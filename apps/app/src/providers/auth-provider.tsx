@@ -12,6 +12,7 @@ import { forgetChatPresence } from "../features/chat/store/react";
 import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
 import { attachFocusUser } from "../features/focus/engine";
 import { attachRunUser } from "../features/focus/run";
+import { attachNotesUser, wipeNotesCopies } from "../features/notes/sync/people";
 import { attachTagUser } from "../features/tags/store";
 import { forgetCaptureDrafts, keepCaptureDraftsOf } from "../features/tasks/capture/capture-draft";
 import { clearTemplates } from "../features/tasks/templates/templates-store";
@@ -199,10 +200,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
         // brings back the PostHog person the deletion erased (PRIV-3).
         void setAnalyticsUser(null);
         // A real sign-out (never a session that merely failed to load, e.g. an
-        // expired token offline): the Tasks device copy, its waiting captures
-        // and the remembered workspace list go (TV-D11a).
+        // expired token offline): the Tasks device copy's rows and the
+        // remembered workspace list go (TV-D11a). What still waits to sync
+        // stays under the person's key: auth-js fires this on its own when a
+        // refresh token dies, and offline captures must survive that.
         void wipeSyncCopies();
         void wipeChatCopies();
+        // Notes' caches too (queued edits and ops stay, as above).
+        void wipeNotesCopies();
         // Chat's remembered searches are the person's words too (CV-19).
         forgetSearches();
         forgetRememberedWorkspaces();
@@ -236,6 +241,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     void attachSyncUser(sessionUserId);
     // Chat's device copy is one person's too (CV-3).
     void attachChatUser(sessionUserId);
+    // And Notes' caches (Track C4).
+    void attachNotesUser(sessionUserId);
     // Another person's kept capture drafts go too (TV-U14).
     if (sessionUserId) keepCaptureDraftsOf(sessionUserId);
     // The push worker shows a notice's words only to who's signed in (TV-D12).
@@ -257,9 +264,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     await rt.auth.signOut();
     // The person chose to sign out: their Tasks device copy goes even when
     // auth-js couldn't end the session (offline with an expired token, so no
-    // SIGNED_OUT event follows) (TV-D11a).
+    // SIGNED_OUT event follows) (TV-D11a); what waits to sync stays until they
+    // sign in here again (Settings warns before this).
     void wipeSyncCopies();
     void wipeChatCopies();
+    void wipeNotesCopies();
     forgetSearches();
     forgetChatPresence();
     forgetRememberedWorkspaces();

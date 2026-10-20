@@ -23,7 +23,6 @@ import {
 } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { formatShortcut, SHORTCUTS } from "../../../lib/shortcuts";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
   firstViewFor,
   ROLE_DEFAULTS,
@@ -31,25 +30,17 @@ import {
   teachingTaskTitles,
   welcomeDecision,
 } from "../onboarding";
+import {
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+} from "../tasks-context";
 import { refreshTemplates } from "../templates/templates-store";
 import { consumeTasksWelcomeRequest, TASKS_WELCOME_REQUEST_EVENT } from "../welcome-request";
 
 /** The dialog's pages: the role question, the basics, then up to three steps. */
 export type WelcomeStep = "role" | "basics" | 1 | 2 | 3;
-
-type WelcomeApi = Pick<
-  TasksModuleApi,
-  | "tasks"
-  | "buckets"
-  | "archivedBuckets"
-  | "archivedTasks"
-  | "inbox"
-  | "canEdit"
-  | "currentUserId"
-  | "reachedServer"
-  | "restLoaded"
-  | "createTask"
->;
 
 function patchOnboarding(patch: Partial<TasksOnboardingPrefs>): void {
   const now = currentPreferences().tasksOnboarding;
@@ -70,13 +61,11 @@ export type TasksWelcome = {
 };
 
 export function useTasksWelcome({
-  api,
   runtime,
   workspaceId,
   isOwner,
   onFirstView,
 }: {
-  api: WelcomeApi;
   runtime: ModuoRuntime | null;
   workspaceId: string;
   /** The person owns this workspace (they made it). */
@@ -84,26 +73,33 @@ export function useTasksWelcome({
   /** Open a role's first view: a sidebar place, as its Board when `board`. */
   onFirstView: (view: { selection: string; board: boolean }) => void;
 }): TasksWelcome {
-  const userId = api.currentUserId;
+  const userId = useTasksUserId();
+  const { createTask } = useTaskCommands();
+  const { canEdit, reachedServer, restLoaded } = useTasksStatus();
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const buckets = useTasksSelector((d) => d.buckets);
+  const inbox = useTasksSelector((d) => d.inbox);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
   const prefsReady = usePreferencesReady(userId);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<WelcomeStep>("basics");
   const [starterName, setStarterName] = useState<string | null>(null);
 
   // Async steps read the module as it is by then, not as it was.
-  const apiRef = useRef(api);
+  const latestRef = useRef({ buckets, canEdit });
   const firstViewRef = useRef(onFirstView);
   const workspaceRef = useRef(workspaceId);
   useEffect(() => {
-    apiRef.current = api;
+    latestRef.current = { buckets, canEdit };
     firstViewRef.current = onFirstView;
     workspaceRef.current = workspaceId;
   });
 
-  const tasksReady = api.reachedServer && api.restLoaded;
+  const tasksReady = reachedServer && restLoaded;
   const hasOwnTasks = useMemo(
-    () => !!userId && api.tasks.some((t) => t.creatorId === userId),
-    [api.tasks, userId],
+    () => !!userId && tasks.some((t) => t.creatorId === userId),
+    [tasks, userId],
   );
 
   // Opens by itself once per person; decided once per page and person.
@@ -130,19 +126,19 @@ export function useTasksWelcome({
 
   // The three teaching tasks, into the owner's Inbox of an empty workspace,
   // once its Inbox exists (a new workspace's is made on its first open).
-  const inboxId = api.inbox?.id ?? null;
+  const inboxId = inbox?.id ?? null;
   const seedingRef = useRef(false);
   const seedNow =
     firstShow &&
     !!inboxId &&
     shouldSeedWorkspace({
       isOwner,
-      canEdit: api.canEdit,
+      canEdit,
       tasksReady,
       seededAlready: !!onboardingPrefs.seeded[workspaceId],
       // An archived project (and its tasks) means the workspace isn't new.
-      taskCount: api.tasks.length + (api.archivedTasks?.length ?? 0),
-      projectCount: api.buckets.length + (api.archivedBuckets?.length ?? 0),
+      taskCount: tasks.length + (archivedTasks?.length ?? 0),
+      projectCount: buckets.length + (archivedBuckets?.length ?? 0),
     });
   useEffect(() => {
     if (!seedNow || !inboxId || seedingRef.current) return;
@@ -160,10 +156,10 @@ export function useTasksWelcome({
         if (workspaceRef.current !== seededFor) return;
         // One after another, each from the module as it is after the last
         // (positions follow the copy), so they land in this order.
-        await apiRef.current.createTask({ bucketId: inboxId, title });
+        await createTask({ bucketId: inboxId, title });
       }
     })();
-  }, [seedNow, inboxId, workspaceId]);
+  }, [seedNow, inboxId, workspaceId, createTask]);
 
   const reopen = useCallback(() => {
     setStarterName(null);
@@ -187,7 +183,7 @@ export function useTasksWelcome({
       patchOnboarding({ role, roleAt: new Date().toISOString() });
       setStep("basics");
       if (!role) return;
-      const a = apiRef.current;
+      const a = latestRef.current;
       firstViewRef.current(
         firstViewFor(
           role,

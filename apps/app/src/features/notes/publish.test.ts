@@ -24,7 +24,8 @@ function note(p: Partial<Note> & { id: string }): Note {
     createdAt: "2026-07-04T00:00:00Z",
     updatedAt: "2026-07-04T00:00:00Z",
     deletedAt: p.deletedAt ?? null,
-    shareMode: p.shareMode ?? "custom",
+    // A new sub-note inherits its parent's sharing (the insert trigger and the app).
+    shareMode: p.shareMode ?? (p.parentId ? "inherit" : "custom"),
     workspaceShared: p.workspaceShared ?? false,
     inInbox: p.inInbox ?? null,
     fullWidth: p.fullWidth ?? false,
@@ -44,6 +45,18 @@ describe("publish — subtree selection (AC10)", () => {
     const ids = selectPublishSubtree("root", notes).map((n) => n.id);
     expect(ids).toEqual(["root", "c1", "g1", "c2"]);
     expect(publishedChildCount("root", notes)).toBe(3);
+  });
+
+  it("excludes a sub-note with its own sharing, and what is below it, from the parent's link", () => {
+    const notes = [
+      note({ id: "root", ...published }),
+      note({ id: "open", parentId: "root", position: "a" }),
+      note({ id: "private", parentId: "root", position: "b", shareMode: "custom" }),
+      note({ id: "under-private", parentId: "private", position: "a" }),
+    ];
+    expect(selectPublishSubtree("root", notes).map((n) => n.id)).toEqual(["root", "open"]);
+    expect(publishedChildCount("root", notes)).toBe(1);
+    expect(buildPublishTree("root", notes)?.children.map((c) => c.note.id)).toEqual(["open"]);
   });
 
   it("excludes a trashed child from the public subtree", () => {

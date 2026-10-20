@@ -14,7 +14,7 @@ import { captureTaskToStore } from "../../lib/sync/capture";
 import { findWorkspaceStore } from "../../lib/sync/store";
 import { formatTime, formatWeekdayDate } from "../../lib/time-format";
 import { endPosition, makeTask } from "../tasks/helpers";
-import { parseCapture } from "../tasks/parse/capture-parser";
+import type { parseCapture } from "../tasks/parse/capture-parser";
 
 export type CaptureTarget = "task" | "note" | "event" | "contact";
 
@@ -137,6 +137,8 @@ export async function createCapturedEntity(input: {
   const { runtime, workspaceId, target } = input;
   const now = input.now ?? new Date();
   const trimmed = input.body.trim();
+  // The parser (chrono-node, rrule) is its own async chunk: off the first load.
+  const loadParser = () => import("../tasks/parse/capture-parser").then((m) => m.parseCapture);
 
   switch (target) {
     case "note": {
@@ -159,7 +161,7 @@ export async function createCapturedEntity(input: {
       };
     }
     case "event": {
-      const parsed = parseCapture(trimmed, now);
+      const parsed = (await loadParser())(trimmed, now);
       const title = parsed.title.trim() || trimmed;
       const { startsAt, endsAt, allDay } = eventTimes(parsed, now);
       const event = await runtime.calendar.createEvent({
@@ -179,7 +181,7 @@ export async function createCapturedEntity(input: {
     }
     case "task":
     default: {
-      const parsed = parseCapture(trimmed, now);
+      const parsed = (await loadParser())(trimmed, now);
       const title = parsed.title.trim() || trimmed;
       // parseCapture already sets scheduledAt to a recurrence's first
       // occurrence (single-row model, CaptureModal parity).

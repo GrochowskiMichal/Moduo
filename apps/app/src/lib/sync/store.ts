@@ -13,8 +13,9 @@
 //   - **Then only what changed.** Each table keeps a cursor (the newest server
 //     `updated_at` it has read) and later reads ask for rows changed since,
 //     a few minutes early (a save that committed late is never missed),
-//     soft-deleted rows included. The queue, tag links and relations have no
-//     stamps (hard deletes) and are read whole; they are small.
+//     soft-deleted rows included. The queue, tag links and relations delete
+//     hard: since TV-D11b they're stamped and leave tombstones, so they delta
+//     too (a database without that migration answers whole).
 //   - **Realtime on top** (TV-D5's channel): a row lands only if it is newer
 //     by the server's stamp. A reconnect or a return to the window reads the
 //     changes again: Realtime is a latency layer, never the source of truth.
@@ -29,10 +30,16 @@
 //     the server's `tasks_search` finds the rest and the store reads them in.
 //
 // Writes are ops laid over the rows the server sent (`begin`). Each op has an
-// id; an op's fields stay on top until its answer comes back (a Realtime echo
-// of your own write never flicks the field back: echo skip by op id), then
-// the answer becomes the row. If the server refuses, only that op's fields go
-// away: one field rolls back to what the server holds, nothing reloads.
+// id; an op's fields stay on top until its answer comes back, then the answer
+// becomes the row. A Realtime echo of your own write is a server row like any
+// other: it lands only if strictly newer by the server's stamp (an equal stamp
+// changes nothing), and it lands under the op's fields, so the field never
+// flicks back. If the server refuses, only that op's fields go away: one field
+// rolls back to what the server holds, nothing reloads.
+//
+// The pieces are the sync kernel's (`kernel/`): one `SyncedCollection` per
+// table (landing, delete marks, overlays, the delta), one FIFO outbox, the
+// registry and the person lifecycle.
 //
 // Offline (default g): everything reads from the device copy; captures and
 // check-offs wait in an outbox kept with the copy ("2 waiting to sync") and
@@ -42,7 +49,7 @@
 import { toast } from "sonner";
 import type { AgentSession } from "../../features/spine/agent-session";
 import { applyLiveTags, seedTags } from "../../features/tags/store";
-import { isNewer, type LiveChange, stampMinus } from "../../features/tasks/live";
+import type { LiveChange } from "../../features/tasks/live";
 import type {
   RecurrenceRule,
   Task,
@@ -64,10 +71,21 @@ import {
   type CachedWorkspace,
   cacheKey,
   deviceCache,
-  isKeyOf,
   type SyncCache,
 } from "./cache";
+import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
+import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
+import { openWrite, withOverlays } from "./kernel/overlay";
+import {
+  type OwnedCopies,
+  personLifecycle,
+  refcount,
+  StoreRegistry,
+  waitingEverywhere,
+} from "./kernel/registry";
+import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError } from "./network";
+import { type KernelMirror, mirrorKernel } from "./tanstack/kernel-mirror";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -82,8 +100,6 @@ export type OverlayChange =
   | { table: SyncTableName; patch: { id: string; fields: Record<string, unknown> } }
   | { table: SyncTableName; insert: AnyRow }
   | { table: SyncTableName; remove: string };
-
-type Overlay = { op: number } & OverlayChange;
 
 /** The bundle's projects and tasks, with archived ones set apart (TV-U6). */
 type ArchivedSplit = {
@@ -276,32 +292,11 @@ const TASK_ROWS: readonly SyncTableName[] = [
   "attachments",
 ];
 
-type TableState = {
-  rows: Map<string, AnyRow>;
-  /** The newest server stamp a read of this table has seen (delta tables). */
-  cursor: string | null;
-  /** When each row was last applied (local ms): a whole read that started
-   *  earlier can't drop it (it may have been created after the read began). */
-  seenAt: Map<string, number>;
-  /** Ids removed (any delete: an answer, Realtime, a delta, a queue op), with
-   *  when: a read that started earlier can't bring them back. */
-  goneAt: Map<string, number>;
-  /** Soft-deleted rows' server stamps: an older version of the row (a late
-   *  echo, a read in flight) never brings it back; a restore is newer. */
-  tombstones: Map<string, { stamp: string; at: number }>;
-  truncated: Truncation | null;
-};
+/** One synced table: its rows, delete marks, overlays and delta cursor (kernel). */
+type Table = SyncedCollection<AnyRow>;
 
-function emptyTable(): TableState {
-  return {
-    rows: new Map(),
-    cursor: null,
-    seenAt: new Map(),
-    goneAt: new Map(),
-    tombstones: new Map(),
-    truncated: null,
-  };
-}
+/** A delta past its ceiling reads on from where it stopped, at most this many times. */
+const DELTA_ROUNDS = 20;
 
 /** Realtime table → store table. */
 const LIVE_TO_TABLE: Record<LiveChange["table"], SyncTableName> = {
@@ -376,8 +371,6 @@ export type StoreOptions = {
   listen?: typeof listenTasksLive;
 };
 
-let nextOp = 1;
-
 /** What a surface that wrote around the store dispatches (Home's widgets). */
 const DATA_REFRESH_EVENT = "moduo:data-refresh";
 
@@ -391,12 +384,20 @@ export class WorkspaceStore {
   private readonly timing: StoreTiming;
   private readonly listen: typeof listenTasksLive;
 
-  private tables = new Map<SyncTableName, TableState>();
-  private overlays: Overlay[] = [];
+  private tables = new Map<SyncTableName, Table>();
+  /**
+   * Each table's rows as an in-memory TanStack DB collection (TS-3a). The
+   * store still reads and lands into the kernel table; `changed` mirrors it,
+   * and the snapshot reads the rows back from the collection.
+   */
+  private mirrors = new Map<SyncTableName, KernelMirror<AnyRow>>();
+  /** `changed` is mirroring: the collections' own change events are its. */
+  private mirroring = false;
   /** My line-up while queue ops are on their way (the newest op's view). */
   private lineup: StoreLineup = null;
   private kept: TaskQueueEntry[] = [];
-  private outbox: OutboxEntry[] = [];
+  /** Captures and check-offs, sent in order; a refusal leaves (kernel `Outbox`). */
+  private outbox = new Outbox<OutboxEntry>("fifo-drop-on-refusal");
   /** Overlay op per outbox entry (rebuilt from the copy). */
   private outboxOps = new Map<string, number>();
 
@@ -424,7 +425,10 @@ export class WorkspaceStore {
   private accessTimer: ReturnType<typeof setTimeout> | null = null;
   private hydrated: Promise<void> | null = null;
 
-  private refs = 0;
+  private readonly holds = refcount(
+    () => this.start(),
+    () => this.stop(),
+  );
   private stopLive: (() => void) | null = null;
   private syncing: Promise<void> | null = null;
   /** A read that follows the running one (see `sync`). */
@@ -440,7 +444,6 @@ export class WorkspaceStore {
 
   private listeners = new Set<() => void>();
   private snapshot: StoreSnapshot | null = null;
-  private renderedCache = new Map<SyncTableName, AnyRow[]>();
   private loadWaiters: (() => void)[] = [];
 
   constructor(runtime: ModuoRuntime, userId: string, workspaceId: string, opts: StoreOptions = {}) {
@@ -450,7 +453,18 @@ export class WorkspaceStore {
     this.cache = opts.cache ?? deviceCache();
     this.timing = { ...DEFAULT_TIMING, ...opts.timing };
     this.listen = opts.listen ?? listenTasksLive;
-    for (const t of SYNC_TABLES) this.tables.set(t.name, emptyTable());
+    this.backoff = new Backoff(3_000, this.timing.retryMs);
+    for (const t of SYNC_TABLES) this.tables.set(t.name, this.makeTable(t.name));
+  }
+
+  private makeTable(name: SyncTableName): Table {
+    return createSyncedCollection<AnyRow>({
+      name,
+      read: (since) => this.read(name, since),
+      lagMs: this.timing.lagMs,
+      maxPages: DELTA_ROUNDS,
+      goneTtlMs: this.timing.goneTtlMs,
+    });
   }
 
   // ── Readers ───────────────────────────────────────────────────────────────
@@ -498,9 +512,28 @@ export class WorkspaceStore {
     return this.disposed;
   }
 
+  /** What waits to sync, in order (a sign-out keeps it on the device). */
+  waitingEntries(): OutboxEntry[] {
+    return this.outbox.list();
+  }
+
+  /** Outbox ids this store sent or dropped (a sign-out must not keep them). */
+  handledEntryIds(): string[] {
+    return this.outbox.handledIds();
+  }
+
   /** Whether a capture is waiting in the outbox under this task id. */
   isQueuedCreate(taskId: string): boolean {
     return this.outbox.some((e) => e.kind === "create" && e.task.id === taskId);
+  }
+
+  /**
+   * Whether anything for this task still waits in the outbox, including the
+   * entry a flush is sending right now. A later write for it must queue behind
+   * those: sent live, it would land first and the older queued one would win.
+   */
+  hasOutboxEntries(taskId: string): boolean {
+    return this.outbox.some((e) => (e.kind === "create" ? e.task.id : e.taskId) === taskId);
   }
 
   /** Claim the repeat roll-over for a load stamp: true once per stamp. */
@@ -514,15 +547,7 @@ export class WorkspaceStore {
 
   /** Keep the store running while you need it; call the returned function when done. */
   acquire(): () => void {
-    this.refs += 1;
-    if (this.refs === 1) this.start();
-    let released = false;
-    return () => {
-      if (released) return;
-      released = true;
-      this.refs -= 1;
-      if (this.refs <= 0) this.stop();
-    };
+    return this.holds.acquire();
   }
 
   private start(): void {
@@ -533,6 +558,8 @@ export class WorkspaceStore {
       window.addEventListener("pagehide", this.persistNow);
       window.addEventListener(DATA_REFRESH_EVENT, this.onDataRefresh);
     }
+    // The perf spec's "paint from device" clock starts here (AC1).
+    globalThis.performance?.mark?.("moduo:tasks-store-start");
     this.hydrated ??= this.hydrate();
     void this.hydrated.then(() => this.sync("open"));
     // Restarted while still offline: keep trying.
@@ -567,12 +594,18 @@ export class WorkspaceStore {
     this.stop(opts);
     this.disposed = true;
     this.listeners.clear();
+    // Empty the kernel tables first: a cleaned-up collection can be started
+    // again (a late subscriber) and would mirror whatever they still held.
+    for (const table of this.tables.values()) table.forget([...table.rows.keys()]);
+    for (const mirror of this.mirrors.values()) mirror.dispose();
+    this.mirrors.clear();
+    this.stable.clear();
+    this.mirroredAt.clear();
+    this.renderedRows.clear();
     this.tables.clear();
-    this.overlays = [];
-    this.outbox = [];
+    this.outbox.clear();
     this.lineup = null;
     this.kept = [];
-    this.renderedCache.clear();
     // A component still holding it (unmounting after sign-out) reads nothing.
     this.snapshot = null;
     this.lastSnapshot = null;
@@ -592,36 +625,33 @@ export class WorkspaceStore {
 
   private async hydrate(): Promise<void> {
     const copy = await this.cache.read(cacheKey(this.userId, this.workspaceId));
+    globalThis.performance?.mark?.("moduo:tasks-copy-read");
     if (!copy || this.disposed) return;
     if (copy.v !== CACHE_VERSION) {
       // An older build's copy: its rows may lack fields this build reads, so
-      // they're read again; what waited to sync still goes.
-      this.adoptOutbox(Array.isArray(copy.outbox) ? (copy.outbox as OutboxEntry[]) : []);
+      // they're read again; what waited to sync still goes (first).
+      this.adoptOutbox(copy.outbox, { first: true });
       return;
     }
     for (const t of SYNC_TABLES) {
       const cached = copy.tables[t.name];
-      if (!cached) continue;
-      const state = this.table(t.name);
       // A live change that landed first is newer than the copy: it stays.
-      for (const row of cached.rows as AnyRow[]) {
-        if (row && typeof row.id === "string" && !state.rows.has(row.id)) {
-          state.rows.set(row.id, row);
-        }
-      }
-      state.cursor ??= cached.cursor;
-      this.renderedCache.delete(t.name);
+      if (cached) this.table(t.name).restore(cached);
     }
     this.restLoaded = copy.restLoaded;
     this.fullReadAt = copy.fullReadAt ?? 0;
-    this.outbox = Array.isArray(copy.outbox) ? (copy.outbox as OutboxEntry[]) : [];
-    for (const entry of this.outbox) this.showOutboxEntry(entry);
+    // What this tab queued before the copy was read stays queued (shown once),
+    // behind the copy's older entries.
+    for (const entry of this.outbox.adopt(copy.outbox, { first: true })) {
+      this.showOutboxEntry(entry);
+    }
     const hasRows = [...this.tables.values()].some((t) => t.rows.size > 0);
     if (hasRows) {
       this.fromCache = true;
       this.markLoaded();
     }
     this.changed();
+    globalThis.performance?.mark?.("moduo:tasks-copy-shown");
   }
 
   /**
@@ -646,10 +676,8 @@ export class WorkspaceStore {
     const key = cacheKey(this.userId, this.workspaceId);
     // What to write is taken now (a dispose right after must not empty it).
     const tables: CachedWorkspace["tables"] = {};
-    for (const [name, state] of this.tables) {
-      tables[name] = { rows: [...state.rows.values()], cursor: state.cursor };
-    }
-    const outbox = [...this.outbox];
+    for (const [name, table] of this.tables) tables[name] = table.toCopy();
+    const outbox = this.outbox.list();
     const restLoaded = this.restLoaded;
     const fullReadAt = this.fullReadAt;
     // Writes go one after another; each keeps the outbox another tab left in
@@ -659,7 +687,7 @@ export class WorkspaceStore {
     this.persisting = this.persisting.then(async () => {
       if (this.wiped) return;
       await this.cache.update(key, (stored) => {
-        theirs = this.othersWaiting(stored?.outbox, outbox);
+        theirs = this.outbox.othersWaiting(stored?.outbox, outbox);
         return {
           v: CACHE_VERSION,
           savedAt: Date.now(),
@@ -682,32 +710,11 @@ export class WorkspaceStore {
   private wiped = false;
 
   private persisting: Promise<void> = Promise.resolve();
-  /** Outbox entries this tab sent (or dropped): another tab's copy can't bring them back. */
-  private outboxDone = new Set<string>();
-
-  /** Entries another tab left waiting in the copy that this one hasn't got or done. */
-  private othersWaiting(
-    stored: unknown[] | undefined,
-    mine: readonly OutboxEntry[],
-  ): OutboxEntry[] {
-    if (!Array.isArray(stored)) return [];
-    const have = new Set(mine.map((e) => e.id));
-    return (stored as OutboxEntry[]).filter(
-      (e) => !!e && typeof e.id === "string" && !have.has(e.id) && !this.outboxDone.has(e.id),
-    );
-  }
-
   /** Take on what another tab left waiting (sent again safely: same ids). */
-  private adoptOutbox(entries: readonly OutboxEntry[]): void {
-    const have = new Set(this.outbox.map((e) => e.id));
-    let adopted = false;
-    for (const entry of entries) {
-      if (have.has(entry.id)) continue;
-      this.outbox.push(entry);
-      this.showOutboxEntry(entry);
-      adopted = true;
-    }
-    if (adopted) {
+  private adoptOutbox(entries: unknown, opts: { first?: boolean } = {}): void {
+    const joined = this.outbox.adopt(entries, opts);
+    for (const entry of joined) this.showOutboxEntry(entry);
+    if (joined.length > 0) {
       this.changed();
       if (!this.offline) void this.flush();
     }
@@ -722,7 +729,7 @@ export class WorkspaceStore {
    * throttle window. A read already running is followed by one more.
    */
   requestSync = (reason: "return" | "reconnect" = "reconnect"): void => {
-    if (this.disposed || this.refs <= 0) return;
+    if (this.disposed || !this.holds.held()) return;
     if (this.syncTimer) return;
     const wait = Math.max(0, this.lastSyncAt + this.timing.throttleMs - Date.now());
     if (wait > 0 && reason === "return") return;
@@ -751,7 +758,7 @@ export class WorkspaceStore {
         const next = this.againReload ? "reload" : "quiet";
         this.again = null;
         this.againReload = false;
-        if (this.disposed || (this.refs <= 0 && next !== "reload")) return;
+        if (this.disposed || (!this.holds.held() && next !== "reload")) return;
         return this.sync(next);
       });
       return this.again;
@@ -1006,32 +1013,10 @@ export class WorkspaceStore {
           }
           return;
         }
-        const state = this.table(t.name);
-        this.pruneGone(state);
-        if (!state.cursor) {
-          // Never had a row: read its live rows ("" keeps an empty table's place).
-          const res = await this.read(t.name, null);
-          this.applyWhole(t.name, res.rows as AnyRow[], started, res.truncated);
-          state.cursor = res.maxUpdatedAt ?? state.cursor;
-          return;
-        }
-        let since = stampMinus(state.cursor, this.timing.lagMs);
-        // A delta past its ceiling reads on from where it stopped.
-        for (let round = 0; round < 20; round += 1) {
-          const res = await this.read(t.name, since);
-          if (res.whole) {
-            // This database can't read the table's changes (no stamps or
-            // tombstones yet): it answered with every live row.
-            this.applyWhole(t.name, res.rows as AnyRow[], started, res.truncated);
-            state.cursor = newestOf(state.cursor, res.maxUpdatedAt);
-            break;
-          }
-          this.applyRows(t.name, res.rows as AnyRow[], "answer", started);
-          this.forgetRows(t.name, res.deleted, started);
-          state.cursor = newestOf(state.cursor, res.maxUpdatedAt);
-          if (!res.truncated || !res.maxUpdatedAt) break;
-          since = res.maxUpdatedAt;
-        }
+        // Changes since the cursor, from the lookback; a delta past its
+        // ceiling reads on from where it stopped. A database that can't read
+        // the table's changes (no stamps or tombstones yet) answers whole.
+        await this.table(t.name).readChanges(started);
       }),
     );
     this.seedTagStore(started);
@@ -1060,14 +1045,14 @@ export class WorkspaceStore {
         const res = await ids({ workspaceId: this.workspaceId, table });
         if (!res.complete || this.disposed) continue;
         const keep = new Set(res.ids);
-        const state = this.table(table);
-        const gone = [...state.rows.keys()].filter(
-          (id) => !keep.has(id) && (state.seenAt.get(id) ?? 0) < started,
+        const { landed } = this.table(table);
+        const gone = [...landed.rows.keys()].filter(
+          (id) => !keep.has(id) && (landed.seenAt.get(id) ?? 0) < started,
         );
         // Shared with you since (a project's grant, a task's): no stamp moved,
         // so no delta brings them. Read them by id.
-        const known = new Set(state.rows.keys());
-        const added = res.ids.filter((id) => !known.has(id) && !state.goneAt.has(id));
+        const known = new Set(landed.rows.keys());
+        const added = res.ids.filter((id) => !known.has(id) && !landed.goneAt.has(id));
         if (added.length > 0 && this.runtime.tasks.syncRead) {
           const got = await this.runtime.tasks.syncRead({
             workspaceId: this.workspaceId,
@@ -1208,12 +1193,12 @@ export class WorkspaceStore {
       return;
     }
     if (this.disposed) return;
-    const state = this.table("tasks");
+    const { landed } = this.table("tasks");
     const present = new Set(got.rows.map((r) => r.id));
-    const fresh = got.rows.some((r) => !state.rows.has(r.id));
+    const fresh = got.rows.some((r) => !landed.rows.has(r.id));
     this.applyRows("tasks", got.rows as AnyRow[], "answer", started);
     const gone = ids.filter(
-      (id) => !present.has(id) && state.rows.has(id) && (state.seenAt.get(id) ?? 0) < started,
+      (id) => !present.has(id) && landed.rows.has(id) && (landed.seenAt.get(id) ?? 0) < started,
     );
     if (gone.length > 0) this.dropRows("tasks", gone);
     if (got.rows.length > 0 || gone.length > 0) {
@@ -1290,24 +1275,114 @@ export class WorkspaceStore {
 
   // ── Applying rows ─────────────────────────────────────────────────────────
 
-  private table(name: SyncTableName): TableState {
-    let state = this.tables.get(name);
-    if (!state) {
-      state = emptyTable();
-      this.tables.set(name, state);
+  private table(name: SyncTableName): Table {
+    let table = this.tables.get(name);
+    if (!table) {
+      table = this.makeTable(name);
+      this.tables.set(name, table);
     }
-    return state;
+    return table;
   }
+
+  /**
+   * A table's in-memory collection (TS-3a): the rows the snapshot shows,
+   * before overlays. Read-only for now (TS-3b reads it with live queries;
+   * TS-3c writes through it). Null once disposed.
+   */
+  collection(name: SyncTableName): KernelMirror<AnyRow>["collection"] | null {
+    this.syncMirrors();
+    return this.mirror(name)?.collection ?? null;
+  }
+
+  /** The table's collection, made on first use (none once disposed). */
+  private mirror(name: SyncTableName): KernelMirror<AnyRow> | null {
+    if (this.disposed) return null;
+    let mirror = this.mirrors.get(name);
+    if (!mirror) {
+      mirror = mirrorKernel<AnyRow>(
+        `tasks:${this.userId}:${this.workspaceId}:${name}:${nextMirrorId++}`,
+        this.table(name),
+      );
+      // A change the store didn't make (none yet; TS-3c's writes) still shows.
+      mirror.onChange(() => {
+        if (!this.mirroring) this.changed();
+      });
+      this.mirrors.set(name, mirror);
+    }
+    return mirror;
+  }
+
+  /**
+   * Every table's rows as shown take what changed in its kernel table, and
+   * so does its collection when one was asked for. TS-3b: the snapshot reads
+   * these rows, not the collection's, so a warm open no longer pays for
+   * writing 10k rows into collections nobody reads yet (~30 ms).
+   */
+  private syncMirrors(): void {
+    if (this.disposed) return;
+    this.mirroring = true;
+    try {
+      for (const name of this.tables.keys()) {
+        const table = this.table(name);
+        if (this.mirroredAt.get(name) === table.revision) continue;
+        // Only the rows that changed (an overlay alone changes none).
+        const touched = table.takeTouched();
+        if (touched !== null) {
+          this.stabilize(name, touched === "all" ? undefined : touched);
+          this.mirrors.get(name)?.sync(touched === "all" ? undefined : touched);
+        }
+        this.mirroredAt.set(name, table.revision);
+      }
+    } finally {
+      this.mirroring = false;
+    }
+  }
+
+  /**
+   * Per table, the kernel's rows in its order, each the object shown before
+   * while the kernel's is field-for-field the same (a read re-landing a row
+   * it already had, at the same stamp): rows already drawn don't redraw.
+   * A new map whenever a row changes, the same one otherwise.
+   */
+  private stable = new Map<SyncTableName, ReadonlyMap<string, AnyRow>>();
+
+  private stabilize(name: SyncTableName, ids?: Iterable<string>): void {
+    const kernel = this.table(name).rows;
+    const prev = this.stable.get(name);
+    if (!prev) {
+      this.stable.set(name, new Map(kernel));
+      return;
+    }
+    // Untouched ids keep what was shown (maybe an older, equal object).
+    const touched = ids ? new Set(ids) : null;
+    let changed = false;
+    const next = new Map<string, AnyRow>();
+    for (const [id, now] of kernel) {
+      const was = prev.get(id);
+      if (touched && !touched.has(id) && was) {
+        next.set(id, was);
+        continue;
+      }
+      if (was && (now === was || shallowSame(now, was))) next.set(id, was);
+      else {
+        next.set(id, now);
+        changed = true;
+      }
+    }
+    if (next.size !== prev.size) changed = true;
+    if (!changed) return;
+    this.stable.set(name, next);
+  }
+
+  /** The kernel revision each collection last took. */
+  private mirroredAt = new Map<SyncTableName, number>();
 
   /**
    * Rows from a read or an op's answer: each lands unless the copy's row is
    * strictly newer ("answer"), or unless it isn't strictly newer ("live":
    * Realtime, where an equal stamp is our own echo). A soft-deleted row
-   * removes it.
-   */
-  /**
-   * `readStartedAt`: the rows come from a read that began then; a row removed
-   * since (a delete it couldn't know about) stays removed.
+   * removes it. `readStartedAt`: the rows come from a read that began then; a
+   * row removed since (a delete it couldn't know about) stays removed.
    */
   private applyRows(
     name: SyncTableName,
@@ -1315,35 +1390,7 @@ export class WorkspaceStore {
     rule: "answer" | "live",
     readStartedAt?: number,
   ): void {
-    const state = this.table(name);
-    const now = Date.now();
-    let touched = false;
-    for (const row of rows) {
-      if (!row || typeof row.id !== "string") continue;
-      if (readStartedAt !== undefined && (state.goneAt.get(row.id) ?? -1) >= readStartedAt)
-        continue;
-      const tomb = state.tombstones.get(row.id);
-      if (tomb && row.updatedAt !== undefined && !isNewer(row.updatedAt, tomb.stamp)) continue;
-      const local = state.rows.get(row.id);
-      if (local && row.updatedAt !== undefined && local.updatedAt !== undefined) {
-        const newer = isNewer(row.updatedAt, local.updatedAt);
-        const older = isNewer(local.updatedAt, row.updatedAt);
-        if (rule === "live" ? !newer : older) continue;
-      }
-      if (row.deletedAt) {
-        if (state.rows.delete(row.id)) touched = true;
-        state.seenAt.delete(row.id);
-        state.goneAt.set(row.id, now);
-        if (row.updatedAt) state.tombstones.set(row.id, { stamp: row.updatedAt, at: now });
-        continue;
-      }
-      state.rows.set(row.id, row);
-      state.seenAt.set(row.id, now);
-      state.goneAt.delete(row.id);
-      state.tombstones.delete(row.id);
-      touched = true;
-    }
-    if (touched) this.renderedCache.delete(name);
+    this.table(name).applyRows(rows, rule, readStartedAt);
   }
 
   /** A whole read: what it has lands; what it lacks goes, unless it arrived after the read began. */
@@ -1353,22 +1400,7 @@ export class WorkspaceStore {
     startedAt: number,
     truncated: Truncation | null,
   ): void {
-    const state = this.table(name);
-    this.pruneGone(state);
-    const fresh = rows.filter((r) => (state.goneAt.get(r.id) ?? -1) < startedAt);
-    this.applyRows(name, fresh, "answer", startedAt);
-    // A read cut at its ceiling can't tell absent from not-reached.
-    if (!truncated) {
-      const present = new Set(rows.map((r) => r.id));
-      for (const id of [...state.rows.keys()]) {
-        if (present.has(id)) continue;
-        if ((state.seenAt.get(id) ?? 0) >= startedAt) continue;
-        state.rows.delete(id);
-        state.seenAt.delete(id);
-      }
-    }
-    state.truncated = truncated;
-    this.renderedCache.delete(name);
+    this.table(name).applyWhole(rows, startedAt, truncated);
   }
 
   /**
@@ -1376,22 +1408,7 @@ export class WorkspaceStore {
    * read that began then, so a row applied since (restored meanwhile) stays.
    */
   private forgetRows(name: SyncTableName, ids: readonly string[], readStartedAt?: number): void {
-    if (ids.length === 0) return;
-    const state = this.table(name);
-    const now = Date.now();
-    for (const id of ids) {
-      if (readStartedAt !== undefined && (state.seenAt.get(id) ?? 0) >= readStartedAt) continue;
-      state.rows.delete(id);
-      state.seenAt.delete(id);
-      state.goneAt.set(id, now);
-    }
-    this.renderedCache.delete(name);
-  }
-
-  private pruneGone(state: TableState): void {
-    const cutoff = Date.now() - this.timing.goneTtlMs;
-    for (const [id, at] of state.goneAt) if (at < cutoff) state.goneAt.delete(id);
-    for (const [id, tomb] of state.tombstones) if (tomb.at < cutoff) state.tombstones.delete(id);
+    this.table(name).forget(ids, readStartedAt);
   }
 
   private onLive = (event: TasksLiveEvent): void => {
@@ -1428,35 +1445,24 @@ export class WorkspaceStore {
 
   /** Show `changes` at once; settle or fail the returned write when the server answers. */
   begin(changes: OverlayChange[] = []): PendingWrite {
-    const op = nextOp++;
-    let open = true;
-    const add = (more: OverlayChange[]) => {
-      if (!open || more.length === 0) return;
-      for (const c of more) {
-        this.overlays.push({ op, ...c } as Overlay);
-        this.renderedCache.delete(c.table);
-      }
-      this.changed();
-    };
-    add(changes);
-    return {
-      op,
-      add,
-      settle: (answers) => {
-        if (!open) return;
-        open = false;
+    const write = openWrite<OverlayChange, Answers>({
+      show: (op, more) => {
+        for (const { table, ...overlay } of more) this.table(table).show(op, overlay);
+        this.changed();
+      },
+      settled: (op, answers) => {
         if (answers) this.applyAnswers(answers);
         this.dropOverlays(op);
         this.changed();
         this.schedulePersist();
       },
-      fail: () => {
-        if (!open) return;
-        open = false;
+      failed: (op) => {
         this.dropOverlays(op);
         this.changed();
       },
-    };
+    });
+    write.add(changes);
+    return write;
   }
 
   /** Server rows that arrived outside an op (a status set, a roll-over). */
@@ -1472,11 +1478,7 @@ export class WorkspaceStore {
    * subtask). The server's next row for it still replaces it.
    */
   patchCopy(table: SyncTableName, id: string, fields: Record<string, unknown>): void {
-    const state = this.table(table);
-    const row = state.rows.get(id);
-    if (!row) return;
-    state.rows.set(id, { ...row, ...fields } as AnyRow);
-    this.renderedCache.delete(table);
+    if (!this.table(table).patch(id, fields)) return;
     this.changed();
     this.schedulePersist();
   }
@@ -1498,14 +1500,7 @@ export class WorkspaceStore {
   }
 
   private dropOverlays(op: number): void {
-    const before = this.overlays.length;
-    const tables = new Set<SyncTableName>();
-    this.overlays = this.overlays.filter((o) => {
-      if (o.op !== op) return true;
-      tables.add(o.table);
-      return false;
-    });
-    if (this.overlays.length !== before) for (const t of tables) this.renderedCache.delete(t);
+    for (const table of this.tables.values()) table.drop(op);
   }
 
   // ── My queue's line-up while queue ops are out ────────────────────────────
@@ -1557,32 +1552,22 @@ export class WorkspaceStore {
   /** Show my line-up as `rows` (op `seq`, the newest one). */
   private setLineup(seq: number, rows: TaskQueueEntry[]): void {
     this.lineup = { seq, rows };
-    this.renderedCache.delete("queue");
+    this.table("queue").invalidate();
     this.changed();
   }
 
   /** A queue op's answer (my whole line-up, the server's): it becomes the copy;
    *  the shown line-up goes once the newest op has answered. */
   private lineupAnswered(seq: number, mine: TaskQueueEntry[]): void {
-    const state = this.table("queue");
-    const now = Date.now();
-    const kept = new Set(mine.map((e) => e.id));
-    for (const [id, row] of state.rows) {
-      const e = row as unknown as TaskQueueEntry;
-      if (e.userId === this.userId && e.workspaceId === this.workspaceId) {
-        state.rows.delete(id);
-        state.seenAt.delete(id);
-        // Left my queue: a read already on its way can't put it back.
-        if (!kept.has(id)) state.goneAt.set(id, now);
-      }
-    }
-    for (const e of mine) {
-      state.rows.set(e.id, e as unknown as AnyRow);
-      state.seenAt.set(e.id, now);
-      state.goneAt.delete(e.id);
-    }
+    // My rows it lacks left my queue: a read already on its way can't put them back.
+    this.table("queue").replaceSlice(
+      (row) => {
+        const e = row as unknown as TaskQueueEntry;
+        return e.userId === this.userId && e.workspaceId === this.workspaceId;
+      },
+      mine as unknown as AnyRow[],
+    );
     if (this.lineup && this.lineup.seq <= seq) this.lineup = null;
-    this.renderedCache.delete("queue");
     this.changed();
     this.schedulePersist();
   }
@@ -1590,7 +1575,7 @@ export class WorkspaceStore {
   /** A queue op failed: the shown line-up goes if it was the newest's. */
   private lineupFailed(seq: number): void {
     if (this.lineup && this.lineup.seq <= seq) this.lineup = null;
-    this.renderedCache.delete("queue");
+    this.table("queue").invalidate();
     this.changed();
   }
 
@@ -1613,7 +1598,7 @@ export class WorkspaceStore {
     this.offline = offline;
     if (offline) this.scheduleRetry();
     else {
-      this.retries = 0;
+      this.backoff.reset();
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
@@ -1622,19 +1607,18 @@ export class WorkspaceStore {
   }
 
   /** Tries while offline: soon at first (a blip passes quickly), then less often. */
-  private retries = 0;
+  private readonly backoff: Backoff;
 
   private scheduleRetry(): void {
     if (this.retryTimer || this.disposed) return;
-    const wait = Math.min(this.timing.retryMs, 3_000 * 2 ** this.retries);
-    this.retries += 1;
+    const wait = this.backoff.next();
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       const behind = () => this.offline || this.syncError !== null;
-      if (!behind() || this.disposed || this.refs <= 0) return;
+      if (!behind() || this.disposed || !this.holds.held()) return;
       void this.sync("quiet").then(() => {
         if (behind()) this.scheduleRetry();
-        else this.retries = 0;
+        else this.backoff.reset();
       });
     }, wait);
   }
@@ -1669,7 +1653,9 @@ export class WorkspaceStore {
       });
       return "queued";
     };
-    if (this.offline || this.isQueuedCreate(input.taskId)) return queue();
+    // Behind anything already waiting for this task (a capture, or an older
+    // check-off the flush hasn't finished), so the writes land in order.
+    if (this.offline || this.hasOutboxEntries(input.taskId)) return queue();
     const write = this.begin([
       {
         table: "tasks",
@@ -1766,27 +1752,28 @@ export class WorkspaceStore {
     if (this.flushing || this.offline || this.disposed) return;
     this.flushing = true;
     try {
-      while (this.outbox.length > 0 && !this.offline && !this.disposed) {
-        const entry = this.outbox[0];
-        try {
-          const answers = await this.send(entry);
-          this.outbox.shift();
-          this.outboxDone.add(entry.id);
+      await drainOutbox(this.outbox, {
+        running: () => !this.offline && !this.disposed,
+        send: async (entry) => {
+          try {
+            return { ok: true, value: await this.send(entry) };
+          } catch (error) {
+            return { ok: false, error };
+          }
+        },
+        isNetwork: isNetworkError,
+        sent: (entry, answers) => {
           const op = this.outboxOps.get(entry.id);
           this.outboxOps.delete(entry.id);
           this.applyAnswers(answers);
           if (op !== undefined) this.dropOverlays(op);
           this.persistNow();
           this.changed();
-        } catch (e) {
-          if (isNetworkError(e)) {
-            this.setOffline(true);
-            break;
-          }
-          // Refused: it won't go through later either. Say so, drop it, and
-          // show what the server holds.
-          this.outbox.shift();
-          this.outboxDone.add(entry.id);
+        },
+        offline: () => this.setOffline(true),
+        // Refused: it won't go through later either. It left the outbox; say
+        // so and show what the server holds.
+        refused: (entry, e) => {
           const op = this.outboxOps.get(entry.id);
           this.outboxOps.delete(entry.id);
           if (op !== undefined) this.dropOverlays(op);
@@ -1796,8 +1783,12 @@ export class WorkspaceStore {
           toast.error(`Couldn't sync ${what}`, {
             description: e instanceof Error ? e.message : undefined,
           });
-        }
-      }
+        },
+      });
+    } catch (e) {
+      // Something threw while landing an answer: the entry left the outbox;
+      // the next cue (reconnect, return, a new capture) drains the rest.
+      console.warn("[sync] outbox drain stopped", e);
     } finally {
       this.flushing = false;
     }
@@ -1833,37 +1824,37 @@ export class WorkspaceStore {
   // ── The snapshot ──────────────────────────────────────────────────────────
 
   private changed(): void {
+    this.syncMirrors();
     this.snapshot = null;
     for (const fn of this.listeners) fn();
   }
 
+  private renderedRows = new Map<
+    SyncTableName,
+    { rows: ReadonlyMap<string, AnyRow>; revision: number; shown: AnyRow[] }
+  >();
+
+  /**
+   * A table's rows as shown: the kernel's rows (kept stable) with its overlays
+   * on top, the same array until either changes.
+   */
   private rendered<T extends SyncTableName>(name: T): SyncRows[T][] {
-    const hit = this.renderedCache.get(name);
-    if (hit) return hit as unknown as SyncRows[T][];
-    const state = this.table(name);
-    const own = this.overlays.filter((o) => o.table === name);
-    let list: AnyRow[];
-    if (own.length === 0) {
-      list = [...state.rows.values()];
-    } else {
-      const map = new Map(state.rows);
-      for (const o of own) {
-        if ("insert" in o) {
-          // Shown under `tmp-<id>` until its answer: its own row may come first
-          // (a Realtime insert); then it shows once.
-          const real = o.insert.id.startsWith("tmp-") ? o.insert.id.slice(4) : null;
-          if (real && map.has(real)) continue;
-          map.set(o.insert.id, o.insert);
-        } else if ("remove" in o) map.delete(o.remove);
-        else {
-          const row = map.get(o.patch.id);
-          if (row) map.set(o.patch.id, { ...row, ...o.patch.fields } as AnyRow);
-        }
-      }
-      list = [...map.values()];
+    const table = this.table(name);
+    // Disposed: what the kernel table still holds (nothing).
+    if (this.disposed) return table.view() as unknown as SyncRows[T][];
+    if (this.mirroredAt.get(name) !== table.revision) this.syncMirrors();
+    let rows = this.stable.get(name);
+    if (!rows) {
+      this.stabilize(name);
+      rows = this.stable.get(name) as ReadonlyMap<string, AnyRow>;
     }
-    this.renderedCache.set(name, list);
-    return list as unknown as SyncRows[T][];
+    const prev = this.renderedRows.get(name);
+    if (prev && prev.rows === rows && prev.revision === table.revision) {
+      return prev.shown as unknown as SyncRows[T][];
+    }
+    const shown = withOverlays(rows, table.overlays.list());
+    this.renderedRows.set(name, { rows, revision: table.revision, shown });
+    return shown as unknown as SyncRows[T][];
   }
 
   private queueView: {
@@ -2008,7 +1999,7 @@ export class WorkspaceStore {
     const queue = this.queueRows();
     // The tasks waiting in the outbox (a List row's clock, TV-U10), the same
     // set object until it changes so rows don't redraw for nothing.
-    const pendingIds = this.outbox.map((e) => (e.kind === "create" ? e.task.id : e.taskId));
+    const pendingIds = this.outbox.list().map((e) => (e.kind === "create" ? e.task.id : e.taskId));
     const prevPending = prev?.snapshot.pendingTaskIds;
     const pendingTaskIds =
       prevPending &&
@@ -2059,6 +2050,18 @@ export class WorkspaceStore {
  * plus the live count (a delete that drops the row moves it). A file still
  * uploading (a Realtime row before it's finished) never counts.
  */
+/** The same fields with the same values (a row re-landed unchanged). */
+function shallowSame(a: AnyRow, b: AnyRow): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    if (!Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function countAttachments(files: readonly SyncRows["attachments"][]): {
   counts: ReadonlyMap<string, number>;
   stamps: ReadonlyMap<string, string>;
@@ -2107,17 +2110,12 @@ function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
-/** The newer of two server stamps (either may be missing). */
-function newestOf(a: string | null, b: string | null): string | null {
-  if (!a) return b;
-  if (!b) return a;
-  return isNewer(b, a) ? b : a;
-}
-
 // ── One store per person and workspace ──────────────────────────────────────
 
-const registries = new WeakMap<object, Map<string, WorkspaceStore>>();
-const everyStore = new Set<WorkspaceStore>();
+const registry = new StoreRegistry<WorkspaceStore>();
+
+/** Collection ids stay unique across stores (a store made again for one workspace). */
+let nextMirrorId = 0;
 let storeOptions: StoreOptions = {};
 
 /** Tests: the options every new store gets (a memory cache, short timings). */
@@ -2135,23 +2133,12 @@ export function workspaceStore(
   userId: string,
   workspaceId: string,
 ): WorkspaceStore {
-  let byWorkspace = registries.get(runtime.tasks);
-  if (!byWorkspace) {
-    byWorkspace = new Map();
-    registries.set(runtime.tasks, byWorkspace);
-  }
-  let store = byWorkspace.get(workspaceId);
-  if (store && store.userId !== userId) {
-    store.dispose({ persist: false });
-    everyStore.delete(store);
-    store = undefined;
-  }
-  if (!store) {
-    store = new WorkspaceStore(runtime, userId, workspaceId, storeOptions);
-    byWorkspace.set(workspaceId, store);
-    everyStore.add(store);
-  }
-  return store;
+  return registry.get(
+    runtime.tasks,
+    userId,
+    workspaceId,
+    () => new WorkspaceStore(runtime, userId, workspaceId, storeOptions),
+  );
 }
 
 /** The workspace's store if one is running (capture, the bell); null otherwise. */
@@ -2159,42 +2146,82 @@ export function findWorkspaceStore(
   runtime: ModuoRuntime,
   workspaceId: string,
 ): WorkspaceStore | null {
-  return registries.get(runtime.tasks)?.get(workspaceId) ?? null;
+  return registry.find(runtime.tasks, workspaceId);
 }
 
-function disposeStores(keep: (store: WorkspaceStore) => boolean, persist: boolean): void {
-  for (const store of [...everyStore]) {
-    if (keep(store)) continue;
-    store.dispose({ persist });
-    if (registries.get(store.runtime.tasks)?.get(store.workspaceId) === store) {
-      registries.get(store.runtime.tasks)?.delete(store.workspaceId);
-    }
-    everyStore.delete(store);
-  }
+/**
+ * The device copies as the person lifecycle sees them. Cutting a copy down
+ * to what waits keeps its outbox (plus what the stores that just stopped
+ * held) and no rows; an older version stamp makes the next store that opens
+ * it take the outbox and read everything else again.
+ */
+function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
+  return {
+    keys: () => cache.keys(),
+    async keepOnlyWaiting(key, inMemory, handled) {
+      let kept = 0;
+      await cache.update(key, (stored) => {
+        const outbox: OutboxEntry[] = [];
+        const seen = new Set<string>();
+        const stack = [
+          ...(Array.isArray(stored?.outbox) ? (stored.outbox as OutboxEntry[]) : []),
+          ...inMemory,
+        ];
+        for (const entry of stack) {
+          if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
+          seen.add(entry.id);
+          if (!handled.has(entry.id)) outbox.push(entry);
+        }
+        kept = outbox.length;
+        return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
+      });
+      return kept;
+    },
+    deleteWhere: (match) => cache.deleteWhere(match),
+    clear: () => cache.clear(),
+  };
 }
+
+const people = personLifecycle({
+  registry,
+  scopeOf: (store) => store.runtime.tasks,
+  copies: () => taskCopies(storeOptions.cache ?? deviceCache()),
+  waiting: (store) => store.waitingEntries(),
+  handled: (store) => store.handledEntryIds(),
+});
 
 /**
  * Who is signed in now (the auth shell calls this on every change).
  *  - Someone: stores and device copies of anyone else go, so a second
- *    account on this device never reads the first one's rows.
+ *    account on this device never reads the first one's rows. What another
+ *    person still has waiting to sync stays (no rows, under their key) until
+ *    they sign in here again.
  *  - Nobody (null): the stores stop, but the copy stays. A session can be
  *    null without a sign-out (an expired token that couldn't refresh offline);
  *    its waiting captures must survive until it's back. A real sign-out calls
  *    `wipeSyncCopies`.
  */
 export function attachSyncUser(userId: string | null): Promise<void> {
-  if (userId === null) {
-    disposeStores(() => false, true);
-    return Promise.resolve();
-  }
-  disposeStores((store) => store.userId === userId, false);
-  return (storeOptions.cache ?? deviceCache()).deleteWhere((key) => !isKeyOf(key, userId));
+  return people.attachUser(userId);
 }
 
-/** Signed out, or the account was deleted: every store and every device copy go. */
-export function wipeSyncCopies(): Promise<void> {
-  disposeStores(() => false, false);
-  return (storeOptions.cache ?? deviceCache()).clear();
+/**
+ * Signed out (by the person, or by auth-js on its own when a refresh token
+ * dies): every store stops and every device copy loses its rows, but what
+ * still waits to sync stays under its person's key and goes out the next time
+ * they sign in here. Account deletion passes `keepWaiting: false`: the
+ * account is gone, so is everything.
+ */
+export function wipeSyncCopies(opts: { keepWaiting?: boolean } = {}): Promise<void> {
+  return people.wipe(opts);
+}
+
+/**
+ * How many writes wait to sync in every running store, Tasks' and Chat's (a
+ * sign-out warns first; both keep theirs on the device).
+ */
+export function waitingSyncCount(): number {
+  return waitingEverywhere();
 }
 
 /**
@@ -2205,12 +2232,5 @@ export function keepWorkspaceCopies(
   userId: string,
   workspaceIds: readonly string[],
 ): Promise<void> {
-  const keep = new Set(workspaceIds.map((ws) => cacheKey(userId, ws)));
-  disposeStores(
-    (store) => store.userId !== userId || keep.has(cacheKey(store.userId, store.workspaceId)),
-    false,
-  );
-  return (storeOptions.cache ?? deviceCache()).deleteWhere(
-    (key) => isKeyOf(key, userId) && !keep.has(key),
-  );
+  return people.keepWorkspaces(userId, workspaceIds);
 }

@@ -37,6 +37,7 @@ import type {
   FilterOption,
 } from "../../../components/ui/filter-model";
 import { NavRowDot } from "../../../components/ui/nav-row";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import type { Assignee } from "../assignees";
@@ -52,11 +53,11 @@ import {
   taskFilterShape,
   WAITING_ANY,
 } from "../filters";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Tag, Task, Team } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
 import { bucketDotColor } from "../sidebar";
 import { STATUS_KEY_LABELS } from "../statuses";
+import { useTaskCommands, useTasksSelector, useTaskTagIndex } from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { StatusIcon } from "./status-icon";
@@ -286,51 +287,33 @@ export function taskFilterDimensions(input: {
     }));
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el?.tagName) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
 /**
  * `/` opens search and `f` opens Filter, from anywhere on the page except a
- * text field, a dialog or an open menu. Bubble phase, after the list's own
- * keys; a modified key (⌘/ is notifications) or Shift (`?` is the shortcuts
- * sheet) is never ours.
+ * text field, a dialog or an open menu. Registry bindings in the "tasks"
+ * scope (lib/hotkeys): bubble phase on document, after the list's own keys; a
+ * modified key (⌘/ is notifications) or Shift (`?` is the shortcuts sheet)
+ * never matches them.
  */
 function useToolbarKeys(enabled: boolean, onSearch: () => void, onFilter: () => void) {
-  const handlers = useRef({ onSearch, onFilter });
-  useEffect(() => {
-    handlers.current = { onSearch, onFilter };
-  });
-  useEffect(() => {
-    if (!enabled) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) {
-        return;
-      }
-      if (isTypingTarget(e.target)) return;
-      if (
-        e.target instanceof Element &&
-        e.target.closest(
-          '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
-        )
-      ) {
-        return;
-      }
-      if (e.key === "/") {
-        e.preventDefault();
-        handlers.current.onSearch();
-      } else if (e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        handlers.current.onFilter();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [enabled]);
+  // An open overlay (a menu's typeahead, a dialog) keeps its plain keys.
+  const overlayFocused = (event: KeyboardEvent) =>
+    event.target instanceof Element &&
+    !!event.target.closest(
+      '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
+    );
+  useAppHotkeys(
+    {
+      "tasks.search": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onSearch();
+      },
+      "tasks.filter": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onFilter();
+      },
+    },
+    { enabled },
+  );
 }
 
 export type TasksFilterControls = {
@@ -368,7 +351,6 @@ export function useTasksFilters({
   scopeTasks,
   conditions,
   onConditionsChange,
-  api,
   assignees,
   enabled,
   keepTaskId = null,
@@ -382,7 +364,6 @@ export function useTasksFilters({
   scopeTasks: Task[];
   conditions: FilterCondition[];
   onConditionsChange: (next: FilterCondition[]) => void;
-  api: TasksModuleApi;
   runtime: ModuoRuntime | null;
   assignees: readonly Assignee[];
   enabled: boolean;
@@ -406,22 +387,28 @@ export function useTasksFilters({
   const inputRef = useRef<HTMLInputElement>(null);
   const filterWrapRef = useRef<HTMLSpanElement>(null);
 
+  const { tags, tagsByTask, openTaskCountByTag } = useTaskTagIndex();
+  const teams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const subtasksByParent = useTasksSelector((d) => d.subtasksByParent);
   const dimensions = useMemo(
     () =>
       taskFilterDimensions({
         assignees,
-        tags: api.tags,
-        countByTag: api.openTaskCountByTag,
+        tags,
+        countByTag: openTaskCountByTag,
         conditions,
-        teams: api.teams,
+        teams,
         projects,
       }),
-    [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams, projects],
+    [assignees, tags, openTaskCountByTag, conditions, teams, projects],
   );
 
   // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks
   // you can see, finished and not deleted.
-  const fileCounts = api.attachmentCounts;
+  const fileCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
   const attachmentCount = useCallback(
     (taskId: string) => fileCounts?.get(taskId) ?? 0,
     [fileCounts],
@@ -430,13 +417,13 @@ export function useTasksFilters({
   // Each task's Waiting on… kinds (the Waiting on filter).
   const waitingKinds = useMemo(() => {
     const out = new Map<string, string[]>();
-    for (const w of api.waiting ?? []) {
+    for (const w of waiting ?? []) {
       const list = out.get(w.taskId);
       if (list) list.push(w.kind);
       else out.set(w.taskId, [w.kind]);
     }
     return out;
-  }, [api.waiting]);
+  }, [waiting]);
 
   // Today's date keys the context, so "Today" and "This week" roll over at
   // midnight.
@@ -444,10 +431,10 @@ export function useTasksFilters({
   const ctx = useMemo<TaskFilterContext>(
     () => ({
       now: new Date(),
-      tagIdsOf: (id) => (api.tagsByTask.get(id) ?? []).map((t) => t.id),
-      isQueued: (id) => api.queuedTaskIds.has(id),
-      isBlocked: (id) => api.blockedTaskIds.has(id),
-      hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
+      tagIdsOf: (id) => (tagsByTask.get(id) ?? []).map((t) => t.id),
+      isQueued: (id) => queuedTaskIds.has(id),
+      isBlocked: (id) => blockedTaskIds.has(id),
+      hasSubtasks: (id) => (subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
       waitingKindsOf: (id) => waitingKinds.get(id) ?? [],
       inboxId,
@@ -456,10 +443,10 @@ export function useTasksFilters({
       today,
       inboxId,
       waitingKinds,
-      api.tagsByTask,
-      api.queuedTaskIds,
-      api.blockedTaskIds,
-      api.subtasksByParent,
+      tagsByTask,
+      queuedTaskIds,
+      blockedTaskIds,
+      subtasksByParent,
       attachmentCount,
     ],
   );
@@ -486,7 +473,7 @@ export function useTasksFilters({
   // tasks still loading, a read cut at its ceiling): the store reads the
   // matches it lacks, and they pass here by id. The copy's own matches show
   // at once; these join a moment later.
-  const searchServer = api.searchTasks;
+  const searchServer = useTaskCommands().searchTasks;
   const [serverHits, setServerHits] = useState<{ query: string; ids: ReadonlySet<string> } | null>(
     null,
   );
@@ -527,10 +514,10 @@ export function useTasksFilters({
 
   const tokenContext = useMemo(
     () => ({
-      tags: api.tags,
+      tags,
       people: assignees.map((a) => ({ userId: a.userId, name: a.name, isMe: a.isMe })),
     }),
-    [api.tags, assignees],
+    [tags, assignees],
   );
   const setQuery = useCallback(
     (next: string, final = false) => {

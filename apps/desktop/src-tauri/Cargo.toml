@@ -22,9 +22,7 @@ tauri-build = { version = "2.0", features = [] }
 active-win-pos-rs = "0.11"
 aes-gcm = "0.11"
 anyhow = "1"
-argon2 = "0.6"
 base64 = "0.23"
-bip39 = { version = "3", features = ["rand"] }
 ed25519-dalek = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
@@ -71,3 +69,13 @@ futures-util = "0.3"
 lto = true
 codegen-units = 1
 strip = true
+# Size over peak speed: the shell is I/O-bound (IMAP, HTTP, redb), so "s" costs
+# nothing a user feels. Measured 2026-10-20 (binary with the frontend embedded):
+# opt-level 3 = 14.15 MB, "s" = 10.80 MB, "z" = 8.14 MB. "z" was not taken:
+# it de-inlines hot loops (MIME parsing, search) for a smaller further gain.
+opt-level = "s"
+# panic stays "unwind" on purpose: a panic in one tokio task (an IMAP worker
+# choking on a malformed message, say) ends only that task and the app keeps
+# running. "abort" would save another ~2.7 MB (10.80 -> 8.11 MB) but turn any
+# such panic into a crash of the whole app.
+panic = "unwind"

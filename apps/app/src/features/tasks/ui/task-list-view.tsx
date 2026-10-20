@@ -35,6 +35,7 @@ import { cn } from "../../../lib/utils";
 import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
+import { byIdOf } from "../derived";
 import {
   type OrderDirection,
   orderTasks,
@@ -67,7 +68,6 @@ import {
   nestedSubtaskIds,
   showBucketPill,
 } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type GroupAdd, type GroupAddState, groupAddState } from "../list-group-add";
 import type { Bucket, ProjectStatus, Section, Task, Team } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
@@ -90,6 +90,14 @@ import {
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
 import { statusNameOf } from "../statuses";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+  useTaskTagIndex,
+} from "../tasks-context";
 import { nowOn, useMinuteTick, useToday } from "../use-today";
 import {
   asTaskDrag,
@@ -254,7 +262,6 @@ type Props = {
   groupSub?: (groupKey: string) => ReactNode;
   /** What a group header counts: its open tasks (default), or all of them (Won't do). */
   countEvery?: boolean;
-  api: TasksModuleApi;
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -384,8 +391,29 @@ export function TaskListView({
   defaultFolded,
   groupSub,
   countEvery = false,
-  api,
 }: Props) {
+  // What the List reads from the Tasks module (A4): each slice on its own.
+  const commands = useTaskCommands();
+  const { bulkWrite, deleteTask, dropTask, focusOnTask, toggleQueue } = commands;
+  const { loaded } = useTasksStatus();
+  const { tagsByTask } = useTaskTagIndex();
+  const agentSessions = useTasksSelector((_, snap) => snap.agentSessions);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const blockersByTask = useTasksSelector((d) => d.blockersByTask);
+  const commentCounts = useTasksSelector((_, snap) => snap.commentCounts);
+  const moduleUserId = useTasksUserId();
+  const pendingTaskIds = useTasksSelector((_, snap) => snap.pendingTaskIds);
+  const queueClaims = useTasksSelector((d) => d.queueClaims);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const allSections = useTasksSelector((d) => d.sections);
+  const statusById = useTasksSelector((d) => d.statusById);
+  const statuses = useTasksSelector((d) => d.statuses);
+  const statusesForBucket = useStatusesForBucket();
+  const subtaskProgressByTask = useTasksSelector((d) => d.subtaskProgressByTask);
+  const subtasksByParent = useTasksSelector((d) => d.subtasksByParent);
+  const allTasks = useTasksSelector((d) => d.liveTasks);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
   // Selection is owned by the parent (shared with the detail rail); these aliases
   // keep the keyboard-cursor logic below unchanged.
   const selectedId = selectedTaskId;
@@ -440,7 +468,7 @@ export function TaskListView({
   // so subtask-free lists look exactly as before.
   const expandSlot = nestedIds.size > 0;
   // Parent titles for subtasks rendered flat (Today, or parent out of scope).
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(allTasks);
   const parentTitleFor = (task: Task): string | null => {
     if (!task.parentId || nestedIds.has(task.id)) return null;
     const parent = taskById.get(task.parentId);
@@ -504,14 +532,14 @@ export function TaskListView({
       stayingIds.has(t.id) ||
       t.id === selectedId ||
       t.id === selectedParentId ||
-      (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+      (subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     // `all` keeps every task of the group in order, hidden ones included:
     // a drop is placed among them (TV-U1's rule, since `position` orders both).
     // Backlog stays in its line even when selected (the line opens for it
     // instead, so j/k walk the opened line in order); only a task checked off
     // here, or a parent with open subtasks, comes out of it.
     const keepOutOfBacklog = (t: Task) =>
-      stayingIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+      stayingIds.has(t.id) || (subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     const mapped = all.map((g) => {
       const backlog =
         groupBy === "status" ? [] : g.tasks.filter((t) => isBacklogTask(t) && !keepOutOfBacklog(t));
@@ -574,7 +602,7 @@ export function TaskListView({
     taskById,
     revealedGroups,
     doneShown,
-    api.subtasksByParent,
+    subtasksByParent,
   ]);
   // What the end line counts: every completed task Display hides in the view,
   // folded groups' and the selected one too (Show lists them in their groups;
@@ -635,25 +663,25 @@ export function TaskListView({
 
   // ── the facts rows show (row-facts.ts, TV-D11b) ─────────────────────────────
   const sectionNames = useMemo(
-    () => new Map((api.sections ?? []).map((s) => [s.id, s.name])),
-    [api.sections],
+    () => new Map((allSections ?? []).map((s) => [s.id, s.name])),
+    [allSections],
   );
   // Ages ("5m", "3h") move on by the minute where they show: Detailed's
   // Updated (while Display → Columns has it on, MOD-136) and the waiting lines.
   const showsUpdated = detailed && (detailedColumns?.includes("updated") ?? true);
-  const ageTick = useMinuteTick(showsUpdated || (api.waiting?.length ?? 0) > 0);
+  const ageTick = useMinuteTick(showsUpdated || (waiting?.length ?? 0) > 0);
   // biome-ignore lint/correctness/useExhaustiveDependencies: ageTick re-reads the ages each minute.
   const waitingLabels = useMemo(
     () =>
       waitingLabelsOf(
-        api.waiting ?? [],
+        waiting ?? [],
         (id) => {
           const person = byId(id);
           return person ? (person.isMe ? "you" : person.name) : null;
         },
         nowOn(today),
       ),
-    [api.waiting, byId, today, ageTick],
+    [waiting, byId, today, ageTick],
   );
   // The view's own date words (Upcoming's "3:00 PM · 45m", a snoozed row's
   // "until Fri"): they move on by the minute ("missed" once a session ends).
@@ -679,26 +707,26 @@ export function TaskListView({
   const agentMarks = useMemo(
     () =>
       agentRowMarks(
-        api.agentSessions ?? NO_AGENT_SESSIONS,
+        agentSessions ?? NO_AGENT_SESSIONS,
         (id) => taskById.get(id) ?? null,
         (s) => agentWho(s, currentUserId, (id) => byId(id)?.fullName.trim().split(/\s+/)[0]),
       ),
-    [api.agentSessions, taskById, currentUserId, byId],
+    [agentSessions, taskById, currentUserId, byId],
   );
   const factsSource = useMemo<FactsSource>(
     () => ({
-      queuedTaskIds: api.queuedTaskIds,
-      queueClaims: api.queueClaims,
-      blockedTaskIds: api.blockedTaskIds,
-      blockersByTask: api.blockersByTask,
-      tagsByTask: api.tagsByTask,
-      subtaskProgressByTask: api.subtaskProgressByTask,
-      statusById: api.statusById,
+      queuedTaskIds: queuedTaskIds,
+      queueClaims: queueClaims,
+      blockedTaskIds: blockedTaskIds,
+      blockersByTask: blockersByTask,
+      tagsByTask: tagsByTask,
+      subtaskProgressByTask: subtaskProgressByTask,
+      statusById: statusById,
       sectionNames,
       waitingLabels,
-      commentCounts: api.commentCounts,
-      attachmentCounts: api.attachmentCounts,
-      pendingTaskIds: api.pendingTaskIds,
+      commentCounts: commentCounts,
+      attachmentCounts: attachmentCounts,
+      pendingTaskIds: pendingTaskIds,
       whenOf,
       takeableIds,
       sourceOf,
@@ -709,18 +737,18 @@ export function TaskListView({
       whenOf,
       takeableIds,
       sourceOf,
-      api.queuedTaskIds,
-      api.queueClaims,
-      api.blockedTaskIds,
-      api.blockersByTask,
-      api.tagsByTask,
-      api.subtaskProgressByTask,
-      api.statusById,
+      queuedTaskIds,
+      queueClaims,
+      blockedTaskIds,
+      blockersByTask,
+      tagsByTask,
+      subtaskProgressByTask,
+      statusById,
       sectionNames,
       waitingLabels,
-      api.commentCounts,
-      api.attachmentCounts,
-      api.pendingTaskIds,
+      commentCounts,
+      attachmentCounts,
+      pendingTaskIds,
     ],
   );
 
@@ -733,11 +761,11 @@ export function TaskListView({
     for (const group of groups) {
       for (const task of [...group.tasks, ...group.backlog]) {
         out.push(task);
-        if (nest) out.push(...(api.subtasksByParent.get(task.id) ?? []));
+        if (nest) out.push(...(subtasksByParent.get(task.id) ?? []));
       }
     }
     return out;
-  }, [groups, nest, api.subtasksByParent]);
+  }, [groups, nest, subtasksByParent]);
   const columns = useMemo(
     () =>
       rowColumns(listedRows, {
@@ -746,8 +774,8 @@ export function TaskListView({
         detailedColumns,
         showAssignee: showAssignee && assignees.length > 1,
         canEdit,
-        isQueued: (id) => api.queuedTaskIds.has(id),
-        isClaimed: (id) => (api.queueClaims.get(id)?.length ?? 0) > 0,
+        isQueued: (id) => queuedTaskIds.has(id),
+        isClaimed: (id) => (queueClaims.get(id)?.length ?? 0) > 0,
         taskKey,
         isWaiting: (id) => waitingLabels.has(id),
         hasWhen: whenOf ? (t) => !!whenOf(t) : undefined,
@@ -761,8 +789,8 @@ export function TaskListView({
       showAssignee,
       assignees.length,
       canEdit,
-      api.queuedTaskIds,
-      api.queueClaims,
+      queuedTaskIds,
+      queueClaims,
       taskKey,
       waitingLabels,
     ],
@@ -784,13 +812,13 @@ export function TaskListView({
       taskKey,
       bucketNameById,
       sectionNames,
-      api.statusById,
+      statusById,
       waitingLabels,
     ],
   );
   const widths = useMemo(() => {
     const now = nowOn(today);
-    const statusById = api.statusById ?? NO_STATUS_NAMES;
+    const statusByIdOrNone = statusById ?? NO_STATUS_NAMES;
     const cache = textCache;
     const textsOf = (t: Task): RowTexts => {
       const known = cache.get(t);
@@ -803,7 +831,7 @@ export function TaskListView({
               bucketNameById(t.bucketId),
               t.sectionId ? (sectionNames.get(t.sectionId) ?? null) : null,
             ),
-            status: statusNameOf(t, statusById),
+            status: statusNameOf(t, statusByIdOrNone),
             due: dueLabel(t, now),
             session: sessionLabel(t, now),
             time: rowTime(t),
@@ -830,7 +858,7 @@ export function TaskListView({
     taskKey,
     bucketNameById,
     sectionNames,
-    api.statusById,
+    statusById,
     waitingLabels,
   ]);
   // Detailed drops whole columns as the centre narrows (research §1). Only
@@ -900,12 +928,12 @@ export function TaskListView({
         // Only nested subtasks sit under their parent; Flat lists them as
         // rows of their own, in their own place.
         if (nest && expandedParents.has(task.id)) {
-          for (const child of api.subtasksByParent.get(task.id) ?? []) push(child);
+          for (const child of subtasksByParent.get(task.id) ?? []) push(child);
         }
       }
     }
     return out;
-  }, [groups, collapsed, rowsOf, expandedParents, nest, api.subtasksByParent]);
+  }, [groups, collapsed, rowsOf, expandedParents, nest, subtasksByParent]);
 
   const toggleBacklog = useCallback(
     (key: string) => {
@@ -1049,7 +1077,7 @@ export function TaskListView({
   // the page's panel shows the project, not a task you can't see (MOD-123).
   // Said only when it changes, so the page draws once more only then, and
   // taken back when the List goes away.
-  const showsNothing = api.loaded && tasks.length > 0 && visibleOrder.length === 0;
+  const showsNothing = loaded && tasks.length > 0 && visibleOrder.length === 0;
   const saidNothingRef = useRef(false);
   const onShowsNothingRef = useRef(onShowsNothing);
   useLayoutEffect(() => {
@@ -1077,7 +1105,7 @@ export function TaskListView({
   // ── drops and move keys (TV-U4) ──────────────────────────────────────────────
   // Manual order lives inside one project (order.ts, default m): a drag or a
   // move key writes a position only in a project or the Inbox under Manual.
-  // Every drop ends in one Undo toast, shown once it saved (api.dropTask).
+  // Every drop ends in one Undo toast, shown once it saved (dropTask).
   const dragOrder = dragOrderFor(selection, order);
   const inboxId = inbox?.id ?? null;
   const assignableIds = useMemo(
@@ -1099,9 +1127,9 @@ export function TaskListView({
   );
   const drop = useCallback(
     (write: TaskDropWrite, before: Task, label?: string) => {
-      void api.dropTask(write, label ?? dropLabel(write, dropNames, before));
+      void dropTask(write, label ?? dropLabel(write, dropNames, before));
     },
-    [api, dropNames],
+    [dropTask, dropNames],
   );
   // A sorted project view asks to switch back before a reorder (default m).
   const askManualOrder = useCallback(() => {
@@ -1120,12 +1148,12 @@ export function TaskListView({
   const siblingsOf = useCallback(
     (task: Task): Task[] => {
       if (task.parentId && nestedIds.has(task.id)) {
-        return api.subtasksByParent.get(task.parentId) ?? [];
+        return subtasksByParent.get(task.parentId) ?? [];
       }
       const group = groups.find((g) => rowsOf(g).some((t) => t.id === task.id));
       return group ? rowsOf(group) : [];
     },
-    [nestedIds, api.subtasksByParent, groups, rowsOf],
+    [nestedIds, subtasksByParent, groups, rowsOf],
   );
 
   /** `>`: a subtask of the row above (one level; a subtask lives in its
@@ -1136,7 +1164,7 @@ export function TaskListView({
       const siblings = siblingsOf(task);
       const above = siblings[siblings.findIndex((t) => t.id === task.id) - 1];
       if (!above) return;
-      const hasKids = (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0;
+      const hasKids = (id: string) => (subtasksByParent.get(id)?.length ?? 0) > 0;
       if (!canNestUnder(task, above, hasKids)) {
         toast(
           hasKids(task.id)
@@ -1154,7 +1182,7 @@ export function TaskListView({
       if (nest) setExpandedParents((prev) => new Set(prev).add(above.id));
       drop(write, task);
     },
-    [nestedIds, siblingsOf, api.subtasksByParent, inboxId, nest, drop],
+    [nestedIds, siblingsOf, subtasksByParent, inboxId, nest, drop],
   );
 
   /** `<`: out of its parent, to the top level right after the parent (where
@@ -1164,12 +1192,12 @@ export function TaskListView({
       if (!task.parentId) return;
       const write: TaskDropWrite = { taskId: task.id, parentId: null };
       if (dragOrder === "manual") {
-        const position = positionNextTo(api.tasks, { id: task.parentId, edge: "after" }, task.id);
+        const position = positionNextTo(allTasks, { id: task.parentId, edge: "after" }, task.id);
         if (position !== null) write.position = position;
       }
       drop(write, task);
     },
-    [dragOrder, api.tasks, drop],
+    [dragOrder, allTasks, drop],
   );
 
   /** ⌥⇧↑/↓: one place up or down among its siblings, in the manual order
@@ -1184,14 +1212,14 @@ export function TaskListView({
       const neighbour = siblings[siblings.findIndex((t) => t.id === task.id) + delta];
       if (!neighbour) return;
       const position = positionNextTo(
-        api.tasks,
+        allTasks,
         { id: neighbour.id, edge: delta < 0 ? "before" : "after" },
         task.id,
       );
       if (position === null) return;
       drop({ taskId: task.id, position }, task, delta < 0 ? "Moved up" : "Moved down");
     },
-    [dragOrder, refuseReorder, siblingsOf, api.tasks, drop, nestedIds],
+    [dragOrder, refuseReorder, siblingsOf, allTasks, drop, nestedIds],
   );
 
   // The Queue's line-up is the queue's own (`task_queue`): a drag or a move
@@ -1218,14 +1246,14 @@ export function TaskListView({
   // Every callback takes the task's id and keeps its identity, and the
   // actions object never changes, so a memoised row redraws only when its
   // own task, facts or state do (TV-D11b: one edit, one row).
-  const actions = useRowActions(api);
+  const actions = useRowActions(commands);
 
   // Files dropped on a row attach to its task (AT-3, AT3-1).
   const fileDrop = useTaskFileDrop({
     canEdit,
     taskOf: (id) => taskById.get(id),
-    userId: api.currentUserId,
-    pendingTaskIds: api.pendingTaskIds,
+    userId: moduleUserId,
+    pendingTaskIds: pendingTaskIds,
     onOpen: (id) => onSelectTask(id),
   });
 
@@ -1327,18 +1355,18 @@ export function TaskListView({
           // `t` from when the queue was "Today"; the rename makes `q` canonical).
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
-          api.toggleQueue(selectedTask.id);
+          toggleQueue(selectedTask.id);
           return;
         case "focus-on":
           // ⇧F: on top of Up next, with the one clock (call 31).
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
-          api.focusOnTask(selectedTask.id);
+          focusOnTask(selectedTask.id);
           return;
         case "expand":
           // expand the selected parent's subtasks
           if (!selectedTask || !nest) return;
-          if ((api.subtasksByParent.get(selectedTask.id)?.length ?? 0) > 0) {
+          if ((subtasksByParent.get(selectedTask.id)?.length ?? 0) > 0) {
             e.preventDefault();
             setExpandedParents((prev) => new Set(prev).add(selectedTask.id));
           }
@@ -1357,7 +1385,7 @@ export function TaskListView({
         case "delete":
           if (!selectedTask || !canEdit) return;
           e.preventDefault();
-          api.deleteTask(selectedTask.id);
+          deleteTask(selectedTask.id);
           return;
         // The Queue keeps its own line-up: these keys are the lists' (TV-U4).
         case "nest":
@@ -1386,7 +1414,10 @@ export function TaskListView({
       selectedTask,
       canEdit,
       actions,
-      api,
+      toggleQueue,
+      focusOnTask,
+      deleteTask,
+      subtasksByParent,
       onRequestCapture,
       nest,
       nestedIds,
@@ -1468,8 +1499,8 @@ export function TaskListView({
   const pointerRef = useRef<{ x: number; y: number } | null>(null);
 
   const hasChildren = useCallback(
-    (id: string) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
-    [api.subtasksByParent],
+    (id: string) => (subtasksByParent.get(id)?.length ?? 0) > 0,
+    [subtasksByParent],
   );
 
   // Every row on screen, with what a drop needs to know about it.
@@ -1482,7 +1513,7 @@ export function TaskListView({
       if (collapsed.has(group.key)) continue;
       for (const task of rowsOf(group)) {
         const children =
-          nest && expandedParents.has(task.id) ? (api.subtasksByParent.get(task.id) ?? []) : [];
+          nest && expandedParents.has(task.id) ? (subtasksByParent.get(task.id) ?? []) : [];
         index.set(task.id, {
           task,
           depth: 0,
@@ -1495,7 +1526,7 @@ export function TaskListView({
       }
     }
     return index;
-  }, [groups, collapsed, rowsOf, nest, expandedParents, api.subtasksByParent]);
+  }, [groups, collapsed, rowsOf, nest, expandedParents, subtasksByParent]);
 
   const dragTask = dragId ? (taskById.get(dragId) ?? null) : null;
 
@@ -1636,9 +1667,9 @@ export function TaskListView({
       // for each, behind the held row, as one write with one Undo.
       const { multiSelect: multi, visibleOrder: order } = selectionRef.current;
       if (multi && multi.ids.size >= 2 && multi.ids.has(active.id)) {
-        const writes = multiDropWrites(write, active, inViewOrder(multi.ids, order), api.tasks);
+        const writes = multiDropWrites(write, active, inViewOrder(multi.ids, order), allTasks);
         if (writes.length === 0) return;
-        void api.bulkWrite(writes, {
+        void bulkWrite(writes, {
           label: (n) =>
             n === 1 ? dropLabel(write, dropNames, active) : multiDropLabel(write, n, dropNames),
         });
@@ -1646,7 +1677,7 @@ export function TaskListView({
       }
       drop(write, active);
     },
-    [nest, drop, api, dropNames],
+    [nest, drop, bulkWrite, allTasks, dropNames],
   );
 
   const onListDragEnd = useCallback(
@@ -1677,7 +1708,7 @@ export function TaskListView({
         active,
         activeGroupKey: groupKeyFor(active, groupBy, nowOn(today)),
         groupBy,
-        allByPosition: api.tasks,
+        allByPosition: allTasks,
         groupTasks: (key) => groups.find((g) => g.key === key)?.all ?? [],
       });
       if (plan) applyPlan(plan, active);
@@ -1692,7 +1723,7 @@ export function TaskListView({
       grouping,
       groupBy,
       today,
-      api.tasks,
+      allTasks,
       groups,
       applyPlan,
     ],
@@ -1763,7 +1794,7 @@ export function TaskListView({
     const pushRows = (group: ListGroup, list: readonly Task[]) => {
       for (const task of list) {
         const children =
-          nest && expandedParents.has(task.id) ? (api.subtasksByParent.get(task.id) ?? []) : [];
+          nest && expandedParents.has(task.id) ? (subtasksByParent.get(task.id) ?? []) : [];
         out.push({
           kind: "row",
           key: `r:${group.key}:${task.id}`,
@@ -1807,7 +1838,7 @@ export function TaskListView({
     collapsed,
     nest,
     expandedParents,
-    api.subtasksByParent,
+    subtasksByParent,
     openBacklogs,
     addsSections,
     hiddenDone,
@@ -1978,7 +2009,7 @@ export function TaskListView({
       );
     }
     const { task, depth } = item;
-    const children = depth === 0 && nest ? (api.subtasksByParent.get(task.id) ?? []) : [];
+    const children = depth === 0 && nest ? (subtasksByParent.get(task.id) ?? []) : [];
     const row = renderRow(
       task,
       depth,
@@ -2074,16 +2105,16 @@ export function TaskListView({
 
   // The statuses a row's ⇧S menu offers, read only by an open menu.
   const statusesFor = useCallback(
-    (bucketId: string) => api.statusesForBucket?.(bucketId) ?? [],
-    [api.statusesForBucket],
+    (bucketId: string) => statusesForBucket?.(bucketId) ?? [],
+    [statusesForBucket],
   );
-  const showHeader = detailed && api.loaded && tasks.length > 0 && selection !== "today";
+  const showHeader = detailed && loaded && tasks.length > 0 && selection !== "today";
 
   return (
     // The projects and statuses a row's menus offer, read only by an open
     // menu (TV-D11b).
     <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
-      <StatusChoicesProvider statusesFor={statusesFor} any={(api.statuses?.length ?? 0) > 0}>
+      <StatusChoicesProvider statusesFor={statusesFor} any={(statuses?.length ?? 0) > 0}>
         <div className="flex h-full min-h-0 flex-col">
           <PlanViewHeader
             title={scopeTitle}
@@ -2144,7 +2175,7 @@ export function TaskListView({
               aria-label={`${scopeTitle} tasks`}
               className="pane-scroll min-h-0 flex-1 overflow-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring data-[quiet-focus]:focus-visible:ring-0"
             >
-              {!api.loaded ? (
+              {!loaded ? (
                 <TaskListSkeleton />
               ) : tasks.length === 0 ? (
                 filterActive ? (
@@ -2231,6 +2262,7 @@ export function TaskListView({
                       stickyClassName="z-(--z-sticky) bg-card"
                       pinned={pinned}
                       scrollTo={scrollTo}
+                      paintKey={selection}
                     />
                   </div>
                   {canDrag ? dragOverlay : null}

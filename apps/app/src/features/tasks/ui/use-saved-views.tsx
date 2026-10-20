@@ -13,7 +13,7 @@ import {
   usePreferencesValue,
 } from "../../../lib/preferences";
 import type { TasksViewPrefs } from "../display";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useSavedViewOps, useTasksStatus } from "../tasks-context";
 import {
   freeViewName,
   seedViewsFor,
@@ -37,7 +37,6 @@ type Dialog = { kind: "new"; initialName: string } | null;
 const NO_VIEWS: readonly TaskView[] = [];
 
 export function useSavedViews({
-  api,
   workspaceId,
   userId,
   place,
@@ -55,7 +54,6 @@ export function useSavedViews({
   canShare,
   canModerate,
 }: {
-  api: TasksModuleApi;
   workspaceId: string;
   userId: string | null;
   /** The place the centre shows ("all", "mine", "upcoming", a project id, …). */
@@ -89,9 +87,10 @@ export function useSavedViews({
   dialog: ReactNode;
 } {
   const [dialog, setDialog] = useState<Dialog>(null);
+  const ops = useSavedViewOps();
   // A module without saved views (stories, older doubles) offers none.
-  const views = api.views ?? NO_VIEWS;
-  const supported = !!api.saveView;
+  const views = ops.views ?? NO_VIEWS;
+  const supported = !!ops.saveView;
   // What a new view looks at: the open view's place, or the place itself.
   const target = viewScopeOf(place, projectIds);
 
@@ -108,7 +107,7 @@ export function useSavedViews({
   const save = useCallback(
     async (name: string): Promise<boolean> => {
       if (!target) return false;
-      const view = await api.saveView({
+      const view = await ops.saveView({
         name,
         scope: target.scope,
         projectId: target.projectId,
@@ -121,15 +120,15 @@ export function useSavedViews({
       onOpen(viewSelection(view.id));
       return true;
     },
-    [api, target, prefs, openView, drafting, revert, onOpen],
+    [ops, target, prefs, openView, drafting, revert, onOpen],
   );
 
   const saveChanges = useCallback(() => {
     if (!openView) return;
-    void api.saveViewChanges(openView.id, prefs).then((ok) => {
+    void ops.saveViewChanges(openView.id, prefs).then((ok) => {
       if (ok) revert();
     });
-  }, [api, openView, prefs, revert]);
+  }, [ops, openView, prefs, revert]);
 
   const copyLink = useCallback((viewId: string) => {
     const link = viewLink(viewId);
@@ -148,18 +147,18 @@ export function useSavedViews({
       // Deleting the view you're on lands on its place (a refused delete
       // brings the view back in the sidebar; you stay where you are).
       if (openView?.id === viewId) onOpen(viewPlace(openView));
-      api.deleteView(viewId);
+      ops.deleteView(viewId);
     },
-    [api, openView, onOpen],
+    [ops, openView, onOpen],
   );
 
   const viewActions = useMemo<ViewActions>(
     () => ({
       currentUserId: userId,
-      onRename: api.renameView,
-      onShare: api.shareView,
+      onRename: ops.renameView,
+      onShare: ops.shareView,
       onDelete: deleteView,
-      onMove: api.moveView,
+      onMove: ops.moveView,
       onCopyLink: copyLink,
       // A build without saved views makes none (MOD-142).
       onNew: supported ? onNewView : undefined,
@@ -168,10 +167,10 @@ export function useSavedViews({
     }),
     [
       userId,
-      api.renameView,
-      api.shareView,
+      ops.renameView,
+      ops.shareView,
       deleteView,
-      api.moveView,
+      ops.moveView,
       copyLink,
       supported,
       onNewView,
@@ -181,7 +180,7 @@ export function useSavedViews({
   );
 
   // ── ?view=<id> ──────────────────────────────────────────────────────────
-  const reachedServer = api.reachedServer;
+  const { reachedServer } = useTasksStatus();
   useEffect(() => {
     if (!urlViewId) return;
     const view = views.find((v) => v.id === urlViewId);
@@ -218,7 +217,7 @@ export function useSavedViews({
     // Stamped once the server answered for every seed: an older server or a
     // lost connection leaves it for the next open. Two devices at once make
     // nothing twice (the server keeps one per person, workspace and seed).
-    void api.seedViews(seedViewsFor(role)).then((done) => {
+    void ops.seedViews(seedViewsFor(role)).then((done) => {
       if (!done) return;
       const now = currentPreferences().tasksOnboarding;
       updatePreferences({
@@ -228,7 +227,7 @@ export function useSavedViews({
         },
       });
     });
-  }, [seedNow, workspaceId, api]);
+  }, [seedNow, workspaceId, ops.seedViews]);
 
   // Your view; a shared one only with Tasks edit (it changes what others see).
   const canSaveInto = !!openView && openView.ownerId === userId && (canShare || !openView.shared);

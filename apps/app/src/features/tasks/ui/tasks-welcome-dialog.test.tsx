@@ -5,7 +5,16 @@
 // does.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { ReactNode } from "react";
 
 import {
   currentPreferences,
@@ -13,7 +22,17 @@ import {
   updatePreferences,
 } from "../../../lib/preferences";
 import { setDomainReconciledForTest } from "../../../lib/prefs-sync";
-import type { Task } from "../model";
+import { CACHE_VERSION, cacheKey, memoryCache } from "../../../lib/sync/cache";
+import { setStoreOptionsForTests, workspaceStore } from "../../../lib/sync/store";
+import type { TaskCommands } from "../commands";
+import { makeTask } from "../helpers";
+import type { Bucket, Task } from "../model";
+import {
+  type FakeRuntimeExtras,
+  FakeTasksProvider,
+  type FakeTasksSeed,
+  fakeTasksRuntime,
+} from "../testing/fake-tasks";
 import { requestTasksWelcome } from "../welcome-request";
 import { TasksWelcomeDialog } from "./tasks-welcome-dialog";
 import { type TasksWelcome, useTasksWelcome, type WelcomeStep } from "./use-tasks-welcome";
@@ -106,47 +125,97 @@ describe("the dialog", () => {
 // ── when it opens by itself ───────────────────────────────────────────────
 
 const ME = "user-me";
+const WS = "ws-1";
 
-function task(id: string, creatorId: string): Task {
-  return { id, creatorId } as unknown as Task;
-}
-
-function fakeApi(over: Record<string, unknown> = {}) {
+function bucket(id: string, over: Partial<Bucket> = {}): Bucket {
   return {
-    tasks: [] as Task[],
-    buckets: [] as Array<{ id: string }>,
-    inbox: { id: "inbox-1" },
-    canEdit: true,
-    currentUserId: ME,
-    reachedServer: true,
-    restLoaded: true,
-    createTask: rs.fn(() => Promise.resolve(null)),
+    id,
+    workspaceId: WS,
+    ownerId: ME,
+    name: id,
+    isSystem: false,
+    group: null,
+    position: id,
+    createdAt: "",
+    updatedAt: "",
+    deletedAt: null,
     ...over,
-  } as never;
+  };
 }
 
-function renderWelcome(
-  api: ReturnType<typeof fakeApi>,
+/** Your Inbox: where the teaching tasks go. */
+const INBOX = bucket("inbox-1", { name: "Inbox", isSystem: true });
+
+function task(id: string, creatorId: string, bucketId = INBOX.id): Task {
+  return { ...makeTask({ workspaceId: WS, bucketId, title: id, position: id }), id, creatorId };
+}
+
+/**
+ * The workspace as the server holds it (your Inbox, plus `over`), and a spy
+ * for `createTask` (the teaching tasks).
+ */
+function fakeWorkspace(
+  over: { tasks?: Task[]; buckets?: Bucket[]; createTask?: (...args: never[]) => unknown } = {},
+) {
+  const seed: FakeTasksSeed = {
+    tasks: over.tasks ?? [],
+    buckets: [INBOX, ...(over.buckets ?? [])],
+  };
+  const createTask = rs.fn(over.createTask ?? (() => Promise.resolve(null)));
+  return { seed, createTask, commands: { createTask } as unknown as Partial<TaskCommands> };
+}
+
+type FakeWorkspace = ReturnType<typeof fakeWorkspace>;
+
+/**
+ * A provider on `ws`'s store, already read as a warm page finds it. `extras`
+ * replaces runtime calls (a server slow to answer); `prepare` runs before the
+ * store is made (a device copy to open from).
+ */
+async function tasksHost(
+  ws: FakeWorkspace,
+  opts: { extras?: FakeRuntimeExtras; prepare?: () => void } = {},
+) {
+  const fake = fakeTasksRuntime(ws.seed, opts.extras);
+  opts.prepare?.();
+  const store = workspaceStore(fake.runtime, ME, WS);
+  const release = store.acquire();
+  await store.whenRest();
+  function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <FakeTasksProvider runtime={fake.runtime} userId={ME} workspaceId={WS} commands={ws.commands}>
+        {children}
+      </FakeTasksProvider>
+    );
+  }
+  return { Wrapper, release, store };
+}
+
+async function renderWelcome(
+  ws: FakeWorkspace,
   opts: { isOwner?: boolean; runtime?: unknown; onFirstView?: () => void } = {},
 ) {
-  return renderHook(
-    ({ a }) =>
+  const host = await tasksHost(ws);
+  const view = renderHook(
+    () =>
       useTasksWelcome({
-        api: a,
         runtime: (opts.runtime ?? null) as never,
-        workspaceId: "ws-1",
+        workspaceId: WS,
         isOwner: opts.isOwner ?? false,
         onFirstView: opts.onFirstView ?? (() => undefined),
       }),
-    { initialProps: { a: api } },
+    { wrapper: host.Wrapper },
   );
+  // The provider holds the store now.
+  host.release();
+  return view;
 }
 
 const flush = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
 describe("useTasksWelcome", () => {
   it("waits for the person's preferences, then opens on the role question, once", async () => {
-    const { result } = renderWelcome(fakeApi());
+    const { result } = await renderWelcome(fakeWorkspace());
     expect(result.current.open).toBe(false);
     act(() => setDomainReconciledForTest("preferences", ME));
     expect(result.current.open).toBe(true);
@@ -155,41 +224,83 @@ describe("useTasksWelcome", () => {
     await flush();
   });
 
-  it("opens on the basics when the role was already answered", () => {
+  it("opens on the basics when the role was already answered", async () => {
     updatePreferences({
       tasksOnboarding: { ...DEFAULT_PREFERENCES.tasksOnboarding, roleAt: "2026-10-13T09:00:00Z" },
     });
     setDomainReconciledForTest("preferences", ME);
-    const { result } = renderWelcome(fakeApi());
+    const { result } = await renderWelcome(fakeWorkspace());
     expect(result.current.step).toBe("basics");
   });
 
-  it("never opens once seen, and never for someone who already made tasks here", () => {
+  it("never opens once seen, and never for someone who already made tasks here", async () => {
     setDomainReconciledForTest("preferences", ME);
-    const experienced = renderWelcome(fakeApi({ tasks: [task("t1", ME)] }));
+    const experienced = await renderWelcome(fakeWorkspace({ tasks: [task("t1", ME)] }));
     expect(experienced.result.current.open).toBe(false);
     // Marked seen quietly: no other device asks either.
     expect(currentPreferences().tasksOnboarding.welcomeSeenAt).not.toBeNull();
     experienced.unmount();
-    const again = renderWelcome(fakeApi());
+    const again = await renderWelcome(fakeWorkspace());
     expect(again.result.current.open).toBe(false);
   });
 
-  it("waits while the tasks come only from this device's copy", () => {
+  it("waits while the tasks come only from this device's copy", async () => {
     setDomainReconciledForTest("preferences", ME);
-    const { result, rerender } = renderWelcome(fakeApi({ reachedServer: false }));
+    // The device copy holds the whole workspace (open and the rest); the
+    // server answers only once let through.
+    const cache = memoryCache();
+    cache.records.set(cacheKey(ME, WS), {
+      v: CACHE_VERSION,
+      savedAt: Date.now(),
+      tables: { buckets: { rows: [INBOX], cursor: null } },
+      restLoaded: true,
+      outbox: [],
+    });
+    let serverUp: () => void = () => {};
+    const up = new Promise<void>((resolve) => {
+      serverUp = resolve;
+    });
+    const ws = fakeWorkspace();
+    const host = await tasksHost(ws, {
+      prepare: () => setStoreOptionsForTests({ cache, listen: () => () => {} }),
+      extras: {
+        tasks: {
+          syncRead: async ({ table, part }: { table: keyof FakeTasksSeed; part?: string }) => {
+            await up;
+            return {
+              rows: table === "tasks" && part === "rest" ? [] : (ws.seed[table] ?? []),
+              deleted: [],
+              maxUpdatedAt: null,
+              truncated: null,
+            };
+          },
+        },
+      },
+    });
+    expect(host.store.getSnapshot()).toMatchObject({ fromCache: true, restLoaded: true });
+    const { result } = renderHook(
+      () =>
+        useTasksWelcome({
+          runtime: null,
+          workspaceId: WS,
+          isOwner: false,
+          onFirstView: () => undefined,
+        }),
+      { wrapper: host.Wrapper },
+    );
+    host.release();
     expect(result.current.open).toBe(false);
-    rerender({ a: fakeApi({ reachedServer: true }) });
-    expect(result.current.open).toBe(true);
+    await act(async () => serverUp());
+    await waitFor(() => expect(result.current.open).toBe(true));
   });
 
   it("seeds the three teaching tasks in the owner's empty workspace, once", async () => {
     setDomainReconciledForTest("preferences", ME);
-    const api = fakeApi();
-    renderWelcome(api, { isOwner: true });
+    const ws = fakeWorkspace();
+    await renderWelcome(ws, { isOwner: true });
     await flush();
     await flush();
-    const create = (api as unknown as { createTask: ReturnType<typeof rs.fn> }).createTask;
+    const create = ws.createTask;
     expect(create).toHaveBeenCalledTimes(3);
     expect(create.mock.calls.map((c) => (c[0] as { bucketId: string }).bucketId)).toEqual([
       "inbox-1",
@@ -201,53 +312,53 @@ describe("useTasksWelcome", () => {
 
   it("never seeds a workspace whose only projects are archived", async () => {
     setDomainReconciledForTest("preferences", ME);
-    const api = fakeApi({ archivedBuckets: [{ id: "old" }], archivedTasks: [task("t0", ME)] });
-    renderWelcome(api, { isOwner: true });
+    // An archived project, with its task: the store sets both apart.
+    const ws = fakeWorkspace({
+      buckets: [bucket("old", { archivedAt: "2026-10-01T09:00:00Z" })],
+      tasks: [task("t0", ME, "old")],
+    });
+    await renderWelcome(ws, { isOwner: true });
     await flush();
     await flush();
-    expect(
-      (api as unknown as { createTask: ReturnType<typeof rs.fn> }).createTask,
-    ).not.toHaveBeenCalled();
+    expect(ws.createTask).not.toHaveBeenCalled();
   });
 
   it("stops seeding when the workspace changes mid-way", async () => {
     setDomainReconciledForTest("preferences", ME);
     let release: () => void = () => {};
-    const createTask = rs.fn(
-      () =>
+    const ws = fakeWorkspace({
+      createTask: () =>
         new Promise((resolve) => {
           release = () => resolve(null);
         }),
-    );
-    const api = fakeApi({ createTask });
+    });
+    const host = await tasksHost(ws);
     const view = renderHook(
-      ({ ws }) =>
+      ({ workspaceId }) =>
         useTasksWelcome({
-          api,
           runtime: null,
-          workspaceId: ws,
+          workspaceId,
           isOwner: true,
           onFirstView: () => undefined,
         }),
-      { initialProps: { ws: "ws-1" } },
+      { initialProps: { workspaceId: WS }, wrapper: host.Wrapper },
     );
+    host.release();
     await flush();
-    expect(createTask).toHaveBeenCalledTimes(1);
-    view.rerender({ ws: "ws-2" });
+    expect(ws.createTask).toHaveBeenCalledTimes(1);
+    view.rerender({ workspaceId: "ws-2" });
     await act(async () => release());
     await flush();
-    expect(createTask).toHaveBeenCalledTimes(1);
+    expect(ws.createTask).toHaveBeenCalledTimes(1);
   });
 
   it("never seeds a workspace someone else prepared", async () => {
     setDomainReconciledForTest("preferences", ME);
-    const api = fakeApi({ tasks: [task("t1", "organiser")], buckets: [{ id: "p1" }] });
-    const { result } = renderWelcome(api, { isOwner: false });
+    const ws = fakeWorkspace({ tasks: [task("t1", "organiser")], buckets: [bucket("p1")] });
+    const { result } = await renderWelcome(ws, { isOwner: false });
     await flush();
     expect(result.current.open).toBe(true);
-    expect(
-      (api as unknown as { createTask: ReturnType<typeof rs.fn> }).createTask,
-    ).not.toHaveBeenCalled();
+    expect(ws.createTask).not.toHaveBeenCalled();
   });
 
   it("a role answer opens its first view and adds its starter template", async () => {
@@ -259,7 +370,7 @@ describe("useTasksWelcome", () => {
     const runtime = {
       tasks: { createStarterTemplate, listTemplates: rs.fn(() => Promise.resolve([])) },
     };
-    const { result } = renderWelcome(fakeApi({ buckets: [{ id: "p1" }] }), {
+    const { result } = await renderWelcome(fakeWorkspace({ buckets: [bucket("p1")] }), {
       runtime,
       onFirstView,
     });
@@ -274,17 +385,17 @@ describe("useTasksWelcome", () => {
     expect(result.current.starterName).toBe("Project kickoff");
   });
 
-  it("Skip records the question as asked, with no role", () => {
+  it("Skip records the question as asked, with no role", async () => {
     setDomainReconciledForTest("preferences", ME);
     const onFirstView = rs.fn();
-    const { result } = renderWelcome(fakeApi(), { onFirstView });
+    const { result } = await renderWelcome(fakeWorkspace(), { onFirstView });
     act(() => result.current.chooseRole(null));
     expect(onFirstView).not.toHaveBeenCalled();
     expect(currentPreferences().tasksOnboarding.role).toBeNull();
     expect(currentPreferences().tasksOnboarding.roleAt).not.toBeNull();
   });
 
-  it("Help → What's in Tasks reopens it at the basics", () => {
+  it("Help → What's in Tasks reopens it at the basics", async () => {
     updatePreferences({
       tasksOnboarding: {
         ...DEFAULT_PREFERENCES.tasksOnboarding,
@@ -292,7 +403,7 @@ describe("useTasksWelcome", () => {
       },
     });
     setDomainReconciledForTest("preferences", ME);
-    const { result } = renderWelcome(fakeApi());
+    const { result } = await renderWelcome(fakeWorkspace());
     expect(result.current.open).toBe(false);
     act(() => requestTasksWelcome());
     expect(result.current.open).toBe(true);

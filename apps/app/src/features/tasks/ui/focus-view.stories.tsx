@@ -8,10 +8,10 @@ import {
   startFocus,
 } from "../../focus/engine";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskSession } from "../model";
+import { queueEntry } from "../testing/fake-tasks";
 import { FocusView } from "./focus-view";
-import { BUCKETS, TeamWorkspace } from "./tasks-stories-fixtures";
+import { BUCKETS, INBOX, StoryTasks, TeamWorkspace } from "./tasks-stories-fixtures";
 
 // The Focus screen (TV-F7; prototype round-2a frames 1–3): running Per task,
 // Pomodoro, Timer off, and nothing lined up. Visual captures are a deliberate
@@ -77,33 +77,16 @@ const SESSIONS: TaskSession[] = [
   },
 ];
 
-function api(queued: Task[], all: Task[], sessions: TaskSession[] = []): TasksModuleApi {
-  const noop = () => {};
+/** What the store reads: the tasks, my line-up in order, and today's sessions. */
+function seedFor(queued: Task[], all: Task[], sessions: TaskSession[] = []) {
   return {
-    loaded: true,
+    buckets: [INBOX, ...BUCKETS],
     tasks: all,
-    queuedTasks: queued,
-    queuedTaskIds: new Set(queued.map((t) => t.id)),
-    buckets: BUCKETS,
-    sections: [],
+    queue: queued.map((t, i) =>
+      queueEntry(t.id, ME, { workspaceId: WS, position: String.fromCharCode(97 + i) }),
+    ),
     sessions,
-    currentUserId: ME,
-    blockedTaskIds: new Set(),
-    blockersByTask: new Map(),
-    subtasksByParent: new Map([["draft", SUBTASKS]]),
-    focusRefOf: (id: string) => {
-      const t = all.find((x) => x.id === id);
-      return t ? { id, title: t.title, bucketName: "Moduo App", workspaceId: WS } : null;
-    },
-    markDone: noop,
-    toggleDone: noop,
-    moveQueuedToEnd: noop,
-    addToQueue: noop,
-    removeFromQueue: noop,
-    reorderQueue: noop,
-    focusOnTask: () => true,
-    toggleQueue: noop,
-  } as unknown as TasksModuleApi;
+  };
 }
 
 /** A session on the Now task with `timer`, set up before the screen draws. */
@@ -125,21 +108,22 @@ function Screen({ timer, empty = false }: { timer: FocusTimerMode | null; empty?
   const all = empty ? TODAY : [NOW, ...SUBTASKS, ...UP_NEXT];
   return (
     <Session timer={timer}>
-      <div className="h-screen bg-background p-4">
-        <FocusView
-          api={api(queued, all, empty ? SESSIONS : [])}
-          workspaceId={WS}
-          runtime={null}
-          canEdit
-          bucketNameById={(id) => BUCKETS.find((b) => b.id === id)?.name ?? "Inbox"}
-          selectedTaskId={null}
-          onSelectTask={() => {}}
-          onOpenTask={() => {}}
-          panelTaskId={null}
-          onRequestCapture={() => {}}
-          dndMode="internal"
-        />
-      </div>
+      <StoryTasks seed={seedFor(queued, all, empty ? SESSIONS : [])} userId={ME} workspaceId={WS}>
+        <div className="h-screen bg-background p-4">
+          <FocusView
+            workspaceId={WS}
+            runtime={null}
+            canEdit
+            bucketNameById={(id) => BUCKETS.find((b) => b.id === id)?.name ?? "Inbox"}
+            selectedTaskId={null}
+            onSelectTask={() => {}}
+            onOpenTask={() => {}}
+            panelTaskId={null}
+            onRequestCapture={() => {}}
+            dndMode="internal"
+          />
+        </div>
+      </StoryTasks>
     </Session>
   );
 }

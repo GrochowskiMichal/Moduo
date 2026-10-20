@@ -3,6 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import { pluginTailwindcss } from "@rsbuild/plugin-tailwindcss";
+import { devtools } from "@tanstack/devtools-rspack";
 
 function readLocalEnvValue(name: string): string {
   // .env.local lives at the repo root (scripts/local/env.ts writes it there).
@@ -56,6 +58,13 @@ const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
+// The desktop bundle runs only in the shell's own engine (WKWebView on macOS 14+,
+// i.e. Safari 17, and WebView2 on Windows), so it compiles for the `desktop` env in
+// package.json's browserslist (Rsbuild only resolves the NODE_ENV env itself, so it is
+// passed as an override). Web keeps Rsbuild's default targets.
+const desktopBrowserslist: string[] = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+).browserslist.desktop;
 
 // App version + build id surfaced in Settings → About (DF-19i) and Diagnostics
 // (DF-19g). Version comes from the VERSION file; the build id is the short git
@@ -96,7 +105,7 @@ const appBuild = readBuildId();
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
 export default defineConfig({
-  plugins: [pluginReact({ reactCompiler: true })],
+  plugins: [pluginReact({ reactCompiler: true }), pluginTailwindcss()],
   source: {
     entry: {
       index: "./src/main.tsx",
@@ -108,6 +117,8 @@ export default defineConfig({
       "import.meta.env.PUBLIC_SUPABASE_URL": JSON.stringify(supabaseUrl),
       "import.meta.env.PUBLIC_SUPABASE_PUBLISHABLE_KEY": JSON.stringify(supabasePublishableKey),
       "import.meta.env.MODUO_TARGET": JSON.stringify(target),
+      // MODUO_DEVTOOLS=0 keeps the dev-only TanStack Devtools off (main.tsx).
+      "import.meta.env.MODUO_DEVTOOLS": JSON.stringify(process.env.MODUO_DEVTOOLS ?? "1"),
       "import.meta.env.MODUO_VERSION": JSON.stringify(appVersion),
       "import.meta.env.MODUO_BUILD": JSON.stringify(appBuild),
       "import.meta.env.PUBLIC_STRIPE_PUBLISHABLE_KEY": JSON.stringify(stripePublishableKey),
@@ -129,6 +140,13 @@ export default defineConfig({
   },
   html: {
     template: "./index.html",
+  },
+  tools: {
+    // TanStack Devtools (TS-1): source links and console helpers in dev only;
+    // production builds never load the plugin or the panel (src/main.tsx).
+    rspack: (_config, { isDev, prependPlugins }) => {
+      if (isDev) prependPlugins(devtools());
+    },
   },
   resolve: {
     alias: {
@@ -164,25 +182,35 @@ export default defineConfig({
     strictPort: true,
   },
   output: {
+    // MODUO_SOURCEMAP=1 emits .map files for bundle attribution (Rsbuild 2 has
+    // no webpack analyzer); release builds leave it off.
+    ...(process.env.MODUO_SOURCEMAP ? { sourceMap: { js: "source-map" as const } } : {}),
     distPath: {
       root: isWeb ? "dist/web" : "dist",
     },
+    ...(isWeb ? {} : { overrideBrowserslist: desktopBrowserslist }),
   },
   performance: {
     // Reuse the previous compile on the next dev or production build.
     // The target is part of the cache key so a web build cannot be reused
-    // as the desktop bundle.
+    // as the desktop bundle (nor one compiled for other browser targets).
     buildCache: {
-      cacheDigest: [target],
+      cacheDigest: [target, ...(isWeb ? [] : desktopBrowserslist)],
     },
     // Fetch route chunks in the background so the next screen opens from
     // cache. On desktop the files are already local; on web this is idle
     // bandwidth after the first paint.
+    // Geist 400/500 are the first-paint faces: preload them (as="font" with
+    // crossorigin) so text does not wait for the stylesheet to be parsed.
+    preload: {
+      type: "all-assets",
+      include: [/geist-sans-latin-(?:400|500)-normal\.[0-9a-f]+\.woff2$/],
+    },
     prefetch: {
       type: "async-chunks",
       // Except posthog-js: analytics code is fetched only once someone opts in
       // (src/lib/analytics.ts names that chunk). The first pattern is Rsbuild's default.
-      exclude: [/\.(?:webmanifest|pdf|txt)$/i, /(?:^|\/)posthog\./],
+      exclude: [/\.(?:webmanifest|pdf|txt)$/i, /(?:^|\/)posthog\./, /\.woff2?$/],
     },
   },
 });

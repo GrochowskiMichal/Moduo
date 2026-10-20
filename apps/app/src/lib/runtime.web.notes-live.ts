@@ -17,10 +17,11 @@
  * channel degrades to the engine's pulls, never data loss.
  */
 
-import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import type { Db } from "./runtime.db";
 import type { NoteLiveChannel, NoteLiveJoin } from "./runtime.types";
 
-type LiveClient = Pick<SupabaseClient, "rpc" | "channel" | "removeChannel">;
+type LiveClient = Pick<Db, "rpc" | "channel" | "removeChannel">;
 
 /** The server forgets a tab after a minute of silence. */
 export const HEARTBEAT_MS = 20_000;

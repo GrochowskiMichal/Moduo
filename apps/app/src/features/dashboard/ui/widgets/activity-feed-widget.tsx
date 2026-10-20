@@ -19,7 +19,7 @@ import { isNotificationEnabled, usePreferencesValue } from "@/lib/preferences";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -34,7 +34,7 @@ import {
 } from "./widget-primitives";
 
 export function ActivityFeedWidget({ size }: WidgetComponentProps) {
-  const { notifications } = useDashboardData();
+  const notifications = useDashboardSource("notifications");
   const { userId } = useAuth();
   const density = useDensity();
   // Honour the per-type notification mutes (Settings → Preferences) so Home's

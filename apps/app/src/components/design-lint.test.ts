@@ -4,7 +4,7 @@
 // clean codebase, so the patterns get their own test.
 import { describe, expect, it } from "@rstest/core";
 
-import { PATTERNS, scanFile } from "../../../../scripts/check-arbitrary-tw";
+import { PATTERNS, scanFile, staleIgnores } from "../../../../scripts/check-arbitrary-tw";
 
 const patternsFor = (source: string) =>
   scanFile(source, "probe.tsx").map((hit) => `${hit.pattern}:${hit.match}`);
@@ -60,5 +60,13 @@ describe("lint:tw — named-palette coverage (DF-18)", () => {
     for (const { name, regex } of PATTERNS) {
       expect(regex.flags, name).toContain("g");
     }
+  });
+});
+
+describe("IGNORED_PATHS stays honest", () => {
+  it("flags an entry whose file is gone or has no violations left", () => {
+    const ignored = ["src/a.tsx", "src/gone.tsx", "src/legacy"];
+    expect(staleIgnores(["src/a.tsx", "src/legacy/x.tsx"], ignored)).toEqual(["src/gone.tsx"]);
+    expect(staleIgnores([], ignored)).toEqual(ignored);
   });
 });

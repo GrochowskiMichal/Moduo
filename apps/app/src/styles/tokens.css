@@ -942,6 +942,10 @@
  * ==========================================================================*/
 
 @theme inline {
+  /* Container sizes (`@max-panel-narrow:`): the right panel's narrow layout
+     starts below a 320 px panel (AC1.16). A view sits inside the panel body's
+     4 px sides (MOD-121), so its container is 320 − 8 = 312 px wide there. */
+  --container-panel-narrow: 19.5rem; /* 312 */
   --color-background:           var(--background);
   --color-foreground:           var(--foreground);
   --color-card:                 var(--card);

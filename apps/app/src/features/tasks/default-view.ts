@@ -95,6 +95,89 @@ export function resolveDefaultSelection({
   return place === inboxId ? "inbox" : place;
 }
 
+// ── the place open in the centre (DF-1) ─────────────────────────────────────
+
+/** The scopes the sidebar opens besides a project or a saved view. */
+const FIXED_SCOPES = [
+  ...REOPENABLE_SCOPES,
+  "wontdo",
+  "archived",
+  "trash",
+  "templates",
+  "new-view",
+] as const;
+
+/**
+ * Places you pass through but never land back on (REPLAN 30, MOD-142):
+ * Won't do, Archived projects, Recently deleted, Templates, a new view
+ * never saved, and an archived project's page. Neither remembered as where
+ * you left Tasks nor reopened from the address bar.
+ */
+export function remembersPlace(place: string, archivedBucketIds: readonly string[]): boolean {
+  if (!(FIXED_SCOPES as readonly string[]).includes(place)) {
+    return !archivedBucketIds.includes(place);
+  }
+  return (REOPENABLE_SCOPES as readonly string[]).includes(place);
+}
+
+export type EntryPlaceInput = {
+  /** The place the address bar holds (`?place=`), or null. */
+  url: string | null;
+  /**
+   * The address bar still holds the place the page opened with (a refresh,
+   * Back or Forward, a link): a place you only pass through doesn't reopen.
+   */
+  reopening: boolean;
+  /** Where you left Tasks on this device, read once when the page opens. */
+  lastBucket: string | null;
+  /** A device left in the retired "Plan · Focus" switch's Focus mode (TV-F7). */
+  legacyMode: boolean;
+  /** Where a first open goes (the role's first view, TV-U17). */
+  firstView: string | null;
+  inboxId: string | null;
+  /** Every live project id (not the Inbox's). */
+  bucketIds: readonly string[];
+  archivedBucketIds: readonly string[];
+  /** Saved views' selections (`view:<id>`, TV-U8). */
+  viewSelections: readonly string[];
+  /** The bundle has loaded: until then the address bar and memory are trusted. */
+  loaded: boolean;
+  /** The server answered at least once: only then is a missing view gone. */
+  reachedServer: boolean;
+};
+
+/**
+ * The place the centre shows (DF-1). The address bar holds it, and wins over
+ * where you left Tasks: a link (Home's Upcoming "+n more", a saved view) and
+ * a place picked before the bundle answered both land there. Without one it's
+ * where you left Tasks, a first open's onboarding view, else the Inbox
+ * (`resolveDefaultSelection`). A project that's gone falls back to the Inbox;
+ * while the bundle loads, nothing counts as gone.
+ */
+export function resolveEntryPlace(input: EntryPlaceInput): string {
+  const { url, inboxId, bucketIds, archivedBucketIds, viewSelections, loaded } = input;
+  const remembered = input.legacyMode ? "today" : input.lastBucket;
+  const fallback = () =>
+    loaded
+      ? resolveDefaultSelection({
+          lastBucket: remembered,
+          bucketIds: [...(inboxId ? [inboxId] : []), ...bucketIds, ...viewSelections],
+          inboxId,
+          firstOpen: input.firstView,
+        })
+      : (remembered ?? "inbox");
+  if (!url) return fallback();
+  if (input.reopening && !remembersPlace(url, archivedBucketIds)) return fallback();
+  // Gone: a view once the server answered, a project once the bundle has.
+  const gone = () => (input.reopening ? fallback() : "inbox");
+  if (url.startsWith("view:")) {
+    return viewSelections.includes(url) || !input.reachedServer ? url : gone();
+  }
+  if ((FIXED_SCOPES as readonly string[]).includes(url) || !loaded) return url;
+  if (url === inboxId || bucketIds.includes(url) || archivedBucketIds.includes(url)) return url;
+  return gone();
+}
+
 // ── My tasks (tasks-v2 §1, TV-D4; in every workspace since TV-U15) ──────────
 
 /**

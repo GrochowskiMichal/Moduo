@@ -6,7 +6,7 @@ import { Clock } from "lucide-react";
 
 import type { ReconnectItem } from "@/features/contacts/reconnect";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -28,7 +28,7 @@ function lastTouchLabel(item: ReconnectItem): string {
 }
 
 export function ReconnectWidget({ size }: WidgetComponentProps) {
-  const { reconnect } = useDashboardData();
+  const reconnect = useDashboardSource("reconnect");
   const density = useDensity();
 
   if (reconnect.loading && reconnect.data.length === 0) return <WidgetLoading />;

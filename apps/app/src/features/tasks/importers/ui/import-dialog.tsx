@@ -58,43 +58,20 @@ import {
 } from "../plan";
 import { readImportText, sizeProblem } from "../read";
 import {
-  type ImportApi,
   type ImportContext,
   type ImportOutcome,
   type RunOptions,
   resolvePlan,
   runImport,
 } from "../run";
+import { importApiOf } from "./import-api";
+
+export { importApiOf };
 
 const CATEGORIES: TaskStatusCategory[] = ["backlog", "todo", "in_progress", "done", "wont_do"];
 const MB = 1024 * 1024;
 const plural = (n: number, one: string, many = `${one}s`) =>
   `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
-
-/** The runtime's import writes, or null when this build has none. */
-export function importApiOf(runtime: ModuoRuntime | null): ImportApi | null {
-  const t = runtime?.tasks;
-  if (
-    !runtime ||
-    !t?.beginImport ||
-    !t.createImportProject ||
-    !t.createImportSection ||
-    !t.createImportTask ||
-    !t.finishImport
-  ) {
-    return null;
-  }
-  return {
-    beginImport: t.beginImport,
-    createImportProject: t.createImportProject,
-    createImportSection: t.createImportSection,
-    createImportTask: t.createImportTask,
-    finishImport: t.finishImport,
-    listStatuses: (ws) => t.listStatuses(ws),
-    createStatus: (input) => t.createStatus(input),
-    addComment: (input) => runtime.spine.addComment(input),
-  };
-}
 
 type Step =
   | { kind: "pick"; error: string | null; reading: boolean }

@@ -7,8 +7,6 @@
 // Card-level extras (a project's name, subtask counts, progress) ride the same
 // rules. Split out of runtime.web.ts so it stays testable with a fake client.
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import type {
   ContactPreviewRow,
   EmailPreviewRow,
@@ -19,8 +17,9 @@ import type {
   TagPreviewRow,
   TaskPreviewRow,
 } from "../features/spine/references/rows";
+import { type Db, DbError } from "./runtime.db";
 import { handleWithCurrentKey } from "./task-handle";
-import { dueOnToLocalInstant, isMissingColumnError } from "./task-rows";
+import { dueOnToLocalInstant } from "./task-rows";
 
 /** PostgREST rows are untyped here; each is mapped below. */
 type Row = Record<string, any>;
@@ -45,26 +44,21 @@ const likeEscape = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\$
 /** Statuses that count towards progress: Backlog and Won't do sit out (53b). */
 const COUNTED = ["todo", "in_progress", "done"];
 
-export function createReferencePreviews(client: SupabaseClient): ReferencePreviewApi {
+export function createReferencePreviews(client: Db): ReferencePreviewApi {
   const fail = (error: { message: string } | null) => {
-    if (error) throw new Error(error.message);
+    if (error) throw new DbError(error);
   };
 
   return {
     async tasks({ workspaceId, ids, card }) {
       if (!ids.length) return [];
-      const read = (extra: string) =>
-        client
-          .from("tasks")
-          .select(`id, title, status, due_date, bucket_id, assignee_id, deleted_at${extra}`)
-          .eq("workspace_id", workspaceId)
-          .in("id", ids);
-      let { data, error } = await read(", number, status_category, due_on");
-      // A database before TV-D9 has no status category or due_on (a backlog
-      // task's legacy status reads "todo"); before TV-D8, no task numbers.
-      if (isMissingColumnError(error, "status_category") || isMissingColumnError(error, "due_on"))
-        ({ data, error } = await read(", number"));
-      if (isMissingColumnError(error, "number")) ({ data, error } = await read(""));
+      const { data, error } = await client
+        .from("tasks")
+        .select(
+          "id, title, status, due_date, bucket_id, assignee_id, deleted_at, number, status_category, due_on",
+        )
+        .eq("workspace_id", workspaceId)
+        .in("id", ids);
       fail(error);
       const rows: TaskPreviewRow[] = ((data ?? []) as Row[]).map((r) => ({
         id: r.id,
@@ -352,7 +346,6 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("entity_type", "task")
         .eq("handle", current)
         .limit(1);
-      if (isMissingColumnError(error, "handle")) return null;
       fail(error);
       const row = ((data ?? []) as Row[])[0];
       return row ? (str(row.entity_id) ?? null) : null;

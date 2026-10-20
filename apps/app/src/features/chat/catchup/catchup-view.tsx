@@ -10,7 +10,6 @@
 import { Inbox, Loader2, MessageCircle, MoreHorizontal } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-
 import { type BottomBarMode, useBottomBarModeOwner } from "@/components/app/bottom-bar-mode";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -30,6 +29,7 @@ import { formatPastDay, formatTime } from "@/lib/time-format";
 import { useTimeRegion } from "@/lib/time-region";
 import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
+import { useAppHotkeys, useHotkeyScope } from "../../../lib/hotkeys";
 import { messageTree, toExcerptText } from "../markup-v2";
 import type {
   ChatCatchupItem,
@@ -73,12 +73,6 @@ function writeOrder(order: CatchupOrder): void {
   } catch {
     // Private mode: the choice lasts this visit.
   }
-}
-
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el || typeof el.closest !== "function") return false;
-  return !!el.closest("input, textarea, select, [contenteditable=''], [contenteditable='true']");
 }
 
 /** A dialog or menu over the page: Catch up's keys wait. */
@@ -300,53 +294,42 @@ export function useCatchupScreen(input: CatchupScreenInput): CatchupScreen {
   );
 
   // ── keys (§16): R · Space · T · H · ⏎ · ↑↓ · Esc ──────────────────────────
-  useEffect(() => {
-    if (!active || typeof window === "undefined") return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isEditable(event.target) || overlayOpen()) return;
-      const { rows, selected } = latest.current;
-      const move = (by: number) => {
-        if (rows.length === 0) return;
-        const i = rows.findIndex((r) => r.item.id === selected?.item.id);
-        const next = rows[Math.min(rows.length - 1, Math.max(0, (i < 0 ? 0 : i) + by))];
-        if (next) select(next.item.id);
-      };
-      const key = event.key;
-      const action = (():
-        | "down"
-        | "up"
-        | "leave"
-        | "done"
-        | "open"
-        | "reply"
-        | "task"
-        | "later"
-        | null => {
-        if (key === "ArrowDown") return "down";
-        if (key === "ArrowUp") return "up";
-        if (key === "Escape") return "leave";
-        if (!selected || event.shiftKey) return null;
-        if (key === " " || key === "Enter") {
-          if (ownControl(event.target)) return null;
-          return key === " " ? "done" : "open";
-        }
-        const k = key.toLowerCase();
-        if (k === "r") return "reply";
-        if (k === "t") return "task";
-        if (k === "h") return "later";
-        return null;
-      })();
-      if (!action) return;
-      event.preventDefault();
-      if (action === "down") move(1);
-      else if (action === "up") move(-1);
-      else if (action === "leave") actions.current.onLeave();
-      else run(action);
+  // Registry bindings in the "catchup" scope (lib/hotkeys), on while Catch up
+  // is the active view. Never from a field or under an overlay.
+  useHotkeyScope("catchup", active);
+  const free = () => !overlayOpen();
+  const move = (by: number) => () => {
+    if (!free()) return false;
+    const { rows, selected } = latest.current;
+    if (rows.length === 0) return;
+    const i = rows.findIndex((r) => r.item.id === selected?.item.id);
+    const next = rows[Math.min(rows.length - 1, Math.max(0, (i < 0 ? 0 : i) + by))];
+    if (next) select(next.item.id);
+  };
+  const onSelected =
+    (action: "done" | "open" | "reply" | "task" | "later", ownKey = false) =>
+    (event: KeyboardEvent) => {
+      if (!free() || !latest.current.selected) return false;
+      // A focused control keeps its own Space and Enter.
+      if (ownKey && ownControl(event.target)) return false;
+      run(action);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [active, run, select]);
+  useAppHotkeys(
+    {
+      "catchup.down": move(1),
+      "catchup.up": move(-1),
+      "catchup.leave": () => {
+        if (!free()) return false;
+        actions.current.onLeave();
+      },
+      "catchup.done": onSelected("done", true),
+      "catchup.open": onSelected("open", true),
+      "catchup.reply": onSelected("reply"),
+      "catchup.task": onSelected("task"),
+      "catchup.later": onSelected("later"),
+    },
+    { enabled: active },
+  );
 
   // ── the bottom bar's mode row ─────────────────────────────────────────────
   const count = rows.length;

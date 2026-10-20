@@ -26,13 +26,20 @@ import type { TaskRefResolver } from "../../focus/run";
 import { toggleFocusPause, useFocusTimer } from "../../focus/timer";
 import { FocusAwayPrompt } from "../../focus/ui/away-prompt";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { Reference } from "../../spine/references/ui/reference";
+import { byIdOf } from "../derived";
 import { pillReading } from "../focus-screen";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
+import {
+  useSubtasksOf,
+  useTaskById,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksUserId,
+} from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 import { type HandOff, HandOffPopover } from "./focus-hand-off";
 import { PriorityMark } from "./level-icons";
@@ -118,7 +125,6 @@ function AwayLine() {
 
 export function NowCard({
   task,
-  api,
   runtime,
   workspaceId,
   canEdit,
@@ -136,7 +142,6 @@ export function NowCard({
   onHandOff,
 }: {
   task: Task;
-  api: TasksModuleApi;
   runtime: ModuoRuntime | null;
   workspaceId: string;
   canEdit: boolean;
@@ -156,22 +161,28 @@ export function NowCard({
   onHandOff: (handOff: HandOff) => void;
 }) {
   const today = useToday();
-  const project = api.buckets.find((b) => b.id === task.bucketId) ?? null;
-  const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
-  const section = !parent
-    ? (api.sections.find((s) => s.id === task.sectionId && s.projectId === task.bucketId) ?? null)
-    : null;
+  const { focusRefOf, toggleDone } = useTaskCommands();
+  const me = useTasksUserId();
+  const project = useTasksSelector((d) => byIdOf(d.buckets).get(task.bucketId) ?? null);
+  const parent = useTaskById(task.parentId);
+  const section = useTasksSelector((d) =>
+    !parent
+      ? (d.sections.find((s) => s.id === task.sectionId && s.projectId === task.bucketId) ?? null)
+      : null,
+  );
   const due = task.dueDate ? formatDay(task.dueDate, nowOn(today)) : null;
-  const blocked = api.blockedTaskIds.has(task.id)
-    ? (api.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b)).length
-    : 0;
-  const subtasks = api.subtasksByParent.get(task.id) ?? [];
+  const blocked = useTasksSelector((d) =>
+    d.blockedIds.has(task.id)
+      ? (d.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b)).length
+      : 0,
+  );
+  const subtasks = useSubtasksOf(task.id);
   const saving = task.id.startsWith("tmp-");
   // The 📎 mark (AT-3), live from the shared store.
-  const files = api.attachmentCounts?.get(task.id) ?? 0;
+  const files = useTasksSelector((_, snap) => snap.attachmentCounts?.get(task.id) ?? 0);
   // An agent's line, only when one is on this task (call 52; the line reads
   // the workspace's people, so it mounts only then).
-  const agentSessions = api.agentSessions;
+  const agentSessions = useTasksSelector((_, snap) => snap.agentSessions);
   const hasAgent = !!agentSessions?.some((s) => s.taskId === task.id && !s.deletedAt);
 
   return (
@@ -224,7 +235,7 @@ export function NowCard({
         <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} />
         {onNow ? (
           timer === "per_task" ? (
-            <TaskPill task={task} countdown={countdown} resolveTask={api.focusRefOf} />
+            <TaskPill task={task} countdown={countdown} resolveTask={focusRefOf} />
           ) : null
         ) : canEdit ? (
           <Tooltip>
@@ -261,7 +272,7 @@ export function NowCard({
             taskId={task.id}
             workspaceId={workspaceId}
             sessions={agentSessions}
-            userId={api.currentUserId}
+            userId={me}
             runtime={runtime}
             className="pl-0"
           />
@@ -287,7 +298,7 @@ export function NowCard({
           workspaceId={workspaceId}
           panelTaskId={panelTaskId}
           onOpen={onOpenTask}
-          onToggle={api.toggleDone}
+          onToggle={toggleDone}
         />
       ) : null}
 
@@ -313,7 +324,7 @@ export function NowCard({
           <HandOffPopover
             open={handOffOpen}
             onOpenChange={onHandOffOpenChange}
-            me={api.currentUserId}
+            me={me}
             onHandOff={onHandOff}
           >
             <Button size="sm" variant="ghost" disabled={saving} data-slot="focus-hand-off-button">

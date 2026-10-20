@@ -11,7 +11,7 @@ import { useToday } from "@/features/tasks/use-today";
 import { formatDurationSeconds } from "@/lib/time-format";
 import { useTimeRegion } from "@/lib/time-region";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -26,7 +26,7 @@ import {
 } from "./widget-primitives";
 
 export function TimetrackingWidget({ size }: WidgetComponentProps) {
-  const { timeReport } = useDashboardData();
+  const timeReport = useDashboardSource("timeReport");
   const density = useDensity();
   const { timeZone } = useTimeRegion();
   // The report dates entries in Time & region's zone; today is that zone's

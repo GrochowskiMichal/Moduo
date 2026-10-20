@@ -5,7 +5,7 @@
 // Realtime applies the subscriber's row-level security to inserts and
 // updates, so nobody receives a row they couldn't read; a delete carries only
 // the row's id (docs/gotchas/supabase.md §Realtime). Every surface that runs
-// `useTasksModule` (Tasks, Calendar, Notes, Email) shares the channel through a
+// a `TasksProvider` (Tasks, Calendar, Notes, Email) shares the channel through a
 // ref count, like chat's.
 //
 // Realtime is a latency layer, not the source of truth: after a reconnect, on

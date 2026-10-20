@@ -19,12 +19,19 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import type { Contact } from "../../contacts/model";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import { useTasksModule } from "../../tasks/hooks/use-tasks-module";
+import {
+  TasksProvider,
+  useTaskById,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+} from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSyncHealth, resolveAccountHues } from "../accounts";
 import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
@@ -87,16 +94,6 @@ function revealBySelector(selector: string, onDone?: (found: boolean) => void): 
 }
 
 type PanelVariantId = "reader" | "contact" | "detail" | "task";
-
-/** Guard shortcuts from firing while typing or inside an overlay. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return Boolean(el.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']"));
-}
 
 /** One tissue email card for the web read-only view (AC15). Carries the ref +
  * thread ids so a `?thread=` deep link can scroll to it (DF-2). */
@@ -161,19 +158,30 @@ type EmailPageViewProps = {
   onConsumeThreadDeepLink?: () => void;
 };
 
-export function EmailPageView({
-  urlThreadId = null,
-  onConsumeThreadDeepLink,
-}: EmailPageViewProps = {}) {
+export function EmailPageView(props: EmailPageViewProps = {}) {
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId, modulePermissions } = useWorkspace();
-  const email = useEmailModule({ runtime, workspaceId, isDesktop: IS_DESKTOP });
   // Tasks module — powers the convert great-moment + the Task right-panel variant.
-  const tasksApi = useTasksModule(runtime, {
-    userId,
-    workspaceId,
-    modulePermission: modulePermissions?.tasks ?? "none",
-  });
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={workspaceId}
+      modulePermission={modulePermissions?.tasks ?? "none"}
+    >
+      <EmailPageBody {...props} />
+    </TasksProvider>
+  );
+}
+
+function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPageViewProps) {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+  const email = useEmailModule({ runtime, workspaceId, isDesktop: IS_DESKTOP });
+  // Tasks, read narrowly from the provider above (A4).
+  const { load: reloadTasks } = useTaskCommands();
+  const { canEdit: tasksCanEdit } = useTasksStatus();
+  const tasksInbox = useTasksSelector((d) => d.inbox);
   // Contacts, for resolving a sender → an existing contact (AC9).
   const [contacts, setContacts] = useState<Contact[]>([]);
   useEffect(() => {
@@ -211,6 +219,7 @@ export function EmailPageView({
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpTarget, setFollowUpTarget] = useState<EmailThread | null>(null);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
+  const detailTask = useTaskById(detailTaskId);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   const accountHues = useMemo(() => resolveAccountHues(email.accounts), [email.accounts]);
@@ -707,16 +716,16 @@ export function EmailPageView({
       await deleteConvertArtifacts(plan);
       setDetailTaskId(null);
       setPanelVariant("reader");
-      void tasksApi.reload();
+      void reloadTasks();
       void email.refreshTissue();
     },
-    [deleteConvertArtifacts, tasksApi, email],
+    [deleteConvertArtifacts, reloadTasks, email],
   );
 
   const runConvert = useCallback(
     async (thread: EmailThread) => {
       if (!runtime || !workspaceId) return;
-      const inbox = tasksApi.inbox;
+      const inbox = tasksInbox;
       if (!inbox) {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
@@ -797,7 +806,7 @@ export function EmailPageView({
 
         setDetailTaskId(saved.id);
         setPanelVariant("task");
-        void tasksApi.reload();
+        void reloadTasks();
         void email.refreshTissue();
 
         const plan = {
@@ -832,7 +841,7 @@ export function EmailPageView({
           refId: createdRefId,
           refCreated: !refExisted,
         });
-        void tasksApi.reload();
+        void reloadTasks();
         void email.refreshTissue();
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
@@ -840,7 +849,8 @@ export function EmailPageView({
     [
       runtime,
       workspaceId,
-      tasksApi,
+      tasksInbox,
+      reloadTasks,
       email,
       contactIndex,
       contacts,
@@ -889,7 +899,7 @@ export function EmailPageView({
   const makeTaskFromRef = useCallback(
     async (ref: EmailThreadRef) => {
       if (!runtime || !workspaceId) return;
-      const inbox = tasksApi.inbox;
+      const inbox = tasksInbox;
       if (!inbox) {
         toast.error("Your Tasks inbox isn't ready yet.");
         return;
@@ -921,7 +931,7 @@ export function EmailPageView({
         });
         setDetailTaskId(saved.id);
         setPanelVariant("task");
-        void tasksApi.reload();
+        void reloadTasks();
         toast("Task created");
       } catch (e) {
         // DF-6: don't strand a linkless orphan task when the spawn link fails.
@@ -934,12 +944,12 @@ export function EmailPageView({
             refId: null,
             refCreated: false,
           });
-          void tasksApi.reload();
+          void reloadTasks();
         }
         toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
       }
     },
-    [runtime, workspaceId, tasksApi, deleteConvertArtifacts],
+    [runtime, workspaceId, tasksInbox, reloadTasks, deleteConvertArtifacts],
   );
 
   const togglePin = useCallback(
@@ -973,74 +983,35 @@ export function EmailPageView({
     setSelectedThreadId(list[nextIdx].threadId);
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey) return;
-      if (isTypingTarget(e.target)) return;
-      const list = scopedRef.current;
-      const curId = selectedIdRef.current;
-      const current = curId ? (list.find((t) => t.threadId === curId) ?? null) : null;
-
-      switch (e.key) {
-        case "j":
-          moveSelection(1);
-          break;
-        case "k":
-          moveSelection(-1);
-          break;
-        case "Enter":
-          if (current) openThread(current);
-          break;
-        case "e":
-          if (current) runArchive(current);
-          break;
-        case "p":
-          if (current) togglePin(current);
-          break;
-        case "#":
-          if (current) runDelete(current);
-          break;
-        case "m":
-          if (current) setMovePopoverOpen(true);
-          break;
-        case "s":
-          if (current) openSnooze(current);
-          break;
-        case "t":
-          if (current) void runConvert(current);
-          break;
-        case "r":
-          if (current) void startReply("reply");
-          break;
-        case "?":
-          setShortcutsOpen(true);
-          break;
-        case "/":
-          searchInputRef.current?.focus();
-          searchInputRef.current?.select();
-          break;
-        default:
-          return;
-      }
-      e.preventDefault();
-    };
-    // Capture phase so email's own keys — notably `?` for the triage legend —
-    // run BEFORE the bubble-phase global shortcut handler (app-chrome's
-    // useGlobalShortcuts). It preventDefaults what it handles; the global `?`
-    // sheet then sees defaultPrevented and stays closed on /email. All keys here
-    // are already guarded on modifiers + typing targets, so capture is safe.
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [
-    moveSelection,
-    openThread,
-    runArchive,
-    runDelete,
-    openSnooze,
-    runConvert,
-    togglePin,
-    startReply,
-  ]);
+  // Registry bindings in the "email" scope (routes/pages/email-page.tsx turns
+  // it on). Email's own `?` (the triage legend) outranks the app-wide sheet by
+  // scope (`overrides: true`), not by listening in the capture phase (TS-6).
+  // Never from a field; a key a nearer handler claimed is skipped.
+  const currentThread = () => {
+    const curId = selectedIdRef.current;
+    return curId ? (scopedRef.current.find((t) => t.threadId === curId) ?? null) : null;
+  };
+  const withCurrent = (run: (thread: EmailThread) => void) => () => {
+    const current = currentThread();
+    if (current) run(current);
+  };
+  useAppHotkeys({
+    "email.next": () => moveSelection(1),
+    "email.prev": () => moveSelection(-1),
+    "email.open": withCurrent(openThread),
+    "email.archive": withCurrent(runArchive),
+    "email.pin": withCurrent(togglePin),
+    "email.delete": withCurrent(runDelete),
+    "email.move": withCurrent(() => setMovePopoverOpen(true)),
+    "email.snooze": withCurrent(openSnooze),
+    "email.convert": withCurrent((thread) => void runConvert(thread)),
+    "email.reply": withCurrent(() => void startReply("reply")),
+    "email.legend": () => setShortcutsOpen(true),
+    "email.search": () => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    },
+  });
 
   const onConnected = useCallback(() => {
     setConnectOpen(false);
@@ -1073,7 +1044,7 @@ export function EmailPageView({
           fromName={selectedThread?.fromName ?? ""}
           fromAddr={selectedThread?.fromEmail ?? ""}
           contact={resolvedContact}
-          canEdit={tasksApi.canEdit}
+          canEdit={tasksCanEdit}
           onAddContact={addAsContact}
           onOpenEntity={openEntity}
         />
@@ -1083,20 +1054,16 @@ export function EmailPageView({
           runtime={runtime}
           workspaceId={workspaceId}
           refId={selectedRefId}
-          canEdit={tasksApi.canEdit}
+          canEdit={tasksCanEdit}
           onOpenEntity={openEntity}
         />
       ),
       task: () =>
         detailTaskId ? (
           <TaskDetailPanel
-            task={tasksApi.tasks.find((t) => t.id === detailTaskId) ?? null}
-            buckets={tasksApi.buckets}
-            inbox={tasksApi.inbox}
-            canEdit={tasksApi.canEdit}
+            task={detailTask}
             onRequestCapture={() => {}}
             onSelectTask={setDetailTaskId}
-            api={tasksApi}
             runtime={runtime}
             workspaceId={workspaceId}
             onOpenEntity={openEntity}
@@ -1124,7 +1091,8 @@ export function EmailPageView({
       resolvedContact,
       selectedRefId,
       detailTaskId,
-      tasksApi,
+      detailTask,
+      tasksCanEdit,
       addAsContact,
       openEntity,
     ],

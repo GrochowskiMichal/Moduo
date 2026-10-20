@@ -11,16 +11,21 @@ use super::{
 };
 
 pub(super) fn read_accounts(state: &AppState) -> Result<Vec<StoredEmailAccount>, String> {
-    let raw = state
-        .store
+    read_accounts_from(&state.store)
+}
+
+/// The stored account list. A list that doesn't decode is an error, never an
+/// empty list: every caller reads, changes and writes the list back, so an
+/// empty read followed by any save would delete every account.
+pub(super) fn read_accounts_from(store: &RedbStore) -> Result<Vec<StoredEmailAccount>, String> {
+    let raw = store
         .kv_get(EMAIL_NAMESPACE, EMAIL_ACCOUNTS_KEY)
         .map_err(|e| e.to_string())?;
 
     match raw {
         None => Ok(vec![]),
-        Some(value) => {
-            Ok(serde_json::from_value::<Vec<StoredEmailAccount>>(value).unwrap_or_else(|_| vec![]))
-        }
+        Some(value) => serde_json::from_value::<Vec<StoredEmailAccount>>(value)
+            .map_err(|e| format!("email_accounts_unreadable: {e}")),
     }
 }
 
@@ -735,9 +740,35 @@ mod tests {
     /// deserialize.
     ///
     /// This is the one that can lose the user's whole setup: `read_accounts`
-    /// swallows a deserialize error into an **empty list**, so a non-defaulted new
-    /// field would silently disconnect every mailbox on upgrade — and the app would
-    /// look like a fresh install rather than broken (specs/import.md assumption 4).
+    /// used to swallow a deserialize error into an **empty list** (it errors now,
+    /// see `unreadable_account_list_is_an_error_not_empty`), so a non-defaulted
+    /// new field must still never fail an upgrade (specs/import.md assumption 4).
+    /// An account list that doesn't decode errors, and stays as stored: an empty
+    /// read here followed by any save (a sync status patch) deleted every account.
+    #[test]
+    fn unreadable_account_list_is_an_error_not_empty() {
+        let temp = temp_store();
+        let garbage = serde_json::json!({ "not": "a list" });
+        temp.store
+            .kv_set(EMAIL_NAMESPACE, EMAIL_ACCOUNTS_KEY, &garbage)
+            .expect("plant");
+
+        let read = read_accounts_from(&temp.store);
+        assert!(read.is_err(), "a decode failure must not read as no accounts");
+
+        assert_eq!(
+            temp.store
+                .kv_get(EMAIL_NAMESPACE, EMAIL_ACCOUNTS_KEY)
+                .expect("read back"),
+            Some(garbage),
+            "the stored list is left as it was"
+        );
+
+        // No list at all is still an empty list.
+        let fresh = temp_store();
+        assert!(read_accounts_from(&fresh.store).expect("read").is_empty());
+    }
+
     #[test]
     fn accounts_v1_old_shape_still_loads() {
         // Verbatim pre-IM-2b shape: no `historyDepth` key at all.

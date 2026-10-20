@@ -11,6 +11,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-19 · The sensitive CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); low-value ones stay repo-level; callers keep `secrets: inherit` (needed for environment secrets in reusable workflows).
 - 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
+- 2026-10-20 · Published note links show only sub-notes that inherit the page's sharing (`notes_public_subtree`); a sub-note with its own sharing stays private · narrows NO-1's "subtree included" → decisions/notes.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md
 - 2026-10-17 · The local Supabase stack is shared (Maciej) · `local:reset` / `local:down` refuse without `MODUO_SHARED_STACK_OK=1` (the user's go-ahead), the raw `supabase db reset` / `stop --no-backup` are denied, and migrations are tested on top with psql · one reset would wipe other sessions' work mid-run · rejected: a stack per worktree, a docs-only rule → decisions/workflow.md
 - 2026-10-17 · PLAT-8: cutover: DNS on Cloudflare (checked with `scripts/dns-diff.ts`), every host a Worker custom domain in `wrangler.jsonc`, www as a 308 redirect rule, prod via owner-only `deploy-prod.yml` (rebuilds a staging-tested develop commit with the prod version, moves `prod-app`), updater on updates.moduo.app then workers.dev then GitHub.
@@ -73,6 +74,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Chat → [decisions/chat.md](decisions/chat.md)
 
+- 2026-10-20 · A sign-out keeps Chat's waiting sends (rows, drafts and sidebar go; the outbox stays under the person's key until they sign in here again); account deletion still wipes everything; "Log out" counts chat's waiting sends → decisions/chat.md
 - 2026-10-16 · CV-21 Agents and MCP tools (agent's choices; five open calls for Maciej, CV21-1…5): the reply switch in Settings → Preferences → Chat, on by default; only the creator turns private access on, any key manager turns it off; announcement channels need the creator to manage them; a key creates a private channel only with the switch on; the creator gets no reply item for their own agent's replies; the post keeps its v1 signature → decisions/chat.md CV21-1…CV21-8
 - 2026-10-16 · CV-20 Custom emoji (agent's choices): names 2–32 with a letter and never a standard shortcode; images under a server-minted upload slot; a JPEG stored as PNG; the picker's "Add emoji…" opens Settings; the export carries only your own emoji; images of removed emoji wait for a purge job → decisions/chat.md CV20-1…CV20-7
 - 2026-10-16 · CV-14 Decisions (agent's choices): marking needs post rights only and any poster may unmark; the Wrap up tick is refused as a whole when the wrapper can't post; Undo of a wrap-up takes back its own decision in one op; a decision follows a moved message; on an item, a linked channel's decisions plus a mentioning conversation's decisions that name it; ⇧D only in the stream → decisions/chat.md CV14-1…CV14-7
@@ -119,6 +121,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-10-20 · Desktop shell trimmed: 33 dead commands removed (`tasks_module_*` kept under `lite`), release `opt-level = "s"` (14.2 → 10.8 MB, unwinding kept), window hidden until React's first commit, macOS 14 floor + Safari 17 desktop targets; rustls switch deferred (no live IMAP creds).
 - 2026-10-19 · Release builds use `lto`, `codegen-units = 1` and `strip`: 28 MB → 15 MB.
 - 2026-10-19 · Desktop download links go to the update server's `latest/` redirect (current manifest version, Windows falls back to the last version with an installer), ignoring rollout and kill switch; the GitHub bridges stay frozen.
 - 2026-10-19 · REL-5: Mac updater bundles are per-arch (darwin-aarch64, darwin-x86_64), each .app notarized as a zip; the website .dmg stays universal; the darwin-universal transition key and its fallback were dropped after production 1.2.1.
@@ -138,6 +141,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-20 · Shortcuts are one typed registry on TanStack Hotkeys (`lib/hotkeys/`): route/surface/panel/modal scopes, narrower scope wins, no capture-phase overrides; duplicate-binding test.
+- 2026-10-20 · TanStack DB/Pacer/Devtools pinned (Devtools dev-only), Virtual 3.19, first-load budget in `apps/app/bundle-budget.json`, `tanstack` import boundary.
+- 2026-10-20 · First load is the anchor pages only: other routes, Lexical, capture parser, date picker and picker fonts are lazy (1,431 → 986 KB gzip JS).
+- 2026-10-20 · `moduleIds: 'compact-hashed'` not added: Rsbuild 2 already sets it in production (byte-identical).
+- 2026-10-20 · Rstest keeps the default pool and jsdom; `vmThreads` (-12%, 3 files break) and `happy-dom` (no gain, 6 files break) rejected.
+- 2026-10-20 · Tailwind builds through `@rsbuild/plugin-tailwindcss` (byte-identical CSS); PostCSS config now only in Storybook.
+- 2026-10-20 · `lightningcss` pin removed (1.32.0); web CSS differs only by whitespace in `calc()`.
+- 2026-10-20 · Type-checking is back on the official `tsc` 7.0.2; `tsc-ts` removed (supersedes the 2026-10-19 entry).
 - 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
 - 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
 - 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
@@ -216,6 +227,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-20 · Notes' caches (list, per-note documents, pull cursors) are keyed `person:workspace` and cut down to the outboxes on sign-out or a user switch; caches from before the update are deleted, their queued work stays nobody's → decisions/notes.md
 - 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
 - 2026-10-16 · NR-4: block moves are made on the Yjs doc (keep the moved element, re-create the jumped-over ones); `/`, `@` and `[[` share one caret-menu key regime; `[[Create …]]` rides the draft path.
@@ -242,6 +254,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Contacts → [decisions/contacts.md](decisions/contacts.md)
 
+- 2026-10-20 · Contact company ↔ works-at link kept in step by DB triggers for every writer (app, MCP, import, Links); one company per contact (a new works-at link replaces the old); supersedes FX-9's client dual-write → decisions/contacts.md
+- 2026-10-16 · Contacts v4 direction: one modular module (lenses: Companies, Deals, Keep in touch; relationship as the classifier; warmth derived) — PROPOSED, prototype only, pending the designer's ratification.
 - 2026-07-02 · Fix pack FX-9 landed (drag-to-link on /contacts) — Wave 1.5 complete.
 - 2026-07-02 · Fix pack FX-8 landed (single-select custom fields).
 - 2026-07-02 · Fix pack FX-4–FX-7 landed (card wins · relation sanity + People · entry modal · company parity).
@@ -269,6 +283,12 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-20 · TanStack spine re-planned after TS-3b: TS-3c, TS-4, TS-5 paused; TanStack DB stays the storage layer, live queries only for narrow indexed per-entity reads until a release after @tanstack/db 0.15.1 passes the 10k re-test; TS-R1 paints the List's first screen before the rest, the rail and the right panel one frame after the landing (warm open 150 → 83 ms, switch 81 → 50 ms, production) → decisions/data.md
+- 2026-10-20 · TS-3b: live queries only where an index narrows them (subtasks query built, not wired: the query engine is +59 KB first load); whole-workspace Tasks data stays cached JS (`derived.ts`, was `selectors.ts`) because a 10k live query costs 40–65 ms to build; the snapshot reads kernel rows (collections on demand); Home data is one context per source → decisions/data.md
+- 2026-10-20 · TS-3a: the Tasks store's tables are in-memory collections it drives (`ownerDriven`); the snapshot reads rows from them (raw `_state`, kernel order), overlays on top; API unchanged; first-load budget 1045 KB → decisions/data.md
+- 2026-10-20 · TS-2: `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection` into an in-memory TanStack DB collection (Realtime first and buffered, seed then `markReady`, kernel delta, kernel landing; no persistence plugin, the kernel writes the IDB copy; `sendChanges` hook for TS-3c) → decisions/data.md
+- 2026-10-20 · Tasks and Chat sync on one kernel (`lib/sync/kernel/`: stamps, idb, delta, landing, overlay, outbox, registry, collection); each caller's missing-stamp rule is named and pinned; Notes uses only its idb opener, network check and person lifecycle → decisions/data.md
+- 2026-10-20 · Runtime guardrails: Supabase client typed from prod (`db:types`), `runRpc`/`runQuery` throw `DbError`, deploy-gap fallbacks deleted for what prod has, `lint:boundaries` keeps Supabase in `lib/runtime*` and `lib` below `features` (stale grandfather entries fail)
 - 2026-10-10 · AT-2: one upload queue takes a file from prepare to finalize, survives restarts and words each refusal as a fact with one action; the task panel shows the strip under the description and takes paste or drop anywhere; desktop drops are plain HTML5 drops.
 - 2026-10-08 · AT-1: attachment bytes go straight to a private bucket under a pending row and are locked once finalized; one ledger per workspace owner counts them (held under the hosted 50 MB upload cap; Maciej: keep 50 MB for now); the trash clock is the server's; a daily `purge-deleted` function empties the trash after 30 days.
 - 2026-10-08 · The app never takes a Supabase session from the URL (`detectSessionInUrl: false`); sign-in is the typed 6-digit code only; the dashboard invite link still confirms the address but no longer signs anyone in.
@@ -304,6 +324,10 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-20 · PV-B3: the plan view is `useTasksPlanController` (a chain of hooks in the old call order) plus `TasksPlanLayout` (rail, body, panels, DnD host, dialogs); no file over ~600 lines; no logic changed → decisions/tasks.md
+- 2026-10-20 · PV-B2: one deep-link state machine (`deepLinkReducer`) decides whether `?id=` is a link or the mirror's own write; the backstop, mirror and default place act only when it's idle or resolved → decisions/tasks.md
+- 2026-10-20 · PV-B1: the plan view's place lives in `?place=` (written with replace, `place` before `id`), resolved at render by `resolveEntryPlace`; `lastBucket` is read once as an input; the task cursor stays React state · supersedes the one-shot `?place=upcoming` → decisions/tasks.md
+- 2026-10-20 · Sign-out (and another person signing in) keeps each person's waiting Tasks writes on the device, rows gone, until they sign in again; account deletion still wipes all; Log out warns first.
 - 2026-10-16 · "7 days" ends with the single completed line too, so no group, column or lane cell has its own in any mode (Maciej, MOD-148 follow-up, "1-13 ok"): the last week's show in their groups, one "5 older completed · Show" counts the older ones (Hidden keeps "12 completed · Show"; "older" is the agent's, since the recent ones are on screen) · rejected: one wording for both, a line per group in 7 days → decisions/tasks.md MOD-148
 - 2026-10-16 · Moduo's own trail lines (a repeat's catch-up, a waiting-on that came in: `actor_type` "agent", every writer the server's, labelled "Moduo") show the Moduo mark on the gray circle; a connected app's keep the plug (Maciej, MOD-149 follow-up, "1-13 ok"; size and fill the agent's) · ❓ the brand brief says never put the mark in a circle, his call · rejected: a free-standing mark, a rounded-square tile (a team's shape) → decisions/tasks.md MOD-149
 - 2026-10-16 · The Project view shares the task details' hierarchy (Maciej, MOD-152, "1-13 ok" to the canvas): a hairline with 16 px either side before every section (the details' Separator before Activity), a "Progress 2 of 8 done" header with its lines as 12 px meta, the name in the task title's style, no Next up (Waiting in its place; Copy as text still lists the open tasks); a long "on …" in Waiting gives way before the title (agent's) · rejected: lines between zones only, eyebrow headers, Next up lower or folded → decisions/tasks.md MOD-152

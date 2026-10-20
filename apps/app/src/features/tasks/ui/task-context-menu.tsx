@@ -172,7 +172,7 @@ export function TaskContextMenu({
             </ContextMenuItem>
           ) : null}
           <ContextMenuSeparator />
-          <AssignContextMenu task={task} api={actions} />
+          <AssignContextMenu task={task} patchTask={actions.patchTask} />
           <ContextMenuSub>
             <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
             <ContextMenuSubContent>

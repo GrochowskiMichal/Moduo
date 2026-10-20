@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-
 import {
   ContextMenu,
   ContextMenuContent,
@@ -10,6 +9,7 @@ import {
 import { useWorkspace } from "@/features/workspaces/workspace-context";
 import { getRuntime } from "@/lib/runtime";
 import type { RuntimeCapabilities } from "@/lib/runtime.types";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 
 import { DashboardDataProvider } from "../context/dashboard-data-context";
 import { WidgetActionsProvider } from "../context/widget-actions-context";
@@ -94,16 +94,10 @@ export function DashboardPage() {
       resizeWidget(activePage.widgets, id, size) ?? activePage.widgets,
     );
 
-  // Escape exits edit mode. An in-flight drag consumes Escape first (capture
-  // phase in the drag hook) and stops it, so this only fires when idle-editing.
-  useEffect(() => {
-    if (!editing) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !e.defaultPrevented) exit();
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [editing, exit]);
+  // Escape exits edit mode (registry: `home.exit-edit`). An in-flight drag
+  // consumes Escape first (capture phase in the drag hook) and stops it, so
+  // this only fires when idle-editing.
+  useAppHotkeys({ "home.exit-edit": () => exit() }, { enabled: editing });
 
   // The Edit/Done control lives in the app-chrome bottom bar (the panel-toggle
   // slot, empty on Home). Broadcast our state so it renders the right icon, and
@@ -143,20 +137,13 @@ export function DashboardPage() {
     return () => window.removeEventListener(DASHBOARD_PAGE_ACTION_EVENT, onAction);
   }, [goToIndex, addPage, removePage, activePageId, isGestureLive]);
 
-  // ←/→ turn pages (AC5) — ignored while typing or with a modifier held.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
-      e.preventDefault();
-      if (isGestureLive()) return; // not under a held widget (MOD-163)
-      goToIndex(activeIndex + (e.key === "ArrowRight" ? 1 : -1));
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [goToIndex, activeIndex, isGestureLive]);
+  // ←/→ turn pages (AC5) — ignored while typing or with a modifier held
+  // (registry: `home.prev-page` / `home.next-page`).
+  const turn = (by: 1 | -1) => () => {
+    if (isGestureLive()) return; // not under a held widget (MOD-163)
+    goToIndex(activeIndex + by);
+  };
+  useAppHotkeys({ "home.prev-page": turn(-1), "home.next-page": turn(1) });
 
   return (
     <DashboardDataProvider layout={dash.layout} workspaceId={selectedWorkspaceId}>

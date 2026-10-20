@@ -76,6 +76,47 @@ pub const TT_RULES: TableDefinition<&str, &str> = TableDefinition::new("tt_rules
 pub const TT_PROJECTS: TableDefinition<&str, &str> = TableDefinition::new("tt_projects");
 pub const TT_FOCUS: TableDefinition<&str, &str> = TableDefinition::new("tt_focus");
 
+/// Every table, in one place: `ensure_schema` creates them and `wipe_all`
+/// empties them (a sign-out), so a new table can't be left out of either.
+const ALL_TABLES: [TableDefinition<&str, &str>; 36] = [
+    NOTES_META,
+    NOTES_NODES,
+    NOTES_DOC_STATE,
+    NOTES_OUTBOX,
+    NOTES_OPLOG,
+    BUCKETS,
+    TASKS,
+    TAGS,
+    TAG_LINKS,
+    WORKSPACES,
+    WORKSPACE_MEMBERSHIP,
+    WORKSPACE_ACL,
+    WORKSPACE_INVITES,
+    WORKSPACE_NOTIFICATIONS,
+    DEVICE_IDENTITY,
+    MIGRATION_MARKERS,
+    OP_IDEMPOTENCY,
+    DEVICE_SEQ,
+    AUDIT_LOG,
+    EMAIL_ACCOUNTS_V2,
+    EMAIL_FOLDER_STATE,
+    EMAIL_ENVELOPES,
+    EMAIL_ENVELOPE_ORDER,
+    EMAIL_BODIES,
+    EMAIL_BODY_LRU,
+    EMAIL_BODY_TEXT,
+    EMAIL_FLAG_OUTBOX,
+    EMAIL_OP_OUTBOX,
+    EMAIL_UI_STATE,
+    SYNC_CLOUD_OUTBOX,
+    SYNC_PULL_CURSOR,
+    TT_ENTRIES,
+    TT_CATEGORIES,
+    TT_RULES,
+    TT_PROJECTS,
+    TT_FOCUS,
+];
+
 pub struct RedbStore {
     db: Database,
     write_guard: Mutex<()>,
@@ -94,49 +135,9 @@ pub struct EnvelopeWrite {
 impl RedbStore {
     fn ensure_schema(db: &Database) -> anyhow::Result<()> {
         let write_txn = db.begin_write()?;
-        let _ = write_txn.open_table(NOTES_META)?;
-        let _ = write_txn.open_table(NOTES_NODES)?;
-        let _ = write_txn.open_table(NOTES_DOC_STATE)?;
-        let _ = write_txn.open_table(NOTES_OUTBOX)?;
-        let _ = write_txn.open_table(NOTES_OPLOG)?;
-
-        let _ = write_txn.open_table(BUCKETS)?;
-        let _ = write_txn.open_table(TASKS)?;
-        let _ = write_txn.open_table(TAGS)?;
-        let _ = write_txn.open_table(TAG_LINKS)?;
-
-        let _ = write_txn.open_table(WORKSPACES)?;
-        let _ = write_txn.open_table(WORKSPACE_MEMBERSHIP)?;
-        let _ = write_txn.open_table(WORKSPACE_ACL)?;
-        let _ = write_txn.open_table(WORKSPACE_INVITES)?;
-        let _ = write_txn.open_table(WORKSPACE_NOTIFICATIONS)?;
-
-        let _ = write_txn.open_table(DEVICE_IDENTITY)?;
-        let _ = write_txn.open_table(MIGRATION_MARKERS)?;
-
-        let _ = write_txn.open_table(OP_IDEMPOTENCY)?;
-        let _ = write_txn.open_table(DEVICE_SEQ)?;
-        let _ = write_txn.open_table(AUDIT_LOG)?;
-
-        let _ = write_txn.open_table(EMAIL_ACCOUNTS_V2)?;
-        let _ = write_txn.open_table(EMAIL_FOLDER_STATE)?;
-        let _ = write_txn.open_table(EMAIL_ENVELOPES)?;
-        let _ = write_txn.open_table(EMAIL_ENVELOPE_ORDER)?;
-        let _ = write_txn.open_table(EMAIL_BODIES)?;
-        let _ = write_txn.open_table(EMAIL_BODY_LRU)?;
-        let _ = write_txn.open_table(EMAIL_BODY_TEXT)?;
-        let _ = write_txn.open_table(EMAIL_FLAG_OUTBOX)?;
-        let _ = write_txn.open_table(EMAIL_OP_OUTBOX)?;
-        let _ = write_txn.open_table(EMAIL_UI_STATE)?;
-
-        let _ = write_txn.open_table(SYNC_CLOUD_OUTBOX)?;
-        let _ = write_txn.open_table(SYNC_PULL_CURSOR)?;
-
-        let _ = write_txn.open_table(TT_ENTRIES)?;
-        let _ = write_txn.open_table(TT_CATEGORIES)?;
-        let _ = write_txn.open_table(TT_RULES)?;
-        let _ = write_txn.open_table(TT_PROJECTS)?;
-        let _ = write_txn.open_table(TT_FOCUS)?;
+        for table_def in ALL_TABLES {
+            let _ = write_txn.open_table(table_def)?;
+        }
         write_txn.commit()?;
         Ok(())
     }
@@ -212,42 +213,8 @@ impl RedbStore {
             .lock()
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let write_txn = self.db.begin_write()?;
-        let tables = [
-            NOTES_META,
-            NOTES_NODES,
-            NOTES_DOC_STATE,
-            NOTES_OUTBOX,
-            NOTES_OPLOG,
-            BUCKETS,
-            TASKS,
-            TAGS,
-            TAG_LINKS,
-            WORKSPACES,
-            WORKSPACE_MEMBERSHIP,
-            WORKSPACE_ACL,
-            WORKSPACE_INVITES,
-            WORKSPACE_NOTIFICATIONS,
-            DEVICE_IDENTITY,
-            MIGRATION_MARKERS,
-            OP_IDEMPOTENCY,
-            DEVICE_SEQ,
-            AUDIT_LOG,
-            EMAIL_ACCOUNTS_V2,
-            EMAIL_FOLDER_STATE,
-            EMAIL_ENVELOPES,
-            EMAIL_ENVELOPE_ORDER,
-            EMAIL_BODIES,
-            EMAIL_BODY_LRU,
-            EMAIL_BODY_TEXT,
-            EMAIL_FLAG_OUTBOX,
-            EMAIL_OP_OUTBOX,
-            EMAIL_UI_STATE,
-            TT_ENTRIES,
-            TT_CATEGORIES,
-            TT_RULES,
-            TT_PROJECTS,
-            TT_FOCUS,
-        ];
+        // The same list the schema is made from: a table added there is wiped too.
+        let tables = ALL_TABLES;
 
         for table_def in tables {
             let mut table = write_txn.open_table(table_def)?;
@@ -1229,4 +1196,55 @@ fn stable_hash<T: Serialize>(value: &T) -> anyhow::Result<String> {
     let mut state = std::collections::hash_map::DefaultHasher::new();
     json.hash(&mut state);
     Ok(format!("{:x}", state.finish()))
+}
+
+#[cfg(test)]
+mod wipe_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    struct TempStore {
+        store: RedbStore,
+        path: PathBuf,
+    }
+
+    impl Drop for TempStore {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    fn temp_store() -> TempStore {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let path = std::env::temp_dir().join(format!(
+            "moduo-store-wipe-{}-{}.redb",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = fs::remove_file(&path);
+        let store = RedbStore::open(&path).expect("open temp redb");
+        TempStore { store, path }
+    }
+
+    /// A sign-out's wipe must reach the cloud-sync outbox and pull cursors too:
+    /// otherwise the next account on this device inherits the last one's queued
+    /// writes and cursors.
+    #[test]
+    fn wipe_all_clears_the_cloud_sync_tables() {
+        let temp = temp_store();
+        let store = &temp.store;
+        store
+            .sync_outbox_push(&serde_json::json!({ "id": "e1", "table_name": "tasks" }))
+            .expect("push");
+        store.sync_set_pull_cursor("tasks", "2026-10-20T00:00:00Z").expect("cursor");
+        store
+            .kv_set("auth", "session-cache", &serde_json::json!({ "x": 1 }))
+            .expect("kv");
+
+        store.wipe_all().expect("wipe");
+
+        assert!(store.sync_outbox_list().expect("list").is_empty());
+        assert_eq!(store.sync_get_pull_cursor("tasks").expect("read"), None);
+        assert_eq!(store.kv_get("auth", "session-cache").expect("kv read"), None);
+    }
 }

@@ -71,9 +71,9 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const fireRefresh = useCallback(() => refreshRef.current(), []);
   const engine = useMemo(() => {
     if (!ready) return null;
-    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh);
+    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh, userId!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, runtime, workspaceId, fireRefresh]);
+  }, [ready, runtime, workspaceId, userId, fireRefresh]);
 
   useEffect(() => {
     if (!engine) return;
@@ -115,14 +115,14 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       setTruncated(bundle.truncated);
       setLoadError(null);
       setLoading(false);
-      void writeMetaCache(workspaceId!, bundle.notes);
+      void writeMetaCache(userId!, workspaceId!, bundle.notes);
     } catch (e) {
       if (reqRef.current !== req) return;
       // Outage: keep whatever is painted (cache), surface quietly.
       setLoadError(e instanceof Error ? e.message : "Couldn't load notes.");
       setLoading(false);
     }
-  }, [ready, runtime, workspaceId, withFavorites]);
+  }, [ready, runtime, userId, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
 
   useEffect(() => {
@@ -143,7 +143,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     // Guarded on "a server bundle has RESOLVED", not on load() having merely
     // started — load() bumps reqRef synchronously, so the old guard never let
     // the cache paint at all (offline boot rendered an empty list).
-    void readMetaCache(workspaceId!).then((cached) => {
+    void readMetaCache(userId!, workspaceId!).then((cached) => {
       if (cancelled || !cached || serverLoadedRef.current) return;
       if (notesRef.current.length === 0 && cached.notes.length > 0) {
         setNotes((cached.notes as any[]).map((n) => n as Note));
@@ -353,20 +353,35 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     [engine, workspaceId, patchLocal, guard, afterCreate],
   );
 
+  /** Move a note. `followParent`: it also takes the new parent's sharing, in
+   * the same server operation (all or nothing; a refusal toasts and reloads). */
   const moveNote = useCallback(
-    (noteId: string, parentId: string | null, position: string): Promise<boolean> => {
+    (
+      noteId: string,
+      parentId: string | null,
+      position: string,
+      opts?: { followParent?: boolean },
+    ): Promise<boolean> => {
       if (!engine || !workspaceId) return Promise.resolve(false);
       if (wouldCreateCycle(notesRef.current, noteId, parentId)) return Promise.resolve(false); // quiet no-op
+      const followParent = Boolean(opts?.followParent && parentId);
       // Nesting clears the stored Inbox flag server-side (NR-1 trigger).
       patchLocal(noteId, {
         parentId,
         position,
         ...(parentId ? { inInbox: false } : {}),
+        ...(followParent ? { shareMode: "inherit" as const, workspaceShared: false } : {}),
         updatedAt: new Date().toISOString(),
       });
       return guard(
         afterCreate(noteId, () =>
-          engine.runMetaOp("move", { workspaceId, noteId, parentId, position }),
+          engine.runMetaOp("move", {
+            workspaceId,
+            noteId,
+            parentId,
+            position,
+            ...(followParent ? { followParent } : {}),
+          }),
         ),
       );
     },

@@ -23,21 +23,8 @@ import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
 import { cn } from "../../lib/utils";
-
-import { AboutSection } from "./sections/about-section";
-import { AccessSection } from "./sections/access-section";
+import { type LazySection, lazySection, SettingsSectionView } from "./section-loader";
 import { AccountSection } from "./sections/account-section";
-import { AdvancedSection } from "./sections/advanced-section";
-import { ApiKeysSection } from "./sections/api-keys-section";
-import { AppearanceSection } from "./sections/appearance-section";
-import { BillingSection } from "./sections/billing-section";
-import { ChatSection } from "./sections/chat-section";
-import { FocusSection } from "./sections/focus-section";
-import { IntegrationsSection } from "./sections/integrations-section";
-import { PreferencesSection } from "./sections/preferences-section";
-import { StorageSection } from "./sections/storage-section";
-import { TimeRegionSection } from "./sections/time-region-section";
-import { WorkspaceSection } from "./sections/workspace-section";
 import {
   clearPendingOpenSettings,
   isSettingsSectionId,
@@ -49,11 +36,53 @@ import {
   type SettingsSectionId,
 } from "./settings-events";
 
+// Sections load on first open (each is its own async chunk), so the modal's
+// weight (fflate, billing, access) stays off the first-load bundle. Account is
+// the exception: it holds Log out, which has to work offline, when a chunk
+// never fetched before can't load.
+const AboutSection = lazySection(() =>
+  import("./sections/about-section").then((m) => m.AboutSection),
+);
+const AccessSection = lazySection(() =>
+  import("./sections/access-section").then((m) => m.AccessSection),
+);
+const AdvancedSection = lazySection(() =>
+  import("./sections/advanced-section").then((m) => m.AdvancedSection),
+);
+const ApiKeysSection = lazySection(() =>
+  import("./sections/api-keys-section").then((m) => m.ApiKeysSection),
+);
+const AppearanceSection = lazySection(() =>
+  import("./sections/appearance-section").then((m) => m.AppearanceSection),
+);
+const BillingSection = lazySection(() =>
+  import("./sections/billing-section").then((m) => m.BillingSection),
+);
+const ChatSection = lazySection(() => import("./sections/chat-section").then((m) => m.ChatSection));
+const FocusSection = lazySection(() =>
+  import("./sections/focus-section").then((m) => m.FocusSection),
+);
+const IntegrationsSection = lazySection(() =>
+  import("./sections/integrations-section").then((m) => m.IntegrationsSection),
+);
+const PreferencesSection = lazySection(() =>
+  import("./sections/preferences-section").then((m) => m.PreferencesSection),
+);
+const StorageSection = lazySection(() =>
+  import("./sections/storage-section").then((m) => m.StorageSection),
+);
+const TimeRegionSection = lazySection(() =>
+  import("./sections/time-region-section").then((m) => m.TimeRegionSection),
+);
+const WorkspaceSection = lazySection(() =>
+  import("./sections/workspace-section").then((m) => m.WorkspaceSection),
+);
+
 type SectionEntry = {
   id: SettingsSectionId;
   label: string;
   icon: LucideIcon;
-  Component: ComponentType;
+  Component: ComponentType | LazySection;
 };
 
 const SECTIONS: SectionEntry[] = [
@@ -228,7 +257,7 @@ export function SettingsModal() {
             <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
-                  {id === section ? <Component /> : null}
+                  {id === section ? <SettingsSectionView section={Component} /> : null}
                 </TabsContent>
               ))}
             </div>

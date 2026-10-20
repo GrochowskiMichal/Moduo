@@ -1,5 +1,6 @@
 import "./lib/auth-url-boot";
 import { RouterProvider } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
@@ -11,6 +12,7 @@ import { useConfirmBeforeQuit } from "./lib/confirm-before-quit";
 import { useKeepInMenuBar } from "./lib/keep-in-menu-bar";
 import { startNewVersionCheck } from "./lib/new-version-check";
 import { applyMotion, readLocalPreferences, usePreferences } from "./lib/preferences";
+import { useShowWindowAfterFirstCommit } from "./lib/show-window";
 import { router } from "./router";
 import "./global.css";
 
@@ -53,6 +55,23 @@ function ConfirmBeforeQuit() {
   return null;
 }
 
+// Desktop-only: reveal the window, created hidden, once React has committed.
+function ShowWindow() {
+  useShowWindowAfterFirstCommit();
+  return null;
+}
+
+// The TanStack Devtools panel, in development builds only: production never
+// reaches the import, so the bundler drops it (scripts/check-bundle-size.ts guards the size).
+// Not under automation (Playwright sets navigator.webdriver; its trigger used to
+// sit over toast buttons), and off with MODUO_DEVTOOLS=0.
+const TanStackDevtoolsPanel =
+  process.env.NODE_ENV === "development" &&
+  import.meta.env.MODUO_DEVTOOLS !== "0" &&
+  !(typeof navigator !== "undefined" && navigator.webdriver)
+    ? lazy(() => import("./lib/devtools/tanstack-devtools"))
+    : null;
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <TooltipProvider>
@@ -61,5 +80,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <Toaster />
     <PreferencesSync />
     <ConfirmBeforeQuit />
+    <ShowWindow />
+    {TanStackDevtoolsPanel ? (
+      <Suspense fallback={null}>
+        <TanStackDevtoolsPanel />
+      </Suspense>
+    ) : null}
   </RootErrorBoundary>,
 );

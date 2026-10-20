@@ -294,7 +294,8 @@ export const contactsConnectorModule: ConnectorModule = {
     },
     {
       name: "contacts_link",
-      description: "Link a contact/company to another entity (idempotent). Kinds: works-at, follow-up, references, …",
+      description:
+        "Link a contact/company to another entity (idempotent). Kinds: works-at, follow-up, references, …. A works-at link between a person and a company also makes it the person's company (replacing a previous one); removing it clears that.",
       access: "edit",
       inputSchema: {
         type: "object",

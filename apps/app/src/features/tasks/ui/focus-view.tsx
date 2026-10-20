@@ -46,6 +46,7 @@ import {
 import { IconButton } from "../../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
+import { HotkeyScope, useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { bumpNotNow, clearNotNows, readNotNows } from "../../focus/along-the-way";
@@ -70,6 +71,7 @@ import {
   useFocusTimer,
 } from "../../focus/timer";
 import { dispatchOpenSettings } from "../../settings/settings-events";
+import { byIdOf } from "../derived";
 import {
   ARRANGE_MIN_SAVED,
   alongTheWayOffer,
@@ -83,9 +85,15 @@ import {
   minutesLeft,
   NOT_NOWS_TO_ASK,
 } from "../focus-screen";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
+import {
+  useTaskCommands,
+  useTasksReader,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+} from "../tasks-context";
 import { AlongTheWayOffer, BreakOffer } from "./focus-between";
 import { FocusEmptyState } from "./focus-empty-state";
 import type { HandOff } from "./focus-hand-off";
@@ -107,7 +115,6 @@ const POMODORO_PRESETS: readonly { work: number; rest: number }[] = [
 ];
 
 type Props = {
-  api: TasksModuleApi;
   workspaceId: string;
   runtime: ModuoRuntime | null;
   canEdit: boolean;
@@ -131,7 +138,6 @@ type Props = {
 };
 
 export function FocusView({
-  api,
   workspaceId,
   runtime,
   canEdit,
@@ -152,30 +158,50 @@ export function FocusView({
   const [handOffOpen, setHandOffOpen] = useState(false);
   const [between, setBetween] = useState<BetweenOffer[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
-  const me = api.currentUserId;
+  const me = useTasksUserId();
+  const {
+    markDone,
+    addWaiting,
+    addReminder,
+    removeWaiting,
+    removeReminder,
+    arrangeQueue,
+    moveQueuedToEnd,
+    addToQueue,
+    setTaskStatus,
+    focusOnTask,
+    focusRefOf,
+  } = useTaskCommands();
+  const read = useTasksReader();
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const queuedTasks = useTasksSelector((d) => d.queuedTasks);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const buckets = useTasksSelector((d) => d.buckets);
+  const { loaded } = useTasksStatus();
 
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(tasks);
   // A session in this workspace (here or on another of my devices).
   const here = focus.active && focus.workspaceId === workspaceId;
   const sessionTask = here && focus.taskId ? (taskById.get(focus.taskId) ?? null) : null;
   // Lined-up tasks that wait on someone or something are In flight (TV-F8).
-  const inFlight = useInFlight(api);
+  const inFlight = useInFlight();
   const { now, upNext } = useMemo(
-    () => focusLineup(api.queuedTasks, sessionTask, inFlight.waitingIds),
-    [api.queuedTasks, sessionTask, inFlight.waitingIds],
+    () => focusLineup(queuedTasks, sessionTask, inFlight.waitingIds),
+    [queuedTasks, sessionTask, inFlight.waitingIds],
   );
   // The session is on the card (else the card offers Start).
   const onNow = here && !!now && focus.taskId === now.id;
-  const refOf = api.focusRefOf;
+  const refOf = focusRefOf;
 
   // The panel follows Now (its Details), until you open something else: a row
   // in Up next or a scheduled task. A subtask stacks on top instead (65a).
   // Opening Focus shows Now, unless the task already open is lined up here (a
   // link to it); a task opened in another view doesn't follow you in.
   const shownNowRef = useRef<string | null>(null);
-  const queuedRef = useRef(api.queuedTaskIds);
+  const queuedRef = useRef(queuedTaskIds);
   useLayoutEffect(() => {
-    queuedRef.current = api.queuedTaskIds;
+    queuedRef.current = queuedTaskIds;
   });
   useEffect(() => {
     const prev = shownNowRef.current;
@@ -223,10 +249,10 @@ export function FocusView({
         const task = alongTheWayOffer({
           leaving,
           next,
-          tasks: api.tasks,
-          lineup: api.queuedTaskIds,
+          tasks,
+          lineup: queuedTaskIds,
           me,
-          blocked: api.blockedTaskIds,
+          blocked: blockedTaskIds,
           waiting: inFlight.waitingIds,
         });
         if (task) {
@@ -237,7 +263,16 @@ export function FocusView({
       }
       return out;
     },
-    [onNow, workspaceId, prefs.alongTheWay, api, me, inFlight.waitingIds],
+    [
+      onNow,
+      workspaceId,
+      prefs.alongTheWay,
+      tasks,
+      queuedTaskIds,
+      blockedTaskIds,
+      me,
+      inFlight.waitingIds,
+    ],
   );
   const answered = useCallback(() => setBetween((list) => list.slice(1)), []);
   // Nothing left to move on to (the line-up ran out meanwhile): no offer waits.
@@ -251,7 +286,7 @@ export function FocusView({
     const next = firstReal(upNext);
     setRunNotice(null);
     const offers = betweenOffers(now, next);
-    api.markDone(now.id);
+    markDone(now.id);
     setBetween(offers);
     if (!onNow) return;
     // Counted in "n done" by the device that runs the clock: this one, now.
@@ -260,26 +295,22 @@ export function FocusView({
     // The last one ends the session (62: "a session ends by itself when Up
     // next runs out"); the done line keeps its numbers.
     moveFocusTo(next ? refOf(next.id) : null, refOf);
-  }, [now, canEdit, upNext, api, onNow, refOf, betweenOffers]);
+  }, [now, canEdit, upNext, markDone, onNow, refOf, betweenOffers]);
 
   // ── Hand off W (TV-F8; call 5): it waits on someone, and moves to In flight ──
-  const apiRef = useRef(api);
-  useLayoutEffect(() => {
-    apiRef.current = api;
-  });
   const handOff = useCallback(
     (h: HandOff) => {
       if (!now || !canEdit) return;
       const task = now;
       const next = firstReal(upNext);
-      const entryId = api.addWaiting(
+      const entryId = addWaiting(
         task.id,
         h.target.kind === "person"
           ? { kind: "person", ref: h.target.ref }
           : { kind: "text", label: h.target.label },
       );
       if (!entryId) return;
-      if (h.checkBackAt) api.addReminder(task.id, "at", h.checkBackAt);
+      if (h.checkBackAt) addReminder(task.id, "at", h.checkBackAt);
       if (h.note && runtime) {
         runtime.spine
           .addComment({
@@ -300,27 +331,40 @@ export function FocusView({
       const who = h.target.kind === "person" ? h.target.name : h.target.label;
       undoToast(`Waiting on ${who} · In flight`, {
         onUndo: () => {
-          const latest = apiRef.current;
-          latest.removeWaiting(entryId);
+          removeWaiting(entryId);
           if (h.checkBackAt) {
             const at = Date.parse(h.checkBackAt);
-            const reminder = latest.reminders.find(
+            const reminder = read().reminders.find(
               (r) => r.taskId === task.id && r.kind === "at" && r.at && Date.parse(r.at) === at,
             );
-            if (reminder) latest.removeReminder(reminder.id);
+            if (reminder) removeReminder(reminder.id);
           }
           if (moved) moveFocusTo(refOf(task.id), refOf);
         },
       });
     },
-    [now, canEdit, upNext, api, runtime, workspaceId, betweenOffers, onNow, refOf],
+    [
+      now,
+      canEdit,
+      upNext,
+      addWaiting,
+      addReminder,
+      removeWaiting,
+      removeReminder,
+      read,
+      runtime,
+      workspaceId,
+      betweenOffers,
+      onNow,
+      refOf,
+    ],
   );
 
   // ── Arrange by project (TV-F8: 57, 62) ───────────────────────────────────
   const arrangement = useMemo(() => arrangeByProject(now, upNext), [now, upNext]);
   const arrange = useCallback(() => {
     if (!canEdit || arrangement.saved < 1) return;
-    const before = api.queuedTasks.map((t) => t.id);
+    const before = queuedTasks.map((t) => t.id);
     const after = arrangedQueue(
       before,
       upNext.map((t) => t.id),
@@ -328,18 +372,18 @@ export function FocusView({
     );
     // A move refused partway keeps what went through: say so, and Undo still
     // walks the line-up back.
-    api.arrangeQueue(after, (partial) =>
+    arrangeQueue(after, (partial) =>
       undoToast(partial ? "Arranged only in part" : "Arranged by project", {
-        onUndo: () => apiRef.current.arrangeQueue(before),
+        onUndo: () => arrangeQueue(before),
       }),
     );
-  }, [canEdit, arrangement, api, upNext]);
+  }, [canEdit, arrangement, queuedTasks, arrangeQueue, upNext]);
 
   // ── your usual pace (TV-F8, call 10) ─────────────────────────────────────
   const paceRatio = useMemo(
     () =>
       usualPace(
-        api.tasks.map((t) => ({
+        tasks.map((t) => ({
           status: taskCategoryOf(t),
           completedBy: t.completedBy,
           completedAt: t.completedAt,
@@ -349,7 +393,7 @@ export function FocusView({
         })),
         me,
       ),
-    [api.tasks, me],
+    [tasks, me],
   );
 
   // ── the next meeting (TV-F8, call 64) ─────────────────────────────────────
@@ -379,10 +423,10 @@ export function FocusView({
     if (!now || !canEdit) return;
     const next = firstReal(upNext);
     setRunNotice(null);
-    if (api.queuedTaskIds.has(now.id)) api.moveQueuedToEnd(now.id);
-    else api.addToQueue(now.id, "end");
+    if (queuedTaskIds.has(now.id)) moveQueuedToEnd(now.id);
+    else addToQueue(now.id, "end");
     if (onNow && next) moveFocusTo(refOf(next.id), refOf);
-  }, [now, canEdit, upNext, api, onNow, refOf]);
+  }, [now, canEdit, upNext, queuedTaskIds, moveQueuedToEnd, addToQueue, onNow, refOf]);
 
   const changeTimer = useCallback(
     (timer: FocusTimerMode) => {
@@ -404,13 +448,13 @@ export function FocusView({
       return;
     }
     clearNotNows(me, workspaceId, offer.task.id);
-    api.addToQueue(offer.task.id, "top");
+    addToQueue(offer.task.id, "top");
     // With a session on, it gets the clock now; without one it's the Now card.
     if (onNow) {
       const ref = refOf(offer.task.id);
       if (ref) moveFocusTo(ref, refOf);
     }
-  }, [offer, answered, refOf, me, workspaceId, api, onNow]);
+  }, [offer, answered, refOf, me, workspaceId, addToQueue, onNow]);
   const declineOffer = useCallback(() => {
     if (!offer) return;
     answered();
@@ -429,12 +473,12 @@ export function FocusView({
         return;
       }
       const back = task.statusId ? { statusId: task.statusId } : { category: taskCategoryOf(task) };
-      api.setTaskStatus(task.id, { category: how });
+      setTaskStatus(task.id, { category: how });
       undoToast(how === "backlog" ? "Moved to Backlog" : "Marked Won’t do", {
-        onUndo: () => apiRef.current.setTaskStatus(task.id, back),
+        onUndo: () => setTaskStatus(task.id, back),
       });
     },
-    [offer, answered, me, workspaceId, onShowDetails, api],
+    [offer, answered, me, workspaceId, onShowDetails, setTaskStatus],
   );
 
   // ── keys: ⏎ Done · S Skip · W Hand off · C new at the top · ⇧F on a row ────
@@ -443,7 +487,7 @@ export function FocusView({
     done,
     skip,
     onRequestCapture,
-    api,
+    focusOnTask,
     canEdit,
     offer,
     takeOffer,
@@ -457,7 +501,7 @@ export function FocusView({
       done,
       skip,
       onRequestCapture,
-      api,
+      focusOnTask,
       canEdit,
       offer,
       takeOffer,
@@ -467,63 +511,66 @@ export function FocusView({
       hasNow: !!now,
     };
   });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
-      const target = e.target instanceof Element ? e.target : null;
-      // Ours only while the screen holds focus: never from the sidebar, the
-      // panel, a field, or nowhere at all (⏎ has no Undo).
-      if (!target || !rootRef.current?.contains(target)) return;
-      if (isTypingTarget(target)) return;
-      if (target.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return;
+  // Registry bindings in the "focus" scope (lib/hotkeys), ours only while the
+  // screen holds focus: never from the sidebar, the panel, a field, or nowhere
+  // at all (⏎ has no Undo). Checked per key, not with `enabled` from a focus
+  // state: a key right after focus() would beat that render. No wider scope
+  // binds these keys, so declining one hides nothing.
+  const ours = (e: KeyboardEvent): Element | null => {
+    const target = e.target instanceof Element ? e.target : null;
+    if (e.repeat || !target || !rootRef.current?.contains(target)) return null;
+    if (target.closest('[role="menu"],[role="dialog"],[role="listbox"]')) return null;
+    return target;
+  };
+  // A focused button keeps its own Enter.
+  const onControl = (target: Element) =>
+    !!target.closest("button,a,[role='button'],[role='checkbox']");
+  useAppHotkeys({
+    // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
+    "focus.promote": (e) => {
+      const target = ours(e);
       const k = keys.current;
-      if (e.shiftKey && e.key.toLowerCase() === "f") {
-        // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
-        const id = target.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
-        if (!id || !k.canEdit) return;
-        e.preventDefault();
-        // A new Now card: whatever was offered between tasks is moot.
-        k.dropOffers();
-        k.api.focusOnTask(id);
-        return;
-      }
-      if (e.shiftKey) return;
-      // A focused button keeps its own Enter.
-      const onControl = !!target.closest("button,a,[role='button'],[role='checkbox']");
+      const id = target?.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
+      if (!id || !k.canEdit) return false;
+      // A new Now card: whatever was offered between tasks is moot.
+      k.dropOffers();
+      k.focusOnTask(id);
+    },
+    // Between tasks the offer holds Now's place: ⏎ takes it (the Shrink ·
+    // Move · Let go ask has no ⏎ of its own), Esc declines.
+    "focus.enter": (e) => {
+      const target = ours(e);
+      const k = keys.current;
+      if (!target || onControl(target)) return false;
       if (k.offer) {
-        // Between tasks the offer holds Now's place: ⏎ takes it (the
-        // Shrink · Move · Let go ask has no ⏎ of its own), Esc declines.
-        const plainTake = k.offer.kind === "break" || !k.offer.ask;
-        if (e.key === "Enter" && !onControl && plainTake) {
-          e.preventDefault();
-          k.takeOffer();
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          e.stopPropagation();
-          k.declineOffer();
-        } else if (e.key.toLowerCase() === "c" && k.canEdit) {
-          e.preventDefault();
-          k.onRequestCapture();
-        }
-        return;
-      }
-      if (e.key === "Enter" && !onControl) {
-        e.preventDefault();
+        if (k.offer.kind !== "break" && k.offer.ask) return false;
+        k.takeOffer();
+      } else {
         k.done();
-      } else if (e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        k.skip();
-      } else if (e.key.toLowerCase() === "w" && k.canEdit && k.hasNow) {
-        e.preventDefault();
-        k.openHandOff();
-      } else if (e.key.toLowerCase() === "c" && k.canEdit) {
-        e.preventDefault();
-        k.onRequestCapture();
       }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+    },
+    "focus.decline": (e) => {
+      const k = keys.current;
+      if (!ours(e) || !k.offer) return false;
+      e.stopPropagation();
+      k.declineOffer();
+    },
+    "focus.capture": (e) => {
+      const k = keys.current;
+      if (!ours(e) || !k.canEdit) return false;
+      k.onRequestCapture();
+    },
+    "focus.skip": (e) => {
+      const k = keys.current;
+      if (!ours(e) || k.offer) return false;
+      k.skip();
+    },
+    "focus.hand-off": (e) => {
+      const k = keys.current;
+      if (!ours(e) || k.offer || !k.canEdit || !k.hasNow) return false;
+      k.openHandOff();
+    },
+  });
 
   // The screen takes focus when nothing else holds it: on opening (from the
   // top bar, a reload), and when the button you used goes away (Done on the
@@ -550,14 +597,14 @@ export function FocusView({
     const ids = sessionRun?.doneTaskIds ?? endedRun?.doneTaskIds;
     if (ids) return ids;
     // No session yet: what you checked off here since the list loaded.
-    return api.queuedTasks.filter((t) => t.status === "done").map((t) => t.id);
-  }, [sessionRun, endedRun, api.queuedTasks]);
+    return queuedTasks.filter((t) => t.status === "done").map((t) => t.id);
+  }, [sessionRun, endedRun, queuedTasks]);
   const timed = (sessionRun?.mode ?? endedRun?.mode ?? prefs.timer) !== "off";
   // The run's notice is about this workspace's session only.
   const noticeOwner = run ?? ended;
   const noticeHere = !noticeOwner || noticeOwner.workspaceId === workspaceId;
 
-  if (!api.loaded) return <FocusSkeleton />;
+  if (!loaded) return <FocusSkeleton />;
 
   const timerMode: FocusTimerMode = here && focus.timer ? focus.timer : prefs.timer;
   const header = (
@@ -611,103 +658,102 @@ export function FocusView({
     ) : null;
 
   return (
-    <div
-      ref={rootRef}
-      tabIndex={-1}
-      className="flex h-full min-h-0 flex-col outline-none"
-      data-slot="focus-view"
-    >
-      {header}
-      {/* Never sideways (MOD-119): a long word or line stays inside the column. */}
-      <div className="pane-scroll min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
-          {notice && noticeHere ? (
-            <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />
-          ) : null}
-          {now ? (
-            <>
-              {offer?.kind === "along" ? (
-                <AlongTheWayOffer
-                  key={`along-${offer.task.id}`}
-                  task={offer.task}
-                  projectName={bucketNameById(offer.leavingProjectId)}
-                  projectColor={bucketDotColor(
-                    api.buckets.find((b) => b.id === offer.leavingProjectId) ?? {},
-                  )}
-                  ask={offer.ask}
-                  onTake={takeOffer}
-                  onNotNow={declineOffer}
-                  onShrink={() => settleOffer("shrink")}
-                  onMove={() => settleOffer("backlog")}
-                  onLetGo={() => settleOffer("wont_do")}
-                />
-              ) : offer?.kind === "break" ? (
-                <BreakOffer
-                  key="break"
-                  minutes={offer.minutes}
-                  long={offer.long}
-                  onTake={takeOffer}
-                  onSkip={declineOffer}
-                />
-              ) : (
-                <NowCard
-                  task={now}
-                  api={api}
-                  runtime={runtime}
-                  workspaceId={workspaceId}
+    <HotkeyScope scope="focus">
+      <div
+        ref={rootRef}
+        tabIndex={-1}
+        className="flex h-full min-h-0 flex-col outline-none"
+        data-slot="focus-view"
+      >
+        {header}
+        {/* Never sideways (MOD-119): a long word or line stays inside the column. */}
+        <div className="pane-scroll min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto">
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-6">
+            {notice && noticeHere ? (
+              <NoticeLine text={notice} onDismiss={() => setRunNotice(null)} />
+            ) : null}
+            {now ? (
+              <>
+                {offer?.kind === "along" ? (
+                  <AlongTheWayOffer
+                    key={`along-${offer.task.id}`}
+                    task={offer.task}
+                    projectName={bucketNameById(offer.leavingProjectId)}
+                    projectColor={bucketDotColor(
+                      buckets.find((b) => b.id === offer.leavingProjectId) ?? {},
+                    )}
+                    ask={offer.ask}
+                    onTake={takeOffer}
+                    onNotNow={declineOffer}
+                    onShrink={() => settleOffer("shrink")}
+                    onMove={() => settleOffer("backlog")}
+                    onLetGo={() => settleOffer("wont_do")}
+                  />
+                ) : offer?.kind === "break" ? (
+                  <BreakOffer
+                    key="break"
+                    minutes={offer.minutes}
+                    long={offer.long}
+                    onTake={takeOffer}
+                    onSkip={declineOffer}
+                  />
+                ) : (
+                  <NowCard
+                    task={now}
+                    runtime={runtime}
+                    workspaceId={workspaceId}
+                    canEdit={canEdit}
+                    bucketNameById={bucketNameById}
+                    onNow={onNow}
+                    timer={timerMode}
+                    countdown={prefs.countdownEstimate}
+                    panelTaskId={panelTaskId}
+                    onOpenTask={onOpenTask}
+                    onStart={start}
+                    onDone={done}
+                    onSkip={skip}
+                    handOffOpen={handOffOpen}
+                    onHandOffOpenChange={setHandOffOpen}
+                    onHandOff={handOff}
+                  />
+                )}
+                <UpNext
+                  upNext={upNext}
                   canEdit={canEdit}
                   bucketNameById={bucketNameById}
-                  onNow={onNow}
-                  timer={timerMode}
-                  countdown={prefs.countdownEstimate}
-                  panelTaskId={panelTaskId}
-                  onOpenTask={onOpenTask}
-                  onStart={start}
-                  onDone={done}
-                  onSkip={skip}
-                  handOffOpen={handOffOpen}
-                  onHandOffOpenChange={setHandOffOpen}
-                  onHandOff={handOff}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  dndMode={dndMode}
+                  meeting={meeting}
+                  pace={pace}
+                  arrange={
+                    arrangement.saved >= ARRANGE_MIN_SAVED
+                      ? { saved: arrangement.saved, onArrange: arrange }
+                      : null
+                  }
                 />
-              )}
-              <UpNext
-                upNext={upNext}
-                api={api}
-                canEdit={canEdit}
-                bucketNameById={bucketNameById}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={onSelectTask}
-                dndMode={dndMode}
-                meeting={meeting}
-                pace={pace}
-                arrange={
-                  arrangement.saved >= ARRANGE_MIN_SAVED
-                    ? { saved: arrangement.saved, onArrange: arrange }
-                    : null
-                }
-              />
-              {inFlightLine}
-              {doneLine}
-              {doneList}
-            </>
-          ) : (
-            <>
-              {inFlightLine}
-              {doneLine}
-              {doneList}
-              <FocusEmptyState
-                api={api}
-                canEdit={canEdit}
-                bucketNameById={bucketNameById}
-                selectedTaskId={selectedTaskId}
-                onSelectTask={onSelectTask}
-                onRequestCapture={onRequestCapture}
-              />
-            </>
-          )}
+                {inFlightLine}
+                {doneLine}
+                {doneList}
+              </>
+            ) : (
+              <>
+                {inFlightLine}
+                {doneLine}
+                {doneList}
+                <FocusEmptyState
+                  canEdit={canEdit}
+                  bucketNameById={bucketNameById}
+                  selectedTaskId={selectedTaskId}
+                  onSelectTask={onSelectTask}
+                  onRequestCapture={onRequestCapture}
+                />
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </HotkeyScope>
   );
 }
 
@@ -1023,10 +1069,4 @@ function FocusSkeleton() {
 /** The first task with a real id (one still saving can't take the clock). */
 function firstReal(list: readonly Task[]): Task | null {
   return list.find((t) => !t.id.startsWith("tmp-")) ?? null;
-}
-
-function isTypingTarget(el: Element): boolean {
-  if (el instanceof HTMLElement && el.isContentEditable) return true;
-  const tag = el.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
 }

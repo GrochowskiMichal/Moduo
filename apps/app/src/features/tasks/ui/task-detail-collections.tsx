@@ -45,12 +45,15 @@ import type { HubRow } from "../../spine/rollup";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { onBreakDown, takeBreakDown } from "../break-down";
-import { wouldCreateCycle } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { subtaskProgress, wouldCreateCycle } from "../helpers";
 import type { Task, TaskWaitingEntry } from "../model";
 import { subtaskPositionAt } from "../subtask-order";
+import { useSubtasksOf, useTaskCommands, useTasksReader, useTasksSelector } from "../tasks-context";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDndSensors } from "./dnd/task-dnd";
+
+/** One empty list for every absent collection (a stable identity). */
+const NO_TASKS: Task[] = [];
 
 // ── Subtasks ──────────────────────────────────────────────────────────────────
 
@@ -58,17 +61,18 @@ export function SubtasksSection({
   task,
   canEdit,
   onOpenTask,
-  api,
 }: {
   task: Task;
   canEdit: boolean;
   onOpenTask: (id: string) => void;
-  api: TasksModuleApi;
 }) {
+  const { addSubtask, dropTask } = useTaskCommands();
+  const read = useTasksReader();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const subtasks = api.subtasksByParent.get(task.id) ?? [];
-  const progress = api.subtaskProgressByTask.get(task.id);
+  // A narrow live query (TS-3b): redraws for this task's subtasks only.
+  const subtasks = useSubtasksOf(task.id);
+  const progress = subtaskProgress(subtasks);
   // A late row's "Break down" (TV-U10) opens the subtask line here, whether
   // this panel shows the task already or is about to.
   const taskId = task.id;
@@ -89,14 +93,14 @@ export function SubtasksSection({
 
   const submit = () => {
     const next = draft.trim();
-    if (next) api.addSubtask(task.id, next);
+    if (next) addSubtask(task.id, next);
     setDraft("");
   };
   const moveTo = (subtaskId: string, toIndex: number) => {
     const from = subtasks.findIndex((s) => s.id === subtaskId);
-    const position = subtaskPositionAt(api.tasks, subtasks, subtaskId, toIndex);
+    const position = subtaskPositionAt(read().liveTasks, subtasks, subtaskId, toIndex);
     if (position === null) return;
-    void api.dropTask({ taskId: subtaskId, position }, toIndex < from ? "Moved up" : "Moved down");
+    void dropTask({ taskId: subtaskId, position }, toIndex < from ? "Moved up" : "Moved down");
   };
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     if (!over || active.id === over.id) return;
@@ -140,7 +144,6 @@ export function SubtasksSection({
                   onOpen={() => onOpenTask(subtask.id)}
                   onAddAfter={() => setAdding(true)}
                   onMove={(delta) => moveTo(subtask.id, i + delta)}
-                  api={api}
                 />
               ))}
             </div>
@@ -187,7 +190,6 @@ function SubtaskRow({
   onOpen,
   onAddAfter,
   onMove,
-  api,
 }: {
   subtask: Task;
   parent: Task;
@@ -197,8 +199,8 @@ function SubtaskRow({
   onAddAfter: () => void;
   /** ⌥⇧↑/↓: one place up (-1) or down (1) among its siblings. */
   onMove: (delta: 1 | -1) => void;
-  api: TasksModuleApi;
 }) {
+  const { toggleDone } = useTaskCommands();
   const { byId } = useAssignees();
   const openRef = useRef<HTMLButtonElement>(null);
   // The whole row drags (past a few pixels, so a click still opens or checks).
@@ -224,7 +226,7 @@ function SubtaskRow({
         isDragging && ["relative z-10", DRAG_SOURCE],
       )}
     >
-      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => api.toggleDone(subtask)} />
+      <CompleteToggle done={done} disabled={!canEdit} onToggle={() => toggleDone(subtask)} />
       <button
         ref={openRef}
         type="button"
@@ -271,15 +273,14 @@ export function WaitingSection({
   task,
   entries,
   canEdit,
-  api,
   defaultOpen = false,
 }: {
   task: Task;
   entries: TaskWaitingEntry[];
   canEdit: boolean;
-  api: TasksModuleApi;
   defaultOpen?: boolean;
 }) {
+  const { addWaiting, removeWaiting } = useTaskCommands();
   const { assignees, byId } = useAssignees();
   const [open, setOpen] = useState(defaultOpen && canEdit);
   const [text, setText] = useState("");
@@ -287,7 +288,7 @@ export function WaitingSection({
   const addText = () => {
     const label = text.trim();
     if (!label) return;
-    api.addWaiting(task.id, { kind: "text", label });
+    addWaiting(task.id, { kind: "text", label });
     setText("");
     setOpen(false);
   };
@@ -315,7 +316,7 @@ export function WaitingSection({
                             key={a.userId}
                             value={`${a.name} ${a.fullName} ${a.isMe ? SELF_KEYWORDS.join(" ") : ""} ${a.userId}`}
                             onSelect={() => {
-                              api.addWaiting(task.id, { kind: "person", ref: a.userId });
+                              addWaiting(task.id, { kind: "person", ref: a.userId });
                               setOpen(false);
                             }}
                           >
@@ -380,7 +381,7 @@ export function WaitingSection({
               <IconButton
                 icon={X}
                 label="Stop waiting"
-                onClick={() => api.removeWaiting(entry.id)}
+                onClick={() => removeWaiting(entry.id)}
                 className="hit-min opacity-0 focus-visible:opacity-100 group-hover:opacity-100"
               />
             ) : null}
@@ -397,29 +398,28 @@ export function BlockedBySection({
   task,
   canEdit,
   onOpenTask,
-  api,
 }: {
   task: Task;
   canEdit: boolean;
   onOpenTask: (id: string) => void;
-  api: TasksModuleApi;
 }) {
+  const { removeBlocker } = useTaskCommands();
   // Edges, never a stored status.
-  const blockers = api.blockersByTask.get(task.id) ?? [];
+  const blockers = useTasksSelector((d) => d.blockersByTask.get(task.id) ?? NO_TASKS);
   if (blockers.length === 0 && !canEdit) return null;
   return (
     <div>
       <CollectionHeader
         label="Blocked by"
         count={blockers.length}
-        action={canEdit ? <BlockerPicker task={task} api={api} /> : null}
+        action={canEdit ? <BlockerPicker task={task} /> : null}
       />
       {blockers.map((blocker) => (
         <RelatedTaskRow
           key={blocker.id}
           task={blocker}
           onOpen={() => onOpenTask(blocker.id)}
-          onRemove={canEdit ? () => api.removeBlocker(task.id, blocker.id) : undefined}
+          onRemove={canEdit ? () => removeBlocker(task.id, blocker.id) : undefined}
         />
       ))}
     </div>
@@ -429,13 +429,11 @@ export function BlockedBySection({
 export function BlocksSection({
   task,
   onOpenTask,
-  api,
 }: {
   task: Task;
   onOpenTask: (id: string) => void;
-  api: TasksModuleApi;
 }) {
-  const dependents = api.dependentsByTask.get(task.id) ?? [];
+  const dependents = useTasksSelector((d) => d.dependentsByTask.get(task.id) ?? NO_TASKS);
   if (dependents.length === 0) return null;
   return (
     <div>
@@ -486,16 +484,22 @@ function RelatedTaskRow({
 }
 
 /** A new blocker: open, live tasks only; tasks that would close a loop are left out. */
-function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
+function BlockerPicker({ task }: { task: Task }) {
+  const { addBlocker } = useTaskCommands();
   const [open, setOpen] = useState(false);
-  const currentBlockerIds = new Set((api.blockersByTask.get(task.id) ?? []).map((b) => b.id));
+  const blockers = useTasksSelector((d) => d.blockersByTask.get(task.id) ?? NO_TASKS);
+  // The whole list only while the picker is open: closed, a task edit
+  // elsewhere doesn't redraw it.
+  const tasks = useTasksSelector((d) => (open ? d.liveTasks : NO_TASKS));
+  const relations = useTasksSelector((d) => d.bundle.taskRelations);
+  const currentBlockerIds = new Set(blockers.map((b) => b.id));
   const candidates = open
-    ? api.tasks.filter(
+    ? tasks.filter(
         (t) =>
           t.id !== task.id &&
           !isClosedTask(t) &&
           !currentBlockerIds.has(t.id) &&
-          !wouldCreateCycle(t.id, task.id, api.taskRelations),
+          !wouldCreateCycle(t.id, task.id, relations),
       )
     : [];
   return (
@@ -514,7 +518,7 @@ function BlockerPicker({ task, api }: { task: Task; api: TasksModuleApi }) {
                   key={t.id}
                   value={`${t.title || "Untitled"} ${t.id}`}
                   onSelect={() => {
-                    api.addBlocker(task.id, t.id);
+                    addBlocker(task.id, t.id);
                     setOpen(false);
                   }}
                 >

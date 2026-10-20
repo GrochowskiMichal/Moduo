@@ -620,8 +620,3 @@ pub async fn calendar_google_publish_booking_token(
     )
     .await
 }
-
-#[tauri::command]
-pub async fn calendar_apple_oauth_start() -> Result<CalendarOAuthStartResult, String> {
-    Err("apple_calendar_oauth_not_supported: iCloud Calendar uses CalDAV/app-specific-password flow".to_string())
-}

@@ -1,7 +1,7 @@
 // The workspace tag store (tasks-v2 TV-T1).
 //
 // Tags are workspace-wide and every surface shows them: Tasks, Calendar, Notes
-// and Email each run their own `useTasksModule` (their own task bundle), and
+// and Email each mount a `TasksProvider` (over the shared store), and
 // the contact, company, note and email hubs read one entity's tags on their
 // own. Holding tags in each of those meant a tag added in one place didn't
 // show in another until it reloaded. They live here instead, once per
@@ -31,8 +31,9 @@ import { toast } from "sonner";
 
 import { pickTagColor } from "../../components/tag-colors";
 import type { ModuoRuntime } from "../../lib/runtime.types";
+import { isNewer } from "../../lib/sync/kernel/stamps";
 import { undoToast } from "../../lib/undo-toast";
-import { isNewer, type LiveChange } from "../tasks/live";
+import type { LiveChange } from "../tasks/live";
 import type { Tag, TagLink } from "../tasks/model";
 import { findTagByName } from "./selectors";
 

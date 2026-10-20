@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { ensureFontLoaded } from "./picker-fonts";
 import { useDomainSync } from "./prefs-sync";
 
 export type Theme = "dark" | "light";
@@ -152,6 +153,7 @@ export function applyAppearance(appearance: Appearance): void {
   for (const key of Object.keys(DATA_ATTR_MAP) as (keyof Appearance)[]) {
     root.setAttribute(DATA_ATTR_MAP[key], appearance[key]);
   }
+  ensureFontLoaded(appearance.font);
 }
 
 function syncsField(patch: Partial<Appearance>): boolean {
