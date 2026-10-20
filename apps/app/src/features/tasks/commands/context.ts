@@ -14,6 +14,7 @@ import type { NewTaskFields } from "../helpers";
 import type { Task, TasksTrash, TimeBlockMap } from "../model";
 import type { TasksData } from "../selectors";
 import type { StatusTarget } from "../statuses";
+import type { WritePlan } from "../write-plan";
 
 /** An adjustment `logTimeAdjustment` recorded, as its Undo needs it. */
 export type TimeAdjustment = {
@@ -73,6 +74,8 @@ export type TaskCommandsContext = {
  */
 export type TaskPeers = {
   patchTask: (id: string, patch: Partial<Task>) => void;
+  /** `patchTask`, answering the write's plan (null for a task the copy doesn't have). */
+  writeTask: (id: string, patch: Partial<Task>) => WritePlan | null;
   setTaskStatus: (id: string, target: StatusTarget) => void;
   offerReminderRestore: (task: Task, to: TaskStatusCategory | undefined) => void;
   finishOpenSubtasks: (before: Task) => Finished | null;

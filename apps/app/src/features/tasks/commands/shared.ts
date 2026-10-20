@@ -15,12 +15,20 @@ import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, PendingWrite, WorkspaceStore } from "../../../lib/sync/store";
 import type { TagContext } from "../../tags/store";
 import type { ProjectStatus, RecurrenceRule, Task, TaskQueueEntry, TaskStatus } from "../model";
-import { statusesForBucketOf } from "../selectors";
+import { engineZone } from "../recurrence-engine";
+import { byIdOf, statusesForBucketOf } from "../selectors";
 import { optimisticStatus } from "../statuses";
+import {
+  childrenByParentOf,
+  isTempId,
+  patchOf,
+  type QueueFollow,
+  queueFollowOf,
+  type WritePlanContext,
+} from "../write-plan";
 import type { TaskCommandsContext } from "./context";
 
-/** Optimistic placeholder id, not yet a real server uuid. */
-export const isTempId = (id: string) => id.startsWith("tmp-");
+export { isTempId, patchOf };
 
 export const NO_EDIT = "You don't have edit access to Tasks in this workspace.";
 /** A queued capture that wasn't created (refused, or waiting offline): no queue op, no toast. */
@@ -36,12 +44,6 @@ export function sayOffline(): void {
       "This change needs a connection. Captures and check-offs wait on this device and sync when you're back.",
   });
 }
-
-/** One field write of a task, as an overlay change. */
-export const patchOf = (id: string, fields: Partial<Task>): OverlayChange => ({
-  table: "tasks",
-  patch: { id, fields: fields as Record<string, unknown> },
-});
 
 /** A task's status as it was, for an Undo: its own status when it has one. */
 export function statusBack(before: Task): Partial<Task> {
@@ -84,6 +86,11 @@ export type ApplyOpOptions = {
   offline?: { status: string; recurrence?: RecurrenceRule | null };
   /** Once the server took it (a caller's own toast, say "Taken", TV-U15). */
   onSaved?: (saved: Task) => void;
+  /** Once the server refused it (after its fields went back). */
+  onRefused?: () => void;
+  /** Other rows the op answered before its last call (a move's subtasks):
+   *  settled with it, and kept when a later call of it is refused. */
+  rows?: () => Task[];
 };
 
 export type Shared = ReturnType<typeof createShared>;
@@ -139,28 +146,46 @@ export function createShared(ctx: TaskCommandsContext) {
       ? optimisticStatus(task, { category: "todo" }, statusesForBucket(task.bucketId))
       : null;
 
+  /** A status change's queue follow-up on this device: a done task of mine
+   *  stays on show until the next reload; reopening drops it (`queueFollowOf`). */
+  const applyQueueFollow = (taskId: string, follow: QueueFollow) => {
+    if (follow.unkeep) store?.unkeep(taskId);
+    if (follow.keep) store?.keep(follow.keep);
+  };
+
   /**
    * Mirror the server: done, archived, backlog or deleted leaves every queue
-   * (TV-D2, TV-D9). Returns the overlay changes that take the task out of the
-   * queues shown (the write that changes its status carries them, so a refusal
-   * puts them back), and the queue rows the server will have dropped. A done
-   * task of mine stays on show (kept) until the next reload; reopening drops it.
+   * (TV-D2, TV-D9; the rule is `queueFollowOf`). Returns the overlay changes
+   * that take the task out of the queues shown, and the queue rows the server
+   * will have dropped.
    */
   const queueFollowStatus = (
     taskId: string,
     status: TaskStatus | TaskStatusCategory | "deleted",
   ): { changes: OverlayChange[]; rowIds: string[] } => {
-    if (status === "todo" || status === "in_progress") {
-      store?.unkeep(taskId);
-      return { changes: [], rowIds: [] };
-    }
     const d = data();
-    const mine = d.myQueueEntries.find((e) => e.taskId === taskId);
-    if (status === "done" && mine) store?.keep(mine);
-    const rows = d.allQueueRows.filter((e) => e.taskId === taskId);
+    const follow = queueFollowOf(taskId, status, d.allQueueRows, d.myQueueEntries);
+    applyQueueFollow(taskId, follow);
+    return { changes: follow.changes, rowIds: follow.rowIds };
+  };
+
+  /**
+   * What a task write is planned against (`planTaskWrite`), read from the
+   * store now. `canEdit` is false without a store or runtime to write to.
+   */
+  const planContext = (): WritePlanContext => {
+    const d = data();
     return {
-      changes: rows.map((e) => ({ table: "queue", remove: e.id }) as OverlayChange),
-      rowIds: rows.map((e) => e.id),
+      userId,
+      canEdit: !!runtime && !!workspaceId && !!store && env().canEdit,
+      archivedTaskIds: byIdOf(d.archivedTasks),
+      bucketsById: byIdOf(d.allBuckets),
+      statuses: d.statuses,
+      subtasksByParent: childrenByParentOf(d.liveTasks),
+      queueRows: d.allQueueRows,
+      myQueueEntries: d.myQueueEntries,
+      now: new Date(),
+      zone: engineZone(),
     };
   };
 
@@ -217,7 +242,10 @@ export function createShared(ctx: TaskCommandsContext) {
     const write = store.begin([patchOf(id, shown), ...(opts.extra ?? [])]);
     void op()
       .then((saved) => {
-        write.settle({ tasks: [saved] });
+        // One settle for every row the op answered, so nothing it moved
+        // shows the old copy in between; the task's last answer is the newest.
+        const others = (opts.rows?.() ?? []).filter((t) => t.id !== saved.id);
+        write.settle({ tasks: [...others, saved] });
         if (opts.forget?.length) store.forget("queue", opts.forget);
         const gone = opts.leaves?.(saved);
         if (gone?.length) store.forget("tasks", gone);
@@ -240,7 +268,11 @@ export function createShared(ctx: TaskCommandsContext) {
           });
           return;
         }
+        // What already saved stays (its rows become the copy).
+        const answered = opts.rows?.() ?? [];
+        if (answered.length > 0) store.answer({ tasks: answered });
         refused(write, e);
+        opts.onRefused?.();
       });
   };
 
@@ -349,6 +381,8 @@ export function createShared(ctx: TaskCommandsContext) {
     statusesForBucket,
     backlogToTodo,
     queueFollowStatus,
+    applyQueueFollow,
+    planContext,
     applyOp,
     sendNewTask,
     sendQueueOp,

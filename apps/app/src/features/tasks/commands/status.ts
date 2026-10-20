@@ -2,22 +2,18 @@
 // finish the open subtasks with it (call 87), archive; and the workspace's
 // and projects' status sets.
 
-import {
-  isClosedTask,
-  legacyTaskStatus,
-  type TaskStatusCategory,
-  taskCategoryOf,
-} from "@contracts/vocabularies";
+import { legacyTaskStatus, type TaskStatusCategory, taskCategoryOf } from "@contracts/vocabularies";
 import { toast } from "sonner";
 import { undoToast } from "../../../lib/undo-toast";
 import { subtasksToFinish } from "../home";
 import type { ProjectStatus, Task } from "../model";
 import { CATEGORY_LABELS, type StatusTarget } from "../statuses";
+import type { WritePlan } from "../write-plan";
 import type { Finished, TaskCommandsContext, TaskPeers } from "./context";
 import { type Shared, statusBack } from "./shared";
 
 export function createStatusOps(ctx: TaskCommandsContext, shared: Shared, peers: TaskPeers) {
-  const { store, runtime, workspaceId, data, env } = ctx;
+  const { store, runtime, workspaceId, data } = ctx;
   const { editBlocked, failed, statusesForBucket } = shared;
 
   /**
@@ -65,49 +61,47 @@ export function createStatusOps(ctx: TaskCommandsContext, shared: Shared, peers:
   const setTaskStatus = (id: string, target: StatusTarget) => {
     const existing = data().allTasks.find((t) => t.id === id);
     if (!existing) return;
-    const canEdit = env().canEdit;
-    const toCategory =
-      "statusId" in target
-        ? statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId)?.category
-        : target.category;
+    let plan: WritePlan | null;
     if ("statusId" in target) {
       const s = statusesForBucket(existing.bucketId).find((x) => x.id === target.statusId);
       if (!s || s.id === existing.statusId) return;
-      peers.patchTask(id, {
+      plan = peers.writeTask(id, {
         statusId: s.id,
         statusCategory: s.category,
         status: legacyTaskStatus(s.category),
       });
     } else {
       if (taskCategoryOf(existing) === target.category) return;
-      peers.patchTask(id, {
+      plan = peers.writeTask(id, {
         statusCategory: target.category,
         status: legacyTaskStatus(target.category),
       });
     }
     // Call 87: into Done from an open status finishes the open subtasks.
-    if (toCategory === "done" && canEdit && !isClosedTask(existing)) {
-      const finished = finishOpenSubtasks(existing);
-      if (finished) sayFinishedWith(existing, finished);
-    }
+    finishWith(existing, plan);
+  };
+
+  /**
+   * Call 87, after a status write: one that started into Done from an open
+   * status (`planTaskWrite`'s follow-up) finishes the open subtasks and says
+   * so with one Undo. A refused write finishes nothing.
+   */
+  const finishWith = (before: Task, plan: WritePlan | null) => {
+    if (plan?.kind !== "write" || !plan.followUps.finishOpenSubtasks) return;
+    const finished = finishOpenSubtasks(before);
+    if (finished) sayFinishedWith(before, finished);
   };
 
   const toggleDone = (task: Task) => {
+    const before = data().allTasks.find((t) => t.id === task.id) ?? task;
     const finishing = task.status !== "done";
-    const canEdit = env().canEdit;
-    peers.patchTask(task.id, { status: finishing ? "done" : "todo" });
-    if (!finishing || !canEdit) return;
-    const finished = finishOpenSubtasks(task);
-    if (finished) sayFinishedWith(task, finished);
+    finishWith(before, peers.writeTask(task.id, { status: finishing ? "done" : "todo" }));
   };
 
   const markDone = (id: string) => {
     const before = data().allTasks.find((t) => t.id === id);
-    const canEdit = env().canEdit;
-    peers.patchTask(id, { status: "done" });
-    if (!before || !canEdit || taskCategoryOf(before) === "done") return;
-    const finished = finishOpenSubtasks(before);
-    if (finished) sayFinishedWith(before, finished);
+    const plan = peers.writeTask(id, { status: "done" });
+    if (before) finishWith(before, plan);
   };
 
   /** Archive a task — terminal, removes it from open lists (used by drift triage). */
