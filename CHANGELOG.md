@@ -5,6 +5,12 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.3 · 2026-10-20
+
+### Fixed
+
+- Task details keep their full-width labels when the right panel is 320 px wide; they narrow only below that.
+
 ## 1.2.2 · 2026-10-19
 
 ### Improved
