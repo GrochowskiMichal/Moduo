@@ -140,6 +140,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-20 · TanStack DB/Pacer/Devtools pinned (Devtools dev-only), Virtual 3.19, first-load budget in `apps/app/bundle-budget.json`, `tanstack` import boundary.
 - 2026-10-20 · First load is the anchor pages only: other routes, Lexical, capture parser, date picker and picker fonts are lazy (1,431 → 986 KB gzip JS).
 - 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
 - 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.

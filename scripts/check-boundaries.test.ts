@@ -87,6 +87,45 @@ describe("checkFile", () => {
       [],
     );
   });
+
+  it("keeps TanStack DB inside lib/sync/tanstack and Query/Store out of app code", () => {
+    expect(
+      checkFile("src/features/tasks/x.ts", 'import { createCollection } from "@tanstack/db";'),
+    ).toEqual([{ rule: "tanstack", file: "src/features/tasks/x.ts", target: "@tanstack/db" }]);
+    expect(
+      checkFile("src/lib/sync/store.ts", 'import { useLiveQuery } from "@tanstack/react-db";'),
+    ).toHaveLength(1);
+    expect(
+      checkFile(
+        "src/lib/sync/tanstack/tasks.ts",
+        'import { createCollection } from "@tanstack/db";',
+      ),
+    ).toEqual([]);
+    expect(
+      checkFile(
+        "src/lib/sync/tanstack/q.ts",
+        'import { QueryClient } from "@tanstack/react-query";',
+      ),
+    ).toHaveLength(1);
+    expect(
+      checkFile("src/components/c.tsx", 'import { Store } from "@tanstack/store";'),
+    ).toHaveLength(1);
+    expect(
+      checkFile("src/components/c.tsx", 'import { useStore } from "@tanstack/react-store";'),
+    ).toHaveLength(1);
+    expect(
+      checkFile(
+        "src/components/c.tsx",
+        'import { useVirtualizer } from "@tanstack/react-virtual";',
+      ),
+    ).toEqual([]);
+    expect(
+      checkFile(
+        "src/components/c.tsx",
+        'import { useDebouncedValue } from "@tanstack/react-pacer";',
+      ),
+    ).toEqual([]);
+  });
 });
 
 describe("compare", () => {

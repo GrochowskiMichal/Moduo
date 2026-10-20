@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig } from "@rsbuild/core";
 import { pluginReact } from "@rsbuild/plugin-react";
+import { devtools } from "@tanstack/devtools-rspack";
 
 function readLocalEnvValue(name: string): string {
   // .env.local lives at the repo root (scripts/local/env.ts writes it there).
@@ -129,6 +130,13 @@ export default defineConfig({
   },
   html: {
     template: "./index.html",
+  },
+  tools: {
+    // TanStack Devtools (TS-1): source links and console helpers in dev only;
+    // production builds never load the plugin or the panel (src/main.tsx).
+    rspack: (_config, { isDev, prependPlugins }) => {
+      if (isDev) prependPlugins(devtools());
+    },
   },
   resolve: {
     alias: {
