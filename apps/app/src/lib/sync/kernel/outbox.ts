@@ -157,7 +157,8 @@ export async function drainOutbox<E extends OutboxEntryBase, R>(
     before?(entry: E): Promise<"send" | "skip" | "stop"> | "send" | "skip" | "stop";
     send(entry: E): Promise<SendOutcome<R>>;
     isNetwork(error: unknown): boolean;
-    sent(entry: E, value: R): void;
+    /** `wasQueued`: it was still in the outbox when its answer came (an echo may have taken it first). */
+    sent(entry: E, value: R, wasQueued: boolean): void;
     refused(entry: E, error: unknown): void;
     offline(entry: E, error: unknown): void;
   },
@@ -172,8 +173,8 @@ export async function drainOutbox<E extends OutboxEntryBase, R>(
     if (!run.running()) return;
     const res = await run.send(entry);
     if (res.ok) {
-      outbox.remove(entry.id);
-      run.sent(entry, res.value);
+      const wasQueued = outbox.remove(entry.id) !== undefined;
+      run.sent(entry, res.value, wasQueued);
       continue;
     }
     if (run.isNetwork(res.error)) {

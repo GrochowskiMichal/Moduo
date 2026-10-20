@@ -76,7 +76,13 @@ import {
 import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
 import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
 import { openWrite } from "./kernel/overlay";
-import { type OwnedCopies, personLifecycle, refcount, StoreRegistry } from "./kernel/registry";
+import {
+  type OwnedCopies,
+  personLifecycle,
+  refcount,
+  StoreRegistry,
+  waitingEverywhere,
+} from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError } from "./network";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
@@ -2043,9 +2049,12 @@ export function wipeSyncCopies(opts: { keepWaiting?: boolean } = {}): Promise<vo
   return people.wipe(opts);
 }
 
-/** How many writes wait to sync in the running stores (a sign-out warns first). */
+/**
+ * How many writes wait to sync in every running store, Tasks' and Chat's (a
+ * sign-out warns first; both keep theirs on the device).
+ */
 export function waitingSyncCount(): number {
-  return people.waitingCount();
+  return waitingEverywhere();
 }
 
 /**
