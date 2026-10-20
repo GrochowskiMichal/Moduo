@@ -17,7 +17,7 @@ import { Switch } from "../../../components/ui/switch";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { timeAgo } from "../../contacts/rollup";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
-import { EntityTextEditor } from "../../spine/editor/entity-text-editor";
+import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { EntityHub } from "../../spine/ui/entity-hub";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
