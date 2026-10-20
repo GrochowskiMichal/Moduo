@@ -517,6 +517,14 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **REL-5 — Split Mac builds (per-arch updater bundles, universal .dmg kept)** · deps: REL-2 · 2026-10-19 · `t/mike/rel-5-split-mac` · #489; staging 1.2.0-rc.54 per-arch (51.7% / 54.2%). universal key + tarball dropped after production 1.2.1 (`t/mike/rel-5-drop-universal`)
 - [x] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3 · 2026-10-19 · `t/mike/rel-6-branches` (#492) · mirror branches deleted; prod-landing last, after its content was ported to apps/landing (#494) and shipped in v1.2.1 (#496), tip 7e3823fd
 
+## Tasks plan view — selection and split (Track B of the 2026-10-20 structure plan)
+
+> The plan view's place and task selection lived in state, the URL, localStorage and about 12 guard refs kept in step by racing effects (DF-1). Track B runs beside Track A (`features/tasks/hooks/**`) and Track C (`lib/sync/**`); it owns `ui/tasks-plan-view.tsx`, `routes/pages/tasks-page.tsx`, `search.ts`, `default-view.ts`, `selection.ts` and `ui/plan/**`. No user-visible change.
+
+- [~] **PV-B1 — The place comes from the URL (`?place=`, `resolveEntryPlace`, `usePlanPlace`)** · deps: — · `t/mike/plan-place-from-url`
+- [ ] **PV-B2 — Deep-link state machine (`deepLinkReducer`, `useTaskDeepLink`)** · deps: PV-B1
+- [ ] **PV-B3 — Split the plan view (`useTasksPlanController`, `TasksPlanLayout`: rail, body, panels, DnD host; no file over ~600 lines)** · deps: PV-B2
+
 ## Sync kernel (Track C of the 2026-10-20 audit plan) · `~/.claude/plans/golden-pondering-gosling.md`
 
 One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat stores; Notes shares its infrastructure. Runs beside Track A (useTasksModule split) and Track B (plan view); it never changes `WorkspaceStore`'s public API or `StoreSnapshot`. Each block is one PR into `mike`; C2–C4 get the `validator`.

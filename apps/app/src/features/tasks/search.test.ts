@@ -25,8 +25,17 @@ describe("validateTasksSearch", () => {
     expect(validateTasksSearch({ id: "" })).toEqual({});
   });
 
-  it("keeps a known place to open and drops any other", () => {
+  it("keeps a place the sidebar opens and drops any other", () => {
+    const uuid = "9d1c3a7e-1111-4222-8333-444455556666";
     expect(validateTasksSearch({ place: "upcoming" })).toEqual({ place: "upcoming" });
+    for (const place of ["inbox", "today", "mine", "all", "trash", uuid, `view:${uuid}`]) {
+      expect(validateTasksSearch({ place })).toEqual({ place });
+    }
+    expect(validateTasksSearch({ place: `tmp-${uuid}` })).toEqual({ place: `tmp-${uuid}` });
+    expect(validateTasksSearch({ place: "view:all" })).toEqual({});
+    expect(validateTasksSearch({ place: `${uuid}'` })).toEqual({});
+    // The task comes last, so the address bar ends with it (MOD-28).
+    expect(Object.keys(validateTasksSearch({ id: "t1", place: "mine" }))).toEqual(["place", "id"]);
     expect(validateTasksSearch({ place: "settings" })).toEqual({});
     expect(validateTasksSearch({ place: 3 })).toEqual({});
     expect(validateTasksSearch({ id: 42 })).toEqual({});

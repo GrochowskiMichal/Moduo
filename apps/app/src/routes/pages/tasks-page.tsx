@@ -18,7 +18,7 @@ export function TasksPage() {
   // cursor (j/k moves it constantly), not a document — back should leave
   // /tasks, not walk the cursor history. The functional updater guards any
   // future /tasks params (an object `search` replaces the whole query string —
-  // the gotcha that bit FX-1); today `id` is the only validated param.
+  // the gotcha that bit FX-1).
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as TasksSearch;
   const urlTaskId = search.id ?? null;
@@ -36,19 +36,23 @@ export function TasksPage() {
       },
     });
   }, [navigate]);
-  // A place to open (Home's Upcoming "+n more"): opened once, then taken off.
+  // The place open in the centre (DF-1): `?place=`, its only source. Writes
+  // replace too, so Back and Forward never walk through places. `place` goes
+  // before `id`, so the address bar ends with the task (MOD-28).
   const urlPlace = search.place ?? null;
-  const onUrlPlaceConsumed = useCallback(() => {
-    void navigate({
-      to: "/tasks",
-      replace: true,
-      search: (prev: Record<string, unknown>) => {
-        const next = { ...prev };
-        delete next.place;
-        return next;
-      },
-    });
-  }, [navigate]);
+  const onUrlPlaceChange = useCallback(
+    (place: string) => {
+      void navigate({
+        to: "/tasks",
+        replace: true,
+        search: (prev: TasksSearch) => {
+          const { id, ...rest } = prev;
+          return { ...rest, place, ...(id ? { id } : {}) };
+        },
+      });
+    },
+    [navigate],
+  );
   const onUrlTaskIdChange = useCallback(
     (id: string | null) => {
       void navigate({
@@ -113,7 +117,7 @@ export function TasksPage() {
       urlViewId={urlViewId}
       onUrlViewConsumed={onUrlViewConsumed}
       urlPlace={urlPlace}
-      onUrlPlaceConsumed={onUrlPlaceConsumed}
+      onUrlPlaceChange={onUrlPlaceChange}
     />
   );
 }

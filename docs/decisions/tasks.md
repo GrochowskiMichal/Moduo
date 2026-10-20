@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-20 · The plan view's place lives in the address bar (PV-B1, DF-1)
+
+- **`?place=` is the only source of the place open in Tasks; the task cursor stays React state** → `resolveEntryPlace` / `remembersPlace` (`default-view.ts`), `ui/plan/use-plan-place.ts`, `validateTasksSearch` (`search.ts`), `routes/pages/tasks-page.tsx`
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: the place is `inbox | today | upcoming | mine | all | wontdo | archived | trash | templates | new-view | <project id> | view:<id>`, written with `replace` (Back and Forward still leave Tasks, never walk places), `place` before `id` so the address bar ends with the task (MOD-28). Without one, the place is where you left Tasks (`lastBucket`, read once per workspace), a first open's onboarding view, else the Inbox; it's written to the address bar once the bundle has loaded and no deep link is waiting (the link owns the entry scope). A pick shows at once, before the router commits it (`usePlanPlace` holds it until the address bar moves). Places you pass through (Won't do, Archived, Recently deleted, Templates, an unsaved view, an archived project) aren't remembered and don't reopen on arrival, exactly as `lastBucket` behaved; a project that's gone mid-visit falls back to the Inbox.
+  - Why: the place lived in state, the URL (one-shot `?place=upcoming`), localStorage and two guard refs kept in step by four racing effects. One pure function now decides it at render, so every effect in a flush sees the same place.
+  - Not done: the task cursor stays state (j/k key-repeat and WebKit's `replaceState` throttling, see `tasks-plan-view.tsx`); its URL sync becomes one reducer in PV-B2.
+
 ## 2026-10-20 · A sign-out keeps what waits to sync (supersedes part of TV-D11a)
 
 - **Sign-out cuts the Tasks device copy down to its outbox instead of wiping it** → `wipeSyncCopies` / `attachSyncUser` / `keepOnlyWaiting` (`lib/sync/store.ts`), Settings → Account's "Log out" warning
