@@ -6,27 +6,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { remembersPlace, resolveEntryPlace } from "../../default-view";
-
-// Per-workspace view memory on this device (`moduo:tasks:<part>:<ws>`).
-function lsKey(workspaceId: string, part: string): string {
-  return `moduo:tasks:${part}:${workspaceId}`;
-}
-function readLS(workspaceId: string, part: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(lsKey(workspaceId, part));
-  } catch {
-    return null;
-  }
-}
-function writeLS(workspaceId: string, part: string, value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(lsKey(workspaceId, part), value);
-  } catch {
-    /* ignore */
-  }
-}
+import { readLS, writeLS } from "./plan-base";
 
 /** What the page opened with in a workspace: read once, never re-read. */
 type Entry = {

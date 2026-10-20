@@ -308,6 +308,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-20 · PV-B3: the plan view is `useTasksPlanController` (a chain of hooks in the old call order) plus `TasksPlanLayout` (rail, body, panels, DnD host, dialogs); no file over ~600 lines; no logic changed → decisions/tasks.md
 - 2026-10-20 · PV-B2: one deep-link state machine (`deepLinkReducer`) decides whether `?id=` is a link or the mirror's own write; the backstop, mirror and default place act only when it's idle or resolved → decisions/tasks.md
 - 2026-10-20 · PV-B1: the plan view's place lives in `?place=` (written with replace, `place` before `id`), resolved at render by `resolveEntryPlace`; `lastBucket` is read once as an input; the task cursor stays React state · supersedes the one-shot `?place=upcoming` → decisions/tasks.md
 - 2026-10-20 · Sign-out (and another person signing in) keeps each person's waiting Tasks writes on the device, rows gone, until they sign in again; account deletion still wipes all; Log out warns first.

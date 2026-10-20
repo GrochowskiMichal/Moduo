@@ -523,7 +523,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 
 - [~] **PV-B1 — The place comes from the URL (`?place=`, `resolveEntryPlace`, `usePlanPlace`)** · deps: — · `t/mike/plan-place-from-url`
 - [~] **PV-B2 — Deep-link state machine (`deepLinkReducer`, `useTaskDeepLink`)** · deps: PV-B1 · `t/mike/plan-deep-link-machine`
-- [ ] **PV-B3 — Split the plan view (`useTasksPlanController`, `TasksPlanLayout`: rail, body, panels, DnD host; no file over ~600 lines)** · deps: PV-B2
+- [~] **PV-B3 — Split the plan view (`useTasksPlanController`, `TasksPlanLayout`: rail, body, panels, DnD host; no file over ~600 lines)** · deps: PV-B2 · `t/mike/plan-view-split`
 
 ## Running sessions & parallelism
 

@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-20 · The plan view is a controller and a layout (PV-B3)
+
+- **`TasksPlanView` = `useTasksPlanController(props)` + `<TasksPlanLayout c={…} />`; no file over ~600 lines** → `ui/plan/` (controller chain `use-plan-{chrome,selection,scope,actions,cursor,centre,panel-state}`, layout `tasks-plan-layout`, `plan-{rail,body,panels,dnd-host,dialogs}`, shared `plan-base.ts`)
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: the 2,761-line component was cut at its own seams, in order, with no logic changed. Each controller step takes everything before it and returns it plus its own values; the layout components read what they draw from the controller. Hooks that only feed a drawing (the DnD sensors and collision, the reference host, the panel stack's reference reads, the Project view's chat lines) moved into the component that draws it. Every other hook and effect keeps its old call order (see gotchas/ui.md, "The plan view's controller"). `tasks-page.tsx` stays the router adapter; the `api` prop is unchanged (Track A moves the plan view off the facade later).
+  - Why: no unit test could render the plan view and every change touched one huge file. The controller now has a hook test, and Track A can move each step off `useTasksModule` on its own.
+  - Not done: the controller passes one wide object (`c`) to the layout. Narrowing each component's props is follow-up work, best done once Track A's selectors land.
+
 ## 2026-10-20 · One state machine decides what an `?id=` in the address bar is (PV-B2, DF-1, MOD-28)
 
 - **`deepLinkReducer` (`ui/plan/deep-link.ts`) replaces six guard refs and four effects; `useTaskDeepLink` carries out its commands** → `ui/plan/use-task-deep-link.ts`, `tasks-plan-view.tsx`
