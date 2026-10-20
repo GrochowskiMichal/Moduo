@@ -3,7 +3,7 @@
 // through the calendar-google-web edge function.
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 import { finishConnectReturn, rememberConnectStart } from "./connect-return";
 export type LinkedGoogleCalendar = {
   email: string;

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { toast } from "sonner";
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { supabaseClient } from "../../../lib/runtime.web";
+import { supabaseClient } from "../../../lib/runtime.web.client";
 import { undoToast } from "../../../lib/undo-toast";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import {

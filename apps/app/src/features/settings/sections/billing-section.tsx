@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { isDesktopShell, openStripeUrl } from "../../../hooks/use-entitlement";
-import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
+import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web.client";
 import { useAuth } from "../../../providers/auth-provider";
 import {
   ENTITLEMENTS_COLUMNS,

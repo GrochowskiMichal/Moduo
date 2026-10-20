@@ -2,7 +2,7 @@
 // changes over Realtime (read under the table's rule, so only statuses you
 // may see arrive) and the tab's visibility. Imported once by the app.
 
-import { supabaseClient } from "../runtime.web";
+import { supabaseClient } from "../runtime.web.client";
 import { readPeopleNow } from "./api";
 import { setDefaultPeopleNowDeps } from "./store";
 

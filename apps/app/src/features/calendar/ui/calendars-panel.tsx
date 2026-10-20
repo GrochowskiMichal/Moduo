@@ -3,7 +3,7 @@ import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
-import { supabaseClient } from "../../../lib/runtime.web";
+import { supabaseClient } from "../../../lib/runtime.web.client";
 import { ShareMenu } from "../../sharing/share-menu";
 import { useWorkspace } from "../../workspaces/workspace-context";
 

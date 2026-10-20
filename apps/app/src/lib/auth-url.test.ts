@@ -112,7 +112,7 @@ describe("scrubAuthCallbackFromUrl", () => {
     expect(window.location.hash).toBe("");
     expect(window.location.href).not.toContain("access_token");
     expect(ignoredAuthLink()).toBe("session");
-    clearIgnoredAuthLink(); // what a SIGNED_IN does (runtime.web.ts)
+    clearIgnoredAuthLink(); // what a SIGNED_IN does (runtime.web.client.ts)
     expect(ignoredAuthLink()).toBeNull();
   });
 

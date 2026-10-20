@@ -51,7 +51,7 @@ import {
 import { playChatSound, soundsForNotice } from "../../lib/notices/sound";
 import { currentPreferences } from "../../lib/preferences";
 import { isTauriRuntime } from "../../lib/runtime";
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 import { ChatNoticeAsk } from "./chat-notice-ask";

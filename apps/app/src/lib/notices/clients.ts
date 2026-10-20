@@ -9,7 +9,7 @@
 // (`components/app/notice-deliveries.tsx`): the desktop app is cloud-first too.
 
 import type { ClientSurface } from "@contracts/vocabularies";
-import { supabaseClient } from "../runtime.web";
+import { supabaseClient } from "../runtime.web.client";
 import { CLIENT_IDLE_MS } from "./ring";
 
 export type { ClientSurface };

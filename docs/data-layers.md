@@ -28,8 +28,8 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 
 | File | Role |
 | --- | --- |
-| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
-| `apps/app/src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
+| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary: `ModuoRuntime` and the shared types (`RuntimeCapabilities`, …). Each module's port and its own types live in `runtime.types.<module>.ts`, re-exported from here, so callers import from `runtime.types` only. |
+| `apps/app/src/lib/runtime.web.ts` | Web runtime: the composition root that assembles `webRuntime` from one file per module (`runtime.web.<module>.ts`, each typed by its port). The Supabase client is `runtime.web.client.ts` (light: importing it doesn't load every module); helpers several modules share are in `runtime.web.shared.ts`. Cloud-only, no offline. |
 | `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for nearly every module (auth, workspaces, tasks, notes, chat, contacts, calendar, dashboard, …), and Tauri `invoke` only for the desktop engines: the email IMAP/SMTP engine, the device key-value store (`localStore`), the legacy time-tracking commands (`tt_*`), integrations, and the one-off import of old redb notes. |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.

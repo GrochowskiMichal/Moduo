@@ -10,7 +10,7 @@ const h = rs.hoisted(() => ({
   pending: [] as { resolve: (v: { data: unknown; error: null }) => void }[],
 }));
 
-rs.mock("@/lib/runtime.web", () => ({
+rs.mock("@/lib/runtime.web.client", () => ({
   supabaseClient: {
     auth: {
       getSession: async () => ({

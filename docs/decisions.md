@@ -283,6 +283,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-20 · The web runtime and its port are one file per module (`runtime.web.<module>.ts` + `runtime.types.<module>.ts`, composed in `runtime.web.ts`); the Supabase client, boot cache and auth listener are `runtime.web.client.ts` → decisions/data.md
 - 2026-10-20 · TanStack spine re-planned after TS-3b: TS-3c, TS-4, TS-5 paused; TanStack DB stays the storage layer, live queries only for narrow indexed per-entity reads until a release after @tanstack/db 0.15.1 passes the 10k re-test; TS-R1 paints the List's first screen before the rest, the rail and the right panel one frame after the landing (warm open 150 → 83 ms, switch 81 → 50 ms, production) → decisions/data.md
 - 2026-10-20 · TS-3b: live queries only where an index narrows them (subtasks query built, not wired: the query engine is +59 KB first load); whole-workspace Tasks data stays cached JS (`derived.ts`, was `selectors.ts`) because a 10k live query costs 40–65 ms to build; the snapshot reads kernel rows (collections on demand); Home data is one context per source → decisions/data.md
 - 2026-10-20 · TS-3a: the Tasks store's tables are in-memory collections it drives (`ownerDriven`); the snapshot reads rows from them (raw `_state`, kernel order), overlays on top; API unchanged; first-load budget 1045 KB → decisions/data.md

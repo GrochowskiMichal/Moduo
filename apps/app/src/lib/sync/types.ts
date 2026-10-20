@@ -3,7 +3,7 @@
 // Every table the store keeps is named here with the model it holds. The
 // runtime's `tasks.syncRead` reads one table at a time (a delta since a
 // server stamp, or its live rows), and the store keeps one map per table.
-// Adding a table is one entry here, one source in `runtime.web.ts`
+// Adding a table is one entry here, one source in `runtime.web.tasks.ts`
 // (SYNC_SOURCES), one line in `store.ts` (SYNC_TABLES, and ACCESS_CHECKED for
 // a delta table RLS can hide rows of) and its Realtime mapping in
 // `features/tasks/live.ts` if it is published.

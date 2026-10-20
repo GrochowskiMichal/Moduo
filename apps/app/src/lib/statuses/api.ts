@@ -5,7 +5,7 @@
 
 import type { StatusClearAfter, StatusPreset } from "@contracts/vocabularies";
 
-import { supabaseClient } from "../runtime.web";
+import { supabaseClient } from "../runtime.web.client";
 import {
   type PersonNow,
   type PersonStatus,

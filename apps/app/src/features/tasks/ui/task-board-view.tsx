@@ -51,7 +51,6 @@ import {
   targetAccepts,
   targetName,
 } from "../dnd/board-drop";
-import { positionNextTo } from "../dnd/drop-mode";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
 import type { GroupAdd } from "../list-group-add";
@@ -92,8 +91,9 @@ import {
   useRowActions,
   waitingLabelsOf,
 } from "./row-facts";
+import { isViewKeyTarget, runSharedRowKey, stepLabel, stepPosition } from "./row-keys";
 import { CardBody, type CardTeam, TaskCard } from "./task-card";
-import { activateTask, type TaskCommand } from "./task-context-menu";
+import type { TaskCommand } from "./task-context-menu";
 import type { GroupMarkContext } from "./task-list-parts";
 import { TaskBoardSkeleton, TasksNoMatch } from "./task-view-states";
 import { registerBoardDropNames, useBoardFolds } from "./use-board-folds";
@@ -845,16 +845,9 @@ export function TaskBoardView({
     }
     const cell = cellOfTask.get(task.id);
     if (!cell) return;
-    const at = cell.shown.findIndex((t) => t.id === task.id);
-    const neighbour = cell.shown[at + step];
-    if (at < 0 || !neighbour) return;
-    const position = positionNextTo(
-      allTasks,
-      { id: neighbour.id, edge: step < 0 ? "before" : "after" },
-      task.id,
-    );
+    const position = stepPosition(allTasks, cell.shown, task, step);
     if (position === null) return;
-    void dropTask({ taskId: task.id, position }, step < 0 ? "Moved up" : "Moved down");
+    void dropTask({ taskId: task.id, position }, stepLabel(step));
   };
   /** `c`: a new task in the selected card's column, with its value. */
   const captureHere = () => {
@@ -867,15 +860,7 @@ export function TaskBoardView({
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (editingId || activeId) return;
     // The page's keys first (a selection's bulk row), from the board itself.
-    if (
-      onViewKey &&
-      e.target instanceof Node &&
-      e.currentTarget.contains(e.target) &&
-      !(
-        e.target instanceof HTMLElement && e.target.closest("input, textarea, [contenteditable]")
-      ) &&
-      onViewKey(e, selectedTask)
-    ) {
+    if (onViewKey && isViewKeyTarget(e) && onViewKey(e, selectedTask)) {
       e.preventDefault();
       return;
     }
@@ -888,21 +873,23 @@ export function TaskBoardView({
       const next = moveInGrid(grid, selectedTaskId, dir);
       if (next) onSelectTask(next);
     };
+    if (
+      runSharedRowKey(action, e, {
+        selectedTask,
+        canEdit,
+        multiSelect,
+        order: gridOrder,
+        actions,
+        onOpenTask,
+        startEdit: setEditingId,
+        setCommand,
+        toggleQueue,
+        deleteTask,
+      })
+    ) {
+      return;
+    }
     switch (action) {
-      case "extend-next":
-      case "extend-prev":
-        if (!multiSelect) return;
-        e.preventDefault();
-        multiSelect.extend(action === "extend-next" ? 1 : -1, gridOrder);
-        return;
-      case "select-all":
-        if (!multiSelect) return;
-        e.preventDefault();
-        multiSelect.selectAll(gridOrder);
-        return;
-      case "clear-selection":
-        if (multiSelect?.clear()) e.preventDefault();
-        return;
       case "next":
         return go("down");
       case "prev":
@@ -918,39 +905,6 @@ export function TaskBoardView({
     }
     if (!selectedTask) return;
     switch (action) {
-      case "open":
-        e.preventDefault();
-        if (onOpenTask) onOpenTask(selectedTask.id);
-        else if (canEdit) setEditingId(selectedTask.id);
-        return;
-      case "edit":
-        if (!canEdit) return;
-        e.preventDefault();
-        setEditingId(selectedTask.id);
-        return;
-      case "toggle-done":
-        if (!canEdit) return;
-        e.preventDefault();
-        activateTask(selectedTask, actions);
-        return;
-      case "bucket":
-      case "schedule":
-      case "due":
-      case "status":
-        if (!canEdit) return;
-        e.preventDefault();
-        setCommand({ taskId: selectedTask.id, kind: action });
-        return;
-      case "queue":
-        if (!canEdit) return;
-        e.preventDefault();
-        toggleQueue(selectedTask.id);
-        return;
-      case "delete":
-        if (!canEdit) return;
-        e.preventDefault();
-        deleteTask(selectedTask.id);
-        return;
       case "move-up":
       case "move-down":
         if (!canEdit) return;

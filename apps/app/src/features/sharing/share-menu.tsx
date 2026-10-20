@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Switch } from "../../components/ui/switch";
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 
 type Person = { userId: string; name: string };
 

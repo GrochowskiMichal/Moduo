@@ -1,4 +1,4 @@
-import { SUPABASE_URL, supabaseClient } from "../../lib/runtime.web";
+import { SUPABASE_URL, supabaseClient } from "../../lib/runtime.web.client";
 import {
   AVATAR_BUCKET,
   allObjectPaths,

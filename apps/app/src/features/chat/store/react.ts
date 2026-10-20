@@ -15,7 +15,7 @@ import {
   subscribeChatServerPrefs,
 } from "@/lib/notices/chat-prefs";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 import { forgetPeopleNow } from "@/lib/statuses/store";
 import { getUploadQueue } from "@/lib/uploads";
 import { uploadQueueGate } from "../files/gate";
