@@ -10,6 +10,7 @@ import { useReferenceStore } from "../../../spine/references/context";
 import { WorkspaceContext } from "../../../workspaces/workspace-context";
 import { sanitizeTasksView, tasksDisplayKey, tasksViewDefaults } from "../../display";
 import { defaultRowsFor, firstViewFor } from "../../onboarding";
+import { useSavedViewOps, useTasksSelector, useTasksStatus } from "../../tasks-context";
 import { viewSelection } from "../../views";
 import { NEW_VIEW_SELECTION } from "../bucket-rail";
 import { useTaskSelection } from "../use-task-selection";
@@ -21,7 +22,6 @@ import { useDeepLinkMachine } from "./use-task-deep-link";
 
 export function usePlanSelection(c: PlanChromeCtx) {
   const {
-    api,
     workspaceId,
     runtime,
     urlTaskId,
@@ -35,6 +35,10 @@ export function usePlanSelection(c: PlanChromeCtx) {
     collapsedGroups,
     onboardingRole,
   } = c;
+  // What the cursor and the place read from the Tasks module (A4).
+  const { loading, reachedServer } = useTasksStatus();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const { views } = useSavedViewOps();
   // Task-level selection (distinct from `selection`, which is the bucket scope).
   // Lifted here so the right-rail detail panel can bind to it across List/Board.
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -86,14 +90,8 @@ export function usePlanSelection(c: PlanChromeCtx) {
   // where you left Tasks, a first open's onboarding view, or the Inbox
   // (REPLAN 30, TV-U17; `resolveEntryPlace`). A pick writes the address bar.
   const bucketIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
-  const archivedBucketIds = useMemo(
-    () => api.archivedBuckets.map((b) => b.id),
-    [api.archivedBuckets],
-  );
-  const viewSelections = useMemo(
-    () => (api.views ?? []).map((v) => viewSelection(v.id)),
-    [api.views],
-  );
+  const archivedBucketIds = useMemo(() => archivedBuckets.map((b) => b.id), [archivedBuckets]);
+  const viewSelections = useMemo(() => (views ?? []).map((v) => viewSelection(v.id)), [views]);
   const { place: selection, setPlace: setSelection } = usePlanPlace({
     workspaceId,
     urlPlace,
@@ -104,8 +102,8 @@ export function usePlanSelection(c: PlanChromeCtx) {
     viewSelections,
     // A first open follows onboarding (TV-U17): the role's first view.
     firstView: onboardingRole ? firstViewFor(onboardingRole, bucketIds).selection : null,
-    loaded: !api.loading,
-    reachedServer: api.reachedServer,
+    loaded: !loading,
+    reachedServer,
     // DF-1: an inbound deep link owns the entry scope; the default waits.
     holdDefault: inboundPending,
   });
@@ -162,7 +160,6 @@ export function usePlanSelection(c: PlanChromeCtx) {
     [workspaceId, legacyLayout, setSelection, setFullPageId],
   );
   const welcome = useTasksWelcome({
-    api,
     runtime,
     workspaceId,
     isOwner: isWorkspaceOwner,

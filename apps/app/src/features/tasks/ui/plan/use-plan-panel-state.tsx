@@ -6,11 +6,11 @@ import { useCallback, useEffect } from "react";
 import type { EntityRef } from "../../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../../../lib/entity-open";
 import { activePanelView, panelTaskOf } from "../../panel-views";
+import { useTasksSelector, useTasksStatus } from "../../tasks-context";
 import type { PlanCentreCtx } from "./use-plan-centre";
 
 export function usePlanPanelState(c: PlanCentreCtx) {
   const {
-    api,
     onUrlTaskIdChange,
     buckets,
     panelView,
@@ -32,6 +32,8 @@ export function usePlanPanelState(c: PlanCentreCtx) {
     askedProjectId,
     timelineShown,
   } = c;
+  const { loading } = useTasksStatus();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
 
   // Opening a linked task selects it in place; other entity types deep-link out.
   const handleOpenEntity = useCallback(
@@ -61,8 +63,8 @@ export function usePlanPanelState(c: PlanCentreCtx) {
   const fullPageTask = fullPageId ? (taskById.get(fullPageId) ?? null) : null;
   // A task that left (deleted, moved out of reach) or a new scope closes it.
   useEffect(() => {
-    if (fullPageId && !api.loading && !taskById.has(fullPageId)) setFullPageId(null);
-  }, [fullPageId, api.loading, taskById, setFullPageId]);
+    if (fullPageId && !loading && !taskById.has(fullPageId)) setFullPageId(null);
+  }, [fullPageId, loading, taskById, setFullPageId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope is the cue
   useEffect(() => {
     setFullPageId(null);
@@ -84,7 +86,7 @@ export function usePlanPanelState(c: PlanCentreCtx) {
   // The title's ask wins (MOD-95): the project the centre is titled with.
   const askedProject = askedProjectId
     ? (buckets.find((b) => b.id === askedProjectId) ??
-      api.archivedBuckets.find((b) => b.id === askedProjectId) ??
+      archivedBuckets.find((b) => b.id === askedProjectId) ??
       null)
     : null;
   const panelProject =
@@ -92,7 +94,7 @@ export function usePlanPanelState(c: PlanCentreCtx) {
     (panelTask
       ? (buckets.find((b) => b.id === panelTask.bucketId && !b.isSystem) ??
         // A task of an archived project shows that project, read-only (TV-U16).
-        api.archivedBuckets.find((b) => b.id === panelTask.bucketId) ??
+        archivedBuckets.find((b) => b.id === panelTask.bucketId) ??
         null)
       : scopeProject);
   // The panel remembers its view; the title's ask shows Project only while

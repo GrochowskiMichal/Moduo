@@ -16,22 +16,22 @@ import {
   referencePanelTitle,
 } from "../../../spine/references/ui/reference-panel";
 import { IN_FLIGHT_PANEL_VIEW, NO_DATE_PANEL_VIEW, panelTitleOf } from "../../panel-views";
+import { useTaskCommands, useTasksSelector, useTaskTagIndex } from "../../tasks-context";
 import { BulkPanel } from "../bulk-panel";
 import { InFlightPanel } from "../in-flight-panel";
 import { ProjectPanel } from "../project-panel";
 import { TaskDetailPanel, TaskGonePanel } from "../task-detail-panel";
 import { TimelineNoDatePanel } from "../timeline-no-date-panel";
-
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function PlanPanels({ c }: { c: PlanController }) {
   const {
-    api,
     workspaceId,
     runtime,
     onUrlTaskIdChange,
     canEdit,
     buckets,
+    tasks,
     inbox,
     setFullPageId,
     setStatusesEditor,
@@ -69,10 +69,20 @@ export function PlanPanels({ c }: { c: PlanController }) {
     panelProject,
     panelActive,
   } = c;
+  const { updateProjectFields } = useTaskCommands();
+  const { tagsByTask } = useTaskTagIndex();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  const completions = useTasksSelector((_, snap) => snap.completions);
+  const allSections = useTasksSelector((d) => d.sections);
+  const statusById = useTasksSelector((d) => d.statusById);
+  const allTeams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
   const detailPanel = (
     <TaskDetailPanel
       task={panelTask}
-      buckets={selectedArchivedTask ? [...buckets, ...api.archivedBuckets] : buckets}
+      buckets={selectedArchivedTask ? [...buckets, ...archivedBuckets] : buckets}
       canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
@@ -93,11 +103,11 @@ export function PlanPanels({ c }: { c: PlanController }) {
   const details = multiSelect.multi ? (
     <BulkPanel
       tasks={bulkTasks}
-      statusById={api.statusById}
+      statusById={statusById}
       bucketNameById={bucketNameById}
-      sections={api.sections}
-      teams={api.teams}
-      tagsByTask={api.tagsByTask}
+      sections={allSections}
+      teams={allTeams}
+      tagsByTask={tagsByTask}
       canEdit={canEdit && !archivedProject}
       onPick={bulk.openPicker}
     />
@@ -160,13 +170,13 @@ export function PlanPanels({ c }: { c: PlanController }) {
   const projectView = panelProject ? (
     <ProjectPanel
       project={panelProject}
-      tasks={panelProject.archivedAt ? api.archivedTasks : api.tasks}
-      sections={api.sections}
-      completions={api.completions}
-      waiting={api.waiting}
+      tasks={panelProject.archivedAt ? archivedTasks : tasks}
+      sections={allSections}
+      completions={completions}
+      waiting={waiting}
       canEdit={canEdit}
       onSetState={requestProjectState}
-      onEdit={(id, patch) => void api.updateProjectFields(id, patch)}
+      onEdit={(id, patch) => void updateProjectFields(id, patch)}
       onOpenTask={(id) => {
         pickPanelView("details");
         onUrlTaskIdChange(id);
@@ -208,7 +218,7 @@ export function PlanPanels({ c }: { c: PlanController }) {
         // Always listed, so the menu keeps its shape; with no project (an
         // Inbox task) it says so.
         project: () =>
-          projectView ?? <ProjectPanel project={null} tasks={api.tasks} sections={api.sections} />,
+          projectView ?? <ProjectPanel project={null} tasks={tasks} sections={allSections} />,
         // Always listed (an alongside view): hand-offs and my agents' work.
         [IN_FLIGHT_PANEL_VIEW]: () => (
           <InFlightPanel
@@ -218,7 +228,7 @@ export function PlanPanels({ c }: { c: PlanController }) {
             onOpenTask={openTaskInPanel}
             onPickUp={pickUpInFlight}
             onLater={checkBackLater}
-            fileCounts={api.attachmentCounts}
+            fileCounts={attachmentCounts}
           />
         ),
         // Listed only while the Timeline shows (the registry hides a view a

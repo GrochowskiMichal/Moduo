@@ -51,7 +51,6 @@ import { formatShortcut, SHORTCUTS } from "../../../lib/shortcuts";
 import { undoToast } from "../../../lib/undo-toast";
 import { useAssignees } from "../assignees";
 import { positionsBefore, todayStr } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import {
   declineComment,
   declineMode,
@@ -67,23 +66,17 @@ import {
 } from "../inbox-triage";
 import type { Bucket, Task } from "../model";
 import { bucketDotColor } from "../sidebar";
+import {
+  useTaskCommands,
+  useTasksReader,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+} from "../tasks-context";
 import { useToday } from "../use-today";
 import { DayPickerDialog } from "./day-picker-dialog";
 import type { ListExtraGroup } from "./list-extensions";
 import { useAgentCaptures } from "./use-agent-captures";
-
-type InboxApi = Pick<
-  TasksModuleApi,
-  | "loaded"
-  | "reachedServer"
-  | "tasks"
-  | "buckets"
-  | "inbox"
-  | "commentStamps"
-  | "currentUserId"
-  | "patchTask"
-  | "dropTask"
->;
 
 /** The dialog a triage action opened, for one task. */
 type Open =
@@ -104,7 +97,6 @@ function firstName(name: string): string {
 }
 
 export function useInboxView({
-  api,
   runtime,
   workspaceId,
   enabled,
@@ -113,7 +105,6 @@ export function useInboxView({
   onSelectTask,
   visibleRows,
 }: {
-  api: InboxApi;
   runtime: ModuoRuntime | null;
   workspaceId: string;
   /** The Inbox is the place open: its keys and the bar's mode apply. */
@@ -135,8 +126,15 @@ export function useInboxView({
   dialogs: ReactNode;
 } {
   const today = useToday();
-  const me = api.currentUserId ?? null;
-  const inboxId = api.inbox?.id ?? null;
+  const { dropTask, patchTask } = useTaskCommands();
+  const read = useTasksReader();
+  const me = useTasksUserId() ?? null;
+  const inbox = useTasksSelector((d) => d.inbox);
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const buckets = useTasksSelector((d) => d.buckets);
+  const commentStamps = useTasksSelector((_, snap) => snap.commentStamps);
+  const { reachedServer } = useTasksStatus();
+  const inboxId = inbox?.id ?? null;
   const { byId } = useAssignees();
   const myName = firstName(byId(me)?.fullName || byId(me)?.name || "you");
 
@@ -162,14 +160,12 @@ export function useInboxView({
 
   const inboxOpen = useMemo(
     () =>
-      inboxId
-        ? api.tasks.filter((t) => t.bucketId === inboxId && !t.parentId && isOpenTask(t))
-        : [],
-    [api.tasks, inboxId],
+      inboxId ? tasks.filter((t) => t.bucketId === inboxId && !t.parentId && isOpenTask(t)) : [],
+    [tasks, inboxId],
   );
   const split = useMemo(
-    () => splitSnoozed(inboxOpen, mySnoozes, today, api.commentStamps),
-    [inboxOpen, mySnoozes, today, api.commentStamps],
+    () => splitSnoozed(inboxOpen, mySnoozes, today, commentStamps),
+    [inboxOpen, mySnoozes, today, commentStamps],
   );
   const snoozedIds = useMemo(() => new Set(split.snoozed.map((t) => t.id)), [split.snoozed]);
 
@@ -183,16 +179,16 @@ export function useInboxView({
     // lack a task snoozed elsewhere, which would read as stale and be lost on
     // every device), online, and never while the module still holds another
     // workspace's tasks (a switch).
-    if (!api.reachedServer || !inboxId || api.inbox?.workspaceId !== workspaceId) return;
+    if (!reachedServer || !inboxId || inbox?.workspaceId !== workspaceId) return;
     if (split.woken.length === 0 && split.stale.length === 0) return;
     if (canEdit && split.woken.length > 0) {
-      const tops = api.tasks.filter((t) => t.bucketId === inboxId && !t.parentId && !t.deletedAt);
+      const tops = tasks.filter((t) => t.bucketId === inboxId && !t.parentId && !t.deletedAt);
       let first: string | null = null;
       for (const t of tops) if (first === null || t.position < first) first = t.position;
       const keys = positionsBefore(split.woken.length, first);
       split.woken.forEach((id, i) => {
         const position = keys[i];
-        if (position) api.patchTask(id, { position });
+        if (position) patchTask(id, { position });
       });
     }
     const gone = new Set([...split.woken, ...split.stale]);
@@ -200,7 +196,7 @@ export function useInboxView({
       for (const id of gone) delete mine[id];
       return mine;
     });
-  }, [wokenKey, api.reachedServer, inboxId]);
+  }, [wokenKey, reachedServer, inboxId]);
 
   const [showSnoozed, setShowSnoozed] = useState(false);
   const scope = useCallback(
@@ -257,13 +253,13 @@ export function useInboxView({
   );
 
   // ── the actions ─────────────────────────────────────────────────────────
-  const latest = useRef({ api, selectedTaskId, inboxOpen, split });
+  const latest = useRef({ selectedTaskId, inboxOpen, split });
   useLayoutEffect(() => {
-    latest.current = { api, selectedTaskId, inboxOpen, split };
+    latest.current = { selectedTaskId, inboxOpen, split };
   });
   const taskOf = useCallback(
-    (id: string) => latest.current.api.tasks.find((t) => t.id === id) ?? null,
-    [],
+    (id: string) => read().liveTasks.find((t) => t.id === id) ?? null,
+    [read],
   );
 
   /** After an action the cursor moves to the next row shown (else the one above). */
@@ -307,12 +303,12 @@ export function useInboxView({
       }
       if (action === "decline" && declineMode(task, me) === "wont-do") {
         selectNextAfter(task.id);
-        void latest.current.api.dropTask({ taskId: task.id, status: "archived" }, "Won’t do");
+        void dropTask({ taskId: task.id, status: "archived" }, "Won’t do");
         return;
       }
       setOpen({ kind: action, taskId: task.id });
     },
-    [canEdit, snoozedIds, me, unsnooze, selectNextAfter],
+    [canEdit, snoozedIds, me, unsnooze, selectNextAfter, dropTask],
   );
 
   const onViewKey = useCallback(
@@ -359,7 +355,7 @@ export function useInboxView({
     close();
     if (!task) return;
     selectNextAfter(task.id);
-    void api.dropTask(
+    void dropTask(
       {
         taskId: task.id,
         bucketId: project.id,
@@ -388,7 +384,7 @@ export function useInboxView({
       toast.error("Couldn’t add the note, so the task stays with you.");
       return;
     }
-    api.patchTask(task.id, { assigneeId: back });
+    patchTask(task.id, { assigneeId: back });
     toast(`Handed back to ${backName}`);
   };
 
@@ -464,7 +460,7 @@ export function useInboxView({
       );
       return;
     }
-    void api.dropTask(
+    void dropTask(
       { taskId: task.id, status: "archived" },
       `Duplicate of “${original.title || "Untitled"}” · Won’t do`,
     );
@@ -480,7 +476,7 @@ export function useInboxView({
       return;
     }
     selectNextAfter(task.id);
-    const stamp = api.commentStamps.get(task.id) ?? null;
+    const stamp = commentStamps.get(task.id) ?? null;
     writeSnoozes((mine) => ({ ...mine, [task.id]: { until, stamp } }));
     undoToast(`Snoozed ${snoozedUntilLabel(until, new Date())}`, {
       onUndo: () =>
@@ -491,19 +487,16 @@ export function useInboxView({
     });
   };
 
-  const projects = useMemo(
-    () => api.buckets.filter((b) => !b.isSystem && !b.archivedAt),
-    [api.buckets],
-  );
+  const projects = useMemo(() => buckets.filter((b) => !b.isSystem && !b.archivedAt), [buckets]);
   const originals = useMemo(
     () =>
       openTask
-        ? api.tasks.filter(
+        ? tasks.filter(
             (t) =>
               t.id !== openTask.id && t.parentId !== openTask.id && !t.deletedAt && isOpenTask(t),
           )
         : [],
-    [api.tasks, openTask],
+    [tasks, openTask],
   );
 
   const captureHint = captureShortcut ? formatShortcut(captureShortcut) : "⌘⇧K";
@@ -564,7 +557,7 @@ export function useInboxView({
           open
           task={openTask}
           candidates={originals}
-          projectName={(id) => api.buckets.find((b) => b.id === id)?.name ?? "Inbox"}
+          projectName={(id) => buckets.find((b) => b.id === id)?.name ?? "Inbox"}
           onPick={(original) => void markDuplicate(original)}
           onClose={close}
         />

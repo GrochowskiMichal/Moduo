@@ -22,6 +22,12 @@ import {
 } from "../../my-tasks";
 import { defaultRowsFor, timelineRoleFor } from "../../onboarding";
 import { sidebarProjects } from "../../sidebar";
+import {
+  useSavedViewOps,
+  useTaskCommands,
+  useTasksReader,
+  useTasksSelector,
+} from "../../tasks-context";
 import { newViewPrefs, viewIdOf, viewPlace, viewPrefsOf } from "../../views";
 import {
   ARCHIVED_SELECTION,
@@ -41,7 +47,6 @@ import type { PlanSelectionCtx } from "./use-plan-selection";
 
 export function usePlanScope(c: PlanSelectionCtx) {
   const {
-    api,
     workspaceId,
     runtime,
     canEdit,
@@ -62,6 +67,17 @@ export function usePlanScope(c: PlanSelectionCtx) {
     selection,
     newViewSeq,
   } = c;
+  // What the place reads from the Tasks module (A4).
+  const { claimTask, patchTask } = useTaskCommands();
+  const read = useTasksReader();
+  const { views } = useSavedViewOps();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const allAreas = useTasksSelector((d) => d.areas);
+  const queuedTasks = useTasksSelector((d) => d.queuedTasks);
+  const teamMembers = useTasksSelector((d) => d.teamMembers);
+  const allTeams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
 
   // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
   // tasks-v2's "two or more members" rule): its status groups answer "what am
@@ -76,7 +92,6 @@ export function usePlanScope(c: PlanSelectionCtx) {
   // Display. Everything about the centre reads `place`; the sidebar's
   // highlight, the URL and remembering where you were read `selection`.
   const openViewId = viewIdOf(selection);
-  const views = api.views;
   const openView = useMemo(
     () => (openViewId ? (views?.find((v) => v.id === openViewId) ?? null) : null),
     [openViewId, views],
@@ -90,8 +105,8 @@ export function usePlanScope(c: PlanSelectionCtx) {
   const startConversation = useStartConversation();
   /** The archived project open now (read-only), if any. */
   const archivedProject = useMemo(
-    () => api.archivedBuckets.find((b) => b.id === place) ?? null,
-    [api.archivedBuckets, place],
+    () => archivedBuckets.find((b) => b.id === place) ?? null,
+    [archivedBuckets, place],
   );
 
   // A task can sit in a project you can't see (it was assigned to you): that
@@ -106,7 +121,7 @@ export function usePlanScope(c: PlanSelectionCtx) {
     const known = new Set([
       ...(inbox ? [inbox.id] : []),
       ...buckets.map((b) => b.id),
-      ...api.archivedBuckets.map((b) => b.id),
+      ...archivedBuckets.map((b) => b.id),
     ]);
     const out = new Map<string, string>();
     for (const t of tasks) {
@@ -118,17 +133,17 @@ export function usePlanScope(c: PlanSelectionCtx) {
       if (name) out.set(t.bucketId, `${name}’s Inbox`);
     }
     return out;
-  }, [tasks, buckets, inbox, api.archivedBuckets, currentUserId, assignees]);
+  }, [tasks, buckets, inbox, archivedBuckets, currentUserId, assignees]);
   const bucketNameById = useCallback(
     (id: string) => {
       if (inbox && id === inbox.id) return "Inbox";
       const live = buckets.find((b) => b.id === id);
       if (live) return live.name;
-      const archived = api.archivedBuckets.find((b) => b.id === id);
+      const archived = archivedBuckets.find((b) => b.id === id);
       if (archived) return `${archived.name} · Archived`;
       return handedInboxes.get(id) ?? PRIVATE_PROJECT_LABEL;
     },
-    [buckets, inbox, api.archivedBuckets, handedInboxes],
+    [buckets, inbox, archivedBuckets, handedInboxes],
   );
 
   // Won't do (archived) tasks leave every scope, except the one you're looking
@@ -162,8 +177,8 @@ export function usePlanScope(c: PlanSelectionCtx) {
   const linkedTaskId =
     revealRequest && revealRequest.id === selectedTaskId ? revealRequest.id : null;
   const groupChoices = useMemo(
-    () => ({ teams: api.teams.length > 0, areas: api.areas.length > 0 }),
-    [api.teams.length, api.areas.length],
+    () => ({ teams: allTeams.length > 0, areas: allAreas.length > 0 }),
+    [allTeams.length, allAreas.length],
   );
   // The Inbox opened by its id is still the Inbox: its Display (no Section
   // grouping, its own saved choices) is the Inbox's.
@@ -210,12 +225,11 @@ export function usePlanScope(c: PlanSelectionCtx) {
   // The views built on the List (TV-U15): Upcoming's days, the Inbox's
   // triage, My tasks' team block. Each hands the List what differs.
   const isInboxScope = place === "inbox" || (inboxId !== null && place === inboxId);
-  const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds: bucketIds });
+  const upcoming = useUpcomingView({ canEdit, inboxId, projectIds: bucketIds });
   // The Inbox's rows as the List shows them (set below, once filtered): the
   // cursor after a triage moves to the next of these.
   const inboxRowsRef = useRef<readonly Task[]>([]);
   const inboxView = useInboxView({
-    api,
     runtime,
     workspaceId,
     // A selection owns the bar and the keys while it lasts (TV-U12).
@@ -227,13 +241,10 @@ export function usePlanScope(c: PlanSelectionCtx) {
   });
   // My tasks' team block (54): your teams' tasks nobody has taken yet.
   const blocks = useMemo(
-    () => teamBlocks(tasks, api.teams, api.teamMembers, currentUserId),
-    [tasks, api.teams, api.teamMembers, currentUserId],
+    () => teamBlocks(tasks, allTeams, teamMembers, currentUserId),
+    [tasks, allTeams, teamMembers, currentUserId],
   );
-  const waitingIds = useMemo(
-    () => new Set((api.waiting ?? []).map((w) => w.taskId)),
-    [api.waiting],
-  );
+  const waitingIds = useMemo(() => new Set((waiting ?? []).map((w) => w.taskId)), [waiting]);
   const myOrder = tasksDisplay.display.order;
   // The block's groups change only when what they show does: an edit to any
   // other task makes `blocks` anew, and a new group array re-measures the
@@ -271,20 +282,20 @@ export function usePlanScope(c: PlanSelectionCtx) {
   );
   // Take it (54): TV-D13's claim op makes the task yours and keeps its team
   // (it refuses one somebody took first), with Undo while it's still yours.
-  const takeRef = useRef({ api, currentUserId });
+  const takeRef = useRef({ claimTask, patchTask, read, currentUserId });
   useLayoutEffect(() => {
-    takeRef.current = { api, currentUserId };
+    takeRef.current = { claimTask, patchTask, read, currentUserId };
   });
   const takeTask = useCallback((id: string) => {
-    const { api: moduleApi, currentUserId: me } = takeRef.current;
+    const { claimTask: claim, currentUserId: me } = takeRef.current;
     if (!me) return;
     // The toast once the server took it (a refused claim says so instead).
-    moduleApi.claimTask(id, () =>
+    claim(id, () =>
       undoToast("Taken · it’s yours", {
         onUndo: () => {
           // Never over a newer change: only while it's still yours.
-          const now = takeRef.current.api.tasks.find((t) => t.id === id);
-          if (now?.assigneeId === me) takeRef.current.api.patchTask(id, { assigneeId: null });
+          const now = takeRef.current.read().liveTasks.find((t) => t.id === id);
+          if (now?.assigneeId === me) takeRef.current.patchTask(id, { assigneeId: null });
         },
       }),
     );
@@ -295,14 +306,14 @@ export function usePlanScope(c: PlanSelectionCtx) {
   const allBuckets = useMemo(() => {
     const order = allProjectOrder(
       buckets,
-      api.areas.map((a) => a.id),
+      allAreas.map((a) => a.id),
     );
     const byId = new Map(buckets.map((b) => [b.id, b]));
     return order.flatMap((id) => {
       const b = byId.get(id);
       return b ? [b] : [];
     });
-  }, [buckets, api.areas]);
+  }, [buckets, allAreas]);
   const allFolded = useCallback(
     (key: string) => startsFolded(buckets.find((b) => b.id === key)),
     [buckets],
@@ -311,17 +322,17 @@ export function usePlanScope(c: PlanSelectionCtx) {
     (key: string) => {
       const bucket = buckets.find((b) => b.id === key);
       if (!bucket) return undefined;
-      const area = bucket.areaId ? api.areas.find((a) => a.id === bucket.areaId)?.name : null;
+      const area = bucket.areaId ? allAreas.find((a) => a.id === bucket.areaId)?.name : null;
       const state =
         bucket.status === "on_hold" ? "On hold" : bucket.status === "done" ? "Done" : null;
       const parts = [area, state].filter((p): p is string => !!p);
       return parts.length > 0 ? `· ${parts.join(" · ")}` : undefined;
     },
-    [buckets, api.areas],
+    [buckets, allAreas],
   );
 
   const scopeTasksAll = useMemo(() => {
-    if (place === "today") return api.queuedTasks;
+    if (place === "today") return queuedTasks;
     if (place === ARCHIVED_SELECTION || place === TRASH_SELECTION || place === TEMPLATES_SELECTION)
       return [];
     const live = (t: Task) => t.status !== "archived" || withArchived || t.id === keptArchivedId;
@@ -335,7 +346,7 @@ export function usePlanScope(c: PlanSelectionCtx) {
       return kept && !upcoming.scope.includes(kept) ? [...upcoming.scope, kept] : upcoming.scope;
     }
     if (archivedProject) {
-      return api.archivedTasks.filter((t) => t.bucketId === archivedProject.id && live(t));
+      return archivedTasks.filter((t) => t.bucketId === archivedProject.id && live(t));
     }
     if (place === "mine") {
       // Yours, Backlog in (the List folds it behind its line), in its own
@@ -358,12 +369,12 @@ export function usePlanScope(c: PlanSelectionCtx) {
     tasks,
     inboxId,
     isInboxScope,
-    api.queuedTasks,
+    queuedTasks,
     currentUserId,
     keptArchivedId,
     withArchived,
     archivedProject,
-    api.archivedTasks,
+    archivedTasks,
     upcoming.scope,
     inboxView.scope,
     blocks,
@@ -372,8 +383,8 @@ export function usePlanScope(c: PlanSelectionCtx) {
   ]);
   // Search in All also finds archived projects' tasks, labelled (REPLAN 78).
   const archivedSearchTasks = useMemo(
-    () => (place === "all" ? api.archivedTasks.filter((t) => t.status !== "archived") : []),
-    [place, api.archivedTasks],
+    () => (place === "all" ? archivedTasks.filter((t) => t.status !== "archived") : []),
+    [place, archivedTasks],
   );
 
   // Filter → Project, where more than one project shows (MOD-141): the
@@ -383,9 +394,9 @@ export function usePlanScope(c: PlanSelectionCtx) {
   const projectFilter = useMemo(
     () =>
       offersProjectFilter(place)
-        ? { projects: sidebarProjects(buckets, api.areas, projectOrder), inbox: place !== "all" }
+        ? { projects: sidebarProjects(buckets, allAreas, projectOrder), inbox: place !== "all" }
         : null,
-    [place, buckets, api.areas, projectOrder],
+    [place, buckets, allAreas, projectOrder],
   );
 
   // Filters and search narrow the center list/board/timeline (rail counts
@@ -396,7 +407,6 @@ export function usePlanScope(c: PlanSelectionCtx) {
     scopeTasks: scopeTasksAll,
     conditions: tasksDisplay.filters,
     onConditionsChange: tasksDisplay.setFilters,
-    api,
     runtime,
     assignees,
     // Focus has no toolbar: no Filter, no search (TV-F7).

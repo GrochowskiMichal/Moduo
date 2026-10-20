@@ -1,5 +1,5 @@
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -7,7 +7,7 @@ import { ECHO_GRACE_MS, type LiveChange } from "../live";
 import type { Task, TaskQueueEntry, TasksModuleBundle } from "../model";
 import type { TasksLiveEvent } from "../realtime";
 import { currentOccurrence } from "../recurrence-engine";
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 // TV-D5 through the real hook: a teammate's change shows up (D5-1), our own
 // optimistic edit is never flicked back by its echo (D5-2), and coming back
@@ -78,12 +78,10 @@ function emit(change: LiveChange) {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function mount(runtime: ModuoRuntime) {
-  return renderHook(() =>
-    useTasksModule(runtime, { userId: ME, workspaceId: WS, modulePermission: "edit" }),
-  );
+  return renderTasksHook(runtime, { userId: ME, workspaceId: WS, modulePermission: "edit" });
 }
 
-describe("useTasksModule live updates", () => {
+describe("Tasks live updates", () => {
   it("D5-1: a teammate's new task, edit and queue claim show up", async () => {
     const { runtime } = fakeRuntime([task()]);
     const { result } = mount(runtime);
@@ -125,7 +123,7 @@ describe("useTasksModule live updates", () => {
     await waitFor(() => expect(result.current.tasks).toHaveLength(1));
     await sleep(ECHO_GRACE_MS + 50);
 
-    act(() => result.current.patchTask("t1", { title: "Draft 3" }));
+    act(() => result.current.commands.patchTask("t1", { title: "Draft 3" }));
     expect(result.current.tasks[0]!.title).toBe("Draft 3");
 
     // The echo of an earlier save ("Draft 2") arrives while "Draft 3" is saving.
@@ -171,7 +169,7 @@ describe("useTasksModule live updates", () => {
     await waitFor(() => expect(result.current.tasks).toHaveLength(1));
     await sleep(ECHO_GRACE_MS + 50);
 
-    act(() => result.current.patchTask("t1", { title: "Mine" }));
+    act(() => result.current.commands.patchTask("t1", { title: "Mine" }));
     act(() =>
       emit({
         table: "tasks",
@@ -243,7 +241,7 @@ describe("useTasksModule live updates", () => {
       h.listener?.({ type: "resync", reason: "reconnect" });
     });
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    act(() => result.current.patchTask("t1", { title: "Typed meanwhile" }));
+    act(() => result.current.commands.patchTask("t1", { title: "Typed meanwhile" }));
     // The snapshot predates the edit.
     await act(async () => {
       slow.resolve(bundleOf([task({ title: "Draft" })]));
@@ -270,7 +268,7 @@ describe("useTasksModule live updates", () => {
 // roll the workspace over now (items: []) and applies the server's answer. A
 // quiet refetch on coming back to the window doesn't ask again. A repeat
 // checked off on Home or through MCP stays done (Tasks v3 P0 #2).
-describe("useTasksModule repeat roll-over and quiet refetches", () => {
+describe("Tasks repeat roll-over and quiet refetches", () => {
   const DAY = 24 * 60 * 60 * 1000;
   const rule = {
     rrule: "FREQ=DAILY;INTERVAL=1",
@@ -347,7 +345,7 @@ describe("useTasksModule repeat roll-over and quiet refetches", () => {
 
     // An explicit reload is a full load and asks again.
     await act(async () => {
-      await result.current.reload();
+      await result.current.commands.load();
     });
     await waitFor(() => expect(opCatchUp).toHaveBeenCalledTimes(2));
   }, 20_000);

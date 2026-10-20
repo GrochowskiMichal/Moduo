@@ -4,7 +4,7 @@
 // backstop, the mirror) still settle the same way. Each step hands the next
 // everything before it.
 
-import { type PlanBase, planBase, type TasksPlanViewProps } from "./plan-base";
+import { type PlanBase, type TasksPlanViewProps, usePlanBase } from "./plan-base";
 import { usePlanActions } from "./use-plan-actions";
 import { usePlanCentre } from "./use-plan-centre";
 import { usePlanChrome } from "./use-plan-chrome";
@@ -14,7 +14,7 @@ import { usePlanScope } from "./use-plan-scope";
 import { usePlanSelection } from "./use-plan-selection";
 
 export function useTasksPlanController(props: TasksPlanViewProps) {
-  const base: PlanBase = planBase(props);
+  const base: PlanBase = usePlanBase(props);
   // Panels, layout, the sidebar's memory and dialogs' open state.
   const chrome = usePlanChrome(base);
   // The cursor, the place (`?place=`), the deep link's machine, Focus requests.

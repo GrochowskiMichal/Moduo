@@ -1,13 +1,12 @@
 // The plan view's left rail: the sidebar's places, wired to the controller.
 
 import { dispatchOpenCapture } from "../../../../components/app/capture-shell";
+import { useDriftCountByBucket, useTaskCommands, useTasksSelector } from "../../tasks-context";
 import { BucketRail } from "../bucket-rail";
-
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function PlanRail({ c }: { c: PlanController }) {
   const {
-    api,
     canEdit,
     buckets,
     inbox,
@@ -40,18 +39,33 @@ export function PlanRail({ c }: { c: PlanController }) {
     offersTemplates,
     taskImport,
   } = c;
+  const {
+    createArea,
+    createBucket,
+    deleteArea,
+    moveArea,
+    moveBucketToArea,
+    renameArea,
+    renameBucket,
+    setAreaColor,
+    setBucketColor,
+  } = useTaskCommands();
+  const allAreas = useTasksSelector((d) => d.areas);
+  const driftCountByBucket = useDriftCountByBucket();
+  const openTaskCountByBucket = useTasksSelector((d) => d.openTaskCountByBucket);
+  const queueCount = useTasksSelector((d) => d.queueCount);
 
   const left = (
     <BucketRail
       selection={selection}
       onSelect={setSelection}
       buckets={buckets}
-      areas={api.areas}
+      areas={allAreas}
       inbox={inbox}
-      openCountByBucket={api.openTaskCountByBucket}
-      driftCountByBucket={api.driftCountByBucket}
+      openCountByBucket={openTaskCountByBucket}
+      driftCountByBucket={driftCountByBucket}
       totalOpenCount={totalOpenCount}
-      queueCount={api.queueCount}
+      queueCount={queueCount}
       myTasksCount={myOpenCount}
       canEdit={canEdit}
       hidden={hiddenRows}
@@ -62,14 +76,14 @@ export function PlanRail({ c }: { c: PlanController }) {
       viewActions={savedViews.viewActions}
       collapsed={collapsedGroups}
       onToggleCollapsed={toggleGroup}
-      onCreateBucket={(name, areaId) => api.createBucket(name, { areaId })}
-      onRenameBucket={api.renameBucket}
+      onCreateBucket={(name, areaId) => createBucket(name, { areaId })}
+      onRenameBucket={renameBucket}
       onRequestDelete={(bucket) => setProjectDialog({ kind: "delete", bucket, open: true })}
       onRequestArchive={requestArchive}
-      onSetBucketColor={api.setBucketColor}
+      onSetBucketColor={setBucketColor}
       projectOrder={projectOrder}
       onMoveBucket={moveProject}
-      onMoveBucketToArea={api.moveBucketToArea}
+      onMoveBucketToArea={moveBucketToArea}
       onCaptureInto={(id) => {
         // A project's "+" in the sidebar: capture into that project.
         if (canEdit) dispatchOpenCapture({ destination: { projectId: id }, seed: captureSeed });
@@ -82,11 +96,11 @@ export function PlanRail({ c }: { c: PlanController }) {
       onEditDefaultStatuses={
         canEdit && canManageWorkspace ? () => setStatusesEditor({ projectId: null }) : undefined
       }
-      onCreateArea={api.createArea}
-      onRenameArea={api.renameArea}
-      onSetAreaColor={api.setAreaColor}
-      onMoveArea={api.moveArea}
-      onDeleteArea={api.deleteArea}
+      onCreateArea={createArea}
+      onRenameArea={renameArea}
+      onSetAreaColor={setAreaColor}
+      onMoveArea={moveArea}
+      onDeleteArea={deleteArea}
       wontDoCount={wontDoCount}
       templates={
         offersTemplates

@@ -24,9 +24,9 @@ import { cn } from "../../../lib/utils";
 import { filesLabel } from "../../attachments/files";
 import { TaskClaimMark } from "../../focus/ui/claim-mark";
 import { type MeetingLine, upNextLines, upNextMove, upNextSummary } from "../focus-screen";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { estimateOf, type Task } from "../model";
 import { bucketDotColor } from "../sidebar";
+import { useTaskCommands, useTasksSelector } from "../tasks-context";
 import {
   DndBoundary,
   type DragActivatorRef,
@@ -38,7 +38,6 @@ import {
 
 export function UpNext({
   upNext,
-  api,
   canEdit,
   bucketNameById,
   selectedTaskId,
@@ -49,7 +48,6 @@ export function UpNext({
   arrange = null,
 }: {
   upNext: Task[];
-  api: TasksModuleApi;
   canEdit: boolean;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
@@ -65,26 +63,31 @@ export function UpNext({
   const sensors = useTaskDndSensors();
   const ids = useMemo(() => upNext.map((t) => t.id), [upNext]);
   const lines = useMemo(() => upNextLines(upNext, meeting), [upNext, meeting]);
-  const projects = useMemo(() => new Map(api.buckets.map((b) => [b.id, b])), [api.buckets]);
+  const { reorderQueue, focusOnTask, removeFromQueue, addToQueue } = useTaskCommands();
+  const buckets = useTasksSelector((d) => d.buckets);
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const queuedTasks = useTasksSelector((d) => d.queuedTasks);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  const projects = useMemo(() => new Map(buckets.map((b) => [b.id, b])), [buckets]);
   // A lined-up subtask says whose it is ("· ↳ parent").
   const parentTitles = useMemo(() => {
     const wanted = new Set(upNext.map((t) => t.parentId).filter(Boolean));
     const map = new Map<string, string>();
     if (wanted.size === 0) return map;
-    for (const t of api.tasks) if (wanted.has(t.id)) map.set(t.id, t.title || "Untitled");
+    for (const t of tasks) if (wanted.has(t.id)) map.set(t.id, t.title || "Untitled");
     return map;
-  }, [upNext, api.tasks]);
+  }, [upNext, tasks]);
 
   // A move inside Up next as the whole line-up's order: Now and everything
   // else keep their places (`upNextMove`); Undo puts the line-up back.
   const reorder = useCallback(
     (taskId: string, to: number, label: string) => {
-      const before = api.queuedTasks.map((t) => t.id);
+      const before = queuedTasks.map((t) => t.id);
       const after = upNextMove(before, ids, taskId, to);
       if (!after) return;
-      api.reorderQueue(after, () => undoToast(label, { onUndo: () => api.reorderQueue(before) }));
+      reorderQueue(after, () => undoToast(label, { onUndo: () => reorderQueue(before) }));
     },
-    [api, ids],
+    [queuedTasks, reorderQueue, ids],
   );
   const move = (id: string, delta: 1 | -1) => {
     const from = ids.indexOf(id);
@@ -179,13 +182,13 @@ export function UpNext({
                       }
                       selected={selectedTaskId === line.task.id}
                       canEdit={canEdit}
-                      files={api.attachmentCounts?.get(line.task.id) ?? 0}
+                      files={attachmentCounts?.get(line.task.id) ?? 0}
                       onSelect={() => onSelectTask(line.task.id)}
-                      onFocusOn={() => api.focusOnTask(line.task.id)}
+                      onFocusOn={() => focusOnTask(line.task.id)}
                       onRemove={() => {
                         const id = line.task.id;
-                        api.removeFromQueue(id);
-                        undoToast("Removed from Focus", { onUndo: () => api.addToQueue(id) });
+                        removeFromQueue(id);
+                        undoToast("Removed from Focus", { onUndo: () => addToQueue(id) });
                       }}
                       onMove={(delta) => move(line.task.id, delta)}
                       dragListeners={dragListeners}

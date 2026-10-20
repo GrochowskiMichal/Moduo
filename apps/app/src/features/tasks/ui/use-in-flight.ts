@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 
 import { type InFlightItem, inFlightItems, waitingTaskIds } from "../focus-screen";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useTasksSelector, useTasksUserId } from "../tasks-context";
 import { useMinuteTick } from "../use-today";
 
 const NO_ITEMS: readonly never[] = [];
@@ -19,15 +19,13 @@ export type InFlight = {
   attention: number;
 };
 
-type InFlightApi = Pick<
-  TasksModuleApi,
-  "tasks" | "waiting" | "reminders" | "agentSessions" | "queuedTaskIds" | "currentUserId"
->;
-
-export function useInFlight(api: InFlightApi): InFlight {
-  const waiting = api.waiting ?? NO_ITEMS;
-  const reminders = api.reminders ?? NO_ITEMS;
-  const agentSessions = api.agentSessions ?? NO_ITEMS;
+export function useInFlight(): InFlight {
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const me = useTasksUserId();
+  const waiting = useTasksSelector((_, snap) => snap.waiting) ?? NO_ITEMS;
+  const reminders = useTasksSelector((_, snap) => snap.reminders) ?? NO_ITEMS;
+  const agentSessions = useTasksSelector((_, snap) => snap.agentSessions) ?? NO_ITEMS;
   const waitingIds = useMemo(() => waitingTaskIds(waiting), [waiting]);
   const active = waiting.length > 0 || agentSessions.length > 0;
   const tick = useMinuteTick(active);
@@ -35,24 +33,15 @@ export function useInFlight(api: InFlightApi): InFlight {
     void tick;
     if (!active) return [];
     return inFlightItems({
-      tasks: api.tasks,
+      tasks,
       waiting,
       reminders,
       agentSessions,
-      lineup: api.queuedTaskIds,
-      me: api.currentUserId,
+      lineup: queuedTaskIds,
+      me,
       nowMs: Date.now(),
     });
-  }, [
-    active,
-    api.tasks,
-    waiting,
-    reminders,
-    agentSessions,
-    api.queuedTaskIds,
-    api.currentUserId,
-    tick,
-  ]);
+  }, [active, tasks, waiting, reminders, agentSessions, queuedTaskIds, me, tick]);
   const attention = useMemo(() => items.filter((i) => i.attention).length, [items]);
   return { items, waitingIds, attention };
 }

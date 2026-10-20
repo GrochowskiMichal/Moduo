@@ -16,6 +16,8 @@ import {
   type Bucket,
   isDrifted,
   type ProjectStatus,
+  type Tag,
+  type TagLink,
   type Task,
   type TaskQueueEntry,
   type TaskRelation,
@@ -230,6 +232,28 @@ export const dependentsByTaskOf = cached2((liveTasks: Task[], relations: TaskRel
 export const frontierOf = (liveTasks: Task[], relations: TaskRelation[], taskId: string): Task[] =>
   frontierTasks(taskId, liveTasks, relations);
 
+// ── tags (the shared tag store's, TV-T1) ─────────────────────────────────────
+
+/** Tags attached to each task (entityType "task"), name-sorted. */
+export const tagsByTaskOf = cached((byEntity: ReadonlyMap<string, Tag[]>) => {
+  const map = new Map<string, Tag[]>();
+  for (const [key, tags] of byEntity) {
+    if (key.startsWith("task:")) map.set(key.slice("task:".length), tags);
+  }
+  return map;
+});
+
+/** Open-task count per tag: drives the filter menu (counts, hides empties). */
+export const openTaskCountByTagOf = cached2((links: TagLink[], liveTasks: Task[]) => {
+  const openIds = new Set(liveTasks.filter((t) => isOpenTask(t)).map((t) => t.id));
+  const counts = new Map<string, number>();
+  for (const link of links) {
+    if (link.entityType !== "task" || !openIds.has(link.entityId)) continue;
+    counts.set(link.tagId, (counts.get(link.tagId) ?? 0) + 1);
+  }
+  return counts;
+});
+
 // ── personal queues (TV-D4) ──────────────────────────────────────────────────
 
 /** Queue rows of this workspace only (the store keeps one workspace's, but rows may lag a switch). */
@@ -298,6 +322,9 @@ export const tasksDataOf = cached3(
       buckets: userBucketsOf(bundle.buckets),
       areas: areasOfBundle(bundle),
       sections: bundle.sections ?? NO_ROWS,
+      /** TV-D10's teams and their members. */
+      teams: bundle.teams ?? NO_ROWS,
+      teamMembers: bundle.teamMembers ?? NO_ROWS,
       statuses,
       statusById: statusByIdOf(statuses),
       openTaskCountByBucket: openTaskCountByBucketOf(liveTasks),

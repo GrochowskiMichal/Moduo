@@ -23,6 +23,7 @@ import {
   type ProjectAsk,
 } from "../../panel-views";
 import { handleLabel } from "../../row-layout";
+import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks-context";
 import { undatedTasks } from "../../timeline-rows";
 import { dayNumOfKey } from "../../timeline-scale";
 import {
@@ -50,11 +51,11 @@ import type { PlanCursorCtx } from "./use-plan-cursor";
 
 export function usePlanCentre(c: PlanCursorCtx) {
   const {
-    api,
     workspaceId,
     canEdit,
     buckets,
     inbox,
+    tasks,
     setPanelView,
     setFullPageId,
     selectedTaskId,
@@ -91,8 +92,23 @@ export function usePlanCentre(c: PlanCursorCtx) {
     scopeTitle,
     savedViews,
     openCapture,
-    viewApi,
   } = c;
+  // What the centre reads from the Tasks module (A4).
+  const {
+    addReminder,
+    addToQueue,
+    addWaiting,
+    createSection,
+    deleteSection,
+    removeFromQueue,
+    removeWaiting,
+    renameSection,
+  } = useTaskCommands();
+  const { restLoaded } = useTasksStatus();
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const allSections = useTasksSelector((d) => d.sections);
+  const sessions = useTasksSelector((_, snap) => snap.sessions);
+  const allTeams = useTasksSelector((d) => d.teams);
 
   // The toolbar's page-owned pieces, passed to every view as nodes so List,
   // Board and Timeline stay unaware of the filter and Display machinery. The
@@ -231,7 +247,6 @@ export function usePlanCentre(c: PlanCursorCtx) {
     header,
     filterActive: filtering.active,
     onClearFilters: filtering.clear,
-    api: viewApi,
   };
   // List and Board follow Display; the Timeline keeps its own rules.
   const displayProps = tasksDisplay.viewProps;
@@ -242,8 +257,8 @@ export function usePlanCentre(c: PlanCursorCtx) {
     taskKey,
     // Display → Columns (MOD-128, MOD-136): Detailed's own columns that are on.
     detailedColumns: display.detailedColumns,
-    sections: api.sections,
-    teams: api.teams,
+    sections: allSections,
+    teams: allTeams,
     filteredOut: filtering.active
       ? {
           hidden: scopeTasksAll.length - scopeTasks.length,
@@ -256,12 +271,12 @@ export function usePlanCentre(c: PlanCursorCtx) {
         ...nextHeaderSort(display, column, tasksDisplayDefaults(displayScope).order),
       }),
     onAddSection:
-      projectScope && canEdit ? (name: string) => void api.createSection(place, name) : undefined,
+      projectScope && canEdit ? (name: string) => void createSection(place, name) : undefined,
     // ⏎ opens the selected task's full page (decision 22; the panel's
     // "↑↓ to move · ⏎ to open").
     onOpenTask: setFullPageId,
-    onRenameSection: canEdit ? api.renameSection : undefined,
-    onDeleteSection: canEdit ? api.deleteSection : undefined,
+    onRenameSection: canEdit ? renameSection : undefined,
+    onDeleteSection: canEdit ? deleteSection : undefined,
     // Folds follow the person (TV-U8); a saved view keeps its own.
     collapseKey: listFoldKey(workspaceId, selection, tasksDisplay.display.group),
   };
@@ -303,7 +318,7 @@ export function usePlanCentre(c: PlanCursorCtx) {
                   countEvery: true,
                   // Won't do tasks arrive after the open ones (TV-D11a): not
                   // "nothing" until they're in.
-                  emptyState: api.restLoaded ? <WontDoEmpty /> : <TaskListSkeleton />,
+                  emptyState: restLoaded ? <WontDoEmpty /> : <TaskListSkeleton />,
                 }
               : {};
 
@@ -362,7 +377,7 @@ export function usePlanCentre(c: PlanCursorCtx) {
   const timelineAskTaskIds = useMemo(
     () =>
       timelineAskIds.length > 0 && currentUserId
-        ? api.tasks
+        ? tasks
             .filter(
               (t) =>
                 t.assigneeId === currentUserId &&
@@ -371,7 +386,7 @@ export function usePlanCentre(c: PlanCursorCtx) {
             )
             .map((t) => t.id)
         : [],
-    [timelineAskIds, currentUserId, api.tasks, timelineProjectAnswer],
+    [timelineAskIds, currentUserId, tasks, timelineProjectAnswer],
   );
   const timelineTaskAnswer = useEditableTasks(
     workspaceId,
@@ -405,40 +420,40 @@ export function usePlanCentre(c: PlanCursorCtx) {
     [pickPanelView, setSelectedTaskId],
   );
   // In flight (TV-F8): what I'm waiting on, and my agents' work.
-  const inFlight = useInFlight(api);
+  const inFlight = useInFlight();
   // Pick up: the wait is over, the task goes back to the top of Focus.
   const pickUpInFlight = useCallback(
     (item: InFlightItem) => {
       const id = item.task.id;
       const waits = item.waiting;
-      const wasQueued = api.queuedTaskIds.has(id);
-      for (const w of waits) api.removeWaiting(w.id);
-      api.addToQueue(id, "top");
+      const wasQueued = queuedTaskIds.has(id);
+      for (const w of waits) removeWaiting(w.id);
+      addToQueue(id, "top");
       undoToast("Back in Focus", {
         onUndo: () => {
-          for (const w of waits) api.addWaiting(id, { kind: w.kind, ref: w.ref, label: w.label });
-          if (!wasQueued) api.removeFromQueue(id);
+          for (const w of waits) addWaiting(id, { kind: w.kind, ref: w.ref, label: w.label });
+          if (!wasQueued) removeFromQueue(id);
         },
       });
     },
-    [api],
+    [queuedTaskIds, removeWaiting, addToQueue, addWaiting, removeFromQueue],
   );
   // Still waiting: check back tomorrow morning (a new check-back un-brightens the card).
   const checkBackLater = useCallback(
     (item: InFlightItem) => {
       const at = checkBackAt("tomorrow", new Date());
       if (!at) return;
-      if (api.addReminder(item.task.id, "at", at.toISOString())) toast("Checking back tomorrow");
+      if (addReminder(item.task.id, "at", at.toISOString())) toast("Checking back tomorrow");
     },
-    [api],
+    [addReminder],
   );
   // The place's open tasks with no date and no session (the button's count).
   const undated = useMemo(
     () =>
       timelineShown
-        ? undatedTasks(scopeTasks, api.sessions, dayNumOfKey(todayStr()) ?? 0, Date.now())
+        ? undatedTasks(scopeTasks, sessions, dayNumOfKey(todayStr()) ?? 0, Date.now())
         : [],
-    [timelineShown, scopeTasks, api.sessions],
+    [timelineShown, scopeTasks, sessions],
   );
 
   // The "← item" stack's reset: a new selection is a new context, so the

@@ -53,7 +53,6 @@ import {
 import { positionNextTo } from "../dnd/drop-mode";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { GroupAdd } from "../list-group-add";
 import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
@@ -61,6 +60,14 @@ import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
 import { byIdOf } from "../selectors";
 import type { StatusKey } from "../statuses";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+  useTaskTagIndex,
+} from "../tasks-context";
 import { useToday } from "../use-today";
 import { boardKeyActionFor, moveInGrid } from "./board-keys";
 import {
@@ -167,7 +174,6 @@ type Props = {
   taskKey?: string | null;
   /** Where folds are remembered on this device (null: not remembered). */
   foldKey?: string | null;
-  api: TasksModuleApi;
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -247,8 +253,39 @@ export function TaskBoardView({
   onEditStatuses,
   taskKey = null,
   foldKey = null,
-  api,
 }: Props) {
+  // What the Board reads from the Tasks module (A4): each slice on its own.
+  const commands = useTaskCommands();
+  const {
+    bulkWaiting,
+    bulkWrite,
+    createSection,
+    deleteSection,
+    deleteTask,
+    dropTask,
+    renameSection,
+    toggleQueue,
+  } = commands;
+  const { loaded } = useTasksStatus();
+  const { tagsByTask } = useTaskTagIndex();
+  const allAreas = useTasksSelector((d) => d.areas);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const blockersByTask = useTasksSelector((d) => d.blockersByTask);
+  const commentCounts = useTasksSelector((_, snap) => snap.commentCounts);
+  const moduleUserId = useTasksUserId();
+  const pendingTaskIds = useTasksSelector((_, snap) => snap.pendingTaskIds);
+  const queueClaims = useTasksSelector((d) => d.queueClaims);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const allSections = useTasksSelector((d) => d.sections);
+  const statusById = useTasksSelector((d) => d.statusById);
+  const statuses = useTasksSelector((d) => d.statuses);
+  const statusesForBucket = useStatusesForBucket();
+  const subtaskProgressByTask = useTasksSelector((d) => d.subtaskProgressByTask);
+  const subtasksByParent = useTasksSelector((d) => d.subtasksByParent);
+  const allTasks = useTasksSelector((d) => d.liveTasks);
+  const allTeams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [command, setCommand] = useState<{ taskId: string; kind: TaskCommand } | null>(null);
@@ -302,15 +339,15 @@ export function TaskBoardView({
       inboxId,
       canEdit,
       today,
-      statuses: api.statuses ?? [],
+      statuses: statuses ?? [],
       buckets: ctxBuckets,
       bucketName: bucketNameById,
-      sections: api.sections,
-      teams: api.teams,
+      sections: allSections,
+      teams: allTeams,
       assignees,
-      areas: api.areas,
+      areas: allAreas,
       statusFilter,
-      waiting: api.waiting,
+      waiting: waiting,
     }),
     [
       selection,
@@ -318,15 +355,15 @@ export function TaskBoardView({
       inboxId,
       canEdit,
       today,
-      api.statuses,
+      statuses,
       ctxBuckets,
       bucketNameById,
-      api.sections,
-      api.teams,
+      allSections,
+      allTeams,
       assignees,
-      api.areas,
+      allAreas,
       statusFilter,
-      api.waiting,
+      waiting,
     ],
   );
   const groupDim = effectiveBoardGroup(boardCtx);
@@ -335,7 +372,7 @@ export function TaskBoardView({
   // In My tasks every card is mine, so cards leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
 
-  const taskById = byIdOf(api.tasks);
+  const taskById = byIdOf(allTasks);
   const folds = useBoardFolds(foldKey);
   const [showEmpty, setShowEmpty] = useState<{ scope: string; on: boolean }>({
     scope: selection,
@@ -357,11 +394,11 @@ export function TaskBoardView({
       stayingIds.has(t.id) ||
       t.id === selectedTaskId ||
       t.id === selectedParentId ||
-      (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+      (subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     // The end line counts without the selection's keep, so its count holds
     // still as the selection moves (MOD-148).
     const keepUncounted = (t: Task) =>
-      stayingIds.has(t.id) || (api.subtasksByParent.get(t.id) ?? []).some(isUnfinished);
+      stayingIds.has(t.id) || (subtasksByParent.get(t.id) ?? []).some(isUnfinished);
     return allColumns.map((c) => {
       const { shown, hidden } = partitionCompleted(c.tasks, { mode: completed, now, keep });
       const doneCount = c.tasks.filter((t) =>
@@ -387,7 +424,7 @@ export function TaskBoardView({
     selectedTaskId,
     doneShown,
     taskById,
-    api.subtasksByParent,
+    subtasksByParent,
     folds,
   ]);
   // Empty people, teams, projects and areas hide (default o), "n hidden · Show".
@@ -491,45 +528,45 @@ export function TaskBoardView({
 
   // ── the facts cards show (row-facts.ts, TV-D11b) ──────────────────────────
   const sectionNames = useMemo(
-    () => new Map((api.sections ?? []).map((s) => [s.id, s.name])),
-    [api.sections],
+    () => new Map((allSections ?? []).map((s) => [s.id, s.name])),
+    [allSections],
   );
   const waitingLabels = useMemo(
     () =>
-      waitingLabelsOf(api.waiting ?? [], (id) => {
+      waitingLabelsOf(waiting ?? [], (id) => {
         const person = byId(id);
         return person ? (person.isMe ? "you" : person.name) : null;
       }),
-    [api.waiting, byId],
+    [waiting, byId],
   );
   const factsSource = useMemo<FactsSource>(
     () => ({
-      queuedTaskIds: api.queuedTaskIds,
-      queueClaims: api.queueClaims,
-      blockedTaskIds: api.blockedTaskIds,
-      blockersByTask: api.blockersByTask,
-      tagsByTask: api.tagsByTask,
-      subtaskProgressByTask: api.subtaskProgressByTask,
-      statusById: api.statusById,
+      queuedTaskIds: queuedTaskIds,
+      queueClaims: queueClaims,
+      blockedTaskIds: blockedTaskIds,
+      blockersByTask: blockersByTask,
+      tagsByTask: tagsByTask,
+      subtaskProgressByTask: subtaskProgressByTask,
+      statusById: statusById,
       sectionNames,
       waitingLabels,
-      commentCounts: api.commentCounts,
-      attachmentCounts: api.attachmentCounts,
-      pendingTaskIds: api.pendingTaskIds,
+      commentCounts: commentCounts,
+      attachmentCounts: attachmentCounts,
+      pendingTaskIds: pendingTaskIds,
     }),
     [
-      api.queuedTaskIds,
-      api.queueClaims,
-      api.blockedTaskIds,
-      api.blockersByTask,
-      api.tagsByTask,
-      api.subtaskProgressByTask,
-      api.statusById,
+      queuedTaskIds,
+      queueClaims,
+      blockedTaskIds,
+      blockersByTask,
+      tagsByTask,
+      subtaskProgressByTask,
+      statusById,
       sectionNames,
       waitingLabels,
-      api.commentCounts,
-      api.attachmentCounts,
-      api.pendingTaskIds,
+      commentCounts,
+      attachmentCounts,
+      pendingTaskIds,
     ],
   );
   const factsOf = (task: Task) => taskFactsOf(task, factsSource);
@@ -542,12 +579,12 @@ export function TaskBoardView({
   const teamMarks = useMemo(
     () =>
       new Map<string, CardTeam>(
-        (api.teams ?? []).map((t) => [
+        (allTeams ?? []).map((t) => [
           t.id,
           { id: t.id, name: t.name, mark: t.mark, color: t.color },
         ]),
       ),
-    [api.teams],
+    [allTeams],
   );
   const markCtx = useMemo<GroupMarkContext>(
     () => ({
@@ -563,12 +600,12 @@ export function TaskBoardView({
 
   // A card's facts and actions: each card redraws only when its own task or
   // facts change. Selecting a card hands the keys to the board.
-  const actions = useRowActions(api);
+  const actions = useRowActions(commands);
   const fileDrop = useTaskFileDrop({
     canEdit,
     taskOf: (id) => taskById.get(id),
-    userId: api.currentUserId,
-    pendingTaskIds: api.pendingTaskIds,
+    userId: moduleUserId,
+    pendingTaskIds: pendingTaskIds,
     onOpen: (id) => onSelectTask(id),
   });
   // A click's ⇧ / ⌘ go to the page's selection (TV-U12) with the cards in
@@ -643,8 +680,8 @@ export function TaskBoardView({
     });
   }, [order, onManualOrder]);
   const statusesFor = useCallback(
-    (bucketId: string) => api.statusesForBucket?.(bucketId) ?? [],
-    [api.statusesForBucket],
+    (bucketId: string) => statusesForBucket?.(bucketId) ?? [],
+    [statusesForBucket],
   );
   const cellRef = (cell: Cell): BoardCellRef => ({
     id: cell.id,
@@ -715,24 +752,24 @@ export function TaskBoardView({
         multi && multi.ids.size >= 2 && multi.ids.has(task.id)
           ? inViewOrder(multi.ids, selectionRef.current.order)
           : [task.id];
-      void api.bulkWaiting(
+      void bulkWaiting(
         ids,
         decision.entry,
         targetName(dest.column.target, dest.column.label, currentUserId),
-        api.waiting,
+        waiting,
       );
     } else if (decision.kind === "write") {
       // A card of a selection carries the selection (TV-U12): one write, one Undo.
       const multi = selectionRef.current.multiSelect;
       if (multi && multi.ids.size >= 2 && multi.ids.has(task.id)) {
         const ids = inViewOrder(multi.ids, selectionRef.current.order);
-        const writes = multiDropWrites(decision.write, task, ids, api.tasks);
+        const writes = multiDropWrites(decision.write, task, ids, allTasks);
         if (writes.length > 0) {
-          void api.bulkWrite(writes, { label: (n) => manyLabel(decision.label, n) });
+          void bulkWrite(writes, { label: (n) => manyLabel(decision.label, n) });
         }
         return;
       }
-      void api.dropTask(decision.write, decision.label);
+      void dropTask(decision.write, decision.label);
     }
   };
 
@@ -788,13 +825,13 @@ export function TaskBoardView({
         order: "none",
         ctx: dropContext(task),
       });
-      if (decision.kind === "write") void api.dropTask(decision.write, decision.label);
+      if (decision.kind === "write") void dropTask(decision.write, decision.label);
       if (decision.kind === "waiting") {
-        void api.bulkWaiting(
+        void bulkWaiting(
           [task.id],
           decision.entry,
           targetName(column.target, column.label, currentUserId),
-          api.waiting,
+          waiting,
         );
       }
       return;
@@ -812,12 +849,12 @@ export function TaskBoardView({
     const neighbour = cell.shown[at + step];
     if (at < 0 || !neighbour) return;
     const position = positionNextTo(
-      api.tasks,
+      allTasks,
       { id: neighbour.id, edge: step < 0 ? "before" : "after" },
       task.id,
     );
     if (position === null) return;
-    void api.dropTask({ taskId: task.id, position }, step < 0 ? "Moved up" : "Moved down");
+    void dropTask({ taskId: task.id, position }, step < 0 ? "Moved up" : "Moved down");
   };
   /** `c`: a new task in the selected card's column, with its value. */
   const captureHere = () => {
@@ -907,12 +944,12 @@ export function TaskBoardView({
       case "queue":
         if (!canEdit) return;
         e.preventDefault();
-        api.toggleQueue(selectedTask.id);
+        toggleQueue(selectedTask.id);
         return;
       case "delete":
         if (!canEdit) return;
         e.preventDefault();
-        api.deleteTask(selectedTask.id);
+        deleteTask(selectedTask.id);
         return;
       case "move-up":
       case "move-down":
@@ -936,13 +973,13 @@ export function TaskBoardView({
     !canEdit || filterActive ? null : groupDim === "status" && onAddStatus ? (
       <AddStatusButton onAdd={onAddStatus} />
     ) : groupDim === "section" && projectBoard ? (
-      <AddSectionButton onAdd={(name) => void api.createSection(selection, name)} />
+      <AddSectionButton onAdd={(name) => void createSection(selection, name)} />
     ) : null;
   const sectionEdits = (column: ViewColumn) =>
     canEdit && column.sectionId
       ? {
-          onRename: (name: string) => api.renameSection(column.sectionId as string, name),
-          onDelete: () => api.deleteSection(column.sectionId as string),
+          onRename: (name: string) => renameSection(column.sectionId as string, name),
+          onDelete: () => deleteSection(column.sectionId as string),
         }
       : null;
 
@@ -1008,7 +1045,7 @@ export function TaskBoardView({
     />
   );
 
-  const loading = !api.loaded;
+  const loading = !loaded;
   const noMatch = !loading && filterActive && tasks.length === 0;
 
   const body = loading ? (
@@ -1084,7 +1121,7 @@ export function TaskBoardView({
     // The projects and statuses a card's menus offer, read only by an open
     // menu (TV-D11b).
     <ProjectChoicesProvider projects={buckets} inboxId={inboxId}>
-      <StatusChoicesProvider statusesFor={statusesFor} any={(api.statuses?.length ?? 0) > 0}>
+      <StatusChoicesProvider statusesFor={statusesFor} any={(statuses?.length ?? 0) > 0}>
         <div className="flex h-full min-h-0 flex-col">
           <PlanViewHeader
             title={scopeTitle}

@@ -8,7 +8,7 @@ import { truncationNotice } from "../../../../components/app/truncation-notice";
 import { type ReferenceHost, ReferenceHostProvider } from "../../../spine/references/context";
 import { referenceKey } from "../../../spine/references/kinds";
 import type { ReferenceRef } from "../../../spine/references/types";
-import { TaskCommandsOverride } from "../../tasks-context";
+import { TaskCommandsOverride, useTaskCommands, useTasksSelector } from "../../tasks-context";
 
 import { PlanBody } from "./plan-body";
 import { PlanDialogs } from "./plan-dialogs";
@@ -18,25 +18,36 @@ import { PlanRail } from "./plan-rail";
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function TasksPlanLayout({ c }: { c: PlanController }) {
-  const { api, viewApi, canEdit, inbox, referenceStore, taskById, selectedTask, pushPanel } = c;
-  // The detail panel reads its commands from context (A4): here queuing goes
-  // through the blocked-by offer and "Focus on this" says where it went, as
-  // everywhere else on the page (`viewApi`). One object for the page's life,
-  // calling the newest `viewApi`, so the commands keep their identity.
-  const latestViewApi = useRef(viewApi);
+  const {
+    guardedToggleQueue,
+    focusOnTask,
+    canEdit,
+    inbox,
+    referenceStore,
+    taskById,
+    selectedTask,
+    pushPanel,
+  } = c;
+  const { markDone, patchTask, createTask } = useTaskCommands();
+  const truncated = useTasksSelector((d) => d.bundle.truncated);
+  // Everything under the page reads its commands from context (A4): here
+  // queuing goes through the blocked-by offer and "Focus on this" says where
+  // it went. One object for the page's life, calling the newest guards, so
+  // the commands keep their identity.
+  const latestGuards = useRef({ guardedToggleQueue, focusOnTask });
   useLayoutEffect(() => {
-    latestViewApi.current = viewApi;
+    latestGuards.current = { guardedToggleQueue, focusOnTask };
   });
   const pageCommands = useMemo(
     () => ({
-      toggleQueue: (id: string) => latestViewApi.current.toggleQueue(id),
-      focusOnTask: (id: string) => latestViewApi.current.focusOnTask(id),
+      toggleQueue: (id: string) => latestGuards.current.guardedToggleQueue(id),
+      focusOnTask: (id: string) => latestGuards.current.focusOnTask(id),
     }),
     [],
   );
-  const latestForHost = useRef({ taskById, selectedTask, inbox, api });
+  const latestForHost = useRef({ taskById, selectedTask, inbox });
   useLayoutEffect(() => {
-    latestForHost.current = { taskById, selectedTask, inbox, api };
+    latestForHost.current = { taskById, selectedTask, inbox };
   });
   // What references on this page can do: open in the panel, complete a task
   // through the module (so the live gate and Undo see it), and create a task
@@ -46,12 +57,12 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
       openInPanel: (ref: ReferenceRef) =>
         pushPanel({ key: referenceKey(ref), type: ref.type, id: ref.id }),
       setTaskDone: (taskId: string, done: boolean) => {
-        const { taskById: byId, api: moduleApi } = latestForHost.current;
+        const { taskById: byId } = latestForHost.current;
         if (byId.has(taskId)) {
           // Done through the module's check-off, so its open subtasks finish
           // too (call 87).
-          if (done) moduleApi.markDone(taskId);
-          else moduleApi.patchTask(taskId, { status: "todo" });
+          if (done) markDone(taskId);
+          else patchTask(taskId, { status: "todo" });
           return;
         }
         referenceStore?.completeTask(taskId, done).catch((error: unknown) => {
@@ -60,15 +71,15 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
       },
       createEntity: async (type: string, title: string) => {
         if (type !== "task") return null;
-        const { selectedTask: open, inbox: myInbox, api: moduleApi } = latestForHost.current;
+        const { selectedTask: open, inbox: myInbox } = latestForHost.current;
         const bucketId = open?.bucketId ?? myInbox?.id;
         if (!bucketId) return null;
-        const saved = await moduleApi.createTask({ bucketId, title });
+        const saved = await createTask({ bucketId, title });
         return saved ? { type: "task", id: saved.id } : null;
       },
       canEditTasks: canEdit,
     }),
-    [pushPanel, referenceStore, canEdit],
+    [pushPanel, referenceStore, canEdit, markDone, patchTask, createTask],
   );
 
   return (
@@ -77,7 +88,7 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
         <PlanDndHost c={c}>
           <FeaturePanelsShell
             feature="tasks"
-            notice={truncationNotice(api.truncated)}
+            notice={truncationNotice(truncated)}
             left={<PlanRail c={c} />}
             center={<PlanBody c={c} />}
             right={<PlanPanels c={c} />}

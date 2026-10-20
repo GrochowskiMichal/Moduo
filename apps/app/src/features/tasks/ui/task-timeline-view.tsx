@@ -40,10 +40,17 @@ import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden } from "../completed";
 import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskRelation } from "../model";
 import { PRIVATE_PROJECT_LABEL } from "../model";
 import { byIdOf } from "../selectors";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksReader,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+} from "../tasks-context";
 import { contradictions } from "../timeline-deps";
 import { fitZoom } from "../timeline-drag";
 import {
@@ -127,7 +134,6 @@ type Props = {
   header?: PlanHeaderControls;
   /** Filter or search narrows the scope. */
   filterActive?: boolean;
-  api: TasksModuleApi;
   workspaceId: string;
   /** The scope's Display (the zoom, Group by, Colour by, Show, Subtasks). */
   display: TasksDisplay;
@@ -256,7 +262,6 @@ export function TaskTimelineView({
   onSelectTask,
   header,
   filterActive = false,
-  api,
   workspaceId,
   display,
   onDisplayChange,
@@ -273,6 +278,23 @@ export function TaskTimelineView({
   canDragIn = EVERY_PROJECT,
   canDragTask = EVERY_PROJECT,
 }: Props) {
+  // What the Timeline reads from the Tasks module (A4): each slice on its own.
+  const commands = useTaskCommands();
+  const { patchTask } = commands;
+  const read = useTasksReader();
+  const { loading } = useTasksStatus();
+  const archivedBuckets = useTasksSelector((d) => d.archivedBuckets);
+  const archivedTasks = useTasksSelector((d) => d.archivedTasks);
+  const allAreas = useTasksSelector((d) => d.areas);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  const moduleUserId = useTasksUserId();
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const allSections = useTasksSelector((d) => d.sections);
+  const sessions = useTasksSelector((_, snap) => snap.sessions);
+  const statuses = useTasksSelector((d) => d.statuses);
+  const statusesForBucket = useStatusesForBucket();
+  const taskRelations = useTasksSelector((d) => d.bundle.taskRelations);
+  const liveTasks = useTasksSelector((d) => d.liveTasks);
   const scopeKey = inbox && selection === inbox.id ? "inbox" : selection;
   const scopeKind = useMemo(() => timelineScopeOf(scopeKey), [scopeKey]);
   // Drags need Edit (TV-TL2): the page works it out (`canDrag`); without one,
@@ -293,7 +315,7 @@ export function TaskTimelineView({
   const { byId: personById } = useAssignees();
 
   // ── Folds: projects expanded at All, sections folded (per device) ─────────
-  const foldKey = `moduo:tasks:folds:${api.currentUserId ?? "anon"}:${scopeKey}:timeline:${workspaceId}`;
+  const foldKey = `moduo:tasks:folds:${moduleUserId ?? "anon"}:${scopeKey}:timeline:${workspaceId}`;
   const [folds, setFolds] = useState(() => ({ key: foldKey, set: readToggled(foldKey) }));
   const toggled = folds.key === foldKey ? folds.set : readToggled(foldKey);
   if (folds.key !== foldKey) setFolds({ key: foldKey, set: toggled });
@@ -318,13 +340,13 @@ export function TaskTimelineView({
 
   // ── Rows ────────────────────────────────────────────────────────────────
   const projects = useMemo(
-    () => (scopeKind.kind === "project" ? [...buckets, ...api.archivedBuckets] : buckets),
-    [scopeKind.kind, buckets, api.archivedBuckets],
+    () => (scopeKind.kind === "project" ? [...buckets, ...archivedBuckets] : buckets),
+    [scopeKind.kind, buckets, archivedBuckets],
   );
   // A project's bar and progress count all its work, an archived one's too.
   const allTasks = useMemo(
-    () => (scopeKind.kind === "project" ? [...api.tasks, ...api.archivedTasks] : api.tasks),
-    [scopeKind.kind, api.tasks, api.archivedTasks],
+    () => (scopeKind.kind === "project" ? [...liveTasks, ...archivedTasks] : liveTasks),
+    [scopeKind.kind, liveTasks, archivedTasks],
   );
   const hueById = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -357,9 +379,9 @@ export function TaskTimelineView({
         tasks,
         allTasks,
         projects,
-        areas: api.areas,
-        sections: api.sections,
-        sessions: api.sessions,
+        areas: allAreas,
+        sections: allSections,
+        sessions: sessions,
         group,
         subtasks: display.timelineSubtasks,
         showUndated,
@@ -378,9 +400,9 @@ export function TaskTimelineView({
       tasks,
       allTasks,
       projects,
-      api.areas,
-      api.sections,
-      api.sessions,
+      allAreas,
+      allSections,
+      sessions,
       group,
       display.timelineSubtasks,
       showUndated,
@@ -525,7 +547,7 @@ export function TaskTimelineView({
   }, [viewport]);
 
   // Open (a new scope, or once the tasks are in) with today a quarter across.
-  const loaded = !api.loading;
+  const loaded = !loading;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope or the first load is the cue
   useLayoutEffect(() => {
     const next = initialRange(today, built.extent);
@@ -697,8 +719,8 @@ export function TaskTimelineView({
 
   // ── Dependencies (70, 68b) ──────────────────────────────────────────────
   // Only the reader's own copy: a relation to a task they can't see draws nothing.
-  const taskById = byIdOf(api.tasks);
-  const relations = api.taskRelations ?? NO_RELATIONS;
+  const taskById = byIdOf(liveTasks);
+  const relations = taskRelations ?? NO_RELATIONS;
   const depMode = display.timelineDeps ?? "selected";
   const lateMarks = useMemo(
     () => (depMode === "off" ? new Map() : contradictions(relations, taskById)),
@@ -760,7 +782,7 @@ export function TaskTimelineView({
   ]);
 
   // ── The canvas: drags, clicks on undated rows, the No date drop ─────────
-  const writes = useTimelineWrites(api, zoom);
+  const writes = useTimelineWrites(zoom);
   const canvasLive = useRef<CanvasLive>({
     range,
     dw,
@@ -842,7 +864,6 @@ export function TaskTimelineView({
     onSelectTask,
     onOpenProject,
     toggleRow,
-    api,
     canEdit,
     multiSelect,
     taskOrder,
@@ -853,7 +874,6 @@ export function TaskTimelineView({
       onSelectTask,
       onOpenProject,
       toggleRow,
-      api,
       canEdit,
       multiSelect,
       taskOrder,
@@ -883,8 +903,8 @@ export function TaskTimelineView({
       endRename: (id, title) => {
         setEditingId(null);
         const next = title?.trim();
-        const task = latest.current.api.tasks.find((t) => t.id === id);
-        if (next && task && next !== task.title) latest.current.api.patchTask(id, { title: next });
+        const task = read().liveTasks.find((t) => t.id === id);
+        if (next && task && next !== task.title) patchTask(id, { title: next });
         refocus();
       },
       requestCommand: (id, cmd) => setCommand({ id, command: cmd }),
@@ -896,9 +916,9 @@ export function TaskTimelineView({
       },
       refocus,
     }),
-    [refocus, scrollToDay],
+    [refocus, scrollToDay, read, patchTask],
   );
-  const rowActions = useRowActions(api);
+  const rowActions = useRowActions(commands);
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
     const scroller = scrollerRef.current;
@@ -1121,8 +1141,8 @@ export function TaskTimelineView({
   );
   const bodyRef = useRef<HTMLDivElement>(null);
   const statusesFor = useCallback(
-    (bucketId: string) => api.statusesForBucket?.(bucketId) ?? [],
-    [api.statusesForBucket],
+    (bucketId: string) => statusesForBucket?.(bucketId) ?? [],
+    [statusesForBucket],
   );
   const toggleUndated = () => {
     const next = showUndated
@@ -1130,11 +1150,11 @@ export function TaskTimelineView({
       : [...display.timelineShow, "undated" as const];
     onDisplayChange({ ...display, timelineShow: next });
   };
-  const empty = !built.hasMarks && !api.loading;
+  const empty = !built.hasMarks && !loading;
 
   return (
     <ProjectChoicesProvider projects={buckets} inboxId={inbox?.id ?? null}>
-      <StatusChoicesProvider statusesFor={statusesFor} any={(api.statuses?.length ?? 0) > 0}>
+      <StatusChoicesProvider statusesFor={statusesFor} any={(statuses?.length ?? 0) > 0}>
         <TimelineCanvasContext.Provider value={canvas}>
           <div className="flex h-full min-h-0 flex-col">
             <PlanViewHeader
@@ -1327,7 +1347,7 @@ export function TaskTimelineView({
                                 cursor={row.key === cursorKey}
                                 sticky={place.sticky}
                                 canEdit={canEdit}
-                                queued={row.kind === "task" && api.queuedTaskIds.has(row.task.id)}
+                                queued={row.kind === "task" && queuedTaskIds.has(row.task.id)}
                                 hue={
                                   row.kind === "project"
                                     ? (row.project.color ?? null)
@@ -1347,7 +1367,7 @@ export function TaskTimelineView({
                                 actions={rowActions}
                                 files={
                                   row.kind === "task"
-                                    ? (api.attachmentCounts?.get(row.task.id) ?? 0)
+                                    ? (attachmentCounts?.get(row.task.id) ?? 0)
                                     : 0
                                 }
                               />

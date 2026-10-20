@@ -5,7 +5,7 @@
 // (⌥⇧→ moves a card a column through `dropTask`, `c` adds into its column).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 const PEOPLE = {
   u1: {
@@ -33,6 +33,7 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import { readFolds, resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Bucket, ProjectStatus, Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskBoardView } from "./task-board-view";
 
 beforeAll(() => {
@@ -98,20 +99,10 @@ function task(id: string, over: Partial<Task> = {}): Task {
   };
 }
 
-function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
+/** The Board over a store holding the project, its statuses and these tasks (A4). */
+async function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
+  // The writes are spies: the keys' move is asserted through dropTask.
   const api = {
-    loaded: true,
-    tasks,
-    statuses: STATUSES,
-    statusById: new Map(STATUSES.map((s) => [s.id, s])),
-    statusesForBucket: (id: string) => (id === "p1" ? STATUSES : []),
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -124,7 +115,7 @@ function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
   };
   const onRequestCapture = rs.fn();
   const onSelectTask = rs.fn();
-  render(
+  await renderWithTasks(
     <TooltipProvider>
       <TaskBoardView
         tasks={tasks}
@@ -140,11 +131,15 @@ function renderBoard(tasks: Task[], extra: Record<string, unknown> = {}) {
         onRequestCapture={onRequestCapture}
         selectedTaskId={null}
         onSelectTask={onSelectTask}
-        api={api as never}
         foldKey="moduo:tasks:folds:test"
         {...extra}
       />
     </TooltipProvider>,
+    {
+      seed: { buckets: [PROJECT], statuses: STATUSES, tasks },
+      workspaceId: "w",
+      commands: api,
+    },
   );
   return { api, onRequestCapture, onSelectTask };
 }
@@ -155,8 +150,8 @@ const columnNames = () =>
   );
 
 describe("Board v3 (TV-U11)", () => {
-  it("a project's own statuses; Backlog is the folded button, which unfolds and takes no drop", () => {
-    renderBoard([task("a"), task("b", { statusId: "s-backlog", statusCategory: "backlog" })]);
+  it("a project's own statuses; Backlog is the folded button, which unfolds and takes no drop", async () => {
+    await renderBoard([task("a"), task("b", { statusId: "s-backlog", statusCategory: "backlog" })]);
     expect(columnNames()).toEqual(["Todo", "In progress", "In review", "Done"]);
     const backlog = screen.getByRole("button", { name: "Backlog, 1 task, unfold" });
     // Never a drop target: no droppable section around it, no rotated text.
@@ -168,8 +163,8 @@ describe("Board v3 (TV-U11)", () => {
     expect(readFolds("moduo:tasks:folds:test")["col:status:s-backlog"]).toBe(false);
   });
 
-  it("a status's ⋯ folds it into the button", () => {
-    renderBoard([task("a")]);
+  it("a status's ⋯ folds it into the button", async () => {
+    await renderBoard([task("a")]);
     fireEvent.pointerDown(screen.getByRole("button", { name: "In review options" }), {
       button: 0,
       ctrlKey: false,
@@ -179,8 +174,8 @@ describe("Board v3 (TV-U11)", () => {
     expect(screen.getByRole("button", { name: "In review, 0 tasks, unfold" })).toBeTruthy();
   });
 
-  it('a column\'s "+" adds with its value; In review carries its own status', () => {
-    const { onRequestCapture } = renderBoard([task("a")]);
+  it('a column\'s "+" adds with its value; In review carries its own status', async () => {
+    const { onRequestCapture } = await renderBoard([task("a")]);
     fireEvent.click(screen.getByRole("button", { name: "Add a task to In review" }));
     expect(onRequestCapture).toHaveBeenCalledWith({
       projectId: "p1",
@@ -189,23 +184,23 @@ describe("Board v3 (TV-U11)", () => {
     expect(screen.queryByRole("button", { name: "Add a task to Done" })).toBeNull();
   });
 
-  it("empty people hide behind “n hidden · Show” (default o)", () => {
-    renderBoard([task("a", { assigneeId: "u2" })], { boardGroupBy: "assignee" });
+  it("empty people hide behind “n hidden · Show” (default o)", async () => {
+    await renderBoard([task("a", { assigneeId: "u2" })], { boardGroupBy: "assignee" });
     expect(columnNames()).toEqual(["Mike"]);
     fireEvent.click(screen.getByRole("button", { name: "2 hidden · Show" }));
     expect(columnNames()).toEqual(["You", "Mike", "Unassigned"]);
   });
 
-  it("your column reads You, and its buttons say you (MOD-137)", () => {
-    renderBoard([task("a", { assigneeId: "u1" })], { boardGroupBy: "assignee" });
+  it("your column reads You, and its buttons say you (MOD-137)", async () => {
+    await renderBoard([task("a", { assigneeId: "u1" })], { boardGroupBy: "assignee" });
     expect(columnNames()).toContain("You");
     expect(screen.getByRole("button", { name: "Add a task to you" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Your column options" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
   });
 
-  it("lanes: one header per lane with cards, each folds (call 85)", () => {
-    renderBoard([task("a", { priority: "high" }), task("b")], { lanes: "priority" });
+  it("lanes: one header per lane with cards, each folds (call 85)", async () => {
+    await renderBoard([task("a", { priority: "high" }), task("b")], { lanes: "priority" });
     const lanes = [...document.querySelectorAll<HTMLElement>("[data-board-lane-key]")].map(
       (l) => l.dataset.boardLaneKey,
     );
@@ -216,19 +211,19 @@ describe("Board v3 (TV-U11)", () => {
     expect(screen.queryByText("Task a")).toBeNull();
   });
 
-  it("Display → Description: Preview shows the words, never the markup (AC7.4)", () => {
+  it("Display → Description: Preview shows the words, never the markup (AC7.4)", async () => {
     const t = task("a", { description: "<p>Check the <b>empty</b> states</p>" });
-    renderBoard([t]);
+    await renderBoard([t]);
     expect(document.querySelector('[data-slot="card-description"]')).toBeNull();
     cleanup();
-    renderBoard([t], { description: true });
+    await renderBoard([t], { description: true });
     expect(document.querySelector('[data-slot="card-description"]')?.textContent).toBe(
       "Check the empty states",
     );
   });
 
-  it("⌥⇧→ moves the selected card to the next column, through dropTask; `c` adds into its column", () => {
-    const { api, onRequestCapture } = renderBoard([task("a")], { selectedTaskId: "a" });
+  it("⌥⇧→ moves the selected card to the next column, through dropTask; `c` adds into its column", async () => {
+    const { api, onRequestCapture } = await renderBoard([task("a")], { selectedTaskId: "a" });
     const board = screen.getByRole("grid", { name: "Website board" });
     fireEvent.keyDown(board, { key: "ArrowRight", altKey: true, shiftKey: true });
     expect(api.dropTask).toHaveBeenCalledWith(
@@ -249,15 +244,15 @@ describe("Board v3 (TV-U11)", () => {
 // the desktop app's WebKit view would rubber-band. Measured live with a
 // sideways wheel: the Board scrolls to its end and the document never moves.
 describe("the Board's sideways scroll (MOD-161)", () => {
-  it("is contained in the columns' scroller", () => {
-    renderBoard([task("a")]);
+  it("is contained in the columns' scroller", async () => {
+    await renderBoard([task("a")]);
     const scroller = document.querySelector("section[data-board-column]")?.parentElement;
     expect(scroller?.className).toMatch(/\boverflow-x-auto\b/);
     expect(scroller?.className).toMatch(/\boverscroll-x-contain\b/);
   });
 
-  it("is contained in the lanes' scroller", () => {
-    renderBoard([task("a", { priority: "high" })], { lanes: "priority" });
+  it("is contained in the lanes' scroller", async () => {
+    await renderBoard([task("a", { priority: "high" })], { lanes: "priority" });
     const lane = document.querySelector("[data-board-lane-key]") as HTMLElement;
     expect(lane.closest(".overflow-auto")?.className).toMatch(/\boverscroll-x-contain\b/);
   });
