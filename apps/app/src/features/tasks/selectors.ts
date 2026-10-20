@@ -259,3 +259,67 @@ export const queuedTasksOf = cached3(
 
 /** The rail's Queue count: my open queued tasks. */
 export const queueCountOf = cached((queued: Task[]) => openQueueCount(queued));
+
+// ── one snapshot's Tasks data ────────────────────────────────────────────────
+
+/**
+ * Everything the Tasks hook shows and its commands read, from one snapshot.
+ * Only cached selectors, so it costs a few lookups; cached on the snapshot
+ * too, so a render and a command reading the same snapshot share one object.
+ * Archived projects and their tasks ride apart in the bundle (TV-U6): `all*`
+ * see both (an archive's Undo edits rows still archived), the rest don't.
+ */
+export const tasksDataOf = cached3(
+  (snap: StoreSnapshot, userId: string | null, workspaceId: string | null) => {
+    const bundle = snap.bundle;
+    const liveTasks = liveTasksOf(bundle.tasks);
+    const statuses = statusesOfBundle(bundle);
+    // Each person has their own Queue (TV-D4); rows of other people are claims.
+    const queueRows = workspaceQueueRowsOf(snap.queue, workspaceId);
+    const myQueueEntries = myQueueEntriesOf(queueRows, userId);
+    const queuedTasks = queuedTasksOf(
+      myQueueEntries,
+      workspaceQueueRowsOf(snap.kept, workspaceId),
+      liveTasks,
+    );
+    return {
+      bundle,
+      /** Visible and archived projects together. */
+      allBuckets: allBucketsOf(bundle),
+      /** Visible and archived tasks together. */
+      allTasks: allTasksOf(bundle),
+      liveBuckets: liveBucketsOf(bundle.buckets),
+      /** Your own Inbox (a teammate's may be visible too). */
+      inbox: inboxOf(bundle.buckets, userId),
+      liveTasks,
+      archivedBuckets: archivedBucketsOf(bundle.archivedBuckets ?? NO_ROWS),
+      archivedTasks: archivedTasksOf(bundle.archivedTasks ?? NO_ROWS),
+      /** User buckets (Inbox excluded — the rail pins it), position-sorted. */
+      buckets: userBucketsOf(bundle.buckets),
+      areas: areasOfBundle(bundle),
+      sections: bundle.sections ?? NO_ROWS,
+      statuses,
+      statusById: statusByIdOf(statuses),
+      openTaskCountByBucket: openTaskCountByBucketOf(liveTasks),
+      taskCountByBucket: taskCountByBucketOf(liveTasks),
+      subtasksByParent: subtasksByParentOf(liveTasks),
+      subtaskProgressByTask: subtaskProgressByTaskOf(liveTasks),
+      blockedIds: blockedTaskIdsOf(liveTasks, bundle.taskRelations),
+      blockersByTask: blockersByTaskOf(liveTasks, bundle.taskRelations),
+      dependentsByTask: dependentsByTaskOf(liveTasks, bundle.taskRelations),
+      /** Every queue row I can see (TV-D2), any workspace's: what a status change takes out. */
+      allQueueRows: snap.queue,
+      /** My line-up, in order (what the server holds, plus optimistic edits). */
+      myQueueEntries,
+      queuedTaskIds: queuedTaskIdsOf(myQueueEntries),
+      queueClaims: queueClaimsOf(queueRows, userId),
+      queuedTasks,
+      queueCount: queueCountOf(queuedTasks),
+      /** Your own reminders (TV-D12). */
+      reminders: snap.reminders,
+      offline: snap.offline,
+    };
+  },
+);
+
+export type TasksData = ReturnType<typeof tasksDataOf>;
