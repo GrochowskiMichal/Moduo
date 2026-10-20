@@ -57,6 +57,13 @@ const desktopChannel = readLocalEnvValue("PUBLIC_DESKTOP_CHANNEL");
 // MODUO_TARGET: "web" for web builds, "desktop" for Tauri builds (default).
 const target = (process.env.MODUO_TARGET as string | undefined) ?? "desktop";
 const isWeb = target === "web";
+// The desktop bundle runs only in the shell's own engine (WKWebView on macOS 14+,
+// i.e. Safari 17, and WebView2 on Windows), so it compiles for the `desktop` env in
+// package.json's browserslist (Rsbuild only resolves the NODE_ENV env itself, so it is
+// passed as an override). Web keeps Rsbuild's default targets.
+const desktopBrowserslist: string[] = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8"),
+).browserslist.desktop;
 
 // App version + build id surfaced in Settings → About (DF-19i) and Diagnostics
 // (DF-19g). Version comes from the VERSION file; the build id is the short git
@@ -180,13 +187,14 @@ export default defineConfig({
     distPath: {
       root: isWeb ? "dist/web" : "dist",
     },
+    ...(isWeb ? {} : { overrideBrowserslist: desktopBrowserslist }),
   },
   performance: {
     // Reuse the previous compile on the next dev or production build.
     // The target is part of the cache key so a web build cannot be reused
-    // as the desktop bundle.
+    // as the desktop bundle (nor one compiled for other browser targets).
     buildCache: {
-      cacheDigest: [target],
+      cacheDigest: [target, ...(isWeb ? [] : desktopBrowserslist)],
     },
     // Fetch route chunks in the background so the next screen opens from
     // cache. On desktop the files are already local; on web this is idle
