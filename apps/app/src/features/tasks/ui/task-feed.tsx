@@ -63,14 +63,19 @@ import {
   shapeFeed,
 } from "../feed";
 import { formatTimestamp } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { ActivityEntry, Task } from "../model";
+import type { ActivityEntry, Task, Team } from "../model";
+import {
+  useTaskCommands,
+  useTasksActivityStamp,
+  useTasksSelector,
+  useTasksUserId,
+} from "../tasks-context";
 
 const NO_ACTIVITY: ActivityEntry[] = [];
+const NO_TEAMS: Team[] = [];
 
 type Props = {
   task: Task;
-  api: TasksModuleApi;
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
   /** Full access to the task's project: delete anyone's comment (the server decides). */
@@ -107,21 +112,23 @@ function writeFilter(userId: string | null, filter: FeedFilter) {
 
 export function TaskFeed({
   task,
-  api,
   runtime,
   workspaceId,
   canRemoveAny = false,
   composerSlot,
 }: Props) {
-  const { loadActivity, activityStamp, currentUserId } = api;
+  const { loadActivity } = useTaskCommands();
+  const activityStamp = useTasksActivityStamp();
+  const currentUserId = useTasksUserId();
+  const allTeams = useTasksSelector((d) => d.bundle.teams ?? NO_TEAMS);
   const [activity, setActivity] = useState<ActivityEntry[]>(NO_ACTIVITY);
   const [filter, setFilterState] = useState<FeedFilter>(() => readFilter(currentUserId));
   const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
   const people = useCommentPeople();
   // TV-D13: `@Design` in a comment tells Design's members once.
   const teams = useMemo<ComposerTeam[]>(
-    () => api.teams.map((t) => ({ id: t.id, name: t.name, mark: t.mark, color: t.color })),
-    [api.teams],
+    () => allTeams.map((t) => ({ id: t.id, name: t.name, mark: t.mark, color: t.color })),
+    [allTeams],
   );
   const thread = useCommentThread({
     runtime,
@@ -157,7 +164,7 @@ export function TaskFeed({
   // Something changed on the task, or one of its comments changed anywhere
   // (an edit, a reaction, a delete; the store hears them live): read the
   // thread again. Not on mount: the thread reads itself then.
-  const commentStamp = api.commentStamps?.get(task.id) ?? "";
+  const commentStamp = useTasksSelector((_, snap) => snap.commentStamps?.get(task.id) ?? "");
   const seen = useRef({ activityStamp, commentStamp });
   // biome-ignore lint/correctness/useExhaustiveDependencies: the stamps are the trigger
   useEffect(() => {

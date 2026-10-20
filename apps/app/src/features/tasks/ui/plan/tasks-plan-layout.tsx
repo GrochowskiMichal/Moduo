@@ -8,6 +8,7 @@ import { truncationNotice } from "../../../../components/app/truncation-notice";
 import { type ReferenceHost, ReferenceHostProvider } from "../../../spine/references/context";
 import { referenceKey } from "../../../spine/references/kinds";
 import type { ReferenceRef } from "../../../spine/references/types";
+import { TaskCommandsOverride } from "../../tasks-context";
 
 import { PlanBody } from "./plan-body";
 import { PlanDialogs } from "./plan-dialogs";
@@ -17,7 +18,22 @@ import { PlanRail } from "./plan-rail";
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function TasksPlanLayout({ c }: { c: PlanController }) {
-  const { api, canEdit, inbox, referenceStore, taskById, selectedTask, pushPanel } = c;
+  const { api, viewApi, canEdit, inbox, referenceStore, taskById, selectedTask, pushPanel } = c;
+  // The detail panel reads its commands from context (A4): here queuing goes
+  // through the blocked-by offer and "Focus on this" says where it went, as
+  // everywhere else on the page (`viewApi`). One object for the page's life,
+  // calling the newest `viewApi`, so the commands keep their identity.
+  const latestViewApi = useRef(viewApi);
+  useLayoutEffect(() => {
+    latestViewApi.current = viewApi;
+  });
+  const pageCommands = useMemo(
+    () => ({
+      toggleQueue: (id: string) => latestViewApi.current.toggleQueue(id),
+      focusOnTask: (id: string) => latestViewApi.current.focusOnTask(id),
+    }),
+    [],
+  );
   const latestForHost = useRef({ taskById, selectedTask, inbox, api });
   useLayoutEffect(() => {
     latestForHost.current = { taskById, selectedTask, inbox, api };
@@ -56,17 +72,19 @@ export function TasksPlanLayout({ c }: { c: PlanController }) {
   );
 
   return (
-    <ReferenceHostProvider host={referenceHost}>
-      <PlanDndHost c={c}>
-        <FeaturePanelsShell
-          feature="tasks"
-          notice={truncationNotice(api.truncated)}
-          left={<PlanRail c={c} />}
-          center={<PlanBody c={c} />}
-          right={<PlanPanels c={c} />}
-        />
-      </PlanDndHost>
-      <PlanDialogs c={c} />
-    </ReferenceHostProvider>
+    <TaskCommandsOverride commands={pageCommands}>
+      <ReferenceHostProvider host={referenceHost}>
+        <PlanDndHost c={c}>
+          <FeaturePanelsShell
+            feature="tasks"
+            notice={truncationNotice(api.truncated)}
+            left={<PlanRail c={c} />}
+            center={<PlanBody c={c} />}
+            right={<PlanPanels c={c} />}
+          />
+        </PlanDndHost>
+        <PlanDialogs c={c} />
+      </ReferenceHostProvider>
+    </TaskCommandsOverride>
   );
 }

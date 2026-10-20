@@ -13,18 +13,32 @@
 //   between unrelated writes; a selector must never build a new object or
 //   array itself (useSyncExternalStore would loop).
 // - `useTaskById(id)`, `useTasksStatus()`: the two conveniences most surfaces need.
+// - `useTasksUserId()`, `useTasksActivityStamp()`, `useTaskTags(id)`: who
+//   reads, the trail's refetch cue, and a task's tags (the tag store's).
+// - `useTasksReader()`: the data as it is when a handler runs (a drop's
+//   neighbours), without subscribing the component to it.
+// - `TaskCommandsOverride`: a host's own take on a few commands for what is
+//   under it (the Tasks page guards Focus with the blocked-by offer).
 // - `useTasksApi()`: the whole `TasksModuleApi`, for what still takes it
-//   (TaskDetailPanel, the Tasks views). It re-renders on every change.
+//   (the Tasks views). It re-renders on every change.
 //
 // With the React Compiler on, each hook returns what useSyncExternalStore
 // hands it, never a read of the store beside it (docs/gotchas/ui.md, RF-1).
 
-import { createContext, type ReactNode, useContext, useMemo, useSyncExternalStore } from "react";
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { EMPTY_SNAPSHOT, type StoreSnapshot, type WorkspaceStore } from "../../lib/sync/store";
+import { entityKey, useTagView } from "../tags/store";
 import type { TaskCommands } from "./commands";
 import { type TasksModuleApi, type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";
-import type { Task } from "./model";
+import type { Tag, Task } from "./model";
 import { byIdOf, type TasksData, tasksDataOf } from "./selectors";
 
 /** What never changes with the data: the narrow hooks read the store through it. */
@@ -39,6 +53,8 @@ type TasksScope = {
 
 const ScopeContext = createContext<TasksScope | null>(null);
 const ApiContext = createContext<TasksModuleApi | null>(null);
+/** Bumped after every op that saved: the detail panel's trail re-reads on it. */
+const ActivityContext = createContext(0);
 
 type ProviderProps = {
   runtime: ModuoRuntime | null;
@@ -66,7 +82,9 @@ export function TasksProvider({
   );
   return (
     <ScopeContext.Provider value={scope}>
-      <ApiContext.Provider value={root.api}>{children}</ApiContext.Provider>
+      <ActivityContext.Provider value={root.api.activityStamp}>
+        <ApiContext.Provider value={root.api}>{children}</ApiContext.Provider>
+      </ActivityContext.Provider>
     </ScopeContext.Provider>
   );
 }
@@ -78,6 +96,26 @@ function useTasksScope(): TasksScope {
 }
 
 const noSubscribe = () => () => {};
+
+/**
+ * A host's own version of some commands for everything under it, as the Tasks
+ * page's queue toggle opens the blocked-by offer first. Pass a stable object:
+ * a new one gives every command reader below a new `useTaskCommands()`.
+ */
+export function TaskCommandsOverride({
+  commands,
+  children,
+}: {
+  commands: Partial<TaskCommands>;
+  children: ReactNode;
+}) {
+  const scope = useTasksScope();
+  const value = useMemo<TasksScope>(
+    () => ({ ...scope, commands: { ...scope.commands, ...commands } }),
+    [scope, commands],
+  );
+  return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
+}
 
 /** Every Tasks command; the identity holds across data changes. */
 export function useTaskCommands(): TaskCommands {
@@ -121,6 +159,40 @@ export function useTasksStatus(): TasksStatus {
   const error = useTasksSelector((_, snap) => (store ? snap.error : null));
   const offline = useTasksSelector((_, snap) => !!store && snap.offline);
   return { loading: !!store && !loaded, loaded, error, canRead, canEdit, offline };
+}
+
+/** Who reads the Tasks data (null before sign-in). */
+export function useTasksUserId(): string | null {
+  return useTasksScope().userId;
+}
+
+/** Moves after every op that saved (the detail panel's trail re-reads on it). */
+export function useTasksActivityStamp(): number {
+  return useContext(ActivityContext);
+}
+
+const NO_TAGS: Tag[] = [];
+
+/**
+ * The workspace's live tags and one task's (name-sorted), from the shared tag
+ * store: re-renders on a tag change, never on a task's.
+ */
+export function useTaskTags(taskId: string): { tags: Tag[]; taskTags: Tag[] } {
+  const { workspaceId, canRead } = useTasksScope();
+  const view = useTagView(canRead ? workspaceId : null);
+  return { tags: view.tags, taskTags: view.byEntity.get(entityKey("task", taskId)) ?? NO_TAGS };
+}
+
+/**
+ * The Tasks data as it is now, for a handler (a drop reads its neighbours):
+ * the component doesn't re-render when it changes.
+ */
+export function useTasksReader(): () => TasksData {
+  const { store, userId, workspaceId } = useTasksScope();
+  return useCallback(
+    () => tasksDataOf(store ? store.getSnapshot() : EMPTY_SNAPSHOT, userId, workspaceId),
+    [store, userId, workspaceId],
+  );
 }
 
 /** The whole Tasks api, for what still takes it; re-renders on every change. */

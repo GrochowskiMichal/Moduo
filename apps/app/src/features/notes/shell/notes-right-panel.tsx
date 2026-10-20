@@ -12,7 +12,7 @@ import { type PanelItem, RightPanel } from "../../../components/app/right-panel"
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import { ContextTaskDetailPanel } from "../../tasks/ui/context-task-detail-panel";
+import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
 import type { NotesPanelVariantId } from "../panel-prefs";
@@ -99,7 +99,7 @@ export function NotesRightPanel({
         render: () => (
           <HubDropZone target={{ type: "task", id: task.id }} disabled={!canEdit}>
             <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
-              <ContextTaskDetailPanel
+              <TaskDetailPanel
                 task={task}
                 onRequestCapture={() => {}}
                 onSelectTask={onTaskDetail}

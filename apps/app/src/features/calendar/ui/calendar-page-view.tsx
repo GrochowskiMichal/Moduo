@@ -45,7 +45,7 @@ import {
   useTasksSelector,
   useTasksStatus,
 } from "../../tasks/tasks-context";
-import { ContextTaskDetailPanel } from "../../tasks/ui/context-task-detail-panel";
+import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
@@ -1042,7 +1042,7 @@ export function CalendarPageView({
             onClose={() => setPanelVariant("tasks")}
           />
         ) : detailTask ? (
-          <ContextTaskDetailPanel
+          <TaskDetailPanel
             task={detailTask}
             onRequestCapture={() => dispatchOpenCapture()}
             onSelectTask={(id) => setDetailTarget({ type: "task", id })}

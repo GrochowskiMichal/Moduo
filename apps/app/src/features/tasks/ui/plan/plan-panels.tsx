@@ -46,7 +46,6 @@ export function PlanPanels({ c }: { c: PlanController }) {
     bulkIds,
     bulk,
     openCapture,
-    viewApi,
     taskById,
     requestArchive,
     requestProjectState,
@@ -74,13 +73,11 @@ export function PlanPanels({ c }: { c: PlanController }) {
     <TaskDetailPanel
       task={panelTask}
       buckets={selectedArchivedTask ? [...buckets, ...api.archivedBuckets] : buckets}
-      inbox={inbox}
       canEdit={panelCanEdit}
       onRequestCapture={openCapture}
       onSelectTask={setSelectedTaskId}
       onOpenTask={openTaskInPanel}
       onOpenFullPage={panelTask ? () => setFullPageId(panelTask.id) : undefined}
-      api={viewApi}
       runtime={runtime}
       workspaceId={workspaceId}
       onOpenEntity={handleOpenEntity}
@@ -105,12 +102,7 @@ export function PlanPanels({ c }: { c: PlanController }) {
       onPick={bulk.openPicker}
     />
   ) : privateLinkId ? (
-    <TaskGonePanel
-      taskId={privateLinkId}
-      api={api}
-      canEdit={canEdit}
-      onBack={() => setPrivateLinkId(null)}
-    />
+    <TaskGonePanel taskId={privateLinkId} canEdit={canEdit} onBack={() => setPrivateLinkId(null)} />
   ) : panelTask ? (
     <HubDropZone target={{ type: "task", id: panelTask.id }} disabled={!panelCanEdit}>
       {detailPanel}
@@ -139,12 +131,10 @@ export function PlanPanels({ c }: { c: PlanController }) {
           <TaskDetailPanel
             task={task}
             buckets={buckets}
-            inbox={inbox}
             canEdit={canEdit}
             onRequestCapture={openCapture}
             onSelectTask={openTaskInPanel}
             onOpenTask={openTaskInPanel}
-            api={viewApi}
             runtime={runtime}
             workspaceId={workspaceId}
             onOpenEntity={handleOpenEntity}

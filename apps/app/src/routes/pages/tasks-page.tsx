@@ -2,13 +2,32 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useMemo } from "react";
 
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
-import { useTasksModule } from "../../features/tasks/hooks/use-tasks-module";
 import type { TasksSearch } from "../../features/tasks/search";
+import { TasksProvider, useTasksApi } from "../../features/tasks/tasks-context";
 import { TasksPlanView } from "../../features/tasks/ui/tasks-plan-view";
 import { useAuth } from "../../providers/auth-provider";
 import { useWorkspace } from "../../providers/workspace-provider";
 
 export function TasksPage() {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  // One Tasks root for the page (A4): everything under it reads the module
+  // through the provider, the views that still take the whole api included.
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+      // Recently deleted opens from the Tasks sidebar's ⋯ only (TV-U6).
+      includeTrash
+    >
+      <TasksPageBody />
+    </TasksProvider>
+  );
+}
+
+function TasksPageBody() {
   const { runtime, userId, configError } = useAuth();
   const { selectedWorkspaceId, modulePermissions } = useWorkspace();
 
@@ -69,13 +88,7 @@ export function TasksPage() {
     [navigate],
   );
 
-  const api = useTasksModule(runtime, {
-    userId,
-    workspaceId: selectedWorkspaceId,
-    modulePermission: modulePermissions.tasks,
-    // Recently deleted opens from the Tasks sidebar's ⋯ only (TV-U6).
-    includeTrash: true,
-  });
+  const api = useTasksApi();
 
   const canRender = useMemo(
     () =>

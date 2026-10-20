@@ -68,10 +68,11 @@ import {
   shownOptionalProperties,
 } from "../detail-properties";
 import { LEVEL_OPTIONS } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, EnergyLevel, PriorityLevel, Task } from "../model";
+import type { Bucket, EnergyLevel, PriorityLevel, Task, Team } from "../model";
 import { changePatternRule, engineZone } from "../recurrence-engine";
+import { statusesForBucketOf } from "../selectors";
 import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
+import { useTaskCommands, useTasksSelector, useTaskTags } from "../tasks-context";
 import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
@@ -88,7 +89,6 @@ import {
 
 type Props = {
   task: Task;
-  api: TasksModuleApi;
   canEdit: boolean;
   /** My share of the task's tracked time (null until known). */
   mySeconds: number | null;
@@ -102,7 +102,6 @@ type Props = {
 
 export function TaskDetailProperties({
   task,
-  api,
   canEdit,
   mySeconds,
   projects,
@@ -113,8 +112,11 @@ export function TaskDetailProperties({
   const [revealed, setRevealed] = useState<Set<OptionalProperty>>(() => new Set());
   // The row that was just revealed opens its editor once, on mount.
   const [opening, setOpening] = useState<OptionalProperty | null>(null);
-  const sessions = api.sessions.filter((s) => s.taskId === task.id);
-  const reminders = api.reminders.filter((r) => r.taskId === task.id);
+  const { patchTask, moveOccurrence } = useTaskCommands();
+  const allSessions = useTasksSelector((_, snap) => snap.sessions);
+  const allReminders = useTasksSelector((_, snap) => snap.reminders);
+  const sessions = allSessions.filter((s) => s.taskId === task.id);
+  const reminders = allReminders.filter((r) => r.taskId === task.id);
   const extras: PropertyExtras = {
     sessions: sessions.length,
     reminders: reminders.length,
@@ -137,7 +139,7 @@ export function TaskDetailProperties({
       setRepeatMoveTo(d);
       return;
     }
-    api.patchTask(task.id, d ? { dueDate: d.toISOString() } : { dueDate: null, dueTime: null });
+    patchTask(task.id, d ? { dueDate: d.toISOString() } : { dueDate: null, dueTime: null });
   };
   const chooseRepeatMove = (choice: "one" | "pattern") => {
     const to = repeatMoveTo;
@@ -145,10 +147,10 @@ export function TaskDetailProperties({
     if (!to || !task.recurrence) return;
     const day = localDayOf(to.toISOString());
     if (choice === "one") {
-      if (day) api.moveOccurrence(task.id, { dueOn: day });
+      if (day) moveOccurrence(task.id, { dueOn: day });
       return;
     }
-    api.patchTask(task.id, {
+    patchTask(task.id, {
       recurrence: changePatternRule(task.recurrence, to, engineZone()),
       dueDate: to.toISOString(),
     });
@@ -166,18 +168,18 @@ export function TaskDetailProperties({
   return (
     <div className="flex flex-col gap-px">
       <PropertyRow label="Status">
-        <StatusValue task={task} api={api} canEdit={canEdit} />
+        <StatusValue task={task} canEdit={canEdit} />
       </PropertyRow>
       <PropertyRow label="Assignee" align="start">
-        <AssigneeValue task={task} api={api} canEdit={canEdit} projects={projects} />
-        <TeamValue task={task} api={api} canEdit={canEdit} />
+        <AssigneeValue task={task} canEdit={canEdit} projects={projects} />
+        <TeamValue task={task} canEdit={canEdit} />
       </PropertyRow>
       <PropertyRow label="Priority">
         <LevelValue
           kind="priority"
           value={task.priority}
           canEdit={canEdit}
-          onChange={(v) => api.patchTask(task.id, { priority: v as PriorityLevel | null })}
+          onChange={(v) => patchTask(task.id, { priority: v as PriorityLevel | null })}
         />
       </PropertyRow>
       <PropertyRow label="Due">
@@ -189,7 +191,7 @@ export function TaskDetailProperties({
           aria-label="Due"
           disabled={!canEdit}
         />
-        <DueTimeValue task={task} api={api} canEdit={canEdit} />
+        <DueTimeValue task={task} canEdit={canEdit} />
         <RepeatMoveDialog
           open={repeatMoveTo !== null}
           tasks={[task]}
@@ -205,7 +207,7 @@ export function TaskDetailProperties({
             value={task.energyLevel}
             canEdit={canEdit}
             defaultOpen={autoOpen("energy")}
-            onChange={(v) => api.patchTask(task.id, { energyLevel: v as EnergyLevel | null })}
+            onChange={(v) => patchTask(task.id, { energyLevel: v as EnergyLevel | null })}
           />
         </PropertyRow>
       ) : null}
@@ -214,7 +216,6 @@ export function TaskDetailProperties({
           <SessionsValue
             task={task}
             sessions={sessions}
-            api={api}
             canEdit={canEdit}
             me={me}
             assignee={assignee}
@@ -224,19 +225,13 @@ export function TaskDetailProperties({
       ) : null}
       {shown.has("reminder") ? (
         <PropertyRow label="Reminder">
-          <ReminderValue
-            task={task}
-            reminders={reminders}
-            api={api}
-            defaultOpen={autoOpen("reminder")}
-          />
+          <ReminderValue task={task} reminders={reminders} defaultOpen={autoOpen("reminder")} />
         </PropertyRow>
       ) : null}
       {shown.has("estimate") ? (
         <PropertyRow label="Estimate" align="start">
           <EstimateValue
             task={task}
-            api={api}
             canEdit={canEdit}
             mySeconds={mySeconds}
             defaultOpen={autoOpen("estimate")}
@@ -245,12 +240,12 @@ export function TaskDetailProperties({
       ) : null}
       {shown.has("repeat") ? (
         <PropertyRow label="Repeat">
-          <RepeatValue task={task} api={api} canEdit={canEdit} defaultOpen={autoOpen("repeat")} />
-          {task.recurrence ? <RepeatHistory task={task} api={api} /> : null}
+          <RepeatValue task={task} canEdit={canEdit} defaultOpen={autoOpen("repeat")} />
+          {task.recurrence ? <RepeatHistory task={task} /> : null}
         </PropertyRow>
       ) : null}
       <PropertyRow label="Tags" align="start">
-        <TagsValue task={task} api={api} canEdit={canEdit} />
+        <TagsValue task={task} canEdit={canEdit} />
       </PropertyRow>
       {quiet.length > 0 ? (
         <AddPropertyLine items={quiet.map(propertyItem)} onPick={reveal} />
@@ -278,21 +273,17 @@ const propertyItem = (p: OptionalProperty): AddPropertyItem<OptionalProperty> =>
 
 // ── values ────────────────────────────────────────────────────────────────────
 
-function StatusValue({
-  task,
-  api,
-  canEdit,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  canEdit: boolean;
-}) {
+function StatusValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { setTaskStatus } = useTaskCommands();
+  const statuses = useTasksSelector((d) => d.statuses);
+  const statusById = useTasksSelector((d) => d.statusById);
+  const allBuckets = useTasksSelector((d) => d.allBuckets);
   // The project's own statuses, grouped by category (REPLAN 53a); the five
   // categories when its statuses aren't readable here (a project you can't
   // see, a database before TV-D9). Hidden ones are listed only while in use.
   const category = taskCategoryOf(task);
-  const name = statusNameOf(task, api.statusById);
-  const groups = statusesByCategory(api.statusesForBucket(task.bucketId))
+  const name = statusNameOf(task, statusById);
+  const groups = statusesByCategory(statusesForBucketOf(statuses, allBuckets, task.bucketId))
     .map((g) => ({
       ...g,
       statuses: g.statuses.filter((s) => !s.hidden || s.id === task.statusId),
@@ -310,8 +301,8 @@ function StatusValue({
         <DropdownMenuRadioGroup
           value={byName ? (task.statusId ?? "") : category}
           onValueChange={(v) => {
-            if (byName) api.setTaskStatus(task.id, { statusId: v });
-            else api.setTaskStatus(task.id, { category: v as TaskStatusCategory });
+            if (byName) setTaskStatus(task.id, { statusId: v });
+            else setTaskStatus(task.id, { category: v as TaskStatusCategory });
           }}
         >
           {byName
@@ -326,7 +317,7 @@ function StatusValue({
                   ))}
                 </div>
               ))
-            : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || api.statuses.length > 0).map(
+            : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || statuses.length > 0).map(
                 (c) => (
                   <DropdownMenuRadioItem key={c} value={c}>
                     <StatusIcon category={c} className="text-muted-foreground" />
@@ -348,15 +339,15 @@ function StatusValue({
  */
 function AssigneeValue({
   task,
-  api,
   canEdit,
   projects,
 }: {
   task: Task;
-  api: TasksModuleApi;
   canEdit: boolean;
   projects: Bucket[];
 }) {
+  const { patchTask } = useTaskCommands();
+  const inboxId = useTasksSelector((d) => d.inbox?.id ?? null);
   const { assignees, byId, currentUserId } = useAssignees();
   const [open, setOpen] = useState(false);
   const [filing, setFiling] = useState<Assignee | null>(null);
@@ -364,7 +355,7 @@ function AssigneeValue({
   // A former member reads "Former member", so the value never renders blank.
   const label = known ? known.name : assigneeLabel(task.assigneeId, byId);
   const unassigned = task.assigneeId === null;
-  const inInbox = api.inbox?.id === task.bucketId;
+  const inInbox = inboxId === task.bucketId;
 
   const assign = (id: string | null, bucketId?: string) => {
     setOpen(false);
@@ -375,7 +366,7 @@ function AssigneeValue({
         if (msg) toast.message(msg);
       });
     }
-    api.patchTask(task.id, bucketId ? { assigneeId: id, bucketId } : { assigneeId: id });
+    patchTask(task.id, bucketId ? { assigneeId: id, bucketId } : { assigneeId: id });
   };
 
   return (
@@ -469,9 +460,14 @@ function AssigneeValue({
 }
 
 /** The team a task is routed to, beside its assignee (a rounded square, call 95). */
-function TeamValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
-  const team = api.teams.find((t) => t.id === task.teamId) ?? null;
-  if (api.teams.length === 0 && !team) return null;
+/** One empty list for a bundle without teams (a stable identity). */
+const NO_TEAMS: Team[] = [];
+
+function TeamValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { patchTask } = useTaskCommands();
+  const teams = useTasksSelector((d) => d.bundle.teams ?? NO_TEAMS);
+  const team = teams.find((t) => t.id === task.teamId) ?? null;
+  if (teams.length === 0 && !team) return null;
   if (!team && !canEdit) return null;
   return (
     <DropdownMenu>
@@ -500,9 +496,9 @@ function TeamValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; ca
       <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuRadioGroup
           value={task.teamId ?? "none"}
-          onValueChange={(v) => api.patchTask(task.id, { teamId: v === "none" ? null : v })}
+          onValueChange={(v) => patchTask(task.id, { teamId: v === "none" ? null : v })}
         >
-          {api.teams.map((t) => (
+          {teams.map((t) => (
             <DropdownMenuRadioItem key={t.id} value={t.id}>
               <TeamMark name={t.name} id={t.id} letters={t.mark} color={t.color} size="icon" />
               {t.name}
@@ -581,26 +577,27 @@ function LevelValue({
   );
 }
 
-function TagsValue({ task, api, canEdit }: { task: Task; api: TasksModuleApi; canEdit: boolean }) {
-  const taskTags = api.tagsByTask.get(task.id) ?? [];
+function TagsValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { toggleTaskTag, createTagForTask, setTagColor, deleteTag } = useTaskCommands();
+  const { tags, taskTags } = useTaskTags(task.id);
   const chip = (t: (typeof taskTags)[number]) => (
     <TagChip
       key={t.id}
       name={t.name}
       color={t.color}
       size="md"
-      onRemove={canEdit ? () => api.toggleTaskTag(task.id, t.id) : undefined}
+      onRemove={canEdit ? () => toggleTaskTag(task.id, t.id) : undefined}
     />
   );
   const picker = (trigger: ReactNode) => (
     <TagPicker
-      tags={api.tags}
+      tags={tags}
       selectedIds={taskTags.map((t) => t.id)}
       canEdit={canEdit}
-      onToggle={(tagId) => api.toggleTaskTag(task.id, tagId)}
-      onCreate={(name) => api.createTagForTask(name, task.id)}
-      onRecolor={(tagId, color) => api.setTagColor(tagId, color)}
-      onDelete={(tagId) => api.deleteTag(tagId)}
+      onToggle={(tagId) => toggleTaskTag(task.id, tagId)}
+      onCreate={(name) => createTagForTask(name, task.id)}
+      onRecolor={(tagId, color) => setTagColor(tagId, color)}
+      onDelete={(tagId) => deleteTag(tagId)}
       trigger={trigger}
     />
   );

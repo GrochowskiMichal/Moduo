@@ -45,8 +45,14 @@ import { activityActorName } from "../activity";
 import { useAssignees } from "../assignees";
 import { feedTime } from "../feed";
 import { useTaskTimeShare } from "../hooks/use-task-time-share";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { type ActivityEntry, type Bucket, isUnsavedTaskId, type Task } from "../model";
+import {
+  useTaskById,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksStatus,
+  useTasksUserId,
+} from "../tasks-context";
 import { AgentSessionLines } from "./task-agent-session";
 import { TaskDescription } from "./task-description";
 import {
@@ -63,16 +69,18 @@ import { TaskFeed } from "./task-feed";
 
 type Props = {
   task: Task | null;
-  buckets: Bucket[];
-  inbox: Bucket | null;
-  canEdit: boolean;
+  /** The projects it can move to and is shown in. Defaults to the live ones;
+   *  the Tasks page adds archived ones for a task of an archived project. */
+  buckets?: Bucket[];
+  /** Defaults to Tasks edit access; the Tasks page keeps an archived
+   *  project's task read-only (TV-U6). */
+  canEdit?: boolean;
   onRequestCapture: () => void;
   /** Move the page's task selection (a duplicate opens there). */
   onSelectTask: (id: string) => void;
   /** Open a task in the panel on top of this one ("← item", call 65a): a
    *  subtask, a blocker, the parent. Defaults to selecting it. */
   onOpenTask?: (id: string) => void;
-  api: TasksModuleApi;
   /** Spine runtime: the linked items, comments and the feed. Optional so a
    *  host that doesn't wire the spine gets the plain inspector. */
   runtime?: ModuoRuntime | null;
@@ -99,24 +107,30 @@ type Props = {
  */
 export const TASK_DETAIL_REFRESH_EVENT = "moduo:task:detail:refresh";
 
+// Everything Tasks shows here comes from the page's `<TasksProvider>` through
+// the narrow hooks (A4), each part reading only what it shows: an edit to
+// another task redraws none of it.
+
 export function TaskDetailPanel(props: Props) {
-  const { task, canEdit, onRequestCapture } = props;
+  const { task, onRequestCapture } = props;
   // Every date and time in the panel redraws when Time & region changes (TV-D14).
   useTimeRegion();
+  const access = useTasksStatus().canEdit;
+  const liveBuckets = useTasksSelector((d) => d.buckets);
+  const canEdit = props.canEdit ?? access;
+  const buckets = props.buckets ?? liveBuckets;
   if (!task) return <DetailEmptyState canEdit={canEdit} onRequestCapture={onRequestCapture} />;
   // Key on id so every local draft (title, revealed rows, feed fold) resets
   // when the selection changes.
-  return <DetailBody key={task.id} {...props} task={task} />;
+  return <DetailBody key={task.id} {...props} task={task} buckets={buckets} canEdit={canEdit} />;
 }
 
 function DetailBody({
   task,
   buckets,
-  inbox,
   canEdit,
   onSelectTask,
   onOpenTask,
-  api,
   runtime = null,
   workspaceId = null,
   onOpenFullPage,
@@ -124,26 +138,32 @@ function DetailBody({
   layout = "panel",
   claimSlot,
   onSaveAsTemplate,
-}: Props & { task: Task }) {
+}: Props & { task: Task; buckets: Bucket[]; canEdit: boolean }) {
+  const commands = useTaskCommands();
+  const currentUserId = useTasksUserId();
   // Subtasks are one level (spec §1): a live parent makes this a subtask, and
   // only top-level tasks have a Subtasks collection.
-  const parent = task.parentId ? (api.tasks.find((t) => t.id === task.parentId) ?? null) : null;
+  const parent = useTaskById(task.parentId);
   const openTask = onOpenTask ?? onSelectTask;
   const mySeconds = useTaskTimeShare(
     runtime,
     workspaceId,
-    api.currentUserId,
+    currentUserId,
     task.id,
     task.timeSpentSeconds,
   );
   const done = task.status === "done";
-  const waiting = api.waiting.filter((w) => w.taskId === task.id);
+  const allWaiting = useTasksSelector((_, snap) => snap.waiting);
+  const waiting = allWaiting.filter((w) => w.taskId === task.id);
+  const agentSessions = useTasksSelector((_, snap) => snap.agentSessions);
+  const attachmentStamp = useTasksSelector(
+    (_, snap) => snap.attachmentStamps?.get(task.id) ?? null,
+  );
   const [waitingOpen, setWaitingOpen] = useState(false);
   const bucket = buckets.find((b) => b.id === task.bucketId) ?? null;
   // Full access to the project deletes anyone's comment (the server decides;
   // the owner is the one we can tell here).
-  const canRemoveAny =
-    canEdit && !!bucket && !bucket.isSystem && bucket.ownerId === api.currentUserId;
+  const canRemoveAny = canEdit && !!bucket && !bucket.isSystem && bucket.ownerId === currentUserId;
   const projects = buckets.filter((b) => !b.isSystem && !b.archivedAt);
   // A task still on its way to the server (a `tmp-` id) has no files, links
   // or comments to read yet: those reads wait for its real id (the body
@@ -157,10 +177,10 @@ function DetailBody({
     // The task's own workspace: that's where its files live.
     workspaceId: workspaceId ? task.workspaceId || workspaceId : null,
     entity: { type: "task", id: task.id },
-    userId: api.currentUserId ?? null,
+    userId: currentUserId ?? null,
     canEdit,
     // Live (AT-3): a teammate's upload or delete shows without reopening.
-    refreshStamp: api.attachmentStamps?.get(task.id) ?? null,
+    refreshStamp: attachmentStamp,
   });
   const dropScroll = cn(
     "pane-scroll min-h-0 flex-1 overflow-y-auto rounded-lg transition-[background-color,box-shadow] duration-(--motion-fade) ease-(--ease-out)",
@@ -218,27 +238,24 @@ function DetailBody({
       <CompleteToggle
         done={done}
         disabled={!canEdit}
-        onToggle={() => api.toggleDone(task)}
+        onToggle={() => commands.toggleDone(task)}
         className="mt-1"
       />
-      <TitleField
-        task={task}
-        canEdit={canEdit}
-        api={api}
-        size={layout === "page" ? "page" : "lead"}
-      />
+      <TitleField task={task} canEdit={canEdit} size={layout === "page" ? "page" : "lead"} />
     </div>
   );
   const closedLine =
     task.status === "archived" ? (
-      <WontDoLine canEdit={canEdit} onReopen={() => api.patchTask(task.id, { status: "todo" })} />
+      <WontDoLine
+        canEdit={canEdit}
+        onReopen={() => commands.patchTask(task.id, { status: "todo" })}
+      />
     ) : taskCategoryOf(task) === "done" ? (
       <DoneLine task={task} />
     ) : null;
   const properties = (
     <TaskDetailProperties
       task={task}
-      api={api}
       canEdit={canEdit}
       mySeconds={mySeconds}
       projects={projects}
@@ -253,7 +270,6 @@ function DetailBody({
     <div className="pl-4 empty:hidden">
       <TaskDescription
         task={task}
-        api={api}
         canEdit={canEdit}
         runtime={runtime}
         workspaceId={workspaceId}
@@ -269,20 +285,17 @@ function DetailBody({
   const attachments = <AttachmentsSection state={files} addTile="with-files" />;
   const collections = (
     <div className="flex flex-col gap-3">
-      {!parent ? (
-        <SubtasksSection task={task} canEdit={canEdit} onOpenTask={openTask} api={api} />
-      ) : null}
+      {!parent ? <SubtasksSection task={task} canEdit={canEdit} onOpenTask={openTask} /> : null}
       {waiting.length > 0 || waitingOpen ? (
         <WaitingSection
           task={task}
           entries={waiting}
           canEdit={canEdit}
-          api={api}
           defaultOpen={waitingOpen && waiting.length === 0}
         />
       ) : null}
-      <BlockedBySection task={task} canEdit={canEdit} onOpenTask={openTask} api={api} />
-      <BlocksSection task={task} onOpenTask={openTask} api={api} />
+      <BlockedBySection task={task} canEdit={canEdit} onOpenTask={openTask} />
+      <BlocksSection task={task} onOpenTask={openTask} />
       {showHub ? (
         <LinkedSection
           focus={{ type: "task", id: task.id }}
@@ -310,7 +323,6 @@ function DetailBody({
   const feed = (
     <TaskFeed
       task={task}
-      api={api}
       runtime={readRuntime}
       workspaceId={workspaceId}
       canRemoveAny={canRemoveAny}
@@ -322,9 +334,7 @@ function DetailBody({
       task={task}
       parent={parent}
       buckets={buckets}
-      inbox={inbox}
       canEdit={canEdit}
-      api={api}
       onOpenTask={openTask}
       onSelectTask={onSelectTask}
       onOpenFullPage={onOpenFullPage}
@@ -359,8 +369,8 @@ function DetailBody({
                 <AgentSessionLines
                   taskId={task.id}
                   workspaceId={task.workspaceId}
-                  sessions={api.agentSessions}
-                  userId={api.currentUserId}
+                  sessions={agentSessions}
+                  userId={currentUserId}
                   runtime={runtime}
                 />
                 {description}
@@ -413,8 +423,8 @@ function DetailBody({
             <AgentSessionLines
               taskId={task.id}
               workspaceId={task.workspaceId}
-              sessions={api.agentSessions}
-              userId={api.currentUserId}
+              sessions={agentSessions}
+              userId={currentUserId}
               runtime={runtime}
             />
             {description}
@@ -446,14 +456,13 @@ function DetailBody({
 function TitleField({
   task,
   canEdit,
-  api,
   size,
 }: {
   task: Task;
   canEdit: boolean;
-  api: TasksModuleApi;
   size: "lead" | "page";
 }) {
+  const { patchTask } = useTaskCommands();
   const [title, setTitle] = useState(task.title);
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -474,7 +483,7 @@ function TitleField({
     const next = title.replace(/\s+/g, " ").trim();
     if (!next)
       setTitle(task.title); // refuse empty: restore
-    else if (next !== task.title) api.patchTask(task.id, { title: next });
+    else if (next !== task.title) patchTask(task.id, { title: next });
   };
 
   return (
@@ -575,18 +584,17 @@ export function PrivateItemPanel({ onBack }: { onBack: () => void }) {
  */
 export function TaskGonePanel({
   taskId,
-  api,
   canEdit,
   onBack,
 }: {
   taskId: string;
-  api: TasksModuleApi;
   canEdit: boolean;
   onBack: () => void;
 }) {
   const state = useReference({ type: "task", id: taskId });
   const [deletion, setDeletion] = useState<ActivityEntry | null>(null);
-  const { loadActivity, currentUserId } = api;
+  const { loadActivity, restoreTask } = useTaskCommands();
+  const currentUserId = useTasksUserId();
   const deleted = state?.status === "deleted";
   useEffect(() => {
     if (!deleted) return;
@@ -612,7 +620,7 @@ export function TaskGonePanel({
       ) : null}
       <div className="mt-1 flex gap-1">
         {canEdit ? (
-          <Button variant="secondary" size="sm" onClick={() => void api.restoreTask(taskId)}>
+          <Button variant="secondary" size="sm" onClick={() => void restoreTask(taskId)}>
             <RotateCcw aria-hidden />
             Restore
           </Button>

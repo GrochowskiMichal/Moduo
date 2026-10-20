@@ -15,7 +15,7 @@
 import { isClosedTask } from "@contracts/vocabularies";
 import { useLayoutEffect, useRef, useState } from "react";
 import { formatAge } from "../../../lib/time-format";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { TaskCommands } from "../commands";
 import type { ProjectStatus, Tag, Task, TaskWaitingEntry } from "../model";
 import { statusNameOf } from "../statuses";
 
@@ -57,17 +57,16 @@ export type TaskFacts = {
   agent?: string | null;
 };
 
-/** The API maps the facts are read from. */
-export type FactsSource = Pick<
-  TasksModuleApi,
-  | "queuedTaskIds"
-  | "queueClaims"
-  | "blockedTaskIds"
-  | "blockersByTask"
-  | "tagsByTask"
-  | "subtaskProgressByTask"
-  | "statusById"
-> & {
+/** The maps the facts are read from (plain data: the views build it from their api). */
+export type FactsSource = {
+  queuedTaskIds: ReadonlySet<string>;
+  /** Who else has each task queued (user ids, earliest first). */
+  queueClaims: ReadonlyMap<string, readonly string[]>;
+  blockedTaskIds: ReadonlySet<string>;
+  blockersByTask: ReadonlyMap<string, readonly Pick<Task, "title" | "status">[]>;
+  tagsByTask: ReadonlyMap<string, readonly Tag[]>;
+  subtaskProgressByTask: ReadonlyMap<string, { done: number; total: number }>;
+  statusById: ReadonlyMap<string, ProjectStatus>;
   /** Section id → name (the view builds it once from `api.sections`). */
   sectionNames?: ReadonlyMap<string, string>;
   /** Task id → its waiting line (`waitingLabelsOf`). */
@@ -189,7 +188,7 @@ export function sameValues<T extends object>(a: T, b: T): boolean {
 
 /** The actions a row or card can take. */
 export type TaskRowActions = Pick<
-  TasksModuleApi,
+  TaskCommands,
   | "toggleDone"
   | "patchTask"
   | "toggleQueue"

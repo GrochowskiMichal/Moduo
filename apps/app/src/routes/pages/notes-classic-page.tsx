@@ -68,7 +68,7 @@ import { ShareMenu } from "../../features/sharing/share-menu";
 import { useCommentPeople } from "../../features/spine/hooks/use-comment-people";
 import { betweenPositions, endPosition } from "../../features/tasks/helpers";
 import { TasksProvider, useTaskCommands } from "../../features/tasks/tasks-context";
-import { ContextTaskDetailPanel } from "../../features/tasks/ui/context-task-detail-panel";
+import { TaskDetailPanel } from "../../features/tasks/ui/task-detail-panel";
 import { type CaptureSource, useCaptureSource } from "../../lib/capture-source";
 import type { EntityRef } from "../../lib/entity-links";
 import { useAuth } from "../../providers/auth-provider";
@@ -630,7 +630,7 @@ function NotesClassicPageBody() {
           // onto it links the note to the task, using the page's DndContext.
           <HubDropZone target={{ type: "task", id: detailTask.id }} disabled={!canEdit || degraded}>
             <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
-              <ContextTaskDetailPanel
+              <TaskDetailPanel
                 task={detailTask}
                 onRequestCapture={() => {}}
                 onSelectTask={setTaskDetailId}
