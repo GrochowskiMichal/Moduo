@@ -308,6 +308,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-06-24 · Polymorphic integrity → a lean central `entities` registry.
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
+- 2026-10-20 · PV-B2: one deep-link state machine (`deepLinkReducer`) decides whether `?id=` is a link or the mirror's own write; the backstop, mirror and default place act only when it's idle or resolved → decisions/tasks.md
 - 2026-10-20 · PV-B1: the plan view's place lives in `?place=` (written with replace, `place` before `id`), resolved at render by `resolveEntryPlace`; `lastBucket` is read once as an input; the task cursor stays React state · supersedes the one-shot `?place=upcoming` → decisions/tasks.md
 - 2026-10-20 · Sign-out (and another person signing in) keeps each person's waiting Tasks writes on the device, rows gone, until they sign in again; account deletion still wipes all; Log out warns first.
 - 2026-10-16 · "7 days" ends with the single completed line too, so no group, column or lane cell has its own in any mode (Maciej, MOD-148 follow-up, "1-13 ok"): the last week's show in their groups, one "5 older completed · Show" counts the older ones (Hidden keeps "12 completed · Show"; "older" is the agent's, since the recent ones are on screen) · rejected: one wording for both, a line per group in 7 days → decisions/tasks.md MOD-148

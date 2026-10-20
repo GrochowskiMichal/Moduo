@@ -522,7 +522,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 > The plan view's place and task selection lived in state, the URL, localStorage and about 12 guard refs kept in step by racing effects (DF-1). Track B runs beside Track A (`features/tasks/hooks/**`) and Track C (`lib/sync/**`); it owns `ui/tasks-plan-view.tsx`, `routes/pages/tasks-page.tsx`, `search.ts`, `default-view.ts`, `selection.ts` and `ui/plan/**`. No user-visible change.
 
 - [~] **PV-B1 — The place comes from the URL (`?place=`, `resolveEntryPlace`, `usePlanPlace`)** · deps: — · `t/mike/plan-place-from-url`
-- [ ] **PV-B2 — Deep-link state machine (`deepLinkReducer`, `useTaskDeepLink`)** · deps: PV-B1
+- [~] **PV-B2 — Deep-link state machine (`deepLinkReducer`, `useTaskDeepLink`)** · deps: PV-B1 · `t/mike/plan-deep-link-machine`
 - [ ] **PV-B3 — Split the plan view (`useTasksPlanController`, `TasksPlanLayout`: rail, body, panels, DnD host; no file over ~600 lines)** · deps: PV-B2
 
 ## Running sessions & parallelism
