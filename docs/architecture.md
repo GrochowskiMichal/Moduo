@@ -28,6 +28,7 @@ Paths in docs written before 2026-10-17 are pre-move: `src/` is now `apps/app/sr
 - `apps/app/src/components/ui`: reusable design-system primitives with no domain knowledge.
 - `apps/app/src/components/app`: reusable app shell/chrome components.
 - `apps/app/src/lib`: cross-feature runtime adapters and platform services.
+- **The runtime (2026-10-20), one file per module.** The port: `lib/runtime.types.ts` holds `ModuoRuntime` and the shared types, and each module's port lives in `lib/runtime.types.<module>.ts` (re-exported, so callers import from `runtime.types` only). The web implementation: `lib/runtime.web.ts` is only the composition root; `lib/runtime.web.client.ts` is the Supabase client (plus the boot read cache and the auth listener; light, so code that only needs the client imports this, never `runtime.web`); `lib/runtime.web.shared.ts` holds helpers more than one module uses; each module is `lib/runtime.web.<module>.ts`, typed by its port. **Adding a runtime method:** add it to `runtime.types.<module>.ts` and implement it in `runtime.web.<module>.ts` (and in `runtime.tauri.ts` only if desktop doesn't delegate that module). A helper used by one module stays in that module's file; move it to `shared` when a second module needs it. Larger Tasks areas have their own factories (`runtime.web.structure.ts`, `.templates`, `.views`, `.agents`, `.previews`).
 - `apps/app/src/styles`: global tokens and stylesheet entry points.
 
 Shared data pieces (added 2026-10-17):
