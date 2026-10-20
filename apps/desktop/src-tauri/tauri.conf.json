@@ -18,7 +18,9 @@
         "height": 840,
         "resizable": true,
         "maximizable": true,
-        "backgroundThrottling": "disabled"
+        "backgroundThrottling": "disabled",
+        "visible": false,
+        "backgroundColor": "#000000"
       }
     ],
     "security": {

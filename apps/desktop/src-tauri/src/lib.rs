@@ -132,6 +132,12 @@ fn perform_one_time_auth_v3_reset(
 /// Routing ⌘Q through a custom item lets `on_menu_event` honour the toggle. DF-19f-quit.
 const QUIT_MENU_ID: &str = "moduo-quit";
 
+/// The main window is created hidden (`visible: false`) and the webview shows it after
+/// React's first commit (`apps/app/src/lib/show-window.ts`), so launch never flashes a
+/// blank frame. If the webview never gets there (a crashed bundle, a stale build without
+/// the hook), show it anyway after this delay.
+const WINDOW_SHOW_FALLBACK: std::time::Duration = std::time::Duration::from_secs(2);
+
 /// Build the application menu. On macOS this mirrors `tauri::menu::Menu::default` (v2.11)
 /// EXACTLY — same App/File/Edit/View/Window/Help structure so Copy/Paste/Undo/Fullscreen/
 /// Minimize/etc. and their shortcuts keep working — EXCEPT the App menu's Quit is a custom
@@ -442,6 +448,15 @@ pub fn run() {
                 Err(err) => eprintln!("[tray] not available: {err}"),
             }
             commands::email::bootstrap_idle_workers(app.handle());
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(WINDOW_SHOW_FALLBACK).await;
+                if let Some(window) = handle.get_webview_window("main") {
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
