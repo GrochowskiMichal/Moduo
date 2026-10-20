@@ -37,6 +37,7 @@ snapshot() {
   supabase db dump --linked --schema public,private,stripe -f "$SNAP/public.sql"
   supabase db dump --linked --schema storage -f "$SNAP/storage.sql"
   supabase db dump --linked --schema auth -f "$SNAP/auth.sql"
+  supabase db dump --linked --schema realtime -f "$SNAP/realtime.sql"
   date -u +%Y%m%d%H%M%S > "$SNAP/snapshot-at"
   echo "✓ Snapshot taken at $(cat "$SNAP/snapshot-at") UTC"
 }
@@ -49,11 +50,24 @@ create extension if not exists pg_net;
 create extension if not exists pg_cron;
 create extension if not exists pgcrypto with schema extensions;
 SQL
+  # The dump writes every grant relative to Postgres's built-in default (owner
+  # and PUBLIC), but Supabase's default privileges here would add anon,
+  # authenticated and service_role to every object it creates, so ~570
+  # functions prod keeps from anon became callable by it (chat_privacy.test.sql
+  # "never anon"). Lift those defaults while the dump loads; its explicit
+  # grants then match prod, and its own ALTER DEFAULT PRIVILEGES lines at the
+  # end put the defaults back for the migrations that follow.
+  "${PSQL[@]}" <<'SQL'
+alter default privileges for role postgres in schema public revoke all on functions from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;
+alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated, service_role;
+SQL
   "${PSQL[@]}" -f "$SNAP/public.sql"
   # Storage tables/functions already exist locally; take only prod's policies.
   awk '/^CREATE POLICY/{p=1} p{print} p&&/;[[:space:]]*$/{p=0}' "$SNAP/storage.sql" | "${PSQL[@]}"
   # Same for auth: only prod's triggers on auth.* (signup → profile, …).
   grep -E '^CREATE (OR REPLACE )?TRIGGER' "$SNAP/auth.sql" | "${PSQL[@]}"
+  realtime_policies
   # Repo migrations newer than the snapshot = work not on prod yet.
   local at; at="$(cat "$SNAP/snapshot-at" 2>/dev/null || echo 0)"
   for f in supabase/migrations/*.sql; do
@@ -63,6 +77,22 @@ SQL
   "${PSQL[@]}" -f supabase/seed.sql
   "${PSQL[@]}" -c "create table if not exists public._local_bootstrapped(at timestamptz default now()); insert into public._local_bootstrapped default values;"
   echo "✓ Local DB ready. Sign in as dev@moduo.local / localdev (Mailpit: http://127.0.0.1:54324)."
+}
+
+# Prod's policies on realtime.messages (who may read and write chat and notes
+# channels): the chat ones come from migrations older than any snapshot, so a
+# snapshot without them leaves Realtime closed and chat_privacy.test.sql
+# failing. A snapshot from before realtime.sql existed fetches just that file.
+# Each policy is dropped first: a migration newer than the snapshot may
+# create one the dump already has.
+realtime_policies() {
+  if [[ ! -f "$SNAP/realtime.sql" ]]; then
+    supabase link --project-ref "$PROD_REF" >/dev/null
+    supabase db dump --linked --schema realtime -f "$SNAP/realtime.sql"
+  fi
+  awk '/^CREATE POLICY/{p=1} p{print} p&&/;[[:space:]]*$/{p=0}' "$SNAP/realtime.sql" \
+    | sed -E 's/^CREATE POLICY ("[^"]+") ON ([^ ]+)/DROP POLICY IF EXISTS \1 ON \2; CREATE POLICY \1 ON \2/' \
+    | "${PSQL[@]}"
 }
 
 bootstrapped() { "${PSQL[@]}" -tAc "select to_regclass('public._local_bootstrapped') is not null" 2>/dev/null | grep -q t; }
@@ -87,7 +117,8 @@ MSG
 case "${1:-up}" in
   up)
     supabase start
-    bootstrapped || bootstrap
+    # An existing stack gets prod's realtime policies too (idempotent).
+    if bootstrapped; then realtime_policies; else bootstrap; fi
     bun scripts/local/env.ts local
     ;;
   reset)
