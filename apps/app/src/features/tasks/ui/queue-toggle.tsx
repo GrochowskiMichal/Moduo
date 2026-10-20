@@ -4,23 +4,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/
 import { cn } from "../../../lib/utils";
 import { onThisLabel, useTaskClaim } from "../../focus/claims";
 import { type Assignee, useAssignees } from "../assignees";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
 import { AssigneeAvatar } from "./assignee-avatar";
-
-/**
- * Who else has a task in their Focus, as names and the first of them (claims,
- * TV-D4). Empty when nobody else does.
- */
-export function useQueueClaim(
-  taskId: string,
-  api: Pick<TasksModuleApi, "queueClaims">,
-): { names: string[]; first: Assignee | null } {
-  return useClaimNames(api.queueClaims.get(taskId) ?? NO_CLAIMS);
-}
-
-const NO_CLAIMS: readonly string[] = [];
 
 type ClaimNames = { names: string[]; first: Assignee | null };
 

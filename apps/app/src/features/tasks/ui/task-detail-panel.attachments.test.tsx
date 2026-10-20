@@ -4,7 +4,7 @@
 // state's caption and action (AT2-4), and view-only.
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 type Snapshot = { items: unknown[]; almostFull: Record<string, unknown> };
 const fakeQueue = {
@@ -60,9 +60,10 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import type { AttachmentMark } from "../../../lib/sync/types";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskDetailPanel } from "./task-detail-panel";
 
 beforeAll(() => {
@@ -110,38 +111,23 @@ const task = (): Task => ({
   description: "<p>Repro steps</p>",
 });
 
-const api = (t: Task): TasksModuleApi =>
-  ({
-    canEdit: true,
-    tasks: [t],
-    tags: [],
-    tagsByTask: new Map(),
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    statuses: [],
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    setTaskStatus: rs.fn(),
-    blockersByTask: new Map(),
-    dependentsByTask: new Map(),
-    taskRelations: [],
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map(),
-    activityStamp: 0,
-    currentUserId: "u1",
-    loadActivity: async () => [],
-    patchTask: rs.fn(),
-    toggleDone: rs.fn(),
-    toggleQueue: rs.fn(),
-    // TV-U13: the task's rows and structure from the store.
-    sessions: [],
-    reminders: [],
-    waiting: [],
-    teams: [],
-    areas: [],
-    sections: [],
-    commentStamps: new Map(),
-  }) as unknown as TasksModuleApi;
+/** The commands the panel may call here, as spies. */
+const commands = () => ({
+  loadActivity: rs.fn(async () => []),
+  patchTask: rs.fn(),
+  toggleDone: rs.fn(),
+  toggleQueue: rs.fn(),
+  setTaskStatus: rs.fn(),
+});
+
+/** The store's mark of a finished file on the task (AT-3: its stamp moves with them). */
+const mark = (id: string, updatedAt: string): AttachmentMark => ({
+  id,
+  taskId: "t1",
+  status: "ready",
+  updatedAt,
+  deletedAt: null,
+});
 
 function rec(id: string, over: Partial<AttachmentRecord> = {}): AttachmentRecord {
   return {
@@ -196,21 +182,24 @@ function fakeRuntime(records: AttachmentRecord[]) {
 
 function renderPanel(runtime: ModuoRuntime, canEdit = true, layout: "panel" | "page" = "panel") {
   const t = task();
-  return render(
+  return renderWithTasks(
     <TooltipProvider>
       <TaskDetailPanel
         task={t}
-        buckets={[]}
-        inbox={INBOX}
         canEdit={canEdit}
         onRequestCapture={() => {}}
         onSelectTask={() => {}}
-        api={api(t)}
         runtime={runtime}
         workspaceId="w"
         layout={layout}
       />
     </TooltipProvider>,
+    {
+      seed: { buckets: [INBOX], tasks: [t] },
+      commands: commands(),
+      workspaceId: "w",
+      runtime: runtime as never,
+    },
   );
 }
 
@@ -241,7 +230,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
         sizeBytes: 2 * 1048576,
       }),
     ]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     const strip = await screen.findByRole("list", { name: "Attachments" });
     const image = within(strip).getByRole("button", { name: "Open a.png" });
     await waitFor(() =>
@@ -289,7 +278,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
         objectPath: "w/heic/original.heic",
       }),
     ]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     const strip = await screen.findByRole("list", { name: "Attachments" });
     const small = within(strip).getByRole("button", { name: "Open small.png" });
     await waitFor(() =>
@@ -315,7 +304,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("uploads files dropped anywhere on the task, with a drop highlight while dragging", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    const { container } = renderPanel(runtime);
+    const { container } = await renderPanel(runtime);
     await filesRead(attachments);
     const title = screen.getByRole("textbox", { name: "Task title" });
     const file = png();
@@ -334,7 +323,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("attaches a pasted screenshot, but leaves a text paste alone", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     await filesRead(attachments);
     const title = screen.getByRole("textbox", { name: "Task title" });
     fireEvent.paste(title, { clipboardData: fileTransfer([png()], ["text/plain", "Files"]) });
@@ -345,7 +334,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("takes a paste after a click on blank panel space (the panel holds focus)", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     await filesRead(attachments);
     const panel = screen.getByRole("region", { name: "Task details" });
     // Focusable by a click, outside the Tab order.
@@ -358,7 +347,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("picks files through the + tile", async () => {
     const { runtime } = fakeRuntime([rec("a")]);
-    const { container } = renderPanel(runtime);
+    const { container } = await renderPanel(runtime);
     await screen.findByRole("button", { name: "Add files" });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     const file = png("picked.png");
@@ -369,7 +358,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
   for (const layout of ["panel", "page"] as const) {
     it(`with no files, ⋯ → Attach files… opens the picker (MOD-115, ${layout})`, async () => {
       const { runtime, attachments } = fakeRuntime([]);
-      const { container } = renderPanel(runtime, true, layout);
+      const { container } = await renderPanel(runtime, true, layout);
       await filesRead(attachments);
       expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
       const input = container.querySelector('input[type="file"]') as HTMLInputElement;
@@ -388,7 +377,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("view-only: no Attach files… in ⋯", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime, false);
+    await renderPanel(runtime, false);
     await filesRead(attachments);
     fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
       button: 0,
@@ -400,7 +389,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("with no files, no strip and no + until files are dragged over (MOD-115)", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     await filesRead(attachments);
     expect(screen.queryByRole("list", { name: "Attachments" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add files" })).toBeNull();
@@ -413,7 +402,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("view-only: files open, but there's no + and a drop attaches nothing", async () => {
     const { runtime } = fakeRuntime([rec("a")]);
-    renderPanel(runtime, false);
+    await renderPanel(runtime, false);
     const strip = await screen.findByRole("list", { name: "Attachments" });
     expect(within(strip).getByRole("button", { name: "Open a.png" })).toBeTruthy();
     expect(within(strip).queryByRole("button", { name: "Add files" })).toBeNull();
@@ -425,7 +414,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("opens the viewer: ←/→ between files, Download, Copy, Delete with Undo", async () => {
     const { runtime, attachments } = fakeRuntime([rec("a"), rec("bb"), rec("ccc")]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     fireEvent.click(await screen.findByRole("button", { name: "Open bb.png" }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText("bb.png")).toBeTruthy();
@@ -457,7 +446,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("shows an upload's progress in place, and a problem as a caption with its action", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     await filesRead(attachments);
     const base = {
       userId: "u1",
@@ -532,7 +521,7 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
 
   it("a small image uploading shows itself, though it has no preview (MOD-132)", async () => {
     const { runtime, attachments } = fakeRuntime([]);
-    renderPanel(runtime);
+    await renderPanel(runtime);
     await filesRead(attachments);
     act(() =>
       fakeQueue.set({
@@ -577,31 +566,33 @@ describe("TaskDetailPanel — attachments (AT-2)", () => {
     const records = [rec("a")];
     const { runtime, attachments } = fakeRuntime(records);
     const t = task();
-    const panel = (stamp: string) => (
+    const { store } = await renderWithTasks(
       <TooltipProvider>
         <TaskDetailPanel
           task={t}
-          buckets={[]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={{ ...api(t), attachmentStamps: new Map([["t1", stamp]]) } as TasksModuleApi}
           runtime={runtime}
           workspaceId="w"
         />
-      </TooltipProvider>
+      </TooltipProvider>,
+      {
+        seed: { buckets: [INBOX], tasks: [t], attachments: [mark("a", "2026-10-09T10:00:00Z")] },
+        commands: commands(),
+        workspaceId: "w",
+        runtime: runtime as never,
+      },
     );
-    const { rerender } = render(panel("s1"));
     await screen.findByRole("button", { name: "Open a.png" });
     expect(attachments.listForEntity).toHaveBeenCalledTimes(1);
     // A teammate added a file: Realtime moved the stamp, the strip reads again.
     records.push(rec("bb"));
-    rerender(panel("s2"));
+    act(() => store.answer({ attachments: [mark("bb", "2026-10-09T11:00:00Z")] }));
     await screen.findByRole("button", { name: "Open bb.png" });
     expect(attachments.listForEntity).toHaveBeenCalledTimes(2);
     // The same stamp again reads nothing more.
-    rerender(panel("s2"));
+    act(() => store.answer({ attachments: [mark("bb", "2026-10-09T11:00:00Z")] }));
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
     });

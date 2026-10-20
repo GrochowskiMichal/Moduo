@@ -25,7 +25,6 @@ export function PlanBody({ c }: { c: PlanController }) {
     runtime,
     canEdit,
     buckets,
-    inbox,
     setFullPageId,
     setProjectDialog,
     setStatusesEditor,
@@ -220,7 +219,6 @@ export function PlanBody({ c }: { c: PlanController }) {
         key={fullPageTask.id}
         task={fullPageTask}
         buckets={buckets}
-        inbox={inbox}
         // A task of an archived project stays read-only here too (TV-U6).
         canEdit={canEdit && !api.archivedTasks.some((t) => t.id === fullPageTask.id)}
         onRequestCapture={openCapture}
@@ -228,7 +226,6 @@ export function PlanBody({ c }: { c: PlanController }) {
         onOpenTask={openTaskInPanel}
         onCloseFullPage={() => setFullPageId(null)}
         layout="page"
-        api={viewApi}
         runtime={runtime}
         workspaceId={workspaceId}
         onOpenEntity={handleOpenEntity}

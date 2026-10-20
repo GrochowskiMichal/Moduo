@@ -31,7 +31,7 @@ import {
   useTasksSelector,
   useTasksStatus,
 } from "../../tasks/tasks-context";
-import { ContextTaskDetailPanel } from "../../tasks/ui/context-task-detail-panel";
+import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { accountSyncHealth, resolveAccountHues } from "../accounts";
 import { type EmailSection, flattenSections, groupThreadsBySection, senderKey } from "../classify";
 import { blankDraft, buildComposeDraft, type ComposeMode } from "../compose";
@@ -1108,7 +1108,7 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
       ),
       task: () =>
         detailTaskId ? (
-          <ContextTaskDetailPanel
+          <TaskDetailPanel
             task={detailTask}
             onRequestCapture={() => {}}
             onSelectTask={setDetailTaskId}

@@ -13,8 +13,8 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { formatDay } from "../../../lib/time-format";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task, TaskTimeEntry } from "../model";
+import { useTaskCommands } from "../tasks-context";
 import {
   dayToDate,
   entryDay,
@@ -24,11 +24,6 @@ import {
   parseTimeEntry,
 } from "../time-entries";
 import { formatTracked } from "../time-format";
-
-type TimeApi = Pick<
-  TasksModuleApi,
-  "logTime" | "editTimeEntry" | "removeTimeEntry" | "listMyTimeEntries"
->;
 
 /** "2h · Yesterday · call with Anna" — what the quick line will log. */
 function previewOf(text: string, now: Date): string | null {
@@ -40,7 +35,8 @@ function previewOf(text: string, now: Date): string | null {
     .join(" · ");
 }
 
-export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
+export function TaskTimeEntries({ task }: { task: Task }) {
+  const commands = useTaskCommands();
   const [entries, setEntries] = useState<TaskTimeEntry[] | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -50,8 +46,8 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
   const now = new Date();
 
   const reload = useCallback(() => {
-    api.listMyTimeEntries(task.id).then(setEntries, () => setEntries([]));
-  }, [api, task.id]);
+    commands.listMyTimeEntries(task.id).then(setEntries, () => setEntries([]));
+  }, [commands, task.id]);
   // A saved total (Focus, a teammate) may bring a new entry of yours.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the total is the signal to read again
   useEffect(() => {
@@ -63,7 +59,7 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
     const parsed = parseTimeEntry(draft);
     if (!parsed || busy) return;
     setBusy(true);
-    void api
+    void commands
       .logTime(task.id, { seconds: parsed.minutes * 60, on: parsed.day, note: parsed.note })
       .then((ok) => {
         if (ok) {
@@ -96,7 +92,7 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
       return;
     }
     setBusy(true);
-    void api
+    void commands
       .editTimeEntry(
         task.id,
         entry.id,
@@ -113,7 +109,7 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
   };
   const remove = (entry: TaskTimeEntry) => {
     setBusy(true);
-    void api
+    void commands
       .removeTimeEntry(task.id, entry.id, entry.seconds)
       .then((ok) => {
         if (!ok) return;
@@ -126,7 +122,7 @@ export function TaskTimeEntries({ task, api }: { task: Task; api: TimeApi }) {
                 action: {
                   label: "Undo",
                   onClick: () =>
-                    void api
+                    void commands
                       .logTime(task.id, {
                         seconds: entry.seconds,
                         on: entryDay(entry),
