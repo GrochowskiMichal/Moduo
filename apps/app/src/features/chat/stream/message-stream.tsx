@@ -290,9 +290,11 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
       useFlushSync: true,
     });
     // Compensate every size change wholly above the viewport, whatever the
-    // scroll direction (TanStack skips them while scrolling backward).
+    // scroll direction (TanStack skips them while scrolling backward). Since
+    // virtual-core 3.19 a correction is folded into scrollOffset at once
+    // (scrollAdjustments is deprecated and always 0), so scrollOffset alone is the line.
     virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, v) =>
-      item.start + item.size <= (v.scrollOffset ?? 0) + v.scrollAdjustments;
+      item.start + item.size <= (v.scrollOffset ?? 0);
 
     const indexOfKey = useCallback((key: string) => {
       const list = rowsRef.current;
@@ -371,7 +373,6 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
             const target = Math.max(0, item.start + anchorInner - anchorTop);
             el.scrollTop = target;
             virtualizer.scrollOffset = target;
-            virtualizer.scrollAdjustments = 0;
           }
         }
         flushSync(rerender);

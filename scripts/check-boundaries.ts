@@ -11,6 +11,10 @@
  *            port and open to all. Everyone else calls getRuntime().
  *   layers   src/lib/** never imports src/features/**: lib is the layer
  *            features build on, not the other way round.
+ *   tanstack TanStack DB (`@tanstack/db`, `@tanstack/react-db`) is reached
+ *            only through src/lib/sync/tanstack/ (specs/tanstack-spine.md);
+ *            TanStack Query and Store arrive as DB's dependencies and are
+ *            never imported by app code.
  *
  * Tests and stories are exempt (they mock and fixture across layers). The
  * files that broke a rule when it was added are grandfathered in
@@ -24,10 +28,14 @@ import path from "node:path";
 
 import { ALLOW_LAYERS, ALLOW_RUNTIME } from "./check-boundaries.allow";
 
-export type Violation = { rule: "runtime" | "layers"; file: string; target: string };
+export type Violation = { rule: "runtime" | "layers" | "tanstack"; file: string; target: string };
 
 const RUNTIME_ONLY = new Set(["src/lib/runtime.web", "src/lib/runtime.db"]);
 const RUNTIME_PORT = new Set(["src/lib/runtime", "src/lib/runtime.types"]);
+
+const TANSTACK_DB = /^@tanstack\/(?:react-)?db(?:\/|$)/;
+const TANSTACK_BANNED = /^@tanstack\/(?:react-query|query-core|store|react-store)(?:\/|$)/;
+const TANSTACK_HOME = "src/lib/sync/tanstack/";
 
 const IMPORT_RE = [
   // import x from "a" · import type { x } from "a" · export { x } from "a"
@@ -83,26 +91,33 @@ export function checkFile(file: string, content: string): Violation[] {
     if (file.startsWith("src/lib/") && target?.startsWith("src/features/")) {
       out.push({ rule: "layers", file, target });
     }
+    if (TANSTACK_BANNED.test(spec) || (TANSTACK_DB.test(spec) && !file.startsWith(TANSTACK_HOME))) {
+      out.push({ rule: "tanstack", file, target: spec });
+    }
   }
   return out;
 }
 
-/** `runtime` is grandfathered per file; `layers` per file → target pair. */
+/** `runtime` is grandfathered per file; `layers` per file → target pair; `tanstack` never. */
 export const keyOf = (v: Violation) => (v.rule === "runtime" ? v.file : `${v.file} -> ${v.target}`);
 
 export function compare(
   violations: Violation[],
-  allow: { runtime: readonly string[]; layers: readonly string[] },
+  allow: { runtime: readonly string[]; layers: readonly string[]; tanstack?: readonly string[] },
 ): { fresh: Violation[]; stale: Array<{ rule: Violation["rule"]; entry: string }> } {
-  const seen = { runtime: new Set<string>(), layers: new Set<string>() };
+  const seen = {
+    runtime: new Set<string>(),
+    layers: new Set<string>(),
+    tanstack: new Set<string>(),
+  };
   const fresh: Violation[] = [];
   for (const v of violations) {
     const key = keyOf(v);
     seen[v.rule].add(key);
-    if (!allow[v.rule].includes(key)) fresh.push(v);
+    if (!(allow[v.rule] ?? []).includes(key)) fresh.push(v);
   }
-  const stale = (["runtime", "layers"] as const).flatMap((rule) =>
-    allow[rule].filter((entry) => !seen[rule].has(entry)).map((entry) => ({ rule, entry })),
+  const stale = (["runtime", "layers", "tanstack"] as const).flatMap((rule) =>
+    (allow[rule] ?? []).filter((entry) => !seen[rule].has(entry)).map((entry) => ({ rule, entry })),
   );
   return { fresh, stale };
 }
@@ -112,6 +127,8 @@ const FIX: Record<Violation["rule"], string> = {
     "Only src/lib/runtime*.ts may talk to Supabase. Call getRuntime() (src/lib/runtime.ts) and, if the method is missing, add it to the port (lib/runtime.types.ts) and implement it in runtime.web.ts.",
   layers:
     "src/lib must not import src/features. Move the shared code down into src/lib (as timestampMicros moved to lib/sync/stamps.ts), or have the feature pass it in.",
+  tanstack:
+    "Import TanStack DB only inside src/lib/sync/tanstack/ and expose what features need from there; TanStack Query and Store are not app APIs (specs/tanstack-spine.md).",
 };
 
 async function walk(dir: string): Promise<string[]> {
@@ -136,7 +153,7 @@ async function main() {
     console.log("lint:boundaries — imports stay inside their layers.");
     return;
   }
-  for (const rule of ["runtime", "layers"] as const) {
+  for (const rule of ["runtime", "layers", "tanstack"] as const) {
     const hits = fresh.filter((v) => v.rule === rule);
     if (!hits.length) continue;
     console.error(`\nlint:boundaries — ${rule}: ${hits.length} new import(s) across a boundary:`);
