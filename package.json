@@ -73,8 +73,5 @@
     "stylelint-declaration-strict-value": "^1.12.1",
     "turbo": "2.11.7",
     "typescript": "7.0.2"
-  },
-  "resolutions": {
-    "lightningcss": "1.30.1"
   }
 }
