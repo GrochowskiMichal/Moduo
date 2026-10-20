@@ -20,8 +20,8 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { formatDay, formatDuration, formatTime } from "../../../lib/time-format";
 import { formatDue, formatScheduled } from "../../tasks/helpers";
-import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import type { Task } from "../../tasks/model";
+import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks/tasks-context";
 import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
 import { groupPanelTasks } from "../panel";
 import type { StripItem } from "../strip";
@@ -34,23 +34,20 @@ export type ReviewController = {
 };
 
 type Props = {
-  api: TasksModuleApi;
   onOpenTask: (taskId: string) => void;
   onRequestCapture: () => void;
   /** The strip's Review sub-state (AC9). Null when not reviewing. */
   review?: ReviewController | null;
 };
 
-export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }: Props) {
+export function CalendarTasksPanel({ onOpenTask, onRequestCapture, review }: Props) {
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const queuedTasks = useTasksSelector((d) => d.queuedTasks);
+  const { canEdit } = useTasksStatus();
   const [query, setQuery] = useState("");
   const groups = useMemo(
-    () =>
-      groupPanelTasks({
-        tasks: api.tasks,
-        queuedTasks: api.queuedTasks,
-        query,
-      }),
-    [api.tasks, api.queuedTasks, query],
+    () => groupPanelTasks({ tasks, queuedTasks, query }),
+    [tasks, queuedTasks, query],
   );
 
   const total = groups.queue.length + groups.dueSoon.length + groups.backlog.length;
@@ -58,7 +55,7 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
   return (
     <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
       {review && review.items.length > 0 ? (
-        <ReviewSection review={review} canEdit={api.canEdit} />
+        <ReviewSection review={review} canEdit={canEdit} />
       ) : null}
 
       <div className="relative shrink-0">
@@ -92,9 +89,9 @@ export function CalendarTasksPanel({ api, onOpenTask, onRequestCapture, review }
         </span>
       ) : null}
 
-      <TaskGroup title="Queue" tasks={groups.queue} api={api} onOpenTask={onOpenTask} />
-      <TaskGroup title="Due soon" tasks={groups.dueSoon} api={api} onOpenTask={onOpenTask} />
-      <TaskGroup title="Backlog" tasks={groups.backlog} api={api} onOpenTask={onOpenTask} />
+      <TaskGroup title="Queue" tasks={groups.queue} onOpenTask={onOpenTask} />
+      <TaskGroup title="Due soon" tasks={groups.dueSoon} onOpenTask={onOpenTask} />
+      <TaskGroup title="Backlog" tasks={groups.backlog} onOpenTask={onOpenTask} />
     </div>
   );
 }
@@ -203,12 +200,10 @@ function ReviewRow({
 function TaskGroup({
   title,
   tasks,
-  api,
   onOpenTask,
 }: {
   title: string;
   tasks: Task[];
-  api: TasksModuleApi;
   onOpenTask: (taskId: string) => void;
 }) {
   if (tasks.length === 0) return null;
@@ -218,25 +213,19 @@ function TaskGroup({
         {title} ({tasks.length})
       </Eyebrow>
       {tasks.map((task) => (
-        <PanelTaskRow key={task.id} task={task} api={api} onOpen={() => onOpenTask(task.id)} />
+        <PanelTaskRow key={task.id} task={task} onOpen={() => onOpenTask(task.id)} />
       ))}
     </div>
   );
 }
 
-function PanelTaskRow({
-  task,
-  api,
-  onOpen,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  onOpen: () => void;
-}) {
+function PanelTaskRow({ task, onOpen }: { task: Task; onOpen: () => void }) {
+  const { toggleDone } = useTaskCommands();
+  const { canEdit } = useTasksStatus();
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `cal-panel-task:${task.id}`,
     data: taskDrag(task.id, "list"),
-    disabled: !api.canEdit,
+    disabled: !canEdit,
   });
   const scheduled = formatScheduled(task.scheduledAt);
   const due = formatDue(task.dueDate);
@@ -264,8 +253,8 @@ function PanelTaskRow({
     >
       <CompleteToggle
         done={task.status === "done"}
-        disabled={!api.canEdit}
-        onToggle={() => api.toggleDone(task)}
+        disabled={!canEdit}
+        onToggle={() => toggleDone(task)}
         aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`}
       />
       <span className="min-w-0 flex-1 break-words py-0.5 text-sm text-foreground">

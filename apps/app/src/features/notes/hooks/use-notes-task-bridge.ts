@@ -1,6 +1,7 @@
 /**
  * The page half of task lines (Wave-3 NO-5, AC3/AC4) — implements the
- * editor bridge's `tasks` surface on top of the Tasks module hook + spine.
+ * editor bridge's `tasks` surface on top of the Tasks context (A4) + spine.
+ * Needs a `<TasksProvider>` above it.
  * Owns every server write (mint, link, detach, revert) and the ONE-toast
  * contract; the editor plugin only ever hands over snapshots and callbacks.
  */
@@ -11,8 +12,8 @@ import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import type { TasksModuleApi } from "../../tasks/hooks/use-tasks-module";
 import type { Task } from "../../tasks/model";
+import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks/tasks-context";
 import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
 import { buildDetachPlan, buildMintRevertPlan, type DetachPlan } from "../tasks/detach";
 import {
@@ -32,7 +33,6 @@ type Params = {
   /** The open note (task lines only exist inside one). */
   noteId: string | null;
   noteLabel: string;
-  tasksApi: TasksModuleApi;
   onOpenTaskDetail: (taskId: string) => void;
 };
 
@@ -41,9 +41,16 @@ export function useNotesTaskBridge({
   workspaceId,
   noteId,
   noteLabel,
-  tasksApi,
   onOpenTaskDetail,
 }: Params): NotesTaskBridge {
+  const commands = useTaskCommands();
+  const { canEdit } = useTasksStatus();
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const inboxBucket = useTasksSelector((d) => d.inbox);
+  const attachmentCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
+  // What the stable callbacks read when they run (kept current below).
+  const tasksApi = { canEdit, inbox: inboxBucket, tasks, reload: commands.load };
+
   // Tasks minted recently (⌘Z-after-mint reverts these, AC4) and a live
   // overlay so lines render the row before the bundle catches up. The mint
   // registry is TIME-BOUNDED: "⌘Z right after minting" is the immediate-
@@ -60,11 +67,11 @@ export function useNotesTaskBridge({
 
   const tasksById = useMemo(() => {
     const map = new Map<string, Task>();
-    for (const t of tasksApi.tasks) {
+    for (const t of tasks) {
       if (t.deletedAt === null) map.set(t.id, t);
     }
     return map;
-  }, [tasksApi.tasks]);
+  }, [tasks]);
 
   const stable = useRef({ runtime, workspaceId, noteId, noteLabel, tasksApi, tasksById });
   useEffect(() => {
@@ -334,22 +341,22 @@ export function useNotesTaskBridge({
   // (caught in NO-5 live-verify: a checked task stayed visually unchecked).
   return useMemo<NotesTaskBridge>(
     () => ({
-      canEditTasks: tasksApi.canEdit && Boolean(noteId),
+      canEditTasks: canEdit && Boolean(noteId),
       getTask,
       listLinkableTasks: () => stable.current.tasksApi.tasks,
       toggleTask: (taskId) => {
         const task = getTask(taskId);
-        if (task) stable.current.tasksApi.toggleDone(task);
+        if (task) commands.toggleDone(task);
       },
       renameTask: (taskId, lineText) => {
         const task = getTask(taskId);
         if (!task) return;
         const patch = applyTaskRename(task, lineText);
-        if (patch) stable.current.tasksApi.patchTask(taskId, patch);
+        if (patch) commands.patchTask(taskId, patch);
       },
       scheduleTaskAt: (taskId, iso) => {
-        if (iso) stable.current.tasksApi.scheduleTaskAt(taskId, iso);
-        else stable.current.tasksApi.unscheduleTask(taskId);
+        if (iso) commands.scheduleTaskAt(taskId, iso);
+        else commands.unscheduleTask(taskId);
       },
       mintTask,
       linkExistingTask,
@@ -358,12 +365,13 @@ export function useNotesTaskBridge({
       revertMintIfJustMinted,
       restoreDetachedTasks,
       openTaskDetail: onOpenTaskDetail,
-      fileCount: (taskId) => tasksApi.attachmentCounts?.get(taskId) ?? 0,
+      fileCount: (taskId) => attachmentCounts?.get(taskId) ?? 0,
     }),
     [
-      tasksApi.canEdit,
+      canEdit,
+      commands,
       // A file added or deleted anywhere redraws the lines' 📎 marks (AT-3).
-      tasksApi.attachmentCounts,
+      attachmentCounts,
       noteId,
       tasksById,
       getTask,
