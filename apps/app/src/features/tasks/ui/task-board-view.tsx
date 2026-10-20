@@ -59,6 +59,7 @@ import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
+import { byIdOf } from "../selectors";
 import type { StatusKey } from "../statuses";
 import { useToday } from "../use-today";
 import { boardKeyActionFor, moveInGrid } from "./board-keys";
@@ -334,7 +335,7 @@ export function TaskBoardView({
   // In My tasks every card is mine, so cards leave the avatar out (D4-4).
   const showAssignee = selection !== "mine";
 
-  const taskById = useMemo(() => new Map(api.tasks.map((t) => [t.id, t])), [api.tasks]);
+  const taskById = byIdOf(api.tasks);
   const folds = useBoardFolds(foldKey);
   const [showEmpty, setShowEmpty] = useState<{ scope: string; on: boolean }>({
     scope: selection,
