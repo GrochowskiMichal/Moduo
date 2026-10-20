@@ -38,8 +38,8 @@
 
 import { currentPreferences } from "../../../lib/preferences";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { micros as stampMicros } from "../../../lib/sync/kernel/stamps";
 import { browserOffline } from "../../../lib/sync/network";
-import { timestampMicros } from "../../../lib/sync/stamps";
 import type { ChatFileGate } from "../files/gate";
 import type {
   ChatChannel,
@@ -231,7 +231,7 @@ const ZERO = (channelId: string): ChatUnread => ({
   catchup: 0,
 });
 
-const micros = (at: string | null | undefined) => timestampMicros(at) ?? 0;
+const micros = (at: string | null | undefined) => stampMicros(at, 0);
 
 /**
  * A line that takes ids away from the conversation it's in: a live moved_out
