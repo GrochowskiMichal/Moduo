@@ -537,17 +537,19 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 ## TanStack spine — TanStack DB under the stores, Hotkeys · [`specs/tanstack-spine.md`](./tanstack-spine.md)
 
 > Builds on the Sync kernel: the kernel becomes the sync function of TanStack DB collections; the stores' overlay, snapshot and IndexedDB record plumbing is what gets replaced. TS-0 done: in-memory collections over the existing IndexedDB copy; SQLite is optional TS-8. Added 2026-10-20 from the stack audit.
+> **Re-planned 2026-10-20 after TS-3b:** TS-3c, TS-4 and TS-5 are paused (whole-workspace live queries cost 40–65 ms at 10k on @tanstack/db 0.15.1, +59 KB first load; the time left was rendering). TanStack DB stays the storage layer; live queries only for narrow indexed per-entity reads; re-test on the first release after 0.15.1. TS-R1 took the render hotspots. See the spec's §Re-plan.
 
 - [x] **TS-0 — Spike: Tasks on TanStack DB** · 2026-10-20 · #529 · switch 200 → 32 ms, search 67 → 37 ms, rows redrawn per edit 130 → 2; OPFS SQLite warm open slower (676 vs 514 ms) → in-memory plan
 - [x] **TS-1 — Pinned TanStack DB + Pacer + Devtools (dev-only), virtual-core ≥ 3.19 with `anchorTo: 'end'` in Chat, bundle budget, boundary lint** · 2026-10-20 · [#531](https://github.com/GrochowskiMichal/Moduo/pull/531) · first-load 992.2 KB gz after #530 (budget 1012 in `apps/app/bundle-budget.json`); chat fling worst frame 83 → 33 ms
 - [x] **TS-2 — In-memory Supabase collection adapter on the kernel, seeded from the existing IDB copy** · 2026-10-20 · [#532](https://github.com/GrochowskiMichal/Moduo/pull/532) · `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection`; 22 characterization tests
 - [x] **TS-3a — Tasks collections behind the `WorkspaceStore` facade (no API change)** · 2026-10-20 · store-driven collections (`ownerDriven`), snapshot rows from them; open 64→62, switch 82→82, search 89→74 ms; first-load 1035 KB gz (budget 1045); AC1's paint-from-device e2e case moves to TS-3b
 - [x] **TS-3b — Tasks reads narrowed after measuring: cached JS for whole-workspace data (`selectors.ts` → `derived.ts`), subtasks live query built not wired (+59 KB), snapshot off the collections, Toolbar and rail redraws fixed, DashboardData split** · 2026-10-20 · dev: open 61→48, view switch 81→74, search 66→58, project switch 195→179, warm open 347→313 ms; prod build: warm open ~170→148–155 (AC1 at the line), project switch 90→82; an edit redraws 1 row; first-load 1035.9 KB gz
-- [ ] **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · deps: TS-3b · validator
-- [ ] **TS-4 — Chat on in-memory collections (paged from the per-row IDB copy, hold-failed outbox kept)** · deps: TS-3c, SK-C3
-- [ ] **TS-5 — Contacts, Calendar, Notes metadata as collections with delta** · deps: TS-2, SK-C4
+- [x] **TS-R1 — Render hotspots: first screen of List rows first, rail and right panel one frame after the landing** · 2026-10-20 · `t/mike/ts-r1-render-hotspots` · production build: warm open to first rows 150 → 83 ms, project switch 81 → 50 ms; open, view switch, search unchanged; whole page drawn ~150 → ~180 ms
+- [ ] ⏸ **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · paused 2026-10-20 (re-plan) · deps: TS-3b, a TanStack DB release after 0.15.1 that passes the re-test · validator
+- [ ] ⏸ **TS-4 — Chat on in-memory collections (paged from the per-row IDB copy, hold-failed outbox kept)** · paused 2026-10-20 (re-plan) · deps: TS-3c, SK-C3
+- [ ] ⏸ **TS-5 — Contacts, Calendar, Notes metadata as collections with delta** · paused 2026-10-20 (re-plan) · deps: TS-2, SK-C4
 - [x] **TS-6 — Hotkeys: `@tanstack/react-hotkeys` registry, scopes, conflict test, migration of `useGlobalShortcuts`** · 2026-10-20 · `lib/hotkeys/` (registry + `useAppHotkeys` + scopes), Hotkeys devtools panel
-- [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6
+- [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6 (waits with the paused blocks)
 - [ ] **TS-8 — Optional: SQLite persistence (OPFS web, plugin-sql desktop, offline-transactions) only after a second spike beats 514 ms warm open** · deps: TS-7
 
 ## Running sessions & parallelism

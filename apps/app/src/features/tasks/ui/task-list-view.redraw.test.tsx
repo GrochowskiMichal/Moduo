@@ -142,6 +142,13 @@ async function renderList(seed: Task[] = []) {
     seed: { buckets: [inbox], tasks: initial },
     workspaceId: "w",
   });
+  // A short List draws its first screen, then the rest once that frame
+  // paints (TS-R1): let it finish before counting draws.
+  if (rs.isFakeTimers()) act(() => rs.advanceTimersByTime(50));
+  else
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
   // The store's own copies (what a teammate's edit replaces one of).
   const stored = (id: string) => view.store.getSnapshot().bundle.tasks.find((t) => t.id === id);
   return {

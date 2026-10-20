@@ -1,6 +1,7 @@
 # Spec: TanStack spine — TanStack DB under the module stores, Hotkeys for the command layer
 
-> Status: **ready from TS-1; in-memory plan after TS-0** · Owner: Mike · Written 2026-10-20 from the stack audit
+> Status: **re-planned 2026-10-20 after TS-3b: TS-3c, TS-4 and TS-5 paused; TS-R1 (render hotspots) built** (see
+> §Re-plan) · Owner: Mike · Written 2026-10-20 from the stack audit
 > (`docs/local/perf-stack-audit-2026-10.md`, personal) and its round-2 addendum.
 > Relation to the Sync kernel (SK-C1…C4, `specs/BUILD_ORDER.md`): **this spec builds on the kernel, it does not
 > race it.** The kernel's stamps / delta / landing / outbox become the sync function of a TanStack DB collection;
@@ -128,12 +129,33 @@ unrelated rows.
 | TS-2 | **In-memory Supabase collection adapter on the kernel** (`lib/sync/tanstack/`) | `supabaseCollectionOptions()` with no persistence plugin: seeds from the kernel's existing IndexedDB copy, then runs the kernel's delta (keyset, lookback), buffered Realtime, newer-only landing, soft deletes, access-loss truncate, writing through `begin/write/commit/markReady`; the copy is still written by the kernel; characterization tests mirroring SK-C1's | AC1, AC10 | TS-1, SK-C1 |
 | TS-3a | **Tasks collections behind the existing `WorkspaceStore` facade** | the 16 Tasks tables as in-memory collections with phase ordering (open before closed); `getSnapshot`/`subscribe` served from live queries; `StoreSnapshot` unchanged; device copy and outbox stay where they are | AC1, AC4 | TS-2, SK-C2 |
 | TS-3b | **Tasks reads: narrow live queries where they pay, measured hotspots fixed** (narrowed 2026-10-20 after measuring: a whole-workspace live query costs 40–65 ms to build at 10k on db 0.15.1, groupBy ~35 ms, includes ~110 ms, against <1 ms for the cached derivations) | a task's subtasks as an indexed live query over a children-only collection of the store's shown rows (`lib/sync/tanstack/tasks-live.ts`, built and tested, not wired: the query engine adds 59 KB gzip to the first load); whole-workspace data (task lists, sidebar counts, row facts and comment counts) stays cached JS, `selectors.ts` → `features/tasks/derived.ts`; `DashboardDataContext` split per source; the snapshot reads kernel rows directly (collections made on demand); Toolbar stops re-reading computed style per render; sidebar project rows memoised; target: an edit redraws ≤ 2 rows | AC1, AC2, AC3, AC4 | TS-3a |
-| TS-3c | **Tasks writes as collection transactions** | op RPCs as mutation handlers patching only `changes`, the kernel's outbox kept (not `offline-transactions`); `usePacedMutations` for typed fields; per-field rollback kept for bulk and drop edits; overlay and echo-skip code removed from `store.ts`; Tier 2 validator | AC3, AC5, AC10 | TS-3b |
-| TS-4 | **Chat on in-memory collections** | messages per conversation with `loadSubset` paging from the kernel's per-row IDB copy, meta/sidebar collection, hold-failed-for-retry outbox kept, typing/presence untouched | AC6, AC4 | TS-3c, SK-C3 |
-| TS-5 | **Contacts, Calendar, Notes metadata collections** | the three whole-reload hooks become collections with delta, seeded from a kernel IDB copy; Calendar's busy overlay stays separate; Notes docs stay on Yjs | AC7 | TS-2, SK-C4 |
+| TS-R1 | **Render hotspots on the Tasks page** ✅ 2026-10-20 (added by the re-plan) | profiled a production build on the 10k fixture: the landing of the device copy was one synchronous render of the whole page (~135 ms render + ~60 ms commit), the short List drawing all 80 Inbox rows for ~22 on screen, the rail and the right panel ~15 ms each. Now a short `VirtualStack` draws the first screenful and the rest once that frame paints (and again on a new place: `paintKey`); the rail and the right panel draw the landing one frame later (`useLandingLag` + `TasksHeld`/`TasksLagged` in `tasks-context.tsx`, `lib/after-paint.ts`), then read the store live. Production, `mike` → TS-R1: warm open to first rows 150 → 83 ms, project switch 81 → 50 ms; open, view switch, search unchanged; the whole page (rail + panel) is drawn at ~180 ms instead of ~150. Not done: lazy NavRow tooltips (measured: 207 on the page, ≤ 5 ms, inside the noise); `<Activity>` for hidden views (not tried: the view switch is already ~35 ms) | AC1, AC2 | TS-3b |
+| TS-3c | ⏸ **Paused 2026-10-20 (§Re-plan).** **Tasks writes as collection transactions** | op RPCs as mutation handlers patching only `changes`, the kernel's outbox kept (not `offline-transactions`); `usePacedMutations` for typed fields; per-field rollback kept for bulk and drop edits; overlay and echo-skip code removed from `store.ts`; Tier 2 validator | AC3, AC5, AC10 | TS-3b |
+| TS-4 | ⏸ **Paused 2026-10-20 (§Re-plan).** **Chat on in-memory collections** | messages per conversation with `loadSubset` paging from the kernel's per-row IDB copy, meta/sidebar collection, hold-failed-for-retry outbox kept, typing/presence untouched | AC6, AC4 | TS-3c, SK-C3 |
+| TS-5 | ⏸ **Paused 2026-10-20 (§Re-plan).** **Contacts, Calendar, Notes metadata collections** | the three whole-reload hooks become collections with delta, seeded from a kernel IDB copy; Calendar's busy overlay stays separate; Notes docs stay on Yjs | AC7 | TS-2, SK-C4 |
 | TS-6 | **Hotkeys** (`lib/hotkeys/`) | `@tanstack/react-hotkeys` registry with route and panel scopes, conflict test, migration of `useGlobalShortcuts` and page overrides, devtools panel | AC8 | TS-1 (independent of TS-2…5) |
 | TS-7 | **Cleanup and knowledge** | remove the stores' snapshot / overlay plumbing and selectors; decisions at the top of `docs/decisions/data.md` and `toolchain.md`; gotchas; `docs/data-layers.md` and `architecture.md` updated | AC10 | TS-3c, TS-4, TS-5, TS-6 |
 | TS-8 | **Optional, later: SQLite persistence** | only if a second spike (on-demand `loadSubset` or an IDB-backed persistence adapter) beats today's 514 ms warm open at 10k; then web OPFS + coordinator, desktop `tauri-plugin-sql` + capabilities, `offline-transactions` outbox, one-time wipe of the old IDB copies | — | TS-7, a passing spike |
+
+### Re-plan (2026-10-20, after TS-3b)
+
+Mike's decision: **pause TS-3c, TS-4 and TS-5; keep TanStack DB as the storage layer; spend the next block on
+render hotspots (TS-R1).** TS-7 waits with them; TS-6 is done and TS-8 stays optional.
+
+- **Why.** TS-3b measured @tanstack/db 0.15.1 at 10k tasks: a whole-workspace live query costs 40–65 ms to build,
+  `groupBy` ~35 ms, `includes` ~110 ms, against < 1 ms for the cached JS derivations; a narrow indexed query is
+  0.5–1 ms. Wiring even one live query puts the query engine and `react-db` in the first load (+59 KB gzip). Edits
+  already redraw 1 row. The time left on the page was rendering, not data: after TS-3b a production warm open took
+  ~150 ms to first rows (AC1's line) and a project switch 82 ms, mostly one synchronous render of the whole page
+  after the device copy lands (~130 ms, the sidebar's NavRows the largest app part) and the IndexedDB copy read
+  (~27 ms, one record). Moving writes, Chat and the other modules onto collections buys none of that.
+- **Live queries are reserved for narrow, indexed per-entity reads** (one task's subtasks, one conversation's
+  messages) until a TanStack DB release makes whole-workspace queries cheap. **Re-test against the first
+  `@tanstack/db` release after 0.15.1** (pinned with `@tanstack/react-db` 0.5.11): repeat TS-3b's measurement, a
+  `where deletedAt null orderBy position` live query over the 10k fixture's tasks, and resume TS-3c only if it
+  builds in under ~5 ms and the first-load cost fits AC9.
+- **Next on the open, from TS-R1's profile:** the IndexedDB copy read and restore (~25 ms read + ~18 ms restore of one
+  record before anything draws) and the derived Tasks data for a new snapshot (`tasksDataOf`, ~20 ms at 10k).
 
 Sizing: about 9–10 working days for TS-2 + TS-3a–c on Tasks (spike estimate). TS-3a and TS-3c are the heavy ones (one session each, Tier 2). TS-6 can run in parallel with TS-2…5 (disjoint
 files). TS-4 and TS-5 can run in parallel after TS-3c.
@@ -162,3 +184,5 @@ Supabase, where Loro's movable tree is the candidate).
 ## Open questions
 
 None. TS-0 (2026-10-20) answered the persistence question: in-memory collections now, SQLite only behind TS-8.
+TS-3b and the re-plan (2026-10-20) answered the next one: writes, Chat and the other modules stay off collections
+until a TanStack DB release makes whole-workspace live queries cheap (see §Re-plan).

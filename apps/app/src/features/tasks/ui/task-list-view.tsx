@@ -2262,6 +2262,7 @@ export function TaskListView({
                       stickyClassName="z-(--z-sticky) bg-card"
                       pinned={pinned}
                       scrollTo={scrollTo}
+                      paintKey={selection}
                     />
                   </div>
                   {canDrag ? dragOverlay : null}
