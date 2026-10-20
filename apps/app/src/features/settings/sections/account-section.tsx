@@ -7,7 +7,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
-import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
+import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web.client";
 import { waitingSyncCount, wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";

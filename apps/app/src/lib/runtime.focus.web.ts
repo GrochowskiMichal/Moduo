@@ -13,7 +13,7 @@ import type { FocusRun, FocusRunRuntime } from "../features/focus/run-model";
 import { focusRunRowToModel, runSnapshotToState } from "../features/focus/run-model";
 import { collectTruncations, readPaged } from "./paged-select";
 import { DbError, type Json } from "./runtime.db";
-import { supabaseClient } from "./runtime.web";
+import { supabaseClient } from "./runtime.web.client";
 import { sortQueueEntries, taskQueueRowToModel } from "./task-rows";
 
 /** The export reads at most this many of my runs per workspace. */

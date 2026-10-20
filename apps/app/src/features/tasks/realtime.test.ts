@@ -18,7 +18,7 @@ const h = rs.hoisted(() => ({
   }[],
 }));
 
-rs.mock("@/lib/runtime.web", () => ({
+rs.mock("@/lib/runtime.web.client", () => ({
   supabaseClient: {
     channel: (topic: string) => {
       const ch = {

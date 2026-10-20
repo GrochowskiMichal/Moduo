@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 import { GroupHeader } from "@/components/ui/group-header";
 import { Switch } from "@/components/ui/switch";
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 
 type CapsRow = Record<string, unknown> & { role_key?: unknown };
 

@@ -9,7 +9,7 @@
 // account (a desktop Zoom connect always finishes in the browser this way).
 // → supabase/functions/_shared/oauth-connect.ts
 
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 
 export type ConnectProvider = "google" | "zoom";
 

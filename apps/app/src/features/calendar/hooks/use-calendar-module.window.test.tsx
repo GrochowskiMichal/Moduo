@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { supabaseClient } from "../../../lib/runtime.web";
+import { supabaseClient } from "../../../lib/runtime.web.client";
 import type { CalendarAccountModel, CalendarEventModel, CalendarModuleBundle } from "../events";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
 import { type CalendarModuleApi, useCalendarModule } from "./use-calendar-module";

@@ -6,7 +6,7 @@
 // around today and WIDENS it as you navigate, so the data you can see is the
 // data that got fetched.
 //
-// Standalone (no imports) on purpose: `runtime.web.ts` needs the default
+// Standalone (no imports) on purpose: `runtime.web.calendar.ts` needs the default
 // window, and pulling the calendar lens' value chain into the runtime would
 // drag the whole feature graph with it.
 

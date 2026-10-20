@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 
 type Defaults = {
   notes: string;
