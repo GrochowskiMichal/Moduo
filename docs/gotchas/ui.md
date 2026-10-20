@@ -279,6 +279,8 @@ Read before working in `src/components/`, `src/routes/`, `.storybook/`, dashboar
 
 ## E2E waits (CV-E2E)
 
+- **A lazy chunk that was never fetched can't load offline, and a bare `React.lazy` that fails throws to the app's error boundary ("Something went wrong").** The web app has no service worker, so a Settings section first opened offline took the whole app down and Log out was unreachable (offline.spec's Track C, after the bundle diet #530). Anything that must work offline (Account, which holds Log out) stays in the main bundle; other sections go through `lazySection` + `SettingsSectionView` (`features/settings/section-loader.tsx`), which shows a Retry in place and forgets the failed import. (2026-10-20)
+
 - **A loading skeleton that shares the real view's `data-slot` makes "the view is visible" a wait that passes on the skeleton.** `FocusSkeleton` is `data-slot="focus-view"` with `aria-busy="true"`: wait for `[data-slot="focus-view"]:not([aria-busy="true"])`, or for the first line of real content with the 20 s first-load wait, never the bare slot. The same goes for a spec that deep-links (`/tasks?id=…`) and asserts store-dependent content at the default 5 s: until the store has loaded the page is the Inbox and the panel says "No project here". On a busy Mac (several worktrees building) the load alone can pass 5 s. (2026-10-14)
 
 ## The chat stream (CV-7a)

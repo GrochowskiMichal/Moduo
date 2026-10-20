@@ -17,13 +17,14 @@ import {
   X,
 } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { type ComponentType, lazy, Suspense, useEffect, useState } from "react";
+import { type ComponentType, useEffect, useState } from "react";
 
 import { Eyebrow } from "../../components/ui/eyebrow";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { useShortcut } from "../../lib/shortcuts";
 import { cn } from "../../lib/utils";
-
+import { type LazySection, lazySection, SettingsSectionView } from "./section-loader";
+import { AccountSection } from "./sections/account-section";
 import {
   clearPendingOpenSettings,
   isSettingsSectionId,
@@ -36,55 +37,52 @@ import {
 } from "./settings-events";
 
 // Sections load on first open (each is its own async chunk), so the modal's
-// weight (fflate, billing, access) stays off the first-load bundle.
-const AboutSection = lazy(() =>
-  import("./sections/about-section").then((m) => ({ default: m.AboutSection })),
+// weight (fflate, billing, access) stays off the first-load bundle. Account is
+// the exception: it holds Log out, which has to work offline, when a chunk
+// never fetched before can't load.
+const AboutSection = lazySection(() =>
+  import("./sections/about-section").then((m) => m.AboutSection),
 );
-const AccessSection = lazy(() =>
-  import("./sections/access-section").then((m) => ({ default: m.AccessSection })),
+const AccessSection = lazySection(() =>
+  import("./sections/access-section").then((m) => m.AccessSection),
 );
-const AccountSection = lazy(() =>
-  import("./sections/account-section").then((m) => ({ default: m.AccountSection })),
+const AdvancedSection = lazySection(() =>
+  import("./sections/advanced-section").then((m) => m.AdvancedSection),
 );
-const AdvancedSection = lazy(() =>
-  import("./sections/advanced-section").then((m) => ({ default: m.AdvancedSection })),
+const ApiKeysSection = lazySection(() =>
+  import("./sections/api-keys-section").then((m) => m.ApiKeysSection),
 );
-const ApiKeysSection = lazy(() =>
-  import("./sections/api-keys-section").then((m) => ({ default: m.ApiKeysSection })),
+const AppearanceSection = lazySection(() =>
+  import("./sections/appearance-section").then((m) => m.AppearanceSection),
 );
-const AppearanceSection = lazy(() =>
-  import("./sections/appearance-section").then((m) => ({ default: m.AppearanceSection })),
+const BillingSection = lazySection(() =>
+  import("./sections/billing-section").then((m) => m.BillingSection),
 );
-const BillingSection = lazy(() =>
-  import("./sections/billing-section").then((m) => ({ default: m.BillingSection })),
+const ChatSection = lazySection(() => import("./sections/chat-section").then((m) => m.ChatSection));
+const FocusSection = lazySection(() =>
+  import("./sections/focus-section").then((m) => m.FocusSection),
 );
-const ChatSection = lazy(() =>
-  import("./sections/chat-section").then((m) => ({ default: m.ChatSection })),
+const IntegrationsSection = lazySection(() =>
+  import("./sections/integrations-section").then((m) => m.IntegrationsSection),
 );
-const FocusSection = lazy(() =>
-  import("./sections/focus-section").then((m) => ({ default: m.FocusSection })),
+const PreferencesSection = lazySection(() =>
+  import("./sections/preferences-section").then((m) => m.PreferencesSection),
 );
-const IntegrationsSection = lazy(() =>
-  import("./sections/integrations-section").then((m) => ({ default: m.IntegrationsSection })),
+const StorageSection = lazySection(() =>
+  import("./sections/storage-section").then((m) => m.StorageSection),
 );
-const PreferencesSection = lazy(() =>
-  import("./sections/preferences-section").then((m) => ({ default: m.PreferencesSection })),
+const TimeRegionSection = lazySection(() =>
+  import("./sections/time-region-section").then((m) => m.TimeRegionSection),
 );
-const StorageSection = lazy(() =>
-  import("./sections/storage-section").then((m) => ({ default: m.StorageSection })),
-);
-const TimeRegionSection = lazy(() =>
-  import("./sections/time-region-section").then((m) => ({ default: m.TimeRegionSection })),
-);
-const WorkspaceSection = lazy(() =>
-  import("./sections/workspace-section").then((m) => ({ default: m.WorkspaceSection })),
+const WorkspaceSection = lazySection(() =>
+  import("./sections/workspace-section").then((m) => m.WorkspaceSection),
 );
 
 type SectionEntry = {
   id: SettingsSectionId;
   label: string;
   icon: LucideIcon;
-  Component: ComponentType;
+  Component: ComponentType | LazySection;
 };
 
 const SECTIONS: SectionEntry[] = [
@@ -259,11 +257,7 @@ export function SettingsModal() {
             <div className="pane-scroll h-full min-h-0 overflow-y-auto px-2 py-4">
               {SECTIONS.map(({ id, Component }) => (
                 <TabsContent key={id} value={id} className="data-[state=inactive]:hidden">
-                  {id === section ? (
-                    <Suspense fallback={null}>
-                      <Component />
-                    </Suspense>
-                  ) : null}
+                  {id === section ? <SettingsSectionView section={Component} /> : null}
                 </TabsContent>
               ))}
             </div>
