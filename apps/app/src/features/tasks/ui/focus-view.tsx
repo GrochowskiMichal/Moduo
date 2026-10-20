@@ -46,7 +46,7 @@ import {
 import { IconButton } from "../../../components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { type FocusPrefs, useFocusPrefs } from "../../../lib/focus-prefs";
-import { HotkeyScope, useAppHotkeys, useFocusWithin } from "../../../lib/hotkeys";
+import { HotkeyScope, useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { bumpNotNow, clearNotNows, readNotNows } from "../../focus/along-the-way";
@@ -511,10 +511,11 @@ export function FocusView({
       hasNow: !!now,
     };
   });
-  // Registry bindings in the "focus" scope (lib/hotkeys), live only while the
+  // Registry bindings in the "focus" scope (lib/hotkeys), ours only while the
   // screen holds focus: never from the sidebar, the panel, a field, or nowhere
-  // at all (⏎ has no Undo).
-  const focusInside = useFocusWithin(rootRef);
+  // at all (⏎ has no Undo). Checked per key, not with `enabled` from a focus
+  // state: a key right after focus() would beat that render. No wider scope
+  // binds these keys, so declining one hides nothing.
   const ours = (e: KeyboardEvent): Element | null => {
     const target = e.target instanceof Element ? e.target : null;
     if (e.repeat || !target || !rootRef.current?.contains(target)) return null;
@@ -524,55 +525,52 @@ export function FocusView({
   // A focused button keeps its own Enter.
   const onControl = (target: Element) =>
     !!target.closest("button,a,[role='button'],[role='checkbox']");
-  useAppHotkeys(
-    {
-      // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
-      "focus.promote": (e) => {
-        const target = ours(e);
-        const k = keys.current;
-        const id = target?.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
-        if (!id || !k.canEdit) return false;
-        // A new Now card: whatever was offered between tasks is moot.
-        k.dropOffers();
-        k.focusOnTask(id);
-      },
-      // Between tasks the offer holds Now's place: ⏎ takes it (the Shrink ·
-      // Move · Let go ask has no ⏎ of its own), Esc declines.
-      "focus.enter": (e) => {
-        const target = ours(e);
-        const k = keys.current;
-        if (!target || onControl(target)) return false;
-        if (k.offer) {
-          if (k.offer.kind !== "break" && k.offer.ask) return false;
-          k.takeOffer();
-        } else {
-          k.done();
-        }
-      },
-      "focus.decline": (e) => {
-        const k = keys.current;
-        if (!ours(e) || !k.offer) return false;
-        e.stopPropagation();
-        k.declineOffer();
-      },
-      "focus.capture": (e) => {
-        const k = keys.current;
-        if (!ours(e) || !k.canEdit) return false;
-        k.onRequestCapture();
-      },
-      "focus.skip": (e) => {
-        const k = keys.current;
-        if (!ours(e) || k.offer) return false;
-        k.skip();
-      },
-      "focus.hand-off": (e) => {
-        const k = keys.current;
-        if (!ours(e) || k.offer || !k.canEdit || !k.hasNow) return false;
-        k.openHandOff();
-      },
+  useAppHotkeys({
+    // ⇧F on a subtask or an Up next row: it becomes the Now card (65a).
+    "focus.promote": (e) => {
+      const target = ours(e);
+      const k = keys.current;
+      const id = target?.closest<HTMLElement>("[data-focus-task]")?.dataset.focusTask;
+      if (!id || !k.canEdit) return false;
+      // A new Now card: whatever was offered between tasks is moot.
+      k.dropOffers();
+      k.focusOnTask(id);
     },
-    { enabled: focusInside },
-  );
+    // Between tasks the offer holds Now's place: ⏎ takes it (the Shrink ·
+    // Move · Let go ask has no ⏎ of its own), Esc declines.
+    "focus.enter": (e) => {
+      const target = ours(e);
+      const k = keys.current;
+      if (!target || onControl(target)) return false;
+      if (k.offer) {
+        if (k.offer.kind !== "break" && k.offer.ask) return false;
+        k.takeOffer();
+      } else {
+        k.done();
+      }
+    },
+    "focus.decline": (e) => {
+      const k = keys.current;
+      if (!ours(e) || !k.offer) return false;
+      e.stopPropagation();
+      k.declineOffer();
+    },
+    "focus.capture": (e) => {
+      const k = keys.current;
+      if (!ours(e) || !k.canEdit) return false;
+      k.onRequestCapture();
+    },
+    "focus.skip": (e) => {
+      const k = keys.current;
+      if (!ours(e) || k.offer) return false;
+      k.skip();
+    },
+    "focus.hand-off": (e) => {
+      const k = keys.current;
+      if (!ours(e) || k.offer || !k.canEdit || !k.hasNow) return false;
+      k.openHandOff();
+    },
+  });
 
   // The screen takes focus when nothing else holds it: on opening (from the
   // top bar, a reload), and when the button you used goes away (Done on the
