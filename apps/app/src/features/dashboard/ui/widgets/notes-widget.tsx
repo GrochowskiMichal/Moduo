@@ -6,7 +6,7 @@ import { useMemo } from "react";
 
 import { shapeRecentNotes } from "@/features/notes/recent";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -21,7 +21,7 @@ import {
 } from "./widget-primitives";
 
 export function NotesWidget({ size }: WidgetComponentProps) {
-  const { recentNotes } = useDashboardData();
+  const recentNotes = useDashboardSource("recentNotes");
   const density = useDensity();
 
   const items = useMemo(

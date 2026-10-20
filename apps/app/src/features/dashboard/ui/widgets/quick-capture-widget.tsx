@@ -15,12 +15,12 @@ import { findWorkspaceStore } from "@/lib/sync/store";
 
 import {
   requestDashboardDataRefresh,
-  useDashboardData,
+  useDashboardSource,
 } from "../../context/dashboard-data-context";
 import type { WidgetComponentProps } from "../../registry/types";
 
 export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
-  const { workspaceId } = useDashboardData();
+  const workspaceId = useDashboardSource("workspaceId");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   // A synchronous guard — `busy` state can't block a rapid double-Enter (both

@@ -10,9 +10,9 @@ import type { TaskStatusCategory } from "@contracts/vocabularies";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../lib/sync/store";
+import type { TasksData } from "../derived";
 import type { NewTaskFields } from "../helpers";
 import type { Task, TasksTrash, TimeBlockMap } from "../model";
-import type { TasksData } from "../selectors";
 import type { StatusTarget } from "../statuses";
 import type { WritePlan } from "../write-plan";
 

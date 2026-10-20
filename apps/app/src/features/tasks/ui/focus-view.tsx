@@ -71,6 +71,7 @@ import {
   useFocusTimer,
 } from "../../focus/timer";
 import { dispatchOpenSettings } from "../../settings/settings-events";
+import { byIdOf } from "../derived";
 import {
   ARRANGE_MIN_SAVED,
   alongTheWayOffer,
@@ -85,7 +86,6 @@ import {
   NOT_NOWS_TO_ASK,
 } from "../focus-screen";
 import { estimateOf, type Task } from "../model";
-import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
 import {
   useTaskCommands,

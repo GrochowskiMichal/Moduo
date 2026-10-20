@@ -277,6 +277,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-20 · TS-3b: live queries only where an index narrows them (subtasks query built, not wired: the query engine is +59 KB first load); whole-workspace Tasks data stays cached JS (`derived.ts`, was `selectors.ts`) because a 10k live query costs 40–65 ms to build; the snapshot reads kernel rows (collections on demand); Home data is one context per source → decisions/data.md
 - 2026-10-20 · TS-3a: the Tasks store's tables are in-memory collections it drives (`ownerDriven`); the snapshot reads rows from them (raw `_state`, kernel order), overlays on top; API unchanged; first-load budget 1045 KB → decisions/data.md
 - 2026-10-20 · TS-2: `supabaseCollectionOptions()` mirrors a kernel `SyncedCollection` into an in-memory TanStack DB collection (Realtime first and buffered, seed then `markReady`, kernel delta, kernel landing; no persistence plugin, the kernel writes the IDB copy; `sendChanges` hook for TS-3c) → decisions/data.md
 - 2026-10-20 · Tasks and Chat sync on one kernel (`lib/sync/kernel/`: stamps, idb, delta, landing, overlay, outbox, registry, collection); each caller's missing-stamp rule is named and pinned; Notes uses only its idb opener, network check and person lifecycle → decisions/data.md

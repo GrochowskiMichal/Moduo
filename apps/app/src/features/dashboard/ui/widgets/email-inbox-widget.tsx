@@ -12,7 +12,7 @@ import {
   shapeEmailInbox,
 } from "@/features/email/widget";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -91,7 +91,7 @@ function Body({ view }: { view: EmailInboxView }) {
 }
 
 export function EmailInboxWidget({ size }: WidgetComponentProps) {
-  const { email } = useDashboardData();
+  const email = useDashboardSource("email");
   const density = useDensity();
 
   const view = useMemo(

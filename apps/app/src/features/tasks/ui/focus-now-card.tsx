@@ -29,11 +29,17 @@ import { TaskClaimMark } from "../../focus/ui/claim-mark";
 import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { Reference } from "../../spine/references/ui/reference";
+import { byIdOf } from "../derived";
 import { pillReading } from "../focus-screen";
 import { estimateOf, type Task } from "../model";
-import { byIdOf } from "../selectors";
 import { bucketDotColor } from "../sidebar";
-import { useTaskById, useTaskCommands, useTasksSelector, useTasksUserId } from "../tasks-context";
+import {
+  useSubtasksOf,
+  useTaskById,
+  useTaskCommands,
+  useTasksSelector,
+  useTasksUserId,
+} from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 import { type HandOff, HandOffPopover } from "./focus-hand-off";
 import { PriorityMark } from "./level-icons";
@@ -117,8 +123,6 @@ function AwayLine() {
 
 // ── the Now card ────────────────────────────────────────────────────────────
 
-const NO_TASKS: Task[] = [];
-
 export function NowCard({
   task,
   runtime,
@@ -172,7 +176,7 @@ export function NowCard({
       ? (d.blockersByTask.get(task.id) ?? []).filter((b) => !isClosedTask(b)).length
       : 0,
   );
-  const subtasks = useTasksSelector((d) => d.subtasksByParent.get(task.id) ?? NO_TASKS);
+  const subtasks = useSubtasksOf(task.id);
   const saving = task.id.startsWith("tmp-");
   // The 📎 mark (AT-3), live from the shared store.
   const files = useTasksSelector((_, snap) => snap.attachmentCounts?.get(task.id) ?? 0);

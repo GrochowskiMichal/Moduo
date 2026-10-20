@@ -89,13 +89,30 @@ function isReachable(el: HTMLElement, root: HTMLElement) {
  */
 function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
   const activeRef = React.useRef<HTMLElement | null>(null);
+  /**
+   * The last look's candidates and stops. `isReachable` reads computed style,
+   * which forces a style recalculation after every DOM change; the toolbar
+   * syncs after each render of its owner (a project switch redrew the Tasks
+   * header's), so the stops are reused while the same elements are there and
+   * nothing the observer watches changed (TS-3b: ~20 ms per project switch).
+   */
+  const lookRef = React.useRef<{ candidates: HTMLElement[]; stops: HTMLElement[] } | null>(null);
 
   const items = React.useCallback((): HTMLElement[] => {
     const root = ref.current;
     if (!root) return [];
+    const candidates = [...root.querySelectorAll<HTMLElement>(ITEM_SELECTOR)];
+    const last = lookRef.current;
+    if (
+      last &&
+      last.candidates.length === candidates.length &&
+      last.candidates.every((el, i) => el === candidates[i])
+    ) {
+      return last.stops;
+    }
     const seenGroups = new Set<Element>();
     const out: HTMLElement[] = [];
-    for (const el of root.querySelectorAll<HTMLElement>(ITEM_SELECTOR)) {
+    for (const el of candidates) {
       if (!isReachable(el, root)) continue;
       const group = el.closest<HTMLElement>(NESTED_ROVING);
       if (group) {
@@ -112,6 +129,7 @@ function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
       }
       out.push(el);
     }
+    lookRef.current = { candidates, stops: out };
     return out;
   }, [ref]);
 
@@ -149,12 +167,22 @@ function useRovingFocus(ref: React.RefObject<HTMLDivElement | null>) {
     // Nested roving widgets park their own tabindex in an effect AFTER our
     // layout effect, and a conditionally-rendered control changes the item list
     // without re-rendering the toolbar — both need re-syncing from the DOM.
-    const observer = new MutationObserver(() => sync());
+    const observer = new MutationObserver((records) => {
+      // A tabindex we wrote on a plain stop changes no stop; anything else
+      // may (a nested widget moving its own winner, a class hiding a control).
+      const plain = lookRef.current?.stops;
+      const ours = (r: MutationRecord) =>
+        r.attributeName === "tabindex" &&
+        !!plain?.includes(r.target as HTMLElement) &&
+        !(r.target as HTMLElement).closest(NESTED_ROVING);
+      if (!records.every(ours)) lookRef.current = null;
+      sync();
+    });
     observer.observe(root, {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["tabindex", "disabled", "hidden", "aria-hidden"],
+      attributeFilter: ["tabindex", "disabled", "hidden", "aria-hidden", "class", "style"],
     });
     return () => observer.disconnect();
   }, [ref, sync]);

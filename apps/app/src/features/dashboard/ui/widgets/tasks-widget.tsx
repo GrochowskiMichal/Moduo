@@ -20,7 +20,7 @@ import { findWorkspaceStore } from "@/lib/sync/store";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -84,7 +84,10 @@ function TaskRow({
 }
 
 export function TasksWidget({ widget, size, canWrite }: WidgetComponentProps) {
-  const { tasks: taskSource, taskQueue, taskFiles, workspaceId } = useDashboardData();
+  const taskSource = useDashboardSource("tasks");
+  const taskQueue = useDashboardSource("taskQueue");
+  const taskFiles = useDashboardSource("taskFiles");
+  const workspaceId = useDashboardSource("workspaceId");
   const { userId } = useAuth();
   const density = useDensity();
   const focus = useFocusTaskState();

@@ -35,6 +35,7 @@ import { cn } from "../../../lib/utils";
 import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
+import { byIdOf } from "../derived";
 import {
   type OrderDirection,
   orderTasks,
@@ -88,7 +89,6 @@ import {
   updatedLabel,
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
-import { byIdOf } from "../selectors";
 import { statusNameOf } from "../statuses";
 import {
   useStatusesForBucket,

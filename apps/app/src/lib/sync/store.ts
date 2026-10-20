@@ -558,6 +558,8 @@ export class WorkspaceStore {
       window.addEventListener("pagehide", this.persistNow);
       window.addEventListener(DATA_REFRESH_EVENT, this.onDataRefresh);
     }
+    // The perf spec's "paint from device" clock starts here (AC1).
+    globalThis.performance?.mark?.("moduo:tasks-store-start");
     this.hydrated ??= this.hydrate();
     void this.hydrated.then(() => this.sync("open"));
     // Restarted while still offline: keep trying.
@@ -597,6 +599,7 @@ export class WorkspaceStore {
     for (const table of this.tables.values()) table.forget([...table.rows.keys()]);
     for (const mirror of this.mirrors.values()) mirror.dispose();
     this.mirrors.clear();
+    this.stable.clear();
     this.mirroredAt.clear();
     this.renderedRows.clear();
     this.tables.clear();
@@ -622,6 +625,7 @@ export class WorkspaceStore {
 
   private async hydrate(): Promise<void> {
     const copy = await this.cache.read(cacheKey(this.userId, this.workspaceId));
+    globalThis.performance?.mark?.("moduo:tasks-copy-read");
     if (!copy || this.disposed) return;
     if (copy.v !== CACHE_VERSION) {
       // An older build's copy: its rows may lack fields this build reads, so
@@ -647,6 +651,7 @@ export class WorkspaceStore {
       this.markLoaded();
     }
     this.changed();
+    globalThis.performance?.mark?.("moduo:tasks-copy-shown");
   }
 
   /**
@@ -1307,7 +1312,12 @@ export class WorkspaceStore {
     return mirror;
   }
 
-  /** Every table's collection takes what changed in its kernel table. */
+  /**
+   * Every table's rows as shown take what changed in its kernel table, and
+   * so does its collection when one was asked for. TS-3b: the snapshot reads
+   * these rows, not the collection's, so a warm open no longer pays for
+   * writing 10k rows into collections nobody reads yet (~30 ms).
+   */
   private syncMirrors(): void {
     if (this.disposed) return;
     this.mirroring = true;
@@ -1317,12 +1327,51 @@ export class WorkspaceStore {
         if (this.mirroredAt.get(name) === table.revision) continue;
         // Only the rows that changed (an overlay alone changes none).
         const touched = table.takeTouched();
-        if (touched !== null) this.mirror(name)?.sync(touched === "all" ? undefined : touched);
+        if (touched !== null) {
+          this.stabilize(name, touched === "all" ? undefined : touched);
+          this.mirrors.get(name)?.sync(touched === "all" ? undefined : touched);
+        }
         this.mirroredAt.set(name, table.revision);
       }
     } finally {
       this.mirroring = false;
     }
+  }
+
+  /**
+   * Per table, the kernel's rows in its order, each the object shown before
+   * while the kernel's is field-for-field the same (a read re-landing a row
+   * it already had, at the same stamp): rows already drawn don't redraw.
+   * A new map whenever a row changes, the same one otherwise.
+   */
+  private stable = new Map<SyncTableName, ReadonlyMap<string, AnyRow>>();
+
+  private stabilize(name: SyncTableName, ids?: Iterable<string>): void {
+    const kernel = this.table(name).rows;
+    const prev = this.stable.get(name);
+    if (!prev) {
+      this.stable.set(name, new Map(kernel));
+      return;
+    }
+    // Untouched ids keep what was shown (maybe an older, equal object).
+    const touched = ids ? new Set(ids) : null;
+    let changed = false;
+    const next = new Map<string, AnyRow>();
+    for (const [id, now] of kernel) {
+      const was = prev.get(id);
+      if (touched && !touched.has(id) && was) {
+        next.set(id, was);
+        continue;
+      }
+      if (was && (now === was || shallowSame(now, was))) next.set(id, was);
+      else {
+        next.set(id, now);
+        changed = true;
+      }
+    }
+    if (next.size !== prev.size) changed = true;
+    if (!changed) return;
+    this.stable.set(name, next);
   }
 
   /** The kernel revision each collection last took. */
@@ -1786,16 +1835,19 @@ export class WorkspaceStore {
   >();
 
   /**
-   * A table's rows as shown: the collection's rows with the kernel's overlays
+   * A table's rows as shown: the kernel's rows (kept stable) with its overlays
    * on top, the same array until either changes.
    */
   private rendered<T extends SyncTableName>(name: T): SyncRows[T][] {
     const table = this.table(name);
-    const mirror = this.mirror(name);
     // Disposed: what the kernel table still holds (nothing).
-    if (!mirror) return table.view() as unknown as SyncRows[T][];
+    if (this.disposed) return table.view() as unknown as SyncRows[T][];
     if (this.mirroredAt.get(name) !== table.revision) this.syncMirrors();
-    const rows = mirror.rows();
+    let rows = this.stable.get(name);
+    if (!rows) {
+      this.stabilize(name);
+      rows = this.stable.get(name) as ReadonlyMap<string, AnyRow>;
+    }
     const prev = this.renderedRows.get(name);
     if (prev && prev.rows === rows && prev.revision === table.revision) {
       return prev.shown as unknown as SyncRows[T][];
@@ -1998,6 +2050,18 @@ export class WorkspaceStore {
  * plus the live count (a delete that drops the row moves it). A file still
  * uploading (a Realtime row before it's finished) never counts.
  */
+/** The same fields with the same values (a row re-landed unchanged). */
+function shallowSame(a: AnyRow, b: AnyRow): boolean {
+  const ka = Object.keys(a);
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    if (!Object.is((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function countAttachments(files: readonly SyncRows["attachments"][]): {
   counts: ReadonlyMap<string, number>;
   stamps: ReadonlyMap<string, string>;

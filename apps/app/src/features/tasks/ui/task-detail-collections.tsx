@@ -45,10 +45,10 @@ import type { HubRow } from "../../spine/rollup";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import { useAssignees } from "../assignees";
 import { onBreakDown, takeBreakDown } from "../break-down";
-import { wouldCreateCycle } from "../helpers";
+import { subtaskProgress, wouldCreateCycle } from "../helpers";
 import type { Task, TaskWaitingEntry } from "../model";
 import { subtaskPositionAt } from "../subtask-order";
-import { useTaskCommands, useTasksReader, useTasksSelector } from "../tasks-context";
+import { useSubtasksOf, useTaskCommands, useTasksReader, useTasksSelector } from "../tasks-context";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { useTaskDndSensors } from "./dnd/task-dnd";
 
@@ -70,8 +70,9 @@ export function SubtasksSection({
   const read = useTasksReader();
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState("");
-  const subtasks = useTasksSelector((d) => d.subtasksByParent.get(task.id) ?? NO_TASKS);
-  const progress = useTasksSelector((d) => d.subtaskProgressByTask.get(task.id));
+  // A narrow live query (TS-3b): redraws for this task's subtasks only.
+  const subtasks = useSubtasksOf(task.id);
+  const progress = subtaskProgress(subtasks);
   // A late row's "Break down" (TV-U10) opens the subtask line here, whether
   // this panel shows the task already or is about to.
   const taskId = task.id;

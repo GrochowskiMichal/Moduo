@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
-  useDashboardData,
+  useDashboardSource,
 } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
@@ -28,7 +28,9 @@ import { openEntity } from "../../widget-nav";
 import { WidgetBodyRoot } from "./widget-primitives";
 
 export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
-  const { tasks: taskSource, calendar: calendarSource, workspaceId } = useDashboardData();
+  const taskSource = useDashboardSource("tasks");
+  const calendarSource = useDashboardSource("calendar");
+  const workspaceId = useDashboardSource("workspaceId");
   const density = useDensity();
   const movingRef = useRef(false);
 
