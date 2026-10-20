@@ -75,7 +75,7 @@ import {
 } from "./cache";
 import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
 import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
-import { openWrite } from "./kernel/overlay";
+import { openWrite, withOverlays } from "./kernel/overlay";
 import {
   type OwnedCopies,
   personLifecycle,
@@ -85,6 +85,7 @@ import {
 } from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError } from "./network";
+import { type KernelMirror, mirrorKernel } from "./tanstack/kernel-mirror";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
@@ -384,6 +385,14 @@ export class WorkspaceStore {
   private readonly listen: typeof listenTasksLive;
 
   private tables = new Map<SyncTableName, Table>();
+  /**
+   * Each table's rows as an in-memory TanStack DB collection (TS-3a). The
+   * store still reads and lands into the kernel table; `changed` mirrors it,
+   * and the snapshot reads the rows back from the collection.
+   */
+  private mirrors = new Map<SyncTableName, KernelMirror<AnyRow>>();
+  /** `changed` is mirroring: the collections' own change events are its. */
+  private mirroring = false;
   /** My line-up while queue ops are on their way (the newest op's view). */
   private lineup: StoreLineup = null;
   private kept: TaskQueueEntry[] = [];
@@ -583,6 +592,13 @@ export class WorkspaceStore {
     this.stop(opts);
     this.disposed = true;
     this.listeners.clear();
+    // Empty the kernel tables first: a cleaned-up collection can be started
+    // again (a late subscriber) and would mirror whatever they still held.
+    for (const table of this.tables.values()) table.forget([...table.rows.keys()]);
+    for (const mirror of this.mirrors.values()) mirror.dispose();
+    this.mirrors.clear();
+    this.mirroredAt.clear();
+    this.renderedRows.clear();
     this.tables.clear();
     this.outbox.clear();
     this.lineup = null;
@@ -1264,6 +1280,55 @@ export class WorkspaceStore {
   }
 
   /**
+   * A table's in-memory collection (TS-3a): the rows the snapshot shows,
+   * before overlays. Read-only for now (TS-3b reads it with live queries;
+   * TS-3c writes through it). Null once disposed.
+   */
+  collection(name: SyncTableName): KernelMirror<AnyRow>["collection"] | null {
+    this.syncMirrors();
+    return this.mirror(name)?.collection ?? null;
+  }
+
+  /** The table's collection, made on first use (none once disposed). */
+  private mirror(name: SyncTableName): KernelMirror<AnyRow> | null {
+    if (this.disposed) return null;
+    let mirror = this.mirrors.get(name);
+    if (!mirror) {
+      mirror = mirrorKernel<AnyRow>(
+        `tasks:${this.userId}:${this.workspaceId}:${name}:${nextMirrorId++}`,
+        this.table(name),
+      );
+      // A change the store didn't make (none yet; TS-3c's writes) still shows.
+      mirror.onChange(() => {
+        if (!this.mirroring) this.changed();
+      });
+      this.mirrors.set(name, mirror);
+    }
+    return mirror;
+  }
+
+  /** Every table's collection takes what changed in its kernel table. */
+  private syncMirrors(): void {
+    if (this.disposed) return;
+    this.mirroring = true;
+    try {
+      for (const name of this.tables.keys()) {
+        const table = this.table(name);
+        if (this.mirroredAt.get(name) === table.revision) continue;
+        // Only the rows that changed (an overlay alone changes none).
+        const touched = table.takeTouched();
+        if (touched !== null) this.mirror(name)?.sync(touched === "all" ? undefined : touched);
+        this.mirroredAt.set(name, table.revision);
+      }
+    } finally {
+      this.mirroring = false;
+    }
+  }
+
+  /** The kernel revision each collection last took. */
+  private mirroredAt = new Map<SyncTableName, number>();
+
+  /**
    * Rows from a read or an op's answer: each lands unless the copy's row is
    * strictly newer ("answer"), or unless it isn't strictly newer ("live":
    * Realtime, where an equal stamp is our own echo). A soft-deleted row
@@ -1710,13 +1775,34 @@ export class WorkspaceStore {
   // ── The snapshot ──────────────────────────────────────────────────────────
 
   private changed(): void {
+    this.syncMirrors();
     this.snapshot = null;
     for (const fn of this.listeners) fn();
   }
 
-  /** A table's rows as shown (overlays on top), the same array until it changes. */
+  private renderedRows = new Map<
+    SyncTableName,
+    { rows: ReadonlyMap<string, AnyRow>; revision: number; shown: AnyRow[] }
+  >();
+
+  /**
+   * A table's rows as shown: the collection's rows with the kernel's overlays
+   * on top, the same array until either changes.
+   */
   private rendered<T extends SyncTableName>(name: T): SyncRows[T][] {
-    return this.table(name).view() as unknown as SyncRows[T][];
+    const table = this.table(name);
+    const mirror = this.mirror(name);
+    // Disposed: what the kernel table still holds (nothing).
+    if (!mirror) return table.view() as unknown as SyncRows[T][];
+    if (this.mirroredAt.get(name) !== table.revision) this.syncMirrors();
+    const rows = mirror.rows();
+    const prev = this.renderedRows.get(name);
+    if (prev && prev.rows === rows && prev.revision === table.revision) {
+      return prev.shown as unknown as SyncRows[T][];
+    }
+    const shown = withOverlays(rows, table.overlays.list());
+    this.renderedRows.set(name, { rows, revision: table.revision, shown });
+    return shown as unknown as SyncRows[T][];
   }
 
   private queueView: {
@@ -1963,6 +2049,9 @@ function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
 // ── One store per person and workspace ──────────────────────────────────────
 
 const registry = new StoreRegistry<WorkspaceStore>();
+
+/** Collection ids stay unique across stores (a store made again for one workspace). */
+let nextMirrorId = 0;
 let storeOptions: StoreOptions = {};
 
 /** Tests: the options every new store gets (a memory cache, short timings). */

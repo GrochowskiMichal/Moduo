@@ -38,14 +38,10 @@ export type LiveSubscription = { ready: Promise<void>; close: () => void };
 /** One update as TS-3c sends it: the row's id and only the fields the edit changed. */
 export type ChangedFields = { id: string; changes: Record<string, unknown> };
 
-export type SupabaseCollectionOptions<R extends LandingRow & object> = {
+type CommonOptions<R extends LandingRow & object> = {
   id: string;
   /** The kernel collection (owned by the store, which also persists its copy). */
   kernel: SyncedCollection<R>;
-  /** The kernel's device copy for this person and workspace (null: none yet). */
-  seed: () => Promise<CollectionCopy | null>;
-  /** Open Realtime for the table; called before the first read. */
-  subscribe: (handlers: LiveHandlers<R>) => LiveSubscription;
   /**
    * How long the first read waits for Realtime to subscribe (default 5 s).
    * Past it, or if subscribing fails, the read runs anyway: events from before
@@ -65,6 +61,29 @@ export type SupabaseCollectionOptions<R extends LandingRow & object> = {
    */
   sendChanges?: (changes: ChangedFields[]) => Promise<R[]>;
 };
+
+export type SupabaseCollectionOptions<R extends LandingRow & object> = CommonOptions<R> &
+  (
+    | {
+        /**
+         * The owner reads, lands and seeds the kernel itself (TS-3a's Tasks
+         * store, whose phases and access checks span tables) and calls
+         * `utils.sync` after each change: the collection only mirrors the
+         * kernel. It never reads, never opens Realtime, and is ready at once
+         * with what the kernel holds.
+         */
+        ownerDriven: true;
+        seed?: never;
+        subscribe?: never;
+      }
+    | {
+        ownerDriven?: false;
+        /** The kernel's device copy for this person and workspace (null: none yet). */
+        seed: () => Promise<CollectionCopy | null>;
+        /** Open Realtime for the table; called before the first read. */
+        subscribe: (handlers: LiveHandlers<R>) => LiveSubscription;
+      }
+  );
 
 export type SupabaseCollectionUtils<R> = {
   /** An op's answer (or a re-read row) into the collection by the "answer" rule. */
@@ -199,6 +218,20 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         };
 
         // Live rows land by the kernel's "live" rule in arrival order: the newest per id wins.
+        if (opts.ownerDriven) {
+          run = { diff, clear, catchUp: () => Promise.resolve() };
+          mirror();
+          markReadyOnce();
+          return () => {
+            stopped = true;
+            run = null;
+          };
+        }
+        if (!opts.subscribe || !opts.seed)
+          throw new Error(`${config.id}: seed and subscribe are required`);
+        const subscribe = opts.subscribe;
+        const seed = opts.seed;
+
         const landLive = (rows: R[], deleted: string[]) => {
           kernel.applyRows(rows, "live");
           kernel.forget(deleted);
@@ -209,7 +242,7 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
           for (const event of buffer.splice(0)) landLive(event.rows, event.deleted);
         };
 
-        const live = opts.subscribe({
+        const live = subscribe({
           rows: (rows) => {
             if (stopped) return;
             if (buffering) buffer.push({ rows, deleted: [] });
@@ -266,7 +299,7 @@ export function supabaseCollectionOptions<R extends LandingRow & object>(
         const start = async () => {
           const lossesBefore = losses;
           // A device copy that can't be read is no copy: the server answers.
-          const copy = await opts.seed().catch(() => null);
+          const copy = await seed().catch(() => null);
           if (stopped) return;
           // Access lost while the copy was read: its rows are not this person's any more.
           if (copy && losses === lossesBefore) {

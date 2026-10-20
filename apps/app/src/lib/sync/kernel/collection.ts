@@ -49,6 +49,10 @@ export class SyncedCollection<R extends LandingRow> {
   cursor: string | null = null;
   truncated: Truncation | null = null;
   private shown: R[] | null = null;
+  /** Bumped by every change to the rows or their overlays (a cache key for views built elsewhere). */
+  revision = 0;
+  /** Rows changed since `takeTouched` last ran ("all": too many to name). */
+  private touched: Set<string> | "all" | null = null;
 
   constructor(private readonly opts: CollectionOptions<R>) {
     this.name = opts.name;
@@ -68,32 +72,65 @@ export class SyncedCollection<R extends LandingRow> {
   /** Something changed the rows or their overlays: the next view is built afresh. */
   invalidate(): void {
     this.shown = null;
+    this.revision += 1;
   }
 
   // ── Landing ───────────────────────────────────────────────────────────────
 
+  /**
+   * The ids whose rows changed since the last call (a superset), "all" after
+   * a whole read or a restore, null when none did; then starts over. TS-3a's
+   * collections take only these.
+   */
+  takeTouched(): Iterable<string> | "all" | null {
+    const touched = this.touched;
+    this.touched = null;
+    return touched;
+  }
+
+  private touch(ids: Iterable<string> | "all"): void {
+    if (this.touched === "all") return;
+    if (ids === "all") {
+      this.touched = "all";
+      return;
+    }
+    this.touched ??= new Set();
+    for (const id of ids) this.touched.add(id);
+  }
+
   applyRows(rows: readonly R[], rule: LandingRule, readStartedAt?: number): void {
-    if (this.landed.applyRows(rows, rule, readStartedAt)) this.invalidate();
+    if (this.landed.applyRows(rows, rule, readStartedAt)) {
+      this.touch(rows.filter((r) => r && typeof r.id === "string").map((r) => r.id));
+      this.invalidate();
+    }
   }
 
   applyWhole(rows: readonly R[], startedAt: number, truncated: Truncation | null): void {
     this.landed.applyWhole(rows, startedAt, truncated === null);
     this.truncated = truncated;
+    this.touch("all");
     this.invalidate();
   }
 
   forget(ids: readonly string[], readStartedAt?: number): void {
-    if (this.landed.forget(ids, readStartedAt)) this.invalidate();
+    if (this.landed.forget(ids, readStartedAt)) {
+      this.touch(ids);
+      this.invalidate();
+    }
   }
 
   replaceSlice(inSlice: (row: R) => boolean, rows: readonly R[]): void {
     this.landed.replaceSlice(inSlice, rows);
+    this.touch("all");
     this.invalidate();
   }
 
   patch(id: string, fields: Record<string, unknown>): boolean {
     const done = this.landed.patch(id, fields);
-    if (done) this.invalidate();
+    if (done) {
+      this.touch([id]);
+      this.invalidate();
+    }
     return done;
   }
 
@@ -170,6 +207,7 @@ export class SyncedCollection<R extends LandingRow> {
   restore(copy: CollectionCopy): void {
     this.landed.restore(copy.rows);
     this.cursor ??= copy.cursor;
+    this.touch("all");
     this.invalidate();
   }
 }
