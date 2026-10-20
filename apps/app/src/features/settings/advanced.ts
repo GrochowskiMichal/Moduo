@@ -293,7 +293,8 @@ export function moduoCacheKeysToClear(allKeys: string[]): string[] {
 /**
  * Whether an IndexedDB database name is one of Moduo's own on-device stores:
  * the notes meta/outbox DB (`moduo-notes-v2`), every per-note y-indexeddb doc DB
- * (`moduo:notes-v2:doc:<ws>:<note>`) and the upload queue (`moduo-uploads`, AT-2).
+ * (`moduo:notes-v2:doc:<person>:<ws>:<note>`; `<ws>:<note>` before Track C4)
+ * and the upload queue (`moduo-uploads`, AT-2).
  * The reset deletes exactly these; other apps' databases are left alone.
  */
 export function isModuoIdbName(name: string | null | undefined): boolean {

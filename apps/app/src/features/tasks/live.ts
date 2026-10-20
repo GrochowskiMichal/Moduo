@@ -14,7 +14,7 @@
 //      coming back to the app refetches (see `use-tasks-module.ts`).
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
-import { isNewer } from "../../lib/sync/stamps";
+import { isNewer } from "../../lib/sync/kernel/stamps";
 import type { AttachmentMark, CommentMark } from "../../lib/sync/types";
 import {
   agentSessionRowToModel,

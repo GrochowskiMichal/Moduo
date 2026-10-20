@@ -31,7 +31,7 @@ import { toast } from "sonner";
 
 import { pickTagColor } from "../../components/tag-colors";
 import type { ModuoRuntime } from "../../lib/runtime.types";
-import { isNewer } from "../../lib/sync/stamps";
+import { isNewer } from "../../lib/sync/kernel/stamps";
 import { undoToast } from "../../lib/undo-toast";
 import type { LiveChange } from "../tasks/live";
 import type { Tag, TagLink } from "../tasks/model";
