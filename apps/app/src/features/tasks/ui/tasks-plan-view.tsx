@@ -79,7 +79,7 @@ import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { useAssignees } from "../assignees";
 import { tasksWord } from "../bulk";
-import { myTasksScope, openCount, resolveDefaultSelection } from "../default-view";
+import { myTasksScope, openCount } from "../default-view";
 import {
   nextHeaderSort,
   orderTasks,
@@ -138,7 +138,7 @@ import {
 } from "../panel-views";
 import { commitProjectDrop } from "../project-order";
 import { handleLabel } from "../row-layout";
-import { handleLinkStep, lookupHandleLink, resolveTasksDeepLink, type TasksPlace } from "../search";
+import { handleLinkStep, lookupHandleLink, resolveTasksDeepLink } from "../search";
 import { backstopPick, inViewOrder } from "../selection";
 import {
   projectDeleteSummary,
@@ -172,6 +172,7 @@ import { FrontierOfferDialog } from "./frontier-offer-dialog";
 import { InFlightPanel } from "./in-flight-panel";
 import { useInboxView } from "./inbox-view";
 import type { ListExtraGroup } from "./list-extensions";
+import { usePlanPlace } from "./plan/use-plan-place";
 import { type PlanHeaderControls, type PlanView, SortedOrderLine } from "./plan-view-header";
 import { ProjectPanel } from "./project-panel";
 import { RecentlyDeletedView } from "./recently-deleted-view";
@@ -213,9 +214,9 @@ type Props = {
   /** `?view=<id>` (TV-U8): a saved view's link, opened once, then taken off the URL. */
   urlViewId?: string | null;
   onUrlViewConsumed?: () => void;
-  /** `?place=upcoming` (Home's Upcoming "+n more"): opened once, then taken off. */
-  urlPlace?: TasksPlace | null;
-  onUrlPlaceConsumed?: () => void;
+  /** `?place=` (DF-1): the place open in the centre; the page owns the router coupling. */
+  urlPlace?: string | null;
+  onUrlPlaceChange: (place: string) => void;
 };
 
 // The selection→URL mirror writes only at rest (see the mirror effect).
@@ -267,7 +268,7 @@ export function TasksPlanView({
   urlViewId = null,
   onUrlViewConsumed,
   urlPlace = null,
-  onUrlPlaceConsumed,
+  onUrlPlaceChange,
 }: Props) {
   const { canEdit, buckets, inbox, tasks } = api;
 
@@ -277,19 +278,8 @@ export function TasksPlanView({
     const stored = readLS(workspaceId, "view");
     return stored === "board" || stored === "timeline" ? stored : "list";
   });
-  // Provisional selection (last-opened place); the default is resolved once the
-  // bundle has loaded (see effect below). A device left in the retired "Plan ·
-  // Focus" switch's Focus mode opens Focus, which is now the sidebar's (TV-F7).
-  // A `?place=` link (Home's Upcoming "+n more") is the first selection
-  // itself: set later, a remembered project still loading would read as gone
-  // in the same flush and send it to the Inbox.
-  const [selection, setSelection] = useState<string>(() =>
-    urlPlace === "upcoming"
-      ? UPCOMING_SELECTION
-      : readLS(workspaceId, "mode") === "execute"
-        ? "today"
-        : (readLS(workspaceId, "lastBucket") ?? "inbox"),
-  );
+  // The retired "Plan · Focus" switch's mode is read once by `usePlanPlace`
+  // (a device left in its Focus mode opens Focus, TV-F7), then forgotten.
   useEffect(() => {
     removeLS(workspaceId, "mode");
     // The Timeline's zoom is per scope in Display since TV-TL1.
@@ -458,36 +448,35 @@ export function TasksPlanView({
     [workspaceId, collapseKey, collapsedGroups],
   );
 
-  // Remember where you were, so the next open lands back on it (REPLAN 30);
-  // Archived projects and Recently deleted aren't places to reopen, nor is a
-  // new view that was never saved (MOD-142).
-  useEffect(() => {
-    if (
-      selection === ARCHIVED_SELECTION ||
-      selection === TRASH_SELECTION ||
-      selection === WONTDO_SELECTION ||
-      selection === TEMPLATES_SELECTION ||
-      selection === NEW_VIEW_SELECTION
-    )
-      return;
-    if (api.archivedBuckets.some((b) => b.id === selection)) return;
-    writeLS(workspaceId, "lastBucket", selection);
-  }, [workspaceId, selection, api.archivedBuckets]);
-
   const inboxId = inbox?.id ?? null;
 
-  // Where Tasks opens, run once per workspace after the bundle loads: where
-  // you left it, else the Inbox (REPLAN 30; "Open at" is retired). A place
-  // picked in the sidebar before the bundle answered wins.
-  const resolvedForRef = useRef<string | null>(null);
-  const pickedForRef = useRef<string | null>(urlPlace ? workspaceId : null);
-  const pickSelection = useCallback(
-    (next: string) => {
-      pickedForRef.current = workspaceId;
-      setSelection(next);
-    },
-    [workspaceId],
+  // The place open in the centre (DF-1): the address bar's `?place=`, else
+  // where you left Tasks, a first open's onboarding view, or the Inbox
+  // (REPLAN 30, TV-U17; `resolveEntryPlace`). A pick writes the address bar.
+  const bucketIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
+  const archivedBucketIds = useMemo(
+    () => api.archivedBuckets.map((b) => b.id),
+    [api.archivedBuckets],
   );
+  const viewSelections = useMemo(
+    () => (api.views ?? []).map((v) => viewSelection(v.id)),
+    [api.views],
+  );
+  const { place: selection, setPlace: setSelection } = usePlanPlace({
+    workspaceId,
+    urlPlace,
+    onUrlPlaceChange,
+    inboxId,
+    bucketIds,
+    archivedBucketIds,
+    viewSelections,
+    // A first open follows onboarding (TV-U17): the role's first view.
+    firstView: onboardingRole ? firstViewFor(onboardingRole, bucketIds).selection : null,
+    loaded: !api.loading,
+    reachedServer: api.reachedServer,
+    // DF-1: an inbound deep link owns the entry scope; the default waits.
+    holdDefault: inboundPending,
+  });
 
   // The top-bar timer's "open Focus" (and a "Focus on this" toast's Open)
   // opens the sidebar's Focus (TV-F7; it was the Plan · Focus switch). The
@@ -497,8 +486,8 @@ export function TasksPlanView({
   // unrelated visit.
   const openFocus = useCallback(() => {
     setFullPageId(null);
-    pickSelection("today");
-  }, [pickSelection]);
+    setSelection("today");
+  }, [setSelection]);
 
   // The Views header's + (MOD-142): a new blank view, named when it's saved.
   // Each one starts blank, even right after another.
@@ -506,18 +495,8 @@ export function TasksPlanView({
   const startNewView = useCallback(() => {
     setNewViewSeq((n) => n + 1);
     setFullPageId(null);
-    pickSelection(NEW_VIEW_SELECTION);
-  }, [pickSelection]);
-
-  // `?place=upcoming` (Home's Upcoming "+n more"): open it like a sidebar pick
-  // (it wins over "where you left it"), then take it off the URL. On a fresh
-  // mount the selection already starts there (see `selection`).
-  useEffect(() => {
-    if (urlPlace !== "upcoming") return;
-    setFullPageId(null);
-    pickSelection(UPCOMING_SELECTION);
-    onUrlPlaceConsumed?.();
-  }, [urlPlace, pickSelection, onUrlPlaceConsumed]);
+    setSelection(NEW_VIEW_SELECTION);
+  }, [setSelection]);
   useEffect(() => {
     if (consumeFocusViewRequest()) openFocus();
     const onRequest = () => {
@@ -546,9 +525,9 @@ export function TasksPlanView({
         writeViewPrefs(key, { ...prefs, layout: "board" });
       }
       setFullPageId(null);
-      pickSelection(place);
+      setSelection(place);
     },
-    [workspaceId, legacyLayout, pickSelection],
+    [workspaceId, legacyLayout, setSelection],
   );
   const welcome = useTasksWelcome({
     api,
@@ -557,43 +536,6 @@ export function TasksPlanView({
     isOwner: isWorkspaceOwner,
     onFirstView: openFirstView,
   });
-  useEffect(() => {
-    if (api.loading) return;
-    if (resolvedForRef.current === workspaceId) return;
-    if (pickedForRef.current === workspaceId) {
-      resolvedForRef.current = workspaceId;
-      return;
-    }
-    // DF-1: an inbound deep link owns the entry scope — skip the
-    // last-place default rather than race the apply effect below for it
-    // (both would queue setSelection in the same flush; the default must not
-    // win over the deep link's bucket).
-    if (inboundPending) {
-      resolvedForRef.current = workspaceId;
-      return;
-    }
-    resolvedForRef.current = workspaceId;
-    // Saved views reopen too (TV-U8): their selections count as places.
-    const bucketIds = [
-      inboxId,
-      ...buckets.map((b) => b.id),
-      ...(api.views ?? []).map((v) => viewSelection(v.id)),
-    ].filter(Boolean) as string[];
-    setSelection(
-      resolveDefaultSelection({
-        lastBucket: readLS(workspaceId, "lastBucket"),
-        bucketIds,
-        inboxId,
-        // A first open follows onboarding (TV-U17): the role's first view.
-        firstOpen: onboardingRole
-          ? firstViewFor(
-              onboardingRole,
-              buckets.map((b) => b.id),
-            ).selection
-          : null,
-      }),
-    );
-  }, [api.loading, workspaceId, inboxId, buckets, api.views, inboundPending, onboardingRole]);
 
   // My tasks is always in the sidebar (tasks-v3 §3; TV-U15 retires
   // tasks-v2's "two or more members" rule): its status groups answer "what am
@@ -618,31 +560,6 @@ export function TasksPlanView({
   const drafting = selection === NEW_VIEW_SELECTION;
   const place = openView ? viewPlace(openView) : drafting ? "all" : selection;
 
-  // Keep selection valid; "inbox" resolves against the seeded Inbox bucket.
-  // A view waits for the server before it counts as gone.
-  useEffect(() => {
-    if (openViewId) {
-      if (!openView && api.reachedServer) setSelection("inbox");
-      return;
-    }
-    if (
-      selection === "all" ||
-      selection === "inbox" ||
-      selection === "today" ||
-      selection === UPCOMING_SELECTION ||
-      selection === WONTDO_SELECTION ||
-      selection === "mine" ||
-      selection === ARCHIVED_SELECTION ||
-      selection === TRASH_SELECTION ||
-      selection === TEMPLATES_SELECTION ||
-      selection === NEW_VIEW_SELECTION
-    )
-      return;
-    if (inboxId && selection === inboxId) return;
-    // An archived project opens read-only from Archived projects (TV-U6).
-    if (api.archivedBuckets.some((b) => b.id === selection)) return;
-    if (!buckets.some((b) => b.id === selection)) setSelection("inbox");
-  }, [selection, buckets, inboxId, api.archivedBuckets, openViewId, openView, api.reachedServer]);
   /** Chat's "Start a conversation for X" (CV-13), null when chat is off for you. */
   const startConversation = useStartConversation();
   /** The archived project open now (read-only), if any. */
@@ -767,8 +684,7 @@ export function TasksPlanView({
   // The views built on the List (TV-U15): Upcoming's days, the Inbox's
   // triage, My tasks' team block. Each hands the List what differs.
   const isInboxScope = place === "inbox" || (inboxId !== null && place === inboxId);
-  const projectIds = useMemo(() => buckets.map((b) => b.id), [buckets]);
-  const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds });
+  const upcoming = useUpcomingView({ api, canEdit, inboxId, projectIds: bucketIds });
   // The Inbox's rows as the List shows them (set below, once filtered): the
   // cursor after a triage moves to the next of these.
   const inboxRowsRef = useRef<readonly Task[]>([]);
@@ -1034,8 +950,8 @@ export function TasksPlanView({
   // New under "Project is P" files into P (MOD-141), so the task stays in
   // the filtered list; under "Project is Inbox", the capture's own default.
   const filterProjectId = useMemo(
-    () => (place === "today" ? null : seededProject(filtering.seed, projectIds)),
-    [place, filtering.seed, projectIds],
+    () => (place === "today" ? null : seededProject(filtering.seed, bucketIds)),
+    [place, filtering.seed, bucketIds],
   );
 
   // The place's own name; an open view shows its name instead.
@@ -1080,8 +996,8 @@ export function TasksPlanView({
     dirty: tasksDisplay.dirty,
     revert: tasksDisplay.revert,
     placeTitle,
-    projectIds,
-    onOpen: pickSelection,
+    projectIds: bucketIds,
+    onOpen: setSelection,
     urlViewId,
     onUrlViewConsumed: onUrlViewConsumed ?? NO_OP,
     canShare: canEdit,
@@ -1325,7 +1241,7 @@ export function TasksPlanView({
     return () => {
       api.openTrashRef.current = null;
     };
-  }, [api.openTrashRef]);
+  }, [api.openTrashRef, setSelection]);
 
   // Templates and "Duplicate project…" (TV-D15): the dialogs, the Templates
   // page, and what a copy settles into the shared store in one step.
@@ -1342,7 +1258,7 @@ export function TasksPlanView({
     areas: api.areas,
     sections: api.sections,
     tasks: api.tasks,
-    onOpenProject: pickSelection,
+    onOpenProject: setSelection,
     onOpenTask: (id) => onUrlTaskIdChange(id),
   });
   const offersTemplates = templateActions.supported && canEdit;
@@ -1357,13 +1273,13 @@ export function TasksPlanView({
     sections: api.sections,
     tasks,
     archivedTasks: api.archivedTasks,
-    onOpenProject: pickSelection,
+    onOpenProject: setSelection,
   });
 
   const left = (
     <BucketRail
       selection={selection}
-      onSelect={pickSelection}
+      onSelect={setSelection}
       buckets={buckets}
       areas={api.areas}
       inbox={inbox}
@@ -2128,7 +2044,7 @@ export function TasksPlanView({
         stayingIds={displayProps.stayingIds}
         taskKey={taskKey}
         onOpenTask={setFullPageId}
-        onOpenProject={pickSelection}
+        onOpenProject={setSelection}
         // TV-TL2: a selection's bar keys (never Upcoming's or the Inbox's own),
         // and "No date · n" opening the right panel's view.
         onViewKey={bulk.onKey}
