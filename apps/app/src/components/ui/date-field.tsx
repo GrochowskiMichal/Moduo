@@ -6,10 +6,24 @@ import { formatDay, formatDayTime } from "@/lib/time-format";
 import { getResolvedTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
-import { Calendar } from "./calendar";
+import type { Calendar as CalendarImpl } from "./calendar";
 import { Input, useDraftField } from "./input";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 import { PropertyValue } from "./property-row";
+
+// react-day-picker is its own async chunk, fetched when a picker first opens.
+const LazyCalendarImpl = React.lazy(() =>
+  import("./calendar").then((m) => ({ default: m.Calendar })),
+);
+
+/** The token calendar behind a lazy boundary; holds its grid's size while it loads. */
+function LazyCalendar(props: React.ComponentProps<typeof CalendarImpl>) {
+  return (
+    <React.Suspense fallback={<div aria-busy="true" className="h-72 w-64" />}>
+      <LazyCalendarImpl {...props} />
+    </React.Suspense>
+  );
+}
 
 type DateFieldProps = {
   value: Date | null;
@@ -310,7 +324,7 @@ function DatePickerPanel({ draft, heading }: { draft: DateDraft; heading?: strin
           </Button>
         ))}
       </div>
-      <Calendar
+      <LazyCalendar
         mode="single"
         selected={draft.shown ?? undefined}
         onSelect={draft.pickDay}
@@ -413,4 +427,12 @@ function DateField({
 }
 
 export type { DateDraft, DateFieldProps, TimeInputProps };
-export { DateField, DatePickerPanel, formatTimeText, parseTimeText, TimeInput, useDateDraft };
+export {
+  DateField,
+  DatePickerPanel,
+  formatTimeText,
+  LazyCalendar,
+  parseTimeText,
+  TimeInput,
+  useDateDraft,
+};

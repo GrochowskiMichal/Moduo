@@ -13,21 +13,14 @@ import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from 
 import { useCallback, useMemo, useState } from "react";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "../../../components/ui/alert-dialog";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
 import { ShareMenu } from "../../sharing/share-menu";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
+import { TasksProvider } from "../../tasks/tasks-context";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import { useNotesExperience } from "../experience";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
@@ -45,12 +38,29 @@ import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
 import { NotesSidebar } from "./notes-sidebar";
 import { NotesTopBar } from "./notes-top-bar";
+import { SharingQuestionDialog } from "./sharing-question-dialog";
 import type { FooterView } from "./sidebar-footer-views";
 import { useNotesShell } from "./use-notes-shell";
 import { useShellActions } from "./use-shell-actions";
 import { useShellTasks } from "./use-shell-tasks";
 
 export function NotesShell() {
+  // Task lines read the Tasks context (A4): the provider wraps the whole shell.
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+    >
+      <NotesShellBody />
+    </TasksProvider>
+  );
+}
+
+function NotesShellBody() {
   const shell = useNotesShell();
   const { runtime, userId, workspace, workspaceId, module, selectedId, selectedNote, draft } =
     shell;
@@ -78,9 +88,7 @@ export function NotesShell() {
 
   const tasks = useShellTasks({
     runtime,
-    userId,
     workspaceId,
-    tasksPermission: workspace.modulePermissions.tasks,
     noteId: editorNoteId,
     noteLabel: displayTitle(selectedNote?.title ?? ""),
   });
@@ -88,7 +96,7 @@ export function NotesShell() {
     runtime,
     workspaceId,
     module,
-    deleteTask: tasks.tasksApi.deleteTask,
+    deleteTask: tasks.deleteTask,
   });
   const actions = useShellActions(shell, trashWithDetach);
   const search = useCallback(
@@ -336,7 +344,6 @@ export function NotesShell() {
               taskBridge={tasks.taskBridge}
               taskDetailId={tasks.taskDetailId}
               onTaskDetail={tasks.setTaskDetailId}
-              tasksApi={tasks.tasksApi}
               onOpenEntity={openEntity}
             />
           }
@@ -358,30 +365,10 @@ export function NotesShell() {
         onOpenChange={(open) => !open && actions.setMoveTarget(null)}
         onPick={actions.pickMoveTarget}
       />
-      <AlertDialog
+      <SharingQuestionDialog
         open={actions.sharingQuestion !== null}
-        onOpenChange={(open) => {
-          // Esc / click-away = keep current access, and the move still happens.
-          if (!open && actions.sharingQuestion) actions.answerSharing(false);
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Moving under a private note</AlertDialogTitle>
-            <AlertDialogDescription>
-              This note is shared, and its new parent is private. Who should be able to see it?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => actions.answerSharing(false)}>
-              Keep current access
-            </AlertDialogCancel>
-            <AlertDialogAction onClick={() => actions.answerSharing(true)}>
-              Match the new parent
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        onAnswer={actions.answerSharing}
+      />
     </>
   );
 }

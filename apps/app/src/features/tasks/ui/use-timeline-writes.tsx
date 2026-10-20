@@ -1,11 +1,11 @@
 // What the Timeline saves (Tasks v3 TV-TL2, REPLAN 70): a drag's result, a
 // click on an undated row, a ⌥←/→, the dependency mark's fix and a drop from
 // the No date view. Every change is one store write with one Undo:
-//   - tasks (one or a selection) through the bulk engine (`api.bulkWrite`,
+//   - tasks (one or a selection) through the bulk engine (`bulkWrite`,
 //     TV-U12), which also moves a hollow point's session and a repeat's
 //     occurrence;
-//   - a section's dates through `api.setSectionDates`, a project's through
-//     `api.setProjectDates`.
+//   - a section's dates through `setSectionDates`, a project's through
+//     `setProjectDates`.
 // A repeat asks first ("Just this one" or "Change the pattern", TV-U15's
 // dialog). Moving a task later offers "Also move the 3 that wait on this" in
 // the toast; nothing moves by itself.
@@ -14,9 +14,9 @@ import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "
 
 import { undoToast } from "../../../lib/undo-toast";
 import { dayWordOf, dueDayOf as dueKeyOf, tasksWord } from "../bulk";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Section, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
+import { useTaskCommands, useTasksReader } from "../tasks-context";
 import { waitingOn, waitingWords } from "../timeline-deps";
 import {
   asksAboutRepeat,
@@ -75,16 +75,18 @@ function shiftWords(shift: number): string {
   return `${by} ${shift < 0 ? "earlier" : "later"}`;
 }
 
-export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): TimelineWrites {
+export function useTimelineWrites(zoom: TimelineZoom): TimelineWrites {
   // The newest of everything: writes run from dialogs and toasts, later.
-  const latest = useRef({ api, zoom });
+  const commands = useTaskCommands();
+  const read = useTasksReader();
+  const latest = useRef({ commands, read, zoom });
   useLayoutEffect(() => {
-    latest.current = { api, zoom };
+    latest.current = { commands, read, zoom };
   });
   const [ask, setAsk] = useState<Ask | null>(null);
 
   const taskOf = useCallback(
-    (id: string) => latest.current.api.tasks.find((t) => t.id === id) ?? null,
+    (id: string) => latest.current.read().liveTasks.find((t) => t.id === id) ?? null,
     [],
   );
 
@@ -101,17 +103,16 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
     (plan: TaskMovePlan, shift: number, alsoUndo?: () => void, skipped?: number) => void
   >(() => undefined);
   run.current = (plan, shift, alsoUndo, skipped = 0) => {
-    const a = latest.current.api;
     if (plan.writes.length === 0) return;
-    void a.bulkWrite(plan.writes, {
+    void latest.current.commands.bulkWrite(plan.writes, {
       label: (main) => withSkipped(plan.label(main), skipped),
       alsoUndo,
       followUp:
         shift > 0
           ? (changed, undoThis) => {
-              const now = latest.current.api;
-              const byId = new Map(now.tasks.map((t) => [t.id, t]));
-              const waiting = waitingOn(new Set(changed), now.taskRelations ?? [], byId);
+              const now = latest.current.read();
+              const byId = new Map(now.liveTasks.map((t) => [t.id, t]));
+              const waiting = waitingOn(new Set(changed), now.bundle.taskRelations ?? [], byId);
               if (waiting.length === 0) return null;
               const ids = waiting.map((t) => t.id);
               return {
@@ -120,7 +121,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
                 // repeat among them asks; one Undo puts both moves back.
                 onClick: () => {
                   const fresh = ids.flatMap((id) => {
-                    const task = latest.current.api.tasks.find((t) => t.id === id);
+                    const task = latest.current.read().liveTasks.find((t) => t.id === id);
                     return task ? [task] : [];
                   });
                   shiftRef.current(fresh, shift, () => {
@@ -194,11 +195,11 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   );
 
   const sectionNamed = useCallback((id: string): Section | null => {
-    return latest.current.api.sections.find((s) => s.id === id) ?? null;
+    return latest.current.read().sections.find((s) => s.id === id) ?? null;
   }, []);
 
   const projectName = useCallback((id: string): string => {
-    const { api: a } = latest.current;
+    const a = latest.current.read();
     return (
       a.buckets.find((b) => b.id === id)?.name ??
       a.archivedBuckets.find((b) => b.id === id)?.name ??
@@ -209,7 +210,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   const sectionEnds = useCallback(
     (sectionId: string, day: number) => {
       const name = sectionNamed(sectionId)?.name ?? "";
-      void latest.current.api.setSectionDates(
+      void latest.current.commands.setSectionDates(
         sectionId,
         { startsOn: null, endsOn: keyOfDay(day) },
         milestoneWords(name, day),
@@ -221,7 +222,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   const sectionSpan = useCallback(
     (sectionId: string, span: DaySpan) => {
       const name = sectionNamed(sectionId)?.name || "Untitled section";
-      void latest.current.api.setSectionDates(
+      void latest.current.commands.setSectionDates(
         sectionId,
         { startsOn: keyOfDay(span.start), endsOn: keyOfDay(span.end) },
         `${name} · ${spanWords(span.start, span.end)}`,
@@ -232,7 +233,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
 
   const projectSpan = useCallback(
     (projectId: string, span: DaySpan) => {
-      void latest.current.api.setProjectDates(
+      void latest.current.commands.setProjectDates(
         projectId,
         { startsOn: keyOfDay(span.start), targetOn: keyOfDay(span.end) },
         `${projectName(projectId)} · ${spanWords(span.start, span.end)}`,
@@ -300,7 +301,7 @@ export function useTimelineWrites(api: TasksModuleApi, zoom: TimelineZoom): Time
   const clearDue = useCallback((tasks: readonly Task[], skipped = 0) => {
     const dated = tasks.filter((t) => dueKeyOf(t));
     if (dated.length === 0) return;
-    void latest.current.api.bulkWrite(
+    void latest.current.commands.bulkWrite(
       dated.map((t) => ({ taskId: t.id, dueDate: null })),
       {
         label: (n) =>

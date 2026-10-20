@@ -3,19 +3,19 @@
 // memoised, and hooks keep stable identities, so editing one task redraws one
 // row").
 //
-// The module's API object is new on every change (any task, the queue, a
-// tag), so a row that took it as a prop redrew on every edit anywhere. A row
-// takes instead:
+// The view reads the module's maps (queue, tags, blockers, …) from the Tasks
+// context, and they are new on many changes, so a row that took them as props
+// would redraw on every edit anywhere. A row takes instead:
 //   - its task (the store keeps every other task's object as it was);
-//   - its facts, read from the API's maps for that task only, compared by
-//     value (`sameTaskFacts`): a row redraws when its own facts change;
+//   - its facts, read from those maps for that task only, compared by value
+//     (`sameTaskFacts`): a row redraws when its own facts change;
 //   - one actions object that never changes (`useRowActions`), which calls
-//     the newest API when a person acts.
+//     the newest commands when a person acts.
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { useLayoutEffect, useRef, useState } from "react";
 import { formatAge } from "../../../lib/time-format";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import type { TaskCommands } from "../commands";
 import type { ProjectStatus, Tag, Task, TaskWaitingEntry } from "../model";
 import { statusNameOf } from "../statuses";
 
@@ -57,18 +57,17 @@ export type TaskFacts = {
   agent?: string | null;
 };
 
-/** The API maps the facts are read from. */
-export type FactsSource = Pick<
-  TasksModuleApi,
-  | "queuedTaskIds"
-  | "queueClaims"
-  | "blockedTaskIds"
-  | "blockersByTask"
-  | "tagsByTask"
-  | "subtaskProgressByTask"
-  | "statusById"
-> & {
-  /** Section id → name (the view builds it once from `api.sections`). */
+/** The maps the facts are read from (plain data: the views build it from the Tasks context). */
+export type FactsSource = {
+  queuedTaskIds: ReadonlySet<string>;
+  /** Who else has each task queued (user ids, earliest first). */
+  queueClaims: ReadonlyMap<string, readonly string[]>;
+  blockedTaskIds: ReadonlySet<string>;
+  blockersByTask: ReadonlyMap<string, readonly Pick<Task, "title" | "status">[]>;
+  tagsByTask: ReadonlyMap<string, readonly Tag[]>;
+  subtaskProgressByTask: ReadonlyMap<string, { done: number; total: number }>;
+  statusById: ReadonlyMap<string, ProjectStatus>;
+  /** Section id → name (the view builds it once from the sections). */
   sectionNames?: ReadonlyMap<string, string>;
   /** Task id → its waiting line (`waitingLabelsOf`). */
   waitingLabels?: ReadonlyMap<string, string>;
@@ -96,24 +95,24 @@ export function blockedLabelOf(blockers: readonly Pick<Task, "title" | "status">
     : `Blocked by ${open.length} tasks`;
 }
 
-export function taskFactsOf(task: Task, api: FactsSource): TaskFacts {
-  const blocked = api.blockedTaskIds.has(task.id);
+export function taskFactsOf(task: Task, source: FactsSource): TaskFacts {
+  const blocked = source.blockedTaskIds.has(task.id);
   return {
-    queued: api.queuedTaskIds.has(task.id),
-    claims: api.queueClaims.get(task.id) ?? NONE,
-    blockedLabel: blocked ? blockedLabelOf(api.blockersByTask.get(task.id) ?? NONE) : null,
-    tags: api.tagsByTask.get(task.id) ?? NONE,
-    progress: api.subtaskProgressByTask.get(task.id) ?? null,
-    statusName: statusNameOf(task, api.statusById ?? NO_STATUSES),
-    sectionName: task.sectionId ? (api.sectionNames?.get(task.sectionId) ?? null) : null,
-    waiting: api.waitingLabels?.get(task.id) ?? null,
-    comments: api.commentCounts?.get(task.id) ?? 0,
-    attachments: api.attachmentCounts?.get(task.id) ?? 0,
-    pending: api.pendingTaskIds?.has(task.id) ?? false,
-    ...(api.whenOf ? { when: api.whenOf(task) } : {}),
-    ...(api.takeableIds?.has(task.id) ? { takeable: true } : {}),
-    ...(api.sourceOf ? { source: api.sourceOf(task) } : {}),
-    ...(api.agentMarks?.has(task.id) ? { agent: api.agentMarks.get(task.id) } : {}),
+    queued: source.queuedTaskIds.has(task.id),
+    claims: source.queueClaims.get(task.id) ?? NONE,
+    blockedLabel: blocked ? blockedLabelOf(source.blockersByTask.get(task.id) ?? NONE) : null,
+    tags: source.tagsByTask.get(task.id) ?? NONE,
+    progress: source.subtaskProgressByTask.get(task.id) ?? null,
+    statusName: statusNameOf(task, source.statusById ?? NO_STATUSES),
+    sectionName: task.sectionId ? (source.sectionNames?.get(task.sectionId) ?? null) : null,
+    waiting: source.waitingLabels?.get(task.id) ?? null,
+    comments: source.commentCounts?.get(task.id) ?? 0,
+    attachments: source.attachmentCounts?.get(task.id) ?? 0,
+    pending: source.pendingTaskIds?.has(task.id) ?? false,
+    ...(source.whenOf ? { when: source.whenOf(task) } : {}),
+    ...(source.takeableIds?.has(task.id) ? { takeable: true } : {}),
+    ...(source.sourceOf ? { source: source.sourceOf(task) } : {}),
+    ...(source.agentMarks?.has(task.id) ? { agent: source.agentMarks.get(task.id) } : {}),
   };
 }
 
@@ -189,7 +188,7 @@ export function sameValues<T extends object>(a: T, b: T): boolean {
 
 /** The actions a row or card can take. */
 export type TaskRowActions = Pick<
-  TasksModuleApi,
+  TaskCommands,
   | "toggleDone"
   | "patchTask"
   | "toggleQueue"
@@ -202,12 +201,12 @@ export type TaskRowActions = Pick<
 
 /**
  * One actions object for the life of the view: each call goes to the newest
- * API, so rows never redraw because the API object did.
+ * commands, so rows never redraw because the commands object did.
  */
-export function useRowActions(api: TaskRowActions): TaskRowActions {
-  const latest = useRef(api);
+export function useRowActions(commands: TaskRowActions): TaskRowActions {
+  const latest = useRef(commands);
   useLayoutEffect(() => {
-    latest.current = api;
+    latest.current = commands;
   });
   const [actions] = useState<TaskRowActions>(() => ({
     toggleDone: (...args) => latest.current.toggleDone(...args),
@@ -217,7 +216,7 @@ export function useRowActions(api: TaskRowActions): TaskRowActions {
     skipOccurrence: (...args) => latest.current.skipOccurrence(...args),
     setTaskParent: (...args) => latest.current.setTaskParent(...args),
     deleteTask: (...args) => latest.current.deleteTask(...args),
-    // Optional on the views' stand-in APIs (stories, tests).
+    // Optional on stand-in commands (stories, tests).
     setTaskStatus: (...args) => latest.current.setTaskStatus?.(...args),
   }));
   return actions;

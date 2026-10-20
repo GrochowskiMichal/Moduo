@@ -5,6 +5,7 @@
 
 import { isClosedTask, isOpenTask, taskCategoryOf } from "@contracts/vocabularies";
 
+import { localDayOf } from "../../lib/task-rows";
 import { toFloating } from "../../lib/zoned-time";
 import type {
   Bucket,
@@ -84,7 +85,8 @@ export function projectFacts(tasks: readonly Task[], projectId: string) {
   };
 }
 
-const dueKey = (t: Task) => t.dueOn ?? t.dueDate?.slice(0, 10) ?? null;
+// The day a due date stands for on this device (TV-D9), never its UTC day.
+const dueKey = (t: Task) => t.dueOn ?? localDayOf(t.dueDate);
 
 export type SectionProgress = {
   section: Section;

@@ -4,7 +4,9 @@ import {
   currentTimeBlockSlot,
   myTasksScope,
   openCount,
+  remembersPlace,
   resolveDefaultSelection,
+  resolveEntryPlace,
   setBucketTimeBlock,
   timeBlockByBucket,
 } from "./default-view";
@@ -96,6 +98,90 @@ describe("resolveDefaultSelection (REPLAN 30: opens where you left it)", () => {
   it("never opens Archived projects or Recently deleted", () => {
     expect(resolveDefaultSelection({ ...base, lastBucket: "archived" })).toBe("inbox");
     expect(resolveDefaultSelection({ ...base, lastBucket: "trash" })).toBe("inbox");
+  });
+});
+
+describe("resolveEntryPlace (DF-1: the address bar holds the place)", () => {
+  const V = "view:9d1c3a7e-1111-4222-8333-444455556666";
+  const base = {
+    url: null,
+    reopening: true,
+    lastBucket: null,
+    legacyMode: false,
+    firstView: null,
+    inboxId: "inbox-id",
+    bucketIds: ["b1", "b2"],
+    archivedBucketIds: ["old"],
+    viewSelections: [V],
+    loaded: true,
+    reachedServer: true,
+  };
+
+  it("opens the place the address bar holds, over where you left Tasks", () => {
+    expect(resolveEntryPlace({ ...base, url: "upcoming", lastBucket: "b2" })).toBe("upcoming");
+    expect(resolveEntryPlace({ ...base, url: "b1", lastBucket: "b2" })).toBe("b1");
+    expect(resolveEntryPlace({ ...base, url: V })).toBe(V);
+    expect(resolveEntryPlace({ ...base, url: "inbox-id" })).toBe("inbox-id");
+  });
+
+  it("without one, reopens where you left Tasks, else onboarding's view, else the Inbox", () => {
+    expect(resolveEntryPlace({ ...base, lastBucket: "b2" })).toBe("b2");
+    expect(resolveEntryPlace({ ...base, lastBucket: V })).toBe(V);
+    expect(resolveEntryPlace({ ...base, firstView: "b1" })).toBe("b1");
+    expect(resolveEntryPlace(base)).toBe("inbox");
+    // The retired Plan · Focus switch's Focus mode opens Focus (TV-F7).
+    expect(resolveEntryPlace({ ...base, legacyMode: true, lastBucket: "b2" })).toBe("today");
+  });
+
+  it("trusts the address bar and memory while the bundle loads", () => {
+    const loading = { ...base, loaded: false, bucketIds: [], viewSelections: [] };
+    expect(resolveEntryPlace({ ...loading, url: "b9" })).toBe("b9");
+    expect(resolveEntryPlace({ ...loading, lastBucket: "b9" })).toBe("b9");
+    expect(resolveEntryPlace(loading)).toBe("inbox");
+  });
+
+  it("a project gone mid-visit falls back to the Inbox", () => {
+    const visiting = { ...base, reopening: false, lastBucket: "b2" };
+    expect(resolveEntryPlace({ ...visiting, url: "gone" })).toBe("inbox");
+    // On arrival (another workspace's project, a deleted one) it's where you left Tasks.
+    expect(resolveEntryPlace({ ...base, url: "gone", lastBucket: "b2" })).toBe("b2");
+  });
+
+  it("a view counts as gone only once the server answered", () => {
+    const missing = "view:00000000-0000-4000-8000-000000000000";
+    expect(resolveEntryPlace({ ...base, url: missing, reachedServer: false })).toBe(missing);
+    expect(resolveEntryPlace({ ...base, url: missing, reopening: false })).toBe("inbox");
+  });
+
+  it("a place you only pass through doesn't reopen on arrival, but opens when picked", () => {
+    for (const url of ["trash", "archived", "wontdo", "templates", "new-view", "old"]) {
+      expect(resolveEntryPlace({ ...base, url, lastBucket: "b1" })).toBe("b1");
+      expect(resolveEntryPlace({ ...base, url, lastBucket: "b1", reopening: false })).toBe(url);
+    }
+  });
+
+  it("settles: what it resolves resolves to itself", () => {
+    const cases = [
+      { ...base },
+      { ...base, url: "gone", lastBucket: "b2" },
+      { ...base, url: "trash", lastBucket: V },
+      { ...base, firstView: "upcoming" },
+    ];
+    for (const c of cases) {
+      const place = resolveEntryPlace(c);
+      expect(resolveEntryPlace({ ...c, url: place, reopening: false })).toBe(place);
+    }
+  });
+});
+
+describe("remembersPlace", () => {
+  it("remembers projects, views and the reopenable scopes, never a passing place", () => {
+    expect(remembersPlace("b1", [])).toBe(true);
+    expect(remembersPlace("view:x", [])).toBe(true);
+    expect(remembersPlace("mine", [])).toBe(true);
+    expect(remembersPlace("trash", [])).toBe(false);
+    expect(remembersPlace("new-view", [])).toBe(false);
+    expect(remembersPlace("old", ["old"])).toBe(false);
   });
 });
 

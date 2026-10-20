@@ -1,0 +1,340 @@
+// The Tasks module for a page, through React context (A4). `TasksProvider`
+// builds the Tasks root (`useTasksRoot`: the store, the commands, the stateful
+// bits) once for the page, and the components under it read only what they
+// show:
+//
+// - `useTaskCommands()`: every command, one stable object per store, runtime,
+//   workspace and person. A data change never gives it a new identity, so a
+//   component that only writes never re-renders on one.
+// - `useTasksSelector(select)`: a slice of the Tasks data (`tasksDataOf` the
+//   store's snapshot; the snapshot itself is the second argument). The
+//   component re-renders only when the slice's identity moves. The selectors
+//   are cached, so `d.inbox`, `d.liveTasks`, `snap.sessions` are stable
+//   between unrelated writes; a selector must never build a new object or
+//   array itself (useSyncExternalStore would loop).
+// - `useTaskById(id)`, `useTasksStatus()`: the two conveniences most surfaces need.
+// - `useTasksUserId()`, `useTasksActivityStamp()`, `useTaskTags(id)`: who
+//   reads, the trail's refetch cue, and a task's tags (the tag store's).
+// - `useTasksReader()`: the data as it is when a handler runs (a drop's
+//   neighbours), without subscribing the component to it.
+// - `useTaskTagIndex()`, `useDriftCountByBucket()`, `useStatusesForBucket()`,
+//   `useFrontierFor()`: derived reads the Tasks views share (each cached).
+// - `useTasksTrash()`, `useOpenTrashRef()`, `useSavedViewOps()`: the page's
+//   stateful pieces (Recently deleted, its link, saved views).
+// - `TaskCommandsOverride`: a host's own take on a few commands for what is
+//   under it (the Tasks page guards Focus with the blocked-by offer).
+//
+// With the React Compiler on, each hook returns what useSyncExternalStore
+// hands it, never a read of the store beside it (docs/gotchas/ui.md, RF-1).
+
+import {
+  createContext,
+  type MutableRefObject,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
+import type { ModuoRuntime } from "../../lib/runtime.types";
+import { EMPTY_SNAPSHOT, type StoreSnapshot, type WorkspaceStore } from "../../lib/sync/store";
+import { entityKey, useTagView } from "../tags/store";
+import type { TaskCommands } from "./commands";
+import { type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";
+import type { ViewOps } from "./hooks/use-view-ops";
+import type { ProjectStatus, Tag, Task, TasksTrash } from "./model";
+import {
+  byIdOf,
+  driftCountByBucketOf,
+  frontierOf,
+  openTaskCountByTagOf,
+  statusesForBucketOf,
+  type TasksData,
+  tagsByTaskOf,
+  tasksDataOf,
+} from "./selectors";
+import { useToday } from "./use-today";
+
+/** What never changes with the data: the narrow hooks read the store through it. */
+type TasksScope = {
+  store: WorkspaceStore | null;
+  commands: TaskCommands;
+  userId: string | null;
+  workspaceId: string | null;
+  canRead: boolean;
+  canEdit: boolean;
+};
+
+const ScopeContext = createContext<TasksScope | null>(null);
+/** Recently deleted (when the page reads it) and the page's way there. */
+type TrashScope = {
+  trash: TasksTrash | null;
+  openTrashRef: MutableRefObject<(() => void) | null>;
+};
+const TrashContext = createContext<TrashScope | null>(null);
+const ViewOpsContext = createContext<ViewOps | null>(null);
+/** Bumped after every op that saved: the detail panel's trail re-reads on it. */
+const ActivityContext = createContext(0);
+
+type ProviderProps = {
+  runtime: ModuoRuntime | null;
+  userId: string | null;
+  workspaceId: string | null;
+  modulePermission?: TasksParams["modulePermission"];
+  /** Also read Recently deleted (TV-U6): the Tasks page only. */
+  includeTrash?: boolean;
+  children: ReactNode;
+};
+
+export function TasksProvider({
+  runtime,
+  userId,
+  workspaceId,
+  modulePermission,
+  includeTrash,
+  children,
+}: ProviderProps) {
+  const root = useTasksRoot(runtime, { userId, workspaceId, modulePermission, includeTrash });
+  const { store, commands, canRead, canEdit } = root;
+  const scope = useMemo<TasksScope>(
+    () => ({ store, commands, userId, workspaceId, canRead, canEdit }),
+    [store, commands, userId, workspaceId, canRead, canEdit],
+  );
+  const { trash, openTrashRef } = root;
+  const trashScope = useMemo<TrashScope>(() => ({ trash, openTrashRef }), [trash, openTrashRef]);
+  const {
+    views,
+    saveView,
+    saveViewChanges,
+    renameView,
+    shareView,
+    deleteView,
+    moveView,
+    seedViews,
+  } = root.viewOps;
+  const viewOps = useMemo<ViewOps>(
+    () => ({
+      views,
+      saveView,
+      saveViewChanges,
+      renameView,
+      shareView,
+      deleteView,
+      moveView,
+      seedViews,
+    }),
+    [views, saveView, saveViewChanges, renameView, shareView, deleteView, moveView, seedViews],
+  );
+  return (
+    <ScopeContext.Provider value={scope}>
+      <ActivityContext.Provider value={root.activityStamp}>
+        <TrashContext.Provider value={trashScope}>
+          <ViewOpsContext.Provider value={viewOps}>{children}</ViewOpsContext.Provider>
+        </TrashContext.Provider>
+      </ActivityContext.Provider>
+    </ScopeContext.Provider>
+  );
+}
+
+function useTasksScope(): TasksScope {
+  const scope = useContext(ScopeContext);
+  if (!scope) throw new Error("Tasks hooks need a <TasksProvider> above them.");
+  return scope;
+}
+
+const noSubscribe = () => () => {};
+
+/**
+ * A host's own version of some commands for everything under it, as the Tasks
+ * page's queue toggle opens the blocked-by offer first. Pass a stable object:
+ * a new one gives every command reader below a new `useTaskCommands()`.
+ */
+export function TaskCommandsOverride({
+  commands,
+  children,
+}: {
+  commands: Partial<TaskCommands>;
+  children: ReactNode;
+}) {
+  const scope = useTasksScope();
+  const value = useMemo<TasksScope>(
+    () => ({ ...scope, commands: { ...scope.commands, ...commands } }),
+    [scope, commands],
+  );
+  return <ScopeContext.Provider value={value}>{children}</ScopeContext.Provider>;
+}
+
+/** Every Tasks command; the identity holds across data changes. */
+export function useTaskCommands(): TaskCommands {
+  return useTasksScope().commands;
+}
+
+/**
+ * A slice of the Tasks data, re-rendering only when its identity moves.
+ * Return a cached value (a field of `data` or `snap`, a row from them), never
+ * a new object or array.
+ */
+export function useTasksSelector<T>(select: (data: TasksData, snap: StoreSnapshot) => T): T {
+  const { store, userId, workspaceId } = useTasksScope();
+  const read = () => {
+    const snap = store ? store.getSnapshot() : EMPTY_SNAPSHOT;
+    return select(tasksDataOf(snap, userId, workspaceId), snap);
+  };
+  return useSyncExternalStore(store ? store.subscribe : noSubscribe, read, read);
+}
+
+/** One live task (as `api.tasks.find` finds it: not deleted, not in an archived project), or null. */
+export function useTaskById(id: string | null | undefined): Task | null {
+  return useTasksSelector((d) => (id ? (byIdOf(d.liveTasks).get(id) ?? null) : null));
+}
+
+export type TasksStatus = {
+  /** Before the first answer: show a skeleton, never "empty" (TV-P0). */
+  loading: boolean;
+  loaded: boolean;
+  error: string | null;
+  canRead: boolean;
+  canEdit: boolean;
+  /** Reading the device copy; captures and check-offs wait (TV-D11a). */
+  offline: boolean;
+  /** Done, Won't do and Backlog tasks have arrived (they load after the open ones). */
+  restLoaded: boolean;
+  /**
+   * A read reached the server this session (not just the device copy): what
+   * isn't here now is really gone (TV-U15's snoozes are forgotten only then).
+   */
+  reachedServer: boolean;
+};
+
+/** Loading, error and access, re-rendering only when one of them changes. */
+export function useTasksStatus(): TasksStatus {
+  const { store, canRead, canEdit } = useTasksScope();
+  const loaded = useTasksSelector((_, snap) => !!store && snap.loaded);
+  const error = useTasksSelector((_, snap) => (store ? snap.error : null));
+  const offline = useTasksSelector((_, snap) => !!store && snap.offline);
+  const restLoaded = useTasksSelector((_, snap) => !!store && snap.restLoaded);
+  const reachedServer = useTasksSelector(
+    (_, snap) => !!store && snap.loadStamp > 0 && !snap.fromCache && !snap.offline,
+  );
+  return {
+    loading: !!store && !loaded,
+    loaded,
+    error,
+    canRead,
+    canEdit,
+    offline,
+    restLoaded,
+    reachedServer,
+  };
+}
+
+/** Who reads the Tasks data (null before sign-in). */
+export function useTasksUserId(): string | null {
+  return useTasksScope().userId;
+}
+
+/** Moves after every op that saved (the detail panel's trail re-reads on it). */
+export function useTasksActivityStamp(): number {
+  return useContext(ActivityContext);
+}
+
+const NO_TAGS: Tag[] = [];
+
+/**
+ * The workspace's live tags and one task's (name-sorted), from the shared tag
+ * store: re-renders on a tag change, never on a task's.
+ */
+export function useTaskTags(taskId: string): { tags: Tag[]; taskTags: Tag[] } {
+  const { workspaceId, canRead } = useTasksScope();
+  const view = useTagView(canRead ? workspaceId : null);
+  return { tags: view.tags, taskTags: view.byEntity.get(entityKey("task", taskId)) ?? NO_TAGS };
+}
+
+/**
+ * The Tasks data as it is now, for a handler (a drop reads its neighbours):
+ * the component doesn't re-render when it changes.
+ */
+export function useTasksReader(): () => TasksData {
+  const { store, userId, workspaceId } = useTasksScope();
+  return useCallback(
+    () => tasksDataOf(store ? store.getSnapshot() : EMPTY_SNAPSHOT, userId, workspaceId),
+    [store, userId, workspaceId],
+  );
+}
+
+export type TaskTagIndex = {
+  /** Live workspace tags, name-sorted. */
+  tags: Tag[];
+  /** Tags attached to each task, name-sorted. */
+  tagsByTask: Map<string, Tag[]>;
+  /** Open-task count per tag (the filter menu's counts). */
+  openTaskCountByTag: Map<string, number>;
+};
+
+/** The workspace's tags by task, from the shared tag store; each map is cached. */
+export function useTaskTagIndex(): TaskTagIndex {
+  const { workspaceId, canRead } = useTasksScope();
+  const view = useTagView(canRead ? workspaceId : null);
+  const liveTasks = useTasksSelector((d) => d.liveTasks);
+  return {
+    tags: view.tags,
+    tagsByTask: tagsByTaskOf(view.byEntity),
+    openTaskCountByTag: openTaskCountByTagOf(view.links, liveTasks),
+  };
+}
+
+/** Soft, ambient per-project drift counts; rolls over at midnight. */
+export function useDriftCountByBucket(): Map<string, number> {
+  const today = useToday();
+  const liveTasks = useTasksSelector((d) => d.liveTasks);
+  return driftCountByBucketOf(liveTasks, today);
+}
+
+/**
+ * The statuses a project's tasks use (the Inbox: the workspace default). A
+ * read for render: its identity moves with the statuses and projects.
+ */
+export function useStatusesForBucket(): (bucketId: string) => ProjectStatus[] {
+  const statuses = useTasksSelector((d) => d.statuses);
+  const allBuckets = useTasksSelector((d) => d.allBuckets);
+  return useCallback(
+    (bucketId: string) => statusesForBucketOf(statuses, allBuckets, bucketId),
+    [statuses, allBuckets],
+  );
+}
+
+/**
+ * The unblocked frontier of a task: "what's actually next" (spec §5c). A read
+ * for render: its identity moves with the tasks and their blockers.
+ */
+export function useFrontierFor(): (taskId: string) => Task[] {
+  const liveTasks = useTasksSelector((d) => d.liveTasks);
+  const relations = useTasksSelector((d) => d.bundle.taskRelations);
+  return useCallback(
+    (taskId: string) => frontierOf(liveTasks, relations, taskId),
+    [liveTasks, relations],
+  );
+}
+
+function useTrashScope(): TrashScope {
+  const scope = useContext(TrashContext);
+  if (!scope) throw new Error("Tasks hooks need a <TasksProvider> above them.");
+  return scope;
+}
+
+/** Recently deleted (TV-U6), when the provider reads it (`includeTrash`); null otherwise. */
+export function useTasksTrash(): TasksTrash | null {
+  return useTrashScope().trash;
+}
+
+/** The page sets it: opens Recently deleted (the delete toast links there). */
+export function useOpenTrashRef(): MutableRefObject<(() => void) | null> {
+  return useTrashScope().openTrashRef;
+}
+
+/** Saved views (TV-U8): yours, then the ones shared with you, and their ops. */
+export function useSavedViewOps(): ViewOps {
+  const ops = useContext(ViewOpsContext);
+  if (!ops) throw new Error("Tasks hooks need a <TasksProvider> above them.");
+  return ops;
+}

@@ -12,7 +12,6 @@ import { type PanelItem, RightPanel } from "../../../components/app/right-panel"
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import type { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
@@ -36,7 +35,6 @@ export function NotesRightPanel({
   taskBridge,
   taskDetailId,
   onTaskDetail,
-  tasksApi,
   onOpenEntity,
 }: {
   runtime: ModuoRuntime | null;
@@ -52,7 +50,6 @@ export function NotesRightPanel({
   taskBridge: NotesTaskBridge;
   taskDetailId: string | null;
   onTaskDetail: (id: string | null) => void;
-  tasksApi: ReturnType<typeof useTasksModule>;
   onOpenEntity: (ref: EntityRef) => void;
 }) {
   if (!note) {
@@ -104,12 +101,8 @@ export function NotesRightPanel({
             <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
               <TaskDetailPanel
                 task={task}
-                buckets={tasksApi.buckets}
-                inbox={tasksApi.inbox}
-                canEdit={tasksApi.canEdit}
                 onRequestCapture={() => {}}
                 onSelectTask={onTaskDetail}
-                api={tasksApi}
                 runtime={runtime}
                 workspaceId={workspaceId}
                 onOpenEntity={onOpenEntity}

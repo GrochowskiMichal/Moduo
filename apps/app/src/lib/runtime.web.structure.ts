@@ -5,13 +5,8 @@
 // writes and answers in one transaction. Split out of runtime.web.ts so it
 // stays testable with a fake client and so the shared store (TV-D11a) can
 // read the same tables without touching the bundle load.
-//
-// A database before the TV-D10 migrations (the merge-before-apply window)
-// reads as empty; the writes that existing pickers make (create, rename and
-// group a project, time blocks) fall back to what that database has.
 
 import type { ProjectState, TaskReminderKind, TaskWaitingKind } from "@contracts/vocabularies";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   Area,
   Bucket,
@@ -27,12 +22,10 @@ import type {
 import { sanitizeTimeBlocks, type TasksTrash, TRASH_DAYS } from "../features/tasks/model";
 import { trashFromRows } from "./bucket-rows";
 import { collectTruncations, READ_CAPS, readPaged, type Truncation } from "./paged-select";
+import { type Db, DbError, untypedDb } from "./runtime.db";
 import {
   areaRowToModel,
   bucketRowToModel,
-  isMissingColumnError,
-  isMissingFunctionError,
-  isMissingTableError,
   sectionRowToModel,
   taskReminderRowToModel,
   taskSessionRowToModel,
@@ -107,8 +100,8 @@ function one<T>(data: unknown, mapOne: (row: unknown) => T): T {
   return mapOne(Array.isArray(data) ? data[0] : data);
 }
 
-function fail(error: { message?: string }): never {
-  throw new Error(error.message ?? "That didn't save.");
+function fail(error: { code?: string; message?: string }): never {
+  throw new DbError({ ...error, message: error.message ?? "That didn't save." });
 }
 
 const PROJECT_KEYS: Record<Exclude<keyof ProjectFields, "archived">, string> = {
@@ -212,18 +205,10 @@ const READS = {
 } satisfies Record<string, LiveRead<unknown>>;
 
 export function createTasksStructure(
-  client: SupabaseClient,
+  client: Db,
   deps: {
     /** The signed-in user's id (time blocks are per person). */
     userId: () => Promise<string | null>;
-    /** The pre-TV-D10 project save (raw), for a database before it. */
-    upsertBucketLegacy: (bucket: Bucket) => Promise<Bucket>;
-    /** The pre-TV-U6 project delete (raw: every task to the caller's Inbox),
-     *  for a database before its migration. Remove in TV-D7. */
-    deleteProjectLegacy: (workspaceId: string, projectId: string) => Promise<void>;
-    /** The pre-TV-D10 workspace time blocks (raw), for a database before it. */
-    getTimeBlocksLegacy: (workspaceId: string) => Promise<TimeBlockMap>;
-    setTimeBlocksLegacy: (workspaceId: string, blocks: TimeBlockMap) => Promise<TimeBlockMap>;
   },
 ) {
   /** Every live row of a workspace table, up to its cap, in a stable order. */
@@ -231,8 +216,9 @@ export function createTasksStructure(
     read: LiveRead<T>,
     workspaceId: string,
   ): Promise<{ rows: T[]; truncation: Truncation | null }> {
+    // `read.table` comes from READS, so this read is untyped (runtime.db.ts).
     const build = (opts?: { count: "exact"; head: true }) =>
-      client
+      untypedDb(client)
         .from(read.table)
         .select("*", opts)
         .eq("workspace_id", workspaceId)
@@ -253,16 +239,13 @@ export function createTasksStructure(
       },
       keyOf: (row) => String(row?.id),
     });
-    if (res.error) {
-      // A database before TV-D10 has no such table: nothing to show.
-      if (isMissingTableError(res.error, read.table)) return { rows: [], truncation: null };
-      fail(res.error);
-    }
+    if (res.error) fail(res.error);
     return { rows: mapRows(res.rows, read.map), truncation: res.truncation };
   }
 
+  // `fn` is one of this file's *_op_* names; the call is untyped (runtime.db.ts).
   async function rpc(fn: string, args: Row): Promise<Answer> {
-    const { data, error } = await client.rpc(fn, args);
+    const { data, error } = await untypedDb(client).rpc(fn, args);
     return { data, error };
   }
 
@@ -385,41 +368,28 @@ export function createTasksStructure(
     // ── Projects ("buckets" in the schema until TV-D7) ───────────────────────
 
     /**
-     * Make a project (you own it). `id` makes a resend idempotent. Before
-     * TV-D10's migration it saves the old way (name, place and section).
+     * Make a project (you own it). `id` makes a resend idempotent.
+     * `group` is unused since the pre-TV-D10 save went (callers still pass it).
      */
     async createProject(input: {
       workspaceId: string;
       id?: string;
       fields: ProjectFields & { name: string };
-      /** For the old save: the rail section to file it under. */
       group?: string | null;
     }): Promise<Bucket> {
-      const res = await rpc("projects_op_create", {
-        p_workspace_id: input.workspaceId,
-        p_project: { ...(input.id ? { id: input.id } : {}), ...projectFieldsToOp(input.fields) },
-      });
-      if (!res.error) return one(res.data, bucketRowToModel);
-      if (!isMissingFunctionError(res.error, "projects_op_create")) fail(res.error);
-      const now = new Date().toISOString();
-      return deps.upsertBucketLegacy({
-        id: input.id ?? "",
-        workspaceId: input.workspaceId,
-        ownerId: "",
-        name: input.fields.name,
-        isSystem: false,
-        group: input.group ?? null,
-        position: input.fields.position ?? "",
-        createdAt: now,
-        updatedAt: now,
-        deletedAt: null,
-      });
+      return rpcOne(
+        "projects_op_create",
+        {
+          p_workspace_id: input.workspaceId,
+          p_project: { ...(input.id ? { id: input.id } : {}), ...projectFieldsToOp(input.fields) },
+        },
+        bucketRowToModel,
+      );
     },
 
     /**
-     * Edit a project's fields (only those given). Before TV-D10's migration a
-     * rename or a new place still saves, from `fallback` (the project as the
-     * app has it); the other fields need the migration.
+     * Edit a project's fields (only those given). `fallback` is unused since
+     * the pre-TV-D10 save went (callers still pass it).
      */
     async updateProject(input: {
       workspaceId: string;
@@ -427,19 +397,15 @@ export function createTasksStructure(
       patch: ProjectFields;
       fallback?: Bucket;
     }): Promise<Bucket> {
-      const res = await rpc("projects_op_update", {
-        p_workspace_id: input.workspaceId,
-        p_project_id: input.projectId,
-        p_patch: projectFieldsToOp(input.patch),
-      });
-      if (!res.error) return one(res.data, bucketRowToModel);
-      if (!isMissingFunctionError(res.error, "projects_op_update") || !input.fallback)
-        fail(res.error);
-      return deps.upsertBucketLegacy({
-        ...input.fallback,
-        name: input.patch.name ?? input.fallback.name,
-        position: input.patch.position ?? input.fallback.position,
-      });
+      return rpcOne(
+        "projects_op_update",
+        {
+          p_workspace_id: input.workspaceId,
+          p_project_id: input.projectId,
+          p_patch: projectFieldsToOp(input.patch),
+        },
+        bucketRowToModel,
+      );
     },
 
     /** Move a project into an area (null: none) and, with a position, to a new place. */
@@ -466,8 +432,7 @@ export function createTasksStructure(
      * `projects_op_file` finds the area of that name you can see, or makes
      * it, on the server (a stale list here never makes a second one, and an
      * area you can't see is never joined); null takes it out. Answers with the
-     * project and, when it named an area, the areas you can see now. Before
-     * TV-D10's migration it writes the old label.
+     * project and, when it named an area, the areas you can see now.
      */
     async setProjectArea(input: {
       workspaceId: string;
@@ -481,13 +446,7 @@ export function createTasksStructure(
         p_project_id: input.project.id,
         p_area_name: name,
       });
-      if (filed.error) {
-        if (!isMissingFunctionError(filed.error, "projects_op_file")) fail(filed.error);
-        return {
-          project: await deps.upsertBucketLegacy({ ...input.project, group: name }),
-          areas: null,
-        };
-      }
+      if (filed.error) fail(filed.error);
       const project = one(filed.data, bucketRowToModel);
       const known = project.areaId == null || input.areas.some((a) => a.id === project.areaId);
       return {
@@ -502,8 +461,8 @@ export function createTasksStructure(
      * Delete a project (REPLAN 78): its open work goes to each top task's
      * assignee's Inbox (unassigned: yours), with one quiet notice per person;
      * the finished work goes with it to Recently deleted. Needs Full access.
-     * Undo / Restore is `restoreTrash`. Before TV-U6's migration: the old
-     * delete (every task to your Inbox), which can't be restored.
+     * Undo / Restore is `restoreTrash` (`restorable` is always true now the
+     * pre-TV-U6 delete is gone).
      */
     async deleteProject(input: {
       workspaceId: string;
@@ -513,10 +472,8 @@ export function createTasksStructure(
         p_workspace_id: input.workspaceId,
         p_project_id: input.projectId,
       });
-      if (!res.error) return { ...projectDeleteResultOf(res.data), restorable: true };
-      if (!isMissingFunctionError(res.error, "projects_op_delete")) fail(res.error);
-      await deps.deleteProjectLegacy(input.workspaceId, input.projectId);
-      return { moved: 0, deleted: 0, notified: 0, restorable: false };
+      if (res.error) fail(res.error);
+      return { ...projectDeleteResultOf(res.data), restorable: true };
     },
 
     /** Recently deleted: the projects and tasks deleted in the last 30 days
@@ -854,12 +811,7 @@ export function createTasksStructure(
         .select("task_time_blocks")
         .eq("user_id", userId)
         .maybeSingle();
-      if (error) {
-        if (isMissingColumnError(error, "task_time_blocks")) {
-          return deps.getTimeBlocksLegacy(workspaceId);
-        }
-        fail(error);
-      }
+      if (error) fail(error);
       const all = (data as { task_time_blocks?: unknown } | null)?.task_time_blocks;
       const mine =
         all && typeof all === "object" ? (all as Record<string, unknown>)[workspaceId] : undefined;
@@ -871,9 +823,8 @@ export function createTasksStructure(
         p_workspace_id: workspaceId,
         p_blocks: sanitizeTimeBlocks(blocks),
       });
-      if (!res.error) return sanitizeTimeBlocks(res.data);
-      if (!isMissingFunctionError(res.error, "tasks_op_set_time_blocks")) fail(res.error);
-      return deps.setTimeBlocksLegacy(workspaceId, blocks);
+      if (res.error) fail(res.error);
+      return sanitizeTimeBlocks(res.data);
     },
   };
   return api;

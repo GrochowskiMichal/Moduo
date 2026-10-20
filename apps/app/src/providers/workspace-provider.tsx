@@ -1,5 +1,6 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { keepChatWorkspaces } from "../features/chat/store/store";
+import { keepNotesWorkspaces } from "../features/notes/sync/people";
 import { PROFILE_UPDATED_EVENT } from "../features/profile/profile-storage";
 import { deriveNotificationFeeds, type NotificationItem } from "../features/spine/notifications";
 import type { Overrides, WorkspaceRoleDef } from "../features/workspaces/access";
@@ -197,6 +198,11 @@ export function WorkspaceProvider({ children }: PropsWithChildren) {
           );
           // And chat's (CV-3).
           void keepChatWorkspaces(
+            userId,
+            next.map((workspace) => workspace.id),
+          );
+          // And Notes' (Track C4).
+          void keepNotesWorkspaces(
             userId,
             next.map((workspace) => workspace.id),
           );

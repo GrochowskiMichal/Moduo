@@ -2,6 +2,38 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index.
 
+## 2026-10-20 · The plan view is a controller and a layout (PV-B3)
+
+- **`TasksPlanView` = `useTasksPlanController(props)` + `<TasksPlanLayout c={…} />`; no file over ~600 lines** → `ui/plan/` (controller chain `use-plan-{chrome,selection,scope,actions,cursor,centre,panel-state}`, layout `tasks-plan-layout`, `plan-{rail,body,panels,dnd-host,dialogs}`, shared `plan-base.ts`)
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: the 2,761-line component was cut at its own seams, in order, with no logic changed. Each controller step takes everything before it and returns it plus its own values; the layout components read what they draw from the controller. Hooks that only feed a drawing (the DnD sensors and collision, the reference host, the panel stack's reference reads, the Project view's chat lines) moved into the component that draws it. Every other hook and effect keeps its old call order (see gotchas/ui.md, "The plan view's controller"). `tasks-page.tsx` stays the router adapter; the `api` prop is unchanged (Track A moves the plan view off the facade later).
+  - Why: no unit test could render the plan view and every change touched one huge file. The controller now has a hook test, and Track A can move each step off `useTasksModule` on its own.
+  - Not done: the controller passes one wide object (`c`) to the layout. Narrowing each component's props is follow-up work, best done once Track A's selectors land.
+
+## 2026-10-20 · One state machine decides what an `?id=` in the address bar is (PV-B2, DF-1, MOD-28)
+
+- **`deepLinkReducer` (`ui/plan/deep-link.ts`) replaces six guard refs and four effects; `useTaskDeepLink` carries out its commands** → `ui/plan/use-task-deep-link.ts`, `tasks-plan-view.tsx`
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: phases `idle | awaitingLoad | awaitingHandle | resolved | failed`; events `urlChanged` (with the entity-open "take me there" mark), `evaluate` (the bundle changed), `handleResolved` / `handleFailed`, `retry`, `cursorMoved`, `mirrorWritten`; commands `openTask` (with its scope snap), `openPlace`, `gone`, `lookup`, `follow`. The backstop, the 250 ms mirror and the default place act only while the machine is `idle` or `resolved` (`linkSettled`). A render whose address bar is newer than the last event reads it as waiting already (`deepLinkAt`), so every effect in the arrival flush holds, as `inboundPending` did.
+  - Kept as it was: the cursor is React state; the mirror's debounce and its handle rewrite; a failed lookup is asked again every 30 s or when back online, and dropped when you pick another task; the entity-open mark is now taken when the address bar changes rather than when the link is applied (the app chrome sets it right before navigating).
+  - Why: `processedUrlIdRef`, `selfWroteUrlIdRef`, `handlePendingRef`, `handleRetryIntentRef`, `latestUrlIdRef` and `selectionAtFailRef` were kept in step by effect order and comments; each race is now a reducer test.
+
+## 2026-10-20 · The plan view's place lives in the address bar (PV-B1, DF-1)
+
+- **`?place=` is the only source of the place open in Tasks; the task cursor stays React state** → `resolveEntryPlace` / `remembersPlace` (`default-view.ts`), `ui/plan/use-plan-place.ts`, `validateTasksSearch` (`search.ts`), `routes/pages/tasks-page.tsx`
+  - Who: agent, Track B of the 2026-10-20 structure plan (approved by Mike); revisitable.
+  - Decision: the place is `inbox | today | upcoming | mine | all | wontdo | archived | trash | templates | new-view | <project id> | view:<id>`, written with `replace` (Back and Forward still leave Tasks, never walk places), `place` before `id` so the address bar ends with the task (MOD-28). Without one, the place is where you left Tasks (`lastBucket`, read once per workspace), a first open's onboarding view, else the Inbox; it's written to the address bar once the bundle has loaded and no deep link is waiting (the link owns the entry scope). A pick shows at once, before the router commits it (`usePlanPlace` holds it until the address bar moves). Places you pass through (Won't do, Archived, Recently deleted, Templates, an unsaved view, an archived project) aren't remembered and don't reopen on arrival, exactly as `lastBucket` behaved; a project that's gone mid-visit falls back to the Inbox.
+  - Why: the place lived in state, the URL (one-shot `?place=upcoming`), localStorage and two guard refs kept in step by four racing effects. One pure function now decides it at render, so every effect in a flush sees the same place.
+  - Not done: the task cursor stays state (j/k key-repeat and WebKit's `replaceState` throttling, see `tasks-plan-view.tsx`); its URL sync becomes one reducer in PV-B2.
+
+## 2026-10-20 · A sign-out keeps what waits to sync (supersedes part of TV-D11a)
+
+- **Sign-out cuts the Tasks device copy down to its outbox instead of wiping it** → `wipeSyncCopies` / `attachSyncUser` / `keepOnlyWaiting` (`lib/sync/store.ts`), Settings → Account's "Log out" warning
+  - Who: agent, from the 2026-10-20 audit of `origin/mike` (data-loss fixes); revisitable.
+  - Decision: on SIGNED_OUT (which auth-js also fires on its own when a refresh token dies), on an explicit sign-out, and when another person signs in on the device, each copy loses its rows but keeps its waiting captures and check-offs under its person's key (written with an old version stamp, so the next store takes only the outbox). They go out the next time that person signs in here. A copy with nothing waiting is deleted as before. Account deletion still wipes everything (`keepWaiting: false`). Settings → Account's "Log out" first says how many changes haven't synced, with "Log out anyway" / "Stay signed in".
+  - Why: the old wipe deleted offline captures whenever auth-js signed the person out by itself.
+  - The cost: a waiting capture's title stays in this browser's IndexedDB after sign-out, under the person's key, until they sign in here again. It is never shown to anyone else.
+
 ## 2026-10-16 · The Project view shares the task details' hierarchy (MOD-152)
 
 No migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html)'s `.dbody` (16 px between blocks) and `.shead` (13 px medium, sentence case, its `.num` in `--text-3`), and [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2's `.shead Progress` with its count. The before/after canvas (measured live, approved item by item) stayed in the session's scratch folder, not in git.

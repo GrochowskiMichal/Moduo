@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area is [docs/decisions.md](../decisions.md). Add new entries at the top here **and** a one-line pointer in the index. Earlier chat lines (v1 ships as the 7th tab, 2026-10-06; chat + calls become a planned module, 2026-10-02) stay under Billing and Product in the index.
 
+## 2026-10-20 · A sign-out keeps Chat's waiting sends (Track C3, as Tasks since #509)
+
+- **Sign-out cuts the chat copy down to its outbox instead of wiping it** → `wipeChatCopies` / `attachChatUser` (`features/chat/store/store.ts`), `ChatDeviceCopy.keepOnlyWaiting` (`device-copy.ts`), Settings → Account's "Log out" warning
+  - Who: agent, from the 2026-10-20 audit plan (Track C3); revisitable.
+  - Decision: on SIGNED_OUT, an explicit sign-out, and when another person signs in on the device, each person's chat copy loses its rows, drafts, sidebar and counts, but keeps its outbox (waiting, failed and deleted-while-sending entries) under its `person:workspace` key, written with an old version stamp so the next store takes only the outbox. They go out the next time that person signs in here. A copy with nothing waiting is deleted. Account deletion still wipes everything (`keepWaiting: false`); a workspace left takes its copy, outbox included. "Log out" now counts chat's waiting sends with Tasks' captures.
+  - Why: the old wipe deleted unsent messages whenever auth-js signed the person out by itself (a dead refresh token), the bug #509 fixed for Tasks.
+  - The cost: an unsent message's text stays in this browser's IndexedDB after sign-out, under the person's key, until they sign in here again. It is never shown to anyone else. Unsent drafts go with the sign-out (they aren't a write yet).
+
 ## 2026-10-16 · CV-21 (agents and MCP tools) — the agent's choices; five are open calls for Maciej
 
 Migration `20261017123000_chat_v2_agents.sql`; see [the record](../build/chat-v2/CV-21.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-16. CV21-1…CV21-5 are open calls for Maciej. The record holds the rest.

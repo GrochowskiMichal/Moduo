@@ -131,8 +131,8 @@ jobs:
       - name: Remote cache mode
         run: echo "Remote cache ${TURBO_API:-not configured} · TURBO_CACHE=$TURBO_CACHE (remote:r = read-only)"
 
-      - name: Typecheck, Biome, lint:tw, lint:css, release-notes leak check
-        run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:css lint:notes --output-logs=new-only
+      - name: Typecheck, Biome, lint:tw, lint:boundaries, lint:css, release-notes leak check
+        run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:css lint:notes --output-logs=new-only
 
   unit-tests:
     needs: scan

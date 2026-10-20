@@ -9,7 +9,7 @@
 // folded line per group; a section that shows nothing keeps its header.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -23,6 +23,7 @@ import type { CompletedMode } from "../completed";
 import { resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Bucket, ProjectStatus, Section, Task } from "../model";
+import { type RenderWithTasksOptions, renderWithTasks } from "../testing/render-with-tasks";
 import type { ListGrouping } from "./list-extensions";
 import { TaskBoardView } from "./task-board-view";
 import { TaskListView } from "./task-list-view";
@@ -124,21 +125,18 @@ const DOGFOOD = [
   done("d6", { sectionId: "s2", updatedAt: new Date().toISOString() }),
 ];
 
-function apiOf(tasks: Task[]) {
+/** The store under the views (A4): the project, its statuses and sections, the tasks. */
+function storeOf(tasks: Task[]): RenderWithTasksOptions {
   return {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    statuses: STATUSES,
-    statusById: new Map(STATUSES.map((s) => [s.id, s])),
-    statusesForBucket: () => STATUSES,
-    sections: SECTIONS,
+    seed: { buckets: [PROJECT], statuses: STATUSES, sections: SECTIONS, tasks },
+    workspaceId: "w",
+    commands: commandsOf(),
+  };
+}
+
+/** The writes, as spies: nothing here reaches the store. */
+function commandsOf() {
+  return {
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -155,7 +153,7 @@ function apiOf(tasks: Task[]) {
 
 type ListProps = Partial<Parameters<typeof TaskListView>[0]>;
 
-function renderList(over: ListProps = {}, tasks: Task[] = DOGFOOD) {
+async function renderList(over: ListProps = {}, tasks: Task[] = DOGFOOD) {
   const onSelectTask = rs.fn();
   function List(props: ListProps) {
     const [selected, setSelected] = useState<string | null>("a");
@@ -179,15 +177,15 @@ function renderList(over: ListProps = {}, tasks: Task[] = DOGFOOD) {
           onSelectTask(id);
           setSelected(id);
         }}
-        api={apiOf(tasks) as never}
         {...props}
       />
     );
   }
-  const view = render(
+  const view = await renderWithTasks(
     <TooltipProvider>
       <List {...over} />
     </TooltipProvider>,
+    storeOf(tasks),
   );
   const rerender = (props: ListProps) =>
     view.rerender(
@@ -212,8 +210,8 @@ const endButton = () => {
 };
 
 describe("the List while Completed is Hidden (MOD-148)", () => {
-  it("draws no per-group lines and one line at the end, counting every hidden completed task", () => {
-    renderList();
+  it("draws no per-group lines and one line at the end, counting every hidden completed task", async () => {
+    await renderList();
     expect(completedButtons()).toHaveLength(1);
     expect(endLines()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
@@ -231,8 +229,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     }
   });
 
-  it("sits at the very end, after + Add section, inside the list's grid", () => {
-    renderList();
+  it("sits at the very end, after + Add section, inside the list's grid", async () => {
+    await renderList();
     const grid = screen.getByRole("grid");
     const line = endLines()[0] as HTMLElement;
     expect(grid.contains(line)).toBe(true);
@@ -244,8 +242,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(endButton().tabIndex).toBe(0);
   });
 
-  it("Show lists them in place, in their groups, and the line then reads Hide", () => {
-    renderList();
+  it("Show lists them in place, in their groups, and the line then reads Hide", async () => {
+    await renderList();
     fireEvent.click(endButton());
     for (const id of ["d1", "d2", "d3", "d4", "d5", "d6"]) expect(row(`Task ${id}`)).toBeTruthy();
     expect(endButton().textContent).toBe("6 completed · Hide");
@@ -265,8 +263,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(endButton().textContent).toBe("6 completed · Show");
   });
 
-  it("j/k walk the tasks it shows, never the line", () => {
-    const { onSelectTask } = renderList();
+  it("j/k walk the tasks it shows, never the line", async () => {
+    const { onSelectTask } = await renderList();
     const grid = screen.getByRole("grid");
     fireEvent.click(endButton());
     // a (No section) → d1 (its done task, now shown) → b (Triage).
@@ -276,8 +274,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(onSelectTask).toHaveBeenLastCalledWith("b");
   });
 
-  it("its count holds still while the cursor walks onto a finished task", () => {
-    renderList();
+  it("its count holds still while the cursor walks onto a finished task", async () => {
+    await renderList();
     const grid = screen.getByRole("grid");
     fireEvent.click(endButton());
     fireEvent.keyDown(grid, { key: "j", code: "KeyJ" });
@@ -289,8 +287,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(endButton().textContent).toBe("6 completed · Show");
   });
 
-  it("counts a folded group's hidden tasks too, and its fold stays yours", () => {
-    renderList();
+  it("counts a folded group's hidden tasks too, and its fold stays yours", async () => {
+    await renderList();
     fireEvent.click(screen.getByRole("button", { name: /^Visual/ }));
     expect(endButton().textContent).toBe("6 completed · Show");
     fireEvent.click(endButton());
@@ -298,8 +296,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     expect(row("Task d2")).toBeTruthy();
   });
 
-  it("ends with a new scope, grouping or Completed choice, and never saves Display", () => {
-    const { rerender } = renderList();
+  it("ends with a new scope, grouping or Completed choice, and never saves Display", async () => {
+    const { rerender } = await renderList();
     const showThenAway = (away: ListProps) => {
       fireEvent.click(endButton());
       expect(row("Task d1")).toBeTruthy();
@@ -316,13 +314,13 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
     showThenAway({ groupBy: "status" });
   });
 
-  it("an ungrouped list ends with the same one line", () => {
-    renderList({ groupBy: "none", onAddSection: undefined });
+  it("an ungrouped list ends with the same one line", async () => {
+    await renderList({ groupBy: "none", onAddSection: undefined });
     expect(completedButtons()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
   });
 
-  it("a view's own grouping (Upcoming's days) ends with the same one line", () => {
+  it("a view's own grouping (Upcoming's days) ends with the same one line", async () => {
     const day = (t: Task) => (t.sectionId ? "tue" : "mon");
     const grouping: ListGrouping = {
       groups: (list) =>
@@ -337,15 +335,15 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
       onDrop: () => {},
       addState: () => ({ kind: "none" }),
     };
-    renderList({ selection: "upcoming", grouping, onAddSection: undefined });
+    await renderList({ selection: "upcoming", grouping, onAddSection: undefined });
     expect(completedButtons()).toHaveLength(1);
     expect(endButton().textContent).toBe("6 completed · Show");
     fireEvent.click(endButton());
     expect(row("Task d4")).toBeTruthy();
   });
 
-  it("with nothing completed hidden there is no line", () => {
-    renderList({}, [task("a"), task("b", { sectionId: "s1" })]);
+  it("with nothing completed hidden there is no line", async () => {
+    await renderList({}, [task("a"), task("b", { sectionId: "s1" })]);
     expect(endLines()).toHaveLength(0);
   });
 });
@@ -353,8 +351,8 @@ describe("the List while Completed is Hidden (MOD-148)", () => {
 describe('the List in "7 days" (MOD-148 follow-up)', () => {
   const week = { completed: "week" as CompletedMode };
 
-  it("lists the last week's in their groups and ends with one line for the older ones", () => {
-    renderList(week);
+  it("lists the last week's in their groups and ends with one line for the older ones", async () => {
+    await renderList(week);
     // d6 was finished today: listed in Visual, as before.
     expect(row("Task d6")).toBeTruthy();
     for (const id of ["d1", "d2", "d3", "d4", "d5"]) expect(row(`Task ${id}`)).toBeNull();
@@ -375,8 +373,8 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
     expect(screen.getAllByRole("button", { name: /^Backlog, / })).toHaveLength(1);
   });
 
-  it("Show lists the older ones in place, in their groups, then Hide", () => {
-    renderList(week);
+  it("Show lists the older ones in place, in their groups, then Hide", async () => {
+    await renderList(week);
     fireEvent.click(endButton());
     for (const id of ["d1", "d2", "d3", "d4", "d5", "d6"]) expect(row(`Task ${id}`)).toBeTruthy();
     expect(endButton().textContent).toBe("5 older completed · Hide");
@@ -392,8 +390,8 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
     expect(endButton().textContent).toBe("5 older completed · Show");
   });
 
-  it("its count holds still while the cursor walks onto an older finished task", () => {
-    const { onSelectTask } = renderList(week);
+  it("its count holds still while the cursor walks onto an older finished task", async () => {
+    const { onSelectTask } = await renderList(week);
     const grid = screen.getByRole("grid");
     fireEvent.click(endButton());
     // a (No section) → d1 (older, shown now).
@@ -407,8 +405,8 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
     expect(endButton().textContent).toBe("5 older completed · Show");
   });
 
-  it("Show ends when Completed switches to Hidden, whose line reads without older", () => {
-    const { rerender } = renderList(week);
+  it("Show ends when Completed switches to Hidden, whose line reads without older", async () => {
+    const { rerender } = await renderList(week);
     fireEvent.click(endButton());
     expect(row("Task d1")).toBeTruthy();
     rerender({});
@@ -420,9 +418,9 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
     expect(endButton().textContent).toBe("5 older completed · Show");
   });
 
-  it("with nothing older than a week there is no line", () => {
+  it("with nothing older than a week there is no line", async () => {
     const recent = new Date().toISOString();
-    renderList(week, [task("a"), done("d6", { sectionId: "s2", updatedAt: recent })]);
+    await renderList(week, [task("a"), done("d6", { sectionId: "s2", updatedAt: recent })]);
     expect(row("Task d6")).toBeTruthy();
     expect(endLines()).toHaveLength(0);
     expect(completedButtons()).toHaveLength(0);
@@ -430,8 +428,8 @@ describe('the List in "7 days" (MOD-148 follow-up)', () => {
 });
 
 describe('the List in "All" (unchanged)', () => {
-  it("lists every one with no line at all", () => {
-    renderList({ completed: "all" });
+  it("lists every one with no line at all", async () => {
+    await renderList({ completed: "all" });
     expect(endLines()).toHaveLength(0);
     expect(completedButtons()).toHaveLength(0);
     expect(row("Task d1")).toBeTruthy();
@@ -440,8 +438,8 @@ describe('the List in "All" (unchanged)', () => {
 
 type BoardProps = Partial<Parameters<typeof TaskBoardView>[0]>;
 
-function renderBoard(over: BoardProps = {}, tasks: Task[] = DOGFOOD) {
-  const view = render(boardOf(over, tasks));
+async function renderBoard(over: BoardProps = {}, tasks: Task[] = DOGFOOD) {
+  const view = await renderWithTasks(boardOf(over, tasks), storeOf(tasks));
   return { rerender: (props: BoardProps) => view.rerender(boardOf(props, tasks)) };
 }
 
@@ -462,7 +460,6 @@ function boardOf(over: BoardProps, tasks: Task[]) {
         onRequestCapture={() => {}}
         selectedTaskId={null}
         onSelectTask={() => {}}
-        api={apiOf(tasks) as never}
         {...over}
       />
     </TooltipProvider>
@@ -480,8 +477,8 @@ const boardEnd = () => {
 };
 
 describe("the Board while Completed is Hidden (MOD-148)", () => {
-  it("no column has its own line; one at the board's end counts every column's", () => {
-    renderBoard();
+  it("no column has its own line; one at the board's end counts every column's", async () => {
+    await renderBoard();
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("6 completed · Show");
     expect(boardEnd().getAttribute("aria-expanded")).toBe("false");
@@ -496,16 +493,16 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
     expect(card("Task d2")).toBeNull();
   });
 
-  it("its count holds still with a finished card selected", () => {
-    renderBoard({ selectedTaskId: "d2" });
+  it("its count holds still with a finished card selected", async () => {
+    await renderBoard({ selectedTaskId: "d2" });
     // d2 shows (the selection always does) and still counts.
     expect(card("Task d2")).toBeTruthy();
     expect(card("Task d3")).toBeNull();
     expect(boardEnd().textContent).toBe("6 completed · Show");
   });
 
-  it("ends with a new scope, grouping or Completed choice", () => {
-    const { rerender } = renderBoard();
+  it("ends with a new scope, grouping or Completed choice", async () => {
+    const { rerender } = await renderBoard();
     const aways: BoardProps[] = [
       { completed: "week" },
       { boardGroupBy: "status" },
@@ -521,30 +518,30 @@ describe("the Board while Completed is Hidden (MOD-148)", () => {
     }
   });
 
-  it("a Done column whose cards are all hidden still takes drops", () => {
-    renderBoard({ boardGroupBy: "status" });
+  it("a Done column whose cards are all hidden still takes drops", async () => {
+    await renderBoard({ boardGroupBy: "status" });
     expect(within(column("Done")).getByText("Drop tasks here")).toBeTruthy();
     expect(boardEnd().textContent).toBe("6 completed · Show");
   });
 
-  it("with lanes, no cell has its own line either", () => {
-    renderBoard({ boardGroupBy: "status", lanes: "assignee" });
+  it("with lanes, no cell has its own line either", async () => {
+    await renderBoard({ boardGroupBy: "status", lanes: "assignee" });
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("6 completed · Show");
   });
 });
 
 describe('the Board in "All" (unchanged)', () => {
-  it("lists every card with no line at all", () => {
-    renderBoard({ completed: "all" });
+  it("lists every card with no line at all", async () => {
+    await renderBoard({ completed: "all" });
     expect(completedButtons()).toHaveLength(0);
     expect(column("Triage").contains(card("Task d2"))).toBe(true);
   });
 });
 
 describe('the Board in "7 days" (MOD-148 follow-up)', () => {
-  it("lists the last week's in their columns; one line at the board's end for the older", () => {
-    renderBoard({ completed: "week" });
+  it("lists the last week's in their columns; one line at the board's end for the older", async () => {
+    await renderBoard({ completed: "week" });
     expect(column("Visual").contains(card("Task d6"))).toBe(true);
     expect(card("Task d4")).toBeNull();
     // No column has its own line: the one button sits outside every column.
@@ -561,21 +558,21 @@ describe('the Board in "7 days" (MOD-148 follow-up)', () => {
     expect(card("Task d6")).toBeTruthy();
   });
 
-  it("its count holds still with an older finished card selected", () => {
-    renderBoard({ completed: "week", selectedTaskId: "d2" });
+  it("its count holds still with an older finished card selected", async () => {
+    await renderBoard({ completed: "week", selectedTaskId: "d2" });
     expect(card("Task d2")).toBeTruthy();
     expect(card("Task d3")).toBeNull();
     expect(boardEnd().textContent).toBe("5 older completed · Show");
   });
 
-  it("with lanes, no cell has its own line either", () => {
-    renderBoard({ completed: "week", boardGroupBy: "status", lanes: "assignee" });
+  it("with lanes, no cell has its own line either", async () => {
+    await renderBoard({ completed: "week", boardGroupBy: "status", lanes: "assignee" });
     expect(completedButtons()).toHaveLength(1);
     expect(boardEnd().textContent).toBe("5 older completed · Show");
   });
 
-  it("a Done column whose older cards are hidden still takes drops", () => {
-    renderBoard({ completed: "week", boardGroupBy: "status" }, [task("a"), done("d1")]);
+  it("a Done column whose older cards are hidden still takes drops", async () => {
+    await renderBoard({ completed: "week", boardGroupBy: "status" }, [task("a"), done("d1")]);
     expect(within(column("Done")).getByText("Drop tasks here")).toBeTruthy();
     expect(boardEnd().textContent).toBe("1 older completed · Show");
   });

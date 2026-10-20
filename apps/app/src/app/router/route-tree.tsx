@@ -17,16 +17,7 @@ import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
 import { AuthPage } from "../../routes/pages/auth-page";
-import { BookCancelPage } from "../../routes/pages/book-cancel-page";
-import { BookPage } from "../../routes/pages/book-page";
-import { CalendarPage } from "../../routes/pages/calendar-page";
-import { ChatPage } from "../../routes/pages/chat-page";
-import { ContactsPage } from "../../routes/pages/contacts-page";
 import { HomePage } from "../../routes/pages/home-page";
-import { JoinPage } from "../../routes/pages/join-page";
-import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { PaywallPage } from "../../routes/pages/paywall-page";
-import { SettingsPage } from "../../routes/pages/settings-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
@@ -74,13 +65,17 @@ const authRoute = createRoute({
 const onboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/onboarding",
-  component: preWorkspace(OnboardingPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/onboarding-page"), "OnboardingPage"),
+  ),
 });
 
 const paywallRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/paywall",
-  component: preWorkspace(PaywallPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/paywall-page"), "PaywallPage"),
+  ),
 });
 
 // Public, unauthenticated reader for a published note (NO-9b). Direct child of
@@ -101,7 +96,9 @@ const publishedNoteRoute = createRoute({
 const bookCancelRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/cancel",
-  component: preWorkspace(BookCancelPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-cancel-page"), "BookCancelPage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { token?: string } => {
     const token = typeof search.token === "string" && search.token ? search.token : undefined;
     return token ? { token } : {};
@@ -111,7 +108,9 @@ const bookCancelRoute = createRoute({
 const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/$slug",
-  component: preWorkspace(BookPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-page"), "BookPage"),
+  ),
 });
 
 // Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
@@ -122,7 +121,9 @@ const bookRoute = createRoute({
 const joinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/join",
-  component: preWorkspace(JoinPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/join-page"), "JoinPage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { invite?: string } => {
     const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
     return invite ? { invite } : {};
@@ -178,7 +179,7 @@ const tasksRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
-  component: CalendarPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/calendar-page"), "CalendarPage"),
   // `?event=` deep link → navigate to the event's day + select + open detail (DF-2).
   validateSearch: validateCalendarSearch,
 });
@@ -202,14 +203,14 @@ const emailRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/chat",
-  component: ChatPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/chat-page"), "ChatPage"),
   validateSearch: validateChatSearch,
 });
 
 const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/contacts",
-  component: ContactsPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/contacts-page"), "ContactsPage"),
   // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
   validateSearch: validateContactsSearch,
 });
@@ -228,7 +229,7 @@ const legacyCrmRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/settings",
-  component: SettingsPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/settings-page"), "SettingsPage"),
 });
 
 export const routeTree = rootRoute.addChildren([

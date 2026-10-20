@@ -517,6 +517,39 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [x] **REL-5 — Split Mac builds (per-arch updater bundles, universal .dmg kept)** · deps: REL-2 · 2026-10-19 · `t/mike/rel-5-split-mac` · #489; staging 1.2.0-rc.54 per-arch (51.7% / 54.2%). universal key + tarball dropped after production 1.2.1 (`t/mike/rel-5-drop-universal`)
 - [x] **REL-6 — Retire prod-app/staging-app/prod-landing/main, branch cleanup, delete-on-merge** · deps: REL-3 · 2026-10-19 · `t/mike/rel-6-branches` (#492) · mirror branches deleted; prod-landing last, after its content was ported to apps/landing (#494) and shipped in v1.2.1 (#496), tip 7e3823fd
 
+## Tasks plan view — selection and split (Track B of the 2026-10-20 structure plan)
+
+> The plan view's place and task selection lived in state, the URL, localStorage and about 12 guard refs kept in step by racing effects (DF-1). Track B runs beside Track A (`features/tasks/hooks/**`) and Track C (`lib/sync/**`); it owns `ui/tasks-plan-view.tsx`, `routes/pages/tasks-page.tsx`, `search.ts`, `default-view.ts`, `selection.ts` and `ui/plan/**`. No user-visible change.
+
+- [~] **PV-B1 — The place comes from the URL (`?place=`, `resolveEntryPlace`, `usePlanPlace`)** · deps: — · `t/mike/plan-place-from-url`
+- [~] **PV-B2 — Deep-link state machine (`deepLinkReducer`, `useTaskDeepLink`)** · deps: PV-B1 · `t/mike/plan-deep-link-machine`
+- [~] **PV-B3 — Split the plan view (`useTasksPlanController`, `TasksPlanLayout`: rail, body, panels, DnD host; no file over ~600 lines)** · deps: PV-B2 · `t/mike/plan-view-split`
+
+## Sync kernel (Track C of the 2026-10-20 audit plan) · `~/.claude/plans/golden-pondering-gosling.md`
+
+One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat stores; Notes shares its infrastructure. Runs beside Track A (useTasksModule split) and Track B (plan view); it never changes `WorkspaceStore`'s public API or `StoreSnapshot`. Each block is one PR into `mike`; C2–C4 get the `validator`.
+
+- [~] **SK-C1 — Kernel + characterization tests** · deps: — · `t/mike/sync-kernel` (#515, in review) · stamps (one `micros`, each caller's missing-stamp rule pinned), idb (self-healing open), delta (keyset, lookback, page cap), landing (strictly-newer rule, delete marks), overlay, outbox (two policies, cross-tab), registry (refcount, person lifecycle), `createSyncedCollection`.
+- [~] **SK-C2 — Tasks `WorkspaceStore` on the kernel** · deps: SK-C1 · `t/mike/sync-kernel-tasks` (#517, validator: no blocker/major) · no behaviour change; the store, hook, capture and command-palette tests are the guard; the runtime's delta readers use the kernel's keyset.
+- [~] **SK-C3 — Chat store on the kernel; a sign-out keeps waiting messages** · deps: SK-C2 · `t/mike/sync-kernel-chat` (#519, validator's major fixed) · keeps Chat's hold-failed-for-retry outbox; sign-out cuts the chat copy down to its outbox per person (as Tasks since #509).
+- [~] **SK-C4 — Notes on kernel idb, network and registry; per-person notes caches** · deps: SK-C3 · `t/mike/sync-kernel-notes` (#522, validator's majors fixed) · `moduo-notes-v2` and the per-note y-indexeddb databases keyed `user:ws` with a migration; wiped on a user switch.
+
+## TanStack spine — TanStack DB under the stores, Hotkeys · [`specs/tanstack-spine.md`](./tanstack-spine.md)
+
+> Builds on the Sync kernel: the kernel becomes the sync function of TanStack DB collections; the stores' overlay, snapshot and IndexedDB record plumbing is what gets replaced. TS-0 done: in-memory collections over the existing IndexedDB copy; SQLite is optional TS-8. Added 2026-10-20 from the stack audit.
+
+- [x] **TS-0 — Spike: Tasks on TanStack DB** · 2026-10-20 · #529 · switch 200 → 32 ms, search 67 → 37 ms, rows redrawn per edit 130 → 2; OPFS SQLite warm open slower (676 vs 514 ms) → in-memory plan
+- [x] **TS-1 — Pinned TanStack DB + Pacer + Devtools (dev-only), virtual-core ≥ 3.19 with `anchorTo: 'end'` in Chat, bundle budget, boundary lint** · 2026-10-20 · [#531](https://github.com/GrochowskiMichal/Moduo/pull/531) · first-load 992.2 KB gz after #530 (budget 1012 in `apps/app/bundle-budget.json`); chat fling worst frame 83 → 33 ms
+- [ ] **TS-2 — In-memory Supabase collection adapter on the kernel, seeded from the existing IDB copy** · deps: TS-1, SK-C1 · validator
+- [ ] **TS-3a — Tasks collections behind the `WorkspaceStore` facade (no API change)** · deps: TS-2, SK-C2 · validator
+- [ ] **TS-3b — Tasks consumers on live queries; `selectors.ts` retired; DashboardData split** · deps: TS-3a
+- [ ] **TS-3c — Tasks writes as collection transactions patching only `changes`; kernel outbox kept; overlay code deleted** · deps: TS-3b · validator
+- [ ] **TS-4 — Chat on in-memory collections (paged from the per-row IDB copy, hold-failed outbox kept)** · deps: TS-3c, SK-C3
+- [ ] **TS-5 — Contacts, Calendar, Notes metadata as collections with delta** · deps: TS-2, SK-C4
+- [ ] **TS-6 — Hotkeys: `@tanstack/react-hotkeys` registry, scopes, conflict test, migration of `useGlobalShortcuts`** · deps: TS-1 (parallel with TS-2…5)
+- [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6
+- [ ] **TS-8 — Optional: SQLite persistence (OPFS web, plugin-sql desktop, offline-transactions) only after a second spike beats 514 ms warm open** · deps: TS-7
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).

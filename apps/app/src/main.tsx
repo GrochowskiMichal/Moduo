@@ -1,5 +1,6 @@
 import "./lib/auth-url-boot";
 import { RouterProvider } from "@tanstack/react-router";
+import { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
@@ -53,6 +54,13 @@ function ConfirmBeforeQuit() {
   return null;
 }
 
+// The TanStack Devtools panel, in development builds only: production never
+// reaches the import, so the bundler drops it (scripts/check-bundle-size.ts guards the size).
+const TanStackDevtoolsPanel =
+  process.env.NODE_ENV === "development"
+    ? lazy(() => import("./lib/devtools/tanstack-devtools"))
+    : null;
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <RootErrorBoundary>
     <TooltipProvider>
@@ -61,5 +69,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <Toaster />
     <PreferencesSync />
     <ConfirmBeforeQuit />
+    {TanStackDevtoolsPanel ? (
+      <Suspense fallback={null}>
+        <TanStackDevtoolsPanel />
+      </Suspense>
+    ) : null}
   </RootErrorBoundary>,
 );

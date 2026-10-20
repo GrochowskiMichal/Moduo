@@ -1,6 +1,6 @@
 # Architecture Notes
 
-Last reviewed: 4:05 PM 14th May 2026.
+Last reviewed: 2026-10-20.
 
 ## Current Direction
 
@@ -32,10 +32,22 @@ Paths in docs written before 2026-10-17 are pre-move: `src/` is now `apps/app/sr
 
 Shared data pieces (added 2026-10-17):
 
-- `apps/app/src/lib/sync/`: the Tasks v3 shared store (TV-D11a): one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
-- `apps/app/src/features/chat/store/`: the Chat v2 store (CV-3): device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
+- `apps/app/src/lib/sync/kernel/`: the shared offline-sync kernel (2026-10-20): stamps, one IndexedDB opener, keyset deltas with lookback, the strictly-newer landing rule and delete marks, op-keyed overlays, a persisted outbox (`fifo-drop-on-refusal` or `hold-failed-for-retry`), and a per-person store registry. Tasks and Chat run on it; Notes uses its IndexedDB, network and registry parts only (it syncs Yjs documents, not rows). The rules it encodes are in `docs/gotchas/supabase.md` (sync section).
+- `apps/app/src/lib/sync/store.ts`: the Tasks shared store (TV-D11a) on that kernel: one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
+- `apps/app/src/features/chat/store/`: the Chat v2 store (CV-3) on that kernel: device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
 - `apps/app/src/features/chat/markup-v2/`: Chat v2's stored message form (parse, serialize, canonical blocks, mentions, the Lexical bridge).
 - `apps/app/src/lib/runtime.web.notes-live.ts`: a note's live channel (NR-7): each person listens on a private `notes-live:<uid>` topic the server writes to; clients send nothing over Realtime.
+
+### Tasks data and commands
+
+How a surface reads and writes Tasks (since 2026-10-20):
+
+- `features/tasks/selectors.ts`: pure selectors over the store's snapshot, cached on the identity of their input arrays (`liveTasksOf`, `byIdOf`, `subtasksByParentOf`, … and `tasksDataOf` for the whole set). Every page that shows a workspace shares their results.
+- `features/tasks/commands/`: `createTaskCommands(ctx)`, one stable set of commands per store, runtime, workspace and person, grouped by aggregate (`task`, `status`, `queue`, `time`, `projects`, `bulk`, …). A command reads the store when it runs (`ctx.data()`), so it never changes identity and an Undo closure never sees stale rows.
+- `features/tasks/write-plan.ts`: `planTaskWrite`, the one place that decides a task write (refusals, status mapping, recurrence, queue-follow, subtask-follow, `dueOn`). Single, drop and bulk edits all call it.
+- `features/tasks/tasks-context.tsx`: `<TasksProvider>` (one per page) and the narrow hooks a component uses: `useTaskCommands()`, `useTasksSelector(…)`, `useTaskById(id)`, `useTasksStatus()`. A selector must return a cached value; never build a new array or object inside it.
+- `features/tasks/ui/plan/`: the Tasks page as a controller (`useTasksPlanController`, a chain of small hooks) and a layout. The place lives in the URL (`?place=`, `resolveEntryPlace`); deep links go through one state machine (`deep-link.ts`).
+- Tests render through `features/tasks/testing/` (`renderWithTasks`, `renderTasksHook`, `fakeTasksRuntime`).
 
 Prefer `@/` imports for source-root imports. The alias resolves to `src`, so use `@/components/ui/button` rather than the older `@/src/components/ui/button`.
 
@@ -53,18 +65,7 @@ Keep route files and page adapters small. When a workspace crosses a few hundred
 
 ### Email Feature Module Map
 
-The email frontend uses `email-workspace.tsx` as the orchestration layer and delegates rendering/model details to focused modules:
-
-- `model/email-types.ts`: shared email DTOs and local UI model types.
-- `model/email-cache.ts`: in-memory account/list cache state and folder constants.
-- `utils/email-format.ts`: date formatting helpers.
-- `utils/email-html.ts`: sanitized email HTML iframe document construction.
-- `ui/email-account-sidebar.tsx`: connected account and folder navigation.
-- `ui/email-compose-panel.tsx`: compose overlay.
-- `ui/email-connection-setup.tsx`: mailbox provider selection and credential form.
-- `ui/email-message-detail.tsx`: selected message header/body rendering.
-- `ui/email-message-list.tsx`: list, loading, empty, error, and retry states.
-- `ui/email-workspace.tsx`: runtime calls, effects, cache orchestration, and feature shell composition.
+`features/email/` keeps its pure rules at the top level (`threads.ts`, `classify.ts`, `compose.ts`, `convert.ts`, `snooze.ts`, `followup.ts`, `search.ts`, `undo-send.ts`, `history-depth.ts`, each with its test), the module hook and its helpers in `hooks/` (`use-email-module.ts` orchestrates runtime calls and optimistic triage), shared types in `model/email-types.ts`, and the screen in `ui/` (`email-page-view.tsx` composes the rail, thread list, reader, compose and the detail panel; `email-html.ts` builds the sandboxed message iframe, `email-format.ts` formats dates).
 
 ## Router
 
@@ -87,13 +88,18 @@ The email command boundary now keeps Tauri command registration stable while del
 - `body_fetch.rs`: message body cache miss fetches.
 - `connection.rs`: blocking IMAP connection setup.
 - `constants.rs`: email command constants.
+- `attachments.rs`: received-attachment metadata, save to disk, compose file picker (EM-7).
 - `flags.rs`: optimistic flag updates and flag outbox flushing.
-- `graph_outbox.rs`: email-to-graph outbox queueing.
 - `model.rs`: command DTOs and persisted email data shapes.
+- `oauth.rs`: Gmail sign-in and the XOAUTH2 token lifecycle (EM-2).
+- `ops.rs`: the triage op outbox: archive, move, delete (EM-5).
 - `parsing.rs`: MIME/header/date parsing helpers.
 - `realtime.rs`: IDLE worker supervision and sync de-duplication.
+- `search.rs`: hybrid local and server search (EM-9).
+- `secrets.rs`: account secrets in the OS keychain, never in redb or the cloud.
 - `send_commands.rs`: email send Tauri handler and account send-status updates.
 - `smtp.rs`: SMTP send path.
+- `snooze.rs`: the snooze engine, a server-side `Moduo/Snoozed` mailbox (EM-6).
 - `storage.rs`: Redb/KV email persistence helpers.
 - `sync.rs`: folder/envelope synchronization.
 

@@ -17,6 +17,9 @@
     "lint:tw": {
       "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/check-arbitrary-tw.ts"]
     },
+    "lint:boundaries": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/scripts/check-boundaries*.ts"]
+    },
     "test": {
       "inputs": [
         "$TURBO_DEFAULT$",

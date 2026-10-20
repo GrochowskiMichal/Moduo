@@ -45,11 +45,12 @@ async function loadState(type: string, id: string): Promise<State | null> {
     p_type: type,
     p_id: id,
   });
-  if (error || !data || data.visible === false) return null;
+  const state = data as Record<string, unknown> | null;
+  if (error || !state || state.visible === false) return null;
   return {
-    canManage: data.canManage === true,
-    workspaceLevel: (data.workspaceLevel as string | null) ?? null,
-    people: Array.isArray(data.people) ? data.people : [],
+    canManage: state.canManage === true,
+    workspaceLevel: (state.workspaceLevel as string | null) ?? null,
+    people: Array.isArray(state.people) ? state.people : [],
   };
 }
 
@@ -117,9 +118,9 @@ export function ShareMenu({
     defaultLevel ?? levels.find((l) => l.id === "edit")?.id ?? levels[0]?.id ?? "view";
   const disabled = busy || state === null || state.canManage === false;
 
-  const run = async (fn: string, args: Record<string, unknown>) => {
+  const run = async (call: () => PromiseLike<{ error: { message: string } | null }>) => {
     setBusy(true);
-    const { error } = await supabaseClient.rpc(fn, args);
+    const { error } = await call();
     if (!alive.current) return;
     setBusy(false);
     if (error) {
@@ -130,18 +131,22 @@ export function ShareMenu({
   };
 
   const setGrant = async (subjectType: string, subjectId: string | null, level: string | null) => {
-    const ok = await run("share_op_set", {
-      p_type: resourceType,
-      p_id: resourceId,
-      p_subject_type: subjectType,
-      p_subject_id: subjectId,
-      p_level: level,
-    });
+    const ok = await run(() =>
+      supabaseClient.rpc("share_op_set", {
+        p_type: resourceType,
+        p_id: resourceId,
+        p_subject_type: subjectType,
+        p_subject_id: subjectId,
+        p_level: level,
+      }),
+    );
     if (ok) await refresh();
   };
 
   const makePrivate = async () => {
-    const ok = await run("share_op_make_private", { p_type: resourceType, p_id: resourceId });
+    const ok = await run(() =>
+      supabaseClient.rpc("share_op_make_private", { p_type: resourceType, p_id: resourceId }),
+    );
     if (ok) await refresh();
   };
 
@@ -162,21 +167,25 @@ export function ShareMenu({
   const setDuoLevel = async (level: string) => {
     if (!duo) return;
     const hasPersonal = state?.people.some((p) => p.userId === duo.userId) ?? false;
-    const ok = await run("share_op_set", {
-      p_type: resourceType,
-      p_id: resourceId,
-      p_subject_type: "workspace",
-      p_subject_id: null,
-      p_level: level,
-    });
-    if (ok && hasPersonal) {
-      await run("share_op_set", {
+    const ok = await run(() =>
+      supabaseClient.rpc("share_op_set", {
         p_type: resourceType,
         p_id: resourceId,
-        p_subject_type: "member",
-        p_subject_id: duo.userId,
-        p_level: null,
-      });
+        p_subject_type: "workspace",
+        p_subject_id: null,
+        p_level: level,
+      }),
+    );
+    if (ok && hasPersonal) {
+      await run(() =>
+        supabaseClient.rpc("share_op_set", {
+          p_type: resourceType,
+          p_id: resourceId,
+          p_subject_type: "member",
+          p_subject_id: duo.userId,
+          p_level: null,
+        }),
+      );
     }
     await refresh();
   };

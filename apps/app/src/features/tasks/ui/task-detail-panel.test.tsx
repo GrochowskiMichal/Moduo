@@ -3,7 +3,7 @@
 // the header instead of the old full-width button (U3-3).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 const PEOPLE = {
   u1: {
@@ -42,16 +42,19 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
   }),
 }));
 
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { RightPanel } from "../../../components/app/right-panel";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { setRunClaims } from "../../focus/claims";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
+import type { TaskCommands } from "../commands";
 import { makeTask } from "../helpers";
 import { clearTaskTimeShares } from "../hooks/use-task-time-share";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { ActivityEntry, Bucket, Tag, Task } from "../model";
+import type { ActivityEntry, Bucket, Section, Tag, Task } from "../model";
+import { useTaskCommands, useTasksActivityStamp } from "../tasks-context";
+import { type FakeTasksSeed, queueEntry, tagLink } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { BulkPanel } from "./bulk-panel";
 import { TaskDetailPanel } from "./task-detail-panel";
 import { TaskFullPage } from "./task-full-page";
@@ -108,26 +111,18 @@ function task(over: Partial<Task> = {}): Task {
   };
 }
 
-function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
+/**
+ * The panel's Tasks context for a test: the store holds `seed` (the task, the
+ * two projects, and whatever the test adds), and the commands the panel calls
+ * are spies (`a.patchTask`, …). Pass more spies or seed rows in `over`.
+ */
+type Setup = Partial<TaskCommands> & { seed: FakeTasksSeed; canEdit: boolean };
+
+/** The commands the panel calls, as spies. */
+function spies() {
   return {
-    canEdit: true,
-    tasks: [t],
-    tags: [],
-    tagsByTask: new Map(),
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    statuses: [],
-    statusById: new Map(),
-    statusesForBucket: () => [],
     setTaskStatus: rs.fn(),
-    blockersByTask: new Map(),
-    dependentsByTask: new Map(),
-    taskRelations: [],
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map(),
-    activityStamp: 0,
-    currentUserId: "u1",
-    loadActivity: async () => [],
+    loadActivity: rs.fn(async () => [] as ActivityEntry[]),
     patchTask: rs.fn(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
@@ -141,15 +136,6 @@ function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
     archiveTask: rs.fn(),
     deleteTask: rs.fn(),
     setTaskParent: rs.fn(),
-    // TV-U13: the task's rows and structure from the store.
-    sessions: [],
-    reminders: [],
-    waiting: [],
-    teams: [],
-    areas: [],
-    sections: [],
-    commentStamps: new Map(),
-    inbox: INBOX,
     addSession: rs.fn(),
     updateSession: rs.fn(),
     removeSession: rs.fn(),
@@ -158,9 +144,24 @@ function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
     addWaiting: rs.fn(),
     removeWaiting: rs.fn(),
     restoreTask: rs.fn(async () => true),
-    ...over,
-  } as unknown as TasksModuleApi;
+  };
 }
+
+function api(
+  t: Task,
+  over: Partial<TaskCommands> & { seed?: FakeTasksSeed; canEdit?: boolean } = {},
+): Setup & ReturnType<typeof spies> {
+  const { seed = {}, canEdit = true, ...commands } = over;
+  return {
+    ...spies(),
+    ...commands,
+    canEdit,
+    seed: { buckets: [INBOX, APP], tasks: [t], ...seed },
+  } as never;
+}
+
+/** A row of a Focus line-up in this test's workspace. */
+const queued = (taskId: string, userId: string) => queueEntry(taskId, userId, { workspaceId: "w" });
 
 function fakeRuntime(opts: { comments?: SpineComment[]; mySeconds?: number } = {}) {
   let comments = opts.comments ?? [];
@@ -211,26 +212,33 @@ function fakeRuntime(opts: { comments?: SpineComment[]; mySeconds?: number } = {
   return { runtime: runtime as unknown as ModuoRuntime, addComment, spine: runtime.spine };
 }
 
-function renderPanel(
-  t: Task,
-  a: TasksModuleApi,
-  runtime: ModuoRuntime | null = null,
-  canEdit = true,
-) {
-  return render(
+/** Under the page's Tasks context: the test's seed, its spies for the commands. */
+function renderTasks(ui: ReactElement, a: Setup, runtime: ModuoRuntime | null = null) {
+  const { seed, canEdit, ...commands } = a;
+  return renderWithTasks(ui, {
+    seed,
+    commands,
+    permission: canEdit ? "edit" : "view",
+    workspaceId: "w",
+    // The spine and the time totals the panel reads through its `runtime`.
+    runtime: (runtime ?? undefined) as never,
+  });
+}
+
+function renderPanel(t: Task, a: Setup, runtime: ModuoRuntime | null = null, canEdit = true) {
+  return renderTasks(
     <TooltipProvider>
       <TaskDetailPanel
         task={t}
-        buckets={[APP]}
-        inbox={INBOX}
         canEdit={canEdit}
         onRequestCapture={() => {}}
         onSelectTask={() => {}}
-        api={a}
         runtime={runtime}
         workspaceId={runtime ? "w" : null}
       />
     </TooltipProvider>,
+    a,
+    runtime,
   );
 }
 
@@ -268,8 +276,8 @@ async function openAddMenu(): Promise<HTMLElement> {
 }
 
 describe("the comp layout and property rule C (U3-1)", () => {
-  it("shows the core properties always and names the rest in one quiet line", () => {
-    renderPanel(task(), api(task()));
+  it("shows the core properties always and names the rest in one quiet line", async () => {
+    await renderPanel(task(), api(task()));
     expect(shownRows()).toEqual(["Status", "Assignee", "Priority", "Due", "Tags"]);
     for (const name of OPTIONAL_NAMES) expect(addLine().textContent).toContain(name);
     // Its name holds the words it shows (label in name).
@@ -287,9 +295,9 @@ describe("the comp layout and property rule C (U3-1)", () => {
     expect(document.querySelector("[data-slot=property-value] .lucide-chevron-down")).toBeNull();
   });
 
-  it("shows a set optional property as a row, and its name leaves the quiet line", () => {
+  it("shows a set optional property as a row, and its name leaves the quiet line", async () => {
     const t = task({ energyLevel: "high", recurrence: null, scheduledAt: "2026-10-09T09:00:00Z" });
-    renderPanel(t, api(t));
+    await renderPanel(t, api(t));
     expect(shownRows()).toEqual([
       "Status",
       "Assignee",
@@ -304,7 +312,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
   });
 
   it("picking a name in the quiet line's menu shows that row, empty", async () => {
-    renderPanel(task(), api(task()));
+    await renderPanel(task(), api(task()));
     const menu = await openAddMenu();
     // The menu lists every property the line names, in panel order.
     expect(
@@ -320,7 +328,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
   it('reads the Estimate row as "1h 20m of ~4h" with my share, the bar on its own line', async () => {
     const t = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const { runtime } = fakeRuntime({ mySeconds: 3000 });
-    renderPanel(t, api(t), runtime);
+    await renderPanel(t, api(t), runtime);
     const time = screen.getByRole("button", { name: /^Estimate: 1h 20m, of ~4h/ });
     // "1h 20m of ~4h" never breaks between its parts (checkpoint 1).
     expect(time.querySelector(".whitespace-nowrap")?.textContent).toBe("1h 20m of ~4h");
@@ -332,7 +340,7 @@ describe("the comp layout and property rule C (U3-1)", () => {
   });
 
   it("view-only members see the values but no quiet line, and ⋯ only copies", async () => {
-    renderPanel(task(), api(task()), null, false);
+    await renderPanel(task(), api(task()), null, false);
     expect(screen.queryByRole("button", { name: /^Add a property/ })).toBeNull();
     expect(
       (screen.getByRole("button", { name: "Status: To do" }) as HTMLButtonElement).disabled,
@@ -350,8 +358,8 @@ describe("the description comes before the properties (MOD-116, the prototypes' 
   const follows = (a: Element, b: Element) =>
     (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
-  it("in the panel: title, description, then the properties", () => {
-    renderPanel(task(), api(task()));
+  it("in the panel: title, description, then the properties", async () => {
+    await renderPanel(task(), api(task()));
     const title = screen.getByRole("textbox", { name: "Task title" });
     const description = screen.getByRole("textbox", { name: "Description" });
     const status = screen.getByRole("button", { name: "Status: To do" });
@@ -359,20 +367,18 @@ describe("the description comes before the properties (MOD-116, the prototypes' 
     expect(follows(description, status)).toBe(true);
   });
 
-  it("on the full page too, in the narrow column and the wide one", () => {
-    render(
+  it("on the full page too, in the narrow column and the wide one", async () => {
+    await renderTasks(
       <TooltipProvider>
         <TaskDetailPanel
           task={task()}
-          buckets={[APP]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={api(task())}
           layout="page"
         />
       </TooltipProvider>,
+      api(task()),
     );
     const description = screen.getByRole("textbox", { name: "Description" });
     const statuses = screen.getAllByRole("button", { name: "Status: To do" });
@@ -382,8 +388,8 @@ describe("the description comes before the properties (MOD-116, the prototypes' 
 });
 
 describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () => {
-  it("never wraps: the names sit on one clipped line", () => {
-    renderPanel(task(), api(task()));
+  it("never wraps: the names sit on one clipped line", async () => {
+    await renderPanel(task(), api(task()));
     const names = addLine().querySelector("[data-slot=add-property-names]") as HTMLElement;
     expect(names.className).toContain("whitespace-nowrap");
     expect(names.className).toContain("overflow-hidden");
@@ -393,7 +399,7 @@ describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () =>
   });
 
   it("opens from the keyboard, and a pick adds that property's row with its editor open", async () => {
-    renderPanel(task(), api(task()));
+    await renderPanel(task(), api(task()));
     addLine().focus();
     fireEvent.keyDown(addLine(), { key: "Enter" });
     const menu = await screen.findByRole("menu", { name: /^Add a property/ });
@@ -409,32 +415,27 @@ describe('the "+" line is one line that opens a menu (MOD-114, round-2b)', () =>
 describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
   it("shortens the names with the full one on hover, and puts the handle at the end", async () => {
     const t = task({ number: 142, sectionId: "s1" });
-    const a = api(t, {
-      sections: [
-        {
-          id: "s1",
-          projectId: "b-app",
-          name: "A section name long enough to need the ellipsis",
-          position: 0,
-        },
-      ],
-    } as unknown as Partial<TasksModuleApi>);
-    render(
+    const longSection: Section = {
+      id: "s1",
+      workspaceId: "w",
+      projectId: "b-app",
+      name: "A section name long enough to need the ellipsis",
+      position: 0,
+      startsOn: null,
+      endsOn: null,
+      createdAt: "",
+      updatedAt: "",
+    };
+    const a = api(t, { seed: { sections: [longSection] } });
+    await renderTasks(
       <WorkspaceContext.Provider
         value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
       >
         <TooltipProvider>
-          <TaskDetailPanel
-            task={t}
-            buckets={[APP]}
-            inbox={INBOX}
-            canEdit
-            onRequestCapture={() => {}}
-            onSelectTask={() => {}}
-            api={a}
-          />
+          <TaskDetailPanel task={t} canEdit onRequestCapture={() => {}} onSelectTask={() => {}} />
         </TooltipProvider>
       </WorkspaceContext.Provider>,
+      a,
     );
     const nav = screen.getByRole("navigation", { name: "Location" });
     expect(nav.className).toContain("flex-nowrap");
@@ -458,21 +459,18 @@ describe("the breadcrumb stays on one line (MOD-118, round-2b)", () => {
 });
 
 /** The panel the Tasks page hosts it in: "Details ▾" over the task, Project beside it. */
-function renderInRightPanel(
+async function renderInRightPanel(
   t: Task,
-  a: TasksModuleApi,
+  a: Setup,
   opts: { onOpenFullPage?: () => void; canEdit?: boolean } = {},
 ) {
   const taskDetails = () => (
     <TaskDetailPanel
       task={t}
-      buckets={[APP]}
-      inbox={INBOX}
       canEdit={opts.canEdit ?? true}
       onRequestCapture={() => {}}
       onSelectTask={() => {}}
       onOpenFullPage={opts.onOpenFullPage}
-      api={a}
     />
   );
   const ui = (activeId: string, details: () => ReactNode) => (
@@ -489,7 +487,7 @@ function renderInRightPanel(
       </TooltipProvider>
     </WorkspaceContext.Provider>
   );
-  const utils = render(ui("details", taskDetails));
+  const utils = await renderTasks(ui("details", taskDetails), a);
   return {
     ...utils,
     show: (activeId: string, details: () => ReactNode = taskDetails) =>
@@ -519,9 +517,9 @@ async function openMore(scope: HTMLElement = document.body): Promise<HTMLElement
 }
 
 describe("the task's actions sit in the panel's title row (MOD-118 follow-up, round-2b frame 5)", () => {
-  it('reads "Details ▾ … Focus ↗ ⋯"; the breadcrumb row holds only the crumbs and the handle', () => {
+  it('reads "Details ▾ … Focus ↗ ⋯"; the breadcrumb row holds only the crumbs and the handle', async () => {
     const t = task({ number: 142 });
-    renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    await renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
     expect(labels(titleActions())).toEqual(["Add to Focus", "Open full page", "More actions"]);
     // All three on one rung, the small control size (the toggle was 32 px).
     const heights = within(titleActions())
@@ -544,7 +542,7 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     const t = task();
     const onOpenFullPage = rs.fn();
     const a = api(t, { focusOnTask: rs.fn(() => true) });
-    renderInRightPanel(t, a, { onOpenFullPage });
+    await renderInRightPanel(t, a, { onOpenFullPage });
     fireEvent.click(within(titleActions()).getByRole("button", { name: "Open full page" }));
     expect(onOpenFullPage).toHaveBeenCalledTimes(1);
     fireEvent.click(within(titleActions()).getByRole("button", { name: "Add to Focus" }));
@@ -562,15 +560,12 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     expect(a.deleteTask).toHaveBeenCalledWith("t1");
   });
 
-  it("stays short at its fullest: a viewer, in their Focus, three people on it, one lined up", () => {
+  it("stays short at its fullest: a viewer, in their Focus, three people on it, one lined up", async () => {
     act(() => setRunClaims("w", new Map([["t1", ["u3", "u4", "u5"]]])));
     const t = task();
-    const a = api(t, {
-      canEdit: false,
-      queuedTaskIds: new Set(["t1"]),
-      queueClaims: new Map([["t1", ["u2"]]]),
-    });
-    renderInRightPanel(t, a, { onOpenFullPage: () => {}, canEdit: false });
+    // In my Focus, and in Mike's.
+    const a = api(t, { canEdit: false, seed: { queue: [queued("t1", "u1"), queued("t1", "u2")] } });
+    await renderInRightPanel(t, a, { onOpenFullPage: () => {}, canEdit: false });
     const slot = titleActions();
     // One avatar and "+2" for the three on it; the mark's name says who.
     const onIt = within(slot).getByRole("img", { name: /are on this$/ });
@@ -585,9 +580,9 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     expect(labels(slot)).toEqual(["Open full page", "More actions"]);
   });
 
-  it("the Project view and a multi-selection show none of the task's actions", () => {
+  it("the Project view and a multi-selection show none of the task's actions", async () => {
     const t = task();
-    const { show } = renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
+    const { show } = await renderInRightPanel(t, api(t), { onOpenFullPage: () => {} });
     expect(titleActions().childElementCount).toBeGreaterThan(0);
 
     show("project");
@@ -615,9 +610,9 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
     expect(screen.getByRole("list", { name: "Selected tasks" })).toBeTruthy();
   });
 
-  it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", () => {
+  it("on the full page they sit in its header after ↑ ↓ (the prototype's `.fphead`)", async () => {
     const t = task({ number: 142 });
-    render(
+    await renderTasks(
       <WorkspaceContext.Provider
         value={{ selectedWorkspace: { taskKey: "MOD" } } as unknown as WorkspaceContextValue}
       >
@@ -631,18 +626,16 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
           >
             <TaskDetailPanel
               task={t}
-              buckets={[APP]}
-              inbox={INBOX}
               canEdit
               onRequestCapture={() => {}}
               onSelectTask={() => {}}
               onCloseFullPage={() => {}}
               layout="page"
-              api={api(t)}
             />
           </TaskFullPage>
         </TooltipProvider>
       </WorkspaceContext.Provider>,
+      api(t),
     );
     const header = screen.getByRole("button", { name: "Next task" }).parentElement as HTMLElement;
     const slot = header.querySelector("[data-slot=full-page-actions]") as HTMLElement;
@@ -660,9 +653,9 @@ describe("the task's actions sit in the panel's title row (MOD-118 follow-up, ro
 });
 
 describe("the Focus toggle (U3-3; call 61 renamed the Queue)", () => {
-  it("is one icon, never the old full-width button", () => {
+  it("is one icon, never the old full-width button", async () => {
     const a = api(task());
-    renderPanel(task(), a);
+    await renderPanel(task(), a);
     const queue = screen.getAllByRole("button", { name: /to Focus|in Focus/i });
     expect(queue).toHaveLength(1);
     expect(queue[0].getAttribute("aria-label")).toBe("Add to Focus");
@@ -674,23 +667,23 @@ describe("the Focus toggle (U3-3; call 61 renamed the Queue)", () => {
   });
 
   it("reads 'In Focus' once queued, and offers nothing for a done task", async () => {
-    renderPanel(task(), api(task(), { queuedTaskIds: new Set(["t1"]) }));
+    await renderPanel(task(), api(task(), { seed: { queue: [queued("t1", "u1")] } }));
     const toggle = screen.getByRole("button", { name: "In Focus" });
     expect(toggle.getAttribute("aria-pressed")).toBe("true");
     cleanup();
     const done = task({ status: "done" });
-    renderPanel(done, api(done));
+    await renderPanel(done, api(done));
     expect(screen.queryByRole("button", { name: /Focus/ })).toBeNull();
     expect(within(await openMore()).queryByRole("menuitem", { name: /Focus/ })).toBeNull();
   });
 
   it("⋯ → Focus on this (call 31): on top of Up next, with the clock; not for a viewer", async () => {
     const a = api(task(), { focusOnTask: rs.fn(() => true) });
-    renderPanel(task(), a);
+    await renderPanel(task(), a);
     fireEvent.click(within(await openMore()).getByRole("menuitem", { name: /Focus on this/ }));
     expect(a.focusOnTask).toHaveBeenCalledWith("t1");
     cleanup();
-    renderPanel(task(), api(task()), null, false);
+    await renderPanel(task(), api(task()), null, false);
     expect(within(await openMore()).queryByRole("menuitem", { name: /Focus on this/ })).toBeNull();
   });
 });
@@ -717,7 +710,7 @@ describe("comments on a task (U3-2)", () => {
       ],
     });
     pickAll();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText("Mike")).toBeTruthy());
     expect(spine.listComments).toHaveBeenCalledWith({
@@ -734,7 +727,7 @@ describe("comments on a task (U3-2)", () => {
 
   it("posts a comment with the people it still mentions", async () => {
     const { runtime, addComment } = fakeRuntime();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const box = screen.getByRole("textbox", {
       name: "Comment on this task",
     }) as HTMLTextAreaElement;
@@ -761,7 +754,7 @@ describe("comments on a task (U3-2)", () => {
 
   it("doesn't notify someone whose mention was deleted before posting", async () => {
     const { runtime, addComment } = fakeRuntime();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const box = screen.getByRole("textbox", {
       name: "Comment on this task",
     }) as HTMLTextAreaElement;
@@ -778,7 +771,7 @@ describe("comments on a task (U3-2)", () => {
 
 describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
   it("shows the three faint bars, never a flag, in the value and the menu's None", async () => {
-    renderPanel(task({ priority: null }), api(task({ priority: null })));
+    await renderPanel(task({ priority: null }), api(task({ priority: null })));
     const value = screen.getByRole("button", { name: "Priority: none" });
     expect(value.querySelector('svg[data-level="0"]')).toBeTruthy();
     expect(value.querySelector(".lucide-flag")).toBeNull();
@@ -787,8 +780,8 @@ describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
     expect(none.querySelector('svg[data-level="0"]')).toBeTruthy();
   });
 
-  it("a set priority still shows its filled bars", () => {
-    renderPanel(task({ priority: "high" }), api(task({ priority: "high" })));
+  it("a set priority still shows its filled bars", async () => {
+    await renderPanel(task({ priority: "high" }), api(task({ priority: "high" })));
     const value = screen.getByRole("button", { name: "Priority: High" });
     expect(value.querySelector('svg[data-level="3"]')).toBeTruthy();
   });
@@ -796,7 +789,7 @@ describe("an unset priority draws the bars, as capture does (MOD-134)", () => {
 
 describe("one way to name you (MOD-137)", () => {
   it("your task's assignee reads You; the picker lists you as your name plus (you)", async () => {
-    renderPanel(task(), api(task()));
+    await renderPanel(task(), api(task()));
     const value = screen.getByRole("button", { name: "Assignee: You" });
     expect(value.textContent).toContain("You");
     fireEvent.click(value);
@@ -807,7 +800,7 @@ describe("one way to name you (MOD-137)", () => {
   });
 
   it("an empty Reminder reads Add reminder, never Remind me", async () => {
-    renderPanel(task(), api(task()));
+    await renderPanel(task(), api(task()));
     const menu = await openAddMenu();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Reminder" }));
     await waitFor(() => expect(shownRows()).toContain("Reminder"));
@@ -820,9 +813,9 @@ describe("one way to name you (MOD-137)", () => {
 describe("the activity reads like a thread, its box always in reach (MOD-129)", () => {
   const commentBox = () => screen.getByRole("textbox", { name: "Comment on this task" });
 
-  it("in the panel, the comment box is pinned under the scrolling body", () => {
+  it("in the panel, the comment box is pinned under the scrolling body", async () => {
     const { runtime } = fakeRuntime();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const pinned = commentBox().closest('[data-slot="task-composer"]') as HTMLElement;
     expect(pinned).toBeTruthy();
     // Outside the scroll box (its sibling above), so it stays put as the body scrolls.
@@ -834,24 +827,23 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
     expect(feed.contains(commentBox())).toBe(false);
   });
 
-  it("on the full page, the box ends the activity", () => {
+  it("on the full page, the box ends the activity", async () => {
     const { runtime } = fakeRuntime();
     const t = task();
-    render(
+    await renderTasks(
       <TooltipProvider>
         <TaskDetailPanel
           task={t}
-          buckets={[APP]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={api(t)}
           runtime={runtime}
           workspaceId="w"
           layout="page"
         />
       </TooltipProvider>,
+      api(t),
+      runtime,
     );
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     expect(feed.contains(commentBox())).toBe(true);
@@ -862,15 +854,15 @@ describe("the activity reads like a thread, its box always in reach (MOD-129)", 
   it('drops the "Created by · Updated" line: the trail already says both', async () => {
     const { runtime } = fakeRuntime();
     pickAll();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const feed = screen.getByRole("region", { name: "Comments and activity" });
     await waitFor(() => expect(within(feed).getByText(/created this/)).toBeTruthy());
     expect(within(feed).queryByText(/Created by/)).toBeNull();
     expect(within(feed).queryByText(/Updated/)).toBeNull();
   });
 
-  it("a viewer who can't comment gets no empty pinned strip", () => {
-    renderPanel(task(), api(task()), null);
+  it("a viewer who can't comment gets no empty pinned strip", async () => {
+    await renderPanel(task(), api(task()), null);
     expect(screen.queryByRole("textbox", { name: "Comment on this task" })).toBeNull();
     const slot = document.querySelector('[data-slot="task-composer"]') as HTMLElement;
     expect(slot.childElementCount).toBe(0);
@@ -900,7 +892,7 @@ describe("the feed opens on Comments, its switch at the title's size (MOD-157)",
 
   it("shows only the talk until you pick All", async () => {
     const { runtime } = fakeRuntime({ comments: [COMMENT] });
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     await waitFor(() => expect(within(feed()).getByText("Rail counts first")).toBeTruthy());
     expect(shown("Comments")).toBe("true");
     expect(shown("All")).toBe("false");
@@ -925,7 +917,7 @@ describe("the feed opens on Comments, its switch at the title's size (MOD-157)",
       createdAt: "2026-10-07T09:00:00Z",
     };
     const loadActivity = rs.fn(async () => [changed]);
-    renderPanel(t, api(t, { loadActivity }), runtime);
+    await renderPanel(t, api(t, { loadActivity }), runtime);
     await waitFor(() => expect(within(feed()).getByText("No comments yet.")).toBeTruthy());
     expect(loadActivity).toHaveBeenCalled();
     // The change waits behind All.
@@ -938,39 +930,39 @@ describe("the feed opens on Comments, its switch at the title's size (MOD-157)",
     spine.listComments = rs.fn(async () => {
       throw new Error("offline");
     });
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     await waitFor(() => expect(within(feed()).getByText(/didn’t load/)).toBeTruthy());
     expect(within(feed()).queryByText("No comments yet.")).toBeNull();
   });
 
   it("All brings the changes back, and stays picked on this device", async () => {
     const { runtime } = fakeRuntime({ comments: [COMMENT] });
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     fireEvent.click(within(feed()).getByRole("radio", { name: "All" }));
     await waitFor(() => expect(within(feed()).getByText(/created this/)).toBeTruthy());
     expect(localStorage.getItem(FEED_FILTER_KEY)).toBe("all");
     cleanup();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     expect(shown("All")).toBe("true");
   });
 
-  it("an earlier Comments pick, or anything but All, reads as Comments", () => {
+  it("an earlier Comments pick, or anything but All, reads as Comments", async () => {
     for (const stored of ["comments", "bogus"]) {
       localStorage.setItem(FEED_FILTER_KEY, stored);
       const { runtime } = fakeRuntime();
-      renderPanel(task(), api(task()), runtime);
+      await renderPanel(task(), api(task()), runtime);
       expect(shown("Comments")).toBe("true");
       cleanup();
     }
     // The control: a stored All is read, so the cases above came from storage.
     pickAll();
-    renderPanel(task(), api(task()), fakeRuntime().runtime);
+    await renderPanel(task(), api(task()), fakeRuntime().runtime);
     expect(shown("All")).toBe("true");
   });
 
-  it("draws the switch on the quiet header size, not the control rung", () => {
+  it("draws the switch on the quiet header size, not the control rung", async () => {
     const { runtime } = fakeRuntime();
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     const sw = within(feed()).getByRole("radiogroup", { name: "Show" });
     expect(sw.getAttribute("data-size")).toBe("xs");
     expect(within(sw).getByRole("radio", { name: "All" }).className).toContain("text-sm");
@@ -981,7 +973,7 @@ describe("validator round", () => {
   it("never writes back the tracked total the Time editor opened with", async () => {
     const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const a = api(before);
-    const view = renderPanel(before, a);
+    const view = await renderPanel(before, a);
     fireEvent.click(screen.getByRole("button", { name: /^Estimate: 1h 20m/ }));
     const estimate = (await screen.findByLabelText("Estimate")) as HTMLInputElement;
     // Focus saves a minute while the editor is open.
@@ -990,12 +982,9 @@ describe("validator round", () => {
       <TooltipProvider>
         <TaskDetailPanel
           task={after}
-          buckets={[APP]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={{ ...a, tasks: [after] } as TasksModuleApi}
           runtime={null}
           workspaceId={null}
         />
@@ -1011,7 +1000,7 @@ describe("validator round", () => {
   it("after typing a total, a later commit doesn't send it again over newer time", async () => {
     const before = task({ timeSpentSeconds: 4800, durationMinutes: 240 });
     const a = api(before);
-    const view = renderPanel(before, a);
+    const view = await renderPanel(before, a);
     fireEvent.click(screen.getByRole("button", { name: /^Estimate: 1h 20m/ }));
     const tracked = (await screen.findByLabelText("Tracked")) as HTMLInputElement;
     fireEvent.change(tracked, { target: { value: "2h" } });
@@ -1023,12 +1012,9 @@ describe("validator round", () => {
       <TooltipProvider>
         <TaskDetailPanel
           task={after}
-          buckets={[APP]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={{ ...a, tasks: [after] } as TasksModuleApi}
           runtime={null}
           workspaceId={null}
         />
@@ -1044,7 +1030,31 @@ describe("validator round", () => {
 
   it("reads a task's comments once when it opens", async () => {
     const { runtime, spine } = fakeRuntime();
-    renderPanel(task(), api(task(), { activityStamp: 3 }), runtime);
+    // An op saved before the panel opens has moved the trail's stamp.
+    const seen: { commands: TaskCommands | null; stamp: number } = { commands: null, stamp: 0 };
+    function Earlier() {
+      seen.commands = useTaskCommands();
+      seen.stamp = useTasksActivityStamp();
+      return null;
+    }
+    const { patchTask: _real, ...commands } = api(task());
+    const view = await renderTasks(<Earlier />, commands, runtime);
+    act(() => {
+      seen.commands?.patchTask("t1", { priority: "high" });
+    });
+    await waitFor(() => expect(seen.stamp).toBeGreaterThan(0));
+    view.rerender(
+      <TooltipProvider>
+        <TaskDetailPanel
+          task={task()}
+          canEdit
+          onRequestCapture={() => {}}
+          onSelectTask={() => {}}
+          runtime={runtime}
+          workspaceId="w"
+        />
+      </TooltipProvider>,
+    );
     await waitFor(() => expect(spine.listComments).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));
     expect(spine.listComments).toHaveBeenCalledTimes(1);
@@ -1052,7 +1062,7 @@ describe("validator round", () => {
 
   it("doesn't read the workspace's time totals for a task with no time", async () => {
     const { runtime } = fakeRuntime({ mySeconds: 0 });
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     await new Promise((r) => setTimeout(r, 400));
     expect(
       (runtime.tasks.listTimeTotals as unknown as { mock: { calls: unknown[] } }).mock.calls,
@@ -1073,7 +1083,7 @@ describe("a task the server doesn't have yet (tmp- id)", () => {
   it("reads no comments, links or files until it has its real id", async () => {
     const r = readers();
     const t = task({ id: "tmp-6f1c" });
-    renderPanel(t, api(t), r.runtime);
+    await renderPanel(t, api(t), r.runtime);
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(r.listComments).not.toHaveBeenCalled();
     expect(r.listLinks).not.toHaveBeenCalled();
@@ -1085,18 +1095,15 @@ describe("a task the server doesn't have yet (tmp- id)", () => {
   it("reads them once the saved task replaces it", async () => {
     const r = readers();
     const temp = task({ id: "tmp-6f1c" });
-    const view = renderPanel(temp, api(temp), r.runtime);
+    const view = await renderPanel(temp, api(temp), r.runtime);
     const saved = task({ id: "t1" });
     view.rerender(
       <TooltipProvider>
         <TaskDetailPanel
           task={saved}
-          buckets={[APP]}
-          inbox={INBOX}
           canEdit
           onRequestCapture={() => {}}
           onSelectTask={() => {}}
-          api={api(saved)}
           runtime={r.runtime}
           workspaceId="w"
         />
@@ -1114,11 +1121,7 @@ describe("reordering subtasks (TV-U10)", () => {
   const two = task({ id: "s2", title: "Second step", parentId: "p", position: "0000000030" });
   const withSubtasks = () => {
     const dropTask = rs.fn(async () => true);
-    const a = api(parent, {
-      tasks: [parent, one, two],
-      subtasksByParent: new Map([["p", [one, two]]]),
-      dropTask,
-    } as unknown as Partial<TasksModuleApi>);
+    const a = api(parent, { seed: { tasks: [parent, one, two] }, dropTask });
     return { a, dropTask };
   };
   const moveUp = (title: string) =>
@@ -1128,9 +1131,9 @@ describe("reordering subtasks (TV-U10)", () => {
       shiftKey: true,
     });
 
-  it("⌥⇧↑ moves a subtask up among its siblings, with the drop's Undo label", () => {
+  it("⌥⇧↑ moves a subtask up among its siblings, with the drop's Undo label", async () => {
     const { a, dropTask } = withSubtasks();
-    renderPanel(parent, a);
+    await renderPanel(parent, a);
     moveUp("Second step");
     const [write, label] = dropTask.mock.calls[0] as unknown as [
       { taskId: string; position: string },
@@ -1144,9 +1147,9 @@ describe("reordering subtasks (TV-U10)", () => {
     expect(dropTask).toHaveBeenCalledTimes(1);
   });
 
-  it("read-only, the keys move nothing", () => {
+  it("read-only, the keys move nothing", async () => {
     const { a, dropTask } = withSubtasks();
-    renderPanel(parent, a, null, false);
+    await renderPanel(parent, a, null, false);
     moveUp("Second step");
     expect(dropTask).not.toHaveBeenCalled();
   });
@@ -1196,7 +1199,7 @@ describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", 
       change({ id: "a3", actorId: "u9", actorLabel: "Ola", createdAt: "2026-10-07T11:00:00Z" }),
     ];
     const { runtime } = fakeRuntime();
-    renderPanel(task(), api(task(), { loadActivity: async () => activity }), runtime);
+    await renderPanel(task(), api(task(), { loadActivity: async () => activity }), runtime);
     await waitFor(() => expect(within(feed()).getByText("Ola")).toBeTruthy());
     const key = avatarBy("Mike · via Claude Code");
     expect(key.getAttribute("data-kind")).toBe("app");
@@ -1242,7 +1245,7 @@ describe("a connected app's avatar is a plug, a former member's a ? (MOD-149)", 
       createdAt: "2026-10-07T20:05:00Z",
     };
     const { runtime } = fakeRuntime({ comments: [byKey, byMike] });
-    renderPanel(task(), api(task()), runtime);
+    await renderPanel(task(), api(task()), runtime);
     await waitFor(() => expect(within(feed()).getByText("Claude Code (app)")).toBeTruthy());
     expect(avatarBy("Claude Code (app)").getAttribute("data-kind")).toBe("app");
     const mike = avatarBy("Mike");
@@ -1264,10 +1267,10 @@ describe("the tags' + ends the chips, at their height (MOD-158)", () => {
   });
   const TAGS = [tag("g1", "shell"), tag("g2", "visual")];
   const withTags = (tags: Tag[]) =>
-    api(task(), { tags: TAGS, tagsByTask: new Map([["t1", tags]]) });
+    api(task(), { seed: { tags: TAGS, tagLinks: tags.map((t) => tagLink(t.id, "t1", "w")) } });
 
-  it("rides with the last chip as the round 22 px +, never the 26 px value square", () => {
-    renderPanel(task(), withTags(TAGS));
+  it("rides with the last chip as the round 22 px +, never the 26 px value square", async () => {
+    await renderPanel(task(), withTags(TAGS));
     const add = screen.getByRole("button", { name: "Add tag" });
     expect(add.getAttribute("data-slot")).toBe("tag-add");
     expect(add.className).toContain("size-5.5");
@@ -1280,7 +1283,7 @@ describe("the tags' + ends the chips, at their height (MOD-158)", () => {
   });
 
   it("opens the tag picker through both its triggers (popover and tooltip)", async () => {
-    renderPanel(task(), withTags(TAGS));
+    await renderPanel(task(), withTags(TAGS));
     const add = screen.getByRole("button", { name: "Add tag" });
     expect(add.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(add);
@@ -1288,15 +1291,15 @@ describe("the tags' + ends the chips, at their height (MOD-158)", () => {
     expect(add.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("with no tags yet, the value still reads Add tag", () => {
-    renderPanel(task(), withTags([]));
+  it("with no tags yet, the value still reads Add tag", async () => {
+    await renderPanel(task(), withTags([]));
     const add = screen.getByRole("button", { name: "Add tag" });
     expect(add.getAttribute("data-slot")).toBe("property-value");
     expect(add.textContent).toContain("Add tag");
   });
 
-  it("read-only: the chips and no +", () => {
-    renderPanel(task(), withTags(TAGS), null, false);
+  it("read-only: the chips and no +", async () => {
+    await renderPanel(task(), withTags(TAGS), null, false);
     expect(screen.queryByRole("button", { name: "Add tag" })).toBeNull();
     expect(document.querySelectorAll('[data-slot="tag-chip"]')).toHaveLength(2);
   });

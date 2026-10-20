@@ -6,8 +6,10 @@ import { TaskListView } from "./task-list-view";
 import {
   BUCKETS,
   bucketNameById,
+  commentsOn,
   INBOX,
-  stubApi,
+  StoryTasks,
+  storySeed,
   TASKS,
   TeamWorkspace,
 } from "./tasks-stories-fixtures";
@@ -57,11 +59,14 @@ const meta = {
   component: TaskListView,
   parameters: { layout: "fullscreen" },
   decorators: [
-    (Story) => (
+    // The Tasks context the List reads (A4): a story's `tasksSeed`, else the shared one.
+    (Story, { id, parameters }) => (
       <TeamWorkspace>
-        <div className="h-[600px] bg-card p-4">
-          <Story />
-        </div>
+        <StoryTasks key={id} seed={parameters.tasksSeed}>
+          <div className="h-[600px] bg-card p-4">
+            <Story />
+          </div>
+        </StoryTasks>
       </TeamWorkspace>
     ),
   ],
@@ -79,7 +84,6 @@ const meta = {
     onRequestCapture: () => {},
     selectedTaskId: "review",
     onSelectTask: () => {},
-    api: stubApi(),
   },
   render: (args) => <Interactive {...args} />,
 } satisfies Meta<typeof TaskListView>;
@@ -120,8 +124,8 @@ export const DetailedRows: Story = {
     order: "due",
     sections: SECTIONS,
     onSort: () => {},
-    api: stubApi(numbered(TASKS), { sections: SECTIONS }),
   },
+  parameters: { tasksSeed: storySeed(numbered(TASKS), { sections: SECTIONS }) },
 };
 
 /** A project grouped by Section (its default, TV-U10): "No section" first,
@@ -183,8 +187,8 @@ export const BySectionMostlyDone: Story = {
     onAddSection: () => {},
     onRenameSection: () => {},
     onDeleteSection: () => {},
-    api: stubApi(MOSTLY_DONE, { sections: SECTIONS }),
   },
+  parameters: { tasksSeed: storySeed(MOSTLY_DONE, { sections: SECTIONS }) },
 };
 
 /** The same project in Display → Completed: 7 days, three pieces finished
@@ -202,8 +206,8 @@ export const BySectionSevenDays: Story = {
     ...BySectionMostlyDone.args,
     completed: "week",
     tasks: MOSTLY_DONE_RECENT,
-    api: stubApi(MOSTLY_DONE_RECENT, { sections: SECTIONS }),
   },
+  parameters: { tasksSeed: storySeed(MOSTLY_DONE_RECENT, { sections: SECTIONS }) },
 };
 
 /** A late row (REPLAN 23): muted, never red; hover or select it for
@@ -238,6 +242,16 @@ export const ReadOnly: Story = {
   args: { canEdit: false },
 };
 
+/** Finished files on a task (AT-3's 📎 count). */
+const filesOn = (taskId: string, count: number) =>
+  Array.from({ length: count }, (_, i) => ({
+    id: `f-${taskId}-${i}`,
+    taskId,
+    status: "ready",
+    updatedAt: "2026-10-15T09:00:00.000Z",
+    deletedAt: null,
+  }));
+
 /** An agent at work on a row (TV-D16), for the narrow story. */
 const agentAt = (taskId: string, state: "working" | "needs_you") => ({
   id: `agent-${taskId}`,
@@ -264,17 +278,11 @@ const agentAt = (taskId: string, state: "working" | "needs_you") => ({
  *  12rem its agent too. Three centre widths: 340 px (a 1024 px window with
  *  both side panels open), 440 px and 600 px. */
 export const NarrowRows: Story = {
-  args: {
-    api: stubApi(TASKS, {
+  parameters: {
+    tasksSeed: storySeed(TASKS, {
       agentSessions: [agentAt("review", "needs_you"), agentAt("settings", "working")],
-      commentCounts: new Map([
-        ["review", 3],
-        ["assignee", 12],
-      ]),
-      attachmentCounts: new Map([
-        ["review", 2],
-        ["settings", 1],
-      ]),
+      comments: [...commentsOn("review", 3), ...commentsOn("assignee", 12)],
+      attachments: [...filesOn("review", 2), ...filesOn("settings", 1)],
     }),
   },
   render: (args) => (
