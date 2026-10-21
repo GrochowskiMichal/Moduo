@@ -437,7 +437,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
-- 2026-10-21 · Mindmap removed from the product; the whiteboard/canvas idea is also out — external boards (Excalidraw/Figma/Miro) get embedded via links instead.
+- 2026-10-21 · Mindmap removed from the product (Maciej): abandoned; the whiteboard/canvas idea is also out — external boards (Excalidraw/Figma/Miro) get embedded via links instead.
 - 2026-10-15 · TX-7: workspace emails are queued by the database, the inviter is whoever is signed in, and the daily cap counts queued emails
 - 2026-10-14 · TX-6: reminders and the host's cancel are queued by Postgres triggers from an email context saved on the booking
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest
