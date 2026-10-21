@@ -1,6 +1,32 @@
 {
   "releases": [
     {
+      "version": "1.2.4",
+      "date": "2026-10-20",
+      "highlights": [
+        "Reliability improvements."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Reliability improvements."
+        }
+      ]
+    },
+    {
+      "version": "1.2.3",
+      "date": "2026-10-20",
+      "highlights": [
+        "Task details keep their full-width labels when the right panel is 320 px wide; they narrow only below that."
+      ],
+      "items": [
+        {
+          "type": "fixed",
+          "text": "Task details keep their full-width labels when the right panel is 320 px wide; they narrow only below that."
+        }
+      ]
+    },
+    {
       "version": "1.2.2",
       "date": "2026-10-19",
       "highlights": [
