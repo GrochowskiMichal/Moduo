@@ -12,7 +12,6 @@ Rust-first desktop app using React + Rspack (Rsbuild) + TanStack Router + Tauri 
 - **Framer Motion** - Animations
 - **Lexical 0.52** - Rich text editor
 - **Yjs 13.6** - CRDT for real-time collaboration
-- **XYFlow** - Node-based graphs (mindmaps)
 - **Dnd Kit** - Drag and drop
 - **Lucide React** - Icons
 - **Zod** - Schema validation

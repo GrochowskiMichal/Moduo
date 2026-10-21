@@ -13,7 +13,6 @@ URL patterns from [src/router.tsx](src/router.tsx). Top-level slash is the authe
 - **Inside `AppGate`** (top-nav + 3-pane shell):
   - `/grid` — **Dashboard** (widget grid)
   - `/notes` — **Notes** *(redesign anchor)*
-  - `/mindmap` — Mindmap (XYFlow node graph)
   - `/email` — Email (IMAP)
   - `/ground` — unified planning surface
     - `/tasks` → redirects to `/ground`
@@ -106,7 +105,6 @@ Consistency glossary for the interface. Pick one word, use it everywhere.
 | --- | --- | --- |
 | The main work area | **Workspace** | Already used in `workspace-switcher` / `workspace-settings`. Not "tenant", "account", "team". |
 | A piece of writing | **Note** | Not "doc" or "page" in product copy. (The element is `<doc>` in code if needed.) |
-| The graph view | **Mindmap** | Not "graph", not "canvas" in copy. |
 | User configuration | **Settings** | Not "preferences" or "options". |
 | The customization knobs in Settings | **Appearance** | Section heading inside Settings. |
 | Theme choices | **Theme** (Dark / Light / System) | Not "mode" or "skin". |
@@ -148,7 +146,7 @@ What expands and how the IA handles it. (Foundation concerns only — per-featur
 ## URL Strategy (current)
 
 - **Pattern**: flat top-level (`/<feature>`) — no nesting. TanStack Router routes all sit under `appGateRoute`.
-- **Dynamic segments**: none in v1. Notes / mindmaps / etc. currently don't have per-item URLs. (Per-note routing is a per-feature concern, not foundation.)
+- **Dynamic segments**: none in v1. Notes etc. currently don't have per-item URLs. (Per-note routing is a per-feature concern, not foundation.)
 - **Query parameters**: none used consistently today. Future per-feature designs may introduce `?filter=`, `?sort=`, `?view=` patterns — those decisions live in per-feature briefs.
 - **Redirects in router**:
   - `/` → `/grid`
@@ -163,7 +161,7 @@ When the app converges to 5–7 features, an IA brief should consider:
 - Renaming `/expanses` → `/expenses` (current typo).
 - Whether `/grid` should be renamed to `/dashboard` for consistency with the top-nav label "Dashboard".
 - Whether `/ground` (the unified tasks + calendar surface) should be split or kept as one.
-- Whether per-item URLs (`/notes/<id>`, `/mindmap/<id>`) are needed for deep linking + share-by-URL.
+- Whether per-item URLs (`/notes/<id>`) are needed for deep linking + share-by-URL.
 - Whether the analytics-flavored routes (`/stats`, `/analytics`, `/kpi-okr`, `/revenue`, `/expanses`) collapse into a single `/insights` surface.
 - Whether the "Relations" top-nav item points to a dedicated `/relations` route or stays as a per-page right rail.
 
