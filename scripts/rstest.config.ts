@@ -4,6 +4,7 @@ import { defineConfig } from "@rstest/core";
 export default defineConfig({
   root: new URL("..", import.meta.url).pathname,
   include: [
+    "scripts/agent/*.test.ts",
     "scripts/brand/*.test.ts",
     "scripts/release/*.test.ts",
     "scripts/smoke-hosting.test.ts",
