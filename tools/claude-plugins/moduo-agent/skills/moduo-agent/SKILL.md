@@ -24,19 +24,18 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 
 | Status (category) | Set it when | Who |
 | --- | --- | --- |
-| **Idea** (backlog) | captured, not yet specced | people |
-| **Ready** (to do) | spec meets the Definition of Ready | people, when `/s1` ends |
+| **Backlog** (backlog) | captured, not yet specced or planned | people |
+| **To do** (to do) | planned and specced, ready to pick up | people, when `/s1` ends |
 | **Building** (in progress) | you claim the block (Pick up) | you |
 | **In review** (in progress) | the PR is ready for review (Hand back) | you |
 | **Awaiting release** (in progress) | merged into the personal branch or `develop`, not yet in a `vX.Y.Z` release (Finish) | you |
-| **Shipped** (done) | the release carrying it is tagged | `/ship` |
-| **Done** (done) | work that never ships (docs, research, ops) is finished | you or people |
+| **Shipped** (done) | the release carrying it is tagged; also the only done status, so work that never ships (docs, research, ops) ends here too | `/ship`; you for work that never ships |
 | **Won't do** (won't do) | dropped on purpose; say why in a comment | people |
 
 - Forward only. A review that sends the block back to work moves it to **Building** again; say so in the note.
 - **Blocked is not a stage:** use the task's blocked flag, `waiting_on` and `tasks_handoff`.
-- Names apply to the projects that carry them (Build, Moduo App). Check `statuses_list {project_id}` once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
-- Never set **Shipped** yourself and never move a task you don't hold.
+- Names apply to the projects that carry them (Moduo App today; Build once it gets the same set). Check `statuses_list {project_id}` once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
+- Set **Shipped** yourself only for work that never ships; code waits for `/ship`. Never move a task you don't hold.
 
 ## Pick up (from /s2 Claim, after the draft PR exists)
 1. **Find the Build project:** `projects_list`, the active project named `Build`. None → Moduo off ("no Build project").
@@ -62,7 +61,7 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 `tasks_session_status {task_id, state: "ready", note: "Ready for review · PR #<n>", links: [{url: "<PR url>", label: "PR #<n>"}], summary: "<Changed + Test this from the report, at most 4,000 characters>", agent}`. Also `tasks_set_status {task_id, status: "In review"}`. Then set `state=ready` in `.claude/MODUO_TASK`.
 
 ## Finish (from /s3, after the merge into the personal branch)
-`tasks_set_status {task_id, status: "Awaiting release"}` (a block that never ships, such as docs or ops, goes to `Done`), then `rm -f .claude/MODUO_TASK`. `/ship` moves released tasks to `Shipped`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
+`tasks_set_status {task_id, status: "Awaiting release"}` (a block that never ships, such as docs or ops, goes to `Shipped`), then `rm -f .claude/MODUO_TASK`. `/ship` moves released tasks to `Shipped`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
 
 ## Hand off to the other person
 When work needs the other founder (a review, a design call, a piece in their lane), it goes as a comment on the Moduo task (AGENTS.md §Agent tooling):
