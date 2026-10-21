@@ -93,7 +93,7 @@ Variants (per the standing IA principle — the calendar switcher machinery lift
 | `/note` | Insert a **reference chip** to an existing note | Consistent rule: entity nouns insert that entity. |
 | `/task` | Task line — create new or link existing | §3b. |
 | `/contact` `/company` `/event` | Entity chip, create-and-link offered where sensible (contact/company yes; event no at v1) | Chips are the CT-4 `EntityRefNode`. |
-| `/mindmap` | Existing mindmap embed (renamed from `/embed-mindmap`) | Kept working, demoted in menu order; no new investment. |
+| ~~`/mindmap`~~ | Removed (NR-4; the mindmap left the product 2026-10-21) | Old embeds render a quiet "Mindmap (unavailable)" line. |
 | Basics | `/h1 /h2 /h3 /bullet /number /todo /quote /code /divider /table` | `/todo` = the humble checkbox. `/toggle` removed. `/embed-task` removed. |
 
 Keyword aliases make discovery forgiving (`child`, `subpage` → `/page`; `check`, `checkbox` → `/todo`). Command names are labels — cheap to rename later.

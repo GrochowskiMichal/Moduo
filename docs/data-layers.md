@@ -62,7 +62,6 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | **Email** | redb + in-memory cache; Rust IMAP/SMTP engine | redb (local) | No | 🟡 desktop-only, 2/5 |
 | **Calendar** | localStorage + OAuth tokens | local | No | 🟡 logic only, no UI |
 | **Time-tracking** | redb | local | No | 🟡 Rust backend, no UI |
-| **Mindmap** | localStorage | local | No | 🟡 3/5, exploratory |
 | Dashboard widgets | mostly stateless / demo | n/a | No | 🟡 prototype (`/grid` to be replaced) |
 | **Contacts / Finance** | — | — | — | ⚫ not built |
 

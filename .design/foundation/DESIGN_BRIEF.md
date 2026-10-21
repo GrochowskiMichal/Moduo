@@ -20,7 +20,7 @@ For Claude (and humans), a short `CLAUDE.md` design section + a longer `DESIGN_S
 
 ## Experience Principles
 
-1. **Clarity over decoration** — Surface hierarchy comes from elevation and contrast, never ornament. Body text is always readable; the canvas yields to the user's content (notes, mindmap, email).
+1. **Clarity over decoration** — Surface hierarchy comes from elevation and contrast, never ornament. Body text is always readable; the canvas yields to the user's content (notes, email).
 2. **Tokens or nothing** — Every color, distance, radius, font, and motion value goes through a named token. The theme / accent / font / radius / density / size pickers only work because nothing bypasses the system.
 3. **Consistent skeleton, customizable skin** — Layout rhythm, density, and component behavior stay constant across every page and every user customization. What changes per user is theme, accent, font, radius, density, and font size — never interaction patterns.
 
@@ -168,7 +168,7 @@ Explicit non-goals to prevent scope creep.
 - **Information architecture changes**. Routes, navigation, feature boundaries all stay. `/information-architecture` will produce a descriptive doc, not a refactor plan.
 - **Mobile / tablet layouts**. Desktop window only.
 - **The React Native compatibility shim** (`src/tw/`). Stays as-is.
-- **Email rendering** (Lexical / Yjs / XYFlow internals). Their interaction surfaces follow the same tokens, but their canvas internals (the mindmap nodes' own visual language, the Lexical editor's own theme) are their own design problem.
+- **Email rendering** (Lexical / Yjs internals). Their interaction surfaces follow the same tokens, but their canvas internals (the Lexical editor's own theme) are their own design problem.
 - **Marketing site, app icon, Tauri installer chrome**. Out.
 - **Localization (text expansion / RTL)**. Out for v1; tokens don't preclude it.
 - **Custom CSS by end users** (Obsidian-style theming). Out — customization stays within the curated axes.

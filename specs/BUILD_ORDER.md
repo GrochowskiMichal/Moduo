@@ -566,7 +566,7 @@ Two blocks with no dependency between them still **merge-conflict if they edit t
 
 ---
 
-**Alpha scope — not yet specced** (await `/s1`; add their blocks here when the spec passes the Definition-of-Ready gate): ~~**the mindmap rethink**~~ — **REMOVED from alpha 2026-07-29** (designer call; post-alpha now, and MCP-1 no longer waits on it). ~~The Dashboard rebuild~~ — **specced 2026-07-08** → Wave 6 above (DB-1…DB-8). Then **MCP-1** (above) as the pre-alpha hardening pass.
+**Alpha scope — not yet specced** (await `/s1`; add their blocks here when the spec passes the Definition-of-Ready gate): ~~**the mindmap rethink**~~ — **removed from the product 2026-10-21** (Maciej; out of alpha since 2026-07-29). ~~The Dashboard rebuild~~ — **specced 2026-07-08** → Wave 6 above (DB-1…DB-8). Then **MCP-1** (above) as the pre-alpha hardening pass.
 
 **Planned — not yet specced, timing open** (Maciej + Mike call 2026-10-02): **Communication module — chat + calls**. *Chat is now specced: the "Chat v2" section above (2026-10-14); calls stay Moduo Meet's track.* Originally: await `/s1` — nothing to build now:, Duo (2 seats) and Team (3+ seats) plans only, competing with Slack on features. Reverses the 2026-06-24 "no chat module, keep Slack" line. Whether it lands before or after the alpha is not decided; add its blocks here only once its spec passes the Definition-of-Ready gate. Rationale: [docs/ROADMAP.md](../docs/ROADMAP.md) (*Communication module* + Q14) + [docs/decisions.md](../docs/decisions.md) (2026-10-02).
 
