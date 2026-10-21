@@ -61,6 +61,7 @@ In the scratch worktree:
    - `curl -s https://moduo.app/changelog | grep -c X.Y.Z` is non-zero
    - the GitHub release `vX.Y.Z` on GrochowskiMichal/moduo-releases
    - links: the release PR, the tag, the run. Add them to the PR as a comment.
+8. **Moduo (skip quietly without the `moduo` connector):** once the web proof passes, move the tasks this release carried from **Awaiting release** to **Shipped** with `tasks_set_status` (names in [moduo-agent](../moduo-agent/SKILL.md) §Stages). Take them from the release notes' block IDs and the `Awaiting release` tasks in `Build`; leave any task whose change isn't in this tag.
 
 ## 4b. Hand off
 Leave the PR open. `gh pr edit <n> --add-assignee <other login>`. The PR body is the summary; post nothing else. Report the PR link and that `/ship vX.Y.Z` (theirs or yours) finishes it.
