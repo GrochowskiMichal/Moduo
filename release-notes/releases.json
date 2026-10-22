@@ -1,6 +1,19 @@
 {
   "releases": [
     {
+      "version": "1.2.5",
+      "date": "2026-10-22",
+      "highlights": [
+        "A mistyped moduo.app address now shows a proper \"Page not found\" page instead of the home page."
+      ],
+      "items": [
+        {
+          "type": "fixed",
+          "text": "A mistyped moduo.app address now shows a proper \"Page not found\" page instead of the home page."
+        }
+      ]
+    },
+    {
       "version": "1.2.4",
       "date": "2026-10-20",
       "highlights": [
