@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<!--
+  Served by the landing Worker (not_found_handling: "404-page") with a real 404 status for any
+  path that has no file. Self-contained: no external fonts or scripts, so it renders anywhere.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Page not found · Moduo</title>
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#161616" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fafafa;
+        --fg: #161616;
+        --muted: #6b6b6b;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #161616;
+          --fg: #fafafa;
+          --muted: #a0a0a0;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      }
+      main {
+        max-width: 28rem;
+      }
+      h1 {
+        margin: 0 0 8px;
+        font-size: 1.5rem;
+        font-weight: 600;
+      }
+      p {
+        margin: 0 0 20px;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+      a {
+        color: var(--fg);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Page not found</h1>
+      <p>That address doesn’t lead anywhere on moduo.app.</p>
+      <a href="/">Back to Moduo</a>
+    </main>
+  </body>
+</html>

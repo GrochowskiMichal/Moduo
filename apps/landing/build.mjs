@@ -48,6 +48,9 @@ if (staging) {
   fs.writeFileSync(path.join(outDir, "changelog.html"), renderChangelogPage(template, notes));
 }
 
+// The real 404 page (wrangler.jsonc: not_found_handling "404-page"), on every build.
+fs.copyFileSync(path.join(root, "404.html"), path.join(outDir, "404.html"));
+
 // The landing's own static files (share image, founder photos, …) go to /assets.
 const assets = path.join(root, "assets");
 if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });
