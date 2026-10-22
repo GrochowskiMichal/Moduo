@@ -7,7 +7,7 @@
     "e2e": "playwright test",
     "e2e:billing": "playwright test --config playwright.billing.config.ts",
     "perf": "playwright test --project=perf",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "bun check"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0"

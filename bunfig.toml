@@ -3,3 +3,35 @@
 # linker, which moves every package under node_modules/.bun and changes the
 # app bundle. Revisit when the app moves into apps/ (PLAT-2).
 linker = "hoisted"
+# Skip npm versions published in the last three days: most hijacked releases
+# are caught and pulled within that window.
+minimumReleaseAge = "3d"
+
+[fmt]
+# bun fmt is the formatter (Biome only lints). Prettier defaults apart from the
+# width; `bun run format` writes, `bun run lint:js` checks.
+printWidth = 100
+sortImports = true
+# Same scope Biome formatted: JS, TS and JSON. Stylelint owns CSS, Markdown is
+# prose, and these folders are generated, vendored or another tool's.
+ignorePatterns = [
+  "**/*.css",
+  "**/*.md",
+  "**/*.mdx",
+  "**/*.html",
+  "**/*.yml",
+  "**/*.yaml",
+  "**/*.toml",
+  ".claude/",
+  ".design/",
+  ".design-sync/",
+  ".opencode/",
+  "apps/desktop/src-tauri/",
+  "supabase/",
+  "release-notes/",
+  "scripts/icons/source/",
+  "brand/masters/",
+  "brand/exports/",
+  "**/storybook-static/",
+  "apps/app/src/types/supabase.ts",
+]
