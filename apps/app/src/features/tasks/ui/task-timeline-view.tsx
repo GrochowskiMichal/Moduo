@@ -19,7 +19,6 @@
 // the handles (Edit in the workspace and, inside a project, on it; across
 // projects a project shared view-only is refused by the server, TL2-14).
 
-import { CalendarOff } from "lucide-react";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -32,9 +31,6 @@ import {
   useState,
 } from "react";
 
-import { Button } from "../../../components/ui/button";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { useTimeRegion } from "../../../lib/time-region";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
@@ -52,53 +48,34 @@ import {
   useTasksUserId,
 } from "../tasks-context";
 import { contradictions } from "../timeline-deps";
-import { fitZoom } from "../timeline-drag";
-import {
-  isTypingTarget,
-  shiftDaysOf,
-  type TimelineKeyAction,
-  timelineKeyAction,
-} from "../timeline-keys";
 import {
   buildTimelineRows,
-  type DaySpan,
   type TimelineGroup,
   type TimelineRow,
   taskRowKey,
   timelineGroupsFor,
 } from "../timeline-rows";
 import {
-  DAY_WIDTH,
-  dayCenterX,
   dayNumOfKey,
-  drawWindow,
-  extendRange,
-  initialRange,
-  scrollLeftFor,
-  stepZoom,
-  TIMELINE_ZOOMS,
-  type TimelineRange,
-  type TimelineZoom,
   topTier,
-  visibleDays,
   weekCounts,
   weekdayOf,
   weekStartOf,
   xOfDay,
-  ZOOM_LABELS,
-  zoomAnchor,
 } from "../timeline-scale";
 import { useToday } from "../use-today";
 import type { PlanHeaderControls, PlanView } from "./plan-view-header";
 import { PlanViewHeader } from "./plan-view-header";
 import { ProjectChoicesProvider, StatusChoicesProvider } from "./project-choices";
 import { useRowActions } from "./row-facts";
-import { activateTask, type TaskCommand } from "./task-context-menu";
-import { type DepStub, TimelineDepsLayer } from "./timeline-deps-layer";
+import type { TaskCommand } from "./task-context-menu";
+import { TimelineEmptyNote, TimelineGrid } from "./timeline-canvas-parts";
+import { depStubsFor } from "./timeline-dep-stubs";
+import { TimelineDepsLayer } from "./timeline-deps-layer";
 import { createCanvasStore, TimelineCanvasContext } from "./timeline-drag-store";
 import { TimelineHeader } from "./timeline-header";
+import { timelineKeyDown } from "./timeline-key-handler";
 import {
-  createViewportStore,
   type TimelineGeometry,
   TimelineGeometryContext,
   TimelineViewportContext,
@@ -110,9 +87,13 @@ import {
   TimelineRowItem,
   timelineRowDomId,
 } from "./timeline-row";
+import { TimelineToolbar } from "./timeline-toolbar";
 import type { MultiSelect } from "./use-task-selection";
 import { type CanvasLive, useTimelineCanvas } from "./use-timeline-canvas";
 import { useTimelineDrop } from "./use-timeline-drop";
+import { useTimelineFolds } from "./use-timeline-folds";
+import { useTimelineNameColumn } from "./use-timeline-name-column";
+import { useTimelineViewport } from "./use-timeline-viewport";
 import { useTimelineWrites } from "./use-timeline-writes";
 import { VirtualStack } from "./virtual-stack";
 
@@ -177,74 +158,9 @@ const EVERY_PROJECT = () => true;
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_RELATIONS: readonly TaskRelation[] = [];
 
-/** The keys the view keeps while several tasks are selected (the rest are the bulk bar's). */
-const VIEW_KEYS_ON_A_SELECTION: ReadonlySet<TimelineKeyAction> = new Set<TimelineKeyAction>([
-  "shift-earlier",
-  "shift-later",
-  "shift-earlier-week",
-  "shift-later-week",
-  "extend-next",
-  "extend-prev",
-  "select-all",
-  "clear",
-  "fit",
-  "next",
-  "prev",
-  "today",
-  "zoom-in",
-  "zoom-out",
-  "name-column",
-  "fold",
-  "unfold",
-]);
-
-/** The name column (69): 280 px, 200–480, ⇧[ hides it. Per device. */
-const NAME_W_DEFAULT = 280;
-const NAME_W_MIN = 200;
-const NAME_W_MAX = 480;
-const NAME_COLUMN_KEY = "moduo:tasks:timeline:name-column";
-
 /** A first guess at a row's height (VirtualStack measures each once drawn). */
 const ROW_GUESS = 36;
 const HEADER_ROW_GUESS = 28;
-
-type NameColumn = { width: number; hidden: boolean };
-
-function readNameColumn(): NameColumn {
-  try {
-    const raw = JSON.parse(window.localStorage.getItem(NAME_COLUMN_KEY) ?? "null") as unknown;
-    if (raw && typeof raw === "object") {
-      const { width, hidden } = raw as Partial<NameColumn>;
-      return {
-        width:
-          typeof width === "number" && Number.isFinite(width)
-            ? Math.min(NAME_W_MAX, Math.max(NAME_W_MIN, Math.round(width)))
-            : NAME_W_DEFAULT,
-        hidden: hidden === true,
-      };
-    }
-  } catch {
-    // Storage off or a stray value: the default.
-  }
-  return { width: NAME_W_DEFAULT, hidden: false };
-}
-
-function writeNameColumn(value: NameColumn): void {
-  try {
-    window.localStorage.setItem(NAME_COLUMN_KEY, JSON.stringify(value));
-  } catch {
-    /* ignore */
-  }
-}
-
-function readToggled(key: string): ReadonlySet<string> {
-  try {
-    const raw = JSON.parse(window.localStorage.getItem(key) ?? "[]") as unknown;
-    return new Set(Array.isArray(raw) ? raw.filter((k): k is string => typeof k === "string") : []);
-  } catch {
-    return new Set();
-  }
-}
 
 const NO_SHOW: readonly TimelineShow[] = [];
 
@@ -303,7 +219,6 @@ export function TaskTimelineView({
   const [canvas] = useState(createCanvasStore);
   const selectedIds = multiSelect?.ids ?? NO_IDS;
   const zoom = display.timelineZoom;
-  const dw = DAY_WIDTH[zoom];
   const show = new Set(display.timelineShow ?? NO_SHOW);
   const groups = timelineGroupsFor(scopeKind.kind);
   const group: TimelineGroup = groups.includes(display.timelineGroup)
@@ -316,27 +231,7 @@ export function TaskTimelineView({
 
   // ── Folds: projects expanded at All, sections folded (per device) ─────────
   const foldKey = `moduo:tasks:folds:${moduleUserId ?? "anon"}:${scopeKey}:timeline:${workspaceId}`;
-  const [folds, setFolds] = useState(() => ({ key: foldKey, set: readToggled(foldKey) }));
-  const toggled = folds.key === foldKey ? folds.set : readToggled(foldKey);
-  if (folds.key !== foldKey) setFolds({ key: foldKey, set: toggled });
-  const toggleRow = useCallback((rowKey: string) => {
-    setFolds((prev) => {
-      const next = new Set(prev.set);
-      if (next.has(rowKey)) next.delete(rowKey);
-      else next.add(rowKey);
-      try {
-        window.localStorage.setItem(prev.key, JSON.stringify([...next]));
-      } catch {
-        /* ignore */
-      }
-      return { key: prev.key, set: next };
-    });
-  }, []);
-  const expanded = useMemo(() => {
-    const ids = new Set<string>();
-    for (const k of toggled) if (k.startsWith("project:")) ids.add(k.slice("project:".length));
-    return ids;
-  }, [toggled]);
+  const { toggled, toggleRow, expanded } = useTimelineFolds(foldKey);
 
   // ── Rows ────────────────────────────────────────────────────────────────
   const projects = useMemo(
@@ -439,199 +334,34 @@ export function TaskTimelineView({
   );
 
   // ── The name column ────────────────────────────────────────────────────
-  const [nameColumn, setNameColumn] = useState<NameColumn>(readNameColumn);
-  const nameW = nameColumn.hidden ? 0 : nameColumn.width;
-  const toggleNameColumn = useCallback(() => {
-    setNameColumn((prev) => {
-      const next = { ...prev, hidden: !prev.hidden };
-      writeNameColumn(next);
-      return next;
-    });
-  }, []);
-  const startResize = useCallback(
-    (e: ReactPointerEvent<HTMLElement>) => {
-      if (e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const startX = e.clientX;
-      const startW = nameColumn.width;
-      let width = startW;
-      const onMove = (ev: PointerEvent) => {
-        width = Math.min(NAME_W_MAX, Math.max(NAME_W_MIN, startW + ev.clientX - startX));
-        setNameColumn((prev) => ({ ...prev, width }));
-      };
-      const onUp = () => {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup", onUp);
-        document.removeEventListener("pointercancel", onUp);
-        writeNameColumn({ width, hidden: false });
-      };
-      document.addEventListener("pointermove", onMove);
-      document.addEventListener("pointerup", onUp);
-      document.addEventListener("pointercancel", onUp);
-    },
-    [nameColumn.width],
-  );
+  const { nameHidden, nameW, toggleNameColumn, startResize } = useTimelineNameColumn();
 
   // ── The scroller, its size, the range and the drawn window ─────────────
-  const scrollerRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0, header: 0 });
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const measure = () =>
-      setSize((prev) => {
-        const next = {
-          width: el.clientWidth,
-          height: el.clientHeight,
-          header: headerRef.current?.offsetHeight ?? 0,
-        };
-        return prev.width === next.width &&
-          prev.height === next.height &&
-          prev.header === next.header
-          ? prev
-          : next;
-      });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    if (headerRef.current) observer.observe(headerRef.current);
-    return () => observer.disconnect();
-  }, []);
-  const trackWidth = Math.max(0, size.width - nameW);
-
-  const [range, setRange] = useState<TimelineRange>(() => initialRange(today, built.extent));
-  const [drawn, setDrawn] = useState(() => drawWindow({ from: today - 60, to: today + 60 }));
-  // The days on screen now (whole days), for the off-screen hints only: a
-  // store they subscribe to, so scrolling never redraws the view.
-  const [viewport] = useState(() => createViewportStore({ from: today - 30, to: today + 30 }));
-  const canvasW = range.days * dw;
-
-  // The live values the scroll and wheel handlers read.
-  const live = useRef({ range, dw, trackWidth, zoom, nameW });
-  useLayoutEffect(() => {
-    live.current = { range, dw, trackWidth, zoom, nameW };
+  const {
+    dw,
+    scrollerRef,
+    headerRef,
+    size,
+    trackWidth,
+    range,
+    drawn,
+    viewport,
+    canvasW,
+    pending,
+    handleScroll,
+    scrollToToday,
+    changeZoom,
+    scrollToDay,
+  } = useTimelineViewport({
+    today,
+    extent: built.extent,
+    scopeKey,
+    loaded: !loading,
+    zoom,
+    nameW,
+    display,
+    onDisplayChange,
   });
-  /**
-   * Where the next render puts the scroll: today, a kept day, or an added
-   * start. An ask made with a new range waits for that range to be drawn (a
-   * scope switch can change the zoom in the same render as it asks).
-   */
-  const pending = useRef<
-    | { kind: "today"; range: TimelineRange }
-    | { kind: "day"; day: number; at: number }
-    | { kind: "shift"; days: number; range: TimelineRange }
-    | null
-  >(null);
-
-  const syncWindow = useCallback(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const { range: r, dw: w, trackWidth: tw } = live.current;
-    if (tw <= 0) return;
-    // A new range is on its way: read nothing against the old one.
-    const ask = pending.current;
-    if (ask && ask.kind !== "day" && ask.range !== r) return;
-    const shown = visibleDays(r, w, el.scrollLeft, tw);
-    const grown = extendRange(r, shown, Math.ceil(tw / w) + 30);
-    if (grown) {
-      if (grown.shift > 0) {
-        pending.current = { kind: "shift", days: grown.shift, range: grown.range };
-      }
-      setRange(grown.range);
-    }
-    const next = drawWindow(shown);
-    setDrawn((prev) => (prev.from === next.from && prev.to === next.to ? prev : next));
-    viewport.set(shown);
-  }, [viewport]);
-
-  // Open (a new scope, or once the tasks are in) with today a quarter across.
-  const loaded = !loading;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope or the first load is the cue
-  useLayoutEffect(() => {
-    const next = initialRange(today, built.extent);
-    pending.current = { kind: "today", range: next };
-    setRange(next);
-  }, [scopeKey, loaded]);
-
-  // Apply what was asked once the range, zoom and size are drawn.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after each geometry change
-  useLayoutEffect(() => {
-    const el = scrollerRef.current;
-    const ask = pending.current;
-    if (!el || !ask || trackWidth <= 0) return;
-    // Asked with a range that isn't drawn yet: wait for it.
-    if (ask.kind !== "day" && ask.range !== range) return;
-    pending.current = null;
-    if (ask.kind === "today") el.scrollLeft = scrollLeftFor(range, dw, today, trackWidth);
-    else if (ask.kind === "day") el.scrollLeft = Math.max(0, (ask.day - range.start) * dw - ask.at);
-    else el.scrollLeft += ask.days * dw;
-    syncWindow();
-  }, [range, dw, trackWidth]);
-
-  const onScroll = useRef(0);
-  const handleScroll = useCallback(() => {
-    if (onScroll.current) return;
-    onScroll.current = requestAnimationFrame(() => {
-      onScroll.current = 0;
-      syncWindow();
-    });
-  }, [syncWindow]);
-  useEffect(() => () => cancelAnimationFrame(onScroll.current), []);
-
-  const scrollToToday = useCallback(
-    (smooth: boolean) => {
-      const el = scrollerRef.current;
-      if (!el) return;
-      el.scrollTo({
-        left: scrollLeftFor(range, dw, today, trackWidth),
-        behavior: smooth ? "smooth" : "auto",
-      });
-    },
-    [range, dw, today, trackWidth],
-  );
-
-  // Zoom keeps the day under the pointer where it was; from the control or
-  // the keys, Today when it's on screen (else the middle).
-  const changeZoom = useCallback(
-    (next: TimelineZoom, clientX?: number) => {
-      const el = scrollerRef.current;
-      const { range: r, dw: w, trackWidth: tw, nameW: nw, zoom: z } = live.current;
-      if (next === z) return;
-      if (el) {
-        const left = el.getBoundingClientRect().left + nw;
-        const pointer = clientX === undefined ? undefined : clientX - left;
-        const anchor = zoomAnchor(r, w, el.scrollLeft, tw, today, pointer);
-        pending.current = { kind: "day", ...anchor };
-      }
-      onDisplayChange({ ...display, timelineZoom: next });
-    },
-    [display, onDisplayChange, today],
-  );
-  const changeZoomRef = useRef(changeZoom);
-  useLayoutEffect(() => {
-    changeZoomRef.current = changeZoom;
-  });
-
-  // ⌘-scroll (or a pinch) zooms (69). React's wheel listener is passive, so
-  // the page's own zoom is stopped here.
-  useEffect(() => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    let travel = 0;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.metaKey && !e.ctrlKey) return;
-      e.preventDefault();
-      travel += e.deltaY;
-      if (Math.abs(travel) < 40) return;
-      const out = travel > 0;
-      travel = 0;
-      changeZoomRef.current(stepZoom(live.current.zoom, out ? 1 : -1), e.clientX);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
 
   // ── The cursor (↑↓) and the selection ──────────────────────────────────
   const [cursorKey, setCursorKey] = useState<string | null>(null);
@@ -660,14 +390,6 @@ export function TaskTimelineView({
       if (rect.top < top) el.scrollTop -= top - rect.top;
       else if (rect.bottom > box.bottom) el.scrollTop += rect.bottom - box.bottom;
     });
-  }, []);
-
-  /** Scroll sideways to a day (a hint's click), a quarter of the way across. */
-  const scrollToDay = useCallback((day: number) => {
-    const el = scrollerRef.current;
-    if (!el) return;
-    const { range: r, dw: w, trackWidth: tw } = live.current;
-    el.scrollTo({ left: scrollLeftFor(r, w, day, tw), behavior: "smooth" });
   }, []);
 
   // The page's selection (a click, a deep link, the panel) moves the cursor
@@ -748,27 +470,7 @@ export function TaskTimelineView({
       id === inbox?.id
         ? "Inbox"
         : (buckets.find((b) => b.id === id)?.name ?? PRIVATE_PROJECT_LABEL);
-    const words = (other: Task) => {
-      const title = other.title || "Untitled";
-      if (!other.dueOn && !other.dueDate && !other.scheduledAt) return `${title} · no date`;
-      if (other.bucketId !== self.bucketId) return `↗ ${projectName(other.bucketId)} · ${title}`;
-      return `↗ ${title}`;
-    };
-    const before: DepStub[] = [];
-    const after: DepStub[] = [];
-    const seen = new Set<string>();
-    for (const rel of relations) {
-      const waitsOn = rel.blockedTaskId === self.id;
-      const blocks = rel.blockerTaskId === self.id;
-      if (!waitsOn && !blocks) continue;
-      const other = taskById.get(waitsOn ? rel.blockerTaskId : rel.blockedTaskId);
-      if (!other || other.deletedAt || isHidden(other) || pointDay(other.id) !== null) continue;
-      const id = `${waitsOn ? "before" : "after"}:${other.id}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      (waitsOn ? before : after).push({ id, text: words(other) });
-    }
-    return before.length + after.length > 0 ? { before, after } : null;
+    return depStubsFor({ self, relations, taskById, pointDay, isHidden, projectName });
   }, [
     depMode,
     selectedTaskId,
@@ -920,174 +622,47 @@ export function TaskTimelineView({
   );
   const rowActions = useRowActions(commands);
 
-  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    const scroller = scrollerRef.current;
-    if (!scroller || !(e.target instanceof Node) || !scroller.contains(e.target)) return;
-    if (isTypingTarget(e.target)) return;
-    const action = timelineKeyAction(e);
-    // A selection's own keys first (TV-U12's bar: d the date picker, Space,
-    // ⌫…); the Timeline's date moves and its cursor keys stay the view's.
-    if (selectedIds.size >= 2 && onViewKey && !(action && VIEW_KEYS_ON_A_SELECTION.has(action))) {
-      const selectedNow = selectedTaskId ? (taskById.get(selectedTaskId) ?? null) : null;
-      if (onViewKey(e, selectedNow)) {
-        e.preventDefault();
-        return;
-      }
-    }
-    if (!action) return;
-    const row = cursorKey ? rowByKey.get(cursorKey) : undefined;
-    // A key the view didn't use keeps its native job (←/→ off a header and
-    // Space with no row scroll the canvas).
-    if (runKey(action, row)) e.preventDefault();
-  };
-
-  /** The selected tasks while two or more are, else none. */
-  const selectedTasks = (): Task[] =>
-    selectedIds.size >= 2
-      ? [...selectedIds].flatMap((id) => {
-          const task = taskById.get(id);
-          return task ? [task] : [];
-        })
-      : [];
-
-  /** ⇧T: bring the selection's marks into view, zooming out only if they don't fit. */
-  const fitSelection = (row: TimelineRow | undefined): boolean => {
-    const days: number[] = [];
-    if (selectedIds.size >= 2) {
-      for (const id of selectedIds) {
-        const day = pointDay(id);
-        if (day !== null) days.push(day);
-      }
-    } else if (row?.kind === "task" && row.point) days.push(row.point.day);
-    else if (row?.kind === "section" && row.band) days.push(row.band.start, row.band.end);
-    else if (row?.kind === "section" && row.milestone !== null) days.push(row.milestone);
-    else if (row?.kind === "project" && row.bar) days.push(row.bar.start, row.bar.end);
-    if (days.length === 0) return false;
-    const span: DaySpan = { start: Math.min(...days), end: Math.max(...days) };
-    const next = fitZoom(span, trackWidth, zoom);
-    const center = (span.start + span.end + 1) / 2;
-    if (next !== zoom) {
-      pending.current = { kind: "day", day: center, at: trackWidth / 2 };
-      onDisplayChange({ ...display, timelineZoom: next });
-    } else {
-      scrollerRef.current?.scrollTo({
-        left: Math.max(0, (center - range.start) * dw - trackWidth / 2),
-        behavior: "smooth",
-      });
-    }
-    return true;
-  };
-
-  /** Run a key's action; false when it did nothing here. */
-  const runKey = (action: TimelineKeyAction, row: TimelineRow | undefined): boolean => {
-    const foldable =
-      row?.kind === "section" || (row?.kind === "project" && row.expandable) ? row : null;
-    const shift = shiftDaysOf(action);
-    if (shift !== 0) {
-      // ⌥←/→ (⇧ a week): the selection, or the row under the cursor (70).
-      if (!canDrag) return false;
-      const several = selectedTasks();
-      if (several.length > 0) {
-        const movable = several.filter(canMoveTask);
-        if (movable.length === 0) return false;
-        writes.shiftTasks(movable, shift, several.length - movable.length);
-      } else if (row?.kind === "task") {
-        if (!canMoveTask(row.task)) return false;
-        writes.shiftTasks([row.task], shift);
-      } else if (!row || !canDragRow(row) || !writes.shiftRow(row, shift)) return false;
-      return true;
-    }
-    switch (action) {
-      case "date":
-        if (row?.kind !== "task" || !canMoveTask(row.task)) return false;
-        setCommand({ id: row.task.id, command: "due" });
-        return true;
-      case "clear-date": {
-        if (!canDrag) return false;
-        const several = selectedTasks();
-        const asked = several.length > 0 ? several : row?.kind === "task" ? [row.task] : [];
-        const targets = asked.filter(canMoveTask);
-        if (targets.length === 0) return false;
-        writes.clearDue(targets, asked.length - targets.length);
-        return true;
-      }
-      case "fit":
-        return fitSelection(row);
-      case "late":
-        // The late mark's why and its "Move to …", by keyboard (68b).
-        if (row?.kind !== "task" || !lateMarks.has(row.task.id) || !canMoveTask(row.task)) {
-          return false;
-        }
-        setLateOpen({ id: row.task.id, at: cursorKey });
-        return true;
-      case "extend-next":
-      case "extend-prev":
-        if (!multiSelect || row?.kind !== "task") return false;
-        multiSelect.extend(action === "extend-next" ? 1 : -1, taskOrder);
-        return true;
-      case "select-all":
-        if (!multiSelect || taskOrder.length === 0) return false;
-        multiSelect.selectAll(taskOrder);
-        return true;
-      case "next":
-        moveCursor(1);
-        return true;
-      case "prev":
-        moveCursor(-1);
-        return true;
-      case "fold":
-      case "unfold": {
-        if (!foldable) return false;
-        const open = foldable.kind === "project" ? foldable.expanded : !foldable.folded;
-        if (open === (action === "fold")) toggleRow(foldable.key);
-        return true;
-      }
-      case "open":
-        if (row?.kind === "task") {
-          onOpenTask?.(row.task.id);
-          return true;
-        }
-        if (row?.kind === "project" && row.expandable && onOpenProject) {
-          onOpenProject(row.project.id);
-          return true;
-        }
-        if (foldable) {
-          toggleRow(foldable.key);
-          return true;
-        }
-        return false;
-      case "toggle":
-        if (row?.kind === "task") {
-          if (canEdit) activateTask(row.task, rowActions);
-          return true;
-        }
-        if (foldable) {
-          toggleRow(foldable.key);
-          return true;
-        }
-        return false;
-      case "today":
-        scrollToToday(true);
-        return true;
-      case "zoom-in":
-        changeZoom(stepZoom(zoom, -1));
-        return true;
-      case "zoom-out":
-        changeZoom(stepZoom(zoom, 1));
-        return true;
-      case "name-column":
-        toggleNameColumn();
-        return true;
-      case "clear":
-        // Esc: a selection of several first, then the cursor.
-        if (multiSelect?.clear()) return true;
-        setCursorKey(null);
-        onSelectTask(null);
-        return true;
-      default:
-        return false;
-    }
-  };
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) =>
+    timelineKeyDown(
+      {
+        scrollerRef,
+        selectedIds,
+        selectedTaskId,
+        multiSelect,
+        taskOrder,
+        taskById,
+        rowByKey,
+        cursorKey,
+        setCursorKey,
+        moveCursor,
+        canEdit,
+        canDrag,
+        canMoveTask,
+        canDragRow,
+        writes,
+        rowActions,
+        lateMarks,
+        setCommand,
+        setLateOpen: (open) => setLateOpen(open),
+        pointDay,
+        toggleRow,
+        onSelectTask,
+        onOpenTask,
+        onOpenProject,
+        onViewKey,
+        scrollToToday,
+        changeZoom,
+        toggleNameColumn,
+        zoom,
+        range,
+        dw,
+        trackWidth,
+        pending,
+        display,
+        onDisplayChange,
+      },
+      e,
+    );
 
   // ── Geometry for the rows and marks ─────────────────────────────────────
   const geometry = useMemo<TimelineGeometry>(
@@ -1097,9 +672,9 @@ export function TaskTimelineView({
       zoom,
       today,
       colorBy: display.colorBy,
-      nameHidden: nameColumn.hidden,
+      nameHidden,
     }),
-    [range, dw, zoom, today, display.colorBy, nameColumn.hidden],
+    [range, dw, zoom, today, display.colorBy, nameHidden],
   );
   const topCells = useMemo(() => topTier(zoom, drawn, today), [zoom, drawn, today]);
   const strong = useMemo(
@@ -1165,68 +740,15 @@ export function TaskTimelineView({
               canEdit={canEdit}
               onRequestCapture={onRequestCapture}
             />
-            {/* The Timeline's own bar: No date on the left; Today and the zoom on the right. */}
-            <div className="-mt-1 mb-2 flex shrink-0 items-center gap-1.5">
-              {built.undated > 0 || showUndated ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    {onOpenNoDate ? (
-                      // The right panel's No date view (70): drag a task from there onto a day.
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={onOpenNoDate}
-                        className="px-2"
-                        data-timeline-no-date-open=""
-                      >
-                        <CalendarOff aria-hidden />
-                        No date
-                        <span className="tabular-nums text-subtle-foreground">
-                          · {built.undated}
-                        </span>
-                      </Button>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        aria-pressed={showUndated}
-                        onClick={toggleUndated}
-                        className={cn("px-2", showUndated && "bg-state-active")}
-                      >
-                        <CalendarOff aria-hidden />
-                        No date
-                        <span className="tabular-nums text-subtle-foreground">
-                          · {built.undated}
-                        </span>
-                      </Button>
-                    )}
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {onOpenNoDate
-                      ? "Open the tasks with no date beside the timeline"
-                      : showUndated
-                        ? "Hide the rows with no date"
-                        : "Show the tasks with no date as rows"}
-                  </TooltipContent>
-                </Tooltip>
-              ) : null}
-              <div className="flex-1" />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={() => scrollToToday(true)}>
-                    Today
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Go to today · T</TooltipContent>
-              </Tooltip>
-              <SegmentedControl
-                aria-label="Timeline zoom"
-                size="sm"
-                value={zoom}
-                onValueChange={(value) => changeZoom(value as TimelineZoom)}
-                items={TIMELINE_ZOOMS.map((z) => ({ value: z, label: ZOOM_LABELS[z] }))}
-              />
-            </div>
+            <TimelineToolbar
+              undated={built.undated}
+              showUndated={showUndated}
+              onOpenNoDate={onOpenNoDate}
+              onToggleUndated={toggleUndated}
+              onToday={() => scrollToToday(true)}
+              zoom={zoom}
+              onZoom={changeZoom}
+            />
 
             {/* Out to the centre's edges: its sides and foot are --panel-inset (MOD-121). */}
             <div className="relative -mx-(--panel-inset) -mb-(--panel-inset) min-h-0 flex-1 border-t border-hairline">
@@ -1269,34 +791,15 @@ export function TaskTimelineView({
                           className="relative flex flex-col"
                           style={{ minHeight: bodyMin }}
                         >
-                          {/* The canvas under the rows: the grid, month lines, today. */}
-                          <div
-                            aria-hidden
-                            className="timeline-grid pointer-events-none absolute inset-y-0"
-                            data-unit={unit}
-                            data-weekends={unit === "day" ? "" : undefined}
+                          <TimelineGrid
+                            range={range}
+                            dw={dw}
+                            today={today}
+                            unit={unit}
                             style={gridStyle}
-                          >
-                            {yearMonths.map((day) => (
-                              <span
-                                key={`m${day}`}
-                                className="absolute inset-y-0 w-px bg-timeline-grid"
-                                style={{ left: xOfDay(range, dw, day) }}
-                              />
-                            ))}
-                            {strong.map((day) => (
-                              <span
-                                key={day}
-                                className="absolute inset-y-0 w-px bg-timeline-grid-strong"
-                                style={{ left: xOfDay(range, dw, day) }}
-                              />
-                            ))}
-                            <span
-                              data-timeline-today=""
-                              className="absolute inset-y-0 w-px -translate-x-1/2 bg-primary"
-                              style={{ left: dayCenterX(range, dw, today) }}
-                            />
-                          </div>
+                            yearMonths={yearMonths}
+                            strong={strong}
+                          />
                           {/* The "waits on" lines, under the rows (70, 68b). */}
                           {depMode !== "off" ? (
                             <TimelineDepsLayer
@@ -1378,7 +881,7 @@ export function TaskTimelineView({
                             <div
                               className={cn(
                                 "sticky left-0 w-(--timeline-name-w) shrink-0 bg-card",
-                                !nameColumn.hidden && "border-r border-hairline",
+                                !nameHidden && "border-r border-hairline",
                               )}
                             />
                           </div>
@@ -1389,22 +892,12 @@ export function TaskTimelineView({
                 </TimelineWindowContext.Provider>
               </TimelineGeometryContext.Provider>
               {empty ? (
-                <div
-                  className="pointer-events-none absolute z-(--z-sticky) rounded-md bg-card/90 px-3 py-2"
-                  style={{ left: nameW + 24, top: size.header + 16 }}
-                >
-                  {/* The rows stay listed, with today's line and one sentence (71). */}
-                  <p className="font-sans text-sm text-foreground">
-                    {tasks.length === 0 ? "No tasks here yet." : "Nothing has a date yet."}
-                  </p>
-                  <p className="font-sans text-xs text-muted-foreground">
-                    {tasks.length === 0
-                      ? "Tasks you give a date show up on the timeline."
-                      : canDrag
-                        ? "Click a day on a row, or open No date."
-                        : "Tasks show up here once they have a date."}
-                  </p>
-                </div>
+                <TimelineEmptyNote
+                  noTasks={tasks.length === 0}
+                  canDrag={canDrag}
+                  left={nameW + 24}
+                  top={size.header + 16}
+                />
               ) : null}
             </div>
           </div>
