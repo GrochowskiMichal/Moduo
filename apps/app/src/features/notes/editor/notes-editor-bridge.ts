@@ -77,6 +77,11 @@ export type NotesEditorBridge = {
   createLinkedNote?: (title: string) => { id: string; created: Promise<boolean> } | null;
   /** Open the Comments panel (the block menu's Comment, NR-4). */
   openComments?: () => void;
+  /** The note whose real sub-pages the page lists under the body (MOD-81).
+   * Set, page rows to its children are redundant: they remove themselves and
+   * `/page` opens the new child instead of inserting one. Absent (the classic
+   * page): page rows behave as before. */
+  subpagesListedFor?: string;
 };
 
 export const NotesEditorBridgeContext = createContext<NotesEditorBridge | null>(null);

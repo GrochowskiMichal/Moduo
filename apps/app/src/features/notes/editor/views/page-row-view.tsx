@@ -4,9 +4,10 @@
  */
 
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { $getNodeByKey, type NodeKey } from "lexical";
+import { $getNodeByKey, $isParagraphNode, type NodeKey } from "lexical";
 import { ChevronRight, FileText } from "lucide-react";
 import { useEffect } from "react";
+import { isRedundantPageRow } from "../../subpages";
 import { displayTitle } from "../../title";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { $isPageRowNode } from "../schema/page-row-node";
@@ -25,12 +26,30 @@ export function PageRowView({
   const meta = bridge?.getNoteMeta(noteId) ?? null;
   const title = meta ? displayTitle(meta.title) : label || "Untitled";
   const trashed = Boolean(meta?.deletedAt);
+  const owner = bridge?.subpagesListedFor;
+  const redundant = owner ? isRedundantPageRow(meta, owner) : false;
+
+  // MOD-81: the Sub-pages list under the body already shows this child, so the
+  // row removes itself (and the empty line inserted with it). Edit-gated; a
+  // viewer just doesn't draw it.
+  useEffect(() => {
+    if (!redundant || !editor.isEditable()) return;
+    editor.update(() => {
+      const node = $getNodeByKey(nodeKey);
+      if (!$isPageRowNode(node)) return;
+      const next = node.getNextSibling();
+      if ($isParagraphNode(next) && next.getTextContent().trim() === "" && next.getNextSibling()) {
+        next.remove();
+      }
+      node.remove();
+    });
+  }, [editor, nodeKey, redundant]);
 
   // Reconcile the PERSISTED label to the live title — md export/copy read
   // __label, and without this every row minted before its child was titled
   // exports "[Untitled](…)" forever. Edit-gated (a viewer must not write).
   useEffect(() => {
-    if (!meta || trashed || !editor.isEditable()) return;
+    if (!meta || trashed || redundant || !editor.isEditable()) return;
     const live = displayTitle(meta.title);
     if (live === label) return;
     editor.update(() => {
@@ -39,7 +58,9 @@ export function PageRowView({
         node.setLabel(live);
       }
     });
-  }, [editor, nodeKey, meta, trashed, label]);
+  }, [editor, nodeKey, meta, trashed, redundant, label]);
+
+  if (redundant) return null;
 
   return (
     <button
