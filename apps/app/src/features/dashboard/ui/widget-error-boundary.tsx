@@ -31,7 +31,6 @@ export class WidgetErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // eslint-disable-next-line no-console
     console.error("[dashboard] widget crashed", error, info.componentStack);
   }
 

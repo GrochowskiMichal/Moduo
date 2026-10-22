@@ -73,7 +73,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const engine = useMemo(() => {
     if (!ready) return null;
     return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh, userId!);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, runtime, workspaceId, userId, fireRefresh]);
 
   useEffect(() => {

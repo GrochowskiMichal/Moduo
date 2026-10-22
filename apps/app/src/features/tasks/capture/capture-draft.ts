@@ -163,7 +163,7 @@ export function loadDraft(
       subtasks: Array.isArray(parsed.subtasks) ? parsed.subtasks : [],
       fields: {
         ...EMPTY_FIELDS,
-        ...(parsed.fields ?? {}),
+        ...parsed.fields,
         tags: Array.isArray(parsed.fields?.tags) ? parsed.fields.tags : [],
         waitingOn: Array.isArray(parsed.fields?.waitingOn) ? parsed.fields.waitingOn : [],
       },

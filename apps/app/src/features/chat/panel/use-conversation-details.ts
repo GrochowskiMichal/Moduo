@@ -38,7 +38,7 @@ export function useConversationDetails(
     details: NONE,
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `refresh` is the re-read trigger
+  // `refresh` is the re-read trigger.
   useEffect(() => {
     if (!chat || !workspaceId || !channelId) return;
     let live = true;

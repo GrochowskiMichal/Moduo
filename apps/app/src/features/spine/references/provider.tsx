@@ -105,10 +105,10 @@ export function ReferencesProvider({ children }: { children: ReactNode }) {
   );
 
   // A rename of the task key re-reads every handle.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: taskKey is the cue
   useEffect(() => {
     store?.forgetHandles();
     store?.invalidate((kind) => kind === "task");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- taskKey is the cue
   }, [taskKey]);
 
   // Live while a task, project or tag reference is on screen.

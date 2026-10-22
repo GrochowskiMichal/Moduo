@@ -93,7 +93,6 @@ export function useMindmapDocument({
 
   /* ─── Load mindmap data ─── */
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new document is the cue
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -151,6 +150,7 @@ export function useMindmapDocument({
     return () => {
       active = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new document is the cue
   }, [runtime, workspaceId, selectedMindmapId]);
 
   /* ─── Auto-save ─── */

@@ -49,7 +49,7 @@ export function TaskTimeEntries({ task }: { task: Task }) {
     commands.listMyTimeEntries(task.id).then(setEntries, () => setEntries([]));
   }, [commands, task.id]);
   // A saved total (Focus, a teammate) may bring a new entry of yours.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the total is the signal to read again
+  // The total is the signal to read again.
   useEffect(() => {
     reload();
   }, [reload, task.timeSpentSeconds]);
@@ -116,8 +116,9 @@ export function TaskTimeEntries({ task }: { task: Task }) {
         reload();
         // Undo logs the same time back, on the same day (as logged time).
         const undoable = entry.seconds >= 60 && entry.seconds <= 86_400;
-        toast(`Removed ${formatTracked(entry.seconds)}`, {
-          ...(undoable
+        toast(
+          `Removed ${formatTracked(entry.seconds)}`,
+          undoable
             ? {
                 action: {
                   label: "Undo",
@@ -131,8 +132,8 @@ export function TaskTimeEntries({ task }: { task: Task }) {
                       .then(reload),
                 },
               }
-            : {}),
-        });
+            : {},
+        );
       })
       .finally(() => setBusy(false));
   };

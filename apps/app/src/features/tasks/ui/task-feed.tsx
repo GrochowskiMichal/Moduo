@@ -148,7 +148,7 @@ export function TaskFeed({
     writeFilter(currentUserId, next);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activityStamp re-reads the trail after an op
+  // ActivityStamp re-reads the trail after an op.
   useEffect(() => {
     let cancelled = false;
     void loadActivity(task.id)
@@ -168,12 +168,12 @@ export function TaskFeed({
   // thread again. Not on mount: the thread reads itself then.
   const commentStamp = useTasksSelector((_, snap) => snap.commentStamps?.get(task.id) ?? "");
   const seen = useRef({ activityStamp, commentStamp });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the stamps are the trigger
   useEffect(() => {
     const last = seen.current;
     if (last.activityStamp === activityStamp && last.commentStamp === commentStamp) return;
     seen.current = { activityStamp, commentStamp };
     reloadThread();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stamps are the trigger
   }, [activityStamp, commentStamp]);
 
   const feed = useMemo(

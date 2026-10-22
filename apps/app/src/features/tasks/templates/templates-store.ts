@@ -135,7 +135,7 @@ export function useTemplates(
     () => (workspaceId ? (entries.get(workspaceId) ?? EMPTY) : EMPTY),
     () => EMPTY,
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey asks for a fresh read
+  // RefreshKey asks for a fresh read.
   useEffect(() => {
     void refreshTemplates(runtime, workspaceId);
   }, [runtime, workspaceId, refreshKey]);

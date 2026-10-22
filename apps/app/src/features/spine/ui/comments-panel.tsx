@@ -179,14 +179,14 @@ function EmojiText({
       {parts.map((p, i) =>
         p.t === "emoji" ? (
           <CustomEmojiGlyph
-            // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+            // eslint-disable-next-line react/no-array-index-key -- parts of one text, never reordered
             key={i}
             name={p.name}
             emoji={emoji.byName.get(p.name)}
             urlOf={emoji.urlOf}
           />
         ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+          // eslint-disable-next-line react/no-array-index-key -- parts of one text, never reordered
           <HandleText key={i} text={p.t === "text" ? p.v : tokenText(p)} taskKey={taskKey} />
         ),
       )}
@@ -414,7 +414,7 @@ export function CommentComposer({
   const activeIndex = Math.min(active, Math.max(0, items.length - 1));
 
   // Grow with the text (WebKit desktop builds don't all have field-sizing).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
+  // Re-measure whenever the text changes.
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;

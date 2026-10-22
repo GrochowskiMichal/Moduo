@@ -56,7 +56,7 @@ export function useAgentEdit({
     });
   }, [engine, noteId]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `arrivals` re-reads after an agent write lands
+  // `arrivals` re-reads after an agent write lands.
   useEffect(() => {
     const tasks = runtime?.tasks;
     if (typeof tasks?.listActivity !== "function" || !workspaceId || !noteId) return;

@@ -466,9 +466,9 @@ function PreviewStep({
       live = false;
     };
   }, [whenReady]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: read again once the store has every task
   const ctx = useMemo<ImportContext>(
     () => ({ ...readContext(), workspaceId, userId }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again once the store has every task
     [readContext, workspaceId, userId, readyAt],
   );
   const resolved = useMemo(() => resolvePlan(chosen, ctx), [chosen, ctx]);

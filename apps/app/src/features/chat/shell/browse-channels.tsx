@@ -44,7 +44,6 @@ export function BrowseChannels({
   const ids = useMemo(() => [...open, ...archived].map((r) => r.channel.id), [open, archived]);
   const idsKey = ids.join(",");
   const [counts, setCounts] = useState<Record<string, number>>({});
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `idsKey` stands for `ids`
   useEffect(() => {
     if (!chat || ids.length === 0) return;
     let live = true;
@@ -55,6 +54,7 @@ export function BrowseChannels({
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `idsKey` stands for `ids`
   }, [chat, idsKey]);
 
   const q = query.trim().toLowerCase();

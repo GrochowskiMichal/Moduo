@@ -358,7 +358,7 @@ export function FoldedDescription({
   // Measured again whenever the text's height changes: the editor fills
   // itself after it mounts. A new description mounts a new editor (its key),
   // so the observer moves to the new content.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a changed description replaces the observed element
+  // A changed description replaces the observed element.
   useLayoutEffect(() => {
     const box = boxRef.current;
     if (!box || expanded) return;
@@ -447,7 +447,6 @@ function useSubtaskMarks(
 ): Map<string, { files: number; links: number }> {
   const [marks, setMarks] = useState(() => new Map<string, { files: number; links: number }>());
   const key = subtaskIds.join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the ids' key is the cue
   useEffect(() => {
     if (!runtime || subtaskIds.length === 0) return;
     let alive = true;
@@ -473,6 +472,7 @@ function useSubtaskMarks(
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the ids' key is the cue
   }, [runtime, workspaceId, key]);
   return marks;
 }

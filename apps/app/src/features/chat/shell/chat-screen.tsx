@@ -340,7 +340,7 @@ export function ChatScreen({
   );
   // A conversation's own Search: the find bar under its toolbar (frame 2 "find").
   const [finding, setFinding] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new conversation closes it
+  // A new conversation closes it.
   useEffect(() => setFinding(false), [conversationId]);
   const ordered = useMemo(() => sidebarOrder(model, collapsed), [model, collapsed]);
 
@@ -404,7 +404,7 @@ export function ChatScreen({
   const panelStack = usePanelStack<ChatPanelEntry>();
   const clearPanelItems = panelStack.clear;
   // Another conversation: its own panel, from its view (items belong to the last one).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a switch of conversation is the trigger
   useEffect(() => clearPanelItems(), [conversationId]);
   const pushPanelItem = panelStack.push;
   const openInPanel = useCallback(
@@ -524,7 +524,7 @@ export function ChatScreen({
 
   // ── writes ────────────────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setEditingId(null), [conversationId]);
 
   const streamRef = useRef<MessageStreamHandle | null>(null);
@@ -571,7 +571,7 @@ export function ChatScreen({
   // `@channel` from a role that may not mention everyone is sent as text; the
   // server decides (CV-2a) and the composer says so once the message is back.
   const [channelNote, setChannelNote] = useState<{ id: string; note: string | null } | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setChannelNote(null), [conversationId]);
   useEffect(() => {
     if (!channelNote || channelNote.note) return;
@@ -688,7 +688,7 @@ export function ChatScreen({
   const [moveFor, setMoveFor] = useState<ChatMessage[] | null>(null);
   const [moveStep, setMoveStep] = useState<MoveStep>({ step: "pick" });
   const [moveBusy, setMoveBusy] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setMoveFor(null), [conversationId]);
   const moveTargetsFor = useCallback(
     (query: string) =>
@@ -754,7 +754,7 @@ export function ChatScreen({
 
   // Reply (R, the toolbar): the main box answers a message ("Replying to …").
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setReplyingTo(null), [conversationId]);
 
   // Wrap up ("Which reply settled it?") and Reply to… (CV-12).

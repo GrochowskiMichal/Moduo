@@ -66,9 +66,9 @@ export function usePlanPanelState(c: PlanCentreCtx) {
   useEffect(() => {
     if (fullPageId && !loading && !taskById.has(fullPageId)) setFullPageId(null);
   }, [fullPageId, loading, taskById, setFullPageId]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope is the cue
   useEffect(() => {
     setFullPageId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new scope is the cue
   }, [selection]);
   const pageOrder = scopeTasks.filter((t) => !t.parentId && !isHiddenByDisplay(t));
   const pageIndex = fullPageTask ? pageOrder.findIndex((t) => t.id === fullPageTask.id) : -1;

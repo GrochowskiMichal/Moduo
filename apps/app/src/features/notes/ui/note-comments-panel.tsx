@@ -72,7 +72,7 @@ export function NoteCommentsPanel({
     [thread.comments, anchors.docOrder],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a quote belongs to the note it was taken from
+  // A quote belongs to the note it was taken from.
   useEffect(() => setQuote(null), [noteId]);
 
   // Tell the editor which threads are open, so only their marks highlight.

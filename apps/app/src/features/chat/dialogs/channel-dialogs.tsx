@@ -141,13 +141,13 @@ export function EditChannelDialog({
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a fresh form each time it opens
   useEffect(() => {
     if (!open) return;
     setName(channel.name ?? "");
     setTopic(channel.topic);
     setTried(false);
     setError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a fresh form each time it opens
   }, [open]);
   const nameProblem = canRename ? channelNameProblem(name) : null;
   const submit = async (e: FormEvent) => {
@@ -276,7 +276,6 @@ export function RecentlyDeletedDialog({
   const [rows, setRows] = useState<ChatDeletedChannel[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: read once each time it opens
   useEffect(() => {
     if (!open) return;
     let live = true;
@@ -293,6 +292,7 @@ export function RecentlyDeletedDialog({
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once each time it opens
   }, [open]);
   const restore = async (id: string) => {
     setBusy(id);

@@ -73,7 +73,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   }, []);
   // What was typed belongs to one person in one workspace: another person
   // signing in, or a switch of workspace, starts the line over (TV-U14).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the person and workspace are the trigger
+  // The person and workspace are the trigger.
   useEffect(() => {
     setDraft("");
     lineBeforePrefill.current = null;
@@ -114,7 +114,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
         setDraft(request.draft);
       } else if (before !== null) setDraft(before);
       setContext((prev) => ({
-        ...(request ?? {}),
+        ...request,
         source: request?.source !== undefined ? request.source : getCaptureSource(),
         openId: prev.openId + 1,
         // A prefilled open keeps its own draft for as long as it's open.

@@ -72,12 +72,12 @@ export function FilesView({
   );
 
   // A new conversation starts from one page.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: channelId resets the page count.
+  // ChannelId resets the page count.
   useEffect(() => {
     shown.current = PAGE;
   }, [channelId]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey asks for the shown pages again.
+  // RefreshKey asks for the shown pages again.
   useEffect(() => {
     void read(null);
   }, [read, refreshKey]);

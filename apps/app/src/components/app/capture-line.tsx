@@ -110,7 +110,7 @@ function CaptureLine({
         requestDashboardDataRefresh();
         toast(created.title, {
           description: created.description,
-          // biome-ignore lint/suspicious/noExplicitAny: openTo is one of the module routes
+          // OpenTo is one of the module routes.
           action: { label: "Open", onClick: () => void navigate({ to: created.openTo as any }) },
         });
         if (more) inputRef.current?.focus();

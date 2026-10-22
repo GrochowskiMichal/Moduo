@@ -54,7 +54,6 @@ export function HandleAutolinkPlugin({
     onLinkedRef.current = onLinked;
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keysKey is the identity of taskKeys
   useEffect(() => {
     if (!store || taskKeys.length === 0) return;
     return editor.registerUpdateListener(({ dirtyLeaves, tags, editorState }) => {
@@ -100,6 +99,7 @@ export function HandleAutolinkPlugin({
         );
       });
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keysKey is the identity of taskKeys
   }, [editor, store, keysKey]);
 
   return null;

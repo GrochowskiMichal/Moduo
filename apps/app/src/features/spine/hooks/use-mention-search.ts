@@ -187,7 +187,6 @@ export function useMentionSearch({
       })();
     }, debounceMs);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     runtime,

@@ -144,7 +144,7 @@ export function useChannelManagers(
     channelId: null,
     ids: null,
   });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the roster stamp is the trigger
+  // The roster stamp is the trigger.
   useEffect(() => {
     if (!channelId || kind !== "channel") return;
     let live = true;

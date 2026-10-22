@@ -271,7 +271,7 @@ function MenuItems({
     <>
       {items.map((item, i) =>
         item === "separator" ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: separators are positional
+          // eslint-disable-next-line react/no-array-index-key -- separators are positional
           <Separator key={`sep-${i}`} />
         ) : (
           <Item

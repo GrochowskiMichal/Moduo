@@ -92,7 +92,6 @@ export function useEmailThreadDeepLink({
 
   // Apply once the inbox/tissue has loaded (so a not-yet-synced id isn't judged
   // stale prematurely).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a loaded inbox or a new target is the cue; the setters and clearSearch are the page's
   useEffect(() => {
     if (!pendingThreadTarget || email.loading) return;
     const id = pendingThreadTarget;
@@ -140,6 +139,7 @@ export function useEmailThreadDeepLink({
         });
       }
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a loaded inbox or a new target is the cue; the setters and clearSearch are the page's
   }, [pendingThreadTarget, email.loading, email.threads, email.tissueRefs]);
 
   // Clear the web card highlight after a beat.
