@@ -199,6 +199,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-22 · Apps connect by URL and sign-in: Supabase OAuth 2.1 + a `/oauth/consent` screen make a scoped key ("connection"), the connector exchanges the app's token for that key (calls stay service-role + key header, never the person under RLS), app tokens are locked out of everything else; connector moves to the official MCP SDK + `@supabase/server`; server-side code mode not built (clients do it), code-mode readiness instead → decisions/mcp.md, specs/mcp-oauth.md
+
 - 2026-10-15 · Connector gaps (MOD-92…113, agent's choices): `tasks_list` answers a short row by default (`fields: "full"` for the old shape), agents read comments with Links: View (`comments_list`), a task handle works in the link tools, connector-made tags get the app's colour, and a tool's listing and parser can't drift apart.
 - 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.
 - 2026-10-08 · The "Moduo for Claude Code" mod was dropped; the connector improvements it came with stay.
