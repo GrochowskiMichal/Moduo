@@ -19,13 +19,16 @@
 import { readFileSync, writeFileSync } from "node:fs";
 
 import { afterAll, beforeAll, describe, expect, it, rs } from "@rstest/core";
+import * as supabaseJs from "@supabase/supabase-js";
 
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
 type Row = Record<string, unknown>;
-type Op = { client: string; table?: string; fn?: string; chain: Array<[string, unknown[]]> };
+/** One request a supabase-js client sent, and which client sent it. */
+type Op = { client: string; method: string; path: string; body?: unknown };
 
 const NOW = "2026-10-23T09:00:00.000Z";
+const URL_BASE = "http://parity.local";
 const WS = "11111111-1111-4111-8111-111111111111";
 const ME = "22222222-2222-4222-8222-222222222222";
 const SAMPLE_ID = "33333333-3333-4333-8333-333333333333";
@@ -33,79 +36,61 @@ const SAMPLE_ID = "33333333-3333-4333-8333-333333333333";
 /** Every database call made by the request under test, in order. */
 let ops: Op[] = [];
 
-/**
- * A supabase-js stand-in that records each query chain and answers from the
- * fixtures: the keys (looked up by hash), the workspace, and nothing else
- * (empty lists, null rows, null RPC results).
- */
-function fakeClient(headers: Record<string, string>) {
-  const client = headers["x-moduo-key-id"] ?? "admin";
-  const chainOf = (op: Op, resolveData: () => unknown): any => {
-    const builder: any = new Proxy(
-      {},
-      {
-        get(_t, prop: string) {
-          if (prop === "then") {
-            ops.push(redactHashes(op));
-            const data = resolveData();
-            return (resolve: (r: unknown) => unknown, reject: (e: unknown) => unknown) =>
-              Promise.resolve({ data, error: null, count: Array.isArray(data) ? data.length : null }).then(
-                resolve,
-                reject,
-              );
-          }
-          return (...args: unknown[]) => {
-            op.chain.push([prop, args]);
-            return builder;
-          };
-        },
-      },
-    );
-    return builder;
-  };
-  const single = (op: Op) => op.chain.some(([m]) => m === "maybeSingle" || m === "single");
-  return {
-    from(table: string) {
-      const op: Op = { client, table, chain: [] };
-      return chainOf(op, () => {
-        const rows = fixtureRows(table, op);
-        return single(op) ? (rows[0] ?? null) : rows;
-      });
-    },
-    rpc(fn: string, args: unknown) {
-      const op: Op = { client, fn, chain: [["args", [args]]] };
-      return chainOf(op, () => fixtureRpc(fn, args as Row));
-    },
-    storage: {
-      from(bucket: string) {
-        const op: Op = { client, table: `storage:${bucket}`, chain: [] };
-        return chainOf(op, () => null);
-      },
-    },
-  };
-}
-
 type FixtureKey = { secret: string; name: string; row: Row; effective: Row | null };
 const keysByHash = new Map<string, FixtureKey>();
 
-/** Key hashes are recorded by key name, so the snapshot carries no key material. */
-function redactHashes(op: Op): Op {
-  return {
-    ...op,
-    chain: op.chain.map(([m, a]) =>
-      m === "eq" && a[0] === "key_hash" ? [m, [a[0], `sha256(${keysByHash.get(String(a[1]))?.name ?? "?"})`]] : [m, a],
-    ),
-  };
-}
-
-function fixtureRows(table: string, op: Op): Row[] {
-  const eq = (col: string) => op.chain.find(([m, a]) => m === "eq" && a[0] === col)?.[1][1];
-  if (table === "workspace_api_keys") {
-    const found = keysByHash.get(String(eq("key_hash")));
-    return found ? [found.row] : [];
+/**
+ * The project's API, faked at fetch: both servers build real supabase-js
+ * clients (pre-SDK from esm.sh, now through @supabase/server), so what they
+ * send is recorded the same way. Answers come from the fixtures: the keys
+ * (looked up by hash), the workspace, and nothing else (empty lists, null
+ * RPC results).
+ */
+async function fakeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const req = new Request(input, init);
+  const url = new URL(req.url);
+  const text = req.method === "GET" || req.method === "HEAD" ? "" : await req.text();
+  let body: unknown;
+  try {
+    body = text ? JSON.parse(text) : undefined;
+  } catch {
+    body = text;
   }
-  if (table === "workspaces") return [{ name: "Parity Workspace" }];
-  return [];
+  // Key hashes are recorded by key name, so the snapshot carries no key material.
+  const path = decodeURIComponent(url.pathname + url.search).replace(
+    /key_hash=eq\.([a-f0-9]{64})/,
+    (_m, hash: string) => `key_hash=eq.sha256(${keysByHash.get(hash)?.name ?? "?"})`,
+  );
+  ops.push({
+    client: req.headers.get("x-moduo-key-id") ?? "admin",
+    method: req.method,
+    path,
+    ...(body === undefined ? {} : { body }),
+  });
+  const rest = url.pathname.replace(/^\/rest\/v1\//, "");
+  let data: unknown = [];
+  if (rest.startsWith("rpc/")) {
+    data = fixtureRpc(rest.slice(4), (body ?? {}) as Row);
+  } else if (rest === "workspace_api_keys" && req.method === "GET") {
+    const found = keysByHash.get(url.searchParams.get("key_hash")?.replace(/^eq\./, "") ?? "");
+    data = found ? [found.row] : [];
+  } else if (rest === "workspaces" && req.method === "GET") {
+    data = [{ name: "Parity Workspace" }];
+  } else if (!url.pathname.startsWith("/rest/v1/")) {
+    data = {};
+  }
+  if (Array.isArray(data) && req.headers.get("accept")?.includes("vnd.pgrst.object")) {
+    if (data.length !== 1) {
+      return Response.json(
+        { code: "PGRST116", details: `The result contains ${data.length} rows`, message: "JSON object requested, multiple (or no) rows returned" },
+        { status: 406 },
+      );
+    }
+    data = data[0];
+  }
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (Array.isArray(data)) headers["content-range"] = `*/${data.length}`;
+  return new Response(req.method === "HEAD" ? null : JSON.stringify(data), { status: 200, headers });
 }
 
 function fixtureRpc(fn: string, args: Row): unknown {
@@ -115,10 +100,8 @@ function fixtureRpc(fn: string, args: Row): unknown {
   return null;
 }
 
-rs.mock("https://esm.sh/@supabase/supabase-js@2?target=deno", () => ({
-  createClient: (_url: string, _key: string, opts?: { global?: { headers?: Record<string, string> } }) =>
-    fakeClient(opts?.global?.headers ?? {}),
-}));
+// The pre-SDK server imported supabase-js from esm.sh, which only Deno loads.
+rs.mock("https://esm.sh/@supabase/supabase-js@2?target=deno", () => supabaseJs);
 
 async function sha256Hex(text: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -171,6 +154,7 @@ beforeAll(async () => {
   rs.useFakeTimers({ toFake: ["Date"] });
   rs.setSystemTime(new Date(NOW));
   rs.spyOn(globalThis.crypto, "randomUUID").mockReturnValue("44444444-4444-4444-8444-444444444444");
+  rs.spyOn(globalThis, "fetch").mockImplementation(fakeFetch);
   let i = 1;
   for (const [name, scopes] of Object.entries(KEY_SHAPES)) await addKey(name, i++, {}, scopes);
   await addKey("revoked", i++, { revoked_at: NOW }, everywhere("edit"));
@@ -185,13 +169,15 @@ afterAll(() => {
   rs.restoreAllMocks();
 });
 
-/** The pre-SDK server: index.ts registers its handler with Deno.serve. */
+/** The whole function: index.ts registers its handler with Deno.serve. */
 async function loadServer(): Promise<(req: Request) => Promise<Response>> {
   let handler: ((req: Request) => Promise<Response>) | undefined;
   const env: Record<string, string> = {
-    SUPABASE_URL: "http://parity.local",
+    SUPABASE_URL: URL_BASE,
     SUPABASE_SECRET_KEYS: JSON.stringify({ default: "sb_secret_parity" }),
+    SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: "sb_publishable_parity" }),
   };
+  Object.assign(process.env, env);
   (globalThis as any).Deno = {
     env: { get: (k: string) => env[k] },
     serve: (h: (req: Request) => Promise<Response>) => {
@@ -219,7 +205,7 @@ async function send(
   if (secret) headers.authorization = `Bearer ${secret}`;
   const method = opts.method ?? "POST";
   const res = await serve(
-    new Request("http://parity.local/functions/v1/moduo-mcp", {
+    new Request(`${URL_BASE}/functions/v1/moduo-mcp`, {
       method,
       headers,
       body: method === "POST" ? (opts.raw ?? JSON.stringify(body)) : undefined,
