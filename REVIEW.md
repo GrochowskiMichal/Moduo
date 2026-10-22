@@ -18,7 +18,7 @@ Anything that would break behavior, leak data or block a rollback:
 Naming, style and refactor suggestions are Nit at most. Report five Nits at most and give the rest as a count.
 
 ## Do not report
-Anything Biome, `tsc`, `lint:tw` or `lint:css` already enforce. Skip `storybook-static/`, `bun.lock` and `.design-sync/ds-types/`.
+Anything `bun lint`, `bun fmt`, `bun check`, `lint:tw` or `lint:css` already enforce. Skip `storybook-static/`, `bun.lock` and `.design-sync/ds-types/`.
 
 ## Always check
 - New tables have RLS policies, and the PR says how owner, member and outsider access was checked.
