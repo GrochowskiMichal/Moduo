@@ -14,8 +14,10 @@
 
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+
 import { chromium } from "@playwright/test";
 import type { SQL } from "bun";
+
 import { stampMinus } from "./db";
 import type { SyncIdsAnswer } from "./page/chat-store";
 import type { ChatRow } from "./page/fixture";

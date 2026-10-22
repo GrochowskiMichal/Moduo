@@ -7,6 +7,7 @@
 
 import { ArchiveRestore, ArrowLeft, FileText, Globe, RotateCcw, Trash2 } from "lucide-react";
 import { type CSSProperties, type ReactNode, useState } from "react";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +21,7 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { cn } from "@/lib/utils";
+
 import type { Note } from "../model";
 import { trashDaysLeft } from "../model";
 import type { SidebarSections } from "../sections";

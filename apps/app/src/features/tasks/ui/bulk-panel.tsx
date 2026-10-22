@@ -6,6 +6,7 @@
 
 import { taskCategoryOf } from "@contracts/vocabularies";
 import type { ReactNode } from "react";
+
 import { PropertyRow, PropertyValue } from "../../../components/ui/property-row";
 import { useAssignees } from "../assignees";
 import { dayWordOf, dueDayOf, type Shared, sharedValue, singleProject } from "../bulk";

@@ -1,6 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LogOut, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import defaultProfilePic from "../../../../../../assets/icon.png";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";

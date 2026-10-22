@@ -42,6 +42,7 @@ import {
   TableRowNode,
 } from "@lexical/table";
 import { $createParagraphNode, $isTextNode } from "lexical";
+
 import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-schema";
 import { referenceKind, referenceNoun } from "../../spine/references/kinds";
 import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./schema/embed-node";

@@ -7,6 +7,7 @@ import type * as React from "react";
 
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+
 import type { ChatChannel, ChatPerson } from "../model";
 import { COMPOSER_LINE_COPY, type ComposerLine } from "./composer-state";
 

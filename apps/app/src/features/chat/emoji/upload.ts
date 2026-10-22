@@ -69,7 +69,7 @@ export function isAnimatedImage(b: Uint8Array, type: SniffedType): boolean {
   if (type === "image/webp") {
     // VP8X's animation flag, or an ANIM chunk.
     if (ascii(b, 12, 4) === "VP8X" && b.length > 20 && (b[20]! & 0x02) !== 0) return true;
-    for (let at = 12; at + 8 <= b.length; ) {
+    for (let at = 12; at + 8 <= b.length;) {
       const kind = ascii(b, at, 4);
       if (kind === "ANIM" || kind === "ANMF") return true;
       const len = (b[at + 4]! | (b[at + 5]! << 8) | (b[at + 6]! << 16) | (b[at + 7]! << 24)) >>> 0;

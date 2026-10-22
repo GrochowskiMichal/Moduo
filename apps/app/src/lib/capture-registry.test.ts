@@ -7,9 +7,9 @@ import { visibleModuleNavItems } from "../components/app/app-chrome-constants";
 import type { ModulePermissions } from "../features/workspaces/types";
 import {
   CAPTURE_TYPES,
-  type CaptureTypeDef,
   captureDigitFor,
   captureDigitKey,
+  type CaptureTypeDef,
   captureTypeForDigit,
 } from "./capture-registry";
 

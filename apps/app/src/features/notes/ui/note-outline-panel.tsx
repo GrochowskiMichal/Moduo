@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type * as Y from "yjs";
+
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { extractOutline, type OutlineHeading } from "../outline";
 

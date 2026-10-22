@@ -29,6 +29,7 @@ import {
 import { useEffect } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { anchorStore } from "../../comments/anchor-store";
 import {
   $anchorIdsInOrder,

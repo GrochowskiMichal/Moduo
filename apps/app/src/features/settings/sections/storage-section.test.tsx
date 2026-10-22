@@ -14,8 +14,8 @@ import {
   LARGEST_SHOWN,
   meterLine,
   poolCaption,
-  StorageSectionView,
   seesPool,
+  StorageSectionView,
   uploaderLabel,
 } from "./storage-section";
 

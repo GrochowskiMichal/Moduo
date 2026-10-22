@@ -8,5 +8,5 @@
   "workers_dev": true,
   "preview_urls": false,
   "r2_buckets": [{ "binding": "ARTIFACTS", "bucket_name": "moduo-turbo-cache" }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
 }

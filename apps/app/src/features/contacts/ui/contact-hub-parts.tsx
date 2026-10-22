@@ -3,6 +3,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -13,6 +14,7 @@ import {
 import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { LinkSuggestionStrip } from "../../spine/ui/link-suggestion-strip";
 import { useContactSuggestions } from "../hooks/use-contact-suggestions";
 import type { Contact } from "../model";

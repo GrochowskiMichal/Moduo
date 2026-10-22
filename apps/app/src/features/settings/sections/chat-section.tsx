@@ -21,7 +21,6 @@ import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
 import { saveQuickRow, useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { reactionName } from "../../spine/reactions";
 import { useWorkspace } from "../../workspaces/workspace-context";
-
 import { PrefGroup, PrefRow } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
 

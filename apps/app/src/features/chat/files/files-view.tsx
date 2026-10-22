@@ -5,11 +5,13 @@
 
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { useCallback, useEffect, useRef, useState } from "react";
+
 import { fileIconFor } from "@/features/attachments/files";
 import { AttachmentViewer } from "@/features/attachments/ui/attachment-viewer";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import type { ChatFile, ChatPerson } from "../model";
 import { firstName } from "../stream/rows";
 import { asAttachmentRecord, inlinePath, useSignedLinks } from "./message-files";

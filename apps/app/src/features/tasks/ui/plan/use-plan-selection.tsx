@@ -3,6 +3,7 @@
 // views and onboarding's first view.
 
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+
 import { currentPreferences } from "../../../../lib/preferences";
 import { readViewPrefs, writeViewPrefs } from "../../../../lib/view-prefs";
 import { consumeFocusViewRequest, FOCUS_VIEW_REQUEST_EVENT } from "../../../focus/view-request";

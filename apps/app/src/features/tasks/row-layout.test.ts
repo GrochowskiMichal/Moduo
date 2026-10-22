@@ -2,6 +2,7 @@
 // shows, collapsing the empty ones) and the one date a row's column carries.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { formatAge } from "../../lib/time-format";
 import { makeTask } from "./helpers";
 import { isLate, type Task } from "./model";
@@ -12,8 +13,8 @@ import {
   formatShortDate,
   handleLabel,
   projectLabel,
-  type RowColumnsContext,
   rowColumns,
+  type RowColumnsContext,
   rowDate,
 } from "./row-layout";
 import { waitingLabelsOf } from "./ui/row-facts";

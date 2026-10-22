@@ -1,5 +1,6 @@
 import { isClosedTask } from "@contracts/vocabularies";
 import { ListChecks } from "lucide-react";
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { onThisLabel, useTaskClaim } from "../../focus/claims";

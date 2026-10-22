@@ -4,6 +4,7 @@
 
 import { Mail } from "lucide-react";
 import type { ReactNode } from "react";
+
 import { EmptyState } from "../../../components/ui/empty-state";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import type { EmailThreadRef } from "../../../lib/runtime.types";

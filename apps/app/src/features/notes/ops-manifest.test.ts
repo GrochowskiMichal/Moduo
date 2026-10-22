@@ -3,6 +3,7 @@
 // (not Tasks), conforming to ModuleManifest.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { moduleManifests } from "../../lib/module-registry";
 import { notesModuleManifest } from "./ops-manifest";
 

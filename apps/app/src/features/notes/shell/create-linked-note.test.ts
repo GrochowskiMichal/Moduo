@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 import * as Y from "yjs";
+
 import type { Draft } from "../draft-note";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { createLinkedNote } from "./create-linked-note";

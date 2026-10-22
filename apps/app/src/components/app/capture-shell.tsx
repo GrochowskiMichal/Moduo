@@ -15,14 +15,15 @@
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { CAPTURE_OPEN_EVENT } from "../../lib/capture-open";
 import {
   CAPTURE_TYPES,
   type CaptureContext,
-  type CaptureRequest,
-  type CaptureTypeDef,
   captureDigitFor,
   captureDigitKey,
+  type CaptureRequest,
+  type CaptureTypeDef,
   captureTypeForDigit,
 } from "../../lib/capture-registry";
 import { getCaptureSource } from "../../lib/capture-source";

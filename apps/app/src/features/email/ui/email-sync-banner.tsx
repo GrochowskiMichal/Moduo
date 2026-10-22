@@ -3,6 +3,7 @@
 // a broken mailbox names itself and never stands in for the healthy ones.
 
 import { AlertTriangle } from "lucide-react";
+
 import type { accountSyncHealth } from "../accounts";
 import type { SavedAccount } from "../model/email-types";
 

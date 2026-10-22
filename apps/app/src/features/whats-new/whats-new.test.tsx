@@ -4,7 +4,7 @@
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { Toaster, toast } from "sonner";
+import { toast, Toaster } from "sonner";
 
 import { currentPreferences, DEFAULT_PREFERENCES, updatePreferences } from "../../lib/preferences";
 import { setDomainReconciledForTest } from "../../lib/prefs-sync";

@@ -14,6 +14,7 @@
 
 import type { SpineComment } from "@/lib/runtime.types";
 import { dayOffset, formatDate, formatTime } from "@/lib/time-format";
+
 import { isTrailEntry } from "./activity";
 import type { ActivityEntry, Task } from "./model";
 
@@ -38,14 +39,12 @@ export function buildTaskFeed(input: {
       .map((entry): FeedItem => ({ kind: "activity", id: entry.id, at: entry.createdAt, entry })),
     ...comments
       .filter((c) => !c.deletedAt)
-      .map(
-        (comment): FeedItem => ({
-          kind: "comment",
-          id: comment.id,
-          at: comment.createdAt,
-          comment,
-        }),
-      ),
+      .map((comment): FeedItem => ({
+        kind: "comment",
+        id: comment.id,
+        at: comment.createdAt,
+        comment,
+      })),
   ];
   items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id));
   const created: FeedItem = createEntry

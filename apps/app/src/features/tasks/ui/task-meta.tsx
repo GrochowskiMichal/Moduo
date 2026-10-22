@@ -14,13 +14,14 @@ import {
   Tag as TagIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+
 import { TagChipList } from "../../../components/tag-chip";
 import { MetaCount, MetaCounts } from "../../../components/ui/meta-count";
 import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import { filesLabel } from "../../attachments/files";
-import { type CompletedMode, completedLabel } from "../completed";
+import { completedLabel, type CompletedMode } from "../completed";
 import type { Task } from "../model";
 import { recurrenceLabel } from "../parse/recurrence";
 import type { RowDate } from "../row-layout";

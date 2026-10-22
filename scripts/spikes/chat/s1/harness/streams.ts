@@ -3,6 +3,7 @@
 // reference branch t/maciej/cv-0-s1-legend; here only TanStack Virtual.
 
 import type { ComponentType } from "react";
+
 import type { StreamProps } from "./model";
 import { TanstackStream } from "./tanstack-stream";
 

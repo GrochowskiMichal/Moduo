@@ -13,6 +13,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
+
 import { parseSyncDescriptor } from "../features/calendar/sync";
 import type {
   IntegrationStatusItem,

@@ -15,6 +15,7 @@ import {
   type SerializedLexicalNode,
   type Spread,
 } from "lexical";
+
 import { renderNodeView } from "../../../spine/editor/node-views";
 
 export type SerializedPageRowNode = Spread<

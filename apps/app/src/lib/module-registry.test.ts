@@ -5,6 +5,7 @@
 import { MCP_TOOL_NEEDS } from "@contracts/mcp-key-scopes";
 import { MCP_KEY_MODULES } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
+
 import type { ModuleManifest } from "./module-manifest";
 import { moduleManifests } from "./module-registry";
 

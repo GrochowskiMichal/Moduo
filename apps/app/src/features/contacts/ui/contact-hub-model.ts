@@ -3,6 +3,7 @@
 // the linked-work sections.
 
 import type { ContactDetailsPatch } from "@/lib/runtime.types";
+
 import type { Contact, ContactChannel, ContactDateEntry } from "../model";
 import type { ContactRollup } from "../rollup";
 import { contactStatusMeta, DEFAULT_CONTACT_STATUSES } from "../status";

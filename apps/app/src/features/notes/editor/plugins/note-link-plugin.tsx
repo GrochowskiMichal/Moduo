@@ -13,18 +13,20 @@ import { FilePlus2, FileText } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import { closeOnOutsidePointer, registerMenuKeys } from "@/features/spine/editor/menu-keys";
 import { resolveMention } from "@/features/spine/mention";
 import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import {
   $insertNoteLink,
-  type NoteLinkRow,
-  type NoteLinkToken,
   noteLinkCandidate,
   noteLinkQueryAt,
+  type NoteLinkRow,
   noteLinkRows,
+  type NoteLinkToken,
 } from "../note-link";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 

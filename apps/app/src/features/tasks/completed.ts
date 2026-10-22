@@ -11,6 +11,7 @@
 // or reload, so its Undo is one click away.
 
 import { useState } from "react";
+
 import type { Task, TaskStatus } from "./model";
 
 export const COMPLETED_MODES = ["hidden", "week", "all"] as const;

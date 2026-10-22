@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import {
   ContextMenu,
   ContextMenuContent,
@@ -9,8 +10,8 @@ import {
 import { useWorkspace } from "@/features/workspaces/workspace-context";
 import { getRuntime } from "@/lib/runtime";
 import type { RuntimeCapabilities } from "@/lib/runtime.types";
-import { useAppHotkeys } from "../../../lib/hotkeys";
 
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import { DashboardDataProvider } from "../context/dashboard-data-context";
 import { WidgetActionsProvider } from "../context/widget-actions-context";
 import {

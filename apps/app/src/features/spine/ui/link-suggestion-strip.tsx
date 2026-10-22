@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { useLinkSuggestions } from "../hooks/use-link-suggestions";
 import { resolveEntityIcon } from "../icon-map";
 import { type LinkSuggestion, suggestionReason } from "../suggest";

@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+
 import { e2eAppUrl, e2ePort, runsProject } from "../scripts/agent/e2e-env";
 
 const STORYBOOK_URL = process.env.STORYBOOK_URL ?? "http://127.0.0.1:6006";

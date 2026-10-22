@@ -5,6 +5,7 @@
  */
 
 import { FileText } from "lucide-react";
+
 import type { Note } from "../model";
 import { displayTitle } from "../title";
 

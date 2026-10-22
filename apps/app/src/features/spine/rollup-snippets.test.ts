@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@rstest/core";
 import "./snippet-projectors.builtin";
 import type { EntityLink, EntityRef } from "@/lib/entity-links";
+
 import { entityRefKey, rollupSections } from "./rollup";
 import type { HubSnippetMeta } from "./snippet-projectors";
 

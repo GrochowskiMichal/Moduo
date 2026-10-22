@@ -12,6 +12,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import { formatDate } from "@/lib/time-format";
 import { useAuth } from "@/providers/auth-provider";
+
 import { chatExcerptText } from "../spine/activity";
 import { useReferences } from "../spine/references/context";
 import { plainReferenceName, referencesInText } from "../spine/references/text";

@@ -6,6 +6,7 @@ import { isOpenTask, type ProjectState } from "@contracts/vocabularies";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+
 import { dispatchOpenCapture } from "../../../../components/app/capture-shell";
 import { onCreateNew } from "../../../../components/app/create-events";
 import { useWorkspaceStore } from "../../../../lib/sync/react";
@@ -17,8 +18,8 @@ import { multiDropWrites } from "../../dnd/multi-drop";
 import {
   asRailDropTarget,
   projectMoveWrite,
-  type RailDropTarget,
   railDropAction,
+  type RailDropTarget,
 } from "../../dnd/rail-drop";
 import { type CaptureSeed, seededProject } from "../../filters";
 import { todayStr } from "../../helpers";

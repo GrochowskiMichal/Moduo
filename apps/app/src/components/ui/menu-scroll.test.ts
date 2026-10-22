@@ -2,6 +2,7 @@
 // below the fold, gone once scrolled to the end.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { hasMoreBelow, useMoreBelowRef } from "./menu-scroll";
 
 function scroller(scrollHeight: number, clientHeight: number) {

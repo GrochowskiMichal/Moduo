@@ -3,6 +3,7 @@
 
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+
 import { FeaturePanelsShell } from "../../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../../components/app/truncation-notice";
 import { type ReferenceHost, ReferenceHostProvider } from "../../../spine/references/context";
@@ -16,7 +17,6 @@ import {
   useTaskCommands,
   useTasksSelector,
 } from "../../tasks-context";
-
 import { PlanBody } from "./plan-body";
 import { PlanDialogs } from "./plan-dialogs";
 import { PlanDndHost } from "./plan-dnd-host";

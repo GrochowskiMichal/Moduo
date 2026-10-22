@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import type { PersonNow } from "@/lib/statuses/model";
+
 import { teamNowText } from "./now-line";
 
 const NOW = new Date("2026-10-13T12:00:00Z");

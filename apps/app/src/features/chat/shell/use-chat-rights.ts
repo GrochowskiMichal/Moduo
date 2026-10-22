@@ -6,6 +6,7 @@
 
 import type { WorkspaceRole } from "@contracts/vocabularies";
 import { useEffect, useState } from "react";
+
 import { supabaseClient } from "@/lib/runtime.web.client";
 
 type CapsRow = {

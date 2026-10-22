@@ -3,6 +3,7 @@
 
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { parseFieldOptions } from "../field-defs";
 import type { ContactChannel, ContactDateEntry, ContactFieldType } from "../model";
 

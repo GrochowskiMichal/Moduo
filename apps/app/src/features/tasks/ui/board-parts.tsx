@@ -8,6 +8,7 @@
 
 import { ChevronRight, ListChecks, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
+
 import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
@@ -21,11 +22,11 @@ import { NavRowDot } from "../../../components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
 import type { BoardMark } from "../board-columns";
-import { type CompletedMode, completedLabel } from "../completed";
+import { completedLabel, type CompletedMode } from "../completed";
 import type { GroupAdd, GroupAddState } from "../list-group-add";
 import { bucketDotColor } from "../sidebar";
 import { StatusIcon } from "./status-icon";
-import { type GroupMarkContext, groupMark, NameInput } from "./task-list-parts";
+import { groupMark, type GroupMarkContext, NameInput } from "./task-list-parts";
 
 /** What a column or lane leads with: the category's icon, the List's group
  *  mark (priority, project dot, avatar, team), an area's dot. */

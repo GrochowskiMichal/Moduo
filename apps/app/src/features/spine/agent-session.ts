@@ -7,6 +7,7 @@
 // already has. Pure, so the rules are tested without a component.
 
 import { type AgentSessionState, isClosedTask } from "@contracts/vocabularies";
+
 import { formatAge } from "../../lib/time-format";
 
 export type AgentSessionLink = { url: string; label?: string };

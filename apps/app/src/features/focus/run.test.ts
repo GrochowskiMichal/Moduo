@@ -12,8 +12,8 @@ import {
   focusOnTask,
   getFocusSession,
   registerFocusFlushSink,
-  STOP_UNDO_MS,
   setFocusTimer,
+  STOP_UNDO_MS,
   stopFocus,
   toggleFocusRunning,
 } from "./engine";

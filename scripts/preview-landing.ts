@@ -16,6 +16,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+
 import { renderChangelogPage } from "../apps/landing/changelog.mjs";
 
 const root = path.resolve(import.meta.dir, "..", "apps", "landing");

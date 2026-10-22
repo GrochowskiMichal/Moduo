@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { AgentEditMark } from "../note-meta";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";

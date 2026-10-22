@@ -1,5 +1,6 @@
 import { Navigate } from "@tanstack/react-router";
 import { useEffect } from "react";
+
 import { AppChrome } from "../../components/app/app-chrome";
 import { ensureTrial, extendTrialIfEligible } from "../../features/billing/checkout";
 import { useAuth } from "../../providers/auth-provider";

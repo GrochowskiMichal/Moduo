@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { validateChatSearch } from "./search";
 
 const ID = "11111111-1111-4111-8111-111111111111";

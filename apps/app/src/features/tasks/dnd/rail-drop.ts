@@ -14,7 +14,7 @@
 // only take a drop the pointer is actually over: a card dragged near the rail
 // never snaps to it by distance.
 
-import { type CollisionDetection, closestCenter, pointerWithin } from "@dnd-kit/core";
+import { closestCenter, type CollisionDetection, pointerWithin } from "@dnd-kit/core";
 
 import { betweenPositions } from "../helpers";
 import type { Task } from "../model";

@@ -29,12 +29,12 @@ import {
   checkRepo,
   type Note,
   type NoteType,
-  RELEASES_PATH,
+  readNotes,
   type Release,
   type ReleaseItem,
+  RELEASES_PATH,
   type ReleasesFile,
   ROOT,
-  readNotes,
   SECURITY_LINE,
 } from "./check-notes.ts";
 

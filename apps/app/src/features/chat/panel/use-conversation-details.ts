@@ -5,6 +5,7 @@
 // conversation without a subscription of its own.
 
 import { useEffect, useState } from "react";
+
 import type { ChatHistoryEntry, ChatMember, ChatMessage, ChatRuntime } from "../model";
 
 export type ConversationDetails = {

@@ -11,7 +11,6 @@ import {
   zoneCity,
 } from "../../../lib/time-region";
 import { useAuth } from "../../../providers/auth-provider";
-
 import { PrefGroup, PrefRow } from "./preferences-section";
 
 /**

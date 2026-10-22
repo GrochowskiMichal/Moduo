@@ -7,16 +7,17 @@
 // first, its wiring later in the same render.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
 import { markEntityOpenIntent, takeEntityOpenIntent } from "../../../../lib/entity-open";
 import { lookupHandleLink } from "../../search";
 import {
   DEEP_LINK_START,
+  deepLinkAt,
   type DeepLinkCommand,
   type DeepLinkEvent,
+  deepLinkReducer,
   type DeepLinkState,
   type DeepLinkWorld,
-  deepLinkAt,
-  deepLinkReducer,
   linkSettled,
 } from "./deep-link";
 

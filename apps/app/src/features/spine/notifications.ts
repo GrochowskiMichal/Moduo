@@ -5,7 +5,7 @@
 // per-event wall), derives unread/read from the read mark, and exposes a deep-
 // link target for each card. Never a red wall (Experience Principle 3).
 
-import { type SpineActorFields, spineActivityLine, spineActorName } from "./activity";
+import { spineActivityLine, type SpineActorFields, spineActorName } from "./activity";
 import { referencesInText } from "./references/text";
 import type { ReferenceRef } from "./references/types";
 

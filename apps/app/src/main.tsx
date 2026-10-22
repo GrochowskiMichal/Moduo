@@ -2,6 +2,7 @@ import "./lib/auth-url-boot";
 import { RouterProvider } from "@tanstack/react-router";
 import { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
+
 import { RootErrorBoundary } from "./components/app/root-error-boundary";
 import { Toaster } from "./components/ui/sonner";
 import { TooltipProvider } from "./components/ui/tooltip";

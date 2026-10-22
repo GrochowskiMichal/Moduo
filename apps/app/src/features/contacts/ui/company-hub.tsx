@@ -6,6 +6,7 @@
 
 import { AtSign, CalendarPlus, Globe, Link2, MoreHorizontal, Pencil, UserPlus } from "lucide-react";
 import { useEffect, useState } from "react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DetailTitle, detailTitleVariants } from "@/components/ui/detail-title";
@@ -22,12 +23,13 @@ import { Label } from "@/components/ui/label";
 import type { EntityRef } from "@/lib/entity-links";
 import type { CompanyDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { useStartConversation } from "../../chat/start-conversation";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";
 import { EntityTagRow } from "../../tags/ui/entity-tag-row";
 import type { ActivityEntry } from "../../tasks/model";
-import { type CompanyRollup, companyLastTouchLine } from "../company";
+import { companyLastTouchLine, type CompanyRollup } from "../company";
 import type { Company } from "../model";
 import { ActivityTrail } from "./activity-trail";
 import { initials } from "./contact-directory";

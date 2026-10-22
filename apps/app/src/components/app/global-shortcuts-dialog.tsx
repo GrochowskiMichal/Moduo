@@ -9,14 +9,15 @@
 // sheet stays closed on that route. Mirrors the tasks/email Kbd + dialog pattern.
 
 import { Fragment, type ReactNode, useEffect, useState } from "react";
+
 import { useReturnFocus } from "../../hooks/use-return-focus";
 import {
-  type ChatKeyScope,
   chatKeyRows,
+  type ChatKeyScope,
   formatShortcut,
   onShortcut,
-  SHORTCUTS,
   type ShortcutId,
+  SHORTCUTS,
 } from "../../lib/shortcuts";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Kbd } from "../ui/kbd";

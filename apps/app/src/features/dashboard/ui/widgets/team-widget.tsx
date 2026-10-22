@@ -10,7 +10,7 @@ import { useContext, useMemo } from "react";
 
 import { PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { canBeAssignee } from "@/features/sharing/rules";
-import { loadLine, type TeamPerson, teamLoad } from "@/features/tasks/home";
+import { loadLine, teamLoad, type TeamPerson } from "@/features/tasks/home";
 import { teamHue } from "@/features/tasks/teams";
 import { reportRange } from "@/features/tasks/time-report";
 import { useToday } from "@/features/tasks/use-today";

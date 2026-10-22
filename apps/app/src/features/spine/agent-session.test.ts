@@ -6,7 +6,6 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
-  type AgentSession,
   agentChip,
   agentLineParts,
   agentLineText,
@@ -14,6 +13,7 @@ import {
   agentRowMarkParts,
   agentRowMarks,
   agentSentence,
+  type AgentSession,
   agentWho,
   isOwnSession,
   linkWords,

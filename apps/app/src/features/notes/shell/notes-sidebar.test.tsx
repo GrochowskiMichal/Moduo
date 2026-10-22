@@ -7,7 +7,9 @@
 import { DndContext } from "@dnd-kit/core";
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
+
 import type { Note, NoteFavorite } from "../model";
 import { buildSidebarSections } from "../sections";
 import { NotesSidebar, type NotesSidebarProps } from "./notes-sidebar";

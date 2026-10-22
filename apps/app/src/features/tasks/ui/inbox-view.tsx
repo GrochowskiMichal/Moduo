@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+
 import { type BottomBarMode, useBottomBarModeOwner } from "../../../components/app/bottom-bar-mode";
 import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { Button } from "../../../components/ui/button";

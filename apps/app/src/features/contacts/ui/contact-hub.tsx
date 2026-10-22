@@ -17,6 +17,7 @@ import {
   Star,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DetailTitle, detailTitleVariants } from "@/components/ui/detail-title";
@@ -32,6 +33,7 @@ import { Input } from "@/components/ui/input";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ContactDetailsPatch, ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { useStartConversation } from "../../chat/start-conversation";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import type { MentionCandidate } from "../../spine/mention";

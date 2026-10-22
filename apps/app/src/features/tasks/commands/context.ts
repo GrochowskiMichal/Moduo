@@ -8,6 +8,7 @@
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
 import type { Dispatch, RefObject, SetStateAction } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../lib/sync/store";
 import type { TasksData } from "../derived";
@@ -29,9 +30,7 @@ export type TrashTarget = { kind: "bucket" | "task"; id: string };
 /** What an archive does with the project's open tasks (REPLAN 78: "4 open
  *  tasks — Won't do · Move · Keep"). */
 export type ArchiveOpenTasks =
-  | { kind: "keep" }
-  | { kind: "wont_do" }
-  | { kind: "move"; projectId: string };
+  { kind: "keep" } | { kind: "wont_do" } | { kind: "move"; projectId: string };
 
 /** A new task's fields, as the surfaces give them (the place is worked out here). */
 export type NewTaskInput = Omit<NewTaskFields, "workspaceId" | "position">;

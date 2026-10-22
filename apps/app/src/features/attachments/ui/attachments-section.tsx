@@ -12,8 +12,10 @@
 
 import type React from "react";
 import { useRef, useState } from "react";
+
 import { dispatchOpenSettings } from "@/features/settings/settings-events";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { dragHasFiles, filesFromDataTransfer, pastedFiles } from "../files";
 import { type EntityAttachments, useEntityAttachments } from "../hooks/use-attachments";
 import { AttachmentStrip } from "./attachment-strip";

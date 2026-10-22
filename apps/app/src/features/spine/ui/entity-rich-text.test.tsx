@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+
 import { EntityRichText } from "./entity-rich-text";
 
 afterEach(cleanup);

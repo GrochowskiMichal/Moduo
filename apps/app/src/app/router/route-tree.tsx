@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+
 import { useFileDropGuard } from "../../features/attachments/hooks/use-file-drop-guard";
 import { validateCalendarSearch } from "../../features/calendar/search";
 import { validateChatSearch } from "../../features/chat/search";

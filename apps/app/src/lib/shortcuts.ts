@@ -108,14 +108,12 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
   // browsers reserve Cmd/Ctrl+1..9 for tabs). moduo is Tauri-first, so we accept
   // the collision and do NOT preventDefault at a level that would fight the
   // browser. In Tauri there is no browser chrome to compete with.
-  ...(["1", "2", "3", "4", "5", "6", "7"] as const).map(
-    (digit): ShortcutEntry => ({
-      id: `module-${digit}` as ShortcutId,
-      label: `Module ${digit}`,
-      mac: `⌘${digit}`,
-      other: `Ctrl ${digit}`,
-    }),
-  ),
+  ...(["1", "2", "3", "4", "5", "6", "7"] as const).map((digit): ShortcutEntry => ({
+    id: `module-${digit}` as ShortcutId,
+    label: `Module ${digit}`,
+    mac: `⌘${digit}`,
+    other: `Ctrl ${digit}`,
+  })),
 ];
 
 const SHORTCUT_EVENT_PREFIX = "moduo:shortcut:";
@@ -163,11 +161,7 @@ export function useShortcut(id: ShortcutId, handler: () => void): void {
 // says them. Keep it in step with specs/chat-v2.md §16.
 
 export type ChatKeyScope =
-  | "Anywhere in Chat"
-  | "The composer"
-  | "A message"
-  | "Catch up"
-  | "The chain panel";
+  "Anywhere in Chat" | "The composer" | "A message" | "Catch up" | "The chain panel";
 
 export type ChatKeyRow = { scope: ChatKeyScope; keys: string[]; desc: string };
 

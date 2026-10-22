@@ -56,6 +56,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
 import { CompleteToggle } from "@/components/ui/complete-toggle";
 import { DateField } from "@/components/ui/date-field";
 import { MetaCount } from "@/components/ui/meta-count";
@@ -64,6 +65,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { filesLabel } from "@/features/attachments/files";
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
+
 import type { TaskLineSnapshot } from "../../tasks/detach";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
 import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";

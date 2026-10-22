@@ -23,6 +23,7 @@ import type {
   TaskWaitingKind,
 } from "@contracts/vocabularies";
 import { isOpenTask } from "@contracts/vocabularies";
+
 import type { Truncation } from "../../lib/paged-select";
 
 export type {

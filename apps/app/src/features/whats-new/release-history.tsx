@@ -4,7 +4,7 @@
 import { ChevronRight } from "lucide-react";
 
 import { Eyebrow } from "../../components/ui/eyebrow";
-import { formatReleaseDate, RELEASES, type Release } from "./releases";
+import { formatReleaseDate, type Release, RELEASES } from "./releases";
 import { openWhatsNew } from "./whats-new-store";
 
 /** How many releases About lists. */

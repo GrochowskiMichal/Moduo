@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type FeatureLayoutKey =
-  | "grid"
-  | "notes"
-  | "tasks"
-  | "mindmap"
-  | "email"
-  | "calendar"
-  | "contacts"
-  | "chat"
-  | "settings";
+  "grid" | "notes" | "tasks" | "mindmap" | "email" | "calendar" | "contacts" | "chat" | "settings";
 
 export type FeaturePanelState = {
   left: boolean;

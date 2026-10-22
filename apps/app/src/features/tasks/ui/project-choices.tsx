@@ -7,11 +7,12 @@
 
 import {
   TASK_STATUS_CATEGORIES,
-  type TaskStatusCategory,
   taskCategoryOf,
+  type TaskStatusCategory,
 } from "@contracts/vocabularies";
 import { Inbox } from "lucide-react";
 import { createContext, Fragment, type ReactNode, useContext, useMemo } from "react";
+
 import { ContextMenuRadioItem } from "../../../components/ui/context-menu";
 import {
   DropdownMenuRadioGroup,
@@ -19,7 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "../../../components/ui/dropdown-menu";
 import type { ProjectStatus, Task } from "../model";
-import { CATEGORY_LABELS, type StatusTarget, statusChoiceGroups } from "../statuses";
+import { CATEGORY_LABELS, statusChoiceGroups, type StatusTarget } from "../statuses";
 import { StatusIcon } from "./status-icon";
 
 type ProjectChoice = { id: string; name: string; isSystem: boolean };

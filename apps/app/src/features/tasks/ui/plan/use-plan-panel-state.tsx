@@ -3,6 +3,7 @@
 // Last in `useTasksPlanController`'s chain.
 
 import { useCallback, useEffect } from "react";
+
 import type { EntityRef } from "../../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../../../lib/entity-open";
 import { activePanelView, panelTaskOf } from "../../panel-views";

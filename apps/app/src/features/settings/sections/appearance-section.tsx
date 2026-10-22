@@ -9,7 +9,6 @@ import { RadiusPicker } from "../appearance/radius-picker";
 import { ShadePicker } from "../appearance/shade-picker";
 import { TabsPicker } from "../appearance/tabs-picker";
 import { ThemePicker } from "../appearance/theme-picker";
-
 import { SettingsSectionShell } from "./section-shell";
 
 /** A labelled cluster of pickers (Color / Type / Layout). The eyebrow sits

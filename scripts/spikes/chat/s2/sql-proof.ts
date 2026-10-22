@@ -8,6 +8,7 @@
 //      the row-comparison form and PostgREST's `or=` form.
 
 import type { SQL } from "bun";
+
 import { CREATED, STAMP, stampMinus } from "./db";
 
 const W = crypto.randomUUID();

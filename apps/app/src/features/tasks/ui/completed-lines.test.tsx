@@ -23,7 +23,7 @@ import type { CompletedMode } from "../completed";
 import { resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Bucket, ProjectStatus, Section, Task } from "../model";
-import { type RenderWithTasksOptions, renderWithTasks } from "../testing/render-with-tasks";
+import { renderWithTasks, type RenderWithTasksOptions } from "../testing/render-with-tasks";
 import type { ListGrouping } from "./list-extensions";
 import { TaskBoardView } from "./task-board-view";
 import { TaskListView } from "./task-list-view";

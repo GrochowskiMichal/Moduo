@@ -1,8 +1,8 @@
 import { useEffect } from "react";
+
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import type { Font } from "../../../lib/appearance";
 import { loadPickerFonts } from "../../../lib/picker-fonts";
-
 import { AppearancePickerRow } from "./picker-row";
 
 const OPTIONS: ReadonlyArray<{ value: Font; label: string }> = [

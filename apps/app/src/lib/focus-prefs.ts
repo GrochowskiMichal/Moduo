@@ -17,6 +17,7 @@
 import { type FocusTimerMode, normalizeFocusTimerMode } from "@contracts/vocabularies";
 import { useCallback, useSyncExternalStore } from "react";
 import { z } from "zod";
+
 import { useDomainSync } from "./prefs-sync";
 
 export interface FocusPrefs {

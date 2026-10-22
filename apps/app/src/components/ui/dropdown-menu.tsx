@@ -3,6 +3,7 @@ import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+
 import { eyebrowVariants } from "./eyebrow";
 import { useMoreBelowRef } from "./menu-scroll";
 import { DROPDOWN_MENU_SCROLL, FLOATING_SURFACE } from "./surface";

@@ -123,8 +123,7 @@ export function idbCache(factory: IDBFactory): SyncCache {
     async read(key) {
       try {
         const value = (await idbRequest((await tx("readonly")).get(key))) as
-          | CachedWorkspace
-          | undefined;
+          CachedWorkspace | undefined;
         return value && typeof value === "object" ? value : null;
       } catch {
         return null;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note, NoteFavorite } from "./model";
 import { buildSidebarSections } from "./sections";
 

@@ -8,7 +8,9 @@
 
 import { type DragEndEvent, type DragStartEvent, useDndMonitor } from "@dnd-kit/core";
 import { useEffect, useRef, useState } from "react";
+
 import { asDragPayload } from "@/lib/drag-payload";
+
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import type { SidebarSections } from "../sections";

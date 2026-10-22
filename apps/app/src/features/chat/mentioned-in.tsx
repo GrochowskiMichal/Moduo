@@ -12,6 +12,7 @@ import { type ReactNode, useContext, useEffect, useState } from "react";
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import { formatDate } from "@/lib/time-format";
 import { useAuth } from "@/providers/auth-provider";
+
 import { resolveEntityIcon } from "../spine/icon-map";
 import { WorkspaceContext } from "../workspaces/workspace-context";
 import { DecisionLines } from "./decisions";

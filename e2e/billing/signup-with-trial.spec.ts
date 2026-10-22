@@ -8,6 +8,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+
 import { BASE_URL, fillSignupEmail, testEmail } from "./helpers";
 
 test.describe("Signup → 14-day trial", () => {

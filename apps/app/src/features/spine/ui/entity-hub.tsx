@@ -9,6 +9,7 @@
 
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import {
   type RelationKind,
 } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
+
 import { MentionedInLines } from "../../chat/mentioned-in";
 import type { HubStatus } from "../hooks/use-entity-hub";
 import { resolveEntityIcon } from "../icon-map";

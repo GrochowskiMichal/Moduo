@@ -2,6 +2,7 @@
 // inbound event id to a navigate target (or `none` for stale/unknown ids).
 
 import { describe, expect, it } from "@rstest/core";
+
 import { resolveCalendarDeepLink, validateCalendarSearch } from "./search";
 
 const ev = (id: string, startsAt: string) => ({ id, startsAt }) as { id: string; startsAt: string };

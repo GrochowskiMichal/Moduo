@@ -4,6 +4,7 @@
 
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
+
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
 import { startOfLocalDay } from "../lens";

@@ -27,6 +27,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatDate } from "@/lib/time-format";
+
 import type { ChatChannel, ChatDeletedChannel, ChatPerson } from "../model";
 import { CHANNEL_NAME_MAX, channelNameProblem } from "../panel/details-model";
 import { PeoplePicker } from "./new-conversation-dialog";

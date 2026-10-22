@@ -16,6 +16,7 @@ import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
 import type { SpineComment } from "@/lib/runtime.types";
+
 import { createNotesHeadlessEditor, deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
 import { ADD_COMMENT_COMMAND, registerAddComment } from "../editor/plugins/comment-marks-plugin";

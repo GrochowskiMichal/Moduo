@@ -31,9 +31,9 @@ import {
   keepWorkspaceCopies,
   setStoreOptionsForTests,
   stampMinus,
-  WorkspaceStore,
   waitingSyncCount,
   wipeSyncCopies,
+  WorkspaceStore,
   workspaceStore,
 } from "./store";
 import type {

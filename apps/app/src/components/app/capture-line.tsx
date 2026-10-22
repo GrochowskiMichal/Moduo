@@ -10,9 +10,9 @@ import { toast } from "sonner";
 
 import { requestDashboardDataRefresh } from "../../features/dashboard/context/dashboard-data-context";
 import {
+  canWriteRoute,
   CAPTURE_ROUTES,
   type CaptureTarget,
-  canWriteRoute,
   createCapturedEntity,
   isPermissionError,
 } from "../../features/spine/capture-command";

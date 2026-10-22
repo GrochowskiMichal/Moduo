@@ -10,8 +10,9 @@ import {
   Type,
 } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+
 import { NODE_ICON_OPTIONS, resolveNodeIcon } from "./node-icons";
-import type { MindmapNodeData, MindmapNode as MNode, NodePriority } from "./types";
+import type { MindmapNode as MNode, MindmapNodeData, NodePriority } from "./types";
 import { PRIORITY_META } from "./types";
 
 export type { MindmapNodeData };

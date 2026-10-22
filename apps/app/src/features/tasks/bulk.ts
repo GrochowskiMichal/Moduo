@@ -7,9 +7,10 @@
 import {
   isClosedTask,
   legacyTaskStatus,
-  type TaskStatusCategory,
   taskCategoryOf,
+  type TaskStatusCategory,
 } from "@contracts/vocabularies";
+
 import { dueOnToLocalInstant, localDayOf } from "../../lib/task-rows";
 import { formatDay } from "../../lib/time-format";
 import type { TaskDropWrite } from "./dnd/drop-write";

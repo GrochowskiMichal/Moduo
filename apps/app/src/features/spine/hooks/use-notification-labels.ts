@@ -8,9 +8,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import {
+  noticeCommentIds,
   type NoticeDetails,
   type NotificationGroup,
-  noticeCommentIds,
   notificationReferences,
   unnamedTaskTargets,
 } from "../notifications";

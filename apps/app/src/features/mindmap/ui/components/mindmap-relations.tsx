@@ -9,6 +9,7 @@ import {
   Unlock,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { escapeMermaidText } from "../mermaid-import";
 import { resolveNodeIcon } from "../node-icons";
 import type { MindmapEdge, MindmapNode } from "../types";

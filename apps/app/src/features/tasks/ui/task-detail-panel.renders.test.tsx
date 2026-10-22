@@ -28,6 +28,7 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 }));
 
 import { Profiler } from "react";
+
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { makeTask } from "../helpers";
 import type { Bucket, Task } from "../model";

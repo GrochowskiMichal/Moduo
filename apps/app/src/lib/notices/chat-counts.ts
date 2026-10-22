@@ -8,6 +8,7 @@
 // out), re-read a moment after your own Catch up rows change.
 
 import { useSyncExternalStore } from "react";
+
 import { supabaseClient } from "../runtime.web.client";
 
 export type ChatCounts = {

@@ -1,6 +1,7 @@
 /** The runtime port's spine (implemented in runtime.web.spine.ts). */
 
 import type { ContentAuthorKind, ReactionKey } from "@contracts/vocabularies";
+
 import type { NotificationItem } from "../features/spine/notifications";
 import type { RecentLinkItem } from "../features/spine/recent";
 import type { ReferencePreviewApi } from "../features/spine/references/rows";

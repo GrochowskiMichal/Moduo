@@ -11,6 +11,7 @@
 // it is safe to generate anywhere. See use-email-due-web-sweep.ts.
 
 import type { EmailThreadRef } from "@/lib/runtime.types";
+
 import { isFollowUpDue } from "./refs";
 
 /**

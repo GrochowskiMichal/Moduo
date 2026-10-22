@@ -28,8 +28,8 @@ import {
   sameScopes,
   scopeCeiling,
   scopeDependencyNotes,
-  scopeSummary,
   scopesPayload,
+  scopeSummary,
   toKeyScopes,
 } from "./api-keys";
 

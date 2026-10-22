@@ -36,7 +36,7 @@ import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden } from "../completed";
 import { byIdOf } from "../derived";
-import { type TasksDisplay, type TimelineShow, timelineScopeOf } from "../display";
+import { type TasksDisplay, timelineScopeOf, type TimelineShow } from "../display";
 import type { Bucket, Task, TaskRelation } from "../model";
 import { PRIVATE_PROJECT_LABEL } from "../model";
 import {
@@ -50,10 +50,10 @@ import {
 import { contradictions } from "../timeline-deps";
 import {
   buildTimelineRows,
-  type TimelineGroup,
-  type TimelineRow,
   taskRowKey,
+  type TimelineGroup,
   timelineGroupsFor,
+  type TimelineRow,
 } from "../timeline-rows";
 import {
   dayNumOfKey,
@@ -83,9 +83,9 @@ import {
 } from "./timeline-marks";
 import {
   type RowStubs,
+  timelineRowDomId,
   type TimelineRowHandlers,
   TimelineRowItem,
-  timelineRowDomId,
 } from "./timeline-row";
 import { TimelineToolbar } from "./timeline-toolbar";
 import type { MultiSelect } from "./use-task-selection";

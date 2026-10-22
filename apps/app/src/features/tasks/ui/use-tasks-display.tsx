@@ -4,6 +4,7 @@
 // the Board and the page's selection backstop read the same rules.
 
 import { type ReactNode, useCallback, useMemo, useState } from "react";
+
 import { DisplayMenu } from "../../../components/ui/display-menu";
 import type { FilterCondition } from "../../../components/ui/filter-model";
 import { useViewPrefs } from "../../../lib/view-prefs";
@@ -14,12 +15,12 @@ import {
   sanitizeTasksView,
   type TaskLayout,
   type TasksDisplay,
-  type TasksViewPrefs,
-  type TimelineRoleDefaults,
   tasksDisplayControls,
   tasksDisplayDefaults,
   tasksDisplayKey,
   tasksViewDefaults,
+  type TasksViewPrefs,
+  type TimelineRoleDefaults,
 } from "../display";
 import { showsDone } from "../filters";
 import type { Task } from "../model";

@@ -24,8 +24,7 @@ export function validateCalendarSearch(search: Record<string, unknown>): Calenda
 // first occurrence's chip key.
 
 export type CalendarDeepLinkTarget =
-  | { kind: "event"; eventId: string; startsAt: string }
-  | { kind: "none" };
+  { kind: "event"; eventId: string; startsAt: string } | { kind: "none" };
 
 export function resolveCalendarDeepLink(
   id: string,

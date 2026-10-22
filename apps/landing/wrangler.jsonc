@@ -23,7 +23,7 @@
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page",
-    "run_worker_first": ["/book", "/book/*", "/static/*"]
+    "run_worker_first": ["/book", "/book/*", "/static/*"],
   },
   "observability": { "enabled": true },
   "env": {
@@ -35,7 +35,7 @@
       "workers_dev": true,
       "preview_urls": true,
       "routes": [{ "pattern": "staging.moduo.app", "custom_domain": true }],
-      "services": [{ "binding": "APP", "service": "moduo-app-staging" }]
+      "services": [{ "binding": "APP", "service": "moduo-app-staging" }],
     },
     // moduo.app. Deployed only by deploy-prod.yml, after moduo-app-production (the binding's
     // target). www.moduo.app is not a domain of this Worker: a zone Redirect Rule sends it to
@@ -45,7 +45,7 @@
       "workers_dev": false,
       "preview_urls": false,
       "routes": [{ "pattern": "moduo.app", "custom_domain": true }],
-      "services": [{ "binding": "APP", "service": "moduo-app-production" }]
-    }
-  }
+      "services": [{ "binding": "APP", "service": "moduo-app-production" }],
+    },
+  },
 }

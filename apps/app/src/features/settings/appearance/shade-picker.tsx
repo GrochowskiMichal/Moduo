@@ -1,7 +1,6 @@
 import { Check } from "lucide-react";
 
 import type { Shade } from "../../../lib/appearance";
-
 import { AppearancePickerRow } from "./picker-row";
 
 const SHADE_OPTIONS: ReadonlyArray<{ value: Shade; label: string }> = [

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@rstest/core";
+
 import { googleCalendarExternalId, parseGoogleExternalId } from "./google-account";
 
 describe("parseGoogleExternalId", () => {

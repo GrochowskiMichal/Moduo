@@ -6,10 +6,12 @@
 // Rows are the spine's EntityHubRow; grouping is by the other endpoint's type.
 
 import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
+
 import { MentionedInLines } from "../../chat/mentioned-in";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { type HubRow, type HubSection, isSectionTruncated, visibleRows } from "../../spine/rollup";

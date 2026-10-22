@@ -4,6 +4,7 @@
 // task-rows.ts, shared with the live layer.
 
 import { bucketRowSchema, mapKnownRows, requireRow, taskRowSchema } from "@contracts/rows";
+
 import type { Bucket, Task, TasksModuleBundle, TasksTrash } from "../features/tasks/model";
 import { bucketRowToModel, taskRowToModel } from "./task-rows";
 

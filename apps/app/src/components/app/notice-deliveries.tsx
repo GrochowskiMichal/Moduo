@@ -19,6 +19,7 @@
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
+
 import type { ChatTab } from "../../features/chat/shell/chat-tab";
 import { isAppInBackground } from "../../features/focus/phase-alert";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -34,15 +35,15 @@ import {
 import {
   deliveriesToShow,
   isChatNotice,
-  type NoticeDelivery,
   noticeCopy,
+  type NoticeDelivery,
   noticeDeliveryFromRow,
 } from "../../lib/notices/deliveries";
 import {
   BURST_WINDOW_MS,
   burstCopy,
-  type ChatNoticeTarget,
   chatNoticeSwitch,
+  type ChatNoticeTarget,
   chatNoticeTarget,
   decideChatNotice,
   isChatInFront,
@@ -344,8 +345,7 @@ export function NoticeDeliveries({
         (payload) => {
           // The open workspace counts live from its store.
           const row = ((payload as { new?: unknown }).new ?? (payload as { old?: unknown }).old) as
-            | { workspace_id?: unknown }
-            | undefined;
+            { workspace_id?: unknown } | undefined;
           if (row?.workspace_id && row.workspace_id === selectedWorkspaceId) return;
           if (timer) clearTimeout(timer);
           timer = setTimeout(reread, COUNTS_SETTLE_MS);

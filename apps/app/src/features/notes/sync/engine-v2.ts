@@ -32,6 +32,7 @@
 import { IndexeddbPersistence } from "y-indexeddb";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
@@ -43,16 +44,16 @@ import {
   isForeignOrigin,
 } from "./agent-origin";
 import {
-  type DocOutboxEntry,
   deleteDocOutboxEntries,
   deleteMetaOutboxEntries,
   docDbName,
+  type DocOutboxEntry,
   enqueueDocUpdate,
   enqueueMetaOp,
   listDocOutboxNoteIds,
   type MetaOutboxEntry,
-  type NoteSyncState,
   type NotesOwner,
+  type NoteSyncState,
   openNotesDb,
   ownerLive,
   ownerOf,

@@ -1,6 +1,7 @@
 /** The runtime port's attachments (implemented in runtime.web.attachments.ts). */
 
 import type { AttachmentPreviewMime, AttachmentStatus } from "@contracts/vocabularies";
+
 import type { Truncation } from "./paged-select";
 
 /** One file on a task (AT-1). The bytes live in the private `attachments`

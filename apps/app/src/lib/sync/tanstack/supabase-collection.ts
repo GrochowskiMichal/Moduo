@@ -23,6 +23,7 @@ import type {
   CollectionConfig,
   UpdateMutationFnParams,
 } from "@tanstack/db";
+
 import type { CollectionCopy, SyncedCollection } from "../kernel/collection";
 import type { LandingRow } from "../kernel/landing";
 

@@ -21,6 +21,7 @@
  */
 
 import { CUSTOM_EMOJI_PER_WORKSPACE } from "@contracts/vocabularies";
+
 import { CHAT_MESSAGE_COLUMNS } from "../features/chat/columns";
 import { mapCustomEmoji } from "../features/chat/emoji/model";
 import { type Db, DbError, type Json } from "./runtime.db";

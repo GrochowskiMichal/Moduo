@@ -14,12 +14,13 @@
 
 import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
 import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+
 import { HotkeyScope, isMacPlatform, useAppHotkeys, useFocusWithin } from "../../lib/hotkeys";
 import {
   type PanelModule,
-  type PanelViewDef,
   panelShortcutLabel,
   panelShortcutNumber,
+  type PanelViewDef,
   panelViewsFor,
 } from "../../lib/panel-registry";
 import { cn } from "../../lib/utils";

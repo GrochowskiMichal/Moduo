@@ -9,6 +9,7 @@
 // becomes the estimate; story points and start dates aren't kept.
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
+
 import { csvColumns, headerHas, parseCsv } from "./csv";
 import { jiraDue } from "./dates";
 import {
@@ -23,8 +24,8 @@ import {
   type ImportPlan,
   keepComments,
   moveSubtasksToParents,
-  type PlanComment,
   personFrom,
+  type PlanComment,
   planTask,
   priorityOf,
   projectNamed,

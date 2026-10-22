@@ -17,6 +17,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { ReactNode } from "react";
+
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -24,6 +25,7 @@ import { Reactions } from "@/components/ui/reactions";
 import { Reference } from "@/features/spine/references/ui/reference";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { excerptOf } from "../chains";
 import { customGlyph, useCustomEmoji } from "../emoji/context";

@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import {
   descriptionPlainText,
   descriptionReferences,
@@ -72,13 +73,13 @@ import { useAssignees } from "../assignees";
 import { positionsAfter } from "../helpers";
 import type { Bucket, Task } from "../model";
 import {
+  captureDates,
   type CaptureToken,
   type ClearedDateField,
-  captureDates,
   keepOnClear,
   resolveTitle,
-  SINGLE_VALUE_KINDS,
   segmentsFromLine,
+  SINGLE_VALUE_KINDS,
   type TitleSegment,
   tokenText,
 } from "../parse/capture-tokens";
@@ -103,9 +104,9 @@ import {
   saveDraft,
 } from "./capture-draft";
 import {
+  captureAttachments,
   type CaptureTemplateChoice,
   type CaptureTemplateProvider,
-  captureAttachments,
   captureTemplates,
 } from "./capture-hooks";
 import {
@@ -138,8 +139,7 @@ let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
 let openBody:
-  | ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean)
-  | null = null;
+  ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean) | null = null;
 
 /**
  * A refused capture's files (AT-3): the draft slot on the device keeps words

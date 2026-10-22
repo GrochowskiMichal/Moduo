@@ -5,9 +5,10 @@
 
 import { CheckSquare } from "lucide-react";
 import { lazy, Suspense } from "react";
+
 import type { CaptureBodyProps, CaptureTypeDef } from "../../lib/capture-registry";
 import { attachCaptureFiles } from "../attachments/capture";
-import { CAPTURE_ROUTES, canWriteRoute } from "../spine/capture-command";
+import { canWriteRoute, CAPTURE_ROUTES } from "../spine/capture-command";
 import { registerCaptureAttachments, registerCaptureTemplates } from "./capture/capture-hooks";
 import { taskTemplatesForCapture } from "./templates/capture-provider";
 

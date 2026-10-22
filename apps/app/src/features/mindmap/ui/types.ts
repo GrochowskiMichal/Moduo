@@ -44,12 +44,7 @@ export type MindmapEdge = Edge<MindmapEdgeData>;
 /* ═══════════════════════ Layout ═══════════════════════ */
 
 export type LayoutMode =
-  | "mindmap"
-  | "tree-vertical"
-  | "tree-horizontal"
-  | "radial"
-  | "org-chart"
-  | "free";
+  "mindmap" | "tree-vertical" | "tree-horizontal" | "radial" | "org-chart" | "free";
 
 /* ═══════════════════════ Theme ═══════════════════════ */
 

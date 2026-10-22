@@ -21,7 +21,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
+
+import { DragOverlaySurface, DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
@@ -86,8 +87,8 @@ import { useTaskFileDrop } from "./row-drop";
 import {
   type FactsSource,
   type TaskFacts,
-  type TaskRowActions,
   taskFactsOf,
+  type TaskRowActions,
   useRowActions,
   waitingLabelsOf,
 } from "./row-facts";

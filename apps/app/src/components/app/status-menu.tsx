@@ -23,9 +23,9 @@ import {
   forgetStatus,
   listSavedStatuses,
   type SavedStatusDraft,
-  type StatusDraft,
   saveStatus,
   setMyStatus,
+  type StatusDraft,
 } from "@/lib/statuses/api";
 import {
   activeChoice,
@@ -40,6 +40,7 @@ import "@/lib/statuses/live";
 import { refreshPeopleNow, usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
+
 import { Avatar, AvatarFallback, AvatarImage, PresenceBadge } from "../ui/avatar";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";

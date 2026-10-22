@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
 import type { useEmailModule } from "../hooks/use-email-module";
 import { EMAIL_OPEN_THREAD_EVENT, resolveEmailThreadTarget } from "../url-search";

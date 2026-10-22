@@ -23,7 +23,7 @@
     "directory": "./dist/web",
     "binding": "ASSETS",
     "not_found_handling": "none",
-    "run_worker_first": ["/", "/index.html"]
+    "run_worker_first": ["/", "/index.html"],
   },
   "observability": { "enabled": true },
   "env": {
@@ -40,8 +40,8 @@
         "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
         "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",
         "WEB_ORIGIN": "https://app.staging.moduo.app",
-        "STAGING_PORTAL": "true"
-      }
+        "STAGING_PORTAL": "true",
+      },
     },
     // app.moduo.app, deployed only by deploy-prod.yml. PostHog, Stripe and VAPID keys are added
     // here when they are set for prod (the Vercel prod build had none of them).
@@ -53,8 +53,8 @@
       "vars": {
         "SUPABASE_URL": "https://wtoonrvuqumihpkbvwvs.supabase.co",
         "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_NAVl-rzFzPOi5ZU84aC3pA_SOIR00so",
-        "WEB_ORIGIN": "https://app.moduo.app"
-      }
-    }
-  }
+        "WEB_ORIGIN": "https://app.moduo.app",
+      },
+    },
+  },
 }

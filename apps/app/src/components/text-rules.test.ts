@@ -5,15 +5,16 @@
 // shape has a probe here (in `bun run verify`).
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
 import stylelint from "stylelint";
 
 import { scanFile } from "../../../../scripts/check-arbitrary-tw";
 import {
   isNotWords,
+  scanTextRules,
   SMALL_CAPS_CHROME,
   SMALL_CAPS_DEBT,
-  scanTextRules,
 } from "../../../../scripts/check-text-rules";
 
 const ROOT = process.cwd();

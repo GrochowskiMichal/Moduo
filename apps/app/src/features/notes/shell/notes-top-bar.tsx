@@ -8,6 +8,7 @@
 
 import { MoreHorizontal, PanelRight, PanelRightClose, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
+
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
 import type { Note } from "../model";
 import type { NoteViewer } from "../sync/notes-realtime";
 import { NotePresenceAvatars } from "../ui/note-presence-avatars";

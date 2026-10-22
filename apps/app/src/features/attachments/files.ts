@@ -4,14 +4,15 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
+  File as FileIcon,
   FileArchive,
   FileAudio,
-  File as FileIcon,
   FileImage,
   FileSpreadsheet,
   FileText,
   FileVideo,
 } from "lucide-react";
+
 import type { AttachmentRecord } from "@/lib/runtime.types";
 import { originalIsItsOwnPreview } from "@/lib/uploads/pipeline";
 

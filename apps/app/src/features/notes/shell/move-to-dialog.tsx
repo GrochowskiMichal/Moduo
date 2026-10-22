@@ -6,6 +6,7 @@
 
 import { FileText, FolderOpen, Inbox } from "lucide-react";
 import { type CSSProperties, useMemo } from "react";
+
 import {
   CommandDialog,
   CommandEmpty,
@@ -14,6 +15,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+
 import type { Note } from "../model";
 import type { SidebarSections } from "../sections";
 import { displayTitle } from "../title";

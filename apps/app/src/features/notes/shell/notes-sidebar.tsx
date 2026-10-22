@@ -19,11 +19,13 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { DROP_TARGET } from "@/components/ui/drag-visuals";
 import { IconButton } from "@/components/ui/icon-button";
 import { NavSectionHeader } from "@/components/ui/nav-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import type { NoteSearchResult } from "../search";
@@ -32,14 +34,14 @@ import type { NoteTreeNode } from "../tree";
 import { type DropIntent, keyboardReorderIntent, type SidebarSection } from "./drop-intent";
 import type { RowAction } from "./row-menu";
 import {
+  footerCounts,
   FooterSubView,
   type FooterView,
-  footerCounts,
   SidebarFooter,
 } from "./sidebar-footer-views";
 import { SidebarSearchInput, SidebarSearchResults, useNoteSearch } from "./sidebar-search";
 import { rowKey, type TreeCtx, TreeNodes, TreeRow } from "./sidebar-tree";
-import { type TreeRow as KeyRow, treeKeyAction } from "./tree-keyboard";
+import { treeKeyAction, type TreeRow as KeyRow } from "./tree-keyboard";
 import { useSidebarDrag } from "./use-sidebar-drag";
 
 export type NotesSidebarProps = {

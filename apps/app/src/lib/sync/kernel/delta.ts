@@ -14,7 +14,7 @@
 //     a read that couldn't reach the end means (Chat re-reads its open
 //     window; Tasks reads on next time).
 
-import { laterOf, type MissingStamp, micros, stampMinus, timestampMicros } from "./stamps";
+import { laterOf, micros, type MissingStamp, stampMinus, timestampMicros } from "./stamps";
 
 /** One page of a delta. */
 export type DeltaPage<P> = {

@@ -45,10 +45,12 @@ import {
 } from "lexical";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
+
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
+
 import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {

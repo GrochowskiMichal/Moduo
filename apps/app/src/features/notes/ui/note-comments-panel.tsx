@@ -23,6 +23,7 @@ import { useCommentThread } from "@/features/spine/hooks/use-comment-thread";
 import { WithCommentReactions } from "@/features/spine/ui/comment-reactions";
 import { CommentBody, CommentCard, CommentComposer } from "@/features/spine/ui/comments-panel";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+
 import { anchorStore, useNoteAnchors } from "../comments/anchor-store";
 import { type CommentThreadGroup, groupThreads } from "../comments/anchors";
 import { formatQuoteComment, parseQuoteComment } from "../comments/quote";

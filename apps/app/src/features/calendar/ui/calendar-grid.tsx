@@ -19,7 +19,9 @@
 import { useDroppable } from "@dnd-kit/core";
 import { Circle, CircleCheck, Paperclip } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
+
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
 import { MetaCount } from "../../../components/ui/meta-count";

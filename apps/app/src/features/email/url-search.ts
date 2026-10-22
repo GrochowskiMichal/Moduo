@@ -31,8 +31,7 @@ export function validateEmailSearch(search: Record<string, unknown>): EmailSearc
 }
 
 export type EmailThreadDeepLinkTarget =
-  | { kind: "thread"; threadId: string; refId: string | null }
-  | { kind: "none" };
+  { kind: "thread"; threadId: string; refId: string | null } | { kind: "none" };
 
 /**
  * Resolve an inbound id to the raw `threadId` (for desktop list selection) and

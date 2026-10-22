@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { RightPanel } from "../../../components/app/right-panel";

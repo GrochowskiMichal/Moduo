@@ -5,6 +5,7 @@
 // reads. Newest-first in the hub trail and the notification card.
 
 import { normalizeChatMentionReason } from "@contracts/vocabularies";
+
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 import { dayShort, time24 } from "../calendar/booking/sentence";
 import { parseStored, toExcerptText } from "../chat/markup-v2";

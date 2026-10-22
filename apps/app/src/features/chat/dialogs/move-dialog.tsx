@@ -4,6 +4,7 @@
 // aren't in Founders will see this", CH55). The op decides; this asks.
 
 import { useMemo, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
 import { messageDestinations } from "../capture-type";
 import type { ChatChannel, ChatPerson } from "../model";
 
@@ -40,8 +42,7 @@ export function audienceWarning(newly: number, sourceTitle: string): string {
 }
 
 export type MoveStep =
-  | { step: "pick" }
-  | { step: "confirm"; target: ChatChannel; targetTitle: string; newly: number };
+  { step: "pick" } | { step: "confirm"; target: ChatChannel; targetTitle: string; newly: number };
 
 export function MoveToDialog({
   open,

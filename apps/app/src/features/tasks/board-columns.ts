@@ -17,10 +17,11 @@
 
 import {
   type PriorityLevel,
+  taskCategoryOf,
   type TaskStatusCategory,
   type TaskWaitingKind,
-  taskCategoryOf,
 } from "@contracts/vocabularies";
+
 import type { BoardGroupBy, BoardLanes } from "./display";
 import type { StatusFilter } from "./filters";
 import { type GroupBy, groupKeyFor, groupTasks, isProjectScope, PRIORITY_LABELS } from "./helpers";
@@ -29,9 +30,9 @@ import type { Bucket, ProjectStatus, Task, TaskWaitingEntry } from "./model";
 import {
   categoryKey,
   firstStatusOf,
+  sortStatuses,
   STATUS_KEY_LABELS,
   type StatusKey,
-  sortStatuses,
   statusKeyCategory,
   statusKeyOf,
   statusSetFor,

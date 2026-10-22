@@ -3,6 +3,7 @@
 
 import { CircleCheck } from "lucide-react";
 import { useMemo } from "react";
+
 import { type PanelItem, RightPanel } from "../../../../components/app/right-panel";
 import { EmptyState } from "../../../../components/ui/empty-state";
 import { useItemChatSlots } from "../../../chat/mentioned-in";

@@ -6,6 +6,7 @@
  */
 
 import { toast } from "sonner";
+
 import { findQuoteOffset } from "../comments/quote";
 import type { OutlineHeading } from "../outline";
 
