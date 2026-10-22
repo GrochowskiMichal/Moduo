@@ -992,7 +992,7 @@ export function RepeatHistory({ task }: { task: Task }) {
   const summary = historySummary(completions, task.id);
   // Read on open, and again when a cycle closes while it's open.
   const doneCount = completions.filter((c) => c.taskId === task.id && !c.deletedAt).length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a cycle closing (doneCount) re-reads it.
+  // A cycle closing (doneCount) re-reads it.
   useEffect(() => {
     if (!open) return;
     let live = true;

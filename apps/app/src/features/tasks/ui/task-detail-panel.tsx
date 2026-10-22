@@ -472,7 +472,7 @@ function TitleField({
     if (document.activeElement !== ref.current) setTitle(task.title);
   }, [task.title]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
+  // Re-measure whenever the text changes.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;

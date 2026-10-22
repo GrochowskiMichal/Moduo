@@ -37,7 +37,7 @@ const config: StorybookConfig = {
         ...Object.entries(aliasMap).map(([find, replacement]) => ({ find, replacement })),
       ];
     } else {
-      cfg.resolve.alias = { ...(existingAlias ?? {}), ...aliasMap };
+      cfg.resolve.alias = { ...existingAlias, ...aliasMap };
     }
     return cfg;
   },

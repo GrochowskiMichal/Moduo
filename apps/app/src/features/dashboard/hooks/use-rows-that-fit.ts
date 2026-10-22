@@ -33,7 +33,7 @@ export function useRowsThatFit(ref: RefObject<HTMLElement | null>): number | nul
   });
 
   // And whenever the cell changes size (a resize, a density change).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `measure` only reads the element it's given
+  // `measure` only reads the element it's given.
   useEffect(() => {
     if (!el || typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(() => measure(el));

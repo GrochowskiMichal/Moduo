@@ -108,7 +108,7 @@ export function useMadeFrom(
       .catch(() => {});
   }, [runtime]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the joined ids are the cue
+  // The joined ids are the cue.
   useEffect(() => {
     load();
   }, [key, load]);

@@ -395,11 +395,11 @@ export function TaskTimelineView({
   // The page's selection (a click, a deep link, the panel) moves the cursor
   // and brings its row into view.
   const selectedRow = selectedTaskId ? rowByKey.get(taskRowKey(selectedTaskId)) : undefined;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
   useEffect(() => {
     if (!selectedRow) return;
     setCursorKey(selectedRow.key);
     reveal(selectedRow);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new selection is the cue
   }, [selectedTaskId, selectedRow !== undefined]);
 
   const moveCursor = (delta: 1 | -1) => {

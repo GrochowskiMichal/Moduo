@@ -459,7 +459,7 @@ export function usePlanCentre(c: PlanCursorCtx) {
 
   // The "← item" stack's reset: a new selection is a new context, so the
   // stack starts over.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
+  // A new selection is the cue.
   useEffect(() => {
     clearPanel();
   }, [selectedTaskId, clearPanel]);

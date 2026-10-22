@@ -39,7 +39,7 @@ export function FindBar({ chat, workspaceId, channelId, onJump, onClose, onSeeAl
 
   // A new answer (not new words: the last answer stays on screen while they
   // debounce): start again from its newest hit.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when the answer changes
+  // Reset when the answer changes.
   useEffect(() => setIndex(-1), [hits]);
   // The first answer lands on the newest hit.
   useEffect(() => {
@@ -73,7 +73,7 @@ export function FindBar({ chat, workspaceId, channelId, onJump, onClose, onSeeAl
     >
       <Search className="size-icon shrink-0 text-muted-foreground" aria-hidden />
       <input
-        // biome-ignore lint/a11y/noAutofocus: opening the bar is asking to type
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- opening the bar is asking to type
         autoFocus
         type="text"
         aria-label="Search in this conversation"

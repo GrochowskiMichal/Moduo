@@ -33,7 +33,7 @@ export function useEntityTags(
     [entityType, entityId],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the reload cue.
+  // `tick` is the reload cue.
   useEffect(() => {
     if (!runtime || !workspaceId || !entity) return;
     let cancelled = false;

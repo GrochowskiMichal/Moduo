@@ -92,7 +92,7 @@ export function normalizeLoadedEdges(rawEdges: MindmapEdge[]): MindmapEdge[] {
       animated: data.animated,
       className: edgeClassName(data.pattern, data.animated),
       style: {
-        ...(edge.style ?? {}),
+        ...edge.style,
         stroke: data.color,
         strokeWidth: data.thickness,
         strokeDasharray: edgeDashFromPattern(data.pattern),
@@ -119,7 +119,7 @@ export function withEdgeColor(edge: MindmapEdge, color: string): MindmapEdge {
     animated: data.animated,
     className: edgeClassName(data.pattern, data.animated),
     style: {
-      ...(edge.style ?? {}),
+      ...edge.style,
       stroke: color,
       strokeWidth: data.thickness,
       strokeDasharray: edgeDashFromPattern(data.pattern),
@@ -137,7 +137,7 @@ export function withEdgeShape(edge: MindmapEdge, styleValue: EdgeStyle): Mindmap
     animated: data.animated,
     className: edgeClassName(data.pattern, data.animated),
     style: {
-      ...(edge.style ?? {}),
+      ...edge.style,
       stroke: data.color,
       strokeWidth: data.thickness,
       strokeDasharray: edgeDashFromPattern(data.pattern),
@@ -155,7 +155,7 @@ export function withEdgePattern(edge: MindmapEdge, pattern: EdgePattern): Mindma
     animated,
     className: edgeClassName(pattern, animated),
     style: {
-      ...(edge.style ?? {}),
+      ...edge.style,
       stroke: data.color,
       strokeWidth: data.thickness,
       strokeDasharray: edgeDashFromPattern(pattern),

@@ -68,7 +68,7 @@ export function useNoteLinks({
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const latestNoteId = useRef(noteId);
   latestNoteId.current = noteId;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the sections' identity
+  // Keyed on the sections' identity.
   useEffect(() => {
     setLoadedFor(latestNoteId.current);
   }, [sections]);

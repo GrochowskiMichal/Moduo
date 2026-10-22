@@ -23,7 +23,7 @@ export function useToday(zone?: string): string {
   }
   // Bumped when the timer fired before the day changed, to arm it again.
   const [rearm, setRearm] = useState(0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `today` and `rearm` arm the timer for the next midnight
+  // `today` and `rearm` arm the timer for the next midnight.
   useEffect(() => {
     const now = new Date();
     const midnight = zone

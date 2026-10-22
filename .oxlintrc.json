@@ -1,0 +1,75 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "jsx-a11y", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "ignorePatterns": [
+    ".omo/**",
+    ".cursor/**",
+    ".claude/**",
+    ".design/**",
+    ".design-sync/**",
+    ".opencode/**",
+    "**/dist/**",
+    "**/.turbo/**",
+    "apps/desktop/src-tauri/**",
+    "supabase/**",
+    "**/storybook-static/**",
+    "coverage/**",
+    "apps/app/src/types/supabase.ts",
+    "release-notes/**",
+    "scripts/icons/source/**",
+    "brand/masters/**",
+    "brand/exports/**"
+  ],
+  "rules": {
+    "eslint/prefer-const": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "typescript/no-explicit-any": "off",
+    "typescript/no-non-null-assertion": "off",
+    "eslint/no-param-reassign": "off",
+    "eslint/no-unused-vars": "warn",
+    "react/no-array-index-key": "warn",
+    "react-hooks/exhaustive-deps": "warn",
+    "react/button-has-type": "warn",
+    "jsx-a11y/role-supports-aria-props": "warn",
+    "jsx-a11y/prefer-tag-over-role": "warn",
+    "jsx-a11y/click-events-have-key-events": "warn",
+    "jsx-a11y/no-autofocus": "warn",
+    "jsx-a11y/interactive-supports-focus": "warn",
+    "jsx-a11y/label-has-associated-control": "warn",
+    "jsx-a11y/no-static-element-interactions": "warn",
+    "jsx-a11y/heading-has-content": "warn",
+    "react/set-state-in-effect": "warn",
+    "react/refs": "warn",
+    "react/purity": "warn",
+    "react/immutability": "warn",
+    "react/static-components": "warn",
+    "react/globals": "warn",
+    "react/preserve-manual-memoization": "warn",
+    "react/incompatible-library": "warn",
+    "react/use-memo": "warn",
+    "react/no-did-update-set-state": "warn",
+    "react/no-children-prop": "warn",
+    "jsx-a11y/no-noninteractive-element-interactions": "warn",
+    "jsx-a11y/no-noninteractive-element-to-interactive-role": "warn",
+    "jsx-a11y/no-noninteractive-tabindex": "warn",
+    "unicorn/no-new-array": "off",
+    "unicorn/no-useless-spread": "warn",
+    "unicorn/prefer-string-starts-ends-with": "warn"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx", "e2e/**"],
+      "rules": {
+        "eslint/no-unused-vars": "off"
+      }
+    }
+  ]
+}

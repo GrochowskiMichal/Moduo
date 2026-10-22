@@ -160,7 +160,7 @@ function TaskLine({
           <SelectContent>
             <SelectItem value="none">No section</SelectItem>
             {sections.map((s, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a section is its position
+              // eslint-disable-next-line react/no-array-index-key -- a section is its position
               <SelectItem key={i} value={String(i)}>
                 {s.name || "Untitled section"}
               </SelectItem>
@@ -391,7 +391,7 @@ function ProjectTemplateFields({
         <ul className="flex flex-col">
           {body.statuses.map((s, i) => (
             <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: a status is its position
+              // eslint-disable-next-line react/no-array-index-key -- a status is its position
               key={i}
               className="flex min-h-(--row-h) items-center gap-2 px-2"
             >
@@ -435,7 +435,7 @@ function ProjectTemplateFields({
         <ul className="flex flex-col">
           {body.sections.map((s, i) => (
             <li
-              // biome-ignore lint/suspicious/noArrayIndexKey: a section is its position
+              // eslint-disable-next-line react/no-array-index-key -- a section is its position
               key={i}
               className="group/line flex min-h-(--row-h) flex-wrap items-center gap-2 rounded-md px-2 hover:bg-state-hover"
             >

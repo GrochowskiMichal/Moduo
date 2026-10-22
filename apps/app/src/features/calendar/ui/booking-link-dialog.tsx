@@ -203,7 +203,7 @@ export function BookingLinkDialog({
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const draftId = draft?.id ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when another link opens.
+  // Reset when another link opens.
   useEffect(() => setConfirmDelete(false), [draftId]);
   const needsGoogle =
     draft != null &&

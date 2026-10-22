@@ -19,7 +19,7 @@ export function useReplyChains(
     roots: null,
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `refresh` is the re-read trigger
+  // `refresh` is the re-read trigger.
   useEffect(() => {
     if (!chat || !channelId) return;
     let live = true;

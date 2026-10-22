@@ -49,7 +49,7 @@ function reskinnedSurfaces(source: string): string[] {
   const hits: string[] = [];
   const tag = new RegExp(`<(${FLOATING_TAGS.join("|")})\\b`, "g");
   let match: RegExpExecArray | null;
-  // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+  // The regex-drain idiom: assign and test in the loop condition.
   while ((match = tag.exec(source))) {
     const open = openingTag(source, match.index);
     const className = /className=(?:"([^"]*)"|\{([\s\S]*?)\}\s*(?:\w+=|\/?>))/.exec(open);

@@ -71,7 +71,7 @@ export function ChatSearchView({
     textRef.current = next;
     setTextState(next);
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the link's words change
+  // Runs when the link's words change.
   useEffect(() => {
     const next = reconcileTyped(textRef.current, q, sent.current);
     if (next !== textRef.current) setText(next);
@@ -82,9 +82,9 @@ export function ChatSearchView({
     [people, conversations],
   );
   // The date filter's start moves with the clock; it is read when the words or filters change.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `params` is the whole input
   const args = useMemo(
     () => (workspaceId ? searchQuery(workspaceId, params, new Date()) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `params` is the whole input
     [workspaceId, JSON.stringify(params)],
   );
   const { state, loadMore, retry } = useChatSearch(chat, args);

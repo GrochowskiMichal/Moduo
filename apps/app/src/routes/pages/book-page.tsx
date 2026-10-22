@@ -202,7 +202,7 @@ export function BookPage() {
   const trayRef = useRef<HTMLDivElement>(null);
   const focusTrayOnOpen = useRef(false);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `attempt` re-runs the load on "Try again".
+  // `attempt` re-runs the load on "Try again".
   useEffect(() => {
     let active = true;
     setPhase({ kind: "loading" });

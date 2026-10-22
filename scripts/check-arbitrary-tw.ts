@@ -173,7 +173,7 @@ function scanFile(content: string, file: string): Hit[] {
     for (const { name, regex } of PATTERNS) {
       regex.lastIndex = 0;
       let match: RegExpExecArray | null;
-      // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+      // The regex-drain idiom: assign and test in the loop condition.
       while ((match = regex.exec(line))) {
         hits.push({
           file,

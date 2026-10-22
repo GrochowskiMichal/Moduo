@@ -46,7 +46,7 @@
     "storybook:gen": "cd apps/app && bun ../../scripts/generate-storybook-stories.ts",
     "typecheck": "turbo run typecheck typecheck:root",
     "typecheck:root": "bun check",
-    "lint:js": "biome lint . && bun fmt --check",
+    "lint:js": "bun scripts/bun-lint.ts --report-unused-disable-directives && bun fmt --check",
     "lint:css": "turbo run lint:css",
     "lint:tw": "turbo run lint:tw",
     "lint:boundaries": "turbo run lint:boundaries",
@@ -54,7 +54,7 @@
     "lint:notes": "bun scripts/release/check-notes.ts",
     "build:notes-doc": "bun ./scripts/build-notes-doc.ts",
     "format": "bun fmt",
-    "format:fix": "biome lint --write . && bun fmt",
+    "format:fix": "bun scripts/bun-lint.ts --fix && bun fmt",
     "test": "turbo run test test:scripts",
     "test:scripts": "rstest -c scripts/rstest.config.ts",
     "test:watch": "bun run --cwd apps/app test:watch",
@@ -64,7 +64,6 @@
     "perf": "bun scripts/perf/seed-tasks-10k.ts && bun run --cwd e2e perf"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.15",
     "@resvg/resvg-js": "^2.6.2",
     "@rstest/core": "^0.12.3",
     "stripe": "23.0.0",

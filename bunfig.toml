@@ -8,11 +8,11 @@ linker = "hoisted"
 minimumReleaseAge = "3d"
 
 [fmt]
-# bun fmt is the formatter (Biome only lints). Prettier defaults apart from the
+# bun fmt is the formatter (bun lint lints: .oxlintrc.json). Prettier defaults apart from the
 # width; `bun run format` writes, `bun run lint:js` checks.
 printWidth = 100
 sortImports = true
-# Same scope Biome formatted: JS, TS and JSON. Stylelint owns CSS, Markdown is
+# JS, TS and JSON only. Stylelint owns CSS, Markdown is
 # prose, and these folders are generated, vendored or another tool's.
 ignorePatterns = [
   "**/*.css",

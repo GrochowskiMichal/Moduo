@@ -118,15 +118,14 @@ export function useTimelineViewport({
   }, [viewport]);
 
   // Open (a new scope, or once the tasks are in) with today a quarter across.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new scope or the first load is the cue
   useLayoutEffect(() => {
     const next = initialRange(today, extent);
     pending.current = { kind: "today", range: next };
     setRange(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new scope or the first load is the cue
   }, [scopeKey, loaded]);
 
   // Apply what was asked once the range, zoom and size are drawn.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after each geometry change
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     const ask = pending.current;
@@ -138,6 +137,7 @@ export function useTimelineViewport({
     else if (ask.kind === "day") el.scrollLeft = Math.max(0, (ask.day - range.start) * dw - ask.at);
     else el.scrollLeft += ask.days * dw;
     syncWindow();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs after each geometry change
   }, [range, dw, trackWidth]);
 
   const onScroll = useRef(0);

@@ -657,7 +657,7 @@ export function TaskBoardView({
   const selectedColumnId = selectedTaskId
     ? (cellOfTask.get(selectedTaskId)?.column.id ?? null)
     : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection or column asks again.
+  // A new selection or column asks again.
   useEffect(() => {
     if (!selectedTaskId || typeof window === "undefined") return;
     const frame = window.requestAnimationFrame(() => {

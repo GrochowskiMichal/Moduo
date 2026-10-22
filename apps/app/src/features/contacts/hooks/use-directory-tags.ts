@@ -19,7 +19,7 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
   const reload = useCallback(() => setTick((t) => t + 1), []);
   const view = useTagView(workspaceId);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the reload cue.
+  // `tick` is the reload cue.
   useEffect(() => {
     if (!runtime || !workspaceId) {
       setTruncated([]);
