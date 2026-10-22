@@ -18,3 +18,12 @@ export function selectSubpages(notes: readonly Note[], noteId: string): Note[] {
     .filter((n) => n.parentId === noteId && !n.deletedAt && !n.isArchived)
     .sort(byPosition);
 }
+
+/** A hand-made page row is redundant once the page lists its sub-pages: it
+ * points at a child of `ownerId` that the list already shows, or one in the
+ * Trash (restoring it brings it back to the list). Rows to anything else (a
+ * note moved elsewhere, an archived child, one the viewer can't see) stay as
+ * content. */
+export function isRedundantPageRow(target: Note | null, ownerId: string): boolean {
+  return target?.parentId === ownerId && !target.isArchived;
+}

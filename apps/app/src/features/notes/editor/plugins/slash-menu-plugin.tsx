@@ -465,6 +465,13 @@ export function SlashMenuPlugin({
         closeAll();
         return;
       }
+      // The page lists its sub-pages under the body (MOD-81): open the new
+      // child, like the sidebar's "+", instead of mirroring it as a row.
+      if (bridge?.subpagesListedFor) {
+        closeAll();
+        bridge.openNote(childId);
+        return;
+      }
       const label = displayTitle(bridge?.getNoteMeta(childId)?.title ?? "");
       editor.update(() => {
         $insertNodes([$createPageRowNode(childId, label), $createParagraphNode()]);

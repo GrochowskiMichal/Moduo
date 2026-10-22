@@ -123,6 +123,7 @@ function NotesShellBody() {
           ? createLinkedNote({ engine, materializeDraft: module.materializeDraft, title })
           : null,
       openComments: () => shell.showPanelVariant("comments"),
+      subpagesListedFor: liveNote?.id,
     }),
     [
       notes,
