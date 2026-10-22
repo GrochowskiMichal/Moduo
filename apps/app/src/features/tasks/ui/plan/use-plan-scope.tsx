@@ -24,6 +24,7 @@ import { defaultRowsFor, timelineRoleFor } from "../../onboarding";
 import { sidebarProjects } from "../../sidebar";
 import {
   useSavedViewOps,
+  useStatusCategoryOf,
   useTaskCommands,
   useTasksReader,
   useTasksSelector,
@@ -195,6 +196,8 @@ export function usePlanScope(c: PlanSelectionCtx) {
           : null,
     [openView, drafting, newViewSeq, viewRows],
   );
+  // A Status filter's project statuses by category (MOD-240).
+  const statusCategoryOf = useStatusCategoryOf();
   const tasksDisplay = useTasksDisplay(
     workspaceId,
     displayScope,
@@ -207,6 +210,7 @@ export function usePlanScope(c: PlanSelectionCtx) {
     // …and the Timeline on the role's Due per week (TV-TL1).
     timelineRoleFor(onboardingRole),
     savedView,
+    statusCategoryOf,
   );
   const isHiddenByDisplay = tasksDisplay.isHidden;
   const view: PlanView = tasksDisplay.display.layout;
@@ -216,10 +220,10 @@ export function usePlanScope(c: PlanSelectionCtx) {
   );
   // Won't do tasks join a scope when Filter → Status asks for them (TV-U2,
   // AC1.4), besides the one kept above.
-  const withArchived = showsArchived(tasksDisplay.filters);
+  const withArchived = showsArchived(tasksDisplay.filters, statusCategoryOf);
   const statusFilter = useMemo(
-    () => statusesLetThrough(tasksDisplay.filters),
-    [tasksDisplay.filters],
+    () => statusesLetThrough(tasksDisplay.filters, statusCategoryOf),
+    [tasksDisplay.filters, statusCategoryOf],
   );
 
   // The views built on the List (TV-U15): Upcoming's days, the Inbox's
