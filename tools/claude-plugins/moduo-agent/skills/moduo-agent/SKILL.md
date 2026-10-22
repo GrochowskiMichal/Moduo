@@ -1,6 +1,6 @@
 ---
 name: moduo-agent
-description: Track your build work in Moduo through the moduo connector — pick up a block's task in the "Moduo" project, post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
+description: Track your build work in Moduo through the moduo connector — pick up a block's task in its milestone project (Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
 ---
 
 # moduo-agent: your build work, mirrored in Moduo
@@ -34,13 +34,13 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 
 - Forward only. A review that sends the block back to work moves it to **Building** again; say so in the note.
 - **Blocked is not a stage:** use the task's blocked flag, `waiting_on` and `tasks_handoff`.
-- The stage names live in the **Moduo** project. Check `statuses_list {project_id}` once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
+- The stage names live in every milestone project (they carry the same seven statuses). Check `statuses_list {project_id}` of the task's own project once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
 - Set **Shipped** yourself only for work that never ships; code waits for `/ship`. Never move a task you don't hold.
 
 ## Pick up (from /s2 Claim, after the draft PR exists)
-1. **Find the Moduo project:** `projects_list`, the active project named `Moduo` (all product work lives there, in one section per module). None → Moduo off ("no Moduo project").
-2. **Find the block's task:** `tasks_list {project_id}` (open tasks, short rows); take the one whose title starts with the block ID followed by a space or " — " (e.g. `TV-D16 — Agent sessions`). Not there → `tasks_search {q: "<ID>"}`, keep only Moduo-project rows with that title prefix (a closed one counts: reopen it below).
-3. **None yet → create it:** `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "Building", tags: ["block"]}` and put it in the section of its module (`sections_list`: Tasks, Notes, Meet, Platform & performance …; none fits → leave it out), and add a 🔎 Found line "Created <handle> for <ID> in Moduo". Blocks enter the ledger in `/s1`; block tasks carry the `block` tag and mirror `specs/BUILD_ORDER.md`, which stays the source of truth.
+1. **Know the board:** `projects_list`. Work is organised by milestone, not by module: the active projects **Closed alpha**, **Open alpha** and **Beta & later** hold the block tasks (each project's sections are themes such as Security & privacy, Platform & sync, Release & infra, Notes, Tasks, Calendar & scheduling, Email & notifications, Contacts, Chat, Home, Launch ops, Integrations & MCP, Meet, Quality & polish). The project named `Moduo` holds undated bugs and ideas. None of the three milestone projects → Moduo off ("no milestone projects").
+2. **Find the block's task by its ID in the title, in any project:** `tasks_search {q: "<ID>"}` (no project filter), keep the live rows whose title starts with the block ID followed by " — " (e.g. `TV-D16 — Agent sessions`), or has it in brackets at the end (`… (TV-D16)`); ignore archived projects. A closed one counts: reopen it below. A found task stays in its own project; never move it between milestones unless the person says so.
+3. **None yet → create it:** pick the project from the block's spec and `specs/BUILD_ORDER.md`: gates the closed alpha (2 Nov) → **Closed alpha**; needed for public sign-up (16 Nov) → **Open alpha**; anything else, or when unsure → **Beta & later** (never guess a milestone sooner than the spec says). `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "Building", tags: ["block"]}` in the section for the block's theme (`sections_list {project_id}`; none fits → leave it out), and add a 🔎 Found line "Created <handle> for <ID> in <project>". Blocks enter the ledger in `/s1`; block tasks carry the `block` tag and mirror `specs/BUILD_ORDER.md`, which stays the source of truth for the block's spec. A block task is an epic: its subtasks are the small todos, so tick the ones you finish (`tasks_set_status {task_id: "<subtask handle>", status: "done"}`) and add new ones with `parent_id` only for real remaining steps. Add no other tags.
 4. **Take it:**
    - unassigned and routed to a team → `tasks_claim {task_id}`;
    - unassigned, or already yours → `tasks_assign {task_id, assignee_id: "me"}` (skip if already yours);
