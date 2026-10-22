@@ -58,6 +58,7 @@ export function writeFromPlan(plan: ListDropPlan): TaskDropWrite {
   if (plan.bucketId !== undefined) write.bucketId = plan.bucketId;
   if (plan.position !== undefined) write.position = plan.position;
   if (plan.fields?.status !== undefined) write.status = plan.fields.status;
+  if (plan.fields?.statusId !== undefined) write.statusId = plan.fields.statusId;
   if (plan.fields?.priority !== undefined) write.priority = plan.fields.priority;
   if (plan.fields?.assigneeId !== undefined) write.assigneeId = plan.fields.assigneeId;
   if (plan.fields?.sectionId !== undefined) write.sectionId = plan.fields.sectionId;
@@ -118,7 +119,15 @@ export type DropNames = {
   sectionName?: (id: string | null) => string;
   /** A team's name; null: "No team". */
   teamName?: (id: string | null) => string;
+  /** A project status's name (a drop that sets one, MOD-241). */
+  statusName?: (id: string) => string | undefined;
 };
+
+/** Where a status drop moved a task to: its own status's name, else its key's. */
+export function droppedStatusName(write: TaskDropWrite, names: DropNames): string {
+  const own = write.statusId ? names.statusName?.(write.statusId) : undefined;
+  return own ?? (write.status ? STATUS_KEY_LABELS[write.status] : "");
+}
 
 /**
  * What the Undo toast says: the most telling change, in the one grammar
@@ -133,7 +142,7 @@ export function dropLabel(
   // Under a parent says where, its project included (a subtask lives there).
   if (write.parentId) return `Moved under “${names.taskTitle(write.parentId)}”`;
   if (write.bucketId !== undefined) return `Moved to ${names.bucketName(write.bucketId)}`;
-  if (write.status !== undefined) return `Moved to ${STATUS_KEY_LABELS[write.status]}`;
+  if (write.status !== undefined) return `Moved to ${droppedStatusName(write, names)}`;
   if (write.assigneeId !== undefined) {
     return write.assigneeId ? `Assigned to ${names.assigneeName(write.assigneeId)}` : "Unassigned";
   }

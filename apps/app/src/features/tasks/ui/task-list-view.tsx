@@ -89,7 +89,7 @@ import {
   updatedLabel,
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
-import { statusNameOf } from "../statuses";
+import { statusGroupOf, statusNameOf } from "../statuses";
 import {
   useStatusesForBucket,
   useTaskCommands,
@@ -267,6 +267,7 @@ type Props = {
 
 const NO_IDS: ReadonlySet<string> = new Set();
 const NO_SECTIONS: readonly Section[] = [];
+const NO_STATUSES: readonly ProjectStatus[] = [];
 const NO_TEAMS: readonly Team[] = [];
 const NO_STATUS_NAMES: ReadonlyMap<string, ProjectStatus> = new Map<string, ProjectStatus>();
 const NO_EXTRA_GROUPS: readonly ListExtraGroup[] = [];
@@ -442,6 +443,14 @@ export function TaskListView({
       isProjectScope(selection) ? sections.filter((s) => s.projectId === selection) : NO_SECTIONS,
     [sections, selection],
   );
+  // Status grouping inside one project (or the Inbox) is by its own
+  // statuses (MOD-241); across projects, by status key.
+  const groupStatuses = useMemo(() => {
+    const id = selection === "inbox" ? (inbox?.id ?? null) : selection;
+    return id && (selection === "inbox" || isProjectScope(selection))
+      ? statusesForBucket(id)
+      : NO_STATUSES;
+  }, [selection, inbox?.id, statusesForBucket]);
   // A project with no sections yet, grouped by section, is the plain list:
   // ungrouped for every rule below (headers, drops, keys), so a drop never
   // writes a section that doesn't exist. Its "+ Add section" line stays.
@@ -520,6 +529,7 @@ export function TaskListView({
           now,
           sections: projectSections,
           teams,
+          statuses: groupStatuses,
         });
     if (selection === "today") {
       return all.map((g) => ({ ...g, all: g.tasks, backlog: [], doneCount: 0 }));
@@ -615,10 +625,10 @@ export function TaskListView({
   // or open is remembered per person, view and grouping on this device.
   const defaultCollapsed = useCallback(
     (key: string) =>
-      (groupBy === "status" && key === "backlog") ||
+      (groupBy === "status" && statusGroupOf(key, groupStatuses)?.category === "backlog") ||
       (extraGroups.find((g) => g.key === key)?.folded ?? false) ||
       (defaultFolded?.(key) ?? false),
-    [groupBy, extraGroups, defaultFolded],
+    [groupBy, extraGroups, defaultFolded, groupStatuses],
   );
   const [choices, setChoices] = useState(() => ({
     key: collapseKey,
@@ -1123,8 +1133,9 @@ export function TaskListView({
       taskTitle: (id) => taskById.get(id)?.title || "Untitled",
       sectionName: (id) => (id ? (sectionNames.get(id) ?? "a section") : "No section"),
       teamName: (id) => (id ? (teams.find((t) => t.id === id)?.name ?? "a team") : "No team"),
+      statusName: (id) => statusById.get(id)?.name,
     }),
-    [bucketNameById, assignees, taskById, sectionNames, teams],
+    [bucketNameById, assignees, taskById, sectionNames, teams, statusById],
   );
   const drop = useCallback(
     (write: TaskDropWrite, before: Task, label?: string) => {
@@ -1529,7 +1540,7 @@ export function TaskListView({
         activeNested: rowIndex.get(dragTask.id)?.depth === 1,
         activeGroupKey: grouping
           ? grouping.keyOf(dragTask, now)
-          : groupKeyFor(dragTask, groupBy, now),
+          : groupKeyFor(dragTask, groupBy, now, groupStatuses),
         hasChildren,
         pointer: { x, y },
         over,
@@ -1662,10 +1673,11 @@ export function TaskListView({
       const plan = planListDrop({
         hover: final,
         active,
-        activeGroupKey: groupKeyFor(active, groupBy, nowOn(today)),
+        activeGroupKey: groupKeyFor(active, groupBy, nowOn(today), groupStatuses),
         groupBy,
         allByPosition: allTasks,
         groupTasks: (key) => groups.find((g) => g.key === key)?.all ?? [],
+        statuses: groupStatuses,
       });
       if (plan) applyPlan(plan, active);
     },
@@ -1829,8 +1841,9 @@ export function TaskListView({
       bucketColor: (id: string) => buckets.find((b) => b.id === id)?.color ?? null,
       assignee: (id: string) => byId(id),
       team: (id: string) => teams.find((t) => t.id === id) ?? null,
+      statusCategory: (key: string) => statusGroupOf(key, groupStatuses)?.category ?? null,
     }),
-    [buckets, byId, teams],
+    [buckets, byId, teams, groupStatuses],
   );
   const sectionById = useMemo(
     () => new Map(projectSections.map((s) => [s.id, s])),
@@ -1916,6 +1929,7 @@ export function TaskListView({
             canEdit,
             today,
             inboxId,
+            statuses: groupStatuses,
           })}
           onAdd={onRequestCapture}
           section={

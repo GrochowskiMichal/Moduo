@@ -204,6 +204,33 @@ export function statusChoiceGroups(
     .filter((g) => g.statuses.length > 0);
 }
 
+/**
+ * A task's status group in one project's set (MOD-241): its own status, else
+ * its category's first (a status not read yet, as the Board places it); its
+ * status key when the set lacks the category (never lost).
+ */
+export function statusGroupKey(
+  task: Pick<Task, "status" | "statusId" | "statusCategory">,
+  set: readonly ProjectStatus[],
+): string {
+  if (task.statusId && set.some((s) => s.id === task.statusId)) return task.statusId;
+  return firstStatusOf(set, taskCategoryOf(task))?.id ?? statusKeyOf(task);
+}
+
+/**
+ * What a status group key stands for: its status key and category, and the
+ * project status it names (null for a key that is a category). Null for an
+ * id the set doesn't hold (a status deleted meanwhile).
+ */
+export function statusGroupOf(
+  key: string,
+  set: readonly ProjectStatus[],
+): { key: StatusKey; category: TaskStatusCategory; status: ProjectStatus | null } | null {
+  if (isStatusKey(key)) return { key, category: statusKeyCategory(key), status: null };
+  const status = set.find((s) => s.id === key);
+  return status ? { key: categoryKey(status.category), category: status.category, status } : null;
+}
+
 /** Replace one set (a project's, or the default when `projectId` is null)
  *  inside the bundle's statuses with what an op answered. */
 export function replaceStatusSet(
