@@ -35,3 +35,8 @@ ignorePatterns = [
   "**/storybook-static/",
   "apps/app/src/types/supabase.ts",
 ]
+
+# Wrangler and tests read some .jsonc files with JSON.parse: no trailing commas.
+[[fmt.overrides]]
+files = ["*.jsonc"]
+options = { trailingComma = "none" }

@@ -14,5 +14,5 @@
   "routes": [{ "pattern": "updates.moduo.app", "custom_domain": true }],
   "r2_buckets": [{ "binding": "RELEASES", "bucket_name": "moduo-releases" }],
   "kv_namespaces": [{ "binding": "UPDATE_CONFIG", "id": "KV_NAMESPACE_ID" }],
-  "observability": { "enabled": true },
+  "observability": { "enabled": true }
 }
