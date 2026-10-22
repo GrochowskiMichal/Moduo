@@ -199,6 +199,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-23 · MCPO-2: connector on `@modelcontextprotocol/server` (stateless, per-key tools) + `@supabase/server`; our 401/405/parse answers, `parseToolArgs` gate, refusal and unknown-tool texts kept; only protocol-level answers change (negotiation up to 2025-11-25, method-not-found wording, unknown protocol header and bad initialize refused); parity snapshot proves it → decisions/mcp.md
 - 2026-10-23 · MCPO-1: app tokens refused everywhere but the connector (pre-request, restrictive policies on Storage/Realtime/published tables, Edge Function check); no access-token hook; no passwords set through Supabase Auth (trigger) and Settings' change-password removed → decisions/mcp.md
 - 2026-10-22 · Apps connect by URL and sign-in: Supabase OAuth 2.1 + a `/oauth/consent` screen make a scoped key ("connection"), the connector exchanges the app's token for that key (calls stay service-role + key header, never the person under RLS), app tokens are locked out of everything else; connector moves to the official MCP SDK + `@supabase/server`; server-side code mode not built (clients do it), code-mode readiness instead → decisions/mcp.md, specs/mcp-oauth.md
 

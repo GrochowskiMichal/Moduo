@@ -364,7 +364,7 @@ Read before working in `supabase/`, `src/lib/runtime*`. Index of all areas: [doc
 
 - **`chat__chain_root` reads `chat_can_read_channel` (`auth.uid()`):** any body run for a key's creator needs a person-parameter twin (`chat__chain_root_as`); check every helper an `_as` body calls. (CV-21)
 - **The connector rejects a tool with no arguments schema in `_shared/contracts/mcp-tool-args.ts` ("unknown tool"), and `z.object` strips unknown keys:** a new tool argument must be added there too. (CV-21)
-- **The local edge runtime serves whichever worktree started the stack:** to round-trip this worktree's connector, run a one-off `edge-runtime` container on `supabase_network_moduo` with `--main-service=<functions>/moduo-mcp` (it reads `deno.json` without `--import-map`) and pass `SUPABASE_URL=http://kong:8000` and `SUPABASE_SECRET_KEYS`. (CV-21)
+- **The local edge runtime serves whichever worktree started the stack:** to round-trip this worktree's connector, run a one-off `edge-runtime` container on `supabase_network_moduo` with `--main-service=<functions>/moduo-mcp` (it reads `deno.json` without `--import-map`) and pass `SUPABASE_URL=http://kong:8000`, `SUPABASE_SECRET_KEYS` and (since MCPO-2) `SUPABASE_PUBLISHABLE_KEYS`, without which every call answers 500. Or run it under plain Deno: `DENO_SERVE_ADDRESS=tcp:127.0.0.1:8002 deno run --allow-net --allow-env --allow-read --config deno.json moduo-mcp/index.ts` from `supabase/functions/`, with the same three variables. (CV-21)
 
 ## TanStack DB live queries (TS-3b)
 

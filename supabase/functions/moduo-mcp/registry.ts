@@ -8,7 +8,7 @@
  * = one entry in `connectorModules` + a modules/<name>.ts file.
  */
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   keyScopeAllows,
