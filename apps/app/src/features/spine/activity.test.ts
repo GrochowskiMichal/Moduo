@@ -301,6 +301,24 @@ describe("spineActivityLine", () => {
   });
 });
 
+describe("connected apps (MCPO-3)", () => {
+  it("names the app's access, edit first, in the key card's module order", () => {
+    expect(spineActivityLine(entry("api_keys.connected", { scopes: { tasks: "view" } }))).toBe(
+      "connected to Moduo · View: Tasks",
+    );
+    expect(
+      spineActivityLine(
+        entry("api_keys.connected", {
+          scopes: { links: "view", tasks: "edit", notes: "view", chat: "none" },
+        }),
+      ),
+    ).toBe("connected to Moduo · Edit: Tasks · View: Notes, Links");
+    expect(spineActivityLine(entry("api_keys.connected", { scopes: { tasks: "none" } }))).toBe(
+      "connected to Moduo · no access",
+    );
+  });
+});
+
 describe("storage alerts (AT-1)", () => {
   it("says which level the uploader's file crossed, with the pool's numbers", () => {
     expect(

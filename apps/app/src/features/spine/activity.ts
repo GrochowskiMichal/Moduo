@@ -4,7 +4,12 @@
 // spine mutation logs an attributed `module_activity` row; this is how that row
 // reads. Newest-first in the hub trail and the notification card.
 
-import { normalizeChatMentionReason } from "@contracts/vocabularies";
+import { MCP_KEY_MODULE_LABELS } from "@contracts/mcp-key-scopes";
+import {
+  MCP_KEY_MODULES,
+  normalizeChatMentionReason,
+  normalizeMcpKeyScopes,
+} from "@contracts/vocabularies";
 
 import { isRelationKind, RELATION_KIND_LABELS } from "../../lib/entity-links";
 import { dayShort, time24 } from "../calendar/booking/sentence";
@@ -73,6 +78,18 @@ const gigabytes = (bytes: number): string => {
   const gb = bytes / 1073741824;
   return gb < 10 ? (Math.round(gb * 10) / 10).toString() : Math.round(gb).toString();
 };
+
+/** A key's access in a sentence: "Edit: Tasks · View: Notes, Links", or "no access". */
+function accessPhrase(scopes: unknown): string {
+  const levels = normalizeMcpKeyScopes(scopes);
+  const named = (level: "edit" | "view") =>
+    MCP_KEY_MODULES.filter((m) => levels[m] === level).map((m) => MCP_KEY_MODULE_LABELS[m]);
+  const parts = [
+    ...(named("edit").length > 0 ? [`Edit: ${named("edit").join(", ")}`] : []),
+    ...(named("view").length > 0 ? [`View: ${named("view").join(", ")}`] : []),
+  ];
+  return parts.length > 0 ? parts.join(" · ") : "no access";
+}
 
 /** Phrase a relation kind for an activity line ("works at", "a follow-up"…). */
 function kindPhrase(kind: string | null): string {
@@ -230,6 +247,10 @@ export function spineActivityLine(
       const what = n > 1 ? `${n} of your tasks are` : "your task is";
       return `deleted ${project ? `“${project}”` : "a project"} · ${what} in your Inbox`;
     }
+    // MCPO-3: an app signed in and the person approved it (only they see
+    // this; the actor is the app, "Claude connected to Moduo · View: Tasks").
+    case "api_keys.connected":
+      return `connected to Moduo · ${accessPhrase(p.scopes)}`;
     // ── Storage alerts (AT-1): the owner's pool passed 80% / 95%. The actor is
     // whoever uploaded the file that crossed it.
     case "attachments.storage_80":

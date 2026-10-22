@@ -4,8 +4,12 @@
  * (`@modelcontextprotocol/server`). index.ts mounts it with `@supabase/server`.
  *
  * Auth:   Authorization: Bearer moduo_sk_…  (created in Workspace settings →
- *         API keys; sha256-verified against workspace_api_keys, never stored).
- *         MCPO-3 adds OAuth tokens as a second branch of `authenticate`.
+ *         API keys; sha256-verified against workspace_api_keys, never stored),
+ *         or an app's OAuth access token from Supabase Auth (MCPO-3): verified
+ *         against the project's JWKS, then exchanged for its connection, the
+ *         live workspace_api_keys row for (sub, client_id). From there both are
+ *         the same key. Without either, a 401 points the client at sign-in
+ *         (index.ts adds the protected-resource header).
  * Scope:  the key's per-module none/view/edit ladder decides which tools are
  *         registered (view → read tools, edit → + intent ops), capped by its
  *         creator's own access; a tool that also touches another module needs
@@ -55,6 +59,13 @@ export type ConnectorDeps = {
   admin: SupabaseClient;
   /** A service-role client carrying the x-moduo-key-id actor header. */
   keyClient: (keyId: string) => SupabaseClient;
+  /**
+   * Verifies a Supabase access token (signature against the project's JWKS,
+   * expiry) and answers its claims, or null. Absent: OAuth tokens are refused.
+   */
+  verifyToken?: (token: string) => Promise<Record<string, unknown> | null>;
+  /** Where the protected-resource document is, for the invalid_token challenge. */
+  resourceMetadataUrl?: string;
 };
 
 type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: true };
@@ -71,6 +82,18 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+type KeyRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  created_by: string | null;
+  revoked_at: string | null;
+  expires_at: string | null;
+  last_used_at: string | null;
+};
+
+const KEY_COLUMNS = "id, workspace_id, name, scopes, created_by, revoked_at, expires_at, last_used_at";
+
 /** Verify the bearer secret against workspace_api_keys; null = unauthorized. */
 export async function authenticate(req: Request, admin: SupabaseClient): Promise<KeyContext | null> {
   const header = req.headers.get("authorization") ?? "";
@@ -78,10 +101,58 @@ export async function authenticate(req: Request, admin: SupabaseClient): Promise
   if (!match) return null;
   const { data, error } = await admin
     .from("workspace_api_keys")
-    .select("id, workspace_id, name, scopes, created_by, revoked_at, expires_at, last_used_at")
+    .select(KEY_COLUMNS)
     .eq("key_hash", await sha256Hex(match[1]))
     .maybeSingle();
-  if (error || !data || data.revoked_at) return null;
+  if (error || !data) return null;
+  return await liveKey(data as KeyRow, admin);
+}
+
+/** The app token in the Authorization header, when it isn't a pasted key. */
+export function appToken(req: Request): string | null {
+  const match = (req.headers.get("authorization") ?? "").match(/^Bearer\s+(\S+)$/i);
+  if (!match || /^moduo_sk_/i.test(match[1])) return null;
+  return match[1];
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * MCPO-3: an app's OAuth access token → its connection's key; null = refused.
+ * The token must be a person's (role authenticated) and issued to an app
+ * (`client_id`): a person's own session token is not a connection. The live
+ * row for (person, app) then gets exactly a key's checks, and the person must
+ * still be a member of the connection's workspace (else the app signs in
+ * again and picks one).
+ */
+export async function authenticateApp(token: string, deps: ConnectorDeps): Promise<KeyContext | null> {
+  if (!deps.verifyToken) return null;
+  const claims = await deps.verifyToken(token);
+  if (!claims) return null;
+  const { sub, client_id: clientId, role } = claims;
+  if (role !== "authenticated" || typeof sub !== "string" || !UUID.test(sub)) return null;
+  if (typeof clientId !== "string" || !UUID.test(clientId)) return null;
+  const { data, error } = await deps.admin
+    .from("workspace_api_keys")
+    .select(KEY_COLUMNS)
+    .eq("created_by", sub)
+    .eq("oauth_client_id", clientId)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (error || !data) return null;
+  const member = await deps.admin
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", (data as KeyRow).workspace_id)
+    .eq("user_id", sub)
+    .maybeSingle();
+  if (member.error || !member.data) return null;
+  return await liveKey(data as KeyRow, deps.admin);
+}
+
+/** A found key row, if it may still be used: its context, or null. */
+async function liveKey(data: KeyRow, admin: SupabaseClient): Promise<KeyContext | null> {
+  if (data.revoked_at) return null;
   // API-KEY-EXP-1: an expired key is refused like a revoked one (a 401).
   if (apiKeyExpired(data.expires_at)) return null;
   // PERM-0: a key acts as its creator. A key with no recorded creator can't be
@@ -202,7 +273,22 @@ export async function handleMcpRequest(req: Request, deps: ConnectorDeps): Promi
     return json({ error: "moduo-mcp speaks MCP Streamable HTTP: POST JSON-RPC messages." }, { status: 405 });
   }
 
-  const key = await authenticate(req, deps.admin);
+  const token = appToken(req);
+  const key = token ? await authenticateApp(token, deps) : await authenticate(req, deps.admin);
+  if (!key && token) {
+    // RFC 6750: the app's token is no good (disconnected, expired, never
+    // connected): the client signs in again, which shows the consent screen.
+    const description = "This connection to Moduo was disconnected, has expired or doesn't exist. Sign in again.";
+    const challenge = [
+      'Bearer error="invalid_token"',
+      `error_description="${description}"`,
+      ...(deps.resourceMetadataUrl ? [`resource_metadata="${deps.resourceMetadataUrl}"`] : []),
+    ].join(", ");
+    return json(
+      { error: "invalid_token", error_description: description },
+      { status: 401, headers: { "WWW-Authenticate": challenge } },
+    );
+  }
   if (!key) {
     return json(
       {
