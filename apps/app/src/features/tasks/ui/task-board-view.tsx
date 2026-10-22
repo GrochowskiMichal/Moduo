@@ -52,13 +52,13 @@ import {
   targetName,
 } from "../dnd/board-drop";
 import { manyLabel, multiDropWrites } from "../dnd/multi-drop";
+import type { StatusFilter } from "../filters";
 import { isUnfinished, nestedSubtaskIds, showBucketPill } from "../helpers";
 import type { GroupAdd } from "../list-group-add";
 import type { Bucket, Task } from "../model";
 import { BACK_TO_MANUAL_ORDER, dragOrderFor, sortedByLabel } from "../order";
 import { DEFAULT_ROW_PROPERTIES, type RowPreset } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
-import type { StatusKey } from "../statuses";
 import {
   useStatusesForBucket,
   useTaskCommands,
@@ -142,7 +142,7 @@ type Props = {
   filterActive?: boolean;
   onClearFilters?: () => void;
   /** The statuses Filter → Status lets through (null: no Status filter). */
-  statusFilter?: ReadonlySet<StatusKey> | null;
+  statusFilter?: StatusFilter | null;
   /**
    * "+ Add status" at the end of one project's board grouped by status
    * (REPLAN 53a), and a status's ⋯ "Edit statuses…": the project's

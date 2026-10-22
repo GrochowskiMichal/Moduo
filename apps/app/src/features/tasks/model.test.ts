@@ -148,11 +148,14 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
     const ctx = {} as TaskFilterContext;
     expect(taskFilterValues(parked, "status", ctx)).toEqual(["backlog"]);
     expect(taskFilterValues(open, "status", ctx)).toEqual(["todo"]);
+    const through = statusesLetThrough([
+      { dimension: "status", operator: "any_of", values: ["backlog", "todo"] },
+    ]);
     expect(
-      statusesLetThrough([
-        { dimension: "status", operator: "any_of", values: ["backlog", "todo"] },
-      ]),
-    ).toEqual(new Set(["backlog", "todo"]));
+      (["backlog", "todo", "in_progress", "done", "archived"] as const).filter((k) =>
+        through?.has(k),
+      ),
+    ).toEqual(["backlog", "todo"]);
   });
 
   it("a drop out of Backlog and its Undo go back to Backlog, not To do", () => {

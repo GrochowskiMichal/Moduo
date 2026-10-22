@@ -26,6 +26,30 @@ export function statusKeyOf(task: Pick<Task, "status" | "statusCategory">): Stat
   return isBacklogTask(task) ? "backlog" : legacyTaskStatus(taskCategoryOf(task));
 }
 
+/** A category's status key (Backlog its own; Won't do is "archived"). */
+export function categoryKey(category: TaskStatusCategory): StatusKey {
+  return category === "backlog" ? "backlog" : legacyTaskStatus(category);
+}
+
+const STATUS_KEYS: ReadonlySet<string> = new Set<StatusKey>([
+  "backlog",
+  "todo",
+  "in_progress",
+  "done",
+  "archived",
+]);
+
+/**
+ * A status's category by id (a Filter → Status value naming one project's
+ * own status, MOD-240); undefined for one not loaded or deleted.
+ */
+export type StatusCategoryOf = (statusId: string) => TaskStatusCategory | undefined;
+
+/** Whether a stored value is a status key (else it names one project status by id). */
+export function isStatusKey(value: string): value is StatusKey {
+  return STATUS_KEYS.has(value);
+}
+
 /** The category a status key stands for (archived → Won't do). */
 export function statusKeyCategory(key: StatusKey): TaskStatusCategory {
   return normalizeTaskStatusCategory(key);
@@ -161,6 +185,23 @@ export function statusesByCategory(
     category,
     statuses: sorted.filter((s) => s.category === category),
   }));
+}
+
+/**
+ * What a status picker offers from one project's set (REPLAN 53a): its
+ * statuses grouped by category in order, hidden ones only while `keep` holds
+ * them (the task's own, a filter's value), empty categories left out. Empty
+ * when the set can't be read here (a project you can't see, a database before
+ * TV-D9): the picker offers the five categories instead. Details, the row
+ * menu, bulk Set status and Filter → Status all read it.
+ */
+export function statusChoiceGroups(
+  set: readonly ProjectStatus[],
+  keep: (status: ProjectStatus) => boolean = () => false,
+): Array<{ category: TaskStatusCategory; statuses: ProjectStatus[] }> {
+  return statusesByCategory(set)
+    .map((g) => ({ ...g, statuses: g.statuses.filter((s) => !s.hidden || keep(s)) }))
+    .filter((g) => g.statuses.length > 0);
 }
 
 /** Replace one set (a project's, or the default when `projectId` is null)

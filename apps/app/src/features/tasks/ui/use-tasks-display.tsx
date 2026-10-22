@@ -24,6 +24,8 @@ import {
 import { showsDone } from "../filters";
 import type { Task } from "../model";
 import type { RowPreset } from "../row-layout";
+import type { StatusCategoryOf } from "../statuses";
+import { useStatusCategoryOf } from "../tasks-context";
 import { samePrefs } from "../views";
 
 /**
@@ -71,6 +73,8 @@ export function useTasksDisplay(
   timelineRole?: TimelineRoleDefaults,
   /** An open saved view: its own Filter and Display instead of the place's. */
   saved: SavedViewPrefs | null = null,
+  /** A status's category by id: "Status is Shipped" asks for Done (MOD-240). */
+  statusCategoryOf?: StatusCategoryOf,
 ): {
   display: TasksDisplay;
   setDisplay: (next: TasksDisplay) => void;
@@ -138,7 +142,7 @@ export function useTasksDisplay(
     [setPrefs],
   );
   // "Status is Done" shows done tasks whatever Completed says.
-  const completed = showsDone(filters) ? "all" : display.completed;
+  const completed = showsDone(filters, statusCategoryOf) ? "all" : display.completed;
 
   const scopeKey = `${workspaceId}:${scope}`;
   const justCompleted = useJustCompleted(tasks, scopeKey);

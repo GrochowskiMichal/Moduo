@@ -40,7 +40,7 @@ import { LEVEL_OPTIONS, todayStr } from "../helpers";
 import type { PriorityLevel, Task } from "../model";
 import { engineZone } from "../recurrence-engine";
 import { bucketDotColor } from "../sidebar";
-import { CATEGORY_LABELS, statusesByCategory } from "../statuses";
+import { CATEGORY_LABELS, statusChoiceGroups } from "../statuses";
 import {
   useStatusesForBucket,
   useTaskCommands,
@@ -474,20 +474,18 @@ export function useBulkActions({
           title: `Status for ${n}`,
           placeholder: "Status…",
           items: own
-            ? statusesByCategory(set).flatMap(({ category, statuses }) =>
-                statuses
-                  .filter((s) => !s.hidden)
-                  .map((s) => ({
-                    key: s.id,
-                    label: s.name,
-                    // In category order, each with its category's icon (no
-                    // small-caps headings: these are the project's own words).
-                    icon: <StatusIcon category={category} />,
-                    onPick: () => {
-                      close();
-                      apply({ kind: "status", target: { statusId: s.id } });
-                    },
-                  })),
+            ? statusChoiceGroups(set).flatMap(({ category, statuses }) =>
+                statuses.map((s) => ({
+                  key: s.id,
+                  label: s.name,
+                  // In category order, each with its category's icon (no
+                  // small-caps headings: these are the project's own words).
+                  icon: <StatusIcon category={category} />,
+                  onPick: () => {
+                    close();
+                    apply({ kind: "status", target: { statusId: s.id } });
+                  },
+                })),
               )
             : TASK_STATUS_CATEGORIES.map((category) => ({
                 key: category,

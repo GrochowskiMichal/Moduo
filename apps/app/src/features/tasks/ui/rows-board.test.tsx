@@ -34,6 +34,7 @@ import { resetTagStore } from "../../tags/store";
 import { useJustCompleted } from "../completed";
 import { makeTask } from "../helpers";
 import type { Section, Tag, Task } from "../model";
+import type { StatusKey } from "../statuses";
 import { type FakeTasksSeed, queueEntry, relation, tagLink } from "../testing/fake-tasks";
 import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskBoardView } from "./task-board-view";
@@ -832,13 +833,13 @@ describe("Board (U1-4)", () => {
 
   it("Filter → Status shows only the groups it lets through: Won't do on its own", async () => {
     await renderBoard([task("w", { status: "archived" })], {
-      statusFilter: new Set(["archived"]),
+      statusFilter: new Set<StatusKey>(["archived"]),
       selectedTaskId: "w",
     });
     expect(headers()).toEqual(["Won’t do"]);
     expect(card("Task w")).toBeTruthy();
     cleanup();
-    await renderBoard([task("a")], { statusFilter: new Set(["todo", "in_progress"]) });
+    await renderBoard([task("a")], { statusFilter: new Set<StatusKey>(["todo", "in_progress"]) });
     expect(headers()).toEqual(["To do", "In progress"]);
     cleanup();
     await renderBoard([task("a")]);
