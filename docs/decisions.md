@@ -145,6 +145,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-22 · Bun 1.4.4: `bun check` replaces `tsc --noEmit`, `bun fmt` replaces Biome's formatter (Biome only lints), installs wait 3 days for new versions.
 - 2026-10-20 · Shortcuts are one typed registry on TanStack Hotkeys (`lib/hotkeys/`): route/surface/panel/modal scopes, narrower scope wins, no capture-phase overrides; duplicate-binding test.
 - 2026-10-20 · TanStack DB/Pacer/Devtools pinned (Devtools dev-only), Virtual 3.19, first-load budget in `apps/app/bundle-budget.json`, `tanstack` import boundary.
 - 2026-10-20 · First load is the anchor pages only: other routes, Lexical, capture parser, date picker and picker fonts are lazy (1,431 → 986 KB gzip JS).
