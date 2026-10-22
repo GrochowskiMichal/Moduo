@@ -60,13 +60,14 @@ BEGIN
     'public.tasks__can_hold_session(uuid, uuid, uuid)',
     'public.tasks__busy_sessions(uuid, uuid, timestamptz, timestamptz)',
     'public.tasks__fire_reminders(timestamptz, integer)', 'public.tasks__session_legacy()',
-    'public.buckets__area_sync()', 'public.buckets__project_check()'] LOOP
+    'public.buckets__area_sync()', 'public.buckets__project_check()',
+    'public.tasks__editable(uuid)'] LOOP  -- no policy calls it (DB-SEC-1)
     PERFORM test.ok(NOT has_function_privilege('anon', v_fn, 'EXECUTE')
                 AND NOT has_function_privilege('authenticated', v_fn, 'EXECUTE')
                 AND has_function_privilege('service_role', v_fn, 'EXECUTE'),
       format('grants: %s is the server''s only', v_fn));
   END LOOP;
-  FOREACH v_fn IN ARRAY ARRAY['public.tasks__visible(uuid)', 'public.tasks__editable(uuid)'] LOOP
+  FOREACH v_fn IN ARRAY ARRAY['public.tasks__visible(uuid)'] LOOP
     PERFORM test.ok(NOT has_function_privilege('anon', v_fn, 'EXECUTE')
                 AND has_function_privilege('authenticated', v_fn, 'EXECUTE'),
       format('grants: the policies'' %s (answers only for the caller)', v_fn));
