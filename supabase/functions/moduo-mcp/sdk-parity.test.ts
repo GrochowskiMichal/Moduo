@@ -212,6 +212,8 @@ async function send(
     }),
   );
   const text = await res.text();
+  // Let work a tool left running after its answer land in this case, not the next.
+  for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
   let parsed: unknown = text;
   try {
     parsed = text ? JSON.parse(text) : null;
@@ -279,10 +281,24 @@ const SNAPSHOT_PATH = new URL("./sdk-parity.snapshot.json", import.meta.url);
 const CAPTURE = process.env.MODUO_PARITY_CAPTURE === "1";
 
 /**
- * Protocol answers the SDK gives differently on purpose (case → why). Tool
- * answers never appear here.
+ * Protocol answers the SDK gives differently on purpose: why, and what it
+ * answers now (checked below). Tool answers never appear here.
  */
-const SDK_DIFFERENCES: Record<string, string> = {};
+const SDK_DIFFERENCES: Record<string, { why: string; now: (e: Exchange) => void }> = {
+  "initialize 2025-11-25": {
+    why: "The SDK speaks protocol 2025-11-25 too (specs/mcp-oauth.md #8); the old server fell back to 2025-03-26.",
+    now: (e) => expect((e.body as any).result.protocolVersion).toBe("2025-11-25"),
+  },
+  "initialize unknown version": {
+    why: "An unknown version is answered with the SDK's latest (2025-11-25), as the spec says, not 2025-03-26.",
+    now: (e) => expect((e.body as any).result.protocolVersion).toBe("2025-11-25"),
+  },
+  "unknown method": {
+    why: "The SDK words method-not-found without the method's name; same code (-32601).",
+    now: (e) =>
+      expect(e.body).toEqual({ jsonrpc: "2.0", id: 1, error: { code: -32601, message: "Method not found" } }),
+  },
+};
 
 async function collect(): Promise<Record<string, Exchange>> {
   const out: Record<string, Exchange> = {};
@@ -292,6 +308,12 @@ async function collect(): Promise<Record<string, Exchange>> {
   );
   out["initialize 2025-03-26"] = await send(
     rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "parity", version: "1" } }),
+  );
+  out["initialize 2025-11-25"] = await send(
+    rpc("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "parity", version: "1" } }),
+  );
+  out["initialize unknown version"] = await send(
+    rpc("initialize", { protocolVersion: "2099-01-01", capabilities: {}, clientInfo: { name: "parity", version: "1" } }),
   );
   out["initialize view key"] = await send(
     rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "parity", version: "1" } }),
@@ -312,6 +334,15 @@ async function collect(): Promise<Record<string, Exchange>> {
   out["invalid request"] = await send({ jsonrpc: "1.0", id: 7, method: "ping" });
   out["unknown tool"] = await send(rpc("tools/call", { name: "tasks_teleport", arguments: {} }));
   out["arguments not an object"] = await send(rpc("tools/call", { name: "tasks_list", arguments: "all" }));
+  out["arguments null"] = await send(rpc("tools/call", { name: "tasks_list", arguments: null }));
+  out["arguments a list"] = await send(rpc("tools/call", { name: "tasks_get", arguments: ["MOD-1"] }));
+  out["arguments missing"] = await send(rpc("tools/call", { name: "tasks_list" }));
+  out["tool name missing"] = await send(rpc("tools/call", {}));
+  out["unknown method"] = await send(rpc("resources/list"));
+  out["string id"] = await send(rpc("ping", undefined, "abc"));
+  out["plain client headers"] = await send(rpc("tools/list"), {
+    headers: { accept: "*/*", "content-type": "text/plain" },
+  });
   // Tool lists per key shape.
   for (const shape of Object.keys(KEY_SHAPES)) {
     out[`tools/list ${shape}`] = await send(rpc("tools/list"), { key: keyIds[shape] });
@@ -335,6 +366,15 @@ async function collect(): Promise<Record<string, Exchange>> {
   return out;
 }
 
+/** JSON with object keys sorted: member order carries no meaning on the wire. */
+function canonical(value: unknown): string {
+  return JSON.stringify(value, (_k, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+}
+
 describe("moduo-mcp through the SDK", () => {
   it("same answers through the SDK", async () => {
     const now = await collect();
@@ -344,11 +384,20 @@ describe("moduo-mcp through the SDK", () => {
       writeFileSync(SNAPSHOT_PATH, `{\n${lines.join(",\n")}\n}\n`);
       return;
     }
+    // MODUO_PARITY_DUMP=<file> writes this run's answers there, to diff by hand.
+    if (process.env.MODUO_PARITY_DUMP) writeFileSync(process.env.MODUO_PARITY_DUMP, JSON.stringify(now, null, 1));
     const before = JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")) as Record<string, Exchange>;
     expect(Object.keys(now).sort()).toEqual(Object.keys(before).sort());
-    for (const [name, exchange] of Object.entries(before)) {
-      if (name in SDK_DIFFERENCES) continue;
-      expect(now[name], name).toEqual(exchange);
+    const differing = Object.keys(before).filter(
+      (name) => !(name in SDK_DIFFERENCES) && canonical(now[name]) !== canonical(before[name]),
+    );
+    // Name every case that moved, then show the first in full.
+    expect(differing).toEqual([]);
+    for (const name of differing) expect(now[name], name).toEqual(before[name]);
+    for (const [name, difference] of Object.entries(SDK_DIFFERENCES)) {
+      difference.now(now[name]);
+      // Everything but the answer itself (status, type, database calls) still matches.
+      expect({ ...now[name], body: null }, name).toEqual({ ...before[name], body: null });
     }
   });
 });

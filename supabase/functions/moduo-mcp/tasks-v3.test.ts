@@ -25,6 +25,7 @@ import {
 import { $isReferenceNode } from "../../../apps/app/src/features/spine/editor/entity-ref-schema";
 import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
+import { callThroughSdk } from "./through-sdk.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -250,14 +251,12 @@ function setup(opts: { rpcs?: Record<string, (args: Row) => unknown>; scopes?: R
   return { ctx, tables, ...fake };
 }
 
-/** A tool call as index.ts makes it: the arguments go through the tool's
- *  parser first, so a field the parser drops never reaches the handler. */
+/** A tool call as a client makes it: through the SDK server, so the arguments
+ *  go through the tool's parser first and a field it drops never reaches the
+ *  handler. */
 function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
-  const t = tasksConnectorModule.tools.find((x) => x.name === name);
-  if (!t) throw new Error(`${name} is not registered`);
-  const parsed = parseToolArgs(name, args);
-  if (!parsed.success) return Promise.reject(new Error(parsed.message));
-  return t.handler(parsed.data, ctx) as Promise<any>;
+  if (!tasksConnectorModule.tools.some((x) => x.name === name)) throw new Error(`${name} is not registered`);
+  return callThroughSdk(name, args, ctx);
 }
 
 describe("handles: every task argument takes MOD-142 or a uuid", () => {
