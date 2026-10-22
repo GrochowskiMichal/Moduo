@@ -98,7 +98,7 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/notes/editor/plugins/slash-menu-plugin.tsx": ["command.group"],
   // Email: date groups ("Today"), page sections, snooze picker headings.
   "src/features/email/ui/email-thread-list.tsx": ["group.label"],
-  "src/features/email/ui/email-page-view.tsx": ["label"],
+  "src/features/email/ui/email-web-view.tsx": ["label"],
   "src/features/email/ui/email-snooze-picker.tsx": ["title"],
   "src/features/transactional-email/ui/email-preview.tsx": ["title"],
   // Shared: a form field's label; the command palette's kind of result; the
