@@ -1,6 +1,6 @@
 ---
 name: moduo-agent
-description: Track your build work in Moduo through the moduo connector — pick up a block's task in the "Build" project, post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
+description: Track your build work in Moduo through the moduo connector — pick up a block's task in the "Moduo" project, post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
 ---
 
 # moduo-agent: your build work, mirrored in Moduo
@@ -34,13 +34,13 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 
 - Forward only. A review that sends the block back to work moves it to **Building** again; say so in the note.
 - **Blocked is not a stage:** use the task's blocked flag, `waiting_on` and `tasks_handoff`.
-- Names apply to the projects that carry them (Moduo App today; Build once it gets the same set). Check `statuses_list {project_id}` once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
+- The stage names live in the **Moduo** project. Check `statuses_list {project_id}` once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
 - Set **Shipped** yourself only for work that never ships; code waits for `/ship`. Never move a task you don't hold.
 
 ## Pick up (from /s2 Claim, after the draft PR exists)
-1. **Find the Build project:** `projects_list`, the active project named `Build`. None → Moduo off ("no Build project").
-2. **Find the block's task:** `tasks_list {project_id}` (open tasks, short rows); take the one whose title starts with the block ID followed by a space or " — " (e.g. `TV-D16 — Agent sessions`). Not there → `tasks_search {q: "<ID>"}`, keep only Build-project rows with that title prefix (a closed one counts: reopen it below).
-3. **None yet → create it:** `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "Building"}`, and add a 🔎 Found line "Created <handle> for <ID> in Build". Blocks enter the ledger in `/s1`; the Build project mirrors `specs/BUILD_ORDER.md`, which stays the source of truth.
+1. **Find the Moduo project:** `projects_list`, the active project named `Moduo` (all product work lives there, in one section per module). None → Moduo off ("no Moduo project").
+2. **Find the block's task:** `tasks_list {project_id}` (open tasks, short rows); take the one whose title starts with the block ID followed by a space or " — " (e.g. `TV-D16 — Agent sessions`). Not there → `tasks_search {q: "<ID>"}`, keep only Moduo-project rows with that title prefix (a closed one counts: reopen it below).
+3. **None yet → create it:** `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "Building", tags: ["block"]}` and put it in the section of its module (`sections_list`: Tasks, Notes, Meet, Platform & performance …; none fits → leave it out), and add a 🔎 Found line "Created <handle> for <ID> in Moduo". Blocks enter the ledger in `/s1`; block tasks carry the `block` tag and mirror `specs/BUILD_ORDER.md`, which stays the source of truth.
 4. **Take it:**
    - unassigned and routed to a team → `tasks_claim {task_id}`;
    - unassigned, or already yours → `tasks_assign {task_id, assignee_id: "me"}` (skip if already yours);
