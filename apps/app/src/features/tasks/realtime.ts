@@ -23,8 +23,10 @@
 
 import { normalizeAccessChangeResource } from "@contracts/vocabularies";
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
 import { supabaseClient } from "@/lib/runtime.web.client";
 import type { AccessChange } from "@/lib/sync/types";
+
 import {
   LIVE_SIDE_TABLES,
   LIVE_TABLES,

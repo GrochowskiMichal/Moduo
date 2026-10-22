@@ -7,6 +7,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getNodeByKey, $isParagraphNode, type NodeKey } from "lexical";
 import { ChevronRight, FileText } from "lucide-react";
 import { useEffect } from "react";
+
 import { isRedundantPageRow } from "../../subpages";
 import { displayTitle } from "../../title";
 import { useNotesEditorBridge } from "../notes-editor-bridge";

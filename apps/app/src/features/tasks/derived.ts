@@ -16,6 +16,7 @@
 // day, a second array) is compared by identity against the last call.
 
 import { isOpenTask } from "@contracts/vocabularies";
+
 import type { StoreSnapshot } from "../../lib/sync/store";
 import { blockedTaskIds, frontierTasks, subtaskProgress, subtasksByParent } from "./helpers";
 import {

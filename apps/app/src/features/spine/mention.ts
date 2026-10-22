@@ -12,6 +12,7 @@
 import type { ComponentType } from "react";
 
 import type { EntityRef, LinkOrigin, RelationKind } from "@/lib/entity-links";
+
 import type { DateCommand, DateCommandId } from "./grammar";
 
 /**

@@ -5,6 +5,7 @@
 // a live wrap-up or a new reply shows without another read.
 
 import { useEffect, useState } from "react";
+
 import type { ChatMessage, ChatRuntime } from "../model";
 
 export function useReplyChains(

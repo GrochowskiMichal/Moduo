@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note } from "./model";
 import { isRedundantPageRow, selectSubpages } from "./subpages";
 

@@ -10,7 +10,9 @@
 import { useParams } from "@tanstack/react-router";
 import { Plus, X } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+
 import { SELECTED_OPTION } from "@/components/ui/selection";
+
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Eyebrow } from "../../components/ui/eyebrow";
@@ -30,10 +32,10 @@ import {
 import { bookingPublicOrigin } from "../../features/calendar/booking/public-origin";
 import {
   clockIn,
-  type DayPart,
   dayLongOfKey,
-  dayShortOfKey,
+  type DayPart,
   daysBetween,
+  dayShortOfKey,
   durationPhrase,
   firstName,
   groupByDay,

@@ -6,6 +6,7 @@ import { parseOrError } from "@contracts/errors";
 import { openMeteoForecastSchema, openMeteoGeocodeSchema } from "@contracts/rows";
 import { MapPin, Pencil } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
 
 import type { WidgetComponentProps } from "../../registry/types";

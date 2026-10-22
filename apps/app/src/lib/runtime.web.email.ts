@@ -7,11 +7,12 @@ import {
   parsedMailboxProvider,
   requireRow,
 } from "@contracts/rows";
+
 import { collectTruncations, READ_CAPS } from "./paged-select";
 import { runRpc, untypedDb } from "./runtime.db";
 import type { EmailAccountRef, EmailRuntime, EmailThreadRef } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
-import { desktopOnly, firstRow, type SelectOpts, selectCapped } from "./runtime.web.shared";
+import { desktopOnly, firstRow, selectCapped, type SelectOpts } from "./runtime.web.shared";
 
 // ── Email module (EM-3) row → model mappers ───────────────────────────────────
 function emailAccountRowToModel(raw: unknown): EmailAccountRef {

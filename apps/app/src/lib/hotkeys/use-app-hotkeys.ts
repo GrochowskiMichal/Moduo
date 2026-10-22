@@ -1,7 +1,7 @@
 import type { HotkeyChord as Hotkey } from "@tanstack/hotkeys";
 import { type UseHotkeyDefinition, useHotkeys } from "@tanstack/react-hotkeys";
 
-import { HOTKEYS, type HotkeyDef, type HotkeyId, keysFor } from "./registry";
+import { type HotkeyDef, type HotkeyId, HOTKEYS, keysFor } from "./registry";
 
 /**
  * A binding's handler. Return `false` when the key isn't yours this time (a

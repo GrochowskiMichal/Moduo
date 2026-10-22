@@ -6,8 +6,10 @@
 
 import { Search, X } from "lucide-react";
 import { useEffect, useState } from "react";
+
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { cn } from "@/lib/utils";
+
 import type { NoteSearchResult } from "../search";
 import { displayTitle } from "../title";
 

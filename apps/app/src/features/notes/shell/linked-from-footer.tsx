@@ -5,7 +5,7 @@
  */
 
 import type { EntityRef } from "../../../lib/entity-links";
-import { type BacklinkGroup, backlinkCount } from "../note-meta";
+import { backlinkCount, type BacklinkGroup } from "../note-meta";
 
 export function LinkedFromFooter({
   groups,

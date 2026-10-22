@@ -59,8 +59,8 @@ import {
 } from "../model";
 import {
   RECURRENCE_PRESETS,
-  type RecurrencePreset,
   recurrenceFromPreset,
+  type RecurrencePreset,
 } from "../parse/recurrence";
 import {
   defaultSpec,
@@ -68,8 +68,8 @@ import {
   type RepeatSpec,
   repeatSummary,
   ruleFromSpec,
-  WEEKDAYS,
   type WeekdayCode,
+  WEEKDAYS,
 } from "../repeat";
 import { cycleLine, historySummary } from "../repeat-history";
 import { useTaskCommands, useTasksSelector } from "../tasks-context";

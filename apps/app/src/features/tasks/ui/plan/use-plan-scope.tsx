@@ -3,6 +3,7 @@
 // and the multi-select's pruning.
 
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+
 import { TeamMark } from "../../../../components/ui/avatar";
 import { undoToast } from "../../../../lib/undo-toast";
 import { useStartConversation } from "../../../chat/start-conversation";

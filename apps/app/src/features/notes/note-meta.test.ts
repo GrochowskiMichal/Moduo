@@ -3,6 +3,7 @@
 // `rollupSections`, so a change to the hub's shape breaks these tests too).
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "../../lib/entity-links";
 import { entityRefKey, rollupSections } from "../spine/rollup";
 import { relativeTimeAgo } from "../spine/snippet-format";

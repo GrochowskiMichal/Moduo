@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+
 import {
   type BottomBarAction,
   type BottomBarMode,
@@ -40,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { useCustomEmoji } from "../emoji/context";

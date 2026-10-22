@@ -2,6 +2,7 @@
 // fields, all reading and writing the one draft (Save sends a single patch).
 
 import { Building2, X } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { MentionCandidate } from "../../spine/mention";
 import { selectOptionsFor } from "../field-defs";
 import type { ContactFieldDef, ContactFieldType } from "../model";

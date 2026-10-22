@@ -2,8 +2,9 @@
 // finish the open subtasks with it (call 87), archive; and the workspace's
 // and projects' status sets.
 
-import { legacyTaskStatus, type TaskStatusCategory, taskCategoryOf } from "@contracts/vocabularies";
+import { legacyTaskStatus, taskCategoryOf, type TaskStatusCategory } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import { undoToast } from "../../../lib/undo-toast";
 import { subtasksToFinish } from "../home";
 import type { ProjectStatus, Task } from "../model";

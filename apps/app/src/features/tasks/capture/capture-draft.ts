@@ -18,6 +18,7 @@
 // phrase in the title.)
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
+
 import type { PriorityLevel, RecurrenceRule } from "../model";
 import type { CaptureToken, TitleSegment } from "../parse/capture-tokens";
 

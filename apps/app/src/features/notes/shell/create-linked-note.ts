@@ -6,6 +6,7 @@
  */
 
 import * as Y from "yjs";
+
 import type { Draft } from "../draft-note";
 import { buildDocStateFromMarkdown } from "../editor/materialize";
 import { titleAsMarkdown } from "../editor/note-link";

@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 
 import { Eyebrow } from "@/components/ui/eyebrow";
+
 import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { ActivityEntry } from "../../tasks/model";
 import { timeAgo } from "../rollup";

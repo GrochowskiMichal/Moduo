@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { useAuth } from "../../../providers/auth-provider";
@@ -26,7 +27,6 @@ import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-sele
 import { keyLifecycle } from "../api-keys";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
-
 import { SettingsSectionShell } from "./section-shell";
 
 /** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */

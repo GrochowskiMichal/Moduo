@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "@rstest/core";
 
 // Chat's read rules live in Postgres (RLS and SECURITY DEFINER ops), so they

@@ -7,6 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useTaskCommands } from "../../tasks/tasks-context";
 import { useNotesTaskBridge } from "../hooks/use-notes-task-bridge";

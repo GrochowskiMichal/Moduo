@@ -8,6 +8,7 @@
  */
 
 import { type ContentAuthorKind, normalizeContentAuthorKind } from "@contracts/vocabularies";
+
 import type { Truncation } from "../../lib/paged-select";
 
 export type Note = {

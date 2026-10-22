@@ -9,6 +9,7 @@
 // (`./render-with-tasks.tsx`) is the tests' way in.
 
 import type { ReactNode } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { memoryCache } from "../../../lib/sync/cache";
 import { setStoreOptionsForTests } from "../../../lib/sync/store";

@@ -15,14 +15,15 @@ import { Button } from "@/components/ui/button";
 import { FilterBar, FilterButton } from "@/components/ui/filter-bar";
 import { Input } from "@/components/ui/input";
 import { formatPastDay, formatTime } from "@/lib/time-format";
+
 import type { ChatPerson, ChatRuntime, ChatSearchHit } from "../model";
 import {
   conditionsFromParams,
   matchPeople,
   paramsFromConditions,
   reconcileTyped,
-  type SearchParams,
   searchDimensions,
+  type SearchParams,
   searchQuery,
 } from "./model";
 import { Snippet } from "./snippet";

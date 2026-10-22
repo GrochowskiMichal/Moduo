@@ -5,9 +5,10 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import {
-  CAPTURE_ROUTES,
   canWriteRoute,
+  CAPTURE_ROUTES,
   createCapturedEntity,
   isPermissionError,
 } from "./capture-command";

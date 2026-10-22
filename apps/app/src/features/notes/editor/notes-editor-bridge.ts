@@ -6,6 +6,7 @@
  */
 
 import { createContext, useContext } from "react";
+
 import type { Task } from "../../tasks/model";
 import type { Note } from "../model";
 import type { TaskLineSnapshot } from "../tasks/detach";

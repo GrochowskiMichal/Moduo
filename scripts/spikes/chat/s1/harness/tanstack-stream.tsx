@@ -10,6 +10,7 @@
 import { defaultRangeExtractor, type Range, useVirtualizer } from "@tanstack/react-virtual";
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef } from "react";
 import { flushSync } from "react-dom";
+
 import { type Density, estimateRow, type StreamApi, type StreamProps } from "./model";
 import { RowView } from "./rows";
 

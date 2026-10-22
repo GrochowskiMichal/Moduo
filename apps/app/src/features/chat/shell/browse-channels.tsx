@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
 import type { ChatChannel, ChatMember, ChatRuntime } from "../model";
-import { type BrowseRow, browseChannels } from "../panel/details-model";
+import { browseChannels, type BrowseRow } from "../panel/details-model";
 
 export type BrowseChannelsProps = {
   chat: ChatRuntime | null;

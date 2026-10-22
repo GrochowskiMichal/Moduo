@@ -60,9 +60,9 @@ import { readImportText, sizeProblem } from "../read";
 import {
   type ImportContext,
   type ImportOutcome,
-  type RunOptions,
   resolvePlan,
   runImport,
+  type RunOptions,
 } from "../run";
 import { importApiOf } from "./import-api";
 

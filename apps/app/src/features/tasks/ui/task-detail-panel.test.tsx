@@ -43,7 +43,9 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 }));
 
 import type { ReactElement, ReactNode } from "react";
+
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+
 import { RightPanel } from "../../../components/app/right-panel";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { setRunClaims } from "../../focus/claims";

@@ -77,8 +77,7 @@ function toggleKey(perms: PermissionKey[], key: PermissionKey): PermissionKey[] 
 }
 
 export type RoleEditorTarget =
-  | { kind: "existing"; role: WorkspaceRoleDef }
-  | { kind: "new"; from: WorkspaceRoleDef | null };
+  { kind: "existing"; role: WorkspaceRoleDef } | { kind: "new"; from: WorkspaceRoleDef | null };
 
 export function RoleEditor({
   target,

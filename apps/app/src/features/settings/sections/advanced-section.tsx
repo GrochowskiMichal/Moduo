@@ -2,6 +2,7 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+
 import { customEmojiExportFiles } from "@/features/chat/emoji/export-files";
 import { readChatExport, signedFileBytes } from "@/features/chat/export";
 import { listMyClients, listMyNoticePauses } from "@/lib/notices/clients";
@@ -12,6 +13,7 @@ import {
   otherAccountsHaveUploads,
   UPLOADS_DB_NAME,
 } from "@/lib/uploads";
+
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -28,12 +30,11 @@ import { useWorkspace } from "../../../providers/workspace-provider";
 import { allTimeCalendarWindow } from "../../calendar/window";
 import { downloadZip } from "../../notes/export";
 import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
-
 import {
   attachmentsManifest,
   buildExportBundle,
-  type Diagnostics,
   describeSyncStatus,
+  type Diagnostics,
   type ExportMeta,
   exportZipName,
   formatDebugInfo,

@@ -6,10 +6,12 @@ import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { ChevronLeft, ChevronRight, Copy, Download, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import { formatBytes } from "@/lib/uploads/errors";
+
 import { fileIconFor, isPreviewableImage, saveBlob, thumbnailPath, toPng } from "../files";
 import { signPaths } from "../signed-urls";
 

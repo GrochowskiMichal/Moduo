@@ -9,10 +9,10 @@ import { describe, expect, it } from "@rstest/core";
 import { deriveLinkKey, type EntityRef } from "../../lib/entity-links";
 import {
   type RawLinkSuggestion,
-  SIGNAL_WEIGHTS,
-  type SuggestionSignal,
   scoreSuggestions,
+  SIGNAL_WEIGHTS,
   suggestionReason,
+  type SuggestionSignal,
   topSuggestion,
 } from "./suggest";
 

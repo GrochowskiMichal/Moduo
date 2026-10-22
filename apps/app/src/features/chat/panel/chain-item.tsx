@@ -9,8 +9,10 @@
 import { Check, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { TitleActions } from "@/components/app/title-actions";
 import { Button } from "@/components/ui/button";
+
 import type { ChatMessage, ChatPerson, ChatRuntime } from "../model";
 import type { ChatChain } from "../store/store";
 import type { BodyContext } from "../stream/message-body";

@@ -10,6 +10,7 @@
 
 import { type EntityRef, isChatEnd } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { MentionResolution } from "./mention";
 
 /** The entity to insert as an inline `EntityRefChip` after a successful write. */

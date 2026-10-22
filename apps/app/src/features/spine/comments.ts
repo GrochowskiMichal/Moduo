@@ -6,6 +6,7 @@
 
 import type { SpineComment } from "@/lib/runtime.types";
 import { formatDate } from "@/lib/time-format";
+
 import { replaceSlashDates } from "./grammar";
 import { dateUri, referenceUri, splitReferenceText } from "./references/text";
 import type { ReferenceRef } from "./references/types";

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
+
 import type { MindmapEdge, MindmapNode, MindmapSnapshot } from "../types";
 
 const MAX_HISTORY = 50;

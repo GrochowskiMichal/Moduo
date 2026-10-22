@@ -1,13 +1,14 @@
 import {
-  type CollisionDetection,
   closestCenter,
   closestCorners,
+  type CollisionDetection,
   DndContext,
   type DragEndEvent,
   pointerWithin,
 } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+
 import {
   asDragPayload,
   asDropLinkTarget,
@@ -26,7 +27,6 @@ import { taskDragAnnouncements, useTaskDndSensors } from "../dnd/task-dnd";
 import { TASK_DETAIL_REFRESH_EVENT } from "../task-detail-panel";
 import { boardDropName } from "../use-board-folds";
 import { TIMELINE_DROP_ID } from "../use-timeline-drop";
-
 import type { PlanController } from "./use-tasks-plan-controller";
 
 export function PlanDndHost({ c, children }: { c: PlanController; children: React.ReactNode }) {

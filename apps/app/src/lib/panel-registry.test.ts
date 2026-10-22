@@ -8,9 +8,9 @@ import {
   orderedPanelViews,
   PANEL_VIEWS,
   type PanelModule,
-  type PanelViewDef,
   panelShortcutLabel,
   panelShortcutNumber,
+  type PanelViewDef,
   panelViewsFor,
 } from "./panel-registry";
 

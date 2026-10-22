@@ -11,8 +11,10 @@
 // v1's `hooks/use-chat-badge.ts`.
 
 import { useCallback, useEffect, useMemo } from "react";
+
 import { setLiveChatCount } from "@/lib/notices/chat-counts";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { useChatPresence, useChatSnapshot, useChatStore } from "../store/react";
 import type { ChatSnapshot } from "../store/store";
 

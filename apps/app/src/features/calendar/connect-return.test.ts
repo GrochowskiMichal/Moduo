@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import { connectReturnUrl } from "../../../../../supabase/functions/_shared/oauth-connect";
 import {
-  type ConnectOutcome,
   connectConfirmTitle,
   connectFailureMessage,
+  type ConnectOutcome,
   parseConnectReturn,
 } from "./connect-return";
 

@@ -17,6 +17,7 @@ import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
+
 import { resolveEntityIcon } from "../spine/icon-map";
 import { plainTextToBlocks } from "./markup-v2/paste";
 import { serializeBlocks } from "./markup-v2/serialize";

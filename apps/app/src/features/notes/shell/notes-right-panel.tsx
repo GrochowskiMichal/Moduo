@@ -8,6 +8,7 @@
 
 import { CheckSquare } from "lucide-react";
 import type * as Y from "yjs";
+
 import { type PanelItem, RightPanel } from "../../../components/app/right-panel";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";

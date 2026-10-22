@@ -11,8 +11,9 @@
 //
 // `rerender` keeps the provider (it's the render's wrapper).
 
-import { type RenderResult, render } from "@testing-library/react";
+import { render, type RenderResult } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { type WorkspaceStore, workspaceStore } from "../../../lib/sync/store";
 import type { TaskCommands } from "../commands";
@@ -20,8 +21,8 @@ import {
   type FakeRuntimeExtras,
   FakeTasksProvider,
   type FakeTasksRuntime,
-  type FakeTasksSeed,
   fakeTasksRuntime,
+  type FakeTasksSeed,
 } from "./fake-tasks";
 
 export type RenderWithTasksOptions = {

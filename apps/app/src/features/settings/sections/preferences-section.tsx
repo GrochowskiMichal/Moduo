@@ -35,7 +35,6 @@ import {
 import { isTauriRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-
 import { QuietHoursGroup } from "./quiet-hours-group";
 import { SettingsSectionShell } from "./section-shell";
 

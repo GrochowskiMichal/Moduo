@@ -3,6 +3,7 @@
 // is built right after), and keeps its rows map while nothing changed.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { createSyncedCollection } from "../kernel/collection";
 import { mirrorKernel } from "./kernel-mirror";
 

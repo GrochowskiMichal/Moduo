@@ -13,6 +13,7 @@
 // (specs/contacts.md AC1).
 
 import type { ContactFieldType } from "@contracts/vocabularies";
+
 import type { Truncation } from "../../lib/paged-select";
 
 export type { ContactFieldType } from "@contracts/vocabularies";

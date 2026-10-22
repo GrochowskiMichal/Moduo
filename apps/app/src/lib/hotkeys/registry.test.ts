@@ -5,8 +5,8 @@ import { describe, expect, it } from "@rstest/core";
 import {
   findDuplicateBindings,
   findUndeclaredShadows,
-  HOTKEYS,
   type HotkeyRegistry,
+  HOTKEYS,
   keysFor,
 } from "./registry";
 

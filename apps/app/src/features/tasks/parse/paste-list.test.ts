@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { isPastedList, keepAsOne, PASTE_CAP, parsePastedList } from "./paste-list";
+import { isPastedList, keepAsOne, parsePastedList, PASTE_CAP } from "./paste-list";
 
 describe("a pasted list (AC10.8)", () => {
   it("two or more lines with words make a list; one line doesn't", () => {

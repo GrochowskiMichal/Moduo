@@ -49,9 +49,7 @@ export class OverlayStack<O> {
 
 /** A change shown over one row table: a field patch, a new row, a removal. */
 export type RowOverlay<R extends { id: string }> =
-  | { patch: { id: string; fields: Record<string, unknown> } }
-  | { insert: R }
-  | { remove: string };
+  { patch: { id: string; fields: Record<string, unknown> } } | { insert: R } | { remove: string };
 
 /**
  * The rows as shown: `rows` with `overlays` laid over in order. A new row

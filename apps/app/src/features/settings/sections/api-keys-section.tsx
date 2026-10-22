@@ -2,6 +2,7 @@ import { normalizeMcpKeyScope } from "@contracts/vocabularies";
 import { Check, Copy, Plus, SlidersHorizontal, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -21,7 +22,6 @@ import type { WorkspaceApiKey } from "../../../lib/runtime";
 import { formatFullDate } from "../../../lib/time-format";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-
 import {
   ceilingHint,
   clampScopes,
@@ -44,8 +44,8 @@ import {
   sameScopes,
   scopeCeiling,
   scopeDependencyNotes,
-  scopeSummary,
   scopesPayload,
+  scopeSummary,
   toKeyScopes,
 } from "../api-keys";
 import { SettingsSectionShell } from "./section-shell";

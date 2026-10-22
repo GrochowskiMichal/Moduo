@@ -18,7 +18,7 @@ import {
 } from "../../lib/preferences";
 import { useAuth } from "../../providers/auth-provider";
 import { APP_VERSION } from "../settings/about";
-import { findRelease, RELEASES, type Release, whatsNewDecision } from "./releases";
+import { findRelease, type Release, RELEASES, whatsNewDecision } from "./releases";
 import { WhatsNewDialog } from "./whats-new-dialog";
 import { openWhatsNew } from "./whats-new-store";
 

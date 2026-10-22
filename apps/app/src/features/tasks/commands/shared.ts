@@ -6,10 +6,11 @@
 import {
   isBacklogTask,
   legacyTaskStatus,
-  type TaskStatusCategory,
   taskCategoryOf,
+  type TaskStatusCategory,
 } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, PendingWrite, WorkspaceStore } from "../../../lib/sync/store";

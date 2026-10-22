@@ -6,6 +6,7 @@
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "@/components/app/create-events";
 import { Textarea } from "@/components/ui/textarea";
 import { endPosition, makeTask } from "@/features/tasks/helpers";

@@ -3,10 +3,12 @@
 // lost its current view), the white card + a shadow on light.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { cleanup, render, screen } from "@testing-library/react";
 
 import { blocksWithSelectors, cssBlocks, declarations } from "@/styles/css-blocks";
+
 import { SegmentedControl } from "./segmented-control";
 import { TooltipProvider } from "./tooltip";
 

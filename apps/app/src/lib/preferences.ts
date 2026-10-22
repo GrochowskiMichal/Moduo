@@ -19,6 +19,7 @@
 import { normalizeTasksRole, type TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
+
 import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
 import { newerVersion } from "./versions";
 

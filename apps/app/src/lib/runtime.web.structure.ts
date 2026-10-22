@@ -7,6 +7,7 @@
 // read the same tables without touching the bundle load.
 
 import type { ProjectState, TaskReminderKind, TaskWaitingKind } from "@contracts/vocabularies";
+
 import type {
   Area,
   Bucket,

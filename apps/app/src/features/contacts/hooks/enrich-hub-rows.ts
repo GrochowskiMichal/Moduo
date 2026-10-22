@@ -10,10 +10,12 @@
 // register email meta the same way.
 
 import { isBacklogTask, isClosedTask } from "@contracts/vocabularies";
+
 import { allTimeCalendarWindow } from "@/features/calendar/window";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { findWorkspaceStore } from "@/lib/sync/store";
+
 import { entityRefKey } from "../../spine/rollup";
 import type { HubSnippetMeta } from "../../spine/snippet-projectors";
 

@@ -6,11 +6,11 @@ import { describe, expect, it } from "@rstest/core";
 import type { HandleLinkStep, TasksDeepLinkTarget } from "../../search";
 import {
   DEEP_LINK_START,
+  deepLinkAt,
   type DeepLinkEvent,
+  deepLinkReducer,
   type DeepLinkState,
   type DeepLinkWorld,
-  deepLinkAt,
-  deepLinkReducer,
   HANDLE_RETRY_MS,
   linkSettled,
 } from "./deep-link";

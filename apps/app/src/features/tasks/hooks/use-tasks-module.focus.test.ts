@@ -9,9 +9,9 @@ import {
   __resetFocusEngineForTest,
   attachFocusUser,
   createFocusEngine,
+  flushFocusSession,
   FOCUS_STORAGE_PREFIX,
   type FocusSaveContext,
-  flushFocusSession,
   registerFocusFlushSink,
 } from "../../focus/engine";
 import { blankRecord, parseRecord } from "../../focus/engine-core";

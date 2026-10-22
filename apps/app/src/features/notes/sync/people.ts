@@ -31,8 +31,8 @@ import {
 import type { NotesSyncEngineV2 } from "./engine-v2";
 import {
   DOC_DB_PREFIX,
-  type DocOutboxEntry,
   docDbName,
+  type DocOutboxEntry,
   entryOwner,
   type MetaOutboxEntry,
   type NoteStateRow,

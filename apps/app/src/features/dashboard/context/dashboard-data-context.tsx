@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import type { CalendarModuleBundle } from "@/features/calendar/events";
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 import type { ReconnectItem } from "@/features/contacts/reconnect";

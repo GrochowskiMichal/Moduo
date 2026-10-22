@@ -73,8 +73,8 @@ import {
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { byIdOf } from "../derived";
 import {
-  ARRANGE_MIN_SAVED,
   alongTheWayOffer,
+  ARRANGE_MIN_SAVED,
   arrangeByProject,
   arrangedQueue,
   doneLineText,

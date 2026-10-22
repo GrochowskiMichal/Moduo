@@ -17,6 +17,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+
 import { type BottomBarMode, useBottomBarModeOwner } from "../../../components/app/bottom-bar-mode";
 import { TeamMark } from "../../../components/ui/avatar";
 import { NavRowDot } from "../../../components/ui/nav-row";
@@ -56,15 +57,7 @@ import { publishSelectionMenu, type SelectionMenu } from "./selection-menu";
 import { StatusIcon } from "./status-icon";
 
 export type BulkPickerKind =
-  | "assign"
-  | "tag"
-  | "date"
-  | "move"
-  | "status"
-  | "section"
-  | "priority"
-  | "waiting"
-  | "team";
+  "assign" | "tag" | "date" | "move" | "status" | "section" | "priority" | "waiting" | "team";
 
 export type BulkActions = {
   /** The bar's keys on a selection: true when one was handled. */

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Kbd } from "@/components/ui/kbd";
+
 import type { ChatRuntime, ChatSearchHit } from "../model";
 import { findPosition, stepFind } from "./model";
 import { NOTHING_TO_FIND, useChatSearch } from "./use-chat-search";

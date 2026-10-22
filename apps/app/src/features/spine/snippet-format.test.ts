@@ -4,6 +4,7 @@
 // text is matched structurally rather than to an exact wall-clock string).
 
 import { describe, expect, it } from "@rstest/core";
+
 import {
   formatEmailSnippet,
   formatEventSnippet,

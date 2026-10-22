@@ -33,18 +33,18 @@ import {
   addTemplateSection,
   addTemplateTask,
   offsetLabel,
-  type ProjectTemplateBody,
   patchTemplateSection,
   patchTemplateTask,
+  type ProjectTemplateBody,
   removeTemplateSection,
   removeTemplateTask,
   renameTemplateStatus,
   type TaskTemplateBody,
   type TemplateBody,
+  templateOutline,
   type TemplatePatchable,
   type TemplateTask,
   type TemplateWithBody,
-  templateOutline,
 } from "../model";
 
 const CATEGORY_LABEL: Record<string, string> = {

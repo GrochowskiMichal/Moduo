@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+
 import type { Tag } from "../../tasks/model";
 import { ContactDirectory } from "./contact-directory";
 

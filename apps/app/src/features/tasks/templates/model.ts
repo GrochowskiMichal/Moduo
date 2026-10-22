@@ -15,6 +15,7 @@ import {
   type TemplateKind,
   type TemplateLinkType,
 } from "@contracts/vocabularies";
+
 import type { EnergyLevel, PriorityLevel } from "../model";
 
 export type { TemplateKind } from "@contracts/vocabularies";

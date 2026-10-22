@@ -10,6 +10,7 @@
 import { Inbox, Loader2, MessageCircle, MoreHorizontal } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { type BottomBarMode, useBottomBarModeOwner } from "@/components/app/bottom-bar-mode";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { formatPastDay, formatTime } from "@/lib/time-format";
 import { useTimeRegion } from "@/lib/time-region";
 import { undoToast } from "@/lib/undo-toast";
 import { cn } from "@/lib/utils";
+
 import { useAppHotkeys, useHotkeyScope } from "../../../lib/hotkeys";
 import { messageTree, toExcerptText } from "../markup-v2";
 import type {

@@ -2,9 +2,9 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   assignWarning,
-  CHAT_CAP_DEFAULTS,
   canBeAssignee,
   ceilingRank,
+  CHAT_CAP_DEFAULTS,
   effectiveRank,
   intersectSlotIso,
   noteIsPrivate,

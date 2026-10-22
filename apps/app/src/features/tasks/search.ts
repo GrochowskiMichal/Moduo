@@ -95,9 +95,7 @@ export function taskIdForHandle(
  * TV-D11a), or only then ask the server (an old key, a task not loaded).
  */
 export type HandleLinkStep =
-  | { kind: "task"; taskId: string }
-  | { kind: "wait" }
-  | { kind: "lookup" };
+  { kind: "task"; taskId: string } | { kind: "wait" } | { kind: "lookup" };
 
 export function handleLinkStep(
   handle: string,

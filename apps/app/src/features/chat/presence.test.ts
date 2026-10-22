@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@rstest/core";
-
 // "Show me as online" (CV-17, AC11.2; spec §10, #17, #20, CH48). With the
 // switch off the client never tracks itself on the presence topic, so others
 // see it as offline (it still reads them); on, it tracks while the app is
@@ -7,6 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 // is away only when every tab of theirs is.
 
 import { presenceStateOf } from "@/lib/statuses/model";
+
 import type { ChatSocket } from "./realtime";
 import { ChatPresenceStore, presenceSets } from "./store/presence";
 import {

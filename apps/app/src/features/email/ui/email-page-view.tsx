@@ -8,6 +8,7 @@
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { RightPanel } from "../../../components/app/right-panel";

@@ -6,6 +6,7 @@
 // task always survives in Tasks. Events are never candidates (only tasks pass).
 
 import { isOpenTask } from "@contracts/vocabularies";
+
 import { addDays, DEFAULT_BLOCK_MINUTES, type LensTask } from "./lens";
 
 /** How far back the strip looks (today + the previous 7 days). */

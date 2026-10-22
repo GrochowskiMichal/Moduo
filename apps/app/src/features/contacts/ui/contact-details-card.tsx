@@ -5,9 +5,11 @@
 import { Cake, CalendarDays, Copy, Globe, Hash, Mail, MapPin, Phone } from "lucide-react";
 import type { ReactNode } from "react";
 import { toast } from "sonner";
+
 import { IconButton } from "@/components/ui/icon-button";
 import { formatFullDate } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { birthdayCountdown } from "../dates";
 import type { Contact, ContactChannel, ContactFieldDef } from "../model";
 

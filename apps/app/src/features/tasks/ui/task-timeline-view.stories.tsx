@@ -7,7 +7,7 @@ import { tasksDisplayDefaults } from "../display";
 import { makeTask } from "../helpers";
 import type { Area, Bucket, Section, Task, TaskSession } from "../model";
 import { TaskTimelineView } from "./task-timeline-view";
-import { bucket, INBOX, StoryTasks, storySeed, TeamWorkspace } from "./tasks-stories-fixtures";
+import { bucket, INBOX, storySeed, StoryTasks, TeamWorkspace } from "./tasks-stories-fixtures";
 
 // The Timeline (TV-TL1, REPLAN 67–71): the prototype's two frames (round-2a
 // frames 4 and 5) as stories — All at Quarter, one project row per project

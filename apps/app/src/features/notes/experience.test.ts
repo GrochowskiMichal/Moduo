@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "@rstest/core";
+
 import {
   DEFAULT_PREFERENCES,
   readLocalPreferences,

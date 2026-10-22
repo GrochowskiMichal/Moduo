@@ -9,6 +9,7 @@
  */
 
 import { useCallback } from "react";
+
 import type { EntityLink } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { extractTaskLineIds } from "../editor/doc-markdown";

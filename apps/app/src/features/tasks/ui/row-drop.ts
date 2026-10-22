@@ -10,6 +10,7 @@
 
 import type React from "react";
 import { useCallback, useRef, useState } from "react";
+
 import { attachFilesToTask } from "../../attachments/attach-to-task";
 import { dragHasFiles, filesFromDataTransfer } from "../../attachments/files";
 import type { Task } from "../model";

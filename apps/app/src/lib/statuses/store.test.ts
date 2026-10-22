@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@rstest/core";
-
 // Everyone's "now" (CV-17): read on hold, again on a live change and on the
 // minute while visible; a sign-out stops the feed and forgets what was read,
 // even a read still on its way.

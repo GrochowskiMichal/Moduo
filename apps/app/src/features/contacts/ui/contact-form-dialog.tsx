@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { MentionCandidate } from "../../spine/mention";
 import { probeDuplicate } from "../dedupe";
 import type { Company, Contact } from "../model";

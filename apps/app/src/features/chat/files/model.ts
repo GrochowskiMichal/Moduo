@@ -3,6 +3,7 @@
 // Files view share it.
 
 import { CHAT_FILES_PER_MESSAGE } from "@contracts/attachments";
+
 import type { ChatFile } from "../model";
 
 /** The media box in the feed, in CSS px (mirrors --feed-media-max-w/h, 360 × 240). */

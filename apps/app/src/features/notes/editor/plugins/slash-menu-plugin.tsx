@@ -47,6 +47,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { closeOnOutsidePointer, registerMenuKeys } from "@/features/spine/editor/menu-keys";
@@ -56,6 +57,7 @@ import { executeMention, type MentionContext } from "@/features/spine/mention-ac
 import { MentionCommand } from "@/features/spine/ui/mention-picker";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
 import { displayTitle } from "../../title";
 import { $runBlockCommand } from "../block-actions";

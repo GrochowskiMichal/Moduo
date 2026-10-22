@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+
 import { WorkspaceMark } from "../features/workspaces/ui/workspace-mark";
 import { useEntitlement } from "../hooks/use-entitlement";
 import { useChatCounts } from "../lib/notices/chat-counts";

@@ -31,26 +31,7 @@
     ]
   },
   "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
-  },
-  "javascript": {
-    "formatter": {
-      "quoteStyle": "double",
-      "jsxQuoteStyle": "double",
-      "semicolons": "always",
-      "trailingCommas": "all",
-      "arrowParentheses": "always",
-      "quoteProperties": "asNeeded"
-    }
-  },
-  "json": {
-    "formatter": {
-      "enabled": true,
-      "trailingCommas": "none"
-    }
+    "enabled": false
   },
   "css": {
     "formatter": {
@@ -63,7 +44,7 @@
   "assist": {
     "actions": {
       "source": {
-        "organizeImports": "on"
+        "organizeImports": "off"
       }
     }
   },

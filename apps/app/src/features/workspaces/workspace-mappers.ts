@@ -8,6 +8,7 @@ import {
   PERMISSION_MODULES,
   type PermissionKey,
 } from "@contracts/vocabularies";
+
 import { sanitizeOverrides, sanitizePermissions, type WorkspaceRoleDef } from "./access";
 import type {
   ModulePermission,

@@ -23,8 +23,8 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
-  DROP_TARGET,
   DragOverlaySurface,
+  DROP_TARGET,
   InsertionLine,
   NestPreview,
   SortedNote,
@@ -32,7 +32,7 @@ import {
 import { formatDate } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
-import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
+import { agentRowMarks, type AgentSession, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
 import { byIdOf } from "../derived";
@@ -54,7 +54,7 @@ import {
   positionNextTo,
   resolveListHover,
 } from "../dnd/drop-mode";
-import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
+import { dropLabel, type DropNames, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
 import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
 import { readFolds, writeFold } from "../folds";
@@ -80,12 +80,12 @@ import {
   fitColumns,
   handleLabel,
   projectLabel,
-  type RowTexts,
   rowColumns,
   rowDate,
+  type RowTexts,
   rowTime,
-  SIZED_COLUMNS,
   sessionLabel,
+  SIZED_COLUMNS,
   updatedLabel,
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";

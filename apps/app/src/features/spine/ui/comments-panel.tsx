@@ -28,13 +28,14 @@ import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed"
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
 import { CustomEmojiGlyph } from "../../chat/emoji/custom-emoji";
 import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
 import { splitTextTokens, tokenText } from "../../chat/markup-v2/tokens";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import {
-  type CommentPerson,
   commentBodyWithReferences,
+  type CommentPerson,
   filterPeople,
   filterTeams,
   insertMention,

@@ -2,6 +2,7 @@
 // selection only counts as a type+id pair, and the palette action survives.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { validateContactsSearch } from "./search";
 
 describe("validateContactsSearch", () => {

@@ -4,12 +4,12 @@ import { useState } from "react";
 import type { Section, Task } from "../model";
 import { TaskListView } from "./task-list-view";
 import {
-  BUCKETS,
   bucketNameById,
+  BUCKETS,
   commentsOn,
   INBOX,
-  StoryTasks,
   storySeed,
+  StoryTasks,
   TASKS,
   TeamWorkspace,
 } from "./tasks-stories-fixtures";

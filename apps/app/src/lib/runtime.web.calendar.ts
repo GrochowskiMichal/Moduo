@@ -7,6 +7,7 @@ import {
   parsedCalendarProvider,
   requireRow,
 } from "@contracts/rows";
+
 import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
 import { collectTruncations, READ_CAPS } from "./paged-select";

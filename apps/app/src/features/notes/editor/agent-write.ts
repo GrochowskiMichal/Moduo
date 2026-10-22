@@ -25,6 +25,7 @@ import {
 import { $getRoot, $isParagraphNode } from "lexical";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8, encodeUint8ToBase64 } from "../utils/base64";
 import {
   $noteMarkdown,
@@ -38,8 +39,7 @@ import { buildDocStateFromMarkdown, type MaterializedDoc } from "./materialize";
 
 /** What an agent asked for: add to the end, or replace the whole body. */
 export type AgentEdit =
-  | { kind: "append"; markdown: string }
-  | { kind: "replace"; markdown: string };
+  { kind: "append"; markdown: string } | { kind: "replace"; markdown: string };
 
 export type AgentWriteResult = {
   /** The Yjs update to push, base64; null when the edit changed nothing. */

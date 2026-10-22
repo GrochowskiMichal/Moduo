@@ -3,6 +3,7 @@
 // through its own server op (`bulk-write.ts` has the shared pool).
 
 import { toast } from "sonner";
+
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange } from "../../../lib/sync/store";
 import { undoToast } from "../../../lib/undo-toast";
@@ -355,19 +356,17 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
           !!t && !t.deletedAt && !isTempId(t.id) && !isArchived(t.id) && !waitingAlready.has(t.id),
       );
     if (tasks.length === 0) return;
-    const shownRows = tasks.map(
-      (t): TaskWaitingEntry => ({
-        id: crypto.randomUUID(),
-        workspaceId: ws,
-        taskId: t.id,
-        kind: entry.kind,
-        ref: entry.ref ?? null,
-        label: entry.label ?? null,
-        since: now,
-        createdBy: userId,
-        updatedAt: now,
-      }),
-    );
+    const shownRows = tasks.map((t): TaskWaitingEntry => ({
+      id: crypto.randomUUID(),
+      workspaceId: ws,
+      taskId: t.id,
+      kind: entry.kind,
+      ref: entry.ref ?? null,
+      label: entry.label ?? null,
+      since: now,
+      createdBy: userId,
+      updatedAt: now,
+    }));
     const write = store.begin(shownRows.map((r) => ({ table: "waiting", insert: r })));
     const rows: TaskWaitingEntry[] = [];
     const added: TaskWaitingEntry[] = [];

@@ -10,6 +10,7 @@ import {
   normalizeChatNotifyLevel,
   normalizeContentAuthorKind,
 } from "@contracts/vocabularies";
+
 import type {
   ChatCatchupItem,
   ChatChannel,

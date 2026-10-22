@@ -17,6 +17,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { connect, dropSchema, freshSchema } from "./db";
 import { proveDelta, proveKeyset } from "./sql-proof";
 

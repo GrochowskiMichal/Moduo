@@ -6,6 +6,7 @@
 // linked to a project, client or team (CH53).
 
 import { useId, useMemo, useState } from "react";
+
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { excerptOf } from "../chains";
 import type { ChatMessage, ChatPerson } from "../model";
 import { authorName } from "../stream/rows";

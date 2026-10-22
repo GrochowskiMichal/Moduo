@@ -6,6 +6,7 @@ import {
   ATTACHMENT_PER_FILE_BYTES,
   ATTACHMENT_PLATFORM_FILE_CAP_BYTES,
 } from "@contracts/attachments";
+
 import { isNetworkError } from "@/features/notes/sync/meta-outbox";
 
 /** An attachments op refusal: AT-1 raises machine codes (`attachment_too_large`,

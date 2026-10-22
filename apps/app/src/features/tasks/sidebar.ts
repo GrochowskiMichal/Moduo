@@ -5,6 +5,7 @@
 // answers. Pure, no React or IO.
 
 import { isClosedTask } from "@contracts/vocabularies";
+
 import {
   DEFAULT_LABEL_COLOR,
   LABEL_COLORS,

@@ -10,6 +10,7 @@
 
 import { Plus, User } from "lucide-react";
 import type { ReactNode } from "react";
+
 import {
   Command,
   CommandEmpty,
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/command";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
 import { resolveEntityIcon } from "../icon-map";
 import type { MentionCandidate } from "../mention";
 

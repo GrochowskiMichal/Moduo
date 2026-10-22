@@ -5,6 +5,7 @@
 
 import { Clock3, CornerUpLeft, Mail } from "lucide-react";
 import { useMemo } from "react";
+
 import { formatEmailDate } from "@/features/email/utils/email-format";
 import {
   type EmailInboxThreadRow,

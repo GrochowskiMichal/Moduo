@@ -2,6 +2,7 @@
 // words marked. Drawn as text nodes only; the marks never pass through HTML.
 
 import { cn } from "@/lib/utils";
+
 import { splitSnippet } from "./model";
 
 export function Snippet({ text, className }: { text: string; className?: string }) {

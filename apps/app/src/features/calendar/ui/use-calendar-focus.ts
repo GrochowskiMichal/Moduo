@@ -3,6 +3,7 @@
 // the app shell from any page.
 
 import { useCallback, useMemo } from "react";
+
 import { useFocusPrefs } from "../../../lib/focus-prefs";
 import { focusOn, useFocusTaskState } from "../../focus/timer";
 import type { Task } from "../../tasks/model";

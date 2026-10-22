@@ -5,6 +5,7 @@ import {
   taskRelationRowSchema,
 } from "@contracts/rows";
 import { normalizeAccessChangeResource } from "@contracts/vocabularies";
+
 import type {
   ActivityEntry,
   Bucket,
@@ -26,7 +27,7 @@ import { DbError, type Json, runQuery, runRpc, untypedDb } from "./runtime.db";
 import type { TasksRuntime } from "./runtime.types";
 import { createTasksAgents } from "./runtime.web.agents";
 import { supabaseClient } from "./runtime.web.client";
-import { getAuthedUser, type SelectOpts, selectCapped } from "./runtime.web.shared";
+import { getAuthedUser, selectCapped, type SelectOpts } from "./runtime.web.shared";
 import { createTasksStructure } from "./runtime.web.structure";
 import { createTasksTemplates, type TemplateApplyResult } from "./runtime.web.templates";
 import { createTasksViews } from "./runtime.web.views";
@@ -51,12 +52,12 @@ import {
   projectStatusRowToModel,
   sectionRowToModel,
   sortQueueEntries,
-  type TaskFieldPatch,
   tagLinkRowToModel,
   tagRowToModel,
   taskCompletionRowToModel,
   taskCreateOpInput,
   taskCyclesFromJson,
+  type TaskFieldPatch,
   taskPatchToOpFields,
   taskQueueRowToModel,
   taskReminderRowToModel,

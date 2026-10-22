@@ -12,6 +12,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ChevronRight, FileText, MoreHorizontal, Plus } from "lucide-react";
 import type * as React from "react";
+
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,6 +31,7 @@ import {
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
+
 import type { Note } from "../model";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";

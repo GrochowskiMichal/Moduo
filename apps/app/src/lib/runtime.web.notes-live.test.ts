@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { joinNoteLive } from "./runtime.web.notes-live";
 
 const NOTE = "0b5c3a8e-6f1d-4c2a-9e7b-1a2b3c4d5e6f";

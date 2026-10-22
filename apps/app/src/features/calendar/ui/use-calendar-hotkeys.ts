@@ -3,6 +3,7 @@
 // route through a ref so the one listener never captures stale state.
 
 import { useEffect, useRef } from "react";
+
 import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { CalendarView } from "../lens";
 

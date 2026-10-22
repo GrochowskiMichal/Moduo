@@ -4,6 +4,7 @@
 
 import { useCallback } from "react";
 import { toast } from "sonner";
+
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import type { useAuth } from "../../../providers/auth-provider";
 import type { Contact } from "../../contacts/model";

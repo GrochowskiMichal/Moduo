@@ -5,9 +5,11 @@
 // same read in compact rows (round 5 frame 4).
 
 import { MessagesSquare } from "lucide-react";
+
 import { PersonAvatar } from "@/components/ui/avatar";
 import { formatAge, formatWhen } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { type ChainEntry, excerptOf } from "../chains";
 import type { ChatMessage, ChatPerson } from "../model";
 import { firstName } from "../stream/rows";

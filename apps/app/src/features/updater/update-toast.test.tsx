@@ -4,7 +4,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { Toaster, toast } from "sonner";
+import { toast, Toaster } from "sonner";
 
 import { WhatsNewDialog } from "../whats-new/whats-new-dialog";
 import { resetWhatsNewForTest } from "../whats-new/whats-new-store";

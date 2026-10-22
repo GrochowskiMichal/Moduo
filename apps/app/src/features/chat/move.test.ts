@@ -2,6 +2,7 @@
 // words, the op's answer and the two event lines' words.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { audienceWarning, moveTargets } from "./dialogs/move-dialog";
 import { parseMoveAnswer } from "./mappers";
 import type { ChatChannel, ChatMessage, ChatPerson } from "./model";

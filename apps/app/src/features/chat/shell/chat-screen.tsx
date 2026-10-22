@@ -12,6 +12,7 @@ import type { WorkspaceRole } from "@contracts/vocabularies";
 import { CornerUpLeft, Loader2, MessageSquareText, MessagesSquare, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "@/components/app/create-events";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
 import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/statuses/model";
 import { usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
+
 import { useAppHotkeys } from "../../../lib/hotkeys";
 import { publicConfig } from "../../../lib/public-config";
 import { catchupStoreFor } from "../catchup/catchup-store";
@@ -38,8 +40,8 @@ import { useCatchupScreen } from "../catchup/catchup-view";
 import { LaterDialog } from "../catchup/later-dialog";
 import { laterHint } from "../catchup/later-times";
 import {
-  type ChainRights,
   chainGroups,
+  type ChainRights,
   chainsStamp,
   excerptOf,
   mayAttach,
@@ -56,7 +58,7 @@ import {
   makePrivateCopy,
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
-import { type MoveStep, MoveToDialog, moveTargets } from "../dialogs/move-dialog";
+import { type MoveStep, moveTargets, MoveToDialog } from "../dialogs/move-dialog";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { CustomEmojiProvider } from "../emoji/context";
 import { useComposerFiles } from "../files/composer-files";

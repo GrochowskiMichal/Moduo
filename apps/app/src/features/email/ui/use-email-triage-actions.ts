@@ -3,6 +3,7 @@
 
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
+
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import { TRIAGE_UNDO_MS, type useEmailModule } from "../hooks/use-email-module";
 import type { EmailFolderInfo, EmailThread } from "../model/email-types";

@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button";
 import {
   nowLine,
   type PersonNow,
-  type PresenceState,
   presenceLabel,
+  type PresenceState,
   statusLine,
 } from "@/lib/statuses/model";
 import { cn } from "@/lib/utils";
+
 import type { ChatPerson } from "../model";
 
 /** An avatar with the presence shape (AC11.1). */

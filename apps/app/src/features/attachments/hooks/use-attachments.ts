@@ -5,10 +5,12 @@
 import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+
 import type { AttachmentRecord, ModuoRuntime, StorageStatus } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
 import { getUploadQueue } from "@/lib/uploads";
 import { targetKey, type UploadTarget, type UploadView } from "@/lib/uploads/queue";
+
 import { thumbnailPath } from "../files";
 import { clearSignedUrlCache, signPaths } from "../signed-urls";
 

@@ -6,6 +6,7 @@
 // (TV-D11a); a body is read only when a template is opened.
 
 import { useEffect, useSyncExternalStore } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Template } from "./model";
 

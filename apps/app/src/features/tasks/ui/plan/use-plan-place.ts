@@ -5,6 +5,7 @@
 // committed the write.
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+
 import { remembersPlace, resolveEntryPlace } from "../../default-view";
 import { readLS, writeLS } from "./plan-base";
 

@@ -1,7 +1,7 @@
 import { getHotkeyManager, HotkeysProvider } from "@tanstack/react-hotkeys";
 import { type ReactNode, useEffect } from "react";
 
-import { SCOPE_PARENT, type HotkeyScope as Scope } from "./registry";
+import { type HotkeyScope as Scope, SCOPE_PARENT } from "./registry";
 
 /**
  * Turns a hotkey scope on while mounted (and `enabled`). Routes wrap their page

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { ChatMember } from "../../features/chat/model";
 import { validateChatSearch } from "../../features/chat/search";
 import { catchupCount } from "../../features/chat/shell/chat-tab";
@@ -9,9 +10,9 @@ import { chatServerPrefsFromRow } from "./chat-prefs";
 import {
   BURST_WINDOW_MS,
   burstCopy,
-  CLIENT_IDLE_MS,
   chatNoticeSwitch,
   chatNoticeTarget,
+  CLIENT_IDLE_MS,
   decideChatNotice,
   isChatInFront,
   PUSH_WAIT_MS,

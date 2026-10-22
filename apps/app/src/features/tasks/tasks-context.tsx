@@ -35,8 +35,8 @@
 
 import {
   createContext,
-  type MutableRefObject,
   memo,
+  type MutableRefObject,
   type ReactNode,
   useCallback,
   useContext,
@@ -45,6 +45,7 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
+
 import { afterPaint } from "../../lib/after-paint";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { EMPTY_SNAPSHOT, type StoreSnapshot, type WorkspaceStore } from "../../lib/sync/store";
@@ -56,8 +57,8 @@ import {
   frontierOf,
   openTaskCountByTagOf,
   statusesForBucketOf,
-  type TasksData,
   tagsByTaskOf,
+  type TasksData,
   tasksDataOf,
 } from "./derived";
 import { type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";

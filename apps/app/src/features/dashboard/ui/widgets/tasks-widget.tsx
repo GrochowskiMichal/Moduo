@@ -7,6 +7,7 @@
 import { Check, Paperclip } from "lucide-react";
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
+
 import { MetaCount } from "@/components/ui/meta-count";
 import { filesLabel } from "@/features/attachments/files";
 import { useFocusTaskState } from "@/features/focus/timer";

@@ -1,7 +1,7 @@
 import { SUPABASE_URL, supabaseClient } from "../../lib/runtime.web.client";
 import {
-  AVATAR_BUCKET,
   allObjectPaths,
+  AVATAR_BUCKET,
   extensionForType,
   profileAvatarPath,
   publicObjectUrl,

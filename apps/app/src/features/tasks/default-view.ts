@@ -8,6 +8,7 @@
 // and grouping are per-device view preferences in localStorage.
 
 import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
+
 import { type Task, TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot } from "./model";
 
 export { TIME_BLOCK_SLOTS, type TimeBlockMap, type TimeBlockSlot };

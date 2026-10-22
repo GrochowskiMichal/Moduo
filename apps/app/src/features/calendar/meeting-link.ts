@@ -37,8 +37,7 @@ export function meetingLinkOf(event: {
 export function googleMeetingLink(raw: Record<string, unknown>): string | null {
   if (typeof raw.hangoutLink === "string" && raw.hangoutLink) return raw.hangoutLink;
   const conference = raw.conferenceData as
-    | { entryPoints?: { entryPointType?: string; uri?: string }[] }
-    | undefined;
+    { entryPoints?: { entryPointType?: string; uri?: string }[] } | undefined;
   const video = conference?.entryPoints?.find((point) => point.entryPointType === "video")?.uri;
   if (video) return video;
   return typeof raw.location === "string" && raw.location.trim() ? raw.location.trim() : null;

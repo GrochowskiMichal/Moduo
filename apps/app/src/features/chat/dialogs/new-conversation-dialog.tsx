@@ -27,6 +27,7 @@ import { Label } from "@/components/ui/label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { ChatLink, ChatPerson } from "../model";
 import {
   CHANNEL_NAME_MAX,

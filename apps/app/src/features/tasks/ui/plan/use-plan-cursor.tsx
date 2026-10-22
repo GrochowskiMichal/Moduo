@@ -2,6 +2,7 @@
 // deep link's wiring (`useTaskDeepLink`) with its reveal.
 
 import { useEffect, useMemo, useState } from "react";
+
 import { taskLinkId } from "../../../../lib/task-handle";
 import { looksLikeHandle } from "../../../spine/grammar";
 import { handleLinkStep, resolveTasksDeepLink } from "../../search";

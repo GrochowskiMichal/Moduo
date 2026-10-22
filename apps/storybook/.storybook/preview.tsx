@@ -17,8 +17,8 @@ import {
   type WorkspaceContextValue,
 } from "../../app/src/features/workspaces/workspace-context";
 import {
-  APPEARANCE_OPTIONS,
   type Appearance,
+  APPEARANCE_OPTIONS,
   DEFAULT_APPEARANCE,
   parseAppearance,
 } from "../../app/src/lib/appearance";

@@ -30,9 +30,7 @@ export type TimelineSubtasks = "hidden" | "nested";
 
 /** Which shape of rows a scope gets. */
 export type TimelineScope =
-  | { kind: "workspace" }
-  | { kind: "project"; projectId: string }
-  | { kind: "tasks" };
+  { kind: "workspace" } | { kind: "project"; projectId: string } | { kind: "tasks" };
 
 /** The Group by choices a scope offers, its default first. */
 export function timelineGroupsFor(scope: TimelineScope["kind"]): TimelineGroup[] {

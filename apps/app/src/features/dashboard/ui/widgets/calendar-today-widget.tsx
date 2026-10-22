@@ -6,6 +6,7 @@
 import { ArrowRight, CalendarClock } from "lucide-react";
 import { useCallback, useMemo, useRef } from "react";
 import { toast } from "sonner";
+
 import { eventChipsInRange } from "@/features/calendar/events";
 import { localDayKey, startOfLocalDay, taskBlocks, visibleRange } from "@/features/calendar/lens";
 import { DEFAULT_CALENDAR_PREFS } from "@/features/calendar/prefs";

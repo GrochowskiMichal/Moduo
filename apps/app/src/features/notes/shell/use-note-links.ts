@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";

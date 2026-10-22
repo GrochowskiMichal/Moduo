@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { StorybookConfig } from "@storybook/react-vite";
 
 // The stories and static files live in the app package (apps/app).

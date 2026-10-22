@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { forgetSearches } from "../features/chat/find/model";
 import { forgetChatPresence } from "../features/chat/store/react";
 import { attachChatUser, wipeChatCopies } from "../features/chat/store/store";
@@ -22,8 +23,8 @@ import { forgetBrowserPush, postPushUser } from "../lib/notices/browser-push";
 import {
   initRuntime,
   type ModuoRuntime,
-  type RuntimeSession,
   runtimeConfigError,
+  type RuntimeSession,
 } from "../lib/runtime";
 import { attachSyncUser, wipeSyncCopies } from "../lib/sync/store";
 import { forgetTimeRegion, syncTimeRegion } from "../lib/time-region";
