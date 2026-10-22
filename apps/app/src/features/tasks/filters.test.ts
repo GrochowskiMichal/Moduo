@@ -15,6 +15,7 @@ import {
   sanitizeTaskFilters,
   seededProject,
   showsArchived,
+  showsBacklog,
   showsDone,
   statusesLetThrough,
   TASK_FILTER_DIMENSIONS,
@@ -276,17 +277,61 @@ describe("Status brings hidden tasks back", () => {
   });
 
   it("the statuses a Status filter lets through (the Board's groups)", () => {
+    const keys = (f: ReturnType<typeof statusesLetThrough>) =>
+      (["backlog", "todo", "in_progress", "done", "archived"] as const).filter((k) => f?.has(k));
     expect(statusesLetThrough([is("priority", "high")])).toBeNull();
-    expect([...(statusesLetThrough([is("status", "archived")]) ?? [])]).toEqual(["archived"]);
-    expect([...(statusesLetThrough([is("status", "done", "todo")]) ?? [])]).toEqual([
-      "todo",
-      "done",
-    ]);
+    expect(keys(statusesLetThrough([is("status", "archived")]))).toEqual(["archived"]);
+    expect(keys(statusesLetThrough([is("status", "done", "todo")]))).toEqual(["todo", "done"]);
     // "Is not" never brings Won't do in.
-    expect([...(statusesLetThrough([isNot("status", "done")]) ?? [])]).toEqual([
-      "todo",
-      "in_progress",
-    ]);
+    expect(keys(statusesLetThrough([isNot("status", "done")]))).toEqual(["todo", "in_progress"]);
+  });
+});
+
+describe("Status filter on one project's statuses (MOD-240)", () => {
+  const CATEGORY: Record<string, "in_progress" | "done" | "wont_do" | "backlog"> = {
+    building: "in_progress",
+    review: "in_progress",
+    shipped: "done",
+    wontdo: "wont_do",
+    later: "backlog",
+  };
+  const categoryOf = (id: string) => CATEGORY[id];
+  const building = task("building", { status: "in_progress", statusId: "building" });
+  const review = task("review", { status: "in_progress", statusId: "review" });
+  const legacy = task("legacy", { status: "in_progress", statusId: null });
+  const run = (conditions: FilterCondition[]) =>
+    filterTasks([building, review, legacy], conditions, ctx).map((t) => t.id);
+
+  it("a task's values are its key and its exact status", () => {
+    expect(taskFilterValues(building, "status", ctx)).toEqual(["in_progress", "building"]);
+    expect(taskFilterValues(legacy, "status", ctx)).toEqual(["in_progress"]);
+  });
+
+  it("matches the exact status, and older category values still match by category", () => {
+    expect(run([is("status", "building")])).toEqual(["building"]);
+    expect(run([isNot("status", "building")])).toEqual(["review", "legacy"]);
+    expect(run([is("status", "in_progress")])).toEqual(["building", "review", "legacy"]);
+  });
+
+  it("a status of a closed category brings its tasks in like the category does", () => {
+    expect(showsDone([is("status", "shipped")], categoryOf)).toBe(true);
+    expect(showsDone([is("status", "building")], categoryOf)).toBe(false);
+    expect(showsArchived([is("status", "wontdo")], categoryOf)).toBe(true);
+    expect(showsBacklog([is("status", "later")], categoryOf)).toBe(true);
+    // Unknown without the lookup (a status not loaded): nothing extra joins.
+    expect(showsDone([is("status", "shipped")])).toBe(false);
+  });
+
+  it("lets through the named status per column, its category per category column", () => {
+    const f = statusesLetThrough([is("status", "building")], categoryOf);
+    expect(f?.has("in_progress", "building")).toBe(true);
+    expect(f?.has("in_progress", "review")).toBe(false);
+    expect(f?.has("in_progress")).toBe(true);
+    expect(f?.has("done")).toBe(false);
+    const not = statusesLetThrough([isNot("status", "building")], categoryOf);
+    expect(not?.has("in_progress", "building")).toBe(false);
+    expect(not?.has("in_progress", "review")).toBe(true);
+    expect(not?.has("archived", "wontdo")).toBe(false);
   });
 });
 

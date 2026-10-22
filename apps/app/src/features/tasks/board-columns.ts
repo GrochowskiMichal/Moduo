@@ -16,17 +16,18 @@
 //     words for its layout, never shown.
 
 import {
-  legacyTaskStatus,
   type PriorityLevel,
   type TaskStatusCategory,
   type TaskWaitingKind,
   taskCategoryOf,
 } from "@contracts/vocabularies";
 import type { BoardGroupBy, BoardLanes } from "./display";
+import type { StatusFilter } from "./filters";
 import { type GroupBy, groupKeyFor, groupTasks, isProjectScope, PRIORITY_LABELS } from "./helpers";
 import { type GroupAddState, groupAddState } from "./list-group-add";
 import type { Bucket, ProjectStatus, Task, TaskWaitingEntry } from "./model";
 import {
+  categoryKey,
   firstStatusOf,
   STATUS_KEY_LABELS,
   type StatusKey,
@@ -113,19 +114,14 @@ export type BoardContext = {
   /** Members in picker order (me first). */
   assignees?: ReadonlyArray<{ userId: string; name: string; canTakeTasks: boolean }>;
   areas?: ReadonlyArray<{ id: string; name: string; color: string | null; position: number }>;
-  /** The status keys Filter → Status lets through (null: no Status filter). */
-  statusFilter?: ReadonlySet<StatusKey> | null;
+  /** What Filter → Status lets through (null: no Status filter). */
+  statusFilter?: StatusFilter | null;
   /** Waiting on entries of the tasks in view (Group by Waiting on). */
   waiting?: ReadonlyArray<Pick<TaskWaitingEntry, "taskId" | "kind" | "ref" | "label" | "since">>;
 };
 
 /** The no-value key of the assignee, section and team groupings. */
 const NONE = "none";
-
-/** A category's status key (Backlog its own; Won't do is "archived"). */
-export function categoryKey(category: TaskStatusCategory): StatusKey {
-  return category === "backlog" ? "backlog" : legacyTaskStatus(category);
-}
 
 /** The project a board is one of (a project, or the Inbox), else null. */
 export function boardProject(
@@ -199,10 +195,10 @@ function statusShows(
   key: StatusKey,
   has: boolean,
   ctx: BoardContext,
-  opts: { hidden?: boolean; backlogWhenEmpty: boolean },
+  opts: { hidden?: boolean; backlogWhenEmpty: boolean; statusId?: string },
 ): boolean {
   if (has) return true;
-  if (ctx.statusFilter) return ctx.statusFilter.has(key);
+  if (ctx.statusFilter) return ctx.statusFilter.has(key, opts.statusId);
   if (opts.hidden) return false;
   if (key === "archived") return false;
   if (key === "backlog") return opts.backlogWhenEmpty;
@@ -268,6 +264,7 @@ function projectStatusColumns(
         hidden: s.hidden,
         // A project's Backlog is part of its shape (the folded button).
         backlogWhenEmpty: true,
+        statusId: s.id,
       });
     })
     .map<BoardColumn>((s) => {

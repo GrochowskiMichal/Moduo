@@ -20,6 +20,7 @@
 // - `useTasksReader()`: the data as it is when a handler runs (a drop's
 //   neighbours), without subscribing the component to it.
 // - `useTaskTagIndex()`, `useDriftCountByBucket()`, `useStatusesForBucket()`,
+//   `useStatusCategoryOf()`,
 //   `useFrontierFor()`: derived reads the Tasks views share (each cached).
 // - `useTasksTrash()`, `useOpenTrashRef()`, `useSavedViewOps()`: the page's
 //   stateful pieces (Recently deleted, its link, saved views).
@@ -62,6 +63,7 @@ import {
 import { type TasksParams, useTasksRoot } from "./hooks/use-tasks-module";
 import type { ViewOps } from "./hooks/use-view-ops";
 import type { ProjectStatus, Tag, Task, TasksTrash } from "./model";
+import type { StatusCategoryOf } from "./statuses";
 import { useToday } from "./use-today";
 
 /** What never changes with the data: the narrow hooks read the store through it. */
@@ -371,6 +373,12 @@ export function useStatusesForBucket(): (bucketId: string) => ProjectStatus[] {
     (bucketId: string) => statusesForBucketOf(statuses, allBuckets, bucketId),
     [statuses, allBuckets],
   );
+}
+
+/** A status's category by id (Filter → Status's project statuses, MOD-240). */
+export function useStatusCategoryOf(): StatusCategoryOf {
+  const statusById = useTasksSelector((d) => d.statusById);
+  return useCallback((id: string) => statusById.get(id)?.category, [statusById]);
 }
 
 /**

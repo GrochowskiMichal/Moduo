@@ -5,7 +5,8 @@
 
 import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies";
 import { DATE_GROUPS, type DateGroup, type GroupBy, isProjectScope } from "./helpers";
-import { type StatusKey, statusKeyCategory } from "./statuses";
+import type { ProjectStatus } from "./model";
+import { firstStatusOf, statusGroupOf } from "./statuses";
 
 /** What the capture opens with for a group (on top of the view's own "here"). */
 export type GroupAdd = {
@@ -55,8 +56,10 @@ export function groupAddState(input: {
   /** Today's local date key ("2026-10-13"): Date groups count from it. */
   today: string;
   inboxId: string | null;
+  /** The project's own statuses, where status groups are its statuses (MOD-241). */
+  statuses?: readonly ProjectStatus[];
 }): GroupAddState {
-  const { scope, groupBy, key, canEdit, today, inboxId } = input;
+  const { scope, groupBy, key, canEdit, today, inboxId, statuses = [] } = input;
   // Won't do lists finished decisions: a new task never starts there.
   if (!canEdit || groupBy === "none" || scope === "today" || scope === "wontdo") return NONE;
   if (scope === "upcoming" && groupBy !== "date") return NONE;
@@ -73,10 +76,21 @@ export function groupAddState(input: {
     case "section":
       return { kind: "add", add: { ...base, sectionId: key === NO_KEY ? null : key } };
     case "status": {
+      const group = statusGroupOf(key, statuses);
       // A new task is never made finished: Done and Won't do have no "+".
-      const category = statusKeyCategory(key as StatusKey);
-      if (category === "done" || category === "wont_do") return NONE;
-      return { kind: "add", add: { ...base, seed: { status: category } } };
+      if (!group || group.category === "done" || group.category === "wont_do") return NONE;
+      const { category, status } = group;
+      // The category's first is what the capture picks anyway: no chip for it.
+      const own = status && firstStatusOf(statuses, category)?.id !== status.id ? status : null;
+      return {
+        kind: "add",
+        add: {
+          ...base,
+          seed: own
+            ? { status: category, statusId: own.id, statusName: own.name }
+            : { status: category },
+        },
+      };
     }
     case "priority":
       return {

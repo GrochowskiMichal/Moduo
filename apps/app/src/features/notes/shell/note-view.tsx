@@ -12,12 +12,14 @@ import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
+import { selectSubpages } from "../subpages";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle } from "../title";
 import { NoteEditor } from "../ui/note-editor";
 import { NotesEditorDropZone } from "../ui/notes-editor-drop-zone";
 import { LinkedFromFooter } from "./linked-from-footer";
 import { NoteMetaLineView } from "./note-meta-line";
+import { SubpagesList } from "./subpages-list";
 import { useAgentEdit } from "./use-agent-edit";
 import { useNoteLinks } from "./use-note-links";
 
@@ -123,7 +125,15 @@ export function NoteView({
               ) : null
             }
             footer={
-              liveNote ? <LinkedFromFooter groups={links.backlinks} onOpen={onOpenEntity} /> : null
+              liveNote ? (
+                <>
+                  <SubpagesList
+                    subpages={selectSubpages(bridge.listNotes?.() ?? [], liveNote.id)}
+                    onOpen={bridge.openNote}
+                  />
+                  <LinkedFromFooter groups={links.backlinks} onOpen={onOpenEntity} />
+                </>
+              ) : null
             }
           />
         </div>

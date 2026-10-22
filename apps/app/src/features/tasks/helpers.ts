@@ -4,8 +4,22 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { dayOffset, formatDay, formatStamp, formatWhen } from "../../lib/time-format";
-import type { Bucket, EnergyLevel, PriorityLevel, Task, TaskRelation, TaskStatus } from "./model";
-import { STATUS_KEY_LABELS, type StatusKey, statusKeyOf } from "./statuses";
+import type {
+  Bucket,
+  EnergyLevel,
+  PriorityLevel,
+  ProjectStatus,
+  Task,
+  TaskRelation,
+  TaskStatus,
+} from "./model";
+import {
+  STATUS_KEY_LABELS,
+  type StatusKey,
+  statusGroupKey,
+  statusGroupOf,
+  statusKeyOf,
+} from "./statuses";
 
 // ── Position (fractional indexing) ───────────────────────────────────────────
 // Order keys are base-36 digit strings compared lexicographically (see
@@ -360,6 +374,9 @@ export type GroupContext = {
   /** Workspace members in picker order (me first). An assignee not listed
    *  (a former member) groups after them. */
   assignees?: ReadonlyArray<{ userId: string; name: string }>;
+  /** One project's own statuses (Status grouping inside it, MOD-241): a
+   *  group per status, by id. Absent or empty: a group per status key. */
+  statuses?: readonly ProjectStatus[];
   now?: Date;
 };
 
@@ -449,7 +466,7 @@ export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskG
 
   const map = new Map<string, Task[]>();
   for (const task of tasks) {
-    const key = groupKeyFor(task, by, now);
+    const key = groupKeyFor(task, by, now, ctx.statuses);
     const list = map.get(key);
     if (list) list.push(task);
     else map.set(key, [task]);
@@ -462,11 +479,17 @@ export function groupTasks(tasks: Task[], by: GroupBy, ctx: GroupContext): TaskG
   }));
 }
 
-/** The group a task falls in under `by` (its own field, never its parent's). */
-export function groupKeyFor(task: Task, by: GroupBy, now: Date = new Date()): string {
+/** The group a task falls in under `by` (its own field, never its parent's).
+ *  `statuses`: the project's own set, where status groups are its statuses. */
+export function groupKeyFor(
+  task: Task,
+  by: GroupBy,
+  now: Date = new Date(),
+  statuses: readonly ProjectStatus[] = [],
+): string {
   switch (by) {
     case "status":
-      return statusKeyOf(task);
+      return statuses.length > 0 ? statusGroupKey(task, statuses) : statusKeyOf(task);
     case "bucket":
       return task.bucketId;
     case "assignee":
@@ -488,7 +511,15 @@ function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>, ctx: GroupConte
   const present = new Set(map.keys());
   const keys = [...map.keys()];
   if (by === "status") {
-    return STATUS_ORDER.filter((s) => present.has(s));
+    // The keys' order (in flight first, Backlog last); one project's
+    // statuses by their category's place there, then their own order.
+    const set = ctx.statuses ?? [];
+    const rank = (key: string) => {
+      const group = statusGroupOf(key, set);
+      return group ? STATUS_ORDER.indexOf(group.key) : STATUS_ORDER.length;
+    };
+    const position = (key: string) => set.find((s) => s.id === key)?.position ?? -1;
+    return keys.slice().sort((a, b) => rank(a) - rank(b) || position(a) - position(b));
   }
   if (by === "priority") {
     const ranked: string[] = LEVEL_ORDER.filter((l) => present.has(l));
@@ -532,7 +563,10 @@ function orderedGroupKeys(by: GroupBy, map: Map<string, Task[]>, ctx: GroupConte
 }
 
 function groupLabel(by: GroupBy, key: string, ctx: GroupContext, now: Date): string {
-  if (by === "status") return STATUS_KEY_LABELS[key as StatusKey] ?? key;
+  if (by === "status") {
+    const group = statusGroupOf(key, ctx.statuses ?? []);
+    return group?.status?.name ?? STATUS_KEY_LABELS[key as StatusKey] ?? key;
+  }
   if (by === "bucket") return ctx.bucketName(key);
   if (by === "priority")
     return key === "unset" ? UNSET_LABEL : PRIORITY_LABELS[key as PriorityLevel];

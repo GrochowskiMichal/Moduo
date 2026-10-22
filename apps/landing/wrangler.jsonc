@@ -6,7 +6,7 @@
 // `bun run build` (index, manifesto, privacy, terms, dpa, aup, assets, favicons) or
 // `bun run build:staging` (the staging portal at /, the marketing page at /landing, noindex)
 // writes ./dist. Clean URLs: html_handling serves privacy.html at /privacy and redirects
-// /privacy.html there. A path with no file gets index.html, as Vercel's catch-all rewrite does.
+// /privacy.html there. A path with no file gets 404.html with a real 404 status.
 //
 // Booking: /book, /book/* and /static/* run the router Worker first (edge/worker.ts), which
 // hands them to the app Worker through the APP service binding, so moduo.app/book/<slug> stays
@@ -22,7 +22,7 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "single-page-application",
+    "not_found_handling": "404-page",
     "run_worker_first": ["/book", "/book/*", "/static/*"]
   },
   "observability": { "enabled": true },
@@ -39,7 +39,7 @@
     },
     // moduo.app. Deployed only by deploy-prod.yml, after moduo-app-production (the binding's
     // target). www.moduo.app is not a domain of this Worker: a zone Redirect Rule sends it to
-    // https://moduo.app with a 308, as Vercel did (docs/release.md).
+    // https://moduo.app with a 308 (docs/release.md).
     "production": {
       "name": "moduo-landing-production",
       "workers_dev": false,

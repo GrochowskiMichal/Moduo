@@ -8,10 +8,12 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-22 · MOD-60: landing returns a real 404 page for unknown paths (`404-page`), no longer index.html with a 200.
 - 2026-10-20 · Cross-person hand-offs are a comment on the Moduo task, to the person; an agent never instructs another person's agent · phase 0 dogfood: `moduo` connector in `.mcp.json` (key from `MODUO_MCP_KEY`), `/s2`/`/s3` mirror blocks into the Build project, presence hook posts online/idle only for a claimed working task, kit kept plugin-shaped in `tools/claude-plugins/moduo-agent/` → decisions/workflow.md
 - 2026-10-19 · The sensitive CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); low-value ones stay repo-level; callers keep `secrets: inherit` (needed for environment secrets in reusable workflows).
 - 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
+- 2026-10-22 · A note lists its real sub-pages live under the body (`selectSubpages`), read from the permission-filtered notes bundle; manual page rows stay plain content · MOD-81
 - 2026-10-20 · Published note links show only sub-notes that inherit the page's sharing (`notes_public_subtree`); a sub-note with its own sharing stays private · narrows NO-1's "subtree included" → decisions/notes.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md
 - 2026-10-17 · The local Supabase stack is shared (Maciej) · `local:reset` / `local:down` refuse without `MODUO_SHARED_STACK_OK=1` (the user's go-ahead), the raw `supabase db reset` / `stop --no-backup` are denied, and migrations are tested on top with psql · one reset would wipe other sessions' work mid-run · rejected: a stack per worktree, a docs-only rule → decisions/workflow.md
@@ -151,7 +153,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-20 · `lightningcss` pin removed (1.32.0); web CSS differs only by whitespace in `calc()`.
 - 2026-10-20 · Type-checking is back on the official `tsc` 7.0.2; `tsc-ts` removed (supersedes the 2026-10-19 entry).
 - 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
-- 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
+- 2026-10-19 · Node is 24.22.1 (the Krypton LTS), from one `.nvmrc`; jsdom 30.
 - 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
 - 2026-10-19 · Desktop IMAP is `async-imap` 0.12 (tokio) over `tokio-native-tls`.
 - 2026-10-19 · Dependency hygiene: unused packages and the RN shim removed, hoisted test imports declared.
@@ -284,6 +286,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-22 · DB-SEC-1: the security advisor's "definer function callable by signed-in users" is expected for app RPCs and policy helpers; revoke client EXECUTE only from trigger functions and helpers no client path reaches, fix the ones that answer for any id → decisions/data.md
+- 2026-10-22 · DB-PERF-1: an advisor's "unused index" is no reason to drop on a small DB; drop only the provably redundant, make RLS cheap per row first (`can_access` fast path, initplan wraps, one permissive policy per command)
 - 2026-10-20 · The web runtime and its port are one file per module (`runtime.web.<module>.ts` + `runtime.types.<module>.ts`, composed in `runtime.web.ts`); the Supabase client, boot cache and auth listener are `runtime.web.client.ts` → decisions/data.md
 - 2026-10-20 · TanStack spine re-planned after TS-3b: TS-3c, TS-4, TS-5 paused; TanStack DB stays the storage layer, live queries only for narrow indexed per-entity reads until a release after @tanstack/db 0.15.1 passes the 10k re-test; TS-R1 paints the List's first screen before the rest, the rail and the right panel one frame after the landing (warm open 150 → 83 ms, switch 81 → 50 ms, production) → decisions/data.md
 - 2026-10-20 · TS-3b: live queries only where an index narrows them (subtasks query built, not wired: the query engine is +59 KB first load); whole-workspace Tasks data stays cached JS (`derived.ts`, was `selectors.ts`) because a 10k live query costs 40–65 ms to build; the snapshot reads kernel rows (collections on demand); Home data is one context per source → decisions/data.md

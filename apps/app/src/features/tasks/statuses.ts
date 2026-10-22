@@ -26,6 +26,30 @@ export function statusKeyOf(task: Pick<Task, "status" | "statusCategory">): Stat
   return isBacklogTask(task) ? "backlog" : legacyTaskStatus(taskCategoryOf(task));
 }
 
+/** A category's status key (Backlog its own; Won't do is "archived"). */
+export function categoryKey(category: TaskStatusCategory): StatusKey {
+  return category === "backlog" ? "backlog" : legacyTaskStatus(category);
+}
+
+const STATUS_KEYS: ReadonlySet<string> = new Set<StatusKey>([
+  "backlog",
+  "todo",
+  "in_progress",
+  "done",
+  "archived",
+]);
+
+/**
+ * A status's category by id (a Filter → Status value naming one project's
+ * own status, MOD-240); undefined for one not loaded or deleted.
+ */
+export type StatusCategoryOf = (statusId: string) => TaskStatusCategory | undefined;
+
+/** Whether a stored value is a status key (else it names one project status by id). */
+export function isStatusKey(value: string): value is StatusKey {
+  return STATUS_KEYS.has(value);
+}
+
 /** The category a status key stands for (archived → Won't do). */
 export function statusKeyCategory(key: StatusKey): TaskStatusCategory {
   return normalizeTaskStatusCategory(key);
@@ -161,6 +185,50 @@ export function statusesByCategory(
     category,
     statuses: sorted.filter((s) => s.category === category),
   }));
+}
+
+/**
+ * What a status picker offers from one project's set (REPLAN 53a): its
+ * statuses grouped by category in order, hidden ones only while `keep` holds
+ * them (the task's own, a filter's value), empty categories left out. Empty
+ * when the set can't be read here (a project you can't see, a database before
+ * TV-D9): the picker offers the five categories instead. Details, the row
+ * menu, bulk Set status and Filter → Status all read it.
+ */
+export function statusChoiceGroups(
+  set: readonly ProjectStatus[],
+  keep: (status: ProjectStatus) => boolean = () => false,
+): Array<{ category: TaskStatusCategory; statuses: ProjectStatus[] }> {
+  return statusesByCategory(set)
+    .map((g) => ({ ...g, statuses: g.statuses.filter((s) => !s.hidden || keep(s)) }))
+    .filter((g) => g.statuses.length > 0);
+}
+
+/**
+ * A task's status group in one project's set (MOD-241): its own status, else
+ * its category's first (a status not read yet, as the Board places it); its
+ * status key when the set lacks the category (never lost).
+ */
+export function statusGroupKey(
+  task: Pick<Task, "status" | "statusId" | "statusCategory">,
+  set: readonly ProjectStatus[],
+): string {
+  if (task.statusId && set.some((s) => s.id === task.statusId)) return task.statusId;
+  return firstStatusOf(set, taskCategoryOf(task))?.id ?? statusKeyOf(task);
+}
+
+/**
+ * What a status group key stands for: its status key and category, and the
+ * project status it names (null for a key that is a category). Null for an
+ * id the set doesn't hold (a status deleted meanwhile).
+ */
+export function statusGroupOf(
+  key: string,
+  set: readonly ProjectStatus[],
+): { key: StatusKey; category: TaskStatusCategory; status: ProjectStatus | null } | null {
+  if (isStatusKey(key)) return { key, category: statusKeyCategory(key), status: null };
+  const status = set.find((s) => s.id === key);
+  return status ? { key: categoryKey(status.category), category: status.category, status } : null;
 }
 
 /** Replace one set (a project's, or the default when `projectId` is null)

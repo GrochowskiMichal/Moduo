@@ -13,8 +13,15 @@ import {
   effectiveLanes,
   sharedStatusNames,
 } from "./board-columns";
+import { statusesLetThrough } from "./filters";
 import { makeTask } from "./helpers";
 import type { ProjectStatus, Task } from "./model";
+
+const inProgress = (value: string) => ({
+  dimension: "status",
+  operator: "is" as const,
+  values: [value],
+});
 
 function task(id: string, fields: Partial<Task> = {}): Task {
   return {
@@ -140,7 +147,10 @@ describe("one project's board by status (53a)", () => {
   });
 
   it("a drop writes the status by id; a Status filter shows what it lets through", () => {
-    const cols = buildBoardColumns([], ctx({ statusFilter: new Set(["in_progress"]) }));
+    const cols = buildBoardColumns(
+      [],
+      ctx({ statusFilter: statusesLetThrough([inProgress("in_progress")]) }),
+    );
     expect(labels(cols)).toEqual(["In progress", "In review"]);
     expect(cols[1]?.target).toEqual({
       field: "status",
@@ -148,6 +158,14 @@ describe("one project's board by status (53a)", () => {
       statusId: "p1-review",
       name: null,
     });
+  });
+
+  it("a Status filter naming one status shows its column alone (MOD-240)", () => {
+    const cols = buildBoardColumns(
+      [],
+      ctx({ statusFilter: statusesLetThrough([inProgress("p1-review")]) }),
+    );
+    expect(labels(cols)).toEqual(["In review"]);
   });
 
   it('the "+" adds into the project with the category, and its own status when not the first', () => {

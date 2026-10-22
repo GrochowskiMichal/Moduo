@@ -11,10 +11,14 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import { HotkeyScope } from "../../../lib/hotkeys";
 import type { Assignee } from "../assignees";
 import { makeTask } from "../helpers";
-import type { Bucket, Tag, Task } from "../model";
+import type { Bucket, ProjectStatus, Tag, Task } from "../model";
 import { tagLink } from "../testing/fake-tasks";
 import { renderWithTasks } from "../testing/render-with-tasks";
-import { type ProjectFilterChoices, useTasksFilters } from "./use-tasks-filters";
+import {
+  type ProjectFilterChoices,
+  statusFilterOptions,
+  useTasksFilters,
+} from "./use-tasks-filters";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -343,5 +347,64 @@ describe("Search", () => {
     expect(rows()).toHaveLength(3);
     fireEvent.keyDown(box, { key: "Escape" });
     expect(screen.getByRole("button", { name: "Search" })).toBeTruthy();
+  });
+});
+
+describe("Filter → Status options (MOD-240)", () => {
+  const status = (
+    id: string,
+    category: ProjectStatus["category"],
+    name: string,
+    position = 0,
+    hidden = false,
+  ): ProjectStatus => ({
+    id,
+    workspaceId: "w",
+    projectId: "p1",
+    category,
+    name,
+    position,
+    hidden,
+    createdAt: "2026-10-01T00:00:00Z",
+    updatedAt: "2026-10-01T00:00:00Z",
+  });
+  const SET = [
+    status("todo", "todo", "To do"),
+    status("review", "in_progress", "In review", 1),
+    status("building", "in_progress", "Building", 0),
+    status("shipped", "done", "Shipped"),
+    status("parked", "in_progress", "Parked", 2, true),
+  ];
+  const byId = new Map(SET.map((s) => [s.id, s]));
+  const asked = (...values: string[]): FilterCondition[] => [
+    { dimension: "status", operator: "any_of", values },
+  ];
+  const labels = (options: { label: string }[]) => options.map((o) => o.label);
+
+  it("inside a project: its own statuses in order, hidden ones left out", () => {
+    const options = statusFilterOptions(SET, byId, []);
+    expect(labels(options)).toEqual(["To do", "Building", "In review", "Shipped"]);
+    expect(options.map((o) => o.value)).toEqual(["todo", "building", "review", "shipped"]);
+  });
+
+  it("a hidden status shows while a filter asks for it", () => {
+    expect(labels(statusFilterOptions(SET, byId, asked("parked")))).toContain("Parked");
+  });
+
+  it("elsewhere: the five categories", () => {
+    expect(labels(statusFilterOptions([], byId, []))).toEqual([
+      "Backlog",
+      "To do",
+      "In progress",
+      "Done",
+      "Won’t do",
+    ]);
+  });
+
+  it("values the list lacks keep a readable chip", () => {
+    const options = statusFilterOptions(SET, byId, asked("in_progress", "gone"));
+    expect(labels(options).slice(-2)).toEqual(["In progress", "Deleted status"]);
+    const across = statusFilterOptions([], byId, asked("review"));
+    expect(labels(across).at(-1)).toBe("In review");
   });
 });

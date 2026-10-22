@@ -1,6 +1,6 @@
 ---
 name: moduo-agent
-description: Track your build work in Moduo through the moduo connector — pick up a block's task in the "Build" project, post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
+description: Track your build work in Moduo through the moduo connector — pick up a block's task in its milestone project (Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, complete it on merge, and hand off to another person as a task comment. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
 ---
 
 # moduo-agent: your build work, mirrored in Moduo
@@ -19,15 +19,33 @@ You are the person's agent: **MichaśAI** for Mike, **MaciuśAI** for Maciej (`p
 ## Is Moduo on?
 Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp__moduo__tasks_session_status`, `projects_list`, `tasks_list`, `tasks_search`, `tasks_assign`, `tasks_claim`, `tasks_set_status`, `tasks_create`, plus `tasks_list_assignees`, `comments_add` and `tasks_handoff` for hand-offs (`select:` them in one call). No match → Moduo off ("not connected"). The first call that fails with "Missing, invalid, revoked or expired API key" or a network error → Moduo off ("key rejected" / "unreachable").
 
+## Stages (the task's status, not your live state)
+`tasks_session_status` says what you are doing right now. The task's **status** says where the work is in its life. Move it yourself, one `tasks_set_status {task_id, status: "<name>"}` per hop, never skipping ahead:
+
+| Status (category) | Set it when | Who |
+| --- | --- | --- |
+| **Backlog** (backlog) | captured, not yet specced or planned | people |
+| **To do** (to do) | planned and specced, ready to pick up | people, when `/s1` ends |
+| **Building** (in progress) | you claim the block (Pick up) | you |
+| **In review** (in progress) | the PR is ready for review (Hand back) | you |
+| **Awaiting release** (in progress) | merged into the personal branch or `develop`, not yet in a `vX.Y.Z` release (Finish) | you |
+| **Shipped** (done) | the release carrying it is tagged; also the only done status, so work that never ships (docs, research, ops) ends here too | `/ship`; you for work that never ships |
+| **Won't do** (won't do) | dropped on purpose; say why in a comment | people |
+
+- Forward only. A review that sends the block back to work moves it to **Building** again; say so in the note.
+- **Blocked is not a stage:** use the task's blocked flag, `waiting_on` and `tasks_handoff`.
+- The stage names live in every milestone project (they carry the same seven statuses). Check `statuses_list {project_id}` of the task's own project once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
+- Set **Shipped** yourself only for work that never ships; code waits for `/ship`. Never move a task you don't hold.
+
 ## Pick up (from /s2 Claim, after the draft PR exists)
-1. **Find the Build project:** `projects_list`, the active project named `Build`. None → Moduo off ("no Build project").
-2. **Find the block's task:** `tasks_list {project_id}` (open tasks, short rows); take the one whose title starts with the block ID followed by a space or " — " (e.g. `TV-D16 — Agent sessions`). Not there → `tasks_search {q: "<ID>"}`, keep only Build-project rows with that title prefix (a closed one counts: reopen it below).
-3. **None yet → create it:** `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "in_progress"}`, and add a 🔎 Found line "Created <handle> for <ID> in Build". Blocks enter the ledger in `/s1`; the Build project mirrors `specs/BUILD_ORDER.md`, which stays the source of truth.
+1. **Know the board:** `projects_list`. Work is organised by milestone, not by module: the active projects **Closed alpha**, **Open alpha** and **Beta & later** hold the block tasks (each project's sections are themes such as Security & privacy, Platform & sync, Release & infra, Notes, Tasks, Calendar & scheduling, Email & notifications, Contacts, Chat, Home, Launch ops, Integrations & MCP, Meet, Quality & polish). The project named `Moduo` holds undated bugs and ideas. None of the three milestone projects → Moduo off ("no milestone projects").
+2. **Find the block's task by its ID in the title, in any project:** `tasks_search {q: "<ID>"}` (no project filter), keep the live rows whose title starts with the block ID followed by " — " (e.g. `TV-D16 — Agent sessions`), or has it in brackets at the end (`… (TV-D16)`); ignore archived projects. A closed one counts: reopen it below. A found task stays in its own project; never move it between milestones unless the person says so.
+3. **None yet → create it:** pick the project from the block's spec and `specs/BUILD_ORDER.md`: gates the closed alpha (2 Nov) → **Closed alpha**; needed for public sign-up (16 Nov) → **Open alpha**; anything else, or when unsure → **Beta & later** (never guess a milestone sooner than the spec says). `tasks_create {title: "<ID> — <block name>", project_id, assignee_id: "me", status: "Building", tags: ["block"]}` in the section for the block's theme (`sections_list {project_id}`; none fits → leave it out), and add a 🔎 Found line "Created <handle> for <ID> in <project>". Blocks enter the ledger in `/s1`; block tasks carry the `block` tag and mirror `specs/BUILD_ORDER.md`, which stays the source of truth for the block's spec. A block task is an epic: its subtasks are the small todos, so tick the ones you finish (`tasks_set_status {task_id: "<subtask handle>", status: "done"}`) and add new ones with `parent_id` only for real remaining steps. Add no other tags.
 4. **Take it:**
    - unassigned and routed to a team → `tasks_claim {task_id}`;
    - unassigned, or already yours → `tasks_assign {task_id, assignee_id: "me"}` (skip if already yours);
    - assigned to someone else → don't take it and don't report on it. The draft PR is the claim, so keep building, and add a 🔎 Found line "<handle> is <name>'s in Moduo". Moduo is off for this block.
-   Then `tasks_set_status {task_id, status: "in_progress"}` unless it already is.
+   Then `tasks_set_status {task_id, status: "Building"}` unless it already is.
 5. **Report working:** `tasks_session_status {task_id: "<handle>", state: "working", note: "Claimed <ID>", step: 2, steps: 7, links: [{url: "<draft PR url>", label: "Draft PR"}], agent}`. The steps are `/s2`'s seven: 1 Select · 2 Claim · 3 Load context · 4 Build · 5 Verify · 6 Review · 7 Record.
 6. **Remember it:** `printf 'task=%s\nstate=working\nstep=2\nsteps=7\n' <handle> > .claude/MODUO_TASK`.
 
@@ -40,10 +58,10 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 - Either way, write `state=needs_you` or `state=failed` into `.claude/MODUO_TASK`, so the presence hook leaves the line alone. Reporting `working` again later starts a new run; that is right once you resume.
 
 ## Hand back (from /s3, once the PR is ready for review)
-`tasks_session_status {task_id, state: "ready", note: "Ready for review · PR #<n>", links: [{url: "<PR url>", label: "PR #<n>"}], summary: "<Changed + Test this from the report, at most 4,000 characters>", agent}`. Then set `state=ready` in `.claude/MODUO_TASK`.
+`tasks_session_status {task_id, state: "ready", note: "Ready for review · PR #<n>", links: [{url: "<PR url>", label: "PR #<n>"}], summary: "<Changed + Test this from the report, at most 4,000 characters>", agent}`. Also `tasks_set_status {task_id, status: "In review"}`. Then set `state=ready` in `.claude/MODUO_TASK`.
 
 ## Finish (from /s3, after the merge into the personal branch)
-`tasks_set_status {task_id, status: "done"}`, then `rm -f .claude/MODUO_TASK`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
+`tasks_set_status {task_id, status: "Awaiting release"}` (a block that never ships, such as docs or ops, goes to `Shipped`), then `rm -f .claude/MODUO_TASK`. `/ship` moves released tasks to `Shipped`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
 
 ## Hand off to the other person
 When work needs the other founder (a review, a design call, a piece in their lane), it goes as a comment on the Moduo task (AGENTS.md §Agent tooling):

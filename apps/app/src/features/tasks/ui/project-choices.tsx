@@ -19,7 +19,7 @@ import {
   DropdownMenuSeparator,
 } from "../../../components/ui/dropdown-menu";
 import type { ProjectStatus, Task } from "../model";
-import { CATEGORY_LABELS, type StatusTarget, statusesByCategory } from "../statuses";
+import { CATEGORY_LABELS, type StatusTarget, statusChoiceGroups } from "../statuses";
 import { StatusIcon } from "./status-icon";
 
 type ProjectChoice = { id: string; name: string; isSystem: boolean };
@@ -94,9 +94,8 @@ export function StatusChoicesProvider({
 }
 
 /**
- * The status menu's items for one task (REPLAN 53a): its project's own
- * statuses grouped by category, hidden ones only while in use; the five
- * categories when the project's statuses can't be read here.
+ * The status menu's items for one task (REPLAN 53a), read only by an open
+ * menu: its project's own statuses (`StatusRadioItems`).
  */
 export function StatusMenuItems({
   task,
@@ -106,13 +105,36 @@ export function StatusMenuItems({
   onPick: (target: StatusTarget) => void;
 }) {
   const { statusesFor, any } = useContext(StatusChoicesContext);
+  return (
+    <StatusRadioItems
+      task={task}
+      set={statusesFor(task.bucketId)}
+      withBacklog={any}
+      onPick={onPick}
+    />
+  );
+}
+
+/**
+ * A task's status choices as menu radio items, the one list Details and the
+ * row menu share: its project's statuses grouped by category, hidden ones
+ * only while in use (`statusChoiceGroups`); the five categories when the
+ * project's statuses can't be read here (Backlog only where statuses exist
+ * at all, `withBacklog`).
+ */
+export function StatusRadioItems({
+  task,
+  set,
+  withBacklog,
+  onPick,
+}: {
+  task: Pick<Task, "statusId" | "status" | "statusCategory">;
+  set: readonly ProjectStatus[];
+  withBacklog: boolean;
+  onPick: (target: StatusTarget) => void;
+}) {
   const category = taskCategoryOf(task);
-  const groups = statusesByCategory(statusesFor(task.bucketId))
-    .map((g) => ({
-      ...g,
-      statuses: g.statuses.filter((s) => !s.hidden || s.id === task.statusId),
-    }))
-    .filter((g) => g.statuses.length > 0);
+  const groups = statusChoiceGroups(set, (s) => s.id === task.statusId);
   const byName = groups.length > 0;
   return (
     <DropdownMenuRadioGroup
@@ -133,7 +155,7 @@ export function StatusMenuItems({
               ))}
             </Fragment>
           ))
-        : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || any).map((c) => (
+        : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || withBacklog).map((c) => (
             <DropdownMenuRadioItem key={c} value={c}>
               <StatusIcon category={c} className="text-muted-foreground" />
               {CATEGORY_LABELS[c]}

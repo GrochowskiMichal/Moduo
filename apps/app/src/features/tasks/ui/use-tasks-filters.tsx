@@ -53,11 +53,22 @@ import {
   taskFilterShape,
   WAITING_ANY,
 } from "../filters";
-import type { Bucket, Tag, Task, Team } from "../model";
+import type { Bucket, ProjectStatus, Tag, Task, Team } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
 import { bucketDotColor } from "../sidebar";
-import { STATUS_KEY_LABELS } from "../statuses";
-import { useTaskCommands, useTasksSelector, useTaskTagIndex } from "../tasks-context";
+import {
+  CATEGORY_LABELS,
+  isStatusKey,
+  STATUS_KEY_LABELS,
+  statusChoiceGroups,
+  statusKeyCategory,
+} from "../statuses";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksSelector,
+  useTaskTagIndex,
+} from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { StatusIcon } from "./status-icon";
@@ -96,32 +107,82 @@ const LEVELS = (none: string): FilterOption[] => [
   { value: NONE_VALUE, label: none },
 ];
 
+/** Filter → Status across projects: the five categories by their keys. The
+ *  labels every surface uses ("To do", "Won't do", calls 21/53a). Won't do
+ *  tasks are out of every scope until this asks for them (TV-U2, AC1.4).
+ *  TV-D9: Backlog joins, and each value leads with its category's icon (the
+ *  values stay the stored legacy ones, so saved filters keep working). */
+const STATUS_KEY_OPTIONS: FilterOption[] = [
+  {
+    value: "backlog",
+    label: STATUS_KEY_LABELS.backlog,
+    leading: <StatusIcon category="backlog" />,
+    keywords: ["someday", "not planned"],
+  },
+  { value: "todo", label: STATUS_KEY_LABELS.todo, leading: <StatusIcon category="todo" /> },
+  {
+    value: "in_progress",
+    label: STATUS_KEY_LABELS.in_progress,
+    leading: <StatusIcon category="in_progress" />,
+  },
+  { value: "done", label: STATUS_KEY_LABELS.done, leading: <StatusIcon category="done" /> },
+  {
+    value: "archived",
+    label: STATUS_KEY_LABELS.archived,
+    leading: <StatusIcon category="wont_do" />,
+    keywords: ["won't do", "wont do", "archived"],
+  },
+];
+
+/**
+ * What Filter → Status offers (MOD-240): inside one project, its own
+ * statuses by name (the Details picker's list, by id); elsewhere, or when
+ * the project's statuses can't be read, the five categories. A value the
+ * list lacks keeps a readable chip: a category from an older filter by its
+ * name, another project's status by its own, a deleted one as such.
+ */
+export function statusFilterOptions(
+  set: readonly ProjectStatus[],
+  statusById: ReadonlyMap<string, ProjectStatus>,
+  conditions: readonly FilterCondition[],
+): FilterOption[] {
+  const asked = new Set(
+    conditions.filter((c) => c.dimension === "status").flatMap((c) => c.values),
+  );
+  const groups = statusChoiceGroups(set, (s) => asked.has(s.id));
+  const options: FilterOption[] =
+    groups.length === 0
+      ? STATUS_KEY_OPTIONS
+      : groups.flatMap((g) =>
+          g.statuses.map((s) => ({
+            value: s.id,
+            label: s.name,
+            leading: <StatusIcon category={s.category} />,
+            // Typing a category still finds its statuses ("done" → Shipped).
+            keywords: [CATEGORY_LABELS[s.category]],
+          })),
+        );
+  const known = new Set(options.map((o) => o.value));
+  const extra = [...asked].filter((v) => !known.has(v));
+  return [
+    ...options,
+    ...extra.map((value): FilterOption => {
+      if (isStatusKey(value)) {
+        return {
+          value,
+          label: STATUS_KEY_LABELS[value],
+          leading: <StatusIcon category={statusKeyCategory(value)} />,
+        };
+      }
+      const status = statusById.get(value);
+      return status
+        ? { value, label: status.name, leading: <StatusIcon category={status.category} /> }
+        : { value, label: "Deleted status" };
+    }),
+  ];
+}
+
 const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
-  // The labels every surface uses ("To do", "Won't do", calls 21/53a). Won't
-  // do tasks are out of every scope until this asks for them (TV-U2, AC1.4).
-  // TV-D9: Backlog joins, and each value leads with its category's icon (the
-  // values stay the stored legacy ones, so saved filters keep working).
-  status: [
-    {
-      value: "backlog",
-      label: STATUS_KEY_LABELS.backlog,
-      leading: <StatusIcon category="backlog" />,
-      keywords: ["someday", "not planned"],
-    },
-    { value: "todo", label: STATUS_KEY_LABELS.todo, leading: <StatusIcon category="todo" /> },
-    {
-      value: "in_progress",
-      label: STATUS_KEY_LABELS.in_progress,
-      leading: <StatusIcon category="in_progress" />,
-    },
-    { value: "done", label: STATUS_KEY_LABELS.done, leading: <StatusIcon category="done" /> },
-    {
-      value: "archived",
-      label: STATUS_KEY_LABELS.archived,
-      leading: <StatusIcon category="wont_do" />,
-      keywords: ["won't do", "wont do", "archived"],
-    },
-  ],
   priority: LEVELS("No priority"),
   energy: LEVELS("No energy"),
   due: [
@@ -210,8 +271,22 @@ export function taskFilterDimensions(input: {
   teams?: readonly Team[];
   /** Absent or null: no Project dimension (one project, the Inbox). */
   projects?: ProjectFilterChoices | null;
+  /** Filter → Status's choices (MOD-240): the project's own set inside one
+   *  (empty elsewhere: the categories), and every status by id for chips. */
+  statuses?: {
+    set: readonly ProjectStatus[];
+    byId: ReadonlyMap<string, ProjectStatus>;
+  };
 }): FilterDimension[] {
-  const { assignees, tags, countByTag, conditions, teams = [], projects = null } = input;
+  const {
+    assignees,
+    tags,
+    countByTag,
+    conditions,
+    teams = [],
+    projects = null,
+    statuses = { set: [], byId: new Map() },
+  } = input;
   const projectOptions: FilterOption[] = [
     ...(projects?.inbox ? [{ value: INBOX_VALUE, label: "Inbox", icon: Inbox }] : []),
     ...(projects?.projects ?? []).map((project) => ({
@@ -269,6 +344,8 @@ export function taskFilterDimensions(input: {
           id,
           "Deleted tag",
         );
+      case "status":
+        return statusFilterOptions(statuses.set, statuses.byId, conditions);
       default:
         return OPTIONS[id] ?? [];
     }
@@ -393,6 +470,17 @@ export function useTasksFilters({
   const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
   const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
   const subtasksByParent = useTasksSelector((d) => d.subtasksByParent);
+  // Inside one project (or the Inbox), Filter → Status offers its own
+  // statuses (MOD-240); anywhere else the lookup finds no set.
+  const statusesForBucket = useStatusesForBucket();
+  const statusById = useTasksSelector((d) => d.statusById);
+  const statuses = useMemo(
+    () => ({
+      set: statusesForBucket(scope === "inbox" ? (inboxId ?? "") : scope),
+      byId: statusById,
+    }),
+    [statusesForBucket, scope, inboxId, statusById],
+  );
   const dimensions = useMemo(
     () =>
       taskFilterDimensions({
@@ -402,8 +490,9 @@ export function useTasksFilters({
         conditions,
         teams,
         projects,
+        statuses,
       }),
-    [assignees, tags, openTaskCountByTag, conditions, teams, projects],
+    [assignees, tags, openTaskCountByTag, conditions, teams, projects, statuses],
   );
 
   // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks

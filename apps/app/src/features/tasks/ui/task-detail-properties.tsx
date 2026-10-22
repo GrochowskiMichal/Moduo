@@ -10,11 +10,7 @@
 // properties). Values wrap and never truncate; the label column narrows from
 // 96 to 76 px when the panel is under 320 px (the panel is the container).
 
-import {
-  TASK_STATUS_CATEGORIES,
-  type TaskStatusCategory,
-  taskCategoryOf,
-} from "@contracts/vocabularies";
+import { taskCategoryOf } from "@contracts/vocabularies";
 import {
   Bell,
   CalendarClock,
@@ -71,11 +67,12 @@ import {
 import { LEVEL_OPTIONS } from "../helpers";
 import type { Bucket, EnergyLevel, PriorityLevel, Task, Team } from "../model";
 import { changePatternRule, engineZone } from "../recurrence-engine";
-import { CATEGORY_LABELS, statusesByCategory, statusNameOf } from "../statuses";
+import { statusNameOf } from "../statuses";
 import { useTaskCommands, useTasksSelector, useTaskTags } from "../tasks-context";
 import { type AddPropertyItem, AddPropertyLine } from "./add-property-line";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { EnergyIcon, PriorityIcon } from "./level-icons";
+import { StatusRadioItems } from "./project-choices";
 import { RepeatMoveDialog } from "./repeat-move-dialog";
 import { StatusIcon } from "./status-icon";
 import {
@@ -278,18 +275,9 @@ function StatusValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
   const statuses = useTasksSelector((d) => d.statuses);
   const statusById = useTasksSelector((d) => d.statusById);
   const allBuckets = useTasksSelector((d) => d.allBuckets);
-  // The project's own statuses, grouped by category (REPLAN 53a); the five
-  // categories when its statuses aren't readable here (a project you can't
-  // see, a database before TV-D9). Hidden ones are listed only while in use.
+  // The project's own statuses (REPLAN 53a), the row menu's list.
   const category = taskCategoryOf(task);
   const name = statusNameOf(task, statusById);
-  const groups = statusesByCategory(statusesForBucketOf(statuses, allBuckets, task.bucketId))
-    .map((g) => ({
-      ...g,
-      statuses: g.statuses.filter((s) => !s.hidden || s.id === task.statusId),
-    }))
-    .filter((g) => g.statuses.length > 0);
-  const byName = groups.length > 0;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild disabled={!canEdit}>
@@ -298,34 +286,12 @@ function StatusValue({ task, canEdit }: { task: Task; canEdit: boolean }) {
         </PropertyValue>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
-        <DropdownMenuRadioGroup
-          value={byName ? (task.statusId ?? "") : category}
-          onValueChange={(v) => {
-            if (byName) setTaskStatus(task.id, { statusId: v });
-            else setTaskStatus(task.id, { category: v as TaskStatusCategory });
-          }}
-        >
-          {byName
-            ? groups.map((g, i) => (
-                <div key={g.category}>
-                  {i > 0 ? <DropdownMenuSeparator /> : null}
-                  {g.statuses.map((s) => (
-                    <DropdownMenuRadioItem key={s.id} value={s.id}>
-                      <StatusIcon category={s.category} className="text-muted-foreground" />
-                      {s.name}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </div>
-              ))
-            : TASK_STATUS_CATEGORIES.filter((c) => c !== "backlog" || statuses.length > 0).map(
-                (c) => (
-                  <DropdownMenuRadioItem key={c} value={c}>
-                    <StatusIcon category={c} className="text-muted-foreground" />
-                    {CATEGORY_LABELS[c]}
-                  </DropdownMenuRadioItem>
-                ),
-              )}
-        </DropdownMenuRadioGroup>
+        <StatusRadioItems
+          task={task}
+          set={statusesForBucketOf(statuses, allBuckets, task.bucketId)}
+          withBacklog={statuses.length > 0}
+          onPick={(target) => setTaskStatus(task.id, target)}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

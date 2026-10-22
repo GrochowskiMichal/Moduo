@@ -3426,45 +3426,6 @@ export type Database = {
           },
         ]
       }
-      panel_layouts: {
-        Row: {
-          created_at: string
-          id: string
-          layout_data: Json
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          layout_data?: Json
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          layout_data?: Json
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "panel_layouts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "panel_layouts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "user_entitlements"
-            referencedColumns: ["user_id"]
-          },
-        ]
-      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -4953,214 +4914,6 @@ export type Database = {
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tasks_comments: {
-        Row: {
-          author_id: string | null
-          body: string
-          created_at: string
-          deleted_at: string | null
-          id: string
-          task_id: string
-          updated_at: string
-        }
-        Insert: {
-          author_id?: string | null
-          body?: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          task_id: string
-          updated_at?: string
-        }
-        Update: {
-          author_id?: string | null
-          body?: string
-          created_at?: string
-          deleted_at?: string | null
-          id?: string
-          task_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_comments_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_comments_author_id_fkey"
-            columns: ["author_id"]
-            isOneToOne: false
-            referencedRelation: "user_entitlements"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "tasks_comments_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tasks_items: {
-        Row: {
-          assigned_to: string | null
-          created_at: string
-          deleted_at: string | null
-          description: string
-          due_date: string | null
-          id: string
-          position: number
-          priority: number
-          project_id: string
-          state_id: string | null
-          tags: Json
-          title: string
-          updated_at: string
-        }
-        Insert: {
-          assigned_to?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          description?: string
-          due_date?: string | null
-          id?: string
-          position?: number
-          priority?: number
-          project_id: string
-          state_id?: string | null
-          tags?: Json
-          title?: string
-          updated_at?: string
-        }
-        Update: {
-          assigned_to?: string | null
-          created_at?: string
-          deleted_at?: string | null
-          description?: string
-          due_date?: string | null
-          id?: string
-          position?: number
-          priority?: number
-          project_id?: string
-          state_id?: string | null
-          tags?: Json
-          title?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_items_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_items_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "user_entitlements"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "tasks_items_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_items_state_id_fkey"
-            columns: ["state_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_states"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tasks_projects: {
-        Row: {
-          created_at: string
-          deleted_at: string | null
-          description: string
-          id: string
-          name: string
-          updated_at: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          deleted_at?: string | null
-          description?: string
-          id?: string
-          name?: string
-          updated_at?: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          deleted_at?: string | null
-          description?: string
-          id?: string
-          name?: string
-          updated_at?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_projects_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      tasks_states: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          is_done: boolean
-          name: string
-          position: number
-          project_id: string
-          updated_at: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          id?: string
-          is_done?: boolean
-          name: string
-          position?: number
-          project_id: string
-          updated_at?: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          is_done?: boolean
-          name?: string
-          position?: number
-          project_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_states_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_projects"
             referencedColumns: ["id"]
           },
         ]
@@ -9746,11 +9499,16 @@ export type Database = {
         Returns: undefined
       }
       contact_merge_candidates: { Args: never; Returns: Json }
+      contacts__company_link_backfill: { Args: never; Returns: undefined }
       contacts__emails_to_jsonb: {
         Args: { p_arr: string[] | null; p_primary: string | null }
         Returns: Json
       }
       contacts__primary_value: { Args: { p_list: Json | null }; Returns: string }
+      contacts__works_at_company: {
+        Args: { p_contact_id: string | null; p_workspace_id: string | null }
+        Returns: string
+      }
       contacts_module_permission: {
         Args: { p_workspace_id: string | null }
         Returns: string
@@ -11304,6 +11062,7 @@ export type Database = {
       }
       notes_op_move: {
         Args: {
+          p_follow_parent?: boolean | null
           p_note_id: string | null
           p_parent_id?: string | null
           p_position?: string | null
@@ -11594,6 +11353,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      notes_public_subtree: { Args: { p_token: string | null }; Returns: Json }
       notice__gate: {
         Args: {
           p_at: string | null
@@ -11716,10 +11476,6 @@ export type Database = {
         Args: { p_notes: string | null; p_tasks: string | null }
         Returns: Json
       }
-      perm_private_entity_visible: {
-        Args: { p_entity_id: string | null; p_entity_type: string | null }
-        Returns: boolean
-      }
       perm_rank: { Args: { p_level: string | null }; Returns: number }
       perm_resolve: {
         Args: {
@@ -11752,6 +11508,10 @@ export type Database = {
       }
       perm_validate_overrides: { Args: { p_overrides: Json | null }; Returns: Json }
       plan_tier_rank: { Args: { t: string | null }; Returns: number }
+      prefs_op_set: {
+        Args: { p_domain: string | null; p_updated_at: string | null; p_value: Json | null }
+        Returns: Json
+      }
       profile_plan_tier_text: { Args: { p_user_id: string | null }; Returns: string }
       project_statuses__check_name: {
         Args: {
@@ -14690,10 +14450,6 @@ export type Database = {
       }
       time_region__zone_ok: { Args: { p_zone: string | null }; Returns: boolean }
       user_agent_work: { Args: never; Returns: boolean }
-      user_can_manage_workspace_members: {
-        Args: { p_workspace_id: string | null }
-        Returns: boolean
-      }
       user_chat_prefs: { Args: never; Returns: Json }
       user_clients__purge: { Args: never; Returns: number }
       user_is_workspace_member: {
