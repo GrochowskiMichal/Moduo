@@ -310,3 +310,47 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+-- DB-PERF-1 · The task check ranks its project once (20261022120000_perm_fast_paths);
+-- these pin the answers the old full/edit/view ladder gave. R is a viewer
+-- (tasks.view only). PF is O's project shared with N at freebusy, PR is O's
+-- project shared with R in full, SY is M's Inbox (a system project) holding
+-- T6, a task E made and handed to M.
+SELECT test.person('R');
+INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W'), test.id('R'), 'viewer');
+INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
+  (test.id('PF'), test.id('W'), test.id('O'), 'Free/busy only', false),
+  (test.id('PR'), test.id('W'), test.id('O'), 'Viewer in full', false),
+  (test.id('SY'), test.id('W'), test.id('M'), 'Inbox', true);
+DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id IN (test.id('PF'), test.id('PR'), test.id('SY'));
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'bucket', test.id('PF'), 'member', test.id('N'), 'freebusy', test.id('O')),
+       (test.id('W'), 'bucket', test.id('PR'), 'member', test.id('R'), 'full', test.id('O'));
+INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) VALUES
+  (test.id('T4'), test.id('W'), test.id('PF'), test.id('O'), 'Free/busy task', 'todo'),
+  (test.id('T5'), test.id('W'), test.id('PR'), test.id('O'), 'Viewer task', 'todo'),
+  (test.id('T6'), test.id('W'), test.id('SY'), test.id('E'), 'Handed task', 'todo');
+
+DO $$
+BEGIN
+  PERFORM test.ok(test.can('N', 'task', 'T4', 'view') = 'false'
+                  AND test.can('N', 'task', 'T4', 'freebusy') = 'false',
+    'a freebusy share on the project gives its tasks nothing');
+  PERFORM test.ok(test.can('R', 'task', 'T5', 'view') = 'true'
+                  AND test.can('R', 'task', 'T5', 'edit') = 'false'
+                  AND test.can('R', 'task', 'T5', 'full') = 'false',
+    'a full share on the project is capped by a viewer''s tasks permissions');
+  PERFORM test.ok(test.can('E', 'task', 'T6', 'edit') = 'true'
+                  AND test.can('E', 'task', 'T6', 'full') = 'false',
+    'a task you made and handed to someone''s Inbox stays editable to you, not more');
+  PERFORM test.ok(test.can('M', 'task', 'T6', 'full') = 'true'
+                  AND test.can('N', 'task', 'T6', 'view') = 'false',
+    'an Inbox task is its owner''s in full and nobody else''s');
+  PERFORM test.ok(test.can('O', 'task', 'T2', 'bogus') = 'false',
+    'an unknown level is a no');
+  PERFORM test.ok(test.as_service(format(
+      'SELECT string_agg(public.perm_ceiling_rank(%L, u, ''tasks'')::text, '','' ORDER BY o) FROM unnest(ARRAY[%L, %L, %L, %L]::uuid[]) WITH ORDINALITY AS x(u, o)',
+      test.id('W'), test.id('O'), test.id('N'), test.id('R'), test.id('X'))) = '4,4,2,0',
+    'the tasks ceiling: owner 4, member 4, viewer 2, outsider 0');
+END;
+$$;
