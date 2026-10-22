@@ -266,28 +266,39 @@ export async function answerMessage(
   });
   await server.connect(transport);
   try {
-    return await transport.handleRequest(sdkRequest(headers), { parsedBody: withoutNullArguments(message) });
+    return await transport.handleRequest(sdkRequest(headers), { parsedBody: withoutNulls(message) });
   } finally {
     await server.close();
   }
 }
 
-/** `"arguments": null` meant no arguments before the SDK, which refuses it. */
-function withoutNullArguments(raw: unknown): unknown {
-  const message = raw as { method?: unknown; params?: { arguments?: unknown } };
-  if (message.method !== "tools/call" || message.params?.arguments !== null) return raw;
-  const { arguments: _none, ...params } = message.params;
-  return { ...message, params };
+/**
+ * `"params": null` and `"arguments": null` meant "none" before the SDK, which
+ * refuses both.
+ */
+function withoutNulls(raw: { params?: unknown }): unknown {
+  if (raw.params === null) {
+    const { params: _none, ...rest } = raw;
+    return rest;
+  }
+  const params = raw.params as { arguments?: unknown } | undefined;
+  if (params?.arguments !== null) return raw;
+  const { arguments: _none, ...kept } = params;
+  return { ...raw, params: kept };
 }
 
 /**
  * The SDK insists on `Accept: application/json, text/event-stream` and a JSON
  * Content-Type; the connector never did, and scripts that send neither keep
- * working. The client's other headers (mcp-protocol-version) go along; the
+ * working. The client's other headers (mcp-protocol-version) go along, its
+ * credentials don't; the
  * body has been read already and goes in as `parsedBody`.
  */
 function sdkRequest(clientHeaders: HeadersInit): Request {
   const headers = new Headers(clientHeaders);
+  // The key is verified already; tools never see the caller's credentials.
+  headers.delete("authorization");
+  headers.delete("cookie");
   headers.delete("content-length");
   headers.delete("transfer-encoding");
   headers.set("accept", "application/json, text/event-stream");

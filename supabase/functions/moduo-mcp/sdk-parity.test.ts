@@ -189,7 +189,7 @@ async function loadServer(): Promise<(req: Request) => Promise<Response>> {
   return handler;
 }
 
-type Exchange = { status: number; contentType: string | null; body: unknown; ops: Op[] };
+type Exchange = { status: number; contentType: string | null; cors: string[]; body: unknown; ops: Op[] };
 
 async function send(
   body: unknown,
@@ -220,7 +220,8 @@ async function send(
   } catch {
     // keep the text
   }
-  return { status: res.status, contentType: res.headers.get("content-type"), body: parsed, ops: [...ops] };
+  const cors = [...res.headers].filter(([h]) => h.startsWith("access-control-")).map(([h, v]) => `${h}: ${v}`).sort();
+  return { status: res.status, contentType: res.headers.get("content-type"), cors, body: parsed, ops: [...ops] };
 }
 
 const rpc = (method: string, params?: unknown, id: number | string = 1) => ({ jsonrpc: "2.0", id, method, params });
@@ -293,6 +294,14 @@ const SDK_DIFFERENCES: Record<string, { why: string; now: (e: Exchange) => void 
     why: "An unknown version is answered with the SDK's latest (2025-11-25), as the spec says, not 2025-03-26.",
     now: (e) => expect((e.body as any).result.protocolVersion).toBe("2025-11-25"),
   },
+  "unsupported protocol header": {
+    why: "The SDK refuses an MCP-Protocol-Version header it doesn't speak (HTTP 400), as the spec asks; the old server ignored it.",
+    now: (e) => expect(e.status).toBe(400),
+  },
+  "initialize without params": {
+    why: "The SDK checks initialize's params (protocolVersion, capabilities, clientInfo) and answers -32603; the old server answered anything.",
+    now: (e) => expect((e.body as any).error.code).toBe(-32603),
+  },
   "unknown method": {
     why: "The SDK words method-not-found without the method's name; same code (-32601).",
     now: (e) =>
@@ -339,6 +348,9 @@ async function collect(): Promise<Record<string, Exchange>> {
   out["arguments missing"] = await send(rpc("tools/call", { name: "tasks_list" }));
   out["tool name missing"] = await send(rpc("tools/call", {}));
   out["unknown method"] = await send(rpc("resources/list"));
+  out["params null"] = await send(rpc("tools/list", null));
+  out["unsupported protocol header"] = await send(rpc("ping"), { headers: { "mcp-protocol-version": "1999-01-01" } });
+  out["initialize without params"] = await send(rpc("initialize"));
   out["string id"] = await send(rpc("ping", undefined, "abc"));
   out["plain client headers"] = await send(rpc("tools/list"), {
     headers: { accept: "*/*", "content-type": "text/plain" },
@@ -396,8 +408,8 @@ describe("moduo-mcp through the SDK", () => {
     for (const name of differing) expect(now[name], name).toEqual(before[name]);
     for (const [name, difference] of Object.entries(SDK_DIFFERENCES)) {
       difference.now(now[name]);
-      // Everything but the answer itself (status, type, database calls) still matches.
-      expect({ ...now[name], body: null }, name).toEqual({ ...before[name], body: null });
+      // The database calls (the key lookup) still match.
+      expect(now[name].ops, name).toEqual(before[name].ops);
     }
   });
 });
