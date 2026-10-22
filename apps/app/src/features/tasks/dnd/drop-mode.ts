@@ -17,9 +17,9 @@
 // gotchas/ui.md), so what the line shows is what the drop does.
 
 import { betweenPositions, canNestUnder, type GroupBy } from "../helpers";
-import type { PriorityLevel, Task, TaskStatus } from "../model";
+import type { PriorityLevel, ProjectStatus, Task, TaskStatus } from "../model";
 import type { DragOrder } from "../order";
-import type { StatusKey } from "../statuses";
+import { type StatusKey, statusGroupOf } from "../statuses";
 
 /** How far into a row (px) the pointer must be to nest instead of reorder.
  *  The nested-row indent (`ml-10`), so the zone edge is where a subtask's
@@ -241,6 +241,8 @@ export type ListDropPlan = {
 type GroupFieldPatch = Partial<Pick<Task, "priority" | "assigneeId" | "sectionId" | "teamId">> & {
   /** A status group: Backlog is its own key (TV-D9). */
   status?: StatusKey;
+  /** One project's own status, with `status` as its key (MOD-241). */
+  statusId?: string;
 };
 
 /**
@@ -249,10 +251,20 @@ type GroupFieldPatch = Partial<Pick<Task, "priority" | "assigneeId" | "sectionId
  * person = assigned to them). Project groups move the task instead (see
  * {@link ListDropPlan.bucketId}). Null = this grouping has no field to write.
  */
-export function groupFieldPatch(groupBy: GroupBy, key: string): GroupFieldPatch | null {
+export function groupFieldPatch(
+  groupBy: GroupBy,
+  key: string,
+  /** The project's own statuses, where status groups are its statuses. */
+  statuses: readonly ProjectStatus[] = [],
+): GroupFieldPatch | null {
   switch (groupBy) {
-    case "status":
-      return { status: key as StatusKey };
+    case "status": {
+      const group = statusGroupOf(key, statuses);
+      if (!group) return null;
+      return group.status
+        ? { status: group.key, statusId: group.status.id }
+        : { status: group.key };
+    }
     case "priority":
       return { priority: key === "unset" ? null : (key as PriorityLevel) };
     case "assignee":
@@ -315,6 +327,8 @@ export function planListDrop(input: {
   allByPosition: ReadonlyArray<Task>;
   /** Each group's tasks in order, hidden completed ones included. */
   groupTasks: (groupKey: string) => ReadonlyArray<Pick<Task, "id">>;
+  /** The project's own statuses, where status groups are its statuses. */
+  statuses?: readonly ProjectStatus[];
 }): ListDropPlan | null {
   const { hover, active, activeGroupKey, groupBy, allByPosition } = input;
   if (hover.kind === "sorted") return null;
@@ -335,7 +349,7 @@ export function planListDrop(input: {
     if (key === activeGroupKey) return;
     if (groupBy === "bucket") plan.bucketId = key;
     else {
-      const fields = groupFieldPatch(groupBy, key);
+      const fields = groupFieldPatch(groupBy, key, input.statuses);
       if (fields) plan.fields = fields;
     }
   };
