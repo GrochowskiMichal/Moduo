@@ -408,8 +408,11 @@ describe("moduo-mcp through the SDK", () => {
     for (const name of differing) expect(now[name], name).toEqual(before[name]);
     for (const [name, difference] of Object.entries(SDK_DIFFERENCES)) {
       difference.now(now[name]);
-      // The database calls (the key lookup) still match.
+      // The database calls (the key lookup) and CORS still match, and the
+      // status too unless the difference is the status.
       expect(now[name].ops, name).toEqual(before[name].ops);
+      expect(now[name].cors, name).toEqual(before[name].cors);
+      if (name !== "unsupported protocol header") expect(now[name].status, name).toBe(before[name].status);
     }
   });
 });
