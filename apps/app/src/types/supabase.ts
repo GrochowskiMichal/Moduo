@@ -11476,10 +11476,6 @@ export type Database = {
         Args: { p_notes: string | null; p_tasks: string | null }
         Returns: Json
       }
-      perm_private_entity_visible: {
-        Args: { p_entity_id: string | null; p_entity_type: string | null }
-        Returns: boolean
-      }
       perm_rank: { Args: { p_level: string | null }; Returns: number }
       perm_resolve: {
         Args: {
@@ -14454,10 +14450,6 @@ export type Database = {
       }
       time_region__zone_ok: { Args: { p_zone: string | null }; Returns: boolean }
       user_agent_work: { Args: never; Returns: boolean }
-      user_can_manage_workspace_members: {
-        Args: { p_workspace_id: string | null }
-        Returns: boolean
-      }
       user_chat_prefs: { Args: never; Returns: Json }
       user_clients__purge: { Args: never; Returns: number }
       user_is_workspace_member: {
