@@ -1,4 +1,4 @@
-import { rest, rpc, type Session, signIn, stackKeys } from "./local-stack";
+import { rest, rpc, type Session, setLocalPassword, signIn, stackKeys } from "./local-stack";
 
 /**
  * A chat room of its own for a spec (CV-7a): two throwaway people and a
@@ -34,11 +34,8 @@ export async function ensureChatPerson(who: ChatPersonSeed): Promise<Session> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: who.password }),
-  });
+  // Auth refuses password writes; set it in SQL (supabase/seed.sql does the same).
+  setLocalPassword(user.id, who.password);
   await rest("service", `profiles?id=eq.${user.id}`, {
     method: "PATCH",
     body: { display_name: who.name },

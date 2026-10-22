@@ -38,6 +38,7 @@ import {
   ErasureError,
   erasureErrorMessage,
 } from "../_shared/account-erasure.ts";
+import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
 import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -63,6 +64,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const authHeader = req.headers.get("Authorization");
+    if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
     if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
 
     const {

@@ -11,6 +11,8 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { isAppToken } from "./app-token.ts";
+
 export const TRIAL_DAYS_NO_CARD = 14;
 export const TRIAL_DAYS_WITH_CARD = 30;
 export const PAID_PLANS = ["pro", "duo", "team"] as const;
@@ -98,6 +100,8 @@ export async function authenticate(
   authHeader: string | null,
 ): Promise<User | null> {
   if (!authHeader) return null;
+  // An app's OAuth token is the connector's only (MCPO-1, _shared/app-token.ts).
+  if (isAppToken(authHeader)) return null;
   const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
   return error || !user ? null : user;
 }

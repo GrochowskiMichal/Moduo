@@ -336,7 +336,7 @@ second module makes the duplication real.
 
 ## Deferred
 
-- OAuth flow for MCP clients that won't send static bearer keys.
+- OAuth flow for MCP clients that won't send static bearer keys: planned in [specs/mcp-oauth.md](../specs/mcp-oauth.md) (MCPO-1…6).
 - `agent` actor type (in-app agents, distinct from API keys) — CHECK-reserved
   since Session 8.
 - Workspace-level activity feed UI (the connector already exposes
