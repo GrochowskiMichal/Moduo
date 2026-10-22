@@ -13,6 +13,7 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
 import { createPortalSessionBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
 import { safeRedirect } from "../_shared/billing.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -58,6 +59,7 @@ Deno.serve(async (req: Request) => {
     );
 
     const authHeader = req.headers.get("Authorization");
+    if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
     if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: { user }, error: authError } = await supabase.auth.getUser(

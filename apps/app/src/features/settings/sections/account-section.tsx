@@ -20,7 +20,7 @@ import { forgetRunUser } from "../../focus/run";
 import { wipeNotesCopies } from "../../notes/sync/people";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { forgetCaptureDrafts } from "../../tasks/capture/capture-draft";
-import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
+import { providerLabel } from "../account";
 import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -53,11 +53,6 @@ export function AccountSection() {
 
   const [provider, setProvider] = useState<string | null>(null);
   const [providerLoaded, setProviderLoaded] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [pwBusy, setPwBusy] = useState(false);
-  const [pwMessage, setPwMessage] = useState<string | null>(null);
-  const [pwError, setPwError] = useState<string | null>(null);
 
   const [isPhraseVisible, setIsPhraseVisible] = useState(false);
   const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
@@ -153,16 +148,14 @@ export function AccountSection() {
     };
   }, [runtime, userId]);
 
-  // Cloud accounts: learn the sign-in provider so we know whether a password is
-  // even applicable (OAuth-only accounts have none). Future-lite (local vault)
-  // accounts skip this — they authenticate with the login key below.
+  // Cloud accounts: learn the sign-in provider for the "signed in with" line.
+  // Future-lite (local vault) accounts skip this — they authenticate with the
+  // login key below.
   useEffect(() => {
     if (hasLocalKey) return;
     let active = true;
-    // Read the provider from the CACHED session (no network round-trip) so an
-    // OAuth-only account never flashes the wrong provider + a password form it
-    // can't use before the value resolves. Nothing provider-dependent renders
-    // until `providerLoaded`.
+    // Read the provider from the CACHED session (no network round-trip) so the
+    // line never flashes the wrong provider before the value resolves.
     void supabaseClient.auth
       .getSession()
       .then(({ data }) => {
@@ -299,29 +292,6 @@ export function AccountSection() {
     }
   };
 
-  const canChangePassword = isPasswordProvider(provider);
-
-  const handleChangePassword = async () => {
-    const validationError = validateNewPassword(newPassword, confirmPassword);
-    if (validationError) {
-      setPwError(validationError);
-      setPwMessage(null);
-      return;
-    }
-    setPwBusy(true);
-    setPwError(null);
-    setPwMessage(null);
-    const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-    setPwBusy(false);
-    if (error) {
-      setPwError(error.message);
-      return;
-    }
-    setNewPassword("");
-    setConfirmPassword("");
-    setPwMessage("Password updated.");
-  };
-
   return (
     <SettingsSectionShell
       title="Account"
@@ -441,70 +411,6 @@ export function AccountSection() {
             <Eyebrow>Email</Eyebrow>
             <span className="text-sm text-foreground">{userEmail ?? "—"}</span>
           </div>
-
-          {!providerLoaded ? null : canChangePassword ? (
-            <div className="mt-6 border-t border-border pt-6">
-              <h4 className="text-sm font-medium text-foreground">Password</h4>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Set or change the password you use to sign in.
-              </p>
-              <div className="mt-4 flex max-w-sm flex-col gap-3">
-                <div>
-                  <Label htmlFor="account-new-password">New password</Label>
-                  <Input
-                    id="account-new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(event) => {
-                      setNewPassword(event.target.value);
-                      setPwError(null);
-                      setPwMessage(null);
-                    }}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="account-confirm-password">Confirm password</Label>
-                  <Input
-                    id="account-confirm-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(event) => {
-                      setConfirmPassword(event.target.value);
-                      setPwError(null);
-                      setPwMessage(null);
-                    }}
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={() => void handleChangePassword()}
-                    disabled={pwBusy || newPassword.length === 0}
-                  >
-                    {pwBusy ? "Saving…" : "Update password"}
-                  </Button>
-                  {pwMessage ? (
-                    <p className="text-xs text-success" role="status">
-                      {pwMessage}
-                    </p>
-                  ) : null}
-                  {pwError ? (
-                    <p className="text-xs text-destructive" role="alert">
-                      {pwError}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-4 text-xs text-muted-foreground">
-              You sign in with {providerLabel(provider)}, so there&apos;s no password to manage
-              here.
-            </p>
-          )}
         </section>
       ) : null}
 
