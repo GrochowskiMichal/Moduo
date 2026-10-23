@@ -5,6 +5,21 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.3.1 · 2026-10-23
+
+### Improved
+
+- New and renamed notes from teammates and agents show up in the sidebar, and links appear in the side panel right away.
+- Notes has a new, calmer layout for everyone: a centred reading column, Favorites, Inbox and Pages in the sidebar, and panels that open only when you need them.
+- Markdown you paste anywhere in a note turns into headings, lists and checkboxes.
+- Notes reopens the last note you had open, where you left off. Checkboxes and live tasks now look different at a glance.
+
+### Fixed
+
+- Notes you open and leave without typing no longer pile up as empty Untitled notes.
+- Undo in a note now takes back only your own edits, never a teammate's or Claude's.
+- The welcome note keeps its content on every device instead of opening empty as Untitled.
+
 ## 1.3.0 · 2026-10-23
 
 ### New

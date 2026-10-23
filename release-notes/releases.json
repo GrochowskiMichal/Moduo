@@ -1,6 +1,43 @@
 {
   "releases": [
     {
+      "version": "1.3.1",
+      "date": "2026-10-23",
+      "highlights": [
+        "Notes has a new, calmer layout for everyone: a centred reading column, Favorites, Inbox and Pages in the sidebar, and panels that open only when you need them."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "New and renamed notes from teammates and agents show up in the sidebar, and links appear in the side panel right away."
+        },
+        {
+          "type": "improved",
+          "text": "Notes has a new, calmer layout for everyone: a centred reading column, Favorites, Inbox and Pages in the sidebar, and panels that open only when you need them."
+        },
+        {
+          "type": "improved",
+          "text": "Markdown you paste anywhere in a note turns into headings, lists and checkboxes."
+        },
+        {
+          "type": "improved",
+          "text": "Notes reopens the last note you had open, where you left off. Checkboxes and live tasks now look different at a glance."
+        },
+        {
+          "type": "fixed",
+          "text": "Notes you open and leave without typing no longer pile up as empty Untitled notes."
+        },
+        {
+          "type": "fixed",
+          "text": "Undo in a note now takes back only your own edits, never a teammate's or Claude's."
+        },
+        {
+          "type": "fixed",
+          "text": "The welcome note keeps its content on every device instead of opening empty as Untitled."
+        }
+      ]
+    },
+    {
       "version": "1.3.0",
       "date": "2026-10-23",
       "highlights": [
