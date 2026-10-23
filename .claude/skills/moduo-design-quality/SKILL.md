@@ -1,6 +1,6 @@
 ---
 name: moduo-design-quality
-description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against apps/app/src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with the prototype skill or /design).
+description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against apps/app/src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with mattpocock-skills:prototype or /design).
 ---
 
 # moduo-design-quality
