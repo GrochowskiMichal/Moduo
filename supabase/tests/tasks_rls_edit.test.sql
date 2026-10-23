@@ -61,6 +61,14 @@ BEGIN
   PERFORM test.ok(test.value_as('D', format('SELECT title FROM public.tasks WHERE id = %L', test.id('TD'))) = 'Call the recruiter',
     'D can see the task shared with them directly');
 
+  -- The policies' helpers answer nothing about rows you can't see.
+  PERFORM test.ok(test.value_as('V', format('SELECT public.buckets__rls_fixed_kept(%L, %L, %L, false)',
+                                            test.id('Q'), test.id('O'), test.id('W'))) = 'false',
+    'the project pin says nothing about a project you can''t see');
+  PERFORM test.ok(test.value_as('V', format('SELECT public.tasks__rls_move_ok(%L, %L, %L)',
+                                            test.id('TD'), test.id('W'), test.id('Q'))) = 'false',
+    'nor the task pin about a task you can''t see');
+
   -- Without the bypass, RLS refuses a viewer before the trigger runs.
   PERFORM set_config('share.bypass', '', true);
   r := test.try('V', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('T')));

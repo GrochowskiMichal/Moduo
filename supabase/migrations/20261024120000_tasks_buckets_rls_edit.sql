@@ -22,7 +22,9 @@
 --
 -- WITH CHECK runs before the new row is written, so a lookup by id (here and
 -- in can_access) reads the row as it was; the pins compare against that.
--- The helpers are SECURITY DEFINER so the lookup doesn't recurse into RLS.
+-- The helpers are SECURITY DEFINER so the lookup doesn't recurse into RLS;
+-- callable as RPCs too, they answer false for a row you can't see, so they
+-- tell you nothing new.
 --
 -- System work is untouched: every function that sets share.bypass is
 -- SECURITY DEFINER and owned by postgres (BYPASSRLS), and the service role
@@ -37,7 +39,7 @@ LANGUAGE sql
 STABLE SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT coalesce((
+  SELECT public.can_access('bucket', p_id, 'view') AND coalesce((
     SELECT b.owner_id IS NOT DISTINCT FROM p_owner_id
        AND b.workspace_id IS NOT DISTINCT FROM p_workspace_id
        AND b.is_system IS NOT DISTINCT FROM p_is_system
@@ -53,7 +55,7 @@ LANGUAGE sql
 STABLE SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT coalesce((
+  SELECT public.can_access('task', p_id, 'view') AND coalesce((
     SELECT t.workspace_id IS NOT DISTINCT FROM p_workspace_id
        AND (t.bucket_id IS NOT DISTINCT FROM p_bucket_id
             OR public.can_access('bucket', p_bucket_id, 'edit'))
