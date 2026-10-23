@@ -77,6 +77,10 @@ BEGIN
                                 test.id('TV-new'), test.id('W'), test.id('P'), test.id('V')));
   PERFORM test.ok(r LIKE '42501%', 'nor add a task to it', r);
 
+  r := test.as_user('R', format($q$INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system)
+                                   VALUES (%L, %L, %L, 'Planted', false)$q$,
+                                test.id('PR-new'), test.id('W'), test.id('R')));
+  PERFORM test.ok(r LIKE '42501%', 'a viewer-role member can''t add a project of their own', r);
   r := test.as_user('R', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('T')));
   PERFORM test.ok(r = 'ok 0', 'an Edit share capped by the viewer role can''t rename the task either', r);
 
@@ -99,6 +103,10 @@ BEGIN
   PERFORM test.ok(r = 'ok 1', 'and add a task to it', r);
   r := test.try('E', format('DELETE FROM public.buckets WHERE id = %L', test.id('P')));
   PERFORM test.ok(r = 'ok 0', 'but deleting the project needs Full', r);
+  r := test.try('E', format($q$INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system)
+                               VALUES (%L, %L, %L, 'My own', false)$q$,
+                            test.id('PE-new'), test.id('W'), test.id('E')));
+  PERFORM test.ok(r = 'ok 1', 'a member can add a project of their own', r);
 
   r := test.try('D', format($q$UPDATE public.tasks SET title = 'Call the recruiter today' WHERE id = %L$q$, test.id('TD')));
   PERFORM test.ok(r = 'ok 1', 'a task shared directly at Edit can be renamed', r);

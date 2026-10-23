@@ -10,7 +10,10 @@
 -- so RLS holds the same floor the trigger does:
 --
 --   SELECT  unchanged (View on the task or its project; your own project).
---   INSERT  unchanged (Edit on the parent project; your own project).
+--   INSERT  tasks unchanged (Edit on the parent project). Projects: your own
+--           project, now only where your role can add (owner or
+--           tasks.create, the trigger's rule), so a leak can't plant one in
+--           a workspace you only view.
 --   UPDATE  Edit on the row, before (USING) and after (WITH CHECK).
 --   DELETE  tasks: Edit (a task is an item in its project, as in the
 --           trigger). Projects: Full, as the trigger asks.
@@ -56,7 +59,8 @@ CREATE POLICY buckets_read ON public.buckets
 
 CREATE POLICY buckets_insert ON public.buckets
   FOR INSERT TO authenticated
-  WITH CHECK (owner_id = (SELECT auth.uid()) OR public.can_access('bucket', id, 'edit'));
+  WITH CHECK ((owner_id = (SELECT auth.uid()) AND public.perm_i_have(workspace_id, 'tasks.create'))
+              OR public.can_access('bucket', id, 'edit'));
 
 CREATE POLICY buckets_update ON public.buckets
   FOR UPDATE TO authenticated
