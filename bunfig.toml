@@ -5,7 +5,7 @@
 linker = "hoisted"
 # Skip npm versions published in the last three days: most hijacked releases
 # are caught and pulled within that window.
-minimumReleaseAge = "3d"
+minimumReleaseAge = 259200
 
 [fmt]
 # bun fmt is the formatter (bun lint lints: .oxlintrc.json). Prettier defaults apart from the
