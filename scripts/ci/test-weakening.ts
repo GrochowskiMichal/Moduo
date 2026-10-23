@@ -59,30 +59,30 @@ interface FileDiff {
   removed: string[];
 }
 
+/** Applies one line of a file's header (before its first hunk); returns true at the first `@@`. */
+function readHeader(current: FileDiff, line: string): boolean {
+  if (line.startsWith("rename from ")) current.oldFile = line.slice(12);
+  else if (line.startsWith("rename to ")) current.file = line.slice(10);
+  return line.startsWith("@@");
+}
+
 /** Parses `git diff` output (renames detected) into added and removed lines per new path. */
 export function parseDiff(diff: string): FileDiff[] {
   const files: FileDiff[] = [];
   let current: FileDiff | null = null;
   let inHunk = false;
   for (const line of diff.split("\n")) {
-    if (line.startsWith("diff --git ")) {
-      // `diff --git a/<old> b/<new>`; `+++ b/<new>` (or `rename to`) refines it below.
-      const m = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
-      current = { file: m ? m[2] : "", oldFile: m ? m[1] : "", added: [], removed: [] };
+    const start = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+    if (start) {
+      current = { file: start[2], oldFile: start[1], added: [], removed: [] };
       files.push(current);
       inHunk = false;
-      continue;
+    } else if (current && !inHunk) {
+      inHunk = readHeader(current, line);
+    } else if (current && !line.startsWith("@@")) {
+      if (line.startsWith("+")) current.added.push(line.slice(1));
+      else if (line.startsWith("-")) current.removed.push(line.slice(1));
     }
-    if (!current) continue;
-    if (!inHunk) {
-      if (line.startsWith("rename from ")) current.oldFile = line.slice(12);
-      else if (line.startsWith("rename to ")) current.file = line.slice(10);
-      else if (line.startsWith("@@")) inHunk = true;
-      continue;
-    }
-    if (line.startsWith("@@")) continue;
-    if (line.startsWith("+")) current.added.push(line.slice(1));
-    else if (line.startsWith("-")) current.removed.push(line.slice(1));
   }
   return files;
 }

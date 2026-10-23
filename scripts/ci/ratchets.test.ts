@@ -149,6 +149,27 @@ describe("ratchets", () => {
     ).toEqual([[17, null]]);
   });
 
+  it("tightens a renumbered or moved function under its new name, and check stays green", () => {
+    const cb = (ifs: number) =>
+      `  useCallback(() => {${Array.from({ length: ifs }, () => " if (a) {}").join("")} }, []);`;
+    const b: Baseline = {
+      ...baseline,
+      size: {},
+      complexity: { "src/view.tsx": { "View>useCallback(cb)": 30 }, "src/old.ts": { legacy: 20 } },
+    };
+    const m = measure([
+      { path: "src/view.tsx", source: `function View(a) {\n${cb(16)}\n${cb(29)}\n}` },
+      { path: "src/split/legacy.ts", source: complex("legacy", 19) },
+    ]);
+    const tight = tighten(m, b);
+    expect(tight.complexity).toEqual({
+      "src/view.tsx": { "View>useCallback(cb)#2": 29 },
+      "src/split/legacy.ts": { legacy: 19 },
+    });
+    // The 16 had no frozen partner: still new, and tighten never adds it.
+    expect(check(m, tight).map((v) => [v.fn, v.frozen])).toEqual([["View>useCallback(cb)", null]]);
+  });
+
   it("keeps a frozen function's value when it moves to another file", () => {
     const m = measure([
       { path: "src/old.ts", source: "export {};" },

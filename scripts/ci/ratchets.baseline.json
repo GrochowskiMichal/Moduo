@@ -938,12 +938,6 @@
       "childExpressions": 27,
       "scanTextRules": 53
     },
-    "scripts/ci/ratchets.ts": {
-      "complexityOf>visit": 18
-    },
-    "scripts/ci/test-weakening.ts": {
-      "parseDiff": 23
-    },
     "scripts/dns-diff.ts": {
       "liveDiff": 24
     },

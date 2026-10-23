@@ -120,60 +120,76 @@ function logicalLeaves(node: Node, out: Node[] = []): Node[] {
 }
 
 /** Cognitive complexity of one function body, not counting the functions nested in it. */
+/** Score of a flow-breaking node itself (before its children), or null if it isn't one. */
+function increment(node: Node, nesting: number, elseIf: boolean): number | null {
+  if (node.type === "IfStatement") return elseIf ? 1 : 1 + nesting;
+  if (
+    node.type === "ConditionalExpression" ||
+    node.type === "SwitchStatement" ||
+    node.type === "CatchClause" ||
+    LOOP_TYPES.has(node.type)
+  )
+    return 1 + nesting;
+  if (node.type === "BreakStatement" || node.type === "ContinueStatement")
+    return node.label ? 1 : 0;
+  if (node.type === "LogicalExpression") {
+    // +1 per run of the same operator: `a && b && c` is 1, `a && b || c` is 2.
+    const ops = logicalOperators(node);
+    return ops.filter((op, i) => op !== ops[i - 1]).length;
+  }
+  return null;
+}
+
+/** The parts of a flow-breaking node, each with the nesting it is scored at. */
+function nestedParts(node: Node, nesting: number): [Node, number, boolean][] {
+  const inner = nesting + 1;
+  switch (node.type) {
+    case "IfStatement": {
+      const alt = node.alternate;
+      // `else if` stays at this nesting and scores flat; a plain `else` scores +1.
+      const altPart: [Node, number, boolean][] =
+        alt?.type === "IfStatement" ? [[alt, nesting, true]] : alt ? [[alt, inner, false]] : [];
+      return [[node.test, nesting, false], [node.consequent, inner, false], ...altPart];
+    }
+    case "ConditionalExpression":
+      return [
+        [node.test, nesting, false],
+        [node.consequent, inner, false],
+        [node.alternate, inner, false],
+      ];
+    case "SwitchStatement":
+      return [
+        [node.discriminant, nesting, false],
+        ...node.cases.map((c: Node) => [c, inner, false]),
+      ];
+    case "CatchClause":
+      return [[node.body, inner, false]];
+    case "LogicalExpression":
+      return logicalLeaves(node).map((leaf) => [leaf, nesting, false]);
+    default: {
+      if (!LOOP_TYPES.has(node.type)) return [];
+      const heads = ["init", "test", "update", "left", "right"].map(
+        (key): [Node, number, boolean] => [node[key], nesting, false],
+      );
+      return [...heads, [node.body, inner, false]];
+    }
+  }
+}
+
+function visit(node: Node, nesting: number, elseIf: boolean): number {
+  if (!isNode(node) || FUNCTION_TYPES.has(node.type)) return 0;
+  const own = increment(node, nesting, elseIf);
+  const parts: [Node, number, boolean][] =
+    own === null ? children(node).map((c) => [c, nesting, false]) : nestedParts(node, nesting);
+  // A plain `else` adds +1 on top of its `if`.
+  const plainElse =
+    node.type === "IfStatement" && node.alternate && node.alternate.type !== "IfStatement";
+  return (own ?? 0) + (plainElse ? 1 : 0) + parts.reduce((n, [c, d, e]) => n + visit(c, d, e), 0);
+}
+
+/** Cognitive complexity of one function body, not counting the functions nested in it. */
 export function complexityOf(fn: Node): number {
-  let score = 0;
-  const visit = (node: Node, nesting: number, elseIf = false): void => {
-    if (!isNode(node) || FUNCTION_TYPES.has(node.type)) return;
-    switch (node.type) {
-      case "IfStatement": {
-        score += elseIf ? 1 : 1 + nesting;
-        visit(node.test, nesting);
-        visit(node.consequent, nesting + 1);
-        const alt = node.alternate;
-        if (alt?.type === "IfStatement") visit(alt, nesting, true);
-        else if (alt) {
-          score += 1;
-          visit(alt, nesting + 1);
-        }
-        return;
-      }
-      case "ConditionalExpression":
-        score += 1 + nesting;
-        visit(node.test, nesting);
-        visit(node.consequent, nesting + 1);
-        visit(node.alternate, nesting + 1);
-        return;
-      case "SwitchStatement":
-        score += 1 + nesting;
-        visit(node.discriminant, nesting);
-        for (const c of node.cases) visit(c, nesting + 1);
-        return;
-      case "CatchClause":
-        score += 1 + nesting;
-        visit(node.body, nesting + 1);
-        return;
-      case "BreakStatement":
-      case "ContinueStatement":
-        if (node.label) score += 1;
-        return;
-      case "LogicalExpression": {
-        // +1 per run of the same operator: `a && b && c` is 1, `a && b || c` is 2.
-        const ops = logicalOperators(node);
-        score += ops.filter((op, i) => op !== ops[i - 1]).length;
-        for (const leaf of logicalLeaves(node)) visit(leaf, nesting);
-        return;
-      }
-    }
-    if (LOOP_TYPES.has(node.type)) {
-      score += 1 + nesting;
-      for (const key of ["init", "test", "update", "left", "right"]) visit(node[key], nesting);
-      visit(node.body, nesting + 1);
-      return;
-    }
-    for (const c of children(node)) visit(c, nesting);
-  };
-  visit(fn.body, 0);
-  return score;
+  return visit(fn.body, 0, false);
 }
 
 function keyName(key: Node): string | null {
@@ -327,78 +343,83 @@ function checkSize(measured: Measured, baseline: Baseline): Violation[] {
   });
 }
 
-interface Unmatched {
+interface Assigned {
   file: string;
   fn: string;
   score: number;
+  /** The frozen value this function is held to, or null for a new one. */
+  frozen: number | null;
 }
 
 /**
  * One file's functions against its frozen ones. Same-named functions (`useCallback(cb)`, `#2`,
  * `#3` …) are paired highest with highest, so adding or removing one doesn't shift the others onto
- * the wrong frozen value. Returns the violations, the functions with no frozen partner, and the
- * frozen values left without a function (it shrank, was deleted, or moved to another file).
+ * the wrong frozen value. Also returns the frozen values left without a function there (it shrank,
+ * was deleted, or moved to another file).
  */
 function pairFile(file: string, measured: Measured, baseline: Baseline) {
   const now = byBaseName(measured.complexity[file] ?? {});
   const was = byBaseName(baseline.complexity[file] ?? {});
-  const violations: Violation[] = [];
-  const unmatched: Unmatched[] = [];
+  const assigned: Assigned[] = [];
   const left: [string, number][] = [];
   for (const [base, fns] of now) {
     const frozen = (was.get(base) ?? []).map((f) => f.score);
     fns.forEach(({ name, score }, i) => {
-      if (i >= frozen.length) unmatched.push({ file, fn: name, score });
-      else if (score > frozen[i] + COMPLEXITY_HEADROOM)
-        violations.push(complexityViolation(measured, file, name, score, frozen[i]));
+      assigned.push({ file, fn: name, score, frozen: frozen[i] ?? null });
     });
   }
   for (const [base, fns] of was) {
     for (const f of fns.slice(now.get(base)?.length ?? 0)) left.push([base, f.score]);
   }
-  return { violations, unmatched, left };
-}
-
-function complexityViolation(
-  measured: Measured,
-  file: string,
-  fn: string,
-  value: number,
-  frozen: number | null,
-): Violation {
-  return { kind: "complexity", file, fn, line: measured.lines[file]?.[fn], value, frozen };
+  return { assigned, left };
 }
 
 /** Takes the smallest frozen value from the pool that still covers `score`, if any. */
-function takeFrozen(pool: number[], score: number): boolean {
+function takeFrozen(pool: number[], score: number): number | null {
   let best = -1;
   pool.forEach((frozen, i) => {
     if (score <= frozen + COMPLEXITY_HEADROOM && (best < 0 || frozen < pool[best])) best = i;
   });
-  if (best >= 0) pool.splice(best, 1);
-  return best >= 0;
+  return best >= 0 ? pool.splice(best, 1)[0] : null;
 }
 
-export function check(measured: Measured, baseline: Baseline): Violation[] {
-  const out = checkSize(measured, baseline);
-  const unmatched: Unmatched[] = [];
+/** Every function over the limit with the frozen value it is held to (null: none). */
+export function assign(measured: Measured, baseline: Baseline): Assigned[] {
+  const out: Assigned[] = [];
   const orphans = new Map<string, number[]>();
   const files = new Set([...Object.keys(measured.complexity), ...Object.keys(baseline.complexity)]);
   for (const file of files) {
     const r = pairFile(file, measured, baseline);
-    out.push(...r.violations);
-    unmatched.push(...r.unmatched);
+    out.push(...r.assigned);
     for (const [base, score] of r.left) orphans.set(base, [...(orphans.get(base) ?? []), score]);
   }
   // A frozen function moved to another file (the fix for a big file) keeps its frozen value.
-  for (const { file, fn, score } of unmatched) {
-    if (!takeFrozen(orphans.get(baseName(fn)) ?? [], score))
-      out.push(complexityViolation(measured, file, fn, score, null));
+  for (const a of out) {
+    if (a.frozen === null) a.frozen = takeFrozen(orphans.get(baseName(a.fn)) ?? [], a.score);
   }
   return out;
 }
 
-/** The baseline lowered to today's values: shrunk entries go down, fixed ones disappear. */
+export function check(measured: Measured, baseline: Baseline): Violation[] {
+  const out = checkSize(measured, baseline);
+  for (const { file, fn, score, frozen } of assign(measured, baseline)) {
+    if (frozen === null || score > frozen + COMPLEXITY_HEADROOM)
+      out.push({
+        kind: "complexity",
+        file,
+        fn,
+        line: measured.lines[file]?.[fn],
+        value: score,
+        frozen,
+      });
+  }
+  return out;
+}
+
+/**
+ * The baseline lowered to today's values: shrunk entries go down, fixed ones disappear, renumbered
+ * or moved functions are re-keyed under their current name. Never adds or raises a value.
+ */
 export function tighten(measured: Measured, baseline: Baseline): Baseline {
   const size: Baseline["size"] = {};
   for (const [file, frozen] of Object.entries(baseline.size)) {
@@ -406,11 +427,8 @@ export function tighten(measured: Measured, baseline: Baseline): Baseline {
     if (now !== undefined) size[file] = Math.min(now, frozen);
   }
   const complexity: Baseline["complexity"] = {};
-  for (const [file, fns] of Object.entries(baseline.complexity)) {
-    for (const [fn, frozen] of Object.entries(fns)) {
-      const now = measured.complexity[file]?.[fn];
-      if (now !== undefined) (complexity[file] ??= {})[fn] = Math.min(now, frozen);
-    }
+  for (const { file, fn, score, frozen } of assign(measured, baseline)) {
+    if (frozen !== null) (complexity[file] ??= {})[fn] = Math.min(score, frozen);
   }
   return { ...baseline, size, complexity };
 }
