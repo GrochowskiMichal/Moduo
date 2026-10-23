@@ -76,6 +76,10 @@
       ],
       "outputs": []
     },
+    "//#lint:decisions": {
+      "inputs": ["docs/decisions.md", "docs/decisions/*.md", "scripts/docs/decisions.ts"],
+      "outputs": []
+    },
     "//#test:scripts": {
       "inputs": [
         "scripts/**",
@@ -88,6 +92,8 @@
         ".changes/**",
         "release-notes/**",
         "CHANGELOG.md",
+        "docs/decisions.md",
+        "docs/decisions/*.md",
         "supabase/migrations/**",
         "supabase/functions/**"
       ],

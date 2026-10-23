@@ -18,7 +18,7 @@ name: checks
 # verify a signed artifact without it.
 #
 # `static-checks` is the one required context. It always runs and fails unless the secret scan
-# passed and lint and every test shard passed, or a docs-only PR skipped them, and each oracle
+# and the decisions check passed and lint and every test shard passed, or a docs-only PR skipped them, and each oracle
 # (db-test, rust-check, e2e-smoke) passed or was skipped because none of its paths changed.
 on:
   pull_request:
@@ -134,6 +134,25 @@ jobs:
 
       - name: Typecheck, Biome, lint:tw, lint:boundaries, lint:css, release-notes leak check
         run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:css lint:notes --output-logs=new-only
+
+  # Runs on every PR and push, docs-only ones too: decision entries are Markdown, so the lint job
+  # skips them, but their status lines and the generated index must still hold (HV-11). The
+  # script uses only Node built-ins, so it needs no install.
+  decisions:
+    needs: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Decision statuses, references and the generated index
+        run: bun run lint:decisions
 
   unit-tests:
     needs: scan
@@ -385,7 +404,7 @@ jobs:
           retention-days: 7
 
   static-checks:
-    needs: [scan, lint, unit-tests, oracle-paths, db-test, rust-check, e2e-smoke]
+    needs: [scan, lint, decisions, unit-tests, oracle-paths, db-test, rust-check, e2e-smoke]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -395,6 +414,7 @@ jobs:
           SCAN: ${{ needs.scan.result }}
           CODE: ${{ needs.scan.outputs.code }}
           LINT: ${{ needs.lint.result }}
+          DECISIONS: ${{ needs.decisions.result }}
           TESTS: ${{ needs.unit-tests.result }}
           PATHS: ${{ needs.oracle-paths.result }}
           ORACLES: >-
@@ -404,6 +424,8 @@ jobs:
         run: |
           echo "scan: $SCAN · code change: $CODE · lint: $LINT · unit-tests: $TESTS"
           [ "$SCAN" = success ] || exit 1
+          echo "decisions: $DECISIONS"
+          [ "$DECISIONS" = success ] || exit 1
           if [ "$CODE" = true ]; then
             [ "$LINT" = success ] && [ "$TESTS" = success ] || exit 1
           else
