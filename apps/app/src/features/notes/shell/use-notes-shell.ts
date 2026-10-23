@@ -139,14 +139,16 @@ export function useNotesShell() {
 
   // Stale deep link: loaded and the id is neither a note nor the draft.
   useEffect(() => {
-    if (loading || !selectedId) return;
+    // Only against the server's list: the device cache can lack a note made
+    // elsewhere, and a reload used to close the note you had open.
+    if (loading || !module.listFresh || !selectedId) return;
     if (selectedId === draftId && engine?.isDraft(draftId)) return;
     if (!notes.some((n) => n.id === selectedId)) {
       // Say why the note you followed a link to isn't there.
       toast("That note isn’t available. It may have been deleted, or it isn’t shared with you.");
       select(null, true);
     }
-  }, [loading, selectedId, draftId, notes, select, engine]);
+  }, [loading, module.listFresh, selectedId, draftId, notes, select, engine]);
 
   // Notes reopens where you left it: the last note you had open in this
   // workspace, when you arrive with nothing in the URL.

@@ -11,6 +11,7 @@
  * grammar (they're editor-agnostic Lexical plugins).
  */
 
+import { $createCodeNode, $isCodeNode, type CodeNode } from "@lexical/code";
 import { registerCodeHighlighting } from "@lexical/code-prism";
 import { $createHorizontalRuleNode } from "@lexical/extension";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
@@ -27,7 +28,8 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
-import { $createHeadingNode } from "@lexical/rich-text";
+import { $createHeadingNode, $isHeadingNode, $isQuoteNode } from "@lexical/rich-text";
+import { mergeRegister } from "@lexical/utils";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
@@ -35,14 +37,22 @@ import {
   $createTextNode,
   $getRoot,
   $getSelection,
+  $isLineBreakNode,
   $isParagraphNode,
   $isRangeSelection,
   $setSelection,
+  BLUR_COMMAND,
   COMMAND_PRIORITY_HIGH,
+  COMMAND_PRIORITY_LOW,
   INDENT_CONTENT_COMMAND,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_BACKSPACE_COMMAND,
+  KEY_ENTER_COMMAND,
   KEY_MODIFIER_COMMAND,
   KEY_TAB_COMMAND,
+  type LexicalNode,
   OUTDENT_CONTENT_COMMAND,
+  SELECTION_CHANGE_COMMAND,
   TextNode,
 } from "lexical";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -55,7 +65,7 @@ import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import { updateWithoutUndo } from "../editor/collab-undo";
+import { collabUndoManager, registerCollabUndo, updateWithoutUndo } from "../editor/collab-undo";
 import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {
@@ -69,6 +79,7 @@ import {
 import { BlockHandlePlugin } from "../editor/plugins/block-handle-plugin";
 import { CommentMarksPlugin } from "../editor/plugins/comment-marks-plugin";
 import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
+import { LinkBarPlugin } from "../editor/plugins/link-bar-plugin";
 import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { NoteLinkPlugin } from "../editor/plugins/note-link-plugin";
@@ -203,6 +214,200 @@ function DividerShortcutPlugin() {
   return null;
 }
 
+/**
+ * Backspace at the very start of a heading or a quote turns it back into
+ * text, as Notion does, instead of merging it into the line above (an H2
+ * under the title merged into the title).
+ */
+function BlockBackspacePlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_BACKSPACE_COMMAND,
+        (event) => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+          if (selection.anchor.offset !== 0) return false;
+          const block = selection.anchor.getNode().getTopLevelElement();
+          if (!block || block.getIndexWithinParent() === 0) return false;
+          if (!$isHeadingNode(block) && !$isQuoteNode(block)) return false;
+          const first = block.getFirstDescendant();
+          const atStart =
+            first === null ||
+            selection.anchor.getNode().is(block) ||
+            selection.anchor.getNode().is(first);
+          if (!atStart) return false;
+          event?.preventDefault();
+          // Its own undo step, not merged into the typing before it.
+          collabUndoManager(editor)?.stopCapturing();
+          const paragraph = $createParagraphNode();
+          paragraph.append(...block.getChildren());
+          block.replace(paragraph);
+          paragraph.selectStart();
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
+  return null;
+}
+
+/**
+ * Code blocks you can get into and out of:
+ * - typing ``` on an empty line makes one at once (the markdown shortcut only
+ *   fired after a language and a space, so "```npm run build" lost "npm" as
+ *   its language);
+ * - Enter on a code block's empty last line, after an empty line, leaves it;
+ *   ↓ on its last line leaves it when nothing follows (you could not leave).
+ */
+function CodeBlockPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    const exitAfter = (code: CodeNode) => {
+      const next = code.getNextSibling();
+      if ($isParagraphNode(next) && next.getTextContentSize() === 0) {
+        next.selectStart();
+        return;
+      }
+      const line = $createParagraphNode();
+      code.insertAfter(line);
+      line.select();
+    };
+    const codeAtCaretEnd = (): CodeNode | null => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+      const code = selection.anchor.getNode().getTopLevelElement();
+      if (!$isCodeNode(code)) return null;
+      const end = code.getLastDescendant();
+      const anchor = selection.anchor;
+      const atEnd =
+        end === null ||
+        (anchor.getNode().is(end) &&
+          (anchor.type === "element" || anchor.offset === end.getTextContentSize())) ||
+        (anchor.getNode().is(code) && anchor.offset === code.getChildrenSize());
+      return atEnd ? code : null;
+    };
+    return mergeRegister(
+      editor.registerNodeTransform(TextNode, (node) => {
+        if (node.getTextContent() !== "```") return;
+        const block = node.getParent();
+        if (!$isParagraphNode(block) || block.getParent() !== $getRoot()) return;
+        if (block.getChildrenSize() !== 1) return;
+        const selection = $getSelection();
+        if (
+          !$isRangeSelection(selection) ||
+          selection.anchor.key !== node.getKey() ||
+          selection.anchor.offset !== 3
+        ) {
+          return;
+        }
+        const code = $createCodeNode();
+        block.replace(code);
+        code.selectStart();
+      }),
+      editor.registerCommand(
+        KEY_ENTER_COMMAND,
+        (event) => {
+          const code = codeAtCaretEnd();
+          if (!code || event?.shiftKey) return false;
+          const children = code.getChildren();
+          const last = children[children.length - 1];
+          const beforeLast = children[children.length - 2];
+          // The block already ends in an empty line: this Enter leaves it.
+          if (!$isLineBreakNode(last) || !$isLineBreakNode(beforeLast)) return false;
+          event?.preventDefault();
+          last.remove();
+          beforeLast.remove();
+          exitAfter(code);
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+      editor.registerCommand(
+        KEY_ARROW_DOWN_COMMAND,
+        (event) => {
+          const code = codeAtCaretEnd();
+          if (!code || code.getNextSibling() !== null) return false;
+          event?.preventDefault();
+          exitAfter(code);
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    );
+  }, [editor]);
+  return null;
+}
+
+/**
+ * A quiet hint on the empty line under the caret, as Notion shows one: "Type /
+ * for blocks" on a line of text, the heading's level on an empty heading
+ * (an empty H2 was invisible). Not on the title line, which has "Untitled".
+ */
+function EmptyLineHintPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    let marked: HTMLElement | null = null;
+    const clear = () => {
+      marked?.removeAttribute("data-empty-hint");
+      marked = null;
+    };
+    const update = () => {
+      const target = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+        const block = selection.anchor.getNode().getTopLevelElement();
+        if (!block || block.getIndexWithinParent() === 0) return null;
+        if (block.getTextContentSize() > 0) return null;
+        const hint = $isHeadingNode(block)
+          ? `Heading ${block.getTag().slice(1)}`
+          : $isParagraphNode(block)
+            ? "Type / for blocks, [[ for a note"
+            : $isQuoteNode(block)
+              ? "Quote"
+              : null;
+        return hint ? { key: block.getKey(), hint } : null;
+      });
+      const el = target ? editor.getElementByKey(target.key) : null;
+      if (el !== marked) clear();
+      if (el && target) {
+        el.setAttribute("data-empty-hint", target.hint);
+        marked = el;
+      }
+    };
+    return mergeRegister(
+      editor.registerUpdateListener(update),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          update();
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        BLUR_COMMAND,
+        () => {
+          clear();
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+      clear,
+    );
+  }, [editor]);
+  return null;
+}
+
+/** ⌘Z / ⇧⌘Z per line, with redo that survives (editor/collab-undo.ts). */
+function CollabUndoPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => registerCollabUndo(editor), [editor]);
+  return null;
+}
+
 /** ⌘N / ⌘⇧N from inside a note open a new one. The app's bindings skip
  * editors on purpose (a ⌘N in Email's reply must not replace the draft), so
  * the note editor claims the key for itself. */
@@ -246,7 +451,24 @@ function ListTabIndentationPlugin() {
           const hasPreviousSibling = $isListItemNode(node.getPreviousSibling());
           return { inListItem: true, canIndent: hasPreviousSibling };
         });
-        if (!listContext.inListItem) return false;
+        if (!listContext.inListItem) {
+          // Outside a list, Tab stays in the text (it jumped focus to the
+          // hidden block-menu button). Code and tables handle their own Tab.
+          const own = editor.getEditorState().read(() => {
+            const selection = $getSelection();
+            if (!$isRangeSelection(selection)) return true;
+            // Any ancestor: a table cell is a root of its own, so the cell's
+            // paragraph is its "top-level" block.
+            for (let n: LexicalNode | null = selection.anchor.getNode(); n; n = n.getParent()) {
+              const type = n.getType();
+              if (type === "code" || type === "tablecell" || type === "table") return true;
+            }
+            return false;
+          });
+          if (own) return false;
+          event.preventDefault();
+          return true;
+        }
         event.preventDefault();
         if (!event.shiftKey && !listContext.canIndent) return true;
         editor.dispatchCommand(
@@ -590,6 +812,22 @@ export function NoteEditor({
           underlineStrikethrough: "notes-text-underline-strikethrough",
         },
         code: "notes-code-block",
+        codeHighlight: {
+          keyword: "notes-code-keyword",
+          atrule: "notes-code-keyword",
+          builtin: "notes-code-keyword",
+          boolean: "notes-code-number",
+          constant: "notes-code-number",
+          number: "notes-code-number",
+          string: "notes-code-string",
+          char: "notes-code-string",
+          regex: "notes-code-string",
+          url: "notes-code-string",
+          comment: "notes-code-comment",
+          prolog: "notes-code-comment",
+          doctype: "notes-code-comment",
+          cdata: "notes-code-comment",
+        },
         link: "notes-link",
         table: "notes-table",
         tableRow: "notes-table-row",
@@ -636,6 +874,10 @@ export function NoteEditor({
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
+              <CollabUndoPlugin />
+              {editable ? <CodeBlockPlugin /> : null}
+              {editable ? <EmptyLineHintPlugin /> : null}
+              {editable ? <BlockBackspacePlugin /> : null}
               <ListPlugin />
               <CheckListPlugin />
               <ListTabIndentationPlugin />
@@ -643,6 +885,7 @@ export function NoteEditor({
               {editable ? <NewNoteKeyPlugin /> : null}
               <CodeHighlightingPlugin />
               <LinkPlugin />
+              <LinkBarPlugin editable={editable} />
               <TablePlugin />
               {editable ? <TableActionsPlugin /> : null}
               <SlashMenuPlugin

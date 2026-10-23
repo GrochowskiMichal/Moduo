@@ -135,7 +135,8 @@ function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
     if (!$isTextNode(node) || !node.isSimpleText()) return null;
 
     const textBefore = node.getTextContent().slice(0, anchor.offset);
-    const match = textBefore.match(/(?:^|\s)\/([^\s/]*)$/);
+    // One space is allowed ("/heading 1", "/head 2"); a second word ends it.
+    const match = textBefore.match(/(?:^|\s)\/([^\s/]*(?: [^\s/]*)?)$/);
     if (!match) return null;
 
     const query = match[1] ?? "";
@@ -596,7 +597,22 @@ export function SlashMenuPlugin({
     );
   }
 
-  if (!menu || commands.length === 0) return null;
+  if (!menu) return null;
+  if (commands.length === 0) {
+    // A one-word miss says so (the menu used to just vanish); after a space
+    // you are writing prose, so nothing shows.
+    if (menu.query.includes(" ")) return null;
+    return createPortal(
+      <div
+        className="fixed z-50 w-72 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+        style={{ top: menu.top, left: menu.left }}
+        role="status"
+      >
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">No matching block</p>
+      </div>,
+      document.body,
+    );
+  }
 
   // Filtered results are ranked across groups: headers would repeat
   // ("Basics · Insert · Basics…"), so only the full menu shows them.

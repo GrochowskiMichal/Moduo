@@ -25,6 +25,18 @@ describe("block menu", () => {
     expect(run("# One", () => $turnBlockInto($getRoot().getFirstChild()!, "quote"))).toBe("> One");
   });
 
+  it("turns a list into another list, or into one block per item", () => {
+    const list = () => $getRoot().getChildAtIndex(1)!;
+    expect(run("One\n\n- a\n- b", () => $turnBlockInto(list(), "number"))).toBe(
+      "One\n\n1. a\n2. b",
+    );
+    expect(run("One\n\n- a\n- b", () => $turnBlockInto(list(), "text"))).toBe("One\n\na\n\nb");
+    expect(run("One\n\n1. a\n2. b", () => $turnBlockInto(list(), "quote"))).toBe(
+      "One\n\n> a\n\n> b",
+    );
+    expect(run("One\n\n- [ ] a", () => $turnBlockInto(list(), "h2"))).toBe("One\n\n## a");
+  });
+
   it("duplicates a block right under itself", () => {
     expect(
       run("One\n\n- a\n- b\n\nThree", () => $duplicateBlock($getRoot().getChildAtIndex(1)!)),

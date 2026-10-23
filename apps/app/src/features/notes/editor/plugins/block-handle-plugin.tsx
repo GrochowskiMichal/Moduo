@@ -35,7 +35,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -137,6 +136,11 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
         return event.clientY >= r.top && event.clientY < r.bottom;
       });
       if (!block) return;
+      // The title line isn't a block to drag or turn into something else.
+      if (block === root.firstElementChild) {
+        setHovered(null);
+        return;
+      }
       const key = editor.read(() => $getNearestNodeFromDOMNode(block)?.getKey() ?? null);
       if (!key) return;
       const next = { key, ...gripSpot(block) };
@@ -414,11 +418,6 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
               >
                 <Trash2 aria-hidden />
                 Delete
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                Move
-                <DropdownMenuShortcut>⌥⇧↑ ↓</DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

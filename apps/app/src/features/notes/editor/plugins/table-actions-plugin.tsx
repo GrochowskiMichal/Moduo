@@ -23,11 +23,17 @@ import {
   $isTableRowNode,
   type TableCellNode,
 } from "@lexical/table";
+import { mergeRegister } from "@lexical/utils";
 import {
+  $createParagraphNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
+  COMMAND_PRIORITY_CRITICAL,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_TAB_COMMAND,
   type NodeKey,
 } from "lexical";
 import { ChevronDown, Plus } from "lucide-react";
@@ -127,6 +133,78 @@ export function TableActionsPlugin() {
       observer.disconnect();
     };
   }, [editor, recompute]);
+
+  // Keys and clicks a table should answer like a document's table:
+  // - Tab in the last cell adds a row (it left the table);
+  // - ↓ on the last row leaves the table (it moved to the next cell);
+  // - a click on a cell's empty space puts the caret in that cell (only a
+  //   click on its text did, so typing landed in another cell).
+  useEffect(() => {
+    const cellAtCaret = () => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+      return $getTableCellNodeFromLexicalNode(selection.anchor.getNode());
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      const cellEl = (event.target as HTMLElement | null)?.closest("td, th");
+      // Only a press on the cell itself (its padding), never on its text.
+      if (!cellEl || event.target !== cellEl) return;
+      event.preventDefault();
+      editor.update(() => {
+        const node = $getNearestNodeFromDOMNode(cellEl);
+        if ($isTableCellNode(node)) node.selectEnd();
+      });
+      editor.focus();
+    };
+    const offRoot = editor.registerRootListener((root, prev) => {
+      prev?.removeEventListener("pointerdown", onPointerDown);
+      root?.addEventListener("pointerdown", onPointerDown);
+    });
+    return mergeRegister(
+      offRoot,
+      editor.registerCommand(
+        KEY_TAB_COMMAND,
+        (event) => {
+          if (event.shiftKey) return false;
+          const cell = cellAtCaret();
+          if (!cell) return false;
+          const row = cell.getParent();
+          const table = row?.getParent();
+          if (!$isTableRowNode(row) || !$isTableNode(table)) return false;
+          if (!row.is(table.getLastChild()) || !cell.is(row.getLastChild())) return false;
+          event.preventDefault();
+          $insertTableRowAtSelection(true);
+          const added = row.getNextSibling();
+          if ($isTableRowNode(added)) added.getFirstChild<TableCellNode>()?.selectStart();
+          return true;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+      editor.registerCommand(
+        KEY_ARROW_DOWN_COMMAND,
+        (event) => {
+          const cell = cellAtCaret();
+          if (!cell) return false;
+          const row = cell.getParent();
+          const table = row?.getParent();
+          if (!$isTableRowNode(row) || !$isTableNode(table) || !row.is(table.getLastChild())) {
+            return false;
+          }
+          event?.preventDefault();
+          const next = table.getNextSibling();
+          if ($isElementNode(next)) next.selectStart();
+          else {
+            const line = $createParagraphNode();
+            table.insertAfter(line);
+            line.select();
+          }
+          return true;
+        },
+        COMMAND_PRIORITY_CRITICAL,
+      ),
+      () => editor.getRootElement()?.removeEventListener("pointerdown", onPointerDown),
+    );
+  }, [editor]);
 
   // Hover: the pointer over a table shows its bars even without the caret.
   useEffect(() => {
