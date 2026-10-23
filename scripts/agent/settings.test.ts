@@ -112,9 +112,13 @@ describe("lane profile", () => {
       ".claude/settings.json",
       ".claude/settings.lane.json",
       ".env",
+      "~/.claude/skills",
+      "~/.claude/agents",
+      "~/.bun/bin",
     ]) {
       expect(srt.filesystem.denyWrite).toContain(p);
     }
+    expect(srt.filesystem.allowWrite).not.toContain("~/.bun");
   });
 });
 

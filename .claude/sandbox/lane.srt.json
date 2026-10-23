@@ -37,7 +37,7 @@
       "/tmp",
       "/private/tmp",
       "/private/var/folders",
-      "~/.bun",
+      "~/.bun/install/cache",
       "~/.cache",
       "~/.claude",
       "~/.claude.json",
@@ -55,7 +55,13 @@
       "~/.claude/settings.json",
       ".mcp.json",
       "~/.claude/settings.local.json",
-      "~/.claude/hooks"
+      "~/.claude/hooks",
+      "~/.claude/CLAUDE.md",
+      "~/.claude/agents",
+      "~/.claude/commands",
+      "~/.claude/skills",
+      "~/.claude/plugins",
+      "~/.bun/bin"
     ]
   }
 }
