@@ -567,7 +567,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 
 > Planned 2026-10-23 (Mike, engineer mode). Everything before the closed alpha (2 Nov). Up to five lanes in parallel; the spec has a day plan. Maciej agreed to all of it. Once HV-8 lands this ledger becomes a pointer to the Moduo queue.
 
-- [ ] **HV-1 — Rails: modes, guards, /ship** · deps: —
+- [x] **HV-1 — Rails: modes, guards, /ship** · deps: — · done 2026-10-23 (t/mike/hv-1-rails, PR #609)
 - [ ] **HV-2 — One Moduo, one Supabase, worktree pool** · deps: —
 - [ ] **HV-3 — Skill rewiring** · deps: —
 - [ ] **HV-4 — Oracles in CI (Tier 2)** · deps: —
