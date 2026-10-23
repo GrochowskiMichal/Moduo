@@ -14569,7 +14569,7 @@ export type Database = {
       }
       workspace_api_keys_connect_oauth: {
         Args: {
-          p_client_id: string | null
+          p_authorization_id: string | null
           p_expires_in_days?: number | null
           p_include_private_chat?: boolean | null
           p_scopes?: Json | null

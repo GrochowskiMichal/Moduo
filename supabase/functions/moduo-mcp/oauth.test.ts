@@ -202,6 +202,13 @@ describe("401 points at discovery", () => {
     expect(res.headers.get("access-control-allow-methods")).toContain("GET");
   });
 
+  it("answers a bearer that isn't a token (a mistyped key) with the pasted-key words", async () => {
+    const res = await post(listTools, "Bearer moduo_sk_typo");
+    expect(res.status).toBe(401);
+    expect(res.body.error).toMatch(/^Missing, invalid, revoked or expired API key/);
+    expect((await post(listTools, "Bearer sk-not-a-token")).body.error).toMatch(/^Missing, invalid/);
+  });
+
   it("still answers a bad pasted key with its own words, plus the discovery header", async () => {
     const res = await post(listTools, `Bearer moduo_sk_${"0".repeat(48)}`);
     expect(res.status).toBe(401);
@@ -252,7 +259,6 @@ describe("token maps to its connection", () => {
     ["an expired token", () => appToken(ALEX, CLAUDE, { exp: Math.floor(Date.now() / 1000) - 60 })],
     ["an anonymous token", () => appToken(ALEX, CLAUDE, { role: "anon" })],
     ["a client_id that isn't an id", () => appToken(ALEX, "claude")],
-    ["something that isn't a token", async () => "not-a-jwt"],
   ];
   for (const [name, token] of refused) {
     it(`refuses ${name} with 401 invalid_token`, async () => {

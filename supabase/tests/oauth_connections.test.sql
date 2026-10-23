@@ -4,8 +4,8 @@
 --
 -- Cast: O owns workspace W, E is a member of W with API keys allowed, F a
 -- member without them. X owns W2, where E is a member with API keys too.
--- C is "Claude" (redirects to claude.ai), D is "Claude Desktop", G an app
--- with no name. SB is a shared project in W.
+-- C is "Claude" (redirects to claude.ai), D is "Claude Desktop" (two
+-- redirects), G an app with no name, H "Helper". SB is a shared project in W.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'F', 'X']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES
@@ -27,15 +27,41 @@ VALUES
   (test.id('D'), 'dynamic', 'http://localhost:33418/callback,https://example.com/cb',
    'authorization_code,refresh_token', 'Claude Desktop', 'public', 'none'),
   (test.id('G'), 'dynamic', 'https://Agent.Example.org:8443/cb', 'authorization_code,refresh_token',
-   NULL, 'public', 'none');
+   NULL, 'public', 'none'),
+  (test.id('H'), 'dynamic', 'https://h.example.net/cb', 'authorization_code,refresh_token',
+   'Helper', 'public', 'none');
 
--- Connect as a person (the consent screen's Approve).
-CREATE FUNCTION test.connect(p_who text, p_ws text, p_client text, p_scopes jsonb,
+-- A pending sign-in the person is looking at (Supabase Auth binds it to them
+-- when the consent page reads it), returning to `p_redirect` (default: the
+-- app's first registered redirect).
+CREATE FUNCTION test.sign_in(p_who text, p_client text, p_redirect text DEFAULT NULL,
+                             p_status text DEFAULT 'pending', p_expires interval DEFAULT interval '3 minutes')
+RETURNS text LANGUAGE plpgsql AS $$
+DECLARE
+  v_id text := 'auth-' || gen_random_uuid();
+BEGIN
+  INSERT INTO auth.oauth_authorizations
+    (id, authorization_id, client_id, user_id, redirect_uri, scope, status, created_at, expires_at)
+  SELECT gen_random_uuid(), v_id, c.id, test.id(p_who),
+         coalesce(p_redirect, split_part(c.redirect_uris, ',', 1)), 'openid',
+         p_status::auth.oauth_authorization_status, now() - interval '1 hour', now() + p_expires
+  FROM auth.oauth_clients c WHERE c.id = test.id(p_client);
+  RETURN v_id;
+END;
+$$;
+-- Approve a sign-in as a person (the consent screen's Approve).
+CREATE FUNCTION test.approve(p_who text, p_ws text, p_authorization text, p_scopes jsonb,
                              p_days integer DEFAULT 90, p_private boolean DEFAULT false) RETURNS text
 LANGUAGE sql AS $$
   SELECT test.as_user(p_who, format(
     $q$SELECT * FROM public.workspace_api_keys_connect_oauth(%L, %L, %L::jsonb, %s, %L)$q$,
-    test.id(p_ws), test.id(p_client), p_scopes, coalesce(p_days::text, 'NULL'), p_private))
+    test.id(p_ws), p_authorization, p_scopes, coalesce(p_days::text, 'NULL'), p_private))
+$$;
+-- A fresh sign-in by the person for the app, approved.
+CREATE FUNCTION test.connect(p_who text, p_ws text, p_client text, p_scopes jsonb,
+                             p_days integer DEFAULT 90, p_private boolean DEFAULT false) RETURNS text
+LANGUAGE sql AS $$
+  SELECT test.approve(p_who, p_ws, test.sign_in(coalesce(p_who, 'E'), p_client), p_scopes, p_days, p_private)
 $$;
 -- The person's live connection to an app (what moduo-mcp loads for sub + client_id).
 CREATE FUNCTION test.live(p_who text, p_client text) RETURNS public.workspace_api_keys LANGUAGE sql AS $$
@@ -125,6 +151,10 @@ SELECT test.ok((SELECT count(*) FROM public.workspace_api_keys
                     WHERE created_by = test.id('E') AND oauth_client_id IS NOT NULL AND revoked_at IS NULL) = 2
                AND (test.live('E', 'D')).oauth_client_domain = 'localhost',
   'a second app is a second connection, named and placed by its first redirect');
+-- An app may register several redirects; the domain is where this sign-in returns.
+SELECT test.ok(test.approve('O', 'W', test.sign_in('O', 'D', 'https://example.com/cb'), '{"tasks": "view"}') = 'ok 1'
+               AND (test.live('O', 'D')).oauth_client_domain = 'example.com',
+  'the domain is the one this sign-in returns to, not the app''s first registered redirect');
 SELECT test.ok(test.connect('O', 'W', 'G', '{"tasks": "view"}') = 'ok 1'
                AND (test.live('O', 'G')).name = 'agent.example.org'
                AND (test.live('O', 'G')).oauth_client_domain = 'agent.example.org',
@@ -151,8 +181,16 @@ SELECT test.ok(test.connect('E', 'W2', 'C', '{"tasks": "edit"}') LIKE '42501 You
 SELECT test.ok((test.live('E', 'C')).scopes = '{"tasks": "view"}'::jsonb, 'a refused connect changes nothing');
 SELECT test.ok(test.connect('F', 'W', 'C', '{"tasks": "view"}') LIKE '42501 Your role doesn''t include API keys here.%',
   'a role without ws.api_keys is refused');
-SELECT test.ok(test.connect('E', 'W', 'U', '{"tasks": "view"}') LIKE 'P0002 This app isn''t registered with Moduo.%',
-  'an unknown client is refused');
+SELECT test.ok(test.approve('E', 'W', 'auth-nonexistent', '{"tasks": "view"}') LIKE 'P0002 This sign-in link has expired.%',
+  'an unknown sign-in is refused');
+SELECT test.ok(test.approve('E', 'W', test.sign_in('O', 'C'), '{"tasks": "view"}') LIKE 'P0002 %',
+  'someone else''s sign-in is refused');
+SELECT test.ok(test.approve('E', 'W', test.sign_in('E', 'C', NULL, 'pending', interval '-1 second'), '{"tasks": "view"}') LIKE 'P0002 %',
+  'an expired sign-in is refused');
+SELECT test.ok(test.approve('E', 'W', test.sign_in('E', 'C', NULL, 'denied'), '{"tasks": "view"}') LIKE 'P0002 %',
+  'a denied sign-in is refused');
+SELECT test.ok(test.approve('E', 'W2', test.sign_in('E', 'C', NULL, 'approved'), '{"tasks": "view"}') = 'ok 1',
+  'a sign-in Supabase already approved (the app was consented to before) still connects');
 UPDATE auth.oauth_clients SET deleted_at = now() WHERE id = test.id('G');
 SELECT test.ok(test.connect('O', 'W', 'G', '{"tasks": "view"}') LIKE 'P0002 %', 'a deleted client is refused');
 SELECT test.ok(test.connect('E', 'W', 'C', '{"tasks": "view"}', 0) LIKE '22023 %', 'an expiry outside 1–730 days is refused');
@@ -166,7 +204,7 @@ FROM generate_series(1, 20 - (SELECT count(*) FROM public.workspace_api_keys
                               WHERE workspace_id = test.id('W') AND revoked_at IS NULL)::int) AS n;
 SELECT test.ok(test.connect('E', 'W', 'C', '{"tasks": "view"}') LIKE '54000 This workspace has 20 keys and connections.%',
   'a new connection at 20 keys and connections is refused with the cap message');
-SELECT test.ok(test.connect('O', 'W', 'D', '{"tasks": "view"}') LIKE '54000 %',
+SELECT test.ok(test.connect('O', 'W', 'H', '{"tasks": "view"}') LIKE '54000 %',
   'connections count toward the cap');
 SELECT test.ok(test.connect('O', 'W', 'C', '{"tasks": "edit"}') = 'ok 1',
   'updating a connection already in the workspace still works at the cap');
@@ -177,8 +215,11 @@ SELECT test.ok(test.as_user('O', format($q$SELECT * FROM public.workspace_api_ke
 -- ── connect notifies the person ──────────────────────────────────────────────
 SELECT test.ok(test.bell('E', 'W') = 2, 'E''s bell in W: Claude and Claude Desktop connected (reconnects ring nothing)');
 SELECT test.ok(test.bell('E', 'W2') = 1, 'E''s bell in W2: the moved connection');
-SELECT test.ok(test.bell('O', 'W') = 2 AND test.bell('F', 'W') = 0,
-  'O sees only their own two connections; F, who connected nothing, sees none');
+SELECT test.ok(test.bell('O', 'W') = 3 AND test.bell('F', 'W') = 0,
+  'O sees only their own three connections; F, who connected nothing, sees none');
+SELECT test.ok(test.value_as('F', $q$SELECT count(*)::text FROM public.module_activity WHERE entity_type = 'api_key'$q$) = '0'
+               AND test.value_as('E', $q$SELECT count(*)::text FROM public.module_activity WHERE entity_type = 'api_key'$q$) = '3',
+  'a connection notice is readable only by its person (F reads none of them, E reads their three)');
 SELECT test.ok((SELECT actor_type = 'api_key' AND actor_label = 'Claude Desktop'
                        AND payload ->> 'app_name' = 'Claude Desktop'
                        AND payload -> 'scopes' = '{"tasks": "view"}'::jsonb
@@ -213,6 +254,9 @@ SELECT test.ok(test.as_user('E', format($q$SELECT public.workspace_api_keys_rena
   'a connection is renamed (trimmed)');
 SELECT test.ok(test.as_user('E', format($q$SELECT public.workspace_api_keys_rename(%L, '')$q$,
                  (test.live('E', 'C')).id)) LIKE '22023 %', 'an empty name is refused');
+SELECT test.ok(test.as_user('O', format($q$SELECT public.workspace_api_keys_rename(%L, 'Renamed')$q$,
+                 (test.live('E', 'D')).id)) LIKE '42501 Only the person who created this key can rename it.%',
+  'a manager can''t rename someone else''s connection (it''s their trail name)');
 SELECT test.ok(test.as_user('F', format($q$SELECT public.workspace_api_keys_rename(%L, 'Mine')$q$,
                  (test.live('O', 'C')).id)) LIKE 'P0002 %', 'without ws.api_keys a key reads as not found');
 SELECT test.ok(test.as_user('E', format($q$SELECT public.workspace_api_keys_rename(%L, 'Old')$q$,
@@ -234,7 +278,14 @@ SELECT test.ok(test.connect('E', 'W2', 'C', '{"tasks": "view"}') = 'ok 1'
   'signing in again after a disconnect makes a new connection');
 
 -- ── grants ───────────────────────────────────────────────────────────────────
-SELECT test.ok(NOT has_function_privilege('anon', 'public.workspace_api_keys_connect_oauth(uuid, uuid, jsonb, integer, boolean)', 'EXECUTE')
+SELECT test.ok(NOT has_function_privilege('anon', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean)', 'EXECUTE')
                AND NOT has_function_privilege('anon', 'public.workspace_api_keys_rename(uuid, text)', 'EXECUTE')
-               AND has_function_privilege('authenticated', 'public.workspace_api_keys_connect_oauth(uuid, uuid, jsonb, integer, boolean)', 'EXECUTE'),
+               AND has_function_privilege('authenticated', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean)', 'EXECUTE'),
   'connect and rename are for signed-in people only');
+
+-- ── erasure: a deleted key takes its notice ──────────────────────────────────
+DELETE FROM public.workspace_api_keys WHERE id = (test.live('E', 'D')).id;
+SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity
+                           WHERE entity_type = 'api_key' AND payload ->> 'app_name' = 'Claude Desktop'
+                             AND payload -> 'notify_user_ids' ? test.id('E')::text),
+  'deleting a connection (as account erasure does) deletes its notice');

@@ -2,7 +2,7 @@
  * Connector sign-in probe (MCPO-3, specs/mcp-oauth.md AC3, AC4, AC9, AC10): a
  * real OAuth 2.1 code flow against Supabase Auth on the local stack, the
  * consent screen's Approve made by hand (workspace_api_keys_connect_oauth as
- * the person), then the app's real token against moduo-mcp: discovery, tools
+ * the person, for the pending sign-in), then the app's real token against moduo-mcp: discovery, tools
  * per the connection's access, attribution "Person · via <app>", a reconnect,
  * and a disconnect that cuts the app off.
  *
@@ -163,10 +163,10 @@ check(true, "the app registers itself", client.client_id);
 const connections: string[] = [];
 let taskId = "";
 try {
-  const connect = async (scopes: Json) => {
+  const connect = async (authorizationId: string, scopes: Json) => {
     const res = await asPerson(PERSON, "/rest/v1/rpc/workspace_api_keys_connect_oauth", {
       p_workspace_id: WS,
-      p_client_id: client.client_id,
+      p_authorization_id: authorizationId,
       p_scopes: scopes,
       p_expires_in_days: 90,
       p_include_private_chat: false,
@@ -177,7 +177,8 @@ try {
     return { status: res.status, row };
   };
 
-  const authorize = async (): Promise<string> => {
+  // The consent screen: authorize → read the request → connect → approve → token.
+  const consent = async (scopes: Json) => {
     const verifier = b64url(randomBytes(32));
     const url = new URL(`${AUTH}/oauth/authorize`);
     for (const [k, v] of Object.entries({
@@ -197,6 +198,7 @@ try {
     await fetch(`${AUTH}/oauth/authorizations/${authorizationId}`, {
       headers: { apikey: APIKEY, authorization: `Bearer ${PERSON}` },
     });
+    const connection = await connect(authorizationId ?? "", scopes);
     const approve = await fetch(`${AUTH}/oauth/authorizations/${authorizationId}/consent`, {
       method: "POST",
       headers: {
@@ -220,17 +222,16 @@ try {
         code_verifier: verifier,
       }),
     });
-    return ((await json(tokenRes)).access_token as string) ?? "";
+    return { connection, token: ((await json(tokenRes)).access_token as string) ?? "" };
   };
 
   // The consent screen's Approve: the connection first, then Supabase's consent.
-  const first = await connect({ tasks: "view" });
+  const { connection: first, token: APP } = await consent({ tasks: "view" });
   check(
     first.status === 200 && first.row?.created === true,
-    "Approve creates the connection",
+    "Approve creates the connection for the pending sign-in",
     `HTTP ${first.status}`,
   );
-  const APP = await authorize();
   check(!!APP, "the app gets a token");
 
   // A token that predates any connection row would be refused; this one has one.
@@ -272,8 +273,8 @@ try {
     "connecting rang the person's bell once, naming the app",
   );
 
-  // Reconnect with Edit: the same row, and the token already in hand sees it.
-  const again = await connect({ tasks: "edit" });
+  // Signing in again with Edit: the same row, and the token already in hand sees it.
+  const again = (await consent({ tasks: "edit" })).connection;
   check(
     again.row?.id === first.row.id && again.row?.created === false,
     "reconnecting updates the same connection",

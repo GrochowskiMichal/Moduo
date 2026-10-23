@@ -108,11 +108,14 @@ export async function authenticate(req: Request, admin: SupabaseClient): Promise
   return await liveKey(data as KeyRow, admin);
 }
 
-/** The app token in the Authorization header, when it isn't a pasted key. */
+/**
+ * The app token in the Authorization header: a JWT (three dot-separated
+ * parts). Anything else, a mistyped pasted key included, keeps the pasted-key
+ * path and its words.
+ */
 export function appToken(req: Request): string | null {
-  const match = (req.headers.get("authorization") ?? "").match(/^Bearer\s+(\S+)$/i);
-  if (!match || /^moduo_sk_/i.test(match[1])) return null;
-  return match[1];
+  const match = (req.headers.get("authorization") ?? "").match(/^Bearer\s+([\w-]+\.[\w-]+\.[\w-]+)$/i);
+  return match ? match[1] : null;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
