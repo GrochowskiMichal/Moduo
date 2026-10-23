@@ -27,6 +27,10 @@ How a release is applied: [docs/release.md](../docs/release.md).
 - **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert. Never unfreeze it casually: the updater falls back to GitHub on any Worker error, and a moving GitHub manifest would bypass the kill switch.
 - Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
 
+## MCP connector address
+
+- `https://mcp.moduo.app` is the Worker `infra/mcp-proxy` (`moduo-mcp-proxy`), forwarding to the `moduo-mcp` Edge Function. It deploys with every release tag (`release.yml` job `mcp` → `_deploy-mcp-proxy.yml`; re-run: `deploy-prod.yml` target `mcp`), never from a branch push. Its smoke test fails until the function serving the public address is deployed: function first. Decision: [docs/decisions/mcp.md](../docs/decisions/mcp.md) (2026-10-23).
+
 ## Mac build runner (PLAT-7)
 
 - The signing jobs run in the `desktop-signing` environment (develop, mike, `v*` only), so a build started from a task branch stops there. Test `_desktop-release.yml` changes by landing them on `mike` and starting the staging build from `mike`.

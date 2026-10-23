@@ -1,0 +1,20 @@
+// The MCP connector's Moduo address: https://mcp.moduo.app forwards every request to the moduo-mcp
+// Edge Function, so Claude shows Moduo's icon (it picks a custom connector's icon from its URL's
+// domain). The function stays the connector; this Worker only forwards (src/server.ts).
+// Deployed by .github/workflows/_deploy-mcp-proxy.yml from a release tag (release.yml), or a tag
+// re-run (deploy-prod.yml, target mcp). The custom domain is declared here, so a deploy keeps it
+// (the first deploy creates its DNS record in the moduo.app zone).
+{
+  "name": "moduo-mcp-proxy",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // One public address: the custom domain. Local runs use `wrangler dev`.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "mcp.moduo.app", "custom_domain": true }],
+  "vars": {
+    // The function's own URL. Local: `wrangler dev --var UPSTREAM:http://127.0.0.1:54321/functions/v1/moduo-mcp`.
+    "UPSTREAM": "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp"
+  },
+  "observability": { "enabled": true }
+}

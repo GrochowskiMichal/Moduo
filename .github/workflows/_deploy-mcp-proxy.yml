@@ -1,0 +1,92 @@
+name: Deploy MCP address (shared)
+
+# Deploys infra/mcp-proxy, the Worker behind https://mcp.moduo.app that forwards every request to
+# the moduo-mcp Edge Function, from one checked commit. Called by release.yml (a vX.Y.Z tag) and
+# deploy-prod.yml (target mcp, a tag re-run); the caller checks the commit first
+# (scripts/release/check-tag.sh). It ships with the release because the app's Settings show this
+# address from the same release on (docs/decisions/mcp.md, 2026-10-23).
+#
+# The custom domain is declared in infra/mcp-proxy/wrangler.jsonc: the first deploy creates its
+# DNS record in the moduo.app zone, later deploys keep it.
+# Rollback: Cloudflare dashboard → Workers → moduo-mcp-proxy → Deployments → Rollback, or
+# `npx wrangler rollback` in infra/mcp-proxy. The Supabase URL keeps working throughout.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: "Full commit to deploy (already checked by the caller)"
+        required: true
+        type: string
+      label:
+        description: "What the Cloudflare deployment message names, e.g. the tag"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The Cloudflare token lives in this environment (develop, mike and v* tags only).
+    environment: cloudflare-deploy
+    env:
+      WRANGLER: npx --yes wrangler@4.147.0
+      LABEL: ${{ inputs.label }}
+      MCP_URL: https://mcp.moduo.app
+    steps:
+      - name: Checkout the commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Test the Worker
+        working-directory: infra/mcp-proxy
+        run: |
+          bun install --frozen-lockfile
+          bun run test
+
+      # The Cloudflare token is given only to this step, never to install or tests.
+      - name: Deploy
+        working-directory: infra/mcp-proxy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy --message "$LABEL"
+
+      # Fails when moduo-mcp on Supabase predates the public address (it would still name the
+      # Supabase URL as the resource, and clients connecting here would refuse it): deploy the
+      # function first, then re-run this job.
+      - name: Smoke test
+        run: |
+          # A first deploy's custom domain takes a few seconds to answer.
+          for _ in $(seq 1 24); do curl -sf -o /dev/null "$MCP_URL/oauth-protected-resource" && break; sleep 5; done
+          doc="$(curl -sSf "$MCP_URL/oauth-protected-resource")"
+          echo "protected-resource document: $doc"
+          [ "$(jq -r .resource <<< "$doc")" = "$MCP_URL" ] \
+            || { echo "::error::$MCP_URL advertises another resource: deploy moduo-mcp with the public-address change first."; exit 1; }
+          challenge="$(curl -s -o /dev/null -D - -X POST -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$MCP_URL" | tr -d '\r' | grep -i '^www-authenticate:' || true)"
+          echo "401 challenge: $challenge"
+          grep -qF "resource_metadata=\"$MCP_URL/oauth-protected-resource\"" <<< "$challenge" \
+            || { echo "::error::The 401 from $MCP_URL doesn't point at its own protected-resource document."; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$MCP_URL/favicon.ico")
+          echo "favicon → $code"
+          [ "$code" = 200 ] || echo "::warning::$MCP_URL/favicon.ico answers $code."
+          echo "MCP address: $MCP_URL is live." | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,10 +1,11 @@
 name: deploy-prod
 
-# Redeploys a release tag's web app and landing to production (specs/release-v2.md, REL-2). A
-# release ships through release.yml when its vX.Y.Z tag is pushed (/ship); this is for re-runs:
-# a deploy that failed half-way, a target deployed alone, or rolling forward again after a
-# Cloudflare rollback. Same check as the release (scripts/release/check-tag.sh): the tag's commit
-# is on develop, passed `checks`, and VERSION equals the tag. The deploy itself is _deploy-web.yml.
+# Redeploys a release tag's web app and landing (or mcp.moduo.app, target mcp) to production
+# (specs/release-v2.md, REL-2). A release ships through release.yml when its vX.Y.Z tag is pushed
+# (/ship); this is for re-runs: a deploy that failed half-way, a target deployed alone, or rolling
+# forward again after a Cloudflare rollback. Same check as the release
+# (scripts/release/check-tag.sh): the tag's commit is on develop, passed `checks`, and VERSION
+# equals the tag. The deploys themselves are _deploy-web.yml and _deploy-mcp-proxy.yml.
 #
 # Manual, owner only. Production is tags only: Desktop Release (production) takes a tag too.
 # Rollback: docs/release.md §4.
@@ -17,7 +18,8 @@ on:
       target:
         description: What to deploy
         type: choice
-        options: [both, app, landing]
+        # both = app + landing; mcp = mcp.moduo.app alone (_deploy-mcp-proxy.yml).
+        options: [both, app, landing, mcp]
         default: both
 
 # Shared with release.yml's web job: one production web deploy at a time.
@@ -68,6 +70,7 @@ jobs:
 
   web:
     needs: resolve
+    if: inputs.target != 'mcp'
     uses: ./.github/workflows/_deploy-web.yml
     # inherit is required for the called jobs to see their environment's secrets (an explicit
     # list leaves them empty); the sensitive ones live only in those environments.
@@ -76,3 +79,16 @@ jobs:
       sha: ${{ needs.resolve.outputs.sha }}
       label: ${{ inputs.tag }}
       target: ${{ inputs.target }}
+
+  mcp:
+    needs: resolve
+    if: inputs.target == 'mcp'
+    # Shared with release.yml's mcp job.
+    concurrency:
+      group: deploy-mcp-production
+      cancel-in-progress: false
+    uses: ./.github/workflows/_deploy-mcp-proxy.yml
+    secrets: inherit
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      label: ${{ inputs.tag }}

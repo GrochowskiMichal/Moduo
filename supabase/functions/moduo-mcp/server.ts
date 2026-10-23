@@ -60,7 +60,19 @@ import {
 } from "./registry.ts";
 import { outputJsonSchema } from "./tool-outputs.ts";
 
-const SERVER_INFO = { name: "moduo-mcp", title: "Moduo", version: "1.0.0" };
+// icons (MCP 2025-11-25): the landing's own favicons. Claude reads a custom
+// connector's icon off its URL's domain instead (anthropics/claude-ai-mcp#152),
+// which is why apps connect at mcp.moduo.app; other clients read these.
+const SERVER_INFO = {
+  name: "moduo-mcp",
+  title: "Moduo",
+  version: "1.0.0",
+  websiteUrl: "https://moduo.app",
+  icons: [
+    { src: "https://moduo.app/favicon.svg", mimeType: "image/svg+xml", sizes: ["any"] },
+    { src: "https://moduo.app/apple-touch-icon.png", mimeType: "image/png", sizes: ["180x180"] },
+  ],
+};
 
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",

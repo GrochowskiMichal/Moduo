@@ -133,6 +133,9 @@
         "@playwright/test": "^1.63.0",
       },
     },
+    "infra/mcp-proxy": {
+      "name": "@moduo/mcp-proxy",
+    },
     "infra/turbo-cache": {
       "name": "@moduo/turbo-cache",
     },
@@ -397,6 +400,8 @@
     "@moduo/e2e": ["@moduo/e2e@workspace:e2e"],
 
     "@moduo/landing": ["@moduo/landing@workspace:apps/landing"],
+
+    "@moduo/mcp-proxy": ["@moduo/mcp-proxy@workspace:infra/mcp-proxy"],
 
     "@moduo/storybook": ["@moduo/storybook@workspace:apps/storybook"],
 

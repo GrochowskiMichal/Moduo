@@ -22,9 +22,21 @@ This is a living spec. When a decision changes, update this file first, then cod
   (CORS, service-role clients). `sdk-parity.test.ts` holds every answer to
   what the hand-written server said. Deployed with `verify_jwt = false`: MCP
   clients present a Moduo key, not a Supabase JWT.
-- **Endpoint:** `https://<project>.supabase.co/functions/v1/moduo-mcp` —
-  surfaced with a copy affordance in Settings → API keys
-  (`runtime.workspace.getMcpEndpoint()`).
+- **Endpoint:** **`https://mcp.moduo.app`** in production, shown with a copy
+  affordance in Settings → API keys and Integrations → AI & MCP
+  (`runtime.workspace.getMcpEndpoint()`; any other project, such as the local
+  stack, shows its function URL). It is a Cloudflare Worker
+  (`infra/mcp-proxy`, `moduo-mcp-proxy`) that forwards every request to the
+  function unchanged, so Claude shows Moduo's icon: Claude takes a custom
+  connector's icon from its URL's domain and ignores `serverInfo.icons`
+  (anthropics/claude-ai-mcp#152). The function's own address,
+  `https://<project>.supabase.co/functions/v1/moduo-mcp`, keeps working
+  exactly as before for connections made with it. Discovery names whichever
+  of the two the client used (`public-url.ts`: the Worker sends
+  `x-moduo-mcp-origin`, believed only for `MCP_PUBLIC_URL`'s origins,
+  `https://mcp.moduo.app` when unset). `serverInfo` carries `websiteUrl` and
+  `icons` (moduo.app's favicons) for clients that read them. The Worker
+  deploys with each release tag (`_deploy-mcp-proxy.yml`).
 - **Auth:** `Authorization: Bearer moduo_sk_…`. The secret is sha256-matched
   against `workspace_api_keys.key_hash`; revoked or unknown → 401. The key
   pins the workspace: **tools never take a workspace argument.**
@@ -41,8 +53,14 @@ How an app such as Claude connects with only the URL
 [decisions/mcp.md](decisions/mcp.md)):
 
 1. The app calls the connector with no credentials and gets 401 with
-   `WWW-Authenticate: Bearer resource_metadata=…/moduo-mcp/oauth-protected-resource`,
-   which names Supabase Auth (`…/auth/v1`) as the sign-in server.
+   `WWW-Authenticate: Bearer resource_metadata=…/oauth-protected-resource`
+   (`https://mcp.moduo.app/oauth-protected-resource`, or
+   `…/moduo-mcp/oauth-protected-resource` on the Supabase URL), whose
+   `resource` is the address the app called and whose sign-in server is
+   always the project's Supabase Auth (`https://<project>.supabase.co/auth/v1`).
+   Supabase Auth accepts any absolute `resource` (it checks only the URI's
+   shape and that the token request repeats it), and the token's audience
+   doesn't depend on it, so one token works at both addresses.
 2. It registers itself (dynamic client registration) and sends the person to
    Supabase's authorize endpoint (PKCE), which redirects to
    `https://app.moduo.app/oauth/consent?authorization_id=…`.

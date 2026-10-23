@@ -54,6 +54,8 @@ Run it with `supabase db query --linked -f <file>`, so the history row carries t
 
 Deploy each changed function with `supabase functions deploy <name>`, in dependency order (a function a migration queues work for goes first; see the Chat v2 record).
 
+`moduo-mcp` goes out **before** the release that deploys `mcp.moduo.app`'s Worker: the release's smoke test fails while the function still names only its Supabase URL in discovery.
+
 A **shared function such as `moduo-mcp` deploys from a merge of `maciej` + `mike`** (every branch that has deployed it), or one person's tools disappear. When a migration and a function depend on each other, follow the order the block's record names (NR-8: `moduo-mcp` before or with the web release).
 
 ## 4. Web
@@ -68,6 +70,7 @@ Web and landing run on Cloudflare Workers (since PLAT-8, 2026-10-17); moduo.app'
 | moduo.app | `moduo-landing-production` | `release.yml`, same (re-run: `deploy-prod.yml`) |
 | www.moduo.app | none: a zone Redirect Rule, 308 to https://moduo.app | n/a |
 | updates.moduo.app | `moduo-update-server` | `update-server.yml` |
+| mcp.moduo.app | `moduo-mcp-proxy` (forwards to the `moduo-mcp` Edge Function) | `release.yml`'s `mcp` job, on a `vX.Y.Z` tag (re-run: `deploy-prod.yml` target `mcp`) |
 
 Every PR that touches the app or the landing also gets a preview URL comment on workers.dev (`app-preview.yml`, `landing-preview.yml`). Custom domains are declared in each `wrangler.jsonc` (`routes` with `custom_domain`), so a deploy keeps them.
 

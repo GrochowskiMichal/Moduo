@@ -5,6 +5,7 @@ import {
   isInviteEmailMismatch,
 } from "../features/workspaces/invite-join";
 import { toMemberPerm, toMemberRole } from "../features/workspaces/workspace-mappers";
+import { mcpEndpointFor } from "./mcp-endpoint";
 import { publicConfig } from "./public-config";
 import { DbError, runQuery, runRpc, type TableInsert } from "./runtime.db";
 import type { WorkspaceRuntime } from "./runtime.types";
@@ -539,6 +540,6 @@ export const webWorkspace: WorkspaceRuntime = {
     return data.redirect_url;
   },
   getMcpEndpoint() {
-    return `${SUPABASE_URL}/functions/v1/moduo-mcp`;
+    return mcpEndpointFor(SUPABASE_URL);
   },
 };
