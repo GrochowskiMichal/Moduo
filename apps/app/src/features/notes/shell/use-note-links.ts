@@ -9,7 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
-import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
+import { onNoteLinksChanged } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
 import {
   type AgentEditMark,
@@ -44,9 +44,7 @@ export function useNoteLinks({
   const { status, sections, reload } = useEntityHub(runtime, workspaceId, focus);
 
   useEffect(() => {
-    const onRefresh = () => reload();
-    window.addEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
-    return () => window.removeEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
+    return onNoteLinksChanged(() => reload());
   }, [reload]);
 
   // Typing a mention or a chip writes a link server-side; re-pull whenever the

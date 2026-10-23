@@ -21,7 +21,6 @@ import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
-import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LinkPlugin } from "@lexical/react/LexicalLinkPlugin";
 import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
@@ -40,12 +39,14 @@ import {
   $setSelection,
   COMMAND_PRIORITY_HIGH,
   INDENT_CONTENT_COMMAND,
+  KEY_MODIFIER_COMMAND,
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
+import { dispatchCreateNew } from "@/components/app/create-events";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
@@ -72,11 +73,15 @@ import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
 import { $createPageRowNode } from "../editor/schema/page-row-node";
 import { installNoteNodeViews } from "../editor/views";
+import { isAgentOrigin } from "../sync/agent-origin";
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 // The schema nodes draw through the view registry (NR-3); fill it once.
 installNoteNodeViews();
+
+/** Where each note was scrolled to, kept for the session. */
+const scrollPositions = new Map<string, number>();
 
 type Props = {
   engine: NotesSyncEngineV2;
@@ -86,15 +91,12 @@ type Props = {
   titleForLabel: string;
   /** Debounced first-line title (AC1) — the page maps it to notes.rename. */
   onTitleDerived: (title: string) => void;
-  /** Seed the self-teaching welcome content once, when this doc is empty. */
-  seedWelcome?: boolean;
   /** Live module data + actions for page-rows and /page (NO-4). */
   bridge: NotesEditorBridge;
   /** Put the caret in the note on open (a fresh capture, NR-2). */
   autoFocus?: boolean;
-  /** The refreshed shell (NR-3): the column's width comes from the host (the
-   * reading measure or Full width), not from the editor. */
-  bare?: boolean;
+  /** The note's Full width (NR-3): the column drops the reading measure. */
+  fullWidth?: boolean;
   /** Drawn under the title line (the meta line). */
   belowTitle?: ReactNode;
   /** Drawn after the document (the Linked-from footer). */
@@ -117,6 +119,29 @@ function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
     }, 0);
     return () => clearTimeout(id);
   }, [editor, doc]);
+  return null;
+}
+
+/** ⌘N / ⌘⇧N from inside a note open a new one. The app's bindings skip
+ * editors on purpose (a ⌘N in Email's reply must not replace the draft), so
+ * the note editor claims the key for itself. */
+function NewNoteKeyPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_MODIFIER_COMMAND,
+        (event: KeyboardEvent) => {
+          if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
+          if (event.key.toLowerCase() !== "n") return false;
+          event.preventDefault();
+          dispatchCreateNew();
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
   return null;
 }
 
@@ -155,8 +180,10 @@ function ListTabIndentationPlugin() {
   return null;
 }
 
-/** Debounced first-line-title derivation on every doc change (remote edits
- * retitle too). */
+/** Debounced first-line-title derivation on this editor's own edits. A pull,
+ * a teammate's live edit or an agent write already carries its title on the
+ * server: deriving it here too sent one rename per open editor, and an empty
+ * doc that hadn't loaded yet retitled a note "Untitled". */
 function TitleDerivationPlugin({
   doc,
   onTitleDerived,
@@ -172,7 +199,8 @@ function TitleDerivationPlugin({
   callbackRef.current = onTitleDerived;
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const onUpdate = () => {
+    const onUpdate = (_update: Uint8Array, origin: unknown) => {
+      if (origin === "remote" || isAgentOrigin(origin)) return;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         // The live editor already holds the doc's state (the binding applies
@@ -260,6 +288,26 @@ function InsertPageRowPlugin({ noteId, bridge }: { noteId: string; bridge: Notes
   return null;
 }
 
+/** The caret range at a screen point: WebKit/Blink's `caretRangeFromPoint`,
+ * else the standard `caretPositionFromPoint` (Firefox, where drops always
+ * landed at the end of the note). */
+function rangeAtPoint(x: number, y: number): Range | null {
+  if (typeof document.caretRangeFromPoint === "function") return document.caretRangeFromPoint(x, y);
+  const position = (
+    document as Document & {
+      caretPositionFromPoint?: (
+        x: number,
+        y: number,
+      ) => { offsetNode: Node; offset: number } | null;
+    }
+  ).caretPositionFromPoint?.(x, y);
+  if (!position) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  range.collapse(true);
+  return range;
+}
+
 /** Drag-into-editor (NO-7b): the page fires this when an entity is dropped onto
  * the open editor. Insert a reference chip at the drop point — a chip only, no
  * `entity_links` write (that's the drag-onto-row/hub gesture). The DOM caret at
@@ -281,12 +329,8 @@ function InsertEntityChipPlugin({ noteId, editable }: { noteId: string; editable
       editor.update(() => {
         // Best-effort placement at the drop caret.
         let dropSel: ReturnType<typeof $createRangeSelection> | null = null;
-        if (
-          d.clientX != null &&
-          d.clientY != null &&
-          typeof document.caretRangeFromPoint === "function"
-        ) {
-          const domRange = document.caretRangeFromPoint(d.clientX, d.clientY);
+        if (d.clientX != null && d.clientY != null) {
+          const domRange = rangeAtPoint(d.clientX, d.clientY);
           if (domRange) {
             try {
               const sel = $createRangeSelection();
@@ -322,61 +366,6 @@ function InsertEntityChipPlugin({ noteId, editable }: { noteId: string; editable
   return null;
 }
 
-/** One-shot self-teaching content for a fresh workspace's welcome note
- * (DESIGN_BRIEF §4). Canonical Lexical nodes → syncs like any typed content.
- * The new Notes' version teaches `/task`, `[[`, `/contact` and the handles (NR-4). */
-function WelcomeSeedPlugin({ enabled, writing }: { enabled: boolean; writing: boolean }) {
-  const [editor] = useLexicalComposerContext();
-  useEffect(() => {
-    if (!enabled) return;
-    // After the collab bootstrap settles.
-    const id = setTimeout(() => {
-      editor.update(() => {
-        const root = $getRoot();
-        if (root.getTextContent().trim() !== "") return;
-        root.clear();
-        const h1 = $createHeadingNode("h1");
-        h1.append($createTextNode("Welcome to Notes"));
-        const p1 = $createParagraphNode();
-        p1.append(
-          $createTextNode(
-            "This is your space to write things down — the first line of any note is its title.",
-          ),
-        );
-        const p2 = $createParagraphNode();
-        p2.append(
-          $createTextNode(
-            writing
-              ? "Type / for blocks (headings, lists, checkboxes) and @ to mention a teammate. Hover a line and drag its ⋮⋮ handle to move it, or press ⌥⇧↑ / ⌥⇧↓."
-              : "Type / for blocks (headings, lists, checkboxes), or @ to mention a teammate. Notes nest: create a child page from the sidebar's + and drag rows to organize.",
-          ),
-        );
-        // Teach the task-line gesture without minting a demo task into the
-        // real Tasks Inbox — the seed stays inert (NO-5 decision).
-        const p3 = $createParagraphNode();
-        p3.append(
-          $createTextNode(
-            writing
-              ? "When a line is real work, type /task — it becomes a live task, synced with Tasks both ways. Type [[ to link another note (or create one by name), and /contact to bring in a person's card. Select text and press ⌘K to link it."
-              : "Checkboxes below stay humble checkboxes. When a line is real work, type /task (or hover a checkbox and press ⌘⇧T) — the line becomes a live task, synced with Tasks both ways.",
-          ),
-        );
-        const list = $createListNode("check");
-        const li1 = $createListItemNode(true);
-        li1.append($createTextNode("Open Notes"));
-        const li2 = $createListItemNode(false);
-        li2.append($createTextNode("Write a first thought (⌘⇧N captures from anywhere)"));
-        const li3 = $createListItemNode(false);
-        li3.append($createTextNode("Delete this note whenever you're done with it"));
-        list.append(li1, li2, li3);
-        root.append(h1, p1, p2, p3, list);
-      });
-    }, 120);
-    return () => clearTimeout(id);
-  }, [editor, enabled, writing]);
-  return null;
-}
-
 export function NoteEditor({
   engine,
   workspaceId,
@@ -384,17 +373,16 @@ export function NoteEditor({
   editable = true,
   titleForLabel,
   onTitleDerived,
-  seedWelcome = false,
   bridge,
   autoFocus = false,
-  bare = false,
+  fullWidth = false,
   belowTitle,
   footer,
 }: Props) {
   const { userId, runtime } = useAuth();
-  // The new Notes' writing surface (NR-4): block handles, `[[`, ⌘K links.
-  // Classic Notes is frozen, and a view-only note gets none of them.
-  const writing = bare && editable;
+  // The writing surface (NR-4): block handles, `[[`, ⌘K links. A view-only
+  // note gets none of them.
+  const writing = editable;
   const session = useMemo(() => engine.getOrCreateSession(noteId), [engine, noteId]);
   // Mount as soon as the local copy has loaded (NR-3 honest provider): the
   // cached doc paints and edits at once while the pull runs underneath. An
@@ -402,21 +390,42 @@ export function NoteEditor({
   // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
   // note opened on a new device would gain a stray empty block.
   const [ready, setReady] = useState(false);
-  // The first pull has settled: only then may the welcome seed look at an
-  // "empty" doc (before it, empty may just mean "not pulled yet").
-  const [booted, setBooted] = useState(false);
+
+  // Coming back to a long note lands where you were reading (this session).
+  const paneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!ready || !pane) return;
+    const saved = scrollPositions.get(noteId) ?? 0;
+    // The binding draws the document a few frames after mount: wait until
+    // it is tall enough to hold the saved position (or give up quietly).
+    let frame = 0;
+    let tries = 0;
+    const restore = () => {
+      if (pane.scrollHeight - pane.clientHeight >= saved || tries++ > 30) {
+        pane.scrollTop = saved;
+        return;
+      }
+      frame = requestAnimationFrame(restore);
+    };
+    if (saved > 0) frame = requestAnimationFrame(restore);
+    const onScroll = () => scrollPositions.set(noteId, pane.scrollTop);
+    pane.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      pane.removeEventListener("scroll", onScroll);
+    };
+  }, [ready, noteId]);
 
   useEffect(() => {
     let active = true;
     setReady(false);
-    setBooted(false);
     void session.cacheReady.then(() => {
       if (active && session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0) setReady(true);
     });
     void session.booted.then(() => {
       if (!active) return;
       setReady(true);
-      setBooted(true);
     });
     return () => {
       active = false;
@@ -484,127 +493,123 @@ export function NoteEditor({
     );
   }
 
+  // The pane is the scroller, full width, so the wheel works over the margins
+  // and the scrollbar sits at the pane's edge; the reading column is centred
+  // inside it. Overlays (block handle, meta line, drop line) position against
+  // the column, the task-line overlay against the pane.
   return (
     <div
+      ref={paneRef}
       data-meta-line={belowTitle ? "" : undefined}
-      className={cn(
-        "pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto",
-        bare && "flex flex-col",
-      )}
+      className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto"
     >
-      <NotesEditorBridgeContext.Provider value={bridge}>
-        <LexicalCollaboration key={`collab-${noteId}`}>
-          <LexicalComposer initialConfig={initialConfig} key={noteId}>
-            <RichTextPlugin
-              contentEditable={
-                <ContentEditable
-                  className={cn(
-                    "w-full px-6 pt-10 text-base leading-relaxed text-foreground outline-none",
-                    bare ? "flex-1 pb-12" : "mx-auto min-h-full max-w-3xl pb-24",
-                  )}
-                />
-              }
-              placeholder={
-                <div
-                  className={cn(
-                    "pointer-events-none absolute top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60",
-                    bare ? "inset-x-0" : "left-1/2 w-full max-w-3xl -translate-x-1/2",
-                  )}
-                >
-                  Untitled
-                </div>
-              }
-              ErrorBoundary={LexicalErrorBoundary}
-            />
-            <HistoryPlugin />
-            <ListPlugin />
-            <CheckListPlugin />
-            <ListTabIndentationPlugin />
-            <CodeHighlightingPlugin />
-            <LinkPlugin />
-            <TablePlugin />
-            <SlashMenuPlugin
-              workspaceId={workspaceId}
-              runtime={runtime}
-              source={{ type: "note", id: noteId }}
-              sourceLabel={titleForLabel || "Untitled"}
-              noteLinks={writing}
-            />
-            {writing ? (
-              <>
-                <NoteLinkPlugin
-                  workspaceId={workspaceId}
-                  runtime={runtime}
-                  noteId={noteId}
-                  sourceLabel={titleForLabel || "Untitled"}
-                />
-                <LinkDialogPlugin
-                  workspaceId={workspaceId}
-                  runtime={runtime}
-                  noteId={noteId}
-                  sourceLabel={titleForLabel || "Untitled"}
-                />
-                <BlockHandlePlugin doc={session.doc} />
-              </>
-            ) : null}
-            <MentionMenuPlugin
-              workspaceId={workspaceId ?? null}
-              runtime={runtime}
-              source={{ type: "note", id: noteId }}
-              sourceLabel={titleForLabel || "Untitled"}
-              sourceIcon="note"
-              currentUserId={userId}
-              // The Notes grammar: @ = workspace people ONLY (AC5); a mention
-              // writes the person-targeted activity row → their notification.
-              peopleOnly
-              onMentionPerson={
-                runtime && editable
-                  ? (memberId) =>
-                      runtime.notesV2.mention({
-                        workspaceId,
-                        noteId,
-                        mentionedUserIds: [memberId],
-                      })
-                  : undefined
-              }
-            />
-            <MarkdownClipboardPlugin />
-            {/* Live markdown-as-you-type (DF-13): the same transformer set the
+      <div
+        className={cn(
+          "relative mx-auto flex min-h-full w-full flex-col",
+          fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
+        )}
+      >
+        <NotesEditorBridgeContext.Provider value={bridge}>
+          <LexicalCollaboration key={`collab-${noteId}`}>
+            <LexicalComposer initialConfig={initialConfig} key={noteId}>
+              <RichTextPlugin
+                contentEditable={
+                  <ContentEditable className="w-full flex-1 px-6 pt-10 pb-12 text-base leading-relaxed text-foreground outline-none" />
+                }
+                placeholder={
+                  <div className="pointer-events-none absolute inset-x-0 top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
+                    Untitled
+                  </div>
+                }
+                ErrorBoundary={LexicalErrorBoundary}
+              />
+              <ListPlugin />
+              <CheckListPlugin />
+              <ListTabIndentationPlugin />
+              {editable ? <NewNoteKeyPlugin /> : null}
+              <CodeHighlightingPlugin />
+              <LinkPlugin />
+              <TablePlugin />
+              <SlashMenuPlugin
+                workspaceId={workspaceId}
+                runtime={runtime}
+                source={{ type: "note", id: noteId }}
+                sourceLabel={titleForLabel || "Untitled"}
+                noteLinks={writing}
+              />
+              {writing ? (
+                <>
+                  <NoteLinkPlugin
+                    workspaceId={workspaceId}
+                    runtime={runtime}
+                    noteId={noteId}
+                    sourceLabel={titleForLabel || "Untitled"}
+                  />
+                  <LinkDialogPlugin
+                    workspaceId={workspaceId}
+                    runtime={runtime}
+                    noteId={noteId}
+                    sourceLabel={titleForLabel || "Untitled"}
+                  />
+                  <BlockHandlePlugin doc={session.doc} />
+                </>
+              ) : null}
+              <MentionMenuPlugin
+                workspaceId={workspaceId ?? null}
+                runtime={runtime}
+                source={{ type: "note", id: noteId }}
+                sourceLabel={titleForLabel || "Untitled"}
+                sourceIcon="note"
+                currentUserId={userId}
+                // The Notes grammar: @ = workspace people ONLY (AC5); a mention
+                // writes the person-targeted activity row → their notification.
+                peopleOnly
+                onMentionPerson={
+                  runtime && editable
+                    ? (memberId) =>
+                        runtime.notesV2.mention({
+                          workspaceId,
+                          noteId,
+                          mentionedUserIds: [memberId],
+                        })
+                    : undefined
+                }
+              />
+              <MarkdownClipboardPlugin />
+              {/* Live markdown-as-you-type (DF-13): the same transformer set the
               paste/import path uses, so `**bold**`, `# heading`, `- [ ]` etc.
               format while typing. ⌘B/⌘I ride Lexical's built-in rich-text
               bindings; the floating toolbar makes them discoverable. */}
-            <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
-            {bare ? (
+              <MarkdownShortcutPlugin transformers={NOTES_TRANSFORMERS} />
               <CommentMarksPlugin
                 noteId={noteId}
                 editable={editable}
                 runtime={runtime}
                 workspaceId={workspaceId ?? null}
               />
-            ) : null}
-            <FormatToolbarPlugin
-              editable={editable}
-              link={writing}
-              comment={writing && Boolean(bridge.openComments)}
-            />
-            <TaskLinePlugin editable={editable} noteId={noteId} />
-            <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
-            <InsertEntityChipPlugin noteId={noteId} editable={editable} />
-            <CollaborationPluginV2__EXPERIMENTAL
-              id={noteId}
-              doc={session.doc}
-              provider={session.provider as any}
-              __shouldBootstrapUnsafe={true}
-            />
-            <SyncFromYjsPlugin doc={session.doc} />
-            <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
-            <WelcomeSeedPlugin enabled={seedWelcome && editable && booted} writing={writing} />
-            {autoFocus && editable ? <AutoFocusPlugin /> : null}
-            {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
-          </LexicalComposer>
-        </LexicalCollaboration>
-      </NotesEditorBridgeContext.Provider>
-      {footer ? <div className="w-full px-6">{footer}</div> : null}
+              <FormatToolbarPlugin
+                editable={editable}
+                link={writing}
+                comment={writing && Boolean(bridge.openComments)}
+              />
+              <TaskLinePlugin editable={editable} noteId={noteId} />
+              <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
+              <InsertEntityChipPlugin noteId={noteId} editable={editable} />
+              <CollaborationPluginV2__EXPERIMENTAL
+                id={noteId}
+                doc={session.doc}
+                provider={session.provider as any}
+                __shouldBootstrapUnsafe={true}
+              />
+              <SyncFromYjsPlugin doc={session.doc} />
+              <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
+              {autoFocus && editable ? <AutoFocusPlugin /> : null}
+              {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
+            </LexicalComposer>
+          </LexicalCollaboration>
+        </NotesEditorBridgeContext.Provider>
+        {footer ? <div className="w-full px-6 pb-12">{footer}</div> : null}
+      </div>
     </div>
   );
 }

@@ -60,7 +60,6 @@ describe("DEFAULT_PREFERENCES", () => {
         viewsSeeded: {},
       },
       tasksFolds: {},
-      notesExperience: "classic",
       lastSeenVersion: null,
     });
   });
@@ -122,8 +121,6 @@ describe("sanitizePreferences", () => {
         viewsSeeded: {},
       },
       tasksFolds: {},
-      // Absent → classic (the New Notes switch is off by default, NR-2).
-      notesExperience: "classic",
       lastSeenVersion: null,
     });
   });

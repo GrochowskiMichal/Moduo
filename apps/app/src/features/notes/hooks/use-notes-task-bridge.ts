@@ -16,7 +16,7 @@ import { undoToast } from "../../../lib/undo-toast";
 import { endPosition, makeTask } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";
 import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks/tasks-context";
-import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
+import { announceNoteLinksChanged, type NotesTaskBridge } from "../editor/notes-editor-bridge";
 import { buildDetachPlan, buildMintRevertPlan, type DetachPlan } from "../tasks/detach";
 import {
   applyTaskRename,
@@ -143,6 +143,7 @@ export function useNotesTaskBridge({
             minted: true,
           }),
         );
+        announceNoteLinksChanged();
         void api.reload();
         return saved;
       } catch (e) {
@@ -166,7 +167,7 @@ export function useNotesTaskBridge({
         taskTitle: task.title,
         minted: false,
       });
-      void rt.spine.createLink(input).catch(() => {
+      void rt.spine.createLink(input).then(announceNoteLinksChanged, () => {
         toast.error("Couldn't link that task.", {
           action: { label: "Retry", onClick: () => void rt.spine.createLink(input) },
         });

@@ -16,7 +16,7 @@ import type { ActivityEntry } from "@/features/tasks/model";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 
-import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
+import { onNoteLinksChanged } from "../editor/notes-editor-bridge";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -42,9 +42,7 @@ export function NoteDetailPanel({
   // A drag-onto-hub link (NO-7b) is written by the page; re-pull so the new edge
   // appears without a re-select.
   useEffect(() => {
-    const onRefresh = () => reload();
-    window.addEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
-    return () => window.removeEventListener(NOTE_DETAIL_REFRESH_EVENT, onRefresh);
+    return onNoteLinksChanged(() => reload());
   }, [reload]);
 
   useEffect(() => {
