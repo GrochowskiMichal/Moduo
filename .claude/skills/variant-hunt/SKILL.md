@@ -15,9 +15,9 @@ One seed: a `benchmarks/escapes/<id>/` folder (preferred: it already names the m
 ## Rules that always hold
 
 - **Never fix.** Not even a one-liner. The hunt writes tests and a report; a confirmed bug becomes a Moduo task and goes through the normal bug lane (Tier 2 when it touches sync, prefs, auth or desktop stores).
-- **Never edit an existing test or product file.** Only add new proof-test files. Exception in Rust: a proof test goes in a new `#[cfg(test)] mod hunt_<id>` appended at the end of the module it tests (Rust unit tests must live in the crate); touch nothing else in that file.
+- **Never edit an existing test or product file.** Only add new proof-test files. Exception in Rust: a proof test goes in a new `#[cfg(test)] mod hunt_<seed>` (e.g. `hunt_509_5`) appended at the end of the module it tests (Rust unit tests must live in the crate); touch nothing else in that file.
 - **Proof tests are parked, not red.** `bun run verify` must stay green on the branch:
-  - TypeScript: a new file `<dir>/<subject>.variant.test.ts` next to the code, whose suites run only on demand:
+  - TypeScript: a new file `<dir>/<subject>.<seed>.variant.test.ts` next to the code (e.g. `cache.509-3.variant.test.ts`, so two seeds never collide), whose suites run only on demand:
     ```ts
     // HV-15 variant of benchmarks/escapes/<id>: <one line>. Fails until <MOD-handle or "the fix"> lands.
     // Run: MODUO_HUNT=1 bun run --cwd apps/app test <path>
@@ -51,11 +51,11 @@ One seed: a `benchmarks/escapes/<id>/` folder (preferred: it already names the m
 
    | Seed | Candidate (file:line) | Mechanism match | Failing test | Verdict |
    | --- | --- | --- | --- | --- |
-   | 509-1 | `lib/foo.ts:42` | error read as empty → pushes defaults | `lib/foo.variant.test.ts` · "…" (fails: expected 0 pushes, got 1) | confirmed |
+   | 509-1 | `lib/foo.ts:42` | error read as empty → pushes defaults | `lib/foo.509-1.variant.test.ts` · "…" (fails: expected 0 pushes, got 1) | confirmed |
 
    Verdicts: **confirmed** (failing test, real user path) · **dropped** (with reason). Below the table: sites searched (count and the grep/LSP queries used), sites dropped by reason, and for each confirmed bug a three-line task draft (title, user-visible damage, the proof test path and run command).
 7. **Hand off confirmed bugs** (the session running the hunt, not a subagent): one Moduo task each in the `Moduo` project, tagged `bug`, titled `<what loses data> (variant of <escape id>)`, description = damage + proof test path + run command + seed. The fix follows the bug lane: un-skip the proof test, make it pass, then the test joins `benchmarks/escapes/` as a new escape.
 
 ## Running it for many seeds
 
-One subagent per seed (Opus, high effort, `general-purpose`), all in the same worktree, each told its seed folder, this skill's path, and the file names it may create (`*.variant.test.ts`, `mod hunt_<id>` in Rust). They return the step-6 report; the calling session merges the tables, de-duplicates candidates found by two seeds, re-runs every proof test itself before calling it confirmed, and files the tasks.
+One subagent per seed (Opus, high effort, `general-purpose`), all in the same worktree, each told its seed folder, this skill's path, and the file names it may create (`*.<seed>.variant.test.ts`, `mod hunt_<seed>` in Rust, e.g. `hunt_509_5`). They return the step-6 report; the calling session merges the tables, de-duplicates candidates found by two seeds, re-runs every proof test itself before calling it confirmed, and files the tasks.
