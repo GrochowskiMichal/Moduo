@@ -1,0 +1,24 @@
+# Failures already red on a prod-faithful stack (a fresh snapshot of prod plus
+# the repo's unapplied migrations: checks.yml's db-test job). `bun run db:test`
+# prints these as known and fails on anything else, and on a line here that
+# passes again. Fix the test or the schema and delete the line; never add one to
+# make a new failure go away. Format: `<file>: <check label or "ERROR: message">`.
+
+# The app-token lockout (20261022230000, MCPO-1) adds a restrictive
+# app_tokens_refused policy to every table, so "its only policy" / "one read
+# rule each" counts two. The tests need to ignore that policy.
+attachments_everywhere.test.sql: path: RLS — attachments are read through the item gate, their only policy
+chat_statuses.test.sql: rules: one read rule each, about the caller; no write rules (the ops write)
+sessions_access.test.sql: path: RLS — task_sessions is read through tasks__visible, its only policy
+sessions_access.test.sql: path: RLS — task_reminders is read through tasks__visible, its only policy
+sessions_access.test.sql: path: RLS — task_waiting is read through tasks__visible, its only policy
+sessions_access.test.sql: ERROR: more than one row returned by a subquery used as an expression
+
+# Reads a row of prod data (public.app_settings min_build), which a schema
+# snapshot doesn't carry.
+chat_wrappers.test.sql: min_build: at or above the first production desktop build without v1 calls (1.0.21)
+
+# security_advisor_grants (20261022130000) took EXECUTE on
+# storage__limits_for_owner away from signed-in people, which this check of
+# plan_helpers_scope (20261022100000) needs. One of the two is wrong on prod.
+plan_helpers_scope.test.sql: a member still reads the owner's storage limits
