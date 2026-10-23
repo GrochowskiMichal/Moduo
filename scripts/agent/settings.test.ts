@@ -169,6 +169,9 @@ describe("scripts/agent/lane.sh", () => {
       encoding: "utf8",
     }).stdout.trim();
     expect(profile.filesystem.allowWrite).toContain(gitDir);
+    expect(profile.filesystem.denyWrite).toEqual(
+      expect.arrayContaining([`${gitDir}/hooks`, `${gitDir}/config`, path.join(ROOT, ".mcp.json")]),
+    );
   });
 });
 

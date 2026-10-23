@@ -25,7 +25,13 @@
     "allowLocalBinding": true
   },
   "filesystem": {
-    "denyRead": ["~/.ssh", "~/.aws", "~/.config/gcloud", ".env", ".env.local"],
+    "denyRead": [
+      "~/.ssh",
+      "~/.aws",
+      "~/.config/gcloud",
+      ".env",
+      ".env.local"
+    ],
     "allowWrite": [
       ".",
       "/tmp",
@@ -46,7 +52,10 @@
       ".claude/hooks",
       ".claude/sandbox",
       ".git/hooks",
-      "~/.claude/settings.json"
+      "~/.claude/settings.json",
+      ".mcp.json",
+      "~/.claude/settings.local.json",
+      "~/.claude/hooks"
     ]
   }
 }
