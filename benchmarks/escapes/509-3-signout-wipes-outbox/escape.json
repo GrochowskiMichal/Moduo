@@ -1,0 +1,21 @@
+{
+  "id": "509-3-signout-wipes-outbox",
+  "title": "Sign-out wipes writes that never synced",
+  "mechanism": "teardown-drops-pending",
+  "sites": [
+    "apps/app/src/providers/auth-provider.tsx",
+    "apps/app/src/lib/sync/store.ts",
+    "apps/app/src/lib/sync/cache.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.test.ts",
+      "name": "sign-out keeps what waits to sync (rows go) and sends it when that person signs back in",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.test.ts"
+    }
+  ],
+  "pr": 509,
+  "fixCommit": "9a45905456d59aab9ea8535b25c284bcd2c901ff",
+  "foundBy": "manual audit 2026-10-20"
+}
