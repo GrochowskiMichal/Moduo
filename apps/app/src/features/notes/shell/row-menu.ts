@@ -10,8 +10,10 @@ import {
   Download,
   FilePlus,
   FolderInput,
+  FolderTree,
   Globe,
   type LucideIcon,
+  Smile,
   Star,
   StarOff,
   Trash2,
@@ -25,7 +27,9 @@ export type RowAction =
   | "subpage"
   | "duplicate"
   | "move"
+  | "icon"
   | "export"
+  | "export-tree"
   | "publish"
   | "archive"
   | "trash";
@@ -37,18 +41,32 @@ export function rowMenuItems(opts: {
   canEdit: boolean;
   favorite: boolean;
   section?: SidebarSection;
+  /** The note has sub-pages: offer them in one .zip too. */
+  hasChildren?: boolean;
 }): RowMenuItem[] {
   const fav: RowMenuItem = opts.favorite
     ? { action: "unfavorite", label: "Remove from favorites", icon: StarOff }
     : { action: "favorite", label: "Add to favorites", icon: Star };
-  const exportItem: RowMenuItem = { action: "export", label: "Export .md", icon: Download };
-  if (!opts.canEdit) return [fav, exportItem];
+  const exports: RowMenuItem[] = [
+    { action: "export", label: "Export .md", icon: Download },
+    ...(opts.hasChildren
+      ? [
+          {
+            action: "export-tree",
+            label: "Export with sub-pages (.zip)",
+            icon: FolderTree,
+          } as const,
+        ]
+      : []),
+  ];
+  if (!opts.canEdit) return [fav, ...exports];
   return [
     fav,
     { action: "subpage", label: "New subpage", icon: FilePlus },
     { action: "duplicate", label: "Duplicate", icon: Copy },
     { action: "move", label: "Move to…", icon: FolderInput },
-    exportItem,
+    { action: "icon", label: "Change icon…", icon: Smile },
+    ...exports,
     { action: "publish", label: "Publish…", icon: Globe },
     "separator",
     { action: "archive", label: "Archive", icon: Archive },

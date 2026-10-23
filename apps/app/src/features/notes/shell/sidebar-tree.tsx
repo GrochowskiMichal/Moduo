@@ -118,7 +118,9 @@ export function TreeRow({
   const selected = ctx.selectedId === note.id;
   const hover = ctx.hover?.key === key ? ctx.hover : null;
   const favorite = ctx.favoriteIds.has(note.id);
-  const items = isDraft ? [] : rowMenuItems({ canEdit: ctx.canEdit, favorite, section });
+  const items = isDraft
+    ? []
+    : rowMenuItems({ canEdit: ctx.canEdit, favorite, section, hasChildren: expandable });
 
   const row = (
     <div

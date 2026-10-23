@@ -19,6 +19,7 @@ import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
 import { runRedbImportOnce } from "../sync/redb-import";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
+import { WELCOME_MARKDOWN, WELCOME_TITLE } from "../welcome";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
 
@@ -45,7 +46,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
-  const [welcomeNoteId, setWelcomeNoteId] = useState<string | null>(null);
   const reqRef = useRef(0);
   const serverLoadedRef = useRef(false);
   /** Optimistic creates whose op hasn't settled — merged into every server
@@ -246,20 +246,17 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     } catch {
       return;
     }
+    // Created and seeded before it shows: the note appears with its content,
+    // never as an empty doc an editor could retitle.
     const id = crypto.randomUUID();
-    const optimistic = welcomeOptimisticNote(id, workspaceId, userId);
-    setNotes([optimistic]);
-    setWelcomeNoteId(id);
-    pendingCreatesRef.current.set(id, optimistic);
+    const ws = workspaceId;
     void runtime!.notesV2
-      .create({ workspaceId, id, title: "Welcome to Notes", icon: "👋", position: endPosition([]) })
-      .then(() => pendingCreatesRef.current.delete(id))
+      .create({ workspaceId: ws, id, title: WELCOME_TITLE, icon: "👋", position: endPosition([]) })
+      .then(() => repairNote(runtime!, ws, id, WELCOME_MARKDOWN))
+      .then(() => load())
       .catch(() => {
-        // degrade quietly — the seed is a nicety, never an error surface —
-        // but don't burn the one-shot flag on a failed attempt.
-        pendingCreatesRef.current.delete(id);
-        setNotes((prev) => prev.filter((n) => n.id !== id));
-        setWelcomeNoteId(null);
+        // Degrade quietly (the seed is a nicety, never an error surface), but
+        // don't burn the one-shot flag on a failed attempt.
         try {
           window.localStorage.removeItem(flag);
         } catch {
@@ -726,7 +723,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     syncStatus,
     engine,
     canEdit,
-    welcomeNoteId,
     refresh: load,
     createNote,
     materializeDraft,
@@ -765,29 +761,4 @@ function descendantIdsIncludingTrashed(notes: Note[], noteId: string): string[] 
   };
   walk(noteId, 0);
   return out;
-}
-
-function welcomeOptimisticNote(id: string, workspaceId: string, userId: string | null): Note {
-  const now = new Date().toISOString();
-  return {
-    id,
-    workspaceId,
-    createdBy: userId,
-    parentId: null,
-    title: "Welcome to Notes",
-    icon: "👋",
-    isPinned: false,
-    position: endPosition([]),
-    isArchived: false,
-    publishedAt: null,
-    publishToken: null,
-    docVersion: 0,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    shareMode: "custom",
-    workspaceShared: false,
-    inInbox: true,
-    fullWidth: false,
-  };
 }

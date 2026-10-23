@@ -525,7 +525,11 @@ export function SlashMenuPlugin({
   useEffect(
     () =>
       registerMenuKeys(editor, {
-        isOpen: () => menuRef.current !== null || pickerRef.current !== null,
+        // A menu with no matching command is not drawn, so it must not hold
+        // ↵ either ("call /api" + ↵ is a new line).
+        isOpen: () =>
+          (menuRef.current !== null && commandsRef.current.length > 0) ||
+          pickerRef.current !== null,
         count: () => (menuRef.current ? commandsRef.current.length : 0),
         index: () => selectedIndexRef.current,
         setIndex: setSelectedIndex,

@@ -274,15 +274,10 @@ export interface Preferences {
   tasksOnboarding: TasksOnboardingPrefs;
   /** Folded groups and columns in each List and Board (TV-U8), following the person. */
   tasksFolds: Record<string, TasksFoldEntry>;
-  /** Which Notes UI this person uses while the refresh ships behind a switch
-   *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
-  notesExperience: NotesExperience;
   /** The newest app version this person has been told about (What's new, REL-4).
    *  Only moves forward, so the "Updated to X" toast shows once per version. */
   lastSeenVersion: string | null;
 }
-
-export type NotesExperience = "classic" | "next";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
@@ -298,7 +293,6 @@ export const DEFAULT_PREFERENCES: Preferences = {
   tasksInbox: { snoozed: {} },
   tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
   tasksFolds: {},
-  notesExperience: "classic",
   lastSeenVersion: null,
 };
 
@@ -307,7 +301,6 @@ const LAST_ROUTE_KEY = "moduo.lastRoute";
 
 const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email", "last"] as const;
 const MOTION_PREFS = ["system", "reduced", "full"] as const;
-const NOTES_EXPERIENCES = ["classic", "next"] as const;
 
 const notificationPrefsSchema = z
   .preprocess(
@@ -484,7 +477,6 @@ const preferencesSchema = z.object({
   tasksInbox: tasksInboxSchema,
   tasksOnboarding: tasksOnboardingSchema,
   tasksFolds: tasksFoldsSchema,
-  notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
   lastSeenVersion: z
     .string()
     .trim()

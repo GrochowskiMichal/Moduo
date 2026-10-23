@@ -29,7 +29,6 @@ import {
 } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
-  $addUpdateTag,
   $createTextNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
@@ -40,7 +39,6 @@ import {
   COLLABORATION_TAG,
   type ElementNode,
   HISTORIC_TAG,
-  HISTORY_MERGE_TAG,
   type LexicalEditor,
   type LexicalNode,
   type NodeKey,
@@ -67,6 +65,7 @@ import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
 
 import type { TaskLineSnapshot } from "../../tasks/detach";
+import { updateWithoutUndo } from "../collab-undo";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
 import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";
 
@@ -206,13 +205,12 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
   // the plugin's mount sweep.
   if (editor.getRootElement() === null) return false;
   let landed = false;
-  editor.update(
+  updateWithoutUndo(
+    editor,
     () => {
-      // Fold the stamp into the SAME undo step as the insert/convert — ⌘Z
-      // must revert the whole mint (destroying a line that still carries its
-      // taskId, so the revert plan can delete the task too), never strand a
-      // pending line with no task behind it.
-      $addUpdateTag(HISTORY_MERGE_TAG);
+      // The stamp is never an undo step of its own: ⌘Z reverts the insert or
+      // convert, which takes the line WITH its taskId (so the revert plan can
+      // delete the task too), never strands a pending line with no task.
       const node = $getNodeByKey(nodeKey);
       if ($isTaskLineNode(node)) {
         node.setTaskId(task.id);
@@ -220,7 +218,7 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
         landed = true;
       }
     },
-    { tag: TASK_LINE_TAG },
+    TASK_LINE_TAG,
   );
   return landed;
 }
@@ -746,10 +744,10 @@ export function TaskLinePlugin({
       if (fix.done !== undefined || fix.title !== undefined) fixes.push(fix);
     }
     if (fixes.length === 0) return;
-    editor.update(
+    updateWithoutUndo(
+      editor,
       () => {
-        // Reconciling remote task state must never become its own undo step.
-        $addUpdateTag(HISTORY_MERGE_TAG);
+        // Reconciling remote task state is never an undo step.
         const selection = $getSelection();
         for (const fix of fixes) {
           const node = $getNodeByKey(fix.key);
@@ -772,7 +770,7 @@ export function TaskLinePlugin({
           }
         }
       },
-      { tag: TASK_LINE_TAG },
+      TASK_LINE_TAG,
     );
   }, [editor, editable, tasks, entries]);
 

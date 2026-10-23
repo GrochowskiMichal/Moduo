@@ -10,7 +10,6 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
-import { cn } from "@/lib/utils";
 
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
@@ -37,7 +36,6 @@ export function NoteView({
   degraded,
   loading,
   canEdit,
-  seedWelcome,
   bridge,
   onTitleDerived,
   onRestore,
@@ -58,7 +56,6 @@ export function NoteView({
   degraded: boolean;
   loading: boolean;
   canEdit: boolean;
-  seedWelcome: boolean;
   bridge: NotesEditorBridge;
   onTitleDerived: (title: string) => void;
   onRestore: (id: string) => void;
@@ -98,47 +95,39 @@ export function NoteView({
   } else if (editorNoteId && engine) {
     body = (
       <NotesEditorDropZone noteId={isDraft ? null : editorNoteId} editable={editable}>
-        <div
-          className={cn(
-            "mx-auto h-full min-h-0 w-full",
-            note?.fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
-          )}
-        >
-          <NoteEditor
-            key={editorNoteId}
-            engine={engine}
-            workspaceId={workspaceId}
-            noteId={editorNoteId}
-            editable={editable}
-            titleForLabel={displayTitle(note?.title ?? "")}
-            onTitleDerived={onTitleDerived}
-            seedWelcome={seedWelcome}
-            bridge={bridge}
-            autoFocus={isDraft}
-            bare
-            belowTitle={
-              liveNote && (links.line.chips.length > 0 || links.line.edited) ? (
-                <NoteMetaLineView
-                  line={links.line}
-                  onOpenEntity={onOpenEntity}
-                  onOpenDetail={onOpenDetail}
-                  onUndo={agent.undo}
+        <NoteEditor
+          key={editorNoteId}
+          engine={engine}
+          workspaceId={workspaceId}
+          noteId={editorNoteId}
+          editable={editable}
+          titleForLabel={displayTitle(note?.title ?? "")}
+          onTitleDerived={onTitleDerived}
+          bridge={bridge}
+          autoFocus={isDraft}
+          fullWidth={note?.fullWidth ?? false}
+          belowTitle={
+            liveNote && (links.line.chips.length > 0 || links.line.edited) ? (
+              <NoteMetaLineView
+                line={links.line}
+                onOpenEntity={onOpenEntity}
+                onOpenDetail={onOpenDetail}
+                onUndo={agent.undo}
+              />
+            ) : null
+          }
+          footer={
+            liveNote ? (
+              <>
+                <SubpagesList
+                  subpages={selectSubpages(bridge.listNotes?.() ?? [], liveNote.id)}
+                  onOpen={bridge.openNote}
                 />
-              ) : null
-            }
-            footer={
-              liveNote ? (
-                <>
-                  <SubpagesList
-                    subpages={selectSubpages(bridge.listNotes?.() ?? [], liveNote.id)}
-                    onOpen={bridge.openNote}
-                  />
-                  <LinkedFromFooter groups={links.backlinks} onOpen={onOpenEntity} />
-                </>
-              ) : null
-            }
-          />
-        </div>
+                <LinkedFromFooter groups={links.backlinks} onOpen={onOpenEntity} />
+              </>
+            ) : null
+          }
+        />
       </NotesEditorDropZone>
     );
   } else {

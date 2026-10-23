@@ -6,7 +6,7 @@
  * with "Saved locally — will sync" when a push or a read failed.
  */
 
-import { MoreHorizontal, PanelRight, PanelRightClose, Undo2 } from "lucide-react";
+import { MoreHorizontal, PanelRight, PanelRightClose } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
@@ -34,6 +34,7 @@ export function NotesTopBar({
   unsynced,
   canEdit,
   favorite,
+  hasChildren,
   share,
   publish,
   panelOpen,
@@ -41,7 +42,6 @@ export function NotesTopBar({
   onOpenNote,
   onOpenSection,
   onAction,
-  onSwitchToClassic,
   onFullWidthChange,
 }: {
   crumbs: Crumb[];
@@ -51,6 +51,8 @@ export function NotesTopBar({
   unsynced: boolean;
   canEdit: boolean;
   favorite: boolean;
+  /** The open note has sub-pages (the .zip export). */
+  hasChildren: boolean;
   share: ReactNode;
   publish: ReactNode;
   panelOpen: boolean;
@@ -58,11 +60,10 @@ export function NotesTopBar({
   onOpenNote: (id: string) => void;
   onOpenSection: (section: CrumbSection) => void;
   onAction: (action: RowAction, note: Note) => void;
-  onSwitchToClassic: () => void;
   /** Per-note Full width (NR-3); editors only. */
   onFullWidthChange: (note: Note, fullWidth: boolean) => void;
 }) {
-  const items = note && !note.deletedAt ? rowMenuItems({ canEdit, favorite }) : [];
+  const items = note && !note.deletedAt ? rowMenuItems({ canEdit, favorite, hasChildren }) : [];
   return (
     <header className="flex h-(--bar-h) shrink-0 items-center gap-2 px-2">
       <NoteBreadcrumb crumbs={crumbs} onOpenNote={onOpenNote} onOpenSection={onOpenSection} />
@@ -82,43 +83,39 @@ export function NotesTopBar({
         ) : null}
         {share}
         {publish}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="More" tooltip="More" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-60">
-            {note
-              ? items.map((item, i) =>
-                  item === "separator" ? (
-                    // eslint-disable-next-line react/no-array-index-key -- separators are positional
-                    <DropdownMenuSeparator key={`sep-${i}`} />
-                  ) : (
-                    <DropdownMenuItem
-                      key={item.action}
-                      variant={item.destructive ? "destructive" : "default"}
-                      onSelect={() => onAction(item.action, note)}
-                    >
-                      <item.icon aria-hidden />
-                      {item.label}
-                    </DropdownMenuItem>
-                  ),
-                )
-              : null}
-            {items.length > 0 ? <DropdownMenuSeparator /> : null}
-            {note && !note.deletedAt && canEdit ? (
-              <DropdownMenuCheckboxItem
-                checked={note.fullWidth}
-                onCheckedChange={(checked) => onFullWidthChange(note, checked === true)}
-              >
-                Full width
-              </DropdownMenuCheckboxItem>
-            ) : null}
-            <DropdownMenuItem onSelect={onSwitchToClassic}>
-              <Undo2 aria-hidden />
-              Switch back to classic Notes
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {items.length > 0 && note ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton icon={MoreHorizontal} label="More" tooltip="More" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-60">
+              {items.map((item, i) =>
+                item === "separator" ? (
+                  // eslint-disable-next-line react/no-array-index-key -- separators are positional
+                  <DropdownMenuSeparator key={`sep-${i}`} />
+                ) : (
+                  <DropdownMenuItem
+                    key={item.action}
+                    variant={item.destructive ? "destructive" : "default"}
+                    onSelect={() => onAction(item.action, note)}
+                  >
+                    <item.icon aria-hidden />
+                    {item.label}
+                  </DropdownMenuItem>
+                ),
+              )}
+              {canEdit ? <DropdownMenuSeparator /> : null}
+              {canEdit ? (
+                <DropdownMenuCheckboxItem
+                  checked={note.fullWidth}
+                  onCheckedChange={(checked) => onFullWidthChange(note, checked === true)}
+                >
+                  Full width
+                </DropdownMenuCheckboxItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <IconButton
           icon={panelOpen ? PanelRightClose : PanelRight}
           label={panelOpen ? "Hide panel" : "Show panel"}
