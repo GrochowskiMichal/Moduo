@@ -3,12 +3,14 @@ name: db-snapshot
 # Prod's schema snapshot for checks.yml's db-test job (HV-4): structure and catalog only, no
 # rows (`scripts/local/stack.sh snapshot`: the schema dumps plus extensions, applied migration
 # versions, API role settings, storage buckets, Realtime publication and cron jobs). It goes to
-# the Actions cache, never an artifact or the log: the repo is public, and a cache is readable
-# only by this repo's workflows. A run on develop (the schedule, or by hand) writes the cache
-# every pull request into develop and every push to mike or maciej can restore.
+# the Actions cache encrypted with DB_SNAPSHOT_KEY, never an artifact or the log: the repo is
+# public, and a fork's pull request can restore any cache entry (it runs its own copy of
+# checks.yml) but never gets a secret. A run on develop (the schedule, or by hand) writes the
+# cache every pull request into develop and every push to mike or maciej can restore.
 #
 # Needs SUPABASE_ACCESS_TOKEN in the supabase-snapshot environment (deployment branches:
-# develop only), so a pull request can never reach the token.
+# develop only), so a pull request can never reach the token, and the repo secret
+# DB_SNAPSHOT_KEY, which checks.yml's db-test decrypts with.
 on:
   schedule:
     - cron: "41 4 * * *"
@@ -29,6 +31,7 @@ jobs:
     environment: supabase-snapshot
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      DB_SNAPSHOT_KEY: ${{ secrets.DB_SNAPSHOT_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -41,11 +44,20 @@ jobs:
       - name: Dump prod's schema (no rows)
         run: |
           [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::SUPABASE_ACCESS_TOKEN is not set in the supabase-snapshot environment."; exit 1; }
+          [ -n "$DB_SNAPSHOT_KEY" ] || { echo "::error::The DB_SNAPSHOT_KEY repo secret is not set."; exit 1; }
           bash scripts/local/stack.sh snapshot > /dev/null
           ls -l ~/.cache/moduo/supabase-snapshot
+
+      - name: Encrypt it
+        run: |
+          set -o pipefail
+          mkdir -p ~/db-snapshot
+          tar -C ~/.cache/moduo -czf - supabase-snapshot \
+            | openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:DB_SNAPSHOT_KEY -out ~/db-snapshot/snapshot.tgz.enc
+          rm -rf ~/.cache/moduo/supabase-snapshot
 
       - name: Save it for db-test
         uses: actions/cache/save@v6
         with:
-          path: ~/.cache/moduo/supabase-snapshot
+          path: ~/db-snapshot
           key: db-snapshot-${{ github.run_id }}
