@@ -274,3 +274,63 @@ describe("token maps to its connection", () => {
     });
   }
 });
+
+describe("two addresses: the Supabase URL and mcp.moduo.app", () => {
+  // What infra/mcp-proxy adds to every request it forwards.
+  const viaProxy = { "x-moduo-mcp-origin": "https://mcp.moduo.app" };
+  const PUBLIC_METADATA = "https://mcp.moduo.app/oauth-protected-resource";
+
+  async function postWith(headers: Record<string, string>, authorization?: string) {
+    const res = await serve(
+      new Request(ENDPOINT, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          ...(authorization ? { authorization } : {}),
+          ...headers,
+        },
+        body: JSON.stringify(listTools),
+      }),
+    );
+    return { status: res.status, challenge: res.headers.get("www-authenticate"), body: (await res.json()) as any };
+  }
+
+  it("points a client that came through mcp.moduo.app at mcp.moduo.app's document", async () => {
+    const res = await postWith(viaProxy);
+    expect(res.status).toBe(401);
+    expect(res.challenge).toBe(`Bearer resource_metadata="${PUBLIC_METADATA}"`);
+  });
+
+  it("names mcp.moduo.app as the resource, and still the project's Supabase Auth as the sign-in", async () => {
+    const res = await serve(new Request(METADATA, { method: "GET", headers: viaProxy }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      resource: "https://mcp.moduo.app",
+      authorization_servers: [`${BASE}/auth/v1`],
+      bearer_methods_supported: ["header"],
+    });
+  });
+
+  it("names mcp.moduo.app in a refused token's challenge too", async () => {
+    const res = await postWith(viaProxy, `Bearer ${await appToken(ALEX, DESKTOP)}`);
+    expect(res.status).toBe(401);
+    expect(res.challenge).toContain(`resource_metadata="${PUBLIC_METADATA}"`);
+  });
+
+  it("serves the tools the same through mcp.moduo.app", async () => {
+    const res = await postWith(viaProxy, `Bearer ${await appToken(ALEX, CLAUDE)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.result.tools.map((t: { name: string }) => t.name)).toContain("tasks_list");
+  });
+
+  const spoofed = ["https://evil.example", "https://mcp.moduo.app.evil.example", "http://mcp.moduo.app", ""];
+  for (const origin of spoofed) {
+    it(`keeps the Supabase URL for a forwarded origin it doesn't know (${JSON.stringify(origin)})`, async () => {
+      const headers = { "x-moduo-mcp-origin": origin };
+      expect((await postWith(headers)).challenge).toBe(`Bearer resource_metadata="${METADATA}"`);
+      const doc = await (await serve(new Request(METADATA, { method: "GET", headers }))).json();
+      expect(doc.resource).toBe(ENDPOINT);
+    });
+  }
+});

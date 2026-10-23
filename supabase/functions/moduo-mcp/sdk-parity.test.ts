@@ -20,7 +20,9 @@
  * (2026-07-28) added mcp-method and mcp-name to every answer's CORS
  * Allow-Headers, and answers a ping with an unknown MCP-Protocol-Version
  * header as the old server did (200) instead of the SDK's 400; nothing else
- * moved.
+ * moved. The mcp.moduo.app change (2026-10-23) added websiteUrl and icons to
+ * serverInfo in the six initialize answers, edited in by hand (capture mode
+ * records the SDK's raw answers, not the compared form); nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
