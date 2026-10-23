@@ -563,6 +563,42 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **MCPO-5 — Prod switch-on and real clients (no staging pass: dogfood on prod); connector doc refreshed** · 2026-10-23 · `t/mike/mcpo-5-switch-on` · OAuth server on in prod, MFA off; Claude Code and Claude (desktop chat, claude.ai) connected as Mike and used; stale duplicate connections disconnected
 - [x] **MCPO-6 — Code-mode readiness (output schemas for the five main reads, annotations on every tool)** · deps: MCPO-2 · 2026-10-23 `t/mike/mcpo-6-codemode`
 
+## Harness v3 — the flow board, built · [`specs/harness-v3.md`](./harness-v3.md)
+
+> Planned 2026-10-23 (Mike, engineer mode). Everything before the closed alpha (2 Nov). Up to five lanes in parallel; the spec has a day plan. HV-8's queue move waits for Maciej's OK. Once HV-8 lands this ledger becomes a pointer to the Moduo queue.
+
+- [ ] **HV-1 — Rails: modes, guards, /ship** · deps: —
+- [ ] **HV-2 — One Moduo, one Supabase, worktree pool** · deps: —
+- [ ] **HV-3 — Skill rewiring** · deps: —
+- [ ] **HV-4 — Oracles in CI (Tier 2)** · deps: —
+- [ ] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: —
+- [ ] **HV-9 — Security pass before alpha** · deps: —
+- [ ] **HV-11 — Decisions current view** · deps: —
+- [ ] **HV-12 — ast-grep pack** · deps: —
+- [ ] **HV-15 — Variant hunt** · deps: —
+- [ ] **HV-17 — Sync outbox property harness** · deps: —
+- [ ] **HV-28 — Canary and rollback (Tier 2)** · deps: —
+- [ ] **HV-6 — AI review on PRs into develop (Tier 2)** · deps: HV-5
+- [ ] **HV-7 — GitHub → Moduo sync (Tier 2)** · deps: HV-2
+- [ ] **HV-10 — Rules by path** · deps: HV-1
+- [ ] **HV-18 — Frozen tests profile** · deps: HV-1
+- [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
+- [ ] **HV-23 — Router, scout** · deps: HV-1
+- [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
+- [ ] **HV-16 — RLS access matrix** · deps: HV-4
+- [ ] **HV-21 — Weekly numbers** · deps: HV-5
+- [ ] **HV-8 — Moduo is the queue (needs Maciej's OK)** · deps: HV-7
+- [ ] **HV-13 — Docs eval** · deps: HV-20
+- [ ] **HV-25 — Experiment arms** · deps: HV-20
+- [ ] **HV-29 — MCP agent-experience eval** · deps: HV-20
+- [ ] **HV-26 — Build engine v3** · deps: HV-3, HV-18
+- [ ] **HV-27 — Catching tests (Tier 2)** · deps: HV-6
+- [ ] **HV-22 — Routines** · deps: HV-15, HV-21
+- [ ] **HV-14a — Compile gotchas: Supabase + spine** · deps: HV-10, HV-12, HV-13
+- [ ] **HV-14b — Compile gotchas: UI + notes** · deps: HV-10, HV-12, HV-13
+- [ ] **HV-14c — Compile gotchas: build-ci, email, calendar, desktop, workflow** · deps: HV-10, HV-12, HV-13
+- [ ] **HV-30 — Docs and decision close-out** · deps: HV-3, HV-8, HV-10
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).
