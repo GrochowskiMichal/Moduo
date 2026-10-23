@@ -27,6 +27,7 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
+import { $createHeadingNode } from "@lexical/rich-text";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
@@ -48,11 +49,13 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { dispatchCreateNew } from "@/components/app/create-events";
+import { Skeleton } from "@/components/ui/skeleton";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
+import { updateWithoutUndo } from "../editor/collab-undo";
 import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {
@@ -82,6 +85,34 @@ import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 // The schema nodes draw through the view registry (NR-3); fill it once.
 installNoteNodeViews();
 
+/** The note's shape while it loads, after a beat (a fast load never shows it). */
+function NoteSkeleton({ fullWidth }: { fullWidth: boolean }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShow(true), 400);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Loading note"
+      className={cn(
+        "mx-auto flex h-full w-full flex-col gap-3 px-6 pt-10",
+        fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
+      )}
+    >
+      {show ? (
+        <>
+          <Skeleton className="mb-4 h-8 w-1/2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-11/12" />
+          <Skeleton className="h-4 w-3/4" />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /** A line that is only a divider marker (`---`, `***`, `___`). */
 const DIVIDER_LINE = /^(?:---|\*\*\*|___)$/;
 
@@ -94,6 +125,11 @@ type Props = {
   noteId: string;
   editable?: boolean;
   titleForLabel: string;
+  /** The note's stored title, when the doc's first line must carry it (a note
+   * made outside the editor whose body doesn't start with its title). Pass it
+   * only while nothing of ours waits to sync (a pending rename would make the
+   * stored title stale). */
+  repairTitle?: string | null;
   /** Debounced first-line title (AC1) — the page maps it to notes.rename. */
   onTitleDerived: (title: string) => void;
   /** Live module data + actions for page-rows and /page (NO-4). */
@@ -263,6 +299,34 @@ function TitleDerivationPlugin({
 }
 
 /**
+ * "The first line is the title" must hold for every note. One whose body
+ * doesn't start with its stored title (made by an older import, or by a write
+ * that kept the two apart) showed its first sentence as the title, and the
+ * first keystroke renamed the note to it. Once the doc has arrived, write the
+ * stored title in as the first line. Not an undo step: nobody typed it.
+ */
+function TitleLinePlugin({ title, booted }: { title: string | null; booted: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current || !booted || !title?.trim()) return;
+    done.current = true;
+    const firstLine = firstLineTitle(editor.getEditorState().read($noteText));
+    if (firstLine === title.trim()) return;
+    updateWithoutUndo(editor, () => {
+      const heading = $createHeadingNode("h1");
+      heading.append($createTextNode(title.trim()));
+      const first = $getRoot().getFirstChild();
+      // An empty first line takes the title; otherwise it goes above.
+      if (first && first.getTextContent().trim() === "") first.replace(heading);
+      else if (first) first.insertBefore(heading);
+      else $getRoot().append(heading);
+    });
+  }, [editor, title, booted]);
+  return null;
+}
+
+/**
  * Draws `children` right under the document's first block (the title line).
  * Lexical owns every node inside the contenteditable and reclaims foreign DOM
  * there (the NO-5 trap), so this is an overlay NEXT TO it: the first block
@@ -417,6 +481,7 @@ export function NoteEditor({
   noteId,
   editable = true,
   titleForLabel,
+  repairTitle = null,
   onTitleDerived,
   bridge,
   autoFocus = false,
@@ -437,6 +502,8 @@ export function NoteEditor({
   // A note already in memory (opened before, or warmed by hovering its row)
   // paints on the first frame: no blank pass at all.
   const [ready, setReady] = useState(() => session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0);
+  // The first pull has settled (the doc is the server's, not just the cache).
+  const [booted, setBooted] = useState(false);
 
   // Coming back to a long note lands where you were reading (this session).
   const paneRef = useRef<HTMLDivElement>(null);
@@ -472,6 +539,7 @@ export function NoteEditor({
     void session.booted.then(() => {
       if (!active) return;
       setReady(true);
+      setBooted(true);
     });
     return () => {
       active = false;
@@ -533,9 +601,10 @@ export function NoteEditor({
     [noteId, editable],
   );
 
-  // Still loading: an empty pane, never a "Preparing note…" line. A cached
-  // note is ready within a frame; a cold one appears as soon as it arrives.
-  if (!ready) return <div className="h-full" />;
+  // Still loading: never a "Preparing note…" line. A cached note is ready
+  // within a frame; a cold one shows an empty pane, then (on a slow network)
+  // the note's shape, where its title and lines will be.
+  if (!ready) return <NoteSkeleton fullWidth={fullWidth} />;
 
   // The pane is the scroller, full width, so the wheel works over the margins
   // and the scrollbar sits at the pane's edge; the reading column is centred
@@ -649,6 +718,7 @@ export function NoteEditor({
               />
               <SyncFromYjsPlugin doc={session.doc} />
               <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
+              {editable ? <TitleLinePlugin title={repairTitle} booted={booted} /> : null}
               {autoFocus && editable ? <AutoFocusPlugin /> : null}
               {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
             </LexicalComposer>

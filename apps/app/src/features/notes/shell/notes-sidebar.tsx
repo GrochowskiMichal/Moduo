@@ -170,7 +170,11 @@ export function NotesSidebar(props: NotesSidebarProps) {
             .find((r) => !goesWithIt(r.key));
         if (next) focusRow(next.key);
         if (inFavorites) props.onUnfavorite(note.id);
-        else props.onTrash(note.id);
+        else {
+          props.onTrash(note.id);
+          // Deleting the open note opens the next one, not an empty pane.
+          if (note.id === selectedId && next) props.onOpen(next.id);
+        }
         break;
       }
       case "reorder": {
@@ -325,14 +329,16 @@ export function NotesSidebar(props: NotesSidebarProps) {
       {/* Tasks' footer (MOD-140): the places under the tree, pinned. */}
       <SidebarFooter
         label="Published, archive and trash"
-        className="px-1 pt-2"
+        className="mt-2 px-1 pt-2"
         items={[
-          ...(footerCounts(sections.footer).published > 0
-            ? [footerItem("published", Globe, "Published")]
-            : []),
           footerItem("archive", Archive, "Archived"),
           footerItem("trash", Trash2, "Recently deleted"),
-          ...(props.onImport ? [{ icon: Import, label: "Import", onSelect: props.onImport }] : []),
+          ...(footerCounts(sections.footer).published > 0
+            ? [{ ...footerItem("published", Globe, "Published"), iconOnly: true }]
+            : []),
+          ...(props.onImport
+            ? [{ icon: Import, label: "Import", onSelect: props.onImport, iconOnly: true }]
+            : []),
         ]}
       />
       {/* What follows the pointer. pointer-events-none is load-bearing: the

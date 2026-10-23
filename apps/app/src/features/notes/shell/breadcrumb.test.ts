@@ -52,9 +52,9 @@ describe("crumbs — the note breadcrumb (NR-2, AC5)", () => {
     expect(labels(buildBreadcrumb(notes, "ideaKid"))).toEqual(["Inbox", "Idea", "Detail"]);
   });
 
-  it("starts archived and trashed notes at Archive / Trash", () => {
-    expect(labels(buildBreadcrumb(notes, "old"))).toEqual(["Archive", "Old"]);
-    expect(labels(buildBreadcrumb(notes, "gone"))).toEqual(["Trash", "Gone"]);
+  it("starts archived and trashed notes at Archived / Recently deleted", () => {
+    expect(labels(buildBreadcrumb(notes, "old"))).toEqual(["Archived", "Old"]);
+    expect(labels(buildBreadcrumb(notes, "gone"))).toEqual(["Recently deleted", "Gone"]);
   });
 
   it("shows a root draft as an Untitled Inbox capture, and a child draft under its page", () => {

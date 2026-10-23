@@ -7,11 +7,12 @@
  * ("Saved locally — will sync" for edits waiting, or a failed refresh).
  */
 
-import { PanelRight, PanelRightClose } from "lucide-react";
+import { PanelRight, PanelRightClose, Star } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { IconButton } from "@/components/ui/icon-button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 import type { NoteViewer } from "../sync/notes-realtime";
 import { NotePresenceAvatars } from "../ui/note-presence-avatars";
@@ -31,6 +32,8 @@ export function NotesTopBar({
   signal,
   share,
   publish,
+  favorite,
+  onToggleFavorite,
   panelOpen,
   onTogglePanel,
   onOpenNote,
@@ -43,6 +46,9 @@ export function NotesTopBar({
   signal: NotesSignal | null;
   share: ReactNode;
   publish: ReactNode;
+  /** The open note is one of your favorites (null: nothing open to star). */
+  favorite: boolean | null;
+  onToggleFavorite: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
   onOpenNote: (id: string) => void;
@@ -67,6 +73,15 @@ export function NotesTopBar({
         ) : null}
         {share}
         {publish}
+        {favorite !== null ? (
+          <IconButton
+            icon={Star}
+            label={favorite ? "Remove from favorites" : "Add to favorites"}
+            aria-pressed={favorite}
+            onClick={onToggleFavorite}
+            className={cn(favorite && "text-foreground [&_svg]:fill-current")}
+          />
+        ) : null}
         <IconButton
           icon={panelOpen ? PanelRightClose : PanelRight}
           label={panelOpen ? "Hide panel" : "Show panel"}

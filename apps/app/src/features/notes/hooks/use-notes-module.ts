@@ -552,7 +552,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const extra = ids.size - 1;
       const taskIds = opts?.detachedTaskIds ?? [];
       const n = taskIds.length;
-      const label = `Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}${
+      const label = `Deleted${extra > 0 ? ` (+${extra} nested)` : ""}${
         n > 0 ? ` · ${n} task${n === 1 ? "" : "s"} detached` : ""
       }`;
       // One toast, one grammar (DF-5): Undo in the action slot; the destructive

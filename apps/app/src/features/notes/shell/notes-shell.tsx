@@ -89,6 +89,7 @@ function NotesShellBody() {
     workspaceId,
     noteId: editorNoteId,
     noteLabel: displayTitle(selectedNote?.title ?? ""),
+    onShowPanel: () => shell.setPanelOpen(true),
   });
   const trashWithDetach = useTrashWithTaskDetach({
     runtime,
@@ -167,12 +168,14 @@ function NotesShellBody() {
   const openEntity = useCallback(
     (ref: EntityRef) => {
       if (ref.type === "note") shell.select(ref.id);
+      // A task opens in the panel beside the note, never by leaving Notes.
+      else if (ref.type === "task") tasks.taskBridge.openTaskDetail(ref.id);
       else
         window.dispatchEvent(
           new CustomEvent("moduo:entity:open", { detail: { type: ref.type, id: ref.id } }),
         );
     },
-    [shell.select],
+    [shell.select, tasks.taskBridge],
   );
 
   const openSection = useCallback(
@@ -215,7 +218,7 @@ function NotesShellBody() {
     );
   }
 
-  const shareable = liveNote && !degraded && runtime;
+  const shareable = liveNote && !liveNote.isArchived && !degraded && runtime;
   const topBar = (
     <NotesTopBar
       crumbs={selectedId ? buildBreadcrumb(notes, selectedId, draft) : []}
@@ -250,6 +253,10 @@ function NotesShellBody() {
             onOpenChange={actions.setPublishOpen}
           />
         ) : null
+      }
+      favorite={liveNote ? favoritePositions.has(liveNote.id) : null}
+      onToggleFavorite={() =>
+        liveNote && module.setFavorite(liveNote.id, !favoritePositions.has(liveNote.id))
       }
       panelOpen={shell.panelOpen}
       onTogglePanel={() => shell.setPanelOpen(!shell.panelOpen)}
@@ -308,7 +315,8 @@ function NotesShellBody() {
               editorNoteId={editorNoteId}
               note={selectedNote}
               isDraft={isDraft}
-              editable={canEdit && !degraded}
+              // An archived note reads, it doesn't take edits (unarchive first).
+              editable={canEdit && !degraded && !(liveNote?.isArchived ?? false)}
               degraded={degraded}
               loading={loading}
               canEdit={canEdit && !degraded}
@@ -318,9 +326,11 @@ function NotesShellBody() {
                 else if (editorNoteId) module.renameNote(editorNoteId, title);
               }}
               onRestore={module.restoreNote}
+              onUnarchive={(id) => module.archiveNote(id, false)}
               onOpenEntity={openEntity}
               onOpenDetail={() => shell.showPanelVariant("detail")}
               memberName={(id) => noteEditorName(id, userId, workspace.members)}
+              settled={module.syncStatus === "synced"}
             />
           }
           right={
@@ -335,6 +345,19 @@ function NotesShellBody() {
               variant={shell.panelVariant}
               onVariantChange={shell.showPanelVariant}
               taskBridge={tasks.taskBridge}
+              location={
+                liveNote
+                  ? buildBreadcrumb(notes, liveNote.id, draft)
+                      .slice(0, -1)
+                      .map((c) => c.label)
+                      .join(" › ")
+                  : ""
+              }
+              editedBy={
+                liveNote?.editedBy
+                  ? noteEditorName(liveNote.editedBy, userId, workspace.members)
+                  : null
+              }
               taskDetailId={tasks.taskDetailId}
               onTaskDetail={tasks.setTaskDetailId}
               onOpenEntity={openEntity}

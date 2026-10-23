@@ -6,6 +6,7 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { onCreateNew } from "../../../components/app/create-events";
 import { useAuth } from "../../../providers/auth-provider";
@@ -140,7 +141,11 @@ export function useNotesShell() {
   useEffect(() => {
     if (loading || !selectedId) return;
     if (selectedId === draftId && engine?.isDraft(draftId)) return;
-    if (!notes.some((n) => n.id === selectedId)) select(null, true);
+    if (!notes.some((n) => n.id === selectedId)) {
+      // Say why the note you followed a link to isn't there.
+      toast("That note isn’t available. It may have been deleted, or it isn’t shared with you.");
+      select(null, true);
+    }
   }, [loading, selectedId, draftId, notes, select, engine]);
 
   // Notes reopens where you left it: the last note you had open in this
