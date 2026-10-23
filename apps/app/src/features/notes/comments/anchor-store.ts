@@ -32,9 +32,17 @@ type NoteAnchors = {
   focused: string | null;
   /** A thread anchored here whose first comment isn't posted yet. */
   pending: string | null;
+  /** How many comments each open thread holds (the margin's count). */
+  counts: ReadonlyMap<string, number> | null;
 };
 
-const EMPTY: NoteAnchors = { docOrder: null, openThreads: null, focused: null, pending: null };
+const EMPTY: NoteAnchors = {
+  docOrder: null,
+  openThreads: null,
+  focused: null,
+  pending: null,
+  counts: null,
+};
 
 const state = new Map<string, NoteAnchors>();
 const actions = new Map<string, AnchorEditorActions>();
@@ -47,7 +55,8 @@ function patch(noteId: string, next: Partial<NoteAnchors>): void {
     merged.docOrder === prev.docOrder &&
     merged.openThreads === prev.openThreads &&
     merged.focused === prev.focused &&
-    merged.pending === prev.pending
+    merged.pending === prev.pending &&
+    merged.counts === prev.counts
   ) {
     return;
   }
@@ -74,6 +83,9 @@ export const anchorStore = {
   },
   setOpenThreads(noteId: string, ids: ReadonlySet<string> | null): void {
     patch(noteId, { openThreads: ids });
+  },
+  setCounts(noteId: string, counts: ReadonlyMap<string, number> | null): void {
+    patch(noteId, { counts });
   },
   focus(noteId: string, anchorId: string | null): void {
     patch(noteId, { focused: anchorId });

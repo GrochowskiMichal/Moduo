@@ -654,6 +654,9 @@ export function TaskLinePlugin({
     const recompute = () => {
       const collected = editor.getEditorState().read($collectTaskLines);
       const prev = entriesRef.current;
+      // Most notes have no task lines: then there is nothing to measure, and
+      // typing costs no forced layout per keystroke.
+      if (collected.size === 0 && prev.size === 0) return prev;
       const next = new Map<NodeKey, LineEntry>();
       for (const [key, data] of collected) {
         const el = editor.getElementByKey(key);
@@ -673,7 +676,8 @@ export function TaskLinePlugin({
             before.top !== entry.top ||
             before.height !== entry.height ||
             before.left !== entry.left ||
-            before.right !== entry.right
+            before.right !== entry.right ||
+            before.textRight !== entry.textRight
           ) {
             changed = true;
             break;
