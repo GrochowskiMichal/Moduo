@@ -101,7 +101,7 @@ function Harness({ favorites = FAVORITES, notes = NOTES, initialView, ...rest }:
           onNewCapture={fn()}
           onNewPage={fn()}
           onCreateChild={fn()}
-          onAction={fn()}
+          onUnfavorite={fn()}
           onDropIntent={fn()}
           onUnarchive={fn()}
           onTrash={fn()}

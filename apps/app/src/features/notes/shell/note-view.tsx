@@ -39,9 +39,11 @@ export function NoteView({
   bridge,
   onTitleDerived,
   onRestore,
+  onUnarchive,
   onOpenEntity,
   onOpenDetail,
   memberName,
+  settled = true,
 }: {
   topBar: ReactNode;
   runtime: ModuoRuntime | null;
@@ -59,9 +61,12 @@ export function NoteView({
   bridge: NotesEditorBridge;
   onTitleDerived: (title: string) => void;
   onRestore: (id: string) => void;
+  onUnarchive?: (id: string) => void;
   onOpenEntity: (ref: EntityRef) => void;
   /** Open the right panel on its Detail variant (a count chip's target). */
   onOpenDetail: () => void;
+  /** Nothing of ours waits to sync (the stored title is current). */
+  settled?: boolean;
   /** A workspace member's display name, for "Edited … by …". */
   memberName?: (userId: string) => string | null;
 }) {
@@ -79,7 +84,7 @@ export function NoteView({
   if (note?.deletedAt) {
     body = (
       <div className="grid h-full place-content-center gap-3 text-center text-muted-foreground">
-        <p className="text-sm">This note is in the Trash.</p>
+        <p className="text-sm">This note was deleted. It stays in Recently deleted for 30 days.</p>
         {canEdit ? (
           <Button
             variant="secondary"
@@ -153,6 +158,16 @@ export function NoteView({
         </div>
       ) : null}
       {topBar}
+      {liveNote?.isArchived ? (
+        <div className="flex items-center justify-center gap-3 border-b border-hairline px-4 py-1.5 text-xs text-muted-foreground">
+          This note is archived, so it can’t be edited.
+          {canEdit && onUnarchive ? (
+            <Button variant="ghost" size="sm" onClick={() => onUnarchive(liveNote.id)}>
+              Unarchive
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="min-h-0 flex-1">{body}</div>
     </div>
   );

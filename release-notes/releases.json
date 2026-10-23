@@ -1,6 +1,101 @@
 {
   "releases": [
     {
+      "version": "1.3.2",
+      "date": "2026-10-23",
+      "highlights": [
+        "Dragging a block by its handle moves it again, and the handle sits on the line it belongs to."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Notes looks calmer: no extra heading or menus, a star to favorite a note, and a Details panel that matches Tasks."
+        },
+        {
+          "type": "improved",
+          "text": "Code blocks show code in a monospace font with colours, wrap long lines, and are easy to leave."
+        },
+        {
+          "type": "improved",
+          "text": "Tables get buttons to add rows and columns, Tab adds a row at the end, and every cell can be clicked into."
+        },
+        {
+          "type": "improved",
+          "text": "Undo in a note goes back one line at a time, and redo always brings it back."
+        },
+        {
+          "type": "fixed",
+          "text": "Dragging a block by its handle moves it again, and the handle sits on the line it belongs to."
+        },
+        {
+          "type": "fixed",
+          "text": "Imported notes keep their titles when you edit them, and switching between notes no longer shows a loading message."
+        },
+        {
+          "type": "fixed",
+          "text": "Typing three dashes makes a divider, checkboxes line up with their text, and links can be opened, edited and removed."
+        }
+      ]
+    },
+    {
+      "version": "1.3.1",
+      "date": "2026-10-23",
+      "highlights": [
+        "Notes has a new, calmer layout for everyone: a centred reading column, Favorites, Inbox and Pages in the sidebar, and panels that open only when you need them."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "New and renamed notes from teammates and agents show up in the sidebar, and links appear in the side panel right away."
+        },
+        {
+          "type": "improved",
+          "text": "Notes has a new, calmer layout for everyone: a centred reading column, Favorites, Inbox and Pages in the sidebar, and panels that open only when you need them."
+        },
+        {
+          "type": "improved",
+          "text": "Markdown you paste anywhere in a note turns into headings, lists and checkboxes."
+        },
+        {
+          "type": "improved",
+          "text": "Notes reopens the last note you had open, where you left off. Checkboxes and live tasks now look different at a glance."
+        },
+        {
+          "type": "fixed",
+          "text": "Notes you open and leave without typing no longer pile up as empty Untitled notes."
+        },
+        {
+          "type": "fixed",
+          "text": "Undo in a note now takes back only your own edits, never a teammate's or Claude's."
+        },
+        {
+          "type": "fixed",
+          "text": "The welcome note keeps its content on every device instead of opening empty as Untitled."
+        }
+      ]
+    },
+    {
+      "version": "1.3.0",
+      "date": "2026-10-23",
+      "highlights": [
+        "Connect Claude and other AI assistants to Moduo with just a link: sign in, choose what they can reach, and disconnect them any time in Settings."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Connect Claude and other AI assistants to Moduo with just a link: sign in, choose what they can reach, and disconnect them any time in Settings."
+        },
+        {
+          "type": "improved",
+          "text": "Moduo has its own connector address for Claude and other AI apps, so Claude shows the Moduo logo. Your existing connections keep working."
+        },
+        {
+          "type": "improved",
+          "text": "Connecting Claude again offers to replace your earlier Claude connection, and Settings shows when each connected app was added."
+        }
+      ]
+    },
+    {
       "version": "1.2.6",
       "date": "2026-10-23",
       "highlights": [

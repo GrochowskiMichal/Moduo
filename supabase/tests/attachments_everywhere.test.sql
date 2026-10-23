@@ -112,9 +112,9 @@ BEGIN
               AND NOT has_table_privilege('anon', 'public.attachments', 'SELECT'),
     'grants: attachments is read-only for the app (every write is an op)');
   PERFORM test.ok((SELECT string_agg(p.qual, ' ') FROM pg_policies p
-                   WHERE p.schemaname = 'public' AND p.tablename = 'attachments') LIKE '%can_access(entity_type, entity_id, ''view''%'
+                   WHERE p.schemaname = 'public' AND p.tablename = 'attachments' AND p.policyname <> 'app_tokens_refused') LIKE '%can_access(entity_type, entity_id, ''view''%'
               AND (SELECT count(*) FROM pg_policies p
-                   WHERE p.schemaname = 'public' AND p.tablename = 'attachments') = 1,
+                   WHERE p.schemaname = 'public' AND p.tablename = 'attachments' AND p.policyname <> 'app_tokens_refused') = 1,
     'path: RLS — attachments are read through the item gate, their only policy');
   PERFORM test.ok(EXISTS (SELECT 1 FROM pg_publication_tables
                           WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'attachments'),

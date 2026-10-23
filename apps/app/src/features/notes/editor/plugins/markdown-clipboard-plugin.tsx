@@ -35,6 +35,7 @@ import {
   type SerializedLexicalNode,
 } from "lexical";
 import { useEffect } from "react";
+import { toast } from "sonner";
 
 import { createNotesHeadlessEditor } from "../doc-markdown";
 import { looksLikeMarkdown, NOTES_TRANSFORMERS } from "../markdown";
@@ -79,6 +80,13 @@ export function MarkdownClipboardPlugin() {
       (event) => {
         if (!(event instanceof ClipboardEvent) || !event.clipboardData) return false;
         const data = event.clipboardData;
+        // Images in notes aren't built yet (NR-9): say so, rather than drop
+        // the picture and leave an empty line where it was pasted.
+        if (Array.from(data.files).some((f) => f.type.startsWith("image/"))) {
+          event.preventDefault();
+          toast("Notes can’t hold images yet. Pasting an image is coming soon.");
+          return true;
+        }
         // Internal or rich pastes keep Lexical's own handling.
         if (data.types.includes("application/x-lexical-editor")) return false;
         if (data.types.includes("text/html")) return false;
