@@ -12,6 +12,11 @@ const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
 
 hunt("HV-15 variant 509-4: an old edit shows its UTC day", () => {
   it("a note edited at 00:30 on Aug 2 (local) reads 'Edited on 2026-08-02'", () => {
+    // Only a zone east of UTC shows the bug; in UTC this would pass and read as "fixed".
+    expect(
+      new Date(2026, 7, 2, 0, 30).getTimezoneOffset(),
+      "run with TZ=Pacific/Auckland",
+    ).toBeLessThan(0);
     const edited = new Date(2026, 7, 2, 0, 30).toISOString();
     const now = new Date(2026, 9, 23, 12, 0);
     expect(
