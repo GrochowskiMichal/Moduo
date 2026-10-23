@@ -4,7 +4,6 @@ import { useState } from "react";
 import { fn } from "storybook/test";
 
 import type { Note, NoteFavorite } from "../model";
-import type { NoteSearchResult } from "../search";
 import { buildSidebarSections } from "../sections";
 import { NotesSidebar, type NotesSidebarProps } from "./notes-sidebar";
 import type { FooterView } from "./sidebar-footer-views";
@@ -59,23 +58,6 @@ const FAVORITES: NoteFavorite[] = [
   { noteId: "handbook", position: "0000002000", createdAt: "2026-10-01T00:00:00.000Z" },
 ];
 
-const RESULTS: NoteSearchResult[] = [
-  {
-    id: "acme",
-    title: "Acme",
-    snippet: "…renewal pricing came up again; Dana wants the annual plan…",
-    titleMatch: false,
-    archived: false,
-  },
-  {
-    id: "inbox-1",
-    title: "Random thought about pricing",
-    snippet: "",
-    titleMatch: true,
-    archived: false,
-  },
-];
-
 type Args = Partial<NotesSidebarProps> & { favorites?: NoteFavorite[]; initialView?: FooterView };
 
 function Harness({ favorites = FAVORITES, notes = NOTES, initialView, ...rest }: Args) {
@@ -102,13 +84,13 @@ function Harness({ favorites = FAVORITES, notes = NOTES, initialView, ...rest }:
           onNewPage={fn()}
           onCreateChild={fn()}
           onUnfavorite={fn()}
+          onAction={fn()}
           onDropIntent={fn()}
           onUnarchive={fn()}
           onTrash={fn()}
           onRestore={fn()}
           onPurge={fn()}
           onImport={fn()}
-          onSearch={async () => RESULTS}
           {...rest}
         />
       </div>

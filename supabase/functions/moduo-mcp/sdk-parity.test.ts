@@ -23,6 +23,9 @@
  * moved. The mcp.moduo.app change (2026-10-23) added websiteUrl and icons to
  * serverInfo in the six initialize answers, edited in by hand (capture mode
  * records the SDK's raw answers, not the compared form); nothing else moved.
+ * The browser-client fix (2026-10-23) added Access-Control-Expose-Headers:
+ * WWW-Authenticate to every answer's CORS, so a client in a web page can read
+ * the 401's sign-in pointer; nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

@@ -10,7 +10,12 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { Note } from "../model";
 import { publishedChildCount } from "../publish";
@@ -27,6 +32,8 @@ type Props = {
   /** Controlled popover (the refreshed shell opens it from a `⋯ → Publish…`). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** `parent`: opened from a row's menu; no button, anchored to the row. */
+  anchor?: "trigger" | "parent";
 };
 
 export function NotePublishControl({
@@ -38,6 +45,7 @@ export function NotePublishControl({
   onUnpublish,
   open: openProp,
   onOpenChange,
+  anchor = "trigger",
 }: Props) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -90,32 +98,38 @@ export function NotePublishControl({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              size="sm"
-              variant={isPublished ? "secondary" : "ghost"}
-              className="gap-1.5"
-              aria-label={isPublished ? "Published to web" : "Publish to web"}
-            >
-              <Globe
-                className={
-                  isPublished ? "size-icon-sm text-primary" : "size-icon-sm text-muted-foreground"
-                }
-                aria-hidden
-              />
-              <span className={isPublished ? "text-foreground" : "text-muted-foreground"}>
-                {isPublished ? "Published" : "Publish"}
-              </span>
-            </Button>
-          </PopoverTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="bottom">
-          {isPublished ? "This note has a public link" : "Publish this note to the web"}
-        </TooltipContent>
-      </Tooltip>
+      {anchor === "parent" ? (
+        <PopoverAnchor asChild>
+          <span aria-hidden className="pointer-events-none absolute inset-0" />
+        </PopoverAnchor>
+      ) : (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <PopoverTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant={isPublished ? "secondary" : "ghost"}
+                className="gap-1.5"
+                aria-label={isPublished ? "Published to web" : "Publish to web"}
+              >
+                <Globe
+                  className={
+                    isPublished ? "size-icon-sm text-primary" : "size-icon-sm text-muted-foreground"
+                  }
+                  aria-hidden
+                />
+                <span className={isPublished ? "text-foreground" : "text-muted-foreground"}>
+                  {isPublished ? "Published" : "Publish"}
+                </span>
+              </Button>
+            </PopoverTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            {isPublished ? "This note has a public link" : "Publish this note to the web"}
+          </TooltipContent>
+        </Tooltip>
+      )}
 
       <PopoverContent align="end" className="w-80">
         {isPublished ? (
