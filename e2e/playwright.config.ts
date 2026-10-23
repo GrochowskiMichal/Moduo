@@ -13,7 +13,10 @@ const E2E_BASE_URL = process.env.E2E_BASE_URL;
 const APP_URL = E2E_BASE_URL ?? e2eAppUrl;
 
 export default defineConfig({
-  testDir: "./tests",
+  // The whole folder: tests/ and the feature folders (calendar/, contacts/,
+  // spine/, tasks/, …), which a "./tests" testDir never ran. billing/ has its
+  // own config (playwright.billing.config.ts).
+  testDir: ".",
   timeout: 30_000,
   expect: {
     toHaveScreenshot: {
@@ -26,12 +29,22 @@ export default defineConfig({
   projects: [
     {
       name: "e2e",
-      testIgnore: ["**/visual/**", "**/perf/**", "**/clips/**"],
+      testIgnore: ["**/visual/**", "**/perf/**", "**/clips/**", "billing/**", "smoke/**"],
       // One spec at a time: every spec signs in as the same seed person in
       // the same workspace on the local stack, so parallel files read each
       // other's rows (a bell's newest notices, a project's order, the
       // offline queue's sync line). Serial, the whole suite passes together.
       workers: 1,
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: APP_URL,
+      },
+    },
+    {
+      // The signed-out smoke CI runs (`bun run e2e:smoke`): no stack, no sign-in.
+      name: "smoke",
+      testDir: "./smoke",
+      retries: process.env.CI ? 1 : 0,
       use: {
         ...devices["Desktop Chrome"],
         baseURL: APP_URL,
@@ -79,7 +92,7 @@ export default defineConfig({
     : [
         // Playwright starts every entry whatever `--project` says, so each
         // server boots only when a project that needs it is part of the run.
-        ...(["e2e", "perf", "clips"].some((name) => runsProject(name))
+        ...(["e2e", "smoke", "perf", "clips"].some((name) => runsProject(name))
           ? [
               {
                 // Rsbuild directly (not `bun run dev:web`): that script pins
