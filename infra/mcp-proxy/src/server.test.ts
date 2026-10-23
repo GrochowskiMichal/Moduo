@@ -198,3 +198,23 @@ describe("favicon", () => {
     spy.mockRestore();
   });
 });
+
+describe("refused paths", () => {
+  it("answers 404 to an encoded slash or backslash, without calling the function", async () => {
+    seen = [];
+    for (const path of ["/..%2f..%2fstorage/v1/x", "/a%2Fb", "/x%5cy"]) {
+      expect(
+        (await handle(new Request(`${PUBLIC}${path}`, { method: "POST", body: "{}" }), env)).status,
+      ).toBe(404);
+    }
+    expect(seen).toEqual([]);
+  });
+});
+
+describe("favicon unreachable", () => {
+  it("answers 502 when moduo.app can't be reached", async () => {
+    const spy = rs.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("network"));
+    expect((await handle(new Request(`${PUBLIC}/favicon.ico`), env)).status).toBe(502);
+    spy.mockRestore();
+  });
+});

@@ -9,7 +9,7 @@ name: Deploy MCP address (shared)
 # The custom domain is declared in infra/mcp-proxy/wrangler.jsonc: the first deploy creates its
 # DNS record in the moduo.app zone, later deploys keep it.
 # Rollback: Cloudflare dashboard → Workers → moduo-mcp-proxy → Deployments → Rollback, or
-# `npx wrangler rollback` in infra/mcp-proxy. The Supabase URL keeps working throughout.
+# `npx wrangler rollback --env production` in infra/mcp-proxy. The Supabase URL keeps working throughout.
 on:
   workflow_call:
     inputs:
@@ -39,6 +39,7 @@ jobs:
       WRANGLER: npx --yes wrangler@4.147.0
       LABEL: ${{ inputs.label }}
       MCP_URL: https://mcp.moduo.app
+      UPSTREAM: https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp
     steps:
       - name: Checkout the commit
         uses: actions/checkout@v7
@@ -62,17 +63,24 @@ jobs:
           bun install --frozen-lockfile
           bun run test
 
+      # Before anything goes live: the function must already name this address when the Worker
+      # forwards to it, or clients connecting here would refuse its discovery. Deploy moduo-mcp
+      # first (docs/release.md §3), then re-run this job.
+      - name: The function knows its public address
+        run: |
+          doc="$(curl -sSf -H "x-moduo-mcp-origin: $MCP_URL" "$UPSTREAM/oauth-protected-resource")"
+          echo "function's document via the Worker's header: $doc"
+          [ "$(jq -r .resource <<< "$doc")" = "$MCP_URL" ] \
+            || { echo "::error::moduo-mcp on Supabase predates the public address: deploy it first, then re-run."; exit 1; }
+
       # The Cloudflare token is given only to this step, never to install or tests.
       - name: Deploy
         working-directory: infra/mcp-proxy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: $WRANGLER deploy --message "$LABEL"
+        run: $WRANGLER deploy --env production --message "$LABEL"
 
-      # Fails when moduo-mcp on Supabase predates the public address (it would still name the
-      # Supabase URL as the resource, and clients connecting here would refuse it): deploy the
-      # function first, then re-run this job.
       - name: Smoke test
         run: |
           # A first deploy's custom domain takes a few seconds to answer.

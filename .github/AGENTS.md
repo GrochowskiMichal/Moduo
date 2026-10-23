@@ -29,7 +29,7 @@ How a release is applied: [docs/release.md](../docs/release.md).
 
 ## MCP connector address
 
-- `https://mcp.moduo.app` is the Worker `infra/mcp-proxy` (`moduo-mcp-proxy`), forwarding to the `moduo-mcp` Edge Function. It deploys with every release tag (`release.yml` job `mcp` → `_deploy-mcp-proxy.yml`; re-run: `deploy-prod.yml` target `mcp`), never from a branch push. Its smoke test fails until the function serving the public address is deployed: function first. Decision: [docs/decisions/mcp.md](../docs/decisions/mcp.md) (2026-10-23).
+- `https://mcp.moduo.app` is the Worker `infra/mcp-proxy` (`moduo-mcp-proxy`), forwarding to the `moduo-mcp` Edge Function. It deploys with every release tag (`release.yml` job `mcp` → `_deploy-mcp-proxy.yml`; re-run: `deploy-prod.yml` target `mcp`), never from a branch push. It refuses to deploy until the function serving the public address is out: function first. Prod config is `env.production` (`wrangler deploy --env production`). Decision: [docs/decisions/mcp.md](../docs/decisions/mcp.md) (2026-10-23).
 
 ## Mac build runner (PLAT-7)
 

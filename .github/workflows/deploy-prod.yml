@@ -22,11 +22,6 @@ on:
         options: [both, app, landing, mcp]
         default: both
 
-# Shared with release.yml's web job: one production web deploy at a time.
-concurrency:
-  group: deploy-web-production
-  cancel-in-progress: false
-
 permissions:
   contents: read
 
@@ -71,6 +66,11 @@ jobs:
   web:
     needs: resolve
     if: inputs.target != 'mcp'
+    # Shared with release.yml's web job: one production web deploy at a time. Job level, so an mcp
+    # re-run neither waits behind a web deploy nor is cancelled by one.
+    concurrency:
+      group: deploy-web-production
+      cancel-in-progress: false
     uses: ./.github/workflows/_deploy-web.yml
     # inherit is required for the called jobs to see their environment's secrets (an explicit
     # list leaves them empty); the sensitive ones live only in those environments.

@@ -47,8 +47,13 @@ export function upstreamUrl(request: Request, upstream: string): string {
 }
 
 async function favicon(): Promise<Response> {
-  // cf.cacheTtl: Cloudflare keeps a copy at the edge for a day (ignored outside Workers).
-  const res = await fetch(FAVICON_URL, { cf: { cacheTtl: 86400 } } as RequestInit);
+  let res: Response;
+  try {
+    // cf.cacheTtl: Cloudflare keeps a copy at the edge for a day (ignored outside Workers).
+    res = await fetch(FAVICON_URL, { cf: { cacheTtl: 86400 } } as RequestInit);
+  } catch {
+    return new Response(null, { status: 502 });
+  }
   if (!res.ok) return new Response(null, { status: res.status === 404 ? 404 : 502 });
   return new Response(res.body, {
     headers: {
@@ -60,6 +65,9 @@ async function favicon(): Promise<Response> {
 
 export async function handle(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
+  // An encoded slash or backslash could step out of the function's path if a gateway decodes it;
+  // the connector never uses one.
+  if (/%2f|%5c/i.test(url.pathname)) return new Response(null, { status: 404 });
   if (url.pathname === "/favicon.ico" && (request.method === "GET" || request.method === "HEAD")) {
     return favicon();
   }
