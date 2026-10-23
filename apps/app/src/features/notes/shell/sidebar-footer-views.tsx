@@ -32,8 +32,8 @@ export type FooterView = "published" | "archive" | "trash";
 
 const VIEW_TITLE: Record<FooterView, string> = {
   published: "Published",
-  archive: "Archive",
-  trash: "Trash",
+  archive: "Archived",
+  trash: "Recently deleted",
 };
 
 function countTree(nodes: NoteTreeNode[]): number {
@@ -46,34 +46,6 @@ export function footerCounts(footer: SidebarSections["footer"]): Record<FooterVi
     archive: countTree(footer.archive),
     trash: countTree(footer.trash),
   };
-}
-
-export function SidebarFooter({
-  counts,
-  onOpenView,
-}: {
-  counts: Record<FooterView, number>;
-  onOpenView: (view: FooterView) => void;
-}) {
-  return (
-    <nav
-      aria-label="More notes"
-      className="flex items-center gap-0.5 overflow-hidden border-t border-hairline px-1 pt-2 text-xs whitespace-nowrap text-muted-foreground"
-    >
-      {(Object.keys(VIEW_TITLE) as FooterView[]).map((view, i) => (
-        <span key={view} className="flex items-center gap-0.5">
-          {i > 0 ? <span aria-hidden>·</span> : null}
-          <button
-            type="button"
-            onClick={() => onOpenView(view)}
-            className="rounded-sm px-1 py-0.5 tabular-nums outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            {VIEW_TITLE[view]} ({counts[view]})
-          </button>
-        </span>
-      ))}
-    </nav>
-  );
 }
 
 export function FooterSubView({
@@ -135,8 +107,11 @@ export function FooterSubView({
             )}
             <span className="min-w-0 flex-1 truncate">{displayTitle(note.title)}</span>
             {view === "trash" && note.deletedAt ? (
-              <span className="shrink-0 text-xs tabular-nums">
-                {trashDaysLeft(note.deletedAt, now)}d
+              <span
+                className="shrink-0 text-xs text-subtle-foreground tabular-nums"
+                title="Days until it is deleted for good"
+              >
+                {trashDaysLeft(note.deletedAt, now)} days left
               </span>
             ) : null}
           </button>
@@ -147,7 +122,7 @@ export function FooterSubView({
                 label="Unarchive"
                 onClick={() => onUnarchive(note.id)}
               />
-              <IconButton icon={Trash2} label="Move to trash" onClick={() => onTrash(note.id)} />
+              <IconButton icon={Trash2} label="Delete" onClick={() => onTrash(note.id)} />
             </span>
           ) : null}
           {canEdit && depth === 0 && view === "trash" ? (
@@ -171,6 +146,11 @@ export function FooterSubView({
         <IconButton icon={ArrowLeft} label="Back to notes" onClick={onBack} />
         <h3 className="font-display text-sm font-medium text-foreground">{VIEW_TITLE[view]}</h3>
       </div>
+      {view === "trash" && nodes.length > 0 ? (
+        <p className="px-3 pb-2 text-xs text-subtle-foreground">
+          Deleted notes stay here for 30 days, then they’re gone for good.
+        </p>
+      ) : null}
       <div className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1">
         {nodes.length === 0 ? (
           <p className="px-2 py-6 text-center text-sm text-muted-foreground">
@@ -178,7 +158,7 @@ export function FooterSubView({
               ? "Nothing is published."
               : view === "archive"
                 ? "Nothing archived."
-                : "Trash is empty. Deleted notes stay here for 30 days."}
+                : "Nothing deleted. Deleted notes stay here for 30 days."}
           </p>
         ) : (
           <ul aria-label={VIEW_TITLE[view]}>{renderRows(nodes, 0)}</ul>

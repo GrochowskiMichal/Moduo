@@ -49,6 +49,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
   const reqRef = useRef(0);
+  /** The list came from the server (not only the device cache) this visit. */
+  const [listFresh, setListFresh] = useState(false);
   const serverLoadedRef = useRef(false);
   /** Optimistic creates whose op hasn't settled — merged into every server
    * bundle so a concurrent load() can't clobber a just-captured note. */
@@ -106,6 +108,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       if (reqRef.current !== req) return;
       if (favs) setFavorites(favs);
       serverLoadedRef.current = true;
+      setListFresh(true);
       // Merge unsettled optimistic creates so a load racing a capture can't
       // drop the just-created note (and deselect it via the stale-id sweep).
       const merged = [...bundle.notes];
@@ -165,6 +168,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     setTruncated([]);
     setLoadError(null);
     serverLoadedRef.current = false;
+    setListFresh(false);
     pendingCreatesRef.current.clear();
     if (!ready) {
       setLoading(false);
@@ -552,7 +556,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const extra = ids.size - 1;
       const taskIds = opts?.detachedTaskIds ?? [];
       const n = taskIds.length;
-      const label = `Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}${
+      const label = `Deleted${extra > 0 ? ` (+${extra} nested)` : ""}${
         n > 0 ? ` · ${n} task${n === 1 ? "" : "s"} detached` : ""
       }`;
       // One toast, one grammar (DF-5): Undo in the action slot; the destructive
@@ -765,6 +769,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     notes,
     favorites,
     loading,
+    listFresh,
     degraded,
     truncated,
     loadError,

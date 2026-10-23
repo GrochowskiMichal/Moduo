@@ -63,6 +63,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { filesLabel } from "@/features/attachments/files";
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
+import { cn } from "@/lib/utils";
 
 import type { TaskLineSnapshot } from "../../tasks/detach";
 import { updateWithoutUndo } from "../collab-undo";
@@ -89,6 +90,9 @@ type LineEntry = {
   height: number;
   left: number;
   right: number;
+  /** Where a one-line task's text ends (null when it wraps): its details sit
+   * right after the words, not at the far edge of the column. */
+  textRight: number | null;
 };
 
 // ── document walking ─────────────────────────────────────────────────────────
@@ -600,16 +604,26 @@ export function TaskLinePlugin({
 
   /** Geometry of a line element relative to the overlay (scroll-content space). */
   const measure = useCallback(
-    (el: HTMLElement | null): Pick<LineEntry, "top" | "height" | "left" | "right"> => {
+    (
+      el: HTMLElement | null,
+    ): Pick<LineEntry, "top" | "height" | "left" | "right" | "textRight"> => {
       const container = overlayEl?.parentElement;
-      if (!el || !container) return { top: 0, height: 0, left: 0, right: 0 };
+      if (!el || !container) return { top: 0, height: 0, left: 0, right: 0, textRight: null };
       const cRect = container.getBoundingClientRect();
       const rect = el.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const lines = Array.from(range.getClientRects()).filter((r) => r.width > 0);
+      const oneLine =
+        lines.length > 0 && lines.every((r) => Math.abs(r.top - lines[0]!.top) < r.height / 2);
       return {
         top: rect.top - cRect.top + container.scrollTop,
         height: rect.height,
         left: rect.left - cRect.left + container.scrollLeft,
         right: rect.right - cRect.left + container.scrollLeft,
+        textRight: oneLine
+          ? Math.max(...lines.map((r) => r.right)) - cRect.left + container.scrollLeft
+          : null,
       };
     },
     [overlayEl],
@@ -1081,14 +1095,27 @@ export function TaskLinePlugin({
                 <TaskLineCheckbox entry={entry} task={task} tasks={tasks} editable={editable} />
               </span>
               <span
-                className="absolute inline-flex items-center justify-end"
-                style={{
-                  top: entry.top + 2,
-                  left: Math.max(entry.left, entry.right - 320),
-                  width: Math.min(entry.right - entry.left, 320),
-                  height: Math.min(entry.height, 28),
-                  pointerEvents: "none",
-                }}
+                className={cn(
+                  "absolute inline-flex items-center",
+                  entry.textRight === null ? "justify-end" : "justify-start",
+                )}
+                style={
+                  entry.textRight === null
+                    ? {
+                        top: entry.top + 2,
+                        left: Math.max(entry.left, entry.right - 320),
+                        width: Math.min(entry.right - entry.left, 320),
+                        height: Math.min(entry.height, 28),
+                        pointerEvents: "none",
+                      }
+                    : {
+                        top: entry.top + 2,
+                        left: entry.textRight + 12,
+                        width: Math.max(0, entry.right - entry.textRight - 12),
+                        height: Math.min(entry.height, 28),
+                        pointerEvents: "none",
+                      }
+                }
               >
                 <span style={{ pointerEvents: "auto" }}>
                   <TaskLineMeta

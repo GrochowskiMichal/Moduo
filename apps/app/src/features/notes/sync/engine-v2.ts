@@ -171,7 +171,9 @@ type NoteSession = {
 /** Keep at most this many idle note sessions alive (fast note switching)
  * before closing the least-recently-used — each holds a Y.Doc + an
  * IndexedDB connection for the whole workspace visit otherwise. */
-const MAX_IDLE_SESSIONS = 8;
+// Notes you switch between stay in memory, so going back to one paints at
+// once instead of reloading it (a note doc is small).
+const MAX_IDLE_SESSIONS = 24;
 
 /** After an agent write lands, wait this long (for the live pull of the
  * same write to settle) before re-saving the merged body. */
@@ -203,6 +205,8 @@ export class NotesSyncEngineV2 {
    * durably (so nothing typed is lost if the page closes) but not pushed until
    * `releasePush`, so a push can never reach the server before its create. */
   private readonly held = new Set<string>();
+  /** Notes an editor has open: never evicted, however many rows get warmed. */
+  private readonly onScreen = new Map<string, number>();
 
   /** Whose caches this engine reads and writes (`stopped` once they're wiped). */
   private readonly owner: NotesOwner;
@@ -267,6 +271,16 @@ export class NotesSyncEngineV2 {
   }
 
   // ── sessions ────────────────────────────────────────────────────────────────
+
+  /** An editor shows this note: keep its session until the returned release. */
+  pinOnScreen(noteId: string): () => void {
+    this.onScreen.set(noteId, (this.onScreen.get(noteId) ?? 0) + 1);
+    return () => {
+      const n = (this.onScreen.get(noteId) ?? 1) - 1;
+      if (n <= 0) this.onScreen.delete(noteId);
+      else this.onScreen.set(noteId, n);
+    };
+  }
 
   getOrCreateSession(noteId: string): NoteSession {
     let s = this.sessions.get(noteId);
@@ -662,6 +676,7 @@ export class NotesSyncEngineV2 {
           s.noteId !== currentNoteId &&
           !this.drafts.has(s.noteId) &&
           !this.held.has(s.noteId) &&
+          !this.onScreen.has(s.noteId) &&
           !s.flushing &&
           s.memOutbox.length === 0 &&
           s.flushTimer === null &&

@@ -79,7 +79,7 @@ function renderSidebar(overrides: Partial<NotesSidebarProps> = {}) {
     onNewCapture: rs.fn(),
     onNewPage: rs.fn(),
     onCreateChild: rs.fn(),
-    onAction: rs.fn(),
+    onUnfavorite: rs.fn(),
     onDropIntent: rs.fn(),
     onUnarchive: rs.fn(),
     onTrash: rs.fn(),
@@ -121,7 +121,7 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     expect(screen.queryAllByRole("treeitem").some((el) => el.textContent?.includes("Old"))).toBe(
       false,
     );
-    expect(screen.getByRole("button", { name: /Trash \(1\)/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Recently deleted" })).toBeTruthy();
   });
 
   it("expands with →, steps into the child, and reports aria-level 2 there", () => {
@@ -144,7 +144,7 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     fireEvent.keyDown(idea, { key: "Enter" });
     expect(props.onOpen).toHaveBeenCalledWith("Idea");
     fireEvent.keyDown(idea, { key: "Backspace" });
-    expect(props.onAction).toHaveBeenCalledWith("trash", expect.objectContaining({ id: "Idea" }));
+    expect(props.onTrash).toHaveBeenCalledWith("Idea");
   });
 
   it("⌫ on a Favorites row only un-favorites, never trashes the shared note", () => {
@@ -154,11 +154,8 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
       .querySelector<HTMLElement>('[role="treeitem"]') as HTMLElement;
     fav.focus();
     fireEvent.keyDown(fav, { key: "Backspace" });
-    expect(props.onAction).toHaveBeenCalledWith(
-      "unfavorite",
-      expect.objectContaining({ id: "Roadmap" }),
-    );
-    expect(props.onAction).not.toHaveBeenCalledWith("trash", expect.anything());
+    expect(props.onUnfavorite).toHaveBeenCalledWith("Roadmap");
+    expect(props.onTrash).not.toHaveBeenCalled();
   });
 
   it("keeps one roving tab stop, on the open note", () => {
@@ -175,7 +172,7 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     const idea = item("Idea");
     idea.focus();
     fireEvent.keyDown(idea, { key: "Backspace" });
-    expect(props.onAction).not.toHaveBeenCalled();
+    expect(props.onTrash).not.toHaveBeenCalled();
   });
 
   it("says where captures land when the Inbox is empty", () => {
