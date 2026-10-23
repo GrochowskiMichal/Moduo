@@ -32,8 +32,8 @@ export type FooterView = "published" | "archive" | "trash";
 
 const VIEW_TITLE: Record<FooterView, string> = {
   published: "Published",
-  archive: "Archive",
-  trash: "Trash",
+  archive: "Archived",
+  trash: "Recently deleted",
 };
 
 function countTree(nodes: NoteTreeNode[]): number {
@@ -46,34 +46,6 @@ export function footerCounts(footer: SidebarSections["footer"]): Record<FooterVi
     archive: countTree(footer.archive),
     trash: countTree(footer.trash),
   };
-}
-
-export function SidebarFooter({
-  counts,
-  onOpenView,
-}: {
-  counts: Record<FooterView, number>;
-  onOpenView: (view: FooterView) => void;
-}) {
-  return (
-    <nav
-      aria-label="More notes"
-      className="flex items-center gap-0.5 overflow-hidden border-t border-hairline px-1 pt-2 text-xs whitespace-nowrap text-muted-foreground"
-    >
-      {(Object.keys(VIEW_TITLE) as FooterView[]).map((view, i) => (
-        <span key={view} className="flex items-center gap-0.5">
-          {i > 0 ? <span aria-hidden>·</span> : null}
-          <button
-            type="button"
-            onClick={() => onOpenView(view)}
-            className="rounded-sm px-1 py-0.5 tabular-nums outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
-          >
-            {VIEW_TITLE[view]} ({counts[view]})
-          </button>
-        </span>
-      ))}
-    </nav>
-  );
 }
 
 export function FooterSubView({

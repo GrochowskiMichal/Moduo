@@ -12,6 +12,7 @@
  */
 
 import { registerCodeHighlighting } from "@lexical/code-prism";
+import { $createHorizontalRuleNode } from "@lexical/extension";
 import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
@@ -26,7 +27,6 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
-import { $createHeadingNode } from "@lexical/rich-text";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
@@ -42,6 +42,7 @@ import {
   KEY_MODIFIER_COMMAND,
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
+  TextNode,
 } from "lexical";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
@@ -69,6 +70,7 @@ import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { NoteLinkPlugin } from "../editor/plugins/note-link-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
+import { TableActionsPlugin } from "../editor/plugins/table-actions-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
 import { $createPageRowNode } from "../editor/schema/page-row-node";
@@ -79,6 +81,9 @@ import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 
 // The schema nodes draw through the view registry (NR-3); fill it once.
 installNoteNodeViews();
+
+/** A line that is only a divider marker (`---`, `***`, `___`). */
+const DIVIDER_LINE = /^(?:---|\*\*\*|___)$/;
 
 /** Where each note was scrolled to, kept for the session. */
 const scrollPositions = new Map<string, number>();
@@ -119,6 +124,46 @@ function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
     }, 0);
     return () => clearTimeout(id);
   }, [editor, doc]);
+  return null;
+}
+
+/** A line of exactly `---` becomes a divider the moment the third dash is
+ * typed. The markdown shortcut only fired on `--- ` with a trailing space,
+ * so `---` then Enter left three dashes. Only at the caret: a teammate's
+ * remote `---` or a paste is left to its own author. */
+function DividerShortcutPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerNodeTransform(TextNode, (node) => {
+        if (!DIVIDER_LINE.test(node.getTextContent())) return;
+        const block = node.getParent();
+        if (!$isParagraphNode(block) || block.getParent() !== $getRoot()) return;
+        if (block.getChildrenSize() !== 1) return;
+        const selection = $getSelection();
+        if (
+          !$isRangeSelection(selection) ||
+          !selection.isCollapsed() ||
+          selection.anchor.key !== node.getKey() ||
+          selection.anchor.offset !== node.getTextContentSize()
+        ) {
+          return;
+        }
+        const divider = $createHorizontalRuleNode();
+        block.replace(divider);
+        // The caret goes to the line under the divider (an empty one already
+        // there, or a fresh one).
+        const next = divider.getNextSibling();
+        if ($isParagraphNode(next) && next.getTextContentSize() === 0) {
+          next.selectStart();
+        } else {
+          const line = $createParagraphNode();
+          divider.insertAfter(line);
+          line.select();
+        }
+      }),
+    [editor],
+  );
   return null;
 }
 
@@ -389,7 +434,9 @@ export function NoteEditor({
   // EMPTY cache waits for the pull instead: mounting the binding on an empty
   // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
   // note opened on a new device would gain a stray empty block.
-  const [ready, setReady] = useState(false);
+  // A note already in memory (opened before, or warmed by hovering its row)
+  // paints on the first frame: no blank pass at all.
+  const [ready, setReady] = useState(() => session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0);
 
   // Coming back to a long note lands where you were reading (this session).
   const paneRef = useRef<HTMLDivElement>(null);
@@ -419,7 +466,6 @@ export function NoteEditor({
 
   useEffect(() => {
     let active = true;
-    setReady(false);
     void session.cacheReady.then(() => {
       if (active && session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0) setReady(true);
     });
@@ -431,6 +477,8 @@ export function NoteEditor({
       active = false;
     };
   }, [session]);
+
+  useEffect(() => engine.pinOnScreen(noteId), [engine, noteId]);
 
   // Leaving the note kicks a flush (the engine also flushes on debounce).
   useEffect(
@@ -485,13 +533,9 @@ export function NoteEditor({
     [noteId, editable],
   );
 
-  if (!ready) {
-    return (
-      <div className="grid h-full place-content-center text-sm text-muted-foreground">
-        Preparing note…
-      </div>
-    );
-  }
+  // Still loading: an empty pane, never a "Preparing note…" line. A cached
+  // note is ready within a frame; a cold one appears as soon as it arrives.
+  if (!ready) return <div className="h-full" />;
 
   // The pane is the scroller, full width, so the wheel works over the margins
   // and the scrollbar sits at the pane's edge; the reading column is centred
@@ -526,10 +570,12 @@ export function NoteEditor({
               <ListPlugin />
               <CheckListPlugin />
               <ListTabIndentationPlugin />
+              {editable ? <DividerShortcutPlugin /> : null}
               {editable ? <NewNoteKeyPlugin /> : null}
               <CodeHighlightingPlugin />
               <LinkPlugin />
               <TablePlugin />
+              {editable ? <TableActionsPlugin /> : null}
               <SlashMenuPlugin
                 workspaceId={workspaceId}
                 runtime={runtime}

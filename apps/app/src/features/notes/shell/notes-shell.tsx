@@ -33,8 +33,6 @@ import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
 import { buildBreadcrumb, type CrumbSection } from "./breadcrumb";
 import { createLinkedNote } from "./create-linked-note";
-import { IconPickerDialog } from "./icon-picker-dialog";
-import { MoveToDialog } from "./move-to-dialog";
 import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
 import { NotesSidebar } from "./notes-sidebar";
@@ -221,14 +219,10 @@ function NotesShellBody() {
   const topBar = (
     <NotesTopBar
       crumbs={selectedId ? buildBreadcrumb(notes, selectedId, draft) : []}
-      note={liveNote}
       viewers={viewers}
       signal={
         module.syncStatus === "offline" ? "unsynced" : module.loadError !== null ? "stale" : null
       }
-      canEdit={canEdit && !degraded}
-      favorite={liveNote ? favoritePositions.has(liveNote.id) : false}
-      hasChildren={liveNote ? notes.some((n) => n.parentId === liveNote.id && !n.deletedAt) : false}
       share={
         shareable ? (
           <ShareMenu
@@ -244,7 +238,7 @@ function NotesShellBody() {
         ) : null
       }
       publish={
-        shareable && (liveNote.publishToken || actions.publishOpen) ? (
+        shareable ? (
           <NotePublishControl
             note={liveNote}
             notes={notes}
@@ -261,8 +255,6 @@ function NotesShellBody() {
       onTogglePanel={() => shell.setPanelOpen(!shell.panelOpen)}
       onOpenNote={(id) => shell.select(id)}
       onOpenSection={openSection}
-      onAction={actions.onAction}
-      onFullWidthChange={(note, fullWidth) => module.setFullWidth(note.id, fullWidth)}
     />
   );
 
@@ -290,13 +282,14 @@ function NotesShellBody() {
               footerView={footerView}
               onFooterViewChange={setFooterView}
               onOpen={(id) => shell.select(id)}
+              onWarm={(id) => void engine?.getOrCreateSession(id)}
               onNewCapture={() => shell.openDraft(null)}
               onNewPage={() => shell.openDraft(null, { toPages: true })}
               onCreateChild={(parentId) => shell.openDraft(parentId)}
-              onAction={actions.onAction}
               onDropIntent={actions.applyIntent}
               onUnarchive={(id) => module.archiveNote(id, false)}
               onTrash={actions.trash}
+              onUnfavorite={(id) => module.setFavorite(id, false)}
               onRestore={module.restoreNote}
               onPurge={(id) => {
                 void module.purgeNote(id);
@@ -358,17 +351,6 @@ function NotesShellBody() {
         existingRootPositions={notes
           .filter((n) => !n.parentId && !n.deletedAt)
           .map((n) => n.position)}
-      />
-      <MoveToDialog
-        note={actions.moveTarget}
-        sections={shell.sections}
-        onOpenChange={(open) => !open && actions.setMoveTarget(null)}
-        onPick={actions.pickMoveTarget}
-      />
-      <IconPickerDialog
-        note={actions.iconTarget}
-        onOpenChange={(open) => !open && actions.setIconTarget(null)}
-        onPick={(note, icon) => module.setIcon(note.id, icon)}
       />
       <SharingQuestionDialog
         open={actions.sharingQuestion !== null}

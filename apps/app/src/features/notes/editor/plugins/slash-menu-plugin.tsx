@@ -22,6 +22,7 @@ import {
   $insertNodes,
   $isRangeSelection,
   $isTextNode,
+  type ElementNode,
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
@@ -180,8 +181,13 @@ function runBasicCommand(id: SlashCommandId): void {
       $insertNodes([$createHorizontalRuleNode(), $createParagraphNode()]);
       break;
     case "table": {
-      const table = $createTableNodeWithDimensions(3, 3, true);
+      // A header row only: a header COLUMN greyed the first column of every
+      // table and read as a rendering bug.
+      const table = $createTableNodeWithDimensions(3, 3, { rows: true, columns: false });
       $insertNodes([table, $createParagraphNode()]);
+      // Start typing in the first cell, not on the line under the table.
+      const firstCell = table.getFirstChild<ElementNode>()?.getFirstChild<ElementNode>();
+      firstCell?.selectStart();
       break;
     }
     case "text":

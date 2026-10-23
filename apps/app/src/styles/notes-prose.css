@@ -179,13 +179,31 @@
 }
 
 .notes-list-item-checked::before {
-  content: "✓";
-  color: var(--primary-foreground);
   background: var(--primary);
   border-color: var(--primary);
-  font-size: var(--text-xs);
-  display: grid;
-  place-items: center;
+}
+
+/* The tick is drawn, not a "✓" glyph: a font's tick sat low and left and
+ * fell half out of the box. Two borders of a rotated box, centred on it. */
+.notes-list-item-checked::after {
+  content: "";
+  position: absolute;
+  left: calc(0.25rem + 0.3125rem);
+  top: calc(0.375rem + 0.1875rem);
+  width: 0.375rem;
+  height: 0.5625rem;
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* Lexical focuses the item in script when its box is clicked, which the
+ * browser treats as keyboard focus: an outline round the whole line (it read
+ * as a stray hover box). The caret already shows where you are. */
+.notes-list-item-unchecked:focus,
+.notes-list-item-checked:focus {
+  outline: none;
 }
 
 /* Task lines (NO-5) — a checkbox line that grew up, never a card. The
@@ -324,6 +342,13 @@
   outline: none;
   text-align: left;
   position: relative;
+}
+
+/* Only the first row is a header. Tables made before /table stopped adding a
+ * header COLUMN keep its cells as headers: they read as ordinary cells. */
+.notes-table tr:not(:first-child) .notes-table-cell-header {
+  background: transparent;
+  font-weight: inherit;
 }
 
 .notes-table-cell-header:focus-within {

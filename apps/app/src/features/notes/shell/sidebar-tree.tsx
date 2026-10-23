@@ -4,30 +4,17 @@
  * Each row is a real `treeitem` (aria-level / aria-expanded / aria-selected,
  * roving tabindex owned by the sidebar). Selection is the R5 tint
  * (`SELECTED_ROW`), hover a dimmed state fill, never the same as selected.
- * `⋯` and right-click open the same menu. Rows are dragged with dnd-kit (the
+ * Rows carry no menu (Mike, 2026-10-24): `+` adds a subpage, ⌫ trashes, a
+ * drag files or favorites. Rows are dragged with dnd-kit (the
  * page owns the DndContext) and dropped by raw pointer at release: each row
  * carries `data-drop-*` attributes the sidebar hit-tests.
  */
 
 import { useDraggable } from "@dnd-kit/core";
-import { ChevronRight, FileText, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronRight, FileText, Plus } from "lucide-react";
 import type * as React from "react";
 
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
 import { DRAG_SOURCE, DROP_TARGET, InsertionLine } from "@/components/ui/drag-visuals";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -36,7 +23,6 @@ import type { Note } from "../model";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import type { SidebarSection } from "./drop-intent";
-import { type RowAction, rowMenuItems } from "./row-menu";
 
 export type RowHover = { key: string; zone: "before" | "after" | "into" } | null;
 
@@ -51,9 +37,10 @@ export type TreeCtx = {
   dragging: boolean;
   onToggle: (key: string) => void;
   onOpen: (id: string) => void;
+  /** The pointer is on a row: start loading its note so the click paints. */
+  onWarm?: (id: string) => void;
   onFocusRow: (key: string) => void;
   onCreateChild: (id: string) => void;
-  onAction: (action: RowAction, note: Note) => void;
 };
 
 export function rowKey(section: SidebarSection, id: string): string {
@@ -117,10 +104,6 @@ export function TreeRow({
   const isDraft = note.id === ctx.draftId;
   const selected = ctx.selectedId === note.id;
   const hover = ctx.hover?.key === key ? ctx.hover : null;
-  const favorite = ctx.favoriteIds.has(note.id);
-  const items = isDraft
-    ? []
-    : rowMenuItems({ canEdit: ctx.canEdit, favorite, section, hasChildren: expandable });
 
   const row = (
     <div
@@ -131,6 +114,7 @@ export function TreeRow({
       tabIndex={ctx.focusedKey === key ? 0 : -1}
       data-row-key={key}
       data-drop-row={isDraft ? undefined : key}
+      onPointerEnter={isDraft ? undefined : () => ctx.onWarm?.(note.id)}
       data-drop-section={section}
       data-drop-id={note.id}
       data-drop-into={section === "favorites" ? undefined : "true"}
@@ -213,80 +197,16 @@ export function TreeRow({
               <Plus aria-hidden className="size-icon-sm" />
             </button>
           ) : null}
-          {items.length > 0 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  aria-label={`${displayTitle(note.title)} options`}
-                  onClick={(e) => e.stopPropagation()}
-                  className="hit-min flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
-                >
-                  <MoreHorizontal aria-hidden className="size-icon-sm" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-52">
-                <MenuItems items={items} note={note} ctx={ctx} kit="dropdown" />
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : null}
         </span>
       ) : null}
     </div>
   );
 
-  const withMenu =
-    items.length > 0 ? (
-      <ContextMenu>
-        <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-        <ContextMenuContent className="w-52">
-          <MenuItems items={items} note={note} ctx={ctx} kit="context" />
-        </ContextMenuContent>
-      </ContextMenu>
-    ) : (
-      row
-    );
-
-  if (!ctx.canEdit || isDraft) return withMenu;
+  if (!ctx.canEdit || isDraft) return row;
   return (
     <DraggableRow note={note} dragKey={key}>
-      {withMenu}
+      {row}
     </DraggableRow>
-  );
-}
-
-function MenuItems({
-  items,
-  note,
-  ctx,
-  kit,
-}: {
-  items: ReturnType<typeof rowMenuItems>;
-  note: Note;
-  ctx: TreeCtx;
-  kit: "dropdown" | "context";
-}) {
-  const Item = kit === "dropdown" ? DropdownMenuItem : ContextMenuItem;
-  const Separator = kit === "dropdown" ? DropdownMenuSeparator : ContextMenuSeparator;
-  return (
-    <>
-      {items.map((item, i) =>
-        item === "separator" ? (
-          // eslint-disable-next-line react/no-array-index-key -- separators are positional
-          <Separator key={`sep-${i}`} />
-        ) : (
-          <Item
-            key={item.action}
-            variant={item.destructive ? "destructive" : "default"}
-            onSelect={() => ctx.onAction(item.action, note)}
-          >
-            <item.icon aria-hidden />
-            {item.label}
-          </Item>
-        ),
-      )}
-    </>
   );
 }
 

@@ -10,7 +10,7 @@
  */
 
 import { DragOverlay } from "@dnd-kit/core";
-import { FileText, Import, Plus } from "lucide-react";
+import { Archive, FileText, Globe, Import, type LucideIcon, Trash2 } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -21,8 +21,8 @@ import {
   useState,
 } from "react";
 
+import { SidebarFooter } from "@/components/app/sidebar-footer";
 import { DragOverlaySurface, DROP_TARGET } from "@/components/ui/drag-visuals";
-import { IconButton } from "@/components/ui/icon-button";
 import { NavSectionHeader } from "@/components/ui/nav-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
@@ -34,13 +34,7 @@ import type { SidebarSections } from "../sections";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import { type DropIntent, keyboardReorderIntent, type SidebarSection } from "./drop-intent";
-import type { RowAction } from "./row-menu";
-import {
-  footerCounts,
-  FooterSubView,
-  type FooterView,
-  SidebarFooter,
-} from "./sidebar-footer-views";
+import { footerCounts, FooterSubView, type FooterView } from "./sidebar-footer-views";
 import { SidebarSearchInput, SidebarSearchResults, useNoteSearch } from "./sidebar-search";
 import { rowKey, type TreeCtx, TreeNodes, TreeRow } from "./sidebar-tree";
 import { treeKeyAction, type TreeRow as KeyRow } from "./tree-keyboard";
@@ -60,13 +54,14 @@ export type NotesSidebarProps = {
   footerView: FooterView | null;
   onFooterViewChange: (view: FooterView | null) => void;
   onOpen: (id: string) => void;
+  onWarm?: (id: string) => void;
   onNewCapture: () => void;
   onNewPage: () => void;
   onCreateChild: (parentId: string) => void;
-  onAction: (action: RowAction, note: Note) => void;
   onDropIntent: (intent: DropIntent) => void;
   onUnarchive: (id: string) => void;
   onTrash: (id: string) => void;
+  onUnfavorite: (id: string) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
   onSearch?: (query: string) => Promise<NoteSearchResult[]>;
@@ -133,20 +128,6 @@ export function NotesSidebar(props: NotesSidebarProps) {
     // Only the treeitem itself; a row's menu or button handles its own keys.
     const target = e.target as HTMLElement;
     if (!target.matches('[role="treeitem"]')) return;
-    // ⇧F10 / the Menu key open the row's menu, the same one a right-click
-    // opens (its ⋯ button stays out of the tab order).
-    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
-      e.preventDefault();
-      const rect = target.getBoundingClientRect();
-      target.dispatchEvent(
-        new MouseEvent("contextmenu", {
-          bubbles: true,
-          clientX: rect.left + 24,
-          clientY: rect.bottom,
-        }),
-      );
-      return;
-    }
     const current = target.dataset.rowKey ?? effectiveFocus;
     const action = treeKeyAction(rows, current, e, { canEdit });
     if (!action) return;
@@ -188,7 +169,8 @@ export function NotesSidebar(props: NotesSidebarProps) {
             .reverse()
             .find((r) => !goesWithIt(r.key));
         if (next) focusRow(next.key);
-        props.onAction(inFavorites ? "unfavorite" : "trash", note);
+        if (inFavorites) props.onUnfavorite(note.id);
+        else props.onTrash(note.id);
         break;
       }
       case "reorder": {
@@ -224,28 +206,23 @@ export function NotesSidebar(props: NotesSidebarProps) {
     dragging: drag.dragging,
     onToggle: (key) => toggle(key),
     onOpen: props.onOpen,
+    onWarm: props.onWarm,
     onFocusRow: setFocusedKey,
     onCreateChild: props.onCreateChild,
-    onAction: props.onAction,
   };
+
+  const footerItem = (target: FooterView, icon: LucideIcon, label: string) => ({
+    icon,
+    label,
+    active: view === target,
+    onSelect: () => setView(view === target ? null : target),
+  });
 
   const inboxCount = sections.inbox.length;
   const showSkeleton = props.loading && notes.length === 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-1 px-1 pb-2">
-        <h2 className="pl-1 font-display text-base font-semibold text-foreground">Notes</h2>
-        {canEdit ? (
-          <span className="flex items-center">
-            {props.onImport ? (
-              <IconButton icon={Import} label="Import notes" onClick={props.onImport} />
-            ) : null}
-            <IconButton icon={Plus} label="New note (⌘N)" onClick={props.onNewCapture} />
-          </span>
-        ) : null}
-      </div>
-
       {view ? (
         <FooterSubView
           view={view}
@@ -307,6 +284,8 @@ export function NotesSidebar(props: NotesSidebarProps) {
                   dropActive={drag.headerHover === "inbox"}
                   count={inboxCount}
                   countLabel={`${inboxCount} in Inbox`}
+                  onAdd={canEdit ? props.onNewCapture : undefined}
+                  addLabel="New note (⌘N)"
                 >
                   {inboxCount === 0 ? (
                     // An empty section's line takes a drop like its header.
@@ -341,9 +320,21 @@ export function NotesSidebar(props: NotesSidebarProps) {
               </div>
             )}
           </div>
-          <SidebarFooter counts={footerCounts(sections.footer)} onOpenView={setView} />
         </>
       )}
+      {/* Tasks' footer (MOD-140): the places under the tree, pinned. */}
+      <SidebarFooter
+        label="Published, archive and trash"
+        className="px-1 pt-2"
+        items={[
+          ...(footerCounts(sections.footer).published > 0
+            ? [footerItem("published", Globe, "Published")]
+            : []),
+          footerItem("archive", Archive, "Archived"),
+          footerItem("trash", Trash2, "Recently deleted"),
+          ...(props.onImport ? [{ icon: Import, label: "Import", onSelect: props.onImport }] : []),
+        ]}
+      />
       {/* What follows the pointer. pointer-events-none is load-bearing: the
           drop is hit-tested with elementFromPoint, which must see the row
           under the overlay, not the overlay. */}
