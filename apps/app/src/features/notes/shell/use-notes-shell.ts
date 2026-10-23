@@ -76,14 +76,19 @@ export function useNotesShell() {
   );
 
   /** A focused new note: in the Inbox (root), under a page (`parentId`), or
-   * straight into Pages (`toPages`). Exists only here until its first character. */
+   * straight into Pages (`toPages`). Exists only here until its first character.
+   * Returns the draft's id (null when this person can't write). */
   const openDraft = useCallback(
-    (parentId: string | null = null, opts: { toPages?: boolean; replace?: boolean } = {}) => {
-      if (!engine || !canEdit || degraded) return;
+    (
+      parentId: string | null = null,
+      opts: { toPages?: boolean; replace?: boolean } = {},
+    ): string | null => {
+      if (!engine || !canEdit || degraded) return null;
       const id = crypto.randomUUID();
       engine.openDraft(id);
       dispatchDraft({ type: "open", draft: { id, parentId, toPages: opts.toPages } });
       select(id, opts.replace ?? false);
+      return id;
     },
     [engine, canEdit, degraded, dispatchDraft, select],
   );
@@ -137,6 +142,34 @@ export function useNotesShell() {
     if (selectedId === draftId && engine?.isDraft(draftId)) return;
     if (!notes.some((n) => n.id === selectedId)) select(null, true);
   }, [loading, selectedId, draftId, notes, select, engine]);
+
+  // Notes reopens where you left it: the last note you had open in this
+  // workspace, when you arrive with nothing in the URL.
+  const lastKey = userId && workspaceId ? `moduo:notes:last-open:${userId}:${workspaceId}` : null;
+  useEffect(() => {
+    if (!lastKey || !selectedId || selectedId === draftId) return;
+    if (!notes.some((n) => n.id === selectedId && !n.deletedAt)) return;
+    try {
+      localStorage.setItem(lastKey, selectedId);
+    } catch {
+      // A lost "last note" only means opening on the empty state.
+    }
+  }, [lastKey, selectedId, draftId, notes]);
+  const resumedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastKey || loading || resumedFor.current === lastKey) return;
+    resumedFor.current = lastKey;
+    if (selectedId || search.action) return;
+    let last: string | null = null;
+    try {
+      last = localStorage.getItem(lastKey);
+    } catch {
+      return;
+    }
+    if (last && notes.some((n) => n.id === last && !n.deletedAt && !n.isArchived)) {
+      select(last, true);
+    }
+  }, [lastKey, loading, selectedId, search.action, notes, select]);
 
   // Opening a note jumps it to the front of the blank-note repair queue.
   useEffect(() => {

@@ -9,7 +9,8 @@
  * - View-only hides create, drag, publish and trash.
  */
 
-import { Plus, Upload } from "lucide-react";
+import { DragOverlay } from "@dnd-kit/core";
+import { FileText, Import, Plus } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -20,7 +21,7 @@ import {
   useState,
 } from "react";
 
-import { DROP_TARGET } from "@/components/ui/drag-visuals";
+import { DragOverlaySurface, DROP_TARGET } from "@/components/ui/drag-visuals";
 import { IconButton } from "@/components/ui/icon-button";
 import { NavSectionHeader } from "@/components/ui/nav-row";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -30,6 +31,7 @@ import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import type { NoteSearchResult } from "../search";
 import type { SidebarSections } from "../sections";
+import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import { type DropIntent, keyboardReorderIntent, type SidebarSection } from "./drop-intent";
 import type { RowAction } from "./row-menu";
@@ -78,13 +80,16 @@ export function NotesSidebar(props: NotesSidebarProps) {
   const view = props.footerView;
   const setView = props.onFooterViewChange;
   const treeRef = useRef<HTMLDivElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const search = useNoteSearch(props.onSearch);
   const drag = useSidebarDrag({
     notes,
     sections,
     favoritePositions: props.favoritePositions,
     onDrop: props.onDropIntent,
+    scrollerRef,
   });
+  const dragNote = drag.dragNoteId ? notes.find((n) => n.id === drag.dragNoteId) : undefined;
 
   const toggle = useCallback(
     (key: string, open?: boolean) =>
@@ -128,6 +133,20 @@ export function NotesSidebar(props: NotesSidebarProps) {
     // Only the treeitem itself; a row's menu or button handles its own keys.
     const target = e.target as HTMLElement;
     if (!target.matches('[role="treeitem"]')) return;
+    // ⇧F10 / the Menu key open the row's menu, the same one a right-click
+    // opens (its ⋯ button stays out of the tab order).
+    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+      e.preventDefault();
+      const rect = target.getBoundingClientRect();
+      target.dispatchEvent(
+        new MouseEvent("contextmenu", {
+          bubbles: true,
+          clientX: rect.left + 24,
+          clientY: rect.bottom,
+        }),
+      );
+      return;
+    }
     const current = target.dataset.rowKey ?? effectiveFocus;
     const action = treeKeyAction(rows, current, e, { canEdit });
     if (!action) return;
@@ -220,7 +239,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
         {canEdit ? (
           <span className="flex items-center">
             {props.onImport ? (
-              <IconButton icon={Upload} label="Import notes" onClick={props.onImport} />
+              <IconButton icon={Import} label="Import notes" onClick={props.onImport} />
             ) : null}
             <IconButton icon={Plus} label="New note (⌘N)" onClick={props.onNewCapture} />
           </span>
@@ -245,7 +264,10 @@ export function NotesSidebar(props: NotesSidebarProps) {
           {props.onSearch ? (
             <SidebarSearchInput query={search.query} onChange={search.setQuery} />
           ) : null}
-          <div className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 pb-4">
+          <div
+            ref={scrollerRef}
+            className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 pb-4"
+          >
             {search.active ? (
               <SidebarSearchResults
                 results={search.results}
@@ -285,11 +307,12 @@ export function NotesSidebar(props: NotesSidebarProps) {
                   dropActive={drag.headerHover === "inbox"}
                   count={inboxCount}
                   countLabel={`${inboxCount} in Inbox`}
-                  onAdd={canEdit ? props.onNewCapture : undefined}
-                  addLabel="New note"
                 >
                   {inboxCount === 0 ? (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">Captures land here.</p>
+                    // An empty section's line takes a drop like its header.
+                    <p data-drop-header="inbox" className="px-2 py-1 text-xs text-muted-foreground">
+                      Captures land here.
+                    </p>
                   ) : (
                     <TreeNodes nodes={sections.inbox} section="inbox" depth={0} ctx={ctx} />
                   )}
@@ -302,7 +325,13 @@ export function NotesSidebar(props: NotesSidebarProps) {
                   addLabel="New page"
                 >
                   {sections.pages.length === 0 ? (
-                    <p className="px-2 py-1 text-xs text-muted-foreground">
+                    <p
+                      data-drop-header="pages"
+                      className={cn(
+                        "px-2 py-1 text-xs text-muted-foreground",
+                        drag.headerHover === "pages" && DROP_TARGET,
+                      )}
+                    >
                       File a note here to keep it.
                     </p>
                   ) : (
@@ -315,6 +344,21 @@ export function NotesSidebar(props: NotesSidebarProps) {
           <SidebarFooter counts={footerCounts(sections.footer)} onOpenView={setView} />
         </>
       )}
+      {/* What follows the pointer. pointer-events-none is load-bearing: the
+          drop is hit-tested with elementFromPoint, which must see the row
+          under the overlay, not the overlay. */}
+      <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
+        {dragNote ? (
+          <DragOverlaySurface className="max-w-56 text-sm">
+            {dragNote.icon ? (
+              <span className="text-sm leading-none">{dragNote.icon}</span>
+            ) : (
+              <FileText aria-hidden className="size-icon-sm text-muted-foreground" />
+            )}
+            <span className="truncate">{displayTitle(dragNote.title)}</span>
+          </DragOverlaySurface>
+        ) : null}
+      </DragOverlay>
     </div>
   );
 }

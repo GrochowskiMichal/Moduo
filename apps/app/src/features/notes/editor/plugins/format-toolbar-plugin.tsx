@@ -29,7 +29,7 @@ import {
   type TextFormatType,
 } from "lexical";
 import { Bold, Code, Italic, Link2, MessageSquarePlus, Strikethrough } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { IconButton } from "@/components/ui/icon-button";
@@ -108,8 +108,14 @@ export function FormatToolbarPlugin({
 }) {
   const [editor] = useLexicalComposerContext();
   const [state, setState] = useState<ToolbarState | null>(null);
+  /** The mouse is down in the editor: a selection is still being made. */
+  const selectingRef = useRef(false);
 
   const recompute = useCallback(() => {
+    if (selectingRef.current) {
+      setState(null);
+      return;
+    }
     editor.getEditorState().read(() => {
       const selection = $getSelection();
       if (
@@ -223,19 +229,48 @@ export function FormatToolbarPlugin({
     };
   }, [editor, editable, recompute]);
 
-  // Dismiss on scroll/resize — installed only while the bar is up, so the
-  // capture-phase listener isn't running for every scroll in the app.
+  // Follow the selection on scroll/resize instead of vanishing for good (it
+  // never came back). Installed only while the bar is up.
   const visible = state !== null;
   useEffect(() => {
     if (!visible) return;
-    const hide = () => setState(null);
-    window.addEventListener("scroll", hide, { capture: true, passive: true });
-    window.addEventListener("resize", hide);
-    return () => {
-      window.removeEventListener("scroll", hide, { capture: true });
-      window.removeEventListener("resize", hide);
+    let frame = 0;
+    const follow = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => recompute());
     };
-  }, [visible]);
+    window.addEventListener("scroll", follow, { capture: true, passive: true });
+    window.addEventListener("resize", follow);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", follow, { capture: true });
+      window.removeEventListener("resize", follow);
+    };
+  }, [visible, editor, recompute]);
+
+  // Not while the mouse is still selecting: the bar popped up under the
+  // pointer mid-drag. It shows on release.
+  useEffect(() => {
+    const onDown = () => {
+      selectingRef.current = true;
+      setState(null);
+    };
+    const onUp = () => {
+      if (!selectingRef.current) return;
+      selectingRef.current = false;
+      requestAnimationFrame(() => recompute());
+    };
+    const unregister = editor.registerRootListener((root, prev) => {
+      prev?.removeEventListener("pointerdown", onDown);
+      root?.addEventListener("pointerdown", onDown);
+    });
+    document.addEventListener("pointerup", onUp);
+    return () => {
+      unregister();
+      editor.getRootElement()?.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("pointerup", onUp);
+    };
+  }, [editor, recompute]);
 
   if (!editable || !state) return null;
 

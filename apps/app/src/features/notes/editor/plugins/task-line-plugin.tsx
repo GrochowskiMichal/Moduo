@@ -73,6 +73,8 @@ import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../sche
 export const TASK_LINE_TAG = "moduo-task-line";
 
 const RENAME_DEBOUNCE_MS = 500;
+/** Time to cross from a checkbox line to its "Make task" pill. */
+const PILL_GRACE_MS = 250;
 
 type LineEntry = {
   taskId: string | null;
@@ -379,7 +381,8 @@ function TaskLineMeta({
             title="Open task details"
             onClick={() => tasks.openTaskDetail(entry.taskId!)}
           >
-            {chipLabel ?? "Details"}
+            {/* With no date the chip still says what the line is. */}
+            {chipLabel ?? "Task"}
           </button>
           {editable && tasks.canEditTasks ? (
             <span
@@ -619,8 +622,18 @@ export function TaskLinePlugin({
     if (!container) return;
     const ro = new ResizeObserver(() => setMeasureStamp((s) => s + 1));
     ro.observe(container);
-    return () => ro.disconnect();
-  }, [overlayEl]);
+    // The document's own height too: the meta line arriving, an image or a
+    // web font loading moves every line with no editor update to re-measure
+    // on, and the checkboxes drifted off their lines until the next keystroke.
+    const unregister = editor.registerRootListener((root, prev) => {
+      if (prev) ro.unobserve(prev);
+      if (root) ro.observe(root);
+    });
+    return () => {
+      unregister();
+      ro.disconnect();
+    };
+  }, [overlayEl, editor]);
 
   // ── the one document listener: track lines, renames OUT, deletions ────────
   useEffect(() => {
@@ -808,12 +821,36 @@ export function TaskLinePlugin({
   // Hover tracking: reveal a line's quiet actions + the "Make task" pill on
   // plain checkbox lines. The pill is fixed-positioned off the line's rect —
   // any scroll dismisses it (stale coordinates must never invite a mis-click).
+  // Both live OUTSIDE the contenteditable (the overlay; the pill in a portal),
+  // so reaching for them leaves the root: that must not hide them. Leaving
+  // into either keeps the hover, and the pill gets a short grace to cross the
+  // gap from its line.
+  const hoverGrace = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepHover = useCallback(() => {
+    if (hoverGrace.current) clearTimeout(hoverGrace.current);
+    hoverGrace.current = null;
+  }, []);
+  const dropHover = useCallback(
+    (delay = 0) => {
+      keepHover();
+      const clear = () => {
+        setHover(null);
+        setHoveredLine(null);
+      };
+      if (delay > 0) hoverGrace.current = setTimeout(clear, delay);
+      else clear();
+    },
+    [keepHover],
+  );
   useEffect(() => {
     const onScroll = () => setHover(null);
+    const intoWidgets = (to: EventTarget | null) =>
+      to instanceof Element && to.closest("[data-task-line-overlay], [data-task-pill]") !== null;
     const onOver = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const lineEl = target?.closest<HTMLElement>("[data-task-line]");
       if (lineEl) {
+        keepHover();
         const key = getNearestNodeKey(editor, lineEl);
         setHoveredLine(key);
         setHover(null);
@@ -825,19 +862,28 @@ export function TaskLinePlugin({
         ".notes-list-item-unchecked, .notes-list-item-checked",
       );
       if (!li) {
-        setHover(null);
+        dropHover(PILL_GRACE_MS);
         return;
       }
       const key = getNearestNodeKey(editor, li);
-      if (!key) return setHover(null);
+      if (!key) return dropHover();
+      keepHover();
       const rect = li.getBoundingClientRect();
       setHover({ itemKey: key, top: rect.top, left: rect.right + 8 });
     };
-    const onLeave = () => {
-      setHover(null);
-      setHoveredLine(null);
+    const onLeave = (event: MouseEvent) => {
+      if (intoWidgets(event.relatedTarget)) return;
+      dropHover(PILL_GRACE_MS);
+    };
+    // Leaving the line's widgets for anywhere but the editor drops the hover.
+    const onWidgetsLeave = (event: MouseEvent) => {
+      const to = event.relatedTarget;
+      if (intoWidgets(to)) return;
+      if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+      dropHover();
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    overlayEl?.addEventListener("mouseout", onWidgetsLeave);
     const teardown = editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener("mouseover", onOver);
       prevRoot?.removeEventListener("mouseleave", onLeave);
@@ -846,12 +892,14 @@ export function TaskLinePlugin({
     });
     return () => {
       window.removeEventListener("scroll", onScroll, { capture: true });
+      overlayEl?.removeEventListener("mouseout", onWidgetsLeave);
       const root = editor.getRootElement();
       root?.removeEventListener("mouseover", onOver);
       root?.removeEventListener("mouseleave", onLeave);
       teardown();
+      keepHover();
     };
-  }, [editor, editable]);
+  }, [editor, editable, overlayEl, keepHover, dropHover]);
 
   // Right-click menu on checkbox lines + task lines.
   useEffect(() => {
@@ -1059,8 +1107,15 @@ export function TaskLinePlugin({
         ? createPortal(
             <button
               type="button"
+              data-task-pill=""
               className="fixed z-40 inline-flex items-center gap-1 rounded-md border border-border bg-popover px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               style={{ top: hover.top, left: hover.left }}
+              onMouseEnter={keepHover}
+              onMouseLeave={(e) => {
+                const to = e.relatedTarget;
+                if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+                dropHover();
+              }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 const t = tasksRef.current;

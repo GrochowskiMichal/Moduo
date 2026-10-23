@@ -220,7 +220,7 @@ describe("Linked from footer (AC6)", () => {
         ],
       ),
     );
-    expect(groups.map((g) => g.label)).toEqual(["References", "Spawned from", "Mentions"]);
+    expect(groups.map((g) => g.label)).toEqual(["References", "Created from", "Mentions"]);
     expect(groups[0]!.rows.map((r) => r.title)).toEqual(["Brief"]);
     expect(groups[0]!.rows[0]!.ref).toEqual(brief);
     expect(backlinkCount(groups)).toBe(3);

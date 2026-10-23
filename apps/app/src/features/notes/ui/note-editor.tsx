@@ -78,6 +78,9 @@ import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 // The schema nodes draw through the view registry (NR-3); fill it once.
 installNoteNodeViews();
 
+/** Where each note was scrolled to, kept for the session. */
+const scrollPositions = new Map<string, number>();
+
 type Props = {
   engine: NotesSyncEngineV2;
   workspaceId: string;
@@ -260,6 +263,26 @@ function InsertPageRowPlugin({ noteId, bridge }: { noteId: string; bridge: Notes
   return null;
 }
 
+/** The caret range at a screen point: WebKit/Blink's `caretRangeFromPoint`,
+ * else the standard `caretPositionFromPoint` (Firefox, where drops always
+ * landed at the end of the note). */
+function rangeAtPoint(x: number, y: number): Range | null {
+  if (typeof document.caretRangeFromPoint === "function") return document.caretRangeFromPoint(x, y);
+  const position = (
+    document as Document & {
+      caretPositionFromPoint?: (
+        x: number,
+        y: number,
+      ) => { offsetNode: Node; offset: number } | null;
+    }
+  ).caretPositionFromPoint?.(x, y);
+  if (!position) return null;
+  const range = document.createRange();
+  range.setStart(position.offsetNode, position.offset);
+  range.collapse(true);
+  return range;
+}
+
 /** Drag-into-editor (NO-7b): the page fires this when an entity is dropped onto
  * the open editor. Insert a reference chip at the drop point — a chip only, no
  * `entity_links` write (that's the drag-onto-row/hub gesture). The DOM caret at
@@ -281,12 +304,8 @@ function InsertEntityChipPlugin({ noteId, editable }: { noteId: string; editable
       editor.update(() => {
         // Best-effort placement at the drop caret.
         let dropSel: ReturnType<typeof $createRangeSelection> | null = null;
-        if (
-          d.clientX != null &&
-          d.clientY != null &&
-          typeof document.caretRangeFromPoint === "function"
-        ) {
-          const domRange = document.caretRangeFromPoint(d.clientX, d.clientY);
+        if (d.clientX != null && d.clientY != null) {
+          const domRange = rangeAtPoint(d.clientX, d.clientY);
           if (domRange) {
             try {
               const sel = $createRangeSelection();
@@ -346,6 +365,32 @@ export function NoteEditor({
   // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
   // note opened on a new device would gain a stray empty block.
   const [ready, setReady] = useState(false);
+
+  // Coming back to a long note lands where you were reading (this session).
+  const paneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const pane = paneRef.current;
+    if (!ready || !pane) return;
+    const saved = scrollPositions.get(noteId) ?? 0;
+    // The binding draws the document a few frames after mount: wait until
+    // it is tall enough to hold the saved position (or give up quietly).
+    let frame = 0;
+    let tries = 0;
+    const restore = () => {
+      if (pane.scrollHeight - pane.clientHeight >= saved || tries++ > 30) {
+        pane.scrollTop = saved;
+        return;
+      }
+      frame = requestAnimationFrame(restore);
+    };
+    if (saved > 0) frame = requestAnimationFrame(restore);
+    const onScroll = () => scrollPositions.set(noteId, pane.scrollTop);
+    pane.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      pane.removeEventListener("scroll", onScroll);
+    };
+  }, [ready, noteId]);
 
   useEffect(() => {
     let active = true;
@@ -429,6 +474,7 @@ export function NoteEditor({
   // the column, the task-line overlay against the pane.
   return (
     <div
+      ref={paneRef}
       data-meta-line={belowTitle ? "" : undefined}
       className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto"
     >

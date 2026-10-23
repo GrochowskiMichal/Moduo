@@ -27,11 +27,18 @@ import type { Crumb, CrumbSection } from "./breadcrumb";
 import { NoteBreadcrumb } from "./note-breadcrumb";
 import { type RowAction, rowMenuItems } from "./row-menu";
 
+export type NotesSignal = "unsynced" | "stale";
+
+const SIGNAL_COPY: Record<NotesSignal, string> = {
+  unsynced: "Saved locally — will sync",
+  stale: "Couldn't refresh — showing what's on this device",
+};
+
 export function NotesTopBar({
   crumbs,
   note,
   viewers,
-  unsynced,
+  signal,
   canEdit,
   favorite,
   hasChildren,
@@ -48,7 +55,9 @@ export function NotesTopBar({
   /** The open note, or null for a draft / nothing open (the menu hides). */
   note: Note | null;
   viewers: NoteViewer[];
-  unsynced: boolean;
+  /** The one sync signal: nothing while healthy. "unsynced" = edits wait on
+   * this device; "stale" = the list couldn't be refreshed. */
+  signal: NotesSignal | null;
   canEdit: boolean;
   favorite: boolean;
   /** The open note has sub-pages (the .zip export). */
@@ -69,16 +78,16 @@ export function NotesTopBar({
       <NoteBreadcrumb crumbs={crumbs} onOpenNote={onOpenNote} onOpenSection={onOpenSection} />
       <div className="flex shrink-0 items-center gap-1.5">
         <NotePresenceAvatars viewers={viewers} />
-        {unsynced ? (
+        {signal ? (
           <Tooltip>
             <TooltipTrigger asChild>
               <span
                 role="status"
-                aria-label="Saved locally — will sync"
+                aria-label={SIGNAL_COPY[signal]}
                 className="mx-1 size-2 rounded-full bg-muted-foreground/60"
               />
             </TooltipTrigger>
-            <TooltipContent side="bottom">Saved locally — will sync</TooltipContent>
+            <TooltipContent side="bottom">{SIGNAL_COPY[signal]}</TooltipContent>
           </Tooltip>
         ) : null}
         {share}

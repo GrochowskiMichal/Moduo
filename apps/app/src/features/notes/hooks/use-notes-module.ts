@@ -22,6 +22,8 @@ import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
 import { WELCOME_MARKDOWN, WELCOME_TITLE } from "../welcome";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
+const BACKGROUND_REFRESH_EVERY_MS = 60_000;
+const BACKGROUND_REFRESH_MIN_MS = 15_000;
 
 type Params = {
   userId: string | null;
@@ -124,6 +126,35 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     }
   }, [ready, runtime, userId, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
+
+  // ── background refresh ─────────────────────────────────────────────────────
+  // There is no live feed for the note list (the live channel carries only the
+  // open note's body), so a teammate's or an agent's new, renamed or moved
+  // note showed only after leaving Notes. Re-read the list when the window
+  // comes back and every minute while it shows, never over our own unsettled
+  // writes (an optimistic rename would flicker back to the server's title).
+  const syncStatusRef = useRef(syncStatus);
+  syncStatusRef.current = syncStatus;
+  const inflightRef = useRef(0);
+  useEffect(() => {
+    if (!ready) return;
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - last < BACKGROUND_REFRESH_MIN_MS) return;
+      if (inflightRef.current > 0 || syncStatusRef.current !== "synced") return;
+      last = Date.now();
+      void load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, BACKGROUND_REFRESH_EVERY_MS);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
+  }, [ready, load]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,14 +308,22 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const guard = useCallback(
     (fn: () => Promise<unknown>): Promise<boolean> => {
       if (!engine || !canEdit) return Promise.resolve(false);
-      return fn().then(
-        () => true,
-        (e) => {
-          toast.error(e instanceof Error ? e.message : "Something went wrong.");
-          void load();
-          return false;
-        },
-      );
+      inflightRef.current += 1;
+      return fn()
+        .then(
+          () => true,
+          (e) => {
+            // The server's wording is for us, not for the person: say what
+            // happened and put the truth back on screen.
+            console.warn("[notes] a change was refused", e);
+            toast.error("Couldn't save that change. Showing the latest version.");
+            void load();
+            return false;
+          },
+        )
+        .finally(() => {
+          inflightRef.current -= 1;
+        });
     },
     [engine, canEdit, load],
   );

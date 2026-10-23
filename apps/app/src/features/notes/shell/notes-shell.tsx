@@ -115,7 +115,9 @@ function NotesShellBody() {
     () => ({
       getNoteMeta: (id) => notes.find((n) => n.id === id) ?? null,
       openNote: (id) => shell.select(id),
-      createChildNote: () => (liveNote ? module.createNote(liveNote.id) : null),
+      // A draft like the sidebar's "+": it reaches the server only once typed
+      // in, so a `/page` you leave empty leaves nothing behind.
+      createChildNote: () => (liveNote ? shell.openDraft(liveNote.id) : null),
       tasks: tasks.taskBridge,
       listNotes: () => notes,
       createLinkedNote: (title) =>
@@ -128,6 +130,7 @@ function NotesShellBody() {
     [
       notes,
       shell.select,
+      shell.openDraft,
       shell.showPanelVariant,
       liveNote,
       module,
@@ -220,7 +223,9 @@ function NotesShellBody() {
       crumbs={selectedId ? buildBreadcrumb(notes, selectedId, draft) : []}
       note={liveNote}
       viewers={viewers}
-      unsynced={module.syncStatus === "offline" || module.loadError !== null}
+      signal={
+        module.syncStatus === "offline" ? "unsynced" : module.loadError !== null ? "stale" : null
+      }
       canEdit={canEdit && !degraded}
       favorite={liveNote ? favoritePositions.has(liveNote.id) : false}
       hasChildren={liveNote ? notes.some((n) => n.parentId === liveNote.id && !n.deletedAt) : false}

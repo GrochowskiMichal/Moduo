@@ -280,6 +280,13 @@ export function SlashMenuPlugin({
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
   }, [commands.length]);
 
+  // Arrowing past the visible rows scrolls the highlight along.
+  useEffect(() => {
+    menuBoxRef.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
+
   // A fresh query means a fresh list — never a stale mid-list highlight.
   useEffect(() => {
     setSelectedIndex(0);
@@ -585,6 +592,9 @@ export function SlashMenuPlugin({
 
   if (!menu || commands.length === 0) return null;
 
+  // Filtered results are ranked across groups: headers would repeat
+  // ("Basics · Insert · Basics…"), so only the full menu shows them.
+  const grouped = menu.query === "";
   let lastGroup: string | null = null;
   return createPortal(
     <div
@@ -598,7 +608,7 @@ export function SlashMenuPlugin({
         const isSelected = index === selectedIndex;
         const Icon = COMMAND_ICONS[command.id];
         const groupHeader =
-          command.group !== lastGroup ? (
+          grouped && command.group !== lastGroup ? (
             <Eyebrow as="div" className="px-2 pb-0.5 pt-2 first:pt-1">
               {command.group}
             </Eyebrow>
@@ -621,8 +631,10 @@ export function SlashMenuPlugin({
               }}
             >
               <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{command.title}</span>
-              <span className="shrink-0 truncate text-xs text-muted-foreground/70">
+              {/* The name never truncates; the hint gives way ("Che…" read as
+                  nothing). */}
+              <span className="shrink-0">{command.title}</span>
+              <span className="min-w-0 flex-1 truncate text-right text-xs text-subtle-foreground">
                 {command.description}
               </span>
             </button>
