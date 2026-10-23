@@ -9,6 +9,7 @@
  */
 
 import { mapKnownRows } from "@contracts/rows";
+
 import type { FocusRun, FocusRunRuntime } from "../features/focus/run-model";
 import { focusRunRowToModel, runSnapshotToState } from "../features/focus/run-model";
 import { collectTruncations, readPaged } from "./paged-select";

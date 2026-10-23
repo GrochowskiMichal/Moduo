@@ -7,11 +7,12 @@
 // Each answers whether the write started (false: it was refused up front
 // and said why), so a caller's own toast and Undo show only for a real one.
 
-import { type TaskStatusCategory, taskCategoryOf } from "@contracts/vocabularies";
+import { taskCategoryOf, type TaskStatusCategory } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import type { Task, TaskReminder, TaskSession, TaskWaitingEntry } from "../model";
 import type { TaskCommandsContext } from "./context";
-import { isTempId, type Shared, STILL_SAVING, sayOffline } from "./shared";
+import { isTempId, sayOffline, type Shared, STILL_SAVING } from "./shared";
 
 export function createActivityOps(ctx: TaskCommandsContext, shared: Shared) {
   const { store, runtime, workspaceId, userId, data, env, bumpActivity } = ctx;

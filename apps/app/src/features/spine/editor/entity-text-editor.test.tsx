@@ -15,6 +15,7 @@ import {
   KEY_ENTER_COMMAND,
   type LexicalEditor,
 } from "lexical";
+
 import {
   EntityTextEditor,
   type EntityTextEditorApi,

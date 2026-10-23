@@ -6,10 +6,12 @@
  */
 
 import type { ReactNode } from "react";
+
 import { Button } from "@/components/ui/button";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
 import { selectSubpages } from "../subpages";

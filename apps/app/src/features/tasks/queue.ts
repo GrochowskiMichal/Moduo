@@ -6,6 +6,7 @@
 // deleted; restoring it never puts it back.
 
 import { isOpenTask } from "@contracts/vocabularies";
+
 import { betweenPositions } from "./helpers";
 import type { Task, TaskQueueEntry } from "./model";
 

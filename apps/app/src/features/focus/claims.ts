@@ -9,6 +9,7 @@
 // ids) and label it with `onThisLabel` in the panel header and on rows.
 
 import { useEffect, useSyncExternalStore } from "react";
+
 import type { FocusClaim } from "./run-model";
 
 /** Refresh claims this often while the window is visible. */

@@ -5,6 +5,7 @@
 // browser" (#33) and Settings reads "Not allowed by the browser".
 
 import { useEffect, useState } from "react";
+
 import { type BrowserPushState, browserPushState } from "./browser-push";
 
 export const CHAT_ASK_KEY = "moduo:chat-notice-ask";

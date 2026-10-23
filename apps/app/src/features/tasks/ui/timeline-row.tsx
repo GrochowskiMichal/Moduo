@@ -34,8 +34,8 @@ import {
   SectionDiamond,
   SessionTicks,
   TaskPointMark,
-  TrackLines,
   timelineRowDomId,
+  TrackLines,
   useTimelineGeometry,
 } from "./timeline-marks";
 import { TimelineTaskCommand } from "./timeline-row-commands";

@@ -6,6 +6,7 @@ import { isOpenTask, type ProjectState } from "@contracts/vocabularies";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+
 import { dispatchOpenCapture } from "../../../../components/app/capture-shell";
 import { onCreateNew } from "../../../../components/app/create-events";
 import { useWorkspaceStore } from "../../../../lib/sync/react";
@@ -17,8 +18,8 @@ import { multiDropWrites } from "../../dnd/multi-drop";
 import {
   asRailDropTarget,
   projectMoveWrite,
-  type RailDropTarget,
   railDropAction,
+  type RailDropTarget,
 } from "../../dnd/rail-drop";
 import { type CaptureSeed, seededProject } from "../../filters";
 import { todayStr } from "../../helpers";
@@ -104,7 +105,6 @@ export function usePlanActions(c: PlanScopeCtx) {
   const openTrashRef = useOpenTrashRef();
   const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
   const allSections = useTasksSelector((d) => d.sections);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the views write viewOrderRef as they draw; it's read, never a cue
   const bulkIds = useMemo(
     () =>
       multiSelect.multi
@@ -113,6 +113,7 @@ export function usePlanActions(c: PlanScopeCtx) {
             viewOrderRef.current.length > 0 ? viewOrderRef.current : scopeTasks.map((t) => t.id),
           )
         : EMPTY_IDS,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the views write viewOrderRef as they draw; it's read, never a cue
     [multiSelect.multi, multiSelect.ids, scopeTasks],
   );
   // The bottom bar's row, its keys and pickers while several are selected.

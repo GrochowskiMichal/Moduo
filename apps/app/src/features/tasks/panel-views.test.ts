@@ -10,9 +10,9 @@ import {
   askedProjectFor,
   IN_FLIGHT_PANEL_VIEW,
   NO_DATE_PANEL_VIEW,
-  type ProjectAsk,
   panelTaskOf,
   panelTitleOf,
+  type ProjectAsk,
 } from "./panel-views";
 
 const QUIET = {

@@ -1,6 +1,14 @@
 import { type Browser, expect, type Page, test } from "@playwright/test";
 
-import { rest, runTag, type Session, signIn, signInPage, stackKeys } from "./support/local-stack";
+import {
+  rest,
+  runTag,
+  type Session,
+  setLocalPassword,
+  signIn,
+  signInPage,
+  stackKeys,
+} from "./support/local-stack";
 
 /**
  * Tasks v3 TV-U17 · "role question and welcome once" (AC2–AC7 defaults,
@@ -46,12 +54,8 @@ async function ensureNewbie(): Promise<Session> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  // The stack blanks passwords on insert (prod signs in by code); set one after.
-  await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: NEWBIE.password }),
-  });
+  // Auth refuses password writes; set it in SQL (supabase/seed.sql does the same).
+  setLocalPassword(user.id, NEWBIE.password);
   return signIn(NEWBIE);
 }
 

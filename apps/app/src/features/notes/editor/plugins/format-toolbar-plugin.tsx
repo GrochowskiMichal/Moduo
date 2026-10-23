@@ -31,7 +31,9 @@ import {
 import { Bold, Code, Italic, Link2, MessageSquarePlus, Strikethrough } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+
 import { IconButton } from "@/components/ui/icon-button";
+
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
 import { OPEN_LINK_DIALOG_COMMAND } from "./link-dialog-plugin";
 

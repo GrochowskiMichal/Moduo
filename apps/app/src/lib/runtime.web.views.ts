@@ -4,6 +4,7 @@
 // runtime.web.ts); these are the ops it settles.
 
 import type { TaskViewScope } from "@contracts/vocabularies";
+
 import type { FilterCondition } from "../components/ui/filter-model";
 import type { TasksDisplay } from "../features/tasks/display";
 import { type TaskView, taskViewFromRow } from "../features/tasks/view-row";

@@ -78,10 +78,10 @@ import { planAccess } from "./access";
 import {
   CHAT_COPY_VERSION,
   type ChatDeviceCopy,
+  chatDeviceCopy,
   type ChatHeldConversation,
   type ChatMeta,
   type ChatOutboxEntry,
-  chatDeviceCopy,
   emptyMeta,
   ownerKey,
 } from "./device-copy";

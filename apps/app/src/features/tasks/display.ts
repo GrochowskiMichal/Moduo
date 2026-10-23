@@ -6,6 +6,7 @@
 // `TasksViewPrefs`), so one key remembers how a scope is set up.
 
 import { ChartGantt, Columns3, List } from "lucide-react";
+
 import { type DisplayControl, sanitizeDisplayValue } from "../../components/ui/display-menu";
 import type { FilterCondition } from "../../components/ui/filter-model";
 import { viewPrefsKey } from "../../lib/view-prefs";
@@ -17,8 +18,8 @@ import {
   groupsByBucket,
   isProjectScope,
   LEVEL_ORDER,
-  STATUS_ORDER,
   spansProjects,
+  STATUS_ORDER,
 } from "./helpers";
 import type { Task } from "./model";
 import {
@@ -33,9 +34,9 @@ import { statusKeyOf } from "./statuses";
 import type { TimelineDeps } from "./timeline-deps";
 import {
   type TimelineGroup,
+  timelineGroupsFor,
   type TimelineScope,
   type TimelineSubtasks,
-  timelineGroupsFor,
 } from "./timeline-rows";
 import { isTimelineZoom, type TimelineZoom } from "./timeline-scale";
 

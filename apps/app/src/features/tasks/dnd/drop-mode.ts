@@ -19,7 +19,7 @@
 import { betweenPositions, canNestUnder, type GroupBy } from "../helpers";
 import type { PriorityLevel, ProjectStatus, Task, TaskStatus } from "../model";
 import type { DragOrder } from "../order";
-import { type StatusKey, statusGroupOf } from "../statuses";
+import { statusGroupOf, type StatusKey } from "../statuses";
 
 /** How far into a row (px) the pointer must be to nest instead of reorder.
  *  The nested-row indent (`ml-10`), so the zone edge is where a subtask's

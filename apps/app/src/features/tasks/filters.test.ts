@@ -4,6 +4,7 @@
 
 import { TASK_VIEW_ID_DIMENSIONS, TASK_VIEW_WORD_DIMENSIONS } from "@contracts/vocabularies";
 import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+
 import type { FilterCondition } from "../../components/ui/filter-model";
 import { applyTimeRegion, EMPTY_TIME_REGION } from "../../lib/time-region";
 import {

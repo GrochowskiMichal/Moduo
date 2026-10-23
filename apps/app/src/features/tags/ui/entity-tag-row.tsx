@@ -9,6 +9,7 @@ import { TagPicker } from "@/components/tag-picker";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { useEntityTags } from "../hooks/use-entity-tags";
 
 export function EntityTagRow({

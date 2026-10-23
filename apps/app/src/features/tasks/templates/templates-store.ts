@@ -6,6 +6,7 @@
 // (TV-D11a); a body is read only when a template is opened.
 
 import { useEffect, useSyncExternalStore } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Template } from "./model";
 
@@ -134,7 +135,7 @@ export function useTemplates(
     () => (workspaceId ? (entries.get(workspaceId) ?? EMPTY) : EMPTY),
     () => EMPTY,
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey asks for a fresh read
+  // RefreshKey asks for a fresh read.
   useEffect(() => {
     void refreshTemplates(runtime, workspaceId);
   }, [runtime, workspaceId, refreshKey]);

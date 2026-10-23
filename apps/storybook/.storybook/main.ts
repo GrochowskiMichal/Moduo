@@ -1,5 +1,6 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import type { StorybookConfig } from "@storybook/react-vite";
 
 // The stories and static files live in the app package (apps/app).
@@ -36,7 +37,7 @@ const config: StorybookConfig = {
         ...Object.entries(aliasMap).map(([find, replacement]) => ({ find, replacement })),
       ];
     } else {
-      cfg.resolve.alias = { ...(existingAlias ?? {}), ...aliasMap };
+      cfg.resolve.alias = { ...existingAlias, ...aliasMap };
     }
     return cfg;
   },

@@ -58,7 +58,9 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 }));
 
 import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
+
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
+
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { AttachmentMark } from "../../../lib/sync/types";
 import { makeTask } from "../helpers";

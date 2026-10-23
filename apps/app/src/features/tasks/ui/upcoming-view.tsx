@@ -9,6 +9,7 @@ import { isOpenTask } from "@contracts/vocabularies";
 import { ChevronDown } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { Button } from "../../../components/ui/button";
 import {
   DropdownMenu,
@@ -51,8 +52,7 @@ import { RepeatMoveDialog } from "./repeat-move-dialog";
 
 /** What's waiting on the person: the repeat question, or a day to pick. */
 type Pending =
-  | { kind: "repeat"; taskIds: string[]; day: string }
-  | { kind: "pick"; taskIds: string[] };
+  { kind: "repeat"; taskIds: string[]; day: string } | { kind: "pick"; taskIds: string[] };
 
 const NONE: GroupAddState = { kind: "none" };
 

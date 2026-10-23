@@ -129,8 +129,7 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
 function graphRecurrenceToRrule(recurrence: unknown): string | null {
   if (!recurrence || typeof recurrence !== "object") return null;
   const pattern = (recurrence as Record<string, unknown>).pattern as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (!pattern) return null;
   const type = str(pattern.type)?.toLowerCase();
   const interval = typeof pattern.interval === "number" ? pattern.interval : 1;

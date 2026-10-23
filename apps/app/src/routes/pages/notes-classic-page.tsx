@@ -10,6 +10,7 @@ import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { CheckSquare, CloudOff, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { onCreateNew } from "../../components/app/create-events";
 import { FeaturePanelsShell } from "../../components/app/feature-panels-shell";
 import { type PanelItem, RightPanel } from "../../components/app/right-panel";
@@ -50,8 +51,8 @@ import { SharingQuestionDialog } from "../../features/notes/shell/sharing-questi
 import { displayTitle } from "../../features/notes/title";
 import {
   buildNoteSections,
-  type DropZone,
   descendantIds,
+  type DropZone,
   resolveDrop,
 } from "../../features/notes/tree";
 import { NoteCommentsPanel } from "../../features/notes/ui/note-comments-panel";

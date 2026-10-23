@@ -5,6 +5,7 @@
 // workspace's. A file that can't be read is left out.
 
 import { CUSTOM_EMOJI_EXT } from "@contracts/vocabularies";
+
 import type { ChatExportFile } from "../export";
 import { type CustomEmoji, liveEmoji } from "./model";
 

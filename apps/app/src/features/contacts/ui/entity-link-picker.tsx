@@ -7,6 +7,7 @@
 import { type ReactNode, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { useMentionSearch } from "../../spine/hooks/use-mention-search";
 import type { MentionCandidate } from "../../spine/mention";
 import { MentionPicker } from "../../spine/ui/mention-picker";

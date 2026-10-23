@@ -4,6 +4,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import { ENTITY_OPEN_EVENT } from "@/lib/entity-open";
+
 import { openModuleRoute } from "./widget-nav";
 
 function opened(run: () => void): unknown[] {

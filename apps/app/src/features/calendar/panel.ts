@@ -5,6 +5,7 @@
 // (visibility beats purity — the row is how you find what's already placed).
 
 import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
+
 import type { Task } from "../tasks/model";
 import { addDays, localDayKey } from "./lens";
 

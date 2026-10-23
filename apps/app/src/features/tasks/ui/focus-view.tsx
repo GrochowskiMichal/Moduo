@@ -73,8 +73,8 @@ import {
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { byIdOf } from "../derived";
 import {
-  ARRANGE_MIN_SAVED,
   alongTheWayOffer,
+  ARRANGE_MIN_SAVED,
   arrangeByProject,
   arrangedQueue,
   doneLineText,
@@ -580,7 +580,7 @@ export function FocusView({
   // An answered offer (Not now, the break) takes its focused button with it,
   // so the screen takes focus back and the keys keep working (TV-F8).
   const offerShown = between.length > 0;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: Now, the session and the offer are the cues
+  // Now, the session and the offer are the cues.
   useEffect(() => {
     if (typeof document === "undefined" || document.activeElement !== document.body) return;
     const root = rootRef.current;

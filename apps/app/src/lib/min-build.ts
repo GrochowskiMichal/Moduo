@@ -151,6 +151,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "user_time_region",
   // CV-18: the workspaces whose notifications you paused (the switcher).
   "workspace_notice_pauses",
+  // MCPO-4: the consent screen reads an app's sign-in.
+  "workspace_api_keys_oauth_request",
 ]);
 
 /**

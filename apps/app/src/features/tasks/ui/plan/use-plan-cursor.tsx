@@ -2,6 +2,7 @@
 // deep link's wiring (`useTaskDeepLink`) with its reveal.
 
 import { useEffect, useMemo, useState } from "react";
+
 import { taskLinkId } from "../../../../lib/task-handle";
 import { looksLikeHandle } from "../../../spine/grammar";
 import { handleLinkStep, resolveTasksDeepLink } from "../../search";
@@ -81,7 +82,6 @@ export function usePlanCursor(c: PlanActionsCtx) {
   // on this entirely. A subtask whose *parent* is in scope also counts as
   // in-scope — it can be selected from under the parent (expanded list rows,
   // the detail panel's subtask list) even from another bucket.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the List writes viewOrderRef in its layout effect; read, never a cue
   useEffect(() => {
     if (loading || inboundPending) return;
     // Focus shows more than its line-up (the Now task's subtasks, today's
@@ -111,6 +111,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
       firstInScope: scopeTasks.find((t) => !isHiddenByDisplay(t))?.id ?? null,
     });
     if (pick !== undefined) setSelectedTaskId(pick);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the List writes viewOrderRef in its layout effect; read, never a cue
   }, [
     loading,
     inboundPending,
@@ -201,7 +202,6 @@ export function usePlanCursor(c: PlanActionsCtx) {
   // auto-expand settle over a few frames, so poll briefly instead of assuming
   // one. Instant scroll: a programmatic reveal, not an animation. `inline`
   // reveals horizontally too (the Timeline canvas scrolls sideways).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new link (`urlTaskId`) is the cue; the target rides a ref
   useEffect(() => {
     const id = scrollTargetRef.current;
     if (!id || loading) return;
@@ -216,6 +216,7 @@ export function usePlanCursor(c: PlanActionsCtx) {
       if (++tries < 24) requestAnimationFrame(reveal);
     };
     requestAnimationFrame(reveal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new link (`urlTaskId`) is the cue; the target rides a ref
   }, [loading, urlTaskId]);
   return {
     ...c,

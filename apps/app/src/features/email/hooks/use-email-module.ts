@@ -5,6 +5,7 @@
 // local restore — no fragile cross-expunge reversal).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import type { Truncation } from "../../../lib/paged-select";
 import type { EmailAccountRef, EmailThreadRef, ModuoRuntime } from "../../../lib/runtime.types";
 import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
@@ -172,7 +173,6 @@ export function useEmailModule({ runtime, workspaceId, isDesktop }: Params) {
       }
       pendingSnoozes.clear();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime]);
 
   // Threads whose messages are snoozed away from the inbox — the server-side move

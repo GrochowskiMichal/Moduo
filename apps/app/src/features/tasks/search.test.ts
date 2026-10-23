@@ -3,6 +3,7 @@
 // scope only; unknown → none, so the page degrades without a crash).
 
 import { describe, expect, it } from "@rstest/core";
+
 import { taskLinkId } from "../../lib/task-handle";
 import {
   descriptionWords,

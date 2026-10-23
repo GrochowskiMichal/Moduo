@@ -2,7 +2,9 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
+
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
 import { useChatTab } from "../../features/chat/shell/chat-tab";
 import {
@@ -38,8 +40,8 @@ import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
 import {
   formatShortcut,
-  SHORTCUTS,
   type ShortcutId,
+  SHORTCUTS,
   useGlobalShortcuts,
   useShortcut,
 } from "../../lib/shortcuts";

@@ -2,6 +2,7 @@
 // type→group folding, empty-group dropping, and that un-navigable kinds vanish.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityRecord } from "./entity-links";
 import { groupPaletteResults, PALETTE_ENTITY_TYPES, withHandleHit } from "./palette-search";
 

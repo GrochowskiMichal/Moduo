@@ -30,8 +30,7 @@ import { AssigneeAvatar } from "./assignee-avatar";
 
 /** Who or what the task now waits on. */
 export type HandOffTarget =
-  | { kind: "person"; ref: string; name: string }
-  | { kind: "text"; label: string };
+  { kind: "person"; ref: string; name: string } | { kind: "text"; label: string };
 
 export type HandOff = {
   target: HandOffTarget;

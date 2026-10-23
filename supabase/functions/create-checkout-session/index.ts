@@ -39,6 +39,7 @@ import {
   TRIAL_DAYS_NO_CARD,
   TRIAL_DAYS_WITH_CARD,
 } from "../_shared/billing.ts";
+import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = makeStripe();
@@ -48,6 +49,9 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
 
   try {
+    if (isAppToken(req.headers.get("Authorization") ?? new URL(req.url).searchParams.get("access_token"))) {
+      return json(APP_TOKEN_REFUSAL, { status: 403 });
+    }
     const keyErr = stripeSecretKeyConfigError();
     if (keyErr) return json({ error: keyErr }, { status: 500 });
 

@@ -3,6 +3,7 @@
 // the shapes.)
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityRef } from "../../lib/entity-links";
 import { buildFollowupTask, followupLinkArgs, followupTitle } from "./followup";
 

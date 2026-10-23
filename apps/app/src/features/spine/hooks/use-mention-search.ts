@@ -7,7 +7,9 @@
 // any surface — callers pass the runtime + workspace + trigger.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { matchDateCommands } from "../grammar";
 import {
   buildMentionCandidates,
@@ -148,14 +150,12 @@ export function useMentionSearch({
                     limit: 8,
                   })
                   .then((records) =>
-                    records.map(
-                      (r): SearchedEntity => ({
-                        type: r.type,
-                        id: r.id,
-                        label: r.label,
-                        icon: r.icon,
-                      }),
-                    ),
+                    records.map((r): SearchedEntity => ({
+                      type: r.type,
+                      id: r.id,
+                      label: r.label,
+                      icon: r.icon,
+                    })),
                   )
               : Promise.resolve<SearchedEntity[]>([]),
             trigger === "mention" && includePeople
@@ -187,7 +187,6 @@ export function useMentionSearch({
       })();
     }, debounceMs);
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
     runtime,

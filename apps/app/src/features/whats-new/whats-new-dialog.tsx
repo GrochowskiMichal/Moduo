@@ -18,9 +18,9 @@ import { CHANGELOG_URL } from "../settings/about";
 import {
   formatReleaseDate,
   groupItems,
-  RELEASES,
   type Release,
   type ReleaseGroup,
+  RELEASES,
 } from "./releases";
 import { closeWhatsNew, useWhatsNewState } from "./whats-new-store";
 

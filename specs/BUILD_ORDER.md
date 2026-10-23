@@ -552,6 +552,17 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **TS-7 — Cleanup (store plumbing, selectors), decisions, gotchas, data-layers/architecture docs** · deps: TS-3c, TS-4, TS-5, TS-6 (waits with the paused blocks)
 - [ ] **TS-8 — Optional: SQLite persistence (OPFS web, plugin-sql desktop, offline-transactions) only after a second spike beats 514 ms warm open** · deps: TS-7
 
+## MCP sign-in — connect apps by URL and sign-in, connector on Supabase's MCP foundation · [`specs/mcp-oauth.md`](./mcp-oauth.md)
+
+> Planned 2026-10-22 (Mike; Maciej OK'd the `/oauth/consent` route). Supabase OAuth 2.1 signs the person in, the consent screen makes a scoped key ("connection"), the connector exchanges the app's token for that key. Lanes: **lockout** (1) and **SDK** (2) in parallel, then 3 → 4 → 5; 6 any time after 2. Nothing OAuth is switched on in prod before MCPO-1 is applied there.
+
+- [x] **MCPO-1 — App tokens can't reach anything but the connector (pre-request guard, Storage/Realtime/published-table policies, `_shared` app-token check, no passwords through Supabase Auth, lockout tests)** · 2026-10-23 · `t/mike/mcpo-1-token-lockout` · [#574](https://github.com/GrochowskiMichal/Moduo/pull/574) · real OAuth flow probed locally; Settings' change-password removed (Mike); MFA must stay off
+- [x] **MCPO-2 — Connector on the official MCP SDK (stateless, `@supabase/server` plumbing, pasted keys only, parity snapshot)** · 2026-10-23 · `t/mike/mcpo-2-sdk` · [#575](https://github.com/GrochowskiMichal/Moduo/pull/575) · no tool answer changes; protocol up to 2025-11-25; deploy `moduo-mcp` only
+- [x] **MCPO-3 — Connections in the data and the connector (key columns, `workspace_api_keys_connect_oauth`, bell notice, OAuth token → key, 401 + discovery)** · 2026-10-23 · `t/mike/mcpo-3-connections` · [#576](https://github.com/GrochowskiMichal/Moduo/pull/576) · connect takes the consent page's `authorization_id`; real OAuth flow probed against the connector (`scripts/mcp-oauth-probe.ts`); deploy migration then `moduo-mcp`
+- [x] **MCPO-4 — Consent screen `/oauth/consent` and connected apps in Settings (resume after sign-in, Disconnect + revokeGrant, connect-by-URL copy)** · 2026-10-23 · `t/mike/mcpo-4-consent` · [#578](https://github.com/GrochowskiMichal/Moduo/pull/578) · adds the read RPC `workspace_api_keys_oauth_request` (Auth answers a returning app with only a redirect); e2e runs a real flow against the side Auth; deploy migration `20261023180000` with MCPO-3's
+- [ ] **MCPO-5 — Real clients against staging and the prod switch-on checklist; connector doc refreshed** · deps: MCPO-4
+- [x] **MCPO-6 — Code-mode readiness (output schemas for the five main reads, annotations on every tool)** · deps: MCPO-2 · 2026-10-23 `t/mike/mcpo-6-codemode`
+
 ## Running sessions & parallelism
 
 **Each session = its own git worktree + a `t/<owner>/<kebab>` branch cut off the *latest* `maciej`** (never `develop`; `maciej` is hot → integrate with a merge commit, not a fast-forward — see [CONTRIBUTING.md](../CONTRIBUTING.md) + [docs/gotchas.md](../docs/gotchas.md)). In the session, run `/s2 next` (auto-picks the first ready block above) or name one (`/s2 CT-3`).

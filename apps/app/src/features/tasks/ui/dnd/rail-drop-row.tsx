@@ -1,7 +1,7 @@
 import { useDroppable } from "@dnd-kit/core";
 
 import { NavRow, type NavRowProps } from "../../../../components/ui/nav-row";
-import { type RailDropTarget, railDroppableId } from "../../dnd/rail-drop";
+import { railDroppableId, type RailDropTarget } from "../../dnd/rail-drop";
 import { asTaskDrag } from "./task-dnd";
 
 /** Whether a drop of `taskId` on this rail row would change anything. */

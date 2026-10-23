@@ -5,7 +5,6 @@ import { Input } from "../../../components/ui/input";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Switch } from "../../../components/ui/switch";
 import { useFocusPrefs } from "../../../lib/focus-prefs";
-
 import { PrefGroup } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
 

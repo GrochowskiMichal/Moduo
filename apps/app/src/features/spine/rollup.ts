@@ -7,6 +7,7 @@
 // file is unit-tested in rollup.test.ts (AC6).
 
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
+
 import { deletedLabel, referenceKind } from "./references/kinds";
 import { type HubSnippetMeta, projectSnippet } from "./snippet-projectors";
 

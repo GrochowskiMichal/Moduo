@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+
 import { useFileDropGuard } from "../../features/attachments/hooks/use-file-drop-guard";
 import { validateCalendarSearch } from "../../features/calendar/search";
 import { validateChatSearch } from "../../features/chat/search";
@@ -128,6 +129,24 @@ const joinRoute = createRoute({
   validateSearch: (search: Record<string, unknown>): { invite?: string } => {
     const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
     return invite ? { invite } : {};
+  },
+});
+
+// The consent screen an app's "Sign in with Moduo" lands on (MCPO-4,
+// specs/mcp-oauth.md). Outside the app gate like /join (Maciej OK'd the route,
+// 2026-10-22): Supabase Auth's OAuth server sends the browser here (its
+// authorization path in supabase/config.toml), signed in or not. Not in the
+// nav. `?authorization_id=` names the app's sign-in.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/consent",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/oauth-consent-page"), "OAuthConsentPage"),
+  ),
+  validateSearch: (search: Record<string, unknown>): { authorization_id?: string } => {
+    // Auth puts it into a request path as it is: letters, digits, - and _ only.
+    const id = typeof search.authorization_id === "string" ? search.authorization_id.trim() : "";
+    return /^[A-Za-z0-9_-]{1,128}$/.test(id) ? { authorization_id: id } : {};
   },
 });
 
@@ -256,6 +275,7 @@ export const routeTree = rootRoute.addChildren([
   bookCancelRoute,
   bookRoute,
   joinRoute,
+  oauthConsentRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,

@@ -1,6 +1,7 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { executeMention } from "./mention-actions";
 
 function fakeRuntime() {

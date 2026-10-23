@@ -4,6 +4,7 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { COMMAND_PRIORITY_CRITICAL, PASTE_COMMAND } from "lexical";
 import { useEffect, useRef } from "react";
+
 import { pastedFiles } from "@/features/attachments/files";
 
 export function FilePastePlugin({ onFiles }: { onFiles: (files: File[]) => void }) {

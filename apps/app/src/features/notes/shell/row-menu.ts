@@ -16,6 +16,7 @@ import {
   StarOff,
   Trash2,
 } from "lucide-react";
+
 import type { SidebarSection } from "./drop-intent";
 
 export type RowAction =
@@ -30,8 +31,7 @@ export type RowAction =
   | "trash";
 
 export type RowMenuItem =
-  | { action: RowAction; label: string; icon: LucideIcon; destructive?: boolean }
-  | "separator";
+  { action: RowAction; label: string; icon: LucideIcon; destructive?: boolean } | "separator";
 
 export function rowMenuItems(opts: {
   canEdit: boolean;

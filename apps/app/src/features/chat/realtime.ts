@@ -20,6 +20,7 @@
 // seam and takes the Supabase client as its socket.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { CHAT_MESSAGE_COLUMN_LIST } from "./columns";
 import { mapChannel, mapMember, mapMessage, memberLeft } from "./mappers";
 import type { ChatChannel, ChatMember, ChatMessage } from "./model";

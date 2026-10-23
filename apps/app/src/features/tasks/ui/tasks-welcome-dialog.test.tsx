@@ -30,8 +30,8 @@ import type { Bucket, Task } from "../model";
 import {
   type FakeRuntimeExtras,
   FakeTasksProvider,
-  type FakeTasksSeed,
   fakeTasksRuntime,
+  type FakeTasksSeed,
 } from "../testing/fake-tasks";
 import { requestTasksWelcome } from "../welcome-request";
 import { TasksWelcomeDialog } from "./tasks-welcome-dialog";

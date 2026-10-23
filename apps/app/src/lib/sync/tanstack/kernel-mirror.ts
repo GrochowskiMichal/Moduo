@@ -6,9 +6,10 @@
 // kernel's difference. Its snapshot reads the rows back from the collection.
 
 import { type Collection, createCollection } from "@tanstack/db";
+
 import type { SyncedCollection } from "../kernel/collection";
 import type { LandingRow } from "../kernel/landing";
-import { type SupabaseCollectionUtils, supabaseCollectionOptions } from "./supabase-collection";
+import { supabaseCollectionOptions, type SupabaseCollectionUtils } from "./supabase-collection";
 
 export type KernelMirror<R extends object> = {
   readonly collection: Collection<R, string, SupabaseCollectionUtils<R>>;

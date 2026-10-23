@@ -13,7 +13,7 @@ import {
 } from "../../../workspaces/workspace-context";
 import { makeTask } from "../../helpers";
 import type { Bucket, Task } from "../../model";
-import { FakeTasksProvider, type FakeTasksSeed, fakeTasksRuntime } from "../../testing/fake-tasks";
+import { FakeTasksProvider, fakeTasksRuntime, type FakeTasksSeed } from "../../testing/fake-tasks";
 import type { TasksPlanViewProps } from "./plan-base";
 import { useTasksPlanController } from "./use-tasks-plan-controller";
 

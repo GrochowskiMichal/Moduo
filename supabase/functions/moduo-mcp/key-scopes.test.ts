@@ -11,7 +11,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
-import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
@@ -32,6 +31,7 @@ import {
   toolRequirement,
   toolsForKey,
 } from "./registry.ts";
+import { callThroughSdk, listThroughSdk } from "./through-sdk.ts";
 import { assertLiveLinkInScope, assertReach, canReach, linksInScope } from "./share.ts";
 
 type Row = Record<string, unknown>;
@@ -146,17 +146,17 @@ const ctx = (scopes: Record<string, string>, db: ReturnType<typeof fakeDb>["db"]
   key: key(scopes),
   db: db as unknown as ToolContext["db"],
 });
-const names = (k: KeyContext) => toolsForKey(k).map((t) => t.name);
+/** The tools a client lists for this key, through the SDK server. */
+const names = async (k: KeyContext) => (await listThroughSdk(k)).map((t) => t.name);
+/** A registered tool whose handler is called as a client calls it: through the SDK server. */
 function tool(module: ConnectorModule, name: string): ToolDef {
   const found = module.tools.find((t) => t.name === name);
   if (!found) throw new Error(`${name} is not registered on ${module.module}`);
-  return found;
+  return { ...found, handler: (args, c) => callThroughSdk(name, args, c) };
 }
-/** A tool call as index.ts makes it: the arguments go through the parser first. */
+/** A tool call as a client makes it: the arguments go through the parser first. */
 function callTool(module: ConnectorModule, name: string, args: Row, c: ToolContext): Promise<any> {
-  const parsed = parseToolArgs(name, args);
-  if (!parsed.success) return Promise.reject(new Error(parsed.message));
-  return tool(module, name).handler(parsed.data, c) as Promise<any>;
+  return tool(module, name).handler(args, c) as Promise<any>;
 }
 
 describe("which tools a key lists and may call", () => {
@@ -174,35 +174,35 @@ describe("which tools a key lists and may call", () => {
     expect(toolsForKey(key({ tasks: "admin", notes: "write" }))).toEqual([]);
   });
 
-  it("gives an Edit-everywhere key every tool", () => {
+  it("gives an Edit-everywhere key every tool", async () => {
     const everything = Object.fromEntries(connectorModules.map((m) => [m.module, "edit"]));
-    expect(names(key(everything))).toEqual(connectorModules.flatMap((m) => m.tools.map((t) => t.name)));
+    expect(await names(key(everything))).toEqual(connectorModules.flatMap((m) => m.tools.map((t) => t.name)));
   });
 
-  it("keeps Links tools from a key without Links, and suggestions behind Links: Edit", () => {
+  it("keeps Links tools from a key without Links, and suggestions behind Links: Edit", async () => {
     const linkTools = linksConnectorModule.tools.map((t) => t.name);
-    const noLinks = names(key({ tasks: "edit", notes: "edit", contacts: "edit" }));
+    const noLinks = await names(key({ tasks: "edit", notes: "edit", contacts: "edit" }));
     for (const t of linkTools) expect(noLinks).not.toContain(t);
-    const view = names(key({ links: "view" }));
+    const view = await names(key({ links: "view" }));
     expect(view).toEqual(expect.arrayContaining(["links_search_entities", "links_list"]));
     expect(view).not.toContain("links_suggest");
     expect(view).not.toContain("links_create");
-    expect(names(key({ links: "edit" }))).toContain("links_suggest");
+    expect(await names(key({ links: "edit" }))).toContain("links_suggest");
   });
 
-  it("needs Tasks: Edit as well for the four task-block tools", () => {
+  it("needs Tasks: Edit as well for the four task-block tools", async () => {
     const blockTools = MCP_TOOL_NEEDS.filter((n) => n.needs === "tasks").map((n) => n.tool);
     expect(blockTools).toHaveLength(4);
-    const calendarOnly = names(key({ calendar: "edit", tasks: "view" }));
+    const calendarOnly = await names(key({ calendar: "edit", tasks: "view" }));
     expect(calendarOnly).toContain("calendar_create_event");
     for (const t of blockTools) expect(calendarOnly).not.toContain(t);
-    const both = names(key({ calendar: "edit", tasks: "edit" }));
+    const both = await names(key({ calendar: "edit", tasks: "edit" }));
     for (const t of blockTools) expect(both).toContain(t);
   });
 
-  it("needs Links: Edit as well for notes_link", () => {
-    expect(names(key({ notes: "edit" }))).not.toContain("notes_link");
-    expect(names(key({ notes: "edit", links: "edit" }))).toContain("notes_link");
+  it("needs Links: Edit as well for notes_link", async () => {
+    expect(await names(key({ notes: "edit" }))).not.toContain("notes_link");
+    expect(await names(key({ notes: "edit", links: "edit" }))).toContain("notes_link");
   });
 
   it("refuses the same tools when called, and says everything they need", () => {
@@ -368,9 +368,9 @@ describe("comments_list (MOD-94): Links reads an item's comments, behind the ite
   });
   const seen = (answer: boolean) => ({ perm_can_see_entity: () => answer });
 
-  it("is a Links read: listed at Links: View, never for a key without Links", () => {
-    expect(names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
-    expect(names(key({ tasks: "edit" }))).not.toContain("comments_list");
+  it("is a Links read: listed at Links: View, never for a key without Links", async () => {
+    expect(await names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
+    expect(await names(key({ tasks: "edit" }))).not.toContain("comments_list");
     expect(tool(linksConnectorModule, "comments_list").access).toBe("view");
   });
 
@@ -662,7 +662,7 @@ describe("calendar_day", () => {
 
 describe("connector wiring", () => {
   it("refuses an expired key in authenticate()", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
     expect(source).toContain("apiKeyExpired(data.expires_at)");
   });
 });

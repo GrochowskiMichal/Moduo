@@ -1,13 +1,13 @@
 import { describe, expect, it } from "@rstest/core";
+
 import {
-  type ChainRights,
   chainGroups,
+  type ChainRights,
   chainsStamp,
   mayAttach,
   mayWrap,
   replyToChoices,
 } from "./chains";
-
 import type { ChatMessage } from "./model";
 import { message } from "./store/testing";
 

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
@@ -72,7 +73,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const engine = useMemo(() => {
     if (!ready) return null;
     return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh, userId!);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, runtime, workspaceId, userId, fireRefresh]);
 
   useEffect(() => {

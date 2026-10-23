@@ -79,12 +79,11 @@ export async function ensurePerfUser(s: Status): Promise<string> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  // The stack blanks passwords on insert (prod signs in by code); set one after.
-  await fetch(`${s.API_URL}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: PERF_USER.password }),
-  });
+  // Auth refuses password writes (20261023000000_auth_no_password_changes.sql); set it in SQL.
+  psql(
+    s.DB_URL,
+    `UPDATE auth.users SET encrypted_password = extensions.crypt('${PERF_USER.password}', extensions.gen_salt('bf')) WHERE id = '${user.id}';`,
+  );
   return user.id;
 }
 

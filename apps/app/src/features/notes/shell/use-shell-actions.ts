@@ -8,6 +8,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { noteIsPrivate } from "../../sharing/rules";
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";

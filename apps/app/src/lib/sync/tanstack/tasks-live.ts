@@ -30,6 +30,7 @@ import {
 } from "@tanstack/db";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useMemo } from "react";
+
 import type { WorkspaceStore } from "../store";
 import type { SyncRows } from "../types";
 

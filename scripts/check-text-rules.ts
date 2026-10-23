@@ -98,7 +98,7 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/notes/editor/plugins/slash-menu-plugin.tsx": ["command.group"],
   // Email: date groups ("Today"), page sections, snooze picker headings.
   "src/features/email/ui/email-thread-list.tsx": ["group.label"],
-  "src/features/email/ui/email-page-view.tsx": ["label"],
+  "src/features/email/ui/email-web-view.tsx": ["label"],
   "src/features/email/ui/email-snooze-picker.tsx": ["title"],
   "src/features/transactional-email/ui/email-preview.tsx": ["title"],
   // Shared: a form field's label; the command palette's kind of result; the
@@ -207,7 +207,7 @@ function lucideNames(content: string): Set<string> {
   const names = new Set<string>();
   const re = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']lucide-react["']/g;
   let m: RegExpExecArray | null;
-  // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+  // The regex-drain idiom: assign and test in the loop condition.
   while ((m = re.exec(content))) {
     for (const part of m[1].split(",")) {
       const alias = part.trim().split(/\s+as\s+/);
@@ -228,7 +228,7 @@ function owningTag(content: string, index: number): string | null {
   let last: { tag: string; at: number } | null = null;
   let m: RegExpExecArray | null;
   const before = content.slice(from, index);
-  // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+  // The regex-drain idiom: assign and test in the loop condition.
   while ((m = re.exec(before))) last = { tag: m[1], at: from + m.index };
   if (!last) return null;
   const open = openingTag(content, last.at);

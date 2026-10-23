@@ -5,10 +5,11 @@ import {
   noteUpdateRowSchema,
   requireRow,
 } from "@contracts/rows";
+
 import {
   type Note,
-  type NoteUpdateRow,
   noteRowToModel,
+  type NoteUpdateRow,
   noteUpdateRowToModel,
   trashWindowCutoffIso,
 } from "../features/notes/model";

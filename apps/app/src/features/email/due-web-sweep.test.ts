@@ -2,7 +2,9 @@
 // whose deadline passed; never snooze-due (excluded on web); never someone else's.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EmailThreadRef } from "@/lib/runtime.types";
+
 import { selectWebFollowUpDue } from "./due-web-sweep";
 
 const NOW = Date.parse("2026-07-14T12:00:00Z");

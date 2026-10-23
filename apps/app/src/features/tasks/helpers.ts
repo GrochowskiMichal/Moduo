@@ -3,6 +3,7 @@
 // grouping logic for the List view. No React, no IO — easy to unit-test.
 
 import { isClosedTask } from "@contracts/vocabularies";
+
 import { dayOffset, formatDay, formatStamp, formatWhen } from "../../lib/time-format";
 import type {
   Bucket,
@@ -15,9 +16,9 @@ import type {
 } from "./model";
 import {
   STATUS_KEY_LABELS,
-  type StatusKey,
   statusGroupKey,
   statusGroupOf,
+  type StatusKey,
   statusKeyOf,
 } from "./statuses";
 

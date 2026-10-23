@@ -16,6 +16,7 @@ import {
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { filesLabel } from "../../features/attachments/files";
 import { hasSearchableWords } from "../../features/chat/find/model";
 import { Snippet } from "../../features/chat/find/snippet";

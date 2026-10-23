@@ -17,6 +17,7 @@ import {
   listGoogleCalendars,
   listGoogleEvents,
 } from "../_shared/google-calendar.ts";
+import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
 import { googleAccessForRow, googleClients } from "../_shared/google-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -105,6 +106,7 @@ Deno.serve(async (req: Request) => {
 
   const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (!jwt) return json({ error: "unauthorized" }, 401);
+  if (isAppToken(jwt)) return json(APP_TOKEN_REFUSAL, 403);
   const db = createClient(SUPABASE_URL, SECRET, { auth: { persistSession: false } });
   const user = await db.auth.getUser(jwt);
   if (user.error || !user.data.user) return json({ error: "unauthorized" }, 401);

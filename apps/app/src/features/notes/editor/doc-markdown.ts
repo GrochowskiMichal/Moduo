@@ -21,6 +21,7 @@ import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } 
 import { $getRoot, type LexicalEditor } from "lexical";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import { NOTES_TRANSFORMERS } from "./markdown";
 import { NOTE_EDITOR_NODES } from "./schema/nodes";
 import { $isTaskLineNode } from "./schema/task-line-node";

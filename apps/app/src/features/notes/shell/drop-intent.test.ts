@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import { buildSidebarSections } from "../sections";

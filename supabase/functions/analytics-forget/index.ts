@@ -23,6 +23,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
+import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
 import { forgetAnalytics } from "../_shared/analytics-forget.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -41,6 +42,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   const authHeader = req.headers.get("Authorization");
+  if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
   if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
 
   try {

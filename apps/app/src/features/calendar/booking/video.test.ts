@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@rstest/core";
+
 import { pickVideo, videoOptions, videoSetting } from "./video";
 
 describe("booking video platform", () => {

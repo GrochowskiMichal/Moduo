@@ -1,4 +1,5 @@
 import { type PropsWithChildren, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { keepChatWorkspaces } from "../features/chat/store/store";
 import { keepNotesWorkspaces } from "../features/notes/sync/people";
 import { PROFILE_UPDATED_EVENT } from "../features/profile/profile-storage";

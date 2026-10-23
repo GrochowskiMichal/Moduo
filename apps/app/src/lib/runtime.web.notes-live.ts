@@ -18,6 +18,7 @@
  */
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
+
 import type { Db } from "./runtime.db";
 import type { NoteLiveChannel, NoteLiveJoin } from "./runtime.types";
 

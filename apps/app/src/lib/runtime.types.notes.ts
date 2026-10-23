@@ -1,11 +1,11 @@
 /** The runtime port's notes, notesV2 (implemented in runtime.web.notes.ts). */
 
 import type {
+  Note as NoteV2,
   NoteDocPull,
   NoteFavorite,
   NotesImportRow,
   NotesV2Bundle,
-  Note as NoteV2,
 } from "../features/notes/model";
 
 /** NR-7: what `notesV2.joinLive` reports to the open editor. Everything

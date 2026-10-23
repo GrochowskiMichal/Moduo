@@ -25,6 +25,7 @@
  */
 
 import * as Y from "yjs";
+
 import { NOTES_DOC_ROOT } from "../editor/doc-markdown";
 
 export class AgentOrigin {

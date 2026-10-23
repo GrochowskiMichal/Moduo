@@ -10,6 +10,7 @@
  */
 
 import { isClosedTask } from "@contracts/vocabularies";
+
 import type { EntityRef, LinkOrigin, RelationKind } from "../../../lib/entity-links";
 import type { NewTaskFields } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";

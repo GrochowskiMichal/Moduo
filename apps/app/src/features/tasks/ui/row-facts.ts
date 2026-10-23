@@ -14,6 +14,7 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { useLayoutEffect, useRef, useState } from "react";
+
 import { formatAge } from "../../../lib/time-format";
 import type { TaskCommands } from "../commands";
 import type { ProjectStatus, Tag, Task, TaskWaitingEntry } from "../model";

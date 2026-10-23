@@ -14,6 +14,7 @@
 
 import type { TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import {
   currentPreferences,
   type TasksOnboardingPrefs,

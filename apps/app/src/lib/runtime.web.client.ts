@@ -2,7 +2,9 @@
  * import on its own, without loading every module's data access. */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+
 import type { Database } from "@/types/supabase";
+
 import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import { readOnlyFetch } from "./min-build";
 import { publicConfig } from "./public-config";

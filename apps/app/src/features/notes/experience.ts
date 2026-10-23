@@ -9,6 +9,7 @@
  */
 
 import { useCallback } from "react";
+
 import {
   type NotesExperience,
   type Preferences,

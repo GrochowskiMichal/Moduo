@@ -41,6 +41,7 @@
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
 import { useSyncExternalStore } from "react";
+
 import { APP_VERSION, DESKTOP_CHANNEL, IS_DESKTOP } from "../features/settings/about";
 import { publicConfig } from "./public-config";
 

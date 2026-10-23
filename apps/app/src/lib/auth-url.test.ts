@@ -7,8 +7,8 @@ import {
   authCallbackKind,
   clearIgnoredAuthLink,
   ignoredAuthLink,
-  SUPABASE_AUTH_OPTIONS,
   scrubAuthCallbackFromUrl,
+  SUPABASE_AUTH_OPTIONS,
 } from "./auth-url";
 
 const SUPABASE_URL = "https://example.supabase.co";

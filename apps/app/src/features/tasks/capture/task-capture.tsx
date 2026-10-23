@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import {
   descriptionPlainText,
   descriptionReferences,
@@ -72,13 +73,13 @@ import { useAssignees } from "../assignees";
 import { positionsAfter } from "../helpers";
 import type { Bucket, Task } from "../model";
 import {
+  captureDates,
   type CaptureToken,
   type ClearedDateField,
-  captureDates,
   keepOnClear,
   resolveTitle,
-  SINGLE_VALUE_KINDS,
   segmentsFromLine,
+  SINGLE_VALUE_KINDS,
   type TitleSegment,
   tokenText,
 } from "../parse/capture-tokens";
@@ -103,9 +104,9 @@ import {
   saveDraft,
 } from "./capture-draft";
 import {
+  captureAttachments,
   type CaptureTemplateChoice,
   type CaptureTemplateProvider,
-  captureAttachments,
   captureTemplates,
 } from "./capture-hooks";
 import {
@@ -138,8 +139,7 @@ let lastTitleWords = "";
 
 /** The open Task capture's way to take a refused capture back ("Restore"). */
 let openBody:
-  | ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean)
-  | null = null;
+  ((draft: CaptureDraft, files: File[], slot: { json: string } | null) => boolean) | null = null;
 
 /**
  * A refused capture's files (AT-3): the draft slot on the device keeps words
@@ -1550,7 +1550,7 @@ export function TaskCaptureBody({
       : null;
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a drop zone for files (the AT-2/AT-3 seam); the keyboard path is paste
+    // A drop zone for files (the AT-2/AT-3 seam); the keyboard path is paste.
     <div
       className="flex flex-col"
       onDragOver={(e) => {
@@ -1767,7 +1767,7 @@ export function TaskCaptureBody({
           <div className="flex flex-wrap gap-1.5 py-1" data-slot="capture-files">
             {files.map((f, i) => (
               <Chip
-                // biome-ignore lint/suspicious/noArrayIndexKey: two files can share a name
+                // eslint-disable-next-line react/no-array-index-key -- two files can share a name
                 key={`${f.name}-${i}`}
                 icon={Paperclip}
                 onRemove={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
@@ -1972,7 +1972,7 @@ function PastePanel({
             ...(item.children.length ? [`${item.children.length} subtasks`] : []),
           ];
           return (
-            // biome-ignore lint/suspicious/noArrayIndexKey: pasted lines can repeat
+            // eslint-disable-next-line react/no-array-index-key -- pasted lines can repeat
             <li key={`${i}-${item.title}`} className="truncate">
               <Circle className="me-1.5 inline size-icon-xs" aria-hidden />
               <span className="text-foreground">{line.title}</span>
@@ -2045,7 +2045,7 @@ function Subtasks({
   return (
     <ul aria-label="Subtasks" className="flex flex-col">
       {lines.map((line, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: lines are edited in place by position
+        // eslint-disable-next-line react/no-array-index-key -- lines are edited in place by position
         <li key={i} className="flex items-center gap-2">
           <Circle className="size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
           <Input

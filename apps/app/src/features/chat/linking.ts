@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 
 import type { CaptureRequest } from "@/lib/capture-registry";
+
 import type { MentionCandidate } from "../spine/mention";
 import type { ChatChannel, ChatLink, ChatRuntime } from "./model";
 

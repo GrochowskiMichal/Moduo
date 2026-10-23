@@ -4,6 +4,7 @@
 // task-capture imports the real editor directly; it is already async.
 
 import { lazy, Suspense } from "react";
+
 import { cn } from "../../../lib/utils";
 import type { EntityTextEditorProps } from "./entity-text-editor";
 

@@ -1,13 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
+
 import type { ProjectStatus, Section, Task } from "../model";
 import { TaskBoardView } from "./task-board-view";
 import {
-  BUCKETS,
   bucketNameById,
+  BUCKETS,
   INBOX,
-  StoryTasks,
   storySeed,
+  StoryTasks,
   TASKS,
   TeamWorkspace,
 } from "./tasks-stories-fixtures";

@@ -11,6 +11,7 @@
 
 import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { useCallback, useMemo, useState } from "react";
+
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
@@ -123,6 +124,7 @@ function NotesShellBody() {
           ? createLinkedNote({ engine, materializeDraft: module.materializeDraft, title })
           : null,
       openComments: () => shell.showPanelVariant("comments"),
+      subpagesListedFor: liveNote?.id,
     }),
     [
       notes,
@@ -138,10 +140,10 @@ function NotesShellBody() {
 
   const canRender = Boolean(
     runtime &&
-      userId &&
-      workspaceId &&
-      !shell.configError &&
-      workspace.modulePermissions.notes !== "none",
+    userId &&
+    workspaceId &&
+    !shell.configError &&
+    workspace.modulePermissions.notes !== "none",
   );
   const people = useCommentPeople();
   const { viewers } = useNoteRealtime({

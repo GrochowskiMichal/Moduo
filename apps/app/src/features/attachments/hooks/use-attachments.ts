@@ -5,10 +5,12 @@
 import { ATTACHMENT_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
+
 import type { AttachmentRecord, ModuoRuntime, StorageStatus } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
 import { getUploadQueue } from "@/lib/uploads";
 import { targetKey, type UploadTarget, type UploadView } from "@/lib/uploads/queue";
+
 import { thumbnailPath } from "../files";
 import { clearSignedUrlCache, signPaths } from "../signed-urls";
 
@@ -20,7 +22,7 @@ export function useUploadQueueBoot(
 ): void {
   const api = runtime?.attachments ?? null;
   // Links and pool facts belong to whoever was signed in: drop them on a switch.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs on every account switch
+  // Runs on every account switch.
   useEffect(() => {
     clearSignedUrlCache();
     statusCache.clear();
@@ -176,7 +178,7 @@ export function useEntityAttachments({
   }, [runtime, workspaceId, entity.type, entity.id, signPreviews]);
 
   // Another entity: never show (or act on) the previous one's files meanwhile.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the entity changes
+  // Runs when the entity changes.
   useEffect(() => {
     setRecords((prev) => (prev.length > 0 ? [] : prev));
     setLoadState("loading");

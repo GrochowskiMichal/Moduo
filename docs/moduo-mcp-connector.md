@@ -15,10 +15,13 @@ This is a living spec. When a decision changes, update this file first, then cod
 - **One stateless edge function** —
   [`supabase/functions/moduo-mcp/`](../supabase/functions/moduo-mcp/) — speaks
   MCP Streamable HTTP (JSON-RPC over a single POST endpoint; notifications
-  acknowledged with 202; no SSE stream, no session state). Hand-rolled
-  protocol plumbing (~100 lines), no SDK dependency, matching the repo's other
-  edge functions. Deployed with `verify_jwt = false`: MCP clients present a
-  Moduo key, not a Supabase JWT.
+  acknowledged with 202; no SSE stream, no session state). Since MCPO-2 the
+  protocol is the official SDK (`@modelcontextprotocol/server`, protocol
+  versions up to 2025-11-25): `server.ts` builds one server per request
+  holding only the key's tools; `index.ts` mounts it with `@supabase/server`
+  (CORS, service-role clients). `sdk-parity.test.ts` holds every answer to
+  what the hand-written server said. Deployed with `verify_jwt = false`: MCP
+  clients present a Moduo key, not a Supabase JWT.
 - **Endpoint:** `https://<project>.supabase.co/functions/v1/moduo-mcp` —
   surfaced with a copy affordance in Settings → API keys
   (`runtime.workspace.getMcpEndpoint()`).
@@ -336,7 +339,7 @@ second module makes the duplication real.
 
 ## Deferred
 
-- OAuth flow for MCP clients that won't send static bearer keys.
+- OAuth flow for MCP clients that won't send static bearer keys: planned in [specs/mcp-oauth.md](../specs/mcp-oauth.md) (MCPO-1…6).
 - `agent` actor type (in-app agents, distinct from API keys) — CHECK-reserved
   since Session 8.
 - Workspace-level activity feed UI (the connector already exposes

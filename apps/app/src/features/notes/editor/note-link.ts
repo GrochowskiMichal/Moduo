@@ -7,6 +7,7 @@
  */
 
 import { $createTextNode, $getNodeByKey, $isTextNode, type NodeKey } from "lexical";
+
 import { $createEntityRefNode } from "../../spine/editor/entity-ref-schema";
 import type { MentionCandidate } from "../../spine/mention";
 import type { Note } from "../model";
@@ -26,8 +27,7 @@ export function noteLinkQueryAt(textBefore: string): { start: number; query: str
 }
 
 export type NoteLinkRow =
-  | { kind: "note"; id: string; title: string }
-  | { kind: "create"; title: string };
+  { kind: "note"; id: string; title: string } | { kind: "create"; title: string };
 
 /**
  * The picker's rows. Live notes only (not trashed, not archived, never the

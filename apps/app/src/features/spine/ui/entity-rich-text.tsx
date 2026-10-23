@@ -15,6 +15,7 @@
 // Relative imports only (no `@/` value imports — this file is test-reachable).
 
 import { type ReactNode, useMemo } from "react";
+
 import { cn } from "../../../lib/utils";
 import { looksLikeRichHtml } from "../editor/entity-rich-html";
 import { isReferenceDisplay } from "../references/types";

@@ -56,6 +56,7 @@ import { WorkspaceContext } from "@/features/workspaces/workspace-context";
 import { CAPTURE_TYPES } from "@/lib/capture-registry";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { publicConfig } from "../../../lib/public-config";
 import { ComposerFileChips } from "../files/composer-chips";
 import type { ComposerFilesApi } from "../files/composer-files";
@@ -508,9 +509,12 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
 
   const atCandidates = useCallback(
     (query: string, found: MentionCandidate[]): MentionCandidate[] => [
-      ...peopleFor(mentionable, query, selfId).map(
-        (p): MentionCandidate => ({ kind: "person", memberId: p.id, label: p.name, icon: null }),
-      ),
+      ...peopleFor(mentionable, query, selfId).map((p): MentionCandidate => ({
+        kind: "person",
+        memberId: p.id,
+        label: p.name,
+        icon: null,
+      })),
       ...(offersChannel(query)
         ? [
             {
@@ -557,16 +561,14 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         : []),
       ...createCommandsFor(query)
         .filter((c) => canCreate(c.id))
-        .map(
-          (c): MentionCandidate => ({
-            kind: "action",
-            id: `create:${c.id}`,
-            label: c.title
-              ? `${CREATE_COMMANDS.find((x) => x.id === c.id)?.label ?? c.id} “${c.title}”`
-              : `/${c.id}`,
-            hint: "Create, linked",
-          }),
-        ),
+        .map((c): MentionCandidate => ({
+          kind: "action",
+          id: `create:${c.id}`,
+          label: c.title
+            ? `${CREATE_COMMANDS.find((x) => x.id === c.id)?.label ?? c.id} “${c.title}”`
+            : `/${c.id}`,
+          hint: "Create, linked",
+        })),
       ...found,
     ],
     [canCreate, onRemind],

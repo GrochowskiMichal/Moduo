@@ -9,6 +9,7 @@
 
 import { CloudOff, FileImage, Plus, RotateCw, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { AttachmentRecord } from "@/lib/runtime.types";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
 import { cn } from "@/lib/utils";
+
 import { fileIconFor, thumbnailPath } from "../files";
 
 export type AttachmentStripProps = {

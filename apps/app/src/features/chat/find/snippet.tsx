@@ -2,6 +2,7 @@
 // words marked. Drawn as text nodes only; the marks never pass through HTML.
 
 import { cn } from "@/lib/utils";
+
 import { splitSnippet } from "./model";
 
 export function Snippet({ text, className }: { text: string; className?: string }) {
@@ -11,14 +12,14 @@ export function Snippet({ text, className }: { text: string; className?: string 
       {parts.map((p, i) =>
         p.hit ? (
           <mark
-            // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
+            // eslint-disable-next-line react/no-array-index-key -- parts never reorder
             key={i}
             className="rounded-sm bg-state-selected font-medium text-foreground"
           >
             {p.text}
           </mark>
         ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: parts never reorder
+          // eslint-disable-next-line react/no-array-index-key -- parts never reorder
           <span key={i}>{p.text}</span>
         ),
       )}

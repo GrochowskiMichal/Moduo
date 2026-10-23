@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+
 import { ensureFontLoaded } from "./picker-fonts";
 import { useDomainSync } from "./prefs-sync";
 
@@ -122,7 +123,6 @@ function sanitizeSynced(raw: Record<string, unknown>): Partial<Appearance> {
   for (const key of SYNCED_KEYS) {
     const value = raw[key];
     if (typeof value === "string" && APPEARANCE_OPTIONS[key].includes(value)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (out as any)[key] = value;
     }
   }

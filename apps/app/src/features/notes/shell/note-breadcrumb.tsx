@@ -6,7 +6,9 @@
 
 import { ChevronRight } from "lucide-react";
 import { Fragment } from "react";
+
 import { cn } from "@/lib/utils";
+
 import type { Crumb, CrumbSection } from "./breadcrumb";
 
 export function NoteBreadcrumb({

@@ -1,7 +1,9 @@
 import { GUEST_REMINDER_MINUTES, type GuestReminderMinute } from "@contracts/vocabularies";
 import { Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+
 import { SELECTED_OPTION } from "@/components/ui/selection";
+
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
@@ -25,7 +27,7 @@ import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
 import { type GuestQuestion, newQuestionId, TASKS_BUSY_ID } from "../booking/model";
-import { WEEKDAYS, type Weekday, type WeeklyHours } from "../booking/slots";
+import { type Weekday, WEEKDAYS, type WeeklyHours } from "../booking/slots";
 import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
 
@@ -201,7 +203,7 @@ export function BookingLinkDialog({
 }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const draftId = draft?.id ?? null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset when another link opens.
+  // Reset when another link opens.
   useEffect(() => setConfirmDelete(false), [draftId]);
   const needsGoogle =
     draft != null &&

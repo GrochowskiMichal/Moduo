@@ -9,10 +9,11 @@ import {
   legacyTaskStatus,
   normalizeTaskStatusCategory,
   TASK_STATUS_CATEGORIES,
+  taskCategoryOf,
   type TaskStatus,
   type TaskStatusCategory,
-  taskCategoryOf,
 } from "@contracts/vocabularies";
+
 import type { Bucket, ProjectStatus, Task } from "./model";
 
 /**

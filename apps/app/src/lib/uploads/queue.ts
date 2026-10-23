@@ -13,6 +13,7 @@
 // after sign-in (the boot hook in use-upload-queue.ts).
 
 import type { AttachmentPreviewMime } from "@contracts/vocabularies";
+
 import type {
   AttachmentBeginInput,
   AttachmentRecord,

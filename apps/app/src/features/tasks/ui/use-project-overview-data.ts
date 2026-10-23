@@ -5,6 +5,7 @@
 // refetches on every render.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { getRuntime } from "../../../lib/runtime";
 import type { AttachmentRecord } from "../../../lib/runtime.types";
 
@@ -21,7 +22,7 @@ export function useProjectTime(input: {
 }): number | null {
   const { workspaceId, projectId, from, to, zone, stamp } = input;
   const [seconds, setSeconds] = useState<number | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `stamp` is the re-read cue
+  // `stamp` is the re-read cue.
   useEffect(() => {
     const runtime = getRuntime();
     if (!runtime) return;
@@ -43,7 +44,7 @@ export function useProjectTime(input: {
     };
   }, [workspaceId, projectId, from, to, zone, stamp]);
   // A new project starts blank, never with the last one's hours.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset per project
+  // Reset per project.
   useEffect(() => setSeconds(null), [projectId]);
   return seconds;
 }
@@ -63,7 +64,7 @@ const NO_FILES: ProjectFiles = { files: [], partial: false, loaded: false };
 export function useProjectFiles(workspaceId: string, taskIds: readonly string[]): ProjectFiles {
   const key = useMemo(() => [...taskIds].sort().join(","), [taskIds]);
   const [all, setAll] = useState<{ list: AttachmentRecord[]; partial: boolean } | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the re-read cue
+  // `key` is the re-read cue.
   useEffect(() => {
     const runtime = getRuntime();
     if (!runtime?.attachments) return;
@@ -163,7 +164,6 @@ function useEditable(
   }));
   const asked = useRef({ ws: workspaceId, ids: new Set<string>() });
   const key = projectIds.join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` is the list's content
   useEffect(() => {
     if (!enabled) return;
     if (asked.current.ws !== workspaceId) asked.current = { ws: workspaceId, ids: new Set() };
@@ -189,6 +189,7 @@ function useEditable(
           () => settle(id, true),
         );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` is the list's content
   }, [kind, workspaceId, key, enabled]);
   const known = answers.ws === workspaceId ? answers.ok : null;
   return useCallback((id: string) => known?.get(id) ?? null, [known]);

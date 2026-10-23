@@ -41,7 +41,7 @@ The grants migration revoked `anon` **and** `authenticated` on each module's int
 ## Migrations / data
 
 - [ ] **Do:** Confirm `20260729140000_ops2_grants_hardening` is applied — `select * from supabase_migrations.schema_migrations where name = 'ops2_grants_hardening'`. → **Expect:** one row. _(cloud)_
-- [ ] **Do:** Re-assert the fix — `select has_function_privilege('anon','public.accept_workspace_invite(uuid)','EXECUTE')`. → **Expect:** `false`. _(cloud)_
+- [ ] **Do:** Re-assert the fix — `select to_regprocedure('public.accept_workspace_invite(uuid)')`. → **Expect:** `NULL` once `20261023220000_drop_legacy_accept_workspace_invite.sql` is on prod (before that, `has_function_privilege('anon', …)` is `false`). _(cloud)_
 - [ ] **Do:** `ls supabase/migrations | cut -d_ -f1 | sort | uniq -d` → **Expect:** no output (OPS-1's guarantee still holds with the new file). _(terminal)_
 
 ## Known gaps / not-yet-testable
@@ -49,5 +49,5 @@ The grants migration revoked `anon` **and** `authenticated` on each module's int
 - **The repo still cannot bootstrap a database.** 73 applied migration versions vs 42 files; 22 of prod's 44 tables are created by no migration. `supabase db reset` fails outright — untestable by design until a baseline migration is captured. **Needs your call** ([inventory §4](../reviews/ops-2-schema-reconciliation.md)).
 - **The reconciliation does not check grants, indexes, function signatures, base-table columns or policy definitions** — see [§1.1](../reviews/ops-2-schema-reconciliation.md). The grants hole this block found is exactly the class a re-run will *not* catch; those were audited with standalone queries kept in the inventory.
 - **Three functions remain anon-callable on purpose** — `tasks_module_can_access_workspace`, `profile_plan_tier_text`, `workspaces_owned_count_for_user`. An anon probe read real values (`'pro'`, `1`) for a supplied user uuid: a minor unauthenticated info disclosure. Not revoked because 22 RLS policies for role `public` call them; scoping those `TO authenticated` first is its own block.
-- **`accept_workspace_invite` is revoked, not dropped.** Dropping it is the follow-up once a release confirms nothing regressed.
+- **`accept_workspace_invite` was revoked here and dropped later.** The drop is `20261023220000_drop_legacy_accept_workspace_invite.sql` (added 2026-10-23); prod loses the function when `/ship` applies it.
 - **12 dead-schema candidates** listed in the inventory §5 are untouched — dropping prod tables needs its own block. `founders_interest` was on that list and is **live**; grep before dropping anything.

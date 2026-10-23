@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from "react";
+
 import { ActivityTrail } from "@/features/contacts/ui/activity-trail";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { EntityHub } from "@/features/spine/ui/entity-hub";
@@ -14,6 +15,7 @@ import { EntityTagRow } from "@/features/tags/ui/entity-tag-row";
 import type { ActivityEntry } from "@/features/tasks/model";
 import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
 
 type Props = {

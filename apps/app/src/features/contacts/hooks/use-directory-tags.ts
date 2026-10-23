@@ -5,6 +5,7 @@
 // simply doesn't offer tags); reload() re-reads the server.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { TAG_LINKS_SCOPE, type Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { seedTags, useTagView } from "../../tags/store";
@@ -18,7 +19,7 @@ export function useDirectoryTags(runtime: ModuoRuntime | null, workspaceId: stri
   const reload = useCallback(() => setTick((t) => t + 1), []);
   const view = useTagView(workspaceId);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `tick` is the reload cue.
+  // `tick` is the reload cue.
   useEffect(() => {
     if (!runtime || !workspaceId) {
       setTruncated([]);

@@ -6,7 +6,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { deriveLinkKey, type EntityRef } from "../../../lib/entity-links";
 import {
   type LinkSuggestion,

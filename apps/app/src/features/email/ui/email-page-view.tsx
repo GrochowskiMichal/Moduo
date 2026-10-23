@@ -8,6 +8,7 @@
 import { AlertTriangle, Mail, PenSquare, RefreshCw } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "../../../components/app/create-events";
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
 import { RightPanel } from "../../../components/app/right-panel";
@@ -59,95 +60,23 @@ import { EmailContactPanel } from "./email-contact-panel";
 import { EmailDestinationList } from "./email-destination-list";
 import { EmailDetailPanel } from "./email-detail-panel";
 import { EmailMovePopover } from "./email-move-popover";
+import type { PanelVariantId } from "./email-page-types";
 import { EmailRail, type EmailScope, type EmailView } from "./email-rail";
 import { EmailReader } from "./email-reader";
 import { EmailSearchFooter, EmailSearchInput } from "./email-search-bar";
 import { EmailShortcutsDialog } from "./email-shortcuts-dialog";
 import { EmailSnoozePicker } from "./email-snooze-picker";
+import { EmailSyncBanner } from "./email-sync-banner";
 import { EmailThreadList } from "./email-thread-list";
+import { EmailWebView } from "./email-web-view";
+import { refArgsForThread, useEmailConvert } from "./use-email-convert";
+import { useEmailThreadDeepLink } from "./use-email-thread-deep-link";
+import { useEmailTriageActions } from "./use-email-triage-actions";
 
 /** Fires on the window so the nav can badge the Email tab (AC3). */
 export const EMAIL_UNREAD_EVENT = "moduo:email:unread";
 
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-/** Poll briefly for a deep-link target row/card (it renders after a scope reset
- * or the inbox load settles over a few frames), then scroll it into view.
- * `onDone(found)` fires once so the caller can degrade on a miss (DF-2). */
-function revealBySelector(selector: string, onDone?: (found: boolean) => void): void {
-  if (typeof document === "undefined") {
-    onDone?.(false);
-    return;
-  }
-  let tries = 0;
-  const step = () => {
-    const el = document.querySelector(selector);
-    if (el) {
-      el.scrollIntoView({ block: "center" });
-      onDone?.(true);
-      return;
-    }
-    if (++tries < 24) requestAnimationFrame(step);
-    else onDone?.(false);
-  };
-  requestAnimationFrame(step);
-}
-
-type PanelVariantId = "reader" | "contact" | "detail" | "task";
-
-/** One tissue email card for the web read-only view (AC15). Carries the ref +
- * thread ids so a `?thread=` deep link can scroll to it (DF-2). */
-function WebTissueCard({
-  thread,
-  meta,
-  highlighted = false,
-}: {
-  thread: EmailThreadRef;
-  meta?: string | null;
-  highlighted?: boolean;
-}) {
-  return (
-    <div
-      data-thread-ref-id={thread.id}
-      data-thread-key={thread.threadKey}
-      className={
-        "rounded-lg border bg-card p-3 transition-colors duration-(--motion-fade) ease-(--ease-out) " +
-        (highlighted ? "border-ring ring-2 ring-ring" : "border-border")
-      }
-    >
-      <div className="flex items-baseline gap-2">
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-          {thread.fromName?.trim() || thread.fromAddr || "Unknown sender"}
-        </span>
-        {thread.sentAt ? (
-          <time
-            className="shrink-0 text-2xs tabular-nums text-muted-foreground"
-            dateTime={thread.sentAt}
-          >
-            {formatEmailDate(thread.sentAt)}
-          </time>
-        ) : null}
-      </div>
-      <div className="truncate text-sm text-foreground">{thread.subject || "(No subject)"}</div>
-      {thread.snippet ? (
-        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{thread.snippet}</p>
-      ) : null}
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span className="text-2xs text-muted-foreground">{meta ?? ""}</span>
-        <span className="text-2xs text-muted-foreground/70">Continue on desktop</span>
-      </div>
-    </div>
-  );
-}
-
-function WebTissueSection({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <Eyebrow as="div">{label}</Eyebrow>
-      {children}
-    </div>
-  );
-}
 
 type EmailPageViewProps = {
   /** Inbound `?thread=` deep link (DF-2) — select + scroll the thread (desktop)
@@ -214,10 +143,6 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   const [connectOpen, setConnectOpen] = useState(false);
   const [reconnectTarget, setReconnectTarget] = useState<SavedAccount | null>(null);
   const [movePopoverOpen, setMovePopoverOpen] = useState(false);
-  const [snoozeOpen, setSnoozeOpen] = useState(false);
-  const [snoozeTarget, setSnoozeTarget] = useState<EmailThread | null>(null);
-  const [followUpOpen, setFollowUpOpen] = useState(false);
-  const [followUpTarget, setFollowUpTarget] = useState<EmailThread | null>(null);
   const [detailTaskId, setDetailTaskId] = useState<string | null>(null);
   const detailTask = useTaskById(detailTaskId);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -314,7 +239,6 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   // Partitioned per account (AC12): a broken mailbox names itself and never
   // stands in for the healthy ones, which keep syncing and listing.
   const syncHealth = useMemo(() => accountSyncHealth(scopedAccounts), [scopedAccounts]);
-  const brokenAccounts = syncHealth.broken;
 
   // Newest successful sync across the scope, for the refresh button's tooltip.
   const lastSyncLabel = useMemo(() => {
@@ -341,96 +265,17 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   }, [selectedThreadId, selectedThread]);
 
   // ── inbound thread deep link (DF-2) ────────────────────────────────────────
-  // A widget row / linked chip / notification opens a specific thread — via the
-  // URL (?thread=) or a one-shot in-app event. Both feed one pending target,
-  // applied once the inbox/tissue has loaded: desktop selects + scrolls the
-  // row; web scrolls its tissue card. The id may be a raw threadId or an
-  // `email_thread` ref id (what spine links + the widget carry).
-  const [pendingThreadTarget, setPendingThreadTarget] = useState<string | null>(null);
-  const [highlightedRefId, setHighlightedRefId] = useState<string | null>(null);
-  const processedUrlThreadRef = useRef<string | null>(null);
-
-  // URL → pending (consume-once, then clear the param; the id lives in state).
-  useEffect(() => {
-    if (!urlThreadId) {
-      processedUrlThreadRef.current = null;
-      return;
-    }
-    if (processedUrlThreadRef.current === urlThreadId) return;
-    processedUrlThreadRef.current = urlThreadId;
-    takeEntityOpenIntent(urlThreadId); // spend the "take me there" mark
-    setPendingThreadTarget(urlThreadId);
-    onConsumeThreadDeepLink?.();
-  }, [urlThreadId, onConsumeThreadDeepLink]);
-
-  // One-shot in-app event → pending (same resolution, no router round-trip).
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onOpenThread = (e: Event) => {
-      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
-      if (id) setPendingThreadTarget(id);
-    };
-    window.addEventListener(EMAIL_OPEN_THREAD_EVENT, onOpenThread);
-    return () => window.removeEventListener(EMAIL_OPEN_THREAD_EVENT, onOpenThread);
-  }, []);
-
-  // Apply once the inbox/tissue has loaded (so a not-yet-synced id isn't judged
-  // stale prematurely).
-  useEffect(() => {
-    if (!pendingThreadTarget || email.loading) return;
-    const id = pendingThreadTarget;
-    setPendingThreadTarget(null);
-    const target = resolveEmailThreadTarget(id, {
-      threads: email.threads,
-      refs: email.tissueRefs,
-    });
-
-    if (IS_DESKTOP) {
-      const inInbox =
-        target.kind === "thread" && email.threads.some((t) => t.threadId === target.threadId);
-      if (!inInbox) {
-        toast("Couldn't find that email", {
-          description: "It may have been archived or isn't in this inbox.",
-        });
-        return;
-      }
-      // Land the row where it actually renders: the inbox view with no account
-      // scope or search filter (sub-views / search results don't carry
-      // `data-thread-id`, and a single-account scope would drop the selection
-      // via the auto-clear effect above). Then select + scroll it into view.
-      setView("inbox");
-      search.clear();
-      setSelectedAccountId(null);
-      setSelectedThreadId(target.threadId);
-      setPanelVariant("reader");
-      revealBySelector(`[data-thread-id="${CSS.escape(target.threadId)}"]`);
-      return;
-    }
-
-    // Web: route to the thread's tissue card (its read-only web representation).
-    const refId = target.kind === "thread" ? target.refId : null;
-    if (!refId) {
-      toast("Couldn't find that email here", {
-        description: "It isn't among your linked emails — open Moduo on desktop to read it.",
-      });
-      return;
-    }
-    setHighlightedRefId(refId);
-    revealBySelector(`[data-thread-ref-id="${CSS.escape(refId)}"]`, (found) => {
-      if (!found) {
-        toast("Open Moduo on desktop to read this email", {
-          description: "It's linked here but not shown on the web view.",
-        });
-      }
-    });
-  }, [pendingThreadTarget, email.loading, email.threads, email.tissueRefs]);
-
-  // Clear the web card highlight after a beat.
-  useEffect(() => {
-    if (!highlightedRefId) return;
-    const t = window.setTimeout(() => setHighlightedRefId(null), 2000);
-    return () => window.clearTimeout(t);
-  }, [highlightedRefId]);
+  const highlightedRefId = useEmailThreadDeepLink({
+    urlThreadId,
+    onConsumeThreadDeepLink,
+    isDesktop: IS_DESKTOP,
+    email,
+    clearSearch: search.clear,
+    setView,
+    setSelectedAccountId,
+    setSelectedThreadId,
+    setPanelVariant,
+  });
 
   // Nav unread badge (AC3): broadcast the count whenever it changes.
   useEffect(() => {
@@ -448,92 +293,21 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   );
 
   // ── triage handlers — optimistic + undo toast (the triage() contract) ──────
-  const runArchive = useCallback(
-    (thread: EmailThread) => {
-      const undo = email.triage(thread, "archive");
-      if (selectedThreadId === thread.threadId) setSelectedThreadId(null);
-      toast("Done", {
-        duration: TRIAGE_UNDO_MS,
-        action: { label: "Undo", onClick: undo },
-      });
-    },
-    [email, selectedThreadId],
-  );
-
-  const runDelete = useCallback(
-    (thread: EmailThread) => {
-      const undo = email.triage(thread, "delete");
-      if (selectedThreadId === thread.threadId) setSelectedThreadId(null);
-      toast("Deleted", {
-        duration: TRIAGE_UNDO_MS,
-        action: { label: "Undo", onClick: undo },
-      });
-    },
-    [email, selectedThreadId],
-  );
-
-  const runMove = useCallback(
-    (thread: EmailThread, folder: EmailFolderInfo) => {
-      const undo = email.triage(thread, "move", folder.name);
-      if (selectedThreadId === thread.threadId) setSelectedThreadId(null);
-      toast(`Moved to ${folder.displayName || folder.name}`, {
-        duration: TRIAGE_UNDO_MS,
-        action: { label: "Undo", onClick: undo },
-      });
-    },
-    [email, selectedThreadId],
-  );
-
-  // ── snooze + follow-up (EM-6) ──────────────────────────────────────────────
-  const openSnooze = useCallback((thread: EmailThread) => {
-    setSnoozeTarget(thread);
-    setSnoozeOpen(true);
-  }, []);
-
-  const doSnooze = useCallback(
-    (at: Date) => {
-      const thread = snoozeTarget;
-      if (!thread) return;
-      const undo = email.snooze(thread, at);
-      if (selectedThreadId === thread.threadId) setSelectedThreadId(null);
-      toast(`Snoozed — returns ${formatSnoozeUntil(at.toISOString(), new Date())}`, {
-        duration: TRIAGE_UNDO_MS,
-        action: { label: "Undo", onClick: undo },
-      });
-    },
-    [email, snoozeTarget, selectedThreadId],
-  );
-
-  const openFollowUp = useCallback((thread: EmailThread) => {
-    setFollowUpTarget(thread);
-    setFollowUpOpen(true);
-  }, []);
-
-  const doFollowUp = useCallback(
-    (at: Date) => {
-      const thread = followUpTarget;
-      if (!thread) return;
-      void email.setFollowUp(thread, at);
-      toast(`Follow-up set — ${formatSnoozeUntil(at.toISOString(), new Date())}`);
-    },
-    [email, followUpTarget],
-  );
-
-  const unsnoozeRef = useCallback(
-    (ref: EmailThreadRef) => {
-      void email.unsnooze(ref);
-      toast("Back in your inbox");
-    },
-    [email],
-  );
-
-  const clearFollowUpRef = useCallback(
-    (ref: EmailThreadRef) => {
-      void email.clearFollowUpFor(ref);
-      toast("Follow-up cleared");
-    },
-    [email],
-  );
+  const {
+    runArchive,
+    runDelete,
+    runMove,
+    openSnooze,
+    doSnooze,
+    openFollowUp,
+    doFollowUp,
+    unsnoozeRef,
+    clearFollowUpRef,
+    snoozeOpen,
+    setSnoozeOpen,
+    followUpOpen,
+    setFollowUpOpen,
+  } = useEmailTriageActions({ email, selectedThreadId, setSelectedThreadId });
 
   // ── compose (EM-7) ─────────────────────────────────────────────────────────
   const signatureFor = useCallback(
@@ -634,22 +408,6 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
     );
   }, []);
 
-  const refArgsForThread = useCallback(
-    (thread: EmailThread) =>
-      buildRefUpsertArgs({
-        threadKey: thread.threadId,
-        accountId: thread.accountId,
-        fromAddr: thread.fromEmail || null,
-        fromName: thread.fromName || null,
-        subject: thread.subject || null,
-        snippet: thread.snippet || null,
-        sentAt: Number.isFinite(thread.timestampMs)
-          ? new Date(thread.timestampMs).toISOString()
-          : null,
-      }),
-    [],
-  );
-
   // An open thread rides along on a capture as "From: …" (tasks-v3 call 93);
   // it joins the registry only if the capture keeps the link.
   const captureSource = useMemo<CaptureSource | null>(() => {
@@ -667,290 +425,21 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   }, [selectedThread, selectedRefId, runtime, workspaceId, refArgsForThread]);
   useCaptureSource(captureSource);
 
-  /**
-   * Best-effort reverse teardown of everything a convert created — shared by
-   * the undo toast AND the mid-sequence failure compensation (DF-6) so the two
-   * paths can't drift. Each step is individually best-effort (a failed task
-   * delete doesn't stop the link/ref cleanup). Only removes the ref/contact
-   * link when THIS convert created them.
-   */
-  const deleteConvertArtifacts = useCallback(
-    async (plan: {
-      taskId: string | null;
-      spawnLinkId: string | null;
-      contactLinkId: string | null;
-      refId: string | null;
-      refCreated: boolean;
-    }) => {
-      if (!runtime || !workspaceId) return;
-      if (plan.taskId) {
-        await runtime.tasks.deleteTask({ workspaceId, taskId: plan.taskId }).catch(() => {});
-      }
-      if (plan.spawnLinkId) {
-        await runtime.spine.deleteLink({ workspaceId, linkId: plan.spawnLinkId }).catch(() => {});
-      }
-      if (plan.contactLinkId) {
-        await runtime.spine.deleteLink({ workspaceId, linkId: plan.contactLinkId }).catch(() => {});
-      }
-      if (plan.refId && plan.refCreated) {
-        await runtime.email.removeRef({ workspaceId, refId: plan.refId }).catch((err) => {
-          // Best-effort: the ref is linkless by now, so a failure here only leaves a
-          // stray tissue row — never block the undo. (`email_op_ref_remove` was
-          // undeployed until OPS-1 applied it 2026-07-29; this catch is now purely
-          // defensive, so warn rather than swallow — a silent failure is invisible.)
-          console.warn("email: convert-undo could not remove the ref", err);
-        });
-      }
-    },
-    [runtime, workspaceId],
-  );
-
-  const undoConvert = useCallback(
-    async (plan: {
-      taskId: string;
-      refId: string;
-      refCreated: boolean;
-      spawnLinkId: string | null;
-      contactLinkId: string | null;
-    }) => {
-      await deleteConvertArtifacts(plan);
-      setDetailTaskId(null);
-      setPanelVariant("reader");
-      void reloadTasks();
-      void email.refreshTissue();
-    },
-    [deleteConvertArtifacts, reloadTasks, email],
-  );
-
-  const runConvert = useCallback(
-    async (thread: EmailThread) => {
-      if (!runtime || !workspaceId) return;
-      const inbox = tasksInbox;
-      if (!inbox) {
-        toast.error("Your Tasks inbox isn't ready yet.");
-        return;
-      }
-      // DF-6: the sequence is non-atomic (separate RPCs) — track what each step
-      // created so a mid-sequence failure can compensate instead of stranding
-      // an orphan task/ref in another module.
-      const refExisted = email.tissueRefs.some((r) => r.threadKey === thread.threadId);
-      let createdRefId: string | null = null;
-      let createdTaskId: string | null = null;
-      let createdSpawnLinkId: string | null = null;
-      let createdContactLinkId: string | null = null;
-      try {
-        const ref = await runtime.email.upsertRef({ workspaceId, ...refArgsForThread(thread) });
-        createdRefId = ref.id;
-
-        const title = cleanTaskTitle(thread.subject);
-        const task = makeTask({
-          workspaceId,
-          bucketId: inbox.id,
-          title,
-          description: buildConvertDescription({
-            snippet: thread.snippet,
-            subject: thread.subject,
-            refId: ref.id,
-          }),
-          position: endPosition([]),
-        });
-        const saved = await runtime.tasks.upsertTask(task);
-        createdTaskId = saved.id;
-
-        // task --spawned-from--> email_thread
-        const spawn = await runtime.spine.createLink({
-          workspaceId,
-          ...spawnedFromLinkArgs({
-            taskId: saved.id,
-            taskTitle: title,
-            refId: ref.id,
-            subject: thread.subject,
-          }),
-        });
-        createdSpawnLinkId = spawn?.id ?? null;
-
-        // email_thread --references--> contact (when the sender is a known contact)
-        const contactId = resolveContactIdByAddress(thread.fromEmail ?? null, contactIndex);
-        if (contactId) {
-          // email_op_link is idempotent (returns a PRE-EXISTING row) — so only mark
-          // the contact link for undo when THIS convert actually creates it, or
-          // undo would silently delete a link the user made earlier.
-          let alreadyLinked = false;
-          try {
-            const existing = await runtime.spine.listLinks({
-              workspaceId,
-              entityType: "email_thread",
-              entityId: ref.id,
-            });
-            alreadyLinked = existing.some(
-              (l) =>
-                (l.targetType === "contact" && l.targetId === contactId) ||
-                (l.sourceType === "contact" && l.sourceId === contactId),
-            );
-          } catch {
-            // Can't tell → err toward NOT deleting on undo.
-            alreadyLinked = true;
-          }
-          const link = (await runtime.email.linkThread({
-            workspaceId,
-            threadId: ref.id,
-            targetType: "contact",
-            targetId: contactId,
-            relationKind: "references",
-            origin: "manual",
-            threadLabel: thread.subject,
-            targetLabel: contacts.find((c) => c.id === contactId)?.name ?? null,
-          })) as { id?: string } | null;
-          createdContactLinkId = alreadyLinked ? null : (link?.id ?? null);
-        }
-
-        setDetailTaskId(saved.id);
-        setPanelVariant("task");
-        void reloadTasks();
-        void email.refreshTissue();
-
-        const plan = {
-          taskId: saved.id,
-          refId: ref.id,
-          refCreated: !refExisted,
-          spawnLinkId: spawn?.id ?? null,
-          contactLinkId: createdContactLinkId,
-        };
-        toast("Task created", {
-          duration: TRIAGE_UNDO_MS,
-          action: { label: "Undo", onClick: () => void undoConvert(plan) },
-          cancel: {
-            label: "Also mark done",
-            onClick: () => {
-              const undo = email.triage(thread, "archive");
-              if (selectedThreadId === thread.threadId) setSelectedThreadId(null);
-              toast("Done", {
-                duration: TRIAGE_UNDO_MS,
-                action: { label: "Undo", onClick: undo },
-              });
-            },
-          },
-        });
-      } catch (e) {
-        // DF-6: compensate — tear down whatever this convert managed to create
-        // so a partial failure leaves nothing behind in Tasks or the spine.
-        await deleteConvertArtifacts({
-          taskId: createdTaskId,
-          spawnLinkId: createdSpawnLinkId,
-          contactLinkId: createdContactLinkId,
-          refId: createdRefId,
-          refCreated: !refExisted,
-        });
-        void reloadTasks();
-        void email.refreshTissue();
-        toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
-      }
-    },
-    [
-      runtime,
-      workspaceId,
-      tasksInbox,
-      reloadTasks,
-      email,
-      contactIndex,
-      contacts,
-      refArgsForThread,
-      undoConvert,
-      deleteConvertArtifacts,
-      selectedThreadId,
-    ],
-  );
-
-  const addAsContact = useCallback(
-    async (name: string, address: string) => {
-      if (!runtime || !workspaceId) return;
-      try {
-        const contact = await runtime.contacts.createContact({
-          workspaceId,
-          name: name.trim() || address,
-          email: address,
-        });
-        setContacts((prev) => [...prev, contact]);
-        const thread = selectedThread;
-        if (thread) {
-          const ref = await runtime.email.upsertRef({ workspaceId, ...refArgsForThread(thread) });
-          await runtime.email.linkThread({
-            workspaceId,
-            threadId: ref.id,
-            targetType: "contact",
-            targetId: contact.id,
-            relationKind: "references",
-            origin: "manual",
-            threadLabel: thread.subject,
-            targetLabel: contact.name,
-          });
-          void email.refreshTissue();
-        }
-        toast("Added to your contacts");
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Couldn't add the contact.");
-      }
-    },
-    [runtime, workspaceId, selectedThread, refArgsForThread, email],
-  );
-
-  // "Make a task" from the Follow-ups list (AC7). The ref already exists in the
-  // tissue, so this creates the task + spawned-from link off ref.id directly.
-  const makeTaskFromRef = useCallback(
-    async (ref: EmailThreadRef) => {
-      if (!runtime || !workspaceId) return;
-      const inbox = tasksInbox;
-      if (!inbox) {
-        toast.error("Your Tasks inbox isn't ready yet.");
-        return;
-      }
-      let createdTaskId: string | null = null;
-      try {
-        const title = cleanTaskTitle(ref.subject);
-        const task = makeTask({
-          workspaceId,
-          bucketId: inbox.id,
-          title,
-          description: buildConvertDescription({
-            snippet: ref.snippet,
-            subject: ref.subject,
-            refId: ref.id,
-          }),
-          position: endPosition([]),
-        });
-        const saved = await runtime.tasks.upsertTask(task);
-        createdTaskId = saved.id;
-        await runtime.spine.createLink({
-          workspaceId,
-          ...spawnedFromLinkArgs({
-            taskId: saved.id,
-            taskTitle: title,
-            refId: ref.id,
-            subject: ref.subject,
-          }),
-        });
-        setDetailTaskId(saved.id);
-        setPanelVariant("task");
-        void reloadTasks();
-        toast("Task created");
-      } catch (e) {
-        // DF-6: don't strand a linkless orphan task when the spawn link fails.
-        // The ref pre-existed here (it came from the tissue), so never remove it.
-        if (createdTaskId) {
-          await deleteConvertArtifacts({
-            taskId: createdTaskId,
-            spawnLinkId: null,
-            contactLinkId: null,
-            refId: null,
-            refCreated: false,
-          });
-          void reloadTasks();
-        }
-        toast.error(e instanceof Error ? e.message : "Couldn't convert to a task.");
-      }
-    },
-    [runtime, workspaceId, tasksInbox, reloadTasks, deleteConvertArtifacts],
-  );
+  const { runConvert, addAsContact, makeTaskFromRef } = useEmailConvert({
+    runtime,
+    workspaceId,
+    email,
+    tasksInbox,
+    reloadTasks,
+    contacts,
+    setContacts,
+    contactIndex,
+    selectedThread,
+    selectedThreadId,
+    setSelectedThreadId,
+    setDetailTaskId,
+    setPanelVariant,
+  });
 
   const togglePin = useCallback(
     (thread: EmailThread) => {
@@ -1099,76 +588,7 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
   );
 
   // ── web: read-only tissue view (no desktop engine, AC15) ───────────────────
-  if (!IS_DESKTOP) {
-    const now = new Date();
-    // Recently pulled-into-tissue threads, newest first, minus those already shown
-    // under Snoozed / Follow-ups so a thread appears once.
-    const shownIds = new Set([
-      ...email.snoozed.map((r) => r.id),
-      ...email.followUps.map((r) => r.id),
-    ]);
-    const recentLinked = [...email.tissueRefs]
-      .filter((r) => !shownIds.has(r.id))
-      .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""))
-      .slice(0, 12);
-    const hasAny =
-      email.snoozed.length > 0 || email.followUps.length > 0 || recentLinked.length > 0;
-    return (
-      <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center gap-2 text-sm text-foreground">
-            <Mail className="size-icon-sm text-muted-foreground" aria-hidden />
-            Open Moduo on desktop to use email
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Your mailbox lives on the desktop app. Snoozed, follow-ups, and linked emails show here.
-          </p>
-        </div>
-
-        {email.snoozed.length > 0 ? (
-          <WebTissueSection label="Snoozed">
-            {email.snoozed.map((ref) => (
-              <WebTissueCard
-                key={ref.id}
-                thread={ref}
-                highlighted={highlightedRefId === ref.id}
-                meta={ref.snoozeUntil ? `Returns ${formatSnoozeUntil(ref.snoozeUntil, now)}` : null}
-              />
-            ))}
-          </WebTissueSection>
-        ) : null}
-
-        {email.followUps.length > 0 ? (
-          <WebTissueSection label="Follow-ups due">
-            {email.followUps.map((ref) => (
-              <WebTissueCard
-                key={ref.id}
-                thread={ref}
-                highlighted={highlightedRefId === ref.id}
-                meta={ref.followUpAt ? `Reply by ${formatEmailDate(ref.followUpAt)}` : null}
-              />
-            ))}
-          </WebTissueSection>
-        ) : null}
-
-        {recentLinked.length > 0 ? (
-          <WebTissueSection label="Recently linked">
-            {recentLinked.map((ref) => (
-              <WebTissueCard key={ref.id} thread={ref} highlighted={highlightedRefId === ref.id} />
-            ))}
-          </WebTissueSection>
-        ) : null}
-
-        {!hasAny ? (
-          <EmptyState
-            icon={Mail}
-            title="Nothing linked yet"
-            description="Emails you convert, link, snooze, or follow up on desktop appear here."
-          />
-        ) : null}
-      </div>
-    );
-  }
+  if (!IS_DESKTOP) return <EmailWebView email={email} highlightedRefId={highlightedRefId} />;
 
   return (
     <>
@@ -1235,40 +655,11 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
                 New message
               </Button>
             </div>
-            {/* DF-6: a broken account silently contributes nothing to this scope —
-                say so instead of letting mail quietly stop arriving. */}
-            {brokenAccounts.length > 0 ? (
-              <div
-                role="status"
-                className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-warning/10 px-3 py-1.5 text-xs text-foreground"
-              >
-                <AlertTriangle className="size-icon-xs shrink-0 text-warning" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  {brokenAccounts.length === 1
-                    ? `${brokenAccounts[0].email} isn't syncing — new mail may be missing.`
-                    : `${brokenAccounts.length} accounts aren't syncing — new mail may be missing.`}
-                </span>
-                {syncHealth.reconnectable.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => setReconnectTarget(a)}
-                    className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Reconnect{brokenAccounts.length > 1 ? ` ${a.email}` : ""}
-                  </button>
-                ))}
-                {brokenAccounts.some((a) => a.status === "error") ? (
-                  <button
-                    type="button"
-                    onClick={() => void email.syncNow()}
-                    className="shrink-0 rounded-sm font-medium text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    Retry sync
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+            <EmailSyncBanner
+              health={syncHealth}
+              onReconnect={setReconnectTarget}
+              onRetrySync={() => void email.syncNow()}
+            />
             {search.active ? (
               <EmailThreadList
                 threads={search.results}

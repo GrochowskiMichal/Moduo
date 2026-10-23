@@ -14,6 +14,7 @@ import type {
   ContentAuthorKind,
   RelationKind,
 } from "@contracts/vocabularies";
+
 import type { CustomEmoji } from "./emoji/model";
 
 export type { CustomEmoji };

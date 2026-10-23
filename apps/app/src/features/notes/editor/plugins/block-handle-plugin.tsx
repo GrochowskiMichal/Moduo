@@ -29,6 +29,7 @@ import {
 import { Copy, GripVertical, MessageSquare, Trash2, Type } from "lucide-react";
 import { type DragEvent as ReactDragEvent, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+
 import {
   $blockMenuFor,
   $deleteBlock,

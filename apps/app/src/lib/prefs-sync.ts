@@ -19,6 +19,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { z } from "zod";
+
 import { createRequestCache } from "./request-cache";
 import { getRuntime, initRuntime } from "./runtime";
 import type { PreferenceDomain, UserPreferences } from "./runtime.types";
@@ -108,9 +109,7 @@ const prefsReads = createRequestCache();
  * reconcile treats `none` as "seed the cloud" and `error` as "touch nothing".
  */
 export type CloudPrefsRead =
-  | { kind: "row"; prefs: UserPreferences }
-  | { kind: "none" }
-  | { kind: "error"; error: unknown };
+  { kind: "row"; prefs: UserPreferences } | { kind: "none" } | { kind: "error"; error: unknown };
 
 export function getCloudPrefs(userId: string): Promise<CloudPrefsRead> {
   return prefsReads
@@ -157,9 +156,7 @@ function domainValue(
  * push can lose to one saved from another device since: `newer` carries it.
  */
 export type PushOutcome =
-  | { kind: "saved" }
-  | { kind: "newer"; value: Json; updatedAt: string }
-  | { kind: "failed" };
+  { kind: "saved" } | { kind: "newer"; value: Json; updatedAt: string } | { kind: "failed" };
 
 /** Push one domain's syncable subset. `failed` when offline / errored / signed out. */
 export async function pushDomain(

@@ -1,12 +1,13 @@
 import { describe, expect, it, test } from "@rstest/core";
+
 import {
   clockIn,
   dayLong,
   dayLongOfKey,
   dayPart,
   dayPartsOfKey,
-  dayShortOfKey,
   daysBetween,
+  dayShortOfKey,
   durationPhrase,
   firstName,
   groupByDay,

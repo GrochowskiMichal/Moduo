@@ -19,18 +19,11 @@ import {
   type LexicalNode,
   type SerializedLexicalNode,
 } from "lexical";
+
 import { TaskLineNode } from "./schema/task-line-node";
 
 export type TurnIntoId =
-  | "text"
-  | "h1"
-  | "h2"
-  | "h3"
-  | "bullet"
-  | "number"
-  | "todo"
-  | "quote"
-  | "code";
+  "text" | "h1" | "h2" | "h3" | "bullet" | "number" | "todo" | "quote" | "code";
 
 export const TURN_INTO: ReadonlyArray<{ id: TurnIntoId; label: string }> = [
   { id: "text", label: "Text" },

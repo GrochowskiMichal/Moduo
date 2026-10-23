@@ -7,11 +7,12 @@
 
 import { type TaskStatusCategory, taskStatusWord } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import { isNetworkError } from "../../../lib/sync/network";
 import type { OverlayChange, WorkspaceStore } from "../../../lib/sync/store";
 import type { TaskFieldPatch } from "../../../lib/task-rows";
 import { undoToast } from "../../../lib/undo-toast";
-import { type BulkRefusal, type BulkWrite, bulkResultText, dueDayOf, tasksWord } from "../bulk";
+import { type BulkRefusal, bulkResultText, type BulkWrite, dueDayOf, tasksWord } from "../bulk";
 import { byIdOf } from "../derived";
 import { undoWrite } from "../dnd/drop-write";
 import type { RecurrenceRule, Task } from "../model";

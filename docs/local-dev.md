@@ -70,6 +70,17 @@ E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture
 - **The fixture** (`scripts/perf/seed-tasks-10k.ts`): 20 projects plus the Inbox, about 1,900 open tasks, 200 Backlog, 7,600 done and 300 Won't do; HTML descriptions, subtasks, dates, tags, blockers, a queue and comments. Task descriptions are Markdown since #408; the seed still writes the old HTML, which the app reads as Markdown (`htmlToMarkdown` in `supabase/functions/_shared/description-markdown.ts`). Every 500th task carries "quokka" (the spec searches it). Sign in as `perf@moduo.local` (the password is in the script) to look around.
 - **The spec** (`e2e/tests/perf/tasks-10k.spec.ts`) times real input inside the page, from the input's first event to the frame that shows the result (median of three), checks that long lists and Board columns draw only a screenful, drags a card out of a 1,200-card column, and checks that adding or renaming a project never blocks the page for 200 ms. It logs every number; compare runs on the same machine.
 
+## Apps signing in (OAuth server, MCPO)
+
+`supabase/config.toml` turns Supabase Auth's OAuth 2.1 server on (`[auth.oauth_server]`, consent at `/oauth/consent`, dynamic registration on), so apps like Claude sign in locally as they will on prod ([specs/mcp-oauth.md](../specs/mcp-oauth.md)). The stack picks that up on its next restart. Until then, and whenever a restart would cut off other sessions, run a second Auth with it on, against the same database:
+
+```bash
+scripts/local/oauth-auth.sh up      # http://127.0.0.1:54399; `down` removes it
+MODUO_OAUTH_AUTH_URL=http://127.0.0.1:54399 bun scripts/oauth-lockout-probe.ts
+```
+
+The probe runs a real authorization (register, authorize, consent, token) and checks that the app's token gets nothing from the Data API, Storage or the Edge Functions (served by the stack's edge runtime: after editing a function, `docker restart supabase_edge_runtime_moduo` before probing it). `supabase/tests/app_token_lockout.test.sql` is the same lockout in SQL.
+
 ## Not local (on purpose)
 
 - **pg_cron jobs** (e.g. `purge-deleted` at 04:23 UTC) aren't in the snapshot; call the function by hand.

@@ -1,4 +1,5 @@
 import { MiniMap } from "@xyflow/react";
+
 import type { ThemePreset } from "../types";
 
 type Props = {

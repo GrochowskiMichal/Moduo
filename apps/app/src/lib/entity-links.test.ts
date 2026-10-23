@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import {
   coerceRelationKind,
   DEFAULT_LINK_ORIGIN,

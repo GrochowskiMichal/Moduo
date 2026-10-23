@@ -31,8 +31,8 @@ import {
 import type { NotesSyncEngineV2 } from "./engine-v2";
 import {
   DOC_DB_PREFIX,
-  type DocOutboxEntry,
   docDbName,
+  type DocOutboxEntry,
   entryOwner,
   type MetaOutboxEntry,
   type NoteStateRow,
@@ -159,6 +159,7 @@ const copies: OwnedCopies<never> = {
     }
   },
   async clear() {
+    const docs = new Set<string>();
     await withStore(
       ["metaCache", "docOutbox", "noteState", "metaOutbox"],
       "readwrite",
@@ -174,12 +175,16 @@ const copies: OwnedCopies<never> = {
         // The seq counters stay: the device's client id outlives the account.
         const state = tx.objectStore("noteState");
         for (const row of (await req(state.getAll())) as NoteStateRow[]) {
+          // Their cursors name their document caches, for a browser that can't list databases.
+          for (const owner of Object.keys(row.cursors ?? {}))
+            docs.add(docDbName(owner, row.noteId));
           state.put({ noteId: row.noteId, nextClientSeq: row.nextClientSeq });
         }
       },
       undefined,
     );
-    for (const name of await docDatabases()) await deleteDatabase(name);
+    for (const name of await docDatabases()) docs.add(name);
+    for (const name of docs) await deleteDatabase(name);
   },
 };
 
@@ -197,10 +202,17 @@ const people = personLifecycle({
  * run on every sign-in: after the first, there is nothing left.
  */
 export async function forgetLegacy(): Promise<void> {
+  const legacyDocs = new Set<string>();
   for (const name of await docDatabases()) {
     const parsed = parseDocDbName(name);
-    if (parsed && "legacyWorkspace" in parsed) await deleteDatabase(name);
+    if (parsed && "legacyWorkspace" in parsed) legacyDocs.add(name);
   }
+  // A browser that can't list databases (no `indexedDB.databases()`) still
+  // yields their names: a legacy list is keyed by its workspace, and a note
+  // with the device-wide cursor is exactly one whose document cache was
+  // cached under `<workspace>:<note>`.
+  for (const name of await legacyDocNames()) legacyDocs.add(name);
+  for (const name of legacyDocs) await deleteDatabase(name);
   await withStore(
     ["metaCache", "noteState"],
     "readwrite",
@@ -216,6 +228,26 @@ export async function forgetLegacy(): Promise<void> {
       }
     },
     undefined,
+  );
+}
+
+/** The per-note database names from before Track C4, worked out from the records that name them. */
+async function legacyDocNames(): Promise<string[]> {
+  return withStore(
+    ["metaCache", "noteState"],
+    "readonly",
+    async (_s, tx) => {
+      const workspaces = (await req(tx.objectStore("metaCache").getAllKeys())).filter(
+        (k): k is string => typeof k === "string" && !k.includes(":"),
+      );
+      if (workspaces.length === 0) return [];
+      const rows = (await req(tx.objectStore("noteState").getAll())) as NoteStateRow[];
+      const notes = rows
+        .filter((r) => r.lastPulledUpdateId !== undefined || r.updatesSinceCompact !== undefined)
+        .map((r) => r.noteId);
+      return workspaces.flatMap((ws) => notes.map((n) => `${DOC_DB_PREFIX}${ws}:${n}`));
+    },
+    [] as string[],
   );
 }
 

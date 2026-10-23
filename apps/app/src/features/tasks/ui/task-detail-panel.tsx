@@ -30,6 +30,7 @@ import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { Button } from "../../../components/ui/button";
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { detailTitleVariants } from "../../../components/ui/detail-title";
@@ -59,8 +60,8 @@ import {
   BlockedBySection,
   BlocksSection,
   LinkedSection,
-  SubtasksSection,
   sayUnlinkFailed,
+  SubtasksSection,
   WaitingSection,
 } from "./task-detail-collections";
 import { TaskDetailHeader } from "./task-detail-header";
@@ -471,7 +472,7 @@ function TitleField({
     if (document.activeElement !== ref.current) setTitle(task.title);
   }, [task.title]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
+  // Re-measure whenever the text changes.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;

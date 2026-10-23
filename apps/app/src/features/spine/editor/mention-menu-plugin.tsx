@@ -38,12 +38,14 @@ import { CalendarDays, Plus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import { PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { dateCommandDay, isoDay, triggerAt } from "../grammar";
 import { useMentionSearch } from "../hooks/use-mention-search";
 import { resolveEntityIcon } from "../icon-map";

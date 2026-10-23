@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
-import { type TreeRow, treeKeyAction } from "./tree-keyboard";
+
+import { treeKeyAction, type TreeRow } from "./tree-keyboard";
 
 // pages:a (expanded) ─ pages:a1 (leaf)
 //                    └ pages:a2 (collapsed, has children)

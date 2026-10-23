@@ -10,8 +10,9 @@ import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
 import type { ChatChannel, ChatMember, ChatRuntime } from "../model";
-import { type BrowseRow, browseChannels } from "../panel/details-model";
+import { browseChannels, type BrowseRow } from "../panel/details-model";
 
 export type BrowseChannelsProps = {
   chat: ChatRuntime | null;
@@ -43,7 +44,6 @@ export function BrowseChannels({
   const ids = useMemo(() => [...open, ...archived].map((r) => r.channel.id), [open, archived]);
   const idsKey = ids.join(",");
   const [counts, setCounts] = useState<Record<string, number>>({});
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `idsKey` stands for `ids`
   useEffect(() => {
     if (!chat || ids.length === 0) return;
     let live = true;
@@ -54,6 +54,7 @@ export function BrowseChannels({
     return () => {
       live = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `idsKey` stands for `ids`
   }, [chat, idsKey]);
 
   const q = query.trim().toLowerCase();

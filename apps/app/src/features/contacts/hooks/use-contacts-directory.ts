@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { ContactsModuleBundle } from "../model";
 
 export type DirectoryStatus = "loading" | "ready" | "error";

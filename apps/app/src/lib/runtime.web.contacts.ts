@@ -8,6 +8,7 @@ import {
   requireRow,
 } from "@contracts/rows";
 import { isOpenTask, normalizeTaskStatusCategory } from "@contracts/vocabularies";
+
 import type {
   Company,
   Contact,

@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, Calendar, Globe, Mail } from "lucide-react";
+import { Bot, Calendar, Check, Copy, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
+import { IconButton } from "../../../components/ui/icon-button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
@@ -23,10 +25,14 @@ import {
 import type { SavedAccount } from "../../email/model/email-types";
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
-import { keyLifecycle } from "../api-keys";
+import {
+  CONNECT_BY_URL_LEAD,
+  isConnectedApp,
+  keyLifecycle,
+  KEYS_FOR_SCRIPTS_LABEL,
+} from "../api-keys";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
-
 import { SettingsSectionShell } from "./section-shell";
 
 /** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
@@ -72,7 +78,8 @@ export function IntegrationsSection() {
   // AI/MCP connector status: count of active (non-revoked) API keys for this
   // workspace. `null` = not yet loaded or unreadable (e.g. a non-admin) — the
   // card then avoids asserting a connection state either way.
-  const [mcpKeyCount, setMcpKeyCount] = useState<number | null>(null);
+  const [mcpCounts, setMcpCounts] = useState<{ apps: number; keys: number } | null>(null);
+  const [urlCopied, setUrlCopied] = useState(false);
 
   const loadAccounts = useCallback(async () => {
     if (!runtime || !workspaceId) return;
@@ -111,12 +118,15 @@ export function IntegrationsSection() {
   const loadMcpKeys = useCallback(async () => {
     if (!runtime || !workspaceId) return;
     try {
-      const keys = await runtime.workspace.listApiKeys(workspaceId);
-      setMcpKeyCount(keys.filter((k) => keyLifecycle(k).status !== "expired").length);
+      const live = (await runtime.workspace.listApiKeys(workspaceId)).filter(
+        (k) => keyLifecycle(k).status !== "expired",
+      );
+      const apps = live.filter(isConnectedApp).length;
+      setMcpCounts({ apps, keys: live.length - apps });
     } catch {
       // Non-admins can't list keys (RLS) and reads can transiently fail — keep
       // the status neutral rather than falsely reporting "not connected".
-      setMcpKeyCount(null);
+      setMcpCounts(null);
     }
   }, [runtime, workspaceId]);
 
@@ -264,7 +274,13 @@ export function IntegrationsSection() {
     }
   };
 
-  const mcpStatus = mcpConnectorStatus(mcpKeyCount);
+  const mcpStatus = mcpConnectorStatus(mcpCounts);
+  const mcpEndpoint = runtime?.workspace.getMcpEndpoint() ?? "";
+  const copyMcpEndpoint = async () => {
+    await navigator.clipboard.writeText(mcpEndpoint).catch(() => {});
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+  };
 
   const caldavIcsGroups = groupRailAccounts(
     calAccounts.filter((a) => a.provider === "caldav" || a.provider === "ics"),
@@ -668,10 +684,19 @@ export function IntegrationsSection() {
 
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Connect Claude and other AI assistants to this workspace over MCP. They reach your tasks
-          and notes through a scoped API key you create and can revoke anytime.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{CONNECT_BY_URL_LEAD}</p>
+
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-muted/30 py-1 pr-1 pl-3">
+          <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+            {mcpEndpoint}
+          </p>
+          <IconButton
+            icon={urlCopied ? Check : Copy}
+            label={urlCopied ? "Copied" : "Copy connector URL"}
+            onClick={() => void copyMcpEndpoint()}
+            className={urlCopied ? "text-success" : undefined}
+          />
+        </div>
 
         <div className="mt-4 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
@@ -680,7 +705,7 @@ export function IntegrationsSection() {
                 <Bot className="size-4" />
               </span>
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">AI assistants (MCP)</span>
+                <span className="text-sm font-medium text-foreground">Connections and keys</span>
                 <span className="text-xs text-muted-foreground">{mcpStatus.label}</span>
               </div>
             </div>
@@ -690,9 +715,12 @@ export function IntegrationsSection() {
               size="sm"
               onClick={() => dispatchOpenSettings({ section: MCP_KEYS_SECTION })}
             >
-              {mcpStatus.connected ? "Manage keys" : "Set up"}
+              {mcpStatus.connected ? "Manage" : "Set up"}
             </Button>
           </div>
+          <p className="px-1 text-xs text-muted-foreground">
+            {KEYS_FOR_SCRIPTS_LABEL}: create an API key in Settings → API keys.
+          </p>
         </div>
       </section>
     </SettingsSectionShell>

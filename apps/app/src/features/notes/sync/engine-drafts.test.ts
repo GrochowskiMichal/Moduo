@@ -8,6 +8,7 @@
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { NotesSyncEngineV2 } from "./engine-v2";
 

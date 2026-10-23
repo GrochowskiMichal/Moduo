@@ -22,6 +22,7 @@ import {
 import { FileText, Globe, Unlink } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import {
   CommandDialog,
   CommandEmpty,
@@ -33,6 +34,7 @@ import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { resolveMention } from "@/features/spine/mention";
 import { executeMention } from "@/features/spine/mention-actions";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { type LinkDialogRow, linkDialogRows } from "../link-dialog";
 import { noteLinkCandidate } from "../note-link";
 import { useNotesEditorBridge } from "../notes-editor-bridge";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note } from "./model";
-import { selectSubpages } from "./subpages";
+import { isRedundantPageRow, selectSubpages } from "./subpages";
 
 function note(partial: Partial<Note> & { id: string }): Note {
   return {
@@ -57,5 +58,23 @@ describe("selectSubpages (MOD-81)", () => {
 
   it("is empty for a leaf note", () => {
     expect(selectSubpages([note({ id: "p" })], "p")).toEqual([]);
+  });
+});
+
+describe("isRedundantPageRow", () => {
+  it("drops rows to live and trashed children", () => {
+    expect(isRedundantPageRow(note({ id: "c", parentId: "p" }), "p")).toBe(true);
+    expect(
+      isRedundantPageRow(note({ id: "x", parentId: "p", deletedAt: "2026-10-01T00:00:00Z" }), "p"),
+    ).toBe(true);
+  });
+
+  it("keeps rows the Sub-pages list doesn't cover", () => {
+    expect(isRedundantPageRow(null, "p")).toBe(false);
+    expect(isRedundantPageRow(note({ id: "m", parentId: "q" }), "p")).toBe(false);
+    expect(
+      isRedundantPageRow(note({ id: "y", parentId: "q", deletedAt: "2026-10-01T00:00:00Z" }), "p"),
+    ).toBe(false);
+    expect(isRedundantPageRow(note({ id: "a", parentId: "p", isArchived: true }), "p")).toBe(false);
   });
 });

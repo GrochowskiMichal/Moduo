@@ -9,8 +9,10 @@
 import { Check, RotateCcw } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { TitleActions } from "@/components/app/title-actions";
 import { Button } from "@/components/ui/button";
+
 import type { ChatMessage, ChatPerson, ChatRuntime } from "../model";
 import type { ChatChain } from "../store/store";
 import type { BodyContext } from "../stream/message-body";
@@ -169,8 +171,8 @@ export function ChainItem({
             handlers={handlers}
           />
         )}
-        {/* biome-ignore lint/a11y/useSemanticElements: a separator that names its count can't be an <hr> */}
         <div
+          // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- a separator that names its count can't be an <hr>
           role="separator"
           aria-label={count === 1 ? "1 reply" : `${count} replies`}
           className="mt-2 mb-0.5 flex h-(--row-h-sm) items-center gap-2.5 px-2 text-sm font-medium text-foreground after:h-px after:flex-1 after:bg-hairline"

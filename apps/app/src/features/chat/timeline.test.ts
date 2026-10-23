@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { ChatChannel, ChatMessage } from "./model";
 import {
   buildSidebar,

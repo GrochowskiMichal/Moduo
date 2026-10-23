@@ -4,6 +4,7 @@
 // by itself over someone's work.
 
 import { useSyncExternalStore } from "react";
+
 import type { Release } from "./releases";
 
 export type WhatsNewState = {

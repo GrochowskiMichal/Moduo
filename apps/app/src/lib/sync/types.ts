@@ -9,6 +9,7 @@
 // `features/tasks/live.ts` if it is published.
 
 import type { AccessChangeResource } from "@contracts/vocabularies";
+
 import type { AgentSession } from "../../features/spine/agent-session";
 import type {
   Area,

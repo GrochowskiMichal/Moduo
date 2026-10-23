@@ -18,6 +18,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+
 import { type BottomBarMode, useBottomBarModeOwner } from "../../../components/app/bottom-bar-mode";
 import { dispatchOpenCapture } from "../../../components/app/capture-shell";
 import { Button } from "../../../components/ui/button";
@@ -148,7 +149,7 @@ export function useInboxView({
   const writeSnoozes = useCallback(
     (change: (mine: Record<string, TasksInboxSnooze>) => Record<string, TasksInboxSnooze>) => {
       const all = prefsRef.current.snoozed;
-      const next = change({ ...(all[workspaceId] ?? {}) });
+      const next = change({ ...all[workspaceId] });
       const snoozed = { ...all };
       if (Object.keys(next).length > 0) snoozed[workspaceId] = next;
       else delete snoozed[workspaceId];
@@ -173,7 +174,6 @@ export function useInboxView({
   // forgotten; one whose task left the Inbox is forgotten too. Each device
   // that sees it does the same, which lands the same way.
   const wokenKey = `${split.woken.join(",")}|${split.stale.join(",")}`;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what changed.
   useEffect(() => {
     // Only once a read reached the server this session (the device copy can
     // lack a task snoozed elsewhere, which would read as stale and be lost on
@@ -196,6 +196,7 @@ export function useInboxView({
       for (const id of gone) delete mine[id];
       return mine;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names what changed.
   }, [wokenKey, reachedServer, inboxId]);
 
   const [showSnoozed, setShowSnoozed] = useState(false);
@@ -214,7 +215,6 @@ export function useInboxView({
   // Anew only when the snoozed rows change: `split` is new on any task's edit,
   // and a new group array re-measures the whole List.
   const snoozedKey = split.snoozed.map((t) => t.id).join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names the snoozed rows.
   const extraGroups = useMemo<readonly ListExtraGroup[]>(
     () =>
       split.snoozed.length === 0
@@ -232,6 +232,7 @@ export function useInboxView({
               },
             },
           ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names the snoozed rows.
     [snoozedKey, showSnoozed, mySnoozes],
   );
 

@@ -19,6 +19,7 @@ import {
 import { IconButton } from "@/components/ui/icon-button";
 import { Toolbar } from "@/components/ui/toolbar";
 import type { PresenceState } from "@/lib/statuses/model";
+
 import type { ChatMember, ChatNotifyLevel, ChatPerson } from "../model";
 import { ConversationGlyph } from "./chat-sidebar";
 import type { ChatRow } from "./sidebar-model";

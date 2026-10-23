@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { NOTE_DETAIL_REFRESH_EVENT } from "../editor/notes-editor-bridge";
@@ -67,7 +68,7 @@ export function useNoteLinks({
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const latestNoteId = useRef(noteId);
   latestNoteId.current = noteId;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the sections' identity
+  // Keyed on the sections' identity.
   useEffect(() => {
     setLoadedFor(latestNoteId.current);
   }, [sections]);

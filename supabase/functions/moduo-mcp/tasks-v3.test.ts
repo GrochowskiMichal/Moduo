@@ -25,6 +25,7 @@ import {
 import { $isReferenceNode } from "../../../apps/app/src/features/spine/editor/entity-ref-schema";
 import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 import { descriptionReferences, readsAsModuoAddress } from "../_shared/description-markdown.ts";
+import { callThroughSdk } from "./through-sdk.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import { toolAllowed, type KeyContext, type ToolContext } from "./registry.ts";
 
@@ -250,14 +251,12 @@ function setup(opts: { rpcs?: Record<string, (args: Row) => unknown>; scopes?: R
   return { ctx, tables, ...fake };
 }
 
-/** A tool call as index.ts makes it: the arguments go through the tool's
- *  parser first, so a field the parser drops never reaches the handler. */
+/** A tool call as a client makes it: through the SDK server, so the arguments
+ *  go through the tool's parser first and a field it drops never reaches the
+ *  handler. */
 function call(name: string, args: Row, ctx: ToolContext): Promise<any> {
-  const t = tasksConnectorModule.tools.find((x) => x.name === name);
-  if (!t) throw new Error(`${name} is not registered`);
-  const parsed = parseToolArgs(name, args);
-  if (!parsed.success) return Promise.reject(new Error(parsed.message));
-  return t.handler(parsed.data, ctx) as Promise<any>;
+  if (!tasksConnectorModule.tools.some((x) => x.name === name)) throw new Error(`${name} is not registered`);
+  return callThroughSdk(name, args, ctx);
 }
 
 describe("handles: every task argument takes MOD-142 or a uuid", () => {
@@ -284,6 +283,36 @@ describe("handles: every task argument takes MOD-142 or a uuid", () => {
     expect(got.agent_sessions).toEqual([{ id: "s1", agent: "Claude", state: "working", mine: true }]);
     expect(rpcCalls.find((c) => c.fn === "tasks_agent_sessions")?.args).toEqual({ p_workspace_id: WS, p_task_id: "t-open" });
     expect(got.subtasks).toEqual([]);
+  });
+
+  it("tasks_get answers its edges, sessions and waits in the shape its output schema lists (MCPO-6)", async () => {
+    const { ctx, tables } = setup();
+    tables.task_relations!.push(
+      { id: "rel-1", workspace_id: WS, blocker_task_id: "t-backlog", blocked_task_id: "t-open" },
+      { id: "rel-2", workspace_id: WS, blocker_task_id: "t-open", blocked_task_id: "t-team" },
+    );
+    tables.task_sessions!.push(
+      { id: "ws-1", workspace_id: WS, task_id: "t-open", user_id: ME, starts_at: "2030-01-02T09:00:00Z",
+        ends_at: "2030-01-02T10:00:00Z", deleted_at: null },
+      // A system-run session is nobody's (tasks__session_legacy): its person has no id.
+      { id: "ws-2", workspace_id: WS, task_id: "t-open", user_id: null, starts_at: "2030-01-03T09:00:00Z",
+        ends_at: "2030-01-03T10:00:00Z", deleted_at: null },
+    );
+    tables.task_waiting!.push(
+      { id: "w-1", workspace_id: WS, task_id: "t-open", kind: "person", ref: BEA, label: null,
+        since: "2030-01-01T00:00:00Z", deleted_at: null },
+      { id: "w-2", workspace_id: WS, task_id: "t-open", kind: "text", ref: null, label: "the client's sign-off",
+        since: "2030-01-01T00:00:00Z", deleted_at: null },
+    );
+    // call() checks the answer against the output schema (through-sdk.ts).
+    const got = await call("tasks_get", { task_id: "t-open" }, ctx);
+    expect(got.blockers.map((t: Row) => t.id)).toEqual(["t-backlog"]);
+    expect(got.blocking.map((t: Row) => t.id)).toEqual(["t-team"]);
+    expect(got.work_sessions.map((w: Row) => w.person)).toEqual([
+      { id: ME, name: "Ada" },
+      { id: null, name: "Former member" },
+    ]);
+    expect(got.waiting_on.map((w: Row) => w.person ?? w.label)).toEqual([{ id: BEA, name: "Bea" }, "the client's sign-off"]);
   });
 });
 

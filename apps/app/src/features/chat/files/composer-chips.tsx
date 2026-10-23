@@ -3,10 +3,12 @@
 // name, a thin progress bar while it goes up). × takes it back out.
 
 import { X } from "lucide-react";
+
 import { Progress } from "@/components/ui/progress";
 import { fileIconFor } from "@/features/attachments/files";
 import { formatBytes } from "@/lib/uploads/errors";
 import { cn } from "@/lib/utils";
+
 import type { ComposerFile } from "./composer-files";
 
 export function ComposerFileChips({

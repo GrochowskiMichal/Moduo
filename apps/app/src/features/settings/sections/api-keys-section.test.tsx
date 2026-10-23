@@ -15,6 +15,8 @@ const mocks = rs.hoisted(() => {
     setApiKeyScopes: rs.fn(),
     setApiKeyPrivateChat: rs.fn(),
     revokeApiKey: rs.fn(),
+    disconnectApp: rs.fn(),
+    renameApiKey: rs.fn(),
     getMcpEndpoint: () => "https://example.supabase.co/functions/v1/moduo-mcp",
   };
   const chat = { isEnabled: rs.fn(() => Promise.resolve(true)) };
@@ -70,6 +72,9 @@ function storedKey(
     lastUsedAt: null,
     expiresAt: null,
     includePrivateChat: false,
+    oauthClientId: null,
+    oauthClientDomain: null,
+    oauthClientScheme: null,
     ...overrides,
   };
 }
@@ -135,7 +140,7 @@ describe("creating a key", () => {
       secret: "moduo_sk_secret",
     });
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     await user.type(screen.getByLabelText("Name"), "Claude");
     await user.click(scopeOption(newKeyCard(), "Tasks", "None"));
@@ -169,7 +174,7 @@ describe("creating a key", () => {
       secret: "s",
     });
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     await user.type(screen.getByLabelText("Name"), "Reader{Enter}");
 
@@ -187,7 +192,7 @@ describe("creating a key", () => {
       secret: "s",
     });
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
     const expiry = () => within(screen.getByRole("radiogroup", { name: "Expires after" }));
     expect(isChecked(expiry().getByRole("radio", { name: "90 days" }))).toBe(true);
 
@@ -208,7 +213,7 @@ describe("creating a key", () => {
   it("says when a grant lists tools that need another module, and stops once they won't", async () => {
     mocks.workspace.listApiKeys.mockResolvedValue([]);
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
     const note = "Moving scheduled tasks also needs Tasks: Edit.";
     // What a Calendar segment is described by: its hint, plus the note while one shows.
     const calendarDescription = () =>
@@ -229,7 +234,7 @@ describe("creating a key", () => {
   it("won't create a key that reaches nothing", async () => {
     mocks.workspace.listApiKeys.mockResolvedValue([]);
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     await user.type(screen.getByLabelText("Name"), "Nothing");
     await user.click(scopeOption(newKeyCard(), "Tasks", "None"));
@@ -251,7 +256,7 @@ describe("creating a key", () => {
     };
     mocks.workspace.listApiKeys.mockResolvedValue([]);
     renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     expect(isDisabled(scopeOption(newKeyCard(), "Notes", "Edit"))).toBe(true);
     expect(isDisabled(scopeOption(newKeyCard(), "Notes", "View"))).toBe(false);
@@ -272,7 +277,7 @@ describe("creating a key", () => {
     };
     mocks.workspace.listApiKeys.mockResolvedValue([]);
     const { user } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     expect(isChecked(scopeOption(newKeyCard(), "Tasks", "None"))).toBe(true);
     await user.type(screen.getByLabelText("Name"), "Reader");
@@ -283,7 +288,7 @@ describe("creating a key", () => {
     mocks.chat.isEnabled.mockImplementation(() => Promise.resolve(false));
     mocks.workspace.listApiKeys.mockResolvedValue([]);
     renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
     expect(
       await within(newKeyCard()).findByText("Chat is on the Duo and Team plans."),
     ).toBeTruthy();
@@ -302,7 +307,7 @@ describe("creating a key", () => {
       }),
     );
     const { user, rerender } = renderSection();
-    await screen.findByText("No keys yet.");
+    await screen.findByText(/Nothing connected yet./);
 
     await user.type(screen.getByLabelText("Name"), "Claude");
     await user.click(screen.getByRole("button", { name: "Create key" }));
@@ -634,5 +639,151 @@ describe("the key's private channels switch (CV-21)", () => {
     await waitFor(() =>
       expect(mocks.workspace.setApiKeyPrivateChat).toHaveBeenCalledWith("k1", false),
     );
+  });
+});
+
+describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
+  const claudeApp = () =>
+    storedKey(
+      { tasks: "view" },
+      {
+        id: "c1",
+        name: "Claude",
+        keyPrefix: null,
+        oauthClientId: "client-1",
+        oauthClientDomain: "claude.ai",
+        oauthClientScheme: "https",
+        lastUsedAt: "2026-10-20T10:00:00Z",
+      },
+    );
+
+  it("shows a connection as a Connected app, with no secret or prefix", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      claudeApp(),
+      storedKey({ tasks: "view" }, { id: "k2", name: "Nightly import" }),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText("Connected app")).toBeTruthy();
+    expect(within(row).getByText(/claude\.ai · Last used/)).toBeTruthy();
+    expect(row.textContent).not.toContain("moduo_sk_");
+    expect(row.textContent).not.toContain("null");
+    expect(within(row).getByText("Acts as you")).toBeTruthy();
+    expect(within(row).getByRole("button", { name: "Edit access for Claude" })).toBeTruthy();
+    // A pasted key keeps its prefix and no badge.
+    const key = keyRow("Nightly import");
+    expect(within(key).queryByText("Connected app")).toBeNull();
+    expect(key.textContent).toContain("moduo_sk_000000");
+    expect(screen.getByText("Connected apps and keys · 2")).toBeTruthy();
+  });
+
+  it("shows an app that returns through its own scheme with that scheme, and as unchecked", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey(
+        { tasks: "view" },
+        {
+          id: "c2",
+          name: "Claude",
+          keyPrefix: null,
+          oauthClientId: "client-2",
+          oauthClientDomain: "claude.ai",
+          oauthClientScheme: "someapp",
+        },
+      ),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/someapp:\/\/claude\.ai · Never used/)).toBeTruthy();
+    expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
+  });
+
+  it("reads a connection made before the scheme was stored as unchecked", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey(
+        { tasks: "view" },
+        {
+          id: "c3",
+          name: "Claude",
+          keyPrefix: null,
+          oauthClientId: "client-3",
+          oauthClientDomain: "claude.ai",
+          oauthClientScheme: null,
+        },
+      ),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/claude\.ai · Never used/)).toBeTruthy();
+    expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
+  });
+
+  it("keeps the checked https app free of the unchecked note", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([claudeApp()]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).queryByText("Moduo hasn't checked this app.")).toBeNull();
+  });
+
+  it("disconnects with its own wording, through disconnectApp", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([claudeApp()]);
+    mocks.workspace.disconnectApp.mockResolvedValue(undefined);
+    const { user } = renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    await user.click(within(row).getByRole("button", { name: "Disconnect Claude" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Disconnect Claude?")).toBeTruthy();
+    expect(
+      within(dialog).getByText("It loses access immediately; it can sign in again later."),
+    ).toBeTruthy();
+    await user.click(within(dialog).getByRole("button", { name: "Disconnect" }));
+    await waitFor(() => expect(mocks.workspace.disconnectApp).toHaveBeenCalledTimes(1));
+    expect(mocks.workspace.disconnectApp.mock.calls[0][0].id).toBe("c1");
+    expect(mocks.workspace.revokeApiKey).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText("Connected app")).toBeNull());
+  });
+
+  it("renames a row its own person holds", async () => {
+    // Focus goes back to the Rename button, whose tooltip measures itself.
+    globalThis.ResizeObserver ??= class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    mocks.workspace.listApiKeys.mockResolvedValue([claudeApp()]);
+    mocks.workspace.renameApiKey.mockResolvedValue("Claude (work)");
+    const { user } = renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    await user.click(within(row).getByRole("button", { name: "Rename Claude" }));
+    const field = screen.getByRole("textbox", { name: "Name for Claude" });
+    await user.clear(field);
+    await user.type(field, "Claude (work){Enter}");
+    await waitFor(() =>
+      expect(mocks.workspace.renameApiKey).toHaveBeenCalledWith("c1", "Claude (work)"),
+    );
+    expect(await screen.findByText("Claude (work)", { selector: "p" })).toBeTruthy();
+  });
+
+  it("offers no rename on a teammate's row (the name is their trail label)", async () => {
+    mocks.ws.current = { ...mocks.ws.current, members: [anna] };
+    mocks.workspace.listApiKeys.mockResolvedValue([{ ...claudeApp(), createdBy: "u-anna" }]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).queryByRole("button", { name: "Rename Claude" })).toBeNull();
+    expect(within(row).getByRole("button", { name: "Disconnect Claude" })).toBeTruthy();
+  });
+
+  it("leads the Connector card with connecting by URL; keys sit under scripts", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([]);
+    renderSection();
+    await screen.findByText(/Nothing connected yet./);
+    const connector = screen.getByText("Connector").parentElement as HTMLElement;
+    expect(connector.textContent).toContain(
+      "Add Moduo as a connector in Claude, ChatGPT or Claude Code with this URL.",
+    );
+    expect(
+      within(connector).getByText("https://example.supabase.co/functions/v1/moduo-mcp"),
+    ).toBeTruthy();
+    expect(within(connector).getByRole("button", { name: "Copy connector URL" })).toBeTruthy();
+    expect(screen.getByText("For scripts and tools that can't sign in")).toBeTruthy();
   });
 });

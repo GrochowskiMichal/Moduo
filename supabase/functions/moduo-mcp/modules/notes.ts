@@ -234,6 +234,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "The note tree — every live note's id, title, parent, icon, and published flag (trashed excluded). Reconstruct the hierarchy from parent_id.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max notes (default 200, max 1000)." } },
@@ -256,6 +257,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_get",
       description: "One note as markdown (`body_md`) plus its meta — the read source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -280,6 +282,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_search",
       description: "Full-text search over note titles and body — returns matches with a snippet.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -314,6 +317,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable, searchable, publishable and editable, and lands in the Inbox when it has no parent.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -359,6 +363,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Append markdown to the end of a note. It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -390,6 +395,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Replace a note's markdown body wholesale (optionally rename it). It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -435,6 +441,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Reparent a note (with its subtree) under another note, or to the root (omit parent_id). Cycle-guarded server-side. Ordering among siblings is not controllable here — the note takes a default position.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -459,6 +466,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_archive",
       description: "Archive a note (with its subtree) — hides it from the tree, reversible.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -473,6 +481,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_trash",
       description: "Move a note (with its subtree) to the Trash (soft-delete; 30-day purge, Undo-friendly).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -488,6 +497,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Link a note to another entity with a typed relation (idempotent; rides the spine, so the key also needs Links: Edit). Use `references` for a manual connection.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {

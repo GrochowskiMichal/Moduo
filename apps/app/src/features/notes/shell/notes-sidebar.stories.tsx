@@ -2,6 +2,7 @@ import { DndContext, PointerSensor, useSensor, useSensors } from "@dnd-kit/core"
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
 import { fn } from "storybook/test";
+
 import type { Note, NoteFavorite } from "../model";
 import type { NoteSearchResult } from "../search";
 import { buildSidebarSections } from "../sections";

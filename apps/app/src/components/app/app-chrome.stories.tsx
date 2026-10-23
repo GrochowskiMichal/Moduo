@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useContext, useEffect, useMemo } from "react";
+
 import type { WorkspaceSummary } from "../../features/workspaces/types";
 import {
   WorkspaceContext,

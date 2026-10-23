@@ -23,8 +23,8 @@ import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
 import {
-  DROP_TARGET,
   DragOverlaySurface,
+  DROP_TARGET,
   InsertionLine,
   NestPreview,
   SortedNote,
@@ -32,7 +32,7 @@ import {
 import { formatDate } from "../../../lib/time-format";
 import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
-import { type AgentSession, agentRowMarks, agentWho } from "../../spine/agent-session";
+import { agentRowMarks, type AgentSession, agentWho } from "../../spine/agent-session";
 import { useAssignees } from "../assignees";
 import { type CompletedMode, isCompletedHidden, partitionCompleted } from "../completed";
 import { byIdOf } from "../derived";
@@ -54,7 +54,7 @@ import {
   positionNextTo,
   resolveListHover,
 } from "../dnd/drop-mode";
-import { type DropNames, dropLabel, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
+import { dropLabel, type DropNames, type TaskDropWrite, writeFromPlan } from "../dnd/drop-write";
 import { multiDropLabel, multiDropWrites } from "../dnd/multi-drop";
 import { isSideDroppable } from "../dnd/rail-drop";
 import { readFolds, writeFold } from "../folds";
@@ -80,12 +80,12 @@ import {
   fitColumns,
   handleLabel,
   projectLabel,
-  type RowTexts,
   rowColumns,
   rowDate,
+  type RowTexts,
   rowTime,
-  SIZED_COLUMNS,
   sessionLabel,
+  SIZED_COLUMNS,
   updatedLabel,
 } from "../row-layout";
 import { inViewOrder, PLAIN_SELECT, type SelectMods } from "../selection";
@@ -681,7 +681,6 @@ export function TaskListView({
   // Updated (while Display → Columns has it on, MOD-136) and the waiting lines.
   const showsUpdated = detailed && (detailedColumns?.includes("updated") ?? true);
   const ageTick = useMinuteTick(showsUpdated || (waiting?.length ?? 0) > 0);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: ageTick re-reads the ages each minute.
   const waitingLabels = useMemo(
     () =>
       waitingLabelsOf(
@@ -692,12 +691,12 @@ export function TaskListView({
         },
         nowOn(today),
       ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ageTick re-reads the ages each minute.
     [waiting, byId, today, ageTick],
   );
   // The view's own date words (Upcoming's "3:00 PM · 45m", a snoozed row's
   // "until Fri"): they move on by the minute ("missed" once a session ends).
   const whenTick = useMinuteTick(!!grouping?.whenOf);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: whenTick re-reads the words each minute.
   const whenOf = useMemo(() => {
     const byExtra = new Map<string, NonNullable<ListExtraGroup["whenOf"]>>();
     for (const g of extraGroups) {
@@ -712,6 +711,7 @@ export function TaskListView({
       if (own) return own(t);
       return viewWhen ? viewWhen(t, now) : null;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- whenTick re-reads the words each minute.
   }, [grouping, extraGroups, today, whenTick]);
   // TV-D16: "Claude · working" on the rows an agent session you can see works
   // on ("Anna's Claude · working" when it's a teammate's, first name only).
@@ -811,9 +811,9 @@ export function TaskListView({
   // Each task's words are kept per task object (the store keeps an unchanged
   // task's object), so an edit re-reads one row, not 10,000 (TV-D11b's
   // budget); anything else the words depend on starts the cache again.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: each dep is what the cached words depend on; a change starts a new cache.
   const textCache = useMemo(
     () => new WeakMap<Task, RowTexts>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- each dep is what the cached words depend on; a change starts a new cache.
     [
       whenOf,
       today,
@@ -1060,7 +1060,6 @@ export function TaskListView({
     list.focus();
     // Same task as the focus, so no frame paints the ring in between.
     if (document.activeElement === list) list.dataset.quietFocus = "";
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const move = useCallback(

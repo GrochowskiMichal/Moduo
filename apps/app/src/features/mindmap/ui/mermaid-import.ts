@@ -90,7 +90,7 @@ export function parseMermaidToMindmap(source: string): {
     metaMap.set(id, {
       label: patch.label ?? prev.label,
       className: patch.className ?? prev.className,
-      style: { ...(prev.style ?? {}), ...(patch.style ?? {}) },
+      style: { ...prev.style, ...patch.style },
     });
   }
 

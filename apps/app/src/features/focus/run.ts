@@ -26,8 +26,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 
 import {
   adoptFocusRun,
-  type FocusGiveBack,
   focusClockIsHere,
+  type FocusGiveBack,
   getFocusSession,
   relinquishFocus,
   STOP_UNDO_MS,
@@ -39,10 +39,10 @@ import type { FocusSession, FocusTaskRef } from "./engine-core";
 import {
   type FocusRun,
   type FocusRunReading,
+  focusRunRowToModel,
   type FocusRunRuntime,
   type FocusRunSnapshot,
   type FocusTimerMode,
-  focusRunRowToModel,
   readRunClock,
   runClockForAdopt,
   runSnapshotFromSession,

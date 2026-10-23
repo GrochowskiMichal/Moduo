@@ -11,11 +11,12 @@ import {
   isClosedTask,
   legacyTaskStatus,
   normalizeTaskStatusCategory,
+  taskCategoryOf,
   type TaskStatus,
   type TaskStatusCategory,
-  taskCategoryOf,
   taskStatusWord,
 } from "@contracts/vocabularies";
+
 import type { OverlayChange } from "../../lib/sync/store";
 import {
   dueOnToLocalInstant,

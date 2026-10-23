@@ -6,6 +6,7 @@
 // the whole copy in one step.
 
 import type { StarterTemplate } from "@contracts/vocabularies";
+
 import type {
   Bucket,
   ProjectStatus,
@@ -16,11 +17,11 @@ import type {
 } from "../features/tasks/model";
 import {
   type Template,
+  templateBodyOf,
+  templateFromRow,
   type TemplateKind,
   type TemplatePatchable,
   type TemplateWithBody,
-  templateBodyOf,
-  templateFromRow,
 } from "../features/tasks/templates/model";
 import type { Truncation } from "./paged-select";
 import { type Db, DbError, untypedDb } from "./runtime.db";

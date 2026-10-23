@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { normalizeLabelColor } from "../../../components/tag-colors";
 import { TeamMark } from "../../../components/ui/avatar";
 import { FilterBar, FilterButton } from "../../../components/ui/filter-bar";

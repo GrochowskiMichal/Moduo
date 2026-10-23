@@ -17,6 +17,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { ReactNode } from "react";
+
 import { PersonAvatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
@@ -24,6 +25,7 @@ import { Reactions } from "@/components/ui/reactions";
 import { Reference } from "@/features/spine/references/ui/reference";
 import { formatPastDay, formatStamp, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { groupMessageReactions, reactedBy, reactionName } from "../../spine/reactions";
 import { excerptOf } from "../chains";
 import { customGlyph, useCustomEmoji } from "../emoji/context";
@@ -47,8 +49,8 @@ export function authorName(m: ChatMessage, person: ChatPerson | undefined): stri
 export function DaySeparator({ at }: { at: string }) {
   return (
     <div className="pt-3.5">
-      {/* biome-ignore lint/a11y/useSemanticElements: a separator that names its day can't be an <hr> */}
       <div
+        // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- a separator that names its day can't be an <hr>
         role="separator"
         aria-label={formatPastDay(at)}
         className="flex h-(--row-h-sm) items-center gap-2.5 bg-card px-3 text-xs font-medium text-muted-foreground before:h-px before:flex-1 before:bg-hairline after:h-px after:flex-1 after:bg-hairline"
@@ -62,8 +64,8 @@ export function DaySeparator({ at }: { at: string }) {
 /** "New" since you last looked: a small pill centred on a hairline at the read mark (CH29d). */
 export function NewPill() {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the pill is drawn inside the separator
     <div
+      // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- the pill is drawn inside the separator
       role="separator"
       aria-label="New messages"
       className="mx-3 mt-3 mb-1.5 flex h-4.5 items-center gap-2.5 before:h-px before:flex-1 before:bg-hairline after:h-px after:flex-1 after:bg-hairline"
@@ -457,9 +459,9 @@ export function MessageRow({
   const pending = message.sendState === "sending" || message.sendState === "waiting";
   return (
     <div className={first ? "pt-(--feed-person-gap)" : undefined}>
-      {/* biome-ignore lint/a11y/useSemanticElements: the feed pattern's rows are articles */}
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: ⌘-click picks a row; the feed's ⇧↑↓ and ⌘A are its keys */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events -- ⌘-click picks a row; the feed's ⇧↑↓ and ⌘A are its keys */}
       <div
+        // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- the feed pattern's rows are articles
         role="article"
         id={domId}
         aria-posinset={position}

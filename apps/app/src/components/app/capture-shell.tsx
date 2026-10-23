@@ -15,14 +15,15 @@
 
 import { ChevronDown } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { CAPTURE_OPEN_EVENT } from "../../lib/capture-open";
 import {
   CAPTURE_TYPES,
   type CaptureContext,
-  type CaptureRequest,
-  type CaptureTypeDef,
   captureDigitFor,
   captureDigitKey,
+  type CaptureRequest,
+  type CaptureTypeDef,
   captureTypeForDigit,
 } from "../../lib/capture-registry";
 import { getCaptureSource } from "../../lib/capture-source";
@@ -72,7 +73,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
   }, []);
   // What was typed belongs to one person in one workspace: another person
   // signing in, or a switch of workspace, starts the line over (TV-U14).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the person and workspace are the trigger
+  // The person and workspace are the trigger.
   useEffect(() => {
     setDraft("");
     lineBeforePrefill.current = null;
@@ -113,7 +114,7 @@ export function CaptureShell({ types = CAPTURE_TYPES }: Props) {
         setDraft(request.draft);
       } else if (before !== null) setDraft(before);
       setContext((prev) => ({
-        ...(request ?? {}),
+        ...request,
         source: request?.source !== undefined ? request.source : getCaptureSource(),
         openId: prev.openId + 1,
         // A prefilled open keeps its own draft for as long as it's open.

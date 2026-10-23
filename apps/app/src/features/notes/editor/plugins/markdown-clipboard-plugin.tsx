@@ -29,6 +29,7 @@ import {
   type RangeSelection,
 } from "lexical";
 import { useEffect } from "react";
+
 import { looksLikeMarkdown, NOTES_TRANSFORMERS } from "../markdown";
 
 /** The top-level block a node sits in (root's direct child). */

@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 import { createCollection } from "@tanstack/db";
+
 import {
   type CollectionCopy,
   type CollectionRead,

@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
 import { renderChangelogPage } from "./changelog.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));

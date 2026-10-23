@@ -21,7 +21,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { DROP_TARGET, DragOverlaySurface } from "../../../components/ui/drag-visuals";
+
+import { DragOverlaySurface, DROP_TARGET } from "../../../components/ui/drag-visuals";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { cn } from "../../../lib/utils";
 import { useAssignees } from "../assignees";
@@ -86,8 +87,8 @@ import { useTaskFileDrop } from "./row-drop";
 import {
   type FactsSource,
   type TaskFacts,
-  type TaskRowActions,
   taskFactsOf,
+  type TaskRowActions,
   useRowActions,
   waitingLabelsOf,
 } from "./row-facts";
@@ -656,7 +657,7 @@ export function TaskBoardView({
   const selectedColumnId = selectedTaskId
     ? (cellOfTask.get(selectedTaskId)?.column.id ?? null)
     : null;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection or column asks again.
+  // A new selection or column asks again.
   useEffect(() => {
     if (!selectedTaskId || typeof window === "undefined") return;
     const frame = window.requestAnimationFrame(() => {

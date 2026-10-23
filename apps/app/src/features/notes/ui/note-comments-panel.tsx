@@ -23,6 +23,7 @@ import { useCommentThread } from "@/features/spine/hooks/use-comment-thread";
 import { WithCommentReactions } from "@/features/spine/ui/comment-reactions";
 import { CommentBody, CommentCard, CommentComposer } from "@/features/spine/ui/comments-panel";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+
 import { anchorStore, useNoteAnchors } from "../comments/anchor-store";
 import { type CommentThreadGroup, groupThreads } from "../comments/anchors";
 import { formatQuoteComment, parseQuoteComment } from "../comments/quote";
@@ -71,7 +72,7 @@ export function NoteCommentsPanel({
     [thread.comments, anchors.docOrder],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a quote belongs to the note it was taken from
+  // A quote belongs to the note it was taken from.
   useEffect(() => setQuote(null), [noteId]);
 
   // Tell the editor which threads are open, so only their marks highlight.

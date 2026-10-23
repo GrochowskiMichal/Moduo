@@ -24,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import type { CalendarModuleBundle } from "@/features/calendar/events";
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 import type { ReconnectItem } from "@/features/contacts/reconnect";
@@ -131,7 +132,6 @@ function useSource<T>(
     emptyRef.current = empty;
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey re-runs the read on purpose
   const load = useCallback((): Promise<void> => {
     // A retired source clears itself; the seq bump cancels any in-flight read.
     if (!enabled || !workspaceId) {
@@ -167,6 +167,7 @@ function useSource<T>(
     // `empty` arrives via emptyRef — array sources pass a fresh `[]` per render,
     // so listing it as a dep would loop the fetch; the ref reads the latest.
     // `refreshKey` is listed only so a new stamp reads again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey re-runs the read on purpose
   }, [enabled, workspaceId, refreshKey]);
 
   useEffect(() => {

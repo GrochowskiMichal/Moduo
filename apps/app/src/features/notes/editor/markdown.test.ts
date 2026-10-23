@@ -7,6 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+
 import {
   $convertFromMarkdownString,
   $convertSelectionToMarkdownString,
@@ -23,6 +24,7 @@ import {
   $setSelection,
 } from "lexical";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8 } from "../utils/base64";
 import {
   createNotesHeadlessEditor,

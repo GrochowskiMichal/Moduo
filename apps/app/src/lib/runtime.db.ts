@@ -6,6 +6,7 @@
 // names are checked at compile time: a misspelt argument is a type error here,
 // not a PGRST202 at run time that a "not deployed yet" fallback swallows.
 import type { SupabaseClient } from "@supabase/supabase-js";
+
 import type { Database, Json } from "@/types/supabase";
 
 export type Db = SupabaseClient<Database>;

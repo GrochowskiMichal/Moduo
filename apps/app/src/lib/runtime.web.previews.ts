@@ -160,16 +160,14 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): NotePreviewRow => ({
-          id: r.id,
-          title: str(r.title) ?? "",
-          icon: str(r.icon),
-          updatedAt: str(r.updated_at) ?? "",
-          deletedAt: str(r.deleted_at),
-          excerpt: card ? excerptOf(str(r.body_text)) : undefined,
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): NotePreviewRow => ({
+        id: r.id,
+        title: str(r.title) ?? "",
+        icon: str(r.icon),
+        updatedAt: str(r.updated_at) ?? "",
+        deletedAt: str(r.deleted_at),
+        excerpt: card ? excerptOf(str(r.body_text)) : undefined,
+      }));
     },
 
     async events({ workspaceId, ids }) {
@@ -180,17 +178,15 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): EventPreviewRow => ({
-          id: r.id,
-          title: str(r.title) ?? "",
-          startsAt: str(r.start_time) ?? "",
-          endsAt: str(r.end_time) ?? "",
-          allDay: r.all_day === true,
-          attendeeCount: Array.isArray(r.attendees) ? r.attendees.length : 0,
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): EventPreviewRow => ({
+        id: r.id,
+        title: str(r.title) ?? "",
+        startsAt: str(r.start_time) ?? "",
+        endsAt: str(r.end_time) ?? "",
+        allDay: r.all_day === true,
+        attendeeCount: Array.isArray(r.attendees) ? r.attendees.length : 0,
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async contacts({ workspaceId, ids, kind }) {
@@ -202,18 +198,16 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
           .eq("workspace_id", workspaceId)
           .in("id", ids);
         fail(error);
-        return ((data ?? []) as Row[]).map(
-          (r): ContactPreviewRow => ({
-            id: r.id,
-            kind: "company",
-            name: str(r.name) ?? "",
-            role: null,
-            companyName: null,
-            email: str(r.website),
-            avatarUrl: str(r.avatar_url),
-            deletedAt: str(r.deleted_at),
-          }),
-        );
+        return ((data ?? []) as Row[]).map((r): ContactPreviewRow => ({
+          id: r.id,
+          kind: "company",
+          name: str(r.name) ?? "",
+          role: null,
+          companyName: null,
+          email: str(r.website),
+          avatarUrl: str(r.avatar_url),
+          deletedAt: str(r.deleted_at),
+        }));
       }
       const { data, error } = await client
         .from("contacts")
@@ -234,18 +228,16 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
       const companyName = new Map(
         ((companies.data ?? []) as Row[]).map((c) => [c.id as string, str(c.name)]),
       );
-      return rows.map(
-        (r): ContactPreviewRow => ({
-          id: r.id,
-          kind: "contact",
-          name: str(r.name) ?? "",
-          role: str(r.title),
-          companyName: r.company_id ? (companyName.get(r.company_id) ?? null) : null,
-          email: str(r.email),
-          avatarUrl: str(r.avatar_url),
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return rows.map((r): ContactPreviewRow => ({
+        id: r.id,
+        kind: "contact",
+        name: str(r.name) ?? "",
+        role: str(r.title),
+        companyName: r.company_id ? (companyName.get(r.company_id) ?? null) : null,
+        email: str(r.email),
+        avatarUrl: str(r.avatar_url),
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async emails({ workspaceId, ids }) {
@@ -258,18 +250,16 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): EmailPreviewRow => ({
-          id: r.id,
-          subject: str(r.subject) ?? "",
-          fromName: str(r.from_name),
-          fromAddr: str(r.from_addr),
-          snippet: str(r.snippet),
-          sentAt: str(r.sent_at),
-          waitingOnReply: !!r.follow_up_at && !r.follow_up_cleared_at,
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): EmailPreviewRow => ({
+        id: r.id,
+        subject: str(r.subject) ?? "",
+        fromName: str(r.from_name),
+        fromAddr: str(r.from_addr),
+        snippet: str(r.snippet),
+        sentAt: str(r.sent_at),
+        waitingOnReply: !!r.follow_up_at && !r.follow_up_cleared_at,
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async tags({ workspaceId, ids }) {
@@ -280,14 +270,12 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): TagPreviewRow => ({
-          id: r.id,
-          name: str(r.name) ?? "",
-          color: str(r.color),
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): TagPreviewRow => ({
+        id: r.id,
+        name: str(r.name) ?? "",
+        color: str(r.color),
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async searchProjects({ workspaceId, query, limit }) {

@@ -10,6 +10,7 @@ import {
   requireRow,
 } from "@contracts/rows";
 import { normalizeContentAuthorKind, normalizeReactionKey } from "@contracts/vocabularies";
+
 import type { NotificationItem } from "../features/spine/notifications";
 import { shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";

@@ -40,15 +40,7 @@ export type LinkLeaf = { t: "link"; href: string; c: Array<TextLeaf | CodeLeaf> 
 export type BrLeaf = { t: "br" };
 
 export type Inline =
-  | TextLeaf
-  | CodeLeaf
-  | UrlLeaf
-  | ChannelLeaf
-  | EmojiLeaf
-  | RefLeaf
-  | DateLeaf
-  | LinkLeaf
-  | BrLeaf;
+  TextLeaf | CodeLeaf | UrlLeaf | ChannelLeaf | EmojiLeaf | RefLeaf | DateLeaf | LinkLeaf | BrLeaf;
 
 export type Block =
   /** Lines of text. Blank lines inside are kept (two `br`s in a row). */

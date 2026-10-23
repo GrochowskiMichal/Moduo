@@ -13,6 +13,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-10-19 · The sensitive CI secrets live in environments (desktop-signing, cloudflare-deploy, a narrower cloudflare-preview); low-value ones stay repo-level; callers keep `secrets: inherit` (needed for environment secrets in reusable workflows).
 - 2026-10-19 · REL-6: mirror branches retired (prod is tags only); ruleset keeps `mike`/`maciej` safe from delete-on-merge; `guard-git.sh` guards `develop`/`mike`/`maciej`; `turbo-cache-write` keeps `maciej`; `branch-audit.ts` holds merged branches an open PR still uses → decisions/workflow.md
 - 2026-10-19 · REL-3: `guard-release.sh` consumes the `/ship` marker and ignores it after 60 minutes; `--tags` and API dispatches are blocked; the first release diffs from the live web build; the release PR is the release record → decisions/workflow.md
+- 2026-10-22 · New Notes retires in-body page rows: a row to a child of the open note (live or trashed) removes itself, `/page` opens the new child; the Sub-pages list is the one place children show · MOD-81 follow-up → decisions/notes.md
 - 2026-10-22 · A note lists its real sub-pages live under the body (`selectSubpages`), read from the permission-filtered notes bundle; manual page rows stay plain content · MOD-81
 - 2026-10-20 · Published note links show only sub-notes that inherit the page's sharing (`notes_public_subtree`); a sub-note with its own sharing stays private · narrows NO-1's "subtree included" → decisions/notes.md
 - 2026-10-19 · REL-4: What's new's last-seen version lives in synced preferences and only moves forward; no recorded version → toast only for people with a pre-release stamp; update toast reads highlights from the manifest Markdown; reload prompt ignores unreadable builds; /changelog reuses the Terms page → decisions/workflow.md
@@ -144,6 +145,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-10-22 · Biome removed: `bun lint` from a canary pinned in `.bun-lint-version` lints (`.oxlintrc.json`), `bun fmt` formats.
+- 2026-10-22 · Bun 1.4.4: `bun check` replaces `tsc --noEmit`, `bun fmt` replaces Biome's formatter (Biome only lints), installs wait 3 days for new versions.
 - 2026-10-20 · Shortcuts are one typed registry on TanStack Hotkeys (`lib/hotkeys/`): route/surface/panel/modal scopes, narrower scope wins, no capture-phase overrides; duplicate-binding test.
 - 2026-10-20 · TanStack DB/Pacer/Devtools pinned (Devtools dev-only), Virtual 3.19, first-load budget in `apps/app/bundle-budget.json`, `tanstack` import boundary.
 - 2026-10-20 · First load is the anchor pages only: other routes, Lexical, capture parser, date picker and picker fonts are lazy (1,431 → 986 KB gzip JS).
@@ -195,6 +198,14 @@ One line per locked product or architecture decision, grouped by area, newest fi
 - 2026-07-30 · IM-2c-a: the depth picker ships without progress/cancel, and AC9's transport is amended from Tauri events to a cursor-backed status read.
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
+
+- 2026-10-23 · Connections keep their return address's scheme (`oauth_client_scheme`), so Settings shows `someapp://claude.ai` as unchecked, not as claude.ai → decisions/mcp.md
+- 2026-10-23 · MCPO-6: `hints` on every tool (read / destructive / idempotent, listed as MCP annotations); Zod output schemas for the five main task reads, listed but not enforced at runtime; `structuredContent` = the text's value; list roots stay arrays (the SDK wraps them for 2025 clients) → decisions/mcp.md
+- 2026-10-23 · MCPO-4: `/oauth/consent` reads the sign-in via Auth then `workspace_api_keys_oauth_request` (name, domain, current connection, full workspaces), holds a returning app's redirect until Approve, denies an Auth-approved one by redirecting with `access_denied`; card shared with the key screen; Disconnect also withdraws the grant → decisions/mcp.md
+- 2026-10-23 · MCPO-3: a connection is a `workspace_api_keys` row with `oauth_client_id`, approved for the person's own pending (or Auth-approved) sign-in; one live per person and app; quiet bell notice only its person reads; the connector verifies the app's JWT and runs as the connection's key; 401 + protected-resource discovery → decisions/mcp.md
+- 2026-10-23 · MCPO-2: connector on `@modelcontextprotocol/server` (stateless, per-key tools) + `@supabase/server`; our 401/405/parse answers, `parseToolArgs` gate, refusal and unknown-tool texts kept; only protocol-level answers change (negotiation up to 2025-11-25, method-not-found wording, unknown protocol header and bad initialize refused); parity snapshot proves it → decisions/mcp.md
+- 2026-10-23 · MCPO-1: app tokens refused everywhere but the connector (pre-request, restrictive policies on Storage/Realtime/published tables, Edge Function check); no access-token hook; no passwords set through Supabase Auth (trigger) and Settings' change-password removed → decisions/mcp.md
+- 2026-10-22 · Apps connect by URL and sign-in: Supabase OAuth 2.1 + a `/oauth/consent` screen make a scoped key ("connection"), the connector exchanges the app's token for that key (calls stay service-role + key header, never the person under RLS), app tokens are locked out of everything else; connector moves to the official MCP SDK + `@supabase/server`; server-side code mode not built (clients do it), code-mode readiness instead → decisions/mcp.md, specs/mcp-oauth.md
 
 - 2026-10-15 · Connector gaps (MOD-92…113, agent's choices): `tasks_list` answers a short row by default (`fields: "full"` for the old shape), agents read comments with Links: View (`comments_list`), a task handle works in the link tools, connector-made tags get the app's colour, and a tool's listing and parser can't drift apart.
 - 2026-10-09 · API keys can expire (optional, 90 days by default in the picker) and Settings flags expired and unused keys; no per-key rate limit.

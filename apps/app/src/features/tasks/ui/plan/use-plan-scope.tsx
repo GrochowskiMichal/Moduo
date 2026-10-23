@@ -3,6 +3,7 @@
 // and the multi-select's pruning.
 
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+
 import { TeamMark } from "../../../../components/ui/avatar";
 import { undoToast } from "../../../../lib/undo-toast";
 import { useStartConversation } from "../../../chat/start-conversation";
@@ -259,12 +260,11 @@ export function usePlanScope(c: PlanSelectionCtx) {
         `${b.team.id}:${b.team.name}:${b.team.mark}:${b.team.color}:${b.tasks.map((t) => t.id).join(",")}`,
     )
     .join("|");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the ids depend on.
   const takeableIds = useMemo(
     () => new Set(blocks.flatMap((b) => b.tasks.map((t) => t.id))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names what the ids depend on.
     [blocksKey],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the key names what the groups show.
   const mineExtraGroups = useMemo<readonly ListExtraGroup[]>(
     () =>
       blocks.map((b) => ({
@@ -282,6 +282,7 @@ export function usePlanScope(c: PlanSelectionCtx) {
           ? { kind: "add" as const, add: { seed: { teamId: b.team.id } } }
           : { kind: "none" as const },
       })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key names what the groups show.
     [blocksKey, canEdit],
   );
   // Take it (54): TV-D13's claim op makes the task yours and keeps its team
@@ -442,9 +443,9 @@ export function usePlanScope(c: PlanSelectionCtx) {
   });
   // A selection lasts within one place and one layout; tasks that leave the
   // scope leave it (a set of ids: rows scrolled away stay in it).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new place or layout is the cue
   useEffect(() => {
     multiSelect.clear();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a new place or layout is the cue
   }, [selection, view, workspaceId]);
   useEffect(() => {
     if (multiSelect.multi && selectedTaskId && !multiSelect.ids.has(selectedTaskId)) {
@@ -452,9 +453,9 @@ export function usePlanScope(c: PlanSelectionCtx) {
     }
   }, [selectedTaskId, multiSelect]);
   const scopeIdSet = useMemo(() => new Set(scopeTasks.map((t) => t.id)), [scopeTasks]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the views write viewOrderRef as they draw; read, never a cue
   useEffect(() => {
     multiSelect.prune((id) => scopeIdSet.has(id), viewOrderRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the views write viewOrderRef as they draw; read, never a cue
   }, [scopeIdSet, multiSelect.prune]);
   return {
     ...c,

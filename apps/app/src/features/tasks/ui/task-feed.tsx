@@ -24,6 +24,7 @@ import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import type { AppAvatarKind } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,6 +38,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
 import { undoToast } from "@/lib/undo-toast";
+
 import { appActorKind } from "../../spine/activity";
 import { commentAuthorName, editableComment } from "../../spine/comments";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
@@ -146,7 +148,7 @@ export function TaskFeed({
     writeFilter(currentUserId, next);
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: activityStamp re-reads the trail after an op
+  // ActivityStamp re-reads the trail after an op.
   useEffect(() => {
     let cancelled = false;
     void loadActivity(task.id)
@@ -166,12 +168,12 @@ export function TaskFeed({
   // thread again. Not on mount: the thread reads itself then.
   const commentStamp = useTasksSelector((_, snap) => snap.commentStamps?.get(task.id) ?? "");
   const seen = useRef({ activityStamp, commentStamp });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the stamps are the trigger
   useEffect(() => {
     const last = seen.current;
     if (last.activityStamp === activityStamp && last.commentStamp === commentStamp) return;
     seen.current = { activityStamp, commentStamp };
     reloadThread();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stamps are the trigger
   }, [activityStamp, commentStamp]);
 
   const feed = useMemo(

@@ -14,7 +14,9 @@ import { listingJsonSchema, TOOL_ARG_SCHEMAS } from "../_shared/contracts/mcp-to
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
-import { connectorModules } from "./registry.ts";
+import { connectorModules, toolAnnotations, type KeyContext } from "./registry.ts";
+import { outputJsonSchema } from "./tool-outputs.ts";
+import { listThroughSdk } from "./through-sdk.ts";
 
 type Schema = { properties?: Record<string, unknown>; required?: string[] };
 
@@ -31,6 +33,27 @@ describe("connector tool arguments: listing and parser", () => {
       const listed = Object.keys((tool.inputSchema as Schema).properties ?? {}).sort();
       const parsed = Object.keys((listingJsonSchema(tool.name) as Schema).properties ?? {}).sort();
       expect(parsed, tool.name).toEqual(listed);
+    }
+  });
+
+  it("are what a client lists through the SDK server, word for word", async () => {
+    const scopes = Object.fromEntries(connectorModules.map((m) => [m.module, "edit"]));
+    const key: KeyContext = { id: "key-1", workspaceId: "ws", name: "Agent", createdBy: "u", scopes };
+    const listed = await listThroughSdk(key);
+    expect(listed.map((t) => t.name)).toEqual(tools.map((t) => t.name));
+    for (const tool of tools) {
+      const entry = listed.find((t) => t.name === tool.name);
+      const output = outputJsonSchema(tool.name);
+      expect(entry, tool.name).toEqual({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: listingJsonSchema(tool.name, tool.inputSchema),
+        annotations: toolAnnotations(tool),
+        // A list's array schema is listed wrapped as { result }, the 2025-era wire shape.
+        ...(output
+          ? { outputSchema: output.type === "object" ? output : { type: "object", properties: { result: output }, required: ["result"] } }
+          : {}),
+      });
     }
   });
 

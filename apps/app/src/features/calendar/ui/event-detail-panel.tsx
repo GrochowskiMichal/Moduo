@@ -6,6 +6,7 @@
 
 import { Trash2, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+
 import { Button } from "../../../components/ui/button";
 import { DetailTitle, detailTitleVariants } from "../../../components/ui/detail-title";
 import { Eyebrow } from "../../../components/ui/eyebrow";

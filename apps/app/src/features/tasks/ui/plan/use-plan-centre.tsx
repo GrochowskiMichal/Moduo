@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { usePanelStack } from "../../../../components/app/right-panel";
 import { undoToast } from "../../../../lib/undo-toast";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../../layout/panel-events";
@@ -458,7 +459,7 @@ export function usePlanCentre(c: PlanCursorCtx) {
 
   // The "← item" stack's reset: a new selection is a new context, so the
   // stack starts over.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection is the cue
+  // A new selection is the cue.
   useEffect(() => {
     clearPanel();
   }, [selectedTaskId, clearPanel]);

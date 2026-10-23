@@ -5,6 +5,7 @@
 // when empty; what folds; what a drop writes; what the "+" adds.
 
 import { describe, expect, it } from "@rstest/core";
+
 import {
   type BoardContext,
   buildBoardColumns,

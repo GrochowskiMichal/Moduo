@@ -4,6 +4,7 @@
 // with, or why there's no "+" here. Pure: no React, no IO.
 
 import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies";
+
 import { DATE_GROUPS, type DateGroup, type GroupBy, isProjectScope } from "./helpers";
 import type { ProjectStatus } from "./model";
 import { firstStatusOf, statusGroupOf } from "./statuses";

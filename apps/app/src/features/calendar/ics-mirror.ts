@@ -319,7 +319,7 @@ function mapCalendarText(
       let iterations = 0;
       let emitted = 0;
       let next: ICAL.Time | null;
-      // biome-ignore lint/suspicious/noAssignInExpressions: iterator-drain idiom (body uses continue/break)
+      // Iterator-drain idiom (body uses continue/break)
       while ((next = iterator.next() ?? null)) {
         if (++iterations > MAX_ITERATIONS_PER_EVENT) break;
         if (emitted >= MAX_OCCURRENCES_PER_EVENT) break;

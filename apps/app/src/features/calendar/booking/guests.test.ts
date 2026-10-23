@@ -1,4 +1,5 @@
 import { describe, expect, test } from "@rstest/core";
+
 import { isEmailAddress, parseGuestEmails } from "./guests";
 
 describe("parseGuestEmails", () => {

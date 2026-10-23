@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 import { flushSync } from "react-dom";
+
 import {
   type BottomBarAction,
   type BottomBarMode,
@@ -40,6 +41,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { formatPastDay } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { useCustomEmoji } from "../emoji/context";
@@ -564,19 +566,19 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     // ── the multi-select (CV-16, §16: ⇧↑↓ · ⌘-click · ⌘A) ──────────────────
     const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
     const anchor = useRef<string | null>(null);
-    // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+    // A switch of conversation is the trigger.
     useEffect(() => {
       setPicked(new Set());
       anchor.current = null;
     }, [conversationId]);
     // Messages that leave the window (moved, deleted) leave the selection.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the drawn rows are the trigger
     useEffect(() => {
       setPicked((prev) => {
         if (prev.size === 0) return prev;
         const next = new Set([...prev].filter((k) => pickable(messageOf(k))));
         return next.size === prev.size ? prev : next;
       });
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the drawn rows are the trigger
     }, [rows]);
     const pickable = (m: ChatMessage | null): m is ChatMessage =>
       !!m && m.kind === "message" && !m.sendState && !m.deletedAt;
@@ -630,7 +632,6 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
     };
     const pickedKey = [...picked].sort().join(",");
     // The bottom bar's mode row while something is picked: Move M · Task T · Delete ⌫.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: the selection (by its ids) and the rights are the triggers
     const mode = useMemo<BottomBarMode | null>(() => {
       if (picked.size === 0) return null;
       const v = manyVerbs();
@@ -669,12 +670,15 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
         actions,
         note: `${picked.size} selected · Esc`,
       };
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the selection (by its ids) and the rights are the triggers
     }, [
       pickedKey,
       canWrite,
       canUseTools,
       conversationId,
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the selection (by its ids) and the rights are the triggers
       !!props.onMoveMany,
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the selection (by its ids) and the rights are the triggers
       !!props.canMoveOthers,
     ]);
     useBottomBarModeOwner(mode);
@@ -1003,7 +1007,7 @@ export const MessageStream = forwardRef<MessageStreamHandle, MessageStreamProps>
             aria-busy={win.loading}
             aria-label="Messages"
             aria-activedescendant={selected ? `chat-msg-${selected}` : undefined}
-            // biome-ignore lint/a11y/noNoninteractiveTabindex: the feed takes focus to step through messages
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- the feed takes focus to step through messages
             tabIndex={0}
             onScroll={onScroll}
             onKeyDown={onKeyDown}

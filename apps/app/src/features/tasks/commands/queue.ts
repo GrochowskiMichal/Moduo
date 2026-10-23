@@ -4,6 +4,7 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import { readLocalFocusPrefs } from "../../../lib/focus-prefs";
 import type { FocusTaskRef } from "../../focus/engine";
 import { focusOn } from "../../focus/timer";

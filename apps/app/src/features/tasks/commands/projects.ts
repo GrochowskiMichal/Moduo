@@ -4,6 +4,7 @@
 
 import { type ProjectState, taskCategoryOf } from "@contracts/vocabularies";
 import { toast } from "sonner";
+
 import type { LabelColor } from "../../../components/tag-colors";
 import type { ProjectFields } from "../../../lib/runtime.web.structure";
 import type { OverlayChange } from "../../../lib/sync/store";
