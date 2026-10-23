@@ -84,6 +84,10 @@ export type NotesEditorBridge = {
    * `/page` opens the new child instead of inserting one. Absent (no note
    * open, a story): page rows behave as plain content. */
   subpagesListedFor?: string;
+  /** Hear about note-list changes (a page row's live title). The bridge
+   * itself stays the same object while notes change, so views that read the
+   * list subscribe here instead of re-rendering with every change. */
+  subscribeNotes?: (listener: () => void) => () => void;
 };
 
 export const NotesEditorBridgeContext = createContext<NotesEditorBridge | null>(null);
