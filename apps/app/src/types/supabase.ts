@@ -6044,7 +6044,6 @@ export type Database = {
       }
     }
     Functions: {
-      accept_workspace_invite: { Args: { p_invite_id: string | null }; Returns: Json }
       access_changes__note: {
         Args: {
           p_resource_id: string | null
