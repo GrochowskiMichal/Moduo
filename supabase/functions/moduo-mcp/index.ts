@@ -16,6 +16,11 @@
  * uses): without it every request answers 500 MISSING_DEFAULT_PUBLISHABLE_KEY.
  * Hosted Edge Functions and the local stack set both, and SUPABASE_JWKS.
  *
+ * Two addresses, one function: apps also connect at https://mcp.moduo.app,
+ * a Worker (infra/mcp-proxy) that forwards here. Discovery names whichever
+ * address the client used (public-url.ts); the sign-in server is always the
+ * project's Supabase Auth.
+ *
  * Deploy with verify_jwt = false — MCP clients send a Moduo key or an app
  * token, and discovery must reach the function signed out; server.ts is the
  * auth.
@@ -24,7 +29,10 @@
 import { withOAuthProtectedResource, withSupabase } from "@supabase/server";
 import { createAdminClient, verifyCredentials } from "@supabase/server/core";
 
+import { publicOrigins, publicResource } from "./public-url.ts";
 import { CORS_HEADERS, handleMcpRequest } from "./server.ts";
+
+const PUBLIC_ORIGINS = publicOrigins(Deno.env.get("MCP_PUBLIC_URL"));
 
 /** An app's access token: its claims when Supabase Auth signed it and it hasn't expired. */
 async function verifyToken(token: string): Promise<Record<string, unknown> | null> {
@@ -39,6 +47,8 @@ async function verifyToken(token: string): Promise<Record<string, unknown> | nul
 
 Deno.serve(
   withOAuthProtectedResource(
+    // "" falls back to the Supabase URL @supabase/server derives from the request.
+    { resourceServer: (req) => publicResource(req, PUBLIC_ORIGINS) },
     withSupabase({ auth: "none", cors: { headers: CORS_HEADERS } }, (req, ctx) =>
       handleMcpRequest(req, {
         admin: ctx.supabaseAdmin,

@@ -122,6 +122,7 @@ No. It's **private by default, but the workspace sees free/busy** (a "Busy" bloc
 
 **c) Make any calendar public.**
 **Yes**, with the same publish pattern as notes: **Publish → public link + ICS feed**, level **Free/busy** or **Full details**. Unpublishing kills the link (same as `notes_archive_unpublishes`).
+  - _2026-10-23: the unserved backend (`calendar_public_feed`, anon-callable, and `calendar_op_publish`) was dropped for security (`20261023043030_drop_calendar_public_feed`); the empty `calendars.publish_token`/`publish_level` columns remain. Publishing comes back as its own block with a served feed._
 
 **d) Calendars added through integrations (Google, etc.).**
 **Private by default + free/busy to the workspace**, same as (a). The owner can raise access up to **Can edit / Full**.

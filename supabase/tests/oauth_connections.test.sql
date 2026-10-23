@@ -296,10 +296,17 @@ SELECT test.ok(test.connect('E', 'W2', 'C', '{"tasks": "view"}') = 'ok 1'
   'signing in again after a disconnect makes a new connection');
 
 -- ── grants ───────────────────────────────────────────────────────────────────
-SELECT test.ok(NOT has_function_privilege('anon', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean)', 'EXECUTE')
+SELECT test.ok(NOT has_function_privilege('anon', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean, uuid[])', 'EXECUTE')
                AND NOT has_function_privilege('anon', 'public.workspace_api_keys_rename(uuid, text)', 'EXECUTE')
-               AND has_function_privilege('authenticated', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean)', 'EXECUTE'),
+               AND has_function_privilege('authenticated', 'public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean, uuid[])', 'EXECUTE'),
   'connect and rename are for signed-in people only');
+SELECT test.ok(to_regprocedure('public.workspace_api_keys_connect_oauth(uuid, text, jsonb, integer, boolean)') IS NULL,
+  'connect has one signature (the old five-argument one is gone; its callers match the new one by its defaults)');
+SELECT test.ok(NOT has_function_privilege('authenticated', 'public.workspace_api_keys__same_oauth_app(public.workspace_api_keys, uuid, uuid, text, text, text)', 'EXECUTE')
+               AND NOT has_function_privilege('anon', 'public.workspace_api_keys__same_oauth_app(public.workspace_api_keys, uuid, uuid, text, text, text)', 'EXECUTE')
+               AND NOT has_function_privilege('authenticated', 'public.workspace_api_keys__oauth_app_name(text, text)', 'EXECUTE')
+               AND NOT has_function_privilege('anon', 'public.workspace_api_keys__oauth_app_name(text, text)', 'EXECUTE'),
+  'the same-app helpers are internal');
 
 -- ── erasure: a deleted key takes its notice ──────────────────────────────────
 DELETE FROM public.workspace_api_keys WHERE id = (test.live('E', 'D')).id;
@@ -307,3 +314,129 @@ SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.module_activity
                            WHERE entity_type = 'api_key' AND payload ->> 'app_name' = 'Claude Desktop'
                              AND payload -> 'notify_user_ids' ? test.id('E')::text),
   'deleting a connection (as account erasure does) deletes its notice');
+
+-- ── MCPO-5 follow-up: duplicate connections to the same app ─────────────────
+-- (supabase/migrations/20261024090000_oauth_replace_duplicates.sql)
+-- Cast: P owns W3; Q is a member of W3 with API keys. C2, C3, C4 are Claude
+-- registering anew on each Connect (same name, https://claude.ai); K calls
+-- itself Claude but returns to another domain; S (above) returns to
+-- someapp://claude.ai. C's own row for P is the reconnect target.
+SELECT test.person(n) FROM unnest(ARRAY['P', 'Q']) AS n;
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W3'), test.id('P'), 'Third');
+INSERT INTO public.workspace_members (workspace_id, user_id, role, overrides)
+VALUES (test.id('W3'), test.id('Q'), 'member', '{"ws.api_keys": true}');
+INSERT INTO auth.oauth_clients
+  (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
+SELECT test.id(n), 'dynamic', 'https://claude.ai/api/mcp/auth_callback', 'authorization_code,refresh_token',
+       ' Claude ', 'public', 'none'
+FROM unnest(ARRAY['C2', 'C3', 'C4', 'C5', 'C6']) AS n;
+INSERT INTO auth.oauth_clients
+  (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
+VALUES (test.id('K'), 'dynamic', 'https://claude.example.net/cb', 'authorization_code,refresh_token',
+        'Claude', 'public', 'none');
+UPDATE auth.oauth_clients SET deleted_at = NULL WHERE id = test.id('S');
+
+-- Approve with replacements; answers the replaced ids, or the error.
+CREATE FUNCTION test.approve_replacing(p_who text, p_ws text, p_authorization text, p_replace uuid[])
+RETURNS text LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format(
+    $q$SELECT replaced::text FROM public.workspace_api_keys_connect_oauth(%L, %L, '{"tasks": "view"}'::jsonb, 90, false, %L::uuid[])$q$,
+    test.id(p_ws), p_authorization, p_replace))
+$$;
+-- What the consent page reads for a sign-in: the others it would offer.
+CREATE FUNCTION test.others(p_who text, p_authorization text) RETURNS jsonb LANGUAGE sql AS $$
+  SELECT test.value_as(p_who, format(
+    $q$SELECT (public.workspace_api_keys_oauth_request(%L) -> 'others')::text$q$, p_authorization))::jsonb
+$$;
+
+SELECT test.connect('P', 'W3', 'C', '{"tasks": "view"}');
+SELECT test.connect('P', 'W3', 'C2', '{"tasks": "view"}');
+SELECT test.connect('P', 'W3', 'S', '{"tasks": "view"}');
+SELECT test.connect('P', 'W3', 'K', '{"tasks": "view"}');
+SELECT test.connect('Q', 'W3', 'C4', '{"tasks": "view"}');
+UPDATE public.workspace_api_keys SET last_used_at = now() - interval '1 hour' WHERE id = (test.live('P', 'C')).id;
+UPDATE public.workspace_api_keys SET last_used_at = now() - interval '30 seconds' WHERE id = (test.live('P', 'C2')).id;
+CREATE TEMP TABLE dup AS
+  SELECT (test.live('P', 'C')).id AS c, (test.live('P', 'C2')).id AS c2, (test.live('P', 'S')).id AS s,
+         (test.live('P', 'K')).id AS k, (test.live('Q', 'C4')).id AS q4,
+         test.sign_in('P', 'C3') AS auth3;
+GRANT SELECT ON dup TO authenticated, service_role;
+
+SELECT test.ok(
+  (SELECT jsonb_agg(o -> 'id' ORDER BY ord) FROM jsonb_array_elements(test.others('P', (SELECT auth3 FROM dup)))
+     WITH ORDINALITY AS t(o, ord))
+    = (SELECT jsonb_build_array(c2, c) FROM dup),
+  'a new Claude sign-in finds P''s two other Claude connections, most recently used first');
+SELECT test.ok(
+  (SELECT bool_and((o ->> 'recently_used')::boolean = (o ->> 'id' = (SELECT c2::text FROM dup)))
+            AND bool_and(o ? 'created_at' AND o ? 'last_used_at' AND o ->> 'name' = 'Claude'
+                         AND o ->> 'workspace_id' = test.id('W3')::text)
+   FROM jsonb_array_elements(test.others('P', (SELECT auth3 FROM dup))) o),
+  'each says when it was made and last used; only the one used in the last two minutes reads recently used');
+SELECT test.ok(
+  NOT EXISTS (SELECT 1 FROM jsonb_array_elements(test.others('P', (SELECT auth3 FROM dup))) o, dup
+              WHERE o ->> 'id' IN (dup.s::text, dup.k::text, dup.q4::text)),
+  'another scheme (someapp://claude.ai), another domain, and someone else''s Claude are not "the same app"');
+SELECT test.ok(test.others('P', test.sign_in('P', 'C')) = (SELECT jsonb_build_array(
+                 (SELECT o FROM jsonb_array_elements(test.others('P', (SELECT auth3 FROM dup))) o WHERE o ->> 'id' = c2::text)) FROM dup),
+  'reconnecting C offers only the others, never C''s own row');
+SELECT test.ok(test.others('Q', test.sign_in('Q', 'C5')) = (SELECT jsonb_build_array(
+                 (SELECT o FROM jsonb_array_elements(test.others('Q', test.sign_in('Q', 'C5'))) o)) FROM dup)
+               AND jsonb_array_length(test.others('Q', test.sign_in('Q', 'C5'))) = 1,
+  'Q sees only Q''s own connection');
+
+-- Renamed, revoked and expired connections are not offered.
+UPDATE public.workspace_api_keys SET name = 'Claude (old laptop)' WHERE id = (SELECT c FROM dup);
+SELECT test.ok(jsonb_array_length(test.others('P', (SELECT auth3 FROM dup))) = 1,
+  'a connection the person renamed is told apart already, so it isn''t offered');
+UPDATE public.workspace_api_keys SET name = 'claude' WHERE id = (SELECT c FROM dup);
+SELECT test.ok(jsonb_array_length(test.others('P', (SELECT auth3 FROM dup))) = 2,
+  'the name matches regardless of case and spaces');
+UPDATE public.workspace_api_keys SET created_at = now() - interval '2 days', expires_at = now() - interval '1 minute' WHERE id = (SELECT c FROM dup);
+SELECT test.ok(jsonb_array_length(test.others('P', (SELECT auth3 FROM dup))) = 1, 'an expired connection is not offered');
+UPDATE public.workspace_api_keys SET expires_at = NULL WHERE id = (SELECT c FROM dup);
+
+-- Replacing: only P's same-app connections end; the rest of the list is skipped.
+SELECT test.ok(test.approve_replacing('P', 'W3', (SELECT auth3 FROM dup),
+                 (SELECT ARRAY[c, s, k, q4, test.id('nothing')] FROM dup)) = (SELECT '{' || c || '}' FROM dup),
+  'approving with replacements ends only P''s other Claude connection and answers it');
+SELECT test.ok((SELECT revoked_at IS NOT NULL FROM public.workspace_api_keys WHERE id = (SELECT c FROM dup))
+               AND (SELECT bool_and(revoked_at IS NULL) FROM public.workspace_api_keys
+                    WHERE id IN (SELECT unnest(ARRAY[s, k, q4, c2]) FROM dup))
+               AND (test.live('P', 'C3')).id IS NOT NULL,
+  'the replaced row is revoked; the other scheme, other domain, Q''s and the unticked one stay; C3 is connected');
+SELECT test.ok(public.module_api_key_effective_scopes((SELECT c FROM dup)) = '{}'::jsonb,
+  'the replaced connection resolves to no access, so its app is refused');
+SELECT test.ok((SELECT payload -> 'replaced' = to_jsonb(ARRAY[(SELECT c FROM dup)])
+                FROM public.module_activity
+                WHERE op = 'api_keys.connected' AND entity_id = (test.live('P', 'C3')).id),
+  'the connected notice records what it replaced');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C3'), (SELECT ARRAY[c2] FROM dup)) = (SELECT '{' || c2 || '}' FROM dup)
+               AND (test.live('P', 'C2')).id IS NULL,
+  'a reconnect replaces too');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C3'), (SELECT ARRAY[(test.live('P', 'C3')).id])) = '{}'
+               AND (test.live('P', 'C3')).id IS NOT NULL,
+  'an app''s own connection is never "another" one: asking to replace it does nothing');
+SELECT test.ok(test.approve_replacing('Q', 'W3', test.sign_in('Q', 'C5'), (SELECT ARRAY[(test.live('P', 'C3')).id])) = '{}'
+               AND (test.live('P', 'C3')).id IS NOT NULL,
+  'nobody can end someone else''s connection by naming it');
+
+-- A replaced connection frees its place under the 20 cap.
+INSERT INTO public.workspace_api_keys (workspace_id, name, key_prefix, key_hash, scopes, created_by)
+SELECT test.id('W3'), 'Key ' || n, 'moduo_sk_' || n, md5('dup-cap-' || n), '{"tasks": "view"}', test.id('P')
+FROM generate_series(1, 20 - (SELECT count(*) FROM public.workspace_api_keys
+                              WHERE workspace_id = test.id('W3') AND revoked_at IS NULL)::int) AS n;
+SELECT test.ok(test.connect('P', 'W3', 'C4', '{"tasks": "view"}') LIKE '54000 %', 'at 20, a new Claude connection is refused');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C4'), ARRAY[(test.live('P', 'C3')).id]) LIKE '{%}'
+               AND (test.live('P', 'C4')).id IS NOT NULL AND (test.live('P', 'C3')).id IS NULL,
+  'at 20, replacing the old Claude connection makes room for the new one');
+-- P's Claude connection in another workspace, then a replacing approve in the full W3.
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W4'), test.id('P'), 'Fourth');
+SELECT test.connect('P', 'W4', 'C6', '{"tasks": "view"}');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C5'), ARRAY[(test.live('P', 'C6')).id])
+                 LIKE 'ERROR This workspace has 20 keys%'
+               AND (test.live('P', 'C6')).id IS NOT NULL AND (test.live('P', 'C6')).revoked_at IS NULL,
+  'a refused connect ends nothing: a replacement in another workspace rolls back with it');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C5'), ARRAY[(test.live('P', 'K')).id]) LIKE 'ERROR This workspace has 20 keys%'
+               AND (test.live('P', 'K')).id IS NOT NULL,
+  'naming a connection that isn''t the same app frees nothing, and the cap still holds');

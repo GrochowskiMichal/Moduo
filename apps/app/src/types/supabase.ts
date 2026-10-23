@@ -3415,15 +3415,12 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          cloud_linked: boolean
           created_at: string
           current_period_end: string | null
           display_name: string
           id: string
-          local_user_id: string | null
           plan_tier: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at: string | null
-          recovery_seed_hash: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string
@@ -3431,15 +3428,12 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
-          cloud_linked?: boolean
           created_at?: string
           current_period_end?: string | null
           display_name?: string
           id: string
-          local_user_id?: string | null
           plan_tier?: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at?: string | null
-          recovery_seed_hash?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
@@ -3447,15 +3441,12 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
-          cloud_linked?: boolean
           created_at?: string
           current_period_end?: string | null
           display_name?: string
           id?: string
-          local_user_id?: string | null
           plan_tier?: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at?: string | null
-          recovery_seed_hash?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
@@ -5024,7 +5015,6 @@ export type Database = {
           token_expiry: string | null
           updated_at: string
           user_id: string
-          zoom_account_id: string | null
         }
         Insert: {
           access_token_enc: string
@@ -5036,7 +5026,6 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string
           user_id: string
-          zoom_account_id?: string | null
         }
         Update: {
           access_token_enc?: string
@@ -5048,7 +5037,6 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string
           user_id?: string
-          zoom_account_id?: string | null
         }
         Relationships: []
       }
@@ -6487,11 +6475,6 @@ export type Database = {
         }
         Returns: Json
       }
-      calendar_op_publish: {
-        Args: { p_calendar_id: string | null; p_level: string | null }
-        Returns: string
-      }
-      calendar_public_feed: { Args: { p_token: string | null }; Returns: Json }
       calendar_set_save: {
         Args: {
           p_calendar_ids: string[] | null
@@ -8998,7 +8981,6 @@ export type Database = {
         Args: { p_workspace_id: string | null }
         Returns: boolean
       }
-      comment_reactions__words_to_emoji: { Args: never; Returns: number }
       comments__can_remove: {
         Args: { c: Database["public"]["Tables"]["comments"]["Row"] | null }
         Returns: boolean
@@ -9337,11 +9319,6 @@ export type Database = {
         Returns: undefined
       }
       contact_merge_candidates: { Args: never; Returns: Json }
-      contacts__company_link_backfill: { Args: never; Returns: undefined }
-      contacts__emails_to_jsonb: {
-        Args: { p_arr: string[] | null; p_primary: string | null }
-        Returns: Json
-      }
       contacts__primary_value: { Args: { p_list: Json | null }; Returns: string }
       contacts__works_at_company: {
         Args: { p_contact_id: string | null; p_workspace_id: string | null }
@@ -11298,10 +11275,6 @@ export type Database = {
         Returns: string[]
       }
       perm_entity_module: { Args: { p_entity_type: string | null }; Returns: string }
-      perm_has: {
-        Args: { p_key: string | null; p_workspace_id: string | null }
-        Returns: boolean
-      }
       perm_i_have: {
         Args: { p_key: string | null; p_workspace_id: string | null }
         Returns: boolean
@@ -11753,7 +11726,6 @@ export type Database = {
       reactions__key_canonical: { Args: { p_key: string | null }; Returns: string }
       reactions__key_ok: { Args: { p_key: string | null }; Returns: boolean }
       reactions__key_pattern: { Args: never; Returns: string }
-      reactions__respell_stored: { Args: never; Returns: number }
       recompute_entitlement: { Args: { p_user: string | null }; Returns: undefined }
       sections__check_dates: {
         Args: { p_ends: string | null; p_starts: string | null }
@@ -11850,10 +11822,6 @@ export type Database = {
       share_assign_preview: {
         Args: { p_bucket_id: string | null; p_user_id: string | null }
         Returns: string
-      }
-      share_can: {
-        Args: { p_id: string | null; p_min: string | null; p_type: string | null }
-        Returns: boolean
       }
       share_default_calendar_grant: {
         Args: { p_calendar_id: string | null }
@@ -14404,6 +14372,7 @@ export type Database = {
           p_authorization_id: string | null
           p_expires_in_days?: number | null
           p_include_private_chat?: boolean | null
+          p_replace_ids?: string[] | null
           p_scopes?: Json | null
           p_workspace_id: string | null
         }
@@ -14414,6 +14383,7 @@ export type Database = {
           include_private_chat: boolean
           moved_from: string
           name: string
+          replaced: string[]
           scopes: Json
           workspace_id: string
         }[]

@@ -6,13 +6,14 @@ name: release
 #   resolve  the tag's commit is on develop, `checks` passed on a push of it (waits for a run still
 #            going) and VERSION equals the tag; anything else is refused (AC7)
 #   web      app.moduo.app, then moduo.app (_deploy-web.yml), with the smoke tests
+#   mcp      mcp.moduo.app, the MCP connector's address (_deploy-mcp-proxy.yml), with its smoke test
 #   desktop  the production desktop build of the checked commit (_desktop-release.yml), only when
 #            something the desktop bundle is built from changed since the last tag that shipped
 #            desktop (desktop bundles the UI; the list is in "Does desktop need a build?"). First
 #            tag release: always.
 #   notes    a GitHub release vX.Y.Z on moduo-releases with that version's notes (releases.json)
 #
-# Re-runs: "Re-run failed jobs". To redeploy only web from a tag, run deploy-prod; only desktop,
+# Re-runs: "Re-run failed jobs". To redeploy only web (or mcp) from a tag, run deploy-prod; only desktop,
 # Desktop Release (production). Both take the tag and run the same check.
 on:
   push:
@@ -99,6 +100,19 @@ jobs:
     uses: ./.github/workflows/_deploy-web.yml
     # inherit is required for the called jobs to see their environment's secrets (an explicit
     # list leaves them empty); the sensitive ones live only in those environments.
+    secrets: inherit
+    with:
+      sha: ${{ needs.resolve.outputs.sha }}
+      label: ${{ github.ref_name }}
+
+  mcp:
+    needs: resolve
+    # One mcp.moduo.app deploy at a time, shared with deploy-prod.
+    concurrency:
+      group: deploy-mcp-production
+      cancel-in-progress: false
+    uses: ./.github/workflows/_deploy-mcp-proxy.yml
+    # inherit is required for the called job to see its environment's secrets.
     secrets: inherit
     with:
       sha: ${{ needs.resolve.outputs.sha }}

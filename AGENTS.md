@@ -16,7 +16,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 8. **Production ships only from a `vX.Y.Z` tag cut by `/ship`** (there is no `main` or mirror branch). Never merge or close unrelated PRs. Force-push only your own task branch, with `--force-with-lease`. *(Hook `guard-release.sh` blocks tag pushes and prod workflow runs without `/ship`'s marker.)*
 9. **Never commit `docs/local/`. Never push `refs/entire/*`** (session transcripts stay local; the guard blocks it) and never wipe local Entire data.
 10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
-11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function`; `.claude/settings.json` asks before `supabase db push`, `db query --linked` and `functions deploy`.)*
+11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function` and before `supabase db push`, `db query --linked` and `functions deploy`. A developer may lift that for their own sessions with `MODUO_SUPABASE_NO_PROMPT=1` in their gitignored `.claude/settings.local.json`; their own allow rules then decide, and teammates are still asked.)*
 12. **Stage explicit paths.** Another session may share the checkout: never `git add -A` or `git add <dir>`.
 13. **The local Supabase stack is shared** by every session and agent on this Mac. Never wipe or stop it (`local:reset`, `local:down`, `supabase db reset`, `supabase stop --no-backup`) unless the user confirms no other session needs it, and never clean up rows or migrations another session left there. Test a migration by applying it on top with `psql … -1 -f <file>`. *(`scripts/local/stack.sh` refuses reset/down without `MODUO_SHARED_STACK_OK=1`; `.claude/settings.json` denies the raw commands.)*
 
@@ -55,7 +55,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
 
 - **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. The full CI suite runs once, on PRs into `develop` (and on the push after merging).
-- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp`, `meet-*`, `apps/app/src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
+- **Tier 2, risky paths** (migrations, RLS/policies, contracts, `delete-account`, billing functions, `moduo-mcp` and `infra/mcp-proxy`, `meet-*`, `apps/app/src/lib/runtime*`, updater/signing, `.github/workflows`): add the `validator` subagent on the diff before merging.
 - **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
 
 ## Product north star (read before designing any module)

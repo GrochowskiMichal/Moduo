@@ -665,7 +665,7 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
     renderSection();
     const row = await waitFor(() => keyRow("Claude"));
     expect(within(row).getByText("Connected app")).toBeTruthy();
-    expect(within(row).getByText(/claude\.ai · Last used/)).toBeTruthy();
+    expect(within(row).getByText(/^claude\.ai · Connected .+ · Last used /)).toBeTruthy();
     expect(row.textContent).not.toContain("moduo_sk_");
     expect(row.textContent).not.toContain("null");
     expect(within(row).getByText("Acts as you")).toBeTruthy();
@@ -693,7 +693,9 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
     ]);
     renderSection();
     const row = await waitFor(() => keyRow("Claude"));
-    expect(within(row).getByText(/someapp:\/\/claude\.ai · Never used/)).toBeTruthy();
+    expect(
+      within(row).getByText(/^someapp:\/\/claude\.ai · Connected .+ · Never used$/),
+    ).toBeTruthy();
     expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
   });
 
@@ -713,7 +715,7 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
     ]);
     renderSection();
     const row = await waitFor(() => keyRow("Claude"));
-    expect(within(row).getByText(/claude\.ai · Never used/)).toBeTruthy();
+    expect(within(row).getByText(/^claude\.ai · Connected .+ · Never used$/)).toBeTruthy();
     expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
   });
 

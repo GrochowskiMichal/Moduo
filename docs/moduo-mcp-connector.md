@@ -22,12 +22,79 @@ This is a living spec. When a decision changes, update this file first, then cod
   (CORS, service-role clients). `sdk-parity.test.ts` holds every answer to
   what the hand-written server said. Deployed with `verify_jwt = false`: MCP
   clients present a Moduo key, not a Supabase JWT.
-- **Endpoint:** `https://<project>.supabase.co/functions/v1/moduo-mcp` —
-  surfaced with a copy affordance in Settings → API keys
-  (`runtime.workspace.getMcpEndpoint()`).
+- **Endpoint:** **`https://mcp.moduo.app`** in production, shown with a copy
+  affordance in Settings → API keys and Integrations → AI & MCP
+  (`runtime.workspace.getMcpEndpoint()`; any other project, such as the local
+  stack, shows its function URL). It is a Cloudflare Worker
+  (`infra/mcp-proxy`, `moduo-mcp-proxy`) that forwards every request to the
+  function unchanged, so Claude shows Moduo's icon: Claude takes a custom
+  connector's icon from its URL's domain and ignores `serverInfo.icons`
+  (anthropics/claude-ai-mcp#152). The function's own address,
+  `https://<project>.supabase.co/functions/v1/moduo-mcp`, keeps working
+  exactly as before for connections made with it. Discovery names whichever
+  of the two the client used (`public-url.ts`: the Worker sends
+  `x-moduo-mcp-origin`, believed only for `MCP_PUBLIC_URL`'s origins,
+  `https://mcp.moduo.app` when unset). `serverInfo` carries `websiteUrl` and
+  `icons` (moduo.app's favicons) for clients that read them. The Worker
+  deploys with each release tag (`_deploy-mcp-proxy.yml`).
 - **Auth:** `Authorization: Bearer moduo_sk_…`. The secret is sha256-matched
   against `workspace_api_keys.key_hash`; revoked or unknown → 401. The key
   pins the workspace: **tools never take a workspace argument.**
+- **Or sign in (OAuth, MCPO-1…6, on in prod since 2026-10-23):** any other
+  bearer is checked as a Supabase OAuth 2.1 token from an app (it carries
+  `client_id`) and swapped for its **connection**: a `workspace_api_keys` row
+  with `oauth_client_id` instead of a secret, made on the consent screen. From
+  there it runs exactly like a pasted key. See "Connecting by sign-in" below.
+
+## Connecting by sign-in (OAuth)
+
+How an app such as Claude connects with only the URL
+([specs/mcp-oauth.md](../specs/mcp-oauth.md), decisions in
+[decisions/mcp.md](decisions/mcp.md)):
+
+1. The app calls the connector with no credentials and gets 401 with
+   `WWW-Authenticate: Bearer resource_metadata=…/oauth-protected-resource`
+   (`https://mcp.moduo.app/oauth-protected-resource`, or
+   `…/moduo-mcp/oauth-protected-resource` on the Supabase URL), whose
+   `resource` is the address the app called and whose sign-in server is
+   always the project's Supabase Auth (`https://<project>.supabase.co/auth/v1`).
+   Supabase Auth accepts any absolute `resource` (it checks only the URI's
+   shape and that the token request repeats it), and the token's audience
+   doesn't depend on it, so one token works at both addresses.
+2. It registers itself (dynamic client registration) and sends the person to
+   Supabase's authorize endpoint (PKCE), which redirects to
+   `https://app.moduo.app/oauth/consent?authorization_id=…`.
+3. The consent screen (sign in with the emailed code first if needed) shows
+   the app, where it returns to, a workspace picker, the access card and an
+   expiry. **Approve** calls `workspace_api_keys_connect_oauth` (one live
+   connection per person and app registration, capped by the person's access
+   and the 20 cap, a bell notice) and then approves the sign-in.
+4. The app swaps the code for a token. Each call: the connector verifies the
+   token, loads the live connection for `(sub, client_id)` with the key checks
+   (revoked, expired, creator still a member), then runs as that key.
+
+Prod settings (Authentication in the Supabase dashboard): OAuth server on,
+authorization path `/oauth/consent`, Site URL `https://app.moduo.app`, dynamic
+registration on, **TOTP, phone and WebAuthn MFA off** (an MFA-verified token
+loses `client_id`). The lockout (`20261022230000`, `20261023000000`) keeps an
+app's token out of everything but this connector.
+
+What people see, per client:
+- **Claude Code** (CLI and the desktop app's Code tab) returns to
+  `http://localhost:<port>` (a loopback redirect, RFC 8252), so the screen
+  shows "Moduo hasn't checked this app". Its sign-in lives on the Mac.
+- **Claude** (claude.ai and the desktop app's chat) returns to
+  `https://claude.ai`. Its connectors belong to the **Claude account**: a
+  desktop Connect finishes in whichever Claude account the browser is signed
+  into, so with two Claude accounts the connection lands on the other one.
+  Each Connect registers a fresh client. Settings → API keys shows when each
+  connection was made and last used, to the minute, and the consent screen
+  offers "Replace your other Claude connection" for each earlier one (ticked
+  unless it was used in the last two minutes), so repeats don't pile up.
+- Claude speaks MCP protocol 2026-07-28: it opens with `server/discover`
+  (the per-request `_meta` envelope, no `initialize`). The connector serves
+  that era through the SDK's `createMcpHandler` and the 2025 era as before;
+  `initialize` asking for 2026-07-28 is answered with 2025-11-25.
 
 ## Scoped API keys (contract Pillar 4)
 
@@ -339,7 +406,6 @@ second module makes the duplication real.
 
 ## Deferred
 
-- OAuth flow for MCP clients that won't send static bearer keys: planned in [specs/mcp-oauth.md](../specs/mcp-oauth.md) (MCPO-1…6).
 - `agent` actor type (in-app agents, distinct from API keys) — CHECK-reserved
   since Session 8.
 - Workspace-level activity feed UI (the connector already exposes

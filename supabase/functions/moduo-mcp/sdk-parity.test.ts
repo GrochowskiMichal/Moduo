@@ -13,10 +13,16 @@
  * listed in SDK_DIFFERENCES with the reason.
  *
  * Never refresh the snapshot to make this pass: a difference is a behavior
- * change clients see. One deliberate refresh so far: MCPO-6 added tool
+ * change clients see. Two deliberate refreshes so far: MCPO-6 added tool
  * annotations and the five main reads' outputSchema to the tool lists and
  * structuredContent to those reads' answers (29 cases); with those fields
- * taken out, every case still equals the MCPO-2 capture.
+ * taken out, every case still equals the MCPO-2 capture. The MCPO-5 follow-up
+ * (2026-07-28) added mcp-method and mcp-name to every answer's CORS
+ * Allow-Headers, and answers a ping with an unknown MCP-Protocol-Version
+ * header as the old server did (200) instead of the SDK's 400; nothing else
+ * moved. The mcp.moduo.app change (2026-10-23) added websiteUrl and icons to
+ * serverInfo in the six initialize answers, edited in by hand (capture mode
+ * records the SDK's raw answers, not the compared form); nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -297,10 +303,6 @@ const SDK_DIFFERENCES: Record<string, { why: string; now: (e: Exchange) => void 
     why: "An unknown version is answered with the SDK's latest (2025-11-25), as the spec says, not 2025-03-26.",
     now: (e) => expect((e.body as any).result.protocolVersion).toBe("2025-11-25"),
   },
-  "unsupported protocol header": {
-    why: "The SDK refuses an MCP-Protocol-Version header it doesn't speak (HTTP 400), as the spec asks; the old server ignored it.",
-    now: (e) => expect(e.status).toBe(400),
-  },
   "initialize without params": {
     why: "The SDK checks initialize's params (protocolVersion, capabilities, clientInfo) and answers -32603; the old server answered anything.",
     now: (e) => expect((e.body as any).error.code).toBe(-32603),
@@ -415,7 +417,7 @@ describe("moduo-mcp through the SDK", () => {
       // status too unless the difference is the status.
       expect(now[name].ops, name).toEqual(before[name].ops);
       expect(now[name].cors, name).toEqual(before[name].cors);
-      if (name !== "unsupported protocol header") expect(now[name].status, name).toBe(before[name].status);
+      expect(now[name].status, name).toBe(before[name].status);
     }
     // 380 cases through the SDK: about a second here, past the 5 s default on a busy CI runner.
   }, 60_000);
