@@ -417,5 +417,6 @@ describe("moduo-mcp through the SDK", () => {
       expect(now[name].cors, name).toEqual(before[name].cors);
       if (name !== "unsupported protocol header") expect(now[name].status, name).toBe(before[name].status);
     }
-  });
+    // 380 cases through the SDK: about a second here, past the 5 s default on a busy CI runner.
+  }, 60_000);
 });
