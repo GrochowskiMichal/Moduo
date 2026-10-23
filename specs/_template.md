@@ -53,7 +53,7 @@
 
 ## Assumptions & technical decisions
 
-<!-- What the agent decided ON THE USER'S BEHALF and why: data model (Supabase-first), library choices, intent-op shapes, permission mapping, migration approach. Each = decision + one-clause rationale + the alternative rejected. Anything durable also gets a line in docs/decisions.md. -->
+<!-- What the agent decided ON THE USER'S BEHALF and why: data model (Supabase-first), library choices, intent-op shapes, permission mapping, migration approach. Each = decision + one-clause rationale + the alternative rejected. Anything durable also becomes an entry in docs/decisions/<area>.md with its status line (bun run docs:index regenerates docs/decisions.md). -->
 
 ## Execution blocks
 
