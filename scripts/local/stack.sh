@@ -8,6 +8,8 @@
 #   bun run local:snapshot  refresh the schema snapshot from prod (read-only)
 #   bun run local:down      stop the stack (data kept; needs MODUO_SHARED_STACK_OK=1)
 #   bun run local:status    URLs and keys
+#   stack.sh ci             GitHub Actions only (checks.yml db-test): a throwaway
+#                           stack in the runner, built from the cached snapshot
 #
 # Why not `supabase db reset`: the repo cannot rebuild the DB from
 # supabase/migrations (22 prod tables have no migration; see
@@ -28,18 +30,41 @@ need() { command -v "$1" >/dev/null || { echo "✗ $1 is missing. $2" >&2; exit 
 need docker "Install OrbStack: brew install --cask orbstack, then open it once."
 need supabase "brew install supabase/tap/supabase"
 need psql "brew install libpq && brew link --force libpq"
+need jq "brew install jq"
 docker info >/dev/null 2>&1 || { open -ga OrbStack 2>/dev/null || true; sleep 5; docker info >/dev/null 2>&1 || { echo "✗ Docker is not running. Open OrbStack." >&2; exit 1; }; }
 
 snapshot() {
-  mkdir -p "$SNAP"
+  # Into a fresh folder, swapped in only when every file is there: a dump that
+  # fails half-way must not leave new files next to an old snapshot-at.
+  local tmp="$SNAP.new"
+  rm -rf "$tmp"; mkdir -p "$tmp"
   echo "→ Dumping prod schema (structure only, no rows) into $SNAP/ …"
   supabase link --project-ref "$PROD_REF" >/dev/null
-  supabase db dump --linked --schema public,private,stripe -f "$SNAP/public.sql"
-  supabase db dump --linked --schema storage -f "$SNAP/storage.sql"
-  supabase db dump --linked --schema auth -f "$SNAP/auth.sql"
-  supabase db dump --linked --schema realtime -f "$SNAP/realtime.sql"
-  date -u +%Y%m%d%H%M%S > "$SNAP/snapshot-at"
+  supabase db dump --linked --schema public,private,stripe -f "$tmp/public.sql"
+  supabase db dump --linked --schema storage -f "$tmp/storage.sql"
+  supabase db dump --linked --schema auth -f "$tmp/auth.sql"
+  supabase db dump --linked --schema realtime -f "$tmp/realtime.sql"
+  # What a schema dump leaves out, read from prod's catalog (read-only): the
+  # extensions; the migration versions prod has applied, so bootstrap replays
+  # exactly the others; the API roles' settings (PostgREST's db_pre_request);
+  # the storage buckets; Realtime publication membership; the pg_cron jobs.
+  prod_rows "select format('create schema if not exists %1\$I; create extension if not exists %2\$I with schema %1\$I;', extnamespace::regnamespace, extname) as sql from pg_extension where extnamespace <> 'pg_catalog'::regnamespace order by extname" > "$tmp/extensions.sql"
+  prod_rows "select version || ' ' || coalesce(name, '') as sql from supabase_migrations.schema_migrations order by 1" > "$tmp/applied-migrations"
+  prod_rows "select format('alter role %I set %s = %L;', rolname, split_part(cfg, '=', 1), substr(cfg, strpos(cfg, '=') + 1)) as sql from pg_roles, unnest(rolconfig) cfg where rolname in ('authenticator', 'anon', 'authenticated', 'service_role') and cfg not like 'session_preload_libraries=%' order by 1" > "$tmp/roles.sql"
+  prod_rows "select format('insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values (%L, %L, %L, %L, %L) on conflict (id) do nothing;', id, name, public, file_size_limit, allowed_mime_types) as sql from storage.buckets order by id" > "$tmp/buckets.sql"
+  prod_rows "select format('alter publication supabase_realtime add table %I.%I;', schemaname, tablename) as sql from pg_publication_tables where pubname = 'supabase_realtime' order by 1" > "$tmp/publication.sql"
+  prod_rows "select format('select cron.schedule(%L, %L, %L);', jobname, schedule, command) as sql from cron.job order by jobname" > "$tmp/cron.sql"
+  date -u +%Y%m%d%H%M%S > "$tmp/snapshot-at"
+  rm -rf "$SNAP.old"; [[ -d "$SNAP" ]] && mv "$SNAP" "$SNAP.old"
+  mv "$tmp" "$SNAP"; rm -rf "$SNAP.old"
   echo "✓ Snapshot taken at $(cat "$SNAP/snapshot-at") UTC"
+}
+
+# One SQL statement per row of a read-only query on prod; no rows is an empty file, a failed
+# query fails the snapshot.
+prod_rows() {
+  local out; out="$(supabase db query --linked --output-format json "$1")"
+  jq -r '.rows[]?.sql' <<< "$out"
 }
 
 bootstrap() {
@@ -50,29 +75,65 @@ create extension if not exists pg_net;
 create extension if not exists pg_cron;
 create extension if not exists pgcrypto with schema extensions;
 SQL
+  [[ -f "$SNAP/extensions.sql" ]] && "${PSQL[@]}" -f "$SNAP/extensions.sql"
   # The dump writes every grant relative to Postgres's built-in default (owner
   # and PUBLIC), but Supabase's default privileges here would add anon,
   # authenticated and service_role to every object it creates, so ~570
   # functions prod keeps from anon became callable by it (chat_privacy.test.sql
   # "never anon"). Lift those defaults while the dump loads; its explicit
   # grants then match prod, and its own ALTER DEFAULT PRIVILEGES lines at the
-  # end put the defaults back for the migrations that follow.
+  # end put the defaults back for the migrations that follow. The dump loads as
+  # supabase_admin, whose own defaults would leak the same way (its grants move
+  # to postgres with each ALTER … OWNER TO), so lift those too and restore them
+  # after the load: anon kept INSERT, UPDATE and DELETE on workspaces and
+  # ~25 db:test files failed on a fresh stack (HV-4).
   "${PSQL[@]}" <<'SQL'
 alter default privileges for role postgres in schema public revoke all on functions from anon, authenticated, service_role;
 alter default privileges for role postgres in schema public revoke all on tables from anon, authenticated, service_role;
 alter default privileges for role postgres in schema public revoke all on sequences from anon, authenticated, service_role;
+alter default privileges for role supabase_admin in schema public revoke all on functions from anon, authenticated, service_role;
+alter default privileges for role supabase_admin in schema public revoke all on tables from anon, authenticated, service_role;
+alter default privileges for role supabase_admin in schema public revoke all on sequences from anon, authenticated, service_role;
 SQL
   "${PSQL[@]}" -f "$SNAP/public.sql"
+  "${PSQL[@]}" <<'SQL'
+alter default privileges for role supabase_admin in schema public grant all on functions to anon, authenticated, service_role;
+alter default privileges for role supabase_admin in schema public grant all on tables to anon, authenticated, service_role;
+alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
+SQL
   # Storage tables/functions already exist locally; take only prod's policies.
   awk '/^CREATE POLICY/{p=1} p{print} p&&/;[[:space:]]*$/{p=0}' "$SNAP/storage.sql" | "${PSQL[@]}"
   # Same for auth: only prod's triggers on auth.* (signup → profile, …).
   grep -E '^CREATE (OR REPLACE )?TRIGGER' "$SNAP/auth.sql" | "${PSQL[@]}"
   realtime_policies
-  # Repo migrations newer than the snapshot = work not on prod yet.
+  for f in roles.sql buckets.sql publication.sql; do
+    [[ -f "$SNAP/$f" ]] && "${PSQL[@]}" -f "$SNAP/$f"
+  done
+  # Prod's cron jobs, switched off: tests read their schedules, and nothing
+  # here should run them (or call prod's functions on a timer).
+  # One transaction, so the scheduler never sees a job switched on.
+  if [[ -f "$SNAP/cron.sql" ]]; then
+    "${PSQL[@]}" -1 -f "$SNAP/cron.sql" -c "update cron.job set active = false" >/dev/null
+  fi
+  # Repo migrations prod hasn't applied = work not on prod yet. Prod recorded
+  # some files under another version than their name (create_tasks_module), so
+  # a file counts as applied when its version or its name is in prod's list.
+  # Three files older than 2026-10-10 went in by hand under other names
+  # (contacts_v2 as contacts_v2_schema + _ops, …); every file before that is on
+  # prod in some form, so those are never replayed. A
+  # snapshot without applied-migrations (taken before HV-4) falls back to
+  # "newer than the snapshot", which misses a file applied after the dump
+  # under an older version.
   local at; at="$(cat "$SNAP/snapshot-at" 2>/dev/null || echo 0)"
   for f in supabase/migrations/*.sql; do
-    local v; v="$(basename "$f" | cut -d_ -f1)"
-    if [[ "$v" > "$at" ]]; then echo "  + $f"; "${PSQL[@]}" -f "$f"; fi
+    local v n; v="$(basename "$f" | cut -d_ -f1)"; n="$(basename "$f" .sql | cut -d_ -f2-)"
+    if [[ -f "$SNAP/applied-migrations" ]]; then
+      [[ "$v" < 20261010000000 ]] && continue
+      awk -v v="$v" -v n="$n" '$1 == v || $2 == n { hit = 1 } END { exit !hit }' "$SNAP/applied-migrations" && continue
+    else
+      [[ "$v" > "$at" ]] || continue
+    fi
+    echo "  + $f"; "${PSQL[@]}" -f "$f"
   done
   "${PSQL[@]}" -f supabase/seed.sql
   "${PSQL[@]}" -c "create table if not exists public._local_bootstrapped(at timestamptz default now()); insert into public._local_bootstrapped default values;"
@@ -134,9 +195,25 @@ case "${1:-up}" in
     supabase stop
     ;;
   status) supabase status ;;
+  ci)
+    # checks.yml's db-test job: start only what the SQL tests read (Postgres,
+    # plus Auth, Storage and Realtime, whose services create their schemas),
+    # then build the DB like a reset does. The snapshot comes from the
+    # db-snapshot workflow's cache (MODUO_SNAPSHOT_DIR); without it this fails
+    # instead of dumping prod. It refuses anything but a fresh runner, so it can
+    # never load the snapshot over this Mac's shared stack.
+    [[ "${GITHUB_ACTIONS:-}" == "true" ]] || { echo "✗ stack.sh ci runs only in GitHub Actions." >&2; exit 1; }
+    for f in public.sql auth.sql storage.sql realtime.sql extensions.sql roles.sql buckets.sql publication.sql cron.sql applied-migrations snapshot-at; do
+      [[ -f "$SNAP/$f" ]] || { echo "✗ $SNAP/$f is missing: run the db-snapshot workflow (Actions → db-snapshot → Run workflow)." >&2; exit 1; }
+    done
+    supabase start --workdir "$ROOT" \
+      -x imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+    if bootstrapped; then echo "✗ $DB_URL is already bootstrapped: not a fresh runner." >&2; exit 1; fi
+    bootstrap
+    ;;
   functions)
     [[ -f supabase/functions/.env ]] || cp supabase/functions/.env.example supabase/functions/.env
     supabase functions serve --env-file supabase/functions/.env --import-map supabase/functions/deno.json
     ;;
-  *) echo "usage: stack.sh up|reset|snapshot|down|status|functions" >&2; exit 2 ;;
+  *) echo "usage: stack.sh up|reset|snapshot|down|status|functions|ci" >&2; exit 2 ;;
 esac
