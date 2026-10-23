@@ -703,10 +703,16 @@ export function TaskLinePlugin({
           );
         }
 
-        // Deletions: lines gone from the doc.
+        // Deletions: lines gone from the doc. A task whose line is still in
+        // the doc under a new key was only re-created (a block move or its
+        // undo re-creates every block it jumps over): that is no deletion, so
+        // never revert the mint or detach it.
         const restored: string[] = [];
+        const stillLined = new Set<string>();
+        for (const entry of collected.values()) if (entry.taskId) stillLined.add(entry.taskId);
         for (const [key, before] of prev) {
           if (collected.has(key) || !before.taskId) continue;
+          if (stillLined.has(before.taskId)) continue;
           if (historic && t.revertMintIfJustMinted(before.taskId)) continue;
           pendingDetach.current.set(before.taskId, {
             taskId: before.taskId,
@@ -720,8 +726,13 @@ export function TaskLinePlugin({
         // 200ms batch window must also pull the line back OUT of the batch,
         // or the flush detaches a line that's visibly back (validator B1).
         if (historic) {
+          const hadLine = new Set<string>();
+          for (const before of prev.values()) if (before.taskId) hadLine.add(before.taskId);
           for (const [key, entry] of collected) {
-            if (!prev.has(key) && entry.taskId) restored.push(entry.taskId);
+            // Back from a deletion, not a line that only got a new key.
+            if (!prev.has(key) && entry.taskId && !hadLine.has(entry.taskId)) {
+              restored.push(entry.taskId);
+            }
           }
           for (const taskId of restored) pendingDetach.current.delete(taskId);
           if (pendingDetach.current.size === 0 && detachTimer.current !== null) {

@@ -81,8 +81,8 @@ export type NotesEditorBridge = {
   openComments?: () => void;
   /** The note whose real sub-pages the page lists under the body (MOD-81).
    * Set, page rows to its children are redundant: they remove themselves and
-   * `/page` opens the new child instead of inserting one. Absent (the classic
-   * page): page rows behave as before. */
+   * `/page` opens the new child instead of inserting one. Absent (no note
+   * open, a story): page rows behave as plain content. */
   subpagesListedFor?: string;
 };
 

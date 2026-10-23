@@ -283,8 +283,17 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     const ws = workspaceId;
     void runtime!.notesV2
       .create({ workspaceId: ws, id, title: WELCOME_TITLE, icon: "👋", position: endPosition([]) })
-      .then(() => repairNote(runtime!, ws, id, WELCOME_MARKDOWN))
-      .then(() => load())
+      .then(() => repairNote(runtime!, ws, id, WELCOME_MARKDOWN, { storeBodies: true }))
+      .then(async (outcome) => {
+        if (outcome === "seeded") return load();
+        // Never leave an empty welcome note behind (its first open would
+        // retitle it Untitled): take it away and try again next visit.
+        await runtime!.notesV2
+          .trash({ workspaceId: ws, noteId: id })
+          .then(() => runtime!.notesV2.purge({ workspaceId: ws, noteId: id }))
+          .catch(() => undefined);
+        throw new Error(`welcome seed ${outcome}`);
+      })
       .catch(() => {
         // Degrade quietly (the seed is a nicety, never an error surface), but
         // don't burn the one-shot flag on a failed attempt.

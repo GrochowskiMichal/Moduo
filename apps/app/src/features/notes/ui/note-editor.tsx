@@ -39,12 +39,14 @@ import {
   $setSelection,
   COMMAND_PRIORITY_HIGH,
   INDENT_CONTENT_COMMAND,
+  KEY_MODIFIER_COMMAND,
   KEY_TAB_COMMAND,
   OUTDENT_CONTENT_COMMAND,
 } from "lexical";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
+import { dispatchCreateNew } from "@/components/app/create-events";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
@@ -117,6 +119,29 @@ function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
     }, 0);
     return () => clearTimeout(id);
   }, [editor, doc]);
+  return null;
+}
+
+/** ⌘N / ⌘⇧N from inside a note open a new one. The app's bindings skip
+ * editors on purpose (a ⌘N in Email's reply must not replace the draft), so
+ * the note editor claims the key for itself. */
+function NewNoteKeyPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_MODIFIER_COMMAND,
+        (event: KeyboardEvent) => {
+          if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
+          if (event.key.toLowerCase() !== "n") return false;
+          event.preventDefault();
+          dispatchCreateNew();
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
   return null;
 }
 
@@ -501,6 +526,7 @@ export function NoteEditor({
               <ListPlugin />
               <CheckListPlugin />
               <ListTabIndentationPlugin />
+              {editable ? <NewNoteKeyPlugin /> : null}
               <CodeHighlightingPlugin />
               <LinkPlugin />
               <TablePlugin />

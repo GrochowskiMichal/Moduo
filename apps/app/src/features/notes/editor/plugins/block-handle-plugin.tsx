@@ -56,7 +56,7 @@ import {
   moveBlockInDoc,
   stepTarget,
 } from "../block-move";
-import { trackUndoOrigin } from "../collab-undo";
+import { asUndoStep } from "../collab-undo";
 import { NOTES_DOC_ROOT } from "../doc-markdown";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
@@ -104,8 +104,7 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   const move = (from: number, to: number): boolean => {
     const count = editor.getEditorState().read(() => $getRoot().getChildrenSize());
     if (doc.get(NOTES_DOC_ROOT, Y.XmlElement).length !== count) return false;
-    trackUndoOrigin(editor, BLOCK_MOVE_ORIGIN);
-    return moveBlockInDoc(doc, from, to);
+    return asUndoStep(editor, BLOCK_MOVE_ORIGIN, () => moveBlockInDoc(doc, from, to));
   };
 
   // ── hover tracking on the scrolling pane that holds the editor ─────────────

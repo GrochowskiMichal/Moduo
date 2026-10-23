@@ -347,7 +347,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
       {/* What follows the pointer. pointer-events-none is load-bearing: the
           drop is hit-tested with elementFromPoint, which must see the row
           under the overlay, not the overlay. */}
-      <DragOverlay dropAnimation={null} style={{ pointerEvents: "none" }}>
+      <DragOverlay dropAnimation={null} className="pointer-events-none">
         {dragNote ? (
           <DragOverlaySurface className="max-w-56 text-sm">
             {dragNote.icon ? (

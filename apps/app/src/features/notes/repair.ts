@@ -54,6 +54,9 @@ export async function repairNote(
   workspaceId: string,
   noteId: string,
   bodyMd: string,
+  /** A note made with its content (the welcome note): store the derived
+   * bodies too, so search, export and the connector read it at once. */
+  opts: { storeBodies?: boolean } = {},
 ): Promise<RepairOutcome> {
   let built: ReturnType<typeof buildDocStateFromMarkdown>;
   try {
@@ -79,8 +82,8 @@ export async function repairNote(
       // (normalized markers, spacing), and nothing here changed the content,
       // so there is no reason to rewrite it. The op's
       // `coalesce(p_body_md, body_md)` keeps it as is.
-      bodyText: null,
-      bodyMd: null,
+      bodyText: opts.storeBodies ? built.bodyText : null,
+      bodyMd: opts.storeBodies ? built.bodyMd : null,
     });
     if (res.seeded) return "seeded";
     return res.reason === "has_updates" ? "has-updates" : "already";

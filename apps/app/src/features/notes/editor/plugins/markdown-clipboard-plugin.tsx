@@ -19,6 +19,7 @@ import {
   $getLexicalContent,
   $insertGeneratedNodes,
 } from "@lexical/clipboard";
+import { $isCodeNode } from "@lexical/code";
 import { $convertFromMarkdownString, $convertSelectionToMarkdownString } from "@lexical/markdown";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -37,6 +38,11 @@ import { useEffect } from "react";
 
 import { createNotesHeadlessEditor } from "../doc-markdown";
 import { looksLikeMarkdown, NOTES_TRANSFORMERS } from "../markdown";
+
+function $isInCodeBlock(node: LexicalNode): boolean {
+  for (let n: LexicalNode | null = node; n; n = n.getParent()) if ($isCodeNode(n)) return true;
+  return false;
+}
 
 /** Markdown → the serialized blocks it imports as, built in a headless editor. */
 function markdownBlocks(text: string): SerializedLexicalNode[] {
@@ -78,6 +84,12 @@ export function MarkdownClipboardPlugin() {
         if (data.types.includes("text/html")) return false;
         const text = data.getData("text/plain");
         if (!text || !looksLikeMarkdown(text)) return false;
+        // Inside a code block, markdown is code: paste it as typed.
+        const inCode = editor.getEditorState().read(() => {
+          const selection = $getSelection();
+          return $isRangeSelection(selection) && $isInCodeBlock(selection.anchor.getNode());
+        });
+        if (inCode) return false;
 
         const docIsEmpty = editor
           .getEditorState()

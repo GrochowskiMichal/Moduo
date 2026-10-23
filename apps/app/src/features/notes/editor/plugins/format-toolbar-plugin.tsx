@@ -265,7 +265,16 @@ export function FormatToolbarPlugin({
       root?.addEventListener("pointerdown", onDown);
     });
     document.addEventListener("pointerup", onUp);
+    // A release outside the window never reaches us: the next key or focus
+    // ends the selecting state, so keyboard selections still get the bar.
+    const reset = () => {
+      if (selectingRef.current) onUp();
+    };
+    document.addEventListener("keydown", reset, true);
+    window.addEventListener("blur", reset);
     return () => {
+      document.removeEventListener("keydown", reset, true);
+      window.removeEventListener("blur", reset);
       unregister();
       editor.getRootElement()?.removeEventListener("pointerdown", onDown);
       document.removeEventListener("pointerup", onUp);

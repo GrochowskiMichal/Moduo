@@ -38,11 +38,18 @@ export function updateWithoutUndo(editor: LexicalEditor, fn: () => void, tag?: s
   }
 }
 
-/** Let ⌘Z undo transactions written straight to the doc under `origin`. */
-export function trackUndoOrigin(editor: LexicalEditor, origin: unknown): void {
+/**
+ * Run a write made straight to the doc under `origin` (a block move) as one
+ * ⌘Z step of its own: tracked, and merged with neither the typing before it
+ * nor the typing right after.
+ */
+export function asUndoStep<T>(editor: LexicalEditor, origin: unknown, write: () => T): T {
   const manager = collabUndoManager(editor);
-  if (!manager) return;
-  manager.trackedOrigins.add(origin);
-  // A block move is one step of its own, never merged with the typing before.
-  manager.stopCapturing();
+  manager?.trackedOrigins.add(origin);
+  manager?.stopCapturing();
+  try {
+    return write();
+  } finally {
+    manager?.stopCapturing();
+  }
 }

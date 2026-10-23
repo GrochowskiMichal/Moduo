@@ -2,8 +2,8 @@
  * The New Notes top bar (specs/notes-refresh.md NR-2, AC5): breadcrumb ·
  * presence · one sync signal · Share · `⋯` · right-panel toggle.
  *
- * One sync signal replaces classic's stack: nothing while healthy, a muted dot
- * with "Saved locally — will sync" when a push or a read failed.
+ * One sync signal: nothing while healthy, a muted dot that says why when not
+ * ("Saved locally — will sync" for edits waiting, or a failed refresh).
  */
 
 import { MoreHorizontal, PanelRight, PanelRightClose } from "lucide-react";

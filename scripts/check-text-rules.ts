@@ -94,7 +94,6 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/dashboard/ui/widgets/widget-primitives.tsx": ["children"],
   // Notes: tree sections ("Pinned", "Inbox", "Workspace", "Archive"); the
   // slash menu's command groups.
-  "src/features/notes/ui/note-tree-sidebar.tsx": ["title"],
   "src/features/notes/editor/plugins/slash-menu-plugin.tsx": ["command.group"],
   // Email: date groups ("Today"), page sections, snooze picker headings.
   "src/features/email/ui/email-thread-list.tsx": ["group.label"],
