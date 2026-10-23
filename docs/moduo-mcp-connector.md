@@ -69,10 +69,14 @@ What people see, per client:
   `https://claude.ai`. Its connectors belong to the **Claude account**: a
   desktop Connect finishes in whichever Claude account the browser is signed
   into, so with two Claude accounts the connection lands on the other one.
-  Each Connect registers a fresh client, so repeats leave identical "Claude"
-  connections in Settings → API keys (disconnect the unused ones).
-- Claude first asks for MCP protocol 2026-07-28, gets 400 from the SDK
-  (which speaks up to 2025-11-25), and retries with an older version.
+  Each Connect registers a fresh client. Settings → API keys shows when each
+  connection was made and last used, to the minute, and the consent screen
+  offers "Replace your other Claude connection" for each earlier one (ticked
+  unless it was used in the last two minutes), so repeats don't pile up.
+- Claude speaks MCP protocol 2026-07-28: it opens with `server/discover`
+  (the per-request `_meta` envelope, no `initialize`). The connector serves
+  that era through the SDK's `createMcpHandler` and the 2025 era as before;
+  `initialize` asking for 2026-07-28 is answered with 2025-11-25.
 
 ## Scoped API keys (contract Pillar 4)
 

@@ -18,6 +18,14 @@
  *         attributes every mutation to the key (actor_type 'api_key') —
  *         agents never move things silently (module contract, Pillar 2).
  *
+ * Protocol revisions: a request carrying the 2026-07-28 `_meta` envelope (no
+ * `initialize`; `server/discover` first) is served by the SDK's own modern
+ * entry (`createMcpHandler`) from the same per-key server; everything else is
+ * the 2025-era stateless path below, which negotiates `initialize` down to
+ * the SDK's latest. A claim-less request whose MCP-Protocol-Version header
+ * names a revision the SDK doesn't speak is answered as that latest rather
+ * than refused (MCPO-5 follow-up; docs/decisions/mcp.md).
+ *
  * The SDK speaks the protocol; what clients saw before the SDK is kept where it
  * is ours to say (sdk-parity.test.ts): the 401/405 answers, the parse and batch
  * errors, the per-key tool list, `parseToolArgs` as the argument gate, the
@@ -25,8 +33,12 @@
  */
 
 import {
+  createMcpHandler,
   McpServer,
+  PROTOCOL_VERSION_META_KEY,
+  SERVER_INFO_META_KEY,
   type StandardSchemaWithJSON,
+  SUPPORTED_PROTOCOL_VERSIONS,
   WebStandardStreamableHTTPServerTransport,
 } from "@modelcontextprotocol/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -52,7 +64,8 @@ const SERVER_INFO = { name: "moduo-mcp", title: "Moduo", version: "1.0.0" };
 
 export const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type, mcp-protocol-version, mcp-session-id",
+  "Access-Control-Allow-Headers":
+    "authorization, content-type, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -284,13 +297,21 @@ export function buildServer(key: KeyContext, deps: ConnectorDeps, workspaceName:
  * arguments that aren't an object get `parseToolArgs`'s message (the SDK would
  * reject the whole request). Null otherwise: the SDK answers.
  */
-function toolCallAnsweredHere(message: { id?: unknown; params?: unknown }, key: KeyContext): Response | null {
+function toolCallAnsweredHere(
+  message: { id?: unknown; params?: unknown },
+  key: KeyContext,
+  modern: boolean,
+): Response | null {
   const params = (message.params ?? {}) as { name?: unknown; arguments?: unknown };
   const name = typeof params.name === "string" ? params.name : "";
+  // 2026-07-28 results carry resultType and the server's identity; the SDK
+  // stamps its own, these are stamped here.
+  const result = (id: unknown, value: ToolResult) =>
+    rpcResult(id, modern ? { ...value, resultType: "complete", _meta: { [SERVER_INFO_META_KEY]: SERVER_INFO } } : value);
   const found = findTool(name);
   if (!found) return rpcError(message.id, -32602, `Unknown tool: ${name}`);
   if (!toolAllowed(key, found.module, found.tool)) {
-    return rpcResult(
+    return result(
       message.id,
       textResult(
         `This API key can't use ${name}: it needs ${toolRequirement(found.module, found.tool)}. Change the key's access in Moduo → Settings → API keys.`,
@@ -301,7 +322,18 @@ function toolCallAnsweredHere(message: { id?: unknown; params?: unknown }, key: 
   const args = params.arguments;
   if (args === undefined || args === null || (typeof args === "object" && !Array.isArray(args))) return null;
   const parsedArgs = parseToolArgs(name, args);
-  return parsedArgs.success ? null : rpcResult(message.id, textResult(parsedArgs.message, true));
+  return parsedArgs.success ? null : result(message.id, textResult(parsedArgs.message, true));
+}
+
+/** The modern revisions the SDK serves (its own list is internal). */
+const MODERN_PROTOCOL_VERSIONS = ["2026-07-28"];
+
+/** The revision a request's 2026-07-28 `_meta` envelope claims, or null for a 2025-era request. */
+function envelopeClaim(message: { params?: unknown }): string | null {
+  const meta = (message.params as { _meta?: unknown } | undefined)?._meta;
+  if (!meta || typeof meta !== "object" || Array.isArray(meta) || !(PROTOCOL_VERSION_META_KEY in meta)) return null;
+  const claimed = (meta as Record<string, unknown>)[PROTOCOL_VERSION_META_KEY];
+  return typeof claimed === "string" ? claimed : "";
 }
 
 /** Answer one HTTP request to the connector. */
@@ -365,13 +397,41 @@ export async function answerMessage(
   deps: ConnectorDeps,
   headers: HeadersInit = {},
 ): Promise<Response> {
+  // `initialize` is 2025-era whatever it claims: it negotiates down.
+  const claim = message.method === "initialize" ? null : envelopeClaim(message);
+  const clientHeaders = new Headers(headers);
+  const toolName = (message.params as { name?: unknown } | undefined)?.name;
+  if (claim) {
+    // The body is the request: a standard header the client left out is
+    // filled from it; one that disagrees with it is still the SDK's to refuse.
+    if (!clientHeaders.has("mcp-protocol-version")) clientHeaders.set("mcp-protocol-version", claim);
+    if (!clientHeaders.has("mcp-method")) clientHeaders.set("mcp-method", message.method);
+    if (
+      message.method === "tools/call" &&
+      !clientHeaders.has("mcp-name") &&
+      typeof toolName === "string" &&
+      /^[\x21-\x7e]+$/.test(toolName)
+    ) {
+      clientHeaders.set("mcp-name", toolName);
+    }
+  }
   if (message.method === "tools/call") {
-    const early = toolCallAnsweredHere(message, key);
+    // In the modern era only once the SDK would serve the request: a claim it
+    // doesn't speak or standard headers that don't match are its to refuse.
+    const servable =
+      claim === null ||
+      (MODERN_PROTOCOL_VERSIONS.includes(claim) &&
+        clientHeaders.get("mcp-protocol-version") === claim &&
+        clientHeaders.get("mcp-method") === message.method &&
+        clientHeaders.get("mcp-name") === toolName);
+    const early = servable ? toolCallAnsweredHere(message, key, claim !== null) : null;
     if (early) return early;
   }
 
   let workspaceName: string | null = null;
-  if (message.method === "initialize") {
+  // The workspace line is the server's instructions: on initialize, or on
+  // server/discover, the 2026-07-28 opening.
+  if (message.method === "initialize" || (claim !== null && message.method === "server/discover")) {
     const { data: workspace } = await deps.admin
       .from("workspaces")
       .select("name")
@@ -379,6 +439,30 @@ export async function answerMessage(
       .maybeSingle();
     workspaceName = workspace?.name ?? "(unknown)";
   }
+
+  if (claim !== null) {
+    // Stateless by design: the connector has nothing to notify, so a listen
+    // stream would only hold the function open. (A claim the SDK doesn't
+    // serve is still its to refuse, below.)
+    if (
+      message.method === "subscriptions/listen" &&
+      MODERN_PROTOCOL_VERSIONS.includes(claim) &&
+      clientHeaders.get("mcp-protocol-version") === claim
+    ) {
+      return rpcError(message.id, -32601, "Method not found: the Moduo connector sends no notifications.");
+    }
+    // The SDK's 2026-07-28 entry, modern-only (the 2025 era is served below):
+    // it checks the envelope and the standard headers, answers server/discover,
+    // and refuses a claimed revision it doesn't serve with the list it does.
+    const modern = createMcpHandler(() => buildServer(key, deps, workspaceName), { legacy: "reject" });
+    return await modern.fetch(sdkRequest(clientHeaders), { parsedBody: withoutNulls(message) });
+  }
+
+  // A 2025-era request is stateless here, so a version header naming a
+  // revision the SDK doesn't speak (a newer one, a typo) has nothing to have
+  // been negotiated against: answer as the SDK's latest instead of a 400.
+  const version = clientHeaders.get("mcp-protocol-version");
+  if (version !== null && !SUPPORTED_PROTOCOL_VERSIONS.includes(version)) clientHeaders.delete("mcp-protocol-version");
 
   const server = buildServer(key, deps, workspaceName);
   // Stateless: no session id, one JSON answer per request (the SDK's
@@ -389,7 +473,7 @@ export async function answerMessage(
   });
   await server.connect(transport);
   try {
-    return await transport.handleRequest(sdkRequest(headers), { parsedBody: withoutNulls(message) });
+    return await transport.handleRequest(sdkRequest(clientHeaders), { parsedBody: withoutNulls(message) });
   } finally {
     await server.close();
   }

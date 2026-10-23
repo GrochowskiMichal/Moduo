@@ -23,6 +23,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import {
   Select,
@@ -48,9 +49,13 @@ import {
   deniedRedirect,
   expiredMessage,
   initialDraft,
+  initialReplaceIds,
   initialWorkspaceId,
   isCheckedApp,
   moveLine,
+  otherConnectionLine,
+  replaceIdsToSend,
+  replaceLabel,
   returnsTo,
   shownScopes,
   UNCHECKED_APP_NOTE,
@@ -263,7 +268,9 @@ function ConsentForm({
   const [busy, setBusy] = useState<"approve" | "deny" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [chatEnabled, setChatEnabled] = useState<boolean | null>(null);
+  const [ticked, setTicked] = useState<string[]>(() => initialReplaceIds(request.others));
   const privateId = useId();
+  const replaceId = useId();
   const accessId = useId();
 
   const choice = choices.find((c) => c.id === workspaceId) ?? null;
@@ -272,7 +279,11 @@ function ConsentForm({
   const shown = workspace ? shownScopes(scopes, workspace.actor) : scopes;
   const ceilings = workspace ? consentCeilings(workspace.actor) : null;
   const returnAddress = returnsTo(request.clientScheme, request.clientDomain);
-  const blocker = approveBlocker(choice, shown);
+  const blocker = approveBlocker(
+    choice,
+    shown,
+    request.others.some((o) => o.workspaceId === workspaceId && ticked.includes(o.id)),
+  );
   const move = moveLine(
     appName,
     connection,
@@ -311,6 +322,7 @@ function ConsentForm({
         scopes: scopesPayload(shown),
         expiresInDays: expiryDays(expiry),
         includePrivateChat: shown.chat !== "none" && includePrivateChat,
+        replaceIds: replaceIdsToSend(request.others, ticked),
       });
       // A returning app was approved on Auth's side when the page read it;
       // its redirect (with the code) is the one to follow now.
@@ -375,6 +387,42 @@ function ConsentForm({
           {scopeSummary(toKeyScopes(connection.scopes))}. Approving replaces this with what you
           choose below.
         </p>
+      ) : null}
+
+      {request.others.length > 0 ? (
+        <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
+          {request.others.map((other, i) => (
+            <div key={other.id} className="flex items-start gap-3">
+              <Checkbox
+                id={`${replaceId}-${i}`}
+                aria-describedby={`${replaceId}-${i}-hint`}
+                className="mt-0.5"
+                checked={ticked.includes(other.id)}
+                disabled={disabled}
+                onCheckedChange={(on) =>
+                  setTicked((now) =>
+                    on === true ? [...now, other.id] : now.filter((id) => id !== other.id),
+                  )
+                }
+              />
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <Label htmlFor={`${replaceId}-${i}`} className="text-sm text-foreground">
+                  {replaceLabel(appName)}
+                </Label>
+                <span id={`${replaceId}-${i}-hint`} className="text-xs text-muted-foreground">
+                  {otherConnectionLine(
+                    other,
+                    workspaceId,
+                    (id) => workspaces.find((w) => w.id === id)?.name ?? null,
+                  )}
+                </span>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Approving disconnects the ones you tick; the rest stay as they are.
+          </p>
+        </div>
       ) : null}
 
       <div className="mt-5 flex flex-col gap-2">

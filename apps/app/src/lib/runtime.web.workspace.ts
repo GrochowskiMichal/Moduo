@@ -480,6 +480,18 @@ export const webWorkspace: WorkspaceRuntime = {
       fullWorkspaceIds: Array.isArray(row.full_workspace_ids)
         ? row.full_workspace_ids.filter((id: unknown): id is string => typeof id === "string")
         : [],
+      others: Array.isArray(row.others)
+        ? row.others
+            .filter((o: any) => o && typeof o.id === "string" && typeof o.workspace_id === "string")
+            .map((o: any) => ({
+              id: o.id,
+              workspaceId: o.workspace_id,
+              name: typeof o.name === "string" ? o.name : "",
+              createdAt: String(o.created_at ?? ""),
+              lastUsedAt: typeof o.last_used_at === "string" ? o.last_used_at : null,
+              recentlyUsed: o.recently_used === true,
+            }))
+        : [],
       heldRedirect,
     };
   },
@@ -489,6 +501,7 @@ export const webWorkspace: WorkspaceRuntime = {
     scopes,
     expiresInDays,
     includePrivateChat,
+    replaceIds,
   }) {
     const data = await runRpc(
       supabaseClient.rpc("workspace_api_keys_connect_oauth", {
@@ -497,11 +510,19 @@ export const webWorkspace: WorkspaceRuntime = {
         p_scopes: scopes,
         p_expires_in_days: expiresInDays,
         p_include_private_chat: includePrivateChat,
+        // Sent only when there is something to replace, so approving keeps
+        // working against a database without the argument yet.
+        ...(replaceIds && replaceIds.length > 0 ? { p_replace_ids: replaceIds } : {}),
       }),
     );
     const row = Array.isArray(data) ? data[0] : data;
     if (!row) throw new Error("Connecting returned nothing.");
-    return { id: row.id, created: row.created === true, movedFrom: row.moved_from ?? null };
+    return {
+      id: row.id,
+      created: row.created === true,
+      movedFrom: row.moved_from ?? null,
+      replaced: Array.isArray(row.replaced) ? row.replaced : [],
+    };
   },
   async approveOAuthRequest(authorizationId) {
     const { data, error } = await supabaseClient.auth.oauth.approveAuthorization(authorizationId, {

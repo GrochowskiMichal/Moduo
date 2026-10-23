@@ -57,7 +57,25 @@ export type OAuthConsentRequest = {
   } | null;
   /** Workspaces the person manages keys in that are at the 20 cap. */
   fullWorkspaceIds: string[];
+  /**
+   * The person's other live connections to the same app (same name, scheme
+   * and domain, another registration: Claude registers anew on every
+   * Connect), most recently used first. Empty before the migration that
+   * answers it.
+   */
+  others: OAuthOtherConnection[];
   heldRedirect: string | null;
+};
+
+/** One of the person's other connections to the app being approved, offered for replacing. */
+export type OAuthOtherConnection = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  /** Used in the last two minutes: it may be the one in use now, so it isn't replaced by default. */
+  recentlyUsed: boolean;
 };
 
 export type WorkspaceRuntime = {
@@ -192,7 +210,9 @@ export type WorkspaceRuntime = {
     scopes: Record<string, string>;
     expiresInDays: number | null;
     includePrivateChat: boolean;
-  }): Promise<{ id: string; created: boolean; movedFrom: string | null }>;
+    /** The person's other connections to the same app to end with this approve. */
+    replaceIds?: string[];
+  }): Promise<{ id: string; created: boolean; movedFrom: string | null; replaced: string[] }>;
   /** Supabase's approve; resolves to the URL that returns to the app with its code. */
   approveOAuthRequest(authorizationId: string): Promise<string>;
   /** Supabase's deny; resolves to the URL that tells the app no. */
