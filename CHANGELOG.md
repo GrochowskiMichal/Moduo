@@ -5,6 +5,21 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.6 · 2026-10-23
+
+### Improved
+
+- Settings no longer asks for a password: you sign in to Moduo with the code we email you.
+- A page now shows the pages inside it once, in the list at its foot. Older links to those pages in the text tidy themselves away, and /page opens the new page.
+
+### Fixed
+
+- On a shared computer, switching accounts or signing out now also clears the previous person's cached notes in browsers that can't list their stored data.
+
+### Security
+
+- Security and reliability improvements.
+
 ## 1.2.5 · 2026-10-22
 
 ### Fixed
