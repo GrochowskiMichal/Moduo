@@ -1,0 +1,1054 @@
+{
+  "sizeLimit": 32768,
+  "complexityLimit": 15,
+  "size": {
+    "apps/app/src/features/calendar/ui/booking-link-dialog.tsx": 33840,
+    "apps/app/src/features/calendar/ui/calendar-grid.tsx": 42404,
+    "apps/app/src/features/chat/files/files.test.ts": 32872,
+    "apps/app/src/features/chat/markup-v2/corpus.ts": 37609,
+    "apps/app/src/features/chat/shell/chat-screen.tsx": 74505,
+    "apps/app/src/features/chat/store/store.test.ts": 36097,
+    "apps/app/src/features/chat/store/store.ts": 88106,
+    "apps/app/src/features/chat/stream/message-stream.tsx": 42576,
+    "apps/app/src/features/focus/engine-core.ts": 35968,
+    "apps/app/src/features/focus/engine.test.ts": 42707,
+    "apps/app/src/features/focus/engine.ts": 33375,
+    "apps/app/src/features/focus/run.ts": 36835,
+    "apps/app/src/features/notes/editor/plugins/task-line-plugin.tsx": 46049,
+    "apps/app/src/features/notes/sync/engine-v2.ts": 35723,
+    "apps/app/src/features/settings/sections/api-keys-section.test.tsx": 33554,
+    "apps/app/src/features/settings/sections/api-keys-section.tsx": 34035,
+    "apps/app/src/features/tasks/capture/task-capture.test.tsx": 50813,
+    "apps/app/src/features/tasks/capture/task-capture.tsx": 81103,
+    "apps/app/src/features/tasks/helpers.ts": 33242,
+    "apps/app/src/features/tasks/ui/bucket-rail.tsx": 51743,
+    "apps/app/src/features/tasks/ui/focus-view.tsx": 39883,
+    "apps/app/src/features/tasks/ui/rows-board.test.tsx": 41371,
+    "apps/app/src/features/tasks/ui/task-board-view.tsx": 52724,
+    "apps/app/src/features/tasks/ui/task-detail-panel.test.tsx": 52324,
+    "apps/app/src/features/tasks/ui/task-detail-pickers.tsx": 47338,
+    "apps/app/src/features/tasks/ui/task-list-view.tsx": 90459,
+    "apps/app/src/features/tasks/ui/task-timeline-view.tsx": 34997,
+    "apps/app/src/lib/preferences.ts": 33908,
+    "apps/app/src/lib/runtime.chat.supabase.ts": 33528,
+    "apps/app/src/lib/runtime.web.tasks.ts": 54004,
+    "apps/app/src/lib/sync/store.test.ts": 57727,
+    "apps/app/src/lib/sync/store.ts": 85991,
+    "apps/app/src/routes/pages/book-page.tsx": 33438,
+    "apps/app/src/routes/pages/contacts-page.tsx": 33011,
+    "apps/app/src/styles/tokens.css": 47910,
+    "apps/desktop/src-tauri/src/commands/caldav.rs": 33474,
+    "apps/desktop/src-tauri/src/commands/email/connection.rs": 45846,
+    "apps/desktop/src-tauri/src/commands/email/storage.rs": 33382,
+    "apps/desktop/src-tauri/src/commands/email/sync.rs": 48147,
+    "apps/desktop/src-tauri/src/store_redb/mod.rs": 46031,
+    "supabase/functions/_shared/account-erasure.test.ts": 40575,
+    "supabase/functions/_shared/contracts/vocabularies.test.ts": 34466,
+    "supabase/functions/_shared/contracts/vocabularies.ts": 85317,
+    "supabase/functions/_shared/description-markdown.ts": 35789,
+    "supabase/functions/booking-public/index.ts": 33731,
+    "supabase/functions/moduo-mcp/modules/tasks.ts": 102309,
+    "supabase/functions/moduo-mcp/tasks-v3.test.ts": 64176
+  },
+  "complexity": {
+    "apps/app/public/push-display.js": {
+      "<anonymous>>pushDisplay": 17
+    },
+    "apps/app/src/components/app/app-chrome.tsx": {
+      "AppChrome": 29,
+      "AppChrome>useEffect(cb)>onEntityOpen": 16
+    },
+    "apps/app/src/components/app/feature-panels-shell.tsx": {
+      "FeaturePanelsShell": 25
+    },
+    "apps/app/src/components/app/focus-session-chip.tsx": {
+      "FocusSessionChip": 25
+    },
+    "apps/app/src/components/app/global-command-palette.tsx": {
+      "GlobalCommandPalette": 25
+    },
+    "apps/app/src/components/app/notice-deliveries.tsx": {
+      "NoticeDeliveries>useEffect(cb)>handleChat": 37
+    },
+    "apps/app/src/components/app/right-panel.tsx": {
+      "RightPanel": 18
+    },
+    "apps/app/src/components/auth/email-auth-panel.tsx": {
+      "EmailAuthPanel": 100
+    },
+    "apps/app/src/components/notification-center.tsx": {
+      "NotificationCenter": 29
+    },
+    "apps/app/src/components/ui/date-field.tsx": {
+      "parseTimeText": 16
+    },
+    "apps/app/src/components/ui/nav-row.tsx": {
+      "NavRow": 36,
+      "NavSectionHeader": 19
+    },
+    "apps/app/src/features/attachments/ui/attachment-strip.tsx": {
+      "UploadTile": 21
+    },
+    "apps/app/src/features/attachments/ui/attachment-viewer.tsx": {
+      "AttachmentViewer": 29
+    },
+    "apps/app/src/features/calendar/accounts.ts": {
+      "resolveAccountHues": 19
+    },
+    "apps/app/src/features/calendar/booking/slots.ts": {
+      "computeOpenSlots": 18,
+      "normalizeWeeklyHours": 19
+    },
+    "apps/app/src/features/calendar/events.ts": {
+      "eventChipsInRange": 17
+    },
+    "apps/app/src/features/calendar/hooks/use-calendar-sync.ts": {
+      "useCalendarSync>useCallback(cb)": 23
+    },
+    "apps/app/src/features/calendar/ics-mirror.ts": {
+      "mapCalendarText": 55
+    },
+    "apps/app/src/features/calendar/lens.ts": {
+      "dueChipsByDay": 20,
+      "taskBlocks": 36
+    },
+    "apps/app/src/features/calendar/mirror.ts": {
+      "mapGoogleEvent": 17
+    },
+    "apps/app/src/features/calendar/panel.ts": {
+      "groupPanelTasks": 21
+    },
+    "apps/app/src/features/calendar/recurrence-nl.ts": {
+      "parseRecurrenceNL": 61
+    },
+    "apps/app/src/features/calendar/ui/booking-link-dialog.tsx": {
+      "BookingLinkDialog": 36
+    },
+    "apps/app/src/features/calendar/ui/booking-links.tsx": {
+      "BookingLinks>save": 28
+    },
+    "apps/app/src/features/calendar/ui/calendar-connect-dialog.tsx": {
+      "CalendarConnectDialog": 36
+    },
+    "apps/app/src/features/calendar/ui/calendar-grid.tsx": {
+      "CalendarGrid>useCallback(cb)#7": 18
+    },
+    "apps/app/src/features/calendar/ui/calendar-page-view.tsx": {
+      "CalendarPageView": 28
+    },
+    "apps/app/src/features/calendar/ui/event-detail-panel.tsx": {
+      "EventDetailPanel": 17
+    },
+    "apps/app/src/features/calendar/ui/task-block-chip.tsx": {
+      "TaskBlockChip": 23
+    },
+    "apps/app/src/features/chat/capture-type.tsx": {
+      "MessageCaptureBody": 21,
+      "MessageCaptureBody>send": 17
+    },
+    "apps/app/src/features/chat/catchup/catchup-store.ts": {
+      "CatchupStore.read": 24
+    },
+    "apps/app/src/features/chat/catchup/catchup-view.tsx": {
+      "useCatchupScreen": 23,
+      "useCatchupScreen>rowView": 16
+    },
+    "apps/app/src/features/chat/composer/chat-composer.tsx": {
+      "ChatComposer": 24
+    },
+    "apps/app/src/features/chat/composer/emoji-data.ts": {
+      "buildEmojiData": 28
+    },
+    "apps/app/src/features/chat/composer/grammar.ts": {
+      "appLinkRef": 17
+    },
+    "apps/app/src/features/chat/dialogs/new-conversation-dialog.tsx": {
+      "NewConversationForm": 36
+    },
+    "apps/app/src/features/chat/emoji/store.ts": {
+      "sign": 16
+    },
+    "apps/app/src/features/chat/emoji/upload.ts": {
+      "isAnimatedImage": 20
+    },
+    "apps/app/src/features/chat/export.ts": {
+      "conversationMarkdown": 36,
+      "readChatExport": 21,
+      "readConversation": 27
+    },
+    "apps/app/src/features/chat/files/composer-files.ts": {
+      "ComposerFilesStore.remove": 19
+    },
+    "apps/app/src/features/chat/find/chat-search-view.tsx": {
+      "ChatSearchView": 33
+    },
+    "apps/app/src/features/chat/find/find-bar.tsx": {
+      "FindBar": 16
+    },
+    "apps/app/src/features/chat/markup-v2/canonical.ts": {
+      "canonicalBlocks": 34
+    },
+    "apps/app/src/features/chat/markup-v2/parse.ts": {
+      "parseDestination": 40,
+      "parseInline": 115,
+      "parseStored": 69,
+      "processEmphasis>atoms.forEach(cb)": 19,
+      "readStars": 36
+    },
+    "apps/app/src/features/chat/markup-v2/paste.ts": {
+      "Builder.inlineNode": 16,
+      "Builder.walkNode": 18
+    },
+    "apps/app/src/features/chat/markup-v2/serialize.ts": {
+      "lineStartEscape": 16
+    },
+    "apps/app/src/features/chat/markup-v2/tokens.ts": {
+      "urlEnd": 20
+    },
+    "apps/app/src/features/chat/panel/chain-item.tsx": {
+      "ChainItem": 19
+    },
+    "apps/app/src/features/chat/panel/details-model.ts": {
+      "detailsPeople": 16
+    },
+    "apps/app/src/features/chat/panel/details-view.tsx": {
+      "DetailsView": 45
+    },
+    "apps/app/src/features/chat/panel/person-card.tsx": {
+      "PersonCard": 28
+    },
+    "apps/app/src/features/chat/search.ts": {
+      "validateChatSearch": 22
+    },
+    "apps/app/src/features/chat/shell/chat-screen.tsx": {
+      "ChatScreen": 123
+    },
+    "apps/app/src/features/chat/shell/conversation-toolbar.tsx": {
+      "ConversationToolbar": 34
+    },
+    "apps/app/src/features/chat/shell/sidebar-model.ts": {
+      "buildChatSidebar": 20
+    },
+    "apps/app/src/features/chat/store/store.ts": {
+      "ChatStore.landRow": 18,
+      "ChatStore.metaRecord": 16,
+      "ChatStore.onLive": 29,
+      "ChatStore.open": 21,
+      "ChatStore.readNewest": 18
+    },
+    "apps/app/src/features/chat/stream/message-actions.tsx": {
+      "ActionsMenu": 18
+    },
+    "apps/app/src/features/chat/stream/message-body.tsx": {
+      "renderLine>line.map(cb)": 17
+    },
+    "apps/app/src/features/chat/stream/message-stream.tsx": {
+      "estimate": 17,
+      "MessageStream": 20,
+      "MessageStream>draw": 28,
+      "MessageStream>onKeyDown": 83,
+      "MessageStream>useEffect(cb)>MutationObserver(cb)": 23
+    },
+    "apps/app/src/features/chat/stream/rows.tsx": {
+      "MessageRow": 36
+    },
+    "apps/app/src/features/chat/timeline.ts": {
+      "buildStream": 27
+    },
+    "apps/app/src/features/contacts/dedupe.ts": {
+      "findDuplicateGroups": 38
+    },
+    "apps/app/src/features/contacts/import.ts": {
+      "parseCsv": 23
+    },
+    "apps/app/src/features/contacts/ui/company-hub.tsx": {
+      "CompanyHub": 49
+    },
+    "apps/app/src/features/contacts/ui/contact-directory.tsx": {
+      "ContactDirectory": 91,
+      "ContactDirectory>onKeyDown": 23,
+      "DirectoryRow": 16
+    },
+    "apps/app/src/features/contacts/ui/contact-form-dialog.tsx": {
+      "ContactFormDialog": 16
+    },
+    "apps/app/src/features/contacts/ui/contact-hub.tsx": {
+      "ContactHub": 35
+    },
+    "apps/app/src/features/contacts/ui/contact-import-dialog.tsx": {
+      "ContactImportDialog": 28
+    },
+    "apps/app/src/features/contacts/vcard.ts": {
+      "contactToVCard": 16
+    },
+    "apps/app/src/features/dashboard/engine/grid-engine.ts": {
+      "compact": 20
+    },
+    "apps/app/src/features/dashboard/ui/widgets/pomodoro-widget.tsx": {
+      "PomodoroWidget": 27
+    },
+    "apps/app/src/features/email/hooks/use-email-module.ts": {
+      "useEmailModule>useCallback(cb)": 21
+    },
+    "apps/app/src/features/email/hooks/use-email-snooze-restore.ts": {
+      "processDue": 28
+    },
+    "apps/app/src/features/email/threads.ts": {
+      "shapeInboxThreads": 16
+    },
+    "apps/app/src/features/email/ui/email-connect-dialog.tsx": {
+      "EmailConnectDialog": 25
+    },
+    "apps/app/src/features/email/ui/email-destination-list.tsx": {
+      "RefCard": 22
+    },
+    "apps/app/src/features/email/ui/email-page-view.tsx": {
+      "EmailPageBody": 23
+    },
+    "apps/app/src/features/email/ui/email-reader.tsx": {
+      "MessageCard": 39
+    },
+    "apps/app/src/features/email/ui/use-email-convert.ts": {
+      "useEmailConvert>useCallback(cb)#3": 16
+    },
+    "apps/app/src/features/focus/engine-core.ts": {
+      "resolveAway": 19
+    },
+    "apps/app/src/features/focus/engine.ts": {
+      "createFocusEngine>flush": 28
+    },
+    "apps/app/src/features/focus/focus-run-follower.tsx": {
+      "FocusRunFollower>useEffect(cb)": 22
+    },
+    "apps/app/src/features/focus/run-model.ts": {
+      "focusRunRowToModel": 16
+    },
+    "apps/app/src/features/focus/run.ts": {
+      "attachRunUser": 17,
+      "receive": 43,
+      "reconcile": 23
+    },
+    "apps/app/src/features/mindmap/ui/components/mindmap-relations.tsx": {
+      "MindmapRelations": 33,
+      "MindmapRelations>useMemo(cb)#2": 36
+    },
+    "apps/app/src/features/mindmap/ui/custom-node.tsx": {
+      "MindmapCustomNode": 73
+    },
+    "apps/app/src/features/mindmap/ui/edge-style.ts": {
+      "normalizeEdgeData": 16
+    },
+    "apps/app/src/features/mindmap/ui/mermaid-import.ts": {
+      "parseMermaidToMindmap": 186
+    },
+    "apps/app/src/features/mindmap/ui/use-mindmap-keyboard.ts": {
+      "useMindmapKeyboard>useEffect(cb)>onKeyDown": 36
+    },
+    "apps/app/src/features/notes/editor/markdown.ts": {
+      "replace#5": 22
+    },
+    "apps/app/src/features/notes/editor/plugins/slash-menu-plugin.tsx": {
+      "SlashMenuPlugin>commitPick": 21
+    },
+    "apps/app/src/features/notes/editor/plugins/task-line-plugin.tsx": {
+      "TaskLinePlugin>useEffect(cb)#11": 16,
+      "TaskLinePlugin>useEffect(cb)>editor.registerUpdateListener(cb)": 60
+    },
+    "apps/app/src/features/notes/hooks/use-trash-with-task-detach.ts": {
+      "useTrashWithTaskDetach>useCallback(cb)": 19
+    },
+    "apps/app/src/features/notes/note-meta.ts": {
+      "shapeNoteMetaLine": 27
+    },
+    "apps/app/src/features/notes/public-render.ts": {
+      "comparePublicNotes": 23
+    },
+    "apps/app/src/features/notes/shell/breadcrumb.ts": {
+      "buildBreadcrumb": 30
+    },
+    "apps/app/src/features/notes/shell/drop-intent.ts": {
+      "resolveDropIntent": 38
+    },
+    "apps/app/src/features/notes/shell/note-view.tsx": {
+      "NoteView": 29
+    },
+    "apps/app/src/features/notes/shell/notes-shell.tsx": {
+      "NotesShellBody": 42
+    },
+    "apps/app/src/features/notes/shell/notes-sidebar.tsx": {
+      "NotesSidebar": 36,
+      "NotesSidebar>onTreeKeyDown": 20
+    },
+    "apps/app/src/features/notes/shell/sidebar-tree.tsx": {
+      "TreeRow": 28
+    },
+    "apps/app/src/features/notes/shell/tree-keyboard.ts": {
+      "treeKeyAction": 43
+    },
+    "apps/app/src/features/notes/sync/engine-v2.ts": {
+      "NotesSyncEngineV2.flush": 35,
+      "NotesSyncEngineV2.pull": 18,
+      "NotesSyncEngineV2.replayMetaOutbox": 16,
+      "NotesSyncEngineV2.wake": 18
+    },
+    "apps/app/src/features/notes/tree.ts": {
+      "resolveDrop": 23
+    },
+    "apps/app/src/features/notes/ui/note-comments-panel.tsx": {
+      "NoteCommentsPanel": 27
+    },
+    "apps/app/src/features/notes/ui/note-editor.tsx": {
+      "NoteEditor": 18
+    },
+    "apps/app/src/features/notes/ui/note-publish-control.tsx": {
+      "NotePublishControl": 30
+    },
+    "apps/app/src/features/settings/access/invite-panel.tsx": {
+      "InvitePanel": 21
+    },
+    "apps/app/src/features/settings/access/person-editor.tsx": {
+      "PersonEditor": 35
+    },
+    "apps/app/src/features/settings/access/role-editor.tsx": {
+      "RoleEditor": 38
+    },
+    "apps/app/src/features/settings/access/teams-panel.tsx": {
+      "TeamEditor": 25
+    },
+    "apps/app/src/features/settings/api-keys.ts": {
+      "keyLifecycle": 24
+    },
+    "apps/app/src/features/settings/billing.ts": {
+      "subscriptionLine": 29
+    },
+    "apps/app/src/features/settings/sections/access-section.tsx": {
+      "AccessSection": 69
+    },
+    "apps/app/src/features/settings/sections/account-section.tsx": {
+      "AccountSection": 62
+    },
+    "apps/app/src/features/settings/sections/advanced-section.tsx": {
+      "AdvancedSection": 23
+    },
+    "apps/app/src/features/settings/sections/api-keys-section.tsx": {
+      "ApiKeyRow": 66,
+      "ApiKeysSection": 67
+    },
+    "apps/app/src/features/settings/sections/integrations-section.tsx": {
+      "IntegrationsSection": 23
+    },
+    "apps/app/src/features/settings/sections/storage-section.tsx": {
+      "StorageSectionView": 27
+    },
+    "apps/app/src/features/settings/sections/workspace-section.tsx": {
+      "WorkspaceSection": 48
+    },
+    "apps/app/src/features/sharing/share-menu.tsx": {
+      "ShareMenu": 20
+    },
+    "apps/app/src/features/spine/activity.ts": {
+      "spineActivityLine": 133
+    },
+    "apps/app/src/features/spine/comments.ts": {
+      "commentBodyWithReferences": 18
+    },
+    "apps/app/src/features/spine/editor/description-markdown.ts": {
+      "$importInChunks": 16,
+      "$onlyBacktickInBlock": 16,
+      "$trailingEmptyItemLines": 16,
+      "markdownBlocks": 18
+    },
+    "apps/app/src/features/spine/editor/entity-text-editor.tsx": {
+      "EntityTextEditor": 25
+    },
+    "apps/app/src/features/spine/editor/mention-menu-plugin.tsx": {
+      "MentionMenuPlugin": 20,
+      "MentionMenuPlugin>commit": 21
+    },
+    "apps/app/src/features/spine/grammar.ts": {
+      "triggerAt": 21
+    },
+    "apps/app/src/features/spine/hooks/use-mention-search.ts": {
+      "useMentionSearch>useEffect(cb)>setTimeout(cb)><anonymous>": 19
+    },
+    "apps/app/src/features/spine/mention.ts": {
+      "buildMentionCandidates": 27
+    },
+    "apps/app/src/features/spine/notifications.ts": {
+      "notificationDeepLink": 20
+    },
+    "apps/app/src/features/spine/references/resolvers.ts": {
+      "taskFacts": 26
+    },
+    "apps/app/src/features/spine/references/store.ts": {
+      "ReferenceStore.settle": 30
+    },
+    "apps/app/src/features/spine/references/ui/reference-card.tsx": {
+      "ReferenceCardBody": 21
+    },
+    "apps/app/src/features/spine/rollup.ts": {
+      "rollupSections": 20
+    },
+    "apps/app/src/features/spine/snippet-format.ts": {
+      "relativeTimeAgo": 29
+    },
+    "apps/app/src/features/spine/suggest.ts": {
+      "scoreSuggestions": 24
+    },
+    "apps/app/src/features/spine/ui/comments-panel.tsx": {
+      "CommentComposer": 33,
+      "CommentComposer><anonymous>#6": 22
+    },
+    "apps/app/src/features/spine/ui/entity-rich-text.tsx": {
+      "walk>parent.childNodes.forEach(cb)": 29
+    },
+    "apps/app/src/features/tags/store.ts": {
+      "applyLiveTags": 32,
+      "computeView": 20,
+      "seedTags": 38
+    },
+    "apps/app/src/features/tasks/activity.ts": {
+      "activityLine": 69,
+      "updateLine": 49
+    },
+    "apps/app/src/features/tasks/board-columns.ts": {
+      "buildBoardLanes>groups.map(cb)": 17
+    },
+    "apps/app/src/features/tasks/bulk.ts": {
+      "bulkResultText": 19,
+      "planBulk": 45,
+      "planDate": 21
+    },
+    "apps/app/src/features/tasks/capture/capture-create.ts": {
+      "place": 24
+    },
+    "apps/app/src/features/tasks/capture/capture-menus.ts": {
+      "commandEntries": 81,
+      "mentionEntries": 16
+    },
+    "apps/app/src/features/tasks/capture/capture-pills.tsx": {
+      "CapturePills": 46
+    },
+    "apps/app/src/features/tasks/capture/task-capture.tsx": {
+      "TaskCaptureBody": 83,
+      "TaskCaptureBody>createFromTemplate": 16,
+      "TaskCaptureBody>lineTask": 23,
+      "TaskCaptureBody>putBack": 16,
+      "TaskCaptureBody>send": 28,
+      "TaskCaptureBody>submit": 20,
+      "TaskCaptureBody>useState(cb)#2": 54
+    },
+    "apps/app/src/features/tasks/capture/title-editor.tsx": {
+      "$readSegments": 16
+    },
+    "apps/app/src/features/tasks/capture/token-node.tsx": {
+      "TokenChip": 35
+    },
+    "apps/app/src/features/tasks/commands/bulk-write.ts": {
+      "createBulkWrite>bulkWrite": 48,
+      "createBulkWrite>bulkWrite>runPool(cb)": 22,
+      "createBulkWrite>bulkWrite>undoThis": 54
+    },
+    "apps/app/src/features/tasks/commands/bulk.ts": {
+      "createBulkOps>bulkDelete": 16
+    },
+    "apps/app/src/features/tasks/commands/projects.ts": {
+      "createProjectOps>closeOpenWork": 17,
+      "createProjectOps>deleteBucket": 18
+    },
+    "apps/app/src/features/tasks/commands/queue.ts": {
+      "createQueueOps>addToQueue": 16
+    },
+    "apps/app/src/features/tasks/commands/shared.ts": {
+      "createShared>applyOp": 16
+    },
+    "apps/app/src/features/tasks/commands/task.ts": {
+      "createTaskOps>saveTaskWrite": 23,
+      "createTaskOps>setTaskParent": 18,
+      "createTaskOps>writeTask": 32
+    },
+    "apps/app/src/features/tasks/dnd/board-drop.ts": {
+      "planBoardDrop": 29
+    },
+    "apps/app/src/features/tasks/dnd/drop-mode.ts": {
+      "planListDrop": 29,
+      "resolveListHover": 44
+    },
+    "apps/app/src/features/tasks/dnd/drop-write.ts": {
+      "dropLabel": 19
+    },
+    "apps/app/src/features/tasks/dnd/multi-drop.ts": {
+      "multiDropLabel": 16,
+      "multiDropWrites>fits.forEach(cb)": 38
+    },
+    "apps/app/src/features/tasks/filters.ts": {
+      "captureSeed": 27,
+      "taskFilterValues": 18
+    },
+    "apps/app/src/features/tasks/focus-screen.ts": {
+      "inFlightItems": 45,
+      "nextMeeting": 17,
+      "scheduledToday": 22
+    },
+    "apps/app/src/features/tasks/helpers.ts": {
+      "betweenPositions": 16,
+      "frontierTasks": 17,
+      "groupLabel": 20,
+      "midpointFraction": 16,
+      "orderedGroupKeys": 20
+    },
+    "apps/app/src/features/tasks/home.ts": {
+      "teamLoad": 31
+    },
+    "apps/app/src/features/tasks/importers/asana.ts": {
+      "readAsana": 23
+    },
+    "apps/app/src/features/tasks/importers/csv.ts": {
+      "parseCsvRows": 25
+    },
+    "apps/app/src/features/tasks/importers/jira.ts": {
+      "readJira": 42
+    },
+    "apps/app/src/features/tasks/importers/linear.ts": {
+      "readLinear": 25
+    },
+    "apps/app/src/features/tasks/importers/run.ts": {
+      "resolvePlan": 25,
+      "runImport": 68,
+      "runImport>one": 94
+    },
+    "apps/app/src/features/tasks/importers/todoist.ts": {
+      "readTodoist": 59
+    },
+    "apps/app/src/features/tasks/importers/trello.ts": {
+      "readTrello": 74
+    },
+    "apps/app/src/features/tasks/importers/ui/import-dialog.tsx": {
+      "DoneStep": 24
+    },
+    "apps/app/src/features/tasks/list-export.ts": {
+      "tasksAsCsv": 16
+    },
+    "apps/app/src/features/tasks/list-group-add.ts": {
+      "groupAddState": 32
+    },
+    "apps/app/src/features/tasks/parse/capture-parser.ts": {
+      "detectRecurrence": 30,
+      "parseRaw": 46
+    },
+    "apps/app/src/features/tasks/parse/capture-tokens.ts": {
+      "segmentsFromLine": 21
+    },
+    "apps/app/src/features/tasks/parse/paste-list.ts": {
+      "parsePastedList": 23
+    },
+    "apps/app/src/features/tasks/project-overview.ts": {
+      "departureLines": 32
+    },
+    "apps/app/src/features/tasks/repeat.ts": {
+      "repeatSummary": 33
+    },
+    "apps/app/src/features/tasks/selection.ts": {
+      "selectWith": 25
+    },
+    "apps/app/src/features/tasks/templates/ui/template-dialogs.tsx": {
+      "CopyProjectDialog": 29
+    },
+    "apps/app/src/features/tasks/templates/ui/template-editor.tsx": {
+      "TaskLine": 17,
+      "TemplateEditor": 21
+    },
+    "apps/app/src/features/tasks/templates/ui/templates-view.tsx": {
+      "TemplatesView>row": 18
+    },
+    "apps/app/src/features/tasks/templates/ui/use-template-actions.tsx": {
+      "useTemplateActions": 27
+    },
+    "apps/app/src/features/tasks/time-report.ts": {
+      "shapeTimeReport": 27
+    },
+    "apps/app/src/features/tasks/timeline-keys.ts": {
+      "timelineKeyAction": 48
+    },
+    "apps/app/src/features/tasks/timeline-rows.ts": {
+      "buildTimelineRows": 36,
+      "projectBody": 27,
+      "taskRows": 28,
+      "taskScopeRows": 19
+    },
+    "apps/app/src/features/tasks/trash.ts": {
+      "trashEntries": 20
+    },
+    "apps/app/src/features/tasks/ui/bucket-rail.tsx": {
+      "BucketRail": 34,
+      "SidebarHairline": 18
+    },
+    "apps/app/src/features/tasks/ui/delete-bucket-dialog.tsx": {
+      "ArchiveProjectDialog": 20
+    },
+    "apps/app/src/features/tasks/ui/focus-now-card.tsx": {
+      "NowCard": 32
+    },
+    "apps/app/src/features/tasks/ui/focus-view.tsx": {
+      "FocusView": 36
+    },
+    "apps/app/src/features/tasks/ui/in-flight-panel.tsx": {
+      "InFlightCard": 17
+    },
+    "apps/app/src/features/tasks/ui/inbox-view.tsx": {
+      "useInboxView": 16,
+      "useInboxView>markDuplicate": 25
+    },
+    "apps/app/src/features/tasks/ui/list-keys.ts": {
+      "listKeyAction": 37
+    },
+    "apps/app/src/features/tasks/ui/plan/deep-link.ts": {
+      "deepLinkReducer": 18
+    },
+    "apps/app/src/features/tasks/ui/plan/plan-body.tsx": {
+      "PlanBody": 53
+    },
+    "apps/app/src/features/tasks/ui/plan/plan-panels.tsx": {
+      "PlanPanels": 25
+    },
+    "apps/app/src/features/tasks/ui/plan/use-plan-actions.tsx": {
+      "usePlanActions": 46,
+      "usePlanActions>useCallback(cb)#5": 19
+    },
+    "apps/app/src/features/tasks/ui/plan/use-plan-centre.tsx": {
+      "usePlanCentre": 54
+    },
+    "apps/app/src/features/tasks/ui/plan/use-plan-panel-state.tsx": {
+      "usePlanPanelState": 16
+    },
+    "apps/app/src/features/tasks/ui/plan/use-plan-scope.tsx": {
+      "usePlanScope": 19,
+      "usePlanScope>useMemo(cb)#12": 18
+    },
+    "apps/app/src/features/tasks/ui/project-panel.tsx": {
+      "ProjectOverview": 40
+    },
+    "apps/app/src/features/tasks/ui/queue-toggle.tsx": {
+      "QueueToggle": 25
+    },
+    "apps/app/src/features/tasks/ui/row-facts.ts": {
+      "taskFactsOf": 16,
+      "waitingLabelsOf": 17
+    },
+    "apps/app/src/features/tasks/ui/row-keys.ts": {
+      "runSharedRowKey": 29
+    },
+    "apps/app/src/features/tasks/ui/task-agent-session.tsx": {
+      "AgentSessionLine": 39
+    },
+    "apps/app/src/features/tasks/ui/task-board-view.tsx": {
+      "TaskBoardView": 45,
+      "TaskBoardView>onDragEnd": 19,
+      "TaskBoardView>onKeyDown": 20
+    },
+    "apps/app/src/features/tasks/ui/task-card.tsx": {
+      "CardBody": 43
+    },
+    "apps/app/src/features/tasks/ui/task-description.tsx": {
+      "TaskDescription": 16
+    },
+    "apps/app/src/features/tasks/ui/task-detail-header.tsx": {
+      "TaskDetailHeader": 31
+    },
+    "apps/app/src/features/tasks/ui/task-detail-panel.tsx": {
+      "DetailBody": 24
+    },
+    "apps/app/src/features/tasks/ui/task-detail-pickers.tsx": {
+      "EstimateValue": 16,
+      "ReminderValue": 28,
+      "SessionsValue": 20
+    },
+    "apps/app/src/features/tasks/ui/task-feed.tsx": {
+      "TrailLine": 16
+    },
+    "apps/app/src/features/tasks/ui/task-list-header.tsx": {
+      "TaskListHeader": 18,
+      "TaskListHeader>sortCell": 18
+    },
+    "apps/app/src/features/tasks/ui/task-list-view.tsx": {
+      "TaskListView": 65,
+      "TaskListView>renderItem": 56,
+      "TaskListView>useCallback(cb)#19": 48,
+      "TaskListView>useCallback(cb)#24": 19,
+      "TaskListView>useEffect(cb)#2": 22
+    },
+    "apps/app/src/features/tasks/ui/task-row-cells.tsx": {
+      "DateCell": 21
+    },
+    "apps/app/src/features/tasks/ui/task-row.tsx": {
+      "TaskRowView": 125
+    },
+    "apps/app/src/features/tasks/ui/task-timeline-view.tsx": {
+      "TaskTimelineView": 36,
+      "TaskTimelineView><anonymous>#4": 18
+    },
+    "apps/app/src/features/tasks/ui/time-report-sheet.tsx": {
+      "TimeReportSheet": 22
+    },
+    "apps/app/src/features/tasks/ui/timeline-dep-stubs.ts": {
+      "depStubsFor": 16
+    },
+    "apps/app/src/features/tasks/ui/timeline-key-handler.ts": {
+      "fitSelection": 17,
+      "runKey": 63
+    },
+    "apps/app/src/features/tasks/ui/timeline-marks.tsx": {
+      "TaskPointMark": 43
+    },
+    "apps/app/src/features/tasks/ui/timeline-no-date-panel.tsx": {
+      "TimelineNoDatePanel>useMemo(cb)": 17
+    },
+    "apps/app/src/features/tasks/ui/timeline-row.tsx": {
+      "NameContent": 22,
+      "TimelineRowView": 28,
+      "Track": 35,
+      "TrackLabel": 16
+    },
+    "apps/app/src/features/tasks/ui/upcoming-view.tsx": {
+      "useUpcomingView>useCallback(cb)#2": 20,
+      "useUpcomingView>useCallback(cb)#4": 17
+    },
+    "apps/app/src/features/tasks/ui/use-bulk-actions.tsx": {
+      "useBulkActions>useCallback(cb)#10": 17
+    },
+    "apps/app/src/features/tasks/ui/use-saved-views.tsx": {
+      "useSavedViews": 35
+    },
+    "apps/app/src/features/tasks/ui/use-timeline-canvas.ts": {
+      "commitOf": 22,
+      "grabOf": 27
+    },
+    "apps/app/src/features/tasks/upcoming.ts": {
+      "upcomingWhen": 20
+    },
+    "apps/app/src/features/tasks/write-plan.ts": {
+      "patchOfWrite": 17,
+      "planTaskWrite": 57
+    },
+    "apps/app/src/features/updater/manifest-notes.ts": {
+      "parse": 24
+    },
+    "apps/app/src/features/workspaces/workspace-mappers.ts": {
+      "mapWorkspace": 24
+    },
+    "apps/app/src/lib/db-contract-preflight-core.ts": {
+      "validateCatalogSnapshot": 18
+    },
+    "apps/app/src/lib/db-reconcile-core.ts": {
+      "dedupeDecls": 17,
+      "parseDeclarations": 42
+    },
+    "apps/app/src/lib/paged-select.ts": {
+      "readPaged": 25
+    },
+    "apps/app/src/lib/preferences.ts": {
+      "transform(cb)#5": 16
+    },
+    "apps/app/src/lib/runtime.chat.supabase.ts": {
+      "chatRuntimeOn>memberCounts": 16
+    },
+    "apps/app/src/lib/runtime.web.contacts.ts": {
+      "loadOverdueFollowups": 33
+    },
+    "apps/app/src/lib/runtime.web.preferences.ts": {
+      "set>buildRow": 21
+    },
+    "apps/app/src/lib/runtime.web.tasks.ts": {
+      "readByKey": 19,
+      "syncReadTable": 27
+    },
+    "apps/app/src/lib/runtime.web.workspace.ts": {
+      "readOAuthRequest": 19
+    },
+    "apps/app/src/lib/sync/kernel/landing.ts": {
+      "LandedRows.applyRows": 22
+    },
+    "apps/app/src/lib/sync/kernel/outbox.ts": {
+      "drainOutbox": 19
+    },
+    "apps/app/src/lib/sync/kernel/overlay.ts": {
+      "withOverlays": 16
+    },
+    "apps/app/src/lib/sync/store.ts": {
+      "WorkspaceStore.checkAccess": 19,
+      "WorkspaceStore.noteAccessChanges": 17,
+      "WorkspaceStore.readFirst": 20,
+      "WorkspaceStore.splitArchivedRows": 16,
+      "WorkspaceStore.syncOnce": 16
+    },
+    "apps/app/src/lib/task-rows.ts": {
+      "bucketRowToModel": 16,
+      "taskCreateOpInput": 17,
+      "taskCyclesFromJson": 16,
+      "taskPatchToOpFields": 17,
+      "taskRowToModel": 36
+    },
+    "apps/app/src/lib/uploads/pipeline.ts": {
+      "isAnimatedImage": 31,
+      "jpegHasExif": 17,
+      "prepareUpload": 29
+    },
+    "apps/app/src/lib/uploads/queue.ts": {
+      "UploadQueue.add": 25,
+      "UploadQueue.pump": 23,
+      "UploadQueue.runClaimed": 40
+    },
+    "apps/app/src/lib/view-prefs.ts": {
+      "mergeViewPrefs": 17
+    },
+    "apps/app/src/providers/workspace-provider.tsx": {
+      "WorkspaceProvider>useCallback(cb)#3": 22
+    },
+    "apps/app/src/routes/pages/book-page.tsx": {
+      "BookPage": 109
+    },
+    "apps/app/src/routes/pages/contacts-page.tsx": {
+      "ContactsPage": 33
+    },
+    "apps/app/src/routes/pages/oauth-consent-page.tsx": {
+      "ConsentForm": 34
+    },
+    "apps/app/src/routes/pages/published-note-page.tsx": {
+      "PublishedNotePage": 17
+    },
+    "apps/app/src/styles/css-blocks.ts": {
+      "cssBlocks": 26,
+      "stripComments": 18
+    },
+    "infra/turbo-cache/src/index.ts": {
+      "handle": 38
+    },
+    "infra/update-server/src/server.ts": {
+      "compareVersions": 28,
+      "handle": 25
+    },
+    "scripts/brand/masters.ts": {
+      "parseMaster": 16
+    },
+    "scripts/check-arbitrary-tw.ts": {
+      "main": 19
+    },
+    "scripts/check-boundaries.ts": {
+      "checkFile": 17
+    },
+    "scripts/check-text-rules.ts": {
+      "childExpressions": 27,
+      "scanTextRules": 53
+    },
+    "scripts/ci/ratchets.ts": {
+      "complexityOf>visit": 18
+    },
+    "scripts/ci/test-weakening.ts": {
+      "detect": 17,
+      "parseDiff": 23
+    },
+    "scripts/dns-diff.ts": {
+      "liveDiff": 24
+    },
+    "scripts/mcp-import-roundtrip.ts": {
+      "importRun": 18
+    },
+    "scripts/release/check-notes.ts": {
+      "buildDenyList": 20,
+      "checkRepo": 38,
+      "parseNote": 17
+    },
+    "scripts/release/version.mjs": {
+      "compareVersions": 32
+    },
+    "scripts/smoke-hosting.ts": {
+      "smoke": 53,
+      "smokeLanding": 55
+    },
+    "supabase/functions/_shared/account-erasure.ts": {
+      "deleteCustomer": 19,
+      "removeAttachments": 24
+    },
+    "supabase/functions/_shared/contracts/mcp-tool-args.ts": {
+      "flattenStringChoices": 23
+    },
+    "supabase/functions/_shared/description-markdown.ts": {
+      "blocksMarkdown": 39,
+      "codeRanges": 40,
+      "escapeMarkdownText": 34,
+      "htmlWords": 18,
+      "inlineRuns": 30,
+      "listMarkdown": 28,
+      "parseAttrs": 35,
+      "parseHtml": 33
+    },
+    "supabase/functions/_shared/email/outbox.ts": {
+      "runBatches": 52
+    },
+    "supabase/functions/_shared/email/resend-webhook.ts": {
+      "classifyResendEvent": 22
+    },
+    "supabase/functions/_shared/email/send.ts": {
+      "sendViaResend": 29
+    },
+    "supabase/functions/_shared/google-token.ts": {
+      "googleAccessForRow": 16
+    },
+    "supabase/functions/_shared/purge-deleted.ts": {
+      "purgeDeleted": 24
+    },
+    "supabase/functions/_shared/tasks-connector.ts": {
+      "shapeTask": 29,
+      "shapeTaskSummary": 22
+    },
+    "supabase/functions/auth-email-hook/handler.ts": {
+      "handleAuthEmailHook": 16,
+      "planEmails": 26
+    },
+    "supabase/functions/booking-google-connect/index.ts": {
+      "Deno.serve(cb)": 26
+    },
+    "supabase/functions/booking-public/index.ts": {
+      "busyIntervals": 26,
+      "Deno.serve(cb)": 154
+    },
+    "supabase/functions/booking-zoom-connect/index.ts": {
+      "Deno.serve(cb)": 29
+    },
+    "supabase/functions/calendar-google-web/index.ts": {
+      "Deno.serve(cb)": 92
+    },
+    "supabase/functions/create-checkout-session/index.ts": {
+      "Deno.serve(cb)": 45
+    },
+    "supabase/functions/create-portal-session/index.ts": {
+      "Deno.serve(cb)": 18
+    },
+    "supabase/functions/delete-account/index.ts": {
+      "Deno.serve(cb)": 17
+    },
+    "supabase/functions/manage-integration/index.ts": {
+      "Deno.serve(cb)": 23
+    },
+    "supabase/functions/moduo-mcp/modules/links.ts": {
+      "visibleToKey": 16
+    },
+    "supabase/functions/moduo-mcp/modules/tasks.ts": {
+      "describeForWrite": 28,
+      "handler#27": 17,
+      "handler#28": 18,
+      "handler#51": 18,
+      "handler#8": 23,
+      "taskFieldsFromArgs": 29
+    },
+    "supabase/functions/moduo-mcp/server.ts": {
+      "answerMessage": 26
+    },
+    "supabase/functions/push-send/handler.ts": {
+      "runPush": 16
+    },
+    "supabase/functions/waitlist-join/index.ts": {
+      "Deno.serve(cb)": 18
+    }
+  }
+}

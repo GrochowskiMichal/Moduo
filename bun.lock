@@ -7,6 +7,7 @@
       "devDependencies": {
         "@resvg/resvg-js": "^2.6.2",
         "@rstest/core": "^0.12.3",
+        "oxc-parser": "0.127.0",
         "stripe": "23.0.0",
         "stylelint": "^17.16.0",
         "stylelint-config-standard": "^40.0.0",

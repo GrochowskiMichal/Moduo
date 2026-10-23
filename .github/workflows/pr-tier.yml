@@ -1,0 +1,61 @@
+name: pr-tier
+
+# Labels every pull request tier-0, tier-1 or tier-2 from the paths it touches (HV-5, AC19).
+# The Tier 2 path list lives once, in scripts/ci/tier.ts; /s2 and /s3 run the same script.
+# A separate workflow, not a checks.yml job: checks.yml runs only on PRs into develop, while
+# the tier matters most on task PRs into the personal branches, where the validator gate sits.
+# The label is information for the merging founder, never a required check.
+on:
+  pull_request:
+    # `edited` covers a changed base branch.
+    types: [opened, synchronize, reopened, edited]
+
+concurrency:
+  group: pr-tier-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # PR labels go through the issues API.
+  issues: write
+  pull-requests: write
+
+jobs:
+  label:
+    # A fork's token can't write labels.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Classify and label
+        run: |
+          # Assigned first, so a failing classifier stops the step instead of labelling tier-0.
+          out=$(bun scripts/ci/tier.ts --range "$PR_BASE...$PR_HEAD")
+          echo "$out"
+          tier=$(head -n1 <<< "$out")
+          case "$tier" in tier-0|tier-1|tier-2) ;; *) echo "Unexpected tier: $tier"; exit 1 ;; esac
+          gh label create tier-0 --repo "$REPO" --force --color c5def5 --description "Docs only"
+          gh label create tier-1 --repo "$REPO" --force --color fbca04 --description "Code: bun run verify"
+          gh label create tier-2 --repo "$REPO" --force --color d93f0b --description "Risky paths (scripts/ci/tier.ts): validator review"
+          for other in tier-0 tier-1 tier-2; do
+            [ "$other" = "$tier" ] && continue
+            gh api -X DELETE "repos/$REPO/issues/$PR/labels/$other" --silent 2>/dev/null || true
+          done
+          gh api -X POST "repos/$REPO/issues/$PR/labels" -f "labels[]=$tier" --silent
+          { echo "### $tier"; echo; echo '```'; echo "$out"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

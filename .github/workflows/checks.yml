@@ -18,7 +18,8 @@ name: checks
 # verify a signed artifact without it.
 #
 # `static-checks` is the one required context. It always runs and fails unless the secret scan
-# passed and lint and every test shard passed, or a docs-only PR skipped them.
+# passed and lint, every test shard and the ratchets passed (a new .only fails the weakening
+# detector), or a docs-only PR skipped them.
 on:
   pull_request:
     branches: [develop]
@@ -172,8 +173,58 @@ jobs:
         # shard is its own cache entry because turbo hashes the pass-through args.
         run: bunx turbo run test test:scripts --output-logs=new-only -- --shard ${{ matrix.shard }}/3
 
+  # ── HV-5: ratchets and the test-weakening detector ──────────────────────────────────────
+  # Size (32 KB) and per-function cognitive complexity (15), frozen at the 2026-10-23 values in
+  # scripts/ci/ratchets.baseline.json: frozen code may shrink but not grow, anything new over a
+  # limit fails. Part of static-checks.
+  ratchets:
+    needs: scan
+    if: needs.scan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install frontend deps
+        run: bun install --frozen-lockfile
+
+      - name: Size and complexity ratchets
+        run: bun scripts/ci/ratchets.ts
+
+  # Deleted assertions, new .skip/.only and new mocks in lib/sync tests (scripts/ci/test-weakening.ts).
+  # Pull requests only: it reads the PR's diff. Findings are annotations for the merging founder;
+  # only a new .only fails (it silently turns off the rest of its file). Part of static-checks.
+  test-weakening:
+    needs: scan
+    if: github.event_name == 'pull_request' && needs.scan.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PR_BASE: ${{ github.event.pull_request.base.sha }}
+      PR_HEAD: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Test-weakening detector
+        run: bun scripts/ci/test-weakening.ts --range "$PR_BASE...$PR_HEAD"
+  # ── end HV-5 ────────────────────────────────────────────────────────────────────────────
+
   static-checks:
-    needs: [scan, lint, unit-tests]
+    needs: [scan, lint, unit-tests, ratchets, test-weakening]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -184,9 +235,15 @@ jobs:
           CODE: ${{ needs.scan.outputs.code }}
           LINT: ${{ needs.lint.result }}
           TESTS: ${{ needs.unit-tests.result }}
+          RATCHETS: ${{ needs.ratchets.result }}
+          WEAKENING: ${{ needs.test-weakening.result }}
         run: |
           echo "scan: $SCAN · code change: $CODE · lint: $LINT · unit-tests: $TESTS"
           [ "$SCAN" = success ] || exit 1
+          # HV-5: the ratchets run with lint; the weakening detector is skipped on pushes.
+          echo "ratchets: $RATCHETS · test-weakening: $WEAKENING"
+          if [ "$CODE" = true ]; then [ "$RATCHETS" = success ] || exit 1; fi
+          case "$WEAKENING" in success|skipped) ;; *) exit 1 ;; esac
           if [ "$CODE" = true ]; then
             [ "$LINT" = success ] && [ "$TESTS" = success ]
           else

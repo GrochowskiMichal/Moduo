@@ -571,7 +571,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **HV-2 — One Moduo, one Supabase, worktree pool** · deps: —
 - [ ] **HV-3 — Skill rewiring** · deps: —
 - [ ] **HV-4 — Oracles in CI (Tier 2)** · deps: —
-- [ ] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: —
+- [x] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: — · 2026-10-23 `t/mike/hv-5-tier-ratchets`
 - [ ] **HV-9 — Security pass before alpha** · deps: —
 - [ ] **HV-11 — Decisions current view** · deps: —
 - [ ] **HV-12 — ast-grep pack** · deps: —
