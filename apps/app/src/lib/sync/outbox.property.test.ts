@@ -99,8 +99,13 @@ import {
 import type { SyncReadInput, SyncReadResult } from "./types";
 
 const SEED = Number(process.env.FC_SEED ?? 1709);
-const RUNS = Number(process.env.FC_RUNS ?? 120);
+const RUNS = Number(process.env.FC_RUNS ?? 200);
 const PREF_RUNS = Number(process.env.FC_RUNS ?? 200);
+
+/** MOD-569 is open: see `Real.atRisk`. */
+const ALLOW_MOD_569 = true;
+/** MOD-587 is open: see `checkOff`. */
+const ALLOW_LIVE_RACE = true;
 
 const WS = "ws-1";
 const A = "u-a";
@@ -314,6 +319,20 @@ type Real = {
   inFlight: Map<string, number>;
   /** The last check-off made through the running store, per task. */
   madeHere: Map<string, "done" | "todo">;
+  /** The running store's live captures still on their way. */
+  liveCaptures: Map<string, number>;
+  /**
+   * Tasks whose live write was still on its way when its store stopped.
+   * KNOWN GAP (MOD-569): if that request then fails on the network, the store
+   * that stopped queues it in an outbox nobody keeps, and it is lost. Only
+   * for these tasks the end-state checks allow a lost write. Fixing MOD-569
+   * means setting ALLOW_MOD_569 to false.
+   */
+  atRisk: Set<string>;
+  /** Live check-offs still unanswered per task, from any store (MOD-587). */
+  liveAll: Map<string, number>;
+  /** Tasks where two live check-offs raced (MOD-587): their order isn't checked. */
+  raced: Set<string>;
   /** Every promise a command left running (their rejections are expected). */
   running: Promise<unknown>[];
 };
@@ -334,8 +353,14 @@ function closeStore(r: Real) {
   r.release?.();
   r.release = null;
   r.store = null;
+  if (ALLOW_MOD_569) {
+    for (const map of [r.inFlight, r.liveCaptures]) {
+      for (const [id, n] of map) if (n > 0) r.atRisk.add(id);
+    }
+  }
   // A write the stopped store had on its way isn't the next store's to show.
   r.inFlight = new Map();
+  r.liveCaptures = new Map();
   r.madeHere = new Map();
 }
 
@@ -350,8 +375,13 @@ const taskOf = (store: WorkspaceStore, id: string) =>
 
 const entryTask = (e: OutboxEntry) => (e.kind === "create" ? e.task.id : e.taskId);
 
-function track(r: Real, taskId: string | null, p: Promise<unknown>) {
-  const inFlight = r.inFlight;
+function track(
+  r: Real,
+  taskId: string | null,
+  p: Promise<unknown>,
+  kind: "check-off" | "capture" = "check-off",
+) {
+  const inFlight = kind === "capture" ? r.liveCaptures : r.inFlight;
   if (taskId) inFlight.set(taskId, (inFlight.get(taskId) ?? 0) + 1);
   const done = p.then(
     () => {},
@@ -364,9 +394,37 @@ function track(r: Real, taskId: string | null, p: Promise<unknown>) {
   );
 }
 
+/** A's check-off, as every surface sends it (`store.sendStatus`). */
+function checkOff(m: Model, r: Real, id: string, status: "done" | "todo") {
+  const store = r.store!;
+  // KNOWN GAP (MOD-587): nothing orders a check-off behind an older live one
+  // still on its way. Sent live it races it; queued, the flush can send it
+  // first, or the live one fails on the network and is queued behind it.
+  if (ALLOW_LIVE_RACE && (r.liveAll.get(id) ?? 0) > 0) r.raced.add(id);
+  m.intents.set(id, [...(m.intents.get(id) ?? []), status]);
+  r.madeHere.set(id, status);
+  r.liveAll.set(id, (r.liveAll.get(id) ?? 0) + 1);
+  const sent = store.sendStatus({ taskId: id, status, fields: statusFields(status) });
+  track(r, id, sent);
+  r.running.push(
+    sent
+      .catch(() => {})
+      .then(() => {
+        r.liveAll.set(id, (r.liveAll.get(id) ?? 1) - 1);
+      }),
+  );
+}
+
 /** Collapse repeats: a resend of a status the server already applied changes nothing. */
 function collapsed<T>(xs: readonly T[]): T[] {
   return xs.filter((x, i) => i === 0 || xs[i - 1] !== x);
+}
+
+/** Whether `sub` is `all` with some items left out, in the same order. */
+function isSubsequence<T>(sub: readonly T[], all: readonly T[]): boolean {
+  let i = 0;
+  for (const x of all) if (i < sub.length && sub[i] === x) i += 1;
+  return i === sub.length;
 }
 
 /** Whether `head` is how `all` starts. */
@@ -395,8 +453,11 @@ async function checkInvariants(m: Model, r: Real) {
 
   // I2: per task, the server applied A's check-offs in the order A made them.
   for (const [taskId, done] of r.server.applied) {
+    if (r.raced.has(taskId)) continue;
     const made = collapsed(m.intents.get(taskId) ?? []);
-    if (!isPrefix(collapsed(done), made)) {
+    // MOD-569: a lost write leaves a gap, but what did land stays in order.
+    const inOrder = r.atRisk.has(taskId) ? isSubsequence : isPrefix;
+    if (!inOrder(collapsed(done), made)) {
       throw new Error(
         `I2: ${taskId} applied [${done.join(", ")}] but A made [${(m.intents.get(taskId) ?? []).join(", ")}]`,
       );
@@ -447,7 +508,7 @@ class Capture implements Cmd {
     m.captures.push(id);
     // Shown under a `tmp-` id while it saves (sent under its own id), as the
     // capture shell does.
-    track(r, null, r.store!.sendCreate(task(`tmp-${id}`, { title: `capture ${id}` })));
+    track(r, id, r.store!.sendCreate(task(`tmp-${id}`, { title: `capture ${id}` })), "capture");
     await settle();
     await checkInvariants(m, r);
   }
@@ -468,13 +529,7 @@ class CheckOff implements Cmd {
       await checkInvariants(m, r);
       return;
     }
-    m.intents.set(id, [...(m.intents.get(id) ?? []), this.status]);
-    r.madeHere.set(id, this.status);
-    track(
-      r,
-      id,
-      r.store!.sendStatus({ taskId: id, status: this.status, fields: statusFields(this.status) }),
-    );
+    checkOff(m, r, id, this.status);
     await settle();
     await checkInvariants(m, r);
   }
@@ -636,21 +691,12 @@ class LiveEcho implements Cmd {
  */
 function rushedCheckOff(m: Model, r: Real) {
   const store = r.store;
-  // Offline only: it waits in the outbox. (A live one still on its way when
-  // the store stops, whose request then fails on the network, is put into the
-  // stopped store's outbox and lost: a known gap, reported with HV-17.)
-  if (m.signedIn !== A || !m.offline || !store || !taskOf(store, INITIAL[0]!)) return;
+  if (m.signedIn !== A || !store || !taskOf(store, INITIAL[0]!)) return;
   const status =
     store.getSnapshot().bundle.tasks.find((t) => t.id === INITIAL[0])?.statusCategory === "done"
       ? "todo"
       : "done";
-  m.intents.set(INITIAL[0]!, [...(m.intents.get(INITIAL[0]!) ?? []), status]);
-  r.madeHere.set(INITIAL[0]!, status);
-  track(
-    r,
-    INITIAL[0]!,
-    store.sendStatus({ taskId: INITIAL[0]!, status, fields: statusFields(status) }),
-  );
+  checkOff(m, r, INITIAL[0]!, status);
 }
 
 /** SIGNED_OUT (by the person, or auth-js on its own when a refresh token dies). */
@@ -755,9 +801,14 @@ async function drain(m: Model, r: Real) {
   await checkInvariants(m, r);
   expect(r.store!.waitingEntries()).toEqual([]);
   // Every capture is on the server, once.
-  for (const id of m.captures) expect(r.server.created.filter((c) => c === id)).toEqual([id]);
+  for (const id of m.captures) {
+    const times = r.server.created.filter((c) => c === id).length;
+    if (r.atRisk.has(id)) expect(times).toBeLessThanOrEqual(1);
+    else expect(`${id} created ${times}×`).toBe(`${id} created 1×`);
+  }
   // Each task ends at the last check-off made.
   for (const [taskId, intents] of m.intents) {
+    if (r.atRisk.has(taskId) || r.raced.has(taskId)) continue;
     expect(`${taskId}: ${r.server.tasks.get(taskId)?.statusCategory}`).toBe(
       `${taskId}: ${intents.at(-1)}`,
     );
@@ -796,6 +847,10 @@ async function runScenario(s: fc.Scheduler, cmds: Iterable<Cmd>) {
     seen: new Map(),
     inFlight: new Map(),
     madeHere: new Map(),
+    liveCaptures: new Map(),
+    atRisk: new Set(),
+    liveAll: new Map(),
+    raced: new Set(),
     running: [],
   };
   try {
