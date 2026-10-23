@@ -6475,11 +6475,6 @@ export type Database = {
         }
         Returns: Json
       }
-      calendar_op_publish: {
-        Args: { p_calendar_id: string | null; p_level: string | null }
-        Returns: string
-      }
-      calendar_public_feed: { Args: { p_token: string | null }; Returns: Json }
       calendar_set_save: {
         Args: {
           p_calendar_ids: string[] | null
