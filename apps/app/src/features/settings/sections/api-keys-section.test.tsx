@@ -697,6 +697,26 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
     expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
   });
 
+  it("reads a connection made before the scheme was stored as unchecked", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey(
+        { tasks: "view" },
+        {
+          id: "c3",
+          name: "Claude",
+          keyPrefix: null,
+          oauthClientId: "client-3",
+          oauthClientDomain: "claude.ai",
+          oauthClientScheme: null,
+        },
+      ),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/claude\.ai · Never used/)).toBeTruthy();
+    expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
+  });
+
   it("keeps the checked https app free of the unchecked note", async () => {
     mocks.workspace.listApiKeys.mockResolvedValue([claudeApp()]);
     renderSection();
