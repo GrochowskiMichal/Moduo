@@ -5,6 +5,17 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.3.0 · 2026-10-23
+
+### New
+
+- Connect Claude and other AI assistants to Moduo with just a link: sign in, choose what they can reach, and disconnect them any time in Settings.
+
+### Improved
+
+- Moduo has its own connector address for Claude and other AI apps, so Claude shows the Moduo logo. Your existing connections keep working.
+- Connecting Claude again offers to replace your earlier Claude connection, and Settings shows when each connected app was added.
+
 ## 1.2.6 · 2026-10-23
 
 ### Improved
