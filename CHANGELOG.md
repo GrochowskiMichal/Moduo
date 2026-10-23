@@ -5,6 +5,21 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.3.2 · 2026-10-23
+
+### Improved
+
+- Notes looks calmer: no extra heading or menus, a star to favorite a note, and a Details panel that matches Tasks.
+- Code blocks show code in a monospace font with colours, wrap long lines, and are easy to leave.
+- Tables get buttons to add rows and columns, Tab adds a row at the end, and every cell can be clicked into.
+- Undo in a note goes back one line at a time, and redo always brings it back.
+
+### Fixed
+
+- Dragging a block by its handle moves it again, and the handle sits on the line it belongs to.
+- Imported notes keep their titles when you edit them, and switching between notes no longer shows a loading message.
+- Typing three dashes makes a divider, checkboxes line up with their text, and links can be opened, edited and removed.
+
 ## 1.3.1 · 2026-10-23
 
 ### Improved
