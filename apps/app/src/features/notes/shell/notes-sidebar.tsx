@@ -81,7 +81,14 @@ export function NotesSidebar(props: NotesSidebarProps) {
     notes,
     sections,
     favoritePositions: props.favoritePositions,
-    onDrop: props.onDropIntent,
+    onDrop: (intent) => {
+      props.onDropIntent(intent);
+      // A note dropped into a collapsed page shows where it went.
+      if (intent.kind === "move" && intent.parentId) {
+        toggle(rowKey("inbox", intent.parentId), true);
+        toggle(rowKey("pages", intent.parentId), true);
+      }
+    },
     scrollerRef,
   });
   const dragNote = drag.dragNoteId ? notes.find((n) => n.id === drag.dragNoteId) : undefined;
