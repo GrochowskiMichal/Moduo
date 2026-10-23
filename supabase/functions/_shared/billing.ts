@@ -11,7 +11,7 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-import { isAppToken } from "./app-token.ts";
+import { verifiedPerson } from "./app-token.ts";
 
 export const TRIAL_DAYS_NO_CARD = 14;
 export const TRIAL_DAYS_WITH_CARD = 30;
@@ -95,15 +95,12 @@ export function safeRedirect(candidate: string | undefined | null, fallback: str
   return fallback;
 }
 
-export async function authenticate(
-  supabase: SupabaseClient,
-  authHeader: string | null,
-): Promise<User | null> {
-  if (!authHeader) return null;
-  // An app's OAuth token is the connector's only (MCPO-1, _shared/app-token.ts).
-  if (isAppToken(authHeader)) return null;
-  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
-  return error || !user ? null : user;
+/**
+ * The caller's verified user, or why not: "app" for an app's OAuth token
+ * (the connector's only, MCPO-1, _shared/app-token.ts) → 403, "unauthorized" → 401.
+ */
+export function authenticate(supabase: SupabaseClient, authHeader: string | null) {
+  return verifiedPerson<User>(supabase.auth, authHeader);
 }
 
 /** The Stripe customer for this user; created once (idempotent), recreated if the stored id is stale. */
