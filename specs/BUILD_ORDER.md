@@ -565,7 +565,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 
 ## Harness v3 — the flow board, built · [`specs/harness-v3.md`](./harness-v3.md)
 
-> Planned 2026-10-23 (Mike, engineer mode). Everything before the closed alpha (2 Nov). Up to five lanes in parallel; the spec has a day plan. HV-8's queue move waits for Maciej's OK. Once HV-8 lands this ledger becomes a pointer to the Moduo queue.
+> Planned 2026-10-23 (Mike, engineer mode). Everything before the closed alpha (2 Nov). Up to five lanes in parallel; the spec has a day plan. Maciej agreed to all of it. Once HV-8 lands this ledger becomes a pointer to the Moduo queue.
 
 - [ ] **HV-1 — Rails: modes, guards, /ship** · deps: —
 - [ ] **HV-2 — One Moduo, one Supabase, worktree pool** · deps: —
@@ -587,7 +587,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
 - [ ] **HV-16 — RLS access matrix** · deps: HV-4
 - [ ] **HV-21 — Weekly numbers** · deps: HV-5
-- [ ] **HV-8 — Moduo is the queue (needs Maciej's OK)** · deps: HV-7
+- [ ] **HV-8 — Moduo is the queue** · deps: HV-7
 - [ ] **HV-13 — Docs eval** · deps: HV-20
 - [ ] **HV-25 — Experiment arms** · deps: HV-20
 - [ ] **HV-29 — MCP agent-experience eval** · deps: HV-20

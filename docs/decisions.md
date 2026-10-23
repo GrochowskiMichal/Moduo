@@ -8,7 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
-- 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; AI review on PRs into develop → decisions/workflow.md
+- 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; advisory AI review on PRs into develop; Maciej agreed → decisions/workflow.md
 - 2026-10-23 · `oven-sh/setup-bun` pinned to a commit in every workflow (it ran beside the signing keys and deploy tokens); the CodeQL backlog triaged and dismissed with reasons → decisions/workflow.md
 - 2026-10-22 · MOD-60: landing returns a real 404 page for unknown paths (`404-page`), no longer index.html with a 200.
 - 2026-10-20 · Cross-person hand-offs are a comment on the Moduo task, to the person; an agent never instructs another person's agent · phase 0 dogfood: `moduo` connector in `.mcp.json` (key from `MODUO_MCP_KEY`), `/s2`/`/s3` mirror blocks into the Build project, presence hook posts online/idle only for a claimed working task, kit kept plugin-shaped in `tools/claude-plugins/moduo-agent/` → decisions/workflow.md

@@ -1,6 +1,6 @@
 # Spec: Harness v3 — the flow board, built
 
-> Status: **Draft, ready for approval** · Owner: mike · Planned 2026-10-23 (engineer mode) · Target: everything before the closed alpha (2 Nov 2026), Mike's call · Board: [Moduo Flow Board](https://claude.ai/artifact/PV3Ay6K4Jg96FTPp9syPP3) · Evidence: `docs/local/claude_science/harness/harness-audit-2026-10-23.md` and `docs/local/claude_science/harness/reports/Moduo harness experiments deep dive.md` (local, not committed) · Needs Maciej's OK on §Queue and on the `/s1` changes before HV-8 and HV-3 land in `maciej`
+> Status: **Ready to execute** · Owner: mike · Planned 2026-10-23 (engineer mode); Maciej agreed to all of it the same day · Target: everything before the closed alpha (2 Nov 2026), Mike's call · Board: [Moduo Flow Board](https://claude.ai/artifact/PV3Ay6K4Jg96FTPp9syPP3) · Evidence: `docs/local/claude_science/harness/harness-audit-2026-10-23.md` and `docs/local/claude_science/harness/reports/Moduo harness experiments deep dive.md` (local, not committed)
 
 ## Scope
 
@@ -39,7 +39,7 @@ The "users" are the two founders and their agents. What changes for each:
 
 **Build engine** (`/s2`): claim with a draft PR (Moduo moves to Building by itself) → contract tests written first and frozen (the agent cannot edit test files while implementing) → drafts (Tier 2: three in parallel worktrees, the checks pick the smallest passing diff with the best mutant kill rate) → local oracles → on a red check, retry with the failure, at most three times → on the third failure the agent stops and files a defect report ("the spec or the test may be wrong") in Moduo for a person. It never edits a test to pass.
 
-**Gate:** CI labels the PR's tier from its paths. PRs into `develop` run every oracle (SQL/RLS tests, Rust, e2e smoke, test-weakening detector, ratchets) and get an AI review whose findings were voted real before posting. Tier 2 PRs into `develop` cannot merge with an agreed finding open, and also get "catching tests" posted as comments. Tier 0/1 review comments are advisory.
+**Gate:** CI labels the PR's tier from its paths. PRs into `develop` run every oracle (SQL/RLS tests, Rust, e2e smoke, test-weakening detector, ratchets) and get an AI review whose findings were voted real before posting. The review never blocks a merge: its comments are advice for the founder merging the batch. Tier 2 PRs into `develop` also get "catching tests" posted as comments.
 
 **Ship:** unchanged `/ship`, now user-only. Prod web deploys roll out to a slice of traffic first and roll back by themselves when errors climb. The tag moves every shipped block's Moduo task to Shipped.
 
@@ -63,14 +63,13 @@ The "users" are the two founders and their agents. What changes for each:
 - **A guard hook crashes or can't start.** `onFailure: "block"` stops the command; the error names the hook and the fix.
 - **`srt` blocks something a lane needs** (npm registry, GitHub, the local Supabase port). The allowlist covers registry.npmjs.org, github.com, api.github.com, the Turborepo cache Worker, 127.0.0.1 ports used by the local stack; anything else fails loudly with the host name.
 - **Auto mode prompts too often in interactive work.** Allow rules for the common read-only commands are added from transcripts (`fewer-permission-prompts`); bypass stays available only inside `srt`.
-- **AI review false positive blocks a Tier 2 PR.** A founder adds the `review-override` label with a reason in a PR comment; the check passes and the override is counted in the weekly numbers.
+- **AI review is wrong.** It never blocks, so a founder resolves or ignores the comment; ignored agreed findings on Tier 2 paths are counted in the weekly numbers, so a review that cries wolf shows up.
 - **The property harness flakes.** Seeds are fixed in CI and printed on failure; a flake above 1% in a week fails HV-17's acceptance and the harness is made deterministic before it gates.
 - **A rule's referenced file is deleted or renamed.** The dead-reference check fails `verify` with the rule and the missing path.
 - **A path rule is never loaded or cited for 30 days.** The weekly retro lists it; it is deleted unless a person renews the expiry.
 - **The docs eval score drops after a knowledge change.** The change is reverted or the missing fact restored before merge.
 - **A variant-hunt candidate has no failing test.** It is dropped, never reported.
 - **A lane hits the Max usage limit mid-run.** Work is committed and pushed at each green step (current `/s2` rule), the Moduo task gets a `failed` note "usage limit", and the next lane resumes from the branch.
-- **Maciej does not OK the queue move.** HV-8 lands only the GitHub → Moduo sync and the deletions of BUILD_LOG and docs/testing; BUILD_ORDER.md stays as a dependency list until he agrees.
 
 ## Acceptance criteria
 
@@ -103,7 +102,7 @@ Skills and the build engine
 Gate and release
 - **AC19** — CI sets the tier label from the paths a PR touches.
 - **AC20** — PRs into `develop` run SQL/RLS tests, Rust checks, an e2e smoke, the test-weakening detector and the size and complexity ratchets, each only when its paths changed.
-- **AC21** — Every PR into `develop` gets an AI review with vote-verified inline comments; a Tier 2 PR with an agreed finding cannot merge unless a founder adds `review-override` with a reason.
+- **AC21** — Every PR into `develop` gets an AI review with vote-verified inline comments; the review never blocks a merge.
 - **AC22** — Tier 2 PRs into `develop` get catching tests (pass on the parent, fail on the diff) posted as comments.
 - **AC23** — A prod web deploy reaches a slice first and rolls back by itself when the error rate crosses the threshold.
 
@@ -156,7 +155,7 @@ Policy
 | `scripts/ci/tier.test.ts` · "paths → tier" | AC19 | Fixture diffs touching each Tier 2 path get tier-2; docs-only gets tier-0. |
 | CI run on HV-4's PR | AC20 | The new jobs run when their paths change and skip otherwise. |
 | `scripts/ci/test-weakening.test.ts` | AC20 | Deleted asserts, new `.skip`/`.only` and new mocks in `lib/sync` tests are flagged; renames are not. |
-| Live check: a seeded Tier 2 bug PR into develop | AC21, AC22 | The review posts an agreed finding and fails the check; catching tests appear as comments; `review-override` passes it. |
+| Live check: a seeded Tier 2 bug PR into develop | AC21, AC22 | The review posts the agreed finding as a comment without failing any check; catching tests appear as comments. |
 | Staging rehearsal in HV-28 | AC23 | A forced error spike on staging rolls the Worker version back. |
 | `apps/app/src/lib/sync/outbox.property.test.ts` | AC24 | Random edits, offline flips, failed reads, decode errors, sign-outs and races never lose an outbox entry; reverting each #509 fix makes it fail for at least 4 of 5. |
 | `supabase/tests/rls_matrix_*.sql` + `scripts/db/policy-mutants.ts` | AC25 | Each matrix cell holds for every persona; loosening any policy makes a test fail. |
@@ -178,9 +177,9 @@ Policy
 Decided with Mike (23 Oct):
 - **Everything before 2 Nov.** Accepted risk: harness churn during launch week. Mitigation: harness-only blocks first, product-touching oracle blocks (HV-16, HV-17) land as tests only, no product code changes except fixes they reveal.
 - **Auto mode for interactive sessions; bypass only inside `srt`** for unattended lanes, with deny rules for prod deploys.
-- **Moduo is the queue.** Needs Maciej's OK (his `/s1` and Focus line move).
+- **Moduo is the queue**, including the Focus line. Maciej agreed (23 Oct), including the `/s1` changes.
 - **Anthropic models only, unchanged.** No local or Cloudflare models; the Kev replay and any embedding index are out.
-- **AI review runs only on PRs into `develop`.** Assumption (low confidence, ❓): Tier 2 PRs block on agreed findings, Tier 0/1 are advisory.
+- **AI review runs only on PRs into `develop` and never blocks** (Mike, 23 Oct). It is advice for whoever merges the batch.
 - **Delete** BUILD_LOG.md, docs/build-log.md and docs/testing/ (git keeps history).
 - **No merge queue, no org move.** `/s3` merges the personal branch in and re-runs checks before merging.
 
@@ -226,9 +225,9 @@ Lanes run in parallel; a lane is a column of dependent blocks. Tier marks the re
 | HV-3 | Skill rewiring | `/s1` without user-only references (lines telling the person what to type), `/s2` exact Skill calls, repro-first bug lane, three strikes + escalation line, one validator pass (advisory, explicit disagreement), `/s3` without the second validator, fast-lane rule, `skill-refs.test.ts` · Tier 1 · 4 h | AC2, AC15–AC17 | — |
 | HV-4 | Oracles in CI | `db:test` job with the CLI stack, `rust-check` (from #345), e2e smoke (from #344), path filters; close #344/#345 · **Tier 2** · 6 h | AC20 | — |
 | HV-5 | Tier classifier, weakening detector, ratchets | `scripts/ci/tier.ts` + labels, Tier 2 path additions, test-weakening detector, size and complexity ratchets with frozen baselines · **Tier 2** · 5 h | AC19, AC20 | — |
-| HV-6 | AI review on PRs into develop | `ai-review.yml` (claude-code-action, `/code-review medium --comment`), Tier 2 blocking with `review-override`, REVIEW.md refresh, token in an environment · **Tier 2** · 5 h | AC21 | HV-5 |
+| HV-6 | AI review on PRs into develop | `ai-review.yml` (claude-code-action, `/code-review medium --comment`), advisory, never a required check, REVIEW.md refresh, token in an environment · **Tier 2** · 5 h | AC21 | HV-5 |
 | HV-7 | GitHub → Moduo sync | `moduo-sync.yml` + `scripts/agent/moduo-sync.ts` and its event table tests, `MODUO_CI_KEY` · **Tier 2** · 5 h | AC11 | HV-2 |
-| HV-8 | Moduo is the queue | Import open blocks into Moduo (tag `block`, spec link, section), Focus as a pinned note, `bun run queue`, `/s2 next` on the queue, `moduo-agent` slimmed (no stage hops), presence via `mcp_tool` hook, delete BUILD_LOG.md, docs/build-log.md, docs/testing/, BUILD_ORDER.md → pointer, `no-ledger.test.ts` · Tier 1 · 6 h · **needs Maciej's OK for the queue part** | AC12–AC14 | HV-7 |
+| HV-8 | Moduo is the queue | Import open blocks into Moduo (tag `block`, spec link, section), Focus as a pinned note, `bun run queue`, `/s2 next` on the queue, `moduo-agent` slimmed (no stage hops), presence via `mcp_tool` hook, delete BUILD_LOG.md, docs/build-log.md, docs/testing/, BUILD_ORDER.md → pointer, `no-ledger.test.ts` · Tier 1 · 6 h | AC12–AC14 | HV-7 |
 | HV-9 | Security pass before alpha | Cloudflare security-audit skill (installed project-scoped), `/claude-security` scan, Fable validation, triage table, findings as tasks · Tier 1 (fixes go Tier 2) · 6 h | AC27 | — |
 | HV-10 | Rules by path | Folder AGENTS.md → `.claude/rules/*.md`, AGENTS.md trimmed to a map, rules frontmatter, dead-reference check in `verify`, `/doctor prompt-audit` pass · Tier 1 · 4 h | AC28, AC31, AC39 | HV-1 |
 | HV-11 | Decisions current view | `status:`/`supersedes:` on every entry, generated index + CI staleness check, `bun run docs:current`, supersession backfill (Haiku proposes, founder confirms) · Tier 1 · 5 h | AC29 | — |
@@ -256,7 +255,7 @@ Lanes run in parallel; a lane is a column of dependent blocks. Tier marks the re
 Suggested day plan (9 days, up to five parallel lanes):
 - **Fri 24 – Sat 25:** HV-1, HV-2, HV-3, HV-4, HV-5, HV-9 (start), HV-11, HV-12, HV-15, HV-17 (start).
 - **Sun 26 – Mon 27:** HV-6, HV-7, HV-10, HV-18, HV-20, HV-23, HV-24, HV-16, HV-17, HV-9 (finish).
-- **Tue 28 – Wed 29:** HV-8 (after Maciej's OK), HV-13, HV-21, HV-25, HV-26, HV-27, HV-28, HV-29.
+- **Tue 28 – Wed 29:** HV-8, HV-13, HV-21, HV-25, HV-26, HV-27, HV-28, HV-29.
 - **Thu 30 – Fri 31:** HV-14a/b/c, HV-22, HV-30.
 - **Sat 1 Nov:** buffer; develop sync; nothing new lands on 2 Nov.
 
@@ -275,7 +274,7 @@ Suggested day plan (9 days, up to five parallel lanes):
 
 - [x] **Scope, Product behavior, Edge cases, Acceptance criteria** are all filled and unambiguous.
 - [x] **Every acceptance criterion has at least one test** in *Tests that prove them*, with its plain-English note.
-- [ ] **Open questions is empty** — one product decision remains (Maciej's OK on the queue), and one low-confidence assumption (Tier 2 review blocking) is flagged for Mike.
+- [x] **Open questions is empty** — Maciej agreed to everything and Mike settled the review (advisory) on 23 Oct.
 - [x] **Data model is named and Supabase-first** — no new tables; Moduo tasks hold block state through the existing connector; block dependencies stay in specs.
 - [x] For a **module feature** — not a module feature (harness).
 - [x] **Execution blocks** are decomposed, sequenced, and each is context-sized and self-contained.
@@ -284,5 +283,4 @@ Suggested day plan (9 days, up to five parallel lanes):
 
 ## Open questions
 
-- [ ] **Maciej:** OK to move the block queue and the Focus line into Moduo, and to delete BUILD_ORDER's contents (HV-8)? Without it, HV-8 lands only the sync and the deletions.
-- [ ] **Mike (low confidence):** AI review on PRs into develop — Tier 2 blocks on agreed findings, Tier 0/1 advisory. Confirm or make it advisory everywhere.
+- [ ] (none)
