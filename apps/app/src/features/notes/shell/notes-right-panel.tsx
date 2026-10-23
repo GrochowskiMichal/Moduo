@@ -21,7 +21,7 @@ import { displayTitle } from "../title";
 import { NoteCommentsPanel } from "../ui/note-comments-panel";
 import { NoteDetailPanel } from "../ui/note-detail-panel";
 import { NoteOutlinePanel } from "../ui/note-outline-panel";
-import { getEditorSelectionQuote, scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
+import { scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
 
 export function NotesRightPanel({
   runtime,
@@ -92,7 +92,7 @@ export function NotesRightPanel({
         noteLabel={displayTitle(note.title)}
         canComment={canComment}
         currentUserId={userId}
-        getSelectionQuote={getEditorSelectionQuote}
+        canModerate={canEdit}
         onScrollToQuote={scrollEditorToQuote}
       />
     ),
