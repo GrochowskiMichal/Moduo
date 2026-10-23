@@ -34,28 +34,38 @@ need jq "brew install jq"
 docker info >/dev/null 2>&1 || { open -ga OrbStack 2>/dev/null || true; sleep 5; docker info >/dev/null 2>&1 || { echo "✗ Docker is not running. Open OrbStack." >&2; exit 1; }; }
 
 snapshot() {
-  mkdir -p "$SNAP"
+  # Into a fresh folder, swapped in only when every file is there: a dump that
+  # fails half-way must not leave new files next to an old snapshot-at.
+  local tmp="$SNAP.new"
+  rm -rf "$tmp"; mkdir -p "$tmp"
   echo "→ Dumping prod schema (structure only, no rows) into $SNAP/ …"
   supabase link --project-ref "$PROD_REF" >/dev/null
-  supabase db dump --linked --schema public,private,stripe -f "$SNAP/public.sql"
-  supabase db dump --linked --schema storage -f "$SNAP/storage.sql"
-  supabase db dump --linked --schema auth -f "$SNAP/auth.sql"
-  supabase db dump --linked --schema realtime -f "$SNAP/realtime.sql"
+  supabase db dump --linked --schema public,private,stripe -f "$tmp/public.sql"
+  supabase db dump --linked --schema storage -f "$tmp/storage.sql"
+  supabase db dump --linked --schema auth -f "$tmp/auth.sql"
+  supabase db dump --linked --schema realtime -f "$tmp/realtime.sql"
   # What a schema dump leaves out, read from prod's catalog (read-only): the
   # extensions; the migration versions prod has applied, so bootstrap replays
   # exactly the others; the API roles' settings (PostgREST's db_pre_request);
   # the storage buckets; Realtime publication membership; the pg_cron jobs.
-  prod_rows "select format('create schema if not exists %1\$I; create extension if not exists %2\$I with schema %1\$I;', extnamespace::regnamespace, extname) as sql from pg_extension where extnamespace <> 'pg_catalog'::regnamespace order by extname" > "$SNAP/extensions.sql"
-  prod_rows "select version || ' ' || coalesce(name, '') as sql from supabase_migrations.schema_migrations order by 1" > "$SNAP/applied-migrations"
-  prod_rows "select format('alter role %I set %s = %L;', rolname, split_part(cfg, '=', 1), substr(cfg, strpos(cfg, '=') + 1)) as sql from pg_roles, unnest(rolconfig) cfg where rolname in ('authenticator', 'anon', 'authenticated', 'service_role') and cfg not like 'session_preload_libraries=%' order by 1" > "$SNAP/roles.sql"
-  prod_rows "select format('insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values (%L, %L, %L, %L, %L) on conflict (id) do nothing;', id, name, public, file_size_limit, allowed_mime_types) as sql from storage.buckets order by id" > "$SNAP/buckets.sql"
-  prod_rows "select format('alter publication supabase_realtime add table %I.%I;', schemaname, tablename) as sql from pg_publication_tables where pubname = 'supabase_realtime' order by 1" > "$SNAP/publication.sql"
-  prod_rows "select format('select cron.schedule(%L, %L, %L);', jobname, schedule, command) as sql from cron.job order by jobname" > "$SNAP/cron.sql"
-  date -u +%Y%m%d%H%M%S > "$SNAP/snapshot-at"
+  prod_rows "select format('create schema if not exists %1\$I; create extension if not exists %2\$I with schema %1\$I;', extnamespace::regnamespace, extname) as sql from pg_extension where extnamespace <> 'pg_catalog'::regnamespace order by extname" > "$tmp/extensions.sql"
+  prod_rows "select version || ' ' || coalesce(name, '') as sql from supabase_migrations.schema_migrations order by 1" > "$tmp/applied-migrations"
+  prod_rows "select format('alter role %I set %s = %L;', rolname, split_part(cfg, '=', 1), substr(cfg, strpos(cfg, '=') + 1)) as sql from pg_roles, unnest(rolconfig) cfg where rolname in ('authenticator', 'anon', 'authenticated', 'service_role') and cfg not like 'session_preload_libraries=%' order by 1" > "$tmp/roles.sql"
+  prod_rows "select format('insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values (%L, %L, %L, %L, %L) on conflict (id) do nothing;', id, name, public, file_size_limit, allowed_mime_types) as sql from storage.buckets order by id" > "$tmp/buckets.sql"
+  prod_rows "select format('alter publication supabase_realtime add table %I.%I;', schemaname, tablename) as sql from pg_publication_tables where pubname = 'supabase_realtime' order by 1" > "$tmp/publication.sql"
+  prod_rows "select format('select cron.schedule(%L, %L, %L);', jobname, schedule, command) as sql from cron.job order by jobname" > "$tmp/cron.sql"
+  date -u +%Y%m%d%H%M%S > "$tmp/snapshot-at"
+  rm -rf "$SNAP.old"; [[ -d "$SNAP" ]] && mv "$SNAP" "$SNAP.old"
+  mv "$tmp" "$SNAP"; rm -rf "$SNAP.old"
   echo "✓ Snapshot taken at $(cat "$SNAP/snapshot-at") UTC"
 }
 
-prod_rows() { supabase db query --linked --output-format json "$1" | jq -er '.rows[].sql'; }
+# One SQL statement per row of a read-only query on prod; no rows is an empty file, a failed
+# query fails the snapshot.
+prod_rows() {
+  local out; out="$(supabase db query --linked --output-format json "$1")"
+  jq -r '.rows[]?.sql' <<< "$out"
+}
 
 bootstrap() {
   [[ -f "$SNAP/public.sql" ]] || snapshot
@@ -101,9 +111,9 @@ SQL
   done
   # Prod's cron jobs, switched off: tests read their schedules, and nothing
   # here should run them (or call prod's functions on a timer).
+  # One transaction, so the scheduler never sees a job switched on.
   if [[ -f "$SNAP/cron.sql" ]]; then
-    "${PSQL[@]}" -f "$SNAP/cron.sql" >/dev/null
-    "${PSQL[@]}" -c "update cron.job set active = false"
+    "${PSQL[@]}" -1 -f "$SNAP/cron.sql" -c "update cron.job set active = false" >/dev/null
   fi
   # Repo migrations prod hasn't applied = work not on prod yet. Prod recorded
   # some files under another version than their name (create_tasks_module), so

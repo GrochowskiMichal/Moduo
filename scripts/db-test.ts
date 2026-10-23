@@ -27,7 +27,14 @@ export function parseKnown(text: string): Map<string, string[]> {
     const at = line.indexOf(": ");
     if (at < 0) throw new Error(`known-failures.txt: "${line}" is not "<file>: <label>"`);
     const file = line.slice(0, at);
-    known.set(file, [...(known.get(file) ?? []), line.slice(at + 2).trim()]);
+    const label = line.slice(at + 2).trim();
+    // An error stops the file (ON_ERROR_STOP), so every check after it would go unseen.
+    if (label.startsWith("ERROR:")) {
+      throw new Error(
+        `known-failures.txt: "${line}" lists an error; fix it, an error hides the rest of the file`,
+      );
+    }
+    known.set(file, [...(known.get(file) ?? []), label]);
   }
   return known;
 }

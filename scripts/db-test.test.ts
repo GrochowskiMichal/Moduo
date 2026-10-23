@@ -3,16 +3,18 @@ import { failuresOf, judge, parseKnown } from "./db-test";
 describe("parseKnown", () => {
   it("groups labels by file and skips comments and blank lines", () => {
     const known = parseKnown(
-      ["# why", "", "a.test.sql: one", "a.test.sql: ERROR: two: three", "b.test.sql: four "].join(
-        "\n",
-      ),
+      ["# why", "", "a.test.sql: one", "a.test.sql: two: three", "b.test.sql: four "].join("\n"),
     );
-    expect(known.get("a.test.sql")).toEqual(["one", "ERROR: two: three"]);
+    expect(known.get("a.test.sql")).toEqual(["one", "two: three"]);
     expect(known.get("b.test.sql")).toEqual(["four"]);
   });
 
   it("refuses a line without a file", () => {
     expect(() => parseKnown("just a label")).toThrow(/not "<file>: <label>"/);
+  });
+
+  it("refuses an error, which would hide the rest of the file", () => {
+    expect(() => parseKnown("a.test.sql: ERROR: boom")).toThrow(/lists an error/);
   });
 });
 
