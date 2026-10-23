@@ -5,6 +5,12 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.2.5 · 2026-10-22
+
+### Fixed
+
+- A mistyped moduo.app address now shows a proper "Page not found" page instead of the home page.
+
 ## 1.2.4 · 2026-10-20
 
 ### Improved
