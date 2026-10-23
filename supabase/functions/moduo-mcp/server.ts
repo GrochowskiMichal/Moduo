@@ -79,6 +79,9 @@ export const CORS_HEADERS = {
   "Access-Control-Allow-Headers":
     "authorization, content-type, mcp-protocol-version, mcp-session-id, mcp-method, mcp-name",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
+  // A browser hides every response header not listed here, and an MCP client
+  // finds Moduo's sign-in through the 401's WWW-Authenticate.
+  "Access-Control-Expose-Headers": "WWW-Authenticate",
 };
 
 export type ConnectorDeps = {
