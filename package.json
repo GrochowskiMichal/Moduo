@@ -50,6 +50,7 @@
     "lint:css": "turbo run lint:css",
     "lint:tw": "turbo run lint:tw",
     "lint:boundaries": "turbo run lint:boundaries",
+    "lint:ast": "bun tools/ast-grep/lint.ts",
     "size": "turbo run size",
     "lint:notes": "bun scripts/release/check-notes.ts",
     "build:notes-doc": "bun ./scripts/build-notes-doc.ts",
@@ -58,13 +59,14 @@
     "test": "turbo run test test:scripts",
     "test:scripts": "rstest -c scripts/rstest.config.ts",
     "test:watch": "bun run --cwd apps/app test:watch",
-    "verify": "turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:css lint:notes size test test:scripts",
+    "verify": "turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:ast lint:css lint:notes size test test:scripts",
     "e2e": "bun run --cwd e2e e2e",
     "e2e:smoke": "bun run --cwd e2e e2e:smoke",
     "perf:seed": "bun scripts/perf/seed-tasks-10k.ts",
     "perf": "bun scripts/perf/seed-tasks-10k.ts && bun run --cwd e2e perf"
   },
   "devDependencies": {
+    "@ast-grep/cli": "0.51.0",
     "@resvg/resvg-js": "^2.6.2",
     "@rstest/core": "^0.12.3",
     "stripe": "23.0.0",
