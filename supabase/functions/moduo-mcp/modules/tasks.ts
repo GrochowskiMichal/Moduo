@@ -449,6 +449,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "The projects the key's person can see, in sidebar order: their Inbox (is_inbox), status (active · on_hold · done), area, colour, start and target dates, lead, client (a person or a company, {type: contact | company, id, name}; only with Contacts access, and only one the person can open), and the project's description (plain text) when it has one. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -475,6 +476,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_list_buckets",
       description: `${DEPRECATED} use projects_list. The workspace's projects ("buckets"; the reserved Inbox is is_system), with area_id and colour. Archived projects (and their tasks) are left out unless include_archived is true; then they carry archived: true.`,
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -513,6 +515,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "areas_list",
       description: "The areas the sidebar groups projects under, as the key's person sees them.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) =>
         (await visibleAreas(ctx)).map((a) => ({ id: a.id, name: a.name, ...(a.color ? { color: a.color } : {}) })),
@@ -521,6 +524,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "sections_list",
       description: "A project's sections, in order, with their optional start and end dates (an end alone is a milestone).",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { project_id: { type: "string", description: "Project uuid (see projects_list)." } },
@@ -546,6 +550,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "A project's statuses, each in its category (backlog · todo · in_progress · done · wont_do), in order; without a project, the workspace's default set (which the Inbox uses). tasks_set_status and tasks_create take a category word, a status's name or its id.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { project_id: { type: "string", description: "Project uuid. Default: the workspace's default statuses." } },
@@ -572,6 +577,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "The workspace's teams: name, colour, members (with is_me) and their default project when the key's person can see it. tasks_route_team routes a task to one.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const ws = ctx.key.workspaceId;
@@ -602,6 +608,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Task and project templates the key's person can use: their own and the ones shared with the workspace. templates_apply makes a task or project from one. Agents can't share, edit or delete templates.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { kind: { type: "string", enum: [...TEMPLATE_KINDS], description: "Only this kind. Default: both." } },
@@ -625,6 +632,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Tasks, a short row each (fields: summary, the default): handle, id, title, status (its category; status_name when the project calls it something else), priority, assignee's name (none = Unassigned), project (when the list spans projects), section, tags, due (YYYY-MM-DD, with HH:MM when timed), and blocked, drifted, queued_by_me, subtasks (a count) and parent only when they apply. fields: full gives each task's full shape instead (ids, people, description excerpt, dates, estimate, repeat, …); tasks_get reads one in full. Defaults to open tasks (to do + in progress), ordered by project then position. Filters: category (or a legacy status word), project, section, area, team, assignee, completed range. Pages with offset.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -748,6 +756,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "The key creator's Focus (pomodoro) settings from Moduo, with the app's defaults filled in: work/break lengths in minutes, long-break rhythm, auto-start and chime.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const found = await rows(
@@ -761,6 +770,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Your queue: the tasks the key's creator lined up to do next, in order. It's personal (other people's queues are theirs) and not tied to a date; completing, archiving or deleting a task takes it out.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => ({ queue: await shapedQueue(ctx) }),
     },
@@ -768,6 +778,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_today",
       description: `${DEPRECATED} use tasks_queue. The key creator's queue. The queue isn't tied to a day any more, so date is accepted but doesn't filter.`,
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { date: { type: "string", description: "Ignored (YYYY-MM-DD; echoed back). Default: today, UTC." } },
@@ -784,6 +795,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Open tasks whose scheduled time has passed (ambient drift — factual, never an 'overdue' wall). Sorted oldest first.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const data = await loadWorkspace(ctx);
@@ -798,6 +810,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_list_tags",
       description: "Workspace-level tags with how many of the tasks you can see use each (tags are shared across modules).",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const data = await loadWorkspace(ctx);
@@ -813,6 +826,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Search tasks by words in the title and description, by handle (MOD-142) or by an import's key (ENG-123). Tasks in archived projects are found too, marked project_archived: true.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -860,6 +874,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "One task in full: properties (its description as Markdown, references as moduo:// links), tags, dependency edges (blockers and blocked), subtasks, work sessions, your reminders, what it waits on, agent sessions you can see, with Links: View its latest comments (up to 20, the newest last; earlier_comments counts the rest, which comments_list reads), and its recent attributed activity trail.",
       access: "view",
+      hints: "read",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -932,6 +947,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_history",
       description: "A repeating task's past cycles: when each was done (and by whom) or skipped, newest first.",
       access: "view",
+      hints: "read",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -943,6 +959,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Tracked time for a period (up to a year), by task or by day, with the total: the key person's own entries, plus teammates' who share their time with the workspace owner when the person is the owner. Only tasks they can see; a project they can't see has no name. Optional: one project.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -994,6 +1011,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "A task's files (AT-1): name, type, size, when added, and a download link that works for 5 minutes. Links are made for the key's creator; ask again for fresh ones.",
       access: "view",
+      hints: "read",
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const taskId = (await fetchTask(ctx, str(args, "task_id"))).id as string;
@@ -1035,6 +1053,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "The attributed intent-op trail (who did what; an agent's rows read \"Alex · via <key name>\"): one task's trail, or the workspace's most recent activity. Comments aren't in it: read them with comments_list (or tasks_get).",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -1074,6 +1093,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Who a task can be assigned to: the workspace's members with is_me for the key's creator. Only people with can_be_assigned (they can work on tasks) are accepted by tasks_assign.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const [members, workspace] = await Promise.all([
@@ -1095,6 +1115,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Add a task to your queue (the key creator's): at the end, or at the top. A task already queued stays where it is unless you ask for the top. Done and archived tasks can't be queued. Returns your queue.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1117,6 +1138,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_queue_remove",
       description: "Take a task out of your queue. Doing it twice is fine. Returns your queue.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1129,6 +1151,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Move a task that's in your queue: to the top, to the end, or right after another task in your queue. Moving never counts as a reschedule. Returns your queue.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1166,6 +1189,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_commit",
       description: `${DEPRECATED} use tasks_queue_add. Puts the task at the end of your queue (again: moves it there) and marks it for the day in app versions from before personal queues.`,
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1188,6 +1212,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_uncommit",
       description: `${DEPRECATED} use tasks_queue_remove. Takes the task out of your queue (and off the day in older app versions). Doing it twice is fine.`,
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1198,6 +1223,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_skip_today",
       description: `${DEPRECATED} use tasks_queue_remove. Takes the task out of your queue (and off the day in older app versions). It no longer counts as a reschedule.`,
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1209,6 +1235,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Create a task in one go: filed into a project and section (default: the key creator's Inbox), with a status (a category word, the project's status name or id), assignee (a member, \"me\", or null; default the key's creator), team, due date and time, estimate, priority, tags (by name; new ones are made and coloured as the app colours them), a repeat (RRULE), reminders, work sessions and a parent (one level). With imported_from {source, key} it remembers where it came from; sending a key you already used on a live task of yours updates that task instead (a re-run). Inside an import run (import_id), it is recorded for imports_undo. Nothing is written if any part is refused. It gets its handle (e.g. MOD-142), shows in search at once, and the trail reads \"<person> · via <key name>\".",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1287,6 +1314,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Edit a task's fields: title, description, project (its subtasks you can edit move with it), section, parent, status (category word or the project's name), team, due date and time, estimate, priority, energy, repeat (null stops it), and tags (tags_add / tags_remove by name). Pass only what changes; null clears. The assignee has its own tool (tasks_assign).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1360,6 +1388,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Change a task's status: a category word (backlog · todo · in_progress · done · wont_do; the older archived = won't do), or the project's own status name (any case) or id; see statuses_list. Finishing a task finishes its open subtasks you can edit too (also_finished counts them); a repeat moves to its next occurrence instead (the server keeps the pointer; missed occurrences don't exist).",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1401,6 +1430,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Move a scheduled task's time (drift triage). Does not touch the reschedule counter.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1423,6 +1453,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Clear a task's stale scheduled time, keeping the task (drift-triage Ignore).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1434,6 +1465,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Assign a task to a member who can work on tasks, or unassign it with null. \"me\" is the key's creator. Someone else being assigned gets one \"assigned to you\" notification; an unfiled task given to someone goes into their Inbox.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1458,6 +1490,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Route a task to a team (see teams_list), or take it off its team with null. Routing doesn't unassign: to hand your own task to a team, unassign it too. A task in an Inbox goes to the team's default project.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1476,6 +1509,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Take a task routed to one of your teams: it becomes the key creator's. Needs edit access to it; \"Someone already took this task.\" when another member was first.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1487,6 +1521,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Hand a task off: it now waits on a member (person_id) or on what you name (label, e.g. \"the client's sign-off\"). The assignee stays; the entry clears itself when that person comments. tasks_waiting_clear removes one.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1514,6 +1549,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_waiting_clear",
       description: "Remove one \"waiting on\" entry from a task (its id is in tasks_get's waiting_on).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { entry_id: { type: "string", description: "The waiting entry's id." } },
@@ -1532,6 +1568,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Add a comment to a task — only when a person asked you to (your own changes are already in the trail). It reads as written by this key's app. Needs Links: Edit too.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1558,6 +1595,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Post your session's status on a task you're working on — status, not conversation: state (working · needs_you · ready · failed), a short note, an optional step n of m, links (e.g. a PR), and with ready an optional hand-back summary. It shows as one line on the task, private to the key's person unless they share their agent work; needs_you, ready and failed notify them once. Reporting working after ready or failed starts a new run.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1601,6 +1639,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Remind the key's person about a task: at a time (kind at, with at), or a day or an hour before it's due. Reminders are each person's own; they fire as a notice (and an OS / browser notice where allowed).",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1626,6 +1665,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_reminder_remove",
       description: "Remove one of the key's person's reminders (its id is in tasks_get's my_reminders).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { reminder_id: { type: "string", description: "The reminder's id." } },
@@ -1644,6 +1684,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Schedule a work session on a task (a block on the calendar): its person is the key's creator, or the task's assignee (person_id). A task can have several.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1674,6 +1715,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_work_session_update",
       description: "Move or resize a work session (its id is in tasks_get's work_sessions); its person stays.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1700,6 +1742,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "tasks_work_session_remove",
       description: "Remove a work session from a task.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { session_id: { type: "string", description: "The session's id." } },
@@ -1718,6 +1761,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Jump an open recurring task past its pending occurrence without done-credit. Forward-only; the connector computes the next occurrence from the task's rule.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1738,6 +1782,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Move just this occurrence of a repeating task (\"Move just this one\"): a new due date and/or session start; the pattern stays. To change the pattern, send repeat to tasks_update.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1764,6 +1809,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Create a project, owned by the key's creator and seen by the workspace: name, area, status, start and target dates, colour, lead, client (a person or a company; needs Contacts access), description. Inside an import run (import_id) it's recorded for imports_undo. Look for an existing project first (projects_list): a re-run should reuse it.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1812,6 +1858,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, client (a person or a company; needs Contacts access; setting one clears the other), description, archived (needs full access). Pass only what changes; null clears a date, the area, the lead, the client or the description.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -1863,6 +1910,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Duplicate a project you can edit (\"Duplicate project…\"): its sections, statuses and open tasks, with dates shifted to a new start; nothing done or tracked is copied. Answers with the new project and how many tasks it has.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1901,6 +1949,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Add a section to a project you can edit (e.g. \"Week 1\"), with optional start and end dates, after another section or at the end. Inside an import run (import_id) it's recorded for imports_undo. Answers with the project's sections.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1944,6 +1993,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "areas_create",
       description: "Add an area the sidebar groups projects under (everyone in the workspace sees it).",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -1970,6 +2020,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Make a task or a project from a template (see templates_list). A task template: optional title, project and section (default: the template's project if you can add tasks there, else your Inbox) and a date its offsets count from. A project template: optional name, start date (dates shift from it) and area.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -2023,6 +2074,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Begin an import run (\"bring my Todoist / Linear / Trello through your AI\"): name the source (e.g. todoist). Pass the run's id as import_id to projects_create, sections_create and tasks_create, give each task imported_from {source, key} with the source's own id, then imports_finish. Running the same import again (a new run) updates the tasks by key and creates nothing new; imports_undo takes a run back.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -2042,6 +2094,7 @@ export const tasksConnectorModule: ConnectorModule = {
       name: "imports_finish",
       description: "Finish an import run: answers what it made and updated. A finished run takes no more rows.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { import_id: { type: "string", description: "The run's id." } },
@@ -2058,6 +2111,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Undo an import run (\"Undo this import\"): what it made and nobody touched since goes to Recently deleted — tasks, then the sections and projects it made that are left empty. Anything edited since stays; rows it only updated stay as they are. Answers the counts.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { import_id: { type: "string", description: "The run's id." } },

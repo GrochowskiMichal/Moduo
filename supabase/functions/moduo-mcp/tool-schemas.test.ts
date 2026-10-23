@@ -14,7 +14,8 @@ import { listingJsonSchema, TOOL_ARG_SCHEMAS } from "../_shared/contracts/mcp-to
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
-import { connectorModules, type KeyContext } from "./registry.ts";
+import { connectorModules, toolAnnotations, type KeyContext } from "./registry.ts";
+import { outputJsonSchema } from "./tool-outputs.ts";
 import { listThroughSdk } from "./through-sdk.ts";
 
 type Schema = { properties?: Record<string, unknown>; required?: string[] };
@@ -42,10 +43,16 @@ describe("connector tool arguments: listing and parser", () => {
     expect(listed.map((t) => t.name)).toEqual(tools.map((t) => t.name));
     for (const tool of tools) {
       const entry = listed.find((t) => t.name === tool.name);
+      const output = outputJsonSchema(tool.name);
       expect(entry, tool.name).toEqual({
         name: tool.name,
         description: tool.description,
         inputSchema: listingJsonSchema(tool.name, tool.inputSchema),
+        annotations: toolAnnotations(tool),
+        // A list's array schema is listed wrapped as { result }, the 2025-era wire shape.
+        ...(output
+          ? { outputSchema: output.type === "object" ? output : { type: "object", properties: { result: output }, required: ["result"] } }
+          : {}),
       });
     }
   });

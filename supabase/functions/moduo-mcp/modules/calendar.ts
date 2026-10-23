@@ -104,6 +104,7 @@ export const calendarConnectorModule: ConnectorModule = {
       description:
         "Events in a date range — both native Moduo events and mirrored-external ones (read-only, source-attributed). Times are ISO 8601.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -138,6 +139,7 @@ export const calendarConnectorModule: ConnectorModule = {
       description:
         "The composed day: native + external events, scheduled task blocks, and the 'unfinished from earlier' strip (open tasks whose scheduled time passed). Pass `date` (YYYY-MM-DD, UTC) or omit for today.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -218,6 +220,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_create_event",
       description: "Create a native Moduo event. Times ISO 8601; `rrule` an optional RFC-5545 rule.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -246,6 +249,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_update_event",
       description: "Edit a native event (only the fields you pass change). External events are rejected.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -279,6 +283,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_delete_event",
       description: "Delete a native event (tombstoned; spine links cascade). External events are rejected.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { event_id: { type: "string", description: "The event uuid." } },
@@ -293,6 +298,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_schedule_task",
       description: "Place a task on the calendar at a clock time — it becomes a task block (the lens).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -314,6 +320,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_move_block",
       description: "Move an already-scheduled task block to a new time (duration preserved).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -335,6 +342,7 @@ export const calendarConnectorModule: ConnectorModule = {
       name: "calendar_complete_block",
       description: "Complete a task from its block (recurrence advances) — same as completing in Tasks.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: { task_id: { type: "string", description: "The task uuid." } },
@@ -355,6 +363,7 @@ export const calendarConnectorModule: ConnectorModule = {
       description:
         "The strip's Move-to-today: reschedule every open task whose scheduled time passed (last 7 days) onto today, preserving each task's clock time. Returns the moved task ids.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const now = new Date();

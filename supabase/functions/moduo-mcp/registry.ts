@@ -41,6 +41,25 @@ export type ToolContext = {
   db: SupabaseClient;
 };
 
+/**
+ * What a client running tools from code may assume (MCPO-6, specs/mcp-oauth.md
+ * #12): "read" changes nothing, so it is safe to run in parallel and to retry
+ * (every View tool, and links_suggest); otherwise whether the call can delete,
+ * trash or overwrite (`destructive`) and whether repeating it with the same
+ * arguments changes nothing more (`idempotent`).
+ */
+export type ToolHints = "read" | { destructive: boolean; idempotent: boolean };
+
+/** A tool's hints as MCP tool annotations, all three always stated. */
+export function toolAnnotations(tool: ToolDef): {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+} {
+  if (tool.hints === "read") return { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
+  return { readOnlyHint: false, destructiveHint: tool.hints.destructive, idempotentHint: tool.hints.idempotent };
+}
+
 export type ToolDef = {
   /** MCP tool name — [a-zA-Z0-9_-], so `tasks_commit`, not `tasks.commit`. */
   name: string;
@@ -51,7 +70,9 @@ export type ToolDef = {
    * need another module are listed in MCP_TOOL_NEEDS (contracts).
    */
   access: "view" | "edit";
-  handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
+  /** How calling it behaves, listed as the tool's annotations (MCPO-6). */
+  hints: ToolHints;
+  handler:(args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
 };
 
 export type ConnectorModule = {
