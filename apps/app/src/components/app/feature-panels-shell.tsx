@@ -267,17 +267,37 @@ export function FeaturePanelsShell({
   const rightSlot = right ?? <div className="text-sm text-muted-foreground">Details panel</div>;
 
   const layoutKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:${showLeftFull ? "l" : "-"}${showRightFull ? "r" : "-"}`;
-  const defaultLayout = useMemo<Layout | undefined>(
-    () => (resizable ? readPersistedLayout(layoutKey) : undefined),
-    [layoutKey, resizable],
-  );
+  // The sidebar keeps ONE width per module. Each open/closed combination
+  // remembers its own layout, so opening the right panel used to snap the
+  // sidebar to whatever width it last had with the panel open (Notes: 350 →
+  // 275 px). The left share is remembered on its own and wins.
+  const leftKey = `${LAYOUT_STORAGE_PREFIX}:${feature}:left`;
+  const defaultLayout = useMemo<Layout | undefined>(() => {
+    if (!resizable) return undefined;
+    const saved = readPersistedLayout(layoutKey);
+    const leftId = `${feature}-left`;
+    const rightId = `${feature}-right`;
+    const centerId = `${feature}-center`;
+    const left = showLeftFull ? readPersistedLayout(leftKey)?.[leftId] : undefined;
+    if (left === undefined) return saved;
+    const right = showRightFull ? (saved?.[rightId] ?? 20) : 0;
+    const center = 100 - left - right;
+    if (center < 30) return saved;
+    return {
+      [leftId]: left,
+      [centerId]: center,
+      ...(showRightFull ? { [rightId]: right } : {}),
+    };
+  }, [layoutKey, leftKey, resizable, feature, showLeftFull, showRightFull]);
 
   const onLayoutChanged = useCallback(
     (layout: Layout) => {
       if (!resizable) return;
       writePersistedLayout(layoutKey, layout);
+      const left = layout[`${feature}-left`];
+      if (left !== undefined) writePersistedLayout(leftKey, { [`${feature}-left`]: left });
     },
-    [layoutKey, resizable],
+    [layoutKey, leftKey, resizable, feature],
   );
 
   const panels = (

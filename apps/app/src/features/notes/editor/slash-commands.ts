@@ -85,7 +85,7 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   {
     id: "todo",
     title: "Checkbox",
-    description: "A humble checkbox — never a task",
+    description: "Tick it off",
     keywords: ["check", "checkbox", "checklist", "to-do"],
     group: "Basics",
   },
@@ -121,21 +121,21 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   {
     id: "page",
     title: "Page",
-    description: "New child note, right here",
+    description: "A note inside this one",
     keywords: ["child", "subpage", "subnote", "new"],
     group: "Insert",
   },
   {
     id: "note",
     title: "Note",
-    description: "Link a note — or type [[",
+    description: "Link a note, or type [[",
     keywords: ["ref", "reference", "link", "[["],
     group: "Insert",
   },
   {
     id: "task",
     title: "Task",
-    description: "Task line — create or link a real task",
+    description: "A real task, in Tasks too",
     keywords: ["todo-task", "work"],
     group: "Insert",
   },
@@ -167,17 +167,19 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
 export function filterSlashCommands(query: string): SlashCommandDef[] {
   const q = query.trim().toLowerCase();
   if (q === "") return [...SLASH_COMMANDS];
+  // Every typed word must start a word of the name, the id or a keyword:
+  // "/head 2" finds Heading 2. Descriptions don't count ("/ul" matched Quote
+  // and Divider through theirs).
+  const words = q.split(/\s+/);
   const titleHits: SlashCommandDef[] = [];
   const keywordHits: SlashCommandDef[] = [];
   for (const cmd of SLASH_COMMANDS) {
     const title = cmd.title.toLowerCase();
+    const titleWords = title.split(/\s+/);
+    const allWords = [...titleWords, cmd.id, ...cmd.keywords.map((k) => k.toLowerCase())];
     if (title.startsWith(q) || cmd.id.startsWith(q)) {
       titleHits.push(cmd);
-    } else if (
-      title.includes(q) ||
-      cmd.keywords.some((k) => k.startsWith(q)) ||
-      cmd.description.toLowerCase().includes(q)
-    ) {
+    } else if (words.every((w) => allWords.some((t) => t.startsWith(w)))) {
       keywordHits.push(cmd);
     }
   }

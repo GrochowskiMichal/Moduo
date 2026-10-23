@@ -80,6 +80,20 @@ describe("planMdZipImport (AC11/AC14)", () => {
     const plan = planMdZipImport([{ path: ".md", content: "# Real Title\nbody" }]);
     expect(plan.nodes[0].title).toBe("Real Title");
   });
+
+  it("titles a note by its opening heading, not its file name", () => {
+    const plan = planMdZipImport([
+      { path: "lisbon.md", content: "# Meeting notes from Lisbon\nbody" },
+    ]);
+    expect(plan.nodes[0].title).toBe("Meeting notes from Lisbon");
+    expect(plan.nodes[0].md).toBe("# Meeting notes from Lisbon\nbody");
+  });
+
+  it("gives a file with no heading its name as the first line, so title and body agree", () => {
+    const plan = planMdZipImport([{ path: "ideas.md", content: "Lisbon or Porto?\n\nMore." }]);
+    expect(plan.nodes[0].title).toBe("ideas");
+    expect(plan.nodes[0].md.startsWith("# ideas\n\nLisbon or Porto?")).toBe(true);
+  });
 });
 
 describe("Notion export hardening (IM-1, AC1–AC5)", () => {

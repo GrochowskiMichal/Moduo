@@ -157,6 +157,20 @@
      keeps 3:1 on the card in both themes. */
   --presence-reachable: var(--status-success);
 
+  /* Links in written text: told apart from underlined words by colour. */
+  --link: var(--status-info);
+
+  /* Selected text: a blue wash that the text stays readable on (the
+     browser's default grey on dark hid white text). */
+  --text-selection: color-mix(in oklch, var(--status-info) 38%, transparent);
+
+  /* Code highlighting in notes: four quiet hues off the status set, so
+     they follow the theme; everything else stays the text colour. */
+  --code-keyword:  var(--status-info);
+  --code-string:   var(--status-success);
+  --code-number:   var(--status-warning);
+  --code-comment:  var(--muted-foreground);
+
   /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
   --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
   --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 45%, transparent);

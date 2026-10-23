@@ -18,6 +18,7 @@
 import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $getRoot,
   $getSelection,
   $isRangeSelection,
   BLUR_COMMAND,
@@ -122,6 +123,17 @@ export function FormatToolbarPlugin({
         !$isRangeSelection(selection) ||
         selection.isCollapsed() ||
         selection.getTextContent() === ""
+      ) {
+        setState(null);
+        return;
+      }
+      // The title line takes no formatting (it is the note's name).
+      const root = $getRoot();
+      const first = root.getFirstChild();
+      if (
+        first &&
+        selection.anchor.getNode().getTopLevelElement()?.is(first) &&
+        selection.focus.getNode().getTopLevelElement()?.is(first)
       ) {
         setState(null);
         return;

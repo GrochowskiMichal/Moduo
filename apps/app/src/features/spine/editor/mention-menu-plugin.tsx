@@ -637,7 +637,11 @@ export function MentionMenuPlugin({
       {loading && candidates.length === 0 ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Searching…</p>
       ) : candidates.length === 0 ? (
-        <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+        <p className="px-2 py-3 text-sm text-muted-foreground">
+          {trigger === "mention" && peopleOnly
+            ? "No teammate by that name. @ mentions people in this workspace."
+            : "No matches."}
+        </p>
       ) : (
         candidates.map((candidate, index) => {
           const isSelected = index === selectedIndex;

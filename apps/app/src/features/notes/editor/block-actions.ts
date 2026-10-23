@@ -5,7 +5,13 @@
  */
 
 import { $createCodeNode } from "@lexical/code";
-import { $insertList } from "@lexical/list";
+import {
+  $insertList,
+  $isListItemNode,
+  $isListNode,
+  type ListNode,
+  type ListType,
+} from "@lexical/list";
 import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
 import {
@@ -16,6 +22,7 @@ import {
   $isElementNode,
   $isRangeSelection,
   $parseSerializedNode,
+  type ElementNode,
   type LexicalNode,
   type SerializedLexicalNode,
 } from "lexical";
@@ -79,11 +86,73 @@ export function $runBlockCommand(id: TurnIntoId): void {
   }
 }
 
-/** Turn the whole block into `id`. */
+/** A new block of kind `id` (a text kind; lists are handled apart). */
+function $createBlockOf(id: TurnIntoId): ElementNode {
+  switch (id) {
+    case "h1":
+    case "h2":
+    case "h3":
+      return $createHeadingNode(id);
+    case "quote":
+      return $createQuoteNode();
+    case "code":
+      return $createCodeNode();
+    default:
+      return $createParagraphNode();
+  }
+}
+
+/** A list's items, nested ones included, as their inline content. */
+function $listLines(list: ListNode): LexicalNode[][] {
+  const lines: LexicalNode[][] = [];
+  for (const item of list.getChildren()) {
+    if (!$isListItemNode(item)) continue;
+    const inline = item.getChildren().filter((c) => !$isListNode(c));
+    if (inline.length > 0) lines.push(inline);
+    for (const nested of item.getChildren())
+      if ($isListNode(nested)) lines.push(...$listLines(nested));
+  }
+  return lines;
+}
+
+const LIST_TYPE: Partial<Record<TurnIntoId, ListType>> = {
+  bullet: "bullet",
+  number: "number",
+  todo: "check",
+};
+
+/**
+ * Turn the whole block into `id`; the caret ends at the end of what it
+ * became (not a stray selection under the format toolbar). A list was a
+ * no-op: the commands need a text selection, a list block isn't one. A list
+ * changes type in place, or becomes one block per item.
+ */
 export function $turnBlockInto(block: LexicalNode, id: TurnIntoId): void {
   if (!$isElementNode(block) || !$blockMenuFor(block).turnInto) return;
+  if ($isListNode(block)) {
+    const listType = LIST_TYPE[id];
+    if (listType) {
+      block.setListType(listType);
+      block.selectEnd();
+      return;
+    }
+    let last: ElementNode | null = null;
+    for (const line of $listLines(block)) {
+      const next = $createBlockOf(id);
+      next.append(...line);
+      (last ?? block).insertAfter(next);
+      last = next;
+    }
+    block.remove();
+    last?.selectEnd();
+    return;
+  }
   block.select(0, block.getChildrenSize());
   $runBlockCommand(id);
+  const selection = $getSelection();
+  if ($isRangeSelection(selection)) {
+    selection.anchor.getNode().getTopLevelElement()?.selectEnd();
+  }
 }
 
 function $deepJSON(node: LexicalNode): SerializedLexicalNode {
