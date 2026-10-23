@@ -35,7 +35,9 @@ const DESTRUCTIVE = [
   "notes_archive",
   "notes_trash",
   "notes_update",
+  "projects_update",
   "tasks_reminder_remove",
+  "tasks_unschedule",
   "tasks_waiting_clear",
   "tasks_work_session_remove",
 ];
@@ -47,13 +49,14 @@ const DESTRUCTIVE = [
 const REMOVES_NOTHING = ["tasks_queue_remove", "tasks_uncommit", "tasks_skip_today"];
 
 describe("tool annotations", () => {
-  it("every tool is annotated, all three hints stated", () => {
+  it("every tool is annotated, every hint stated", () => {
     expect(tools.length).toBe(110);
     for (const tool of tools) {
       const a = toolAnnotations(tool);
       expect(typeof a.readOnlyHint, tool.name).toBe("boolean");
       expect(typeof a.destructiveHint, tool.name).toBe("boolean");
       expect(typeof a.idempotentHint, tool.name).toBe("boolean");
+      expect(a.openWorldHint, tool.name).toBe(false);
     }
   });
 
@@ -66,7 +69,12 @@ describe("tool annotations", () => {
 
   it("a read-only tool is never destructive and is safe to repeat", () => {
     for (const tool of tools.filter((t) => toolAnnotations(t).readOnlyHint)) {
-      expect(toolAnnotations(tool), tool.name).toEqual({ readOnlyHint: true, destructiveHint: false, idempotentHint: true });
+      expect(toolAnnotations(tool), tool.name).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      });
     }
   });
 

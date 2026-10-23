@@ -93,7 +93,13 @@ const taskInFull = task.extend({
   blocking: z.array(titledTask).describe("Tasks this one blocks."),
   subtasks: z.array(titledTask.extend({ status_category: taskStatusCategorySchema.nullable().optional() })),
   work_sessions: z.array(
-    z.looseObject({ id: z.string(), person, starts_at: z.string(), ends_at: z.string() }),
+    z.looseObject({
+      id: z.string(),
+      // A system-run session is nobody's: no id, "Former member".
+      person: person.extend({ id: z.string().nullable() }),
+      starts_at: z.string(),
+      ends_at: z.string(),
+    }),
   ),
   my_reminders: z.array(z.looseObject({ id: z.string(), kind: z.string() })).describe("The key's person's own reminders."),
   waiting_on: z.array(

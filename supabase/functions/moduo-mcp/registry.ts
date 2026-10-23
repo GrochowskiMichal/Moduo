@@ -50,14 +50,17 @@ export type ToolContext = {
  */
 export type ToolHints = "read" | { destructive: boolean; idempotent: boolean };
 
-/** A tool's hints as MCP tool annotations, all three always stated. */
+/** A tool's hints as MCP tool annotations, every hint always stated. */
 export function toolAnnotations(tool: ToolDef): {
   readOnlyHint: boolean;
   destructiveHint: boolean;
   idempotentHint: boolean;
+  openWorldHint: false;
 } {
-  if (tool.hints === "read") return { readOnlyHint: true, destructiveHint: false, idempotentHint: true };
-  return { readOnlyHint: false, destructiveHint: tool.hints.destructive, idempotentHint: tool.hints.idempotent };
+  // Every tool works inside the workspace only: none reaches the outside world.
+  const closed = { openWorldHint: false as const };
+  if (tool.hints === "read") return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, ...closed };
+  return { readOnlyHint: false, destructiveHint: tool.hints.destructive, idempotentHint: tool.hints.idempotent, ...closed };
 }
 
 export type ToolDef = {
@@ -72,7 +75,7 @@ export type ToolDef = {
   access: "view" | "edit";
   /** How calling it behaves, listed as the tool's annotations (MCPO-6). */
   hints: ToolHints;
-  handler:(args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
+  handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
 };
 
 export type ConnectorModule = {

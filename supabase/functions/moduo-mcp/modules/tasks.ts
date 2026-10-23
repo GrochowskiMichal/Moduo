@@ -1453,7 +1453,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Clear a task's stale scheduled time, keeping the task (drift-triage Ignore).",
       access: "edit",
-      hints: { destructive: false, idempotent: true },
+      hints: { destructive: true, idempotent: true },
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
@@ -1858,7 +1858,7 @@ export const tasksConnectorModule: ConnectorModule = {
       description:
         "Edit a project you can edit: name, status (active · on_hold · done), area, start and target dates, colour, lead, client (a person or a company; needs Contacts access; setting one clears the other), description, archived (needs full access). Pass only what changes; null clears a date, the area, the lead, the client or the description.",
       access: "edit",
-      hints: { destructive: false, idempotent: true },
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
