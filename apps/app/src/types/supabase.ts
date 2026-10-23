@@ -14603,6 +14603,10 @@ export type Database = {
           secret: string
         }[]
       }
+      workspace_api_keys_oauth_request: {
+        Args: { p_authorization_id: string | null }
+        Returns: Json
+      }
       workspace_api_keys_rename: {
         Args: { p_key_id: string | null; p_name: string | null }
         Returns: string

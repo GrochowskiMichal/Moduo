@@ -10,17 +10,21 @@ import { moduleManifests } from "../../lib/module-registry";
 import {
   ceilingHint,
   clampScopes,
+  CONNECT_BY_URL_LEAD,
   DEFAULT_KEY_EXPIRY,
   DEFAULT_KEY_SCOPES,
+  disconnectCopy,
   effectiveScopes,
   expiryDays,
   grantsAnyAccess,
+  isConnectedApp,
   KEY_EXPIRY_OPTIONS,
   KEY_SCOPE_LABELS,
   KEY_SCOPE_MODULES,
   KEY_SCOPE_NEEDS,
   type KeyActor,
   keyLifecycle,
+  KEYS_FOR_SCRIPTS_LABEL,
   keyScopeCap,
   MCP_KEY_MODULES,
   MCP_KEY_SCOPES,
@@ -644,5 +648,35 @@ describe("key expiry", () => {
     expect(fresh.staleNote).toBeNull();
     const used = keyLifecycle({ createdAt: day(-200), lastUsedAt: day(-59), expiresAt: null }, NOW);
     expect(used.staleNote).toBeNull();
+  });
+});
+
+describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
+  it("tells a connected app from a pasted key by its app, not its name", () => {
+    expect(isConnectedApp({ oauthClientId: "c1" })).toBe(true);
+    expect(isConnectedApp({ oauthClientId: null })).toBe(false);
+    expect(isConnectedApp({})).toBe(false);
+  });
+
+  it("asks before disconnecting, in the spec's words", () => {
+    expect(disconnectCopy("Claude")).toEqual({
+      title: "Disconnect Claude?",
+      body: "It loses access immediately; it can sign in again later.",
+    });
+    expect(disconnectCopy("  ").title).toBe("Disconnect this app?");
+  });
+
+  it("nudges an idle connection to be disconnected, a key to be revoked", () => {
+    const old = { createdAt: "2026-01-01T00:00:00Z", lastUsedAt: null, expiresAt: null };
+    const now = Date.parse("2026-06-01T00:00:00Z");
+    expect(keyLifecycle({ ...old, oauthClientId: "c1" }, now).staleNote).toMatch(/Disconnect it/);
+    expect(keyLifecycle(old, now).staleNote).toMatch(/Revoke it/);
+  });
+
+  it("leads with connecting by URL; keys are for what can't sign in", () => {
+    expect(CONNECT_BY_URL_LEAD).toBe(
+      "Add Moduo as a connector in Claude, ChatGPT or Claude Code with this URL. You'll sign in and choose what it can reach.",
+    );
+    expect(KEYS_FOR_SCRIPTS_LABEL).toBe("For scripts and tools that can't sign in");
   });
 });

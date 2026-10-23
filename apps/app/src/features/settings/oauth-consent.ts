@@ -1,0 +1,208 @@
+// Pure rules for the consent screen (/oauth/consent, MCPO-4; specs/mcp-oauth.md
+// AC5, AC7, AC9, Assumptions #6 and #7). An app that signed in with OAuth gets
+// an ordinary scoped connection: the same None / View / Edit card, caps and
+// expiry as a new API key (api-keys.ts), so the two can't drift. No React here.
+
+import {
+  clampScopes,
+  DEFAULT_KEY_EXPIRY,
+  DEFAULT_KEY_SCOPES,
+  grantsAnyAccess,
+  type KeyActor,
+  type KeyCeilings,
+  keyCeilings,
+  type KeyExpiryChoice,
+  keyScopeCaps,
+  type McpKeyScopes,
+  toKeyScopes,
+} from "./api-keys";
+
+/**
+ * Apps whose sign-in returns to these domains (or their subdomains) are the
+ * ones Moduo expects; every other app gets the quiet "hasn't checked" line.
+ * Matched on the domain the sign-in returns to, which the app can't fake the
+ * way it can its name.
+ */
+export const CHECKED_APP_DOMAINS = ["claude.ai", "anthropic.com", "openai.com", "chatgpt.com"];
+
+export function isCheckedAppDomain(domain: string | null | undefined): boolean {
+  const host = (domain ?? "").trim().toLowerCase().replace(/\.$/, "");
+  if (!host) return false;
+  return CHECKED_APP_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+export const UNCHECKED_APP_NOTE = "Moduo hasn't checked this app.";
+
+export const ROLE_MESSAGE = "Your role doesn't include API keys here. Ask the workspace owner.";
+
+export const CAP_MESSAGE =
+  "This workspace has 20 keys and connections. Disconnect or revoke one in Settings → API keys first.";
+
+export const NO_ACCESS_MESSAGE = "Give the app access to at least one module.";
+
+/** What the screen calls the app: its own name, else where it returns to. */
+export function appDisplayName(request: {
+  appName: string | null;
+  clientDomain: string | null;
+}): string {
+  return request.appName?.trim() || request.clientDomain?.trim() || "An app";
+}
+
+export function consentTitle(appName: string): string {
+  return `${appName} wants to work in Moduo as you`;
+}
+
+/** The screen for a sign-in that's unknown, used up or expired. */
+export function expiredMessage(appName: string | null): string {
+  return `This sign-in link has expired. Go back to ${appName?.trim() || "your app"} and connect again.`;
+}
+
+/** One workspace the person belongs to, as the screen needs it. */
+export type ConsentWorkspace = {
+  id: string;
+  name: string;
+  actor: KeyActor;
+};
+
+export type ConsentWorkspaceChoice = {
+  id: string;
+  name: string;
+  /** The person can't manage keys here: listed, never choosable. */
+  disabled: boolean;
+  /** Why it's off, or why Approve is off there. */
+  reason: string | null;
+  /** At the 20 cap: choosable, but Approve is off with the cap message. */
+  full: boolean;
+};
+
+export function canManageKeys(actor: KeyActor): boolean {
+  return actor.role === "owner" || actor.perms.includes("ws.api_keys");
+}
+
+export function workspaceChoices(
+  workspaces: readonly ConsentWorkspace[],
+  fullWorkspaceIds: readonly string[],
+): ConsentWorkspaceChoice[] {
+  return workspaces.map((ws) => {
+    const manage = canManageKeys(ws.actor);
+    const full = manage && fullWorkspaceIds.includes(ws.id);
+    return {
+      id: ws.id,
+      name: ws.name,
+      disabled: !manage,
+      full,
+      reason: !manage ? ROLE_MESSAGE : full ? CAP_MESSAGE : null,
+    };
+  });
+}
+
+/**
+ * The workspace the picker starts on: where the app is connected now (a
+ * reconnect), else the one the person last worked in, else the first that
+ * qualifies; null when none does.
+ */
+export function initialWorkspaceId(
+  choices: readonly ConsentWorkspaceChoice[],
+  connectionWorkspaceId: string | null,
+  rememberedWorkspaceId: string | null,
+): string | null {
+  const open = choices.filter((c) => !c.disabled);
+  for (const id of [connectionWorkspaceId, rememberedWorkspaceId]) {
+    if (id && open.some((c) => c.id === id)) return id;
+  }
+  return open[0]?.id ?? null;
+}
+
+export type ConsentConnection = {
+  workspaceId: string;
+  scopes: Record<string, string>;
+  expiresAt: string | null;
+  includePrivateChat: boolean;
+};
+
+export type ConsentDraft = {
+  scopes: McpKeyScopes;
+  expiry: KeyExpiryChoice;
+  includePrivateChat: boolean;
+};
+
+/**
+ * Where the card starts: the key card's defaults (Tasks: View, 90 days, no
+ * private channels), or on a reconnect what the connection holds now, so
+ * access is always seen before it changes. A connection that never expires
+ * starts at Never; one with an end date starts the default term again
+ * (approving renews it from today).
+ */
+export function initialDraft(connection: ConsentConnection | null): ConsentDraft {
+  if (!connection) {
+    return {
+      scopes: { ...DEFAULT_KEY_SCOPES },
+      expiry: DEFAULT_KEY_EXPIRY,
+      includePrivateChat: false,
+    };
+  }
+  return {
+    scopes: toKeyScopes(connection.scopes),
+    expiry: connection.expiresAt ? DEFAULT_KEY_EXPIRY : "never",
+    includePrivateChat: connection.includePrivateChat,
+  };
+}
+
+/** The card's ceilings in a workspace: up to the person's own access, or what the connection there holds. */
+export function consentCeilings(
+  actor: KeyActor,
+  connection: ConsentConnection | null,
+  workspaceId: string,
+): KeyCeilings {
+  const stored =
+    connection && connection.workspaceId === workspaceId
+      ? toKeyScopes(connection.scopes)
+      : toKeyScopes({});
+  return keyCeilings({ stored, isMine: true, ownerName: "you", myCaps: keyScopeCaps(actor) });
+}
+
+/** What the card shows and sends: the draft, never above the person's own access there. */
+export function shownScopes(draft: Readonly<McpKeyScopes>, actor: KeyActor): McpKeyScopes {
+  return clampScopes(draft, keyScopeCaps(actor));
+}
+
+/** "This moves Claude from Moduo Labs to Elsewhere." when the picked workspace isn't the connection's. */
+export function moveLine(
+  appName: string,
+  connection: { workspaceId: string } | null,
+  toWorkspaceId: string | null,
+  nameOf: (workspaceId: string) => string | null,
+): string | null {
+  if (!connection || !toWorkspaceId || connection.workspaceId === toWorkspaceId) return null;
+  const from = nameOf(connection.workspaceId) ?? "another workspace";
+  const to = nameOf(toWorkspaceId) ?? "this workspace";
+  return `This moves ${appName} from ${from} to ${to}.`;
+}
+
+/** Why Approve is off, or null when it can go. */
+export function approveBlocker(
+  choice: ConsentWorkspaceChoice | null,
+  scopes: Readonly<McpKeyScopes>,
+): string | null {
+  if (!choice || choice.disabled) return ROLE_MESSAGE;
+  if (choice.full) return CAP_MESSAGE;
+  if (!grantsAnyAccess(scopes)) return NO_ACCESS_MESSAGE;
+  return null;
+}
+
+/**
+ * Deny for a sign-in Supabase Auth already approved by itself (a returning
+ * app): it can't be denied there any more, so the app is told no the OAuth
+ * way, on the same return address and state, without the code it was given.
+ */
+export function deniedRedirect(heldRedirect: string): string | null {
+  try {
+    const url = new URL(heldRedirect);
+    url.searchParams.delete("code");
+    url.searchParams.set("error", "access_denied");
+    url.searchParams.set("error_description", "The person denied the request.");
+    return url.toString();
+  } catch {
+    return null;
+  }
+}

@@ -132,6 +132,23 @@ const joinRoute = createRoute({
   },
 });
 
+// The consent screen an app's "Sign in with Moduo" lands on (MCPO-4,
+// specs/mcp-oauth.md). Outside the app gate like /join (Maciej OK'd the route,
+// 2026-10-22): Supabase Auth's OAuth server sends the browser here (its
+// authorization path in supabase/config.toml), signed in or not. Not in the
+// nav. `?authorization_id=` names the app's sign-in.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/consent",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/oauth-consent-page"), "OAuthConsentPage"),
+  ),
+  validateSearch: (search: Record<string, unknown>): { authorization_id?: string } => {
+    const id = search.authorization_id;
+    return typeof id === "string" && id.trim() ? { authorization_id: id.trim() } : {};
+  },
+});
+
 const appGateRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "app-gate",
@@ -257,6 +274,7 @@ export const routeTree = rootRoute.addChildren([
   bookCancelRoute,
   bookRoute,
   joinRoute,
+  oauthConsentRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,
