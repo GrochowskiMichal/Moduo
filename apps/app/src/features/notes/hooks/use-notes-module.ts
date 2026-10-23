@@ -563,7 +563,12 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       // "delete the tasks too" escalation rides the body — never sonner's
       // `cancel` slot, where a destructive verb reads as the dismiss button.
       undoToast(label, {
-        description: n > 0 ? "The tasks still live in Tasks." : undefined,
+        description:
+          n === 1
+            ? "The task still lives in Tasks."
+            : n > 1
+              ? "The tasks still live in Tasks."
+              : undefined,
         onUndo: () => {
           restoreNote(noteId);
           opts?.onUndo?.();

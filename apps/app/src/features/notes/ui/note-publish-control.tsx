@@ -1,8 +1,9 @@
 /**
- * Publish-to-web header control (Wave-3 NO-9, AC10). The note header's "Publish"
- * affordance: a Globe button whose popover publishes/unpublishes and surfaces
- * the revocable public link. Published state reads primary; unpublished is a
- * quiet ghost. Tokens-only chrome.
+ * Publish to web (Wave-3 NO-9, AC10): the popover that publishes/unpublishes a
+ * note and surfaces its revocable public link. A row's `⋯ → Publish…` opens it
+ * on the row; a published note's meta line carries a quiet "Public" chip that
+ * opens it in place, so a public note never looks like a private one.
+ * Before publishing it names the sub-pages the link would take with it.
  */
 
 import { Check, Copy, Globe, Loader2 } from "lucide-react";
@@ -16,9 +17,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
+import { cn } from "../../../lib/utils";
 import type { Note } from "../model";
-import { publishedChildCount } from "../publish";
+import { selectPublishCandidates, selectPublishSubtree } from "../publish";
+import { META_CHIP } from "../shell/note-meta-line";
+import { displayTitle } from "../title";
 
 type Props = {
   note: Note;
@@ -32,9 +35,22 @@ type Props = {
   /** Controlled popover (the refreshed shell opens it from a `⋯ → Publish…`). */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** `parent`: opened from a row's menu; no button, anchored to the row. */
-  anchor?: "trigger" | "parent";
+  /** `parent`: opened from a row's menu, anchored to the row. `chip`: the
+   * meta line's "Public" chip opens it. */
+  anchor?: "chip" | "parent";
 };
+
+/** Names this many sub-pages, then "and N more". */
+const NAMED_PAGES = 3;
+
+/** "Launch checklist, Feedback loop and 2 more" */
+export function namePages(pages: Note[]): string {
+  const names = pages.slice(0, NAMED_PAGES).map((n) => displayTitle(n.title));
+  const rest = pages.length - names.length;
+  if (rest > 0) return `${names.join(", ")} and ${rest} more`;
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
 
 export function NotePublishControl({
   note,
@@ -45,7 +61,7 @@ export function NotePublishControl({
   onUnpublish,
   open: openProp,
   onOpenChange,
-  anchor = "trigger",
+  anchor = "chip",
 }: Props) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -58,7 +74,11 @@ export function NotePublishControl({
 
   const isPublished = Boolean(note.publishedAt && note.publishToken);
   const url = note.publishToken ? publishedUrl(note.publishToken) : "";
-  const childCount = isPublished ? publishedChildCount(note.id, notes) : 0;
+  // The root comes first in both lists; the rest are the sub-pages.
+  const subpages = (
+    isPublished ? selectPublishSubtree(note.id, notes) : selectPublishCandidates(note.id, notes)
+  ).slice(1);
+  const childCount = subpages.length;
 
   const doPublish = async () => {
     setBusy(true);
@@ -103,35 +123,19 @@ export function NotePublishControl({
           <span aria-hidden className="pointer-events-none absolute inset-0" />
         </PopoverAnchor>
       ) : (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                size="sm"
-                variant={isPublished ? "secondary" : "ghost"}
-                className="gap-1.5"
-                aria-label={isPublished ? "Published to web" : "Publish to web"}
-              >
-                <Globe
-                  className={
-                    isPublished ? "size-icon-sm text-primary" : "size-icon-sm text-muted-foreground"
-                  }
-                  aria-hidden
-                />
-                <span className={isPublished ? "text-foreground" : "text-muted-foreground"}>
-                  {isPublished ? "Published" : "Publish"}
-                </span>
-              </Button>
-            </PopoverTrigger>
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            {isPublished ? "This note has a public link" : "Publish this note to the web"}
-          </TooltipContent>
-        </Tooltip>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Public on the web: show the link"
+            className={cn(META_CHIP, "flex items-center gap-1")}
+          >
+            <Globe aria-hidden className="size-icon-xs" />
+            Public
+          </button>
+        </PopoverTrigger>
       )}
 
-      <PopoverContent align="end" className="w-80">
+      <PopoverContent align={anchor === "chip" ? "start" : "end"} className="w-80">
         {isPublished ? (
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
@@ -139,7 +143,7 @@ export function NotePublishControl({
               <p className="text-xs text-muted-foreground">
                 Anyone with the link can read this note
                 {childCount > 0
-                  ? ` and its ${childCount} nested page${childCount === 1 ? "" : "s"}`
+                  ? ` and its ${childCount === 1 ? "subpage" : `${childCount} subpages`} (${namePages(subpages)})`
                   : ""}
                 . Search engines are asked not to index it.
               </p>
@@ -201,9 +205,14 @@ export function NotePublishControl({
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium text-foreground">Publish to web</p>
               <p className="text-xs text-muted-foreground">
-                Create a read-only public link to this note
-                {childCount > 0 ? " and its child pages" : ""}. You can revoke it any time.
+                Create a read-only public link to this note. You can revoke it any time.
               </p>
+              {childCount > 0 ? (
+                <p className="text-xs text-foreground">
+                  {childCount === 1 ? "Its subpage goes" : `Its ${childCount} subpages go`} public
+                  with it: {namePages(subpages)}.
+                </p>
+              ) : null}
             </div>
             <Button
               type="button"

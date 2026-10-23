@@ -77,6 +77,9 @@ export type NotesEditorBridge = {
   /** Create a root note titled `title` for `[[Create …]]` (NR-4). `created`
    * settles true once its server row exists (links wait for it). */
   createLinkedNote?: (title: string) => { id: string; created: Promise<boolean> } | null;
+  /** Create a subpage of the CURRENT note titled `title` (the block menu's
+   * Turn into → Page). Absent: no Page in Turn into. */
+  createSubpage?: (title: string) => { id: string; created: Promise<boolean> } | null;
   /** Open the Comments panel (the block menu's Comment, NR-4). */
   openComments?: () => void;
   /** The note whose real sub-pages the page lists under the body (MOD-81).

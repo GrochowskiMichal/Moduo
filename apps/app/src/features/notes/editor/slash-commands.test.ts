@@ -54,8 +54,11 @@ describe("slash grammar (AC5 — the ratified final set)", () => {
     expect(ids).toContain("task");
   });
 
-  it("empty query returns the full menu in registry order", () => {
-    expect(filterSlashCommands("")).toHaveLength(SLASH_COMMANDS.length);
+  it("empty query returns the full menu, Moduo's own blocks first (a task leads)", () => {
+    const ids = filterSlashCommands("").map((c) => c.id);
+    expect(ids).toHaveLength(SLASH_COMMANDS.length);
+    expect(ids.slice(0, 6)).toEqual(["task", "page", "note", "contact", "company", "event"]);
+    expect(ids[6]).toBe("text");
   });
 
   it("no match → empty (the menu closes, the caller types on)", () => {

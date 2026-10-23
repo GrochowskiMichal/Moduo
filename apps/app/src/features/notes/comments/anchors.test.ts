@@ -22,7 +22,14 @@ import { buildDocStateFromMarkdown } from "../editor/materialize";
 import { ADD_COMMENT_COMMAND, registerAddComment } from "../editor/plugins/comment-marks-plugin";
 import { decodeBase64ToUint8 } from "../utils/base64";
 import { anchorStore } from "./anchor-store";
-import { $anchorIdsInOrder, $anchorSelection, $unanchor, groupThreads } from "./anchors";
+import {
+  $anchorIdsInOrder,
+  $anchorSelection,
+  $firstMarkKey,
+  $firstMarkKeys,
+  $unanchor,
+  groupThreads,
+} from "./anchors";
 
 function bind(doc: Y.Doc): LexicalEditor {
   const { editor } = createNotesHeadlessEditor("anchors");
@@ -151,6 +158,19 @@ describe("anchor lifecycle", () => {
     g = groupThreads(resolved, ids(editor));
     expect(g.resolved.map((t) => t.anchorId)).toEqual(["t1"]);
     expect(g.open).toEqual([]);
+  });
+
+  it("finds every thread's first mark in one walk, the same as one at a time", () => {
+    const doc = docFrom("Alpha beta gamma\n\nSecond line here", 1);
+    const editor = bind(doc);
+    anchorWord(editor, 0, "beta", "t1");
+    anchorWord(editor, 1, "line", "t2");
+    editor.getEditorState().read(() => {
+      const all = $firstMarkKeys();
+      expect([...all.keys()]).toEqual(["t1", "t2"]);
+      expect(all.get("t1")).toBe($firstMarkKey("t1"));
+      expect(all.get("t2")).toBe($firstMarkKey("t2"));
+    });
   });
 
   it("overlapping threads keep each other when one is resolved", () => {

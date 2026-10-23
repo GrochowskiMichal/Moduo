@@ -275,7 +275,7 @@ export function EventDetailPanel({
                 <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
                 {spineActivityLine(entry)}
               </span>
-              <span className="shrink-0 text-2xs text-muted-foreground/70">
+              <span className="shrink-0 text-2xs text-subtle-foreground">
                 {timeAgo(entry.createdAt, now)}
               </span>
             </div>

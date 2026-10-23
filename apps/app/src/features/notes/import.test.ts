@@ -7,6 +7,7 @@ import {
   describeSkips,
   type ImportFileEntry,
   importPositions,
+  linkWikiTitles,
   notionPageId,
   planMdZipImport,
 } from "./import";
@@ -402,5 +403,43 @@ describe("Notion export hardening (IM-1, AC1–AC5)", () => {
     );
     expect(plan.nodes.map((n) => n.title)).toEqual(["Page"]);
     expect(plan.skippedByKind["nested-archive"]).toBe(1);
+  });
+});
+
+describe("wiki links between imported pages", () => {
+  const idFor = (title: string) =>
+    ({ "launch checklist": "id-1", ideas: "id-2" })[title.toLowerCase()] ?? null;
+
+  it("become note links when the title names an imported page", () => {
+    expect(linkWikiTitles("See the [[Launch checklist]] for the day.", idFor)).toBe(
+      "See the [Launch checklist](moduo://note/id-1) for the day.",
+    );
+    expect(linkWikiTitles("[[ideas|our ideas]]", idFor)).toBe("[our ideas](moduo://note/id-2)");
+  });
+
+  it("stay as typed when they name nothing imported, or sit in code", () => {
+    expect(linkWikiTitles("A [[Missing page]] here", idFor)).toBe("A [[Missing page]] here");
+    expect(linkWikiTitles("Use `[[Ideas]]` or\n```\n[[Ideas]]\n```", idFor)).toBe(
+      "Use `[[Ideas]]` or\n```\n[[Ideas]]\n```",
+    );
+  });
+
+  it("reach the rows: the doc is built from linked markdown", () => {
+    const plan = planMdZipImport(
+      planEntries({ "Plan.md": "# Plan\n\nRead [[Notes]].", "Notes.md": "# Notes" }),
+    );
+    const ids = assignImportIds("ws-1", plan.nodes);
+    const built: string[] = [];
+    const rows = buildImportRows(
+      plan.nodes,
+      (t) => ids.get(t)!,
+      (_id, md) => {
+        built.push(md);
+        return null;
+      },
+    );
+    const notesId = rows.find((r) => r.title === "Notes")!.id;
+    expect(built.some((md) => md.includes(`[Notes](moduo://note/${notesId})`))).toBe(true);
+    expect(rows.find((r) => r.title === "Plan")!.bodyText).toBe("Plan\nRead Notes.");
   });
 });

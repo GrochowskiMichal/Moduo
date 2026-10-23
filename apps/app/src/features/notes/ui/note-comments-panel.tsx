@@ -293,8 +293,10 @@ export function NoteCommentsPanel({
               )
             ) : null}
             {thread.comments.length === 0 && !pending ? (
-              <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-                No comments yet. Select text in the note and choose Comment to start a thread.
+              <p className="px-2 py-6 text-center text-sm text-pretty text-muted-foreground">
+                {canComment
+                  ? "No comments yet. Comment on the whole note below, or select text (⌘⌥M) to comment on a line."
+                  : "No comments yet."}
               </p>
             ) : null}
           </>

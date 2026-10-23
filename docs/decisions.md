@@ -249,6 +249,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-23 · The Impeccable pass on Notes: sidebar search back (titles here, text from the server) until NR-10; publish names its subpages first + a Public chip; one keyboard grammar (⇧F10/⌥↵ menus, ⌥F10 toolbar, ⌘⌥M comment, ⌘↵ tick); the spine leads the slash menu, Turn into Task/Page; 36rem measure; light secondary text 600 → decisions/notes.md
 - 2026-10-20 · Notes' caches (list, per-note documents, pull cursors) are keyed `person:workspace` and cut down to the outboxes on sign-out or a user switch; caches from before the update are deleted, their queued work stays nobody's → decisions/notes.md
 - 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight

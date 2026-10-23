@@ -44,19 +44,21 @@
   color: var(--foreground);
 }
 
+/* One step under the title (3xl, the first line here, the page's own h1 on
+ * /p/): a Heading 1 in the body at the title's size read as a second title. */
 .notes-h1,
 .notes-public-prose h1 {
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
 }
 
 .notes-h2,
 .notes-public-prose h2 {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
 }
 
 .notes-h3,
 .notes-public-prose h3 {
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
 }
 
 .notes-quote,
@@ -246,7 +248,7 @@
 /* Inline text formats (DF-13) — Lexical expresses only ONE format via the
  * element tag; combinations and strikethrough/underline need theme classes. */
 .notes-text-bold {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .notes-text-italic {

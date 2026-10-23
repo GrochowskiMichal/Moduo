@@ -4,7 +4,7 @@ import type { Note } from "./model";
 import {
   buildPublishTree,
   isPublished,
-  publishedChildCount,
+  selectPublishCandidates,
   selectPublishSubtree,
 } from "./publish";
 
@@ -45,7 +45,7 @@ describe("publish — subtree selection (AC10)", () => {
     ];
     const ids = selectPublishSubtree("root", notes).map((n) => n.id);
     expect(ids).toEqual(["root", "c1", "g1", "c2"]);
-    expect(publishedChildCount("root", notes)).toBe(3);
+    expect(selectPublishSubtree("root", notes)).toHaveLength(4);
   });
 
   it("excludes a sub-note with its own sharing, and what is below it, from the parent's link", () => {
@@ -56,7 +56,6 @@ describe("publish — subtree selection (AC10)", () => {
       note({ id: "under-private", parentId: "private", position: "a" }),
     ];
     expect(selectPublishSubtree("root", notes).map((n) => n.id)).toEqual(["root", "open"]);
-    expect(publishedChildCount("root", notes)).toBe(1);
     expect(buildPublishTree("root", notes)?.children.map((c) => c.note.id)).toEqual(["open"]);
   });
 
@@ -89,7 +88,6 @@ describe("publish — subtree selection (AC10)", () => {
       note({ id: "c1", parentId: "root" }),
     ];
     expect(selectPublishSubtree("root", revoked)).toEqual([]);
-    expect(publishedChildCount("root", revoked)).toBe(0);
     expect(buildPublishTree("root", revoked)).toBeNull();
   });
 
@@ -124,5 +122,25 @@ describe("publish — subtree selection (AC10)", () => {
       note({ id: "loop", parentId: "loop", position: "a" }),
     ];
     expect(() => selectPublishSubtree("root", notes)).not.toThrow();
+  });
+});
+
+describe("publish — what publishing would expose", () => {
+  it("names the sub-pages an unpublished note would take onto its link", () => {
+    const notes = [
+      note({ id: "root" }),
+      note({ id: "c1", parentId: "root", position: "a" }),
+      note({ id: "private", parentId: "root", position: "b", shareMode: "custom" }),
+      note({ id: "gone", parentId: "root", position: "c", deletedAt: "2026-07-05T00:00:00Z" }),
+    ];
+    expect(selectPublishSubtree("root", notes)).toEqual([]);
+    expect(selectPublishCandidates("root", notes).map((n) => n.id)).toEqual(["root", "c1"]);
+  });
+
+  it("has nothing to expose for a trashed or archived note", () => {
+    expect(selectPublishCandidates("root", [note({ id: "root", isArchived: true })])).toEqual([]);
+    expect(
+      selectPublishCandidates("root", [note({ id: "root", deletedAt: "2026-07-05T00:00:00Z" })]),
+    ).toEqual([]);
   });
 });
