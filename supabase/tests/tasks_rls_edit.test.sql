@@ -2,15 +2,21 @@
 -- (supabase/migrations/20261024120000_tasks_buckets_rls_edit.sql). The write
 -- triggers stand aside while share.bypass is '1'; these checks turn it on, the
 -- way MOD-571's leak did, and expect RLS alone to hold: a viewer's UPDATE and
--- DELETE match no rows. With the bypass off, the triggers and RLS agree.
+-- DELETE match no rows, and an editor can't take over or move what the
+-- triggers pin (a project's owner and workspace, a task's workspace and
+-- project).
 --
 -- Cast: O owns workspace W. In W, P is O's project shared with V at View,
 -- with E at Edit, and with R at Edit while R's role is viewer (the role caps
 -- it at View). T is a task in P. TD is a task in O's project Q, shared
--- directly with D at Edit (D has nothing on Q). Z is O's empty project.
+-- directly with D at Edit (D has nothing on Q). Z is O's empty project. OI
+-- is O's Inbox, holding TH, a task E made and handed to O (TV-D13). E also
+-- owns workspace W2.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'V', 'E', 'R', 'D']) AS n;
-INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Workspace');
+INSERT INTO public.workspaces (id, owner_id, name) VALUES
+  (test.id('W'), test.id('O'), 'Workspace'),
+  (test.id('W2'), test.id('E'), 'Elsewhere');
 INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('V'), 'member'),
   (test.id('W'), test.id('E'), 'member'),
@@ -19,7 +25,8 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
 INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Launch', false),
   (test.id('Q'), test.id('W'), test.id('O'), 'Hiring', false),
-  (test.id('Z'), test.id('W'), test.id('O'), 'Spare', false);
+  (test.id('Z'), test.id('W'), test.id('O'), 'Spare', false),
+  (test.id('OI'), test.id('W'), test.id('O'), 'Inbox', true);
 DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id IN (test.id('P'), test.id('Q'));
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by) VALUES
   (test.id('W'), 'bucket', test.id('P'), 'member', test.id('V'), 'view', test.id('O')),
@@ -27,7 +34,8 @@ INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, su
   (test.id('W'), 'bucket', test.id('P'), 'member', test.id('R'), 'edit', test.id('O'));
 INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) VALUES
   (test.id('T'), test.id('W'), test.id('P'), test.id('O'), 'Write the brief', 'todo'),
-  (test.id('TD'), test.id('W'), test.id('Q'), test.id('O'), 'Call the recruiter', 'todo');
+  (test.id('TD'), test.id('W'), test.id('Q'), test.id('O'), 'Call the recruiter', 'todo'),
+  (test.id('TH'), test.id('W'), test.id('OI'), test.id('E'), 'Book the venue', 'todo');
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
 VALUES (test.id('W'), 'task', test.id('TD'), 'member', test.id('D'), 'edit', test.id('O'));
 
@@ -53,7 +61,7 @@ BEGIN
   PERFORM test.ok(test.value_as('D', format('SELECT title FROM public.tasks WHERE id = %L', test.id('TD'))) = 'Call the recruiter',
     'D can see the task shared with them directly');
 
-  -- Without the bypass, the trigger and RLS both refuse a viewer.
+  -- Without the bypass, RLS refuses a viewer before the trigger runs.
   PERFORM set_config('share.bypass', '', true);
   r := test.try('V', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('T')));
   PERFORM test.ok(r = 'ok 0', 'a View share can''t rename the task', r);
@@ -93,6 +101,25 @@ BEGIN
   -- Edit keeps working, under the bypass too.
   r := test.try('E', format($q$UPDATE public.tasks SET title = 'Write the brief, v2' WHERE id = %L$q$, test.id('T')));
   PERFORM test.ok(r = 'ok 1', 'an Edit share can rename the task', r);
+  -- What the triggers pin holds under the bypass too.
+  r := test.as_user('E', format('UPDATE public.buckets SET owner_id = %L WHERE id = %L', test.id('E'), test.id('P')));
+  PERFORM test.ok(r LIKE '42501%', 'an Edit share can''t take the project over', r);
+  r := test.as_user('E', format('UPDATE public.buckets SET workspace_id = %L WHERE id = %L', test.id('W2'), test.id('P')));
+  PERFORM test.ok(r LIKE '42501%', 'nor move it to their own workspace', r);
+  r := test.as_user('E', format('UPDATE public.buckets SET is_system = true WHERE id = %L', test.id('P')));
+  PERFORM test.ok(r LIKE '42501%', 'nor turn it into an Inbox', r);
+  r := test.as_user('E', format('UPDATE public.tasks SET workspace_id = %L WHERE id = %L', test.id('W2'), test.id('T')));
+  PERFORM test.ok(r LIKE '42501%', 'nor move a task to another workspace', r);
+  r := test.as_user('E', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('Q'), test.id('T')));
+  PERFORM test.ok(r LIKE '42501%', 'nor into a project they can''t edit', r);
+  PERFORM test.ok((SELECT owner_id FROM public.buckets WHERE id = test.id('P')) = test.id('O')
+              AND (SELECT workspace_id FROM public.buckets WHERE id = test.id('P')) = test.id('W')
+              AND (SELECT workspace_id FROM public.tasks WHERE id = test.id('T')) = test.id('W')
+              AND (SELECT bucket_id FROM public.tasks WHERE id = test.id('T')) = test.id('P'),
+    'the project and task stay where they were');
+  r := test.try('E', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('P'), test.id('TD')));
+  PERFORM test.ok(r = 'ok 0', 'nor pull in a task they can''t edit', r);
+
   r := test.try('E', format($q$UPDATE public.buckets SET name = 'Launch v2' WHERE id = %L$q$, test.id('P')));
   PERFORM test.ok(r = 'ok 1', 'and the project', r);
   r := test.try('E', format('DELETE FROM public.tasks WHERE id = %L', test.id('T')));
@@ -112,6 +139,17 @@ BEGIN
   PERFORM test.ok(r = 'ok 1', 'a task shared directly at Edit can be renamed', r);
   r := test.try('D', format($q$UPDATE public.buckets SET name = 'Mine' WHERE id = %L$q$, test.id('Q')));
   PERFORM test.ok(r = 'ok 0', 'but not its project', r);
+  r := test.try('D', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('P'), test.id('TD')));
+  PERFORM test.ok(r LIKE '42501%', 'nor move it into a project they can''t edit', r);
+
+  -- TV-D13: the person who made a task and handed it to someone's Inbox
+  -- keeps Edit on it.
+  r := test.try('E', format($q$UPDATE public.tasks SET title = 'Book the bigger venue' WHERE id = %L$q$, test.id('TH')));
+  PERFORM test.ok(r = 'ok 1', 'a task you handed to someone''s Inbox can still be renamed', r);
+  r := test.try('E', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('P'), test.id('TH')));
+  PERFORM test.ok(r = 'ok 1', 'and filed into a project you can edit', r);
+  r := test.try('E', format('DELETE FROM public.tasks WHERE id = %L', test.id('TH')));
+  PERFORM test.ok(r = 'ok 1', 'and deleted', r);
 
   r := test.try('O', format($q$UPDATE public.buckets SET name = 'Launch 2027' WHERE id = %L$q$, test.id('P')));
   PERFORM test.ok(r = 'ok 1', 'the owner can rename the project', r);

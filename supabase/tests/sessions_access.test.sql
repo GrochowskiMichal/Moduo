@@ -193,7 +193,7 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'write: view access can''t clear an entry', r);
   -- RLS asks for Edit before an UPDATE, so the row isn't matched at all.
   r := test.try('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z' WHERE id = %L$q$, test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'write: view access can''t move it as an old build either', r);
+  PERFORM test.ok(r = 'ok 0', 'write: view access can''t move it as an old build either', r);
   -- The schedule trigger holds the gate itself, not only PERM-W's write check
   -- and RLS: N as the actor, past RLS, with the write check off.
   ALTER TABLE public.tasks DISABLE TRIGGER perm_enforce_write;
