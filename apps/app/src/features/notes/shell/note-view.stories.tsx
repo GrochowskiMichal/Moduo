@@ -164,7 +164,6 @@ function Harness({ fullWidth, withLinks }: { fullWidth: boolean; withLinks: bool
           degraded={false}
           loading={false}
           canEdit
-          seedWelcome={false}
           bridge={bridge}
           onTitleDerived={fn()}
           onRestore={fn()}

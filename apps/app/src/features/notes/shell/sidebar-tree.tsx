@@ -118,7 +118,9 @@ export function TreeRow({
   const selected = ctx.selectedId === note.id;
   const hover = ctx.hover?.key === key ? ctx.hover : null;
   const favorite = ctx.favoriteIds.has(note.id);
-  const items = isDraft ? [] : rowMenuItems({ canEdit: ctx.canEdit, favorite, section });
+  const items = isDraft
+    ? []
+    : rowMenuItems({ canEdit: ctx.canEdit, favorite, section, hasChildren: expandable });
 
   const row = (
     <div
@@ -166,7 +168,7 @@ export function TreeRow({
           if (expandable) ctx.onToggle(key);
         }}
         className={cn(
-          "flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground",
+          "hit-min flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground",
           !expandable && "invisible",
         )}
       >
@@ -206,7 +208,7 @@ export function TreeRow({
                 e.stopPropagation();
                 ctx.onCreateChild(note.id);
               }}
-              className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
+              className="hit-min flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
             >
               <Plus aria-hidden className="size-icon-sm" />
             </button>
@@ -219,7 +221,7 @@ export function TreeRow({
                   tabIndex={-1}
                   aria-label={`${displayTitle(note.title)} options`}
                   onClick={(e) => e.stopPropagation()}
-                  className="flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
+                  className="hit-min flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
                 >
                   <MoreHorizontal aria-hidden className="size-icon-sm" />
                 </button>

@@ -238,11 +238,13 @@ export function EntityHubRow({
               {RELATION_KIND_LABELS[row.relationKind]}
             </span>
           ) : null
-        ) : (
+        ) : row.relationKind !== "references" ? (
+          // The rail, too, says nothing for the default kind: a REFERENCES
+          // eyebrow on every row was noise.
           <Eyebrow className="ml-auto shrink-0 pl-2" tone="tag">
             {RELATION_KIND_LABELS[row.relationKind]}
           </Eyebrow>
-        )}
+        ) : null}
       </button>
 
       {canEdit ? (

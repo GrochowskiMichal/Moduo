@@ -12,7 +12,14 @@ import { toast } from "sonner";
 import { noteIsPrivate } from "../../sharing/rules";
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
-import { downloadTextFile, noteFileName } from "../export";
+import {
+  buildZipEntries,
+  downloadTextFile,
+  downloadZip,
+  noteFileName,
+  safeFileStem,
+  subtreeZipNotes,
+} from "../export";
 import type { Note } from "../model";
 import { displayTitle } from "../title";
 import { descendantIds } from "../tree";
@@ -29,6 +36,7 @@ export function useShellActions(
   const { module, select, selectedId, runtime, workspaceId, sections, openDraft } = shell;
   const { notes, favorites, engine } = module;
   const [moveTarget, setMoveTarget] = useState<Note | null>(null);
+  const [iconTarget, setIconTarget] = useState<Note | null>(null);
   const [publishOpen, setPublishOpen] = useState(false);
   const [sharingQuestion, setSharingQuestionState] = useState<SharingQuestion | null>(null);
   // The dialog can answer twice (the button, then its own close); the ref
@@ -61,14 +69,38 @@ export function useShellActions(
     [engine, selectedId, runtime, workspaceId],
   );
 
+  const exportTree = useCallback(
+    async (note: Note) => {
+      if (!runtime || !workspaceId) return;
+      const ids = [note.id, ...descendantIds(notes, note.id)];
+      try {
+        const docs = await runtime.notesV2.fetchExportDocs({ workspaceId, ids });
+        const mdById = new Map(docs.map((d) => [d.id, d.bodyMd]));
+        downloadZip(
+          `${safeFileStem(displayTitle(note.title))}.zip`,
+          buildZipEntries(subtreeZipNotes(notes, note.id, ids, mdById)),
+        );
+      } catch {
+        toast.error("Couldn't export the notes.");
+      }
+    },
+    [runtime, workspaceId, notes],
+  );
+
+  /** Archiving or trashing the open note (or a page above it) closes it. */
+  const leaves = useCallback(
+    (id: string) =>
+      Boolean(selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId))),
+    [notes, selectedId],
+  );
+
   const trash = useCallback(
     (id: string) => {
-      const leaving =
-        selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId));
+      const leaving = leaves(id);
       void trashWithDetach(id);
       if (leaving) select(null, true);
     },
-    [trashWithDetach, notes, selectedId, select],
+    [trashWithDetach, leaves, select],
   );
 
   const applyIntent = useCallback(
@@ -141,21 +173,30 @@ export function useShellActions(
         case "move":
           setMoveTarget(note);
           return;
+        case "icon":
+          setIconTarget(note);
+          return;
         case "export":
           void exportNote(note);
+          return;
+        case "export-tree":
+          void exportTree(note);
           return;
         case "publish":
           if (note.id !== selectedId) select(note.id);
           setPublishOpen(true);
           return;
-        case "archive":
+        case "archive": {
+          const leaving = leaves(note.id);
           module.archiveNote(note.id, true);
+          if (leaving) select(null, true);
           return;
+        }
         case "trash":
           trash(note.id);
       }
     },
-    [module, openDraft, select, selectedId, exportNote, trash],
+    [module, openDraft, select, selectedId, exportNote, exportTree, leaves, trash],
   );
 
   return {
@@ -164,6 +205,8 @@ export function useShellActions(
     trash,
     moveTarget,
     setMoveTarget,
+    iconTarget,
+    setIconTarget,
     pickMoveTarget,
     publishOpen,
     setPublishOpen,

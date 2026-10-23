@@ -12,6 +12,10 @@ describe("moduo-report.sh", () => {
       [path.join(ROOT, "tools/claude-plugins/moduo-agent/hooks/moduo-report.test.sh")],
       {
         encoding: "utf8",
+        // The hook reads the agent's name from the environment; a session
+        // that sets one (Claude Code with a Moduo key) must not leak it into
+        // the "no agent name" case.
+        env: { ...process.env, MODUO_AGENT_NAME: "" },
       },
     );
     expect(run.stdout + run.stderr).toContain("moduo-report: all passed");
