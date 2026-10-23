@@ -172,8 +172,9 @@
   --code-comment:  var(--muted-foreground);
 
   /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
-  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
-  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 45%, transparent);
+  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 14%, transparent);
+  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 32%, transparent);
+  --comment-mark-line:       color-mix(in oklch, var(--status-warning) 75%, transparent);
 
   --success-foreground: oklch(0.12 0 0);
   --warning-foreground: oklch(0.12 0 0);

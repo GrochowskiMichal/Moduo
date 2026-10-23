@@ -80,6 +80,7 @@ function renderSidebar(overrides: Partial<NotesSidebarProps> = {}) {
     onNewPage: rs.fn(),
     onCreateChild: rs.fn(),
     onUnfavorite: rs.fn(),
+    onAction: rs.fn(),
     onDropIntent: rs.fn(),
     onUnarchive: rs.fn(),
     onTrash: rs.fn(),
@@ -121,7 +122,7 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     expect(screen.queryAllByRole("treeitem").some((el) => el.textContent?.includes("Old"))).toBe(
       false,
     );
-    expect(screen.getByRole("button", { name: "Recently deleted" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deleted" })).toBeTruthy();
   });
 
   it("expands with →, steps into the child, and reports aria-level 2 there", () => {
