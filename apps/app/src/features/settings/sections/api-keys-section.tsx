@@ -45,7 +45,7 @@ import {
   scopeSummary,
   toKeyScopes,
 } from "../api-keys";
-import { isCheckedApp, returnsTo, UNCHECKED_APP_NOTE } from "../oauth-consent";
+import { connectedAppLine, isCheckedApp, UNCHECKED_APP_NOTE } from "../oauth-consent";
 import { KeyExpiryField, KeyScopeFields } from "./key-scope-fields";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -230,16 +230,7 @@ function ApiKeyRow({
             // No secret to show: the app signed in, so where it returns to says which one it is.
             // The scheme counts as on the consent screen: someapp://claude.ai is not claude.ai.
             <>
-              <p className="truncate text-xs text-muted-foreground">
-                {[
-                  returnsTo(apiKey.oauthClientScheme, apiKey.oauthClientDomain),
-                  apiKey.lastUsedAt
-                    ? `Last used ${formatFullDate(apiKey.lastUsedAt)}`
-                    : "Never used",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
+              <p className="truncate text-xs text-muted-foreground">{connectedAppLine(apiKey)}</p>
               {isCheckedApp(apiKey.oauthClientScheme, apiKey.oauthClientDomain) ? null : (
                 <p className="text-xs text-muted-foreground">{UNCHECKED_APP_NOTE}</p>
               )}

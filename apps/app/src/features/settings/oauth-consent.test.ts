@@ -4,20 +4,26 @@
 import type { PermissionKey } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
 
+import { formatDate, formatStamp, formatWhen } from "../../lib/time-format";
 import { DEFAULT_KEY_EXPIRY, DEFAULT_KEY_SCOPES, type KeyActor } from "./api-keys";
 import {
   appDisplayName,
   approveBlocker,
   CAP_MESSAGE,
+  connectedAppLine,
   consentCeilings,
   consentTitle,
   deniedRedirect,
   expiredMessage,
   initialDraft,
+  initialReplaceIds,
   initialWorkspaceId,
   isCheckedApp,
   moveLine,
   NO_ACCESS_MESSAGE,
+  otherConnectionLine,
+  replaceIdsToSend,
+  replaceLabel,
   returnsTo,
   ROLE_MESSAGE,
   shownScopes,
@@ -194,5 +200,67 @@ describe("consent model: deny after Auth approved by itself", () => {
     expect(url.searchParams.get("state")).toBe("xyz");
     expect(url.searchParams.get("error")).toBe("access_denied");
     expect(deniedRedirect("not a url")).toBeNull();
+  });
+});
+
+describe("duplicate connections (MCPO-5 follow-up)", () => {
+  const now = new Date("2026-10-23T15:00:00.000Z");
+  const stale = {
+    id: "c1",
+    workspaceId: "w2",
+    createdAt: "2026-10-21T09:00:00.000Z",
+    lastUsedAt: "2026-10-22T10:00:00.000Z",
+    recentlyUsed: false,
+  };
+  const live = {
+    id: "c2",
+    workspaceId: "w3",
+    createdAt: "2026-10-23T14:00:00.000Z",
+    lastUsedAt: "2026-10-23T14:59:30.000Z",
+    recentlyUsed: true,
+  };
+  const never = { ...stale, id: "c3", lastUsedAt: null };
+  const nameOf = (id: string) => ({ w2: "Elsewhere", w3: "Mine" })[id] ?? null;
+
+  it("ticks every other connection except one used in the last two minutes", () => {
+    expect(initialReplaceIds([live, stale, never])).toEqual(["c1", "c3"]);
+    expect(initialReplaceIds([live])).toEqual([]);
+    expect(initialReplaceIds([])).toEqual([]);
+  });
+
+  it("names the choice plainly", () => {
+    expect(replaceLabel("Claude")).toBe("Replace your other Claude connection");
+  });
+
+  it("says when each was connected and last used, and where when it's another workspace", () => {
+    expect(otherConnectionLine(stale, "w3", nameOf, now)).toBe(
+      `Connected ${formatDate(stale.createdAt, now)} · Last used ${formatWhen(stale.lastUsedAt, now)} · in Elsewhere`,
+    );
+    expect(otherConnectionLine(live, "w3", nameOf, now)).toBe(
+      `Connected ${formatDate(live.createdAt, now)} · Last used just now`,
+    );
+    expect(otherConnectionLine(never, "w9", () => null, now)).toBe(
+      `Connected ${formatDate(never.createdAt, now)} · Never used · in another workspace`,
+    );
+  });
+
+  it("sends only ticked ids that are still on offer", () => {
+    expect(replaceIdsToSend([stale, live], ["c2", "gone", "c1"])).toEqual(["c1", "c2"]);
+    expect(replaceIdsToSend([stale], [])).toEqual([]);
+  });
+
+  it("shows a connected app's date and last use to the minute in Settings", () => {
+    const key = {
+      oauthClientScheme: "https",
+      oauthClientDomain: "claude.ai",
+      createdAt: "2026-10-23T14:00:00.000Z",
+      lastUsedAt: "2026-10-23T14:59:30.000Z",
+    };
+    expect(connectedAppLine(key, now)).toBe(
+      `claude.ai · Connected ${formatStamp(key.createdAt, now)} · Last used ${formatStamp(key.lastUsedAt, now)}`,
+    );
+    expect(connectedAppLine({ ...key, lastUsedAt: null, oauthClientScheme: "someapp" }, now)).toBe(
+      `someapp://claude.ai · Connected ${formatStamp(key.createdAt, now)} · Never used`,
+    );
   });
 });

@@ -200,6 +200,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-24 · MCPO-5 follow-ups: Settings shows when each app was connected (to the minute); the consent screen offers to replace the person's other same-name/scheme/domain connections (ticked unless used in the last 2 min; `p_replace_ids`, revoked before the cap); envelope requests (MCP 2026-07-28) go to the SDK's `createMcpHandler`, unknown version headers no longer 400 → decisions/mcp.md
 - 2026-10-23 · MCPO-5: OAuth sign-in on in prod (MFA off), dogfooded with Claude Code and Claude; a Claude Connect lands in the browser's Claude account, repeats leave duplicate connections, Claude retries after a 400 on protocol 2026-07-28 → decisions/mcp.md
 - 2026-10-23 · Connections keep their return address's scheme (`oauth_client_scheme`), so Settings shows `someapp://claude.ai` as unchecked, not as claude.ai → decisions/mcp.md
 - 2026-10-23 · MCPO-6: `hints` on every tool (read / destructive / idempotent, listed as MCP annotations); Zod output schemas for the five main task reads, listed but not enforced at runtime; `structuredContent` = the text's value; list roots stay arrays (the SDK wraps them for 2025 clients) → decisions/mcp.md

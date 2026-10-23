@@ -14392,6 +14392,7 @@ export type Database = {
           p_authorization_id: string | null
           p_expires_in_days?: number | null
           p_include_private_chat?: boolean | null
+          p_replace_ids?: string[] | null
           p_scopes?: Json | null
           p_workspace_id: string | null
         }
@@ -14402,6 +14403,7 @@ export type Database = {
           include_private_chat: boolean
           moved_from: string
           name: string
+          replaced: string[]
           scopes: Json
           workspace_id: string
         }[]

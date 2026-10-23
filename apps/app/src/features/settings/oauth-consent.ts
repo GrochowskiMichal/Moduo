@@ -3,6 +3,7 @@
 // an ordinary scoped connection: the same None / View / Edit card, caps and
 // expiry as a new API key (api-keys.ts), so the two can't drift. No React here.
 
+import { formatDate, formatStamp, formatWhen } from "../../lib/time-format";
 import {
   clampScopes,
   DEFAULT_KEY_EXPIRY,
@@ -46,6 +47,29 @@ export function returnsTo(
   if (s === "https" || s === "http") return host || null;
   if (!s) return host || null;
   return `${s}://${host}`;
+}
+
+/**
+ * A connected app's line in Settings → API keys: where it returns, when it
+ * was connected and when it was last used, to the minute, so two "Claude"
+ * connections made the same day can be told apart (MCPO-5 follow-up).
+ */
+export function connectedAppLine(
+  key: {
+    oauthClientScheme: string | null;
+    oauthClientDomain: string | null;
+    createdAt: string;
+    lastUsedAt: string | null;
+  },
+  now: Date = new Date(),
+): string {
+  return [
+    returnsTo(key.oauthClientScheme, key.oauthClientDomain),
+    key.createdAt ? `Connected ${formatStamp(key.createdAt, now)}` : null,
+    key.lastUsedAt ? `Last used ${formatStamp(key.lastUsedAt, now)}` : "Never used",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 export const UNCHECKED_APP_NOTE = "Moduo hasn't checked this app.";
@@ -221,4 +245,56 @@ export function deniedRedirect(heldRedirect: string): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Claude registers anew on every Connect, so a person can end up with several
+ * identical "Claude" connections (MCPO-5 follow-up; docs/decisions/mcp.md).
+ * The screen offers to replace the person's other connections to the same
+ * app: ticked by default unless one was used in the last two minutes (it may
+ * be the one in use now, say Claude in another window), which stays an
+ * opt-in tick.
+ */
+export type OtherConnection = {
+  id: string;
+  workspaceId: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  recentlyUsed: boolean;
+};
+
+/** The others ticked when the screen opens. */
+export function initialReplaceIds(others: readonly OtherConnection[]): string[] {
+  return others.filter((o) => !o.recentlyUsed).map((o) => o.id);
+}
+
+export function replaceLabel(appName: string): string {
+  return `Replace your other ${appName} connection`;
+}
+
+/** "Connected Oct 21 · Last used Yesterday, 3:00 PM · in Elsewhere": enough to tell one from another. */
+export function otherConnectionLine(
+  other: OtherConnection,
+  pickedWorkspaceId: string | null,
+  nameOf: (workspaceId: string) => string | null,
+  now: Date = new Date(),
+): string {
+  const used = other.recentlyUsed
+    ? "Last used just now"
+    : other.lastUsedAt
+      ? `Last used ${formatWhen(other.lastUsedAt, now)}`
+      : "Never used";
+  const parts = [`Connected ${formatDate(other.createdAt, now)}`, used];
+  if (other.workspaceId !== pickedWorkspaceId) {
+    parts.push(`in ${nameOf(other.workspaceId) ?? "another workspace"}`);
+  }
+  return parts.join(" · ");
+}
+
+/** The ids to send: the ticked ones still on offer. */
+export function replaceIdsToSend(
+  others: readonly OtherConnection[],
+  ticked: readonly string[],
+): string[] {
+  return others.filter((o) => ticked.includes(o.id)).map((o) => o.id);
 }
