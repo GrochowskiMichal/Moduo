@@ -139,6 +139,8 @@ const NAMED_WRITE_RPCS = new Set([
   "workspace_api_keys_revoke",
   "workspace_api_keys_set_scopes",
   "workspace_api_keys_set_private_chat",
+  "workspace_api_keys_rename",
+  "workspace_api_keys_connect_oauth",
 ]);
 
 describe("every RPC the app calls is sorted into read or write", () => {

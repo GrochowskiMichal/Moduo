@@ -1,8 +1,8 @@
-import { normalizeMcpKeyScope } from "@contracts/vocabularies";
-import { Check, Copy, Plus, SlidersHorizontal, X } from "lucide-react";
+import { Check, Copy, Pencil, Plus, SlidersHorizontal, Unplug, X } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -16,7 +16,6 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Switch } from "../../../components/ui/switch";
 import type { WorkspaceApiKey } from "../../../lib/runtime";
 import { formatFullDate } from "../../../lib/time-format";
@@ -25,41 +24,36 @@ import { useWorkspace } from "../../../providers/workspace-provider";
 import {
   ceilingHint,
   clampScopes,
+  CONNECT_BY_URL_LEAD,
   DEFAULT_KEY_EXPIRY,
   DEFAULT_KEY_SCOPES,
+  disconnectCopy,
   effectiveScopes,
   expiryDays,
   grantsAnyAccess,
-  KEY_EXPIRY_OPTIONS,
-  KEY_SCOPE_LABELS,
-  KEY_SCOPE_MODULES,
+  isConnectedApp,
   type KeyActor,
+  type KeyCeilings,
+  keyCeilings,
   keyLifecycle,
-  keyScopeCap,
-  MCP_KEY_MODULES,
-  MCP_KEY_SCOPES,
+  KEYS_FOR_SCRIPTS_LABEL,
+  keyScopeCaps,
   type McpKeyModule,
-  type McpKeyScope,
   type McpKeyScopes,
   sameScopes,
-  scopeCeiling,
-  scopeDependencyNotes,
   scopesPayload,
   scopeSummary,
   toKeyScopes,
 } from "../api-keys";
+import { KeyExpiryField, KeyScopeFields } from "./key-scope-fields";
 import { SettingsSectionShell } from "./section-shell";
 
-const RANK: Record<McpKeyScope, number> = { none: 0, view: 1, edit: 2 };
 const NO_ACCESS_HINT = "Give the key access to at least one module.";
 const CHAT_PLAN_NOTE = "Chat is on the Duo and Team plans.";
 
 function readySentence(name: string) {
   return `${name} is ready. Copy the key now — it won't be shown again.`;
 }
-
-/** Per module: the highest level that may be chosen, and why anything above it is off. */
-type Ceilings = Record<McpKeyModule, { max: McpKeyScope; why: string | null }>;
 
 /** A labelled cluster (eyebrow above a card), mirroring the other settings sections. */
 function KeysGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -70,97 +64,6 @@ function KeysGroup({ label, children }: { label: string; children: ReactNode }) 
         {children}
       </section>
     </div>
-  );
-}
-
-/**
- * The per-module access picker: one row per module, a None / View / Edit
- * segmented control each. Shared by the new-key card and a key's edit state,
- * and mirrored by the marketing landing's key card, so the labels stay plain.
- * Levels above a row's ceiling are off, with the reason under the hint; when a
- * grant lists tools that also need another module, a note says which.
- */
-function KeyScopeFields({
-  value,
-  onChange,
-  ceilings,
-  extraNotes,
-  disabled,
-  ...group
-}: {
-  value: McpKeyScopes;
-  onChange: (next: McpKeyScopes) => void;
-  ceilings: Ceilings;
-  extraNotes?: Partial<Record<McpKeyModule, string>>;
-  disabled?: boolean;
-  "aria-label"?: string;
-  "aria-labelledby"?: string;
-  /** A reason that covers every row (someone else's key), read once on entering the group. */
-  "aria-describedby"?: string;
-}) {
-  const idPrefix = useId();
-  const notes = scopeDependencyNotes(value);
-  return (
-    <fieldset className="m-0 min-w-0 border-0 p-0" {...group}>
-      <ul className="flex flex-col">
-        {KEY_SCOPE_MODULES.map(({ module, label, hint }) => {
-          const note = notes[module];
-          const { max, why } = ceilings[module];
-          const limit = RANK[max] < RANK.edit ? why : null;
-          const extra = extraNotes?.[module] ?? null;
-          const hintId = `${idPrefix}-${module}-hint`;
-          const limitId = `${idPrefix}-${module}-limit`;
-          const noteId = `${idPrefix}-${module}-note`;
-          const describedBy = [hintId, limit ? limitId : null, note || extra ? noteId : null]
-            .filter(Boolean)
-            .join(" ");
-          return (
-            <li
-              key={module}
-              className="flex items-center justify-between gap-4 border-b border-border py-2.5 first:pt-0 last:border-b-0 last:pb-0"
-            >
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm text-foreground">{label}</span>
-                <span id={hintId} className="truncate text-xs text-muted-foreground">
-                  {hint}
-                </span>
-                {limit ? (
-                  <span id={limitId} className="text-xs text-muted-foreground">
-                    {limit}
-                  </span>
-                ) : null}
-                {/* Its own line, and it wraps: the last words are the part to act on. */}
-                {note || extra ? (
-                  <span id={noteId} className="text-xs text-warning">
-                    {[note, extra].filter(Boolean).join(" ")}
-                  </span>
-                ) : null}
-              </div>
-              <SegmentedControl
-                aria-label={`${label} access`}
-                aria-describedby={describedBy}
-                items={MCP_KEY_SCOPES.map((level) => ({
-                  value: level,
-                  label: KEY_SCOPE_LABELS[level],
-                  // The current level stays selectable even above the ceiling,
-                  // so a narrowed role never traps a row (the server agrees).
-                  disabled: RANK[level] > RANK[max] && level !== value[module],
-                }))}
-                value={value[module]}
-                onValueChange={(next) =>
-                  onChange({ ...value, [module]: normalizeMcpKeyScope(next) })
-                }
-                disabled={disabled}
-              />
-            </li>
-          );
-        })}
-      </ul>
-      {/* One quiet live region for the notes, so a new one is read out without re-reading every hint. */}
-      <p className="sr-only" aria-live="polite">
-        {Object.values(notes).join(" ")}
-      </p>
-    </fieldset>
   );
 }
 
@@ -188,12 +91,13 @@ function ApiKeyRow({
   onToggleEdit,
   onSave,
   onRevoke,
+  onRename,
   privateBusy,
   onSetPrivateChat,
 }: {
   apiKey: WorkspaceApiKey;
   owner: KeyOwner;
-  ceilings: Ceilings;
+  ceilings: KeyCeilings;
   extraNotes?: Partial<Record<McpKeyModule, string>>;
   editing: boolean;
   draft: McpKeyScopes;
@@ -202,6 +106,8 @@ function ApiKeyRow({
   onToggleEdit: () => void;
   onSave: () => void;
   onRevoke: () => void;
+  /** Resolves true once the new name is stored; the field stays open otherwise. */
+  onRename: (name: string) => Promise<boolean>;
   privateBusy: boolean;
   onSetPrivateChat: (on: boolean) => void;
 }) {
@@ -223,6 +129,33 @@ function ApiKeyRow({
   // this editor, which would otherwise pull focus back here (WebKit doesn't
   // focus clicked buttons, so focus sits on <body> either way).
   const restoreFocus = useRef(false);
+  const app = isConnectedApp(apiKey);
+  const [renaming, setRenaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState(apiKey.name);
+  const [renameBusy, setRenameBusy] = useState(false);
+  const renameButtonRef = useRef<HTMLButtonElement>(null);
+
+  const startRename = () => {
+    setNameDraft(apiKey.name);
+    setRenaming(true);
+  };
+  const stopRename = () => {
+    setRenaming(false);
+    // The field unmounts; go back to the button that opened it.
+    window.setTimeout(() => renameButtonRef.current?.focus(), 0);
+  };
+  const commitRename = async () => {
+    if (renameBusy) return;
+    const next = nameDraft.trim();
+    if (!next || next === apiKey.name) {
+      stopRename();
+      return;
+    }
+    setRenameBusy(true);
+    const ok = await onRename(next);
+    setRenameBusy(false);
+    if (ok) stopRename();
+  };
 
   // Closing the editor unmounts Cancel / Save, and a failed save re-enables
   // controls that were disabled while it ran. Either way, if focus fell to
@@ -252,18 +185,66 @@ function ApiKeyRow({
     <li className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <p className="truncate text-sm text-foreground">{apiKey.name}</p>
+          {renaming ? (
+            <Input
+              aria-label={`Name for ${apiKey.name}`}
+              value={nameDraft}
+              maxLength={80}
+              autoFocus
+              // Renaming usually replaces the name: start with it selected.
+              onFocus={(event) => event.currentTarget.select()}
+              readOnly={renameBusy}
+              size="sm"
+              onChange={(event) => setNameDraft(event.target.value)}
+              onBlur={() => void commitRename()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") void commitRename();
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  stopRename();
+                }
+              }}
+            />
+          ) : (
+            <div className="flex min-w-0 items-center gap-2">
+              <p className="truncate text-sm text-foreground">{apiKey.name}</p>
+              {app ? <Badge variant="outline">Connected app</Badge> : null}
+              {owner.isMine ? (
+                <IconButton
+                  ref={renameButtonRef}
+                  icon={Pencil}
+                  label={`Rename ${apiKey.name}`}
+                  tooltip="Rename"
+                  onClick={startRename}
+                />
+              ) : null}
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">{scopeSummary(effective)}</p>
           <p className="text-xs text-muted-foreground">
             {owner.line}
             {limited && owner.actor ? ` · Limited to what ${owner.name} can do` : ""}
           </p>
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {apiKey.keyPrefix}…
-            <span className="ml-2 font-sans">
-              {apiKey.lastUsedAt ? `Last used ${formatFullDate(apiKey.lastUsedAt)}` : "Never used"}
-            </span>
-          </p>
+          {app ? (
+            // No secret to show: the app signed in, so where it returns to says which one it is.
+            <p className="truncate text-xs text-muted-foreground">
+              {[
+                apiKey.oauthClientDomain,
+                apiKey.lastUsedAt ? `Last used ${formatFullDate(apiKey.lastUsedAt)}` : "Never used",
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          ) : (
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {apiKey.keyPrefix}…
+              <span className="ml-2 font-sans">
+                {apiKey.lastUsedAt
+                  ? `Last used ${formatFullDate(apiKey.lastUsedAt)}`
+                  : "Never used"}
+              </span>
+            </p>
+          )}
           {life.expiryLine ? (
             <p
               className={`text-xs ${
@@ -275,7 +256,11 @@ function ApiKeyRow({
               }`}
             >
               {life.expiryLine}
-              {expired ? ". It no longer connects. Revoke it to clear it." : ""}
+              {expired
+                ? app
+                  ? ". The app is asked to sign in again."
+                  : ". It no longer connects. Revoke it to clear it."
+                : ""}
             </p>
           ) : null}
           {life.staleNote ? <p className="text-xs text-warning">{life.staleNote}</p> : null}
@@ -295,9 +280,9 @@ function ApiKeyRow({
             Edit access
           </Button>
           <IconButton
-            icon={X}
-            label={`Revoke ${apiKey.name}`}
-            tooltip="Revoke key"
+            icon={app ? Unplug : X}
+            label={`${app ? "Disconnect" : "Revoke"} ${apiKey.name}`}
+            tooltip={app ? "Disconnect" : "Revoke key"}
             onClick={onRevoke}
             className="text-destructive hover:bg-destructive/10 hover:text-destructive"
           />
@@ -310,8 +295,8 @@ function ApiKeyRow({
             {owner.isMine ? null : (
               <p id={reasonId} className="text-xs text-muted-foreground">
                 {owner.actor
-                  ? `${ceilingHint({ module: "tasks", isCreator: false, myCap: "none", creatorName: owner.name })} You can lower it or revoke it.`
-                  : "You can lower this key's access or revoke it."}
+                  ? `${ceilingHint({ module: "tasks", isCreator: false, myCap: "none", creatorName: owner.name })} You can lower it or ${app ? "disconnect" : "revoke"} it.`
+                  : `You can lower this key's access or ${app ? "disconnect" : "revoke"} it.`}
               </p>
             )}
             <KeyScopeFields
@@ -350,8 +335,10 @@ function ApiKeyRow({
           <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">
               {draftGrantsAccess
-                ? "Applies right away. Reconnect your AI app to pick up new tools."
-                : `${NO_ACCESS_HINT} To cut it off, revoke it.`}
+                ? app
+                  ? "Applies right away. The app picks up new tools when it reloads them."
+                  : "Applies right away. Reconnect your AI app to pick up new tools."
+                : `${NO_ACCESS_HINT} To cut it off, ${app ? "disconnect" : "revoke"} it.`}
             </p>
             <div className="flex shrink-0 items-center gap-2">
               <Button type="button" variant="ghost" onClick={closeFromHere} disabled={saving}>
@@ -426,23 +413,11 @@ export function ApiKeysSection() {
   const me: KeyActor | null = selectedWorkspace
     ? { role: selectedWorkspace.role, perms: myPerms }
     : null;
-  const myCaps = Object.fromEntries(
-    MCP_KEY_MODULES.map((module) => [module, keyScopeCap(me, module)]),
-  ) as McpKeyScopes;
+  const myCaps = keyScopeCaps(me);
 
-  const ceilingsFor = (stored: McpKeyScopes, isMine: boolean, ownerName: string): Ceilings =>
-    Object.fromEntries(
-      MCP_KEY_MODULES.map((module) => {
-        const myCap = myCaps[module];
-        const max = scopeCeiling({ stored: stored[module], isCreator: isMine, myCap });
-        // Someone else's key: one reason for every row, said once above them.
-        const why =
-          isMine && RANK[max] < RANK.edit
-            ? ceilingHint({ module, isCreator: true, myCap, creatorName: ownerName })
-            : null;
-        return [module, { max, why }];
-      }),
-    ) as Ceilings;
+  // Someone else's key: one reason for every row, said once above them.
+  const ceilingsFor = (stored: McpKeyScopes, isMine: boolean, ownerName: string): KeyCeilings =>
+    keyCeilings({ stored, isMine, ownerName, myCaps });
   // A new key holds nothing yet: each row goes up to what you can do yourself.
   const newKeyCeilings = ceilingsFor(toKeyScopes({}), true, "you");
   // The form keeps your choice; what it shows and sends never exceeds what you
@@ -645,16 +620,44 @@ export function ApiKeysSection() {
 
   const handleRevoke = async (key: WorkspaceApiKey) => {
     if (!runtime) return;
+    const app = isConnectedApp(key);
     try {
-      await runtime.workspace.revokeApiKey(key.id);
+      if (app) await runtime.workspace.disconnectApp(key);
+      else await runtime.workspace.revokeApiKey(key.id);
       setKeys((prev) => prev?.filter((k) => k.id !== key.id) ?? prev);
       setEditingId((current) => (current === key.id ? null : current));
+      if (app) toast.success(`${key.name} is disconnected.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Couldn't revoke the key.");
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : app
+            ? "Couldn't disconnect it."
+            : "Couldn't revoke the key.",
+      );
+    }
+  };
+
+  const handleRename = async (key: WorkspaceApiKey, next: string): Promise<boolean> => {
+    if (!runtime) return false;
+    try {
+      const stored = await runtime.workspace.renameApiKey(key.id, next);
+      setKeys((prev) => prev?.map((k) => (k.id === key.id ? { ...k, name: stored } : k)) ?? prev);
+      return true;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't rename it.");
+      return false;
     }
   };
 
   const endpoint = runtime?.workspace.getMcpEndpoint() ?? "";
+  const revokingApp = revokeTarget ? isConnectedApp(revokeTarget) : false;
+  const disconnect = disconnectCopy(revokeTarget?.name ?? "");
+  const appCount = keys?.filter(isConnectedApp).length ?? 0;
+  const listLabel =
+    keys && keys.length > 0
+      ? `${appCount > 0 ? "Connected apps and keys" : "Keys"} · ${keys.length}`
+      : "Connected apps and keys";
 
   return (
     <SettingsSectionShell
@@ -672,89 +675,74 @@ export function ApiKeysSection() {
       ) : (
         <>
           <KeysGroup label="Connector">
-            <p className="text-sm text-muted-foreground">
-              Point your AI app at this address and give it a key. A key reaches only the modules
-              you choose — View lets it read, Edit also lets it make changes — and it never gets
-              more than the person who made it. Everything it does is attributed in the activity
-              trail.
-            </p>
+            <p className="text-sm text-foreground">{CONNECT_BY_URL_LEAD}</p>
             <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 py-1 pr-1 pl-3">
               <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
                 {endpoint}
               </p>
               <IconButton
                 icon={copied === "endpoint" ? Check : Copy}
-                label={copied === "endpoint" ? "Copied" : "Copy MCP endpoint"}
+                label={copied === "endpoint" ? "Copied" : "Copy connector URL"}
                 onClick={() => void copy(endpoint, "endpoint")}
                 className={copied === "endpoint" ? "text-success" : undefined}
               />
             </div>
+            <p className="text-xs text-muted-foreground">
+              An app reaches only the modules you choose: View lets it read, Edit also lets it make
+              changes, and it never gets more than you can do. Everything it does is attributed in
+              the activity trail.
+            </p>
           </KeysGroup>
 
-          <KeysGroup label="New key">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="api-key-name">Name</Label>
-              <Input
-                id="api-key-name"
-                value={name}
-                maxLength={80}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="e.g. Claude"
-                // Read-only, not disabled, while creating: keeps the caret for Enter-to-create.
-                readOnly={creating}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void handleCreate();
-                }}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <span id="api-key-access" className="text-sm font-medium text-foreground">
-                Access
-              </span>
-              <KeyScopeFields
-                aria-labelledby="api-key-access"
-                value={shownNewScopes}
-                onChange={setNewScopes}
-                ceilings={newKeyCeilings}
-                extraNotes={chatNotes}
-                disabled={creating}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">Expires after</span>
-                <span id="api-key-expiry-hint" className="text-xs text-muted-foreground">
-                  A key that stops working on its own limits what a leak can do.
-                </span>
+          <KeysGroup label={listLabel}>
+            {loadFailed ? (
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-muted-foreground" role="alert">
+                  Couldn&apos;t load this workspace&apos;s keys.
+                </p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void refresh()}>
+                  Try again
+                </Button>
               </div>
-              <SegmentedControl
-                aria-label="Expires after"
-                aria-describedby="api-key-expiry-hint"
-                items={KEY_EXPIRY_OPTIONS.map(({ value, label }) => ({ value, label }))}
-                value={expiry}
-                onValueChange={setExpiry}
-                disabled={creating}
-              />
-            </div>
-            <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+            ) : keys === null ? (
+              <p className="text-xs text-muted-foreground">Loading…</p>
+            ) : keys.length === 0 ? (
               <p className="text-xs text-muted-foreground">
-                {newKeyGrantsAccess
-                  ? "The key acts as you. You'll see it once, right after you create it."
-                  : NO_ACCESS_HINT}
+                Nothing connected yet. Apps you connect by URL show up here, and so do keys.
               </p>
-              <Button
-                ref={createButtonRef}
-                type="button"
-                onClick={() => void handleCreate()}
-                disabled={!canCreate}
-              >
-                <Plus aria-hidden />
-                {creating ? "Creating…" : "Create key"}
-              </Button>
-            </div>
+            ) : (
+              <ul className="flex flex-col gap-1.5">
+                {keys.map((key) => {
+                  const owner = ownerOf(key);
+                  return (
+                    <ApiKeyRow
+                      key={key.id}
+                      apiKey={key}
+                      owner={owner}
+                      ceilings={ceilingsFor(toKeyScopes(key.scopes), owner.isMine, owner.name)}
+                      extraNotes={chatNotes}
+                      editing={editingId === key.id}
+                      draft={editScopes}
+                      saving={saving}
+                      onDraftChange={setEditScopes}
+                      onToggleEdit={() => toggleEdit(key)}
+                      onSave={() => void handleSave(key)}
+                      onRevoke={() => setRevokeTarget(key)}
+                      onRename={(next) => handleRename(key, next)}
+                      privateBusy={privateBusyId === key.id}
+                      onSetPrivateChat={(on) => void handleSetPrivateChat(key, on)}
+                    />
+                  );
+                })}
+              </ul>
+            )}
           </KeysGroup>
 
-          <KeysGroup label={keys && keys.length > 0 ? `Keys · ${keys.length}` : "Keys"}>
+          <KeysGroup label={KEYS_FOR_SCRIPTS_LABEL}>
+            <p className="text-xs text-muted-foreground">
+              A key is pasted into the tool as a header instead of signing in. Point the tool at the
+              connector URL above.
+            </p>
             {/* Always mounted, so the reveal is announced — the sentence only, never the secret. */}
             <p role="status" className="sr-only">
               {announcement}
@@ -778,45 +766,56 @@ export function ApiKeysSection() {
                 <IconButton icon={X} label="Dismiss" onClick={() => setRevealed(null)} />
               </div>
             ) : null}
-
-            {loadFailed ? (
-              <div className="flex items-center gap-2">
-                <p className="text-xs text-muted-foreground" role="alert">
-                  Couldn&apos;t load this workspace&apos;s keys.
-                </p>
-                <Button type="button" variant="ghost" size="sm" onClick={() => void refresh()}>
-                  Try again
-                </Button>
-              </div>
-            ) : keys === null ? (
-              <p className="text-xs text-muted-foreground">Loading…</p>
-            ) : keys.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No keys yet.</p>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {keys.map((key) => {
-                  const owner = ownerOf(key);
-                  return (
-                    <ApiKeyRow
-                      key={key.id}
-                      apiKey={key}
-                      owner={owner}
-                      ceilings={ceilingsFor(toKeyScopes(key.scopes), owner.isMine, owner.name)}
-                      extraNotes={chatNotes}
-                      editing={editingId === key.id}
-                      draft={editScopes}
-                      saving={saving}
-                      onDraftChange={setEditScopes}
-                      onToggleEdit={() => toggleEdit(key)}
-                      onSave={() => void handleSave(key)}
-                      onRevoke={() => setRevokeTarget(key)}
-                      privateBusy={privateBusyId === key.id}
-                      onSetPrivateChat={(on) => void handleSetPrivateChat(key, on)}
-                    />
-                  );
-                })}
-              </ul>
-            )}
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="api-key-name">Name</Label>
+              <Input
+                id="api-key-name"
+                value={name}
+                maxLength={80}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="e.g. Nightly import"
+                // Read-only, not disabled, while creating: keeps the caret for Enter-to-create.
+                readOnly={creating}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void handleCreate();
+                }}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <span id="api-key-access" className="text-sm font-medium text-foreground">
+                Access
+              </span>
+              <KeyScopeFields
+                aria-labelledby="api-key-access"
+                value={shownNewScopes}
+                onChange={setNewScopes}
+                ceilings={newKeyCeilings}
+                extraNotes={chatNotes}
+                disabled={creating}
+              />
+            </div>
+            <KeyExpiryField
+              value={expiry}
+              onChange={setExpiry}
+              hint="A key that stops working on its own limits what a leak can do."
+              disabled={creating}
+            />
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground">
+                {newKeyGrantsAccess
+                  ? "The key acts as you. You'll see it once, right after you create it."
+                  : NO_ACCESS_HINT}
+              </p>
+              <Button
+                ref={createButtonRef}
+                type="button"
+                onClick={() => void handleCreate()}
+                disabled={!canCreate}
+              >
+                <Plus aria-hidden />
+                {creating ? "Creating…" : "Create key"}
+              </Button>
+            </div>
           </KeysGroup>
 
           <Dialog
@@ -825,10 +824,13 @@ export function ApiKeysSection() {
           >
             <DialogContent className="max-w-sm">
               <DialogHeader>
-                <DialogTitle>Revoke {revokeTarget?.name || "this key"}?</DialogTitle>
+                <DialogTitle>
+                  {revokingApp ? disconnect.title : `Revoke ${revokeTarget?.name || "this key"}?`}
+                </DialogTitle>
                 <DialogDescription>
-                  Anything connected with this key loses access immediately. This can&apos;t be
-                  undone.
+                  {revokingApp
+                    ? disconnect.body
+                    : "Anything connected with this key loses access immediately. This can't be undone."}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -844,7 +846,7 @@ export function ApiKeysSection() {
                     if (key) void handleRevoke(key);
                   }}
                 >
-                  Revoke key
+                  {revokingApp ? "Disconnect" : "Revoke key"}
                 </Button>
               </DialogFooter>
             </DialogContent>

@@ -12,7 +12,8 @@ export type WorkspaceApiKey = {
   id: string;
   workspaceId: string;
   name: string;
-  keyPrefix: string;
+  /** The secret's visible start; null for a connected app (MCPO-4), which has no secret. */
+  keyPrefix: string | null;
   scopes: Record<string, string>;
   /** The person the key acts as. Null for keys from before creators were recorded (they can't connect). */
   createdBy: string | null;
@@ -22,6 +23,39 @@ export type WorkspaceApiKey = {
   expiresAt: string | null;
   /** Chat (CV-21): the key also reads the private channels its creator is in. Off by default. */
   includePrivateChat: boolean;
+  /** MCPO-3: a connected app (signed in with OAuth) instead of a pasted key; null for a key. */
+  oauthClientId: string | null;
+  /** The host the app's sign-in returns to ("claude.ai"); null for a key. */
+  oauthClientDomain: string | null;
+};
+
+/**
+ * What the consent screen (/oauth/consent, MCPO-4) knows about an app's
+ * sign-in. `heldRedirect` is set when Supabase Auth approved the sign-in by
+ * itself (the person approved this app before): the code is already in it,
+ * so the page follows it only after the person's own Approve.
+ */
+export type OAuthConsentRequest = {
+  authorizationId: string;
+  clientId: string;
+  /** The app's registered name; null when it gave none. */
+  appName: string | null;
+  /** The host the sign-in returns to; null when unreadable. */
+  clientDomain: string | null;
+  /** Its scheme ("https", "http" for localhost, or an app's own like "cursor"). */
+  clientScheme: string | null;
+  /** The person's live connection to this app (a reconnect), in whichever workspace. */
+  connection: {
+    id: string;
+    workspaceId: string;
+    name: string;
+    scopes: Record<string, string>;
+    expiresAt: string | null;
+    includePrivateChat: boolean;
+  } | null;
+  /** Workspaces the person manages keys in that are at the 20 cap. */
+  fullWorkspaceIds: string[];
+  heldRedirect: string | null;
 };
 
 export type WorkspaceRuntime = {
@@ -136,6 +170,31 @@ export type WorkspaceRuntime = {
   /** Chat (CV-21): your own live keys that read chat here (Settings' reply switches). */
   listMyChatKeys(workspaceId: string): Promise<Array<{ id: string; name: string }>>;
   revokeApiKey(keyId: string): Promise<void>;
+  /** Rename a key or connection (its trail name). Only the person it acts as. Resolves to the stored name. */
+  renameApiKey(keyId: string, name: string): Promise<string>;
+  /**
+   * Disconnect a connected app: revokes its row (the connector refuses it at
+   * once) and, when it is the caller's own, withdraws their grant so the app
+   * can't refresh silently. The grant step is best effort.
+   */
+  disconnectApp(key: Pick<WorkspaceApiKey, "id" | "oauthClientId" | "createdBy">): Promise<void>;
+  /**
+   * Read an app's sign-in for the consent screen (this binds it to the
+   * signed-in person). Null when it is unknown, used up or expired.
+   */
+  readOAuthRequest(authorizationId: string): Promise<OAuthConsentRequest | null>;
+  /** The consent screen's Approve, before Supabase's: creates, updates or moves the connection. */
+  connectOAuthApp(input: {
+    authorizationId: string;
+    workspaceId: string;
+    scopes: Record<string, string>;
+    expiresInDays: number | null;
+    includePrivateChat: boolean;
+  }): Promise<{ id: string; created: boolean; movedFrom: string | null }>;
+  /** Supabase's approve; resolves to the URL that returns to the app with its code. */
+  approveOAuthRequest(authorizationId: string): Promise<string>;
+  /** Supabase's deny; resolves to the URL that tells the app no. */
+  denyOAuthRequest(authorizationId: string): Promise<string>;
   /** The Moduo MCP connector URL agents connect to (same on web + desktop). */
   getMcpEndpoint(): string;
 };

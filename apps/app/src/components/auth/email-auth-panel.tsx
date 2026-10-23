@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ModuoMark } from "@/components/ui/moduo-mark";
 import { notifyProfileUpdated, writeStoredAvatar } from "@/features/profile/profile-storage";
 import { joinPath, takePendingJoin } from "@/features/workspaces/invite-join";
+import { consentPath, takePendingConsent } from "@/features/workspaces/pending-consent";
 import type { AuthMnemonic } from "@/lib/runtime";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -202,6 +203,15 @@ export function EmailAuthPanel({ notice }: EmailAuthPanelProps) {
     if (verifyErr) {
       window.sessionStorage.removeItem("moduo:auth_resolving");
       setError(verifyErr.message);
+      return;
+    }
+
+    // An app's sign-in opened while signed out (MCPO-4): back to its consent
+    // screen. Supabase Auth keeps it only minutes, so it goes before anything else.
+    const pendingConsent = takePendingConsent();
+    if (pendingConsent) {
+      window.sessionStorage.removeItem("moduo:auth_resolving");
+      window.location.href = consentPath(pendingConsent);
       return;
     }
 

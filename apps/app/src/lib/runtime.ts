@@ -18,6 +18,7 @@ export type {
   RuntimeCapabilities,
   RuntimeResult,
   RuntimeSession,
+  OAuthConsentRequest,
   WorkspaceApiKey,
 } from "./runtime.types";
 

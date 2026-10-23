@@ -304,11 +304,16 @@ export const webWorkspace: WorkspaceRuntime = {
         .eq("workspace_id", workspaceId)
         .is("revoked_at", null)
         .order("created_at", { ascending: false });
-    let { data, error } = await list(`${columns}, expires_at, include_private_chat`);
+    let { data, error } = await list(
+      `${columns}, expires_at, include_private_chat, oauth_client_id, oauth_client_domain`,
+    );
     // 42703 = a newer column isn't on this backend yet (expires_at:
-    // 20261009210000; include_private_chat: CV-21's 20261017123000): list the
-    // keys without them rather than lose the whole list.
+    // 20261009210000; include_private_chat: CV-21's 20261017123000;
+    // oauth_client_*: MCPO-3's 20261023120000): list the keys without them
+    // rather than lose the whole list.
     // 42501: the column is there but not yet readable by clients.
+    if (error?.code === "42703" || error?.code === "42501")
+      ({ data, error } = await list(`${columns}, expires_at, include_private_chat`));
     if (error?.code === "42703" || error?.code === "42501")
       ({ data, error } = await list(`${columns}, expires_at`));
     if (error?.code === "42703") ({ data, error } = await list(columns));
@@ -317,13 +322,15 @@ export const webWorkspace: WorkspaceRuntime = {
       id: row.id,
       workspaceId: row.workspace_id,
       name: row.name,
-      keyPrefix: row.key_prefix,
+      keyPrefix: row.key_prefix ?? null,
       scopes: (row.scopes ?? {}) as Record<string, string>,
       createdBy: row.created_by ?? null,
       createdAt: row.created_at,
       lastUsedAt: row.last_used_at ?? null,
       expiresAt: row.expires_at ?? null,
       includePrivateChat: row.include_private_chat === true,
+      oauthClientId: row.oauth_client_id ?? null,
+      oauthClientDomain: row.oauth_client_domain ?? null,
     }));
   },
   async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
@@ -348,6 +355,8 @@ export const webWorkspace: WorkspaceRuntime = {
       lastUsedAt: null,
       expiresAt: row.expires_at ?? null,
       includePrivateChat: false,
+      oauthClientId: null,
+      oauthClientDomain: null,
       secret: row.secret,
     };
   },
@@ -394,6 +403,113 @@ export const webWorkspace: WorkspaceRuntime = {
   },
   async revokeApiKey(keyId) {
     await runRpc(supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: keyId }));
+  },
+  async renameApiKey(keyId, name) {
+    const { data, error } = await supabaseClient.rpc("workspace_api_keys_rename", {
+      p_key_id: keyId,
+      p_name: name,
+    });
+    if (error) {
+      if (error.code === "PGRST202") {
+        throw new Error("Renaming isn't available on this server yet.");
+      }
+      throw new DbError(error);
+    }
+    return typeof data === "string" ? data : name.trim();
+  },
+  async disconnectApp(key) {
+    await runRpc(supabaseClient.rpc("workspace_api_keys_revoke", { p_key_id: key.id }));
+    // The row is what the connector checks, so the app is cut off already.
+    // Withdrawing the person's own grant stops a silent refresh; another
+    // person's grant isn't ours to withdraw, and a server without the OAuth
+    // server answers an error we can ignore.
+    if (!key.oauthClientId) return;
+    const user = await getAuthedUser();
+    if (!user || user.id !== key.createdBy) return;
+    // Capped, so a slow Auth never keeps a disconnected row on screen.
+    const grant = supabaseClient.auth.oauth
+      .revokeGrant({ clientId: key.oauthClientId })
+      .catch((err: unknown) => console.warn("[api-keys] revokeGrant", err));
+    await Promise.race([grant, new Promise((resolve) => setTimeout(resolve, 4_000))]);
+  },
+  async readOAuthRequest(authorizationId) {
+    // Read through Auth first: that ties the sign-in to the signed-in person,
+    // and for an app they approved before it approves it on the spot and
+    // answers only the redirect (with the code), which the page holds.
+    const { data: details, error: authError } =
+      await supabaseClient.auth.oauth.getAuthorizationDetails(authorizationId);
+    if (authError) {
+      if (authError.status === 401 || authError.status === 403) throw authError;
+      return null;
+    }
+    const heldRedirect =
+      details && "redirect_url" in details && typeof details.redirect_url === "string"
+        ? details.redirect_url
+        : null;
+    const { data, error } = await supabaseClient.rpc("workspace_api_keys_oauth_request", {
+      p_authorization_id: authorizationId,
+    });
+    if (error) {
+      if (error.code === "P0002") return null;
+      throw new DbError(error);
+    }
+    const row = (data ?? {}) as Record<string, any>;
+    const conn = row.connection as Record<string, any> | null;
+    return {
+      authorizationId,
+      clientId: String(row.client_id ?? ""),
+      appName: typeof row.app_name === "string" ? row.app_name : null,
+      clientDomain: typeof row.client_domain === "string" ? row.client_domain : null,
+      clientScheme: typeof row.client_scheme === "string" ? row.client_scheme : null,
+      connection: conn
+        ? {
+            id: conn.id,
+            workspaceId: conn.workspace_id,
+            name: conn.name,
+            scopes: (conn.scopes ?? {}) as Record<string, string>,
+            expiresAt: conn.expires_at ?? null,
+            includePrivateChat: conn.include_private_chat === true,
+          }
+        : null,
+      fullWorkspaceIds: Array.isArray(row.full_workspace_ids)
+        ? row.full_workspace_ids.filter((id: unknown): id is string => typeof id === "string")
+        : [],
+      heldRedirect,
+    };
+  },
+  async connectOAuthApp({
+    authorizationId,
+    workspaceId,
+    scopes,
+    expiresInDays,
+    includePrivateChat,
+  }) {
+    const data = await runRpc(
+      supabaseClient.rpc("workspace_api_keys_connect_oauth", {
+        p_workspace_id: workspaceId,
+        p_authorization_id: authorizationId,
+        p_scopes: scopes,
+        p_expires_in_days: expiresInDays,
+        p_include_private_chat: includePrivateChat,
+      }),
+    );
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) throw new Error("Connecting returned nothing.");
+    return { id: row.id, created: row.created === true, movedFrom: row.moved_from ?? null };
+  },
+  async approveOAuthRequest(authorizationId) {
+    const { data, error } = await supabaseClient.auth.oauth.approveAuthorization(authorizationId, {
+      skipBrowserRedirect: true,
+    });
+    if (error) throw error;
+    return data.redirect_url;
+  },
+  async denyOAuthRequest(authorizationId) {
+    const { data, error } = await supabaseClient.auth.oauth.denyAuthorization(authorizationId, {
+      skipBrowserRedirect: true,
+    });
+    if (error) throw error;
+    return data.redirect_url;
   },
   getMcpEndpoint() {
     return `${SUPABASE_URL}/functions/v1/moduo-mcp`;
