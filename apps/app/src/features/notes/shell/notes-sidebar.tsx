@@ -29,13 +29,12 @@ import { cn } from "@/lib/utils";
 
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
-import type { NoteSearchResult } from "../search";
 import type { SidebarSections } from "../sections";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import { type DropIntent, keyboardReorderIntent, type SidebarSection } from "./drop-intent";
-import { footerCounts, FooterSubView, type FooterView } from "./sidebar-footer-views";
-import { SidebarSearchInput, SidebarSearchResults, useNoteSearch } from "./sidebar-search";
+import type { RowAction } from "./row-menu";
+import { FooterSubView, type FooterView } from "./sidebar-footer-views";
 import { rowKey, type TreeCtx, TreeNodes, TreeRow } from "./sidebar-tree";
 import { treeKeyAction, type TreeRow as KeyRow } from "./tree-keyboard";
 import { useSidebarDrag } from "./use-sidebar-drag";
@@ -55,6 +54,9 @@ export type NotesSidebarProps = {
   onFooterViewChange: (view: FooterView | null) => void;
   onOpen: (id: string) => void;
   onWarm?: (id: string) => void;
+  onAction: (action: RowAction, note: Note, rowKey: string) => void;
+  rowPopover?: (note: Note, rowKey: string) => ReactNode;
+  canShare?: boolean;
   onNewCapture: () => void;
   onNewPage: () => void;
   onCreateChild: (parentId: string) => void;
@@ -64,7 +66,6 @@ export type NotesSidebarProps = {
   onUnfavorite: (id: string) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
-  onSearch?: (query: string) => Promise<NoteSearchResult[]>;
   onImport?: () => void;
 };
 
@@ -76,7 +77,6 @@ export function NotesSidebar(props: NotesSidebarProps) {
   const setView = props.onFooterViewChange;
   const treeRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const search = useNoteSearch(props.onSearch);
   const drag = useSidebarDrag({
     notes,
     sections,
@@ -218,6 +218,9 @@ export function NotesSidebar(props: NotesSidebarProps) {
     onToggle: (key) => toggle(key),
     onOpen: props.onOpen,
     onWarm: props.onWarm,
+    onAction: props.onAction,
+    rowPopover: props.rowPopover,
+    canShare: props.canShare,
     onFocusRow: setFocusedKey,
     onCreateChild: props.onCreateChild,
   };
@@ -249,22 +252,11 @@ export function NotesSidebar(props: NotesSidebarProps) {
         />
       ) : (
         <>
-          {props.onSearch ? (
-            <SidebarSearchInput query={search.query} onChange={search.setQuery} />
-          ) : null}
           <div
             ref={scrollerRef}
             className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 pb-4"
           >
-            {search.active ? (
-              <SidebarSearchResults
-                results={search.results}
-                searching={search.searching}
-                failed={search.failed}
-                selectedId={selectedId}
-                onOpen={props.onOpen}
-              />
-            ) : showSkeleton ? (
+            {showSkeleton ? (
               <SkeletonRows />
             ) : (
               <div
@@ -338,11 +330,11 @@ export function NotesSidebar(props: NotesSidebarProps) {
         label="Published, archive and trash"
         className="mt-2 px-1 pt-2"
         items={[
+          footerItem("published", Globe, "Published"),
           footerItem("archive", Archive, "Archived"),
-          footerItem("trash", Trash2, "Recently deleted"),
-          ...(footerCounts(sections.footer).published > 0
-            ? [{ ...footerItem("published", Globe, "Published"), iconOnly: true }]
-            : []),
+          // "Deleted": three labels fit the rail only short (its view is
+          // still titled Recently deleted).
+          footerItem("trash", Trash2, "Deleted"),
           ...(props.onImport
             ? [{ icon: Import, label: "Import", onSelect: props.onImport, iconOnly: true }]
             : []),

@@ -171,7 +171,12 @@ async function post(body: unknown, authorization?: string) {
     }),
   );
   for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-  return { status: res.status, challenge: res.headers.get("www-authenticate"), body: (await res.json()) as any };
+  return {
+    status: res.status,
+    challenge: res.headers.get("www-authenticate"),
+    exposed: (res.headers.get("access-control-expose-headers") ?? "").toLowerCase().split(/\s*,\s*/),
+    body: (await res.json()) as any,
+  };
 }
 
 const listTools = { jsonrpc: "2.0", id: 1, method: "tools/list" };
@@ -183,6 +188,8 @@ describe("401 points at discovery", () => {
     expect(res.challenge).toBe(`Bearer resource_metadata="${METADATA}"`);
     // Pasted-key clients keep reading the same words.
     expect(res.body.error).toMatch(/^Missing, invalid, revoked or expired API key/);
+    // A browser hides the challenge from a client in a web page unless it is exposed.
+    expect(res.exposed).toContain("www-authenticate");
   });
 
   it("serves the protected-resource document naming the project's Supabase Auth", async () => {
@@ -269,6 +276,7 @@ describe("token maps to its connection", () => {
       expect(res.challenge).toBe(
         `Bearer error="invalid_token", error_description="${res.body.error_description}", resource_metadata="${METADATA}"`,
       );
+      expect(res.exposed).toContain("www-authenticate");
       // Refused before any tool ran.
       expect(calls.filter((c) => c.client !== "admin")).toEqual([]);
     });

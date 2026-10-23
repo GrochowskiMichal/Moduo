@@ -11,6 +11,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
 - 2026-10-23 · HV-11: supersession is data. Every decision entry has a status line (current, superseded, dropped) and links to what it replaces or what replaced it; `docs/decisions.md` is generated from the area files and CI fails when it is stale.
+- 2026-10-23 · HV-3: skill references are checked against a registry pinned in the repo; a user-only skill may be named only on a line that tells the person to type it.
 - 2026-10-23 · HV-4: the SQL/RLS tests, Rust gates and an e2e smoke run in CI, each only on its paths; the test DB is built from a prod schema snapshot kept in the Actions cache.
 - 2026-10-23 · Harness v3: the flow board becomes the harness, all of it before the closed alpha (Mike's call).
 - 2026-10-23 · `oven-sh/setup-bun` is pinned to a commit like every other third-party action; the CodeQL backlog was triaged once and dismissed with reasons.
