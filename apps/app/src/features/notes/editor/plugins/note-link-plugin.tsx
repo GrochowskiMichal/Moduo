@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 
+import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { closeOnOutsidePointer, registerMenuKeys } from "@/features/spine/editor/menu-keys";
 import { resolveMention } from "@/features/spine/mention";
 import { executeMention, type MentionContext } from "@/features/spine/mention-actions";
@@ -183,7 +184,10 @@ export function NoteLinkPlugin({
   return createPortal(
     <div
       ref={boxRef}
-      className="fixed z-[var(--z-popover)] max-h-80 w-72 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg scrollbar-thin"
+      className={cn(
+        FLOATING_SURFACE,
+        "fixed z-(--z-popover) max-h-80 w-72 overflow-y-auto p-1 shadow-lg scrollbar-thin",
+      )}
       style={{ top: menu.top, left: menu.left }}
       role="listbox"
       aria-label="Link a note"

@@ -13,9 +13,11 @@ import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { onSearchRequest } from "../../../components/app/search-events";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
+import { undoToast } from "../../../lib/undo-toast";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
@@ -28,6 +30,7 @@ import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
 import type { Note } from "../model";
 import { noteEditorName } from "../note-meta";
+import { isPublished } from "../publish";
 import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
@@ -68,7 +71,41 @@ function NotesShellBody() {
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
   const [importOpen, setImportOpen] = useState(false);
   const [footerView, setFooterView] = useState<FooterView | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const panels = useFeaturePanelState("notes");
+  const panelsRef = useRef(panels);
+  useEffect(() => {
+    panelsRef.current = panels;
+  });
+
+  // The bottom bar's Search finds notes while Notes is open (its sidebar
+  // search, opened with the sidebar if it was collapsed); ⌘K stays global.
+  const openSearch = useCallback(() => {
+    const { left, right } = panelsRef.current;
+    if (!left) dispatchLayoutPanelsSet({ feature: "notes", left: true, right });
+    setFooterView(null);
+    setSearchOpen(true);
+    // Already open: put the caret back in the box.
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLInputElement>('[data-slot="notes-search"] input')?.focus(),
+    );
+  }, []);
+  useEffect(
+    () =>
+      onSearchRequest(() => {
+        openSearch();
+        return true;
+      }),
+    [openSearch],
+  );
+  const searchText = useCallback(
+    (query: string) =>
+      runtime && workspaceId
+        ? runtime.notesV2.search({ workspaceId, query, limit: 30 })
+        : Promise.resolve([]),
+    [runtime, workspaceId],
+  );
 
   const isDraft = draft !== null && selectedId === draft.id;
   const liveNote = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
@@ -157,6 +194,15 @@ function NotesShellBody() {
               engine,
               materializeDraft: moduleRef.current.materializeDraft,
               title,
+            })
+          : null,
+      createSubpage: (title) =>
+        engine && canEdit && liveNoteId
+          ? createLinkedNote({
+              engine,
+              materializeDraft: moduleRef.current.materializeDraft,
+              title,
+              parentId: liveNoteId,
             })
           : null,
       openComments: () => shell.showPanelVariant("comments"),
@@ -343,13 +389,28 @@ function NotesShellBody() {
               onDropIntent={actions.applyIntent}
               onUnarchive={(id) => module.archiveNote(id, false)}
               onTrash={actions.trash}
-              onUnfavorite={(id) => module.setFavorite(id, false)}
+              onUnfavorite={(id, opts) => {
+                module.setFavorite(id, false);
+                if (opts?.undoable) {
+                  undoToast("Removed from favorites", {
+                    onUndo: () => module.setFavorite(id, true),
+                  });
+                }
+              }}
               onRestore={module.restoreNote}
               onPurge={(id) => {
                 void module.purgeNote(id);
                 if (selectedId === id) shell.select(null, true);
               }}
               onImport={canEdit && !degraded ? () => setImportOpen(true) : undefined}
+              search={{
+                open: searchOpen,
+                query: searchQuery,
+                onQueryChange: setSearchQuery,
+                onOpenChange: (open) => (open ? openSearch() : setSearchOpen(false)),
+                notes,
+                searchText,
+              }}
             />
           }
           center={
@@ -376,7 +437,20 @@ function NotesShellBody() {
               onOpenEntity={openEntity}
               onOpenDetail={() => shell.showPanelVariant("detail")}
               memberName={(id) => noteEditorName(id, userId, workspace.members)}
-              settled={module.syncStatus === "synced"}
+              onOpenComments={() => shell.showPanelVariant("comments")}
+              publicChip={
+                liveNote && isPublished(liveNote) && runtime ? (
+                  <NotePublishControl
+                    anchor="chip"
+                    note={liveNote}
+                    notes={notes}
+                    canEdit={canEdit && workspace.can("ws.publish")}
+                    publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
+                    onPublish={() => module.publishNote(liveNote.id)}
+                    onUnpublish={() => module.unpublishNote(liveNote.id)}
+                  />
+                ) : null
+              }
             />
           }
           right={

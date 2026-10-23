@@ -162,11 +162,38 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   },
 ] as const;
 
+/**
+ * The full menu (an empty `/`) leads with what only Moduo's notes do — a live
+ * task first, then a page, a link to a note, a person — and the Basics
+ * follow, so the spine isn't below the fold. A typed query still ranks by
+ * the registry order above.
+ */
+const GROUP_ORDER: readonly SlashCommandGroup[] = ["Insert", "Basics"];
+const INSERT_ORDER: readonly SlashCommandId[] = [
+  "task",
+  "page",
+  "note",
+  "contact",
+  "company",
+  "event",
+];
+
+function menuRank(cmd: SlashCommandDef): number {
+  const group = GROUP_ORDER.indexOf(cmd.group) * 100;
+  const pinned = INSERT_ORDER.indexOf(cmd.id);
+  // An Insert command not pinned above goes after the pinned ones.
+  const within =
+    cmd.group === "Insert" && pinned !== -1
+      ? pinned
+      : INSERT_ORDER.length + SLASH_COMMANDS.indexOf(cmd);
+  return group + within;
+}
+
 /** Case-insensitive filter over title + keywords. Empty query → the full
- * menu in registry order. Title-prefix matches rank before keyword ones. */
+ * menu, spine first. Title-prefix matches rank before keyword ones. */
 export function filterSlashCommands(query: string): SlashCommandDef[] {
   const q = query.trim().toLowerCase();
-  if (q === "") return [...SLASH_COMMANDS];
+  if (q === "") return [...SLASH_COMMANDS].sort((a, b) => menuRank(a) - menuRank(b));
   // Every typed word must start a word of the name, the id or a keyword:
   // "/head 2" finds Heading 2. Descriptions don't count ("/ul" matched Quote
   // and Divider through theirs).

@@ -17,6 +17,8 @@ export function createLinkedNote(input: {
   engine: Pick<NotesSyncEngineV2, "openDraft">;
   materializeDraft: (draft: Draft) => Promise<boolean>;
   title: string;
+  /** Under this note (a subpage, Turn into → Page); a root Inbox note when absent. */
+  parentId?: string | null;
 }): { id: string; created: Promise<boolean> } | null {
   const title = input.title.trim();
   if (title === "") return null;
@@ -25,5 +27,5 @@ export function createLinkedNote(input: {
   const built = buildDocStateFromMarkdown(id, titleAsMarkdown(title));
   if (built)
     Y.applyUpdate(session.doc, decodeBase64ToUint8(built.docStateB64), "notes:link-create");
-  return { id, created: input.materializeDraft({ id, parentId: null, title }) };
+  return { id, created: input.materializeDraft({ id, parentId: input.parentId ?? null, title }) };
 }

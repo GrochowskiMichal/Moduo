@@ -137,7 +137,8 @@ export default {
       id: "notes",
       title: "Notes",
       path: "/notes",
-      ready: readyWhen("[role='tree'][aria-label='Notes']"),
+      // The Inbox header is there in every state (an empty section has no tree).
+      ready: readyWhen("[data-drop-header='inbox']"),
       states: {
         default: {},
         empty: { seed: "empty" },

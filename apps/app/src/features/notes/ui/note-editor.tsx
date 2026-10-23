@@ -14,7 +14,13 @@
 import { $createCodeNode, $isCodeNode, type CodeNode } from "@lexical/code";
 import { registerCodeHighlighting } from "@lexical/code-prism";
 import { $createHorizontalRuleNode } from "@lexical/extension";
-import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
+import {
+  $createListItemNode,
+  $createListNode,
+  $isListItemNode,
+  $isListNode,
+  ListNode,
+} from "@lexical/list";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
@@ -35,6 +41,7 @@ import {
   $createParagraphNode,
   $createRangeSelection,
   $createTextNode,
+  $getNodeByKey,
   $getRoot,
   $getSelection,
   $isLineBreakNode,
@@ -55,7 +62,7 @@ import {
   SELECTION_CHANGE_COMMAND,
   TextNode,
 } from "lexical";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { dispatchCreateNew } from "@/components/app/create-events";
@@ -364,7 +371,7 @@ function EmptyLineHintPlugin() {
         const hint = $isHeadingNode(block)
           ? `Heading ${block.getTag().slice(1)}`
           : $isParagraphNode(block)
-            ? "Type / for blocks, [[ for a note"
+            ? "Type / for blocks and tasks, [[ for a note"
             : $isQuoteNode(block)
               ? "Quote"
               : null;
@@ -452,6 +459,9 @@ function ListTabIndentationPlugin() {
           return { inListItem: true, canIndent: hasPreviousSibling };
         });
         if (!listContext.inListItem) {
+          // ⇧Tab outside a list leaves the note, backwards, like any field
+          // (the editor's description tells a screen reader so).
+          if (event.shiftKey) return false;
           // Outside a list, Tab stays in the text (it jumped focus to the
           // hidden block-menu button). Code and tables handle their own Tab.
           const own = editor.getEditorState().read(() => {
@@ -480,6 +490,65 @@ function ListTabIndentationPlugin() {
       COMMAND_PRIORITY_HIGH,
     );
   }, [editor]);
+  return null;
+}
+
+/**
+ * Checklists, for keyboards and screen readers:
+ * - ⌘↵ ticks or unticks the checkbox line under the caret (it split the line);
+ * - a checklist reads as a group of checkboxes (Lexical draws each item as a
+ *   `role="checkbox"` inside a `<ul>`, which a list may not hold).
+ */
+function ChecklistKeysPlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    const offRole = editor.registerMutationListener(
+      ListNode,
+      (mutations) => {
+        editor.getEditorState().read(() => {
+          for (const [key, kind] of mutations) {
+            if (kind === "destroyed") continue;
+            const el = editor.getElementByKey(key);
+            const node = $getNodeByKey(key);
+            if (!el || !$isListNode(node)) continue;
+            if (node.getListType() === "check") {
+              el.setAttribute("role", "group");
+              el.setAttribute("aria-label", "Checklist");
+            } else if (el.getAttribute("role") === "group") {
+              el.removeAttribute("role");
+              el.removeAttribute("aria-label");
+            }
+          }
+        });
+      },
+      { skipInitialization: false },
+    );
+    if (!editable) return offRole;
+    const offToggle = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        if (!event || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
+          return false;
+        }
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return false;
+        let item: LexicalNode | null = selection.anchor.getNode();
+        while (item && !$isListItemNode(item)) item = item.getParent();
+        const list = item?.getParent();
+        if (!$isListItemNode(item) || !$isListNode(list) || list.getListType() !== "check") {
+          return false;
+        }
+        event.preventDefault();
+        item.toggleChecked();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+    return () => {
+      offRole();
+      offToggle();
+    };
+  }, [editor, editable]);
   return null;
 }
 
@@ -712,6 +781,7 @@ export function NoteEditor({
   footer,
 }: Props) {
   const { userId, runtime } = useAuth();
+  const keysHintId = useId();
   // The writing surface (NR-4): block handles, `[[`, ⌘K links. A view-only
   // note gets none of them.
   const writing = editable;
@@ -855,6 +925,7 @@ export function NoteEditor({
       className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto"
     >
       <div
+        data-note-column=""
         className={cn(
           "relative mx-auto flex min-h-full w-full flex-col",
           fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
@@ -865,7 +936,15 @@ export function NoteEditor({
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
               <RichTextPlugin
                 contentEditable={
-                  <ContentEditable className="w-full flex-1 px-6 pt-10 pb-12 text-base leading-relaxed text-foreground outline-none" />
+                  // A grid, not the column's flex: Chrome mis-focuses a
+                  // contenteditable whose parent is a flex box.
+                  <div className="grid w-full flex-1">
+                    <ContentEditable
+                      aria-label={`${titleForLabel || "Untitled"}, note`}
+                      aria-describedby={editable ? keysHintId : undefined}
+                      className="w-full px-6 pt-10 pb-12 text-base leading-relaxed text-foreground outline-none"
+                    />
+                  </div>
                 }
                 placeholder={
                   <div className="pointer-events-none absolute inset-x-0 top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
@@ -880,6 +959,7 @@ export function NoteEditor({
               {editable ? <BlockBackspacePlugin /> : null}
               <ListPlugin />
               <CheckListPlugin />
+              <ChecklistKeysPlugin editable={editable} />
               <ListTabIndentationPlugin />
               {editable ? <DividerShortcutPlugin /> : null}
               {editable ? <NewNoteKeyPlugin /> : null}
@@ -968,6 +1048,12 @@ export function NoteEditor({
           </LexicalCollaboration>
         </NotesEditorBridgeContext.Provider>
         {footer ? <div className="w-full px-6 pb-12">{footer}</div> : null}
+        {editable ? (
+          <p id={keysHintId} className="sr-only">
+            Type slash for blocks and tasks. Option Return opens the block menu, Option F10 the
+            formatting toolbar. Shift Tab, or Escape then Tab, leaves the note.
+          </p>
+        ) : null}
       </div>
     </div>
   );
