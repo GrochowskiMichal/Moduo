@@ -3415,15 +3415,12 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
-          cloud_linked: boolean
           created_at: string
           current_period_end: string | null
           display_name: string
           id: string
-          local_user_id: string | null
           plan_tier: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at: string | null
-          recovery_seed_hash: string | null
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_status: string
@@ -3431,15 +3428,12 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
-          cloud_linked?: boolean
           created_at?: string
           current_period_end?: string | null
           display_name?: string
           id: string
-          local_user_id?: string | null
           plan_tier?: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at?: string | null
-          recovery_seed_hash?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
@@ -3447,15 +3441,12 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
-          cloud_linked?: boolean
           created_at?: string
           current_period_end?: string | null
           display_name?: string
           id?: string
-          local_user_id?: string | null
           plan_tier?: Database["public"]["Enums"]["plan_tier"]
           plan_updated_at?: string | null
-          recovery_seed_hash?: string | null
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_status?: string
@@ -5024,7 +5015,6 @@ export type Database = {
           token_expiry: string | null
           updated_at: string
           user_id: string
-          zoom_account_id: string | null
         }
         Insert: {
           access_token_enc: string
@@ -5036,7 +5026,6 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string
           user_id: string
-          zoom_account_id?: string | null
         }
         Update: {
           access_token_enc?: string
@@ -5048,7 +5037,6 @@ export type Database = {
           token_expiry?: string | null
           updated_at?: string
           user_id?: string
-          zoom_account_id?: string | null
         }
         Relationships: []
       }
