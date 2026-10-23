@@ -203,37 +203,11 @@ BEGIN
 END;
 $$;
 
--- The backfill only adds. Seeded with the triggers off, as data from before the rule.
-ALTER TABLE public.entity_links DISABLE TRIGGER entity_links_works_at_to_company;
-ALTER TABLE public.contacts DISABLE TRIGGER contacts_company_to_link;
-INSERT INTO public.contacts (id, workspace_id, owner_id, name, company_id) VALUES
-  (test.id('P1'), test.id('W'), test.id('O'), 'Link only', NULL),
-  (test.id('P2'), test.id('W'), test.id('O'), 'Company only', test.ref('Acme'));
-INSERT INTO public.entities (workspace_id, entity_type, entity_id, label) VALUES
-  (test.id('W'), 'contact', test.id('P1'), 'Link only');
-INSERT INTO public.entity_links (workspace_id, source_type, source_id, target_type, target_id, relation_kind, created_by)
-VALUES (test.id('W'), 'company', test.ref('Bolt'), 'contact', test.id('P1'), 'works-at', test.id('O'));
-ALTER TABLE public.entity_links ENABLE TRIGGER entity_links_works_at_to_company;
-ALTER TABLE public.contacts ENABLE TRIGGER contacts_company_to_link;
-
-CREATE TABLE test.before_backfill AS
-  SELECT id FROM public.entity_links WHERE deleted_at IS NULL
-  UNION ALL SELECT id FROM public.contacts WHERE deleted_at IS NULL;
-
-SELECT public.contacts__company_link_backfill();
-
+-- The one-time backfill (20261020142000) is gone: the two triggers above keep
+-- a contact's company and works-at link in step from then on.
 DO $$
 BEGIN
-  PERFORM test.ok(test.company_of('Link only') = test.ref('Bolt'),
-    'backfill: a contact with only a works-at link gets that company');
-  PERFORM test.ok(test.works_at('Company only') = ARRAY[test.ref('Acme')],
-    'backfill: a contact with only a company gets the works-at link');
-  PERFORM test.ok(NOT EXISTS (
-      SELECT 1 FROM test.before_backfill b
-      WHERE NOT EXISTS (SELECT 1 FROM public.entity_links l WHERE l.id = b.id AND l.deleted_at IS NULL)
-        AND NOT EXISTS (SELECT 1 FROM public.contacts c WHERE c.id = b.id AND c.deleted_at IS NULL)),
-    'backfill: nothing that was live is removed');
-  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.contacts__company_link_backfill()', 'EXECUTE'),
-    'the backfill is not callable from the app');
+  PERFORM test.ok(to_regprocedure('public.contacts__company_link_backfill()') IS NULL,
+    'the one-time company/link backfill is gone');
 END;
 $$;
