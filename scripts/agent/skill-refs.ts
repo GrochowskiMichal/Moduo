@@ -71,15 +71,18 @@ export function readPluginSkills(pluginDir: string): Record<string, boolean> {
   const manifest = JSON.parse(
     readFileSync(path.join(pluginDir, ".claude-plugin/plugin.json"), "utf8"),
   );
-  const out: Record<string, boolean> = {};
+  // Built as a Map: the names come from a file, and writing them as object
+  // keys lets a name like "__proto__" reach the prototype (CodeQL).
+  const out = new Map<string, boolean>();
   for (const rel of (manifest.skills as string[]).toSorted((a, b) =>
     path.basename(a).localeCompare(path.basename(b)),
   )) {
-    out[path.basename(rel)] = !userOnly(
-      readFileSync(path.join(pluginDir, rel, "SKILL.md"), "utf8"),
+    out.set(
+      path.basename(rel),
+      !userOnly(readFileSync(path.join(pluginDir, rel, "SKILL.md"), "utf8")),
     );
   }
-  return out;
+  return Object.fromEntries(out);
 }
 
 /** The numbered steps of a skill's `## Steps` section, each with its indented sub-lines. */
