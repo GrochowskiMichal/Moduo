@@ -573,7 +573,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-4 — Oracles in CI (Tier 2)** · deps: — · 2026-10-23 `t/mike/hv-4-ci-oracles`
 - [ ] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: —
 - [ ] **HV-9 — Security pass before alpha** · deps: —
-- [ ] **HV-11 — Decisions current view** · deps: —
+- [x] **HV-11 — Decisions current view** · deps: — · 2026-10-23 `t/mike/hv-11-decisions`
 - [ ] **HV-12 — ast-grep pack** · deps: —
 - [ ] **HV-15 — Variant hunt** · deps: —
 - [ ] **HV-17 — Sync outbox property harness** · deps: —

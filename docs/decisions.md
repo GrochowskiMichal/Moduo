@@ -4,12 +4,13 @@
 
 The current decisions, one line each, grouped by area, in each area file's order (newest first). Superseded and dropped entries are left out. The full entry lives in the area file linked in each heading; `bun run docs:current <area>` prints an area's current entries in full.
 
-**Adding a decision:** write the full entry at the top of `docs/decisions/<area>.md` (one bold title sentence, then the why and a pointer to the authoritative doc) with `- status: current` as its first sub-bullet (a `##` entry takes `status: current` as its first paragraph). When it replaces an earlier entry, add `· supersedes: <area> <date> "<title start>"` to its status line and mark the old one `status: superseded · by: <area> <date> "<title start>"`. Then run `bun run docs:index`. If no area fits, use `product`.
+**Adding a decision:** write the full entry at the top of `docs/decisions/<area>.md` (one bold title sentence, then the why and a pointer to the authoritative doc) with `- status: current` as its first sub-bullet (a `##` entry takes `status: current` as its first paragraph). When it replaces an earlier entry, add `· supersedes: <area> <date> "<title start>"` to its status line and mark the old one `status: superseded · by: <area> <date> "<title start>"` (when only part of it changes, it stays `current` and takes the same `· by:`). `bun run lint:decisions` checks both ends. Then run `bun run docs:index`. If no area fits, use `product`.
 
 > Migration-status clauses inside older entries ("deploy-ready but unapplied") describe the day they were written, not today. Probe the database before treating one as a task. See [decisions/data.md](decisions/data.md).
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-23 · HV-11: supersession is data. Every decision entry has a status line (current, superseded, dropped) and links to what it replaces or what replaced it; `docs/decisions.md` is generated from the area files and CI fails when it is stale.
 - 2026-10-23 · HV-4: the SQL/RLS tests, Rust gates and an e2e smoke run in CI, each only on its paths; the test DB is built from a prod schema snapshot kept in the Actions cache.
 - 2026-10-23 · Harness v3: the flow board becomes the harness, all of it before the closed alpha (Mike's call).
 - 2026-10-23 · `oven-sh/setup-bun` is pinned to a commit like every other third-party action; the CodeQL backlog was triaged once and dismissed with reasons.
