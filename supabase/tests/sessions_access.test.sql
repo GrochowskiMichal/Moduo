@@ -191,11 +191,13 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'write: view access can''t add to Waiting on', r);
   r := test.try('N', format($q$SELECT * FROM public.tasks_op_waiting_remove(%L, %L)$q$, test.id('W'), v_entry));
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'write: view access can''t clear an entry', r);
+  -- RLS asks for Edit before an UPDATE, so the row isn't matched at all.
   r := test.try('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z' WHERE id = %L$q$, test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%', 'write: view access can''t move it as an old build either', r);
-  -- The schedule trigger holds the gate itself, not only PERM-W's write check.
+  PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'write: view access can''t move it as an old build either', r);
+  -- The schedule trigger holds the gate itself, not only PERM-W's write check
+  -- and RLS: N as the actor, past RLS, with the write check off.
   ALTER TABLE public.tasks DISABLE TRIGGER perm_enforce_write;
-  r := test.try('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z', duration_minutes = 90 WHERE id = %L$q$, test.id('TV')));
+  r := test.as_op('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z', duration_minutes = 90 WHERE id = %L$q$, test.id('TV')));
   ALTER TABLE public.tasks ENABLE TRIGGER perm_enforce_write;
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%',
     'write: the scheduled_at / duration_minutes trigger refuses view access on its own', r);
