@@ -182,13 +182,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "agent_sessions_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "agent_sessions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -2628,13 +2621,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "focus_runs_now_task_id_fkey"
-            columns: ["now_task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "focus_runs_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -4061,13 +4047,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "task_completions_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "task_completions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -4127,13 +4106,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "task_queue_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "task_queue_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -4190,24 +4162,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "task_relations_blocked_task_id_fkey"
-            columns: ["blocked_task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "task_relations_blocker_task_id_fkey"
             columns: ["blocker_task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_relations_blocker_task_id_fkey"
-            columns: ["blocker_task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
             referencedColumns: ["id"]
           },
           {
@@ -4265,13 +4223,6 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_reminders_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
             referencedColumns: ["id"]
           },
           {
@@ -4337,13 +4288,6 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_sessions_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
             referencedColumns: ["id"]
           },
           {
@@ -4530,13 +4474,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "task_time_entries_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "task_time_entries_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -4699,13 +4636,6 @@ export type Database = {
             columns: ["task_id"]
             isOneToOne: false
             referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "task_waiting_task_id_fkey"
-            columns: ["task_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
             referencedColumns: ["id"]
           },
           {
@@ -4879,13 +4809,6 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "tasks"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_parent_id_fkey"
-            columns: ["parent_id"]
-            isOneToOne: false
-            referencedRelation: "tasks_with_drift"
             referencedColumns: ["id"]
           },
           {
@@ -5922,93 +5845,6 @@ export type Database = {
       }
     }
     Views: {
-      tasks_with_drift: {
-        Row: {
-          bucket_id: string | null
-          commit_order: number | null
-          committed_for: string | null
-          created_at: string | null
-          deleted_at: string | null
-          description: string | null
-          drifted: boolean | null
-          due_date: string | null
-          duration_minutes: number | null
-          energy_level: string | null
-          id: string | null
-          owner_id: string | null
-          position: string | null
-          priority: string | null
-          recurrence: Json | null
-          reschedule_count: number | null
-          scheduled_at: string | null
-          status: string | null
-          title: string | null
-          updated_at: string | null
-          workspace_id: string | null
-        }
-        Insert: {
-          bucket_id?: string | null
-          commit_order?: number | null
-          committed_for?: string | null
-          created_at?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          drifted?: never
-          due_date?: string | null
-          duration_minutes?: number | null
-          energy_level?: string | null
-          id?: string | null
-          owner_id?: string | null
-          position?: string | null
-          priority?: string | null
-          recurrence?: Json | null
-          reschedule_count?: number | null
-          scheduled_at?: string | null
-          status?: string | null
-          title?: string | null
-          updated_at?: string | null
-          workspace_id?: string | null
-        }
-        Update: {
-          bucket_id?: string | null
-          commit_order?: number | null
-          committed_for?: string | null
-          created_at?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          drifted?: never
-          due_date?: string | null
-          duration_minutes?: number | null
-          energy_level?: string | null
-          id?: string | null
-          owner_id?: string | null
-          position?: string | null
-          priority?: string | null
-          recurrence?: Json | null
-          reschedule_count?: number | null
-          scheduled_at?: string | null
-          status?: string | null
-          title?: string | null
-          updated_at?: string | null
-          workspace_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_bucket_id_fkey"
-            columns: ["bucket_id"]
-            isOneToOne: false
-            referencedRelation: "buckets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       user_entitlements: {
         Row: {
           current_period_end: string | null
@@ -6862,7 +6698,6 @@ export type Database = {
         }
         Returns: number
       }
-      chat__convert_v1: { Args: { p_workspace_id?: string | null }; Returns: Json }
       chat__create_channel_as: {
         Args: {
           p_announcement: boolean | null
@@ -7425,7 +7260,6 @@ export type Database = {
       }
       chat__v1_prose: { Args: { p_text: string | null }; Returns: string }
       chat__v1_to_v2: { Args: { p_body: string | null }; Returns: string }
-      chat__v1_tokens: { Args: { p_body: string | null }; Returns: string }
       chat__was_removed: {
         Args: { p_channel_id: string | null; p_user: string | null }
         Returns: boolean
@@ -7566,10 +7400,6 @@ export type Database = {
           snippet: string
           via: string
         }[]
-      }
-      chat_can_access_workspace: {
-        Args: { p_workspace_id: string | null }
-        Returns: boolean
       }
       chat_can_read_channel: {
         Args: { p_channel_id: string | null }
