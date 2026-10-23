@@ -5479,10 +5479,12 @@ export type Database = {
           expires_at: string | null
           id: string
           include_private_chat: boolean
-          key_hash: string
-          key_prefix: string
+          key_hash: string | null
+          key_prefix: string | null
           last_used_at: string | null
           name: string
+          oauth_client_domain: string | null
+          oauth_client_id: string | null
           revoked_at: string | null
           scopes: Json
           workspace_id: string
@@ -5493,10 +5495,12 @@ export type Database = {
           expires_at?: string | null
           id?: string
           include_private_chat?: boolean
-          key_hash: string
-          key_prefix: string
+          key_hash?: string | null
+          key_prefix?: string | null
           last_used_at?: string | null
           name: string
+          oauth_client_domain?: string | null
+          oauth_client_id?: string | null
           revoked_at?: string | null
           scopes?: Json
           workspace_id: string
@@ -5507,10 +5511,12 @@ export type Database = {
           expires_at?: string | null
           id?: string
           include_private_chat?: boolean
-          key_hash?: string
-          key_prefix?: string
+          key_hash?: string | null
+          key_prefix?: string | null
           last_used_at?: string | null
           name?: string
+          oauth_client_domain?: string | null
+          oauth_client_id?: string | null
           revoked_at?: string | null
           scopes?: Json
           workspace_id?: string
@@ -14561,6 +14567,25 @@ export type Database = {
         Args: { p_workspace_id: string | null }
         Returns: boolean
       }
+      workspace_api_keys_connect_oauth: {
+        Args: {
+          p_authorization_id: string | null
+          p_expires_in_days?: number | null
+          p_include_private_chat?: boolean | null
+          p_scopes?: Json | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          created: boolean
+          expires_at: string
+          id: string
+          include_private_chat: boolean
+          moved_from: string
+          name: string
+          scopes: Json
+          workspace_id: string
+        }[]
+      }
       workspace_api_keys_create: {
         Args: {
           p_expires_in_days?: number | null
@@ -14577,6 +14602,10 @@ export type Database = {
           scopes: Json
           secret: string
         }[]
+      }
+      workspace_api_keys_rename: {
+        Args: { p_key_id: string | null; p_name: string | null }
+        Returns: string
       }
       workspace_api_keys_revoke: {
         Args: { p_key_id: string | null }
