@@ -8,9 +8,11 @@ import {
   ANON_DEFINER_ALLOWED,
   clientCallableDefinerQuery,
   dedupeDecls,
+  liveBodies,
   normalizeBody,
   parseDeclarations,
   parseFunctionBodies,
+  signatureArgs,
   sqlQuote,
   stripComments,
 } from "./db-reconcile-core";
@@ -71,6 +73,90 @@ describe("parseDeclarations", () => {
     expect(byKind("trigger")).toEqual(["trg_a"]);
     expect(byKind("policy")).toEqual(["tbl_a::bare_pol", "tbl_a::quoted pol"]);
     expect(byKind("view")).toEqual(["view_a"]);
+  });
+});
+
+// A drop must take an object off the "should exist" list, or every legacy cleanup
+// reads as a MISSING row on the next run, and real drift hides in that noise.
+describe("drops", () => {
+  const live = (...files: string[]) =>
+    dedupeDecls(files.flatMap((sql, i) => parseDeclarations(sql, `${i}.sql`))).map(
+      (d) => `${d.kind}:${d.name}`,
+    );
+  const fn = (name: string) =>
+    `CREATE OR REPLACE FUNCTION public.${name} RETURNS void LANGUAGE sql AS $$ SELECT 1 $$;`;
+
+  it("a later DROP removes the object; a CREATE after it brings it back", () => {
+    expect(live(`CREATE VIEW public.v AS SELECT 1;`, `DROP VIEW IF EXISTS public.v;`)).toEqual([]);
+    expect(live(`DROP VIEW IF EXISTS public.v; CREATE VIEW public.v AS SELECT 2;`)).toEqual([
+      "view:v",
+    ]);
+    expect(live(fn("f(p uuid)"), `DROP FUNCTION IF EXISTS public.f(uuid);`)).toEqual([]);
+    expect(
+      live(
+        `CREATE TABLE public.t (id uuid); CREATE POLICY p ON public.t USING (true);`,
+        `DROP POLICY IF EXISTS p ON public.t; DROP TABLE public.t;`,
+      ),
+    ).toEqual([]);
+    expect(
+      live(
+        `CREATE POLICY "own" ON storage.objects USING (true);`,
+        `DROP POLICY "own" ON storage.objects;`,
+      ),
+    ).toEqual([]);
+    expect(
+      live(
+        `ALTER TABLE public.t ADD COLUMN a text, ADD COLUMN b text;`,
+        `ALTER TABLE public.t DROP COLUMN IF EXISTS a;`,
+      ),
+    ).toEqual(["column:t.b"]);
+  });
+
+  it("dropping an old overload keeps the live one, even with the same argument count", () => {
+    // The chat_op_mark_read shape: (uuid, timestamptz) dropped, (uuid, uuid) live.
+    expect(
+      live(
+        fn("f(p_channel uuid, p_upto uuid)"),
+        `DROP FUNCTION IF EXISTS public.f(uuid, timestamptz);`,
+      ),
+    ).toEqual(["function:f"]);
+    expect(
+      live(
+        fn("f(p_channel uuid, p_at timestamp with time zone DEFAULT now())"),
+        `DROP FUNCTION public.f(uuid, timestamptz);`,
+      ),
+    ).toEqual([]);
+    expect(live(fn("f(a uuid)"), fn("f(a uuid, b text)"), `DROP FUNCTION public.f;`)).toEqual([]);
+  });
+
+  it("ignores a DROP inside a DO block or function body: it is conditional or rebuilt by EXECUTE", () => {
+    const rebuilt = `DO $g$ BEGIN DROP TRIGGER gate ON public.t; EXECUTE v_def; END $g$;`;
+    expect(
+      live(
+        `CREATE TRIGGER gate AFTER INSERT ON public.t FOR EACH ROW EXECUTE FUNCTION public.g();`,
+        rebuilt,
+      ),
+    ).toEqual(["trigger:gate"]);
+  });
+
+  it("drops a dropped function's body from the drift comparison", () => {
+    const decls = dedupeDecls(
+      parseDeclarations(`${fn("a()")} ${fn("b()")} DROP FUNCTION public.b();`, "f.sql"),
+    );
+    const bodies = parseFunctionBodies(`${fn("a()")} ${fn("b()")}`, "f.sql");
+    expect(liveBodies(bodies, decls).map((b) => b.name)).toEqual(["a"]);
+  });
+});
+
+describe("signatureArgs", () => {
+  it("keeps only the argument types, normalized", () => {
+    expect(
+      signatureArgs("p_a uuid DEFAULT NULL, OUT x int, p_t timestamptz, VARIADIC p_ids int[]"),
+    ).toBe("uuid,timestamp with time zone,integer[]");
+    expect(signatureArgs("timestamp with time zone, numeric(10,2), public.tasks")).toBe(
+      "timestamp with time zone,numeric,tasks",
+    );
+    expect(signatureArgs("")).toBe("");
   });
 });
 
@@ -158,6 +244,16 @@ describe("against the real migrations directory", () => {
       .filter((d) => d.kind === "function" && !bodies.has(d.name))
       .map((d) => d.name);
     expect(missing).toEqual([]);
+  });
+
+  it("leaves out what a later migration dropped, and keeps what it only rebuilt", () => {
+    const has = (k: string, n: string) => decls.some((d) => d.kind === k && d.name === n);
+    expect(has("view", "tasks_with_drift")).toBe(false);
+    expect(has("function", "chat__convert_v1")).toBe(false);
+    // An old overload was dropped; the live one stays declared.
+    expect(has("function", "chat_op_mark_read")).toBe(true);
+    // Dropped inside a DO block and re-created with EXECUTE.
+    expect(has("trigger", "module_activity_gate_recipients")).toBe(true);
   });
 
   it("strips comments without eating real SQL", () => {
