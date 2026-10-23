@@ -274,8 +274,8 @@ BEGIN
   r := test.as_service(format('SELECT public.chat_is_workspace_member(%L, %L)', test.id('W'), test.id('M')));
   PERFORM test.ok(r = 'true', 'so does the service role', r);
   -- Client-called server functions that use them keep working.
-  r := test.value_as('E', format('SELECT public.chat_can_access_workspace(%L)', test.id('W')));
-  PERFORM test.ok(r IS NOT NULL AND r NOT LIKE 'ERROR%', 'chat_can_access_workspace (calls chat_is_workspace_member) still answers', r);
+  r := test.value_as('E', format('SELECT public.chat_workspace_enabled(%L)', test.id('W')));
+  PERFORM test.ok(r IS NOT NULL AND r NOT LIKE 'ERROR%', 'chat_workspace_enabled (calls chat_is_workspace_member) still answers', r);
   r := test.as_user('O', format($q$SELECT public.share_op_set('bucket', %L, 'member', %L, 'view')$q$, test.id('PE'), test.id('M')));
   PERFORM test.ok(r = 'ok 1', 'share_op_set (calls perm_ceiling_rank) still shares PE with M', r);
   r := test.can('M', 'bucket', 'PE', 'view');

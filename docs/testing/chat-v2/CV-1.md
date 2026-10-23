@@ -5,7 +5,7 @@
 
 ## Server checks (terminal, local stack up)
 
-- [ ] **Do:** run `bun run db:test chat` → **Expect:** every chat file passes; CV-1's five are `chat_convert` (35 checks), `chat_erasure` (9), `chat_foundation` (47), `chat_privacy` (60) and `chat_realtime` (19) _(terminal)_
+- [ ] **Do:** run `bun run db:test chat` → **Expect:** every chat file passes; CV-1's are `chat_v1_to_v2` (2; the converter's 68 pairs, moved from the retired `chat_convert`), `chat_erasure` (9), `chat_foundation` (48), `chat_privacy` (60) and `chat_realtime` (19) _(terminal)_
 
 ## In v1's Chat (until CV-8a replaces it)
 
@@ -22,7 +22,7 @@
 
 ## Edge cases
 
-- [ ] **Do:** run the conversion again (`select chat__convert_v1();` or the migration file) → **Expect:** it refuses, because v2 data now exists, and changes nothing _(psql)_
+- ~~**Do:** run the conversion again~~ Retired: `20261023230000_drop_legacy_chat_fns.sql` drops `chat__convert_v1`.
 - [ ] **Do:** someone who left a public channel keeps it open as a reader while a member types in it → **Expect:** they see no typing line _(Chat composer line)_
 
 ## Verify before release
