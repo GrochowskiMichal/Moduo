@@ -9,8 +9,8 @@ import { describe, expect, it, rs } from "@rstest/core";
 
 rs.mock("sonner", () => ({ toast: Object.assign(() => {}, { error: () => {} }) }));
 
-import { captureTaskToStore } from "../../lib/sync/capture";
 import { memoryCache } from "../../lib/sync/cache";
+import { captureTaskToStore } from "../../lib/sync/capture";
 import { WorkspaceStore } from "../../lib/sync/store";
 import { dueOnToLocalInstant } from "../../lib/task-rows";
 import type { Bucket } from "../tasks/model";
