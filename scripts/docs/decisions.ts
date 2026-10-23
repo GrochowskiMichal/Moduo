@@ -187,9 +187,13 @@ function build(
     lines,
     statusAt: -1,
   };
-  const i = lines.findIndex((l, n) => n > 0 && STATUS_LINE.test(l));
-  if (i === -1) return entry;
-  const m = lines[i].match(STATUS_LINE) as RegExpMatchArray;
+  // The status line closes the first paragraph: a heading's status comes before its first
+  // part bullet, a bullet's before its other sub-bullets, so a part can't lend its status.
+  const stop = kind === "heading" ? /^- / : /^\s+[-*] /;
+  let i = 1;
+  while (i < lines.length && !STATUS_LINE.test(lines[i]) && !stop.test(lines[i])) i++;
+  const m = lines[i]?.match(STATUS_LINE);
+  if (!m) return entry;
   const where = `docs/decisions/${area}.md:${line + i}`;
   if (!(STATUSES as readonly string[]).includes(m[1]))
     throw new DecisionsError(`${where}: unknown status "${m[1]}" (use ${STATUSES.join(", ")})`);
@@ -301,7 +305,7 @@ export function renderIndex(areas: Area[]): string {
 
 The current decisions, one line each, grouped by area, in each area file's order (newest first). Superseded and dropped entries are left out. The full entry lives in the area file linked in each heading; \`bun run docs:current <area>\` prints an area's current entries in full.
 
-**Adding a decision:** write the full entry at the top of \`docs/decisions/<area>.md\` (one bold title sentence, then the why and a pointer to the authoritative doc) with \`- status: current\` as its first sub-bullet (a \`##\` entry takes \`status: current\` as its first paragraph). When it replaces an earlier entry, add \`· supersedes: <area> <date> "<title start>"\` to its status line and mark the old one \`status: superseded · by: <area> <date> "<title start>"\` (when only part of it changes, it stays \`current\` and takes the same \`· by:\`). \`bun run lint:decisions\` checks both ends. Then run \`bun run docs:index\`. If no area fits, use \`product\`.
+**Adding a decision:** write the full entry at the top of \`docs/decisions/<area>.md\` (one bold title sentence, then the why and a pointer to the authoritative doc) with \`  - status: current\` (two spaces in) as its first sub-bullet (a \`##\` entry takes \`status: current\` as its first paragraph). When it replaces an earlier entry, add \`· supersedes: <area> <date> "<title start>"\` to its status line and mark the old one \`status: superseded · by: <area> <date> "<title start>"\` (when only part of it changes, it stays \`current\` and takes the same \`· by:\`). \`bun run lint:decisions\` checks both ends. Then run \`bun run docs:index\`. If no area fits, use \`product\`.
 
 > Migration-status clauses inside older entries ("deploy-ready but unapplied") describe the day they were written, not today. Probe the database before treating one as a task. See [decisions/data.md](decisions/data.md).
 

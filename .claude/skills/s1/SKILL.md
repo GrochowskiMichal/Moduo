@@ -25,7 +25,7 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 - If you don't know something, research it deeply before proceeding. Never guess silently; never stall waiting on the designer for something you can find out yourself.
 
 ## 3. Fill the spec
-- Copy `specs/_template.md` → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` plus one line in the `docs/decisions.md` index.
+- Copy `specs/_template.md` → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` with its `status:` line (then `bun run docs:index` regenerates the index).
 - For a UI feature, **reference** the `.design/<module>` briefs and the module contract — don't restate them.
 
 ## 4. Decompose into execution blocks

@@ -121,6 +121,52 @@ describe("validate", () => {
   });
 });
 
+describe("edge cases", () => {
+  it("doesn't let a part lend its status to a heading entry", () => {
+    const area = parseArea(
+      "x",
+      "## 2026-01-01 · Heading.\n\n- **A part.** Body.\n  - status: dropped\n",
+    );
+    expect(area.entries[0].status).toBeNull();
+  });
+
+  it("reads a title with a backticked ** and a quoted ` · ` in a reference", () => {
+    const area = parseArea(
+      "x",
+      '- **2026-01-02 · Globs like `landing/**` stay.** Body.\n  - status: current · supersedes: 2026-01-01 "A · B"\n\n- **2026-01-01 · A · B rule.** Body.\n  - status: superseded · by: 2026-01-02 "Globs like"\n',
+    );
+    expect(area.entries[0].title).toBe("Globs like `landing/**` stay.");
+    expect(area.entries[0].supersedes).toEqual([
+      { area: null, date: "2026-01-01", prefix: "A · B" },
+    ]);
+    expect(validate([area])).toEqual([]);
+  });
+
+  it("flags ambiguous, self, one-way and dropped-with-by references", () => {
+    const area = parseArea(
+      "x",
+      [
+        "- **2026-01-03 · Same start one.** Body.",
+        '  - status: current · supersedes: "Same start"',
+        "",
+        "- **2026-01-02 · Same start two.** Body.",
+        '  - status: current · supersedes: 2026-01-02 "Same start two"',
+        "",
+        "- **2026-01-01 · Old.** Body.",
+        '  - status: dropped · by: 2026-01-03 "Same start one"',
+        "",
+        "- **2026-01-00 · Lonely.** Body.",
+        '  - status: current · supersedes: 2026-01-01 "Old"',
+      ].join("\n"),
+    );
+    const problems = validate([area]).join("\n");
+    expect(problems).toMatch(/supersedes: "Same start" matches 2 entries/);
+    expect(problems).toMatch(/points at the entry itself/);
+    expect(problems).toMatch(/by: is for superseded/);
+    expect(problems).toMatch(/supersedes: x 2026-01-01 "Old\." doesn't link back/);
+  });
+});
+
 describe("the current view", () => {
   it("hides superseded and dropped entries unless --all", () => {
     const area = parseArea("things", FLAT);
