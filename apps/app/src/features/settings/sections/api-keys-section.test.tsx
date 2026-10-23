@@ -74,6 +74,7 @@ function storedKey(
     includePrivateChat: false,
     oauthClientId: null,
     oauthClientDomain: null,
+    oauthClientScheme: null,
     ...overrides,
   };
 }
@@ -651,6 +652,7 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
         keyPrefix: null,
         oauthClientId: "client-1",
         oauthClientDomain: "claude.ai",
+        oauthClientScheme: "https",
         lastUsedAt: "2026-10-20T10:00:00Z",
       },
     );
@@ -673,6 +675,33 @@ describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
     expect(within(key).queryByText("Connected app")).toBeNull();
     expect(key.textContent).toContain("moduo_sk_000000");
     expect(screen.getByText("Connected apps and keys · 2")).toBeTruthy();
+  });
+
+  it("shows an app that returns through its own scheme with that scheme, and as unchecked", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([
+      storedKey(
+        { tasks: "view" },
+        {
+          id: "c2",
+          name: "Claude",
+          keyPrefix: null,
+          oauthClientId: "client-2",
+          oauthClientDomain: "claude.ai",
+          oauthClientScheme: "someapp",
+        },
+      ),
+    ]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).getByText(/someapp:\/\/claude\.ai · Never used/)).toBeTruthy();
+    expect(within(row).getByText("Moduo hasn't checked this app.")).toBeTruthy();
+  });
+
+  it("keeps the checked https app free of the unchecked note", async () => {
+    mocks.workspace.listApiKeys.mockResolvedValue([claudeApp()]);
+    renderSection();
+    const row = await waitFor(() => keyRow("Claude"));
+    expect(within(row).queryByText("Moduo hasn't checked this app.")).toBeNull();
   });
 
   it("disconnects with its own wording, through disconnectApp", async () => {

@@ -27,6 +27,8 @@ export type WorkspaceApiKey = {
   oauthClientId: string | null;
   /** The host the app's sign-in returns to ("claude.ai"); null for a key. */
   oauthClientDomain: string | null;
+  /** That address's scheme ("https", or an app's own); null for a key or a connection made before it was stored. */
+  oauthClientScheme: string | null;
 };
 
 /**

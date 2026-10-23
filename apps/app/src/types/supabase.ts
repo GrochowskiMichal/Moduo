@@ -5485,6 +5485,7 @@ export type Database = {
           name: string
           oauth_client_domain: string | null
           oauth_client_id: string | null
+          oauth_client_scheme: string | null
           revoked_at: string | null
           scopes: Json
           workspace_id: string
@@ -5501,6 +5502,7 @@ export type Database = {
           name: string
           oauth_client_domain?: string | null
           oauth_client_id?: string | null
+          oauth_client_scheme?: string | null
           revoked_at?: string | null
           scopes?: Json
           workspace_id: string
@@ -5517,6 +5519,7 @@ export type Database = {
           name?: string
           oauth_client_domain?: string | null
           oauth_client_id?: string | null
+          oauth_client_scheme?: string | null
           revoked_at?: string | null
           scopes?: Json
           workspace_id?: string
