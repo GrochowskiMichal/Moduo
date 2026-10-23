@@ -241,7 +241,8 @@ jobs:
   # The SQL/RLS tests (supabase/tests, `bun run db:test`) on a throwaway Supabase stack in the
   # runner, built like `bun run local:reset`: prod's schema snapshot, then the repo migrations
   # prod hasn't applied. The snapshot comes from the db-snapshot workflow through the Actions
-  # cache (never an artifact: the repo is public), so a fork's pull request skips it.
+  # cache, encrypted with DB_SNAPSHOT_KEY (never an artifact: the repo is public). A fork's pull
+  # request gets no secrets, so it skips this job.
   # supabase/tests/known-failures.txt holds what is already red; anything else fails the job.
   db-test:
     needs: oracle-paths
@@ -255,10 +256,24 @@ jobs:
       - name: Restore prod's schema snapshot
         uses: actions/cache/restore@v6
         with:
-          path: ~/.cache/moduo/supabase-snapshot
+          path: ~/db-snapshot
           # Never an exact hit: restore-keys takes the newest snapshot.
           key: db-snapshot-${{ github.run_id }}
           restore-keys: db-snapshot-
+
+      - name: Decrypt it
+        env:
+          DB_SNAPSHOT_KEY: ${{ secrets.DB_SNAPSHOT_KEY }}
+        run: |
+          if [ ! -f ~/db-snapshot/snapshot.tgz.enc ]; then
+            echo "::error::No schema snapshot in the cache: run db-snapshot on develop (Actions → db-snapshot → Run workflow)."
+            exit 1
+          fi
+          [ -n "$DB_SNAPSHOT_KEY" ] || { echo "::error::The DB_SNAPSHOT_KEY repo secret is not set."; exit 1; }
+          set -o pipefail
+          mkdir -p ~/.cache/moduo
+          openssl enc -d -aes-256-cbc -pbkdf2 -pass env:DB_SNAPSHOT_KEY -in ~/db-snapshot/snapshot.tgz.enc \
+            | tar -C ~/.cache/moduo -xzf -
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
