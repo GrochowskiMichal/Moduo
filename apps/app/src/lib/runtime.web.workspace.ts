@@ -305,13 +305,17 @@ export const webWorkspace: WorkspaceRuntime = {
         .is("revoked_at", null)
         .order("created_at", { ascending: false });
     let { data, error } = await list(
-      `${columns}, expires_at, include_private_chat, oauth_client_id, oauth_client_domain`,
+      `${columns}, expires_at, include_private_chat, oauth_client_id, oauth_client_domain, oauth_client_scheme`,
     );
     // 42703 = a newer column isn't on this backend yet (expires_at:
     // 20261009210000; include_private_chat: CV-21's 20261017123000;
-    // oauth_client_*: MCPO-3's 20261023120000): list the keys without them
-    // rather than lose the whole list.
+    // oauth_client_id/_domain: MCPO-3's 20261023120000; oauth_client_scheme:
+    // 20261023200000): list the keys without them rather than lose the whole list.
     // 42501: the column is there but not yet readable by clients.
+    if (error?.code === "42703" || error?.code === "42501")
+      ({ data, error } = await list(
+        `${columns}, expires_at, include_private_chat, oauth_client_id, oauth_client_domain`,
+      ));
     if (error?.code === "42703" || error?.code === "42501")
       ({ data, error } = await list(`${columns}, expires_at, include_private_chat`));
     if (error?.code === "42703" || error?.code === "42501")
@@ -331,6 +335,7 @@ export const webWorkspace: WorkspaceRuntime = {
       includePrivateChat: row.include_private_chat === true,
       oauthClientId: row.oauth_client_id ?? null,
       oauthClientDomain: row.oauth_client_domain ?? null,
+      oauthClientScheme: row.oauth_client_scheme ?? null,
     }));
   },
   async createApiKey({ workspaceId, name, scopes, expiresInDays }) {
@@ -357,6 +362,7 @@ export const webWorkspace: WorkspaceRuntime = {
       includePrivateChat: false,
       oauthClientId: null,
       oauthClientDomain: null,
+      oauthClientScheme: null,
       secret: row.secret,
     };
   },

@@ -29,7 +29,11 @@ VALUES
   (test.id('G'), 'dynamic', 'https://Agent.Example.org:8443/cb', 'authorization_code,refresh_token',
    NULL, 'public', 'none'),
   (test.id('H'), 'dynamic', 'https://h.example.net/cb', 'authorization_code,refresh_token',
-   'Helper', 'public', 'none');
+   'Helper', 'public', 'none'),
+  -- Calls itself Claude and returns to "claude.ai", but through its own scheme:
+  -- the code goes to a local program.
+  (test.id('S'), 'dynamic', 'someapp://claude.ai/cb', 'authorization_code,refresh_token',
+   'Claude', 'public', 'none');
 
 -- A pending sign-in the person is looking at (Supabase Auth binds it to them
 -- when the consent page reads it), returning to `p_redirect` (default: the
@@ -159,6 +163,20 @@ SELECT test.ok(test.connect('O', 'W', 'G', '{"tasks": "view"}') = 'ok 1'
                AND (test.live('O', 'G')).name = 'agent.example.org'
                AND (test.live('O', 'G')).oauth_client_domain = 'agent.example.org',
   'an app with no name is named by its domain (lowercased, no port)');
+-- The scheme is kept with the domain (20261023200000), so Settings can tell
+-- https://claude.ai from an app's own someapp://claude.ai.
+SELECT test.ok((test.live('E', 'C')).oauth_client_scheme = 'https'
+               AND (test.live('E', 'D')).oauth_client_scheme = 'http',
+  'a connection keeps the scheme its sign-in returns to');
+SELECT test.ok(test.connect('O', 'W', 'S', '{"tasks": "view"}') = 'ok 1'
+               AND (test.live('O', 'S')).oauth_client_domain = 'claude.ai'
+               AND (test.live('O', 'S')).oauth_client_scheme = 'someapp',
+  'an app returning to someapp://claude.ai is stored with its own scheme, not as plain claude.ai');
+UPDATE public.workspace_api_keys SET revoked_at = now() WHERE id = (test.live('O', 'S')).id;  -- out of the counts below
+SELECT test.ok(
+  test.as_op('O', format($q$INSERT INTO public.workspace_api_keys (workspace_id, name, key_prefix, key_hash, created_by, oauth_client_scheme)
+    VALUES (%L, 'Key with a scheme', 'moduo_sk_y', md5('scheme'), %L, 'https')$q$, test.id('W'), test.id('O'))) LIKE '23514 %',
+  'only a connection carries a scheme');
 SELECT test.ok(test.connect('O', 'W', 'C', '{"tasks": "view"}') = 'ok 1'
                AND (test.live('O', 'C')).id <> (test.live('E', 'C')).id,
   'the same app connected by two people is two connections');
@@ -215,8 +233,8 @@ SELECT test.ok(test.as_user('O', format($q$SELECT * FROM public.workspace_api_ke
 -- ── connect notifies the person ──────────────────────────────────────────────
 SELECT test.ok(test.bell('E', 'W') = 2, 'E''s bell in W: Claude and Claude Desktop connected (reconnects ring nothing)');
 SELECT test.ok(test.bell('E', 'W2') = 1, 'E''s bell in W2: the moved connection');
-SELECT test.ok(test.bell('O', 'W') = 3 AND test.bell('F', 'W') = 0,
-  'O sees only their own three connections; F, who connected nothing, sees none');
+SELECT test.ok(test.bell('O', 'W') = 4 AND test.bell('F', 'W') = 0,
+  'O sees only their own four connections; F, who connected nothing, sees none');
 SELECT test.ok(test.value_as('F', $q$SELECT count(*)::text FROM public.module_activity WHERE entity_type = 'api_key'$q$) = '0'
                AND test.value_as('E', $q$SELECT count(*)::text FROM public.module_activity WHERE entity_type = 'api_key'$q$) = '3',
   'a connection notice is readable only by its person (F reads none of them, E reads their three)');
