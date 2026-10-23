@@ -61,10 +61,11 @@ snapshot() {
 }
 
 # One SQL statement per row of a read-only query on prod; no rows is an empty file, a failed
-# query fails the snapshot.
+# query fails the snapshot. The CLI prints a bare array of rows, or wraps it in
+# {"rows": …} when it detects an AI agent (a Claude session), so take either.
 prod_rows() {
   local out; out="$(supabase db query --linked --output-format json "$1")"
-  jq -r '.rows[]?.sql' <<< "$out"
+  jq -r 'if type == "array" then .[] else .rows[]? end | .sql' <<< "$out"
 }
 
 bootstrap() {
