@@ -37,6 +37,11 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "supabase/functions/_shared/contracts/**", why: "contracts" },
   { glob: "supabase/functions/delete-account/**", why: "delete-account" },
   { glob: "supabase/functions/_shared/account-erasure.ts", why: "delete-account" },
+  { glob: "supabase/functions/_shared/posthog-erasure.ts", why: "delete-account" },
+  { glob: "supabase/functions/_shared/app-token.ts", why: "auth (app tokens)" },
+  { glob: "supabase/functions/_shared/secret-keys.ts", why: "auth (secret keys)" },
+  { glob: "supabase/functions/_shared/token-cipher.ts", why: "auth (token encryption)" },
+  { glob: "supabase/config.toml", why: "auth settings" },
   { glob: "supabase/functions/_shared/billing.ts", why: "billing" },
   { glob: "supabase/functions/create-checkout-session/**", why: "billing" },
   { glob: "supabase/functions/create-portal-session/**", why: "billing" },
@@ -51,6 +56,9 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "apps/app/src/lib/prefs-sync.ts", why: "prefs sync" },
   { glob: "apps/app/src/providers/auth-provider.tsx", why: "auth provider" },
   { glob: "apps/desktop/src-tauri/src/store*/**", why: "desktop stores" },
+  { glob: "apps/desktop/src-tauri/src/auth.rs", why: "desktop auth" },
+  { glob: "apps/desktop/src-tauri/src/keychain.rs", why: "desktop auth" },
+  { glob: "apps/desktop/src-tauri/capabilities/**", why: "Tauri permissions" },
   { glob: "apps/desktop/src-tauri/tauri.conf.json", why: "updater/signing" },
   { glob: "apps/app/src/lib/tauri-plugin-updater-stub.ts", why: "updater/signing" },
   { glob: "infra/update-server/**", why: "updater/signing" },
@@ -59,6 +67,8 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "scripts/ci-macos-notarize.sh", why: "updater/signing" },
   { glob: ".github/workflows/**", why: "workflows" },
   { glob: "scripts/ci/**", why: "CI gates (this list, ratchets, weakening detector)" },
+  { glob: ".claude/hooks/guard-*", why: "agent guards" },
+  { glob: ".claude/settings.json", why: "agent permissions" },
 ];
 
 export function globToRegExp(glob: string): RegExp {

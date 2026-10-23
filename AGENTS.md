@@ -55,7 +55,7 @@ On Max, Fable counts against at most half the weekly limit. On Pro it bills usag
 Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
 
 - **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review`. The full CI suite runs once, on PRs into `develop` (and on the push after merging).
-- **Tier 2, risky paths**: the one list is `scripts/ci/tier.ts` (run `bun scripts/ci/tier.ts <personal-branch>`; CI labels each PR `tier-0/1/2` from it). Add the `validator` subagent on the diff before merging.
+- **Tier 2, risky paths**: the one list is `scripts/ci/tier.ts` (run `bun scripts/ci/tier.ts origin/<personal-branch>`; CI labels each PR `tier-0/1/2` from it). Add the `validator` subagent on the diff before merging.
 - **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
 
 ## Product north star (read before designing any module)

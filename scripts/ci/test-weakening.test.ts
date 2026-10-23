@@ -136,6 +136,25 @@ describe("test-weakening detector", () => {
     expect(kinds(back)).toEqual([]);
   });
 
+  it("ignores code quoted in strings, like this file's own fixtures", () => {
+    const quoting = SUITE.replace(
+      '  it("handles negatives", () => {',
+      '  it("handles negatives", () => {\n    const src = \'it.only("x"); it.skip("y"); expect(1)\';',
+    );
+    expect(kinds(diffOf({ "src/add.test.ts": SUITE }, { "src/add.test.ts": quoting }))).toEqual([]);
+  });
+
+  it("does not flag a test file split in two", () => {
+    const [head, second] = SUITE.split('\n  it("handles negatives"');
+    const first = `${head}\n});\n`;
+    const rest = `import { add } from "./add";\n\ndescribe("add", () => {\n  it("handles negatives"${second}`;
+    expect(
+      kinds(
+        diffOf({ "src/add.test.ts": SUITE }, { "src/add.test.ts": first, "src/neg.test.ts": rest }),
+      ),
+    ).toEqual([]);
+  });
+
   it("counts pgTAP assertions in supabase/tests", () => {
     const sql =
       "select plan(2);\nselect ok(true, 'a');\nselect is(1, 1, 'b');\nselect * from finish();\n";

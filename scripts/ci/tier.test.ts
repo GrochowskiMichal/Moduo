@@ -31,6 +31,16 @@ const TIER2_FIXTURES = [
   "scripts/ci-macos-notarize.sh",
   ".github/workflows/checks.yml",
   "scripts/ci/ratchets.baseline.json",
+  "supabase/functions/_shared/posthog-erasure.ts",
+  "supabase/functions/_shared/app-token.ts",
+  "supabase/functions/_shared/secret-keys.ts",
+  "supabase/functions/_shared/token-cipher.ts",
+  "supabase/config.toml",
+  "apps/desktop/src-tauri/src/auth.rs",
+  "apps/desktop/src-tauri/src/keychain.rs",
+  "apps/desktop/src-tauri/capabilities/default.json",
+  ".claude/hooks/guard-git.sh",
+  ".claude/settings.json",
 ];
 
 describe("paths → tier", () => {

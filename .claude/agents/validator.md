@@ -1,6 +1,6 @@
 ---
 name: validator
-description: Skeptical staff-level review of the current diff before a block is reported done or merged. Use on Tier 2 diffs only (migrations, RLS, contracts, moduo-mcp, billing, runtime, updater, workflows) before merging; lean mode skips it elsewhere. Read-only; reports BLOCKER, MAJOR, MINOR and NIT findings with file:line evidence.
+description: Skeptical staff-level review of the current diff before a block is reported done or merged. Use on Tier 2 diffs only (`bun scripts/ci/tier.ts` prints tier-2; the path list lives there) before merging; lean mode skips it elsewhere. Read-only; reports BLOCKER, MAJOR, MINOR and NIT findings with file:line evidence.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Edit, Write
 model: opus

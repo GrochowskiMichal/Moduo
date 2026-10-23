@@ -3,10 +3,12 @@ import { describe, expect, it } from "@rstest/core";
 import {
   type Baseline,
   check,
+  COMPLEXITY_HEADROOM,
   COMPLEXITY_LIMIT,
   complexityChecked,
   measure,
   scoreFunctions,
+  SIZE_HEADROOM,
   SIZE_LIMIT,
   sizeChecked,
   tighten,
@@ -108,15 +110,56 @@ describe("ratchets", () => {
     expect(check(m, baseline)).toEqual([]);
   });
 
-  it("fails a frozen file or function that grew", () => {
+  it("lets a frozen file or function grow within its headroom", () => {
     const m = measure([
-      { path: "src/big.ts", source: "y".repeat(SIZE_LIMIT + 101) },
-      { path: "src/old.ts", source: complex("legacy", 21) },
+      { path: "src/big.ts", source: "y".repeat(SIZE_LIMIT + 100 + SIZE_HEADROOM) },
+      { path: "src/old.ts", source: complex("legacy", 20 + COMPLEXITY_HEADROOM) },
+    ]);
+    expect(check(m, baseline)).toEqual([]);
+  });
+
+  it("fails a frozen file or function that outgrew its headroom", () => {
+    const grown = SIZE_LIMIT + 101 + SIZE_HEADROOM;
+    const m = measure([
+      { path: "src/big.ts", source: "y".repeat(grown) },
+      { path: "src/old.ts", source: complex("legacy", 21 + COMPLEXITY_HEADROOM) },
     ]);
     expect(check(m, baseline).map((v) => [v.kind, v.file, v.value, v.frozen])).toEqual([
-      ["size", "src/big.ts", SIZE_LIMIT + 101, SIZE_LIMIT + 100],
-      ["complexity", "src/old.ts", 21, 20],
+      ["size", "src/big.ts", grown, SIZE_LIMIT + 100],
+      ["complexity", "src/old.ts", 21 + COMPLEXITY_HEADROOM, 20],
     ]);
+  });
+
+  it("pairs same-named functions by score, so a new callback shifts nothing", () => {
+    const cb = (ifs: number) =>
+      `  useCallback(() => {${Array.from({ length: ifs }, () => " if (a) {}").join("")} }, []);`;
+    const before = `function View(a) {\n${cb(30)}\n${cb(18)}\n}`;
+    const frozen = measure([{ path: "src/view.tsx", source: before }]).complexity;
+    expect(frozen).toEqual({
+      "src/view.tsx": { "View>useCallback(cb)": 30, "View>useCallback(cb)#2": 18 },
+    });
+    const b: Baseline = { ...baseline, size: {}, complexity: frozen };
+    // A simple callback added first renumbers both complex ones.
+    const after = `function View(a) {\n  useCallback(() => {}, []);\n${cb(30)}\n${cb(18)}\n}`;
+    expect(check(measure([{ path: "src/view.tsx", source: after }]), b)).toEqual([]);
+    // A third complex one is still new.
+    const more = `function View(a) {\n${cb(30)}\n${cb(18)}\n${cb(17)}\n}`;
+    expect(
+      check(measure([{ path: "src/view.tsx", source: more }]), b).map((v) => [v.value, v.frozen]),
+    ).toEqual([[17, null]]);
+  });
+
+  it("keeps a frozen function's value when it moves to another file", () => {
+    const m = measure([
+      { path: "src/old.ts", source: "export {};" },
+      { path: "src/split/legacy.ts", source: complex("legacy", 20) },
+    ]);
+    expect(check(m, baseline)).toEqual([]);
+    const twice = measure([
+      { path: "src/a.ts", source: complex("legacy", 20) },
+      { path: "src/b.ts", source: complex("legacy", 20) },
+    ]);
+    expect(check(twice, baseline).map((v) => [v.file, v.frozen])).toEqual([["src/b.ts", null]]);
   });
 
   it("fails new violations and leaves code under the limits alone", () => {
@@ -135,6 +178,8 @@ describe("ratchets", () => {
     expect(sizeChecked("supabase/migrations/2026_x.sql")).toBe(false);
     expect(sizeChecked("apps/app/src/types/supabase.ts")).toBe(false);
     expect(sizeChecked("supabase/functions/_shared/notes-doc/notes-doc.bundle.js")).toBe(false);
+    expect(sizeChecked("supabase/functions/_shared/contracts/vocabularies.ts")).toBe(false);
+    expect(sizeChecked("apps/app/src/styles/tokens.css")).toBe(false);
     expect(sizeChecked("apps/app/src/lib/sync/store.test.ts")).toBe(true);
     expect(sizeChecked("apps/desktop/src-tauri/src/lib.rs")).toBe(true);
     expect(complexityChecked("apps/app/src/lib/sync/store.test.ts")).toBe(false);

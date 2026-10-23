@@ -36,7 +36,6 @@
     "apps/app/src/lib/sync/store.ts": 85991,
     "apps/app/src/routes/pages/book-page.tsx": 33438,
     "apps/app/src/routes/pages/contacts-page.tsx": 33011,
-    "apps/app/src/styles/tokens.css": 47910,
     "apps/desktop/src-tauri/src/commands/caldav.rs": 33474,
     "apps/desktop/src-tauri/src/commands/email/connection.rs": 45846,
     "apps/desktop/src-tauri/src/commands/email/storage.rs": 33382,
@@ -44,7 +43,6 @@
     "apps/desktop/src-tauri/src/store_redb/mod.rs": 46031,
     "supabase/functions/_shared/account-erasure.test.ts": 40575,
     "supabase/functions/_shared/contracts/vocabularies.test.ts": 34466,
-    "supabase/functions/_shared/contracts/vocabularies.ts": 85317,
     "supabase/functions/_shared/description-markdown.ts": 35789,
     "supabase/functions/booking-public/index.ts": 33731,
     "supabase/functions/moduo-mcp/modules/tasks.ts": 102309,
@@ -944,7 +942,6 @@
       "complexityOf>visit": 18
     },
     "scripts/ci/test-weakening.ts": {
-      "detect": 17,
       "parseDiff": 23
     },
     "scripts/dns-diff.ts": {

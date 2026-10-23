@@ -5,13 +5,15 @@
  *   complexity  a function whose cognitive complexity is over 15 (SonarSource's metric and default)
  *
  * What was over a limit on 2026-10-23 is frozen in `ratchets.baseline.json` at that value. A
- * frozen file or function may shrink but not grow; anything new over a limit fails. Fix a failure
+ * frozen file may grow by at most 4 KB and a frozen function by 3 (the headroom below); anything
+ * new over a limit fails. A frozen function keeps its value when it moves to another file. Fix a failure
  * by splitting the file or function. Raising a baseline value is a deliberate, reviewed edit to the
  * JSON (it is on the Tier 2 path list), never something a script does.
  *
  * Complexity is scored per function, without the functions nested inside it (each of those is
  * scored on its own), so a React component is not charged for its callbacks. A function is named
- * by its enclosing names, e.g. `TaskRow>useEffect(cb)`; a second one with the same name gets `#2`.
+ * by its enclosing names, e.g. `TaskRow>useEffect(cb)`; a second one with the same name gets `#2`,
+ * and same-named functions are compared by score, not by that number.
  * Written in erasable TypeScript only, so `node` (type stripping) and `bun` both run it.
  *
  * CLI:
@@ -30,6 +32,13 @@ import { parseSync } from "oxc-parser";
 
 export const SIZE_LIMIT = 32 * 1024;
 export const COMPLEXITY_LIMIT = 15;
+/**
+ * How far a frozen value may grow before it fails: a routine fix in a big file or function
+ * passes, a steady drift doesn't. The headroom is measured from the frozen value, so it is spent
+ * once; `--tighten` after a split re-bases it.
+ */
+export const SIZE_HEADROOM = 4 * 1024;
+export const COMPLEXITY_HEADROOM = 3;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const BASELINE = path.join(ROOT, "scripts/ci/ratchets.baseline.json");
@@ -39,10 +48,15 @@ const COMPLEXITY_FILES = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 // Generated, vendored, throwaway or append-only history: not code anyone splits.
 const EXCLUDED =
   /^(\.design|storybook-static|scripts\/spikes|supabase\/migrations)\/|\.d\.[cm]?ts$|__snapshots__\/|\/notes-doc\.bundle\.js$|^apps\/app\/src\/types\/supabase\.ts$|(^|\/)node_modules\/|(^|\/)dist\//;
+// Single sources the rules require editing (AGENTS.md rules 3 and 4): long lists, not logic.
+const SIZE_EXEMPT = new Set([
+  "supabase/functions/_shared/contracts/vocabularies.ts",
+  "apps/app/src/styles/tokens.css",
+]);
 const TEST = /\.(test|spec)\.[cm]?[jt]sx?$|^e2e\//;
 
 export function sizeChecked(file: string): boolean {
-  return SIZE_FILES.test(file) && !EXCLUDED.test(file);
+  return SIZE_FILES.test(file) && !EXCLUDED.test(file) && !SIZE_EXEMPT.has(file);
 }
 
 export function complexityChecked(file: string): boolean {
@@ -292,25 +306,94 @@ export function measure(files: { path: string; source: string }[]): Measured {
   return m;
 }
 
-export function check(measured: Measured, baseline: Baseline): Violation[] {
-  const out: Violation[] = [];
-  for (const [file, bytes] of Object.entries(measured.size)) {
-    const frozen = baseline.size[file] ?? null;
-    if (frozen === null || bytes > frozen) out.push({ kind: "size", file, value: bytes, frozen });
+const baseName = (fn: string) => fn.replace(/#\d+$/, "");
+
+/** Functions grouped by name without the `#N` suffix, highest score first. */
+function byBaseName(fns: Record<string, number>): Map<string, { name: string; score: number }[]> {
+  const groups = new Map<string, { name: string; score: number }[]>();
+  for (const [name, score] of Object.entries(fns)) {
+    const key = baseName(name);
+    groups.set(key, [...(groups.get(key) ?? []), { name, score }]);
   }
-  for (const [file, fns] of Object.entries(measured.complexity)) {
-    for (const [fn, score] of Object.entries(fns)) {
-      const frozen = baseline.complexity[file]?.[fn] ?? null;
-      if (frozen === null || score > frozen)
-        out.push({
-          kind: "complexity",
-          file,
-          fn,
-          line: measured.lines[file]?.[fn],
-          value: score,
-          frozen,
-        });
-    }
+  for (const list of groups.values()) list.sort((a, b) => b.score - a.score);
+  return groups;
+}
+
+function checkSize(measured: Measured, baseline: Baseline): Violation[] {
+  return Object.entries(measured.size).flatMap(([file, bytes]) => {
+    const frozen = baseline.size[file] ?? null;
+    const fails = frozen === null || bytes > frozen + SIZE_HEADROOM;
+    return fails ? [{ kind: "size" as const, file, value: bytes, frozen }] : [];
+  });
+}
+
+interface Unmatched {
+  file: string;
+  fn: string;
+  score: number;
+}
+
+/**
+ * One file's functions against its frozen ones. Same-named functions (`useCallback(cb)`, `#2`,
+ * `#3` …) are paired highest with highest, so adding or removing one doesn't shift the others onto
+ * the wrong frozen value. Returns the violations, the functions with no frozen partner, and the
+ * frozen values left without a function (it shrank, was deleted, or moved to another file).
+ */
+function pairFile(file: string, measured: Measured, baseline: Baseline) {
+  const now = byBaseName(measured.complexity[file] ?? {});
+  const was = byBaseName(baseline.complexity[file] ?? {});
+  const violations: Violation[] = [];
+  const unmatched: Unmatched[] = [];
+  const left: [string, number][] = [];
+  for (const [base, fns] of now) {
+    const frozen = (was.get(base) ?? []).map((f) => f.score);
+    fns.forEach(({ name, score }, i) => {
+      if (i >= frozen.length) unmatched.push({ file, fn: name, score });
+      else if (score > frozen[i] + COMPLEXITY_HEADROOM)
+        violations.push(complexityViolation(measured, file, name, score, frozen[i]));
+    });
+  }
+  for (const [base, fns] of was) {
+    for (const f of fns.slice(now.get(base)?.length ?? 0)) left.push([base, f.score]);
+  }
+  return { violations, unmatched, left };
+}
+
+function complexityViolation(
+  measured: Measured,
+  file: string,
+  fn: string,
+  value: number,
+  frozen: number | null,
+): Violation {
+  return { kind: "complexity", file, fn, line: measured.lines[file]?.[fn], value, frozen };
+}
+
+/** Takes the smallest frozen value from the pool that still covers `score`, if any. */
+function takeFrozen(pool: number[], score: number): boolean {
+  let best = -1;
+  pool.forEach((frozen, i) => {
+    if (score <= frozen + COMPLEXITY_HEADROOM && (best < 0 || frozen < pool[best])) best = i;
+  });
+  if (best >= 0) pool.splice(best, 1);
+  return best >= 0;
+}
+
+export function check(measured: Measured, baseline: Baseline): Violation[] {
+  const out = checkSize(measured, baseline);
+  const unmatched: Unmatched[] = [];
+  const orphans = new Map<string, number[]>();
+  const files = new Set([...Object.keys(measured.complexity), ...Object.keys(baseline.complexity)]);
+  for (const file of files) {
+    const r = pairFile(file, measured, baseline);
+    out.push(...r.violations);
+    unmatched.push(...r.unmatched);
+    for (const [base, score] of r.left) orphans.set(base, [...(orphans.get(base) ?? []), score]);
+  }
+  // A frozen function moved to another file (the fix for a big file) keeps its frozen value.
+  for (const { file, fn, score } of unmatched) {
+    if (!takeFrozen(orphans.get(baseName(fn)) ?? [], score))
+      out.push(complexityViolation(measured, file, fn, score, null));
   }
   return out;
 }
@@ -369,7 +452,7 @@ function describe(v: Violation): string {
   const limit = v.kind === "size" ? `${SIZE_LIMIT / 1024} KB` : `${COMPLEXITY_LIMIT}`;
   if (v.frozen === null) return `${where}: ${unit}, over the ${limit} limit (new)`;
   const was = v.kind === "size" ? `${(v.frozen / 1024).toFixed(1)} KB` : `${v.frozen}`;
-  return `${where}: ${unit}, grew past its frozen ${was}`;
+  return `${where}: ${unit}, grew more than the headroom past its frozen ${was}`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -405,5 +488,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     );
     process.exit(1);
   }
-  console.log("Ratchets hold: nothing new over 32 KB or complexity 15, nothing frozen grew.");
+  console.log(
+    "Ratchets hold: nothing new over 32 KB or complexity 15, nothing frozen outgrew its headroom.",
+  );
 }

@@ -8,8 +8,9 @@
  *   sync-mock           a new mock or spy in an apps/app/src/lib/sync test, where the
  *                       real kernel is the thing under test
  *
- * Counts are net per file and per kind, so moving an assertion, or a whole file (a rename),
- * flags nothing. `only` is an error (exit 1); the rest are warnings for the reviewer: deleting a
+ * Counts are net per file and per kind, so moving an assertion or renaming a file flags nothing;
+ * a lost assertion is reported only when the whole change has fewer of them (a split file is
+ * fine). String contents are ignored, so test data that quotes `it.only(` is not flagged. `only` is an error (exit 1); the rest are warnings for the reviewer: deleting a
  * stale test is sometimes right, and the PR's reviewer decides. A diff script, not a model.
  * Written in erasable TypeScript only, so `node` (type stripping) and `bun` both run it.
  *
@@ -45,7 +46,7 @@ const SQL_ASSERTION =
 
 const PATTERNS: Record<Exclude<FindingKind, "deleted-assertions">, RegExp> = {
   skip: /\b(?:it|test|describe|suite|bench)\s*\.\s*(?:skip|todo|skipIf|runIf)\b|\bx(?:it|test|describe)\s*\(/g,
-  only: /\b(?:it|test|describe|suite|bench)\s*\.\s*only\b|\bf(?:it|describe)\s*\(/g,
+  only: /\b(?:it|test|describe|suite|bench)\s*\.\s*only\b/g,
   "sync-mock":
     /\b(?:rs|vi|jest)\s*\.\s*(?:mock|doMock|fn|spyOn|stubGlobal|stubEnv)\s*\(|\.mock(?:Implementation|ReturnValue|ResolvedValue|RejectedValue)(?:Once)?\s*\(/g,
 };
@@ -93,20 +94,36 @@ function stripComment(line: string): string {
   return line.replace(/\s\/\/.*$/, "");
 }
 
-function count(lines: string[], re: RegExp): number {
+/** Empties string literals, so test data that quotes `it.only(` or `expect(` is not code. */
+export function blankStrings(line: string): string {
+  return line.replace(/(["'`])(?:\\.|(?!\1).)*\1/g, "$1$1");
+}
+
+function count(lines: string[], re: RegExp, sql = false): number {
   let n = 0;
-  for (const line of lines) n += stripComment(line).match(re)?.length ?? 0;
+  // pgTAP assertions take string arguments; SQL strings never hold a call worth counting anyway.
+  for (const line of lines)
+    n += (sql ? stripComment(line) : blankStrings(stripComment(line))).match(re)?.length ?? 0;
   return n;
 }
 
 export function detect(diff: string): Finding[] {
   const findings: Finding[] = [];
-  for (const { file, oldFile, added, removed } of parseDiff(diff)) {
-    // A test renamed to a non-test path still counts: its assertions are what it lost.
-    if (!TEST_FILE.test(file) && !TEST_FILE.test(oldFile)) continue;
+  // A test renamed to a non-test path still counts: its assertions are what it lost.
+  const tests = parseDiff(diff).filter((f) => TEST_FILE.test(f.file) || TEST_FILE.test(f.oldFile));
+  const assertionsNet = (f: FileDiff) => {
+    const sql = f.file.endsWith(".sql");
+    const re = sql ? SQL_ASSERTION : JS_ASSERTION;
+    return count(f.added, re, sql) - count(f.removed, re, sql);
+  };
+  // Splitting one test file into two loses assertions in one file and gains them in the other:
+  // per-file losses are reported only when the change as a whole has fewer assertions.
+  const totalLost = tests.reduce((n, f) => n + assertionsNet(f), 0) < 0;
+  for (const f of tests) {
+    const { file, added, removed } = f;
     const net = (re: RegExp) => count(added, re) - count(removed, re);
 
-    const lostAssertions = -net(file.endsWith(".sql") ? SQL_ASSERTION : JS_ASSERTION);
+    const lostAssertions = totalLost ? -assertionsNet(f) : 0;
     if (lostAssertions > 0)
       findings.push({
         file,
