@@ -300,14 +300,18 @@ BEGIN
     AND (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.chat_chain_mutes'::regclass),
     'RLS is on for both new tables');
   PERFORM test.ok(
-    NOT has_function_privilege('authenticated', 'public.chat__convert_v1(uuid)', 'EXECUTE')
-    AND NOT has_function_privilege('authenticated', 'public.chat__can_read_channel_as(uuid, uuid)', 'EXECUTE')
+    NOT has_function_privilege('authenticated', 'public.chat__can_read_channel_as(uuid, uuid)', 'EXECUTE')
     AND NOT has_function_privilege('authenticated', 'public.chat__v1_to_v2(text)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.chat_can_read_channel(uuid)', 'EXECUTE')
     AND has_function_privilege('authenticated', 'public.chat_can_read_channel(uuid)', 'EXECUTE')
     AND NOT has_function_privilege('anon', 'public.chat__unaccent(text)', 'EXECUTE')
     AND NOT has_function_privilege('authenticated', 'public.chat__unaccent(text)', 'EXECUTE'),
     'grants: the helpers are server-only; the read rule is for signed-in people');
+  PERFORM test.ok(
+    to_regprocedure('public.chat__convert_v1(uuid)') IS NULL
+    AND to_regprocedure('public.chat__v1_tokens(text)') IS NULL
+    AND to_regprocedure('public.chat_can_access_workspace(uuid)') IS NULL,
+    'the retired v1 helpers are gone (…_drop_legacy_chat_fns.sql)');
   PERFORM test.ok(
     (SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname IN (
       'chat_messages_stream_idx', 'chat_messages_delta_idx', 'chat_messages_search_idx',
@@ -422,7 +426,6 @@ BEGIN
            'public.spine__visible_to(uuid, text, uuid, uuid)'::regprocedure,
            'public.chat_realtime_topic_allowed(text)'::regprocedure,
            'public.chat_op_set_announcement(uuid, boolean)'::regprocedure,
-           'public.chat__convert_v1(uuid)'::regprocedure,
            'public.chat__messages_body_text()'::regprocedure,
            'public.account_erase_workspace_data(uuid, boolean)'::regprocedure)
      AND (NOT p.prosecdef
@@ -433,7 +436,7 @@ BEGIN
   PERFORM test.ok(v_bad IS NULL, 'definers: search_path pinned, no PUBLIC or anon EXECUTE', v_bad);
   SELECT string_agg(f, ', ') INTO v_bad
     FROM unnest(ARRAY['chat__can_read_channel_as(uuid, uuid)', 'spine__visible_to(uuid, text, uuid, uuid)',
-                      'chat__convert_v1(uuid)', 'chat__messages_body_text()',
+                      'chat__messages_body_text()',
                       'account_erase_workspace_data(uuid, boolean)', 'chat__body_text(text)',
                       'chat__v1_to_v2(text)', 'chat__unaccent(text)']) AS f
    WHERE has_function_privilege('authenticated', 'public.' || f, 'EXECUTE');

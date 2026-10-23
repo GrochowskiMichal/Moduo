@@ -6862,7 +6862,6 @@ export type Database = {
         }
         Returns: number
       }
-      chat__convert_v1: { Args: { p_workspace_id?: string | null }; Returns: Json }
       chat__create_channel_as: {
         Args: {
           p_announcement: boolean | null
@@ -7425,7 +7424,6 @@ export type Database = {
       }
       chat__v1_prose: { Args: { p_text: string | null }; Returns: string }
       chat__v1_to_v2: { Args: { p_body: string | null }; Returns: string }
-      chat__v1_tokens: { Args: { p_body: string | null }; Returns: string }
       chat__was_removed: {
         Args: { p_channel_id: string | null; p_user: string | null }
         Returns: boolean
@@ -7566,10 +7564,6 @@ export type Database = {
           snippet: string
           via: string
         }[]
-      }
-      chat_can_access_workspace: {
-        Args: { p_workspace_id: string | null }
-        Returns: boolean
       }
       chat_can_read_channel: {
         Args: { p_channel_id: string | null }
