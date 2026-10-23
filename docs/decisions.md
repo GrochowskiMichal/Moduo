@@ -8,6 +8,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-23 · HV-4: `db-test`, `rust-check` and `e2e-smoke` in checks.yml, path-filtered, skip = pass in `static-checks`; the test DB is a prod schema snapshot from `db-snapshot.yml` via the Actions cache; `db:test` has a known-failures baseline → decisions/workflow.md
 - 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; advisory AI review on PRs into develop; Maciej agreed → decisions/workflow.md
 - 2026-10-23 · `oven-sh/setup-bun` pinned to a commit in every workflow (it ran beside the signing keys and deploy tokens); the CodeQL backlog triaged and dismissed with reasons → decisions/workflow.md
 - 2026-10-22 · MOD-60: landing returns a real 404 page for unknown paths (`404-page`), no longer index.html with a 200.
