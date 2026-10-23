@@ -6475,11 +6475,6 @@ export type Database = {
         }
         Returns: Json
       }
-      calendar_op_publish: {
-        Args: { p_calendar_id: string | null; p_level: string | null }
-        Returns: string
-      }
-      calendar_public_feed: { Args: { p_token: string | null }; Returns: Json }
       calendar_set_save: {
         Args: {
           p_calendar_ids: string[] | null
@@ -11286,10 +11281,6 @@ export type Database = {
         Returns: string[]
       }
       perm_entity_module: { Args: { p_entity_type: string | null }; Returns: string }
-      perm_has: {
-        Args: { p_key: string | null; p_workspace_id: string | null }
-        Returns: boolean
-      }
       perm_i_have: {
         Args: { p_key: string | null; p_workspace_id: string | null }
         Returns: boolean
@@ -11838,10 +11829,6 @@ export type Database = {
       share_assign_preview: {
         Args: { p_bucket_id: string | null; p_user_id: string | null }
         Returns: string
-      }
-      share_can: {
-        Args: { p_id: string | null; p_min: string | null; p_type: string | null }
-        Returns: boolean
       }
       share_default_calendar_grant: {
         Args: { p_calendar_id: string | null }
