@@ -18,7 +18,7 @@
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUpRight, Check, Plug } from "lucide-react";
+import { ArrowUpRight, Check } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -49,8 +49,9 @@ import {
   expiredMessage,
   initialDraft,
   initialWorkspaceId,
-  isCheckedAppDomain,
+  isCheckedApp,
   moveLine,
+  returnsTo,
   shownScopes,
   UNCHECKED_APP_NOTE,
   workspaceChoices,
@@ -75,20 +76,11 @@ function ConsentShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AppMark() {
-  return (
-    <span className="grid size-10 place-items-center rounded-lg border border-border bg-muted text-muted-foreground">
-      <Plug className="size-5" aria-hidden />
-    </span>
-  );
-}
-
 /** The card's shape while the sign-in is read: the same rows, quietly. */
 function ConsentSkeleton() {
   return (
     <ConsentShell>
       <div className="flex flex-col gap-4" aria-busy="true" aria-label="Loading">
-        <Skeleton className="size-10" />
         <Skeleton className="h-6 w-3/4" />
         <Skeleton className="h-4 w-1/3" />
         <Skeleton className="h-9 w-full" />
@@ -117,6 +109,10 @@ export function OAuthConsentPage() {
   const [phase, setPhase] = useState<Phase>({ kind: "reading" });
 
   // Signed out: the email-code sign-in, then back here (pending consent).
+  useEffect(() => {
+    if (!authorizationId) setPhase({ kind: "expired", appName: null });
+  }, [authorizationId]);
+
   useEffect(() => {
     if (loading || isSignedIn || !authorizationId) return;
     setPendingConsent(authorizationId);
@@ -163,8 +159,7 @@ export function OAuthConsentPage() {
   if (phase.kind === "expired") {
     return (
       <ConsentShell>
-        <AppMark />
-        <h1 className="mt-4 font-display text-lg text-foreground">Sign-in link expired</h1>
+        <h1 className="font-display text-lg text-foreground">Sign-in link expired</h1>
         <p className="mt-2 text-sm text-muted-foreground" role="alert">
           {expiredMessage(phase.appName)}
         </p>
@@ -182,8 +177,7 @@ export function OAuthConsentPage() {
   if (phase.kind === "leaving") {
     return (
       <ConsentShell>
-        <AppMark />
-        <h1 className="mt-4 font-display text-lg text-foreground">
+        <h1 className="font-display text-lg text-foreground">
           {phase.approved ? `${phase.appName} is connected` : `${phase.appName} wasn't connected`}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground" role="status">
@@ -276,7 +270,8 @@ function ConsentForm({
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const noneQualify = choices.every((c) => c.disabled);
   const shown = workspace ? shownScopes(scopes, workspace.actor) : scopes;
-  const ceilings = workspace ? consentCeilings(workspace.actor, connection, workspace.id) : null;
+  const ceilings = workspace ? consentCeilings(workspace.actor) : null;
+  const returnAddress = returnsTo(request.clientScheme, request.clientDomain);
   const blocker = approveBlocker(choice, shown);
   const move = moveLine(
     appName,
@@ -357,17 +352,16 @@ function ConsentForm({
 
   return (
     <ConsentShell>
-      <AppMark />
-      <h1 className="mt-4 font-display text-lg text-foreground">{consentTitle(appName)}</h1>
+      <h1 className="font-display text-lg text-foreground">{consentTitle(appName)}</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        {request.clientDomain ? (
+        {returnAddress ? (
           <>
-            Returns to <span className="font-mono text-foreground">{request.clientDomain}</span>
+            Returns to <span className="font-mono text-foreground">{returnAddress}</span>
           </>
         ) : (
           "Its website isn't known."
         )}
-        {isCheckedAppDomain(request.clientDomain) ? null : (
+        {isCheckedApp(request.clientScheme, request.clientDomain) ? null : (
           <span className="block text-xs">{UNCHECKED_APP_NOTE}</span>
         )}
       </p>
@@ -376,7 +370,7 @@ function ConsentForm({
       ) : null}
 
       {connection ? (
-        <p className="mt-4 rounded-md border border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
+        <p className="mt-4 border-t border-border pt-4 text-xs text-muted-foreground">
           Connected now{currentWorkspaceName ? ` in ${currentWorkspaceName}` : ""} ·{" "}
           {scopeSummary(toKeyScopes(connection.scopes))}. Approving replaces this with what you
           choose below.

@@ -25,7 +25,7 @@ describe("pending consent: resume after sign-in", () => {
     expect(window.localStorage.getItem(PENDING_CONSENT_KEY)).toBeNull();
   });
 
-  it("expires after 10 minutes", () => {
+  it("expires after 4 minutes (Auth keeps an app's sign-in 3)", () => {
     setPendingConsent("8f2c-auth", 0);
     expect(hasPendingConsent(PENDING_CONSENT_TTL_MS + 1)).toBe(false);
     expect(takePendingConsent(PENDING_CONSENT_TTL_MS + 1)).toBeNull();

@@ -5,12 +5,13 @@
  * signed-out person to /auth; the code sign-in (email-auth-panel) and /auth
  * itself resume at /oauth/consent with it, before a pending invite or
  * onboarding. Supabase Auth lets an app's sign-in live 3 minutes, so a
- * pending consent older than 10 minutes is someone's abandoned attempt.
+ * pending consent older than 4 minutes is an abandoned attempt that would only
+ * send a later sign-in to an expired screen.
  */
 
 export const PENDING_CONSENT_KEY = "moduo:pending_consent";
 
-export const PENDING_CONSENT_TTL_MS = 10 * 60 * 1000;
+export const PENDING_CONSENT_TTL_MS = 4 * 60 * 1000;
 
 function storage(): Storage | null {
   try {

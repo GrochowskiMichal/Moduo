@@ -199,6 +199,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 
+- 2026-10-23 · MCPO-4: `/oauth/consent` reads the sign-in via Auth then `workspace_api_keys_oauth_request` (name, domain, current connection, full workspaces), holds a returning app's redirect until Approve, denies an Auth-approved one by redirecting with `access_denied`; card shared with the key screen; Disconnect also withdraws the grant → decisions/mcp.md
 - 2026-10-23 · MCPO-3: a connection is a `workspace_api_keys` row with `oauth_client_id`, approved for the person's own pending (or Auth-approved) sign-in; one live per person and app; quiet bell notice only its person reads; the connector verifies the app's JWT and runs as the connection's key; 401 + protected-resource discovery → decisions/mcp.md
 - 2026-10-23 · MCPO-2: connector on `@modelcontextprotocol/server` (stateless, per-key tools) + `@supabase/server`; our 401/405/parse answers, `parseToolArgs` gate, refusal and unknown-tool texts kept; only protocol-level answers change (negotiation up to 2025-11-25, method-not-found wording, unknown protocol header and bad initialize refused); parity snapshot proves it → decisions/mcp.md
 - 2026-10-23 · MCPO-1: app tokens refused everywhere but the connector (pre-request, restrictive policies on Storage/Realtime/published tables, Edge Function check); no access-token hook; no passwords set through Supabase Auth (trigger) and Settings' change-password removed → decisions/mcp.md

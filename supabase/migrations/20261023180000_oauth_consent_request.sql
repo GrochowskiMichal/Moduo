@@ -7,7 +7,9 @@
 -- (gotcha in docs/gotchas/supabase.md), so the page can't name the app or show
 -- what it holds from Auth alone. This read answers, for the person's own live
 -- sign-in (the same checks as workspace_api_keys_connect_oauth):
---   - the app's name and the domain the sign-in returns to,
+--   - the app's name, and the scheme and domain the sign-in returns to (the
+--     scheme too: an app may register `someapp://claude.ai/cb`, whose host
+--     alone would read as claude.ai while the code goes to a local program),
 --   - the person's live connection to that app, if any (the reconnect
 --     pre-fill, and the "moves from A to B" line), whatever their role there,
 --   - the workspaces where the person manages keys that are at the 20 cap
@@ -28,6 +30,7 @@ DECLARE
   v_redirect text;
   v_client_name text;
   v_domain text;
+  v_scheme text;
   v_conn public.workspace_api_keys;
   v_full jsonb;
 BEGIN
@@ -46,6 +49,7 @@ BEGIN
       USING ERRCODE = 'P0002';
   END IF;
 
+  v_scheme := lower(substring(btrim(v_redirect) FROM '^([a-zA-Z][a-zA-Z0-9+.-]*):'));
   -- The same host connect stores as oauth_client_domain.
   v_domain := nullif(lower(substring(btrim(v_redirect)
                                      FROM '^[a-zA-Z][a-zA-Z0-9+.-]*://(?:[^@/?#]*@)?(\[[^]]*\]|[^:/?#]+)')), '');
@@ -68,6 +72,7 @@ BEGIN
     'client_id', v_client_id,
     'app_name', left(nullif(btrim(coalesce(v_client_name, '')), ''), 80),
     'client_domain', v_domain,
+    'client_scheme', v_scheme,
     'connection', CASE WHEN v_conn.id IS NULL THEN NULL ELSE jsonb_build_object(
       'id', v_conn.id,
       'workspace_id', v_conn.workspace_id,

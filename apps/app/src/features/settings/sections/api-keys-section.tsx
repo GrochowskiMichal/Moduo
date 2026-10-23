@@ -191,6 +191,8 @@ function ApiKeyRow({
               value={nameDraft}
               maxLength={80}
               autoFocus
+              // Renaming usually replaces the name: start with it selected.
+              onFocus={(event) => event.currentTarget.select()}
               readOnly={renameBusy}
               size="sm"
               onChange={(event) => setNameDraft(event.target.value)}
@@ -686,9 +688,9 @@ export function ApiKeysSection() {
               />
             </div>
             <p className="text-xs text-muted-foreground">
-              An app reaches only the modules you choose — View lets it read, Edit also lets it make
-              changes — and never more than you can do. Everything it does is attributed in the
-              activity trail.
+              An app reaches only the modules you choose: View lets it read, Edit also lets it make
+              changes, and it never gets more than you can do. Everything it does is attributed in
+              the activity trail.
             </p>
           </KeysGroup>
 

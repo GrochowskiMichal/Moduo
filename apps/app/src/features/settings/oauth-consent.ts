@@ -18,17 +18,34 @@ import {
 } from "./api-keys";
 
 /**
- * Apps whose sign-in returns to these domains (or their subdomains) are the
- * ones Moduo expects; every other app gets the quiet "hasn't checked" line.
- * Matched on the domain the sign-in returns to, which the app can't fake the
- * way it can its name.
+ * Apps whose sign-in returns over https to these domains (or their
+ * subdomains) are the ones Moduo expects; every other app gets the quiet
+ * "hasn't checked" line. Matched on where the sign-in returns, which the app
+ * can't fake the way it can its name; the scheme counts too, since
+ * `someapp://claude.ai/cb` hands the code to a local program, not claude.ai.
  */
 export const CHECKED_APP_DOMAINS = ["claude.ai", "anthropic.com", "openai.com", "chatgpt.com"];
 
-export function isCheckedAppDomain(domain: string | null | undefined): boolean {
+export function isCheckedApp(
+  scheme: string | null | undefined,
+  domain: string | null | undefined,
+): boolean {
+  if ((scheme ?? "").trim().toLowerCase() !== "https") return false;
   const host = (domain ?? "").trim().toLowerCase().replace(/\.$/, "");
   if (!host) return false;
   return CHECKED_APP_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
+}
+
+/** Where the screen says the sign-in returns: the host for the web, the whole address start otherwise. */
+export function returnsTo(
+  scheme: string | null | undefined,
+  domain: string | null | undefined,
+): string | null {
+  const s = (scheme ?? "").trim().toLowerCase();
+  const host = (domain ?? "").trim();
+  if (s === "https" || s === "http") return host || null;
+  if (!s) return host || null;
+  return `${s}://${host}`;
 }
 
 export const UNCHECKED_APP_NOTE = "Moduo hasn't checked this app.";
@@ -148,17 +165,16 @@ export function initialDraft(connection: ConsentConnection | null): ConsentDraft
   };
 }
 
-/** The card's ceilings in a workspace: up to the person's own access, or what the connection there holds. */
-export function consentCeilings(
-  actor: KeyActor,
-  connection: ConsentConnection | null,
-  workspaceId: string,
-): KeyCeilings {
-  const stored =
-    connection && connection.workspaceId === workspaceId
-      ? toKeyScopes(connection.scopes)
-      : toKeyScopes({});
-  return keyCeilings({ stored, isMine: true, ownerName: "you", myCaps: keyScopeCaps(actor) });
+/** The card's ceilings: up to the person's own access in the workspace. */
+export function consentCeilings(actor: KeyActor): KeyCeilings {
+  // Like a new key: approving checks the person's own access afresh, so what
+  // a connection held before a role change can't be chosen again.
+  return keyCeilings({
+    stored: toKeyScopes({}),
+    isMine: true,
+    ownerName: "you",
+    myCaps: keyScopeCaps(actor),
+  });
 }
 
 /** What the card shows and sends: the draft, never above the person's own access there. */

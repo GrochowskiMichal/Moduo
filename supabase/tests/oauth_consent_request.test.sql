@@ -22,7 +22,9 @@ VALUES
   (test.id('C'), 'dynamic', 'https://Claude.ai/api/mcp/auth_callback', 'authorization_code,refresh_token',
    'Claude', 'public', 'none'),
   (test.id('G'), 'dynamic', 'http://localhost:33418/callback', 'authorization_code,refresh_token',
-   '  ', 'public', 'none');
+   '  ', 'public', 'none'),
+  (test.id('Z'), 'dynamic', 'evilapp://claude.ai/cb', 'authorization_code,refresh_token',
+   'Claude', 'public', 'none');
 
 CREATE FUNCTION test.sign_in(p_who text, p_client text, p_status text DEFAULT 'pending',
                              p_expires interval DEFAULT interval '3 minutes')
@@ -55,6 +57,11 @@ SELECT test.ok(
           AND r -> 'full_workspace_ids' = '[]'::jsonb
    FROM test.request('E', (SELECT id FROM first_sign_in)) r),
   'a first sign-in reads the app, its domain, and no connection');
+SELECT test.ok(
+  (SELECT r ->> 'client_scheme' = 'evilapp' AND r ->> 'client_domain' = 'claude.ai'
+   FROM test.request('E', test.sign_in('E', 'Z')) r)
+  AND (test.request('E', (SELECT id FROM first_sign_in))) ->> 'client_scheme' = 'https',
+  'the scheme comes with the domain, so evilapp://claude.ai isn''t read as claude.ai');
 SELECT test.ok(
   (test.request('E', test.sign_in('E', 'G'))) -> 'app_name' = 'null'::jsonb
   AND (test.request('E', test.sign_in('E', 'G'))) ->> 'client_domain' = 'localhost',

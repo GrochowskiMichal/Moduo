@@ -426,11 +426,11 @@ export const webWorkspace: WorkspaceRuntime = {
     if (!key.oauthClientId) return;
     const user = await getAuthedUser();
     if (!user || user.id !== key.createdBy) return;
-    try {
-      await supabaseClient.auth.oauth.revokeGrant({ clientId: key.oauthClientId });
-    } catch (err) {
-      console.warn("[api-keys] revokeGrant", err);
-    }
+    // Capped, so a slow Auth never keeps a disconnected row on screen.
+    const grant = supabaseClient.auth.oauth
+      .revokeGrant({ clientId: key.oauthClientId })
+      .catch((err: unknown) => console.warn("[api-keys] revokeGrant", err));
+    await Promise.race([grant, new Promise((resolve) => setTimeout(resolve, 4_000))]);
   },
   async readOAuthRequest(authorizationId) {
     // Read through Auth first: that ties the sign-in to the signed-in person,
@@ -460,6 +460,7 @@ export const webWorkspace: WorkspaceRuntime = {
       clientId: String(row.client_id ?? ""),
       appName: typeof row.app_name === "string" ? row.app_name : null,
       clientDomain: typeof row.client_domain === "string" ? row.client_domain : null,
+      clientScheme: typeof row.client_scheme === "string" ? row.client_scheme : null,
       connection: conn
         ? {
             id: conn.id,

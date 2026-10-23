@@ -15,9 +15,10 @@ import {
   expiredMessage,
   initialDraft,
   initialWorkspaceId,
-  isCheckedAppDomain,
+  isCheckedApp,
   moveLine,
   NO_ACCESS_MESSAGE,
+  returnsTo,
   ROLE_MESSAGE,
   shownScopes,
   workspaceChoices,
@@ -38,7 +39,7 @@ describe("consent model: the app", () => {
     expect(consentTitle("Claude")).toBe("Claude wants to work in Moduo as you");
   });
 
-  it("checks apps only by the domain they return to (and its subdomains)", () => {
+  it("checks apps only by where they return over https (and subdomains)", () => {
     for (const d of [
       "claude.ai",
       "anthropic.com",
@@ -47,7 +48,7 @@ describe("consent model: the app", () => {
       "www.chatgpt.com",
       "Claude.AI",
     ]) {
-      expect(isCheckedAppDomain(d)).toBe(true);
+      expect(isCheckedApp("https", d)).toBe(true);
     }
     for (const d of [
       "localhost",
@@ -57,8 +58,19 @@ describe("consent model: the app", () => {
       "",
       null,
     ]) {
-      expect(isCheckedAppDomain(d)).toBe(false);
+      expect(isCheckedApp("https", d)).toBe(false);
     }
+    // A local program's own scheme can name any host: never checked.
+    expect(isCheckedApp("evilapp", "claude.ai")).toBe(false);
+    expect(isCheckedApp("http", "claude.ai")).toBe(false);
+    expect(isCheckedApp(null, "claude.ai")).toBe(false);
+  });
+
+  it("shows where the sign-in returns, scheme and all unless it's the web", () => {
+    expect(returnsTo("https", "claude.ai")).toBe("claude.ai");
+    expect(returnsTo("http", "localhost")).toBe("localhost");
+    expect(returnsTo("evilapp", "claude.ai")).toBe("evilapp://claude.ai");
+    expect(returnsTo(null, null)).toBeNull();
   });
 
   it("words an expired sign-in with the app, or 'your app'", () => {
@@ -105,25 +117,18 @@ describe("consent model: defaults and caps", () => {
   });
 
   it("caps each module at the person's own access, with the row's reason", () => {
-    const ceilings = consentCeilings(keyManagerViewer, null, "w1");
+    const ceilings = consentCeilings(keyManagerViewer);
     expect(ceilings.tasks).toEqual({ max: "view", why: "You can only view Tasks yourself." });
     expect(ceilings.calendar.max).toBe("none");
     expect(ceilings.calendar.why).toBe("You don't have access to Calendar yourself.");
-    expect(consentCeilings(owner, null, "w1").tasks).toEqual({ max: "edit", why: null });
+    expect(consentCeilings(owner).tasks).toEqual({ max: "edit", why: null });
     expect(
       shownScopes({ ...DEFAULT_KEY_SCOPES, tasks: "edit", calendar: "edit" }, keyManagerViewer),
     ).toMatchObject({ tasks: "view", calendar: "none" });
   });
 
-  it("keeps what the connection already holds in its own workspace selectable (a narrowed role never traps a row)", () => {
-    const connection = {
-      workspaceId: "w1",
-      scopes: { tasks: "edit" },
-      expiresAt: null,
-      includePrivateChat: false,
-    };
-    expect(consentCeilings(keyManagerViewer, connection, "w1").tasks.max).toBe("edit");
-    expect(consentCeilings(keyManagerViewer, connection, "w2").tasks.max).toBe("view");
+  it("never offers more than the person can do now, even on a reconnect that held more", () => {
+    expect(consentCeilings(keyManagerViewer).tasks.max).toBe("view");
   });
 });
 

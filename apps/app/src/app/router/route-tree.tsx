@@ -144,8 +144,9 @@ const oauthConsentRoute = createRoute({
     lazyRouteComponent(() => import("../../routes/pages/oauth-consent-page"), "OAuthConsentPage"),
   ),
   validateSearch: (search: Record<string, unknown>): { authorization_id?: string } => {
-    const id = search.authorization_id;
-    return typeof id === "string" && id.trim() ? { authorization_id: id.trim() } : {};
+    // Auth puts it into a request path as it is: letters, digits, - and _ only.
+    const id = typeof search.authorization_id === "string" ? search.authorization_id.trim() : "";
+    return /^[A-Za-z0-9_-]{1,128}$/.test(id) ? { authorization_id: id } : {};
   },
 });
 

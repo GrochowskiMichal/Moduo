@@ -42,6 +42,8 @@ export type OAuthConsentRequest = {
   appName: string | null;
   /** The host the sign-in returns to; null when unreadable. */
   clientDomain: string | null;
+  /** Its scheme ("https", "http" for localhost, or an app's own like "cursor"). */
+  clientScheme: string | null;
   /** The person's live connection to this app (a reconnect), in whichever workspace. */
   connection: {
     id: string;
