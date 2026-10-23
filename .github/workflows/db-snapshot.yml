@@ -1,0 +1,51 @@
+name: db-snapshot
+
+# Prod's schema snapshot for checks.yml's db-test job (HV-4): structure and catalog only, no
+# rows (`scripts/local/stack.sh snapshot`: the schema dumps plus extensions, applied migration
+# versions, API role settings, storage buckets, Realtime publication and cron jobs). It goes to
+# the Actions cache, never an artifact or the log: the repo is public, and a cache is readable
+# only by this repo's workflows. A run on develop (the schedule, or by hand) writes the cache
+# every pull request into develop and every push to mike or maciej can restore.
+#
+# Needs SUPABASE_ACCESS_TOKEN in the supabase-snapshot environment (deployment branches:
+# develop only), so a pull request can never reach the token.
+on:
+  schedule:
+    - cron: "41 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: db-snapshot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: supabase-snapshot
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@45a513f8c64c0bc8e0e3dfe572b5c95be85f6359 # v3.0.1
+        with:
+          version: 2.120.0
+
+      - name: Dump prod's schema (no rows)
+        run: |
+          [ -n "$SUPABASE_ACCESS_TOKEN" ] || { echo "::error::SUPABASE_ACCESS_TOKEN is not set in the supabase-snapshot environment."; exit 1; }
+          bash scripts/local/stack.sh snapshot > /dev/null
+          ls -l ~/.cache/moduo/supabase-snapshot
+
+      - name: Save it for db-test
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/moduo/supabase-snapshot
+          key: db-snapshot-${{ github.run_id }}
