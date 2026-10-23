@@ -61,7 +61,10 @@
       "~/.claude/commands",
       "~/.claude/skills",
       "~/.claude/plugins",
-      "~/.bun/bin"
+      "~/.bun/bin",
+      "~/.cache/pre-commit",
+      "~/.cache/ms-playwright",
+      "~/.cache/puppeteer"
     ]
   }
 }
