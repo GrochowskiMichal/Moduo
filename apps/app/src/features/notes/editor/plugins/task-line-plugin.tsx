@@ -29,7 +29,6 @@ import {
 } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
-  $addUpdateTag,
   $createTextNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
@@ -40,7 +39,6 @@ import {
   COLLABORATION_TAG,
   type ElementNode,
   HISTORIC_TAG,
-  HISTORY_MERGE_TAG,
   type LexicalEditor,
   type LexicalNode,
   type NodeKey,
@@ -67,6 +65,7 @@ import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
 
 import type { TaskLineSnapshot } from "../../tasks/detach";
+import { updateWithoutUndo } from "../collab-undo";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
 import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";
 
@@ -74,6 +73,8 @@ import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../sche
 export const TASK_LINE_TAG = "moduo-task-line";
 
 const RENAME_DEBOUNCE_MS = 500;
+/** Time to cross from a checkbox line to its "Make task" pill. */
+const PILL_GRACE_MS = 250;
 
 type LineEntry = {
   taskId: string | null;
@@ -206,13 +207,12 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
   // the plugin's mount sweep.
   if (editor.getRootElement() === null) return false;
   let landed = false;
-  editor.update(
+  updateWithoutUndo(
+    editor,
     () => {
-      // Fold the stamp into the SAME undo step as the insert/convert — ⌘Z
-      // must revert the whole mint (destroying a line that still carries its
-      // taskId, so the revert plan can delete the task too), never strand a
-      // pending line with no task behind it.
-      $addUpdateTag(HISTORY_MERGE_TAG);
+      // The stamp is never an undo step of its own: ⌘Z reverts the insert or
+      // convert, which takes the line WITH its taskId (so the revert plan can
+      // delete the task too), never strands a pending line with no task.
       const node = $getNodeByKey(nodeKey);
       if ($isTaskLineNode(node)) {
         node.setTaskId(task.id);
@@ -220,7 +220,7 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
         landed = true;
       }
     },
-    { tag: TASK_LINE_TAG },
+    TASK_LINE_TAG,
   );
   return landed;
 }
@@ -381,7 +381,8 @@ function TaskLineMeta({
             title="Open task details"
             onClick={() => tasks.openTaskDetail(entry.taskId!)}
           >
-            {chipLabel ?? "Details"}
+            {/* With no date the chip still says what the line is. */}
+            {chipLabel ?? "Task"}
           </button>
           {editable && tasks.canEditTasks ? (
             <span
@@ -621,8 +622,18 @@ export function TaskLinePlugin({
     if (!container) return;
     const ro = new ResizeObserver(() => setMeasureStamp((s) => s + 1));
     ro.observe(container);
-    return () => ro.disconnect();
-  }, [overlayEl]);
+    // The document's own height too: the meta line arriving, an image or a
+    // web font loading moves every line with no editor update to re-measure
+    // on, and the checkboxes drifted off their lines until the next keystroke.
+    const unregister = editor.registerRootListener((root, prev) => {
+      if (prev) ro.unobserve(prev);
+      if (root) ro.observe(root);
+    });
+    return () => {
+      unregister();
+      ro.disconnect();
+    };
+  }, [overlayEl, editor]);
 
   // ── the one document listener: track lines, renames OUT, deletions ────────
   useEffect(() => {
@@ -692,10 +703,16 @@ export function TaskLinePlugin({
           );
         }
 
-        // Deletions: lines gone from the doc.
+        // Deletions: lines gone from the doc. A task whose line is still in
+        // the doc under a new key was only re-created (a block move or its
+        // undo re-creates every block it jumps over): that is no deletion, so
+        // never revert the mint or detach it.
         const restored: string[] = [];
+        const stillLined = new Set<string>();
+        for (const entry of collected.values()) if (entry.taskId) stillLined.add(entry.taskId);
         for (const [key, before] of prev) {
           if (collected.has(key) || !before.taskId) continue;
+          if (stillLined.has(before.taskId)) continue;
           if (historic && t.revertMintIfJustMinted(before.taskId)) continue;
           pendingDetach.current.set(before.taskId, {
             taskId: before.taskId,
@@ -709,8 +726,13 @@ export function TaskLinePlugin({
         // 200ms batch window must also pull the line back OUT of the batch,
         // or the flush detaches a line that's visibly back (validator B1).
         if (historic) {
+          const hadLine = new Set<string>();
+          for (const before of prev.values()) if (before.taskId) hadLine.add(before.taskId);
           for (const [key, entry] of collected) {
-            if (!prev.has(key) && entry.taskId) restored.push(entry.taskId);
+            // Back from a deletion, not a line that only got a new key.
+            if (!prev.has(key) && entry.taskId && !hadLine.has(entry.taskId)) {
+              restored.push(entry.taskId);
+            }
           }
           for (const taskId of restored) pendingDetach.current.delete(taskId);
           if (pendingDetach.current.size === 0 && detachTimer.current !== null) {
@@ -746,10 +768,10 @@ export function TaskLinePlugin({
       if (fix.done !== undefined || fix.title !== undefined) fixes.push(fix);
     }
     if (fixes.length === 0) return;
-    editor.update(
+    updateWithoutUndo(
+      editor,
       () => {
-        // Reconciling remote task state must never become its own undo step.
-        $addUpdateTag(HISTORY_MERGE_TAG);
+        // Reconciling remote task state is never an undo step.
         const selection = $getSelection();
         for (const fix of fixes) {
           const node = $getNodeByKey(fix.key);
@@ -772,7 +794,7 @@ export function TaskLinePlugin({
           }
         }
       },
-      { tag: TASK_LINE_TAG },
+      TASK_LINE_TAG,
     );
   }, [editor, editable, tasks, entries]);
 
@@ -810,12 +832,36 @@ export function TaskLinePlugin({
   // Hover tracking: reveal a line's quiet actions + the "Make task" pill on
   // plain checkbox lines. The pill is fixed-positioned off the line's rect —
   // any scroll dismisses it (stale coordinates must never invite a mis-click).
+  // Both live OUTSIDE the contenteditable (the overlay; the pill in a portal),
+  // so reaching for them leaves the root: that must not hide them. Leaving
+  // into either keeps the hover, and the pill gets a short grace to cross the
+  // gap from its line.
+  const hoverGrace = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepHover = useCallback(() => {
+    if (hoverGrace.current) clearTimeout(hoverGrace.current);
+    hoverGrace.current = null;
+  }, []);
+  const dropHover = useCallback(
+    (delay = 0) => {
+      keepHover();
+      const clear = () => {
+        setHover(null);
+        setHoveredLine(null);
+      };
+      if (delay > 0) hoverGrace.current = setTimeout(clear, delay);
+      else clear();
+    },
+    [keepHover],
+  );
   useEffect(() => {
     const onScroll = () => setHover(null);
+    const intoWidgets = (to: EventTarget | null) =>
+      to instanceof Element && to.closest("[data-task-line-overlay], [data-task-pill]") !== null;
     const onOver = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const lineEl = target?.closest<HTMLElement>("[data-task-line]");
       if (lineEl) {
+        keepHover();
         const key = getNearestNodeKey(editor, lineEl);
         setHoveredLine(key);
         setHover(null);
@@ -827,19 +873,28 @@ export function TaskLinePlugin({
         ".notes-list-item-unchecked, .notes-list-item-checked",
       );
       if (!li) {
-        setHover(null);
+        dropHover(PILL_GRACE_MS);
         return;
       }
       const key = getNearestNodeKey(editor, li);
-      if (!key) return setHover(null);
+      if (!key) return dropHover();
+      keepHover();
       const rect = li.getBoundingClientRect();
       setHover({ itemKey: key, top: rect.top, left: rect.right + 8 });
     };
-    const onLeave = () => {
-      setHover(null);
-      setHoveredLine(null);
+    const onLeave = (event: MouseEvent) => {
+      if (intoWidgets(event.relatedTarget)) return;
+      dropHover(PILL_GRACE_MS);
+    };
+    // Leaving the line's widgets for anywhere but the editor drops the hover.
+    const onWidgetsLeave = (event: MouseEvent) => {
+      const to = event.relatedTarget;
+      if (intoWidgets(to)) return;
+      if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+      dropHover();
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    overlayEl?.addEventListener("mouseout", onWidgetsLeave);
     const teardown = editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener("mouseover", onOver);
       prevRoot?.removeEventListener("mouseleave", onLeave);
@@ -848,12 +903,14 @@ export function TaskLinePlugin({
     });
     return () => {
       window.removeEventListener("scroll", onScroll, { capture: true });
+      overlayEl?.removeEventListener("mouseout", onWidgetsLeave);
       const root = editor.getRootElement();
       root?.removeEventListener("mouseover", onOver);
       root?.removeEventListener("mouseleave", onLeave);
       teardown();
+      keepHover();
     };
-  }, [editor, editable]);
+  }, [editor, editable, overlayEl, keepHover, dropHover]);
 
   // Right-click menu on checkbox lines + task lines.
   useEffect(() => {
@@ -1061,8 +1118,15 @@ export function TaskLinePlugin({
         ? createPortal(
             <button
               type="button"
+              data-task-pill=""
               className="fixed z-40 inline-flex items-center gap-1 rounded-md border border-border bg-popover px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               style={{ top: hover.top, left: hover.left }}
+              onMouseEnter={keepHover}
+              onMouseLeave={(e) => {
+                const to = e.relatedTarget;
+                if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+                dropHover();
+              }}
               onMouseDown={(e) => {
                 e.preventDefault();
                 const t = tasksRef.current;

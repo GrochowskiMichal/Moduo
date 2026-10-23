@@ -2,10 +2,9 @@
  * Markdown at the clipboard door (Wave-3 NO-4, AC11).
  *
  * PASTE: plain text that carries markdown BLOCK syntax converts to real
- * blocks when it lands in an empty note (the AI-authored-doc / migration
- * flow). Mid-document pastes stay Lexical-default — @lexical/markdown can
- * only import into a container, and mangling a caret-anchored insert would
- * be worse than plain text (NO-8's import wizard covers files).
+ * blocks (the AI-authored-doc / migration flow). An empty note takes it
+ * whole; anywhere else it is converted off-screen (@lexical/markdown only
+ * imports into a container) and inserted at the caret like a rich paste.
  *
  * COPY: text/plain becomes clean markdown of the selection, through the same
  * `NOTES_TRANSFORMERS` every other door uses (NR-3: one dialect; chips →
@@ -14,7 +13,13 @@
  * into Moduo stays rich and paste-elsewhere gets md.
  */
 
-import { $getHtmlContent, $getLexicalContent } from "@lexical/clipboard";
+import {
+  $generateNodesFromSerializedNodes,
+  $getHtmlContent,
+  $getLexicalContent,
+  $insertGeneratedNodes,
+} from "@lexical/clipboard";
+import { $isCodeNode } from "@lexical/code";
 import { $convertFromMarkdownString, $convertSelectionToMarkdownString } from "@lexical/markdown";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
@@ -27,10 +32,24 @@ import {
   type LexicalNode,
   PASTE_COMMAND,
   type RangeSelection,
+  type SerializedLexicalNode,
 } from "lexical";
 import { useEffect } from "react";
 
+import { createNotesHeadlessEditor } from "../doc-markdown";
 import { looksLikeMarkdown, NOTES_TRANSFORMERS } from "../markdown";
+
+function $isInCodeBlock(node: LexicalNode): boolean {
+  for (let n: LexicalNode | null = node; n; n = n.getParent()) if ($isCodeNode(n)) return true;
+  return false;
+}
+
+/** Markdown → the serialized blocks it imports as, built in a headless editor. */
+function markdownBlocks(text: string): SerializedLexicalNode[] {
+  const { editor } = createNotesHeadlessEditor("moduo-note-paste");
+  editor.update(() => $convertFromMarkdownString(text, NOTES_TRANSFORMERS), { discrete: true });
+  return editor.getEditorState().toJSON().root.children;
+}
 
 /** The top-level block a node sits in (root's direct child). */
 function $topBlock(node: LexicalNode): LexicalNode | null {
@@ -65,15 +84,28 @@ export function MarkdownClipboardPlugin() {
         if (data.types.includes("text/html")) return false;
         const text = data.getData("text/plain");
         if (!text || !looksLikeMarkdown(text)) return false;
+        // Inside a code block, markdown is code: paste it as typed.
+        const inCode = editor.getEditorState().read(() => {
+          const selection = $getSelection();
+          return $isRangeSelection(selection) && $isInCodeBlock(selection.anchor.getNode());
+        });
+        if (inCode) return false;
 
         const docIsEmpty = editor
           .getEditorState()
           .read(() => $getRoot().getTextContent().trim() === "");
-        if (!docIsEmpty) return false;
-
         event.preventDefault();
+        if (docIsEmpty) {
+          editor.update(() => {
+            $convertFromMarkdownString(text, NOTES_TRANSFORMERS);
+          });
+          return true;
+        }
+        const blocks = markdownBlocks(text);
         editor.update(() => {
-          $convertFromMarkdownString(text, NOTES_TRANSFORMERS);
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection)) return;
+          $insertGeneratedNodes(editor, $generateNodesFromSerializedNodes(blocks), selection);
         });
         return true;
       },

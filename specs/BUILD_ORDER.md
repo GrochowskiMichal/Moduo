@@ -453,7 +453,7 @@ _Finished blocks of this section: [BUILD_LOG.md](./BUILD_LOG.md)._
 - [ ] **NR-5 — Task lines in the document (no overlay), inline due/schedule/assignee** · deps: NR-3 · lane notes-editor
 - [ ] **NR-10 — ⌘K searches everything** · deps: NR-2 · lane notes-ui
 - [ ] **NR-11 — Import hardening (trashed re-import, size cap, honest progress, >1000 notes)** · deps: NR-3 · lane notes-data
-- [ ] **NR-12 — Flip to New Notes + delete classic** · deps: NR-4, NR-5, NR-6, NR-7, NR-8, NR-10, NR-11 · lane notes-ui
+- [x] **NR-12 — Flip to New Notes + delete classic** · flipped early 2026-10-24 on `t/mike/notes-overhaul` at Mike's call, ahead of NR-5/10/11 (which stay open), together with the Notes audit fixes · migration `20261024100000_notes_flip_refile.sql` (Tier 2) · lane notes-ui
 - [ ] **NR-9 — Images & files in notes** · deps: NR-3, AT-1 merged into develop · lane notes-editor · Tier 2 (migration)
 
 ## Brand system · [`.design/brand/BRAND_BRIEF.md`](../.design/brand/BRAND_BRIEF.md) (§16)

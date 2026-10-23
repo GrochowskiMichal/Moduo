@@ -50,7 +50,13 @@ import {
   $turnBlockInto,
   TURN_INTO,
 } from "../block-actions";
-import { type BlockMoveDirection, moveBlockInDoc, stepTarget } from "../block-move";
+import {
+  BLOCK_MOVE_ORIGIN,
+  type BlockMoveDirection,
+  moveBlockInDoc,
+  stepTarget,
+} from "../block-move";
+import { asUndoStep } from "../collab-undo";
 import { NOTES_DOC_ROOT } from "../doc-markdown";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
@@ -98,7 +104,7 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   const move = (from: number, to: number): boolean => {
     const count = editor.getEditorState().read(() => $getRoot().getChildrenSize());
     if (doc.get(NOTES_DOC_ROOT, Y.XmlElement).length !== count) return false;
-    return moveBlockInDoc(doc, from, to);
+    return asUndoStep(editor, BLOCK_MOVE_ORIGIN, () => moveBlockInDoc(doc, from, to));
   };
 
   // ── hover tracking on the scrolling pane that holds the editor ─────────────
@@ -283,11 +289,17 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
           className="absolute left-0 flex w-6 items-start justify-center"
           style={{ top: hovered.top, height: hovered.height }}
         >
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
                 draggable
+                // The grip both drags and opens the menu: Radix opens on
+                // press, which would pop the menu at the start of every drag.
+                // Claim the press (Radix then skips it) and open on a click,
+                // which only fires when the pointer didn't drag.
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => setMenuOpen((open) => !open)}
                 onDragStart={onDragStart}
                 onDragEnd={() => {
                   dragFrom.current = null;

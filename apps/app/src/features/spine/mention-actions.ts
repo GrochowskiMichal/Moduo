@@ -13,6 +13,15 @@ import type { ModuoRuntime } from "@/lib/runtime.types";
 
 import type { MentionResolution } from "./mention";
 
+/** Fired on `window` once a mention has written a link (detail: the two ends),
+ * so a hub already on screen for either end re-reads instead of going stale. */
+export const ENTITY_LINKED_EVENT = "moduo:spine:linked";
+
+function announceLinked(source: EntityRef, target: EntityRef): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(ENTITY_LINKED_EVENT, { detail: { source, target } }));
+}
+
 /** The entity to insert as an inline `EntityRefChip` after a successful write. */
 export type MentionInsert = { ref: EntityRef; label: string; icon: string | null };
 
@@ -64,6 +73,7 @@ export async function executeMention(
         targetLabel: resolution.label,
         targetIcon: resolution.icon,
       });
+      announceLinked(ctx.source, resolution.target);
       return { ref: resolution.target, label: resolution.label, icon: resolution.icon };
     }
     case "create-and-link": {
@@ -81,6 +91,7 @@ export async function executeMention(
         targetLabel: created.label,
         targetIcon: created.icon,
       });
+      announceLinked(ctx.source, created.ref);
       return created;
     }
     case "notify-person": {

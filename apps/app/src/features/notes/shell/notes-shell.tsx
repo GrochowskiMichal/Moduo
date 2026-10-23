@@ -23,7 +23,6 @@ import { ShareMenu } from "../../sharing/share-menu";
 import { useCommentPeople } from "../../spine/hooks/use-comment-people";
 import { TasksProvider } from "../../tasks/tasks-context";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
-import { useNotesExperience } from "../experience";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
 import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
@@ -34,6 +33,7 @@ import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
 import { buildBreadcrumb, type CrumbSection } from "./breadcrumb";
 import { createLinkedNote } from "./create-linked-note";
+import { IconPickerDialog } from "./icon-picker-dialog";
 import { MoveToDialog } from "./move-to-dialog";
 import { NoteView } from "./note-view";
 import { NotesRightPanel } from "./notes-right-panel";
@@ -66,7 +66,6 @@ function NotesShellBody() {
   const { runtime, userId, workspace, workspaceId, module, selectedId, selectedNote, draft } =
     shell;
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
-  const [, setExperience] = useNotesExperience();
   const [importOpen, setImportOpen] = useState(false);
   const [footerView, setFooterView] = useState<FooterView | null>(null);
   const panels = useFeaturePanelState("notes");
@@ -116,7 +115,9 @@ function NotesShellBody() {
     () => ({
       getNoteMeta: (id) => notes.find((n) => n.id === id) ?? null,
       openNote: (id) => shell.select(id),
-      createChildNote: () => (liveNote ? module.createNote(liveNote.id) : null),
+      // A draft like the sidebar's "+": it reaches the server only once typed
+      // in, so a `/page` you leave empty leaves nothing behind.
+      createChildNote: () => (liveNote ? shell.openDraft(liveNote.id) : null),
       tasks: tasks.taskBridge,
       listNotes: () => notes,
       createLinkedNote: (title) =>
@@ -129,6 +130,7 @@ function NotesShellBody() {
     [
       notes,
       shell.select,
+      shell.openDraft,
       shell.showPanelVariant,
       liveNote,
       module,
@@ -221,9 +223,12 @@ function NotesShellBody() {
       crumbs={selectedId ? buildBreadcrumb(notes, selectedId, draft) : []}
       note={liveNote}
       viewers={viewers}
-      unsynced={module.syncStatus === "offline" || module.loadError !== null}
+      signal={
+        module.syncStatus === "offline" ? "unsynced" : module.loadError !== null ? "stale" : null
+      }
       canEdit={canEdit && !degraded}
       favorite={liveNote ? favoritePositions.has(liveNote.id) : false}
+      hasChildren={liveNote ? notes.some((n) => n.parentId === liveNote.id && !n.deletedAt) : false}
       share={
         shareable ? (
           <ShareMenu
@@ -258,12 +263,6 @@ function NotesShellBody() {
       onOpenSection={openSection}
       onAction={actions.onAction}
       onFullWidthChange={(note, fullWidth) => module.setFullWidth(note.id, fullWidth)}
-      onSwitchToClassic={() =>
-        void setExperience(
-          "classic",
-          editorNoteId && engine && !isDraft ? () => engine.flushNote(editorNoteId) : undefined,
-        )
-      }
     />
   );
 
@@ -320,7 +319,6 @@ function NotesShellBody() {
               degraded={degraded}
               loading={loading}
               canEdit={canEdit && !degraded}
-              seedWelcome={module.welcomeNoteId !== null && module.welcomeNoteId === editorNoteId}
               bridge={bridge}
               onTitleDerived={(title) => {
                 if (liveNote) module.renameNote(liveNote.id, title);
@@ -366,6 +364,11 @@ function NotesShellBody() {
         sections={shell.sections}
         onOpenChange={(open) => !open && actions.setMoveTarget(null)}
         onPick={actions.pickMoveTarget}
+      />
+      <IconPickerDialog
+        note={actions.iconTarget}
+        onOpenChange={(open) => !open && actions.setIconTarget(null)}
+        onPick={(note, icon) => module.setIcon(note.id, icon)}
       />
       <SharingQuestionDialog
         open={actions.sharingQuestion !== null}

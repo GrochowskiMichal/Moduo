@@ -7,6 +7,9 @@
 
 import { strToU8, zipSync } from "fflate";
 
+import type { Note } from "./model";
+import { displayTitle } from "./title";
+
 /** Sanitize a note title into a safe filename stem (no extension). */
 export function safeFileStem(title: string): string {
   const clean = (title || "Untitled")
@@ -22,6 +25,44 @@ export function noteFileName(title: string): string {
 }
 
 export type ZipNote = { id: string; title: string; md: string; pathSegments: string[] };
+
+/**
+ * A note and its sub-pages as zip entries: each sits in folders named after
+ * its ancestors below the exported note (the note itself at the top level).
+ */
+export function subtreeZipNotes(
+  notes: readonly Pick<Note, "id" | "title" | "parentId">[],
+  rootId: string,
+  ids: readonly string[],
+  mdById: ReadonlyMap<string, string>,
+): ZipNote[] {
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const pathOf = (id: string): string[] => {
+    const chain: string[] = [];
+    let cur = id === rootId ? null : (byId.get(id)?.parentId ?? null);
+    while (cur && chain.length < 12) {
+      const parent = byId.get(cur);
+      if (!parent) break;
+      chain.unshift(displayTitle(parent.title));
+      if (cur === rootId) break;
+      cur = parent.parentId ?? null;
+    }
+    return chain;
+  };
+  return ids.flatMap((id) => {
+    const note = byId.get(id);
+    return note
+      ? [
+          {
+            id,
+            title: displayTitle(note.title),
+            md: mdById.get(id) ?? "",
+            pathSegments: pathOf(id),
+          },
+        ]
+      : [];
+  });
+}
 
 /** Build the `{ path: bytes }` map for a tree zip — each note's ancestor titles
  * become folders; sibling name collisions get a numeric suffix. Pure. */

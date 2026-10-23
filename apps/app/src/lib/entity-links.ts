@@ -27,7 +27,7 @@ export const DEFAULT_RELATION_KIND: RelationKind = "references";
 /** Sentence-case display labels for each relation kind (hub meta, kind picker). */
 export const RELATION_KIND_LABELS: Record<RelationKind, string> = {
   references: "References",
-  "spawned-from": "Spawned from",
+  "spawned-from": "Created from",
   blocks: "Blocks",
   attachment: "Attachment",
   mentions: "Mentions",
