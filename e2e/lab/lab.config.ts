@@ -87,7 +87,10 @@ export default {
     [1280, 800],
     [1920, 1080],
   ],
-  themes: ["dark", "light"],
+  // Dark only: light-mode tuning is out of scope (AGENTS.md), and Moduo's theme is a synced
+  // appearance setting (lib/appearance.ts) that the cloud copy wins over a seeded local mirror,
+  // so a light capture needs the lab person's user_preferences set first. Reduced motion still runs.
+  themes: ["dark"],
 
   tokens: {
     files: ["apps/app/src/styles/tokens.css"],

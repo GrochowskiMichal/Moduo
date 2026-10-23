@@ -6,8 +6,10 @@ run's `ablation.json` stays out of every critic's reach for the same reason.
 
 ## Status
 
-**Uncalibrated.** No planted-defect run and no ladder run is recorded yet. Every scorecard says
-"Uncalibrated" until Procedure A has at least one complete row below.
+**Partly checked, not calibrated.** One planted-defect level (clean vs level2, Moduo,
+2026-10-23) is recorded below: the ordering held and four of five planted defects were found by
+all three runs. Level1, level3 and the noise floor are not run yet, so every scorecard still says
+"Uncalibrated" until Procedure A has a complete row.
 
 What that means for a card: the levels are the critic's reading on an unanchored scale. Treat
 them as a ranking of what to fix, not as a grade to compare with other products. The research
@@ -38,11 +40,20 @@ known for certain.
 
 | Date | Model | Mode | Clean | L1 | L2 | L3 | Monotonic | Recall | Precision | Noise floor |
 |---|---|---|---|---|---|---|---|---|---|---|
-| | | | | | | | | | | |
+| 2026-10-23 | Opus 5.5 | generalist x3 | 6.55 (U6 C7 S7 P6 Ch7) | not run | 6.10 (U6 C6 S6 P6 Ch7) | not run | yes, clean > L2 | 4 of 5 ablations, 3/3 runs | not computed | not run |
+
+Moduo build `9cb967b` on the local stack, WebKit headless, 1440x900, the same seed both runs.
+Runs within a dossier never differed by more than one level. The overall moved by 0.45 through
+Craft (7 to 6) and Speed (7 to 6); Usability, Platform and Character held, which fits: level2
+plants no flow or content defects.
 
 | Ablation | Planted on | Found (runs of 3) | Finding id | Notes |
 |---|---|---|---|---|
-| | | | | |
+| no-focus | every screen | 3/3 | "focus is invisible" (sev 3) in each run | Clean runs raised only one minor focus-style finding. The lab's focus walk carried it: 0 to about 160 stops without an indicator. |
+| jitter-spacing | every screen | 3/3 | misalignment findings | Clean runs raised none. |
+| off-tokens | every screen | 3/3 | half-pixel sizes and off-token values | Clean runs also raise token drift (the real 150 ms and 16 px values), so this is weaker evidence. |
+| slow | every request | 3/3 | latency findings (click p95 176 ms, view switch 888 ms) | Clean runs raised latency in 2/3, at lower severity. |
+| no-motion | every screen | 0/3 | none | Expected blind spot: stills can't show a snap, and the budget rows reward no motion on frequent actions. Only a headed run's frame strips or a human catches it. |
 
 Panel versus generalist: run the same four dossiers with `--panel`. Keep the panel as a default
 only if its recall is higher at similar or better precision for the same total number of critic
