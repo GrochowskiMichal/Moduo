@@ -347,7 +347,8 @@ jobs:
     needs: oracle-paths
     if: needs.oracle-paths.outputs.e2e == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # The smoke takes seconds; Chromium's apt dependencies took 12 minutes on one run.
+    timeout-minutes: 30
     env:
       PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
       PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_e2e_smoke
