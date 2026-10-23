@@ -36,10 +36,10 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - status: superseded · by: 2026-10-20 "Type-checking is back on the o"
 
 - **2026-10-22 · Node 24.22.1** for the October 2026 Node security release (TLS hostname bypasses, Brotli OOB write); bump `.nvmrc` on each patch release. → `.nvmrc`
-  - status: current
+  - status: current · supersedes: 2026-10-19 "Node is 24.22.0"
 
 - **2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`.** Every `setup-node` step reads it (`node-version-file`); nine workflows had been on 22 and two on 24. The checks workflow's lint and unit-test jobs now set Node up too, where they used to take the runner's. Node 26 becomes LTS later in October 2026: move then, by editing `.nvmrc`. This unblocks jsdom 30 (it needs `^22.22.2 || ^24.15`; this Mac had 24.6), which the app's tests now run on. The 2026-10-07 hold on jsdom 28 is lifted. → `.nvmrc` · `.github/workflows/`
-  - status: current
+  - status: current · by: 2026-10-22 "Node 24.22.1"
 
 - **2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.** It was imported only by `grid-canvas.tsx`, and with `motion-dom` it was about 118 kB minified. Each cell sits in a `<ViewTransition default="none" update="dashboard-glide">`. A new push-preview and the drop run in a transition typed `dashboard-grid` (only where `:active-view-transition-type()` is supported, Safari 18.2+; older WebKit just moves the widgets), and global.css times the glide with `--motion-base`/`--ease-out`, so reduced motion makes it instant with no JS bridge (`motion.ts` is deleted). The page root isn't captured during those transitions, so the held widget stays live. It sits in its pre-drag cell, translated by the pointer's travel, so a preview change never moves it. This was measured in headless Chromium with real mouse input: the glides run at 180 ms and the held widget stays within a frame of the pointer. → `apps/app/src/features/dashboard/ui/grid-canvas.tsx` · `hooks/use-grid-drag.ts`
   - status: current

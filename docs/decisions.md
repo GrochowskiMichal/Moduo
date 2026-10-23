@@ -116,7 +116,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-20 · TanStack foundation (TS-1): DB, Pacer and Devtools pinned; Virtual on 3.19; a first-load budget and a TanStack import boundary.
 - 2026-10-20 · First load is the anchor pages only: everything else is a lazy chunk.
 - 2026-10-22 · Node 24.22.1
-- 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`.
+- 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`. *(partly superseded)*
 - 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
 - 2026-10-19 · Desktop IMAP is `async-imap` 0.12 (tokio) over `tokio-native-tls`.
 - 2026-10-19 · Dependency hygiene.
