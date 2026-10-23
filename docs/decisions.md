@@ -34,7 +34,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-17 · The release runbook lives in [docs/release.md](../release.md); prod migrations go one of two ways.
 - 2026-10-16 · Lean mode: the process is trimmed to a pre-alpha pace, with a list of what to re-tighten before the first external beta.
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, and each worktree starts its own dev server on its own port (agent's choice, deferred to by Maciej: confirmed for building, revisitable).
-- 2026-10-14 · A release pushes only its own migrations, from a scratch folder, so prod's history keeps the file versions (agent's choice, deferred to by Maciej).
+- 2026-10-14 · A release pushes only its own migrations, from a scratch folder, so prod's history keeps the file versions (agent's choice, deferred to by Maciej). *(partly superseded)*
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED; the CI part was applied by lean mode, #406, 2026-10-16).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
 - 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
@@ -92,7 +92,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-19 · Mac updater bundles are per-arch; the website `.dmg` stays universal (REL-5).
 - 2026-10-17 · Desktop updates come from our own update server on R2; GitHub freezes at a per-channel bridge release (PLAT-6).
 - 2026-10-17 · Web and desktop take one version from the committed `VERSION` file, starting at 1.1.0.
-- 2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized.
+- 2026-10-07 · Both desktop release channels run one shared workflow, and only the `.dmg` is notarized. *(partly superseded)*
 - 2026-10-07 · Rust crates and Rsbuild move to the newest stable, not their pre-releases.
 - 2026-10-07 · Desktop Rust is pinned to nightly-2026-10-06, with the parallel front end on.
 - 2026-07-13 · DF-19f-quit LIVE-VERIFIED on a real desktop build — the fix works; gate closed.
@@ -112,11 +112,9 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-20 · Rstest stays on the default pool and jsdom: `vmThreads` and `happy-dom` were tried and rejected.
 - 2026-10-20 · The app compiles Tailwind through `@rsbuild/plugin-tailwindcss` 2.0.3; PostCSS survives only for Storybook.
 - 2026-10-20 · The `lightningcss` 1.30.1 pin is gone; the app builds on 1.32.0, the version Tailwind 4.3.3 declares.
-- 2026-10-20 · Type-checking is back on the official `tsc` (typescript 7.0.2); `tsc-ts` is removed.
 - 2026-10-20 · Shortcuts are one typed registry on TanStack Hotkeys (TS-6); a page beats a global key by scope, not by listener order.
 - 2026-10-20 · TanStack foundation (TS-1): DB, Pacer and Devtools pinned; Virtual on 3.19; a first-load budget and a TanStack import boundary.
 - 2026-10-20 · First load is the anchor pages only: everything else is a lazy chunk.
-- 2026-10-19 · Type-checking runs on `tsc-ts`; `typescript` stays only for the language server.
 - 2026-10-22 · Node 24.22.1
 - 2026-10-19 · Node is 24.22.0 (the Krypton LTS), from one `.nvmrc`.
 - 2026-10-19 · The dashboard grid's glide is React 19.3's `<ViewTransition>`; framer-motion is gone.
@@ -126,19 +124,20 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-08 · Storybook is 10.6.1, with `@storybook/addon-mcp`.
 - 2026-10-08 · Claude Code gets TypeScript code intelligence from TypeScript 7's own language server, through a project plugin.
 - 2026-10-07 · Biome doesn't lint `apps/landing/**/*.html`, and `bun run lint:js` gates CI.
-- 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use.
+- 2026-10-07 · The rest of the JS libraries move to their newest stable release, with four majors left on the line already in use. *(partly superseded)*
 - 2026-10-07 · Drag and drop stays on `@dnd-kit/core` 6.3.1, `@dnd-kit/sortable` 10.0.0, and `@dnd-kit/utilities` 3.2.2.
 - 2026-10-07 · The Lexical pack is 0.52.0, and Yjs is 13.6.33.
 - 2026-10-07 · Tailwind CSS and `@tailwindcss/postcss` are both 4.3.3.
 - 2026-10-07 · React and React DOM are 19.3.0.
 - 2026-10-07 · Unit tests run on Rstest 0.12, not Vitest.
-- 2026-07-29 · Biome 2.5.6 adopted as the JS/TS linter + formatter; `lint:js` joins `bun run verify`.
 - 2026-07-29 · Compiler-codegen violations fixed app-wide; heavy routes code-split.
 - 2026-07-28 · React Compiler v1.0 enabled — automatic memoization across the app.
 
+3 superseded or dropped entries are left out; they stay in the area file.
+
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
-- 2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed.
+- 2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed. *(partly superseded)*
 - 2026-07-29 · Import scope collapsed to "Notion notes + email history depth"
 - 2026-07-29 · Email history depth is an engine change, not a setting.
 - 2026-07-29 · The two pending email migrations are APPLIED TO PROD; `email_op_ref_remove` and the follow-up-due sweep are live
@@ -154,7 +153,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-04 · Email EM-2 (Gmail OAuth + connect) + EM-4 (threading + inbox shell) + EM-5 (triage) landed
 - 2026-07-04 · Email EM-1 (engine security core) + EM-3 (cloud substrate) landed
 - 2026-07-04 (pm) · Email (Wave 5) pulled FORWARD — next build, ahead of the Dashboard/Mindmap reworks; spec DoR-ready.
-- 2026-07-04 · Alpha (v1) scope adjusted — Finance/Email OUT; Dashboard + Mindmap reworks IN (designer call, mid-`/execute`).
+- 2026-07-04 · Alpha (v1) scope adjusted — Finance/Email OUT; Dashboard + Mindmap reworks IN (designer call, mid-`/execute`). *(partly superseded)*
 - 2026-07-29 · IM-2a: the email store reads by key prefix and writes per chunk — and the order index stays timestamp-keyed on purpose.
 - 2026-07-30 · IM-2b: email history depth is a per-device FLOOR, and the depth state machine keys off the UID generation.
 - 2026-07-30 · IM-2c-a: the depth picker ships without progress/cancel, and AC9's transport is amended from Tauri events to a cursor-backed status read.
@@ -237,7 +236,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 - 2026-10-20 · A contact's company and its works-at link are kept in step by the database, and a contact has one company.
 - 2026-10-16 · Contacts v4 direction: one modular module (address book → network notebook → CRM) — PROPOSED, pending the designer's ratification; prototype only, no code.
-- 2026-07-02 · Fix pack FX-9 landed (drag-to-link on /contacts) — Wave 1.5 complete.
+- 2026-07-02 · Fix pack FX-9 landed (drag-to-link on /contacts) — Wave 1.5 complete. *(partly superseded)*
 - 2026-07-02 · Fix pack FX-8 landed (single-select custom fields).
 - 2026-07-02 · Fix pack FX-4–FX-7 landed (card wins · relation sanity + People · entry modal · company parity).
 - 2026-07-02 · Fix pack FX-1–FX-3 landed (deep links · tags · directory power).
@@ -257,7 +256,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-09 · Dashboard DB-5 (registry + 9 module widgets) landed — NO migration
 - 2026-07-09 · Home chrome controls live in the app-chrome bottom bar (not floating over the grid) + a vertical-fill fix
 - 2026-07-09 · Dashboard DB-4 (persistence + multi-page pager) landed — NO migration
-- 2026-07-09 · Dashboard DB-3 (edit mode + hand-rolled pointer drag) landed
+- 2026-07-09 · Dashboard DB-3 (edit mode + hand-rolled pointer drag) landed *(partly superseded)*
 - 2026-07-08 · Dashboard DB-2 (shell swap + old-module deletion) landed
 - 2026-07-08 · Dashboard DB-1 (pure grid engine) landed
 - 2026-07-08 · Dashboard rebuild ("Home") specced — the bounded-grid model.
@@ -316,7 +315,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-16 · The Project view shares the task details' hierarchy (MOD-152)
 - 2026-10-16 · A project's client can be a company (MOD-155)
 - 2026-10-16 · Hidden means hidden: one "N completed · Show" ends the List and the Board (MOD-148)
-- 2026-10-16 · The Project view's ⋯, "+" line, rows and actions (dogfood MOD-150, MOD-151, MOD-153, MOD-154)
+- 2026-10-16 · The Project view's ⋯, "+" line, rows and actions (dogfood MOD-150, MOD-151, MOD-153, MOD-154) *(partly superseded)*
 - 2026-10-16 · The details' feed, tags and app avatars (dogfood MOD-157, MOD-158, MOD-149)
 - 2026-10-16 · One way to name you (dogfood call #27)
 - 2026-10-15 · One description editor, stored as Markdown (dogfood calls 14–15: MOD-117, MOD-98, MOD-120)
@@ -327,8 +326,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-15 · The task's details and activity (dogfood calls 9–13: MOD-129, MOD-36, MOD-139, MOD-123, MOD-124, MOD-109)
 - 2026-10-14 · People show their profile photo, initials as the fallback (dogfood MOD-96)
 - 2026-10-14 · The task's actions move to the panel's title row (dogfood MOD-118 follow-up)
-- 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
-- 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
+- 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95) *(partly superseded)*
+- 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-14 · TV-POLISH Tasks v3 polish batch — the agent's choices (deferred to by Maciej)
 - 2026-10-14 · TV-U18 Native importers — the agent's choices (deferred to by Maciej)
 - 2026-10-14 · AT-3 Attachments everywhere + Settings → Storage — the agent's choices (deferred to by Maciej)
@@ -339,7 +338,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-13 · TV-U13b Follow-ups from landed blocks — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-U8 Saved views — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-TL1 Timeline rebuild I — the agent's choices (deferred to by Maciej)
-- 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
+- 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-13 · TV-D16 Agents and MCP v3 — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-U12 Multi-select and the bottom-bar mode pattern — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-D14 Time entries, the time report, Time & region — the agent's choices (deferred to by Maciej)
@@ -347,20 +346,20 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-13 · TV-U11 Board v3 — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-U15 Upcoming, Inbox, My tasks, All (tasks-v3 block 20) — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-D13 follow-up: who changes a team
-- 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej)
-- 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
+- 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej) *(partly superseded)*
+- 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-13 · TV-U10 List v3 — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-F6 Focus salvage + one time engine — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · TV-D15 Templates and Duplicate project (tasks-v3 block 30) — the agent's choices (deferred to by Maciej)
-- 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
+- 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-13 · TV-D12 recurrence a–h, reminders, the notification table — the agent's choices (deferred to by Maciej)
 - 2026-10-13 · AT-2 on v3: the attachments section, toasts over dialogs, uploads in a read-only build — the agent's choices (deferred to by Maciej)
 - 2026-10-11 · TV-D11b virtualization, the 10k fixture, the grant feed — the agent's choices (deferred to by Maciej)
 - 2026-10-11 · TV-U14 Capture v3 (tasks-v3 block 19) — the agent's choices (deferred to by Maciej)
 - 2026-10-11 · TV-D10-fix sessions, reminders and Waiting on behind the task's gate — the agent's choices (deferred to by Maciej)
 - 2026-10-11 · TV-U6 Sidebar v3 — the agent's choices (deferred to by Maciej)
-- 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
-- 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
+- 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej) *(partly superseded)*
+- 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-10 · TV-D9 statuses, completion, dates — the agent's choices (deferred to by Maciej)
 - 2026-10-10 · RF-1 References (tasks-v3 block 18) — the agent's choices (deferred to by Maciej)
 - 2026-10-10 · TV-D8 server ops, registry, handles, recurrence, tolerance — the agent's choices (deferred to by Maciej)
@@ -373,7 +372,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-10 · Tasks v3 re-plan (calls 13–98, defaults a–u, §6)
 - 2026-10-10 · Tasks v3 re-plan — structure (13–20a, 28, 87)
 - 2026-10-10 · Tasks v3 re-plan — statuses, dates, repeats (21–27, 53, 53a, 53b, 68b, 77)
-- 2026-10-10 · Tasks v3 re-plan — navigation and views (29–30, 32, 82b–86, 88, 98)
+- 2026-10-10 · Tasks v3 re-plan — navigation and views (29–30, 32, 82b–86, 88, 98) *(partly superseded)*
 - 2026-10-10 · Tasks v3 re-plan — shell and the right panel (48b, 72, 72a, 89, 96, 81)
 - 2026-10-10 · Tasks v3 re-plan — Focus (10, 31, 57, 59, 59a, 60, 61–66)
 - 2026-10-10 · Tasks v3 re-plan — Timeline (67–71, 68a; 68b above)
@@ -396,7 +395,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-08 · TV-D1 landed: task edits save field by field, a task has its own assignee, and owner_id is the creator again
 - 2026-10-08 · TV-F1: Focus keeps time by the wall clock, survives reloads, and asks about away time
 - 2026-10-08 · TV-Q1: the List leaves modified keys alone, a row's buttons keep Space/Enter, the bucket pill shows only where the bucket isn't implied, and deleting a bucket confirms, then commits when its Undo toast closes.
-- 2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted
+- 2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted *(partly superseded)*
 - 2026-10-07 · Tasks v2 planned: the team model, a personal Queue, Focus as a queue run
 - 2026-07-11 · DF-22: Tasks unifies to ONE app-level `DndContext`, but the Timeline deliberately keeps its own nested one.
 - 2026-07-03 · Tasks TL-3 timeline dependency creation landed — Timeline view complete.
@@ -430,7 +429,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-15 · CV-7b (the composer) — the agent's choices (deferred to by Maciej)
 - 2026-10-15 · CV-7c (reactions widened) — the agent's choices (deferred to by Maciej)
 - 2026-10-15 · CV-6b (one device rings) — the agent's choices (deferred to by Maciej)
-- 2026-10-15 · CV-7a (the stream) — the agent's choices (deferred to by Maciej)
+- 2026-10-15 · CV-7a (the stream) — the agent's choices (deferred to by Maciej) *(partly superseded)*
 - 2026-10-15 · CV-6a (device notices, server) — the agent's choices (deferred to by Maciej)
 - 2026-10-15 · CV-3 (the chat store) — the agent's choices (deferred to by Maciej)
 - 2026-10-15 · CV-5 (Catch up rows and the bell) — the agent's choices (deferred to by Maciej)
@@ -483,7 +482,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-08 · BRAND-4: the landing uses the lockup artwork, and the mark reveals itself in the nav on a first visit
 - 2026-10-08 · BRAND-1: every brand file is generated from `brand/masters/` by `bun run brand:export`
 - 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option
-- 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing
+- 2026-10-08 · Brand system planned: the product is the brand; drawn wordmark; no brand hue; pink isn't a brand colour; the mark reveals itself out of nothing *(partly superseded)*
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
@@ -511,7 +510,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-11 · DF-12 (boot fetch storm consolidation) landed
 - 2026-07-10 · DF-4 (hide Mindmap from the alpha nav) landed
 - 2026-07-10 · Whole-app critique ratified → dogfood-fix plan DF-1…DF-24 (now in `BUILD_ORDER`, ahead of MCP-1) + `/s3` gains step 7 (next-session spawn chips).
-- 2026-07-10 · DF-14 (selection + accent unification) landed
+- 2026-07-10 · DF-14 (selection + accent unification) landed *(partly superseded)*
 - 2026-07-10 · DF-5 (destructive-action safety pack) landed — ONE undo grammar app-wide
 - 2026-06-24 · Alpha strategy locked.
 - 2026-06-24 · Build sequence.

@@ -34,7 +34,7 @@ status: current
 
 ## 2026-10-20 · A sign-out keeps what waits to sync (supersedes part of TV-D11a)
 
-status: current
+status: current · supersedes: 2026-10-11 "TV-D11a the shared store — the"
 
 - **Sign-out cuts the Tasks device copy down to its outbox instead of wiping it** → `wipeSyncCopies` / `attachSyncUser` / `keepOnlyWaiting` (`lib/sync/store.ts`), Settings → Account's "Log out" warning
   - Who: agent, from the 2026-10-20 audit of `origin/mike` (data-loss fixes); revisitable.
@@ -44,7 +44,7 @@ status: current
 
 ## 2026-10-16 · The Project view shares the task details' hierarchy (MOD-152)
 
-status: current
+status: current · supersedes: 2026-10-13 "TV-U16 Project overview, the D", 2026-10-16 "The Project view's ⋯,"
 
 No migration. Frames matched: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html)'s `.dbody` (16 px between blocks) and `.shead` (13 px medium, sentence case, its `.num` in `--text-3`), and [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2's `.shead Progress` with its count. The before/after canvas (measured live, approved item by item) stayed in the session's scratch folder, not in git.
 
@@ -99,7 +99,7 @@ No migration. Frames: [round-1c](../../.design/tasks-v3/prototypes/round-1c.html
 
 ## 2026-10-16 · The Project view's ⋯, "+" line, rows and actions (dogfood MOD-150, MOD-151, MOD-153, MOD-154)
 
-status: current
+status: current · supersedes: 2026-10-14 "Task details match the approve" · by: 2026-10-16 "The Project view shares the ta"
 
 No migration. No approved frame draws the Project view as built. The nearest is [structure](../../.design/tasks-v3/prototypes/structure.html) frame 2 (the right panel's "Overview": a ⋯ in its header, one-line `.mini` rows, centred); round-2b draws the `.pmore` this batch removes. Each item is built as Maciej wrote it; the layout calls below are marked.
 
@@ -161,7 +161,7 @@ No migration. Frames: [round-2b](../../.design/tasks-v3/prototypes/round-2b.html
 
 ## 2026-10-16 · One way to name you (dogfood call #27)
 
-status: current
+status: current · supersedes: 2026-10-13 "TV-F7 Focus screen v3 — the ag"
 
 An app-wide copy pass, recorded here because most of it is Tasks; the rule also sits in the voice guide ([BRAND_BRIEF §11](../../.design/brand/BRAND_BRIEF.md)) and [DESIGN_RULES R8](../DESIGN_RULES.md). No migration. Frames: every prototype ([round-1c](../../.design/tasks-v3/prototypes/round-1c.html), [round-2a](../../.design/tasks-v3/prototypes/round-2a.html), [round-2b](../../.design/tasks-v3/prototypes/round-2b.html), [structure](../../.design/tasks-v3/prototypes/structure.html)) titles your avatar "Alex Rivera (you)", and structure's trail reads "**You** created this"; the pass matches them. No frame draws a picker's own row, a chip, a toast or a Settings switch, so those words are the agent's, revisitable.
 
@@ -181,7 +181,7 @@ An app-wide copy pass, recorded here because most of it is Tasks; the rule also 
 
 ## 2026-10-15 · One description editor, stored as Markdown (dogfood calls 14–15: MOD-117, MOD-98, MOD-120)
 
-status: current
+status: current · supersedes: 2026-10-14 "TV-POLISH-2 Tasks v3 polish ba"
 
 No migration: old descriptions convert lazily. Frames matched: [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 3 (`.ldesc`: the description's bullets, 4 px dots in the third text level, 14 px in, items 2 px apart, blocks about half a line apart) and [round-2b](../../.design/tasks-v3/prototypes/round-2b.html) frame 6 (`.cdesc`: capture's "Add a description…" line). Numbered and checkbox lists, quotes, inline code and links aren't drawn: agent's layout, revisitable (the checkbox mirrors Notes' round one).
 
@@ -223,7 +223,7 @@ Screen-only, no migration. The frame itself is a shell decision: [design-system.
 
 ## 2026-10-15 · The sidebar, views and the Filter (dogfood calls #18–#21)
 
-status: current
+status: current · supersedes: 2026-10-10 "Tasks v3 re-plan — navigation"
 
 Found while Maciej and Mike dogfood Tasks on prod; Maciej approved each call on 2026-10-15. Frames: the sidebar is [round-1c](../../.design/tasks-v3/prototypes/round-1c.html) frame 1; no frame draws a footer, a new view, a Save button or a Project filter, so those parts are the agent's layout, revisitable.
 
@@ -372,7 +372,7 @@ Screen-only, no migration. The prototype is [round-2b](../../.design/tasks-v3/pr
 
 ## 2026-10-14 · Task details match the approved prototypes (dogfood MOD-116, MOD-114, MOD-118, MOD-115, MOD-119, MOD-95)
 
-status: current
+status: current · supersedes: 2026-10-13 "TV-U13 Detail panel v3 + full" · by: 2026-10-16 "The Project view's ⋯,"
 
 The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([round-2b](../../.design/tasks-v3/prototypes/round-2b.html), the detail frames). Screen-only, no migration.
 
@@ -405,7 +405,7 @@ The build had drifted from the HTML prototypes Maciej approved Tasks v3 by ([rou
 
 ## 2026-10-14 · TV-POLISH-2 Tasks v3 polish batch 2 — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-15 "One description editor, stored"
 
 Screen-only, no migration: the seven Tasks gaps the local walkthrough found (`docs/testing/tasks-v3-local.md` §3) and the quick no-migration lines of [docs/testing/tasks-v3-polish-deferred.md](../testing/tasks-v3-polish-deferred.md) whose recommendation held. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
 
@@ -858,7 +858,7 @@ The orchestrator's follow-up block after TV-U12, TV-U13, TV-D12, TV-U15, TV-D16 
 
 ## 2026-10-13 · TV-U8 Saved views — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · supersedes: 2026-10-08 "Tasks v2 calls answered: saved"
 
 Built in tasks-v3 block 21 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC11.1, AC4.8; REPLAN 29b–29e, 29d, §3's role table). Migration `20261013250000_task_views`. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -987,7 +987,7 @@ Built in tasks-v3 block 25 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §6; RE
 
 ## 2026-10-13 · TV-U16 Project overview, the Done prompt, departures — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-16 "The Project view shares the ta"
 
 Built in tasks-v3 block 33 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, AC5.5–5.6's UI half, AC6.4, AC6.6; REPLAN 16, 17, 78; the carry-forwards from TV-U6, TV-U13, TV-D13, TV-D14 and TV-D15; migration `20261013240000_project_description_team_defaults`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -1449,7 +1449,7 @@ Built in tasks-v3 block 20 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §8, AC
 
 ## 2026-10-13 · TV-D13 follow-up: who changes a team
 
-status: current
+status: current · supersedes: 2026-10-11 "TV-D10 areas, projects, sectio", 2026-10-13 "TV-D13 Teams: routing, marks,"
 
 Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `teams_op_remove_member` only); tests `supabase/tests/teams_access.test.sql`. Supersedes the "edits teams and their members" half of TV-D10's teams entry and D13-1's "change their people".
 
@@ -1466,7 +1466,7 @@ Migration `20261013210000_teams_access_fix` (redefines `teams_op_update` and `te
 
 ## 2026-10-13 · TV-F7 Focus screen v3 — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-16 "One way to name you (dogfood c"
 
 Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC8.1–8.5, AC8.9; REPLAN 31, 61–66, 62a, 63, 65a; prototype round-2a frames 1–3) on TV-F6's one time engine. No migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to change.
 
@@ -1558,7 +1558,7 @@ Built in tasks-v3 block 23 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §7, AC
 
 ## 2026-10-13 · TV-D13 Teams: routing, marks, settings — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-13 "TV-D13 follow-up: who changes"
 
 Built in tasks-v3 block 28 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §1, §13, §15, §17, AC5.1's server half, AC5.2, AC5.6's server half, AC5.7; REPLAN 20, 20a, 54, 94, 95, defaults s and t; migrations `20261013150000_teams_routing` and `20261013170000_teams_mention_once`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -1886,7 +1886,7 @@ Built in tasks-v3 block 30 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §15, A
 
 ## 2026-10-13 · TV-U13 Detail panel v3 + full page (tasks-v3 block 17) — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-14 "Task details match the approve"
 
 Built in tasks-v3 block 17 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §9, AC11.7–11.8, AC1.16, AC3.1, AC3.7; REPLAN 32, 56, 65a, 72a, 87, 88, 89, 20a, defaults p and q). Migration `20261013100000_comment_reactions_edits` (local stack only). Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -2296,7 +2296,7 @@ Built in tasks-v3 block 13 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §3, §
 
 ## 2026-10-11 · TV-D11a the shared store — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-20 "A sign-out keeps what waits to"
 
 Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #7, #27; REPLAN §6.6, §6.11, call 37, default g) on the local stack; no migration. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -2372,7 +2372,7 @@ Built in tasks-v3 block 11 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assum
   - Rejected: routing the export through the store (an export must be the server's complete answer at that moment, never a device copy that may be mid-sync).
 ## 2026-10-11 · TV-D10 areas, projects, sections, sessions, reminders, waiting, teams — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-13 "TV-D13 follow-up: who changes"
 
 Built in tasks-v3 block 10 ([specs/tasks-v3.md](../../specs/tasks-v3.md) §Assumptions #4, #12, #20, #24, #26, #27; REPLAN 13–20a, 24, 25, 54, 94, 95, default d; migrations `20261010180000_areas_projects_sections`, `20261010181000_task_sessions_reminders_waiting`, `20261010182000_teams`) on the local stack. Each is the agent's choice, deferred to by Maciej: confirmed for building, open to revisit.
 
@@ -3037,7 +3037,7 @@ status: current
 
 ### 2026-10-10 · Tasks v3 re-plan — navigation and views (29–30, 32, 82b–86, 88, 98)
 
-status: current
+status: current · by: 2026-10-15 "The sidebar, views and the Fil"
 
 - **29 · The rail's smart views** → TV-U6
   - Who: Maciej, 2026-10-09 (order renamed by 61).
@@ -3863,7 +3863,7 @@ status: current
   → [specs/tasks-v2.md](../../specs/tasks-v2.md) (Q1-1–Q1-5)
 
 - **2026-10-08 · Tasks v2 calls answered: saved views are personal and synced; buckets get Archive, "Delete the tasks too" and a 30-day Recently deleted** (Maciej, answering the `/s1` open questions).
-  - status: current
+  - status: current · by: 2026-10-13 "TV-U8 Saved views — the agent'"
   - **Saved views** ship in this wave (TV-U8). They're personal and sync across your devices (`task_views`, own rows). Sharing a view with the workspace comes later, on top of PERM sharing.
   - **Buckets** can be archived: hidden everywhere, restorable any time. Deleting one asks whether to move its tasks to Inbox or delete them too, and anything deleted (tasks, buckets, files) stays in **Recently deleted** for 30 days.
   - **Mike's rebuild** is the agent setup (Harness v2), not Tasks code, `runtime.web.ts`, migrations or the MCP function, so the Tasks blocks need no extra sequencing with him.

@@ -678,7 +678,7 @@ Client-only; see [the record](../build/chat-v2/CV-8a.md). Each choice is the bui
 
 ## 2026-10-15 · CV-7b (the composer) — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · supersedes: 2026-10-15 "CV-7a (the stream) — the agent"
 
 Client-only; see [the record](../build/chat-v2/CV-7b.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15. The record holds the rest (`@channel` offered to everyone and decided by the server, the UTF-16 limit, tool buttons, emoji up to version 15).
 
@@ -774,7 +774,7 @@ Client-only; see [the record](../build/chat-v2/CV-6b.md). Each choice is the bui
 
 ## 2026-10-15 · CV-7a (the stream) — the agent's choices (deferred to by Maciej)
 
-status: current
+status: current · by: 2026-10-15 "CV-7b (the composer) — the age"
 
 Client-only; see [the record](../build/chat-v2/CV-7a.md). Each choice is the builder's, deferred to by Maciej: confirmed for building, revisitable, 2026-10-15.
 
