@@ -48,7 +48,7 @@ export const UNCHECKED = [
  * its reason is gone.
  */
 export const ANON_DEFINER_ALLOWED: Record<string, string> = {
-  "calendar_public_feed(text)": "public ICS feed; the token is the credential",
+  // Empty since 2026-10-23: calendar_public_feed(text), the one entry, was dropped.
 };
 
 /**
