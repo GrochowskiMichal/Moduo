@@ -15,7 +15,7 @@
 //   bun run db:test tasks_ops       just supabase/tests/tasks_ops.test.sql
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /** `file: label` pairs from known-failures.txt (`#` comments and blank lines skipped). */

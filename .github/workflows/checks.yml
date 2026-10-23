@@ -190,6 +190,8 @@ jobs:
       PR_HEAD: ${{ github.event.pull_request.head.sha }}
       BEFORE: ${{ github.event.before }}
       SHA: ${{ github.sha }}
+      HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      REPO: ${{ github.repository }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -227,14 +229,20 @@ jobs:
               db=true rust=true e2e=true
             fi
           done <<< "$files"
+          # A fork's code must never see prod's schema snapshot (the cache is readable by any
+          # run here, and a fork could print it to the public log): its SQL tests run after merge.
+          if [ "$EVENT" = "pull_request" ] && [ "$HEAD_REPO" != "$REPO" ] && [ "$db" = true ]; then
+            echo "Pull request from a fork: db-test is skipped here and runs on the push after merge."
+            db=false
+          fi
           echo "db-test: $db · rust-check: $rust · e2e-smoke: $e2e"
           { echo "db=$db"; echo "rust=$rust"; echo "e2e=$e2e"; } >> "$GITHUB_OUTPUT"
 
   # The SQL/RLS tests (supabase/tests, `bun run db:test`) on a throwaway Supabase stack in the
   # runner, built like `bun run local:reset`: prod's schema snapshot, then the repo migrations
   # prod hasn't applied. The snapshot comes from the db-snapshot workflow through the Actions
-  # cache (never an artifact: the repo is public). supabase/tests/known-failures.txt holds what
-  # is already red; anything else fails the job.
+  # cache (never an artifact: the repo is public), so a fork's pull request skips it.
+  # supabase/tests/known-failures.txt holds what is already red; anything else fails the job.
   db-test:
     needs: oracle-paths
     if: needs.oracle-paths.outputs.db == 'true'
