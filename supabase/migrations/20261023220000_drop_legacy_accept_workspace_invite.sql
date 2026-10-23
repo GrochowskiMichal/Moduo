@@ -1,0 +1,14 @@
+-- Drop the legacy `accept_workspace_invite(uuid)`, the follow-up OPS-2 left open
+-- (20260729140000_ops2_grants_hardening.sql, group 2).
+--
+-- It predates the migration files (no repo file creates it) and never read
+-- auth.uid(): it added the invite's email owner to the workspace, ignoring invite
+-- status and expiry. OPS-2 revoked it from PUBLIC, anon and authenticated; only
+-- service_role could still call it, and nothing does. Invites are accepted through
+-- `workspace_op_accept_invite(p_token)` (DF-24, TX-7).
+--
+-- Probed on prod 2026-10-23 before writing this: nothing depends on it (pg_depend
+-- holds only its language and schema), no policy, view, trigger, cron job or other
+-- function references it, and it uses no custom type. So the function is all there
+-- is to drop.
+DROP FUNCTION IF EXISTS public.accept_workspace_invite(uuid);
