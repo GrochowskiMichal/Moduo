@@ -61,4 +61,10 @@ describe("slash grammar (AC5 — the ratified final set)", () => {
   it("no match → empty (the menu closes, the caller types on)", () => {
     expect(filterSlashCommands("zzzz")).toHaveLength(0);
   });
+
+  it("matches several words, and never through a description", () => {
+    expect(filterSlashCommands("heading 1")[0]?.id).toBe("h1");
+    expect(filterSlashCommands("head 2")[0]?.id).toBe("h2");
+    expect(filterSlashCommands("ul").map((c) => c.id)).not.toContain("quote");
+  });
 });

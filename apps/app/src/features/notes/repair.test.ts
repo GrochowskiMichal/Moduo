@@ -122,7 +122,8 @@ describe("imported notes render without an in-memory seed (AC1)", () => {
     // The derived body is faithful since NR-3 but it is a re-serialization
     // (normalized markers and spacing); an import keeps the user's own bytes
     // until someone edits the note.
-    const md = "Owner: **Anna**\nDue: 2026-09-30\n\nSee [pricing](https://x.test/p).\n";
+    // Opens with its title, so the import keeps the file exactly as it is.
+    const md = "# A\n\nOwner: **Anna**\nDue: 2026-09-30\n\nSee [pricing](https://x.test/p).\n";
     const plan = planMdZipImport([{ path: "A.md", content: md }]);
     const rows = buildImportRows(plan.nodes, (t) => `id-${t}`, buildDocStateFromMarkdown);
 

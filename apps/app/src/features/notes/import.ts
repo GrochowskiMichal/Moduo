@@ -66,12 +66,20 @@ function cleanName(name: string): string {
   return name.replace(MD_EXT, "").replace(NOTION_HASH, "").trim();
 }
 
-function titleFromPath(path: string, md: string): string {
-  const base = path.split("/").pop() ?? path;
-  const name = cleanName(base);
-  if (name) return name;
-  const firstLine = md.split("\n").find((l) => l.trim());
-  return firstLine ? firstLine.replace(/^#+\s*/, "").trim() || "Untitled" : "Untitled";
+/**
+ * A note's title and body, keeping "the first line is the title" true. A file
+ * that opens with a heading is titled by it ("# Meeting notes from Lisbon",
+ * not "lisbon"); one that doesn't gets its file name as a first-line heading,
+ * or the editor would show its first sentence as the title and the first edit
+ * would rename the note to it.
+ */
+function titleAndBody(path: string, md: string): { title: string; md: string } {
+  const firstLine = md.split("\n").find((l) => l.trim()) ?? "";
+  const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(firstLine.trim())?.[1]?.trim();
+  if (heading) return { title: heading, md };
+  const name = cleanName(path.split("/").pop() ?? path);
+  if (name) return { title: name, md: `# ${name}\n\n${md}` };
+  return { title: firstLine.trim() || "Untitled", md };
 }
 
 /** Normalize a path segment for parent-matching (ext + hash stripped, lowered). */
@@ -139,8 +147,7 @@ export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
     return {
       tempId,
       parentTempId: null,
-      title: titleFromPath(f.path, f.content),
-      md: f.content,
+      ...titleAndBody(f.path, f.content),
       path: f.path,
     };
   });
