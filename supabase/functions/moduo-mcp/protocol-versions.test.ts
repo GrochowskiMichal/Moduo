@@ -121,24 +121,6 @@ afterAll(() => {
   rs.restoreAllMocks();
 });
 
-async function post(body: unknown, authorization?: string) {
-  calls = [];
-  const res = await serve(
-    new Request(ENDPOINT, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        ...(authorization ? { authorization } : {}),
-      },
-      body: JSON.stringify(body),
-    }),
-  );
-  for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
-  return { status: res.status, challenge: res.headers.get("www-authenticate"), body: (await res.json()) as any };
-}
-
-
 async function post(body: unknown, headers: Record<string, string> = {}) {
   const res = await serve(
     new Request(ENDPOINT, {
@@ -240,6 +222,15 @@ describe("a 2026-07-28 client", () => {
     expect(modern.status).toBe(200);
     expect(modern.body.result.resultType).toBe("complete");
     expect(modern.body.result.content).toEqual(legacy.body.result.content);
+  });
+
+  it("is refused by the SDK, not answered early, when its Mcp-Name header contradicts the body", async () => {
+    const res = await post(
+      { jsonrpc: "2.0", id: 6, method: "tools/call", params: { _meta: envelope, name: "tasks_create", arguments: {} } },
+      { ...modernHeaders("tools/call"), "mcp-name": "tasks_list" },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe(-32020);
   });
 
   it("gets Unknown tool for a name no module has", async () => {

@@ -400,12 +400,12 @@ export async function answerMessage(
   // `initialize` is 2025-era whatever it claims: it negotiates down.
   const claim = message.method === "initialize" ? null : envelopeClaim(message);
   const clientHeaders = new Headers(headers);
+  const toolName = (message.params as { name?: unknown } | undefined)?.name;
   if (claim) {
     // The body is the request: a standard header the client left out is
     // filled from it; one that disagrees with it is still the SDK's to refuse.
     if (!clientHeaders.has("mcp-protocol-version")) clientHeaders.set("mcp-protocol-version", claim);
     if (!clientHeaders.has("mcp-method")) clientHeaders.set("mcp-method", message.method);
-    const toolName = (message.params as { name?: unknown } | undefined)?.name;
     if (
       message.method === "tools/call" &&
       !clientHeaders.has("mcp-name") &&
@@ -422,7 +422,8 @@ export async function answerMessage(
       claim === null ||
       (MODERN_PROTOCOL_VERSIONS.includes(claim) &&
         clientHeaders.get("mcp-protocol-version") === claim &&
-        clientHeaders.get("mcp-method") === message.method);
+        clientHeaders.get("mcp-method") === message.method &&
+        clientHeaders.get("mcp-name") === toolName);
     const early = servable ? toolCallAnsweredHere(message, key, claim !== null) : null;
     if (early) return early;
   }
@@ -441,8 +442,13 @@ export async function answerMessage(
 
   if (claim !== null) {
     // Stateless by design: the connector has nothing to notify, so a listen
-    // stream would only hold the function open.
-    if (message.method === "subscriptions/listen") {
+    // stream would only hold the function open. (A claim the SDK doesn't
+    // serve is still its to refuse, below.)
+    if (
+      message.method === "subscriptions/listen" &&
+      MODERN_PROTOCOL_VERSIONS.includes(claim) &&
+      clientHeaders.get("mcp-protocol-version") === claim
+    ) {
       return rpcError(message.id, -32601, "Method not found: the Moduo connector sends no notifications.");
     }
     // The SDK's 2026-07-28 entry, modern-only (the 2025 era is served below):

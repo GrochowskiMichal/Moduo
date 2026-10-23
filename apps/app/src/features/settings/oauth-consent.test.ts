@@ -187,6 +187,9 @@ describe("consent model: workspaces", () => {
     expect(approveBlocker(full, some)).toBe(CAP_MESSAGE);
     expect(approveBlocker(open, nothing)).toBe(NO_ACCESS_MESSAGE);
     expect(approveBlocker(open, some)).toBeNull();
+    // A ticked replacement in the full workspace frees its place.
+    expect(approveBlocker(full, some, true)).toBeNull();
+    expect(approveBlocker(noRole, some, true)).toBe(ROLE_MESSAGE);
   });
 });
 

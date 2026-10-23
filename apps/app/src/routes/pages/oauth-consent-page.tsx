@@ -279,7 +279,11 @@ function ConsentForm({
   const shown = workspace ? shownScopes(scopes, workspace.actor) : scopes;
   const ceilings = workspace ? consentCeilings(workspace.actor) : null;
   const returnAddress = returnsTo(request.clientScheme, request.clientDomain);
-  const blocker = approveBlocker(choice, shown);
+  const blocker = approveBlocker(
+    choice,
+    shown,
+    request.others.some((o) => o.workspaceId === workspaceId && ticked.includes(o.id)),
+  );
   const move = moveLine(
     appName,
     connection,

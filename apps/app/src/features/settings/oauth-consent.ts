@@ -219,13 +219,18 @@ export function moveLine(
   return `This moves ${appName} from ${from} to ${to}.`;
 }
 
-/** Why Approve is off, or null when it can go. */
+/**
+ * Why Approve is off, or null when it can go. At the cap, a ticked
+ * replacement in the same workspace frees its place (the server ends it
+ * before counting, and checks the cap again).
+ */
 export function approveBlocker(
   choice: ConsentWorkspaceChoice | null,
   scopes: Readonly<McpKeyScopes>,
+  freesPlace = false,
 ): string | null {
   if (!choice || choice.disabled) return ROLE_MESSAGE;
-  if (choice.full) return CAP_MESSAGE;
+  if (choice.full && !freesPlace) return CAP_MESSAGE;
   if (!grantsAnyAccess(scopes)) return NO_ACCESS_MESSAGE;
   return null;
 }

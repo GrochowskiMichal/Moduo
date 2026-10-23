@@ -329,7 +329,7 @@ INSERT INTO auth.oauth_clients
   (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
 SELECT test.id(n), 'dynamic', 'https://claude.ai/api/mcp/auth_callback', 'authorization_code,refresh_token',
        ' Claude ', 'public', 'none'
-FROM unnest(ARRAY['C2', 'C3', 'C4', 'C5']) AS n;
+FROM unnest(ARRAY['C2', 'C3', 'C4', 'C5', 'C6']) AS n;
 INSERT INTO auth.oauth_clients
   (id, registration_type, redirect_uris, grant_types, client_name, client_type, token_endpoint_auth_method)
 VALUES (test.id('K'), 'dynamic', 'https://claude.example.net/cb', 'authorization_code,refresh_token',
@@ -430,9 +430,13 @@ SELECT test.ok(test.connect('P', 'W3', 'C4', '{"tasks": "view"}') LIKE '54000 %'
 SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C4'), ARRAY[(test.live('P', 'C3')).id]) LIKE '{%}'
                AND (test.live('P', 'C4')).id IS NOT NULL AND (test.live('P', 'C3')).id IS NULL,
   'at 20, replacing the old Claude connection makes room for the new one');
-SELECT test.ok(test.connect('P', 'W3', 'C5', '{"tasks": "view"}') LIKE '54000 %'
-               AND (test.live('P', 'C4')).id IS NOT NULL,
-  'a refused connect ends nothing (the replacement rolls back with it)');
+-- P's Claude connection in another workspace, then a replacing approve in the full W3.
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W4'), test.id('P'), 'Fourth');
+SELECT test.connect('P', 'W4', 'C6', '{"tasks": "view"}');
+SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C5'), ARRAY[(test.live('P', 'C6')).id])
+                 LIKE 'ERROR This workspace has 20 keys%'
+               AND (test.live('P', 'C6')).id IS NOT NULL AND (test.live('P', 'C6')).revoked_at IS NULL,
+  'a refused connect ends nothing: a replacement in another workspace rolls back with it');
 SELECT test.ok(test.approve_replacing('P', 'W3', test.sign_in('P', 'C5'), ARRAY[(test.live('P', 'K')).id]) LIKE 'ERROR This workspace has 20 keys%'
                AND (test.live('P', 'K')).id IS NOT NULL,
   'naming a connection that isn''t the same app frees nothing, and the cap still holds');
