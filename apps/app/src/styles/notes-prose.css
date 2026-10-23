@@ -176,6 +176,12 @@
     border-color var(--motion-fade) var(--ease-out);
 }
 
+/* The box is a control: the pointer says so. */
+.notes-list-item-unchecked::before,
+.notes-list-item-checked::before {
+  cursor: pointer;
+}
+
 .notes-list-item-unchecked:hover::before {
   border-color: var(--foreground);
 }
@@ -467,15 +473,19 @@
   color: inherit;
 }
 
+/* Commented text: a soft wash with a clear underline (read as "someone
+ * said something here", not a selection); its thread's open: stronger. */
 .notes-editor-v2 mark.notes-comment-mark[data-comment="open"] {
   background: var(--comment-mark-bg);
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid var(--comment-mark-line);
   cursor: pointer;
+  transition: background-color var(--motion-fade) var(--ease-out);
 }
 
+.notes-editor-v2 mark.notes-comment-mark[data-comment="open"]:hover,
 .notes-editor-v2 mark.notes-comment-mark[data-comment="focused"] {
   background: var(--comment-mark-bg-focused);
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid var(--comment-mark-line);
 }
 
 /* Selection in the editor and on a published page. */

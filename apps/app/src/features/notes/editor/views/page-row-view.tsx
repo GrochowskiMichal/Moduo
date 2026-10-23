@@ -6,12 +6,14 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getNodeByKey, $isParagraphNode, type NodeKey } from "lexical";
 import { ChevronRight, FileText } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 
 import { isRedundantPageRow } from "../../subpages";
 import { displayTitle } from "../../title";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { $isPageRowNode } from "../schema/page-row-node";
+
+const noSubscription = () => () => {};
 
 export function PageRowView({
   nodeKey,
@@ -24,7 +26,10 @@ export function PageRowView({
 }) {
   const [editor] = useLexicalComposerContext();
   const bridge = useNotesEditorBridge();
-  const meta = bridge?.getNoteMeta(noteId) ?? null;
+  const meta = useSyncExternalStore(
+    bridge?.subscribeNotes ?? noSubscription,
+    () => bridge?.getNoteMeta(noteId) ?? null,
+  );
   const title = meta ? displayTitle(meta.title) : label || "Untitled";
   const trashed = Boolean(meta?.deletedAt);
   const owner = bridge?.subpagesListedFor;

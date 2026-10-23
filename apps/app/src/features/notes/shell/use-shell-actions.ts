@@ -1,16 +1,33 @@
 /**
- * What the shell's gestures do (specs/notes-refresh.md NR-2): ⌫ to trash and
- * sidebar drops, each mapped onto one module op. Moving a shared note under a
- * private parent asks first ("Keep current access" / "Match the new parent";
- * Esc keeps). Notes carry no row or top-bar menu (Mike, 2026-10-24).
+ * What the refreshed shell's gestures do (specs/notes-refresh.md NR-2): the row
+ * and top-bar menu actions, sidebar drops and `Move to…`, each mapped onto
+ * one module op. Moving a shared note under a private parent asks first
+ * ("Keep current access" / "Match the new parent"; Esc keeps), in place of
+ * classic's `window.confirm`.
  */
 
 import { useCallback, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { noteIsPrivate } from "../../sharing/rules";
+import { betweenPositions, endPosition } from "../../tasks/helpers";
+import { tryDeriveNoteBody } from "../editor/doc-markdown";
+import {
+  buildZipEntries,
+  downloadTextFile,
+  downloadZip,
+  noteFileName,
+  safeFileStem,
+  subtreeZipNotes,
+} from "../export";
+import type { Note } from "../model";
+import { displayTitle } from "../title";
 import { descendantIds } from "../tree";
-import type { DropIntent } from "./drop-intent";
+import { type DropIntent, type DropTarget, resolveDropIntent } from "./drop-intent";
+import type { RowAction } from "./row-menu";
 import type { NotesShellState } from "./use-notes-shell";
+
+export type RowPopover = { kind: "share" | "publish"; noteId: string; rowKey: string };
 
 export type SharingQuestion = { noteId: string; parentId: string; position: string };
 
@@ -18,9 +35,12 @@ export function useShellActions(
   shell: NotesShellState,
   trashWithDetach: (id: string) => Promise<void>,
 ) {
-  const { module, select, selectedId } = shell;
-  const { notes } = module;
-  const [publishOpen, setPublishOpen] = useState(false);
+  const { module, select, selectedId, runtime, workspaceId, sections, openDraft } = shell;
+  const { notes, favorites, engine } = module;
+  const [moveTarget, setMoveTarget] = useState<Note | null>(null);
+  const [iconTarget, setIconTarget] = useState<Note | null>(null);
+  /** Share… or Publish… from a row's menu: the popover opens on that row. */
+  const [rowPopover, setRowPopover] = useState<RowPopover | null>(null);
   const [sharingQuestion, setSharingQuestionState] = useState<SharingQuestion | null>(null);
   // The dialog can answer twice (the button, then its own close); the ref
   // makes the second answer a no-op.
@@ -30,16 +50,60 @@ export function useShellActions(
     setSharingQuestionState(q);
   }, []);
 
-  /** Trashing the open note (or a page above it) closes it. */
+  const exportNote = useCallback(
+    async (note: Note) => {
+      const name = displayTitle(note.title);
+      // The open note derives freshest from its live doc; others read body_md.
+      let md =
+        engine && note.id === selectedId
+          ? (tryDeriveNoteBody(engine.getOrCreateSession(note.id).doc)?.md ?? "")
+          : "";
+      if (!md && runtime && workspaceId) {
+        try {
+          const docs = await runtime.notesV2.fetchExportDocs({ workspaceId, ids: [note.id] });
+          md = docs[0]?.bodyMd ?? "";
+        } catch {
+          toast.error("Couldn't export the note.");
+          return;
+        }
+      }
+      downloadTextFile(noteFileName(name), md || `# ${name}\n`);
+    },
+    [engine, selectedId, runtime, workspaceId],
+  );
+
+  const exportTree = useCallback(
+    async (note: Note) => {
+      if (!runtime || !workspaceId) return;
+      const ids = [note.id, ...descendantIds(notes, note.id)];
+      try {
+        const docs = await runtime.notesV2.fetchExportDocs({ workspaceId, ids });
+        const mdById = new Map(docs.map((d) => [d.id, d.bodyMd]));
+        downloadZip(
+          `${safeFileStem(displayTitle(note.title))}.zip`,
+          buildZipEntries(subtreeZipNotes(notes, note.id, ids, mdById)),
+        );
+      } catch {
+        toast.error("Couldn't export the notes.");
+      }
+    },
+    [runtime, workspaceId, notes],
+  );
+
+  /** Archiving or trashing the open note (or a page above it) closes it. */
+  const leaves = useCallback(
+    (id: string) =>
+      Boolean(selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId))),
+    [notes, selectedId],
+  );
+
   const trash = useCallback(
     (id: string) => {
-      const leaving = Boolean(
-        selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId)),
-      );
+      const leaving = leaves(id);
       void trashWithDetach(id);
       if (leaving) select(null, true);
     },
-    [trashWithDetach, notes, selectedId, select],
+    [trashWithDetach, leaves, select],
   );
 
   const applyIntent = useCallback(
@@ -77,11 +141,82 @@ export function useShellActions(
     [module, setSharingQuestion],
   );
 
+  const pickMoveTarget = useCallback(
+    (target: DropTarget) => {
+      if (!moveTarget) return;
+      const favoritePositions = new Map(favorites.map((f) => [f.noteId, f.position]));
+      const intent = resolveDropIntent({
+        notes,
+        layout: sections,
+        favoritePositions,
+        dragId: moveTarget.id,
+        target,
+        pos: { endPosition, betweenPositions },
+      });
+      if (intent) applyIntent(intent);
+    },
+    [moveTarget, favorites, notes, sections, applyIntent],
+  );
+
+  const onAction = useCallback(
+    (action: RowAction, note: Note, rowKey: string) => {
+      switch (action) {
+        case "favorite":
+        case "unfavorite":
+          module.setFavorite(note.id, action === "favorite");
+          return;
+        case "subpage":
+          openDraft(note.id);
+          return;
+        case "duplicate":
+          void module.duplicateNote(note.id).then((copyId) => {
+            if (copyId) select(copyId);
+          });
+          return;
+        case "move":
+          setMoveTarget(note);
+          return;
+        case "icon":
+          setIconTarget(note);
+          return;
+        case "export":
+          void exportNote(note);
+          return;
+        case "export-tree":
+          void exportTree(note);
+          return;
+        case "share":
+        case "publish":
+          // After the menu has closed (it keeps focus where it is for these).
+          setTimeout(() => setRowPopover({ kind: action, noteId: note.id, rowKey }), 0);
+          return;
+        case "full-width":
+          module.setFullWidth(note.id, !note.fullWidth);
+          return;
+        case "archive": {
+          const leaving = leaves(note.id);
+          module.archiveNote(note.id, true);
+          if (leaving) select(null, true);
+          return;
+        }
+        case "trash":
+          trash(note.id);
+      }
+    },
+    [module, openDraft, select, selectedId, exportNote, exportTree, leaves, trash],
+  );
+
   return {
+    onAction,
     applyIntent,
     trash,
-    publishOpen,
-    setPublishOpen,
+    moveTarget,
+    setMoveTarget,
+    iconTarget,
+    setIconTarget,
+    pickMoveTarget,
+    rowPopover,
+    setRowPopover,
     sharingQuestion,
     answerSharing,
   };
