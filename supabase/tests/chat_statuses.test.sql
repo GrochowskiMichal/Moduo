@@ -407,7 +407,8 @@ BEGIN
   PERFORM test.ok((SELECT qual FROM pg_policies WHERE schemaname = 'public' AND tablename = 'user_statuses'
                     AND policyname = 'user_statuses_read') LIKE '%uid()%workspace_members%'
               AND (SELECT count(*) FROM pg_policies WHERE schemaname = 'public'
-                    AND tablename IN ('user_statuses', 'user_saved_statuses') AND cmd <> 'SELECT') = 0,
+                    AND tablename IN ('user_statuses', 'user_saved_statuses') AND cmd <> 'SELECT'
+                    AND policyname <> 'app_tokens_refused') = 0,
     'rules: one read rule each, about the caller; no write rules (the ops write)');
 END;
 $$;
