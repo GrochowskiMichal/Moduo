@@ -72,9 +72,11 @@ export function parseDiff(diff: string): FileDiff[] {
   let current: FileDiff | null = null;
   let inHunk = false;
   for (const line of diff.split("\n")) {
-    const start = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
-    if (start) {
-      current = { file: start[2], oldFile: start[1], added: [], removed: [] };
+    if (line.startsWith("diff --git ")) {
+      // A quoted path (special characters) doesn't match; its entry is kept, empty-named, so its
+      // lines never land in the previous file. gitDiff turns quoting off anyway.
+      const start = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
+      current = { file: start?.[2] ?? "", oldFile: start?.[1] ?? "", added: [], removed: [] };
       files.push(current);
       inHunk = false;
     } else if (current && !inHunk) {
@@ -178,7 +180,16 @@ function gitDiff(argv: string[]): string {
   }
   return execFileSync(
     "git",
-    ["diff", "--no-color", "--no-ext-diff", "-M", "--unified=0", ...target],
+    [
+      "-c",
+      "core.quotePath=false",
+      "diff",
+      "--no-color",
+      "--no-ext-diff",
+      "-M",
+      "--unified=0",
+      ...target,
+    ],
     { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
   );
 }

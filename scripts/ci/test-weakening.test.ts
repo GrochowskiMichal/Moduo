@@ -155,6 +155,18 @@ describe("test-weakening detector", () => {
     ).toEqual([]);
   });
 
+  it("keeps a quoted path's lines out of the file before it", () => {
+    const diff = [
+      "diff --git a/a.test.ts b/a.test.ts",
+      "@@ -1,0 +1 @@",
+      "+const x = 1;",
+      'diff --git "a/\\303\\274.txt" "b/\\303\\274.txt"',
+      "@@ -1,0 +1 @@",
+      '+it.only("y", () => {});',
+    ].join("\n");
+    expect(detect(diff)).toEqual([]);
+  });
+
   it("counts pgTAP assertions in supabase/tests", () => {
     const sql =
       "select plan(2);\nselect ok(true, 'a');\nselect is(1, 1, 'b');\nselect * from finish();\n";
