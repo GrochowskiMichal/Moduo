@@ -68,7 +68,7 @@
         ]
       },
       {
-        "matcher": "mcp__.*__(apply_migration|execute_sql|deploy_edge_function)",
+        "matcher": "Bash|mcp__.*__(apply_migration|execute_sql|deploy_edge_function)",
         "hooks": [
           {
             "type": "command",
@@ -152,15 +152,8 @@
       "Bash(supabase stop --no-backup:*)"
     ],
     "ask": [
-      "Bash(supabase db push*)",
-      "Bash(supabase db query --linked*)",
-      "Bash(supabase db query*--linked*)",
-      "Bash(supabase functions deploy*)",
       "Bash(az deployment group create*)",
-      "Bash(az deployment sub create*)",
-      "mcp__supabase__apply_migration",
-      "mcp__supabase__deploy_edge_function",
-      "mcp__supabase__execute_sql"
+      "Bash(az deployment sub create*)"
     ]
   },
   "enabledPlugins": {
