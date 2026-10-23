@@ -15,6 +15,8 @@ rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 import { readAllPages } from "../_shared/tasks-connector.ts";
 import { tasksConnectorModule } from "./modules/tasks.ts";
 import type { ToolContext } from "./registry.ts";
+import { callThroughSdk } from "./through-sdk.ts";
+import { TOOL_OUTPUT_SCHEMAS } from "./tool-outputs.ts";
 
 type Row = Record<string, unknown>;
 
@@ -132,6 +134,8 @@ function setup(count: number) {
 function call(name: string, args: Row, ctx: ToolContext) {
   const t = tasksConnectorModule.tools.find((x) => x.name === name);
   if (!t) throw new Error(`${name} is not registered`);
+  // A main read goes through the SDK, so its answer is checked against its output schema (MCPO-6).
+  if (TOOL_OUTPUT_SCHEMAS[name]) return callThroughSdk(name, args, ctx);
   return t.handler(args, ctx);
 }
 

@@ -99,6 +99,7 @@ export const emailConnectorModule: ConnectorModule = {
       description:
         "The tissue email threads — the ones deliberately pulled into the workspace (converted / linked / snoozed / followed-up). Metadata only: from, subject, snippet, snooze & follow-up state. Newest first.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max threads (default 50, max 200)." } },
@@ -121,6 +122,7 @@ export const emailConnectorModule: ConnectorModule = {
       name: "email_get",
       description: "One tissue thread's metadata by its ref id (never the message body).",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { ref_id: { type: "string", description: "The email_refs uuid." } },
@@ -136,6 +138,7 @@ export const emailConnectorModule: ConnectorModule = {
       description:
         "Search the tissue threads by sender, subject, or snippet (metadata only). Returns matching threads.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -168,6 +171,7 @@ export const emailConnectorModule: ConnectorModule = {
       name: "email_snooze",
       description: "Snooze a thread until a time — it leaves the inbox and returns when due.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -188,6 +192,7 @@ export const emailConnectorModule: ConnectorModule = {
       name: "email_unsnooze",
       description: "Cancel a snooze — the thread returns to the inbox now.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { ref_id: { type: "string", description: "The email_refs uuid." } },
@@ -203,6 +208,7 @@ export const emailConnectorModule: ConnectorModule = {
       description:
         "Set a follow-up reminder on a thread — notifies at the deadline if no reply arrived.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -223,6 +229,7 @@ export const emailConnectorModule: ConnectorModule = {
       name: "email_clear_follow_up",
       description: "Clear a follow-up reminder on a thread.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { ref_id: { type: "string", description: "The email_refs uuid." } },
@@ -238,6 +245,7 @@ export const emailConnectorModule: ConnectorModule = {
       description:
         "Link a thread to another entity with a typed relation (idempotent; rides the spine). Use `references` for a manual connection, `spawned-from` when a task came from the thread.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -277,6 +285,7 @@ export const emailConnectorModule: ConnectorModule = {
       description:
         "Remove a thread from the tissue — soft-deletes the ref, drops its links, tombstones the entity (the inbox itself is untouched; the mailbox is on desktop).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { ref_id: { type: "string", description: "The email_refs uuid." } },

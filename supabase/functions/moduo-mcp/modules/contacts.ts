@@ -86,6 +86,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_list",
       description: "All people and companies in the workspace — the directory source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max rows per kind (default 100, max 500)." } },
@@ -127,6 +128,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_get",
       description: "A contact (or company) with every live link touching it — the roll-up hub source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -164,6 +166,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_search",
       description: "Search people and companies by name or email.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -222,6 +225,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_create",
       description: "Create a person; registers them so they're immediately linkable/@mentionable.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -250,6 +254,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_update",
       description: "Edit a person's fields (omit a field to leave it unchanged).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -276,6 +281,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_set_status",
       description: "Set a person's flat status (any non-empty label; no pipeline). No-op if unchanged.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -297,6 +303,7 @@ export const contactsConnectorModule: ConnectorModule = {
       description:
         "Link a contact/company to another entity (idempotent). Kinds: works-at, follow-up, references, …. A works-at link between a person and a company also makes it the person's company (replacing a previous one); removing it clears that.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -326,6 +333,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_unlink",
       description: "Soft-delete a link a contact/company owns (Undo-friendly, idempotent).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { link_id: { type: "string", description: "Link uuid." } },
@@ -341,6 +349,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_delete",
       description: "Soft-delete a contact: drops its links and removes it from search / @mention / roll-ups.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { contact_id: { type: "string", description: "Contact uuid." } },
@@ -356,6 +365,7 @@ export const contactsConnectorModule: ConnectorModule = {
       description:
         "Bulk-create people from a deduped plan: each row { op:'create'|'merge', contactId?, name, email, phone, title, company, status }.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {

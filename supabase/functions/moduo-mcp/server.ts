@@ -40,11 +40,13 @@ import {
   findTool,
   moduleScope,
   toolAllowed,
+  toolAnnotations,
   toolRequirement,
   toolsForKey,
   type KeyContext,
   type ToolDef,
 } from "./registry.ts";
+import { outputJsonSchema } from "./tool-outputs.ts";
 
 const SERVER_INFO = { name: "moduo-mcp", title: "Moduo", version: "1.0.0" };
 
@@ -68,7 +70,11 @@ export type ConnectorDeps = {
   resourceMetadataUrl?: string;
 };
 
-type ToolResult = { content: Array<{ type: "text"; text: string }>; isError?: true };
+type ToolResult = {
+  content: Array<{ type: "text"; text: string }>;
+  structuredContent?: unknown;
+  isError?: true;
+};
 
 const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
 const rpcError = (id: unknown, code: number, message: string) =>
@@ -214,6 +220,26 @@ function listedArguments(tool: ToolDef): StandardSchemaWithJSON {
   } as StandardSchemaWithJSON;
 }
 
+/**
+ * A main read's output schema as the SDK sees it (MCPO-6): listed as written
+ * in tool-outputs.ts and not checked on the way out, so a schema that lags an
+ * answer can never turn a good answer into an error (tests check real answers
+ * against it instead). A list's schema is an array: the SDK lists it, and
+ * wraps the answer as `{ result: [...] }`, the way 2025-era clients expect.
+ */
+function listedOutput(toolName: string): StandardSchemaWithJSON | undefined {
+  const listing = outputJsonSchema(toolName);
+  if (!listing) return undefined;
+  return {
+    "~standard": {
+      version: 1,
+      vendor: "moduo",
+      validate: (value: unknown) => ({ value }),
+      jsonSchema: { input: () => listing, output: () => listing },
+    },
+  } as StandardSchemaWithJSON;
+}
+
 /** One stateless MCP server holding only the tools this key may use. */
 export function buildServer(key: KeyContext, deps: ConnectorDeps, workspaceName: string | null): McpServer {
   const server = new McpServer(SERVER_INFO, {
@@ -221,9 +247,15 @@ export function buildServer(key: KeyContext, deps: ConnectorDeps, workspaceName:
     instructions: workspaceName === null ? undefined : instructionsFor(key, workspaceName),
   });
   for (const tool of toolsForKey(key)) {
+    const outputSchema = listedOutput(tool.name);
     server.registerTool(
       tool.name,
-      { description: tool.description, inputSchema: listedArguments(tool) },
+      {
+        description: tool.description,
+        inputSchema: listedArguments(tool),
+        ...(outputSchema ? { outputSchema } : {}),
+        annotations: toolAnnotations(tool),
+      },
       async (rawArgs: unknown) => {
         const parsedArgs = parseToolArgs(tool.name, rawArgs ?? {});
         if (!parsedArgs.success) return textResult(parsedArgs.message, true);
@@ -233,7 +265,9 @@ export function buildServer(key: KeyContext, deps: ConnectorDeps, workspaceName:
         const db = deps.keyClient(key.id);
         try {
           const result = await tool.handler(parsedArgs.data, { key, db });
-          return textResult(JSON.stringify(result, null, 2));
+          const text = JSON.stringify(result, null, 2);
+          // The same value as the text, read back from it, so the two never differ.
+          return outputSchema ? { ...textResult(text), structuredContent: JSON.parse(text) } : textResult(text);
         } catch (err) {
           return textResult(err instanceof Error ? err.message : String(err), true);
         }

@@ -13,7 +13,10 @@
  * listed in SDK_DIFFERENCES with the reason.
  *
  * Never refresh the snapshot to make this pass: a difference is a behavior
- * change clients see.
+ * change clients see. One deliberate refresh so far: MCPO-6 added tool
+ * annotations and the five main reads' outputSchema to the tool lists and
+ * structuredContent to those reads' answers (29 cases); with those fields
+ * taken out, every case still equals the MCPO-2 capture.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
