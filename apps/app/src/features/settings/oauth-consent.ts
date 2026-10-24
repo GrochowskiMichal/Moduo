@@ -37,6 +37,31 @@ export function isCheckedApp(
   return CHECKED_APP_DOMAINS.some((d) => host === d || host.endsWith(`.${d}`));
 }
 
+/**
+ * The domain the consent screen goes by: the server's reading of where the
+ * sign-in returns, only when the browser's own reading of that redirect
+ * (`new URL`) agrees and it carries no userinfo; else none (MOD-576: a
+ * redirect like `https://x@claude.ai:@evil.com/cb` must never read claude.ai).
+ */
+export function agreedDomain(request: {
+  clientScheme: string | null;
+  clientDomain: string | null;
+  redirectUri: string | null;
+}): string | null {
+  const domain = (request.clientDomain ?? "").trim().toLowerCase();
+  if (!domain || !request.redirectUri) return null;
+  let url: URL;
+  try {
+    url = new URL(request.redirectUri.trim());
+  } catch {
+    return null;
+  }
+  if (url.username || url.password) return null;
+  const scheme = url.protocol.replace(/:$/, "").toLowerCase();
+  if (scheme !== (request.clientScheme ?? "").trim().toLowerCase()) return null;
+  return url.hostname.toLowerCase() === domain ? domain : null;
+}
+
 /** Where the screen says the sign-in returns: the host for the web, the whole address start otherwise. */
 export function returnsTo(
   scheme: string | null | undefined,

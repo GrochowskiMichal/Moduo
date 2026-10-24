@@ -4,6 +4,12 @@
  * Creates a Stripe Coupon (100% off, once, lifetime entitlement) and records
  * it in founders_interest for the given email. Optionally sends the coupon via Resend.
  *
+ * The promotion code is random (16 chars from crypto.getRandomValues, nothing
+ * from the email) and bound to the recipient's own Stripe customer, so it works
+ * only in their Checkout (MOD-583, _shared/founder-code.ts). The recipient
+ * needs a Moduo account with a billing customer (made when the trial starts);
+ * without one nothing is created and the answer is 409.
+ *
  * Protected: only callers presenting the project's default secret key in the
  * `apikey` header (team dashboard) can hit this.
  *
@@ -17,6 +23,8 @@ import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
 import { issueFounderCouponBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
+import { escapeHtml } from "../_shared/escape.ts";
+import { founderCustomerId, founderPromoCode } from "../_shared/founder-code.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -44,13 +52,31 @@ Deno.serve(async (req: Request) => {
     }
     const parsed = parseJsonBody(issueFounderCouponBodySchema, json);
     if (!parsed.success) return Response.json({ error: "email required" }, { status: 400 });
-    const { email, sendEmail = true } = parsed.data;
+    const { sendEmail = true } = parsed.data;
+    // Supabase Auth keeps emails lower case, and so does the customer Moduo makes.
+    const email = parsed.data.email.trim().toLowerCase();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       secretKey,
       { auth: { persistSession: false } }
     );
+
+    // The recipient's own customer: the code is bound to it.
+    const candidates = await stripe.customers.list({ email, limit: 20 });
+    const uids = [
+      ...new Set(candidates.data.map((c) => c.metadata?.supabase_user_id).filter((u): u is string => !!u)),
+    ];
+    const { data: profiles } = uids.length
+      ? await supabase.from("profiles").select("id, stripe_customer_id").in("id", uids)
+      : { data: [] };
+    const customerId = founderCustomerId(candidates.data, profiles ?? []);
+    if (!customerId) {
+      return Response.json(
+        { error: "No Moduo billing account for this email yet. Ask them to sign up first." },
+        { status: 409 },
+      );
+    }
 
     // Create a unique 100%-off coupon for this email.
     const coupon = await stripe.coupons.create({
@@ -61,16 +87,11 @@ Deno.serve(async (req: Request) => {
       metadata: { email, type: "early_founders" },
     });
 
-    // Turn it into a promotion code for easy sharing.
-    const code = email
-      .split("@")[0]
-      .toUpperCase()
-      .replace(/[^A-Z0-9]/g, "")
-      .slice(0, 10);
-
+    // A promotion code only this customer can redeem.
     const promoCode = await stripe.promotionCodes.create({
       coupon: coupon.id,
-      code: `FOUNDERS-${code}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+      code: founderPromoCode(),
+      customer: customerId,
       max_redemptions: 1,
       metadata: { email, type: "early_founders" },
     });
@@ -120,7 +141,7 @@ Deno.serve(async (req: Request) => {
                 choose the Pro plan, and enter your coupon at checkout.
               </p>
               <p style="color:#aaa">
-                This code is single-use and reserved for you — please don't share it.
+                This code is single-use and works only when you're signed in to Moduo as ${escapeHtml(email)}.
               </p>
               <p style="color:#555;font-size:12px">— The Moduo team</p>
             </div>
