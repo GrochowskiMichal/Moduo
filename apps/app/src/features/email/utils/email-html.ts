@@ -25,8 +25,10 @@ export type EmailSrcDocOptions = {
 /** Attributes that can trigger a remote fetch when they hold an http(s) URL. */
 const REMOTE_FETCH_ATTRS = ["src", "srcset", "poster", "background"] as const;
 
-/** Matches url(http…) / url(//…) inside inline styles and <style> blocks. */
-const CSS_REMOTE_URL_RE = /url\(\s*(?:"|')?\s*(?:https?:)?\/\//i;
+/** Matches url(http…) / url(//…) inside inline styles and <style> blocks.
+ * Linear: the space after a quote only matches once a quote was seen, so a run
+ * of spaces can't be split two ways between `\s*`s (F19, MOD-577). */
+const CSS_REMOTE_URL_RE = /url\(\s*(?:["']\s*)?(?:https?:)?\/\//i;
 
 function isRemoteUrl(value: string): boolean {
   const v = value.trim().toLowerCase();
@@ -151,6 +153,16 @@ export function buildEmailReaderDoc(
   const doc = parser.parseFromString(rawHtml, "text/html");
 
   doc.querySelectorAll("script, iframe, object, embed").forEach((node) => {
+    node.remove();
+  });
+
+  // A <meta http-equiv="refresh"> navigates the frame on open (the in-frame CSP
+  // can't stop a self-navigation) and <base> retargets every relative URL, so
+  // both go (MOD-574). Only a charset/content-type meta stays; ours leads anyway.
+  doc.querySelectorAll("base, meta").forEach((node) => {
+    const httpEquiv = node.getAttribute("http-equiv")?.trim().toLowerCase() ?? null;
+    const charsetOnly = httpEquiv === null && node.hasAttribute("charset");
+    if (node.localName === "meta" && (charsetOnly || httpEquiv === "content-type")) return;
     node.remove();
   });
 
