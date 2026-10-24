@@ -54,11 +54,20 @@ describe("slash grammar (AC5 — the ratified final set)", () => {
     expect(ids).toContain("task");
   });
 
-  it("empty query returns the full menu in registry order", () => {
-    expect(filterSlashCommands("")).toHaveLength(SLASH_COMMANDS.length);
+  it("empty query returns the full menu, Moduo's own blocks first (a task leads)", () => {
+    const ids = filterSlashCommands("").map((c) => c.id);
+    expect(ids).toHaveLength(SLASH_COMMANDS.length);
+    expect(ids.slice(0, 6)).toEqual(["task", "page", "note", "contact", "company", "event"]);
+    expect(ids[6]).toBe("text");
   });
 
   it("no match → empty (the menu closes, the caller types on)", () => {
     expect(filterSlashCommands("zzzz")).toHaveLength(0);
+  });
+
+  it("matches several words, and never through a description", () => {
+    expect(filterSlashCommands("heading 1")[0]?.id).toBe("h1");
+    expect(filterSlashCommands("head 2")[0]?.id).toBe("h2");
+    expect(filterSlashCommands("ul").map((c) => c.id)).not.toContain("quote");
   });
 });

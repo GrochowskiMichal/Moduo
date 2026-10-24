@@ -81,15 +81,15 @@ BEGIN
       format('grants: %s is read-only for the app (every write is an op)', v_table));
     PERFORM test.ok((SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = ('public.' || v_table)::regclass)
                 AND (SELECT string_agg(p.qual, ' ') FROM pg_policies p
-                     WHERE p.schemaname = 'public' AND p.tablename = v_table) LIKE '%tasks__visible(task_id)%'
+                     WHERE p.schemaname = 'public' AND p.tablename = v_table AND p.policyname <> 'app_tokens_refused') LIKE '%tasks__visible(task_id)%'
                 AND (SELECT count(*) FROM pg_policies p
-                     WHERE p.schemaname = 'public' AND p.tablename = v_table) = 1,
+                     WHERE p.schemaname = 'public' AND p.tablename = v_table AND p.policyname <> 'app_tokens_refused') = 1,
       format('path: RLS — %s is read through tasks__visible, its only policy', v_table));
     PERFORM test.ok(EXISTS (SELECT 1 FROM pg_publication_tables
                             WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = v_table),
       format('path: Realtime — %s streams under that policy (RLS on, so a subscriber gets only what it reads)', v_table));
   END LOOP;
-  PERFORM test.ok((SELECT p.qual FROM pg_policies p WHERE p.tablename = 'task_reminders') LIKE '%user_id = ( SELECT %uid()%tasks__visible(task_id)%',
+  PERFORM test.ok((SELECT p.qual FROM pg_policies p WHERE p.tablename = 'task_reminders' AND p.policyname <> 'app_tokens_refused') LIKE '%user_id = ( SELECT %uid()%tasks__visible(task_id)%',
     'path: RLS — a reminder is read only by its own person');
 END;
 $$;

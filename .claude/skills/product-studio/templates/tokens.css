@@ -1,0 +1,164 @@
+/* Product design tokens: the single source of design values.
+   Written by /product-studio when a project had no design system. Change a value here, never in a
+   component. Roles first, raw ramps second. Dark is the default; light swaps the roles.
+   Placeholder hues: neutrals at 250, the accent at 255. Replace both with the brand's hues,
+   then check every text role for AA contrast in both themes. */
+
+:root {
+  /* Raw neutral ramp, tinted toward the brand hue (chroma 0.005-0.02). */
+  --neutral-0: oklch(0.99 0.004 250);
+  --neutral-50: oklch(0.97 0.005 250);
+  --neutral-100: oklch(0.93 0.006 250);
+  --neutral-200: oklch(0.87 0.008 250);
+  --neutral-300: oklch(0.78 0.010 250);
+  --neutral-400: oklch(0.68 0.012 250);
+  --neutral-500: oklch(0.56 0.012 250);
+  --neutral-600: oklch(0.45 0.012 250);
+  --neutral-700: oklch(0.35 0.012 250);
+  --neutral-800: oklch(0.27 0.012 250);
+  --neutral-850: oklch(0.22 0.012 250);
+  --neutral-900: oklch(0.18 0.011 250);
+  --neutral-950: oklch(0.14 0.010 250);
+
+  /* One accent. Base, hover, active, and the text that sits on it. */
+  --accent-base: oklch(0.68 0.15 255);
+  --accent-hover: oklch(0.72 0.15 255);
+  --accent-active: oklch(0.63 0.15 255);
+
+  /* Roles (dark theme). */
+  --color-bg: var(--neutral-950);
+  --color-surface: var(--neutral-900);
+  --color-raised: var(--neutral-850);
+  --color-border: var(--neutral-800);
+  --color-border-strong: var(--neutral-700);
+  --color-text: var(--neutral-50);
+  --color-text-muted: var(--neutral-400);
+  --color-text-faint: var(--neutral-500);
+  --color-hover: color-mix(in oklch, var(--neutral-50) 6%, transparent);
+  --color-active: color-mix(in oklch, var(--neutral-50) 10%, transparent);
+  --color-accent: var(--accent-base);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-active: var(--accent-active);
+  --color-accent-text: oklch(0.15 0.02 255);
+  --color-selected: color-mix(in oklch, var(--accent-base) 18%, transparent);
+  --color-success: oklch(0.72 0.14 150);
+  --color-warning: oklch(0.80 0.14 80);
+  --color-danger: oklch(0.66 0.19 25);
+  --color-info: oklch(0.72 0.12 235);
+
+  /* Type: one UI family, 1 px steps through the dense range. */
+  --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-2xs: 11px;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-3xl: 24px;
+  --text-4xl: 30px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.45;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing: a 4 px grid. */
+  --space-0-5: 2px;
+  --space-1: 4px;
+  --space-1-5: 6px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Radius by role. Nested radius = outer minus padding, snapped to this scale. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Control rung and density (comfortable). A rung fixes height, font, icon and radius. */
+  --control-h-sm: 28px;
+  --control-h: 32px;
+  --control-h-lg: 40px;
+  --row-h: 36px;
+  --pad-x: 12px;
+  --icon-sm: 14px;
+  --icon: 16px;
+
+  /* Elevation. */
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.25);
+  --shadow-2: 0 1px 2px oklch(0 0 0 / 0.2), 0 8px 24px oklch(0 0 0 / 0.3);
+  --shadow-3: 0 2px 4px oklch(0 0 0 / 0.2), 0 24px 64px oklch(0 0 0 / 0.45);
+
+  /* Focus. */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --focus-ring-color: var(--color-accent);
+
+  /* Motion: frequent actions do not animate; these are for the rest. */
+  --motion-fast: 100ms;
+  --motion-base: 180ms;
+  --motion-slow: 250ms;
+  --motion-fade-reduced: 80ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  color-scheme: dark;
+}
+
+/* Light theme: swap roles, keep the ramps. */
+:root[data-theme="light"] {
+  --color-bg: var(--neutral-0);
+  --color-surface: var(--neutral-50);
+  --color-raised: var(--neutral-0);
+  --color-border: var(--neutral-200);
+  --color-border-strong: var(--neutral-300);
+  --color-text: var(--neutral-950);
+  --color-text-muted: var(--neutral-600);
+  --color-text-faint: var(--neutral-500);
+  --color-hover: color-mix(in oklch, var(--neutral-950) 5%, transparent);
+  --color-active: color-mix(in oklch, var(--neutral-950) 9%, transparent);
+  --color-accent-text: oklch(0.99 0.004 255);
+  --color-selected: color-mix(in oklch, var(--accent-base) 14%, transparent);
+  --shadow-1: 0 1px 2px oklch(0 0 0 / 0.08);
+  --shadow-2: 0 1px 2px oklch(0 0 0 / 0.06), 0 8px 24px oklch(0 0 0 / 0.1);
+  --shadow-3: 0 2px 4px oklch(0 0 0 / 0.06), 0 24px 64px oklch(0 0 0 / 0.18);
+  color-scheme: light;
+}
+
+/* Density: swap per-instance dimensions only; the spacing scale stays. */
+[data-density="compact"] {
+  --control-h-sm: 26px;
+  --control-h: 30px;
+  --control-h-lg: 36px;
+  --row-h: 32px;
+  --pad-x: 10px;
+}
+
+[data-density="dense"] {
+  --control-h-sm: 24px;
+  --control-h: 28px;
+  --control-h-lg: 32px;
+  --row-h: 28px;
+  --pad-x: 8px;
+}
+
+/* Reduced motion: keep short fades, drop movement. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+  }
+}

@@ -10,6 +10,8 @@
  *   ↵            open the note
  *   ⌫ / Delete   move it to the trash (editors only; the undo toast follows)
  *   ⌥⇧↑ / ⌥⇧↓    move it up / down among its siblings (editors only)
+ *   ⇧F10, the menu key, ⌥↵   open the row's menu (every note action; a Mac
+ *                keyboard has no menu key, so ⌥↵ is the one it has)
  *
  * Rows carry a `key` unique across sections, since one note can show twice
  * (as a Favorite and in Pages).
@@ -32,6 +34,7 @@ export type TreeKeyAction =
   | { type: "collapse"; key: string }
   | { type: "open"; id: string }
   | { type: "trash"; id: string }
+  | { type: "menu"; key: string }
   | { type: "reorder"; key: string; direction: "up" | "down" };
 
 export type TreeKey = {
@@ -53,6 +56,12 @@ export function treeKeyAction(
   const row = index >= 0 ? rows[index] : null;
   const plain = !event.altKey && !event.metaKey && !event.ctrlKey && !event.shiftKey;
   const reorderChord = event.altKey && event.shiftKey && !event.metaKey && !event.ctrlKey;
+
+  const menuChord =
+    event.key === "ContextMenu" ||
+    (event.key === "F10" && event.shiftKey && !event.altKey && !event.metaKey && !event.ctrlKey) ||
+    (event.key === "Enter" && event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey);
+  if (menuChord) return row ? { type: "menu", key: row.key } : null;
 
   if (reorderChord && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
     if (!row || !opts.canEdit) return null;

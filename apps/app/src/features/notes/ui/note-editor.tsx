@@ -11,8 +11,16 @@
  * grammar (they're editor-agnostic Lexical plugins).
  */
 
+import { $createCodeNode, $isCodeNode, type CodeNode } from "@lexical/code";
 import { registerCodeHighlighting } from "@lexical/code-prism";
-import { $createListItemNode, $createListNode, $isListItemNode } from "@lexical/list";
+import { $createHorizontalRuleNode } from "@lexical/extension";
+import {
+  $createListItemNode,
+  $createListNode,
+  $isListItemNode,
+  $isListNode,
+  ListNode,
+} from "@lexical/list";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
 import { CheckListPlugin } from "@lexical/react/LexicalCheckListPlugin";
 import { LexicalCollaboration } from "@lexical/react/LexicalCollaborationContext";
@@ -26,32 +34,45 @@ import { ListPlugin } from "@lexical/react/LexicalListPlugin";
 import { MarkdownShortcutPlugin } from "@lexical/react/LexicalMarkdownShortcutPlugin";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
 import { TablePlugin } from "@lexical/react/LexicalTablePlugin";
-import { $createHeadingNode } from "@lexical/rich-text";
+import { $createHeadingNode, $isHeadingNode, $isQuoteNode } from "@lexical/rich-text";
+import { mergeRegister } from "@lexical/utils";
 import { CLEAR_DIFF_VERSIONS_COMMAND__EXPERIMENTAL } from "@lexical/yjs";
 import {
   $createParagraphNode,
   $createRangeSelection,
   $createTextNode,
+  $getNodeByKey,
   $getRoot,
   $getSelection,
+  $isLineBreakNode,
   $isParagraphNode,
   $isRangeSelection,
   $setSelection,
+  BLUR_COMMAND,
   COMMAND_PRIORITY_HIGH,
+  COMMAND_PRIORITY_LOW,
   INDENT_CONTENT_COMMAND,
+  KEY_ARROW_DOWN_COMMAND,
+  KEY_BACKSPACE_COMMAND,
+  KEY_ENTER_COMMAND,
   KEY_MODIFIER_COMMAND,
   KEY_TAB_COMMAND,
+  type LexicalNode,
   OUTDENT_CONTENT_COMMAND,
+  SELECTION_CHANGE_COMMAND,
+  TextNode,
 } from "lexical";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import type * as Y from "yjs";
 
 import { dispatchCreateNew } from "@/components/app/create-events";
+import { Skeleton } from "@/components/ui/skeleton";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
+import { collabUndoManager, registerCollabUndo, updateWithoutUndo } from "../editor/collab-undo";
 import { $noteText, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { NOTES_TRANSFORMERS } from "../editor/markdown";
 import {
@@ -65,10 +86,12 @@ import {
 import { BlockHandlePlugin } from "../editor/plugins/block-handle-plugin";
 import { CommentMarksPlugin } from "../editor/plugins/comment-marks-plugin";
 import { FormatToolbarPlugin } from "../editor/plugins/format-toolbar-plugin";
+import { LinkBarPlugin } from "../editor/plugins/link-bar-plugin";
 import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { NoteLinkPlugin } from "../editor/plugins/note-link-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
+import { TableActionsPlugin } from "../editor/plugins/table-actions-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
 import { NOTE_EDITOR_NODES } from "../editor/schema/nodes";
 import { $createPageRowNode } from "../editor/schema/page-row-node";
@@ -80,6 +103,37 @@ import { displayTitle, firstLineTitle, TITLE_DEBOUNCE_MS } from "../title";
 // The schema nodes draw through the view registry (NR-3); fill it once.
 installNoteNodeViews();
 
+/** The note's shape while it loads, after a beat (a fast load never shows it). */
+function NoteSkeleton({ fullWidth }: { fullWidth: boolean }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setShow(true), 400);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <div
+      aria-busy="true"
+      aria-label="Loading note"
+      className={cn(
+        "mx-auto flex h-full w-full flex-col gap-3 px-6 pt-10",
+        fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
+      )}
+    >
+      {show ? (
+        <>
+          <Skeleton className="mb-4 h-8 w-1/2" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-11/12" />
+          <Skeleton className="h-4 w-3/4" />
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** A line that is only a divider marker (`---`, `***`, `___`). */
+const DIVIDER_LINE = /^(?:---|\*\*\*|___)$/;
+
 /** Where each note was scrolled to, kept for the session. */
 const scrollPositions = new Map<string, number>();
 
@@ -89,6 +143,11 @@ type Props = {
   noteId: string;
   editable?: boolean;
   titleForLabel: string;
+  /** The note's stored title, when the doc's first line must carry it (a note
+   * made outside the editor whose body doesn't start with its title). Pass it
+   * only while nothing of ours waits to sync (a pending rename would make the
+   * stored title stale). */
+  repairTitle?: string | null;
   /** Debounced first-line title (AC1) — the page maps it to notes.rename. */
   onTitleDerived: (title: string) => void;
   /** Live module data + actions for page-rows and /page (NO-4). */
@@ -119,6 +178,240 @@ function SyncFromYjsPlugin({ doc }: { doc: Y.Doc }) {
     }, 0);
     return () => clearTimeout(id);
   }, [editor, doc]);
+  return null;
+}
+
+/** A line of exactly `---` becomes a divider the moment the third dash is
+ * typed. The markdown shortcut only fired on `--- ` with a trailing space,
+ * so `---` then Enter left three dashes. Only at the caret: a teammate's
+ * remote `---` or a paste is left to its own author. */
+function DividerShortcutPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerNodeTransform(TextNode, (node) => {
+        if (!DIVIDER_LINE.test(node.getTextContent())) return;
+        const block = node.getParent();
+        if (!$isParagraphNode(block) || block.getParent() !== $getRoot()) return;
+        if (block.getChildrenSize() !== 1) return;
+        const selection = $getSelection();
+        if (
+          !$isRangeSelection(selection) ||
+          !selection.isCollapsed() ||
+          selection.anchor.key !== node.getKey() ||
+          selection.anchor.offset !== node.getTextContentSize()
+        ) {
+          return;
+        }
+        const divider = $createHorizontalRuleNode();
+        block.replace(divider);
+        // The caret goes to the line under the divider (an empty one already
+        // there, or a fresh one).
+        const next = divider.getNextSibling();
+        if ($isParagraphNode(next) && next.getTextContentSize() === 0) {
+          next.selectStart();
+        } else {
+          const line = $createParagraphNode();
+          divider.insertAfter(line);
+          line.select();
+        }
+      }),
+    [editor],
+  );
+  return null;
+}
+
+/**
+ * Backspace at the very start of a heading or a quote turns it back into
+ * text, as Notion does, instead of merging it into the line above (an H2
+ * under the title merged into the title).
+ */
+function BlockBackspacePlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_BACKSPACE_COMMAND,
+        (event) => {
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || !selection.isCollapsed()) return false;
+          if (selection.anchor.offset !== 0) return false;
+          const block = selection.anchor.getNode().getTopLevelElement();
+          if (!block || block.getIndexWithinParent() === 0) return false;
+          if (!$isHeadingNode(block) && !$isQuoteNode(block)) return false;
+          const first = block.getFirstDescendant();
+          const atStart =
+            first === null ||
+            selection.anchor.getNode().is(block) ||
+            selection.anchor.getNode().is(first);
+          if (!atStart) return false;
+          event?.preventDefault();
+          // Its own undo step, not merged into the typing before it.
+          collabUndoManager(editor)?.stopCapturing();
+          const paragraph = $createParagraphNode();
+          paragraph.append(...block.getChildren());
+          block.replace(paragraph);
+          paragraph.selectStart();
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
+  return null;
+}
+
+/**
+ * Code blocks you can get into and out of:
+ * - typing ``` on an empty line makes one at once (the markdown shortcut only
+ *   fired after a language and a space, so "```npm run build" lost "npm" as
+ *   its language);
+ * - Enter on a code block's empty last line, after an empty line, leaves it;
+ *   ↓ on its last line leaves it when nothing follows (you could not leave).
+ */
+function CodeBlockPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    const exitAfter = (code: CodeNode) => {
+      const next = code.getNextSibling();
+      if ($isParagraphNode(next) && next.getTextContentSize() === 0) {
+        next.selectStart();
+        return;
+      }
+      const line = $createParagraphNode();
+      code.insertAfter(line);
+      line.select();
+    };
+    const codeAtCaretEnd = (): CodeNode | null => {
+      const selection = $getSelection();
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+      const code = selection.anchor.getNode().getTopLevelElement();
+      if (!$isCodeNode(code)) return null;
+      const end = code.getLastDescendant();
+      const anchor = selection.anchor;
+      const atEnd =
+        end === null ||
+        (anchor.getNode().is(end) &&
+          (anchor.type === "element" || anchor.offset === end.getTextContentSize())) ||
+        (anchor.getNode().is(code) && anchor.offset === code.getChildrenSize());
+      return atEnd ? code : null;
+    };
+    return mergeRegister(
+      editor.registerNodeTransform(TextNode, (node) => {
+        if (node.getTextContent() !== "```") return;
+        const block = node.getParent();
+        if (!$isParagraphNode(block) || block.getParent() !== $getRoot()) return;
+        if (block.getChildrenSize() !== 1) return;
+        const selection = $getSelection();
+        if (
+          !$isRangeSelection(selection) ||
+          selection.anchor.key !== node.getKey() ||
+          selection.anchor.offset !== 3
+        ) {
+          return;
+        }
+        const code = $createCodeNode();
+        block.replace(code);
+        code.selectStart();
+      }),
+      editor.registerCommand(
+        KEY_ENTER_COMMAND,
+        (event) => {
+          const code = codeAtCaretEnd();
+          if (!code || event?.shiftKey) return false;
+          const children = code.getChildren();
+          const last = children[children.length - 1];
+          const beforeLast = children[children.length - 2];
+          // The block already ends in an empty line: this Enter leaves it.
+          if (!$isLineBreakNode(last) || !$isLineBreakNode(beforeLast)) return false;
+          event?.preventDefault();
+          last.remove();
+          beforeLast.remove();
+          exitAfter(code);
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+      editor.registerCommand(
+        KEY_ARROW_DOWN_COMMAND,
+        (event) => {
+          const code = codeAtCaretEnd();
+          if (!code || code.getNextSibling() !== null) return false;
+          event?.preventDefault();
+          exitAfter(code);
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    );
+  }, [editor]);
+  return null;
+}
+
+/**
+ * A quiet hint on the empty line under the caret, as Notion shows one: "Type /
+ * for blocks" on a line of text, the heading's level on an empty heading
+ * (an empty H2 was invisible). Not on the title line, which has "Untitled".
+ */
+function EmptyLineHintPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    let marked: HTMLElement | null = null;
+    const clear = () => {
+      marked?.removeAttribute("data-empty-hint");
+      marked = null;
+    };
+    const update = () => {
+      const target = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) return null;
+        const block = selection.anchor.getNode().getTopLevelElement();
+        if (!block || block.getIndexWithinParent() === 0) return null;
+        if (block.getTextContentSize() > 0) return null;
+        const hint = $isHeadingNode(block)
+          ? `Heading ${block.getTag().slice(1)}`
+          : $isParagraphNode(block)
+            ? "Type / for blocks and tasks, [[ for a note"
+            : $isQuoteNode(block)
+              ? "Quote"
+              : null;
+        return hint ? { key: block.getKey(), hint } : null;
+      });
+      const el = target ? editor.getElementByKey(target.key) : null;
+      if (el !== marked) clear();
+      if (el && target) {
+        el.setAttribute("data-empty-hint", target.hint);
+        marked = el;
+      }
+    };
+    return mergeRegister(
+      editor.registerUpdateListener(update),
+      editor.registerCommand(
+        SELECTION_CHANGE_COMMAND,
+        () => {
+          update();
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+      editor.registerCommand(
+        BLUR_COMMAND,
+        () => {
+          clear();
+          return false;
+        },
+        COMMAND_PRIORITY_LOW,
+      ),
+      clear,
+    );
+  }, [editor]);
+  return null;
+}
+
+/** ⌘Z / ⇧⌘Z per line, with redo that survives (editor/collab-undo.ts). */
+function CollabUndoPlugin() {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => registerCollabUndo(editor), [editor]);
   return null;
 }
 
@@ -165,7 +458,27 @@ function ListTabIndentationPlugin() {
           const hasPreviousSibling = $isListItemNode(node.getPreviousSibling());
           return { inListItem: true, canIndent: hasPreviousSibling };
         });
-        if (!listContext.inListItem) return false;
+        if (!listContext.inListItem) {
+          // ⇧Tab outside a list leaves the note, backwards, like any field
+          // (the editor's description tells a screen reader so).
+          if (event.shiftKey) return false;
+          // Outside a list, Tab stays in the text (it jumped focus to the
+          // hidden block-menu button). Code and tables handle their own Tab.
+          const own = editor.getEditorState().read(() => {
+            const selection = $getSelection();
+            if (!$isRangeSelection(selection)) return true;
+            // Any ancestor: a table cell is a root of its own, so the cell's
+            // paragraph is its "top-level" block.
+            for (let n: LexicalNode | null = selection.anchor.getNode(); n; n = n.getParent()) {
+              const type = n.getType();
+              if (type === "code" || type === "tablecell" || type === "table") return true;
+            }
+            return false;
+          });
+          if (own) return false;
+          event.preventDefault();
+          return true;
+        }
         event.preventDefault();
         if (!event.shiftKey && !listContext.canIndent) return true;
         editor.dispatchCommand(
@@ -177,6 +490,65 @@ function ListTabIndentationPlugin() {
       COMMAND_PRIORITY_HIGH,
     );
   }, [editor]);
+  return null;
+}
+
+/**
+ * Checklists, for keyboards and screen readers:
+ * - ⌘↵ ticks or unticks the checkbox line under the caret (it split the line);
+ * - a checklist reads as a group of checkboxes (Lexical draws each item as a
+ *   `role="checkbox"` inside a `<ul>`, which a list may not hold).
+ */
+function ChecklistKeysPlugin({ editable }: { editable: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    const offRole = editor.registerMutationListener(
+      ListNode,
+      (mutations) => {
+        editor.getEditorState().read(() => {
+          for (const [key, kind] of mutations) {
+            if (kind === "destroyed") continue;
+            const el = editor.getElementByKey(key);
+            const node = $getNodeByKey(key);
+            if (!el || !$isListNode(node)) continue;
+            if (node.getListType() === "check") {
+              el.setAttribute("role", "group");
+              el.setAttribute("aria-label", "Checklist");
+            } else if (el.getAttribute("role") === "group") {
+              el.removeAttribute("role");
+              el.removeAttribute("aria-label");
+            }
+          }
+        });
+      },
+      { skipInitialization: false },
+    );
+    if (!editable) return offRole;
+    const offToggle = editor.registerCommand(
+      KEY_ENTER_COMMAND,
+      (event) => {
+        if (!event || !(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) {
+          return false;
+        }
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return false;
+        let item: LexicalNode | null = selection.anchor.getNode();
+        while (item && !$isListItemNode(item)) item = item.getParent();
+        const list = item?.getParent();
+        if (!$isListItemNode(item) || !$isListNode(list) || list.getListType() !== "check") {
+          return false;
+        }
+        event.preventDefault();
+        item.toggleChecked();
+        return true;
+      },
+      COMMAND_PRIORITY_HIGH,
+    );
+    return () => {
+      offRole();
+      offToggle();
+    };
+  }, [editor, editable]);
   return null;
 }
 
@@ -214,6 +586,34 @@ function TitleDerivationPlugin({
       if (timer) clearTimeout(timer);
     };
   }, [doc]);
+  return null;
+}
+
+/**
+ * "The first line is the title" must hold for every note. One whose body
+ * doesn't start with its stored title (made by an older import, or by a write
+ * that kept the two apart) showed its first sentence as the title, and the
+ * first keystroke renamed the note to it. Once the doc has arrived, write the
+ * stored title in as the first line. Not an undo step: nobody typed it.
+ */
+function TitleLinePlugin({ title, booted }: { title: string | null; booted: boolean }) {
+  const [editor] = useLexicalComposerContext();
+  const done = useRef(false);
+  useEffect(() => {
+    if (done.current || !booted || !title?.trim()) return;
+    done.current = true;
+    const firstLine = firstLineTitle(editor.getEditorState().read($noteText));
+    if (firstLine === title.trim()) return;
+    updateWithoutUndo(editor, () => {
+      const heading = $createHeadingNode("h1");
+      heading.append($createTextNode(title.trim()));
+      const first = $getRoot().getFirstChild();
+      // An empty first line takes the title; otherwise it goes above.
+      if (first && first.getTextContent().trim() === "") first.replace(heading);
+      else if (first) first.insertBefore(heading);
+      else $getRoot().append(heading);
+    });
+  }, [editor, title, booted]);
   return null;
 }
 
@@ -372,6 +772,7 @@ export function NoteEditor({
   noteId,
   editable = true,
   titleForLabel,
+  repairTitle = null,
   onTitleDerived,
   bridge,
   autoFocus = false,
@@ -380,6 +781,7 @@ export function NoteEditor({
   footer,
 }: Props) {
   const { userId, runtime } = useAuth();
+  const keysHintId = useId();
   // The writing surface (NR-4): block handles, `[[`, ⌘K links. A view-only
   // note gets none of them.
   const writing = editable;
@@ -389,7 +791,11 @@ export function NoteEditor({
   // EMPTY cache waits for the pull instead: mounting the binding on an empty
   // doc makes Lexical append a paragraph that syncs into Yjs and pushes, so a
   // note opened on a new device would gain a stray empty block.
-  const [ready, setReady] = useState(false);
+  // A note already in memory (opened before, or warmed by hovering its row)
+  // paints on the first frame: no blank pass at all.
+  const [ready, setReady] = useState(() => session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0);
+  // The first pull has settled (the doc is the server's, not just the cache).
+  const [booted, setBooted] = useState(false);
 
   // Coming back to a long note lands where you were reading (this session).
   const paneRef = useRef<HTMLDivElement>(null);
@@ -419,18 +825,20 @@ export function NoteEditor({
 
   useEffect(() => {
     let active = true;
-    setReady(false);
     void session.cacheReady.then(() => {
       if (active && session.doc.getXmlElement(NOTES_DOC_ROOT).length > 0) setReady(true);
     });
     void session.booted.then(() => {
       if (!active) return;
       setReady(true);
+      setBooted(true);
     });
     return () => {
       active = false;
     };
   }, [session]);
+
+  useEffect(() => engine.pinOnScreen(noteId), [engine, noteId]);
 
   // Leaving the note kicks a flush (the engine also flushes on debounce).
   useEffect(
@@ -474,6 +882,22 @@ export function NoteEditor({
           underlineStrikethrough: "notes-text-underline-strikethrough",
         },
         code: "notes-code-block",
+        codeHighlight: {
+          keyword: "notes-code-keyword",
+          atrule: "notes-code-keyword",
+          builtin: "notes-code-keyword",
+          boolean: "notes-code-number",
+          constant: "notes-code-number",
+          number: "notes-code-number",
+          string: "notes-code-string",
+          char: "notes-code-string",
+          regex: "notes-code-string",
+          url: "notes-code-string",
+          comment: "notes-code-comment",
+          prolog: "notes-code-comment",
+          doctype: "notes-code-comment",
+          cdata: "notes-code-comment",
+        },
         link: "notes-link",
         table: "notes-table",
         tableRow: "notes-table-row",
@@ -485,13 +909,10 @@ export function NoteEditor({
     [noteId, editable],
   );
 
-  if (!ready) {
-    return (
-      <div className="grid h-full place-content-center text-sm text-muted-foreground">
-        Preparing note…
-      </div>
-    );
-  }
+  // Still loading: never a "Preparing note…" line. A cached note is ready
+  // within a frame; a cold one shows an empty pane, then (on a slow network)
+  // the note's shape, where its title and lines will be.
+  if (!ready) return <NoteSkeleton fullWidth={fullWidth} />;
 
   // The pane is the scroller, full width, so the wheel works over the margins
   // and the scrollbar sits at the pane's edge; the reading column is centred
@@ -504,6 +925,7 @@ export function NoteEditor({
       className="pane-scroll notes-editor-v2 relative h-full min-h-0 overflow-auto"
     >
       <div
+        data-note-column=""
         className={cn(
           "relative mx-auto flex min-h-full w-full flex-col",
           fullWidth ? "max-w-none" : "max-w-(--width-prose-max)",
@@ -514,7 +936,15 @@ export function NoteEditor({
             <LexicalComposer initialConfig={initialConfig} key={noteId}>
               <RichTextPlugin
                 contentEditable={
-                  <ContentEditable className="w-full flex-1 px-6 pt-10 pb-12 text-base leading-relaxed text-foreground outline-none" />
+                  // A grid, not the column's flex: Chrome mis-focuses a
+                  // contenteditable whose parent is a flex box.
+                  <div className="grid w-full flex-1">
+                    <ContentEditable
+                      aria-label={`${titleForLabel || "Untitled"}, note`}
+                      aria-describedby={editable ? keysHintId : undefined}
+                      className="w-full px-6 pt-10 pb-12 text-base leading-relaxed text-foreground outline-none"
+                    />
+                  </div>
                 }
                 placeholder={
                   <div className="pointer-events-none absolute inset-x-0 top-10 px-6 font-display text-3xl font-semibold text-muted-foreground/60">
@@ -523,13 +953,21 @@ export function NoteEditor({
                 }
                 ErrorBoundary={LexicalErrorBoundary}
               />
+              <CollabUndoPlugin />
+              {editable ? <CodeBlockPlugin /> : null}
+              {editable ? <EmptyLineHintPlugin /> : null}
+              {editable ? <BlockBackspacePlugin /> : null}
               <ListPlugin />
               <CheckListPlugin />
+              <ChecklistKeysPlugin editable={editable} />
               <ListTabIndentationPlugin />
+              {editable ? <DividerShortcutPlugin /> : null}
               {editable ? <NewNoteKeyPlugin /> : null}
               <CodeHighlightingPlugin />
               <LinkPlugin />
+              <LinkBarPlugin editable={editable} />
               <TablePlugin />
+              {editable ? <TableActionsPlugin /> : null}
               <SlashMenuPlugin
                 workspaceId={workspaceId}
                 runtime={runtime}
@@ -603,12 +1041,19 @@ export function NoteEditor({
               />
               <SyncFromYjsPlugin doc={session.doc} />
               <TitleDerivationPlugin doc={session.doc} onTitleDerived={onTitleDerived} />
+              {editable ? <TitleLinePlugin title={repairTitle} booted={booted} /> : null}
               {autoFocus && editable ? <AutoFocusPlugin /> : null}
               {belowTitle ? <BelowTitleSlot>{belowTitle}</BelowTitleSlot> : null}
             </LexicalComposer>
           </LexicalCollaboration>
         </NotesEditorBridgeContext.Provider>
         {footer ? <div className="w-full px-6 pb-12">{footer}</div> : null}
+        {editable ? (
+          <p id={keysHintId} className="sr-only">
+            Type slash for blocks and tasks. Option Return opens the block menu, Option F10 the
+            formatting toolbar. Shift Tab, or Escape then Tab, leaves the note.
+          </p>
+        ) : null}
       </div>
     </div>
   );

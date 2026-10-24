@@ -79,12 +79,21 @@ function renderSidebar(overrides: Partial<NotesSidebarProps> = {}) {
     onNewCapture: rs.fn(),
     onNewPage: rs.fn(),
     onCreateChild: rs.fn(),
+    onUnfavorite: rs.fn(),
     onAction: rs.fn(),
     onDropIntent: rs.fn(),
     onUnarchive: rs.fn(),
     onTrash: rs.fn(),
     onRestore: rs.fn(),
     onPurge: rs.fn(),
+    search: {
+      open: false,
+      query: "",
+      onQueryChange: rs.fn(),
+      onOpenChange: rs.fn(),
+      notes,
+      searchText: async () => [],
+    },
     ...overrides,
   };
   render(
@@ -101,11 +110,15 @@ const item = (name: string) =>
   screen.getAllByRole("treeitem").find((el) => el.textContent?.includes(name)) as HTMLElement;
 
 describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
-  it("announces itself as a tree of leveled, expandable items", () => {
+  it("announces each section as a tree of leveled, expandable items", () => {
     renderSidebar();
-    const tree = screen.getByRole("tree", { name: "Notes" });
+    const tree = screen.getByRole("tree", { name: "Pages" });
     const items = within(tree).getAllByRole("treeitem");
-    expect(items.length).toBeGreaterThanOrEqual(4);
+    expect(items.length).toBeGreaterThanOrEqual(2);
+    // A tree holds rows only: the section's header and its + sit outside.
+    expect(within(tree).queryByRole("button", { name: "New page" })).toBeNull();
+    // A row is named by its title, not by the buttons inside it.
+    expect(screen.getByRole("treeitem", { name: "Clients" })).toBe(item("Clients"));
     expect(item("Clients").getAttribute("aria-level")).toBe("1");
     expect(item("Clients").getAttribute("aria-expanded")).toBe("false");
     // A leaf carries no aria-expanded at all.
@@ -114,14 +127,14 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
 
   it("shows Favorites, the stored Inbox with its count, and Pages; trash stays out", () => {
     renderSidebar();
-    expect(screen.getByRole("group", { name: "Favorites" }).textContent).toContain("Roadmap");
-    expect(screen.getByRole("group", { name: "Inbox" }).textContent).toContain("Idea");
-    expect(screen.getByRole("group", { name: "Pages" }).textContent).toContain("Clients");
+    expect(screen.getByRole("tree", { name: "Favorites" }).textContent).toContain("Roadmap");
+    expect(screen.getByRole("tree", { name: "Inbox" }).textContent).toContain("Idea");
+    expect(screen.getByRole("tree", { name: "Pages" }).textContent).toContain("Clients");
     expect(screen.getByText("1 in Inbox", { exact: false })).toBeTruthy();
     expect(screen.queryAllByRole("treeitem").some((el) => el.textContent?.includes("Old"))).toBe(
       false,
     );
-    expect(screen.getByRole("button", { name: /Trash \(1\)/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Deleted" })).toBeTruthy();
   });
 
   it("expands with →, steps into the child, and reports aria-level 2 there", () => {
@@ -144,21 +157,19 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     fireEvent.keyDown(idea, { key: "Enter" });
     expect(props.onOpen).toHaveBeenCalledWith("Idea");
     fireEvent.keyDown(idea, { key: "Backspace" });
-    expect(props.onAction).toHaveBeenCalledWith("trash", expect.objectContaining({ id: "Idea" }));
+    expect(props.onTrash).toHaveBeenCalledWith("Idea");
   });
 
   it("⌫ on a Favorites row only un-favorites, never trashes the shared note", () => {
     const props = renderSidebar();
     const fav = screen
-      .getByRole("group", { name: "Favorites" })
+      .getByRole("tree", { name: "Favorites" })
       .querySelector<HTMLElement>('[role="treeitem"]') as HTMLElement;
     fav.focus();
     fireEvent.keyDown(fav, { key: "Backspace" });
-    expect(props.onAction).toHaveBeenCalledWith(
-      "unfavorite",
-      expect.objectContaining({ id: "Roadmap" }),
-    );
-    expect(props.onAction).not.toHaveBeenCalledWith("trash", expect.anything());
+    // Offered back with an undo, since a key took it off the list.
+    expect(props.onUnfavorite).toHaveBeenCalledWith("Roadmap", { undoable: true });
+    expect(props.onTrash).not.toHaveBeenCalled();
   });
 
   it("keeps one roving tab stop, on the open note", () => {
@@ -168,6 +179,24 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     expect(stops[0].getAttribute("aria-selected")).toBe("true");
   });
 
+  it("draws an open note that shows twice as selected once, on its home row", () => {
+    renderSidebar({ selectedId: "Roadmap" });
+    const selected = screen
+      .getAllByRole("treeitem")
+      .filter((el) => el.getAttribute("aria-selected") === "true");
+    expect(selected).toHaveLength(1);
+    expect(selected[0].dataset.rowKey).toBe("pages:Roadmap");
+  });
+
+  it("opens a row's menu from the keyboard (⇧F10, the menu key, ⌥↵)", async () => {
+    renderSidebar();
+    const idea = item("Idea");
+    idea.focus();
+    fireEvent.keyDown(idea, { key: "F10", shiftKey: true });
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "Duplicate" })).toBeTruthy();
+  });
+
   it("view-only: no create buttons and ⌫ does nothing", () => {
     const props = renderSidebar({ canEdit: false });
     expect(screen.queryByRole("button", { name: /New note/ })).toBeNull();
@@ -175,12 +204,24 @@ describe("tree roles — the New Notes sidebar (NR-2, AC2/AC4)", () => {
     const idea = item("Idea");
     idea.focus();
     fireEvent.keyDown(idea, { key: "Backspace" });
-    expect(props.onAction).not.toHaveBeenCalled();
+    expect(props.onTrash).not.toHaveBeenCalled();
+  });
+
+  it("draws a row's popover on the row the menu opened it for", () => {
+    let open: string | null = null;
+    const rowPopover = (note: Note, key: string) =>
+      open === key ? <p>{`Publish ${note.id}`}</p> : null;
+    const props = renderSidebar({ rowPopover });
+    expect(screen.queryByText("Publish Idea")).toBeNull();
+    open = "inbox:Idea";
+    cleanup();
+    renderSidebar({ ...props, rowPopover: (note, key) => rowPopover(note, key) });
+    expect(screen.getByText("Publish Idea")).toBeTruthy();
   });
 
   it("says where captures land when the Inbox is empty", () => {
     const filed = notes.filter((n) => n.id !== "Idea");
     renderSidebar({ notes: filed, sections: buildSidebarSections({ notes: filed, favorites }) });
-    expect(screen.getByText("Captures land here.")).toBeTruthy();
+    expect(screen.getByText("New notes land here until you file them.")).toBeTruthy();
   });
 });

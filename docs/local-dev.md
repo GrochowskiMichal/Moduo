@@ -59,7 +59,7 @@ Billing runs on Supabase's **Stripe Sync Engine** ([decisions/billing.md](decisi
 
 ## The 10,000-task perf gate (TV-D11b)
 
-Tasks must stay instant at 10,000 tasks: opening a task, searching and switching views under 200 ms (spec §Assumptions #8, AC12.3, AC12.4). The gate runs on the local stack only; CI has no stack and runs no e2e.
+Tasks must stay instant at 10,000 tasks: opening a task, searching and switching views under 200 ms (spec §Assumptions #8, AC12.3, AC12.4). The gate runs on the local stack only; CI's stack (the `db-test` job) holds no rows and its e2e run is the signed-out smoke.
 
 ```bash
 bun run perf:seed            # the fixture: perf@moduo.local's own workspace "Perf 10k", 10,000 tasks (idempotent; --force reseeds)

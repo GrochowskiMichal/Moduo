@@ -23,3 +23,5 @@ Review the uncommitted changes in the working tree, or the range the parent agen
 3. **Reproduce before you report.** Run the relevant test, or trace the code path to the line. Drop anything you could not verify. If Rust changed, run `cargo check`, `cargo check --features lite` and `cargo test --lib` in `apps/desktop/src-tauri` (`bun run verify` covers no Rust).
 
 Report findings as **BLOCKER / MAJOR / MINOR / NIT**, one line each: what, `file:line`, why it matters, the fix. If there is no BLOCKER or MAJOR, say so on the first line. Never edit files.
+
+Your review is advice and runs once per diff; the agent fixes what it agrees with and answers the rest. Where you disagree with the spec, a test or a choice in the diff, say so in a line that starts with **I disagree:**, naming what you disagree with and why.

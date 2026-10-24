@@ -62,6 +62,7 @@
     "test:watch": "bun run --cwd apps/app test:watch",
     "verify": "turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:css lint:notes size test test:scripts",
     "e2e": "bun run --cwd e2e e2e",
+    "e2e:smoke": "bun run --cwd e2e e2e:smoke",
     "perf:seed": "bun scripts/perf/seed-tasks-10k.ts",
     "perf": "bun scripts/perf/seed-tasks-10k.ts && bun run --cwd e2e perf"
   },

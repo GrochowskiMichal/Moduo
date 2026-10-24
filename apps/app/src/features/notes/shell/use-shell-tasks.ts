@@ -17,6 +17,8 @@ export function useShellTasks(input: {
   workspaceId: string | null;
   noteId: string | null;
   noteLabel: string;
+  /** Open the right panel (a task opened from a line shows there). */
+  onShowPanel?: () => void;
 }) {
   const { runtime, workspaceId, noteId, noteLabel } = input;
   const { load: reloadTasks, deleteTask } = useTaskCommands();
@@ -46,7 +48,12 @@ export function useShellTasks(input: {
     workspaceId,
     noteId,
     noteLabel,
-    onOpenTaskDetail: setTaskDetailId,
+    // Opening a task shows it: the panel starts closed, and a click that only
+    // set the id did nothing you could see.
+    onOpenTaskDetail: (taskId: string) => {
+      setTaskDetailId(taskId);
+      input.onShowPanel?.();
+    },
   });
 
   return { deleteTask, taskBridge, taskDetailId, setTaskDetailId };

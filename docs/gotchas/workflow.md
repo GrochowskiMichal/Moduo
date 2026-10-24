@@ -30,6 +30,9 @@ Read before working in git, branches, skills, hooks. Index of all areas: [docs/g
 
 - **`bun run verify` fails `test:scripts` ("stop: no agent name → the key name") in a shell where `MODUO_AGENT_NAME` is set,** because the presence-hook test inherits it. Not a regression: run it as `env -u MODUO_AGENT_NAME bun run verify`. (DB-PERF-1, 2026-10-22)
 
+- **Run one `/product-lab` at a time per Mac.** Every run re-seeds the lab people (`lab*@moduo.local`) with fresh workspaces and soft-deletes their previous ones, so two runs at once (two worktrees) delete each other's data mid-capture. It never touches `dev@` or another spec's people. Its preview server takes `LAB_PORT` (default 4317) if two lanes need the build at once. (2026-10-23)
+- **Playwright's WebKit tabs only to text fields**, as Safari does until someone turns on keyboard navigation, so a Tab walk in WebKit skips every button and link. The lab's focus walk always runs in Chromium for that reason; keyboard journeys should use the app's shortcuts, not Tab. (2026-10-23)
+
 ## Subframe MCP / CLI
 
 - **The Subframe MCP's OAuth token expires after about 1–2 hours and isn't always refreshed mid-session.** A 401 `invalid_token` after a long idle is an expired token, not a broken setup: log in again (`claude mcp login subframe`). (Found 2026-10-01, under OpenCode; carried over from the unmerged `t/maciej/api-key-scopes`.)

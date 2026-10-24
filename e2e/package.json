@@ -5,11 +5,13 @@
   "type": "module",
   "scripts": {
     "e2e": "playwright test",
+    "e2e:smoke": "playwright test --project=smoke",
     "e2e:billing": "playwright test --config playwright.billing.config.ts",
     "perf": "playwright test --project=perf",
     "typecheck": "bun check"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.64.1",
+    "axe-core": "4.14.0"
   }
 }

@@ -1,7 +1,8 @@
 /**
  * Quiet block handles (NR-4, AC7). Hovering a top-level block shows a faint
  * ⋮⋮ in the left gutter: drag it to move the block, click it for Turn into ·
- * Duplicate · Delete · Comment. ⌥⇧↑ / ⌥⇧↓ move the block under the caret.
+ * Duplicate · Delete · Comment. From the keyboard, ⌥↵ opens that menu for the
+ * block under the caret and ⌥⇧↑ / ⌥⇧↓ move it.
  *
  * The handle is an overlay NEXT TO the contenteditable (Lexical reclaims
  * foreign DOM inside its root, the NO-5 trap), placed at the hovered block's
@@ -12,7 +13,9 @@
 import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $createParagraphNode,
   $createRangeSelection,
+  $createTextNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
   $getRoot,
@@ -23,11 +26,21 @@ import {
   COMMAND_PRIORITY_HIGH,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
   type LexicalNode,
   type NodeKey,
 } from "lexical";
-import { Copy, GripVertical, MessageSquare, Trash2, Type } from "lucide-react";
-import { type DragEvent as ReactDragEvent, useEffect, useRef, useState } from "react";
+import {
+  CheckSquare,
+  Copy,
+  FilePlus2,
+  GripVertical,
+  MessageSquare,
+  Trash2,
+  Type,
+} from "lucide-react";
+import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import * as Y from "yjs";
 
 import {
@@ -35,7 +48,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -43,10 +55,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+import { afterFocusRestore } from "../after-focus-restore";
 import {
   $blockMenuFor,
   $deleteBlock,
   $duplicateBlock,
+  $isTextBlock,
   $turnBlockInto,
   TURN_INTO,
 } from "../block-actions";
@@ -58,12 +72,31 @@ import {
 } from "../block-move";
 import { asUndoStep } from "../collab-undo";
 import { NOTES_DOC_ROOT } from "../doc-markdown";
+import { noteColumn } from "../note-column";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
-
-const BLOCK_MIME = "application/x-moduo-block";
+import { convertBlockToTask } from "./task-line-plugin";
 
 type Hovered = { key: NodeKey; top: number; height: number };
+
+/** How far the pointer travels on the grip before a press becomes a drag. */
+const DRAG_SLOP_PX = 4;
+
+/**
+ * Where the grip sits for a block: centred on its FIRST line (a paragraph's
+ * 26 px line, a heading's taller one), not pinned to the block's top edge,
+ * which left it a few pixels under the text.
+ */
+function gripSpot(block: HTMLElement): { top: number; height: number } {
+  const style = getComputedStyle(block);
+  const padTop = Number.parseFloat(style.paddingTop) || 0;
+  const line = Number.parseFloat(style.lineHeight);
+  const lineHeight = Number.isFinite(line) ? line : (Number.parseFloat(style.fontSize) || 16) * 1.5;
+  return {
+    top: block.offsetTop + padTop,
+    height: Math.min(lineHeight, block.offsetHeight || lineHeight),
+  };
+}
 
 /** The editor's top-level block elements, in document order. */
 function blockElements(root: HTMLElement): HTMLElement[] {
@@ -88,7 +121,8 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   const [hovered, setHovered] = useState<Hovered | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [dropLine, setDropLine] = useState<number | null>(null);
-  const dragFrom = useRef<number | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ from: number } | null>(null);
   const menuOpenRef = useRef(false);
   menuOpenRef.current = menuOpen;
 
@@ -110,8 +144,20 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   // ── hover tracking on the scrolling pane that holds the editor ─────────────
   useEffect(() => {
     let pane: HTMLElement | null = null;
+    // At most one hit-test per frame: mousemove fires far more often, and each
+    // test reads every block's rect.
+    let frame = 0;
+    let last: MouseEvent | null = null;
     const onMove = (event: MouseEvent) => {
-      if (menuOpenRef.current) return;
+      last = event;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (last) hitTest(last);
+      });
+    };
+    const hitTest = (event: MouseEvent) => {
+      if (menuOpenRef.current || dragRef.current) return;
       const root = editor.getRootElement();
       if (!root) return;
       const block = blockElements(root).find((el) => {
@@ -119,9 +165,14 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
         return event.clientY >= r.top && event.clientY < r.bottom;
       });
       if (!block) return;
+      // The title line isn't a block to drag or turn into something else.
+      if (block === root.firstElementChild) {
+        setHovered(null);
+        return;
+      }
       const key = editor.read(() => $getNearestNodeFromDOMNode(block)?.getKey() ?? null);
       if (!key) return;
-      const next = { key, top: block.offsetTop, height: block.offsetHeight };
+      const next = { key, ...gripSpot(block) };
       setHovered((prev) =>
         prev && prev.key === next.key && prev.top === next.top && prev.height === next.height
           ? prev
@@ -129,21 +180,52 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
       );
     };
     const onLeave = () => {
-      if (!menuOpenRef.current) setHovered(null);
+      cancelAnimationFrame(frame);
+      frame = 0;
+      if (!menuOpenRef.current && !dragRef.current) setHovered(null);
     };
     const unregister = editor.registerRootListener((root) => {
       pane?.removeEventListener("mousemove", onMove);
       pane?.removeEventListener("mouseleave", onLeave);
-      pane = root?.parentElement ?? null;
+      pane = noteColumn(root);
       pane?.addEventListener("mousemove", onMove);
       pane?.addEventListener("mouseleave", onLeave);
     });
     return () => {
+      cancelAnimationFrame(frame);
       unregister();
       pane?.removeEventListener("mousemove", onMove);
       pane?.removeEventListener("mouseleave", onLeave);
     };
   }, [editor]);
+
+  // ── ⌥↵: the block menu for the block under the caret ──────────────────────
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_ENTER_COMMAND,
+        (event) => {
+          if (!event?.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return false;
+          const key = editor.getEditorState().read(() => {
+            const selection = $getSelection();
+            if (!$isRangeSelection(selection)) return null;
+            const block = selection.anchor.getNode().getTopLevelElement();
+            // The title line has no block menu, as it has no handle.
+            return block && block.getIndexWithinParent() > 0 ? block.getKey() : null;
+          });
+          const el = key ? editor.getElementByKey(key) : null;
+          if (!key || !el) return false;
+          event.preventDefault();
+          setHovered({ key, ...gripSpot(el) });
+          // Not during this keystroke's update: Lexical would take the focus
+          // back and the menu would read that as a click away and close.
+          afterFocusRestore(() => setMenuOpen(true));
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
 
   // A block that leaves the document takes its handle with it.
   useEffect(
@@ -188,77 +270,92 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, doc]);
 
-  // ── drag: the handle starts it, the pane resolves it ───────────────────────
-  useEffect(() => {
-    let pane: HTMLElement | null = null;
-    const isOurs = (event: DragEvent) => event.dataTransfer?.types.includes(BLOCK_MIME) ?? false;
-    const target = (event: DragEvent): number | null => {
-      const root = editor.getRootElement();
-      if (!root) return null;
-      const rects = blockElements(root).map((el) => el.getBoundingClientRect());
-      return dropIndexAt(rects, event.clientY);
-    };
-    // Capture phase + stopPropagation: Lexical's own drop handling (text and
-    // file drops) and the page's entity drop zone never see a block drag.
-    const onOver = (event: DragEvent) => {
-      if (!isOurs(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-      const at = target(event);
-      const root = editor.getRootElement();
-      if (at === null || !root) return;
-      const els = blockElements(root);
-      const el = els[Math.min(at, els.length - 1)];
-      if (!el) return;
-      setDropLine(at < els.length ? el.offsetTop : el.offsetTop + el.offsetHeight);
-    };
-    const onDrop = (event: DragEvent) => {
-      if (!isOurs(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      setDropLine(null);
-      const from = dragFrom.current;
-      const at = target(event);
-      dragFrom.current = null;
-      if (from === null || at === null) return;
+  // ── drag: pointer events on the grip ───────────────────────────────────────
+  // Not HTML5 drag-and-drop: a press on the grip either drags (past a few px)
+  // or, released in place, opens the menu. The pointer is captured on the
+  // grip, so the drop resolves against the blocks wherever the pointer goes,
+  // and the pane scrolls when it nears an edge.
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
+  const dragFrame = useRef(0);
+  const dragY = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(dragFrame.current), []);
+  const dropAt = (clientY: number): number | null => {
+    const root = editor.getRootElement();
+    if (!root) return null;
+    return dropIndexAt(
+      blockElements(root).map((el) => el.getBoundingClientRect()),
+      clientY,
+    );
+  };
+  const showDropLine = (at: number | null) => {
+    const root = editor.getRootElement();
+    const els = root ? blockElements(root) : [];
+    const el = at === null ? undefined : els[Math.min(at, els.length - 1)];
+    setDropLine(
+      !el || at === null ? null : at < els.length ? el.offsetTop : el.offsetTop + el.offsetHeight,
+    );
+  };
+  const scrollPane = (clientY: number) => {
+    const pane = editor.getRootElement()?.closest<HTMLElement>(".notes-editor-v2");
+    if (!pane) return;
+    const r = pane.getBoundingClientRect();
+    if (clientY < r.top + 40) pane.scrollTop -= 12;
+    else if (clientY > r.bottom - 40) pane.scrollTop += 12;
+  };
+
+  const onGripDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    // Claim the press: Radix would open the menu on it.
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    pressRef.current = { x: event.clientX, y: event.clientY };
+  };
+  const onGripMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current;
+    if (!press) return;
+    if (!dragRef.current) {
+      if (Math.hypot(event.clientX - press.x, event.clientY - press.y) < DRAG_SLOP_PX) return;
+      const el = hovered ? editor.getElementByKey(hovered.key) : null;
+      const index = el ? indexOfElement(el) : null;
+      if (index === null) return;
+      dragRef.current = { from: index };
+      setDragging(true);
+      setMenuOpen(false);
+    }
+    // Layout is read once a frame, not on every pointermove.
+    dragY.current = event.clientY;
+    if (dragFrame.current) return;
+    dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = 0;
+      if (!dragRef.current) return;
+      scrollPane(dragY.current);
+      showDropLine(dropAt(dragY.current));
+    });
+  };
+  const onGripUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    const pressed = pressRef.current !== null;
+    pressRef.current = null;
+    dragRef.current = null;
+    setDragging(false);
+    setDropLine(null);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (drag) {
+      const at = dropAt(event.clientY);
       // Dropping before index `at` lands the block at `at` (or `at - 1` once
       // it has left its old place above).
-      move(from, at > from ? at - 1 : at);
-    };
-    const onLeave = (event: DragEvent) => {
-      if (isOurs(event) && event.target === pane) setDropLine(null);
-    };
-    const unregister = editor.registerRootListener((root) => {
-      pane?.removeEventListener("dragover", onOver, true);
-      pane?.removeEventListener("drop", onDrop, true);
-      pane?.removeEventListener("dragleave", onLeave, true);
-      pane = root?.parentElement ?? null;
-      pane?.addEventListener("dragover", onOver, true);
-      pane?.addEventListener("drop", onDrop, true);
-      pane?.addEventListener("dragleave", onLeave, true);
-    });
-    return () => {
-      unregister();
-      pane?.removeEventListener("dragover", onOver, true);
-      pane?.removeEventListener("drop", onDrop, true);
-      pane?.removeEventListener("dragleave", onLeave, true);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, doc]);
-
-  const onDragStart = (event: ReactDragEvent<HTMLButtonElement>) => {
-    if (!hovered) return;
-    const el = editor.getElementByKey(hovered.key);
-    const index = el ? indexOfElement(el) : null;
-    if (index === null) {
-      event.preventDefault();
+      if (at !== null) move(drag.from, at > drag.from ? at - 1 : at);
       return;
     }
-    dragFrom.current = index;
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData(BLOCK_MIME, String(index));
-    if (el) event.dataTransfer.setDragImage(el, 0, 0);
+    if (pressed) setMenuOpen((open) => !open);
+  };
+  const onGripCancel = () => {
+    pressRef.current = null;
+    dragRef.current = null;
+    setDragging(false);
+    setDropLine(null);
   };
 
   const act = (fn: (key: NodeKey) => void) => {
@@ -271,9 +368,49 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   const menu = hovered
     ? editor.getEditorState().read(() => {
         const node = $getNodeByKey(hovered.key);
-        return node ? $blockMenuFor(node) : null;
+        return node
+          ? { ...$blockMenuFor(node), words: $isTextBlock(node), text: node.getTextContent() }
+          : null;
       })
     : null;
+  // Moduo's own two: the block becomes a live task, or a subpage of this note.
+  const canTask = Boolean(menu?.words && bridge?.tasks.canEditTasks);
+  const canPage = Boolean(menu?.words && bridge?.createSubpage);
+  const turnToTask = () => {
+    if (!hovered || !bridge) return;
+    editor.focus();
+    convertBlockToTask(editor, bridge.tasks, hovered.key);
+  };
+  const turnToPage = () => {
+    if (!hovered || !menu || !bridge?.createSubpage) return;
+    const key = hovered.key;
+    const made = bridge.createSubpage(menu.text.trim());
+    if (!made) {
+      toast.error("Couldn't make a subpage here.");
+      return;
+    }
+    // The words move into the subpage's title: the block leaves this note,
+    // and comes back as a line of text where it was if the subpage can't be saved.
+    const words = menu.text.trim();
+    let at = -1;
+    editor.update(() => {
+      const node = $getNodeByKey(key);
+      if (!node) return;
+      at = node.getIndexWithinParent();
+      $deleteBlock(node);
+    });
+    void made.created.then((ok) => {
+      if (ok || at < 0) return;
+      editor.update(() => {
+        const line = $createParagraphNode().append($createTextNode(words));
+        const root = $getRoot();
+        const before = root.getChildAtIndex(at);
+        if (before) before.insertBefore(line);
+        else root.append(line);
+      });
+      toast.error("The subpage couldn't be saved, so its words are back in the note.");
+    });
+  };
 
   return (
     <>
@@ -284,37 +421,52 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
           style={{ top: dropLine - 1 }}
         />
       ) : null}
+      {dragging && hovered ? (
+        // The block being carried, quietly marked where it was.
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-6 rounded-sm bg-state-hover"
+          style={{
+            top: editor.getElementByKey(hovered.key)?.offsetTop ?? 0,
+            height: editor.getElementByKey(hovered.key)?.offsetHeight ?? 0,
+          }}
+        />
+      ) : null}
       {hovered && menu ? (
         <div
-          className="absolute left-0 flex w-6 items-start justify-center"
+          className="absolute left-0 flex w-6 items-center justify-center"
           style={{ top: hovered.top, height: hovered.height }}
         >
           <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                draggable
-                // The grip both drags and opens the menu: Radix opens on
-                // press, which would pop the menu at the start of every drag.
-                // Claim the press (Radix then skips it) and open on a click,
-                // which only fires when the pointer didn't drag.
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => setMenuOpen((open) => !open)}
-                onDragStart={onDragStart}
-                onDragEnd={() => {
-                  dragFrom.current = null;
-                  setDropLine(null);
-                }}
+                // Out of the tab order: the keyboard opens this menu with ⌥↵
+                // from the text, and Tab must not land on a hidden handle.
+                tabIndex={-1}
+                onPointerDown={onGripDown}
+                onPointerMove={onGripMove}
+                onPointerUp={onGripUp}
+                onPointerCancel={onGripCancel}
                 aria-label="Block menu — drag to move"
                 className={cn(
-                  "mt-1 grid size-5 cursor-grab place-items-center rounded-sm text-muted-foreground/40 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent hover:text-muted-foreground active:cursor-grabbing",
-                  menuOpen && "bg-accent text-muted-foreground",
+                  "grid size-5 cursor-grab touch-none place-items-center rounded-sm text-subtle-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-muted-foreground active:cursor-grabbing",
+                  (menuOpen || dragging) && "bg-state-active text-muted-foreground",
                 )}
               >
                 <GripVertical className="size-3.5" aria-hidden />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="bottom" className="w-52">
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              className="w-52"
+              // Back to the text, not the handle (it isn't a tab stop).
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                editor.focus();
+              }}
+            >
               {menu.turnInto ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
@@ -322,6 +474,19 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
                     Turn into
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
+                    {canTask ? (
+                      <DropdownMenuItem onSelect={turnToTask}>
+                        <CheckSquare aria-hidden />
+                        Task
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canPage ? (
+                      <DropdownMenuItem onSelect={turnToPage}>
+                        <FilePlus2 aria-hidden />
+                        Page
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canTask || canPage ? <DropdownMenuSeparator /> : null}
                     {TURN_INTO.map((t) => (
                       <DropdownMenuItem
                         key={t.id}
@@ -388,11 +553,6 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
               >
                 <Trash2 aria-hidden />
                 Delete
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                Move
-                <DropdownMenuShortcut>⌥⇧↑ ↓</DropdownMenuShortcut>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
