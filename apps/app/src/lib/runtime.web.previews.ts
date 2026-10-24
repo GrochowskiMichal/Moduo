@@ -17,6 +17,7 @@ import type {
   TagPreviewRow,
   TaskPreviewRow,
 } from "../features/spine/references/rows";
+import { noteExcerpt } from "./note-excerpt";
 import { type Db, DbError } from "./runtime.db";
 import { handleWithCurrentKey } from "./task-handle";
 import { dueOnToLocalInstant } from "./task-rows";
@@ -27,16 +28,6 @@ type Row = Record<string, any>;
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const unique = (values: Array<string | null | undefined>): string[] =>
   Array.from(new Set(values.filter((v): v is string => typeof v === "string" && v.length > 0)));
-
-/** A note's text, cut to about two card lines (whole words, no trailing space). */
-function excerptOf(text: string | null): string | null {
-  const flat = (text ?? "").replace(/\s+/g, " ").trim();
-  if (!flat) return null;
-  if (flat.length <= 240) return flat;
-  const cut = flat.slice(0, 240);
-  const space = cut.lastIndexOf(" ");
-  return `${(space > 160 ? cut.slice(0, space) : cut).trimEnd()}…`;
-}
 
 /** A typed `%` or `_` is a character, not a LIKE wildcard. */
 const likeEscape = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\${c}`);
@@ -166,7 +157,7 @@ export function createReferencePreviews(client: Db): ReferencePreviewApi {
         icon: str(r.icon),
         updatedAt: str(r.updated_at) ?? "",
         deletedAt: str(r.deleted_at),
-        excerpt: card ? excerptOf(str(r.body_text)) : undefined,
+        excerpt: card ? noteExcerpt(str(r.body_text), str(r.title)) : undefined,
       }));
     },
 

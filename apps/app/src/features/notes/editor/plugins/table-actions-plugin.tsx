@@ -48,6 +48,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+import { noteColumn } from "../note-column";
+
 type Box = { top: number; left: number; width: number; height: number };
 type Spot = { tableKey: NodeKey; table: Box; cellKey: NodeKey | null; cell: Box | null };
 
@@ -84,7 +86,7 @@ export function TableActionsPlugin() {
 
   const recompute = useCallback(() => {
     const root = editor.getRootElement();
-    const container = root?.parentElement;
+    const container = noteColumn(root);
     if (!root || !container) return setSpot(null);
     const next = editor.getEditorState().read((): Spot | null => {
       let cell: TableCellNode | null = null;
@@ -209,10 +211,16 @@ export function TableActionsPlugin() {
   // Hover: the pointer over a table shows its bars even without the caret.
   useEffect(() => {
     let pane: HTMLElement | null = null;
+    // Cleared AND forgotten: a cleared id left in the ref read as "a leave is
+    // already pending", so after a quick out-and-back the bars never hid.
+    const cancelLeave = () => {
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      leaveTimer.current = null;
+    };
     const onMove = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("[data-table-actions]")) {
-        if (leaveTimer.current) clearTimeout(leaveTimer.current);
+        cancelLeave();
         return;
       }
       const tableEl = target?.closest("table");
@@ -225,7 +233,7 @@ export function TableActionsPlugin() {
           })
         : null;
       if (nextKey) {
-        if (leaveTimer.current) clearTimeout(leaveTimer.current);
+        cancelLeave();
         if (hoverTable.current !== nextKey) {
           hoverTable.current = nextKey;
           recompute();
@@ -243,13 +251,13 @@ export function TableActionsPlugin() {
     };
     const offRoot = editor.registerRootListener((root) => {
       pane?.removeEventListener("mousemove", onMove);
-      pane = root?.parentElement ?? null;
+      pane = noteColumn(root);
       pane?.addEventListener("mousemove", onMove);
     });
     return () => {
       offRoot();
       pane?.removeEventListener("mousemove", onMove);
-      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      cancelLeave();
     };
   }, [editor, recompute]);
 

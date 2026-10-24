@@ -31,6 +31,7 @@ function CommandDialog({
   className,
   commandProps,
   showCloseButton = false,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string;
@@ -40,17 +41,22 @@ function CommandDialog({
    * palette that filters its own items (server-side entity search, DF-10). */
   commandProps?: React.ComponentProps<typeof CommandPrimitive>;
   showCloseButton?: boolean;
+  /** Where focus goes when it closes (default: back to what opened it). */
+  onCloseAutoFocus?: React.ComponentProps<typeof DialogContent>["onCloseAutoFocus"];
 }) {
   return (
     <Dialog {...props}>
-      <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
-      </DialogHeader>
       <DialogContent
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
+        onCloseAutoFocus={onCloseAutoFocus}
       >
+        {/* Inside the content: a title outside it is drawn in the page all
+            the time, an invisible heading on every screen that has a palette. */}
+        <DialogHeader className="sr-only">
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
         <Command
           {...commandProps}
           className={cn(

@@ -47,7 +47,7 @@ body=$(jq -nc \
   | {jsonrpc: "2.0", id: 1, method: "tools/call",
      params: {name: "tasks_session_status", arguments: .}}') || exit 0
 
-url="${MODUO_MCP_URL:-https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp}"
+url="${MODUO_MCP_URL:-https://mcp.moduo.app}"
 # The key goes in on stdin (-H @-), never in the process list.
 (
   printf 'Authorization: Bearer %s\n' "$MODUO_MCP_KEY" |
