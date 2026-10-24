@@ -11,7 +11,7 @@
 -- it at View). T is a task in P. TD is a task in O's project Q, shared
 -- directly with D at Edit (D has nothing on Q). Z is O's empty project. OI
 -- is O's Inbox, holding TH, a task E made and handed to O (TV-D13). E also
--- owns workspace W2.
+-- owns workspace W2, with project P2.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'V', 'E', 'R', 'D']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES
@@ -26,7 +26,8 @@ INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Launch', false),
   (test.id('Q'), test.id('W'), test.id('O'), 'Hiring', false),
   (test.id('Z'), test.id('W'), test.id('O'), 'Spare', false),
-  (test.id('OI'), test.id('W'), test.id('O'), 'Inbox', true);
+  (test.id('OI'), test.id('W'), test.id('O'), 'Inbox', true),
+  (test.id('P2'), test.id('W2'), test.id('E'), 'Side project', false);
 DELETE FROM public.resource_grants WHERE resource_type = 'bucket' AND resource_id IN (test.id('P'), test.id('Q'));
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by) VALUES
   (test.id('W'), 'bucket', test.id('P'), 'member', test.id('V'), 'view', test.id('O')),
@@ -91,12 +92,12 @@ BEGIN
   r := test.as_user('V', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status)
                                    VALUES (%L, %L, %L, %L, 'Sneaked in', 'todo')$q$,
                                 test.id('TV-new'), test.id('W'), test.id('P'), test.id('V')));
-  PERFORM test.ok(r LIKE '42501%', 'nor add a task to it', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor add a task to it', r);
 
   r := test.as_user('R', format($q$INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system)
                                    VALUES (%L, %L, %L, 'Planted', false)$q$,
                                 test.id('PR-new'), test.id('W'), test.id('R')));
-  PERFORM test.ok(r LIKE '42501%', 'a viewer-role member can''t add a project of their own', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'a viewer-role member can''t add a project of their own', r);
   r := test.as_user('R', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('T')));
   PERFORM test.ok(r = 'ok 0', 'an Edit share capped by the viewer role can''t rename the task either', r);
 
@@ -111,15 +112,21 @@ BEGIN
   PERFORM test.ok(r = 'ok 1', 'an Edit share can rename the task', r);
   -- What the triggers pin holds under the bypass too.
   r := test.as_user('E', format('UPDATE public.buckets SET owner_id = %L WHERE id = %L', test.id('E'), test.id('P')));
-  PERFORM test.ok(r LIKE '42501%', 'an Edit share can''t take the project over', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'an Edit share can''t take the project over', r);
   r := test.as_user('E', format('UPDATE public.buckets SET workspace_id = %L WHERE id = %L', test.id('W2'), test.id('P')));
-  PERFORM test.ok(r LIKE '42501%', 'nor move it to their own workspace', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor move it to their own workspace', r);
   r := test.as_user('E', format('UPDATE public.buckets SET is_system = true WHERE id = %L', test.id('P')));
-  PERFORM test.ok(r LIKE '42501%', 'nor turn it into an Inbox', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor turn it into an Inbox', r);
   r := test.as_user('E', format('UPDATE public.tasks SET workspace_id = %L WHERE id = %L', test.id('W2'), test.id('T')));
-  PERFORM test.ok(r LIKE '42501%', 'nor move a task to another workspace', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor move a task to another workspace', r);
   r := test.as_user('E', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('Q'), test.id('T')));
-  PERFORM test.ok(r LIKE '42501%', 'nor into a project they can''t edit', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor into a project they can''t edit', r);
+  r := test.as_user('E', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('P2'), test.id('T')));
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor into a project of their own in another workspace', r);
+  r := test.as_user('E', format($q$INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status)
+                                   VALUES (%L, %L, %L, %L, 'Planted', 'todo')$q$,
+                                test.id('TX-new'), test.id('W'), test.id('P2'), test.id('E')));
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor add a task to this workspace through a project in another', r);
   PERFORM test.ok((SELECT owner_id FROM public.buckets WHERE id = test.id('P')) = test.id('O')
               AND (SELECT workspace_id FROM public.buckets WHERE id = test.id('P')) = test.id('W')
               AND (SELECT workspace_id FROM public.tasks WHERE id = test.id('T')) = test.id('W')
@@ -148,7 +155,7 @@ BEGIN
   r := test.try('D', format($q$UPDATE public.buckets SET name = 'Mine' WHERE id = %L$q$, test.id('Q')));
   PERFORM test.ok(r = 'ok 0', 'but not its project', r);
   r := test.try('D', format('UPDATE public.tasks SET bucket_id = %L WHERE id = %L', test.id('P'), test.id('TD')));
-  PERFORM test.ok(r LIKE '42501%', 'nor move it into a project they can''t edit', r);
+  PERFORM test.ok(r LIKE '42501%row-level security%', 'nor move it into a project they can''t edit', r);
 
   -- TV-D13: the person who made a task and handed it to someone's Inbox
   -- keeps Edit on it.

@@ -10,13 +10,15 @@
 -- so RLS holds the triggers' main lines on its own:
 --
 --   SELECT  unchanged (View on the task or its project; your own project).
---   INSERT  tasks unchanged (Edit on the parent project). Projects: your own
---           project, only where your role can add (owner or tasks.create,
---           the trigger's rule), so a leak can't plant one in a workspace
---           you only view.
+--   INSERT  tasks: Edit on the parent project, as before, and that project
+--           must be in the task's workspace (the trigger's rule). Projects:
+--           your own project, only where your role can add (owner or
+--           tasks.create, the trigger's rule), so a leak can't plant one in a
+--           workspace you only view.
 --   UPDATE  Edit on the row (USING). WITH CHECK pins what the triggers pin:
 --           a project's owner, workspace and Inbox flag; a task's workspace,
---           and its project unless you have Edit on the new one.
+--           and its project unless you have Edit on the new one and it is in
+--           the task's workspace.
 --   DELETE  tasks: Edit (a task is an item in its project, as in the
 --           trigger). Projects: Full, as the trigger asks.
 --
@@ -30,6 +32,19 @@
 -- SECURITY DEFINER and owned by postgres (BYPASSRLS), and the service role
 -- bypasses RLS too. The finer trigger rules (assignee must be able to edit,
 -- status bookkeeping, trash columns) stay trigger-only.
+
+SET LOCAL lock_timeout = '5s';
+
+-- A project the caller can see, in the given workspace.
+CREATE OR REPLACE FUNCTION public.tasks__rls_bucket_here(p_bucket_id uuid, p_workspace_id uuid)
+RETURNS boolean
+LANGUAGE sql
+STABLE SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT public.can_access('bucket', p_bucket_id, 'view') AND EXISTS (
+    SELECT 1 FROM public.buckets b WHERE b.id = p_bucket_id AND b.workspace_id = p_workspace_id)
+$$;
 
 -- The stored project columns an update may not change.
 CREATE OR REPLACE FUNCTION public.buckets__rls_fixed_kept(
@@ -46,8 +61,8 @@ AS $$
     FROM public.buckets b WHERE b.id = p_id), false)
 $$;
 
--- A task stays in its workspace, and moves only into a project the caller
--- can edit.
+-- A task stays in its workspace, and moves only into a project of that
+-- workspace the caller can edit.
 CREATE OR REPLACE FUNCTION public.tasks__rls_move_ok(
   p_id uuid, p_workspace_id uuid, p_bucket_id uuid)
 RETURNS boolean
@@ -58,7 +73,8 @@ AS $$
   SELECT public.can_access('task', p_id, 'view') AND coalesce((
     SELECT t.workspace_id IS NOT DISTINCT FROM p_workspace_id
        AND (t.bucket_id IS NOT DISTINCT FROM p_bucket_id
-            OR public.can_access('bucket', p_bucket_id, 'edit'))
+            OR (public.can_access('bucket', p_bucket_id, 'edit')
+                AND public.tasks__rls_bucket_here(p_bucket_id, t.workspace_id)))
     FROM public.tasks t WHERE t.id = p_id), false)
 $$;
 
@@ -66,8 +82,10 @@ $$;
 -- PUBLIC doesn't revoke anon).
 REVOKE ALL ON FUNCTION public.buckets__rls_fixed_kept(uuid, uuid, uuid, boolean) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.tasks__rls_move_ok(uuid, uuid, uuid) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.tasks__rls_bucket_here(uuid, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.buckets__rls_fixed_kept(uuid, uuid, uuid, boolean) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.tasks__rls_move_ok(uuid, uuid, uuid) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.tasks__rls_bucket_here(uuid, uuid) TO authenticated, service_role;
 
 DROP POLICY IF EXISTS tasks_workspace_access ON public.tasks;
 DROP POLICY IF EXISTS tasks_read ON public.tasks;
@@ -81,7 +99,8 @@ CREATE POLICY tasks_read ON public.tasks
 
 CREATE POLICY tasks_insert ON public.tasks
   FOR INSERT TO authenticated
-  WITH CHECK (public.can_access('task', id, 'view') OR public.can_access('bucket', bucket_id, 'edit'));
+  WITH CHECK ((public.can_access('task', id, 'view') OR public.can_access('bucket', bucket_id, 'edit'))
+              AND public.tasks__rls_bucket_here(bucket_id, workspace_id));
 
 CREATE POLICY tasks_update ON public.tasks
   FOR UPDATE TO authenticated
