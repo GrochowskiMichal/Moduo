@@ -7,6 +7,8 @@
 -- and X can edit it. PRIV is O's private note. NE is E's own note, NX is X's
 -- own note, NXE is O's note X can only edit; all three follow their parent
 -- (share_mode 'inherit'). CX is X's own note under PUB with its own sharing.
+-- Under PUB, sections S1 and S2 and page D (in S1) follow it, so they are on
+-- the web already; ARCH follows it too but is archived.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'E', 'X']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Moduo Labs');
@@ -25,6 +27,17 @@ INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('NXE'), test.id('W'), test.id('O'), 'Board prep', 'private');
 INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('CX'), test.id('W'), test.id('X'), 'Internal FAQ', 'private', test.id('PUB'));
+INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+  (test.id('S1'), test.id('W'), test.id('O'), 'Q3', 'public', test.id('PUB')),
+  (test.id('S2'), test.id('W'), test.id('O'), 'Q4', 'public', test.id('PUB')),
+  (test.id('ARCH'), test.id('W'), test.id('O'), 'Old releases', 'public', test.id('PUB'));
+INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+  (test.id('D'), test.id('W'), test.id('O'), 'v1.2', 'public', test.id('S1'));
+UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false
+  WHERE id IN (test.id('S1'), test.id('S2'), test.id('ARCH'), test.id('D'));
+UPDATE public.notes SET is_archived = true WHERE id = test.id('ARCH');
+DELETE FROM public.resource_grants WHERE resource_type = 'note'
+  AND resource_id IN (test.id('S1'), test.id('S2'), test.id('ARCH'), test.id('D'));
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false
   WHERE id IN (test.id('PUB'), test.id('PUB2'), test.id('PRIV'), test.id('CX'));
 UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false
@@ -73,6 +86,17 @@ BEGIN
   r := test.as_user('X', format('SELECT public.share_op_follow_parent(%L)', test.id('CX')));
   PERFORM test.ok(r LIKE '42501%' AND NOT test.on_web('CX'),
     'nor by making a sub-note of the page follow it', r);
+  -- An archived step inside the page still counts: unarchiving needs only Edit.
+  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b2')$q$,
+    test.id('W'), test.id('NX'), test.id('ARCH')));
+  PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NX') IS NULL,
+    'nor by moving it under an archived page inside the published one', r);
+  -- Reorganising what is on the web already needs only Edit.
+  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b3')$q$,
+    test.id('W'), test.id('D'), test.id('S2')));
+  PERFORM test.ok(r = 'ok 1' AND test.parent_of('D') = test.id('S2') AND test.on_web('D'),
+    'moving a page within the published page needs only Edit (it was public already)', r);
+
   -- With ws.publish but only Edit on the note (changing its audience needs Full).
   UPDATE public.workspace_members SET overrides = '{}'::jsonb
     WHERE workspace_id = test.id('W') AND user_id = test.id('X');
@@ -104,8 +128,8 @@ BEGIN
   PERFORM test.ok(r = 'ok 1' AND public.notes_public_subtree('db-test-pub2') IS NULL,
     'and restoring it doesn''t put it back on the web', r);
 
-  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.notes__in_published_tree(uuid)', 'EXECUTE')
-              AND NOT has_function_privilege('anon', 'public.notes__in_published_tree(uuid)', 'EXECUTE'),
+  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.notes__in_published_tree(uuid, boolean)', 'EXECUTE')
+              AND NOT has_function_privilege('anon', 'public.notes__in_published_tree(uuid, boolean)', 'EXECUTE'),
     'the published-tree helper is internal');
 END;
 $$;

@@ -17,6 +17,12 @@
 --     there while it inherits, or switched to inherit while there) needs
 --     ws.publish and Full on the note, the same two rights publishing and
 --     changing who has access need on their own.
+-- A note already on the web (it followed a published tree before the change)
+-- is not checked again, so teammates with Edit can reorganise a published
+-- wiki. An archived or trashed step inside a published tree counts as part of
+-- it for the target (unarchiving needs only Edit). This guards against
+-- accidental exposure, not a determined editor: Edit on a published page
+-- already lets someone paste into it whatever they can read.
 -- Moving to the top level (parent NULL) is not checked: it narrows access.
 -- System work (no actor) and share.bypass pass, as in perm_enforce_write.
 --
@@ -29,9 +35,13 @@
 
 -- Whether a note's public page would show what sits under it: the note is a
 -- published root, or it follows its parent and that parent is in such a tree.
--- The same chain notes_public_subtree walks down (live, unarchived roots;
--- 'inherit' links).
-CREATE OR REPLACE FUNCTION public.notes__in_published_tree(p_note_id uuid)
+-- The same chain notes_public_subtree walks down ('inherit' links up to a
+-- live, unarchived published root). With p_through_hidden, a trashed or
+-- archived step doesn't end the walk: what sits under it goes public as soon
+-- as it is restored or unarchived (which needs only Edit), so a move into it
+-- is checked as a move into the published tree.
+DROP FUNCTION IF EXISTS public.notes__in_published_tree(uuid);
+CREATE OR REPLACE FUNCTION public.notes__in_published_tree(p_note_id uuid, p_through_hidden boolean DEFAULT false)
  RETURNS boolean
  LANGUAGE plpgsql
  STABLE
@@ -40,6 +50,7 @@ AS $function$
 DECLARE
   v_id uuid := p_note_id;
   v_guard int := 0;
+  v_hidden boolean;
   n record;
 BEGIN
   LOOP
@@ -49,7 +60,8 @@ BEGIN
       INTO n
     FROM public.notes WHERE id = v_id;
     EXIT WHEN NOT FOUND;
-    IF n.deleted_at IS NOT NULL OR coalesce(n.is_archived, false) THEN
+    v_hidden := n.deleted_at IS NOT NULL OR coalesce(n.is_archived, false);
+    IF v_hidden AND NOT p_through_hidden THEN
       RETURN false;
     END IF;
     IF n.publish_token IS NOT NULL AND n.publish_token <> '' AND n.published_at IS NOT NULL THEN
@@ -62,7 +74,7 @@ BEGIN
 END;
 $function$;
 
-REVOKE EXECUTE ON FUNCTION public.notes__in_published_tree(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.notes__in_published_tree(uuid, boolean) FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE FUNCTION public.notes__guard_reparent()
  RETURNS trigger
@@ -91,7 +103,11 @@ BEGIN
 
   IF coalesce(NEW.share_mode, 'custom') = 'inherit'
      AND (v_moved OR coalesce(OLD.share_mode, 'custom') <> 'inherit')
-     AND public.notes__in_published_tree(NEW.parent_id) THEN
+     AND public.notes__in_published_tree(NEW.parent_id, true)
+     -- A note that was already public (moved within or between published
+     -- trees) goes on the web with nothing new.
+     AND NOT (coalesce(OLD.share_mode, 'custom') = 'inherit'
+              AND public.notes__in_published_tree(OLD.parent_id)) THEN
     IF NOT public.perm_user_has(NEW.workspace_id, v_actor, 'ws.publish') THEN
       RAISE EXCEPTION 'That page is published to the web, and your role can''t publish in this workspace.'
         USING ERRCODE = '42501';
