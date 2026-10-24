@@ -764,18 +764,20 @@ async function opUpdateTaskRows(
 
 /**
  * Every task lives in exactly one bucket; an empty, unknown, deleted or
- * cross-workspace bucket falls back to the Inbox (spec §6/§7).
+ * cross-workspace bucket falls back to the Inbox (spec §6/§7). A failed read
+ * throws: it says nothing about the bucket, so it never files into the Inbox.
  */
 async function liveBucketOrInbox(
   workspaceId: string,
   bucketId: string | null | undefined,
 ): Promise<string> {
   if (bucketId) {
-    const { data: b } = await supabaseClient
+    const { data: b, error } = await supabaseClient
       .from("buckets")
       .select("workspace_id, deleted_at")
       .eq("id", bucketId)
       .maybeSingle();
+    if (error) throw new DbError(error);
     if (b && b.workspace_id === workspaceId && !b.deleted_at) return bucketId;
   }
   return (await ensureWebInbox(workspaceId)).id;
@@ -1019,13 +1021,15 @@ export const webTasks: TasksRuntime = {
     const now = new Date().toISOString();
     const bucketId = await liveBucketOrInbox(task.workspaceId, task.bucketId);
     // Re-saving a task that already exists writes its editable fields only,
-    // never its creator or assignee (TV-D1).
+    // never its creator or assignee (TV-D1). A failed existence read throws:
+    // the idempotent create path would return the stored row and drop the edit.
     if (task.id?.trim()) {
-      const { data: prev } = await supabaseClient
+      const { data: prev, error } = await supabaseClient
         .from("tasks")
         .select("id")
         .eq("id", task.id)
         .maybeSingle();
+      if (error) throw new DbError(error);
       if (prev) {
         const [saved] = await opUpdateTaskRows(task.workspaceId, task.id, {
           ...editableTaskFields(task),
