@@ -72,20 +72,17 @@ import {
   type CachedWorkspace,
   cacheKey,
   deviceCache,
+  ownedCopies,
   type SyncCache,
+  withEntryBefore,
 } from "./cache";
 import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
 import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
 import { openWrite, withOverlays } from "./kernel/overlay";
-import {
-  type OwnedCopies,
-  personLifecycle,
-  refcount,
-  StoreRegistry,
-  waitingEverywhere,
-} from "./kernel/registry";
+import { personLifecycle, refcount, StoreRegistry, waitingEverywhere } from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError, waitedOfflineError } from "./network";
+import { liveStatusOf, nextTurn, trackLiveStatus, wakeTurns } from "./status-order";
 import { type KernelMirror, mirrorKernel } from "./tanstack/kernel-mirror";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
@@ -146,6 +143,13 @@ export type OutboxEntry =
 /** The task an outbox entry writes. */
 const entryTaskId = (entry: OutboxEntry): string =>
   entry.kind === "create" ? entry.task.id : entry.taskId;
+
+/** Whether a stored (unchecked) outbox entry writes the same task as `entry`. */
+function sameTaskAs(stored: unknown, entry: OutboxEntry): boolean {
+  const other = stored as Partial<OutboxEntry> | null;
+  if (other?.kind === "create") return other.task?.id === entryTaskId(entry);
+  return other?.kind === "status" && other.taskId === entryTaskId(entry);
+}
 
 /** What every reader gets. Shared until the next change — never mutate it. */
 export type StoreSnapshot = {
@@ -383,56 +387,6 @@ const DATA_REFRESH_EVENT = "moduo:data-refresh";
 
 type StoreLineup = { seq: number; rows: TaskQueueEntry[] } | null;
 
-// ── Status writes in order (MOD-587) ────────────────────────────────────────
-//
-// The server applies a task's status ops in the order they arrive, so a
-// status write for a task never leaves while an older one for it is on its
-// way: it waits in the outbox behind it, and the flush holds it until the
-// live one has answered (or failed and gone back in front). Kept per person,
-// workspace and task across stores: one that stopped (a sign-out, a lost
-// session) may still have one out when the next store for that person opens.
-
-const noop = () => {};
-
-/** Live status writes on their way, by `<person>:<workspace>:<task>`; each settles once its fallback is done. */
-const liveStatus = new Map<string, Promise<void>>();
-
-/** Who waits for a task's turn (`sendStatusInTurn`); woken when anything may have freed one. */
-const turnWaiters = new Set<() => void>();
-
-function nextTurn(): Promise<void> {
-  return new Promise((resolve) => turnWaiters.add(resolve));
-}
-
-function wakeTurns(): void {
-  const waiting = [...turnWaiters];
-  turnWaiters.clear();
-  for (const fn of waiting) fn();
-}
-
-/**
- * A device copy with a late write in it (MOD-569): in front of what waits
- * for its task there (newer), else at the end. No copy: a cut-down one (an
- * older version stamp, so the next store takes only the outbox).
- */
-function withLateEntry(stored: CachedWorkspace | null, entry: OutboxEntry): CachedWorkspace {
-  const outbox: unknown[] = Array.isArray(stored?.outbox) ? [...stored.outbox] : [];
-  const sameTask = (e: unknown) => {
-    if (!e || typeof e !== "object") return false;
-    const other = e as Partial<OutboxEntry>;
-    if (other.kind === "create") return other.task?.id === entryTaskId(entry);
-    return other.kind === "status" && other.taskId === entryTaskId(entry);
-  };
-  if (!outbox.some((e) => (e as { id?: unknown } | null)?.id === entry.id)) {
-    const i = outbox.findIndex(sameTask);
-    if (i < 0) outbox.push(entry);
-    else outbox.splice(i, 0, entry);
-  }
-  return stored
-    ? { ...stored, outbox }
-    : { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
-}
-
 export class WorkspaceStore {
   readonly runtime: ModuoRuntime;
   readonly userId: string;
@@ -597,38 +551,22 @@ export class WorkspaceStore {
 
   /**
    * Whether a status write for this task must wait in the outbox: something
-   * for it waits there, or an older status write for it is still on its way
-   * live (from this store, or from the one before it for this person). Sent
-   * live, it could reach the server first, and the older one would win.
+   * for it waits there, or an older one is on its way live (this store's, or
+   * the one before it for this person). Sent live, it could land first.
    */
   statusMustWait(taskId: string): boolean {
-    return this.hasOutboxEntries(taskId) || liveStatus.has(this.liveKey(taskId));
+    return this.hasOutboxEntries(taskId) || liveStatusOf(this.liveKey(taskId)) !== undefined;
   }
 
-  /**
-   * A live status write for this task is on its way until `run` settles
-   * (its fallback, queueing it after a lost connection, included): later
-   * status writes for the task wait in the outbox, and the flush holds them
-   * until then. Answers `run`.
-   */
+  /** A live status write for this task is on its way until `run` (with its fallback) settles. */
   sendingStatus<T>(taskId: string, run: Promise<T>): Promise<T> {
-    const key = this.liveKey(taskId);
-    const settled = run.then(noop, noop);
-    const before = liveStatus.get(key);
-    const done = before ? Promise.all([before, settled]).then(noop) : settled;
-    liveStatus.set(key, done);
-    void done.then(() => {
-      if (liveStatus.get(key) === done) liveStatus.delete(key);
-      wakeTurns();
-    });
-    return run;
+    return trackLiveStatus(this.liveKey(taskId), run);
   }
 
   /**
    * Send a status op for this task live once nothing older for it is on its
-   * way (in the outbox or live): a drop's status part, which needs the
-   * server's row for its Undo (MOD-561). Rejects as a lost connection when
-   * the store goes offline or stops first (it never left).
+   * way: a drop's status part, whose Undo needs the server's row (MOD-561).
+   * Offline or stopped first, it rejects as a lost connection.
    */
   async sendStatusInTurn<T>(taskId: string, op: () => Promise<T>): Promise<T> {
     for (;;) {
@@ -1806,10 +1744,9 @@ export class WorkspaceStore {
 
   /**
    * A capture or a check-off for later: shown at once, kept with the device
-   * copy, sent in order. `wasLive`: it was sent live and the connection went
-   * on the way, so it is older than anything queued for its task since it
-   * left: it goes in front of those and shows nothing of its own (theirs,
-   * newer, stay on show). Resolves once it is kept somewhere.
+   * copy, sent in order. `wasLive`: it was sent live and the connection went,
+   * so it goes in front of anything queued for its task since (newer, and
+   * still on show). Resolves once it is kept somewhere.
    */
   enqueue(entry: OutboxEntry, opts: { wasLive?: boolean } = {}): Promise<void> {
     // Stopped while it was on its way (a sign-out, a lost session): it goes
@@ -1827,11 +1764,7 @@ export class WorkspaceStore {
     return Promise.resolve();
   }
 
-  /**
-   * A write that came back after this store stopped: the store that took
-   * over for the same person takes it, else it joins their device copy (in
-   * front of anything newer for its task). The account gone: dropped.
-   */
+  /** A write back after this store stopped: to the person's next store, else their copy (MOD-569). */
   private handOff(entry: OutboxEntry): Promise<void> {
     if (this.erased) return Promise.resolve();
     const next = registry.find(this.runtime.tasks, this.workspaceId);
@@ -1843,7 +1776,9 @@ export class WorkspaceStore {
     // After this store's last write of the copy.
     const kept = this.persisting.then(async () => {
       try {
-        await this.cache.update(key, (stored) => withLateEntry(stored, entry));
+        await this.cache.update(key, (stored) =>
+          withEntryBefore(stored, entry, (e) => sameTaskAs(e, entry)),
+        );
       } catch (e) {
         console.warn("[sync] couldn't keep a late write on the device", e);
       }
@@ -1852,11 +1787,7 @@ export class WorkspaceStore {
     return kept;
   }
 
-  /**
-   * The store before this one (same person) had this write on its way: it
-   * joins this outbox once the copy is read, in front of anything newer for
-   * its task. Null before this store starts (it reads the copy then).
-   */
+  /** The store before this one had it on its way: it joins once the copy is read (null: not started). */
   private takeLate(entry: OutboxEntry): Promise<void> | null {
     if (!this.hydrated) return null;
     return this.hydrated.then(() => this.enqueue(entry, { wasLive: true }));
@@ -1929,7 +1860,7 @@ export class WorkspaceStore {
         // An older status write for its task still on its way live: wait for
         // it (MOD-587). One that failed came back in front: pick again.
         before: async (entry) => {
-          const live = liveStatus.get(this.liveKey(entryTaskId(entry)));
+          const live = liveStatusOf(this.liveKey(entryTaskId(entry)));
           if (!live) return "send";
           await live;
           return "skip";
@@ -2332,46 +2263,10 @@ export function findWorkspaceStore(
   return registry.find(runtime.tasks, workspaceId);
 }
 
-/**
- * The device copies as the person lifecycle sees them. Cutting a copy down
- * to what waits keeps its outbox (plus what the stores that just stopped
- * held) and no rows; an older version stamp makes the next store that opens
- * it take the outbox and read everything else again.
- */
-function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
-  return {
-    keys: () => cache.keys(),
-    async keepOnlyWaiting(key, inMemory, handled) {
-      let kept = 0;
-      await cache.update(key, (stored) => {
-        const outbox: OutboxEntry[] = [];
-        const seen = new Set<string>();
-        const stack = [
-          ...(Array.isArray(stored?.outbox) ? (stored.outbox as OutboxEntry[]) : []),
-          ...inMemory,
-        ];
-        for (const entry of stack) {
-          if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
-          seen.add(entry.id);
-          if (!handled.has(entry.id)) outbox.push(entry);
-        }
-        kept = outbox.length;
-        // Nothing waits: the record goes in this same step, so a late write
-        // handed to it meanwhile (MOD-569) can't be deleted after.
-        if (kept === 0) return null;
-        return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
-      });
-      return kept === 0 ? null : kept;
-    },
-    deleteWhere: (match) => cache.deleteWhere(match),
-    clear: () => cache.clear(),
-  };
-}
-
 const people = personLifecycle({
   registry,
   scopeOf: (store) => store.runtime.tasks,
-  copies: () => taskCopies(storeOptions.cache ?? deviceCache()),
+  copies: () => ownedCopies<OutboxEntry>(storeOptions.cache ?? deviceCache()),
   waiting: (store) => store.waitingEntries(),
   handled: (store) => store.handledEntryIds(),
 });

@@ -219,6 +219,38 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     const assignSaved = new Set<string>();
     const sessionSaved = new Set<string>();
     let offlineError: unknown = null;
+    /** One task's status op: its server row, or null when it waits on the device. */
+    const sendStatusPart = async (p: Planned, category: TaskStatusCategory) => {
+      const { write } = p;
+      const status = write.statusId ?? taskStatusWord(category);
+      if (store.statusMustWait(write.taskId)) {
+        // An older check-off for it is still on its way (MOD-561): this one
+        // waits on the device behind it, or the older one would land last.
+        void store.enqueue({
+          kind: "status",
+          id: crypto.randomUUID(),
+          taskId: write.taskId,
+          status,
+          recurrence: p.statusRecurrence,
+          ...(write.position !== undefined ? { position: write.position } : {}),
+          fields: p.shown,
+        });
+        statusQueued.add(write.taskId);
+        return null;
+      }
+      const row = await store.sendingStatus(
+        write.taskId,
+        rt.tasks.opSetStatus({
+          workspaceId: ws,
+          taskId: write.taskId,
+          status,
+          recurrence: p.statusRecurrence,
+          position: write.position,
+        }),
+      );
+      statusSaved.add(write.taskId);
+      return row;
+    };
     const notRun = await runPool(
       planned,
       async (p) => {
@@ -270,36 +302,8 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
             landed = true;
           }
           if (p.category !== undefined) {
-            const status = write.statusId ?? taskStatusWord(p.category);
-            if (store.statusMustWait(write.taskId)) {
-              // An older check-off for it is still on its way (MOD-561): this
-              // one waits on the device behind it, or the older one would land
-              // last and win.
-              void store.enqueue({
-                kind: "status",
-                id: crypto.randomUUID(),
-                taskId: write.taskId,
-                status,
-                recurrence: p.statusRecurrence,
-                ...(write.position !== undefined ? { position: write.position } : {}),
-                fields: p.shown,
-              });
-              statusQueued.add(write.taskId);
-            } else {
-              rows.push(
-                await store.sendingStatus(
-                  write.taskId,
-                  rt.tasks.opSetStatus({
-                    workspaceId: ws,
-                    taskId: write.taskId,
-                    status,
-                    recurrence: p.statusRecurrence,
-                    position: write.position,
-                  }),
-                ),
-              );
-              statusSaved.add(write.taskId);
-            }
+            const row = await sendStatusPart(p, p.category);
+            if (row) rows.push(row);
             landed = true;
           }
           if (write.assigneeId !== undefined) {
