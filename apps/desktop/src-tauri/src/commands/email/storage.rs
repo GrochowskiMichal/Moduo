@@ -931,3 +931,83 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod hunt_509_5 {
+    //! HV-15 variant of benchmarks/escapes/509-5-decode-failure-then-delete: a folder
+    //! sync cursor that fails to decode is treated as "no cursor", and the IDLE
+    //! worker's `update_idle_runtime_state` saves its from-scratch fallback over it.
+    //! Fails until the fix lands.
+    //! Run: cd apps/desktop/src-tauri && cargo test --lib hunt_509_5 -- --ignored
+    use super::*;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    struct TempState {
+        state: AppState,
+        dir: std::path::PathBuf,
+    }
+
+    impl Drop for TempState {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
+    }
+
+    fn temp_state() -> TempState {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "moduo-hunt-509-5-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let state = AppState::new(dir.join("moduo_desktop.redb")).expect("app state");
+        TempState { state, dir }
+    }
+
+    #[test]
+    #[ignore = "HV-15 variant 509-5: an undecodable folder cursor is overwritten by the IDLE worker's fresh fallback"]
+    fn undecodable_folder_cursor_is_not_overwritten_by_idle_state_update() {
+        let temp = temp_state();
+        let state = &temp.state;
+        let key = folder_state_key("gmail:a@x.com", "inbox");
+        // A real cursor (sync + backfill progress) with one field this build can't
+        // read (another build's shape, or a damaged row).
+        let stored = serde_json::json!({
+            "accountId": "gmail:a@x.com",
+            "folder": "inbox",
+            "uidValidity": 7,
+            "uidNext": 4201,
+            "lastSeenUid": 4200,
+            "exists": "4200",
+            "idleSupported": true,
+            "oldestSyncedUid": 12,
+            "historyFloorMs": 1_700_000_000_000_i64,
+            "backfillComplete": true,
+            "updatedAt": "2026-10-20T00:00:00Z"
+        });
+        state
+            .store
+            .put_email_folder_state(&key, &stored)
+            .expect("plant cursor");
+
+        // The IDLE worker records a reconnect for this folder.
+        update_idle_runtime_state(state, "gmail:a@x.com", "inbox", "idle", 1, false);
+
+        let after = state
+            .store
+            .get_email_folder_state(&key)
+            .expect("read back")
+            .expect("cursor row");
+        assert_eq!(
+            after.get("lastSeenUid"),
+            Some(&serde_json::json!(4200)),
+            "the stored sync position must survive: {after}"
+        );
+        assert_eq!(
+            after.get("historyFloorMs"),
+            Some(&serde_json::json!(1_700_000_000_000_i64)),
+            "the reached history floor must survive: {after}"
+        );
+    }
+}
