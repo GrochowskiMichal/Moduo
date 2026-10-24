@@ -24,7 +24,7 @@ How a release is applied: [docs/release.md](../docs/release.md).
 ## Desktop update server (PLAT-6)
 
 - Installed apps ask `infra/update-server` at https://updates.moduo.app first (the repo variable `UPDATE_SERVER_URL`), the same Worker on workers.dev second, then GitHub. Builds from rc.43 up to PLAT-8 know only the workers.dev address, so `workers_dev` stays on. Releases go to R2 `moduo-releases` under `desktop/<channel>/<version>/` (never overwritten), and the channel pointer is written last. Deploy: `update-server.yml`.
-- **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert. Never unfreeze it casually: the updater falls back to GitHub on any Worker error, and a moving GitHub manifest would bypass the kill switch.
+- **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert (`publish-github`). Never unfreeze it casually: pre-PLAT-6 installs read only GitHub, and a moving GitHub manifest would bypass the kill switch. Builds after the bridge no longer list GitHub as an endpoint (MOD-552). `RELEASES_REPO_TOKEN` lives only in the `releases-production` (`v*`) and `releases-staging` (develop, mike) environments; never put it back at repo level. Signing keys per channel and retiring the bridge: [docs/release.md](../docs/release.md) §7.
 - Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
 
 ## MCP connector address

@@ -12,14 +12,17 @@ name: Desktop Release (shared)
 #      releases leave the GitHub release alone, so old installs land on the bridge and go no
 #      further there. Everything after the bridge reaches installs through the update server
 #      alone, where the rollout share and the kill switch apply (desktop-rollout.yml).
-# Builds list the update server at https://updates.moduo.app first, the same Worker at its
-# workers.dev address second, and GitHub third. The updater tries the next one on any error or
-# non-2xx answer; both server addresses read the same KV, and a frozen GitHub manifest offers
-# nothing newer than the bridge, so no fallback can route around the kill switch (a 204 stops the
-# check). The address is the repo variable UPDATE_SERVER_URL (default below). Builds from rc.43 to
+# Builds list the update server at https://updates.moduo.app first and the same Worker at its
+# workers.dev address second. The updater tries the next one on any error or non-2xx answer; both
+# server addresses read the same KV, so no fallback can route around the kill switch (a 204 stops
+# the check). A build made while its channel's bridge isn't frozen yet (it may become the bridge)
+# also lists the GitHub manifest third; builds after the bridge don't (MOD-552): the frozen GitHub
+# manifest never offers them anything newer, so it was only a way around the update server.
+# The address is the repo variable UPDATE_SERVER_URL (default below). Builds from rc.43 to
 # PLAT-8 have only the workers.dev address, so that address must keep working (workers_dev stays on).
 # The fallback covers the update check only: the manifest's download URLs use UPDATE_SERVER_URL.
 # To re-issue a bridge (a broken bridge build), delete latest.json from the channel's GitHub release.
+# Retiring the bridge for good: docs/release.md §7.
 #
 # Mac (REL-5): one job builds the Apple Silicon .app, then the Intel .app, then the universal .app +
 # .dmg, which reuses both compiles. Each per-arch .app becomes its own updater bundle (about half the
@@ -52,8 +55,12 @@ name: Desktop Release (shared)
 #     (optional, preferred) APPLE_API_KEY_ID / APPLE_API_ISSUER / APPLE_API_KEY_P8
 #     TAURI_SIGNING_PRIVATE_KEY (+ _PASSWORD if the key has one)
 #   cloudflare-deploy environment (develop, mike, v*), read by publish: CLOUDFLARE_API_TOKEN.
+#   releases-production environment (v* tags only) and releases-staging (develop, mike), read by
+#   publish-github for its channel: RELEASES_REPO_TOKEN (contents:write on moduo-releases). It can
+#   rewrite the GitHub manifest that pre-PLAT-6 installs trust, so it never lives at repo level,
+#   where any branch's workflow could read it (MOD-552).
 #   Repo level (callers use `secrets: inherit`, which the environment secrets also need):
-#     CLOUDFLARE_ACCOUNT_ID, RELEASES_REPO_TOKEN (contents:write on moduo-releases),
+#     CLOUDFLARE_ACCOUNT_ID,
 #     RUNNER_STATUS_TOKEN (Administration: read on this repo; unset → always GitHub-hosted)
 # (The Rust shell reads MODUO_* settings such as the Google OAuth clients at run time, not at
 # build time, so passing them to `tauri build` did nothing; they are not passed any more.)
@@ -443,18 +450,24 @@ jobs:
         run: bun install --frozen-lockfile
 
       # Stamp the release version (the updater only offers builds newer than the installed one),
-      # turn on signed updater bundles, and point this channel's updater at the update server first
-      # (its domain, then workers.dev) and the GitHub releases repo last (the fallback while the
-      # bridge lasts).
+      # turn on signed updater bundles, and point this channel's updater at the update server (its
+      # domain, then workers.dev). The GitHub releases repo comes last only while the channel's
+      # bridge isn't frozen (this build may become it); see the top of this file.
       - name: Write CI Tauri config
+        env:
+          GITHUB_FROZEN: ${{ needs.version.outputs.github_frozen }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          GITHUB_ENDPOINT=""
+          [ "$GITHUB_FROZEN" = true ] || GITHUB_ENDPOINT=", \"https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/latest.json\""
           cat > "$RUNNER_TEMP/ci-tauri-config.json" <<EOF
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}"${GITHUB_ENDPOINT}] } }
           }
           EOF
+          jq -c .plugins.updater.endpoints "$RUNNER_TEMP/ci-tauri-config.json"
 
       # The persistent target dir still holds earlier versions' bundles; staging picks the first .dmg it finds.
       - name: Clear old bundles (moduo-mac)
@@ -715,15 +728,22 @@ jobs:
       - name: Install frontend deps
         run: bun install --frozen-lockfile
 
+      # Same endpoints as the Mac build (see Write CI Tauri config there).
       - name: Write CI Tauri config
+        env:
+          GITHUB_FROZEN: ${{ needs.version.outputs.github_frozen }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
+          GITHUB_ENDPOINT=""
+          [ "$GITHUB_FROZEN" = true ] || GITHUB_ENDPOINT=", \"https://github.com/${RELEASES_REPO}/releases/download/${RELEASE_TAG}/latest.json\""
           cat > ci-tauri-config.json <<EOF
           {
             "version": "${MODUO_VERSION}",
             "bundle": { "createUpdaterArtifacts": true },
-            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "https://github.com/${RELEASES_REPO}/releases/download/${{ inputs.release_tag }}/latest.json"] } }
+            "plugins": { "updater": { "endpoints": ["${UPDATE_SERVER_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}", "${UPDATE_SERVER_FALLBACK_URL}/desktop/${{ inputs.channel }}/{{target}}/{{arch}}/{{current_version}}"${GITHUB_ENDPOINT}] } }
           }
           EOF
+          jq -c .plugins.updater.endpoints ci-tauri-config.json
 
       # $GITHUB_WORKSPACE keeps its backslashes when quoted; `${{ github.workspace }}` pasted into bash
       # loses them (D:aModuoModuo/...).
@@ -774,6 +794,8 @@ jobs:
     environment: cloudflare-deploy
     outputs:
       published: ${{ steps.offered.outputs.published }}
+      # true when this run made a bridge manifest for publish-github to upload.
+      bridge_manifest: ${{ steps.bridge-manifest.outcome == 'success' }}
     env:
       MODUO_VERSION: ${{ needs.version.outputs.version }}
       MODUO_BUILD: ${{ needs.version.outputs.build }}
@@ -881,6 +903,19 @@ jobs:
           fi
           cat latest.json ../r2-manifest/latest.json
 
+      # The GitHub manifest goes to publish-github, the one job that holds the releases-repo token.
+      # Uploaded before the R2 publish, so those installs still reach the bridge when it fails.
+      - name: Hand the GitHub manifest to publish-github
+        id: bridge-manifest
+        if: needs.version.outputs.github_frozen != 'true'
+        # A failed upload skips publish-github (outcome failure) but never blocks the R2 publish.
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: github-manifest
+          if-no-files-found: error
+          path: release-artifacts/latest.json
+
       # R2 first: every installer, bundle and .sig under the version's own folder, then that
       # version's manifest (which seals it: the version job refuses a version whose manifest
       # exists), then the channel's latest.json, the one key the update server reads to decide.
@@ -965,10 +1000,46 @@ jobs:
           done
           echo "published=true" >> "$GITHUB_OUTPUT"
 
-      # The bridge only (see the top of this file): builds before PLAT-6 only check GitHub. Runs
-      # even when the R2 upload failed, so those installs still reach the bridge (the job stays red).
+  # ─────────────────────────────────────────────────────────────────
+  # GitHub bridge — the rolling GitHub release, only until the channel's bridge is frozen
+  # ─────────────────────────────────────────────────────────────────
+  # The bridge only (see the top of this file): builds before PLAT-6 only check GitHub. Runs even
+  # when the R2 upload failed, so those installs still reach the bridge (publish stays red). Its own
+  # job because RELEASES_REPO_TOKEN lives in a per-channel environment (MOD-552): production's
+  # allows v* tags only, so a branch's workflow can never rewrite what production installs read.
+  publish-github:
+    needs: [version, build-windows, publish]
+    if: >-
+      !cancelled() &&
+      needs.version.outputs.github_frozen != 'true' &&
+      needs.publish.outputs.bridge_manifest == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: ${{ inputs.channel == 'production' && 'releases-production' || 'releases-staging' }}
+    env:
+      MODUO_VERSION: ${{ needs.version.outputs.version }}
+
+    steps:
+      - name: Download Mac artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: mac-dmg
+          path: release-artifacts
+
+      - name: Download Windows artifacts
+        if: needs.build-windows.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-nsis
+          path: release-artifacts
+
+      - name: Download the GitHub manifest
+        uses: actions/download-artifact@v8
+        with:
+          name: github-manifest
+          path: release-artifacts
+
       - name: Upsert rolling ${{ inputs.release_tag }} GitHub Release (bridge)
-        if: ${{ !cancelled() && steps.manifests.outcome == 'success' && needs.version.outputs.github_frozen != 'true' }}
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           repository: ${{ env.RELEASES_REPO }}

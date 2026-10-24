@@ -108,3 +108,48 @@ The desktop app bundles its own copy of the UI at build time, so a web change re
 - **Database:** `select version, name from supabase_migrations.schema_migrations order by version desc limit 20;`
 - **Functions:** `supabase functions list` (version and updated time per function); call one new tool through the connector.
 - **Desktop:** `curl -s https://updates.moduo.app/desktop/production/latest.json | jq '.version,.notes'` (staging: `/desktop/staging/`). The notes are the release's Markdown notes from `releases.json` (since REL-2; 1.1.0's note still names a commit, `37bb493`, while it was built from `0670dbe`); the build is in About. The GitHub `prod-latest` manifest is frozen at the bridge release (1.1.0), so it no longer shows what's live.
+
+## 7. Updater trust: the releases token, signing keys and the GitHub bridge
+
+An installed desktop app takes an update when the manifest it fetches offers a higher version whose bundle carries a valid minisign signature for the one public key built into it (`plugins.updater.pubkey`). The manifest's `version`, `url` and `notes` are not signed. So whoever can write a manifest an install reads, and holds a bundle signed with that key, decides what the install runs. MOD-552 (2026-10-24) narrows both.
+
+**Setting it up (once, in this order, or the next release's `notes` job goes red):**
+
+1. Settings → Environments → create `releases-production` with deployment rule *Selected branches and tags* → add a **tag** rule `v*` (not a branch rule). Create `releases-staging` with branch rules `develop` and `mike`.
+2. Add `RELEASES_REPO_TOKEN` (fine-grained PAT, Contents read/write on `moduo-releases` only) to both environments.
+3. Only then delete the repo-level `RELEASES_REPO_TOKEN`.
+4. Settings → Rules → Rulesets → a tag ruleset on `v*`: restrict creations, updates and deletions, block force pushes, bypass list = the two founders.
+5. Confirm on the next tag release that `notes` ran in `releases-production` and published the notes.
+
+**Who can write the manifests.**
+
+| Manifest | Read by | Written with | Who can reach it |
+| --- | --- | --- | --- |
+| R2 `desktop/<channel>/latest.json` (updates.moduo.app) | every build since PLAT-6 (first) | `CLOUDFLARE_API_TOKEN` | environment `cloudflare-deploy` (develop, mike, `v*`) |
+| GitHub `moduo-releases/prod-latest/latest.json` | production builds before 1.1.0 (only endpoint); 1.1.0 up to MOD-552 (third endpoint) | `RELEASES_REPO_TOKEN` | environment `releases-production` (`v*` tags only) |
+| GitHub `moduo-releases/staging-latest/latest.json` | staging builds before rc.43; rc.43 up to MOD-552 | `RELEASES_REPO_TOKEN` | environment `releases-staging` (develop, mike) |
+
+- `RELEASES_REPO_TOKEN` is read in two places: `_desktop-release.yml`'s `publish-github` job (environment chosen by channel; it runs only until the channel's bridge is frozen, so today it is always skipped) and `release.yml`'s `notes` job (`releases-production`). A fine-grained PAT can't be narrower than one repository, so the staging copy could still write `prod-latest`; that is acceptable because only the founders can push `develop` and `mike`. A separate token (or a separate releases repo) for staging closes it fully.
+- **Desktop Release (production)** dispatched from a branch can't use `releases-production`. That's fine while the production bridge is frozen (its `publish-github` is skipped); if a bridge ever has to be re-issued, start it from the tag (*Use workflow from* → Tags → `vX.Y.Z`, a tag cut after MOD-552: an older tag's workflow reads the token in `publish`, where it is empty once the repo secret is gone).
+- **Builds made after their channel's bridge no longer list GitHub as an endpoint** (MOD-552). The frozen manifest never offered them anything newer, so the third endpoint was only a route around the update server's rollout and kill switch. Builds still list it while their channel has no frozen bridge (the build may become it).
+- **The tag is the gate.** `releases-production`, `desktop-signing` and `cloudflare-deploy` all trust any `v*` tag, and a tag push runs the tagged commit's own workflow file. A tag ruleset on `v*` (create and update limited to the founders, no deletion, no force-update) keeps that to `/ship`.
+
+**Signing keys: one per channel.** Today staging and production share one minisign keypair (public key id `A61FF79D41AB1E26`, `TAURI_SIGNING_PRIVATE_KEY` in `desktop-signing`), so every staging rc is a validly signed update for production installs, and a rewritten manifest could hand one to them. The change:
+
+1. **Production keeps the current keypair.** Every production install trusts it, and Tauri v2 builds trust exactly one key, so rotating production needs a transition release signed with the old key that carries the new public key, and any install that skips that release is stranded (the update server offers only the newest version). Rotate production only if its private key leaks.
+2. **Staging gets a new keypair** (`bunx tauri signer generate -w ~/.tauri/moduo-staging.key`, with a password). Staging builds then embed the staging public key in their CI Tauri config and sign with the staging private key; production builds keep the checked-in key. A staging rc then fails signature checks on a production install whatever manifest offers it.
+3. **The workflow change** (a follow-up once the keys exist): `_desktop-release.yml` writes `plugins.updater.pubkey` from the repo variable `TAURI_UPDATER_PUBKEY_STAGING` into the staging CI config, and staging's build steps read `TAURI_SIGNING_PRIVATE_KEY_STAGING` (+ `_PASSWORD`), failing if either is missing. To keep the production private key away from branch builds too, move it into a `v*`-only environment (`desktop-signing-production`, holding copies of the Apple secrets) and pick the build jobs' environment by channel.
+4. **Staging installs reinstall once.** The first staging build signed with the new key fails the old staging installs' check; download the staging `.dmg` (Settings → About on app.staging.moduo.app) and install it over the old one. Only the founders run staging.
+
+**Retiring the GitHub bridge.** The bridge exists for installs older than PLAT-6 (production before 1.1.0, staging before rc.43), which know only GitHub.
+
+1. **Check whether anyone still reads it.** Every update check that reaches GitHub downloads `latest.json`, and GitHub counts asset downloads. Note the count, wait a week, compare:
+
+   ```bash
+   gh api repos/GrochowskiMichal/moduo-releases/releases/tags/prod-latest --jq '.assets[] | select(.name == "latest.json") | .download_count'
+   ```
+
+   (13 on 2026-10-24; a browser opening the file counts too.) A count that stays flat for two weeks means no production install still checks GitHub. Cross-check in Cloudflare → Workers → `moduo-update-server` → Logs: every check carries its `current_version` in the path (`/desktop/production/<target>/<arch>/<current_version>`), so the versions that check in there are the PLAT-6-or-later installs. Anyone you know runs an older build: ask them to download the current `.dmg` once.
+2. **Remove the code:** the `publish-github` job, the `bridge-manifest` upload and the GitHub endpoint in both *Write CI Tauri config* steps of `_desktop-release.yml`, the GitHub part of the `version` job's check (keep the update server's), and the GitHub endpoint in `apps/desktop/src-tauri/tauri.conf.json`. The `notes` job still needs `RELEASES_REPO_TOKEN` in `releases-production` (or point it at a token for the release-notes repo only).
+3. **Then delete the manifest:** remove `latest.json` from `prod-latest` and `staging-latest` on `moduo-releases` (keep the `.dmg` for old links). Never delete it before step 2: the `version` job reads a missing manifest as "no bridge yet" and the next release would publish a new bridge, and its builds would list GitHub again.
+4. Delete `releases-staging` once nothing reads it.
