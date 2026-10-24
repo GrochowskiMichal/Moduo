@@ -1,0 +1,35 @@
+{
+  "env": {
+    "MODUO_LANE": "1"
+  },
+  "permissions": {
+    "deny": [
+      "Bash(wrangler deploy*)",
+      "Bash(wrangler pages deploy*)",
+      "Bash(wrangler versions deploy*)",
+      "Bash(wrangler versions upload*)",
+      "Bash(wrangler rollback*)",
+      "Bash(wrangler secret put*)",
+      "Bash(bunx wrangler *)",
+      "Bash(npx wrangler *)",
+      "Bash(supabase db push*)",
+      "Bash(supabase functions deploy*)",
+      "Bash(supabase secrets set*)",
+      "Bash(supabase link*)",
+      "Bash(supabase db query *--linked*)",
+      "Bash(gh workflow run*)",
+      "Bash(gh release create*)",
+      "Bash(gh api *dispatches*)",
+      "Bash(git push *--tags*)",
+      "Bash(git push *--follow-tags*)",
+      "Bash(git push * v[0-9]*)",
+      "Bash(git push * refs/tags/*)",
+      "mcp__supabase__apply_migration",
+      "mcp__supabase__execute_sql",
+      "mcp__supabase__deploy_edge_function",
+      "mcp__supabase__merge_branch",
+      "mcp__supabase__reset_branch",
+      "mcp__supabase__create_edge_function_secret"
+    ]
+  }
+}

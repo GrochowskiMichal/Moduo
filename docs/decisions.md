@@ -8,6 +8,9 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-23 · HV-5: Tier 2 list lives once in `scripts/ci/tier.ts` (CI labels PRs from it); size/complexity ratchets frozen and run in verify; test-weakening detector advises, only `.only` fails → decisions/workflow.md
+- 2026-10-23 · HV-1: auto mode per person (`bun run agent:auto-mode`; project settings can't set it); bypass only inside `srt` lanes, enforced by `guard-lane.sh`; guards fail closed (`onFailure: "block"`) → decisions/workflow.md
+- 2026-10-23 · HV-2: `bun run wt` (ready worktree, own dev port via its launch.json) and `wt:prune` (merged PR + clean + no live process only); `moduo` at mcp.moduo.app; connector clean-up per person → decisions/workflow.md
 - 2026-10-23 · HV-3: skill references checked against a pinned plugin registry; user-only skills only on lines telling the person to type them; one advisory validator pass in /s2, none in /s3 → decisions/workflow.md
 - 2026-10-23 · HV-4: `db-test`, `rust-check` and `e2e-smoke` in checks.yml, path-filtered, skip = pass in `static-checks`; the test DB is a prod schema snapshot from `db-snapshot.yml` via the Actions cache; `db:test` has a known-failures baseline → decisions/workflow.md
 - 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; advisory AI review on PRs into develop; Maciej agreed → decisions/workflow.md

@@ -9,7 +9,7 @@ effort: high
 ## Rules that always hold
 - **Stay silent between tool calls.** Report exactly once, at the end, in the format below. The designer reads only that report.
 - **Don't ask the designer new questions.** Everything technical was settled in `/s1`. The only acceptable interruption is a hard blocker research can't resolve: report it under **❓ Needs you** / **⚠ Broke**.
-- **Done means:** `bun run verify` passes after the last edit and every acceptance criterion is proven by a test or a live check. A Tier 2 diff (see `AGENTS.md` §Review gates) also gets the validator's one advisory pass, with each BLOCKER and MAJOR either fixed or answered in the report.
+- **Done means:** `bun run verify` passes after the last edit and every acceptance criterion is proven by a test or a live check. A Tier 2 diff (`bun scripts/ci/tier.ts origin/<personal>` prints `tier-2`) also gets the validator's one advisory pass, with each BLOCKER and MAJOR either fixed or answered in the report.
 - **Tests are the spec's, code is yours.** While implementing, change code until the tests pass: if a test or the spec looks wrong, stop and report it; never edit a test to make it pass.
 - **Tokens only, shadcn primitives, `docs/DESIGN_RULES.md`.** A missing value becomes a token in `apps/app/src/styles/tokens.css`, never an inline literal. The design hook will wake you if you slip.
 - **Stay inside the block's scope.** Note anything else under **🔎 Found** instead of fixing it. Don't turn a finding into a task chip or a new session unless it's in the designer's current focus area (the **Focus** line at the top of `specs/BUILD_ORDER.md`; when that line is unset, no finding becomes a chip) or an unfixed security hole.
