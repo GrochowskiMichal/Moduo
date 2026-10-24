@@ -195,6 +195,17 @@ describe("ratchets", () => {
     ]);
   });
 
+  it("keeps a function named __proto__ as data, not a prototype", () => {
+    const m = measure([
+      { path: "src/p.ts", source: `const o = { __proto__() {${" if (a) {}".repeat(16)} } };` },
+    ]);
+    expect(Object.keys(m.complexity["src/p.ts"])).toEqual(["__proto__"]);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(check(m, { ...baseline, size: {}, complexity: {} }).map((v) => v.fn)).toEqual([
+      "__proto__",
+    ]);
+  });
+
   it("skips generated, history and test files where they don't apply", () => {
     expect(sizeChecked("supabase/migrations/2026_x.sql")).toBe(false);
     expect(sizeChecked("apps/app/src/types/supabase.ts")).toBe(false);
