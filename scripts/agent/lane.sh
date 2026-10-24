@@ -5,7 +5,8 @@
 #   bash scripts/agent/lane.sh "<prompt>" [more claude args…]     (run it from the lane's worktree)
 # Needs srt: npm install -g @anthropic-ai/sandbox-runtime. Without it the lane refuses to start: bypass
 # never runs unsandboxed. The shared git directory is writable (commits) except its hooks/ and config,
-# so a lane can't plant a hook or rewrite the remote. Tests: scripts/agent/settings.test.ts.
+# so a lane can't plant a hook or rewrite the remote. ~/.claude.json is read-only too: Claude runs fine
+# without writing it (checked live with srt 0.0.81, 2026-10-24). Tests: scripts/agent/settings.test.ts.
 set -euo pipefail
 [ "$#" -ge 1 ] || { echo "usage: bash scripts/agent/lane.sh \"<prompt>\" [claude args…]" >&2; exit 64; }
 command -v srt >/dev/null 2>&1 || {
@@ -32,4 +33,4 @@ jq --arg root "$root" --arg git "$gitdir" --arg turbo "$turbo" '
 
 cd "$root"
 inner=$(printf '%q ' claude -p --permission-mode bypassPermissions --settings "$root/.claude/settings.lane.json" "$@")
-MODUO_LANE=1 MODUO_LANE_SANDBOX=1 srt --settings "$settings" "$inner"
+MODUO_LANE=1 MODUO_LANE_SANDBOX=1 srt --settings "$settings" -c "$inner" </dev/null
