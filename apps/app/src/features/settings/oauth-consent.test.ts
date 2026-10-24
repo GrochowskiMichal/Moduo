@@ -84,6 +84,8 @@ describe("consent model: the app", () => {
     expect(at("https://user:pw@claude.ai/cb")).toBeNull();
     expect(at("https://evil.com\\.claude.ai/cb")).toBeNull();
     expect(at("https://claude.ai.evil.com/cb")).toBeNull();
+    // The browser makes punycode of 'İ'; it never reads openai.com.
+    expect(at("https://openaİ.com/cb", "openai.com")).toBeNull();
     expect(at("evilapp://claude.ai/cb")).toBeNull();
     expect(at("not a url")).toBeNull();
     expect(at(null)).toBeNull();

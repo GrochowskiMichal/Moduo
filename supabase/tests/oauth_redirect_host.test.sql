@@ -74,10 +74,13 @@ SELECT test.ok(
      'https://claude.ai:abc/cb',
      'https:/\evil.com',
      'https://clau de.ai/cb',
+     'https://openaİ.com/cb',
+     'https://anthropİc.com/cb',
+     'https://claudé.ai/cb',
      'not a url',
      NULL
    ]) AS u),
-  'an authority with userinfo, a backslash, an escape, a space or a bad port has no host');
+  'an authority with userinfo, a backslash, an escape, a space, non-ASCII or a bad port has no host');
 SELECT test.ok(
   NOT has_function_privilege('authenticated', 'public.workspace_api_keys__oauth_redirect_host(text)', 'execute')
   AND NOT has_function_privilege('authenticated', 'public.workspace_api_keys__recheck_oauth_domains()', 'execute')

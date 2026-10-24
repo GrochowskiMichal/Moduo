@@ -65,7 +65,9 @@ Deno.serve(async (req: Request) => {
     // The recipient's own customer: the code is bound to it.
     const candidates = await stripe.customers.list({ email, limit: 20 });
     const uids = [
-      ...new Set(candidates.data.map((c) => c.metadata?.supabase_user_id).filter((u): u is string => !!u)),
+      ...new Set(candidates.data
+        .map((c: Stripe.Customer) => c.metadata?.supabase_user_id)
+        .filter((u: string | undefined): u is string => !!u)),
     ];
     const { data: profiles } = uids.length
       ? await supabase.from("profiles").select("id, stripe_customer_id").in("id", uids)

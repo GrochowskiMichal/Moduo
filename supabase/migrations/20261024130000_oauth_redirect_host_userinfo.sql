@@ -11,8 +11,9 @@
 --
 -- Now one helper reads the host, and gives NULL ("hasn't checked", no domain)
 -- for any authority a browser could read differently: one holding '@'
--- (userinfo), '\' (a path separator to browsers), '%', spaces or control
--- characters, or anything that isn't a plain host or [IPv6] with an optional
+-- (userinfo), '\' (a path separator to browsers), '%', spaces, control or
+-- any non-ASCII characters (lower() folds 'İ' to 'i' where a browser makes
+-- punycode of it), or anything that isn't a plain host or [IPv6] with an optional
 -- port. Both functions are the 20261024090000 bodies (prod's next) with only
 -- the domain line swapped; signatures and grants unchanged (re-stated).
 -- Stored connections whose domain came from such a redirect lose it.
@@ -24,8 +25,8 @@ IMMUTABLE
 SET search_path = public
 AS $$
   SELECT CASE
-           WHEN s.authority IS NULL OR s.authority ~ '[@\\%[:space:][:cntrl:]]' THEN NULL
-           ELSE nullif(substring(lower(s.authority) FROM '^(\[[0-9a-f:.]+\]|[a-z0-9.-]+)(?::[0-9]*)?$'), '')
+           WHEN s.authority IS NULL OR s.authority ~ '[^!-~]' OR s.authority ~ '[@\\%]' THEN NULL
+           ELSE lower(nullif(substring(s.authority FROM '^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+)(?::[0-9]*)?$'), ''))
          END
   FROM (SELECT substring(btrim(p_redirect) FROM '^[a-zA-Z][a-zA-Z0-9+.-]*://([^/?#]*)') AS authority) s
 $$;
