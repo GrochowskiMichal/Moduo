@@ -77,6 +77,9 @@ export type NotesEditorBridge = {
   /** Create a root note titled `title` for `[[Create …]]` (NR-4). `created`
    * settles true once its server row exists (links wait for it). */
   createLinkedNote?: (title: string) => { id: string; created: Promise<boolean> } | null;
+  /** Create a subpage of the CURRENT note titled `title` (the block menu's
+   * Turn into → Page). Absent: no Page in Turn into. */
+  createSubpage?: (title: string) => { id: string; created: Promise<boolean> } | null;
   /** Open the Comments panel (the block menu's Comment, NR-4). */
   openComments?: () => void;
   /** The note whose real sub-pages the page lists under the body (MOD-81).
@@ -84,6 +87,10 @@ export type NotesEditorBridge = {
    * `/page` opens the new child instead of inserting one. Absent (no note
    * open, a story): page rows behave as plain content. */
   subpagesListedFor?: string;
+  /** Hear about note-list changes (a page row's live title). The bridge
+   * itself stays the same object while notes change, so views that read the
+   * list subscribe here instead of re-rendering with every change. */
+  subscribeNotes?: (listener: () => void) => () => void;
 };
 
 export const NotesEditorBridgeContext = createContext<NotesEditorBridge | null>(null);

@@ -66,12 +66,20 @@ function cleanName(name: string): string {
   return name.replace(MD_EXT, "").replace(NOTION_HASH, "").trim();
 }
 
-function titleFromPath(path: string, md: string): string {
-  const base = path.split("/").pop() ?? path;
-  const name = cleanName(base);
-  if (name) return name;
-  const firstLine = md.split("\n").find((l) => l.trim());
-  return firstLine ? firstLine.replace(/^#+\s*/, "").trim() || "Untitled" : "Untitled";
+/**
+ * A note's title and body, keeping "the first line is the title" true. A file
+ * that opens with a heading is titled by it ("# Meeting notes from Lisbon",
+ * not "lisbon"); one that doesn't gets its file name as a first-line heading,
+ * or the editor would show its first sentence as the title and the first edit
+ * would rename the note to it.
+ */
+function titleAndBody(path: string, md: string): { title: string; md: string } {
+  const firstLine = md.split("\n").find((l) => l.trim()) ?? "";
+  const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/.exec(firstLine.trim())?.[1]?.trim();
+  if (heading) return { title: heading, md };
+  const name = cleanName(path.split("/").pop() ?? path);
+  if (name) return { title: name, md: `# ${name}\n\n${md}` };
+  return { title: firstLine.trim() || "Untitled", md };
 }
 
 /** Normalize a path segment for parent-matching (ext + hash stripped, lowered). */
@@ -82,15 +90,20 @@ function normSeg(seg: string): string {
 /** A rough plain-text projection of markdown for the FTS `body_text` on import
  * (the editor rewrites it precisely on first edit). */
 export function mdToPlainText(md: string): string {
-  return md
-    .replace(/```[\s\S]*?```/g, " ") // fenced code
-    .replace(/`([^`]*)`/g, "$1") // inline code
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → label
-    .replace(/<!--[\s\S]*?-->/g, " ") // html comments (e.g. task ids)
-    .replace(/^[#>\-*+]\s+/gm, "") // block markers
-    .replace(/[*_~]/g, "") // emphasis
-    .replace(/\s+/g, " ")
-    .trim();
+  return (
+    md
+      .replace(/```[\s\S]*?```/g, " ") // fenced code
+      .replace(/`([^`]*)`/g, "$1") // inline code
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links/images → label
+      .replace(/<!--[\s\S]*?-->/g, " ") // html comments (e.g. task ids)
+      .replace(/^[#>\-*+]\s+/gm, "") // block markers
+      .replace(/[*_~]/g, "") // emphasis
+      .replace(/[ \t]+/g, " ")
+      // Blocks stay on lines of their own (a card's excerpt leaves out the
+      // title line and separates the rest).
+      .replace(/ *\n\s*/g, "\n")
+      .trim()
+  );
 }
 
 const importFileEntrySchema = z.object({
@@ -139,8 +152,7 @@ export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
     return {
       tempId,
       parentTempId: null,
-      title: titleFromPath(f.path, f.content),
-      md: f.content,
+      ...titleAndBody(f.path, f.content),
       path: f.path,
     };
   });
@@ -321,6 +333,42 @@ export type ImportRow = {
 };
 
 /**
+ * Wiki links between imported pages (`[[Launch checklist]]`, Obsidian's and
+ * many exports' way to link) become real note links, `[label](moduo://note/id)`,
+ * when the title names a page in the same import; `[[Title|label]]` keeps its
+ * label. A title that names nothing imported stays as typed. Pure.
+ */
+export function linkWikiTitles(md: string, idForTitle: (title: string) => string | null): string {
+  // Code is quoted, never linked: fenced blocks and backtick spans stay as typed.
+  return md
+    .split(/(```[\s\S]*?```|`[^`\n]*`)/)
+    .map((part, i) => (i % 2 === 1 ? part : linkPart(part, idForTitle)))
+    .join("");
+}
+
+function linkPart(md: string, idForTitle: (title: string) => string | null): string {
+  return md.replace(
+    /\[\[([^\]|\n]+)(?:\|([^\]\n]+))?\]\]/g,
+    (whole, title: string, label?: string) => {
+      const id = idForTitle(title.trim());
+      if (!id) return whole;
+      const text = (label ?? title).trim().replace(/[[\]]/g, "");
+      return `[${text}](moduo://note/${id})`;
+    },
+  );
+}
+
+/** Titles of a plan's pages, matched without case, to their note ids. */
+function titleIndex(nodes: ImportPlanNode[], idFor: (tempId: string) => string) {
+  const byTitle = new Map<string, string>();
+  for (const n of nodes) {
+    const key = n.title.trim().toLowerCase();
+    if (key && !byTitle.has(key)) byTitle.set(key, idFor(n.tempId));
+  }
+  return (title: string) => byTitle.get(title.toLowerCase()) ?? null;
+}
+
+/**
  * Turn a plan into the rows `notes_op_import` stores (NOTE-FIX-1) — including
  * each note's fully-built CRDT `doc_state`, so an imported note renders on
  * every device and after every reload instead of only in the session that
@@ -341,11 +389,13 @@ export function buildImportRows(
   existingRootPositions: string[] = [],
 ): ImportRow[] {
   const positions = importPositions(nodes, existingRootPositions);
+  const idForTitle = titleIndex(nodes, idFor);
   return nodes.map((n) => {
     const id = idFor(n.tempId);
+    const md = linkWikiTitles(n.md, idForTitle);
     let built: { docStateB64: string; bodyText: string; bodyMd: string } | null = null;
     try {
-      built = buildDoc(id, n.md);
+      built = buildDoc(id, md);
     } catch {
       built = null;
     }
@@ -355,11 +405,12 @@ export function buildImportRows(
       title: n.title,
       position: positions.get(n.tempId) ?? "",
       docStateB64: built?.docStateB64 ?? null,
-      // ALWAYS the raw file, never the doc-derived body: the user's own
-      // markdown, byte for byte, until someone edits the note (then the one
-      // converter re-derives it from the doc, NR-3).
-      bodyText: mdToPlainText(n.md),
-      bodyMd: n.md,
+      // ALWAYS the file, never the doc-derived body: the user's own markdown,
+      // byte for byte (wiki links between imported pages aside, which became
+      // note links), until someone edits the note (then the one converter
+      // re-derives it from the doc, NR-3).
+      bodyText: mdToPlainText(md),
+      bodyMd: md,
       inInbox: false,
     };
   });

@@ -2,6 +2,10 @@
  * The top bar's breadcrumb (specs/notes-refresh.md NR-2, AC5):
  * `Pages › Clients › Acme`, each crumb clickable. The section crumb reveals
  * that section in the sidebar; an ancestor crumb opens that note.
+ *
+ * A deep path keeps the section, the parent and the note, and folds the rest
+ * into "…" (named in its tooltip). Ancestors keep a readable width; the open
+ * note's own title is what truncates, never the path to it.
  */
 
 import { ChevronRight } from "lucide-react";
@@ -21,10 +25,29 @@ export function NoteBreadcrumb({
   onOpenSection: (section: CrumbSection) => void;
 }) {
   if (crumbs.length === 0) return null;
+  const folded = crumbs.length > 4 ? crumbs.slice(1, -2) : [];
+  const shown: Array<Crumb | { kind: "fold" }> =
+    folded.length > 0 ? [crumbs[0]!, { kind: "fold" }, ...crumbs.slice(-2)] : crumbs;
   return (
     <nav aria-label="Breadcrumb" className="min-w-0 flex-1">
       <ol className="flex min-w-0 items-center gap-0.5 font-sans text-sm text-muted-foreground">
-        {crumbs.map((crumb, i) => {
+        {shown.map((crumb, i) => {
+          if (crumb.kind === "fold") {
+            return (
+              <Fragment key="fold">
+                <li aria-hidden className="flex shrink-0 items-center">
+                  <ChevronRight className="size-icon-xs" />
+                </li>
+                <li
+                  className="shrink-0 px-1"
+                  title={folded.map((c) => c.label).join(" › ")}
+                  aria-label={folded.map((c) => c.label).join(", ")}
+                >
+                  …
+                </li>
+              </Fragment>
+            );
+          }
           const current = crumb.kind === "note" && crumb.current;
           return (
             <Fragment key={crumb.kind === "note" ? crumb.id : crumb.section}>
@@ -35,8 +58,8 @@ export function NoteBreadcrumb({
               ) : null}
               <li
                 className={cn(
-                  "flex min-w-0 items-center",
-                  current ? "shrink-0 max-w-full" : "shrink",
+                  "flex items-center",
+                  current ? "min-w-0 shrink" : "max-w-40 shrink-0",
                 )}
               >
                 {current ? (

@@ -31,7 +31,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 - **Permission modes:** interactive sessions use **auto mode**. Claude Code ignores `defaultMode: "auto"` in project settings, so run `bun run agent:auto-mode` once per machine (writes it to `~/.claude/settings.json`) and pick Auto in the desktop app. Bypass runs only in unattended lanes inside the `srt` sandbox: `bash scripts/agent/lane.sh "<prompt>"` (needs `npm install -g @anthropic-ai/sandbox-runtime`; profile `.claude/sandbox/lane.srt.json`, lane rules `.claude/settings.lane.json`). A one-machine stopgap while you switch: `"env": {"MODUO_ALLOW_BYPASS": "1"}` in your own `.claude/settings.local.json`.
 - **`/ship` is user-only** (`disable-model-invocation`): only a person typing it starts a release.
 - **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase db query --linked`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
-- **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project) and `moduo`, our own connector (see §Moduo connector). Vercel's was removed with Vercel (PLAT-8); Cloudflare is driven by `wrangler` in CI. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
+- **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project) and `moduo`, our own connector at `https://mcp.moduo.app` (see §Moduo connector). A session should see exactly these two; `scripts/agent/mcp-config.test.ts` holds the file to that, and §One Moduo, one Supabase removes the copies that come from elsewhere. Vercel's was removed with Vercel (PLAT-8); Cloudflare is driven by `wrangler` in CI. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
 - **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `/s3`.
 
 ## What GitHub and the cloud provide
@@ -45,13 +45,35 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 2. **gitleaks** for the commit guard: `brew install gitleaks`.
 3. **rust-analyzer** on PATH for Rust diagnostics: `rustup component add rust-analyzer`. The TypeScript server needs nothing extra: it runs from `node_modules` after `bun install`.
 4. **MCP auth**, once per server: `claude mcp login supabase`. `gh auth login` for GitHub.
-   - **If you already connected Supabase as a claude.ai connector** (it also works in cloud routines), turn off the project copy on your machine so Claude doesn't load the same tools twice: in `.claude/settings.local.json` set `"disabledMcpjsonServers": ["supabase"]`. The `guard-prod-db.sh` hook asks before production writes through either route. The Supabase plugins bring two more copies (`plugin:supabase:supabase`, `plugin:postgres-best-practices:supabase`); turn those off in `/mcp`. The plugins' skills keep working.
+   - **One Moduo, one Supabase:** clean up the duplicate connections once, see §One Moduo, one Supabase.
    - **Storybook MCP** (optional, for UI work): `claude mcp add --transport http storybook http://localhost:6006/mcp`. It works only while `bun run storybook` runs, and gives Claude component docs, props and story previews.
 5. **Trust the project** when Claude Code asks; that installs the project plugins and the Supabase skills marketplace.
 5b. **Moduo connector** (optional, recommended): your agent's key, see §Moduo connector.
 6. **Max plan only:** `/advisor fable`, which lets Fable 5.1 advise Opus 5.5 at decision points (saved in your user settings). On Pro, skip it: Fable bills usage credits there.
 7. **Auto mode** for `/s2` runs (the default for new sessions on Pro and Max). Phone pushes need `agentPushNotifEnabled` / `inputNeededNotifEnabled` plus Remote Control.
 8. **Personal notes** (optional): `docs/local/` (gitignored), or machine-wide rules in `~/.claude/CLAUDE.md`.
+
+## One Moduo, one Supabase
+
+The 23 Oct audit found three Moduo connections and two (sometimes four) Supabase servers in every session: 471 tools, most of them twice. The project's `.mcp.json` is the one copy we keep: `moduo` at `https://mcp.moduo.app` with your agent's key, and `supabase` scoped to the project. Everything else is personal and lives outside git. **Once per person:**
+
+1. **The user-level `moduo`** (an old `claude mcp add` in `~/.claude.json`): `claude mcp list` shows it as user scope; remove it with `claude mcp remove moduo --scope user`.
+2. **The API-key connection named "Claude"** in Moduo (**Workspace settings → API keys**): revoke it. Your agent's key (**MichaśAI** / **MaciuśAI**) is the one the project server uses.
+3. **The claude.ai Moduo connector**, if you have one: reconnect it at `https://mcp.moduo.app` (claude.ai → Settings → Connectors). Claude Code then sees the same endpoint as the project's `moduo` and hides the connector (the project entry wins, with your agent's key). A connector still on the old `…supabase.co/functions/v1/moduo-mcp` address is a different endpoint and loads as a second Moduo.
+4. **Turn off the copies in your gitignored `.claude/settings.local.json`** (`bun run wt` copies it into each new worktree):
+   ```json
+   {
+     "disableClaudeAiConnectors": true,
+     "deniedMcpServers": [
+       { "serverName": "plugin:supabase:supabase" },
+       { "serverName": "plugin:postgres-best-practices:supabase" }
+     ]
+   }
+   ```
+   `disableClaudeAiConnectors` keeps every claude.ai connector (Supabase, Moduo, Figma, Stripe …) out of terminal and IDE sessions; leave it out and deny single ones instead with `{ "serverName": "claude.ai <name>" }` if you want some. The two plugin entries drop the Supabase plugins' servers and keep their skills (no settings key for one plugin server is documented; this denylist by name is the working route; the `/mcp` toggle does the same per project in `~/.claude.json`). Don't deny by `serverUrl`: that would also block the project's own server.
+   - **Prefer the claude.ai Supabase connector** (it also works in cloud routines)? Then keep it and drop the project copy instead: `"disabledMcpjsonServers": ["supabase"]`, without `disableClaudeAiConnectors`. Either way, one Supabase. `guard-prod-db.sh` asks before production writes through both routes.
+5. **The desktop app's Code tab** loads claude.ai connectors in-process and ignores the settings above. Disconnect the ones you don't want in sessions at claude.ai/customize/connectors (that also removes them from chat).
+6. **Check:** `/mcp` in a new session lists `moduo` and `supabase` once each (plus `moduo-local` if you test the connector), with any claude.ai duplicate marked hidden.
 
 ## Moduo connector (agents phase 0: dogfood)
 
@@ -66,7 +88,7 @@ Our agents track their build work in Moduo through our own connector, `moduo-mcp
    export MODUO_AGENT_NAME="MichaśAI"     # or "MaciuśAI": your name on the status line
    ```
    Then restart Claude Code (desktop: quit and reopen, so it picks up the profile).
-3. Approve the project's `moduo` server when Claude Code asks (or in `/mcp`).
+3. Approve the project's `moduo` server when Claude Code asks (or in `/mcp`). It talks to `https://mcp.moduo.app`, which forwards to the `moduo-mcp` function; then do §One Moduo, one Supabase.
 4. **Check:** ask Claude to call the `moduo` server's `tasks_list` with `assignee: "me"`. Your open tasks come back. A "Missing, invalid, revoked or expired API key" error means the variable didn't reach Claude Code.
 5. When the key expires (90 days), make a new one with the same name and swap the variable.
 
@@ -89,8 +111,16 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 ## The unsupervised flow
 
 1. **Day:** `/s1 <topic>`, the grilling, spec, blocks and Definition-of-Ready gate (read-only; plan mode works).
-2. **Night shift:** one Claude Code desktop session per block (or a `claude agents` lane), each in its own worktree. Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
+2. **Night shift:** one Claude Code desktop session per block (or a `claude agents` lane), each in its own worktree. For a worktree you start yourself, `bun run wt <name>` hands out a ready one (see §Worktree pool). Start each with the `/goal` template from the `/s2` skill, so the session keeps working until the block's definition of done holds. `/s2` claims its block with a draft PR, so parallel sessions never take the same one.
 3. **Morning:** read each report's **Status** line first (Built, not landed · Blocked · Not started), then **Changed** and **Test this**, plus **❓ Needs you** / **⚠ Broke** when present. There is no manual checklist file: `/s3` puts Test this in the PR body, runs the validator on Tier 2 diffs only, merges into the personal branch, and syncs bigger chunks to `develop`.
 4. **Large audits and migrations** across many files run as dynamic workflows (put `ultracode` in the prompt). Watch long CI or release runs with `/loop`.
 
 The only two things you manage: **the work plan** and **your plan limits**.
+
+## Worktree pool
+
+Never work in the shared main checkout (two sessions there switch the branch under each other). `scripts/agent/wt.ts`:
+
+- **`bun run wt <name>`** (from any checkout) makes `.claude/worktrees/<name>` on a new branch `t/<owner>/<name>` cut off `origin/<owner>` (the personal branch; `--base mike|maciej`, else `MODUO_OWNER`, else the owner of the branch you are on), with no upstream so it can't push into the personal branch. It copies your `.env.local`, `.env.cloud.local` and `.claude/settings.local.json`, runs `bun install --frozen-lockfile --prefer-offline` (Bun's global cache makes it a link step), and gives the worktree its own dev port from the `scripts/agent/e2e-env.ts` scheme (8200–8999, derived from its path, the same port `scripts/agent/e2e.sh` uses): the `web` entry in its `.claude/launch.json` starts Rsbuild on it, so `preview_start web` never collides with another worktree's 8081. `--no-install` skips the install.
+- **`bun run wt:prune`** removes worktrees whose branch has a **merged PR** on GitHub (`gh`), and deletes that local branch. It keeps a worktree with uncommitted or untracked work, commits after the merged head that never landed in `develop`/`mike`/`maciej`, a lock, a detached HEAD, a personal or landing branch checked out (`mike` → `develop` PRs merge too), any worktree a running process has as its working directory (`lsof`: a live session or shell), the main checkout and the one you're in, and prints why for each. `--dry-run` shows what it would do. A clean worktree without a merged PR is always kept, even an empty fresh one.
+

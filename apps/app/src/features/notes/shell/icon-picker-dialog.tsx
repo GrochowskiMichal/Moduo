@@ -7,6 +7,7 @@
  */
 
 import { EmojiPicker } from "frimousse";
+import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ import {
 import { resolveChatEmoji } from "../../chat/composer/emoji-data";
 import type { Note } from "../model";
 import { displayTitle } from "../title";
+import { returnFocusToRow } from "./sidebar-tree";
 
 export function IconPickerDialog({
   note,
@@ -35,9 +37,17 @@ export function IconPickerDialog({
     if (note) onPick(note, icon);
     onOpenChange(false);
   };
+  // The note is gone from the props by the time the dialog finishes closing.
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (note) last.current = note.id;
+  }, [note]);
   return (
     <Dialog open={note !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="w-auto gap-3 p-3">
+      <DialogContent
+        className="w-auto gap-3 p-3"
+        onCloseAutoFocus={(e) => returnFocusToRow(last.current, e)}
+      >
         <DialogHeader>
           <DialogTitle>Icon</DialogTitle>
           <DialogDescription className="truncate">

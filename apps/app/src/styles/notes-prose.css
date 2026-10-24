@@ -44,19 +44,21 @@
   color: var(--foreground);
 }
 
+/* One step under the title (3xl, the first line here, the page's own h1 on
+ * /p/): a Heading 1 in the body at the title's size read as a second title. */
 .notes-h1,
 .notes-public-prose h1 {
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
 }
 
 .notes-h2,
 .notes-public-prose h2 {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
 }
 
 .notes-h3,
 .notes-public-prose h3 {
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
 }
 
 .notes-quote,
@@ -80,7 +82,8 @@
 .notes-list-ul,
 .notes-public-prose ul {
   list-style: disc outside;
-  padding-left: 1.5rem;
+  /* Every list's text starts at one x: bullets, numbers and checkboxes. */
+  padding-left: 1.75rem;
 }
 
 .notes-list-ol,
@@ -164,7 +167,8 @@
   content: "";
   position: absolute;
   left: 0.25rem;
-  top: 0.375rem;
+  /* Centred on the item's first line (it sat 2–3 px low). */
+  top: calc((1lh - 1rem) / 2);
   width: 1rem;
   height: 1rem;
   border-radius: var(--radius-sm);
@@ -174,18 +178,49 @@
     border-color var(--motion-fade) var(--ease-out);
 }
 
+/* The box is a control: the pointer says so. */
+.notes-list-item-unchecked::before,
+.notes-list-item-checked::before {
+  cursor: pointer;
+}
+
 .notes-list-item-unchecked:hover::before {
   border-color: var(--foreground);
 }
 
 .notes-list-item-checked::before {
-  content: "✓";
-  color: var(--primary-foreground);
   background: var(--primary);
   border-color: var(--primary);
-  font-size: var(--text-xs);
-  display: grid;
-  place-items: center;
+}
+
+/* The tick is drawn, not a "✓" glyph: a font's tick sat low and left and
+ * fell half out of the box. Two borders of a rotated box, centred on it. */
+.notes-list-item-checked::after {
+  content: "";
+  position: absolute;
+  left: calc(0.25rem + 0.3125rem);
+  top: calc((1lh - 1rem) / 2 + 0.1875rem);
+  width: 0.375rem;
+  height: 0.5625rem;
+  border: solid var(--primary-foreground);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  pointer-events: none;
+}
+
+/* A done item reads as done. */
+.notes-list-item-checked {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+}
+
+/* Lexical focuses the item in script when its box is clicked, which the
+ * browser treats as keyboard focus: an outline round the whole line (it read
+ * as a stray hover box). The caret already shows where you are. */
+.notes-list-item-unchecked:focus,
+.notes-list-item-checked:focus {
+  outline: none;
 }
 
 /* Task lines (NO-5) — a checkbox line that grew up, never a card. The
@@ -213,7 +248,7 @@
 /* Inline text formats (DF-13) — Lexical expresses only ONE format via the
  * element tag; combinations and strikethrough/underline need theme classes. */
 .notes-text-bold {
-  font-weight: 700;
+  font-weight: var(--font-weight-bold);
 }
 
 .notes-text-italic {
@@ -233,9 +268,23 @@
 }
 
 .notes-inline-code,
+/* `*` sets every element's face (global.css), so the text runs INSIDE a code
+ * block must be named too, or code reads in the body sans. */
 .notes-code-block,
-.notes-public-prose code {
+.notes-code-block *,
+.notes-inline-code,
+.notes-public-prose code,
+.notes-public-prose code * {
   font-family: var(--font-mono);
+}
+
+/* Prism tokens in a code block (the editor theme's codeHighlight map). */
+.notes-code-keyword { color: var(--code-keyword); }
+.notes-code-string { color: var(--code-string); }
+.notes-code-number { color: var(--code-number); }
+.notes-code-comment {
+  color: var(--code-comment);
+  font-style: italic;
 }
 
 .notes-inline-code,
@@ -251,7 +300,9 @@
 .notes-code-block,
 .notes-public-prose pre {
   display: block;
-  white-space: pre;
+  /* Long lines wrap: a cut-off line with no visible scrollbar hid code. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   tab-size: 2;
   overflow-x: auto;
   line-height: var(--leading-relaxed);
@@ -266,7 +317,7 @@
 
 .notes-link,
 .notes-public-prose a {
-  color: var(--primary);
+  color: var(--link);
   text-decoration: underline;
   text-underline-offset: 0.2em;
   text-decoration-thickness: 1px;
@@ -275,14 +326,18 @@
 
 .notes-link:hover,
 .notes-public-prose a:hover {
-  color: var(--primary-hover);
+  color: color-mix(in oklch, var(--link) 80%, var(--foreground));
 }
 
 /* ═══ Notes: Table ═══ */
 
+/* Separate borders: with border-collapse a rounded, clipped table lost its
+ * outer edge on three sides and its bottom corners. The table draws the
+ * frame; each cell draws only its right and bottom rules. */
 .notes-table,
 .notes-public-prose table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   margin: 1rem 0;
   table-layout: fixed;
@@ -291,10 +346,29 @@
   border: 1px solid var(--border);
 }
 
+.notes-table tr > :last-child,
+.notes-public-prose tr > :last-child {
+  border-right: 0;
+}
+
+.notes-table tr:last-child > *,
+.notes-public-prose tr:last-child > * {
+  border-bottom: 0;
+}
+
+/* A cell holds its text, not a paragraph's bottom margin: the text sat at
+ * the top over an empty band. */
+.notes-table-cell > .notes-p,
+.notes-table-cell-header > .notes-p {
+  margin: 0;
+}
+
 
 .notes-table-cell,
 .notes-public-prose td {
-  border: 1px solid var(--border);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   vertical-align: top;
   min-width: 5rem;
@@ -313,7 +387,9 @@
 
 .notes-table-cell-header,
 .notes-public-prose th {
-  border: 1px solid var(--border);
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   padding: 0.5rem 0.75rem;
   vertical-align: top;
   min-width: 5rem;
@@ -324,6 +400,13 @@
   outline: none;
   text-align: left;
   position: relative;
+}
+
+/* Only the first row is a header. Tables made before /table stopped adding a
+ * header COLUMN keep its cells as headers: they read as ordinary cells. */
+.notes-table tr:not(:first-child) .notes-table-cell-header {
+  background: transparent;
+  font-weight: inherit;
 }
 
 .notes-table-cell-header:focus-within {
@@ -392,13 +475,32 @@
   color: inherit;
 }
 
+/* Commented text: a soft wash with a clear underline (read as "someone
+ * said something here", not a selection); its thread's open: stronger. */
 .notes-editor-v2 mark.notes-comment-mark[data-comment="open"] {
   background: var(--comment-mark-bg);
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid var(--comment-mark-line);
   cursor: pointer;
+  transition: background-color var(--motion-fade) var(--ease-out);
 }
 
+.notes-editor-v2 mark.notes-comment-mark[data-comment="open"]:hover,
 .notes-editor-v2 mark.notes-comment-mark[data-comment="focused"] {
   background: var(--comment-mark-bg-focused);
-  border-radius: var(--radius-sm);
+  border-bottom: 2px solid var(--comment-mark-line);
+}
+
+/* Selection in the editor and on a published page. */
+.notes-editor-v2 ::selection,
+.notes-public-prose ::selection {
+  background: var(--text-selection);
+}
+
+/* The empty line under the caret says what to type (EmptyLineHintPlugin). */
+.notes-editor-v2 [data-empty-hint]::before {
+  content: attr(data-empty-hint);
+  float: left;
+  height: 0;
+  color: var(--subtle-foreground);
+  pointer-events: none;
 }

@@ -1,27 +1,36 @@
 /**
- * Notes right panel — Detail variant (NO-7, AC8): the spine payoff surface for
- * a note. Tags + auto-suggested links + the grouped links hub + the activity
- * trail, all reusing the shared spine components with `entityType: "note"`
- * (mirrors the ContactHub composition). Read-only for view-only members.
+ * Notes right panel: Details. Built from the pieces Tasks' detail panel uses,
+ * so the two read as one product: a properties block (Location, Created,
+ * Edited, Tags as a property row), the Linked collection with its + picker
+ * and cards, then Activity. Read-only for view-only members.
  */
 
 import { useEffect, useState } from "react";
 
+import { CollectionHeader } from "@/components/ui/collection-header";
+import { PropertyRow } from "@/components/ui/property-row";
+import { Separator } from "@/components/ui/separator";
 import { ActivityTrail } from "@/features/contacts/ui/activity-trail";
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
-import { EntityHub } from "@/features/spine/ui/entity-hub";
-import { EntityLinkSuggestions } from "@/features/spine/ui/link-suggestion-strip";
+import { createLinkWithToast } from "@/features/spine/ui/drop-link-toast";
 import { EntityTagRow } from "@/features/tags/ui/entity-tag-row";
+import { feedTime } from "@/features/tasks/feed";
 import type { ActivityEntry } from "@/features/tasks/model";
-import type { EntityLink, EntityRef, RelationKind } from "@/lib/entity-links";
+import { LinkedSection, sayUnlinkFailed } from "@/features/tasks/ui/task-detail-collections";
+import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 
 import { onNoteLinksChanged } from "../editor/notes-editor-bridge";
+import type { Note } from "../model";
 
 type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string | null;
-  noteId: string;
+  note: Note;
+  /** Where the note sits: "Pages › Clients". */
+  location: string;
+  /** The last human editor's name, when known. */
+  editedBy?: string | null;
   canEdit: boolean;
   currentUserId: string | null;
   onOpenEntity?: (ref: EntityRef) => void;
@@ -30,20 +39,19 @@ type Props = {
 export function NoteDetailPanel({
   runtime,
   workspaceId,
-  noteId,
+  note,
+  location,
+  editedBy,
   canEdit,
   currentUserId,
-  onOpenEntity,
 }: Props) {
+  const noteId = note.id;
   const focus: EntityRef = { type: "note", id: noteId };
   const { status, sections, reload } = useEntityHub(runtime, workspaceId, focus);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
 
-  // A drag-onto-hub link (NO-7b) is written by the page; re-pull so the new edge
-  // appears without a re-select.
-  useEffect(() => {
-    return onNoteLinksChanged(() => reload());
-  }, [reload]);
+  // A link made elsewhere (a drop on the hub, `[[`, a task line) re-pulls.
+  useEffect(() => onNoteLinksChanged(() => reload()), [reload]);
 
   useEffect(() => {
     if (!runtime || !workspaceId) {
@@ -66,54 +74,78 @@ export function NoteDetailPanel({
     };
   }, [runtime, workspaceId, noteId]);
 
-  const onChangeKind =
-    canEdit && runtime && workspaceId
-      ? (link: EntityLink, kind: RelationKind) =>
-          void runtime.spine
-            .setLinkKind({ workspaceId, linkId: link.id, relationKind: kind })
-            .then(reload)
-      : undefined;
-  const onUnlink =
-    canEdit && runtime && workspaceId
-      ? (link: EntityLink) =>
-          void runtime.spine.deleteLink({ workspaceId, linkId: link.id }).then(reload)
-      : undefined;
+  const linkEntity = (ref: EntityRef, label: string, icon: string | null) => {
+    if (!runtime || !workspaceId) return;
+    void createLinkWithToast({
+      runtime,
+      workspaceId,
+      source: { kind: "entity-drag", entityType: ref.type, entityId: ref.id, label, icon },
+      target: { kind: "link-target", entityType: "note", entityId: noteId },
+      origin: "manual",
+      onChanged: reload,
+    });
+  };
 
+  const now = new Date();
   return (
-    <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto scrollbar-thin pb-6">
-      {/* key: remount per note so tag state never leaks across a focus switch. */}
-      <EntityTagRow
-        key={`note:${noteId}`}
+    <div className="pane-scroll flex h-full min-h-0 flex-col gap-5 overflow-y-auto scrollbar-thin pb-6">
+      <div className="flex flex-col">
+        <PropertyRow label="Location">
+          <span className="min-w-0 break-words font-sans text-sm text-foreground">{location}</span>
+        </PropertyRow>
+        <PropertyRow label="Created">
+          <span className="font-sans text-sm text-foreground">{feedTime(note.createdAt, now)}</span>
+        </PropertyRow>
+        <PropertyRow label="Edited">
+          <span className="min-w-0 break-words font-sans text-sm text-foreground">
+            {feedTime(note.updatedAt, now)}
+            {editedBy ? ` by ${editedBy}` : ""}
+          </span>
+        </PropertyRow>
+        <PropertyRow label="Tags" align="start">
+          {/* key: remount per note so tag state never leaks across notes. */}
+          <EntityTagRow
+            key={`note:${noteId}`}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            focus={focus}
+            canEdit={canEdit}
+            variant="property"
+            className="min-h-(--ctrl-h-sm) flex-1"
+          />
+        </PropertyRow>
+      </div>
+      <LinkedSection
+        focus={focus}
+        rows={sections.flatMap((s) => s.rows)}
+        status={status}
+        canEdit={canEdit}
         runtime={runtime}
         workspaceId={workspaceId}
-        focus={focus}
-        canEdit={canEdit}
-      />
-      {canEdit ? (
-        <EntityLinkSuggestions
-          runtime={runtime}
-          workspaceId={workspaceId}
-          focus={focus}
-          onLinked={reload}
-        />
-      ) : null}
-      <EntityHub
-        variant="rail"
-        focus={focus}
-        status={status}
-        sections={sections}
-        canEdit={canEdit}
-        onOpen={onOpenEntity}
-        onChangeKind={onChangeKind}
-        onUnlink={onUnlink}
+        onLink={linkEntity}
+        onUnlink={(row) => {
+          if (!runtime || !workspaceId) return;
+          void runtime.spine
+            .deleteLink({ workspaceId, linkId: row.link.id })
+            .then(reload)
+            .catch(sayUnlinkFailed);
+        }}
         onRetry={reload}
       />
-      <ActivityTrail
-        activity={activity}
-        currentUserId={currentUserId}
-        now={new Date()}
-        entityId={noteId}
-      />
+      <Separator />
+      <div>
+        <CollectionHeader label="Activity" />
+        {activity.length === 0 ? (
+          <p className="font-sans text-sm text-muted-foreground">Nothing yet.</p>
+        ) : null}
+        <ActivityTrail
+          activity={activity}
+          currentUserId={currentUserId}
+          now={now}
+          entityId={noteId}
+          showHeading={false}
+        />
+      </div>
     </div>
   );
 }

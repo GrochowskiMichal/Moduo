@@ -10,12 +10,14 @@
  */
 
 import { DndContext, PointerSensor, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell";
+import { onSearchRequest } from "../../../components/app/search-events";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
 import type { EntityRef } from "../../../lib/entity-links";
+import { undoToast } from "../../../lib/undo-toast";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { dispatchLayoutPanelsSet, useFeaturePanelState } from "../../layout/panel-events";
@@ -26,8 +28,9 @@ import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
 import { useNoteLinkDrop } from "../hooks/use-note-link-drop";
 import { useNoteRealtime } from "../hooks/use-note-realtime";
 import { useTrashWithTaskDetach } from "../hooks/use-trash-with-task-detach";
+import type { Note } from "../model";
 import { noteEditorName } from "../note-meta";
-import { shapeNoteSearchResults } from "../search";
+import { isPublished } from "../publish";
 import { displayTitle } from "../title";
 import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
@@ -68,7 +71,41 @@ function NotesShellBody() {
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
   const [importOpen, setImportOpen] = useState(false);
   const [footerView, setFooterView] = useState<FooterView | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const panels = useFeaturePanelState("notes");
+  const panelsRef = useRef(panels);
+  useEffect(() => {
+    panelsRef.current = panels;
+  });
+
+  // The bottom bar's Search finds notes while Notes is open (its sidebar
+  // search, opened with the sidebar if it was collapsed); ⌘K stays global.
+  const openSearch = useCallback(() => {
+    const { left, right } = panelsRef.current;
+    if (!left) dispatchLayoutPanelsSet({ feature: "notes", left: true, right });
+    setFooterView(null);
+    setSearchOpen(true);
+    // Already open: put the caret back in the box.
+    requestAnimationFrame(() =>
+      document.querySelector<HTMLInputElement>('[data-slot="notes-search"] input')?.focus(),
+    );
+  }, []);
+  useEffect(
+    () =>
+      onSearchRequest(() => {
+        openSearch();
+        return true;
+      }),
+    [openSearch],
+  );
+  const searchText = useCallback(
+    (query: string) =>
+      runtime && workspaceId
+        ? runtime.notesV2.search({ workspaceId, query, limit: 30 })
+        : Promise.resolve([]),
+    [runtime, workspaceId],
+  );
 
   const isDraft = draft !== null && selectedId === draft.id;
   const liveNote = selectedNote && !selectedNote.deletedAt ? selectedNote : null;
@@ -91,6 +128,7 @@ function NotesShellBody() {
     workspaceId,
     noteId: editorNoteId,
     noteLabel: displayTitle(selectedNote?.title ?? ""),
+    onShowPanel: () => shell.setPanelOpen(true),
   });
   const trashWithDetach = useTrashWithTaskDetach({
     runtime,
@@ -99,41 +137,86 @@ function NotesShellBody() {
     deleteTask: tasks.deleteTask,
   });
   const actions = useShellActions(shell, trashWithDetach);
-  const search = useCallback(
-    (q: string) =>
-      runtime && workspaceId
-        ? runtime.notesV2
-            .search({ workspaceId, query: q })
-            .then((rows) => shapeNoteSearchResults(rows, q))
-        : Promise.resolve([]),
-    [runtime, workspaceId],
-  );
 
   // The editor ↔ module bridge (NO-4): page rows read live titles, a click
   // opens the note, `/page` creates a child of the open note.
+  // Warm the notes you're likely to open (favorites, then the latest edited)
+  // while the browser is idle, so they open with their content at once.
+  const warmedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!engine || !module.listFresh || !workspaceId || warmedFor.current === workspaceId) return;
+    warmedFor.current = workspaceId;
+    const ids = [
+      ...favorites.map((f) => f.noteId),
+      ...[...notes]
+        .filter((n) => !n.deletedAt && !n.isArchived)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 4)
+        .map((n) => n.id),
+    ];
+    const queue = [...new Set(ids)].slice(0, 8);
+    const idle = (cb: () => void) => {
+      if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(cb);
+      else setTimeout(cb, 200);
+    };
+    const next = () => {
+      const id = queue.shift();
+      if (!id) return;
+      void engine.getOrCreateSession(id);
+      idle(next);
+    };
+    idle(next);
+  }, [engine, module.listFresh, workspaceId, favorites, notes]);
+
+  // Stable across note-list changes (a rename, a refresh): the list and the
+  // module ride refs, so the open editor and its plugins aren't re-rendered
+  // and re-subscribed every time any note changes.
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
+  const notesListeners = useRef(new Set<() => void>());
+  useEffect(() => {
+    for (const listener of notesListeners.current) listener();
+  }, [notes]);
+  const moduleRef = useRef(module);
+  moduleRef.current = module;
   const bridge = useMemo<NotesEditorBridge>(
     () => ({
-      getNoteMeta: (id) => notes.find((n) => n.id === id) ?? null,
+      getNoteMeta: (id) => notesRef.current.find((n) => n.id === id) ?? null,
       openNote: (id) => shell.select(id),
       // A draft like the sidebar's "+": it reaches the server only once typed
       // in, so a `/page` you leave empty leaves nothing behind.
-      createChildNote: () => (liveNote ? shell.openDraft(liveNote.id) : null),
+      createChildNote: () => (liveNoteId ? shell.openDraft(liveNoteId) : null),
       tasks: tasks.taskBridge,
-      listNotes: () => notes,
+      listNotes: () => notesRef.current,
       createLinkedNote: (title) =>
         engine && canEdit
-          ? createLinkedNote({ engine, materializeDraft: module.materializeDraft, title })
+          ? createLinkedNote({
+              engine,
+              materializeDraft: moduleRef.current.materializeDraft,
+              title,
+            })
+          : null,
+      createSubpage: (title) =>
+        engine && canEdit && liveNoteId
+          ? createLinkedNote({
+              engine,
+              materializeDraft: moduleRef.current.materializeDraft,
+              title,
+              parentId: liveNoteId,
+            })
           : null,
       openComments: () => shell.showPanelVariant("comments"),
-      subpagesListedFor: liveNote?.id,
+      subpagesListedFor: liveNoteId ?? undefined,
+      subscribeNotes: (listener) => {
+        notesListeners.current.add(listener);
+        return () => notesListeners.current.delete(listener);
+      },
     }),
     [
-      notes,
       shell.select,
       shell.openDraft,
       shell.showPanelVariant,
-      liveNote,
-      module,
+      liveNoteId,
       tasks.taskBridge,
       engine,
       canEdit,
@@ -169,12 +252,14 @@ function NotesShellBody() {
   const openEntity = useCallback(
     (ref: EntityRef) => {
       if (ref.type === "note") shell.select(ref.id);
+      // A task opens in the panel beside the note, never by leaving Notes.
+      else if (ref.type === "task") tasks.taskBridge.openTaskDetail(ref.id);
       else
         window.dispatchEvent(
           new CustomEvent("moduo:entity:open", { detail: { type: ref.type, id: ref.id } }),
         );
     },
-    [shell.select],
+    [shell.select, tasks.taskBridge],
   );
 
   const openSection = useCallback(
@@ -217,52 +302,56 @@ function NotesShellBody() {
     );
   }
 
-  const shareable = liveNote && !degraded && runtime;
+  // Share… and Publish… from a row's menu open on that row (rowPopover).
+  const members = workspace.members
+    .filter((m) => m.isActive && !m.removedAt)
+    .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }));
+  const closeRowPopover = (open: boolean) => {
+    if (!open) actions.setRowPopover(null);
+  };
+  const rowPopover = (note: Note, rowKey: string) => {
+    const pop = actions.rowPopover;
+    if (!pop || pop.noteId !== note.id || pop.rowKey !== rowKey || !runtime) return null;
+    if (note.isArchived || degraded) return null;
+    if (pop.kind === "share") {
+      return (
+        <ShareMenu
+          key={`share:${note.id}`}
+          anchor="parent"
+          defaultOpen
+          onOpenChange={closeRowPopover}
+          resourceType="note"
+          resourceId={note.id}
+          inheritsFromParent={note.shareMode === "inherit" && note.parentId != null}
+          selfUserId={userId}
+          members={members}
+        />
+      );
+    }
+    return (
+      <NotePublishControl
+        anchor="parent"
+        open
+        onOpenChange={closeRowPopover}
+        note={note}
+        notes={notes}
+        canEdit={canEdit && workspace.can("ws.publish")}
+        publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
+        onPublish={() => module.publishNote(note.id)}
+        onUnpublish={() => module.unpublishNote(note.id)}
+      />
+    );
+  };
+
   const topBar = (
     <NotesTopBar
       crumbs={selectedId ? buildBreadcrumb(notes, selectedId, draft) : []}
-      note={liveNote}
       viewers={viewers}
       signal={
         module.syncStatus === "offline" ? "unsynced" : module.loadError !== null ? "stale" : null
       }
-      canEdit={canEdit && !degraded}
-      favorite={liveNote ? favoritePositions.has(liveNote.id) : false}
-      hasChildren={liveNote ? notes.some((n) => n.parentId === liveNote.id && !n.deletedAt) : false}
-      share={
-        shareable ? (
-          <ShareMenu
-            key={liveNote.id}
-            resourceType="note"
-            resourceId={liveNote.id}
-            inheritsFromParent={liveNote.shareMode === "inherit" && liveNote.parentId != null}
-            selfUserId={userId}
-            members={workspace.members
-              .filter((m) => m.isActive && !m.removedAt)
-              .map((m) => ({ userId: m.userId, name: m.displayName?.trim() || "Member" }))}
-          />
-        ) : null
-      }
-      publish={
-        shareable && (liveNote.publishToken || actions.publishOpen) ? (
-          <NotePublishControl
-            note={liveNote}
-            notes={notes}
-            canEdit={canEdit && workspace.can("ws.publish")}
-            publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
-            onPublish={() => module.publishNote(liveNote.id)}
-            onUnpublish={() => module.unpublishNote(liveNote.id)}
-            open={actions.publishOpen}
-            onOpenChange={actions.setPublishOpen}
-          />
-        ) : null
-      }
-      panelOpen={shell.panelOpen}
-      onTogglePanel={() => shell.setPanelOpen(!shell.panelOpen)}
       onOpenNote={(id) => shell.select(id)}
       onOpenSection={openSection}
-      onAction={actions.onAction}
-      onFullWidthChange={(note, fullWidth) => module.setFullWidth(note.id, fullWidth)}
     />
   );
 
@@ -290,20 +379,38 @@ function NotesShellBody() {
               footerView={footerView}
               onFooterViewChange={setFooterView}
               onOpen={(id) => shell.select(id)}
+              onAction={actions.onAction}
+              rowPopover={rowPopover}
+              canShare={members.length > 1}
+              onWarm={(id) => void engine?.getOrCreateSession(id)}
               onNewCapture={() => shell.openDraft(null)}
               onNewPage={() => shell.openDraft(null, { toPages: true })}
               onCreateChild={(parentId) => shell.openDraft(parentId)}
-              onAction={actions.onAction}
               onDropIntent={actions.applyIntent}
               onUnarchive={(id) => module.archiveNote(id, false)}
               onTrash={actions.trash}
+              onUnfavorite={(id, opts) => {
+                module.setFavorite(id, false);
+                if (opts?.undoable) {
+                  undoToast("Removed from favorites", {
+                    onUndo: () => module.setFavorite(id, true),
+                  });
+                }
+              }}
               onRestore={module.restoreNote}
               onPurge={(id) => {
                 void module.purgeNote(id);
                 if (selectedId === id) shell.select(null, true);
               }}
-              onSearch={runtime && !degraded ? search : undefined}
               onImport={canEdit && !degraded ? () => setImportOpen(true) : undefined}
+              search={{
+                open: searchOpen,
+                query: searchQuery,
+                onQueryChange: setSearchQuery,
+                onOpenChange: (open) => (open ? openSearch() : setSearchOpen(false)),
+                notes,
+                searchText,
+              }}
             />
           }
           center={
@@ -315,7 +422,8 @@ function NotesShellBody() {
               editorNoteId={editorNoteId}
               note={selectedNote}
               isDraft={isDraft}
-              editable={canEdit && !degraded}
+              // An archived note reads, it doesn't take edits (unarchive first).
+              editable={canEdit && !degraded && !(liveNote?.isArchived ?? false)}
               degraded={degraded}
               loading={loading}
               canEdit={canEdit && !degraded}
@@ -325,9 +433,24 @@ function NotesShellBody() {
                 else if (editorNoteId) module.renameNote(editorNoteId, title);
               }}
               onRestore={module.restoreNote}
+              onUnarchive={(id) => module.archiveNote(id, false)}
               onOpenEntity={openEntity}
               onOpenDetail={() => shell.showPanelVariant("detail")}
               memberName={(id) => noteEditorName(id, userId, workspace.members)}
+              onOpenComments={() => shell.showPanelVariant("comments")}
+              publicChip={
+                liveNote && isPublished(liveNote) && runtime ? (
+                  <NotePublishControl
+                    anchor="chip"
+                    note={liveNote}
+                    notes={notes}
+                    canEdit={canEdit && workspace.can("ws.publish")}
+                    publishedUrl={(token) => runtime.notesV2.publishedUrl(token)}
+                    onPublish={() => module.publishNote(liveNote.id)}
+                    onUnpublish={() => module.unpublishNote(liveNote.id)}
+                  />
+                ) : null
+              }
             />
           }
           right={
@@ -342,6 +465,19 @@ function NotesShellBody() {
               variant={shell.panelVariant}
               onVariantChange={shell.showPanelVariant}
               taskBridge={tasks.taskBridge}
+              location={
+                liveNote
+                  ? buildBreadcrumb(notes, liveNote.id, draft)
+                      .slice(0, -1)
+                      .map((c) => c.label)
+                      .join(" › ")
+                  : ""
+              }
+              editedBy={
+                liveNote?.editedBy
+                  ? noteEditorName(liveNote.editedBy, userId, workspace.members)
+                  : null
+              }
               taskDetailId={tasks.taskDetailId}
               onTaskDetail={tasks.setTaskDetailId}
               onOpenEntity={openEntity}

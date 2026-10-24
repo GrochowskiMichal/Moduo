@@ -5,7 +5,7 @@
  */
 
 import { FileText, FolderOpen, Inbox } from "lucide-react";
-import { type CSSProperties, useMemo } from "react";
+import { type CSSProperties, useEffect, useMemo, useRef } from "react";
 
 import {
   CommandDialog,
@@ -21,6 +21,7 @@ import type { SidebarSections } from "../sections";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import type { DropTarget } from "./drop-intent";
+import { returnFocusToRow } from "./sidebar-tree";
 
 type Destination = { key: string; label: string; depth: number; target: DropTarget };
 
@@ -55,6 +56,11 @@ export function MoveToDialog({
   onPick: (target: DropTarget) => void;
 }) {
   const pages = useMemo(() => (note ? destinations(sections, note.id) : []), [note, sections]);
+  // The note is gone from the props by the time the dialog finishes closing.
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    if (note) last.current = note.id;
+  }, [note]);
   const pick = (target: DropTarget) => {
     onPick(target);
     onOpenChange(false);
@@ -65,6 +71,7 @@ export function MoveToDialog({
       onOpenChange={onOpenChange}
       title="Move to"
       description="Choose where this note goes."
+      onCloseAutoFocus={(e) => returnFocusToRow(last.current, e)}
     >
       <CommandInput placeholder={`Move “${displayTitle(note?.title ?? "")}” to…`} />
       <CommandList>

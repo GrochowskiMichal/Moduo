@@ -1,6 +1,6 @@
 ---
 name: moduo-design-quality
-description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against apps/app/src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with the prototype skill or /design).
+description: Enforce Moduo's design system AND build/redesign UI with taste. Audits or fixes changed components against apps/app/src/styles/tokens.css + docs/DESIGN_RULES.md (R1–R10) — flags raw hex / arbitrary Tailwind / inline-style color / motion-token bypass / anti-slop, checks relational rules a regex can't, and returns a severity-bucketed Before/After report. Modes audit (default) · polish (audit+fix) · build-with-taste · motion-pass. Use after editing UI, before shipping, for a token/quality pass, or to craft a token-driven component. NOT for planning, IA, briefs, or running the design process from scratch — that is /s1 (with mattpocock-skills:prototype or /design).
 ---
 
 # moduo-design-quality
@@ -68,3 +68,6 @@ Token-driven from line one. Match the **shape** of the experience, not just the 
 
 ## This skill is not the design process
 It works on **changed components against an existing token + rule system**. It does not grill, write briefs, do IA, pick a design direction from scratch, or run phases 1–6. If the task is "plan/design a new feature from zero," that's `/s1`.
+
+## Next to the product lab
+`/product-studio` (whole surfaces, state-first) and `/product-jury` (blind scoring) read this skill as Moduo's **house rules**: when they disagree with a generic default, this skill and `docs/DESIGN_RULES.md` win. `/product-lab` measures what this skill only reads: its `system` gate is token conformance over the rendered app (`.lab/<run>/tokens.json`, near-misses against `tokens.css`), so after a polish pass `node .claude/skills/product-lab/scripts/lab.mjs --only tokens,a11y --screens <id>` shows whether the drift actually went away.

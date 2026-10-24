@@ -21,7 +21,7 @@ import { displayTitle } from "../title";
 import { NoteCommentsPanel } from "../ui/note-comments-panel";
 import { NoteDetailPanel } from "../ui/note-detail-panel";
 import { NoteOutlinePanel } from "../ui/note-outline-panel";
-import { getEditorSelectionQuote, scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
+import { scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
 
 export function NotesRightPanel({
   runtime,
@@ -34,6 +34,8 @@ export function NotesRightPanel({
   variant,
   onVariantChange,
   taskBridge,
+  location,
+  editedBy,
   taskDetailId,
   onTaskDetail,
   onOpenEntity,
@@ -49,6 +51,10 @@ export function NotesRightPanel({
   variant: NotesPanelVariantId;
   onVariantChange: (variant: NotesPanelVariantId) => void;
   taskBridge: NotesTaskBridge;
+  /** Where the open note sits ("Pages › Clients"), for Details. */
+  location: string;
+  /** Its last human editor's name, for Details. */
+  editedBy?: string | null;
   taskDetailId: string | null;
   onTaskDetail: (id: string | null) => void;
   onOpenEntity: (ref: EntityRef) => void;
@@ -69,7 +75,9 @@ export function NotesRightPanel({
         <NoteDetailPanel
           runtime={runtime}
           workspaceId={workspaceId}
-          noteId={note.id}
+          note={note}
+          location={location}
+          editedBy={editedBy}
           canEdit={canEdit}
           currentUserId={userId}
           onOpenEntity={onOpenEntity}
@@ -84,7 +92,7 @@ export function NotesRightPanel({
         noteLabel={displayTitle(note.title)}
         canComment={canComment}
         currentUserId={userId}
-        getSelectionQuote={getEditorSelectionQuote}
+        canModerate={canEdit}
         onScrollToQuote={scrollEditorToQuote}
       />
     ),

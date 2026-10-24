@@ -57,6 +57,16 @@ export function $unanchor(anchorId: string): void {
   }
 }
 
+/** Each thread's first mark, in one walk (the margin measures every open
+ * thread on each change; a walk per thread grew with threads × blocks). */
+export function $firstMarkKeys(): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const mark of $marks()) {
+    for (const id of mark.getIDs()) if (!out.has(id)) out.set(id, mark.getKey());
+  }
+  return out;
+}
+
 /** The first mark carrying a thread id, for scrolling to it. */
 export function $firstMarkKey(anchorId: string): string | null {
   return (
