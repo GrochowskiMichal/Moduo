@@ -218,4 +218,25 @@ describe("createLayoutRepo", () => {
     await repo.save("w1", layout([widget("q", 0, 0)]));
     expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("q");
   });
+
+  it("a placeholder edit stays unconfirmed across a remount, so the real layout still wins", async () => {
+    const real = stored(layout([widget("real", 0, 0)]), "2026-07-01T00:00:00.000Z");
+    const { runtime, cloud } = fakeRuntime({ cloud: real, throwGet: true });
+    // Mount 1: failed read, edit the placeholder.
+    const first = createLayoutRepo(runtime, { now, debounceMs: 0 });
+    await first.load("w1");
+    await first.save("w1", layout([widget("p1", 0, 0)]));
+    // Mount 2 (a new repo on the same device store): the read fails again.
+    const second = createLayoutRepo(runtime, { now, debounceMs: 0 });
+    const loaded = await second.load("w1");
+    expect(loaded.layout.pages[0].widgets[0].id).toBe("p1");
+    await second.save("w1", layout([widget("p2", 0, 0)]));
+    expect(cloud.saveCount).toBe(0); // never pushed over the real row
+    // Back online: the account's real layout wins.
+    cloud.throwGet = false;
+    const third = createLayoutRepo(runtime, { now, debounceMs: 0 });
+    const back = await third.load("w1");
+    expect(back.origin).toBe("cloud");
+    expect(back.layout.pages[0].widgets[0].id).toBe("real");
+  });
 });

@@ -129,10 +129,12 @@ export function createLayoutRepo(
       unconfirmed.delete(workspaceId);
     } catch {
       // offline / signed-out / not-deployed → local-only mode. A failed read says
-      // nothing about the cloud row, so with no cache this is a placeholder, not a seed.
-      if (!cache) {
+      // nothing about the cloud row, so with no cache this is a placeholder, not a
+      // seed. A cache still carrying the placeholder stamp is an edit of one made
+      // by an earlier mount (the hook makes a new repo per mount): still unconfirmed.
+      if (!cache || cache.updatedAt === PLACEHOLDER_STAMP) {
         unconfirmed.add(workspaceId);
-        return resolveLoad(null, null, PLACEHOLDER_STAMP);
+        return resolveLoad(cache, null, PLACEHOLDER_STAMP);
       }
     }
     const resolved = resolveLoad(cache, cloud, now());

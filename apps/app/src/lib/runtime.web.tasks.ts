@@ -146,7 +146,8 @@ async function ensureWebInbox(workspaceId: string): Promise<Bucket> {
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
-  const { data: existing } = await find();
+  const { data: existing, error: findError } = await find();
+  if (findError) throw new DbError(findError);
   if (existing) return bucketRowToModel(existing);
   const now = new Date().toISOString();
   const { data, error } = await supabaseClient
