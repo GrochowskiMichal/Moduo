@@ -19,6 +19,12 @@ The regression tests stay next to the code they cover (they run in the normal su
 | [509-4](509-4-stale-derived-field/README.md) | derived field drifts | `apps/app/src/features/tasks/due-on.test.ts` |
 | [509-5](509-5-decode-failure-then-delete/README.md) | decode failure read as empty, then overwritten | `apps/desktop/src-tauri` (two Rust tests) |
 
+## Fixed variants
+
+| Escape | Seed | Tests |
+| --- | --- | --- |
+| [644-1](644-1-error-read-as-empty/README.md) | 509-1 | tasks runtime, dashboard layout, Google calendars, rename (five tests) |
+
 ## Adding an escape
 
 1. Write the failing test first (bug lane), then fix.
