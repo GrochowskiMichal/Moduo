@@ -1,0 +1,23 @@
+{
+  "id": "569-late-write-to-disposed-store",
+  "title": "A write on its way when its store stops is lost when it then fails",
+  "mechanism": "disposed-sink",
+  "sites": ["apps/app/src/lib/sync/store.ts", "apps/app/src/lib/sync/cache.ts"],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.order.test.ts",
+      "name": "MOD-569: a check-off on its way at sign-out that then fails is kept for the person, and sent when they're back",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.order.test.ts",
+      "name": "MOD-569: one that fails after the person is back joins the new store in front of their newer check-off",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts"
+    }
+  ],
+  "pr": 642,
+  "fixCommit": "a1623827b19c1f909ffb1e44343c9e5a39d5bc97",
+  "foundBy": "HV-17 outbox property harness (PR #626)"
+}
