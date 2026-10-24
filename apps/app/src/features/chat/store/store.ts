@@ -1853,6 +1853,7 @@ export class ChatStore {
         if (!entry.attempted) {
           entry.attempted = true;
           this.metaDirty = true;
+          void this.persistNow();
         }
         this.touch(entry.channelId);
         this.notify();
@@ -1966,9 +1967,10 @@ export class ChatStore {
   remove(id: string): Promise<ChatWriteResult> {
     const entry = this.outbox.find((e) => e.id === id);
     if (entry) {
-      if (this.inFlight === id) {
-        // On its way: it may land on the server (even if its answer is lost),
-        // so it stays out of sight and is deleted there once it does.
+      // On its way, or sent before with its answer lost (a refused one never
+      // stored): it may be on the server, so it stays out of sight, is sent
+      // again, and is deleted there once it lands.
+      if (this.inFlight === id || (entry.attempted && !entry.failed)) {
         entry.deleted = true;
         this.touch(entry.channelId);
         this.metaDirty = true;

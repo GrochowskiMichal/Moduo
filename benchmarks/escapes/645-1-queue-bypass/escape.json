@@ -15,6 +15,12 @@
       "file": "apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts",
       "name": "while the network stays gone, a newer op queues behind the waiting one without a live try",
       "run": "bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts",
+      "name": "a newer op waits for an older one still on its way, even when that one then times out",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts"
     }
   ],
   "pr": 645,

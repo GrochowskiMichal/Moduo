@@ -21,6 +21,18 @@
       "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
       "name": "edited while sending and the answer is lost: edited once its echo lands",
       "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
+      "name": "an edit after a send whose answer was lost reaches the server when the resend lands",
+      "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
+      "name": "a delete after a send whose answer was lost deletes it on the server once the resend lands",
+      "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
     }
   ],
   "pr": 645,

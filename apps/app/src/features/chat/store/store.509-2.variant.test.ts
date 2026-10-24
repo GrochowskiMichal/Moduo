@@ -116,4 +116,20 @@ describe("HV-15 variant 509-2-outbox-overtaken: a chat edit jumps its own waitin
     expect(server.rows.get(id)?.body).toBe("the plan");
     expect(store.rowById(id)?.body).toBe("the plan");
   });
+
+  it("a delete after a send whose answer was lost deletes it on the server once the resend lands", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    server.loseAnswer.add("send");
+    const id = store.send({ channelId: C, body: "oops" });
+    await settle(20);
+    expect(server.rows.get(id)?.deletedAt ?? null).toBeNull();
+    expect(await store.remove(id)).toEqual({ ok: true });
+    window.dispatchEvent(new Event("online"));
+    await settle(40);
+    expect(server.rows.get(id)?.deletedAt).not.toBeNull();
+  });
 });
