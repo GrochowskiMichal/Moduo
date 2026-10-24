@@ -906,30 +906,40 @@ export class NotesSyncEngineV2 {
     // Each entry is tried once per pass (a delete that failed leaves it for the next wake).
     const tried = new Set<number>();
     // Re-read until drained: an op queued behind this replay goes in the same pass.
-    drain: for (;;) {
+    for (;;) {
       const entries = replayOrder(await readMetaOutbox(this.owner)).filter(
-        (e) => typeof e.key !== "number" || !tried.has(e.key),
+        (e) => typeof e.key === "number" && !tried.has(e.key),
       );
       if (entries.length === 0) break;
+      let stop = false;
       for (const entry of entries) {
-        if (!ownerLive(this.owner)) break drain;
-        let error: unknown = null;
-        try {
-          await this.callMetaOp(entry.kind, entry.args);
-        } catch (e) {
-          error = e;
+        tried.add(entry.key!);
+        const decision = await this.replayMetaEntry(entry);
+        if (decision === "stop") {
+          stop = true;
+          break;
         }
-        const decision = replayDecision(entry, error);
-        if (decision === "retry-later") break drain; // still offline — keep FIFO intact
-        // An entry without a key can't be deleted: stop rather than replay it forever.
-        if (typeof entry.key !== "number") break drain;
-        tried.add(entry.key);
-        await deleteMetaOutboxEntries([entry.key]);
         if (decision === "applied") replayedAny = true;
-        if (decision === "drop") console.warn("[notes-sync] dropped queued op", entry.kind, error);
       }
+      if (stop) break;
     }
     if (replayedAny) this.onRemoteMetaChange?.();
+  }
+
+  /** Replay one queued op; "stop" keeps it and everything after it queued (FIFO). */
+  private async replayMetaEntry(entry: MetaOutboxEntry): Promise<"applied" | "dropped" | "stop"> {
+    if (!ownerLive(this.owner)) return "stop";
+    let error: unknown = null;
+    try {
+      await this.callMetaOp(entry.kind, entry.args);
+    } catch (e) {
+      error = e;
+    }
+    const decision = replayDecision(entry, error);
+    if (decision === "retry-later") return "stop"; // still offline — keep FIFO intact
+    await deleteMetaOutboxEntries([entry.key!]);
+    if (decision === "drop") console.warn("[notes-sync] dropped queued op", entry.kind, error);
+    return decision === "applied" ? "applied" : "dropped";
   }
 
   /** Stopped by a sign-in or a sign-out (`persist: false`: its caches are being wiped). */

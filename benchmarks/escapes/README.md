@@ -19,6 +19,14 @@ The regression tests stay next to the code they cover (they run in the normal su
 | [509-4](509-4-stale-derived-field/README.md) | derived field drifts | `apps/app/src/features/tasks/due-on.test.ts` |
 | [509-5](509-5-decode-failure-then-delete/README.md) | decode failure read as empty, then overwritten | `apps/desktop/src-tauri` (two Rust tests) |
 
+## Variants found and fixed
+
+| Escape | Mechanism | Test |
+| --- | --- | --- |
+| [645-1](645-1-queue-bypass/README.md) | a Notes meta op jumps the queue (MOD-563) | `apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts` |
+| [645-2](645-2-queue-bypass/README.md) | a Chat edit jumps its own send (MOD-562) | `apps/app/src/features/chat/store/store.509-2.variant.test.ts` |
+| [645-3](645-3-error-as-empty/README.md) | a failed notes DB open reads as 0 to the Reset guard | `apps/app/src/features/notes/sync/idb-pending.test.ts` |
+
 ## Adding an escape
 
 1. Write the failing test first (bug lane), then fix.

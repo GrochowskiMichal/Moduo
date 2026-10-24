@@ -1,0 +1,23 @@
+{
+  "id": "645-1-queue-bypass",
+  "title": "A Notes rename or move goes live past an older queued one",
+  "mechanism": "queue-bypass",
+  "sites": ["apps/app/src/features/notes/sync/engine-v2.ts"],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts",
+      "name": "a rename made after an offline rename of the same note is the title that stays",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts",
+      "name": "while the network stays gone, a newer op queues behind the waiting one without a live try",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts"
+    }
+  ],
+  "pr": 645,
+  "fixCommit": "fd2ac715c706763af7e76c11a8d2dcfa7ae0a7e3",
+  "foundBy": "HV-15 variant hunt 2026-10-23 (MOD-563)"
+}

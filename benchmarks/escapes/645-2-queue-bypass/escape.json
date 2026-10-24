@@ -1,0 +1,29 @@
+{
+  "id": "645-2-queue-bypass",
+  "title": "A Chat edit jumps its own message's waiting send",
+  "mechanism": "queue-bypass",
+  "sites": ["apps/app/src/features/chat/store/store.ts"],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
+      "name": "editing a message while it is being sent keeps the edited words on the server",
+      "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
+      "name": "editing a send still waiting for the network sends the edited words, with no edit call",
+      "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/chat/store/store.509-2.variant.test.ts",
+      "name": "edited while sending and the answer is lost: edited once its echo lands",
+      "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+    }
+  ],
+  "pr": 645,
+  "fixCommit": "fd2ac715c706763af7e76c11a8d2dcfa7ae0a7e3",
+  "foundBy": "HV-15 variant hunt 2026-10-23 (MOD-562)"
+}

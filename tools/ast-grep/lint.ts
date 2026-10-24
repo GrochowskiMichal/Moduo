@@ -139,19 +139,23 @@ export function checkFixtures(): string[] {
       if (!files.some((f) => f.startsWith(`${kind}.`)))
         problems.push(`${id}: no fixtures/${kind}.*`);
     }
-    for (const f of files) {
-      const file = path.join(fixtures, f);
-      const lines = readFileSync(file, "utf8").split("\n");
-      const want = lines.flatMap((l, i) => (/^\s*\/\/\s*@flag\s*$/.test(l) ? [i + 2] : []));
-      if (f.startsWith("bad.") && want.length === 0) problems.push(`${id}/${f}: no // @flag line`);
-      const got = run(["scan", "--inline-rules", rule, file]).map((m) => m.range.start.line + 1);
-      const missed = want.filter((l) => !got.includes(l));
-      const extra = got.filter((l) => !want.includes(l));
-      if (missed.length) problems.push(`${id}/${f}: not flagged at line ${missed.join(", ")}`);
-      if (extra.length)
-        problems.push(`${id}/${f}: flagged unexpectedly at line ${extra.join(", ")}`);
-    }
+    for (const f of files) problems.push(...checkFixture(id, rule, fixtures, f));
   }
+  return problems;
+}
+
+/** One fixture: the rule flags exactly the line after each `// @flag`. */
+function checkFixture(id: string, rule: string, fixtures: string, f: string): string[] {
+  const problems: string[] = [];
+  const file = path.join(fixtures, f);
+  const lines = readFileSync(file, "utf8").split("\n");
+  const want = lines.flatMap((l, i) => (/^\s*\/\/\s*@flag\s*$/.test(l) ? [i + 2] : []));
+  if (f.startsWith("bad.") && want.length === 0) problems.push(`${id}/${f}: no // @flag line`);
+  const got = run(["scan", "--inline-rules", rule, file]).map((m) => m.range.start.line + 1);
+  const missed = want.filter((l) => !got.includes(l));
+  const extra = got.filter((l) => !want.includes(l));
+  if (missed.length) problems.push(`${id}/${f}: not flagged at line ${missed.join(", ")}`);
+  if (extra.length) problems.push(`${id}/${f}: flagged unexpectedly at line ${extra.join(", ")}`);
   return problems;
 }
 
