@@ -32,7 +32,7 @@ export interface LoadedLayout {
 }
 
 export interface LayoutRepo {
-  /** Cache-first load, cloud-newer replaces, seeds the default on a fresh user. Never throws. */
+  /** Cache-first load, cloud-newer replaces, seeds the default on a fresh user (a placeholder when the cloud read fails). Never throws. */
   load(workspaceId: string): Promise<LoadedLayout>;
   /** Persist a new layout: immediate local write + 1s-debounced cloud upsert. */
   save(workspaceId: string, layout: DashboardLayout): Promise<void>;
@@ -81,7 +81,7 @@ export function createLayoutRepo(
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: { workspaceId: string; layout: DashboardLayout; updatedAt: string } | null = null;
   // Workspaces whose cloud row is unknown: the cloud read failed and there was no
-  // cache, so what shows is a placeholder. Their saves stay local and carry the
+  // cache, or only one still at the placeholder stamp, so what shows is a placeholder. Their saves stay local and carry the
   // placeholder stamp, so the account's real layout wins at the next good read.
   const unconfirmed = new Set<string>();
 
@@ -138,6 +138,9 @@ export function createLayoutRepo(
       }
     }
     const resolved = resolveLoad(cache, cloud, now());
+    // A placeholder edit the cloud read has now confirmed (no row to lose) becomes
+    // a normal local layout, so the epoch stamp only ever means "unconfirmed".
+    if (resolved.updatedAt === PLACEHOLDER_STAMP) resolved.updatedAt = now();
     // Reflect the resolved truth back into the cache so a cloud adoption or a
     // fresh seed survives the next offline paint.
     await writeCache(workspaceId, { layout: resolved.layout, updatedAt: resolved.updatedAt });

@@ -214,6 +214,7 @@ describe("createLayoutRepo", () => {
     const again = await repo.load("w1");
     expect(again.origin).toBe("cache");
     expect(again.layout.pages[0].widgets[0].id).toBe("p");
+    expect(again.updatedAt).toBe(now()); // confirmed: re-stamped, no longer a placeholder
     // Confirmed now, so the next edit pushes as usual.
     await repo.save("w1", layout([widget("q", 0, 0)]));
     expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("q");
