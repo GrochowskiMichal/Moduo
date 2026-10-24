@@ -176,12 +176,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   },
   {
     rule: "sync-catch-returns-empty",
-    file: "apps/app/src/features/notes/sync/idb.ts",
-    snippet: "catch { return null; }",
-    why: "Candidate bug: A failed open makes countPendingOutbox read 0, so the reset-cache guard can wipe unsynced notes.",
-  },
-  {
-    rule: "sync-catch-returns-empty",
     file: "apps/app/src/features/notes/sync/people.ts",
     snippet: "catch { return []; }",
     why: "Risk: If databases can't be listed, a departed account's note doc caches stay on the device.",

@@ -47,6 +47,9 @@ export type ChatOutboxEntry = {
   failed?: string;
   /** Deleted while it was being sent: hidden, and deleted on the server once it lands there. */
   deleted?: boolean;
+  /** Edited after a send of it started: these words show, go with any resend, and
+   *  are edited onto the server row once it lands with other words. */
+  edited?: string;
   /** CV-9: how many files were uploading under its id when it was sent: it waits for them. */
   files?: number;
   /** CV-9: a message of files only whose files all stopped: Retry can't send it. */

@@ -194,7 +194,7 @@ export class NotesSyncEngineV2 {
   private status: NotesSyncStatusV2 = "synced";
   private destroyed = false;
   private detachWindow: (() => void) | null = null;
-  private replayingMeta = false;
+  private metaReplay: Promise<void> | null = null;
   /** Lazy drafts (NR-2): notes that exist only on this device until their
    * first character. Their sessions don't pull (there is nothing on the
    * server), and their edits stay out of the push outbox, so an untouched
@@ -794,25 +794,31 @@ export class NotesSyncEngineV2 {
 
   /** Run a metadata intent op with offline queueing: online → straight
    * through; network-dead → queue + resolve (the caller applied it
-   * optimistically); server rejection → rethrow (honest toast). */
+   * optimistically); server rejection → rethrow (honest toast). Ops stay in
+   * the order they were made: what already waits replays first, and while
+   * anything still waits this one queues behind it rather than overtaking it
+   * (an older rename replayed later would win; 509-2). */
   async runMetaOp(
     kind: MetaOutboxEntry["kind"],
     args: Record<string, unknown>,
   ): Promise<"applied" | "queued"> {
     if (!this.runtime) throw new Error("Runtime unavailable.");
-    try {
-      await this.callMetaOp(kind, args);
-      return "applied";
-    } catch (e) {
-      if (!isNetworkError(e)) throw e;
-      await enqueueMetaOp(this.owner, {
-        kind,
-        args,
-        queuedAt: Date.now(),
-      });
-      this.setStatus("offline");
-      return "queued";
+    await this.replayMetaOutbox();
+    if ((await readMetaOutbox(this.owner)).length === 0) {
+      try {
+        await this.callMetaOp(kind, args);
+        return "applied";
+      } catch (e) {
+        if (!isNetworkError(e)) throw e;
+      }
     }
+    await enqueueMetaOp(this.owner, {
+      kind,
+      args,
+      queuedAt: Date.now(),
+    });
+    this.setStatus("offline");
+    return "queued";
   }
 
   private callMetaOp(kind: MetaOutboxEntry["kind"], args: any): Promise<unknown> {
@@ -886,14 +892,27 @@ export class NotesSyncEngineV2 {
     }
   }
 
-  private async replayMetaOutbox(): Promise<void> {
-    if (!this.runtime || this.replayingMeta || !ownerLive(this.owner)) return;
-    this.replayingMeta = true;
+  /** One replay at a time; a caller that arrives mid-replay waits for it. */
+  private replayMetaOutbox(): Promise<void> {
+    if (!this.runtime || !ownerLive(this.owner)) return Promise.resolve();
+    this.metaReplay ??= this.replayMetaOutboxOnce().finally(() => {
+      this.metaReplay = null;
+    });
+    return this.metaReplay;
+  }
+
+  private async replayMetaOutboxOnce(): Promise<void> {
     let replayedAny = false;
-    try {
-      const entries = replayOrder(await readMetaOutbox(this.owner));
+    // Each entry is tried once per pass (a delete that failed leaves it for the next wake).
+    const tried = new Set<number>();
+    // Re-read until drained: an op queued behind this replay goes in the same pass.
+    drain: for (;;) {
+      const entries = replayOrder(await readMetaOutbox(this.owner)).filter(
+        (e) => typeof e.key !== "number" || !tried.has(e.key),
+      );
+      if (entries.length === 0) break;
       for (const entry of entries) {
-        if (!ownerLive(this.owner)) break;
+        if (!ownerLive(this.owner)) break drain;
         let error: unknown = null;
         try {
           await this.callMetaOp(entry.kind, entry.args);
@@ -901,13 +920,14 @@ export class NotesSyncEngineV2 {
           error = e;
         }
         const decision = replayDecision(entry, error);
-        if (decision === "retry-later") break; // still offline — keep FIFO intact
-        if (typeof entry.key === "number") await deleteMetaOutboxEntries([entry.key]);
+        if (decision === "retry-later") break drain; // still offline — keep FIFO intact
+        // An entry without a key can't be deleted: stop rather than replay it forever.
+        if (typeof entry.key !== "number") break drain;
+        tried.add(entry.key);
+        await deleteMetaOutboxEntries([entry.key]);
         if (decision === "applied") replayedAny = true;
         if (decision === "drop") console.warn("[notes-sync] dropped queued op", entry.kind, error);
       }
-    } finally {
-      this.replayingMeta = false;
     }
     if (replayedAny) this.onRemoteMetaChange?.();
   }

@@ -2,8 +2,8 @@
 // `runMetaOp` sends a rename (any meta op) straight to the server whenever it
 // can, without looking at the meta outbox, so an older rename queued while the
 // network was gone replays later (on the next wake) and wins over the newer
-// one. Fails until the fix lands.
-// Run: MODUO_HUNT=1 bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts
+// one. Fixed in MOD-563; un-parked.
+// Run: bun run --cwd apps/app test src/features/notes/sync/engine-v2.509-2.variant.test.ts
 
 import { describe, expect, it, rs } from "@rstest/core";
 
@@ -48,9 +48,7 @@ rs.mock("./idb", () => {
 
 import { NotesSyncEngineV2 } from "./engine-v2";
 
-const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
-
-hunt("HV-15 variant 509-2-outbox-overtaken: a live Notes meta op jumps a queued one", () => {
+describe("HV-15 variant 509-2-outbox-overtaken: a live Notes meta op jumps a queued one", () => {
   it("a rename made after an offline rename of the same note is the title that stays", async () => {
     let title = "Untitled";
     let networkUp = false;
@@ -80,6 +78,45 @@ hunt("HV-15 variant 509-2-outbox-overtaken: a live Notes meta op jumps a queued 
       await engine.wake();
       // In the order they were made: the newer title is the one that stays.
       expect(title).toBe("Final");
+    } finally {
+      await engine.destroy();
+    }
+  });
+
+  it("while the network stays gone, a newer op queues behind the waiting one without a live try", async () => {
+    let title = "Untitled";
+    let networkUp = false;
+    const tried: string[] = [];
+    const rename = rs.fn(async (args: { noteId: string; title: string }) => {
+      tried.push(args.title);
+      if (!networkUp) throw new TypeError("Failed to fetch");
+      title = args.title;
+      return { id: args.noteId, title: args.title };
+    });
+    const runtime = {
+      notesV2: {
+        rename,
+        pullDoc: async () => ({ snapshotB64: null, docVersion: 0, updates: [] }),
+        pushUpdates: async () => ({ inserted: 0 }),
+      },
+    } as unknown as ModuoRuntime;
+    outbox.rows = [];
+    const engine = new NotesSyncEngineV2(runtime, "ws-509-2", undefined, "user-509-2");
+    try {
+      const args = { workspaceId: "ws-509-2", noteId: "n1" };
+      expect(await engine.runMetaOp("rename", { ...args, title: "Draft" })).toBe("queued");
+      expect(await engine.runMetaOp("rename", { ...args, title: "Final" })).toBe("queued");
+      // The second op only retried the waiting one; it never went out ahead of it.
+      expect(tried).toEqual(["Draft", "Draft"]);
+      expect(outbox.rows.map((r) => (r.args as { title: string }).title)).toEqual([
+        "Draft",
+        "Final",
+      ]);
+      networkUp = true;
+      await engine.wake();
+      expect(tried.slice(2)).toEqual(["Draft", "Final"]);
+      expect(title).toBe("Final");
+      expect(outbox.rows).toEqual([]);
     } finally {
       await engine.destroy();
     }
