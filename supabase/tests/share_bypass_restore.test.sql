@@ -33,7 +33,7 @@ BEGIN
   PERFORM test.ok(test.value_as('V', format('SELECT title FROM public.tasks WHERE id = %L', test.id('TV'))) = 'Board task',
     'V can see the task they were shared at View');
   r := test.try('V', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%', 'a View share can''t rename the task', r);
+  PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'a View share can''t rename the task', r);
 
   -- V leaves workspace A by deleting their own membership.
   r := test.as_user('V', format('DELETE FROM public.workspace_members WHERE workspace_id = %L AND user_id = %L',
@@ -43,11 +43,13 @@ BEGIN
     'leaving puts share.bypass back the way it was', current_setting('share.bypass', true));
 
   -- Same transaction: B's checks still hold. (as_user keeps a write that
-  -- goes through, so the "unchanged" check below would see it.)
+  -- goes through, so the "unchanged" check below would see it.) A refusal is
+  -- the trigger's 42501, or 'ok 0' where RLS asks for Edit first
+  -- (20261024120000_tasks_buckets_rls_edit.sql).
   r := test.as_user('V', format($q$UPDATE public.tasks SET title = 'Mine now' WHERE id = %L$q$, test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%', 'after leaving A, V still can''t rename a task they only view in B', r);
+  PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'after leaving A, V still can''t rename a task they only view in B', r);
   r := test.as_user('V', format('UPDATE public.tasks SET owner_id = %L WHERE id = %L', test.id('V'), test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%', 'nor take it over', r);
+  PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'nor take it over', r);
   r := test.try('V', format('DELETE FROM public.tasks WHERE id = %L', test.id('TV')));
   PERFORM test.ok(r LIKE '42501%' OR r = 'ok 0', 'nor delete it', r);
   r := test.as_user('V', format('UPDATE public.buckets SET owner_id = %L WHERE id = %L', test.id('V'), test.id('PV')));

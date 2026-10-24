@@ -36,9 +36,12 @@ describe("every function that accepts a person's token refuses an app's", () => 
   });
 
   it("no file verifies a token itself or rewrites the Authorization header", () => {
-    // getUser() on its own would verify a string nobody checked for an app (MOD-570).
+    // getUser() on its own would verify a string nobody checked for an app (MOD-570);
+    // a client built with the caller's header would trust it unchecked.
     const offenders = files
-      .filter((f) => /\.auth\.(getUser|getClaims)\(|\bjwtVerify\(|\/auth\/v1\/user\b|replace\([^)]*Bearer/.test(read(f)))
+      .filter((f) =>
+        /\.auth\.(getUser|getClaims)\(|\bjwtVerify\(|\/auth\/v1\/user\b|replace\([^)]*Bearer|global\s*:\s*\{\s*headers/.test(read(f)),
+      )
       .map((f) => relative(FUNCTIONS, f));
     expect(offenders).toEqual([]);
   });
