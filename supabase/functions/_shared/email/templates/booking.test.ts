@@ -286,6 +286,8 @@ describe("booking emails · the host's name (MOD-575)", () => {
       "Secur\u0131ty Desk",
       "Modu\u00F8",
       "\uA731ecurity Desk",
+      "\u1D0D\u1D0F\u1D05\u1D1C\u1D0F",
+      "Sec\u028Arity",
     ]) {
       for (const kind of GUEST_KINDS) {
         const queued = BOOKING_QUEUED[kind](payload({ ...BOOKING_ZOOM_FIXTURE, hostName }));
@@ -323,7 +325,7 @@ describe("booking emails · the host's name (MOD-575)", () => {
     const queued = BOOKING_QUEUED.booking_guest_confirmed(payload({ ...BOOKING_FIXTURE, hostName: "Zoë O'Neill-Łukasz" }));
     expect(queued.fromName).toBe("Zoë O'Neill-Łukasz via Moduo");
     expect(renderEmail(queued.doc).subject).toBe("Booked: Zoë O'Neill-Łukasz, Fri 16 Oct at 14:00");
-    for (const real of ["Padmini Rao", "Kate Billington", "Søren Kierkegaard", "Đorđe Petrović", "प्रिया शर्मा"]) {
+    for (const real of ["Padmini Rao", "Kate Billington", "Paweł Ćwik", "Hållbar Øster", "Nguyễn Thị Minh Khai", "Søren Kierkegaard", "Đorđe Petrović", "प्रिया शर्मा"]) {
       expect(BOOKING_QUEUED.booking_guest_confirmed(payload({ ...BOOKING_FIXTURE, hostName: real })).fromName).toBe(
         `${real} via Moduo`,
       );

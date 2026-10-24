@@ -44,6 +44,22 @@ const OFFICIAL = /security|support|account|helpdesk|noreply|verification|complia
 /** Latin mixed with any other script ("Ѕecurity" with Cyrillic Ѕ, "ꓢecurity" with Lisu ꓢ) is a spoof, not a name. */
 const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])/u;
 
+/**
+ * Latin letters a name may use: any that become ASCII once accents are dropped
+ * (é, ñ, Ś), plus these. Small capitals, IPA and stroked look-alikes ("ᴍᴏᴅᴜᴏ",
+ * "Secʊrity") are not letters anyone's name is written in.
+ */
+const LATIN_EXTRA = new Set(Array.from("łøđßæœþðħıŋŧŀ"));
+
+function ordinaryLatin(flat: string): boolean {
+  for (const ch of flat) {
+    if (!/\p{Script=Latin}/u.test(ch)) continue;
+    const base = ch.normalize("NFKD").replace(/\p{M}/gu, "");
+    if (!/^[A-Za-z]+$/.test(base) && !LATIN_EXTRA.has(ch.toLowerCase())) return false;
+  }
+  return true;
+}
+
 /** One line, capped, invisible characters gone. */
 const visible = (value: string) => singleLine(value.replace(INVISIBLE, ""), TEXT_LIMITS.name);
 
@@ -80,7 +96,7 @@ export function plainBookerName(value: string): string {
  */
 export function plainPersonName(value: string): string | null {
   const flat = visible(value).replace(/\s+/g, " ").trim();
-  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC"))) return null;
+  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC")) || !ordinaryLatin(flat)) return null;
   if (OFFICIAL.test(skeleton(flat)) || squeezed(flat).includes("moduo")) return null;
   return flat;
 }

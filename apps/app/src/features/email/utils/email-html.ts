@@ -180,8 +180,9 @@ function sanitizeOnce(doc: Document, blockRemote: boolean): number {
   return walkRemoteRefs(doc, blockRemote);
 }
 
+/** With a doctype: the srcdoc frame parses in standards mode, so the settle check must too. */
 const serialize = (doc: Document) =>
-  `<head>${doc.head?.innerHTML ?? ""}</head><body>${doc.body?.innerHTML ?? ""}</body>`;
+  `<!doctype html><head>${doc.head?.innerHTML ?? ""}</head><body>${doc.body?.innerHTML ?? ""}</body>`;
 
 /** Plain text, escaped: what the reader shows for HTML that never settles. */
 function textOnly(doc: Document): string {
