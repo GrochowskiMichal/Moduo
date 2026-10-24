@@ -31,7 +31,7 @@ import {
   readConnectState,
   signConnectState,
 } from "../_shared/oauth-connect.ts";
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
 import { exchangeZoomCode, zoomConfigured } from "../_shared/zoom.ts";
@@ -72,12 +72,10 @@ Deno.serve(async (req: Request) => {
   }
 
   if (req.method !== "POST") return json({ error: "method" }, 405);
-  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!jwt) return json({ error: "unauthorized" }, 401);
-  if (isAppToken(jwt)) return json(APP_TOKEN_REFUSAL, 403);
-  const user = await db.auth.getUser(jwt);
-  if (user.error || !user.data.user) return json({ error: "unauthorized" }, 401);
-  const uid = user.data.user.id;
+  const caller = await verifiedPerson(db.auth, req.headers.get("Authorization"));
+  if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, 403);
+  if (caller.kind !== "person") return json({ error: "unauthorized" }, 401);
+  const uid = caller.user.id;
 
   let body: { action?: unknown; origin?: unknown; code?: unknown; state?: unknown } = {};
   try {
