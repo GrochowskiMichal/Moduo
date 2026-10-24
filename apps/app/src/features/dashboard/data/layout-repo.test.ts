@@ -200,4 +200,22 @@ describe("createLayoutRepo", () => {
     expect(loaded.origin).toBe("cache");
     expect(loaded.layout.pages[0].widgets[0].id).toBe("k");
   });
+
+  it("a failed cloud read with no cache shows a placeholder: not cached, edits stay local", async () => {
+    const { runtime, cloud, ls } = fakeRuntime({ throwGet: true });
+    const repo = createLayoutRepo(runtime, { now, debounceMs: 0 });
+    const loaded = await repo.load("w1");
+    expect(loaded.origin).toBe("seed");
+    expect(ls.get("dashboard:w1")).toBeUndefined(); // the placeholder is never cached
+    await repo.save("w1", layout([widget("p", 0, 0)]));
+    expect(cloud.saveCount).toBe(0); // an edit of the placeholder never reaches the cloud
+    // Back online and the account really has no row: the local edit is kept.
+    cloud.throwGet = false;
+    const again = await repo.load("w1");
+    expect(again.origin).toBe("cache");
+    expect(again.layout.pages[0].widgets[0].id).toBe("p");
+    // Confirmed now, so the next edit pushes as usual.
+    await repo.save("w1", layout([widget("q", 0, 0)]));
+    expect(cloud.row?.layout.pages[0].widgets[0].id).toBe("q");
+  });
 });
