@@ -27,6 +27,21 @@
             "type": "command",
             "asyncRewake": true,
             "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-design-tokens.sh\""
+          },
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-ast.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-ast.sh\""
           }
         ]
       }
