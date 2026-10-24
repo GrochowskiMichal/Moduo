@@ -1,0 +1,12 @@
+{
+  "name": "spike-tanstack-db",
+  "private": true,
+  "description": "Throwaway spike (not a workspace): TanStack DB as the Tasks store spine. See docs/local/spike-tanstack-db-tasks.md.",
+  "dependencies": {
+    "@tanstack/db": "0.15.1",
+    "@tanstack/react-db": "0.5.11",
+    "@tanstack/offline-transactions": "1.1.3",
+    "@tanstack/browser-db-sqlite-persistence": "0.2.36",
+    "@tanstack/tauri-db-sqlite-persistence": "0.2.36"
+  }
+}
