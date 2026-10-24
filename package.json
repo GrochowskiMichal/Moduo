@@ -59,6 +59,8 @@
     "format:fix": "bun scripts/bun-lint.ts --fix && bun fmt",
     "test": "turbo run test test:scripts",
     "test:scripts": "rstest -c scripts/rstest.config.ts",
+    "agent:auto-mode": "bun scripts/agent/auto-mode.ts",
+    "agent:lane": "bash scripts/agent/lane.sh",
     "test:watch": "bun run --cwd apps/app test:watch",
     "verify": "turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:css lint:notes size test test:scripts",
     "e2e": "bun run --cwd e2e e2e",

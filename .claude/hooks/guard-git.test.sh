@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for guard-git.sh (REL-6): long-lived branches protected, mirror branches no longer special.
-#   bash .claude/hooks/guard-git.test.sh   (also run by scripts/release/guard-git.test.ts)
+#   bash .claude/hooks/guard-git.test.sh   (also run by scripts/agent/hooks.test.ts)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 hook="$here/guard-git.sh"
@@ -82,5 +82,31 @@ cwd="$personal"
 expect 2 'git push --force-with-lease' 'lease force, no refspec, while on mike'
 expect 2 'git push origin HEAD:refs/heads/develop' 'HEAD to develop from mike'
 expect 0 'git push' 'plain push while on mike (merge-back)'
+
+# Branch switches in the main checkout (HV-1): blocked only while another Claude session works there.
+git init -q "$tmp/main" && main=$(cd "$tmp/main" && pwd -P) && git -C "$main" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$main" branch t/mike/other
+git -C "$main" worktree add -q "$tmp/wt" -b t/mike/wt
+cwd="$main"
+other=$(printf '424242\t%s' "$main")
+GUARD_GIT_CLAUDE_CWDS="" expect 0 'git checkout t/mike/other' 'switch in main, no other session'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 2 'git checkout t/mike/other' 'checkout branch in main, another session there'
+GUARD_GIT_CLAUDE_CWDS="$(printf '424242\t%s/apps/app' "$main")" expect 2 'git switch t/mike/other' 'switch, another session in a subfolder'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 2 'git checkout -b t/mike/new' 'checkout -b in main'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 2 'git status && git switch -c t/mike/new' 'switch -c in a chain'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 2 'git checkout -' 'checkout previous branch'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 0 'git checkout -- README.md' 'file restore in main'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 0 'git checkout t/mike/other -- README.md' 'file from another branch'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 0 'git checkout README.md' 'path that is not a branch'
+GUARD_GIT_CLAUDE_CWDS="$other" expect 0 'git switch --help' 'help'
+GUARD_GIT_CLAUDE_CWDS="$(printf '424242\t%s' "$tmp/wt")" expect 0 'git checkout t/mike/other' 'other session only in a worktree'
+git -C "$main" worktree add -q "$main/.claude/worktrees/nested" -b t/mike/nested
+GUARD_GIT_CLAUDE_CWDS="$(printf '424242\t%s/.claude/worktrees/nested' "$main")" expect 0 'git checkout t/mike/other' 'other session in a worktree nested in the main folder'
+GUARD_GIT_CLAUDE_CWDS="$(printf '424242\t%s-old' "$main")" expect 0 'git checkout t/mike/other' 'sibling folder with the same prefix'
+GUARD_GIT_CLAUDE_CWDS="$(printf '%s\t%s' "$$" "$main")" expect 0 'git checkout t/mike/other' 'only this session (an ancestor) is there'
+cwd="$tmp/wt"
+GUARD_GIT_CLAUDE_CWDS="$other" expect 0 'git switch t/mike/other' 'switch inside a linked worktree'
+cwd="$task"
+GUARD_GIT_CLAUDE_CWDS="$(printf '424242\t%s' "$main")" expect 2 "git -C $main checkout t/mike/other" 'git -C into the main checkout'
 
 if [ "$fails" = 0 ]; then echo "guard-git: all passed"; else echo "guard-git: $fails failed"; exit 1; fi
