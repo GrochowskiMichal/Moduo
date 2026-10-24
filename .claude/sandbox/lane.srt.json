@@ -40,7 +40,6 @@
       "~/.bun/install/cache",
       "~/.cache",
       "~/.claude",
-      "~/.claude.json",
       "~/Library/Caches"
     ],
     "denyWrite": [
@@ -64,7 +63,8 @@
       "~/.bun/bin",
       "~/.cache/pre-commit",
       "~/.cache/ms-playwright",
-      "~/.cache/puppeteer"
+      "~/.cache/puppeteer",
+      "~/.claude.json"
     ]
   }
 }

@@ -119,6 +119,8 @@ describe("lane profile", () => {
       expect(srt.filesystem.denyWrite).toContain(p);
     }
     expect(srt.filesystem.allowWrite).not.toContain("~/.bun");
+    expect(srt.filesystem.allowWrite).not.toContain("~/.claude.json");
+    expect(srt.filesystem.denyWrite).toContain("~/.claude.json");
   });
 });
 
@@ -153,7 +155,7 @@ describe("scripts/agent/lane.sh", () => {
     const out = path.join(bin, "srt.out");
     writeFileSync(
       path.join(bin, "srt"),
-      `#!/bin/bash\n{ echo "sandbox=$MODUO_LANE_SANDBOX lane=$MODUO_LANE"; echo "cmd=$3"; cat "$2"; } > "${out}"\n`,
+      `#!/bin/bash\n{ echo "sandbox=$MODUO_LANE_SANDBOX lane=$MODUO_LANE"; echo "cmd=$4"; cat "$2"; } > "${out}"\n`,
     );
     chmodSync(path.join(bin, "srt"), 0o755);
     const run = lane({ TURBO_API: "https://cache.example.workers.dev/v8" });
