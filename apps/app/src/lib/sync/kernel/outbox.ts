@@ -59,6 +59,21 @@ export class Outbox<E extends OutboxEntryBase> {
   }
 
   /**
+   * Put `entry` in front of the first entry `match` picks, or at the end when
+   * none does: a write that was on its way live is older than those. Answers
+   * whether it went in front of one.
+   */
+  pushBefore(entry: E, match: (entry: E) => boolean): boolean {
+    const i = this.entries.findIndex(match);
+    if (i < 0) {
+      this.entries.push(entry);
+      return false;
+    }
+    this.entries.splice(i, 0, entry);
+    return true;
+  }
+
+  /**
    * The entry to send next, or none. FIFO: the head, if `ready`. Hold: the
    * first entry that isn't failed and is `ready` (a Chat send waiting on its
    * files holds only itself).

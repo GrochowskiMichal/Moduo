@@ -1,8 +1,8 @@
 // HV-15 variant of benchmarks/escapes/509-2-outbox-overtaken: a bulk status
 // change (and a board drop) goes straight to the server while an older
 // check-off for the same task still waits in the outbox, so the older one
-// lands last and wins. Fails until the fix lands.
-// Run: MODUO_HUNT=1 bun run --cwd apps/app test src/features/tasks/commands/bulk-write.509-2.variant.test.ts
+// lands last and wins. Fixed by MOD-561: the bulk status part waits in the
+// outbox behind it, the drop's waits its turn.
 
 import { describe, expect, it, rs } from "@rstest/core";
 import { act, waitFor } from "@testing-library/react";
@@ -125,9 +125,7 @@ async function mountWithFlushingCheckOff() {
   return { server, hook, store };
 }
 
-const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
-
-hunt("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting check-off", () => {
+describe("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting check-off", () => {
   it("a bulk 'To do' on a task whose check-off is still flushing stays To do", async () => {
     const { server, hook } = await mountWithFlushingCheckOff();
     // The person reopens it from a selection before that answer comes back.

@@ -103,9 +103,9 @@ const RUNS = Number(process.env.FC_RUNS ?? 200);
 const PREF_RUNS = Number(process.env.FC_RUNS ?? 200);
 
 /** MOD-569 is open: see `Real.atRisk`. */
-const ALLOW_MOD_569 = true;
+const ALLOW_MOD_569 = false;
 /** MOD-587 is open: see `checkOff`. */
-const ALLOW_LIVE_RACE = true;
+const ALLOW_LIVE_RACE = false;
 
 const WS = "ws-1";
 const A = "u-a";

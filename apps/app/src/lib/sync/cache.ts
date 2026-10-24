@@ -49,12 +49,15 @@ export interface SyncCache {
   write(key: string, value: CachedWorkspace): Promise<void>;
   /**
    * Read and write one record in one step (one IndexedDB transaction): `next`
-   * gets what's stored and returns what to store. Two tabs writing at once
-   * can't drop each other's waiting captures. Resolves to what was stored.
+   * gets what's stored and returns what to store (null: delete the record).
+   * Two tabs writing at once can't drop each other's waiting captures.
+   * Resolves to what was stored; rejects when the record couldn't be read or
+   * written (never "nothing stored": a caller that cuts a copy down would
+   * delete what waits in it).
    */
   update(
     key: string,
-    next: (stored: CachedWorkspace | null) => CachedWorkspace,
+    next: (stored: CachedWorkspace | null) => CachedWorkspace | null,
   ): Promise<CachedWorkspace | null>;
   /** Every record's key. */
   keys(): Promise<string[]>;
@@ -85,7 +88,9 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
     async update(key, next) {
       const stored = records.get(key) ?? null;
       const before = stored ? structuredCloneSafe(stored) : null;
-      records.set(key, structuredCloneSafe(next(before)));
+      const value = next(before);
+      if (value) records.set(key, structuredCloneSafe(value));
+      else records.delete(key);
       return before;
     },
     async keys() {
@@ -137,22 +142,23 @@ export function idbCache(factory: IDBFactory): SyncCache {
       }
     },
     async update(key, next) {
-      try {
-        const store = await tx("readwrite");
-        // The get and the put share one transaction: nothing lands between them.
-        return await new Promise<CachedWorkspace | null>((resolve, reject) => {
-          const get = store.get(key);
-          get.onerror = () => reject(get.error);
-          get.onsuccess = () => {
-            const stored = (get.result as CachedWorkspace | undefined) ?? null;
-            const put = store.put(next(stored), key);
-            put.onerror = () => reject(put.error);
-            put.onsuccess = () => resolve(stored);
-          };
-        });
-      } catch {
-        return null;
-      }
+      const store = await tx("readwrite");
+      // The get and the put share one transaction: nothing lands between them.
+      return await new Promise<CachedWorkspace | null>((resolve, reject) => {
+        const get = store.get(key);
+        get.onerror = () => reject(get.error);
+        get.onsuccess = () => {
+          const stored = (get.result as CachedWorkspace | undefined) ?? null;
+          try {
+            const value = next(stored);
+            const write = value ? store.put(value, key) : store.delete(key);
+            write.onerror = () => reject(write.error);
+            write.onsuccess = () => resolve(stored);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
     },
     async keys() {
       try {
