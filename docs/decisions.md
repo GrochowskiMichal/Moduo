@@ -9,6 +9,10 @@ One line per locked product or architecture decision, grouped by area, newest fi
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
 - 2026-10-23 · HV-5: Tier 2 list lives once in `scripts/ci/tier.ts` (CI labels PRs from it); size/complexity ratchets frozen and run in verify; test-weakening detector advises, only `.only` fails → decisions/workflow.md
+- 2026-10-23 · HV-1: auto mode per person (`bun run agent:auto-mode`; project settings can't set it); bypass only inside `srt` lanes, enforced by `guard-lane.sh`; guards fail closed (`onFailure: "block"`) → decisions/workflow.md
+- 2026-10-23 · HV-2: `bun run wt` (ready worktree, own dev port via its launch.json) and `wt:prune` (merged PR + clean + no live process only); `moduo` at mcp.moduo.app; connector clean-up per person → decisions/workflow.md
+- 2026-10-23 · HV-3: skill references checked against a pinned plugin registry; user-only skills only on lines telling the person to type them; one advisory validator pass in /s2, none in /s3 → decisions/workflow.md
+- 2026-10-23 · HV-4: `db-test`, `rust-check` and `e2e-smoke` in checks.yml, path-filtered, skip = pass in `static-checks`; the test DB is a prod schema snapshot from `db-snapshot.yml` via the Actions cache; `db:test` has a known-failures baseline → decisions/workflow.md
 - 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; advisory AI review on PRs into develop; Maciej agreed → decisions/workflow.md
 - 2026-10-23 · `oven-sh/setup-bun` pinned to a commit in every workflow (it ran beside the signing keys and deploy tokens); the CodeQL backlog triaged and dismissed with reasons → decisions/workflow.md
 - 2026-10-22 · MOD-60: landing returns a real 404 page for unknown paths (`404-page`), no longer index.html with a 200.
@@ -248,6 +252,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-23 · The Impeccable pass on Notes: sidebar search back (titles here, text from the server) until NR-10; publish names its subpages first + a Public chip; one keyboard grammar (⇧F10/⌥↵ menus, ⌥F10 toolbar, ⌘⌥M comment, ⌘↵ tick); the spine leads the slash menu, Turn into Task/Page; 36rem measure; light secondary text 600 → decisions/notes.md
 - 2026-10-20 · Notes' caches (list, per-note documents, pull cursors) are keyed `person:workspace` and cut down to the outboxes on sign-out or a user switch; caches from before the update are deleted, their queued work stays nobody's → decisions/notes.md
 - 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
@@ -461,6 +466,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-23 · Product UI quality: `/product-lab` measures (gates by code), `/product-jury` scores blind (critics never see code or gates), `/product-studio` builds on the house system; weights 30/25/20/15/10; PR deltas measured, the jury at milestones; Impeccable only as a lab-pass detector with Moduo's fonts and Eyebrow waived (Maciej approved) → decisions/design-system.md
 - 2026-10-16 · `CollectionHeader`'s count is the tertiary level and 4 px sit under it when rows follow (Maciej, MOD-152; the `:has()` mechanism agent's) · the details, time entries, templates and the Project view all get it · rejected: a Project-only override, `not-last:mb-1` → decisions/design-system.md
 - 2026-10-16 · 8 px between panels, 16 at the window's edges (Maciej, MOD-162) · `--panel-gap` is the resize handle's width; the handle still grabs over 16 px through the library's `resizeTargetMinimumSize` · rejected: a pseudo-element hit area (the library hit-tests by geometry) → decisions/design-system.md
 - 2026-10-16 · A text field marks focus on its own edge (`--ring` at 50%), controls keep the 2 px ring, no ring is offset (Maciej, MOD-160; recipe agent's choice) · a field matches `:focus-visible` on every click, so the ring showed on every field · rejected: the ring on a cleared border, a soft halo → decisions/design-system.md

@@ -11,6 +11,7 @@ export default defineConfig({
     "scripts/smoke-hosting.test.ts",
     "scripts/dns-diff.test.ts",
     "scripts/db-types.test.ts",
+    "scripts/db-test.test.ts",
     "scripts/check-boundaries.test.ts",
     "scripts/check-bundle-size.test.ts",
   ],

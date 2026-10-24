@@ -2,7 +2,13 @@ import { $convertFromMarkdownString } from "@lexical/markdown";
 import { describe, expect, it } from "@rstest/core";
 import { $getRoot } from "lexical";
 
-import { $blockMenuFor, $deleteBlock, $duplicateBlock, $turnBlockInto } from "./block-actions";
+import {
+  $blockMenuFor,
+  $deleteBlock,
+  $duplicateBlock,
+  $isTextBlock,
+  $turnBlockInto,
+} from "./block-actions";
 import { $noteMarkdown, createNotesHeadlessEditor } from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";
 import { $createTaskLineNode } from "./schema/task-line-node";
@@ -23,6 +29,18 @@ describe("block menu", () => {
       "One\n\n- Two",
     );
     expect(run("# One", () => $turnBlockInto($getRoot().getFirstChild()!, "quote"))).toBe("> One");
+  });
+
+  it("turns a list into another list, or into one block per item", () => {
+    const list = () => $getRoot().getChildAtIndex(1)!;
+    expect(run("One\n\n- a\n- b", () => $turnBlockInto(list(), "number"))).toBe(
+      "One\n\n1. a\n2. b",
+    );
+    expect(run("One\n\n- a\n- b", () => $turnBlockInto(list(), "text"))).toBe("One\n\na\n\nb");
+    expect(run("One\n\n1. a\n2. b", () => $turnBlockInto(list(), "quote"))).toBe(
+      "One\n\n> a\n\n> b",
+    );
+    expect(run("One\n\n- [ ] a", () => $turnBlockInto(list(), "h2"))).toBe("One\n\n## a");
   });
 
   it("duplicates a block right under itself", () => {
@@ -51,6 +69,24 @@ describe("block menu", () => {
         turnInto: true,
         duplicate: true,
       });
+    });
+  });
+
+  it("offers Task and Page for a block of words only", () => {
+    const { editor } = createNotesHeadlessEditor("text-block");
+    editor.update(
+      () =>
+        $convertFromMarkdownString(
+          "Words\n\n## A heading\n\n- a list\n\n> said",
+          NOTES_TRANSFORMERS,
+        ),
+      { discrete: true },
+    );
+    editor.getEditorState().read(() => {
+      const kinds = $getRoot()
+        .getChildren()
+        .map((b) => $isTextBlock(b));
+      expect(kinds).toEqual([true, true, false, true]);
     });
   });
 });

@@ -27,6 +27,8 @@ import { type DropIntent, type DropTarget, resolveDropIntent } from "./drop-inte
 import type { RowAction } from "./row-menu";
 import type { NotesShellState } from "./use-notes-shell";
 
+export type RowPopover = { kind: "share" | "publish"; noteId: string; rowKey: string };
+
 export type SharingQuestion = { noteId: string; parentId: string; position: string };
 
 export function useShellActions(
@@ -37,7 +39,8 @@ export function useShellActions(
   const { notes, favorites, engine } = module;
   const [moveTarget, setMoveTarget] = useState<Note | null>(null);
   const [iconTarget, setIconTarget] = useState<Note | null>(null);
-  const [publishOpen, setPublishOpen] = useState(false);
+  /** Share… or Publish… from a row's menu: the popover opens on that row. */
+  const [rowPopover, setRowPopover] = useState<RowPopover | null>(null);
   const [sharingQuestion, setSharingQuestionState] = useState<SharingQuestion | null>(null);
   // The dialog can answer twice (the button, then its own close); the ref
   // makes the second answer a no-op.
@@ -156,7 +159,7 @@ export function useShellActions(
   );
 
   const onAction = useCallback(
-    (action: RowAction, note: Note) => {
+    (action: RowAction, note: Note, rowKey: string) => {
       switch (action) {
         case "favorite":
         case "unfavorite":
@@ -182,9 +185,13 @@ export function useShellActions(
         case "export-tree":
           void exportTree(note);
           return;
+        case "share":
         case "publish":
-          if (note.id !== selectedId) select(note.id);
-          setPublishOpen(true);
+          // After the menu has closed (it keeps focus where it is for these).
+          setTimeout(() => setRowPopover({ kind: action, noteId: note.id, rowKey }), 0);
+          return;
+        case "full-width":
+          module.setFullWidth(note.id, !note.fullWidth);
           return;
         case "archive": {
           const leaving = leaves(note.id);
@@ -208,8 +215,8 @@ export function useShellActions(
     iconTarget,
     setIconTarget,
     pickMoveTarget,
-    publishOpen,
-    setPublishOpen,
+    rowPopover,
+    setRowPopover,
     sharingQuestion,
     answerSharing,
   };

@@ -2,6 +2,7 @@
   "sizeLimit": 32768,
   "complexityLimit": 15,
   "size": {
+    ".claude/skills/product-lab/scripts/lab.mjs": 40059,
     "apps/app/src/features/calendar/ui/booking-link-dialog.tsx": 33840,
     "apps/app/src/features/calendar/ui/calendar-grid.tsx": 42404,
     "apps/app/src/features/chat/files/files.test.ts": 32872,
@@ -14,8 +15,9 @@
     "apps/app/src/features/focus/engine.test.ts": 42707,
     "apps/app/src/features/focus/engine.ts": 33375,
     "apps/app/src/features/focus/run.ts": 36835,
-    "apps/app/src/features/notes/editor/plugins/task-line-plugin.tsx": 46049,
-    "apps/app/src/features/notes/sync/engine-v2.ts": 35723,
+    "apps/app/src/features/notes/editor/plugins/task-line-plugin.tsx": 53744,
+    "apps/app/src/features/notes/sync/engine-v2.ts": 36401,
+    "apps/app/src/features/notes/ui/note-editor.tsx": 41345,
     "apps/app/src/features/settings/sections/api-keys-section.test.tsx": 33554,
     "apps/app/src/features/settings/sections/api-keys-section.tsx": 34035,
     "apps/app/src/features/tasks/capture/task-capture.test.tsx": 50813,
@@ -49,6 +51,24 @@
     "supabase/functions/moduo-mcp/tasks-v3.test.ts": 64176
   },
   "complexity": {
+    ".claude/skills/product-lab/scripts/lab.mjs": {
+      "easingClass": 17,
+      "step": 33
+    },
+    ".claude/skills/product-lab/scripts/lib/probe.mjs": {
+      "inventory>map(cb)": 24,
+      "pageInfo": 24
+    },
+    ".claude/skills/product-lab/scripts/lib/report.mjs": {
+      "gates": 31,
+      "measurementsMd": 18
+    },
+    ".claude/skills/product-lab/scripts/lib/tokens.mjs": {
+      "harvest": 42,
+      "resolveTokens": 24,
+      "score": 33,
+      "score>classify": 78
+    },
     "apps/app/public/push-display.js": {
       "<anonymous>>pushDisplay": 17
     },
@@ -345,18 +365,25 @@
     "apps/app/src/features/notes/editor/markdown.ts": {
       "replace#5": 22
     },
+    "apps/app/src/features/notes/editor/plugins/block-handle-plugin.tsx": {
+      "BlockHandlePlugin": 28
+    },
+    "apps/app/src/features/notes/editor/plugins/format-toolbar-plugin.tsx": {
+      "FormatToolbarPlugin>useEffect(cb)>editor.registerCommand(cb)#4": 18
+    },
     "apps/app/src/features/notes/editor/plugins/slash-menu-plugin.tsx": {
+      "SlashMenuPlugin": 19,
       "SlashMenuPlugin>commitPick": 21
     },
     "apps/app/src/features/notes/editor/plugins/task-line-plugin.tsx": {
       "TaskLinePlugin>useEffect(cb)#11": 16,
-      "TaskLinePlugin>useEffect(cb)>editor.registerUpdateListener(cb)": 60
+      "TaskLinePlugin>useEffect(cb)>editor.registerUpdateListener(cb)": 62
     },
     "apps/app/src/features/notes/hooks/use-trash-with-task-detach.ts": {
       "useTrashWithTaskDetach>useCallback(cb)": 19
     },
     "apps/app/src/features/notes/note-meta.ts": {
-      "shapeNoteMetaLine": 27
+      "shapeNoteMetaLine": 31
     },
     "apps/app/src/features/notes/public-render.ts": {
       "comparePublicNotes": 23
@@ -368,20 +395,20 @@
       "resolveDropIntent": 38
     },
     "apps/app/src/features/notes/shell/note-view.tsx": {
-      "NoteView": 29
+      "NoteView": 40
     },
     "apps/app/src/features/notes/shell/notes-shell.tsx": {
-      "NotesShellBody": 42
+      "NotesShellBody": 36
     },
     "apps/app/src/features/notes/shell/notes-sidebar.tsx": {
-      "NotesSidebar": 36,
-      "NotesSidebar>onTreeKeyDown": 20
+      "NotesSidebar": 41,
+      "NotesSidebar>onTreeKeyDown": 25
     },
     "apps/app/src/features/notes/shell/sidebar-tree.tsx": {
-      "TreeRow": 28
+      "TreeRow": 30
     },
     "apps/app/src/features/notes/shell/tree-keyboard.ts": {
-      "treeKeyAction": 43
+      "treeKeyAction": 49
     },
     "apps/app/src/features/notes/sync/engine-v2.ts": {
       "NotesSyncEngineV2.flush": 35,
@@ -393,13 +420,13 @@
       "resolveDrop": 23
     },
     "apps/app/src/features/notes/ui/note-comments-panel.tsx": {
-      "NoteCommentsPanel": 27
+      "NoteCommentsPanel": 28
     },
     "apps/app/src/features/notes/ui/note-editor.tsx": {
-      "NoteEditor": 18
+      "NoteEditor": 27
     },
     "apps/app/src/features/notes/ui/note-publish-control.tsx": {
-      "NotePublishControl": 30
+      "NotePublishControl": 29
     },
     "apps/app/src/features/settings/access/invite-panel.tsx": {
       "InvitePanel": 21
@@ -445,7 +472,7 @@
       "ShareMenu": 20
     },
     "apps/app/src/features/spine/activity.ts": {
-      "spineActivityLine": 133
+      "spineActivityLine": 138
     },
     "apps/app/src/features/spine/comments.ts": {
       "commentBodyWithReferences": 18
@@ -460,7 +487,7 @@
       "EntityTextEditor": 25
     },
     "apps/app/src/features/spine/editor/mention-menu-plugin.tsx": {
-      "MentionMenuPlugin": 20,
+      "MentionMenuPlugin": 24,
       "MentionMenuPlugin>commit": 21
     },
     "apps/app/src/features/spine/grammar.ts": {
@@ -925,6 +952,13 @@
       "compareVersions": 28,
       "handle": 25
     },
+    "scripts/agent/skill-refs.ts": {
+      "findProblems": 16,
+      "refs>forEach(cb)": 25
+    },
+    "scripts/agent/wt.ts": {
+      "prune": 16
+    },
     "scripts/brand/masters.ts": {
       "parseMaster": 16
     },
@@ -937,6 +971,9 @@
     "scripts/check-text-rules.ts": {
       "childExpressions": 27,
       "scanTextRules": 53
+    },
+    "scripts/db-test.ts": {
+      "main": 35
     },
     "scripts/dns-diff.ts": {
       "liveDiff": 24

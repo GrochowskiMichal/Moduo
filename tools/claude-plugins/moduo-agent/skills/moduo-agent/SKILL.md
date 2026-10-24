@@ -29,13 +29,13 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 | **Building** (in progress) | you claim the block (Pick up) | you |
 | **In review** (in progress) | the PR is ready for review (Hand back) | you |
 | **Awaiting release** (in progress) | merged into the personal branch or `develop`, not yet in a `vX.Y.Z` release (Finish) | you |
-| **Shipped** (done) | the release carrying it is tagged; also the only done status, so work that never ships (docs, research, ops) ends here too | `/ship`; you for work that never ships |
+| **Shipped** (done) | the release carrying it is tagged; also the only done status, so work that never ships (docs, research, ops) ends here too | the person's `/ship`; you for work that never ships |
 | **Won't do** (won't do) | dropped on purpose; say why in a comment | people |
 
 - Forward only. A review that sends the block back to work moves it to **Building** again; say so in the note.
 - **Blocked is not a stage:** use the task's blocked flag, `waiting_on` and `tasks_handoff`.
 - The stage names live in every milestone project (they carry the same seven statuses). Check `statuses_list {project_id}` of the task's own project once; if a name is missing, set the category word instead (`todo`, `in_progress`, `done`) and carry on. Never create statuses.
-- Set **Shipped** yourself only for work that never ships; code waits for `/ship`. Never move a task you don't hold.
+- Set **Shipped** yourself only for work that never ships; code waits for the person's `/ship`. Never move a task you don't hold.
 
 ## Pick up (from /s2 Claim, after the draft PR exists)
 1. **Know the board:** `projects_list`. Work is organised by milestone, not by module: the active projects **Closed alpha**, **Open alpha** and **Beta & later** hold the block tasks (each project's sections are themes such as Security & privacy, Platform & sync, Release & infra, Notes, Tasks, Calendar & scheduling, Email & notifications, Contacts, Chat, Home, Launch ops, Integrations & MCP, Meet, Quality & polish). The project named `Moduo` holds undated bugs and ideas. None of the three milestone projects → Moduo off ("no milestone projects").
@@ -61,7 +61,7 @@ Load the tools: `ToolSearch` query `+moduo tasks_session_status`. You need `mcp_
 `tasks_session_status {task_id, state: "ready", note: "Ready for review · PR #<n>", links: [{url: "<PR url>", label: "PR #<n>"}], summary: "<Changed + Test this from the report, at most 4,000 characters>", agent}`. Also `tasks_set_status {task_id, status: "In review"}`. Then set `state=ready` in `.claude/MODUO_TASK`.
 
 ## Finish (from /s3, after the merge into the personal branch)
-`tasks_set_status {task_id, status: "Awaiting release"}` (a block that never ships, such as docs or ops, goes to `Shipped`), then `rm -f .claude/MODUO_TASK`. `/ship` moves released tasks to `Shipped`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
+`tasks_set_status {task_id, status: "Awaiting release"}` (a block that never ships, such as docs or ops, goes to `Shipped`), then `rm -f .claude/MODUO_TASK`. The person's `/ship` moves released tasks to `Shipped`. A block that stays open (built, not landed; blocked) keeps its task open and its last state.
 
 ## Hand off to the other person
 When work needs the other founder (a review, a design call, a piece in their lane), it goes as a comment on the Moduo task (AGENTS.md §Agent tooling):

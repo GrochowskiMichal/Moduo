@@ -57,9 +57,23 @@ export function isPublished(note: Note | undefined | null): boolean {
  * unpublishing (token cleared) empties the scope.
  */
 export function selectPublishSubtree(rootId: string, notes: Note[]): Note[] {
-  const byId = new Map(notes.map((n) => [n.id, n]));
-  const root = byId.get(rootId);
+  const root = notes.find((n) => n.id === rootId);
   if (!isPublished(root)) return [];
+  return walkSubtree(root!, notes);
+}
+
+/**
+ * What publishing a note WOULD put on its link, before it is published: the
+ * same scope rules with the root's token not yet there. The Publish popover
+ * names these pages, so nobody publishes sub-pages without being told.
+ */
+export function selectPublishCandidates(rootId: string, notes: Note[]): Note[] {
+  const root = notes.find((n) => n.id === rootId);
+  if (!root || root.deletedAt || root.isArchived) return [];
+  return walkSubtree(root, notes);
+}
+
+function walkSubtree(root: Note, notes: Note[]): Note[] {
   const kids = liveChildrenMap(notes);
   const out: Note[] = [];
   const walk = (note: Note, depth: number) => {
@@ -67,7 +81,7 @@ export function selectPublishSubtree(rootId: string, notes: Note[]): Note[] {
     if (depth >= MAX_DEPTH) return;
     for (const child of kids.get(note.id) ?? []) walk(child, depth + 1);
   };
-  walk(root!, 0);
+  walk(root, 0);
   return out;
 }
 
@@ -83,9 +97,4 @@ export function buildPublishTree(rootId: string, notes: Note[]): NoteTreeNode | 
     children: depth >= MAX_DEPTH ? [] : (kids.get(note.id) ?? []).map((c) => build(c, depth + 1)),
   });
   return build(root!, 0);
-}
-
-/** Count of nested pages under a published root (subtree minus the root). */
-export function publishedChildCount(rootId: string, notes: Note[]): number {
-  return Math.max(0, selectPublishSubtree(rootId, notes).length - 1);
 }

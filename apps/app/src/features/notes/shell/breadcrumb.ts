@@ -18,8 +18,8 @@ export type Crumb =
 const SECTION_LABEL: Record<CrumbSection, string> = {
   inbox: "Inbox",
   pages: "Pages",
-  archive: "Archive",
-  trash: "Trash",
+  archive: "Archived",
+  trash: "Recently deleted",
 };
 
 const MAX_DEPTH = 100;
