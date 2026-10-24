@@ -50,28 +50,25 @@ function fakeRuntime() {
 
 const widgetIds = (l: DashboardLayout) => l.pages.flatMap((p) => p.widgets.map((w) => w.id));
 
-describe(
-  "HV-15 variant 509-1: a failed dashboard read seeds a default that outranks the real layout",
-  () => {
-    it("after a failed first read, the next good read shows the account's layout and an edit keeps it", async () => {
-      const { runtime, cloud } = fakeRuntime();
-      const repo = createLayoutRepo(runtime, {
-        now: () => "2026-10-20T08:00:00.000Z",
-        debounceMs: 0,
-      });
-
-      // A new device opens Home during a blip: no cache, the cloud read fails.
-      cloud.failGet = true;
-      await repo.load("w1");
-
-      // The connection is back: the account's real layout must win.
-      cloud.failGet = false;
-      const loaded = await repo.load("w1");
-      expect(widgetIds(loaded.layout)).toContain("mine");
-
-      // The person moves one widget: the real layout must still be in the cloud.
-      await repo.save("w1", loaded.layout);
-      expect(widgetIds(cloud.row!.layout)).toContain("mine");
+describe("HV-15 variant 509-1: a failed dashboard read seeds a default that outranks the real layout", () => {
+  it("after a failed first read, the next good read shows the account's layout and an edit keeps it", async () => {
+    const { runtime, cloud } = fakeRuntime();
+    const repo = createLayoutRepo(runtime, {
+      now: () => "2026-10-20T08:00:00.000Z",
+      debounceMs: 0,
     });
-  },
-);
+
+    // A new device opens Home during a blip: no cache, the cloud read fails.
+    cloud.failGet = true;
+    await repo.load("w1");
+
+    // The connection is back: the account's real layout must win.
+    cloud.failGet = false;
+    const loaded = await repo.load("w1");
+    expect(widgetIds(loaded.layout)).toContain("mine");
+
+    // The person moves one widget: the real layout must still be in the cloud.
+    await repo.save("w1", loaded.layout);
+    expect(widgetIds(cloud.row!.layout)).toContain("mine");
+  });
+});
