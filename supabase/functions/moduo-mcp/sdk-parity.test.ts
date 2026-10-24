@@ -25,7 +25,11 @@
  * records the SDK's raw answers, not the compared form); nothing else moved.
  * The browser-client fix (2026-10-23) added Access-Control-Expose-Headers:
  * WWW-Authenticate to every answer's CORS, so a client in a web page can read
- * the 401's sign-in pointer; nothing else moved.
+ * the 401's sign-in pointer; nothing else moved. MOD-572 (2026-10-24) made
+ * contacts_update, contacts_set_status and contacts_delete check that the
+ * key's person can reach the contact before calling the op, so their six
+ * cases now answer "No contact with that id" after a reach lookup instead of
+ * calling the op; nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
