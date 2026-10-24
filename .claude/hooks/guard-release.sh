@@ -10,6 +10,7 @@
 # Deleting a tag (`--delete`/`-d`, `:refs/tags/v…`) ships nothing and is allowed.
 # Only Claude's Bash tool passes through here: a person in a terminal is never blocked.
 # Exit 2 = block, stderr = the reason Claude sees. Tested by guard-release.test.sh.
+command -v jq >/dev/null 2>&1 || { echo "guard-release.sh: jq is missing (brew install jq)." >&2; exit 1; }
 input=$(cat)
 cmd=$(printf '%s' "$input" | jq -r '.tool_input.command // ""' 2>/dev/null)
 cwd=$(printf '%s' "$input" | jq -r '.cwd // ""' 2>/dev/null)

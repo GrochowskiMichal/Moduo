@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Tests for guard-release.sh (AC6): blocks without a marker, allows once with it, consumes it.
-#   bash .claude/hooks/guard-release.test.sh   (also run by scripts/release/guard-release.test.ts)
+#   bash .claude/hooks/guard-release.test.sh   (also run by scripts/agent/hooks.test.ts)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 hook="$here/guard-release.sh"

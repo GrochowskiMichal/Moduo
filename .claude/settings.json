@@ -21,15 +21,6 @@
         ]
       },
       {
-        "matcher": "TaskCreate|TaskUpdate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-todo'"
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write",
         "hooks": [
           {
@@ -55,15 +46,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-git.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-git.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-release.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-release.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-secrets.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-secrets.sh\"",
+            "timeout": 120,
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-glob.sh\"",
+            "timeout": 10,
+            "onFailure": "block"
           }
         ]
       },
@@ -72,7 +75,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-prod-db.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-prod-db.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-lane.sh\"",
+            "timeout": 10,
+            "onFailure": "block"
           }
         ]
       }
