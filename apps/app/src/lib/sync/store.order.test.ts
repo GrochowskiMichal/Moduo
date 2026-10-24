@@ -19,28 +19,28 @@ import {
 } from "./store";
 import { at, fakeServer, makeStore, ME, settled, task, tick, WS } from "./store.fake.spec";
 
-describe("status writes in order (MOD-587, MOD-569)", () => {
-  /** Hold the next status op's request until `let` (or `fail`, as a lost connection). */
-  function holdNextStatus(server: ReturnType<typeof fakeServer>) {
-    const tasksApi = server.runtime.tasks as unknown as {
-      opSetStatus: (input: { taskId: string; status: string }) => Promise<Task>;
-    };
-    const real = tasksApi.opSetStatus;
-    let open: (ok: boolean) => void = () => {};
-    const gate = new Promise<boolean>((resolve) => {
-      open = resolve;
-    });
-    let held = true;
-    tasksApi.opSetStatus = async (input) => {
-      if (held) {
-        held = false;
-        if (!(await gate)) throw new TypeError("Failed to fetch");
-      }
-      return real(input);
-    };
-    return { let: () => open(true), fail: () => open(false) };
-  }
+/** Hold the next status op's request until `let` (or `fail`, as a lost connection). */
+function holdNextStatus(server: ReturnType<typeof fakeServer>) {
+  const tasksApi = server.runtime.tasks as unknown as {
+    opSetStatus: (input: { taskId: string; status: string }) => Promise<Task>;
+  };
+  const real = tasksApi.opSetStatus;
+  let open: (ok: boolean) => void = () => {};
+  const gate = new Promise<boolean>((resolve) => {
+    open = resolve;
+  });
+  let held = true;
+  tasksApi.opSetStatus = async (input) => {
+    if (held) {
+      held = false;
+      if (!(await gate)) throw new TypeError("Failed to fetch");
+    }
+    return real(input);
+  };
+  return { let: () => open(true), fail: () => open(false) };
+}
 
+describe("status writes in order (MOD-587, MOD-569)", () => {
   it("MOD-587: a second check-off waits for a live one still on its way", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];
@@ -187,6 +187,35 @@ describe("status writes in order (MOD-587, MOD-569)", () => {
       await settled(back);
       expect(server.statusCalls.map((c) => c.status)).toEqual(["done", "todo"]);
       releaseBack();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+});
+
+describe("account deletion (MOD-569)", () => {
+  it("a check-off that fails after the account is deleted leaves nothing on the device", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      server.tables.tasks = [task("a", { updatedAt: at(5) })];
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await settled(store);
+      const held = holdNextStatus(server);
+      const sent = store.sendStatus({
+        taskId: "a",
+        status: "done",
+        fields: { status: "done", statusCategory: "done" },
+      });
+      await tick();
+      await wipeSyncCopies({ keepWaiting: false });
+      release();
+      held.fail();
+      await sent;
+      await store.whenPersisted();
+      expect(cache.records.size).toBe(0);
     } finally {
       setStoreOptionsForTests({});
     }

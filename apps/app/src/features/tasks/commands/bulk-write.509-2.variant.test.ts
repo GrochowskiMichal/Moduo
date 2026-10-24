@@ -142,6 +142,32 @@ describe("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a wait
     expect(server.rows.get("a")?.status).toBe("todo");
   });
 
+  it("Undo of that bulk change puts the check-off back, after both have landed", async () => {
+    const { server, hook } = await mountWithFlushingCheckOff();
+    toastMock.mockClear();
+    await act(async () => {
+      await hook.result.current.commands.bulkWrite([{ taskId: "a", status: "todo" }], {
+        label: () => "Moved to To do",
+      });
+    });
+    const undo = (
+      toastMock.mock.calls as unknown as [
+        string,
+        { action?: { label: string; onClick: () => void } }?,
+      ][]
+    ).find(([, opts]) => opts?.action?.label === "Undo")?.[1]?.action;
+    expect(undo).toBeDefined();
+    await act(async () => {
+      undo!.onClick();
+      await new Promise((r) => setTimeout(r, 5));
+      server.release();
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    // done (the old check-off), todo (the bulk change), done (its Undo), in that order.
+    expect(server.statusLog).toEqual(["done", "todo", "done"]);
+    expect(server.rows.get("a")?.status).toBe("done");
+  });
+
   it("a board drop into To do on a task whose check-off is still flushing stays To do", async () => {
     const { server, hook } = await mountWithFlushingCheckOff();
     let dropped: Promise<boolean> | null = null;
@@ -154,6 +180,8 @@ describe("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a wait
       await dropped;
       await new Promise((r) => setTimeout(r, 40));
     });
+    // The drop saved (so it offers its Undo) once its turn came.
+    expect(await dropped).toBe(true);
     expect(server.rows.get("a")?.status).toBe("todo");
   });
 });

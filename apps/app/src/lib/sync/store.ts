@@ -1904,6 +1904,8 @@ export class WorkspaceStore {
       console.warn("[sync] outbox drain stopped", e);
     } finally {
       this.flushing = false;
+      // A drop waiting its turn re-checks, also after a drain that threw.
+      wakeTurns();
     }
   }
 

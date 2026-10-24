@@ -250,7 +250,8 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
     },
     keepWorkspaces(userId, workspaceIds) {
       const keep = new Set(workspaceIds.map((ws) => ownerKey(userId, ws)));
-      dispose((store) => store.userId !== userId || keep.has(keyOf(store)), false);
+      // A late write for a workspace left behind can't land: dropped (`erase`).
+      dispose((store) => store.userId !== userId || keep.has(keyOf(store)), false, true);
       return opts.copies().deleteWhere((key) => isOwnedBy(key, userId) && !keep.has(key));
     },
     waitingCount() {

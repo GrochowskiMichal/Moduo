@@ -407,7 +407,11 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
       const reverse: BulkWrite[] = [];
       let kept = 0;
       for (const p of landedAny) {
-        const after = saved.get(p.write.taskId);
+        // A status part that waited on the device has no server row yet:
+        // what the person made (and shows meanwhile) is what Undo reverses.
+        const after = statusQueued.has(p.write.taskId)
+          ? { ...(saved.get(p.write.taskId) ?? p.before), ...p.shown }
+          : saved.get(p.write.taskId);
         const current = data().allTasks.find((t) => t.id === p.write.taskId);
         if (!after || !current || current.deletedAt) continue;
         const back: BulkWrite = { taskId: p.write.taskId };

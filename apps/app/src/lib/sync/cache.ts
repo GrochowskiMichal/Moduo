@@ -16,7 +16,7 @@
 // Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
 // the store still works, it just opens from the server.
 
-import { idbOpener, idbRequest } from "./kernel/idb";
+import { idbDone, idbOpener, idbRequest } from "./kernel/idb";
 import { isOwnedBy, type OwnedCopies, ownerKey } from "./kernel/registry";
 import type { SyncTableName } from "./types";
 
@@ -175,7 +175,8 @@ export function idbCache(factory: IDBFactory): SyncCache {
             const value = next(stored);
             const write = value ? store.put(value, key) : store.delete(key);
             write.onerror = () => reject(write.error);
-            write.onsuccess = () => resolve(stored);
+            // Settled when the transaction commits: a full disk aborts it after the write's success.
+            write.onsuccess = () => idbDone(store.transaction).then(() => resolve(stored), reject);
           } catch (e) {
             reject(e);
           }
