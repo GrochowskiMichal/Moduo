@@ -1,0 +1,58 @@
+id: rust-decode-to-default
+language: rust
+severity: error
+message: A decode failure falls back to an empty/default value, so corrupt data reads as "nothing stored".
+note: |
+  Callers read, change and write the value back: an empty read followed by any save
+  deletes what was stored (PR #509, the email account list). Return the decode error
+  (`.map_err(..)?`) and leave the stored value as it is.
+files:
+  - apps/desktop/src-tauri/src/**/*.rs
+utils:
+  decode-call:
+    kind: call_expression
+    has:
+      field: function
+      stopBy: end
+      regex: (^|::|\.)(from_value|from_str|from_slice|from_reader|from_bytes|deserialize)$
+  empty-value:
+    any:
+      - pattern: vec![]
+      - pattern: Vec::new()
+      - pattern: Default::default()
+      - pattern: HashMap::new()
+      - pattern: BTreeMap::new()
+      - pattern: String::new()
+      - pattern: None
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        kind: field_expression
+        all:
+          - has:
+              field: value
+              any:
+                - matches: decode-call
+                - has:
+                    stopBy: end
+                    matches: decode-call
+          - has:
+              field: field
+              regex: ^(unwrap_or_default|unwrap_or_else|unwrap_or)$
+    - any:
+        - has:
+            field: function
+            has:
+              field: field
+              regex: ^unwrap_or_default$
+        - has:
+            field: arguments
+            has:
+              any:
+                - matches: empty-value
+                - kind: closure_expression
+                  has:
+                    field: body
+                    matches: empty-value
