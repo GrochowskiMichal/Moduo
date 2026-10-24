@@ -6,6 +6,7 @@ export default defineConfig({
   include: [
     "scripts/agent/*.test.ts",
     "scripts/brand/*.test.ts",
+    "scripts/ci/*.test.ts",
     "scripts/release/*.test.ts",
     "scripts/smoke-hosting.test.ts",
     "scripts/dns-diff.test.ts",
