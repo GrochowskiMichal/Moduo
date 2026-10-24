@@ -43,6 +43,9 @@ import { icsAttachment, type IcsEvent } from "../ics.ts";
 import type { QueuedEmail } from "../outbox.ts";
 import { TEXT_LIMITS } from "../render.ts";
 import { viaModuo } from "../send.ts";
+import { isPlainName, linkFree, plainBookerName, plainPersonName } from "./names.ts";
+
+export { isPlainName, plainBookerName };
 
 /** What every booking email is built from. Written by booking-public, stored as the outbox payload. */
 export type BookingEmailData = {
@@ -92,34 +95,34 @@ const CALENDAR_FILE = "invite.ics";
 
 const name = (value: string) => singleLine(value, TEXT_LIMITS.name);
 
-/**
- * A plain name: up to five words of letters (accents and any script), each
- * allowing inner apostrophes or hyphens and a closing abbreviation dot
- * ("Dr. Zoë O'Neill-Łukasz"). No digits, no other punctuation, so no link,
- * domain or address in any spelling (fullwidth or ideographic dots included).
- */
-const PLAIN_NAME = /^[\p{L}\p{M}]+(?:['\u2019-][\p{L}\p{M}]+)*\.?(?: [\p{L}\p{M}]+(?:['\u2019-][\p{L}\p{M}]+)*\.?){0,4}$/u;
-
-/**
- * The booker's name as C2 shows it to someone who never asked to hear from
- * Moduo. The booking page is public, so this is anyone's free text, mailed
- * from our address to up to ten addresses they typed. Only a plain name gets
- * through (an allow-list: spam needs a link or a number); anything else
- * becomes "Someone".
- */
-export function plainBookerName(value: string): string {
-  return isPlainName(value) ? name(value).replace(/\s+/g, " ").trim() : "Someone";
-}
-
-/** True for a plain name (see PLAIN_NAME), up to 50 characters. */
-export function isPlainName(value: string): boolean {
-  const flat = name(value).replace(/\s+/g, " ").trim();
-  return !!flat && Array.from(flat).length <= 50 && PLAIN_NAME.test(flat);
-}
-
 function firstName(value: string): string {
   const full = name(value);
   return full.split(/\s+/)[0] || full;
+}
+
+/**
+ * The host as the guest emails name them. Their display name is typed by an
+ * account holder and these emails go, from our domain, to addresses the booker
+ * typed, so it gets the same allow-list as a workspace inviter (names.ts,
+ * docs/gotchas/email.md); a name that fails it becomes "your host", and the
+ * email comes from plain "Moduo".
+ */
+type Host = { full: string; first: string; named: boolean };
+
+function hostOf(data: BookingEmailData): Host {
+  const plain = plainPersonName(data.hostName);
+  return plain ? { full: plain, first: firstName(plain), named: true } : { full: "your host", first: "your host", named: false };
+}
+
+const capital = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);
+
+/** The host block's caption. */
+const hostCaption = (host: Host) => (host.named ? host.full : "Your host");
+
+/** From "<Host> via Moduo", or "Moduo" when the host's name didn't pass. */
+function guestFrom(data: BookingEmailData): string {
+  const host = hostOf(data);
+  return host.named ? viaModuo(host.full) : "Moduo";
 }
 
 function minutesPhrase(minutes: number): string {
@@ -148,16 +151,18 @@ function guestList(data: BookingEmailData): string {
 }
 
 function calendarEvent(data: BookingEmailData, method: IcsEvent["method"]): IcsEvent {
+  const host = hostOf(data);
   return {
     method,
     uid: `booking-${data.bookingId}@moduo.app`,
     sequence: method === "CANCEL" ? 1 : 0,
     start: new Date(data.start),
     end: new Date(data.end),
-    summary: `${singleLine(data.linkName, TEXT_LIMITS.short) || "Meeting"} with ${name(data.hostName)}`,
+    // Guests' calendars show the summary and organizer, so both get the guest emails' name rules.
+    summary: `${singleLine(linkFree(data.linkName) ?? "", TEXT_LIMITS.short) || "Meeting"} with ${host.full}`,
     description: data.joinUrl ? `${name(data.video)}: ${data.joinUrl}` : undefined,
     url: data.joinUrl || undefined,
-    organizer: { name: name(data.hostName), email: data.hostEmail },
+    organizer: { name: host.named ? host.full : undefined, email: data.hostEmail },
     // Guests' calendars show this name, so it gets C2's plain-name rule in every file.
     attendees: [
       { name: plainBookerName(data.guestName), email: data.guestEmail },
@@ -176,24 +181,24 @@ const attachmentNote = (): Block => ({ type: "attachment", filename: CALENDAR_FI
 /** C1 · Booking confirmed (guest). */
 export function bookingGuestConfirmedEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
-  const host = name(data.hostName);
+  const host = hostOf(data);
   const details = detailsLine(data, w);
   const blocks: Block[] = [
-    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
-    sentence(`You're meeting ${firstName(data.hostName)} on `, fixed(w.day), " at ", fixed(w.time), "."),
+    { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
+    sentence(`You're meeting ${host.first} on `, fixed(w.day), " at ", fixed(w.time), "."),
     paragraph(data.googleInvites ? `${details} Google is sending the calendar invite separately.` : details),
   ];
   if (data.guests.length > 0) blocks.push({ type: "rows", rows: [{ label: "Also invited", value: guestList(data) }] });
   if (!data.googleInvites) blocks.push(attachmentNote());
   if (data.joinUrl) blocks.push(button(`Join ${name(data.video)}`, data.joinUrl));
   if (data.cancelUrl) blocks.push(link("Can't make it? Cancel the meeting", data.cancelUrl));
-  blocks.push(muted(`Questions for ${firstName(data.hostName)}? Reply to this email.`));
+  blocks.push(muted(`Questions for ${host.first}? Reply to this email.`));
   return {
-    subject: `Booked: ${host}, ${w.short} at ${w.time}`,
+    subject: `Booked: ${host.named ? `${host.full}, ` : ""}${w.short} at ${w.time}`,
     preheader: details,
     blocks,
     footer: {
-      reason: `You got this email because you booked time with ${host} through Moduo.`,
+      reason: `You got this email because you booked time with ${host.full} through Moduo.`,
       scheduledWith: true,
     },
   };
@@ -202,24 +207,24 @@ export function bookingGuestConfirmedEmail(data: BookingEmailData): EmailDoc {
 /** C2 · Added to a booking (extra guest). */
 export function bookingGuestAddedEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
-  const host = name(data.hostName);
+  const host = hostOf(data);
   const booker = plainBookerName(data.guestName);
   const bookerFirst = booker === "Someone" ? "the person who booked" : firstName(booker);
   const details = detailsLine(data, w);
   const blocks: Block[] = [
-    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
-    sentence(`${booker} added you to a meeting with ${firstName(data.hostName)} on `, fixed(w.day), " at ", fixed(w.time), "."),
+    { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
+    sentence(`${booker} added you to a meeting with ${host.first} on `, fixed(w.day), " at ", fixed(w.time), "."),
     paragraph(details),
   ];
   if (!data.googleInvites) blocks.push(attachmentNote());
   if (data.joinUrl) blocks.push(button(`Join ${name(data.video)}`, data.joinUrl));
   blocks.push(muted(`Can't make it? Let ${bookerFirst} know.`));
   return {
-    subject: `${booker} added you: ${host}, ${w.short} at ${w.time}`,
+    subject: `${booker} added you: ${host.named ? `${host.full}, ` : ""}${w.short} at ${w.time}`,
     preheader: details,
     blocks,
     footer: {
-      reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host}.`,
+      reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host.full}.`,
       scheduledWith: true,
     },
   };
@@ -289,34 +294,34 @@ export function bookingHostGuestCancelledEmail(data: BookingEmailData): EmailDoc
 /** C5 · You canceled (guest), and its extra-guest variant (Zoom-only bookings). */
 export function bookingGuestCancelledEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
-  const host = name(data.hostName);
-  const first = firstName(data.hostName);
+  const host = hostOf(data);
+  const first = host.first;
   if (data.recipient === "added") {
     const booker = plainBookerName(data.guestName);
     const blocks: Block[] = [
-      { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+      { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
       sentence(`${booker} canceled the meeting with ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
     ];
     if (!data.googleInvites) blocks.push(attachmentNote());
     return {
-      subject: `${booker} canceled the meeting with ${host}`,
+      subject: `${booker} canceled the meeting with ${host.full}`,
       preheader: data.googleInvites ? `${w.short} at ${w.time} is off.` : "The attached calendar file takes it off your calendar.",
       blocks,
       footer: {
-        reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host}.`,
+        reason: `You got this email because ${booker === "Someone" ? "someone" : booker} added this address when booking time with ${host.full}.`,
       },
     };
   }
   const blocks: Block[] = [
-    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+    { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
     sentence(`You canceled your meeting with ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
-    paragraph(`${first} knows.`),
+    paragraph(`${capital(first)} knows.`),
   ];
   if (!data.googleInvites) blocks.push(attachmentNote());
   if (data.rebookUrl) blocks.push(button("Pick another time", data.rebookUrl));
   return {
-    subject: `You canceled your meeting with ${host}`,
-    preheader: `${first} knows. Pick another time whenever suits.`,
+    subject: `You canceled your meeting with ${host.full}`,
+    preheader: `${capital(first)} knows. Pick another time whenever suits.`,
     blocks,
     footer: { reason: "You got this email because you canceled a meeting booked through Moduo." },
   };
@@ -325,20 +330,20 @@ export function bookingGuestCancelledEmail(data: BookingEmailData): EmailDoc {
 /** C6 · Host canceled (guest): the booker and every extra guest. */
 export function bookingGuestHostCancelledEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
-  const host = name(data.hostName);
-  const first = firstName(data.hostName);
+  const host = hostOf(data);
+  const first = host.first;
   const blocks: Block[] = [
-    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
-    sentence(`${first} canceled your meeting on `, fixed(w.day), " at ", fixed(w.time), "."),
+    { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
+    sentence(`${capital(first)} canceled your meeting on `, fixed(w.day), " at ", fixed(w.time), "."),
   ];
   if (!data.googleInvites) blocks.push(attachmentNote());
   if (data.rebookUrl) blocks.push(button("Pick another time", data.rebookUrl));
   blocks.push(muted(`Reply to this email to reach ${first}.`));
   return {
-    subject: `${host} canceled your meeting on ${w.short}`,
+    subject: `${capital(host.full)} canceled your meeting on ${w.short}`,
     preheader: `Pick another time, or reply to reach ${first}.`,
     blocks,
-    footer: { reason: `You got this email because you had a meeting with ${host} booked through Moduo.` },
+    footer: { reason: `You got this email because you had a meeting with ${host.full} booked through Moduo.` },
   };
 }
 
@@ -352,12 +357,12 @@ function relativeDay(data: BookingEmailData, zone: string): "today" | "tomorrow"
 /** C7 · Meeting reminder (guest). The cancel link only for the person who booked. */
 export function bookingGuestReminderEmail(data: BookingEmailData): EmailDoc {
   const w = when(data);
-  const host = name(data.hostName);
-  const first = firstName(data.hostName);
+  const host = hostOf(data);
+  const first = host.first;
   const relative = relativeDay(data, w.zone);
   const details = detailsLine(data, w);
   const blocks: Block[] = [
-    { type: "host", name: host, avatarUrl: data.hostAvatarUrl ?? null },
+    { type: "host", name: hostCaption(host), avatarUrl: data.hostAvatarUrl ?? null },
     relative
       ? sentence(`You're meeting ${first} `, fixed(relative), " at ", fixed(w.time), ".")
       : sentence(`You're meeting ${first} on `, fixed(w.day), " at ", fixed(w.time), "."),
@@ -368,7 +373,7 @@ export function bookingGuestReminderEmail(data: BookingEmailData): EmailDoc {
   const lead = relative ? `${relative === "today" ? "Today" : "Tomorrow"} at ${w.time}` : `${w.day} at ${w.time}`;
   const howLong = data.reminderMinutes === 60 ? "an hour" : "a day";
   return {
-    subject: `${lead}: ${host}`,
+    subject: `${lead}: ${host.named ? host.full : "your meeting"}`,
     preheader: details,
     blocks,
     footer: {
@@ -455,7 +460,7 @@ export const BOOKING_QUEUED: Record<
     const data = parseBookingPayload(payload);
     return {
       doc: bookingGuestConfirmedEmail(data),
-      fromName: viaModuo(data.hostName),
+      fromName: guestFrom(data),
       replyTo: data.hostEmail,
       attachments: calendarFile(data, "REQUEST"),
     };
@@ -464,7 +469,7 @@ export const BOOKING_QUEUED: Record<
     const data = parseBookingPayload(payload);
     return {
       doc: bookingGuestAddedEmail(data),
-      fromName: viaModuo(data.hostName),
+      fromName: guestFrom(data),
       attachments: calendarFile(data, "REQUEST"),
     };
   },
@@ -480,7 +485,7 @@ export const BOOKING_QUEUED: Record<
     const data = parseBookingPayload(payload);
     return {
       doc: bookingGuestCancelledEmail(data),
-      fromName: viaModuo(data.hostName),
+      fromName: guestFrom(data),
       attachments: calendarFile(data, "CANCEL"),
     };
   },
@@ -488,13 +493,13 @@ export const BOOKING_QUEUED: Record<
     const data = parseBookingPayload(payload);
     return {
       doc: bookingGuestHostCancelledEmail(data),
-      fromName: viaModuo(data.hostName),
+      fromName: guestFrom(data),
       replyTo: data.hostEmail,
       attachments: calendarFile(data, "CANCEL"),
     };
   },
   booking_guest_reminder: (payload) => {
     const data = parseBookingPayload(payload);
-    return { doc: bookingGuestReminderEmail(data), fromName: viaModuo(data.hostName) };
+    return { doc: bookingGuestReminderEmail(data), fromName: guestFrom(data) };
   },
 };
