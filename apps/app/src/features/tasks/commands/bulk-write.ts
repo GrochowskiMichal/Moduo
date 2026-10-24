@@ -462,7 +462,7 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
         // Back to open from a check-off that closed it: its queue place too.
         const queuedBefore = new Set(lineupBefore);
         for (const id of back) {
-          if (statusSaved.has(id) && queuedBefore.has(id)) {
+          if ((statusSaved.has(id) || statusQueued.has(id)) && queuedBefore.has(id)) {
             peers.restoreQueuePlace(id, lineupBefore);
           }
         }
