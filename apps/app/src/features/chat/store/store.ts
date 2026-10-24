@@ -1850,6 +1850,10 @@ export class ChatStore {
         }
         if (!this.running || this.disposed) return "stop";
         this.inFlight = entry.id;
+        if (!entry.attempted) {
+          entry.attempted = true;
+          this.metaDirty = true;
+        }
         this.touch(entry.channelId);
         this.notify();
         return "send";
@@ -1941,8 +1945,9 @@ export class ChatStore {
       // Not on the server yet: an edit sent now would be refused and the send
       // would land last with the old words (509-2). It goes with the send.
       if (entry.deleted) return Promise.resolve({ ok: true });
-      // On its way (or maybe landed with a lost answer): edited there once it lands.
-      if (this.inFlight === id || entry.edited !== undefined) entry.edited = body;
+      // Sent at least once (on its way, or landed with a lost answer, where a
+      // resend answers with the stored words): edited there once it lands.
+      if (this.inFlight === id || entry.attempted) entry.edited = body;
       else entry.body = body;
       this.touch(entry.channelId);
       this.metaDirty = true;

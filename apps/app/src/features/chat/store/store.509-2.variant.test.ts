@@ -97,4 +97,23 @@ describe("HV-15 variant 509-2-outbox-overtaken: a chat edit jumps its own waitin
     expect(server.rows.get(id)?.body).toBe("the plan");
     expect(store.rowById(id)?.body).toBe("the plan");
   });
+
+  it("an edit after a send whose answer was lost reaches the server when the resend lands", async () => {
+    const { server, store } = setup();
+    server.addChannel(C, { isDefault: true });
+    store.acquire();
+    await store.ready();
+    await store.open(C);
+    // The send lands but its answer never comes back: it waits to be sent again.
+    server.loseAnswer.add("send");
+    const id = store.send({ channelId: C, body: "teh plan" });
+    await settle(20);
+    expect(server.rows.get(id)?.body).toBe("teh plan");
+    expect(await store.edit(id, "the plan")).toEqual({ ok: true });
+    // The resend answers with the stored (old) words; the edit follows it.
+    window.dispatchEvent(new Event("online"));
+    await settle(40);
+    expect(server.rows.get(id)?.body).toBe("the plan");
+    expect(store.rowById(id)?.body).toBe("the plan");
+  });
 });

@@ -194,7 +194,8 @@ export class NotesSyncEngineV2 {
   private status: NotesSyncStatusV2 = "synced";
   private destroyed = false;
   private detachWindow: (() => void) | null = null;
-  private metaReplay: Promise<void> | null = null;
+  private metaReplay: Promise<boolean> | null = null;
+  private metaChain: Promise<unknown> = Promise.resolve();
   /** Lazy drafts (NR-2): notes that exist only on this device until their
    * first character. Their sessions don't pull (there is nothing on the
    * server), and their edits stay out of the push outbox, so an untouched
@@ -794,31 +795,50 @@ export class NotesSyncEngineV2 {
 
   /** Run a metadata intent op with offline queueing: online → straight
    * through; network-dead → queue + resolve (the caller applied it
-   * optimistically); server rejection → rethrow (honest toast). Ops stay in
-   * the order they were made: what already waits replays first, and while
-   * anything still waits this one queues behind it rather than overtaking it
-   * (an older rename replayed later would win; 509-2). */
-  async runMetaOp(
+   * optimistically); server rejection → rethrow (honest toast). Ops run one at
+   * a time in the order they were made, and what already waits replays first;
+   * while anything still waits this one queues behind it rather than
+   * overtaking it (an older rename replayed later would win; 509-2). */
+  runMetaOp(
     kind: MetaOutboxEntry["kind"],
     args: Record<string, unknown>,
   ): Promise<"applied" | "queued"> {
-    if (!this.runtime) throw new Error("Runtime unavailable.");
-    await this.replayMetaOutbox();
-    if ((await readMetaOutbox(this.owner)).length === 0) {
-      try {
-        await this.callMetaOp(kind, args);
-        return "applied";
-      } catch (e) {
-        if (!isNetworkError(e)) throw e;
+    if (!this.runtime) return Promise.reject(new Error("Runtime unavailable."));
+    // One chain: a newer op checks the outbox only after an older live call
+    // (and the enqueue its timeout leads to) has settled.
+    const run = this.metaChain.then(() => this.runMetaOpInOrder(kind, args));
+    this.metaChain = run.catch(() => {});
+    return run;
+  }
+
+  private async runMetaOpInOrder(
+    kind: MetaOutboxEntry["kind"],
+    args: Record<string, unknown>,
+  ): Promise<"applied" | "queued"> {
+    const replayed = await this.replayMetaOutbox();
+    try {
+      if ((await readMetaOutbox(this.owner)).length === 0) {
+        try {
+          await this.callMetaOp(kind, args);
+          if (this.status === "offline" && !(await this.hasQueuedUpdates())) {
+            this.setStatus("synced");
+          }
+          return "applied";
+        } catch (e) {
+          if (!isNetworkError(e)) throw e;
+        }
       }
+      await enqueueMetaOp(this.owner, {
+        kind,
+        args,
+        queuedAt: Date.now(),
+      });
+      this.setStatus("offline");
+      return "queued";
+    } finally {
+      // Reloaded after this op settled, so the list can't come back with the older words.
+      if (replayed) this.onRemoteMetaChange?.();
     }
-    await enqueueMetaOp(this.owner, {
-      kind,
-      args,
-      queuedAt: Date.now(),
-    });
-    this.setStatus("offline");
-    return "queued";
   }
 
   private callMetaOp(kind: MetaOutboxEntry["kind"], args: any): Promise<unknown> {
@@ -829,7 +849,7 @@ export class NotesSyncEngineV2 {
    * doc outbox, pull open sessions. */
   async wake(): Promise<void> {
     if (this.destroyed) return;
-    await this.replayMetaOutbox();
+    if (await this.replayMetaOutbox()) this.onRemoteMetaChange?.();
     const queuedNoteIds = await listDocOutboxNoteIds(this.owner);
     const flushes: Promise<void>[] = [];
     for (const id of queuedNoteIds) {
@@ -892,16 +912,17 @@ export class NotesSyncEngineV2 {
     }
   }
 
-  /** One replay at a time; a caller that arrives mid-replay waits for it. */
-  private replayMetaOutbox(): Promise<void> {
-    if (!this.runtime || !ownerLive(this.owner)) return Promise.resolve();
+  /** One replay at a time; a caller that arrives mid-replay waits for it.
+   * True when it applied something (the caller reloads the list). */
+  private replayMetaOutbox(): Promise<boolean> {
+    if (!this.runtime || !ownerLive(this.owner)) return Promise.resolve(false);
     this.metaReplay ??= this.replayMetaOutboxOnce().finally(() => {
       this.metaReplay = null;
     });
     return this.metaReplay;
   }
 
-  private async replayMetaOutboxOnce(): Promise<void> {
+  private async replayMetaOutboxOnce(): Promise<boolean> {
     let replayedAny = false;
     // Each entry is tried once per pass (a delete that failed leaves it for the next wake).
     const tried = new Set<number>();
@@ -923,7 +944,7 @@ export class NotesSyncEngineV2 {
       }
       if (stop) break;
     }
-    if (replayedAny) this.onRemoteMetaChange?.();
+    return replayedAny;
   }
 
   /** Replay one queued op; "stop" keeps it and everything after it queued (FIFO). */

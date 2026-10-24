@@ -121,4 +121,45 @@ describe("HV-15 variant 509-2-outbox-overtaken: a live Notes meta op jumps a que
       await engine.destroy();
     }
   });
+
+  it("a newer op waits for an older one still on its way, even when that one then times out", async () => {
+    let title = "Untitled";
+    let releaseDraft: (() => void) | null = null;
+    const rename = rs.fn(async (args: { noteId: string; title: string }) => {
+      if (args.title === "Draft" && !releaseDraft) {
+        // It lands, but its answer never comes back in time.
+        title = args.title;
+        await new Promise<void>((resolve) => {
+          releaseDraft = resolve;
+        });
+        throw new Error("Request timed out");
+      }
+      title = args.title;
+      return { id: args.noteId, title: args.title };
+    });
+    const runtime = {
+      notesV2: {
+        rename,
+        pullDoc: async () => ({ snapshotB64: null, docVersion: 0, updates: [] }),
+        pushUpdates: async () => ({ inserted: 0 }),
+      },
+    } as unknown as ModuoRuntime;
+    outbox.rows = [];
+    const engine = new NotesSyncEngineV2(runtime, "ws-509-2", undefined, "user-509-2");
+    try {
+      const args = { workspaceId: "ws-509-2", noteId: "n1" };
+      const draft = engine.runMetaOp("rename", { ...args, title: "Draft" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const final = engine.runMetaOp("rename", { ...args, title: "Final" });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      releaseDraft!();
+      expect(await draft).toBe("queued");
+      await final;
+      await engine.wake();
+      expect(title).toBe("Final");
+      expect(outbox.rows).toEqual([]);
+    } finally {
+      await engine.destroy();
+    }
+  });
 });
