@@ -152,9 +152,16 @@ export function buildEmailReaderDoc(
   const parser = new DOMParser();
   const doc = parser.parseFromString(rawHtml, "text/html");
 
-  doc.querySelectorAll("script, iframe, object, embed").forEach((node) => {
+  // <noscript> too: DOMParser parses with scripting off, the allow-scripts frame
+  // with it on, so a tag hidden in a comment inside <noscript> here becomes a
+  // real element there. Comments go for the same reason (MOD-574).
+  doc.querySelectorAll("script, iframe, object, embed, noscript").forEach((node) => {
     node.remove();
   });
+  const comments = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
+  const dropped: Node[] = [];
+  while (comments.nextNode()) dropped.push(comments.currentNode);
+  for (const node of dropped) node.parentNode?.removeChild(node);
 
   // A <meta http-equiv="refresh"> navigates the frame on open (the in-frame CSP
   // can't stop a self-navigation) and <base> retargets every relative URL, so

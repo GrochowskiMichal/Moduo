@@ -32,19 +32,27 @@ const LOOKALIKES: Record<string, string> = {
   "м": "m", "υ": "u", "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t",
 };
 
-/** Words that make a sender name read like us or like a department, not a person. */
-const OFFICIAL = /moduo|\b(?:security|support|billing|account|accounts|admin|administrator|service|help|helpdesk|team|staff|noreply|verification|compliance)\b/;
+/**
+ * Words that make a sender name read like us or like a department, not a
+ * person. The long ones match anywhere ("Securityteam"); the short ones only as
+ * words, so "Helpman" or "Teamon" still read as names.
+ */
+const OFFICIAL = /security|support|billing|account|admin|helpdesk|noreply|verification|compliance|\b(?:service|help|team|staff)\b/;
 
-/** Latin mixed with a look-alike script ("Ѕecurity", Cyrillic Ѕ) is a spoof, not a name. */
-const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Armenian}\p{Script=Cherokee}])/u;
+/** Latin mixed with any other script ("Ѕecurity" with Cyrillic Ѕ, "ꓢecurity" with Lisu ꓢ) is a spoof, not a name. */
+const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])/u;
 
 /** One line, capped, invisible characters gone. */
 const visible = (value: string) => singleLine(value.replace(INVISIBLE, ""), TEXT_LIMITS.name);
 
-/** NFKC, lower case, look-alikes folded: what a reader takes the text to say. */
+/** Compatibility-decomposed, accents dropped ("Ṁ" reads as "M"), lower case, look-alikes folded: what a reader takes the text to say. */
 function skeleton(value: string): string {
-  return Array.from(value.normalize("NFKC").replace(INVISIBLE, "").toLowerCase(), (ch) => LOOKALIKES[ch] ?? ch).join("");
+  const bare = value.normalize("NFKD").replace(/\p{M}/gu, "").replace(INVISIBLE, "").toLowerCase();
+  return Array.from(bare, (ch) => LOOKALIKES[ch] ?? ch).join("");
 }
+
+/** The skeleton with spaces and punctuation gone, so "Mod uo" still reads as "moduo". */
+const squeezed = (value: string) => skeleton(value).replace(/[\s\p{P}]+/gu, "");
 
 /** True for a plain name (see PLAIN_NAME), up to 50 characters. */
 export function isPlainName(value: string): boolean {
@@ -55,12 +63,12 @@ export function isPlainName(value: string): boolean {
 /**
  * The booker's name as C2 shows it to someone who never asked to hear from
  * Moduo. The booking page is public, so this is anyone's free text, mailed
- * from our address to up to ten addresses they typed. Only a plain name gets
- * through (an allow-list: spam needs a link or a number); anything else
- * becomes "Someone".
+ * from our address to up to ten addresses they typed. Only a plain name that
+ * reads like a person gets through (the host's rule: spam needs a link or a
+ * number, phishing needs "Moduo Security"); anything else becomes "Someone".
  */
 export function plainBookerName(value: string): string {
-  return isPlainName(value) ? singleLine(value, TEXT_LIMITS.name).replace(/\s+/g, " ").trim() : "Someone";
+  return plainPersonName(value) ?? "Someone";
 }
 
 /**
@@ -70,7 +78,8 @@ export function plainBookerName(value: string): string {
  */
 export function plainPersonName(value: string): string | null {
   const flat = visible(value).replace(/\s+/g, " ").trim();
-  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC")) || OFFICIAL.test(skeleton(flat))) return null;
+  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC"))) return null;
+  if (OFFICIAL.test(skeleton(flat)) || squeezed(flat).includes("moduo")) return null;
   return flat;
 }
 
@@ -79,6 +88,6 @@ export function linkFree(value: string): string | null {
   const label = visible(value);
   if (!label) return null;
   const read = skeleton(label);
-  if (LINK_LIKE.test(read) || /moduo/.test(read) || MIXED_SCRIPT.test(label.normalize("NFKC"))) return null;
+  if (LINK_LIKE.test(read) || squeezed(label).includes("moduo") || MIXED_SCRIPT.test(label.normalize("NFKC"))) return null;
   return label;
 }

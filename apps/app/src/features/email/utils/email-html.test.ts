@@ -135,6 +135,18 @@ describe("buildEmailReaderDoc — navigation vectors (MOD-574)", () => {
     expect(srcDoc).not.toContain("phish.example");
   });
 
+  it("drops <noscript> and comments, which hide tags from a scripting-off parse", () => {
+    const payloadHtml =
+      `<noscript><!--</noscript><meta http-equiv="refresh" content="0;url=https://phish.example/x">--></noscript>` +
+      `<p>Hi</p><!-- <meta http-equiv="refresh" content="0;url=https://phish.example/y"> -->`;
+    for (const html of [payloadHtml, `<html><head>${payloadHtml}</head><body>x</body></html>`]) {
+      const { srcDoc } = buildEmailReaderDoc(html);
+      expect(srcDoc).not.toContain("phish.example");
+      expect(srcDoc).not.toContain("<noscript");
+      expect(srcDoc).not.toContain("<!--");
+    }
+  });
+
   it("drops <base> and every meta but charset/content-type", () => {
     const { srcDoc } = buildEmailReaderDoc(
       `<head><base href="https://evil.example/"><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">` +

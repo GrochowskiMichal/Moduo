@@ -417,7 +417,8 @@ async function hostInbox(
   const fallback = (link.owner_email ?? "").trim();
   if (!link.owner_user_id) return { email: fallback, userId: null, account: "" };
   const user = await db.auth.admin.getUserById(link.owner_user_id).catch(() => null);
-  const account = user?.data?.user?.email?.trim() || "";
+  // Confirmed only: "Confirm email" is on in prod, but a local stack may not be.
+  const account = user?.data?.user?.email_confirmed_at ? user.data.user.email?.trim() || "" : "";
   return { email: account || fallback, userId: link.owner_user_id, account };
 }
 

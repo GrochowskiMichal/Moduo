@@ -276,6 +276,13 @@ describe("booking emails · the host's name (MOD-575)", () => {
       "Ѕecurity Desk",
       "Payroll https://evil.example",
       "Call 555 0100 now",
+      "\u1E40oduo",
+      "\u1E3Eoduo",
+      "\u015Aecurity Desk",
+      "S\u0301ecurity Desk",
+      "\uA4E2ecurity Desk",
+      "Securityteam",
+      "Mod uo",
     ]) {
       for (const kind of GUEST_KINDS) {
         const queued = BOOKING_QUEUED[kind](payload({ ...BOOKING_ZOOM_FIXTURE, hostName }));
@@ -285,7 +292,7 @@ describe("booking emails · the host's name (MOD-575)", () => {
         for (const out of [subject, preheader, html, text, ics]) {
           expect(out).not.toContain(hostName);
           expect(out).not.toContain("evil");
-          expect(out).not.toMatch(/\b(?:security|support)\b/i);
+          expect(out).not.toMatch(/\b(?:security|support)\b|securityteam|mod uo/i);
         }
       }
     }
@@ -325,5 +332,18 @@ describe("booking emails · the host's name (MOD-575)", () => {
     const ics = decode(queued.attachments?.[0]?.content ?? "");
     expect(ics).not.toContain("refund");
     expect(ics).toContain("SUMMARY:Meeting with Anna Carter");
+  });
+});
+
+describe("booking emails · the booker's name (MOD-575)", () => {
+  it("C2 never says a department or Moduo added you", () => {
+    for (const guestName of ["Moduo Security", "\u0455ecurity Team", "Account Support", "\u1E40oduo"]) {
+      expect(plainBookerName(guestName)).toBe("Someone");
+      const queued = BOOKING_QUEUED.booking_guest_added(payload({ ...BOOKING_ZOOM_FIXTURE, guestName }));
+      const { subject, text } = renderEmail(queued.doc);
+      expect(subject.startsWith("Someone added you")).toBe(true);
+      expect(text).not.toContain(guestName);
+      expect(decode(queued.attachments?.[0]?.content ?? "")).not.toContain(guestName);
+    }
   });
 });
