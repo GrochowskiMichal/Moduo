@@ -147,6 +147,34 @@ describe("buildEmailReaderDoc — navigation vectors (MOD-574)", () => {
     }
   });
 
+  it("drops <template>, whose content a scripting-off parse never looks into", () => {
+    const html = `<template><noscript><!--</noscript></template><meta http-equiv="refresh" content="0;url=https://phish.example/t">--></noscript></template>`;
+    for (const raw of [html, `<html><head>${html}</head><body>x</body></html>`]) {
+      const { srcDoc } = buildEmailReaderDoc(raw);
+      expect(srcDoc).not.toContain("<template");
+      expect(srcDoc).not.toContain("phish.example");
+      expect(srcDoc.toLowerCase()).not.toContain("refresh");
+    }
+  });
+
+  it("re-sanitizes until a round trip changes nothing (nested-form/math mutation)", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<form><math><mtext></form><form><mglyph><style></math><meta http-equiv="refresh" content="0;url=https://phish.example/form">`,
+    );
+    expect(srcDoc.toLowerCase()).not.toContain('http-equiv="refresh"');
+    expect(srcDoc).not.toContain("phish.example");
+  });
+
+  it("keeps an ordinary email's markup through the extra passes", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<html><head><style>p{color:red}</style></head><body><table><tr><td><p>Hi <b>there</b></p></td></tr></table></body></html>`,
+    );
+    expect(srcDoc).toContain("<style>p{color:red}</style>");
+    expect(srcDoc).toContain(
+      "<table><tbody><tr><td><p>Hi <b>there</b></p></td></tr></tbody></table>",
+    );
+  });
+
   it("drops <base> and every meta but charset/content-type", () => {
     const { srcDoc } = buildEmailReaderDoc(
       `<head><base href="https://evil.example/"><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">` +

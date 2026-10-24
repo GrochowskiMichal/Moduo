@@ -139,23 +139,19 @@ function heightReporterJs(): string {
 })();`;
 }
 
-/**
- * The reader-facing builder: one parse yields both the sanitized srcdoc AND the
- * remote-ref count (which drives the "Load images" bar) — no second DOMParser
- * pass over what can be a large marketing email.
- */
-export function buildEmailReaderDoc(
-  rawHtml: string,
-  options: EmailSrcDocOptions = {},
-): { srcDoc: string; remoteCount: number } {
-  const { blockRemote = true, autoHeight = false } = options;
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(rawHtml, "text/html");
+/** How many sanitize → serialize → re-parse rounds before we give up on the HTML. */
+const MAX_SANITIZE_PASSES = 4;
 
-  // <noscript> too: DOMParser parses with scripting off, the allow-scripts frame
-  // with it on, so a tag hidden in a comment inside <noscript> here becomes a
-  // real element there. Comments go for the same reason (MOD-574).
-  doc.querySelectorAll("script, iframe, object, embed, noscript").forEach((node) => {
+/**
+ * One sanitize pass over a parsed email. Returns the remote-ref count.
+ *
+ * DOMParser parses with scripting off and never looks inside `template.content`,
+ * while the allow-scripts frame parses with scripting on: a tag hidden in a
+ * comment inside <noscript> or <template> here becomes a real element there.
+ * So both elements and every comment go (MOD-574).
+ */
+function sanitizeOnce(doc: Document, blockRemote: boolean): number {
+  doc.querySelectorAll("script, iframe, object, embed, noscript, template").forEach((node) => {
     node.remove();
   });
   const comments = doc.createTreeWalker(doc, NodeFilter.SHOW_COMMENT);
@@ -181,7 +177,48 @@ export function buildEmailReaderDoc(
     }
   });
 
-  const remoteCount = walkRemoteRefs(doc, blockRemote);
+  return walkRemoteRefs(doc, blockRemote);
+}
+
+const serialize = (doc: Document) =>
+  `<head>${doc.head?.innerHTML ?? ""}</head><body>${doc.body?.innerHTML ?? ""}</body>`;
+
+/** Plain text, escaped: what the reader shows for HTML that never settles. */
+function textOnly(doc: Document): string {
+  const text = (doc.body?.textContent ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+  return `<pre>${text}</pre>`;
+}
+
+/**
+ * The reader-facing builder: the sanitized srcdoc AND the remote-ref count
+ * (which drives the "Load images" bar). Sanitizing repeats on its own output
+ * until a round trip changes nothing, because parse → serialize → parse can
+ * build a different tree (the nested-form/math mutation trick); HTML that is
+ * still changing after MAX_SANITIZE_PASSES is shown as plain text.
+ */
+export function buildEmailReaderDoc(
+  rawHtml: string,
+  options: EmailSrcDocOptions = {},
+): { srcDoc: string; remoteCount: number } {
+  const { blockRemote = true, autoHeight = false } = options;
+  const parser = new DOMParser();
+  let doc = parser.parseFromString(rawHtml, "text/html");
+  const remoteCount = sanitizeOnce(doc, blockRemote);
+  let html = serialize(doc);
+  let settled = false;
+  for (let pass = 1; pass < MAX_SANITIZE_PASSES; pass++) {
+    doc = parser.parseFromString(html, "text/html");
+    sanitizeOnce(doc, blockRemote);
+    const next = serialize(doc);
+    if (next === html) {
+      settled = true;
+      break;
+    }
+    html = next;
+  }
 
   const csp = [
     "default-src 'none'",
@@ -198,8 +235,8 @@ export function buildEmailReaderDoc(
     heightScript = `<script nonce="${nonce}">${heightReporterJs()}</` + `script>`;
   }
 
-  const headHtml = doc.head?.innerHTML ?? "";
-  const bodyHtml = doc.body?.innerHTML ?? rawHtml;
+  const headHtml = settled ? (doc.head?.innerHTML ?? "") : "";
+  const bodyHtml = settled ? (doc.body?.innerHTML ?? "") : textOnly(doc);
 
   const srcDoc = `<!doctype html>
 <html>

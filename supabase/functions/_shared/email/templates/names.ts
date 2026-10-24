@@ -30,14 +30,16 @@ const LINK_LIKE = /https?:|\/\/|www[.．。]|[\p{L}\p{N}][.．。]\p{L}{2,}|[@�
 const LOOKALIKES: Record<string, string> = {
   "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ԁ": "d",
   "м": "m", "υ": "u", "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t",
+  // Latin letters NFKD leaves whole ("Securıty", "Moduø"); only the checks see these, names print as typed.
+  "ı": "i", "ø": "o", "đ": "d", "ɵ": "o", "ꜱ": "s", "ɑ": "a", "ɡ": "g", "ł": "l", "ħ": "h", "ŧ": "t",
 };
 
 /**
  * Words that make a sender name read like us or like a department, not a
- * person. The long ones match anywhere ("Securityteam"); the short ones only as
- * words, so "Helpman" or "Teamon" still read as names.
+ * person. Most match anywhere ("Securityteam"); the ones real names contain
+ * only as words, so "Padmini", "Billington" and "Helpman" still read as names.
  */
-const OFFICIAL = /security|support|billing|account|admin|helpdesk|noreply|verification|compliance|\b(?:service|help|team|staff)\b/;
+const OFFICIAL = /security|support|account|helpdesk|noreply|verification|compliance|\b(?:admin|administrator|billing|service|help|team|staff)\b/;
 
 /** Latin mixed with any other script ("Ѕecurity" with Cyrillic Ѕ, "ꓢecurity" with Lisu ꓢ) is a spoof, not a name. */
 const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])/u;
@@ -51,7 +53,7 @@ function skeleton(value: string): string {
   return Array.from(bare, (ch) => LOOKALIKES[ch] ?? ch).join("");
 }
 
-/** The skeleton with spaces and punctuation gone, so "Mod uo" still reads as "moduo". */
+/** The skeleton with spaces and punctuation gone, so "Mod uo" still reads as "moduo" (at the cost of a rare "Mo Duong"). */
 const squeezed = (value: string) => skeleton(value).replace(/[\s\p{P}]+/gu, "");
 
 /** True for a plain name (see PLAIN_NAME), up to 50 characters. */
