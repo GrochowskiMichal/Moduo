@@ -16,8 +16,8 @@
 // Where IndexedDB is missing (tests, a locked-down browser) there is no copy:
 // the store still works, it just opens from the server.
 
-import { idbOpener, idbRequest } from "./kernel/idb";
-import { isOwnedBy, ownerKey } from "./kernel/registry";
+import { idbDone, idbOpener, idbRequest } from "./kernel/idb";
+import { isOwnedBy, type OwnedCopies, ownerKey } from "./kernel/registry";
 import type { SyncTableName } from "./types";
 
 /** Bumped when the persisted shape changes: an older copy's rows are dropped (its waiting captures are kept).
@@ -49,12 +49,15 @@ export interface SyncCache {
   write(key: string, value: CachedWorkspace): Promise<void>;
   /**
    * Read and write one record in one step (one IndexedDB transaction): `next`
-   * gets what's stored and returns what to store. Two tabs writing at once
-   * can't drop each other's waiting captures. Resolves to what was stored.
+   * gets what's stored and returns what to store (null: delete the record).
+   * Two tabs writing at once can't drop each other's waiting captures.
+   * Resolves to what was stored; rejects when the record couldn't be read or
+   * written (never "nothing stored": a caller that cuts a copy down would
+   * delete what waits in it).
    */
   update(
     key: string,
-    next: (stored: CachedWorkspace | null) => CachedWorkspace,
+    next: (stored: CachedWorkspace | null) => CachedWorkspace | null,
   ): Promise<CachedWorkspace | null>;
   /** Every record's key. */
   keys(): Promise<string[]>;
@@ -62,6 +65,28 @@ export interface SyncCache {
   clear(): Promise<void>;
   /** Wipe the copies whose key matches (another person's, a workspace you left). */
   deleteWhere(match: (key: string) => boolean): Promise<void>;
+}
+
+/**
+ * A copy with a late write in it (MOD-569): in front of the first entry
+ * `sameTask` picks (newer, for its task), else at the end; once. No copy: a
+ * cut-down one (an older version stamp, so the next store takes only the
+ * outbox).
+ */
+export function withEntryBefore(
+  stored: CachedWorkspace | null,
+  entry: { id: string },
+  sameTask: (stored: unknown) => boolean,
+): CachedWorkspace {
+  const outbox: unknown[] = Array.isArray(stored?.outbox) ? [...stored.outbox] : [];
+  if (!outbox.some((e) => (e as { id?: unknown } | null)?.id === entry.id)) {
+    const i = outbox.findIndex(sameTask);
+    if (i < 0) outbox.push(entry);
+    else outbox.splice(i, 0, entry);
+  }
+  return stored
+    ? { ...stored, outbox }
+    : { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
 }
 
 /** The record key: `<person>:<workspace>` (the kernel's owner key). */
@@ -85,7 +110,9 @@ export function memoryCache(): SyncCache & { records: Map<string, CachedWorkspac
     async update(key, next) {
       const stored = records.get(key) ?? null;
       const before = stored ? structuredCloneSafe(stored) : null;
-      records.set(key, structuredCloneSafe(next(before)));
+      const value = next(before);
+      if (value) records.set(key, structuredCloneSafe(value));
+      else records.delete(key);
       return before;
     },
     async keys() {
@@ -137,22 +164,24 @@ export function idbCache(factory: IDBFactory): SyncCache {
       }
     },
     async update(key, next) {
-      try {
-        const store = await tx("readwrite");
-        // The get and the put share one transaction: nothing lands between them.
-        return await new Promise<CachedWorkspace | null>((resolve, reject) => {
-          const get = store.get(key);
-          get.onerror = () => reject(get.error);
-          get.onsuccess = () => {
-            const stored = (get.result as CachedWorkspace | undefined) ?? null;
-            const put = store.put(next(stored), key);
-            put.onerror = () => reject(put.error);
-            put.onsuccess = () => resolve(stored);
-          };
-        });
-      } catch {
-        return null;
-      }
+      const store = await tx("readwrite");
+      // The get and the put share one transaction: nothing lands between them.
+      return await new Promise<CachedWorkspace | null>((resolve, reject) => {
+        const get = store.get(key);
+        get.onerror = () => reject(get.error);
+        get.onsuccess = () => {
+          const stored = (get.result as CachedWorkspace | undefined) ?? null;
+          try {
+            const value = next(stored);
+            const write = value ? store.put(value, key) : store.delete(key);
+            write.onerror = () => reject(write.error);
+            // Settled when the transaction commits: a full disk aborts it after the write's success.
+            write.onsuccess = () => idbDone(store.transaction).then(() => resolve(stored), reject);
+          } catch (e) {
+            reject(e);
+          }
+        };
+      });
     },
     async keys() {
       try {
@@ -204,4 +233,40 @@ export function deviceCache(): SyncCache {
     shared = factory ? idbCache(factory) : noCache;
   }
   return shared;
+}
+
+/**
+ * The device copies as the person lifecycle sees them. Cutting a copy down
+ * to what waits keeps its outbox (plus what the stores that just stopped
+ * held) and no rows; an older version stamp makes the next store that opens
+ * it take the outbox and read everything else again.
+ */
+export function ownedCopies<E extends { id: string }>(cache: SyncCache): OwnedCopies<E> {
+  return {
+    keys: () => cache.keys(),
+    async keepOnlyWaiting(key, inMemory, handled) {
+      let kept = 0;
+      await cache.update(key, (stored) => {
+        const outbox: E[] = [];
+        const seen = new Set<string>();
+        const stack = [
+          ...(Array.isArray(stored?.outbox) ? (stored.outbox as E[]) : []),
+          ...inMemory,
+        ];
+        for (const entry of stack) {
+          if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
+          seen.add(entry.id);
+          if (!handled.has(entry.id)) outbox.push(entry);
+        }
+        kept = outbox.length;
+        // Nothing waits: the record goes in this same step, so a late write
+        // handed to it meanwhile (MOD-569) can't be deleted after.
+        if (kept === 0) return null;
+        return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
+      });
+      return kept === 0 ? null : kept;
+    },
+    deleteWhere: (match) => cache.deleteWhere(match),
+    clear: () => cache.clear(),
+  };
 }

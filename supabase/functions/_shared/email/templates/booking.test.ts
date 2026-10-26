@@ -256,3 +256,104 @@ describe("booking emails · host cancel and reminder (TX-6)", () => {
     expect(far.text).toContain("You're meeting Anna on Friday 16 October at 14:00.");
   });
 });
+
+describe("booking emails · the host's name (MOD-575)", () => {
+  const GUEST_KINDS = [
+    "booking_guest_confirmed",
+    "booking_guest_added",
+    "booking_guest_cancelled",
+    "booking_guest_host_cancelled",
+    "booking_guest_reminder",
+  ] as const;
+
+  it("never puts a host name that reads like a link, like us or like a spoof in From, subject, body or calendar file", () => {
+    for (const hostName of [
+      "Verify your account at evil.example",
+      "Account Security",
+      "Moduo Support",
+      "Mоduо",
+      "Mo​duo",
+      "Ѕecurity Desk",
+      "Payroll https://evil.example",
+      "Call 555 0100 now",
+      "\u1E40oduo",
+      "\u1E3Eoduo",
+      "\u015Aecurity Desk",
+      "S\u0301ecurity Desk",
+      "\uA4E2ecurity Desk",
+      "Securityteam",
+      "Mod uo",
+      "Secur\u0131ty Desk",
+      "Modu\u00F8",
+      "\uA731ecurity Desk",
+      "\u1D0D\u1D0F\u1D05\u1D1C\u1D0F",
+      "Sec\u028Arity",
+    ]) {
+      for (const kind of GUEST_KINDS) {
+        const queued = BOOKING_QUEUED[kind](payload({ ...BOOKING_ZOOM_FIXTURE, hostName }));
+        const { subject, preheader, html, text } = renderEmail(queued.doc);
+        expect(queued.fromName).toBe("Moduo");
+        const ics = decode(queued.attachments?.[0]?.content ?? "");
+        for (const out of [subject, preheader, html, text, ics]) {
+          expect(out).not.toContain(hostName);
+          expect(out).not.toContain("evil");
+          expect(out).not.toMatch(/\b(?:security|support)\b|securityteam|mod uo/i);
+        }
+      }
+    }
+  });
+
+  it("falls back to 'your host' in words that still read well", () => {
+    const spoof = { ...BOOKING_ZOOM_FIXTURE, hostName: "Account Security" };
+    const c1 = renderEmail(BOOKING_QUEUED.booking_guest_confirmed(payload(spoof)).doc);
+    expect(c1.subject).toBe("Booked: Fri 16 Oct at 14:00");
+    expect(c1.text).toContain("You're meeting your host on Friday 16 October at 14:00.");
+    expect(c1.text).toContain("Questions for your host? Reply to this email.");
+    const c6 = renderEmail(BOOKING_QUEUED.booking_guest_host_cancelled(payload(spoof)).doc);
+    expect(c6.subject).toBe("Your host canceled your meeting on Fri 16 Oct");
+    expect(c6.text).toContain("Your host canceled your meeting on Friday 16 October at 14:00.");
+    const c7 = renderEmail(
+      BOOKING_QUEUED.booking_guest_reminder(payload({ ...spoof, sendAt: "2026-10-15T12:00:00Z" })).doc,
+    );
+    expect(c7.subject).toBe("Tomorrow at 14:00: your meeting");
+    const ics = decode(BOOKING_QUEUED.booking_guest_confirmed(payload(spoof)).attachments?.[0]?.content ?? "");
+    expect(ics).toContain("ORGANIZER:mailto:anna@northwind.studio");
+    expect(ics).toContain("with your host");
+  });
+
+  it("keeps a plain host name, in any script", () => {
+    const queued = BOOKING_QUEUED.booking_guest_confirmed(payload({ ...BOOKING_FIXTURE, hostName: "Zoë O'Neill-Łukasz" }));
+    expect(queued.fromName).toBe("Zoë O'Neill-Łukasz via Moduo");
+    expect(renderEmail(queued.doc).subject).toBe("Booked: Zoë O'Neill-Łukasz, Fri 16 Oct at 14:00");
+    for (const real of ["Padmini Rao", "Kate Billington", "Paweł Ćwik", "Hållbar Øster", "Nguyễn Thị Minh Khai", "Søren Kierkegaard", "Đorđe Petrović", "प्रिया शर्मा"]) {
+      expect(BOOKING_QUEUED.booking_guest_confirmed(payload({ ...BOOKING_FIXTURE, hostName: real })).fromName).toBe(
+        `${real} via Moduo`,
+      );
+    }
+    expect(BOOKING_QUEUED.booking_guest_confirmed(payload({ ...BOOKING_FIXTURE, hostName: "王小明" })).fromName).toBe(
+      "王小明 via Moduo",
+    );
+  });
+
+  it("drops a link-like booking link name from the guest's calendar file", () => {
+    const queued = BOOKING_QUEUED.booking_guest_confirmed(
+      payload({ ...BOOKING_ZOOM_FIXTURE, linkName: "Claim your refund at refunds.example" }),
+    );
+    const ics = decode(queued.attachments?.[0]?.content ?? "");
+    expect(ics).not.toContain("refund");
+    expect(ics).toContain("SUMMARY:Meeting with Anna Carter");
+  });
+});
+
+describe("booking emails · the booker's name (MOD-575)", () => {
+  it("C2 never says a department or Moduo added you", () => {
+    for (const guestName of ["Moduo Security", "\u0455ecurity Team", "Account Support", "\u1E40oduo"]) {
+      expect(plainBookerName(guestName)).toBe("Someone");
+      const queued = BOOKING_QUEUED.booking_guest_added(payload({ ...BOOKING_ZOOM_FIXTURE, guestName }));
+      const { subject, text } = renderEmail(queued.doc);
+      expect(subject.startsWith("Someone added you")).toBe(true);
+      expect(text).not.toContain(guestName);
+      expect(decode(queued.attachments?.[0]?.content ?? "")).not.toContain(guestName);
+    }
+  });
+});

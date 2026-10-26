@@ -405,13 +405,34 @@ function publicLink(
   };
 }
 
-/** The host's own inbox (their Moduo account), for the host emails. */
-async function hostInbox(db: SupabaseClient, link: LinkRow): Promise<{ email: string; userId: string | null }> {
+/**
+ * The host's own inbox (their Moduo account), for the host emails. `account`
+ * is that address only when it was read from Auth (verified at sign-in), never
+ * the link's `owner_email`, which the owner can write.
+ */
+async function hostInbox(
+  db: SupabaseClient,
+  link: LinkRow,
+): Promise<{ email: string; userId: string | null; account: string }> {
   const fallback = (link.owner_email ?? "").trim();
-  if (!link.owner_user_id) return { email: fallback, userId: null };
+  if (!link.owner_user_id) return { email: fallback, userId: null, account: "" };
   const user = await db.auth.admin.getUserById(link.owner_user_id).catch(() => null);
-  const email = user?.data?.user?.email?.trim() || fallback;
-  return { email, userId: link.owner_user_id };
+  // Confirmed only: "Confirm email" is on in prod, but a local stack may not be.
+  const account = user?.data?.user?.email_confirmed_at ? user.data.user.email?.trim() || "" : "";
+  return { email: account || fallback, userId: link.owner_user_id, account };
+}
+
+/**
+ * The address guest emails and calendar files name as the host (ORGANIZER,
+ * Reply-To): the connected Google account or the Moduo account, both verified.
+ * Guests are anyone the booker typed, so a typed address would let a host send
+ * a "reply to security@bank.example" from our domain.
+ */
+function verifiedHostEmail(
+  access: { email: string | null } | null,
+  inbox: { account: string },
+): string {
+  return access?.email?.trim() || inbox.account;
 }
 
 /**
@@ -549,7 +570,7 @@ Deno.serve(async (req: Request) => {
         guestZone: row.timezone ?? "",
         video: zoomId ? VIDEO_LABEL.zoom : VIDEO_LABEL.google_meet,
         joinUrl: row.meeting_link ?? "",
-        host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || inbox.email },
+        host: { name: host.name, avatarUrl: host.avatarUrl, email: verifiedHostEmail(access, inbox) },
         hostInbox: inbox,
         guest: { name: row.attendee_name, email: row.attendee_email },
         guests: Array.isArray(row.guest_emails) ? row.guest_emails : [],
@@ -634,7 +655,9 @@ Deno.serve(async (req: Request) => {
     ? parseGuestEmails(body.guests, email)
     : { ok: true as const, emails: [] as string[] };
   if (!guests.ok) return json({ error: "bad_guest" }, 400);
-  const hostAddress = (access?.email || link.owner_email || "").trim().toLowerCase();
+  const inbox = await hostInbox(db, link);
+  const hostEmail = verifiedHostEmail(access, inbox);
+  const hostAddress = hostEmail.toLowerCase();
   const invitedEmails = guests.emails.filter((address) => address !== hostAddress);
   const answersIn = Array.isArray(body.answers) ? body.answers : [];
   const questions = Array.isArray(link.questions_json)
@@ -655,7 +678,6 @@ Deno.serve(async (req: Request) => {
   // An unusable zone falls back to the host's (AC30): Intl would otherwise
   // throw after the booking is committed, and the guest's email names the zone used.
   const guestZone = guestTimeZone(body.timeZone, link.host_timezone);
-  const hostEmail = access?.email || link.owner_email || "";
   if (!hostEmail) return json({ error: "host_unavailable" }, 409);
 
   const gate = await bookingGate(db, req, link.owner_user_id);
@@ -815,7 +837,7 @@ Deno.serve(async (req: Request) => {
     video: VIDEO_LABEL[platform],
     joinUrl: meet.meetLink,
     host: { name: host.name, avatarUrl: host.avatarUrl, email: hostEmail },
-    hostInbox: await hostInbox(db, link),
+    hostInbox: inbox,
     guest: { name, email },
     guests: invitedEmails,
     googleInvites,
