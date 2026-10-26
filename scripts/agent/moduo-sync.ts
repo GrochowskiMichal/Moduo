@@ -349,7 +349,12 @@ export function outcomeLine(o: Outcome): string {
   const where = o.task ? ` ${o.task}` : "";
   const line = `${o.result}:${where} ${o.move.id} → ${o.move.status} (${o.move.reason})`;
   if (o.result === "moved" || o.result === "closed") return line;
-  return `::warning::${line}${o.error ? ` · ${o.error}` : ""}`;
+  // Workflow-command escaping, so server text can't split the annotation into a second command.
+  const text = `${line}${o.error ? ` · ${o.error}` : ""}`
+    .replace(/%/g, "%25")
+    .replace(/\r/g, "%0D")
+    .replace(/\n/g, "%0A");
+  return `::warning::${text}`;
 }
 
 async function main(argv: string[]): Promise<void> {

@@ -10,6 +10,7 @@ import {
   connectorRpc,
   type GitHubFacts,
   type Move,
+  outcomeLine,
   pickBlockTask,
   planEvent,
   releaseLog,
@@ -430,5 +431,18 @@ describe("releaseLog", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("outcomeLine", () => {
+  it("escapes server text so it stays one warning", () => {
+    const move: Move = { id: "HV-7", status: "Shipped", reason: "x" };
+    const line = outcomeLine({ move, result: "failed", error: "bad\n::error::100%" });
+    expect(line.startsWith("::warning::")).toBe(true);
+    expect(line).not.toContain("\n");
+    expect(line).toContain("%0A::error::100%25");
+    expect(outcomeLine({ move, result: "moved", task: "MOD-1" })).toBe(
+      "moved: MOD-1 HV-7 → Shipped (x)",
+    );
   });
 });
