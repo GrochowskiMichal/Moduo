@@ -137,7 +137,8 @@ jobs:
         run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:ast lint:css lint:notes --output-logs=new-only
 
   # Runs on every PR and push, docs-only ones too: decision entries are Markdown, so the lint job
-  # skips them, but their status lines and the generated index must still hold (HV-11). The
+  # skips them, but their status lines and the generated index must still hold (HV-11), and so
+  # must the path rules and the references in agent docs (HV-10, `lint:rules`). The
   # script uses only Node built-ins, so it needs no install.
   decisions:
     needs: scan
@@ -154,6 +155,10 @@ jobs:
 
       - name: Decision statuses, references and the generated index
         run: bun run lint:decisions
+
+      - name: Path rules frontmatter, dead references in rules and agent docs (HV-10)
+        if: success() || failure()
+        run: bun run lint:rules
 
   unit-tests:
     needs: scan
@@ -235,6 +240,8 @@ jobs:
             [ -n "$f" ] || continue
             case "$f" in
               # Edge Functions have their own unit tests; the SQL tests read the schema only.
+              # The RLS matrix's source and its generator and mutant runner (HV-16).
+              supabase/tests/rls_matrix.md|scripts/db/*) db=true ;;
               *.md|supabase/functions/*) ;;
               supabase/*|scripts/db-test.ts|scripts/local/stack.sh) db=true ;;
             esac
@@ -264,6 +271,7 @@ jobs:
   # cache, encrypted with DB_SNAPSHOT_KEY (never an artifact: the repo is public). A fork's pull
   # request gets no secrets, so it skips this job.
   # supabase/tests/known-failures.txt holds what is already red; anything else fails the job.
+  # Then the RLS matrix's policy mutants (HV-16).
   db-test:
     needs: oracle-paths
     if: needs.oracle-paths.outputs.db == 'true'
@@ -311,7 +319,12 @@ jobs:
       - name: SQL tests
         run: bun run db:test
 
-  # `bun run verify` covers no Rust (apps/desktop/src-tauri/AGENTS.md): the three Rust gates.
+      # Loosens each policy on the RLS matrix's tables (supabase/tests/rls_matrix.md) inside a
+      # rolled-back transaction; a mutant the matrix doesn't catch fails the job.
+      - name: Policy mutants
+        run: bun run db:mutants
+
+  # `bun run verify` covers no Rust (.claude/rules/desktop-rust.md): the three Rust gates.
   rust-check:
     needs: oracle-paths
     if: needs.oracle-paths.outputs.rust == 'true'
