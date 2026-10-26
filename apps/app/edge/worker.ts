@@ -19,6 +19,7 @@ import {
   configFromEnv,
   configScript,
   NO_CACHE,
+  rehearsalError,
   scriptHash,
   securityHeaders,
 } from "./config";
@@ -26,7 +27,12 @@ import {
 type Fetcher = { fetch(request: Request): Promise<Response> };
 
 /** BUILD is the short commit SHA, set by the deploy (`--var BUILD:<sha>`), so the smoke test can tell which build is live. */
-export type Env = ConfigEnv & { ASSETS: Fetcher; BUILD?: string };
+export type Env = ConfigEnv & {
+  ASSETS: Fetcher;
+  BUILD?: string;
+  /** Staging canary rehearsal only (config.ts, rehearsalError). */
+  CANARY_FORCE_ERROR_AFTER?: string;
+};
 
 /** Writes `script` as the first child of <head>. HTMLRewriter in production; tests pass a string version. */
 export type InjectHead = (response: Response, script: string) => Response;
@@ -59,6 +65,7 @@ function withHeaders(response: Response, headers: Record<string, string>): Respo
 }
 
 export async function handle(request: Request, env: Env, inject: InjectHead): Promise<Response> {
+  if (rehearsalError(env, Date.now())) throw new Error("canary rehearsal: forced error");
   const url = new URL(request.url);
   const config = configFromEnv(env);
 

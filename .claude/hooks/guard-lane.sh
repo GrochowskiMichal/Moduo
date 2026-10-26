@@ -5,7 +5,7 @@
 #      the sandbox is stopped at its first tool call. Stopgap for one machine:
 #      MODUO_ALLOW_BYPASS=1 in your own gitignored .claude/settings.local.json ("env").
 #   2. In a lane (MODUO_LANE=1) production deploys and pushes to prod are denied: wrangler deploys and
-#      rollbacks, supabase writes to the linked project, gh workflow runs, releases and dispatches,
+#      rollbacks (also through scripts/release/canary.ts), supabase writes to the linked project, gh workflow runs, releases and dispatches,
 #      tag pushes, and any Supabase MCP write. .claude/settings.lane.json denies the same commands
 #      first; this hook catches the spellings a permission rule can't (chains, bunx/npx, other MCP names).
 # Exit 2 = block, stderr = the reason Claude sees. Tests: .claude/hooks/guard-lane.test.sh.
@@ -36,6 +36,7 @@ b='(^|[^[:alnum:]_.-])'
 patterns=(
   "${b}wrangler[[:space:]]+((pages|versions)[[:space:]]+)?deploy"
   "${b}wrangler[[:space:]]+(rollback|secret[[:space:]]+put|versions[[:space:]]+upload)"
+  "${b}scripts/release/canary\.ts[[:space:]]+(run|abort)"
   "${b}supabase[[:space:]]+(db[[:space:]]+push|functions[[:space:]]+deploy|secrets[[:space:]]+set|link)"
   "${b}supabase[[:space:]]+db[[:space:]]+query([[:space:]].*)?--linked"
   "${b}gh[[:space:]]+(workflow[[:space:]]+run|release[[:space:]]+create)"

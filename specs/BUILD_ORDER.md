@@ -577,7 +577,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-12 — ast-grep pack** · deps: — · 2026-10-23 `t/mike/hv-12-ast-grep`
 - [x] **HV-15 — Variant hunt** · deps: — · 2026-10-23 `t/mike/hv-15-variant-hunt`
 - [x] **HV-17 — Sync outbox property harness** · deps: — · 2026-10-23 `t/mike/hv-17-sync-property` (PR #626)
-- [ ] **HV-28 — Canary and rollback (Tier 2)** · deps: —
+- [x] **HV-28 — Canary and rollback (Tier 2)** · deps: — · 2026-10-26 `t/mike/hv-28-canary` (live check pending the zone rule and a develop sync)
 - [x] **HV-6 — AI review on PRs into develop (Tier 2)** · deps: HV-5 · 2026-10-26 `t/mike/hv-6-ai-review` (live check pending the token)
 - [x] **HV-7 — GitHub → Moduo sync (Tier 2)** · deps: HV-2 · 2026-10-26 `t/mike/hv-7-github-sync` (live check pending the key and a develop sync)
 - [x] **HV-10 — Rules by path** · deps: HV-1 · 2026-10-26 `t/mike/hv-10-path-rules`
