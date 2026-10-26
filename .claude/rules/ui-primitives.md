@@ -1,6 +1,12 @@
-# apps/app/src/components/ui/ (loads when an agent works in this folder)
+---
+paths: ["apps/app/src/components/ui/**"]
+incident: "Hand-rolled primitives and raw values drifted from the token system (2026-10-07, Harness v2 added guard-design-tokens.sh)"
+expires: 2027-01-31
+---
 
-Design-system primitives with no domain knowledge. Read [docs/DESIGN_RULES.md](../../../../../docs/DESIGN_RULES.md) and [docs/gotchas/ui.md](../../../../../docs/gotchas/ui.md) first.
+# UI primitives (apps/app/src/components/ui/)
+
+Design-system primitives with no domain knowledge. Read [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) and [docs/gotchas/ui.md](../../docs/gotchas/ui.md) first.
 
 - **Primitives wrap shadcn** wherever shadcn has the component (Dialog, Dropdown, Popover, Command, Tabs, Tooltip, Sheet, Toast, Switch, Select, RadioGroup, Separator, Card, ScrollArea, Avatar, Badge, ContextMenu). Add it with the shadcn CLI; never roll your own.
 - **Every new primitive ships a Storybook story** next to it: `<name>.stories.tsx`.

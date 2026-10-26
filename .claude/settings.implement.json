@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(**/*.test.*)",
+      "Edit(**/*.spec.*)",
+      "Edit(supabase/tests/**)",
+      "Edit(benchmarks/**)"
+    ]
+  }
+}

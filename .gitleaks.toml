@@ -10,3 +10,10 @@ paths = ['''supabase/functions/_shared/notes-doc/notes-doc\.bundle\.js''']
 description = "PLAT-4: Supabase publishable keys (sb_publishable_…) are public by design: every browser gets them in the app bundle and the edge config, and RLS is what protects data. Secret keys (sb_secret_…) stay flagged."
 regexTarget = "match"
 regexes = ['''sb_publishable_[A-Za-z0-9_-]+''']
+
+[[allowlists]]
+description = "HV-16: the generated RLS matrix files (bun run db:matrix) write each fixture id as a '<uuid>'::uuid literal (md5('db-test:' || name)); next to words like api_keys they match generic-api-key. Only those literals, only in those files; regenerated, so per-commit fingerprints would go stale."
+condition = "AND"
+paths = ['''supabase/tests/rls_matrix_[a-z_]+\.test\.sql''']
+regexTarget = "line"
+regexes = ['''\'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\'::uuid''']
