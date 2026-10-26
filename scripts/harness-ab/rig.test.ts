@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { type Arm, judge, loadArm, loadSet, plan, type Row, taskProblems } from "./model";
 import { claudeArgs, report } from "./rig";
 import { agentEnv, RefusedError, refuseWorkspace, rigProfile, type SrtProfile } from "./safety";
+import { ANCHOR, closeStackPorts, STACK_PORTS } from "./srt-offline.mjs";
 import { summarize } from "./stream";
 
 // The A/B rig (specs/harness-v3.md, AC33, AC37): a dry run plans one row per task × arm × repeat, and
@@ -133,7 +134,7 @@ describe("sandbox and environment", () => {
     for (const gone of ["127.0.0.1:54321", "127.0.0.1:54322", "mcp.moduo.app", "github.com"])
       expect(hosts).not.toContain(gone);
     expect(hosts.some((h) => h.startsWith("127.") || h.startsWith("localhost"))).toBe(false);
-    expect(profile.network.allowLocalBinding).toBe(false);
+    expect(profile.network.allowLocalBinding).toBe(true);
     expect(profile.filesystem.denyRead).toEqual(
       expect.arrayContaining([`${ROOT}/.env.local`, "~/.config/gh"]),
     );
@@ -203,6 +204,77 @@ describe("sandbox and environment", () => {
       rmSync(ws, { recursive: true, force: true });
     }
   });
+});
+
+describe("srt-offline: the stack's ports stay closed with local binding on", () => {
+  it("adds a deny per stack port after srt's localhost allow, and fails closed without it", () => {
+    const out = closeStackPorts(`(version 1)\n${ANCHOR}\n(allow network-bind)`);
+    const lines = out.split("\n");
+    const at = lines.indexOf(ANCHOR);
+    expect(lines.slice(at + 1, at + 1 + STACK_PORTS.length)).toEqual(
+      STACK_PORTS.map((p) => `(deny network-outbound (remote tcp "localhost:${p}"))`),
+    );
+    expect(STACK_PORTS).toEqual(expect.arrayContaining([54321, 54322]));
+    expect(() => closeStackPorts("(version 1)")).toThrow(/refusing/);
+  });
+
+  const hasSrt =
+    process.platform === "darwin" &&
+    spawnSync("sh", ["-c", "command -v srt"], { encoding: "utf8" }).status === 0;
+  it.skipIf(!hasSrt)(
+    "live: a stack port is refused, any other local port and a bind work",
+    async () => {
+      const net = await import("node:net");
+      const listen = (port: number) =>
+        new Promise<import("node:net").Server | null>((resolve) => {
+          const server = net.createServer((s) => s.end());
+          server.once("error", () => resolve(null));
+          server.listen(port, "127.0.0.1", () => resolve(server));
+        });
+      // A stack port that's free here (the stack may hold the others), and any free port.
+      let stack: import("node:net").Server | null = null;
+      let stackPort = 0;
+      for (const p of [...STACK_PORTS].reverse()) {
+        stack = await listen(p);
+        if (stack) {
+          stackPort = p;
+          break;
+        }
+      }
+      const other = await listen(0);
+      const otherPort = (other?.address() as import("node:net").AddressInfo).port;
+      const dir = mkdtempSync(path.join(tmpdir(), "harness-ab-srt-"));
+      try {
+        const file = path.join(dir, "p.json");
+        const p = rigProfile(lane, { source: ROOT });
+        writeFileSync(
+          file,
+          JSON.stringify({
+            ...p,
+            $comment: undefined,
+            filesystem: { ...p.filesystem, allowWrite: [dir] },
+          }),
+        );
+        const probe = (port: number) =>
+          `nc -z -w 2 127.0.0.1 ${port} >/dev/null 2>&1 && echo ${port}=open || echo ${port}=closed`;
+        const cmd = [stackPort ? probe(stackPort) : "true", probe(otherPort)].join("; ");
+        const run = spawnSync(
+          path.join(ROOT, "scripts/harness-ab/srt-offline.mjs"),
+          ["--settings", file, "-c", cmd],
+          {
+            encoding: "utf8",
+          },
+        );
+        expect(run.status).toBe(0);
+        if (stackPort) expect(run.stdout).toContain(`${stackPort}=closed`);
+        expect(run.stdout).toContain(`${otherPort}=open`);
+      } finally {
+        stack?.close();
+        other?.close();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 const realpath = (p: string) =>

@@ -12,7 +12,8 @@
 # scripts/agent/frozen-tests.test.ts.
 # The profiles come from this script's checkout, the workspace is the cwd's checkout, so the A/B rig
 # (scripts/harness-ab/) can run a lane in a clone at an old commit. The rig swaps the srt profile with
-# MODUO_LANE_PROFILE and the Claude settings with MODUO_LANE_SETTINGS (both default to the files below).
+# MODUO_LANE_PROFILE, the Claude settings with MODUO_LANE_SETTINGS (both default to the files below) and
+# srt itself with MODUO_LANE_SRT (scripts/harness-ab/srt-offline.mjs, which also closes the stack's ports).
 set -euo pipefail
 implement=0
 if [ "${1:-}" = "--implement" ]; then implement=1; shift; fi
@@ -53,4 +54,4 @@ jq --arg root "$root" --arg git "$gitdir" --arg turbo "$turbo" --argjson frozen 
 
 cd "$root"
 inner=$(printf '%q ' claude -p --permission-mode bypassPermissions --settings "$claude_settings" "$@")
-MODUO_LANE=1 MODUO_LANE_SANDBOX=1 srt --settings "$settings" -c "$inner" </dev/null
+MODUO_LANE=1 MODUO_LANE_SANDBOX=1 "${MODUO_LANE_SRT:-srt}" --settings "$settings" -c "$inner" </dev/null

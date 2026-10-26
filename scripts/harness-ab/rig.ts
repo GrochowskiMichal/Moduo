@@ -1,7 +1,8 @@
 // The A/B rig (specs/harness-v3.md, HV-20, AC33): a task set × arms × repeats, one JSON row per run.
 // Each run: a clone with no remote at the task's commit, `claude -p --output-format stream-json`
-// inside srt (scripts/agent/lane.sh) with the network cut to the model API and npm, then the oracle
-// and verify run outside the agent, also inside srt. How to add tasks and arms: README.md here.
+// inside srt (scripts/agent/lane.sh via srt-offline.mjs) with the network cut to the model API and
+// npm and the shared stack's ports closed, then the oracle and verify run outside the agent, in the
+// same sandbox. How to add tasks and arms: README.md here.
 //
 //   bun run ab list
 //   bun run ab run --set core --arms control,smoke [--tasks a,b] [--repeats 3] [--dry-run] [--keep] [--no-verify]
@@ -45,6 +46,8 @@ import { summarize } from "./stream";
 const SOURCE = path.resolve(RIG_DIR, "../..");
 const OUT = process.env.HARNESS_AB_OUT ?? path.join(SOURCE, ".harness-ab");
 const LANE = path.join(SOURCE, "scripts/agent/lane.sh");
+/** srt with the shared stack's localhost ports closed (srt-offline.mjs). */
+const SRT = path.join(RIG_DIR, "srt-offline.mjs");
 const AGENT_TIMEOUT_MS = 45 * 60_000;
 const CHECK_TIMEOUT_MS = 20 * 60_000;
 
@@ -108,7 +111,7 @@ function sandboxed(
   env: Record<string, string>,
   log: string,
 ) {
-  const r = sh("srt", ["--settings", profileFile, "-c", cmd], {
+  const r = sh(SRT, ["--settings", profileFile, "-c", cmd], {
     cwd: ws,
     env: agentEnv(process.env, env),
     timeout: CHECK_TIMEOUT_MS,
@@ -267,6 +270,7 @@ function execute(
             ...run.arm.env,
             MODUO_LANE_PROFILE: setup.laneProfile,
             MODUO_LANE_SETTINGS: setup.settings,
+            MODUO_LANE_SRT: SRT,
           }),
           timeout: AGENT_TIMEOUT_MS,
         },

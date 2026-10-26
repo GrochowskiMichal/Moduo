@@ -2,7 +2,7 @@
 // Supabase stack, production (the app, its Supabase project, the Moduo MCP) or a git remote.
 // Three layers: the config is checked before anything runs (refuseConfig), the sandbox profile is
 // derived from the lane profile with only the model API and the package registry left open
-// (rigProfile), and the agent gets a scrubbed environment (agentEnv). The workspace itself is a
+// (rigProfile) and run through srt-offline.mjs, which closes the stack's ports on localhost, and the agent gets a scrubbed environment (agentEnv). The workspace itself is a
 // clone with no remote (checked by refuseWorkspace before the agent starts).
 
 export type Refusal = { where: string; reason: string };
@@ -158,7 +158,8 @@ export function rigProfile(lane: SrtProfile, opts: { source: string; extraHosts?
     network: {
       ...lane.network,
       allowedDomains: [...keep],
-      allowLocalBinding: false,
+      // Tests bind local ports (rstest probes one); srt-offline.mjs closes the stack's ports instead.
+      allowLocalBinding: true,
     },
     filesystem: {
       ...lane.filesystem,
