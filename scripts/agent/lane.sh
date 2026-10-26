@@ -10,6 +10,10 @@
 # so a lane can't plant a hook or rewrite the remote. ~/.claude.json is read-only too: Claude runs fine
 # without writing it (checked live with srt 0.0.81, 2026-10-24). Tests: scripts/agent/settings.test.ts,
 # scripts/agent/frozen-tests.test.ts.
+# The profiles come from this script's checkout, the workspace is the cwd's checkout, so the A/B rig
+# (scripts/harness-ab/) can run a lane in a clone at an old commit. The rig swaps the srt profile with
+# MODUO_LANE_PROFILE, the Claude settings with MODUO_LANE_SETTINGS (both default to the files below) and
+# srt itself with MODUO_LANE_SRT (scripts/harness-ab/srt-offline.mjs, which also closes the stack's ports).
 set -euo pipefail
 implement=0
 if [ "${1:-}" = "--implement" ]; then implement=1; shift; fi
@@ -22,18 +26,21 @@ command -v jq >/dev/null 2>&1 || { echo "lane: jq is missing (brew install jq)."
 command -v claude >/dev/null 2>&1 || { echo "lane: claude is not on PATH." >&2; exit 1; }
 
 root=$(git rev-parse --show-toplevel)
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+profile=${MODUO_LANE_PROFILE:-$here/.claude/sandbox/lane.srt.json}
 gitdir=$(git rev-parse --path-format=absolute --git-common-dir)
 turbo=""
 if [ -n "${TURBO_API:-}" ]; then turbo=${TURBO_API#*://}; turbo=${turbo%%/*}; fi
 settings=$(mktemp "${TMPDIR:-/tmp}/lane-srt.XXXXXX")
-claude_settings="$root/.claude/settings.lane.json"
+base_settings=${MODUO_LANE_SETTINGS:-$here/.claude/settings.lane.json}
+claude_settings=$base_settings
 frozen='{"filesystem":{"denyWrite":[]}}'
 if [ "$implement" = 1 ]; then
-  frozen=$(cat "$root/.claude/sandbox/implement.srt.json")
+  frozen=$(cat "$here/.claude/sandbox/implement.srt.json")
   claude_settings=$(mktemp "${TMPDIR:-/tmp}/lane-claude.XXXXXX")
   jq '.permissions.deny += $implement[0].permissions.deny' \
-    --slurpfile implement "$root/.claude/settings.implement.json" \
-    "$root/.claude/settings.lane.json" >"$claude_settings"
+    --slurpfile implement "$here/.claude/settings.implement.json" \
+    "$base_settings" >"$claude_settings"
 fi
 trap 'rm -f "$settings"; [ "$implement" = 1 ] && rm -f "$claude_settings"; true' EXIT
 jq --arg root "$root" --arg git "$gitdir" --arg turbo "$turbo" --argjson frozen "$frozen" '
@@ -43,8 +50,8 @@ jq --arg root "$root" --arg git "$gitdir" --arg turbo "$turbo" --argjson frozen 
   | .filesystem.denyWrite = ([.filesystem.denyWrite[], $frozen.filesystem.denyWrite[] | abs] + [$git + "/hooks", $git + "/config"])
   | .filesystem.denyRead = [.filesystem.denyRead[] | abs]
   | if $turbo != "" then .network.allowedDomains += [$turbo] else . end
-' "$root/.claude/sandbox/lane.srt.json" >"$settings"
+' "$profile" >"$settings"
 
 cd "$root"
 inner=$(printf '%q ' claude -p --permission-mode bypassPermissions --settings "$claude_settings" "$@")
-MODUO_LANE=1 MODUO_LANE_SANDBOX=1 srt --settings "$settings" -c "$inner" </dev/null
+MODUO_LANE=1 MODUO_LANE_SANDBOX=1 "${MODUO_LANE_SRT:-srt}" --settings "$settings" -c "$inner" </dev/null
