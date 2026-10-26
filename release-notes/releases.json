@@ -1,6 +1,80 @@
 {
   "releases": [
     {
+      "version": "1.4.0",
+      "date": "2026-10-26",
+      "highlights": [
+        "Comments in notes are clearer: commented text is underlined, a count sits in the margin, and you can edit or delete a comment.",
+        "Search in Notes finds what you wrote, not just titles, with the line it was found in."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Search in Notes finds what you wrote, not just titles, with the line it was found in."
+        },
+        {
+          "type": "improved",
+          "text": "Comments in notes are clearer: commented text is underlined, a count sits in the margin, and you can edit or delete a comment."
+        },
+        {
+          "type": "improved",
+          "text": "Notes open faster: the ones you are likely to open next load in the background, and typing does less work."
+        },
+        {
+          "type": "improved",
+          "text": "Notes works from the keyboard: open a note's menu, the block menu, the formatting bar and comments without the mouse."
+        },
+        {
+          "type": "improved",
+          "text": "Publishing a note now names the subpages that go public with it, and a published note says it's public."
+        },
+        {
+          "type": "improved",
+          "text": "Right-click a note, or use its ⋯ in the sidebar, for everything you can do with it, including Share and Publish."
+        },
+        {
+          "type": "improved",
+          "text": "A note with many pages inside it lists them compactly, and the sidebar footer shows Published, Archived and Deleted."
+        },
+        {
+          "type": "improved",
+          "text": "Typing / in a note now offers tasks and pages first, and any line can become a task or a subpage."
+        },
+        {
+          "type": "fixed",
+          "text": "A dropped connection no longer moves tasks to the Inbox, resets your Home layout, brings back removed Google calendars or reports a rename that didn't save."
+        },
+        {
+          "type": "fixed",
+          "text": "Editing or deleting a chat message while it is still sending now sticks for everyone."
+        },
+        {
+          "type": "fixed",
+          "text": "Renaming or moving a note right after reconnecting no longer brings back the older name or place."
+        },
+        {
+          "type": "fixed",
+          "text": "Ticking a task off and on quickly, changing many at once or dragging one on the Board now saves in the order you did it, even on a shaky connection or right before signing out."
+        },
+        {
+          "type": "fixed",
+          "text": "Turning a checkbox line into a task keeps it in place, with no empty gap left behind."
+        },
+        {
+          "type": "fixed",
+          "text": "Reset local cache now stays blocked when Moduo can't check this device for unsynced notes, so they can't be lost."
+        },
+        {
+          "type": "fixed",
+          "text": "People with Full access to a note can make it follow its parent page's sharing again, including when moving it."
+        },
+        {
+          "type": "security",
+          "text": "Security and reliability improvements."
+        }
+      ]
+    },
+    {
       "version": "1.3.2",
       "date": "2026-10-23",
       "highlights": [

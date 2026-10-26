@@ -5,6 +5,36 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.4.0 · 2026-10-26
+
+### New
+
+- Search in Notes finds what you wrote, not just titles, with the line it was found in.
+
+### Improved
+
+- Comments in notes are clearer: commented text is underlined, a count sits in the margin, and you can edit or delete a comment.
+- Notes open faster: the ones you are likely to open next load in the background, and typing does less work.
+- Notes works from the keyboard: open a note's menu, the block menu, the formatting bar and comments without the mouse.
+- Publishing a note now names the subpages that go public with it, and a published note says it's public.
+- Right-click a note, or use its ⋯ in the sidebar, for everything you can do with it, including Share and Publish.
+- A note with many pages inside it lists them compactly, and the sidebar footer shows Published, Archived and Deleted.
+- Typing / in a note now offers tasks and pages first, and any line can become a task or a subpage.
+
+### Fixed
+
+- A dropped connection no longer moves tasks to the Inbox, resets your Home layout, brings back removed Google calendars or reports a rename that didn't save.
+- Editing or deleting a chat message while it is still sending now sticks for everyone.
+- Renaming or moving a note right after reconnecting no longer brings back the older name or place.
+- Ticking a task off and on quickly, changing many at once or dragging one on the Board now saves in the order you did it, even on a shaky connection or right before signing out.
+- Turning a checkbox line into a task keeps it in place, with no empty gap left behind.
+- Reset local cache now stays blocked when Moduo can't check this device for unsynced notes, so they can't be lost.
+- People with Full access to a note can make it follow its parent page's sharing again, including when moving it.
+
+### Security
+
+- Security and reliability improvements.
+
 ## 1.3.2 · 2026-10-23
 
 ### Improved
