@@ -24,6 +24,9 @@ The regression tests stay next to the code they cover (they run in the normal su
 | Escape | Seed | Tests |
 | --- | --- | --- |
 | [644-1](644-1-error-read-as-empty/README.md) | 509-1 | tasks runtime, dashboard layout, Google calendars, rename (five tests) |
+| [645-1](645-1-queue-bypass/README.md) | 509-2 | a Notes meta op jumps the queue (MOD-563): `apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts` |
+| [645-2](645-2-queue-bypass/README.md) | 509-2 | a Chat edit or delete jumps its own send (MOD-562): `apps/app/src/features/chat/store/store.509-2.variant.test.ts` |
+| [645-3](645-3-error-as-empty/README.md) | 509-1 | a failed notes DB open reads as 0 to the Reset guard: `apps/app/src/features/notes/sync/idb-pending.test.ts` |
 
 ## Adding an escape
 

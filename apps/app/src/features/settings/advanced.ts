@@ -9,6 +9,8 @@
  * bullet. Nothing in this file touches `window`/`localStorage`/`indexedDB`.
  */
 
+import type { PendingCount } from "../notes/sync/idb";
+
 // ── Data export ──────────────────────────────────────────────────────────────
 
 /** The modules a workspace export gathers (Assumption 6). */
@@ -309,11 +311,18 @@ export function isModuoIdbName(name: string | null | undefined): boolean {
  * waiting to upload (AT-2) live only on this device, so a reset would lose them.
  */
 export function resetBlockedMessage(input: {
-  pendingNotes: number;
+  pendingNotes: PendingCount;
   pendingUploads: number;
   online: boolean;
 }): string {
   const { pendingNotes, pendingUploads, online } = input;
+  if (pendingNotes === "unknown") {
+    const files =
+      pendingUploads > 0
+        ? ` ${pendingUploads} ${pendingUploads === 1 ? "file hasn't" : "files haven't"} finished uploading either.`
+        : "";
+    return `Moduo couldn't read this device's notes, so it can't tell whether a change hasn't synced yet. Resetting now could lose it. Reload Moduo, then re-check.${files}`;
+  }
   const parts: string[] = [];
   if (pendingNotes > 0) {
     parts.push(
@@ -353,8 +362,11 @@ export type Diagnostics = {
  * note edits are the only local-write lane a user can lose, so they lead the
  * message; otherwise it reflects connectivity.
  */
-export function describeSyncStatus(input: { online: boolean; pendingNotes: number }): string {
+export function describeSyncStatus(input: { online: boolean; pendingNotes: PendingCount }): string {
   const { online, pendingNotes } = input;
+  if (pendingNotes === "unknown") {
+    return online ? "Couldn't read notes sync" : "Offline (couldn't read notes sync)";
+  }
   if (pendingNotes > 0) {
     const noun = pendingNotes === 1 ? "change" : "changes";
     return online
