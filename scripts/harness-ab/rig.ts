@@ -20,21 +20,24 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   agentPrompt,
   type Arm,
   ARMS_DIR,
+  experimentProblems,
   isTestPath,
   judge,
   listDir,
   loadArm,
   loadSet,
+  missingPlugins,
   plan,
   plannedRow,
   type PlannedRun,
+  pluginsNotLoaded,
   RIG_DIR,
   type Row,
   type Task,
@@ -48,6 +51,7 @@ const OUT = process.env.HARNESS_AB_OUT ?? path.join(SOURCE, ".harness-ab");
 const LANE = path.join(SOURCE, "scripts/agent/lane.sh");
 /** srt with the shared stack's localhost ports closed (srt-offline.mjs). */
 const SRT = path.join(RIG_DIR, "srt-offline.mjs");
+const INSTALLED_PLUGINS = path.join(homedir(), ".claude/plugins/installed_plugins.json");
 const AGENT_TIMEOUT_MS = 45 * 60_000;
 const CHECK_TIMEOUT_MS = 20 * 60_000;
 
@@ -303,9 +307,14 @@ function execute(
       verify,
       safety: { mcpServers: summary.mcpServers, remotes: setup.remotes, hosts: setup.hosts },
     });
+    const notLoaded = pluginsNotLoaded(run.arm, summary.plugins);
     if (summary.mcpServers.length > 0) {
       row.outcome = "error";
       row.error = `the agent saw MCP servers: ${summary.mcpServers.join(", ")}`;
+    } else if (notLoaded.length > 0 && agent.stdout.trim() !== "") {
+      // Without this the arm silently runs as its baseline.
+      row.outcome = "error";
+      row.error = `the arm's plugins didn't load: ${notLoaded.join(", ")}`;
     } else if (summary.isError && agent.stdout.trim() === "") {
       row.outcome = "error";
       row.error = `the agent produced no stream (exit ${agent.status}); see ${row.artifacts}/agent.stderr.log`;
@@ -428,7 +437,8 @@ function listCommand() {
   for (const id of listDir(ARMS_DIR, true)) {
     const arm = loadArm(id);
     const effort = arm.effort ? ` @${arm.effort}` : "";
-    console.log(`  ${id}: ${arm.model}${effort}, ${arm.description}`);
+    const exp = arm.experiment ? ` [${arm.experiment.name} vs ${arm.experiment.baseline}]` : "";
+    console.log(`  ${id}: ${arm.model}${effort}${exp}, ${arm.description}`);
   }
   return 0;
 }
@@ -460,6 +470,25 @@ function runCommand(f: Flags) {
   const set = loadSet(str(f, "set", "core"));
   const dry = f["dry-run"] === true;
   const arms = (csv(f.arms) ?? ["control"]).map((id) => loadArm(id));
+  const problems = arms.flatMap((a) =>
+    a.experiment ? experimentProblems(a, loadArm(a.experiment.baseline)) : [],
+  );
+  if (problems.length) throw new Error(problems.join("\n"));
+  const installed = existsSync(INSTALLED_PLUGINS)
+    ? JSON.parse(readFileSync(INSTALLED_PLUGINS, "utf8"))
+    : {};
+  const missing = missingPlugins(arms, installed);
+  if (missing.length) {
+    const how = missing
+      .map(
+        (id) =>
+          `claude plugin install ${id} --scope user && claude plugin disable ${id} --scope user`,
+      )
+      .join("; ");
+    const msg = `plugins not installed at user scope: ${missing.join(", ")} (install them disabled: ${how})`;
+    if (!dry) throw new Error(msg);
+    console.error(`harness-ab: warning: ${msg}`);
+  }
   const batch = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   const rigSha = git(SOURCE, "rev-parse", "--short=12", "HEAD");
   const runs = plan({
