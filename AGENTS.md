@@ -23,7 +23,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 ## Session start
 
 1. **Base check.** The SessionStart hook prints whether you are behind the personal branch; reconcile before editing. Note whether `origin/develop` moved.
-2. **Read three short files:** [docs/decisions.md](./docs/decisions.md) (one-line index of every decision), [docs/gotchas.md](./docs/gotchas.md) (areas of traps) and [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) (open blocks and lanes only). **Before working in an area, open its `docs/gotchas/<area>.md`** and any `docs/decisions/<area>.md` you need. Finished history is in [specs/BUILD_LOG.md](./specs/BUILD_LOG.md); for why code exists, `entire search` / `entire why` are faster.
+2. **Read three short files:** [docs/decisions.md](./docs/decisions.md) (one-line index of every current decision), [docs/gotchas.md](./docs/gotchas.md) (areas of traps) and [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) (open blocks and lanes only). **Before working in an area, open its `docs/gotchas/<area>.md`** and any `docs/decisions/<area>.md` you need. Finished history is in [specs/BUILD_LOG.md](./specs/BUILD_LOG.md); for why code exists, `entire search` / `entire why` are faster.
 3. **Read `docs/local/` if it exists** (the gitignored personal layer); never require it.
 4. **Title the session** the moment its purpose is clear: write one line to `.claude/SESSION_TITLE` (gitignored; a SessionStart hook applies it). Planning: `[<Module>] <short title>`. Building: `[<Module> <BLOCK-ID>] <block name>`.
 
@@ -65,7 +65,7 @@ Pick the tier by what the diff touches; details are in the `/s3` skill. **Re-tig
 ## Knowledge map
 
 - **Architecture:** [docs/architecture.md](./docs/architecture.md) (code layout) · [docs/data-layers.md](./docs/data-layers.md) · [docs/moduo-module-contract.md](./docs/moduo-module-contract.md) · vocabulary: [docs/moduo-architecture-vocabulary.md](./docs/moduo-architecture-vocabulary.md).
-- **Decisions:** index [docs/decisions.md](./docs/decisions.md), full entries in `docs/decisions/<area>.md`. Add a decision as a full entry at the top of its area file **plus** one line in the index.
+- **Decisions:** index [docs/decisions.md](./docs/decisions.md) (generated, current entries only), full entries in `docs/decisions/<area>.md`; `bun run docs:current <area>` prints an area without its superseded entries. Add a decision at the top of its area file with a `status:` line (a replacement names what it `supersedes:`), then `bun run docs:index`.
 - **Gotchas:** index [docs/gotchas.md](./docs/gotchas.md), entries in `docs/gotchas/<area>.md`. Append when something costs you more than a few minutes; a trap that bites twice becomes a hook, lint rule or test (with the fix in its error message).
 - **Execution ledger:** [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) (open blocks; claim a block before building it) · [specs/BUILD_LOG.md](./specs/BUILD_LOG.md) (finished).
 - **Agent setup:** [docs/agent-setup.md](./docs/agent-setup.md) · **Entire:** [docs/entire.md](./docs/entire.md).

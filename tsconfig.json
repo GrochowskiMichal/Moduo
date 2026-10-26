@@ -3,6 +3,7 @@
   "include": [
     "scripts/brand",
     "scripts/ci",
+    "scripts/docs",
     "scripts/rstest.config.ts",
     "scripts/release/check-notes.ts",
     "scripts/release/check-notes.test.ts",

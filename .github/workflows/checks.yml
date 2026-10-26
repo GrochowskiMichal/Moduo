@@ -18,7 +18,7 @@ name: checks
 # verify a signed artifact without it.
 #
 # `static-checks` is the one required context. It always runs and fails unless the secret scan
-# passed and lint, every test shard and the ratchets passed (a new .only fails the weakening
+# and the decisions check passed and lint, every test shard and the ratchets passed (a new .only fails the weakening
 # detector), or a docs-only PR skipped them, and each oracle (db-test, rust-check, e2e-smoke)
 # passed or was skipped because none of its paths changed.
 on:
@@ -135,6 +135,25 @@ jobs:
 
       - name: Typecheck, Biome, lint:tw, lint:boundaries, lint:ast, lint:css, release-notes leak check
         run: bunx turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:ast lint:css lint:notes --output-logs=new-only
+
+  # Runs on every PR and push, docs-only ones too: decision entries are Markdown, so the lint job
+  # skips them, but their status lines and the generated index must still hold (HV-11). The
+  # script uses only Node built-ins, so it needs no install.
+  decisions:
+    needs: scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Decision statuses, references and the generated index
+        run: bun run lint:decisions
 
   unit-tests:
     needs: scan
@@ -439,7 +458,7 @@ jobs:
   # ── end HV-5 ────────────────────────────────────────────────────────────────────────────
 
   static-checks:
-    needs: [scan, lint, unit-tests, oracle-paths, db-test, rust-check, e2e-smoke, ratchets, test-weakening]
+    needs: [scan, lint, decisions, unit-tests, oracle-paths, db-test, rust-check, e2e-smoke, ratchets, test-weakening]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -449,6 +468,7 @@ jobs:
           SCAN: ${{ needs.scan.result }}
           CODE: ${{ needs.scan.outputs.code }}
           LINT: ${{ needs.lint.result }}
+          DECISIONS: ${{ needs.decisions.result }}
           TESTS: ${{ needs.unit-tests.result }}
           PATHS: ${{ needs.oracle-paths.result }}
           RATCHETS: ${{ needs.ratchets.result }}
@@ -460,6 +480,8 @@ jobs:
         run: |
           echo "scan: $SCAN · code change: $CODE · lint: $LINT · unit-tests: $TESTS"
           [ "$SCAN" = success ] || exit 1
+          echo "decisions: $DECISIONS"
+          [ "$DECISIONS" = success ] || exit 1
           # HV-5: the ratchets run with lint; the weakening detector is skipped on pushes.
           echo "ratchets: $RATCHETS · test-weakening: $WEAKENING"
           if [ "$CODE" = true ]; then [ "$RATCHETS" = success ] || exit 1; fi
