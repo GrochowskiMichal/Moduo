@@ -124,35 +124,41 @@ export function withoutScope(yml: string): string {
   return yml.replace(/^(files|ignores):[^\n]*\n(?:[ \t]+[^\n]*\n|[ \t]*\n)*/gm, "");
 }
 
+/** One fixture file: its `@flag` lines (none in good.*) against what the rule reports. */
+function checkFixtureFile(id: string, rule: string, file: string): string[] {
+  const name = `${id}/${path.basename(file)}`;
+  const lines = readFileSync(file, "utf8").split("\n");
+  const want = lines.flatMap((l, i) => (/^\s*\/\/\s*@flag\s*$/.test(l) ? [i + 2] : []));
+  const got = run(["scan", "--inline-rules", rule, file]).map((m) => m.range.start.line + 1);
+  const missed = want.filter((l) => !got.includes(l));
+  const extra = got.filter((l) => !want.includes(l));
+  return [
+    ...(path.basename(file).startsWith("bad.") && want.length === 0
+      ? [`${name}: no // @flag line`]
+      : []),
+    ...(missed.length ? [`${name}: not flagged at line ${missed.join(", ")}`] : []),
+    ...(extra.length ? [`${name}: flagged unexpectedly at line ${extra.join(", ")}`] : []),
+  ];
+}
+
+/** One rule folder: its id matches, it has bad.* and good.*, and each fixture checks out. */
+function checkRule(id: string): string[] {
+  const dir = path.join(RULES, id);
+  const yml = readFileSync(path.join(dir, "rule.yml"), "utf8");
+  const ruleId = /^id:\s*(\S+)\s*$/m.exec(yml)?.[1];
+  const fixtures = path.join(dir, "fixtures");
+  const files = existsSync(fixtures) ? readdirSync(fixtures).sort() : [];
+  const missing = ["bad", "good"].filter((kind) => !files.some((f) => f.startsWith(`${kind}.`)));
+  return [
+    ...(ruleId === id ? [] : [`${id}: rule.yml id is "${ruleId}"`]),
+    ...missing.map((kind) => `${id}: no fixtures/${kind}.*`),
+    ...files.flatMap((f) => checkFixtureFile(id, withoutScope(yml), path.join(fixtures, f))),
+  ];
+}
+
 /** Each rule flags exactly its `@flag` lines in bad.* and nothing in good.*. */
 export function checkFixtures(): string[] {
-  const problems: string[] = [];
-  for (const id of readdirSync(RULES).sort()) {
-    const dir = path.join(RULES, id);
-    const yml = readFileSync(path.join(dir, "rule.yml"), "utf8");
-    const ruleId = /^id:\s*(\S+)\s*$/m.exec(yml)?.[1];
-    if (ruleId !== id) problems.push(`${id}: rule.yml id is "${ruleId}"`);
-    const rule = withoutScope(yml);
-    const fixtures = path.join(dir, "fixtures");
-    const files = existsSync(fixtures) ? readdirSync(fixtures).sort() : [];
-    for (const kind of ["bad", "good"]) {
-      if (!files.some((f) => f.startsWith(`${kind}.`)))
-        problems.push(`${id}: no fixtures/${kind}.*`);
-    }
-    for (const f of files) {
-      const file = path.join(fixtures, f);
-      const lines = readFileSync(file, "utf8").split("\n");
-      const want = lines.flatMap((l, i) => (/^\s*\/\/\s*@flag\s*$/.test(l) ? [i + 2] : []));
-      if (f.startsWith("bad.") && want.length === 0) problems.push(`${id}/${f}: no // @flag line`);
-      const got = run(["scan", "--inline-rules", rule, file]).map((m) => m.range.start.line + 1);
-      const missed = want.filter((l) => !got.includes(l));
-      const extra = got.filter((l) => !want.includes(l));
-      if (missed.length) problems.push(`${id}/${f}: not flagged at line ${missed.join(", ")}`);
-      if (extra.length)
-        problems.push(`${id}/${f}: flagged unexpectedly at line ${extra.join(", ")}`);
-    }
-  }
-  return problems;
+  return readdirSync(RULES).sort().flatMap(checkRule);
 }
 
 function report(fresh: Match[]): void {
