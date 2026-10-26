@@ -6,7 +6,7 @@
     },
     "moduo": {
       "type": "http",
-      "url": "https://wtoonrvuqumihpkbvwvs.supabase.co/functions/v1/moduo-mcp",
+      "url": "https://mcp.moduo.app",
       "headers": {
         "Authorization": "Bearer ${MODUO_MCP_KEY:-}"
       }

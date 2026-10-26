@@ -62,7 +62,7 @@ export function rowMenuItems(opts: {
       ? [
           {
             action: "export-tree",
-            label: "Export with sub-pages (.zip)",
+            label: "Export with subpages (.zip)",
             icon: FolderTree,
           } as const,
         ]
@@ -87,6 +87,6 @@ export function rowMenuItems(opts: {
     },
     "separator",
     { action: "archive", label: "Archive", icon: Archive },
-    { action: "trash", label: "Move to trash", icon: Trash2, destructive: true },
+    { action: "trash", label: "Delete", icon: Trash2, destructive: true },
   ];
 }

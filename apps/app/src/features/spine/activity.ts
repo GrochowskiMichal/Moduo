@@ -143,7 +143,39 @@ export function spineActivityLine(
       return "removed a link";
     // NR-6: an MCP key wrote into a note (the actor is the key's name).
     case "notes.agent_edit":
+    case "notes.edit":
       return "edited this note";
+    // A note's own life, as its Details panel lists it.
+    case "notes.create":
+      return "created this note";
+    case "notes.import": {
+      const n = typeof p.imported === "number" ? p.imported : null;
+      return n && n > 1 ? `imported this note with ${n - 1} more` : "imported this note";
+    }
+    case "notes.duplicate":
+      return "duplicated this note";
+    case "notes.move":
+      return "moved this note";
+    case "notes.file":
+      return "filed this note";
+    case "notes.archive":
+      return "archived this note";
+    case "notes.unarchive":
+      return "unarchived this note";
+    case "notes.trash":
+    case "notes.delete":
+      return "deleted this note";
+    case "notes.restore":
+      return "restored this note";
+    case "notes.purge":
+    case "notes.purge_expired":
+      return "deleted this note for good";
+    case "notes.publish":
+      return "published this note";
+    case "notes.unpublish":
+      return "unpublished this note";
+    case "notes.mention":
+      return "mentioned someone here";
     case "comments.add": {
       const excerpt = excerptText(p.excerpt);
       return excerpt ? `commented: “${excerpt}”` : "left a comment";

@@ -12,6 +12,7 @@
 import { useDraggable } from "@dnd-kit/core";
 import { ChevronRight, FileText, MoreHorizontal, Plus } from "lucide-react";
 import type * as React from "react";
+import { useId, useState } from "react";
 
 import {
   ContextMenu,
@@ -42,7 +43,13 @@ export type RowHover = { key: string; zone: "before" | "after" | "into" } | null
 
 export type TreeCtx = {
   selectedId: string | null;
+  /** The one row drawn as selected: a note can show twice (a Favorite and
+   * in Pages), and only the row you opened it from, or its home, lights up. */
+  selectedKey: string | null;
   focusedKey: string | null;
+  /** The row whose `⋯` menu the keyboard opened (⇧F10, the menu key, ⌥↵). */
+  menuKey: string | null;
+  onMenuKeyChange: (key: string | null) => void;
   draftId: string | null;
   canEdit: boolean;
   favoriteIds: ReadonlySet<string>;
@@ -58,12 +65,41 @@ export type TreeCtx = {
   /** A popover the menu opened for this row (Share…, Publish…), anchored to it. */
   rowPopover?: (note: Note, rowKey: string) => React.ReactNode;
   onFocusRow: (key: string) => void;
+  /** The row a note was opened from: the one drawn selected. */
+  onOpenedFrom?: (key: string) => void;
   onCreateChild: (id: string) => void;
   onAction: (action: RowAction, note: Note, rowKey: string) => void;
 };
 
 export function rowKey(section: SidebarSection, id: string): string {
   return `${section}:${id}`;
+}
+
+/**
+ * Put keyboard focus back on a note's row after a dialog or menu about it
+ * closes (Move to…, Change icon…): the row in the tree's tab stop if that's
+ * this note, else its first row. False when the note has no row on screen
+ * (the sidebar is collapsed), so the caller can leave focus to the default.
+ */
+export function focusNoteRow(noteId: string): boolean {
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>('[role="treeitem"][data-row-key]'),
+  ].filter((el) => el.dataset.rowKey?.endsWith(`:${noteId}`));
+  const row = rows.find((el) => el.tabIndex === 0) ?? rows[0];
+  row?.focus();
+  return row !== undefined;
+}
+
+/** A dialog about a note closed: return focus to its row, once the tree has
+ * redrawn (a move changes the row's section). */
+export function returnFocusToRow(noteId: string | null | undefined, event: Event): void {
+  if (!noteId) return;
+  const rowsNow = document.querySelector(
+    `[role="treeitem"][data-row-key$=":${CSS.escape(noteId)}"]`,
+  );
+  if (!rowsNow) return;
+  event.preventDefault();
+  requestAnimationFrame(() => focusNoteRow(noteId));
 }
 
 export function TreeNodes({
@@ -120,8 +156,10 @@ export function TreeRow({
   ctx: TreeCtx;
 }) {
   const key = rowKey(section, note.id);
+  const titleId = useId();
+  const [menuOpen, setMenuOpen] = useState(false);
   const isDraft = note.id === ctx.draftId;
-  const selected = ctx.selectedId === note.id;
+  const selected = ctx.selectedKey === key;
   const hover = ctx.hover?.key === key ? ctx.hover : null;
   const favorite = ctx.favoriteIds.has(note.id);
   const items = isDraft
@@ -138,6 +176,9 @@ export function TreeRow({
   const row = (
     <div
       role="treeitem"
+      // Named by its title alone: the row's buttons (Expand, New subpage,
+      // options) would otherwise be read into every row's name.
+      aria-labelledby={titleId}
       aria-level={depth + 1}
       aria-expanded={expandable ? expanded : undefined}
       aria-selected={selected}
@@ -150,6 +191,7 @@ export function TreeRow({
       data-drop-into={section === "favorites" ? undefined : "true"}
       onClick={() => {
         ctx.onFocusRow(key);
+        ctx.onOpenedFrom?.(key);
         ctx.onOpen(note.id);
       }}
       onFocus={(e) => {
@@ -203,7 +245,10 @@ export function TreeRow({
           <FileText aria-hidden className="size-icon-sm" />
         )}
       </span>
-      <span className={cn("min-w-0 flex-1 truncate", note.title.trim() === "" && "italic")}>
+      <span
+        id={titleId}
+        className={cn("min-w-0 flex-1 truncate", note.title.trim() === "" && "italic")}
+      >
         {displayTitle(note.title)}
       </span>
       {!isDraft ? (
@@ -229,7 +274,15 @@ export function TreeRow({
             </button>
           ) : null}
           {items.length > 0 ? (
-            <DropdownMenu>
+            <DropdownMenu
+              // Controlled throughout: the ⋯ click and the keyboard (⇧F10)
+              // open the same menu.
+              open={menuOpen || ctx.menuKey === key}
+              onOpenChange={(open) => {
+                setMenuOpen(open);
+                if (!open && ctx.menuKey === key) ctx.onMenuKeyChange(null);
+              }}
+            >
               <DropdownMenuTrigger asChild>
                 <button
                   type="button"
@@ -244,7 +297,7 @@ export function TreeRow({
               <DropdownMenuContent
                 align="start"
                 className="w-52"
-                onCloseAutoFocus={keepFocusForPopover}
+                onCloseAutoFocus={(e) => backToRow(e, key)}
               >
                 <MenuItems items={items} note={note} section={section} ctx={ctx} kit="dropdown" />
               </DropdownMenuContent>
@@ -259,7 +312,7 @@ export function TreeRow({
     items.length > 0 ? (
       <ContextMenu>
         <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
-        <ContextMenuContent className="w-52" onCloseAutoFocus={keepFocusForPopover}>
+        <ContextMenuContent className="w-52" onCloseAutoFocus={(e) => backToRow(e, key)}>
           <MenuItems items={items} note={note} section={section} ctx={ctx} kit="context" />
         </ContextMenuContent>
       </ContextMenu>
@@ -275,13 +328,20 @@ export function TreeRow({
   );
 }
 
-/** The item picked opens a popover on the row (Share…, Publish…): the menu
- * must not hand focus back as it closes, or that closes the popover. */
-let opensPopover = false;
-function keepFocusForPopover(event: Event) {
-  if (!opensPopover) return;
-  opensPopover = false;
+/** The item picked opens a popover on the row (Share…, Publish…) or a dialog
+ * (Move to…, Change icon…): the menu must not hand focus back as it closes,
+ * or that closes the popover; the dialog returns it to the row itself. */
+let opensSurface = false;
+const OPENS_SURFACE = new Set<RowAction>(["share", "publish", "move", "icon"]);
+/** As a menu closes, focus goes back to its row (not the hidden `⋯`), so the
+ * arrow keys keep walking the tree. */
+function backToRow(event: Event, key: string) {
   event.preventDefault();
+  if (opensSurface) {
+    opensSurface = false;
+    return;
+  }
+  document.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(key)}"]`)?.focus();
 }
 
 function MenuItems({
@@ -310,7 +370,7 @@ function MenuItems({
             key={item.action}
             variant={item.destructive ? "destructive" : "default"}
             onSelect={() => {
-              opensPopover = item.action === "share" || item.action === "publish";
+              opensSurface = OPENS_SURFACE.has(item.action);
               ctx.onAction(item.action, note, rowKey(section, note.id));
             }}
           >

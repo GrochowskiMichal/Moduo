@@ -31,9 +31,9 @@ export function SubpagesList({
   const chip =
     "inline-flex h-(--ctrl-h-sm) max-w-60 items-center gap-1.5 rounded-md border border-hairline px-2 font-sans text-sm transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50";
   return (
-    <section aria-label="Sub-pages" className="mt-10 border-t border-hairline pt-4 pb-6">
+    <section aria-label="Subpages" className="mt-10 border-t border-hairline pt-4 pb-6">
       <h2 className="mb-2 font-sans text-2xs text-muted-foreground">
-        Sub-pages <span className="tabular-nums">({subpages.length})</span>
+        Subpages <span className="tabular-nums">({subpages.length})</span>
       </h2>
       <ul className="flex flex-wrap gap-1.5">
         {shown.map((page) => (
