@@ -38,7 +38,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 ## What GitHub and the cloud provide
 
 - **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, `bun lint`, gitleaks) passed. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
-- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, moves finished blocks to `BUILD_LOG.md`, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
+- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
 
 ## One-time setup per machine
 
@@ -107,7 +107,7 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 - `hooks/moduo-report.sh` (+ `hooks.json` in plugin form): presence. It reads `.claude/MODUO_TASK` (gitignored; written by the skill: `task=MOD-123`, `state=working`, `step`, `steps`) and posts only while the state is `working`, in the background, with the key on stdin. Tests: `hooks/moduo-report.test.sh`, run in verify.
 - Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add a plugin manifest (`plugin.json` in `.claude-plugin/`) and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
 
-**The Build project** holds one task per open block in `specs/BUILD_ORDER.md`, titled `<ID> — <block name>`. The file stays the source of truth for the first two weeks; Moduo mirrors it. `/s2` creates a missing task; a task assigned to someone else is left alone.
+**The queue** is Moduo: one task per open block in the milestone projects, titled `<ID> — <block name>`, tagged `block`, with "blocks" edges for its dependencies (`bun run queue:import`, idempotent). `bun run queue` reads it with your key; GitHub events move each task's stage (`moduo-sync.yml`, the CI key). A task assigned to someone else is left alone.
 
 ## The unsupervised flow
 

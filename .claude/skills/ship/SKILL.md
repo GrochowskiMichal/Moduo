@@ -62,7 +62,7 @@ In the scratch worktree:
    - `curl -s https://moduo.app/changelog | grep -c X.Y.Z` is non-zero
    - the GitHub release `vX.Y.Z` on GrochowskiMichal/moduo-releases
    - links: the release PR, the tag, the run. Add them to the PR as a comment.
-8. **Moduo (skip quietly without the `moduo` connector):** once the web proof passes, move the tasks this release carried from **Awaiting release** to **Shipped** with `tasks_set_status` (names in [moduo-agent](../moduo-agent/SKILL.md) §Stages). Take them from the release notes' block IDs and the `Awaiting release` tasks in the milestone projects (Closed alpha, Open alpha, Beta & later; find them with `tasks_search` by block ID or `tasks_list` per project); leave any task whose change isn't in this tag. Only the status changes: add no tags and edit nothing else on the task.
+8. **Moduo:** nothing to move by hand. Once `release.yml` succeeds, the sync (`moduo-sync.yml`) moves every block task whose `[ID]` PR merged since the previous tag to **Shipped**. Check that its run moved them; if it missed the tag, start it on `develop`: `gh workflow run moduo-sync.yml --ref develop -f tag=vX.Y.Z`.
 
 ## 4b. Hand off
 Leave the PR open. `gh pr edit <n> --add-assignee <other login>`. The PR body is the summary; post nothing else. Report the PR link and that `/ship vX.Y.Z` (theirs or yours) finishes it.

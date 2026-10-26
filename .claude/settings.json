@@ -106,6 +106,17 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*__(apply_migration|execute_sql|deploy_edge_function)",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "timeout": 40,
+            "command": "bun \"${CLAUDE_PROJECT_DIR}/scripts/agent/risk-hook.ts\""
+          }
+        ]
       }
     ],
     "SessionEnd": [
