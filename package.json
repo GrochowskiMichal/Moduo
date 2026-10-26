@@ -46,6 +46,7 @@
     "drafts": "bun scripts/agent/drafts.ts",
     "wt": "bun scripts/agent/wt.ts",
     "wt:prune": "bun scripts/agent/wt.ts prune",
+    "numbers": "bun scripts/agent/numbers.ts",
     "storybook": "bun run --cwd apps/storybook dev",
     "build-storybook": "bun run --cwd apps/storybook build",
     "storybook:gen": "cd apps/app && bun ../../scripts/generate-storybook-stories.ts",
