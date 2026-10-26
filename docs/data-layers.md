@@ -6,13 +6,13 @@
 > This doc answers: **where does each kind of data live, who is the source of truth, and what is the target shape every new module must adopt** — especially the *connective-tissue spine* that is Moduo's actual moat. Read it before adding a new module or a new data store.
 
 > ### ⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14; §1–§2 tables refreshed 2026-10-20) — read this before the tables below
-> This doc was written 2026-06-24 for its **intent and philosophy**, which still hold. Its per-module **status** is several waves stale — where it disagrees with the code, the code wins. **The status of record is [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).** What actually shipped since:
+> This doc was written 2026-06-24 for its **intent and philosophy**, which still hold. Its per-module **status** is several waves stale — where it disagrees with the code, the code wins. **The status of record is the block queue in Moduo (`bun run queue`).** What actually shipped since:
 > - **43 migrations** (not ~16), all applied to prod as of OPS-1/OPS-2 (2026-07-29); **7+ modules are cloud-first**, not just Tasks.
 > - **The spine is built**, not a "TARGET": central `entities` registry + typed `entity_links` + comments/activity/notifications/suggestions (migrations `20260625…`–`20260627…`).
 > - **Notes is cloud-synced + collaboratively editable** (Yjs↔Postgres + one Realtime latency layer), *not* single-player redb.
 > - **Contacts, Calendar, Email** are all built (Email = desktop engine + lightweight cloud `email_refs` tissue).
 > - **The MCP connector exposes 6 modules (~60 tools)**, not "Tasks only."
-> For current status see [`onboarding/HANDOFF.md`](./onboarding/HANDOFF.md) and the live ledger [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).
+> For current status see [`onboarding/HANDOFF.md`](./onboarding/HANDOFF.md) and the block queue (`bun run queue`).
 
 ---
 
