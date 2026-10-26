@@ -120,3 +120,5 @@ storybook-static/
 
 # Product lab dossiers (/product-lab, /product-jury): screenshots of seeded data, never source.
 .lab/
+# A/B rig results, transcripts and diffs (scripts/harness-ab/)
+.harness-ab/
