@@ -9,10 +9,10 @@
     "typecheck": "bun check"
   },
   "devDependencies": {
-    "@storybook/addon-docs": "10.6.1",
-    "@storybook/addon-mcp": "10.6.1",
-    "@storybook/react-vite": "10.6.1",
+    "@storybook/addon-docs": "10.6.2",
+    "@storybook/addon-mcp": "10.6.2",
+    "@storybook/react-vite": "10.6.2",
     "@tailwindcss/postcss": "4.3.3",
-    "storybook": "10.6.1"
+    "storybook": "10.6.2"
   }
 }
