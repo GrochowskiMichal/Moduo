@@ -11,6 +11,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
 - 2026-10-26 · HV-20: the A/B rig runs each attempt in a remote-less `git clone --shared` at the task's commit, inside srt through `srt-offline.mjs`, with the oracle copied in from the fix commit after the agent stops.
+- 2026-10-26 · HV-26: Tier 2 blocks race three drafts from a frozen contract commit, and `bun run drafts` keeps the smallest passing diff within 5 points of the best mutant kill rate.
+- 2026-10-26 · HV-8: the block queue is Moduo; specs keep the dependencies, `bun run queue` joins them with open PRs, and `bun run queue:import` is the only way blocks enter it.
 - 2026-10-26 · HV-28: the app Worker ships as a canary driven by our own script over Cloudflare's deployments API, judged by probes against the new version plus Workers analytics, and it needs zone-level version affinity to split.
 - 2026-10-26 · HV-7: GitHub events move a block's Moduo task through `moduo-sync.yml`, on `pull_request_target`, planning without the key and applying in the `moduo-sync` environment.
 - 2026-10-26 · HV-6: the AI review runs once per PR into develop, advisory, on Sonnet 5, with the workflow token and a Max OAuth token in its own environment.
@@ -56,8 +58,9 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-14 · Agent workflow ported to OpenCode + made tool/model-agnostic; `AGENTS.md` is now the single source of truth.
 - 2026-07-11 · Onboarding handoff + backend-refactor decision memo written (`docs/onboarding/`), for Mike picking the project back up.
 - 2026-07-02 · Session naming convention + title hook.
-- 2026-06-25 · Execution ledger + session hardening.
 - 2026-06-25 · Claude Code workflow upgrade.
+
+1 superseded or dropped entry is left out; they stay in the area file.
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
