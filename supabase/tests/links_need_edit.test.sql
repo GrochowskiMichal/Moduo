@@ -24,8 +24,8 @@ BEGIN
   PERFORM test.ok(r = '42501 You can''t link these.', 'View on both items isn''t enough', r);
   r := test.link('editor', 'task', test.id('T'), 'note', test.id('N'));
   PERFORM test.ok(r = 'ok 1', 'Edit on them is', r);
-  r := test.link('editor', 'note', test.id('N'), 'task', test.id('T-other'));
-  PERFORM test.ok(r = 'ok 1', 'Edit on one end is enough (the other may be out of sight)', r);
+  r := test.link('editor', 'note', test.id('N'), 'bucket', test.id('PO'));
+  PERFORM test.ok(r = 'ok 1', 'Edit on one end is enough (the other may be out of sight: PO)', r);
 
   r := test.mx('member', format($q$SELECT public.contacts_op_link(%L, 'contact', %L, 'task', %L)$q$,
     test.id('W'), test.id('C'), test.id('T')));
@@ -38,6 +38,30 @@ BEGIN
   r := test.link('member', 'chat_channel', test.id('CH'), 'task', test.id('T'));
   PERFORM test.ok(r LIKE '42501 %', 'member can''t link a private channel they''re not in', r);
   r := test.link('viewer', 'chat_channel', test.id('CH'), 'task', test.id('T'));
-  PERFORM test.ok(r = 'ok 1', 'viewer, in it, links it to a task they can see', r);
+  PERFORM test.ok(r = 'ok 1', 'viewer, in it, links it to another item', r);
+END;
+$$;
+
+-- The item has to be in the workspace the link is filed under: member gets Edit
+-- on outsider's project P2 in W2, and still can't file a link from it under W.
+INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W2'), test.id('member'), 'member');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W2'), 'bucket', test.id('P2'), 'member', test.id('member'), 'edit', test.id('outsider'));
+
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.mx('member', format($q$SELECT public.links_op_create(%L, 'bucket', %L, 'note', %L)$q$,
+    test.id('W'), test.id('P2'), test.id('N')));
+  PERFORM test.ok(r LIKE '42501 %', 'Edit on an item in another workspace doesn''t count', r);
+
+  -- A key is judged as the person who made it: outsider's key KX.
+  r := test.as_key('KX', format($q$SELECT public.links_op_create(%L, 'note', %L, 'task', %L)$q$,
+    test.id('W'), test.id('N'), test.id('T')));
+  PERFORM test.ok(r NOT LIKE 'ok%', 'outsider''s key can''t link W''s items', r);
+  r := test.as_key('KX', format($q$SELECT public.links_op_create(%L, 'bucket', %L, 'task', %L)$q$,
+    test.id('W2'), test.id('P2'), gen_random_uuid()));
+  PERFORM test.ok(r = 'ok 1', 'and links from its creator''s own project', r);
 END;
 $$;

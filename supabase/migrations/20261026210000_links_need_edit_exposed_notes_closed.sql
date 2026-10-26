@@ -8,9 +8,9 @@
 -- other end may be an item they can't open, as before: your own contact may
 -- work at a company you can't open (contacts_company_link.test.sql).
 -- email_op_link already required the caller's own thread, so it is unchanged.
--- A refusal reads the same for a missing and a hidden item. The bodies are the latest definitions (pg_get_functiondef
--- of the prod snapshot plus this repo's newer migrations), changed only by the
--- new check.
+-- A refusal reads the same for a missing and a hidden item. The bodies are the
+-- latest definitions (pg_get_functiondef of the prod snapshot plus this
+-- repo's newer migrations), changed only by the new check.
 --
 -- MOD-594: the legacy exposed_notes table (nothing reads or writes it since
 -- notes publishing moved to publish_token) let anyone, signed in or not,
