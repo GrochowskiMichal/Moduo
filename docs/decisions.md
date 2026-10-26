@@ -8,7 +8,11 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-24 · MOD-552: `RELEASES_REPO_TOKEN` moved to `releases-production` (`v*` only) / `releases-staging` (develop, mike); bridge upload is its own job; builds after a frozen bridge drop the GitHub endpoint; per-channel keys and bridge retirement in release.md §7 → decisions/workflow.md
 - 2026-10-23 · HV-9: Cloudflare security-audit skill vendored at a pinned commit; runs live outside the repo, quick scoped with Fable verifiers, no target execution; unfixed findings go to Moduo tasks only → decisions/workflow.md
+- 2026-10-23 · HV-5: Tier 2 list lives once in `scripts/ci/tier.ts` (CI labels PRs from it); size/complexity ratchets frozen and run in verify; test-weakening detector advises, only `.only` fails → decisions/workflow.md
+- 2026-10-23 · HV-1: auto mode per person (`bun run agent:auto-mode`; project settings can't set it); bypass only inside `srt` lanes, enforced by `guard-lane.sh`; guards fail closed (`onFailure: "block"`) → decisions/workflow.md
+- 2026-10-23 · HV-2: `bun run wt` (ready worktree, own dev port via its launch.json) and `wt:prune` (merged PR + clean + no live process only); `moduo` at mcp.moduo.app; connector clean-up per person → decisions/workflow.md
 - 2026-10-23 · HV-3: skill references checked against a pinned plugin registry; user-only skills only on lines telling the person to type them; one advisory validator pass in /s2, none in /s3 → decisions/workflow.md
 - 2026-10-23 · HV-4: `db-test`, `rust-check` and `e2e-smoke` in checks.yml, path-filtered, skip = pass in `static-checks`; the test DB is a prod schema snapshot from `db-snapshot.yml` via the Actions cache; `db:test` has a known-failures baseline → decisions/workflow.md
 - 2026-10-23 · Harness v3: the flow board built before the closed alpha; auto mode + `srt` lanes; Moduo is the block queue moved by GitHub events; ledgers deleted; Anthropic-only kept; advisory AI review on PRs into develop; Maciej agreed → decisions/workflow.md
@@ -52,6 +56,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-24 · Item checks on note moves into published pages, contact ops, blocks-link removal and member exceptions (MOD-553/572/549/573): a new parent needs Edit; going public by a move needs ws.publish + Full (reorganising inside a published page doesn't); trash unpublishes.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: 10 messages per 10 s and 30 per 60 s per person per workspace (a workspace's apps share one budget), refused with `PT429` (a send waits at most 2 s for the previous one); "typing" at most once per 2.5 s per person and conversation, and a stop only once, to close a start that went out.
 - 2026-10-14 · Chat v1 privacy rules: a conversation's registry and activity rows follow its read rule, typing is one server-written private topic per conversation, `chat_caps_get` answers members only, announcement mode needs a readable channel and never a DM.
 - 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
@@ -250,6 +255,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-23 · The Impeccable pass on Notes: sidebar search back (titles here, text from the server) until NR-10; publish names its subpages first + a Public chip; one keyboard grammar (⇧F10/⌥↵ menus, ⌥F10 toolbar, ⌘⌥M comment, ⌘↵ tick); the spine leads the slash menu, Turn into Task/Page; 36rem measure; light secondary text 600 → decisions/notes.md
 - 2026-10-20 · Notes' caches (list, per-note documents, pull cursors) are keyed `person:workspace` and cut down to the outboxes on sign-out or a user switch; caches from before the update are deleted, their queued work stays nobody's → decisions/notes.md
 - 2026-10-16 · #412: `notes_op_save_snapshot` refuses a stale fold (compare-and-set on `doc_version`); the client pulls and folds again.
 - 2026-10-16 · NR-8: anchored comment threads wrap `comments_op_add`; resolving needs an editor (not a viewer or a key); only known-open threads highlight
@@ -306,6 +312,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-24 · A task's status writes leave one at a time in the order made, across stores (a live one holds the next back); a write back after its store stopped goes to the next store or the device copy; a failed copy update throws, never reads as empty (MOD-587/569/561, HV-12) → decisions/data.md
 - 2026-10-22 · DB-SEC-1: the security advisor's "definer function callable by signed-in users" is expected for app RPCs and policy helpers; revoke client EXECUTE only from trigger functions and helpers no client path reaches, fix the ones that answer for any id → decisions/data.md
 - 2026-10-22 · DB-PERF-1: an advisor's "unused index" is no reason to drop on a small DB; drop only the provably redundant, make RLS cheap per row first (`can_access` fast path, initplan wraps, one permissive policy per command)
 - 2026-10-20 · The web runtime and its port are one file per module (`runtime.web.<module>.ts` + `runtime.types.<module>.ts`, composed in `runtime.web.ts`); the Supabase client, boot cache and auth listener are `runtime.web.client.ts` → decisions/data.md
@@ -463,6 +470,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-23 · Product UI quality: `/product-lab` measures (gates by code), `/product-jury` scores blind (critics never see code or gates), `/product-studio` builds on the house system; weights 30/25/20/15/10; PR deltas measured, the jury at milestones; Impeccable only as a lab-pass detector with Moduo's fonts and Eyebrow waived (Maciej approved) → decisions/design-system.md
 - 2026-10-16 · `CollectionHeader`'s count is the tertiary level and 4 px sit under it when rows follow (Maciej, MOD-152; the `:has()` mechanism agent's) · the details, time entries, templates and the Project view all get it · rejected: a Project-only override, `not-last:mb-1` → decisions/design-system.md
 - 2026-10-16 · 8 px between panels, 16 at the window's edges (Maciej, MOD-162) · `--panel-gap` is the resize handle's width; the handle still grabs over 16 px through the library's `resizeTargetMinimumSize` · rejected: a pseudo-element hit area (the library hit-tests by geometry) → decisions/design-system.md
 - 2026-10-16 · A text field marks focus on its own edge (`--ring` at 50%), controls keep the 2 px ring, no ring is offset (Maciej, MOD-160; recipe agent's choice) · a field matches `:focus-visible` on every click, so the ring showed on every field · rejected: the ring on a cleared border, a soft halo → decisions/design-system.md

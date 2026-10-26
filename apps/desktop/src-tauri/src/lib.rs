@@ -24,6 +24,7 @@ pub mod identity_acl;
 pub mod install_id;
 pub mod keychain;
 pub mod migration_legacy;
+pub mod navigation;
 pub mod store_redb;
 /// Cloud-sync worker (redb ↔ Supabase). Superseded by the JS `notesV2` engine for
 /// the cloud build; kept behind the future offline/"lite" feature, not compiled by default.
@@ -386,6 +387,8 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        // No webview or frame may navigate to a foreign web origin (MOD-574).
+        .plugin(navigation::guard())
         .plugin(tauri_plugin_dialog::init())
         // Focus phase-end alerts (TV-F1): the JS engine fires them at the computed
         // time; the plugin can't schedule on desktop.

@@ -152,6 +152,9 @@ jobs:
       (needs.desktop.result == 'skipped' || needs.desktop.outputs.published == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # RELEASES_REPO_TOKEN lives here (v* tags only), not at repo level: the same token can write
+    # the GitHub update manifest that pre-PLAT-6 production installs trust (MOD-552).
+    environment: releases-production
     env:
       TAG: ${{ github.ref_name }}
       VERSION: ${{ needs.resolve.outputs.version }}

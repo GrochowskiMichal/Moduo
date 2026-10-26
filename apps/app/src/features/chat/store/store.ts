@@ -532,7 +532,7 @@ export class ChatStore {
       authorId: this.userId,
       authorKind: "user",
       authorLabel: null,
-      body: entry.body,
+      body: entry.edited ?? entry.body,
       mentionedUserIds: [],
       mentionedTeamIds: [],
       mentionsEveryone: false,
@@ -1102,6 +1102,11 @@ export class ChatStore {
       this.metaDirty = true;
       // Deleted while it was on its way: now it's on the server, delete it there.
       if (entry?.deleted && !row.deletedAt) queueMicrotask(() => void this.remove(row.id));
+      // Edited while it was on its way: it landed with the old words, edit them there.
+      else if (entry && this.editedSince(entry, row)) {
+        const words = entry.edited!;
+        queueMicrotask(() => void this.edit(row.id, words));
+      }
     }
     if (isMoveLine(row)) {
       const moved = row.event?.ids;
@@ -1797,7 +1802,7 @@ export class ChatStore {
       // Retry would fail "empty" forever, so it says why and offers Delete only.
       const c = this.files.counts?.(entry.id);
       const none = !!c && c.moving === 0 && c.stopped >= (entry.files ?? 0);
-      if (!entry.body.trim() && none) {
+      if (!(entry.edited ?? entry.body).trim() && none) {
         entry.failed = FILES_ALL_STOPPED;
         entry.dead = true;
       } else {
@@ -1845,6 +1850,11 @@ export class ChatStore {
         }
         if (!this.running || this.disposed) return "stop";
         this.inFlight = entry.id;
+        if (!entry.attempted) {
+          entry.attempted = true;
+          this.metaDirty = true;
+          void this.persistNow();
+        }
         this.touch(entry.channelId);
         this.notify();
         return "send";
@@ -1853,7 +1863,7 @@ export class ChatStore {
         const res = await this.transport.send({
           id: entry.id,
           channelId: entry.channelId,
-          body: entry.body,
+          body: entry.edited ?? entry.body,
           replyToId: entry.replyToId,
         });
         this.inFlight = null;
@@ -1876,8 +1886,9 @@ export class ChatStore {
         this.wentOnline();
         this.ensureConv(row.channelId);
         this.landRow(row);
-        // Deleted while it was on its way (its echo didn't come first).
+        // Deleted or edited while it was on its way (its echo didn't come first).
         if (wasQueued && entry.deleted) void this.remove(entry.id);
+        else if (wasQueued && this.editedSince(entry, row)) void this.edit(entry.id, entry.edited!);
         this.afterSend(entry);
       },
     });
@@ -1924,7 +1935,27 @@ export class ChatStore {
     return { ok: true };
   }
 
+  /** A send that landed with other words than the ones it was edited to while it was on its way. */
+  private editedSince(entry: ChatOutboxEntry, row: ChatMessage): boolean {
+    return entry.edited !== undefined && !row.deletedAt && row.body !== entry.edited;
+  }
+
   edit(id: string, body: string): Promise<ChatWriteResult> {
+    const entry = this.outbox.find((e) => e.id === id);
+    if (entry) {
+      // Not on the server yet: an edit sent now would be refused and the send
+      // would land last with the old words (509-2). It goes with the send.
+      if (entry.deleted) return Promise.resolve({ ok: true });
+      // Sent at least once (on its way, or landed with a lost answer, where a
+      // resend answers with the stored words): edited there once it lands.
+      if (this.inFlight === id || entry.attempted) entry.edited = body;
+      else entry.body = body;
+      this.touch(entry.channelId);
+      this.metaDirty = true;
+      this.notify();
+      void this.persistNow();
+      return Promise.resolve({ ok: true });
+    }
     const at = new Date().toISOString();
     return this.write(
       id,
@@ -1936,9 +1967,10 @@ export class ChatStore {
   remove(id: string): Promise<ChatWriteResult> {
     const entry = this.outbox.find((e) => e.id === id);
     if (entry) {
-      if (this.inFlight === id) {
-        // On its way: it may land on the server (even if its answer is lost),
-        // so it stays out of sight and is deleted there once it does.
+      // On its way, or sent before with its answer lost (a refused one never
+      // stored): it may be on the server, so it stays out of sight, is sent
+      // again, and is deleted there once it lands.
+      if (this.inFlight === id || (entry.attempted && !entry.failed)) {
         entry.deleted = true;
         this.touch(entry.channelId);
         this.metaDirty = true;

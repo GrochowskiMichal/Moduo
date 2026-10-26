@@ -46,6 +46,7 @@ const request = (others: OAuthConsentRequest["others"]): OAuthConsentRequest => 
   appName: "Claude",
   clientDomain: "claude.ai",
   clientScheme: "https",
+  redirectUri: "https://claude.ai/api/mcp/auth_callback",
   connection: null,
   fullWorkspaceIds: [],
   others,
@@ -133,5 +134,29 @@ describe("replacing duplicate connections on the consent screen", () => {
     render(<OAuthConsentPage />);
     await screen.findByRole("button", { name: /Approve/ });
     expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("where the consent screen says the sign-in returns (MOD-576)", () => {
+  it("shows Claude's own return as checked", async () => {
+    mocks.workspace.readOAuthRequest.mockResolvedValue(request([]));
+    render(<OAuthConsentPage />);
+    await screen.findByRole("button", { name: /Approve/ });
+    expect(screen.getByText("claude.ai")).toBeTruthy();
+    expect(screen.queryByText("Moduo hasn't checked this app.")).toBeNull();
+  });
+
+  it("never shows claude.ai for a redirect the browser sends elsewhere", async () => {
+    mocks.workspace.readOAuthRequest.mockResolvedValue({
+      ...request([]),
+      // A server still on the old reading would answer claude.ai here.
+      redirectUri: "https://x@claude.ai:@evil.com/cb",
+      heldRedirect: null,
+    });
+    render(<OAuthConsentPage />);
+    await screen.findByRole("button", { name: /Approve/ });
+    expect(screen.queryByText("claude.ai")).toBeNull();
+    expect(screen.getByText("Its website isn't known.", { exact: false })).toBeTruthy();
+    expect(screen.getByText("Moduo hasn't checked this app.")).toBeTruthy();
   });
 });

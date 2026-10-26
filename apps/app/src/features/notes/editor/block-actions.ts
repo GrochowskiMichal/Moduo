@@ -12,7 +12,12 @@ import {
   type ListNode,
   type ListType,
 } from "@lexical/list";
-import { $createHeadingNode, $createQuoteNode } from "@lexical/rich-text";
+import {
+  $createHeadingNode,
+  $createQuoteNode,
+  $isHeadingNode,
+  $isQuoteNode,
+} from "@lexical/rich-text";
 import { $setBlocksType } from "@lexical/selection";
 import {
   $createParagraphNode,
@@ -20,6 +25,7 @@ import {
   $getSelection,
   $isDecoratorNode,
   $isElementNode,
+  $isParagraphNode,
   $isRangeSelection,
   $parseSerializedNode,
   type ElementNode,
@@ -52,6 +58,14 @@ export function $blockMenuFor(block: LexicalNode): { turnInto: boolean; duplicat
   if ($isDecoratorNode(block)) return { turnInto: false, duplicate: false };
   if (block.getType() === "table") return { turnInto: false, duplicate: true };
   return { turnInto: true, duplicate: true };
+}
+
+/** A block of words that can become a task or a subpage (Turn into → Task,
+ * Page): a paragraph, heading or quote holding text. Lists, code, tables and
+ * task lines can't (a list turns per item, with ⌘⇧T). */
+export function $isTextBlock(block: LexicalNode): boolean {
+  if (!$isParagraphNode(block) && !$isHeadingNode(block) && !$isQuoteNode(block)) return false;
+  return block.getTextContent().trim() !== "";
 }
 
 /** Run one block command on the current selection (the slash menu's Basics

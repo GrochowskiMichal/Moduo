@@ -1,0 +1,26 @@
+{
+  "id": "509-5-decode-failure-then-delete",
+  "title": "Desktop: an undecodable store reads as empty, the next save deletes everything",
+  "mechanism": "decode-as-empty-then-overwrite",
+  "sites": [
+    "apps/desktop/src-tauri/src/commands/email/storage.rs",
+    "apps/desktop/src-tauri/src/store_redb/mod.rs"
+  ],
+  "tests": [
+    {
+      "lang": "rust",
+      "file": "apps/desktop/src-tauri/src/commands/email/storage.rs",
+      "name": "unreadable_account_list_is_an_error_not_empty",
+      "run": "cd apps/desktop/src-tauri && cargo test --lib unreadable_account_list_is_an_error_not_empty"
+    },
+    {
+      "lang": "rust",
+      "file": "apps/desktop/src-tauri/src/store_redb/mod.rs",
+      "name": "wipe_all_clears_the_cloud_sync_tables",
+      "run": "cd apps/desktop/src-tauri && cargo test --lib wipe_all_clears_the_cloud_sync_tables"
+    }
+  ],
+  "pr": 509,
+  "fixCommit": "9a45905456d59aab9ea8535b25c284bcd2c901ff",
+  "foundBy": "manual audit 2026-10-20"
+}

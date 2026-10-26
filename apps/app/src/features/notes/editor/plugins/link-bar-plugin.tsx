@@ -19,6 +19,8 @@ import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { IconButton } from "@/components/ui/icon-button";
+import { FLOATING_SURFACE } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 
 import { OPEN_LINK_DIALOG_COMMAND } from "./link-dialog-plugin";
 
@@ -112,7 +114,10 @@ export function LinkBarPlugin({ editable }: { editable: boolean }) {
     <div
       role="toolbar"
       aria-label="Link"
-      className="fixed z-(--z-popover) flex max-w-sm items-center gap-1 rounded-md border border-hairline bg-popover py-0.5 pr-0.5 pl-2 text-popover-foreground shadow-lg"
+      className={cn(
+        FLOATING_SURFACE,
+        "fixed z-(--z-popover) flex max-w-sm items-center gap-1 py-0.5 pr-0.5 pl-2 shadow-lg",
+      )}
       style={{ top: bar.top, left: bar.left }}
       onMouseDown={(e) => e.preventDefault()}
     >

@@ -7,6 +7,7 @@ import { describe, expect, it } from "@rstest/core";
 import { formatDate, formatStamp, formatWhen } from "../../lib/time-format";
 import { DEFAULT_KEY_EXPIRY, DEFAULT_KEY_SCOPES, type KeyActor } from "./api-keys";
 import {
+  agreedDomain,
   appDisplayName,
   approveBlocker,
   CAP_MESSAGE,
@@ -70,6 +71,26 @@ describe("consent model: the app", () => {
     expect(isCheckedApp("evilapp", "claude.ai")).toBe(false);
     expect(isCheckedApp("http", "claude.ai")).toBe(false);
     expect(isCheckedApp(null, "claude.ai")).toBe(false);
+  });
+
+  it("goes by the server's domain only where the browser reads the redirect the same way (MOD-576)", () => {
+    const at = (redirectUri: string | null, clientDomain = "claude.ai", clientScheme = "https") =>
+      agreedDomain({ clientScheme, clientDomain, redirectUri });
+    expect(at("https://claude.ai/api/mcp/auth_callback")).toBe("claude.ai");
+    expect(at("https://Claude.AI:443/cb?code=abc&state=xyz")).toBe("claude.ai");
+    expect(at("http://localhost:33418/callback", "localhost", "http")).toBe("localhost");
+    // The browser goes to evil.com: the userinfo ends at the last '@'.
+    expect(at("https://x@claude.ai:@evil.com/cb")).toBeNull();
+    expect(at("https://user:pw@claude.ai/cb")).toBeNull();
+    expect(at("https://evil.com\\.claude.ai/cb")).toBeNull();
+    expect(at("https://claude.ai.evil.com/cb")).toBeNull();
+    // The browser makes punycode of 'İ'; it never reads openai.com.
+    expect(at("https://openaİ.com/cb", "openai.com")).toBeNull();
+    expect(at("evilapp://claude.ai/cb")).toBeNull();
+    expect(at("not a url")).toBeNull();
+    expect(at(null)).toBeNull();
+    expect(at("https://claude.ai/cb", "")).toBeNull();
+    expect(isCheckedApp("https", at("https://x@claude.ai:@evil.com/cb"))).toBe(false);
   });
 
   it("shows where the sign-in returns, scheme and all unless it's the web", () => {

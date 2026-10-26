@@ -143,6 +143,7 @@ export function NoteDetailPanel({
           currentUserId={currentUserId}
           now={now}
           entityId={noteId}
+          showHeading={false}
         />
       </div>
     </div>

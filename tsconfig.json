@@ -2,11 +2,15 @@
   "extends": "./tsconfig.base.json",
   "include": [
     "scripts/brand",
+    "scripts/ci",
     "scripts/rstest.config.ts",
     "scripts/release/check-notes.ts",
     "scripts/release/check-notes.test.ts",
     "scripts/release/changes.ts",
-    "scripts/release/changes.test.ts"
+    "scripts/release/changes.test.ts",
+    "tools/ast-grep/lint.ts",
+    "tools/ast-grep/baseline.ts",
+    "tools/ast-grep/lint.test.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

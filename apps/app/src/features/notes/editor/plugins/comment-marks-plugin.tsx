@@ -40,8 +40,10 @@ import {
   $anchorIdsInOrder,
   $anchorSelection,
   $firstMarkKey,
+  $firstMarkKeys,
   $unanchor,
 } from "../../comments/anchors";
+import { noteColumn } from "../note-column";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 
 export const ADD_COMMENT_COMMAND: LexicalCommand<void> = createCommand("NOTES_ADD_COMMENT");
@@ -119,29 +121,18 @@ export function CommentMarksPlugin({
   bridgeRef.current = bridge;
 
   useEffect(() => {
-    // A note with no comment marks (most) skips the two whole-document walks
-    // that every keystroke would otherwise pay for.
-    let marks = 0;
-    const offMarks = editor.registerMutationListener(
-      MarkNode,
-      (mutations) => {
-        for (const kind of mutations.values()) {
-          if (kind === "created") marks += 1;
-          else if (kind === "destroyed") marks = Math.max(0, marks - 1);
-        }
-      },
-      { skipInitialization: false },
-    );
-    let published = false;
+    // The thread order and the highlights change only when a mark does
+    // (created, moved, re-drawn, its threads changed, removed): walk the doc
+    // then, never on every keystroke.
     const publish = () => {
-      if (marks === 0 && published && anchorStore.get(noteId).docOrder?.length === 0) return;
-      published = true;
       const order = editor.getEditorState().read(() => $anchorIdsInOrder());
       anchorStore.setDocOrder(noteId, order);
       paintMarks(editor, noteId);
     };
     publish();
-    const offUpdate = editor.registerUpdateListener(publish);
+    const offUpdate = editor.registerMutationListener(MarkNode, publish, {
+      skipInitialization: true,
+    });
     const offStore = anchorStore.subscribe(() => paintMarks(editor, noteId));
 
     // Which threads are open, without waiting for the panel: only their marks
@@ -218,7 +209,6 @@ export function CommentMarksPlugin({
       offActions();
       offAdd();
       offClick();
-      offMarks();
       anchorStore.setDocOrder(noteId, null);
       // The next mount reads the threads again (a peer may have started one).
       anchorStore.setOpenThreads(noteId, null);
@@ -249,7 +239,7 @@ function CommentGutter({ noteId, onOpen }: { noteId: string; onOpen: (anchorId: 
 
   const measure = useCallback(() => {
     const root = editor.getRootElement();
-    const column = root?.parentElement;
+    const column = noteColumn(root);
     const { openThreads, docOrder, counts } = anchorStore.get(noteId);
     if (!root || !column || !openThreads || !docOrder) {
       setBubbles([]);
@@ -257,9 +247,10 @@ function CommentGutter({ noteId, onOpen }: { noteId: string; onOpen: (anchorId: 
     }
     const base = column.getBoundingClientRect().top;
     const next: Bubble[] = [];
+    const firstKeys = editor.getEditorState().read(() => $firstMarkKeys());
     for (const id of docOrder) {
       if (!openThreads.has(id)) continue;
-      const key = editor.getEditorState().read(() => $firstMarkKey(id));
+      const key = firstKeys.get(id);
       const el = key ? editor.getElementByKey(key) : null;
       if (!el) continue;
       const top = el.getBoundingClientRect().top - base;
@@ -282,18 +273,26 @@ function CommentGutter({ noteId, onOpen }: { noteId: string; onOpen: (anchorId: 
 
   useEffect(() => {
     measure();
-    const offUpdate = editor.registerUpdateListener(() => requestAnimationFrame(measure));
+    // One measure per frame however many updates land in it, and none at all
+    // while the note has no open thread (most notes).
+    let frame = 0;
+    const offUpdate = editor.registerUpdateListener(() => {
+      if (!anchorStore.get(noteId).openThreads?.size) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
     const observer = new ResizeObserver(() => measure());
     const offRoot = editor.registerRootListener((root, prev) => {
       if (prev) observer.unobserve(prev);
       if (root) observer.observe(root);
     });
     return () => {
+      cancelAnimationFrame(frame);
       offUpdate();
       offRoot();
       observer.disconnect();
     };
-  }, [editor, measure]);
+  }, [editor, measure, noteId]);
   useEffect(() => measure(), [anchors.openThreads, anchors.docOrder, anchors.counts, measure]);
 
   return (

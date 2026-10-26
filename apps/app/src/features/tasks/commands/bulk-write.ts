@@ -96,6 +96,8 @@ type Planned = {
   statusRecurrence: RecurrenceRule | null | undefined;
   /** Field-level part (tasks_op_update). */
   fields: TaskFieldPatch;
+  /** What the task shows (a status part that waits on the device shows it until it goes). */
+  shown: Partial<Task>;
   moving: boolean;
   queueRows: string[];
   /** The work session a reschedule moves with the task (kept on show until its row comes back). */
@@ -187,6 +189,7 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
         category: plan.status?.category,
         statusRecurrence: plan.status?.recurrence,
         fields: plan.fields,
+        shown: plan.shown,
         moving: plan.moving,
         queueRows: plan.queue.rowIds,
         sessionMove,
@@ -211,9 +214,43 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     // (or the connection went): it's named, and Undo still puts that part back.
     const partial: Planned[] = [];
     const statusSaved = new Set<string>();
+    // A status part that waits on the device behind an older check-off.
+    const statusQueued = new Set<string>();
     const assignSaved = new Set<string>();
     const sessionSaved = new Set<string>();
     let offlineError: unknown = null;
+    /** One task's status op: its server row, or null when it waits on the device. */
+    const sendStatusPart = async (p: Planned, category: TaskStatusCategory) => {
+      const { write } = p;
+      const status = write.statusId ?? taskStatusWord(category);
+      if (store.statusMustWait(write.taskId)) {
+        // An older check-off for it is still on its way (MOD-561): this one
+        // waits on the device behind it, or the older one would land last.
+        void store.enqueue({
+          kind: "status",
+          id: crypto.randomUUID(),
+          taskId: write.taskId,
+          status,
+          recurrence: p.statusRecurrence,
+          ...(write.position !== undefined ? { position: write.position } : {}),
+          fields: p.shown,
+        });
+        statusQueued.add(write.taskId);
+        return null;
+      }
+      const row = await store.sendingStatus(
+        write.taskId,
+        rt.tasks.opSetStatus({
+          workspaceId: ws,
+          taskId: write.taskId,
+          status,
+          recurrence: p.statusRecurrence,
+          position: write.position,
+        }),
+      );
+      statusSaved.add(write.taskId);
+      return row;
+    };
     const notRun = await runPool(
       planned,
       async (p) => {
@@ -265,16 +302,8 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
             landed = true;
           }
           if (p.category !== undefined) {
-            rows.push(
-              await rt.tasks.opSetStatus({
-                workspaceId: ws,
-                taskId: write.taskId,
-                status: write.statusId ?? taskStatusWord(p.category),
-                recurrence: p.statusRecurrence,
-                position: write.position,
-              }),
-            );
-            statusSaved.add(write.taskId);
+            const row = await sendStatusPart(p, p.category);
+            if (row) rows.push(row);
             landed = true;
           }
           if (write.assigneeId !== undefined) {
@@ -325,7 +354,11 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
     }
     // A refused check-off isn't kept on show in my queue (as one drop's isn't).
     for (const p of planned) {
-      if (p.category !== undefined && !statusSaved.has(p.write.taskId)) {
+      if (
+        p.category !== undefined &&
+        !statusSaved.has(p.write.taskId) &&
+        !statusQueued.has(p.write.taskId)
+      ) {
         store.unkeep(p.write.taskId);
       }
     }
@@ -374,7 +407,11 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
       const reverse: BulkWrite[] = [];
       let kept = 0;
       for (const p of landedAny) {
-        const after = saved.get(p.write.taskId);
+        // A status part that waited on the device has no server row yet:
+        // what the person made (and shows meanwhile) is what Undo reverses.
+        const after = statusQueued.has(p.write.taskId)
+          ? { ...(saved.get(p.write.taskId) ?? p.before), ...p.shown }
+          : saved.get(p.write.taskId);
         const current = data().allTasks.find((t) => t.id === p.write.taskId);
         if (!after || !current || current.deletedAt) continue;
         const back: BulkWrite = { taskId: p.write.taskId };
@@ -425,7 +462,7 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
         // Back to open from a check-off that closed it: its queue place too.
         const queuedBefore = new Set(lineupBefore);
         for (const id of back) {
-          if (statusSaved.has(id) && queuedBefore.has(id)) {
+          if ((statusSaved.has(id) || statusQueued.has(id)) && queuedBefore.has(id)) {
             peers.restoreQueuePlace(id, lineupBefore);
           }
         }

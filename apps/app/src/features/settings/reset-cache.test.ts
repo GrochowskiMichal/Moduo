@@ -62,3 +62,11 @@ describe("resetBlockedMessage — pending uploads block the reset too (AT2-6)", 
     );
   });
 });
+
+describe('resetBlockedMessage — notes that couldn\'t be read block the reset ("unknown")', () => {
+  it("says the device couldn't be read and how to re-check", () => {
+    expect(resetBlockedMessage({ pendingNotes: "unknown", pendingUploads: 0, online: true })).toBe(
+      "Moduo couldn't read this device's notes, so it can't tell whether a change hasn't synced yet. Resetting now could lose it. Reload Moduo, then re-check.",
+    );
+  });
+});

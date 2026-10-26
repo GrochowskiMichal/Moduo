@@ -11,7 +11,8 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import type { SupabaseClient, User } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-import { isAppToken } from "./app-token.ts";
+import { verifiedPerson } from "./app-token.ts";
+import { safeRedirectWith } from "./checkout-request.ts";
 
 export const TRIAL_DAYS_NO_CARD = 14;
 export const TRIAL_DAYS_WITH_CARD = 30;
@@ -67,43 +68,23 @@ export function quantityFor(plan: PaidPlan, seats: number | undefined): number {
   return Math.min(TEAM_MAX_SEATS, Math.max(TEAM_MIN_SEATS, n));
 }
 
-const ALLOWED_REDIRECT_ORIGINS = new Set([
-  "https://app.moduo.app",
-  "https://staging.moduo.app",
-  "https://app.staging.moduo.app",
-  "https://moduo.app",
-  "https://www.moduo.app",
-  "http://localhost:8081",
-  "http://127.0.0.1:8081",
-  "tauri://localhost",
-  "http://tauri.localhost",
-  "https://tauri.localhost",
-]);
-
-/** Stripe redirects the browser to these URLs — only ever to our own origins (no open redirect). */
+/**
+ * Stripe redirects the browser to these URLs — only ever to our own origins (no
+ * open redirect; the dev server's only on the local stack: _shared/checkout-request.ts).
+ */
 export function safeRedirect(candidate: string | undefined | null, fallback: string): string {
-  if (!candidate) return fallback;
-  try {
-    const u = new URL(candidate);
-    const extra = Deno.env.get("APP_URL");
-    if (ALLOWED_REDIRECT_ORIGINS.has(u.origin) || (extra && u.origin === new URL(extra).origin)) {
-      return u.toString();
-    }
-  } catch {
-    // fall through
-  }
-  return fallback;
+  return safeRedirectWith(candidate, fallback, {
+    supabaseUrl: Deno.env.get("SUPABASE_URL"),
+    appUrl: Deno.env.get("APP_URL"),
+  });
 }
 
-export async function authenticate(
-  supabase: SupabaseClient,
-  authHeader: string | null,
-): Promise<User | null> {
-  if (!authHeader) return null;
-  // An app's OAuth token is the connector's only (MCPO-1, _shared/app-token.ts).
-  if (isAppToken(authHeader)) return null;
-  const { data: { user }, error } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
-  return error || !user ? null : user;
+/**
+ * The caller's verified user, or why not: "app" for an app's OAuth token
+ * (the connector's only, MCPO-1, _shared/app-token.ts) → 403, "unauthorized" → 401.
+ */
+export function authenticate(supabase: SupabaseClient, authHeader: string | null) {
+  return verifiedPerson<User>(supabase.auth, authHeader);
 }
 
 /** The Stripe customer for this user; created once (idempotent), recreated if the stored id is stale. */

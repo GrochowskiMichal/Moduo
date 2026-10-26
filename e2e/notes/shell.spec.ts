@@ -9,13 +9,17 @@ import { expect, type Page, test } from "@playwright/test";
 const APP = process.env.E2E_APP_URL;
 
 // NR-12 made the new shell the only Notes: there is no switch to press.
+// The sidebar is one tree per section (Favorites, Inbox, Pages); an empty
+// section shows a line instead of a tree, its header is always there.
+const sidebarReady = (page: Page) => page.locator('[data-drop-header="inbox"]').first();
+
 async function useNewNotes(page: Page) {
   await page.goto(`${APP}/notes`);
-  await expect(page.getByRole("tree", { name: "Notes" })).toBeVisible();
+  await expect(sidebarReady(page)).toBeVisible();
 }
 
-const inbox = (page: Page) => page.getByRole("group", { name: "Inbox" });
-const pages = (page: Page) => page.getByRole("group", { name: "Pages" });
+const inbox = (page: Page) => page.getByRole("tree", { name: "Inbox" });
+const pages = (page: Page) => page.getByRole("tree", { name: "Pages" });
 
 test.describe("New Notes shell (NR-2)", () => {
   test.skip(!APP, "E2E_APP_URL not set — run against a live authed session");
@@ -28,7 +32,7 @@ test.describe("New Notes shell (NR-2)", () => {
     // Leave without typing: open the first page instead.
     await pages(page).getByRole("treeitem").first().click();
     await page.reload();
-    await expect(page.getByRole("tree", { name: "Notes" })).toBeVisible();
+    await expect(sidebarReady(page)).toBeVisible();
     expect(await page.getByRole("treeitem", { name: /Untitled/ }).count()).toBe(before);
   });
 
