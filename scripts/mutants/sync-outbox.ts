@@ -3,7 +3,8 @@
  * Concern mutants for the sync outbox (HV-17, AC24): each one plants a bug
  * of a class that has bitten this code (an error read as empty data, an op
  * dropped on sign-out, a live update over a queued op, a skipped recompute),
- * runs the property harness (`apps/app/src/lib/sync/outbox.property.test.ts`)
+ * runs the property harness (`apps/app/src/lib/sync/outbox.property.test.ts`
+ * and `apps/app/src/lib/prefs-sync.property.test.ts`)
  * and counts it killed when the harness fails. `--reverts` instead undoes
  * each of the five #509 fixes, one at a time (as they stand in today's code,
  * after the kernel refactor moved them).
@@ -284,11 +285,21 @@ function apply(m: Mutant): void {
 
 function harness(): { killed: boolean; ms: number; why: string } {
   const started = Date.now();
-  const res = spawnSync("bun", ["x", "rstest", "run", "src/lib/sync/outbox.property.test.ts"], {
-    cwd: path.join(root, "apps/app"),
-    encoding: "utf8",
-    env: { ...process.env, CI: "1" },
-  });
+  const res = spawnSync(
+    "bun",
+    [
+      "x",
+      "rstest",
+      "run",
+      "src/lib/sync/outbox.property.test.ts",
+      "src/lib/prefs-sync.property.test.ts",
+    ],
+    {
+      cwd: path.join(root, "apps/app"),
+      encoding: "utf8",
+      env: { ...process.env, CI: "1" },
+    },
+  );
   const out = `${res.stdout}\n${res.stderr}`;
   const why =
     out.match(/Got (?:AssertionError|error|Error): ([^\n\\]*)/)?.[1]?.slice(0, 110) ??

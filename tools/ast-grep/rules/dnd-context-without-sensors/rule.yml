@@ -1,0 +1,23 @@
+id: dnd-context-without-sensors
+language: tsx
+severity: error
+message: A `<DndContext>` without `sensors` uses dnd-kit's default PointerSensor, which swallows clicks on draggable rows.
+note: |
+  Pass the shell's sensors: `PointerSensor` with `activationConstraint: { distance: 6 }`.
+  Stories and tests too: a synthetic `.click()` still works, so jsdom won't catch it
+  (docs/gotchas/notes.md).
+files:
+  - apps/app/src/**/*.tsx
+rule:
+  any:
+    - kind: jsx_opening_element
+    - kind: jsx_self_closing_element
+  has:
+    field: name
+    regex: ^DndContext$
+  not:
+    has:
+      kind: jsx_attribute
+      has:
+        kind: property_identifier
+        regex: ^sensors$

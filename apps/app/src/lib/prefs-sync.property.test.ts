@@ -1,7 +1,11 @@
-// The preference domains' failed-read contract, as a property (HV-17, the
-// other #509 read bug): a failed read changes nothing, and the account's
-// saved copy is never seeded over. Split from sync/outbox.property.test.ts.
-// Seeds are fixed; set FC_SEED / FC_RUNS to explore.
+// The preference domains' failed-read contract, as a property (HV-17, AC24;
+// the #509 bug where a failed cloud read passed for "no row" and seeded
+// defaults over the account's prefs). Random reconciles (the read failing or
+// not), edits on this device (the push failing or not), saves from another
+// device and someone else using this browser run against a reference of the
+// contract in `reconcileDomain`'s comment. The outbox's own property is
+// `sync/outbox.property.test.ts`. Seeds are fixed; set FC_SEED / FC_RUNS to
+// explore.
 
 import { describe, expect, it, rs } from "@rstest/core";
 import fc from "fast-check";
@@ -52,7 +56,6 @@ import {
 
 const SEED = Number(process.env.FC_SEED ?? 1709);
 const PREF_RUNS = Number(process.env.FC_RUNS ?? 200);
-
 const A = "u-a";
 const B = "u-b";
 
