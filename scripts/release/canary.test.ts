@@ -251,6 +251,10 @@ describe("run", () => {
     const r = await run(OPTS, envFor(w));
     expect(r.outcome).toBe("rolled-back-smoke");
     expect(w.posted).toEqual([at(0), OLD_100]);
+    // The smoke's own detail, not a propagation story, and no minute-long wait.
+    expect(r.report.join("\n")).toMatch(/Smoke at 0% failed: GET \/ \(status 500/);
+    expect(r.report.join("\n")).not.toMatch(/override never reached/);
+    expect(w.clock - 1_800_000_000_000).toBeLessThan(10_000);
   });
 
   it("waits for a fresh deployment to honour the override before the smoke", async () => {
@@ -265,7 +269,7 @@ describe("run", () => {
     expect(r.outcome).toBe("rolled-back-smoke");
     expect(w.posted).toEqual([at(0), OLD_100]);
     expect(r.report.join("\n")).toMatch(
-      /override never reached 11111111 within 60 s \(\/config.json kept answering oldsha1\)/,
+      /override never reached 11111111 within 60 s \(\/config.json kept answering the old build\)/,
     );
   });
 

@@ -343,46 +343,54 @@ async function preflight(s: Omit<Stage, "stable" | "headers">): Promise<Deployme
 /** How long a new deployment may take to honour the version override everywhere. */
 export const OVERRIDE_WAIT_MS = 60_000;
 
+/** The build /config.json names, with or without headers; "" on any failure. */
+async function buildAt(s: Stage, headers: Record<string, string>): Promise<string> {
+  try {
+    const res = await s.f(`${s.opts.url.replace(/\/+$/, "")}/config.json`, {
+      headers,
+      redirect: "manual",
+      signal: timeout(),
+    });
+    return res.ok ? (((await res.json()) as { build?: string }).build ?? "") : "";
+  } catch {
+    return "";
+  }
+}
+
 /**
- * Waits until a request carrying the override is answered by the new version. A deployment can
+ * Waits until requests carrying the override are answered by the new version. A deployment can
  * take a few seconds to reach every location, and until then the override is ignored and the
  * request goes to the old version (the first staging rehearsal smoke-tested the old build that
- * way, 1.7 s after the 0% deployment). The build the host kept naming, or "" once it's ready.
+ * way, 1.7 s after the 0% deployment). It waits only while the answer is the old build: anything
+ * else (an error, another build) is the new version's problem, which the smoke reports in detail.
+ * Three matching answers in a row, since propagation needn't be monotonic. True when the old
+ * build kept answering for the whole wait.
  */
-async function overrideReady(s: Stage): Promise<string> {
-  const root = s.opts.url.replace(/\/+$/, "");
+async function overrideStuck(s: Stage): Promise<boolean> {
+  const old = await buildAt(s, {});
   const until = s.now() + OVERRIDE_WAIT_MS;
-  let seen = "";
-  for (;;) {
-    try {
-      const res = await s.f(`${root}/config.json`, {
-        headers: s.headers,
-        redirect: "manual",
-        signal: timeout(),
-      });
-      seen = res.ok
-        ? (((await res.json()) as { build?: string }).build ?? "")
-        : `HTTP ${res.status}`;
-    } catch (e) {
-      seen = (e as Error).message;
-    }
-    if (seen === s.opts.build) return "";
-    if (s.now() >= until) return seen || "nothing";
-    await s.sleep(2_000);
+  let inARow = 0;
+  while (inARow < 3) {
+    const seen = await buildAt(s, s.headers);
+    if (seen !== s.opts.build && (seen !== old || !old)) return false;
+    inARow = seen === s.opts.build ? inARow + 1 : 0;
+    if (inARow === 0 && s.now() >= until) return true;
+    if (inARow < 3) await s.sleep(inARow ? 500 : 2_000);
   }
+  return false;
 }
 
 /** The hosting smoke test against the new version alone; the failures, or "" when it passed. */
 async function smokeAtZero(s: Stage): Promise<string> {
-  const stuck = await overrideReady(s);
-  if (stuck)
-    return `the version override never reached ${short(s.opts.version)} within ${OVERRIDE_WAIT_MS / 1000} s (/config.json kept answering ${stuck})`;
+  if (await overrideStuck(s))
+    return `the version override never reached ${short(s.opts.version)} within ${OVERRIDE_WAIT_MS / 1000} s (/config.json kept answering the old build)`;
   const checks: Check[] = await smoke(s.opts.url, {
     old: s.opts.old,
     expect: { ...s.opts.expect, build: s.opts.build },
     fetchFn: (u, init) =>
       s.f(u, {
         redirect: "manual",
+        signal: timeout(),
         ...init,
         headers: { ...s.headers, ...(init?.headers as object) },
       }),
@@ -440,6 +448,9 @@ async function soak(s: Stage, started: number): Promise<string> {
 
 /** What follows the 10% move, from the affinity check: soak, promote at once, or roll back. */
 async function afterSplit(s: Stage): Promise<"soak" | "promote" | "rollback"> {
+  // A fresh split takes a few seconds to reach every location; sampling before that sees only
+  // the old version and would read as affinity.
+  await s.sleep(15_000);
   const affinity = await hasAffinity(s.f, s.opts.url);
   if (affinity === "unknown") {
     s.note("The host mostly failed to answer during the affinity check.");
