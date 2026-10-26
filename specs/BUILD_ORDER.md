@@ -574,7 +574,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: — · 2026-10-23 `t/mike/hv-5-tier-ratchets`
 - [ ] **HV-9 — Security pass before alpha** · deps: —
 - [ ] **HV-11 — Decisions current view** · deps: —
-- [ ] **HV-12 — ast-grep pack** · deps: —
+- [x] **HV-12 — ast-grep pack** · deps: — · 2026-10-23 `t/mike/hv-12-ast-grep`
 - [x] **HV-15 — Variant hunt** · deps: — · 2026-10-23 `t/mike/hv-15-variant-hunt`
 - [ ] **HV-17 — Sync outbox property harness** · deps: —
 - [ ] **HV-28 — Canary and rollback (Tier 2)** · deps: —

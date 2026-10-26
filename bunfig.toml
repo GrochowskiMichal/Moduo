@@ -32,6 +32,8 @@ ignorePatterns = [
   "scripts/icons/source/",
   "brand/masters/",
   "brand/exports/",
+  # ast-grep fixtures: pre-fix code kept exactly as the rule must see it.
+  "tools/ast-grep/rules/",
   "**/storybook-static/",
   "apps/app/src/types/supabase.ts",
 ]
