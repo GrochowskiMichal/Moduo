@@ -59,12 +59,29 @@
       "outputs": ["dist/**"]
     },
     "//#typecheck:root": {
-      "inputs": ["tsconfig.json", "scripts/**", "apps/app/src/components/ui/moduo-mark-path.ts"],
+      "inputs": [
+        "tsconfig.json",
+        "scripts/**",
+        "tools/ast-grep/*.ts",
+        "apps/app/src/components/ui/moduo-mark-path.ts"
+      ],
       "outputs": []
     },
     "//#lint:js": {
       "inputs": ["$TURBO_DEFAULT$", "!**/.turbo/**"],
       "outputs": []
+    },
+    "//#lint:ast": {
+      "inputs": [
+        "tools/ast-grep/**",
+        "apps/app/src/**",
+        "apps/desktop/src-tauri/src/**",
+        "bun.lock"
+      ],
+      "outputs": []
+    },
+    "//#lint:ratchets": {
+      "cache": false
     },
     "//#lint:notes": {
       "inputs": [
@@ -83,6 +100,7 @@
     "//#test:scripts": {
       "inputs": [
         "scripts/**",
+        "tools/ast-grep/**",
         ".claude/hooks/guard-release*",
         ".claude/hooks/guard-git*",
         "VERSION",

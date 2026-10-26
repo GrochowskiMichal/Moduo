@@ -1,0 +1,20 @@
+{
+  "id": "509-2-outbox-overtaken",
+  "title": "A live write jumps an older queued write for the same task",
+  "mechanism": "queue-bypass",
+  "sites": [
+    "apps/app/src/lib/sync/store.ts",
+    "apps/app/src/features/tasks/hooks/use-tasks-module.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.test.ts",
+      "name": "a check-off made while an older one for the same task is flushing waits behind it",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.test.ts"
+    }
+  ],
+  "pr": 509,
+  "fixCommit": "9a45905456d59aab9ea8535b25c284bcd2c901ff",
+  "foundBy": "manual audit 2026-10-20"
+}

@@ -3,14 +3,16 @@
  * Favorites · Inbox · Pages, then a Published / Archive / Trash footer.
  *
  * - A note only changes section when someone moves it (stored Inbox, NR-1).
- * - One `role="tree"` with a roving tabindex: ↑↓ → ← ↵ ⌫ and ⌥⇧↑↓ act the way
- *   a file tree does (tree-keyboard.ts).
+ * - One `role="tree"` per section (its header and + sit outside it, as a tree
+ *   holds only rows), sharing one roving tabindex: ↑↓ → ← ↵ ⌫ and ⌥⇧↑↓ act the
+ *   way a file tree does across all three, and ⇧F10 / the menu key / ⌥↵ open
+ *   a row's menu (tree-keyboard.ts).
  * - Drag reorders, nests, files and un-files (use-sidebar-drag.ts).
  * - View-only hides create, drag, publish and trash.
  */
 
 import { DragOverlay } from "@dnd-kit/core";
-import { Archive, FileText, Globe, Import, type LucideIcon, Trash2 } from "lucide-react";
+import { Archive, FileText, Globe, Import, type LucideIcon, Search, Trash2 } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -23,7 +25,7 @@ import {
 
 import { SidebarFooter } from "@/components/app/sidebar-footer";
 import { DragOverlaySurface, DROP_TARGET } from "@/components/ui/drag-visuals";
-import { NavSectionHeader } from "@/components/ui/nav-row";
+import { NavRow, NavSectionHeader } from "@/components/ui/nav-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +35,7 @@ import type { SidebarSections } from "../sections";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import { type DropIntent, keyboardReorderIntent, type SidebarSection } from "./drop-intent";
+import { NotesSearchView, type NoteTextHit } from "./notes-search-view";
 import type { RowAction } from "./row-menu";
 import { FooterSubView, type FooterView } from "./sidebar-footer-views";
 import { rowKey, type TreeCtx, TreeNodes, TreeRow } from "./sidebar-tree";
@@ -63,16 +66,29 @@ export type NotesSidebarProps = {
   onDropIntent: (intent: DropIntent) => void;
   onUnarchive: (id: string) => void;
   onTrash: (id: string) => void;
-  onUnfavorite: (id: string) => void;
+  /** `undoable`: the keyboard took it off the list, so offer it back. */
+  onUnfavorite: (id: string, opts?: { undoable?: boolean }) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
   onImport?: () => void;
+  /** Notes' own search, shown in the tree's place while open. */
+  search: {
+    open: boolean;
+    query: string;
+    onQueryChange: (query: string) => void;
+    onOpenChange: (open: boolean) => void;
+    /** Every note to search (archived ones included). */
+    notes: Note[];
+    searchText: (query: string) => Promise<NoteTextHit[]>;
+  };
 };
 
 export function NotesSidebar(props: NotesSidebarProps) {
   const { sections, canEdit, selectedId, notes } = props;
   const [expanded, setExpanded] = useState<Set<string>>(() => readExpanded(props.workspaceId));
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [openedFrom, setOpenedFrom] = useState<string | null>(null);
   const view = props.footerView;
   const setView = props.onFooterViewChange;
   const treeRef = useRef<HTMLDivElement>(null);
@@ -121,10 +137,24 @@ export function NotesSidebar(props: NotesSidebarProps) {
 
   const rows = useMemo(() => visibleRows(sections, expanded), [sections, expanded]);
   const favoriteIds = useMemo(() => new Set(sections.favorites.map((n) => n.id)), [sections]);
+  // The open note's home row: Inbox or Pages, before its Favorites copy.
+  const homeKey = selectedId
+    ? (
+        rows.find((r) => r.id === selectedId && !r.key.startsWith("favorites:")) ??
+        rows.find((r) => r.id === selectedId)
+      )?.key
+    : undefined;
   const effectiveFocus =
     focusedKey && rows.some((r) => r.key === focusedKey)
       ? focusedKey
-      : (rows.find((r) => r.id === selectedId)?.key ?? rows[0]?.key ?? null);
+      : (homeKey ?? rows[0]?.key ?? null);
+
+  // A note can show twice (a Favorite and in Inbox or Pages): only one row
+  // reads as selected — the one you opened it from, else its home row.
+  const selectedKey =
+    selectedId && rows.some((r) => r.key === openedFrom && r.id === selectedId)
+      ? openedFrom
+      : (homeKey ?? null);
 
   const focusRow = (key: string) => {
     setFocusedKey(key);
@@ -151,7 +181,13 @@ export function NotesSidebar(props: NotesSidebarProps) {
         toggle(action.key, false);
         break;
       case "open":
+        setOpenedFrom(current ?? null);
         props.onOpen(action.id);
+        break;
+      case "menu":
+        // A draft row has no menu: a key kept for it would open the menu by
+        // itself once the draft is saved under the same row.
+        if (rows.find((r) => r.key === action.key)?.id !== props.draftId) setMenuKey(action.key);
         break;
       case "trash": {
         const note = notes.find((n) => n.id === action.id);
@@ -176,7 +212,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
             .reverse()
             .find((r) => !goesWithIt(r.key));
         if (next) focusRow(next.key);
-        if (inFavorites) props.onUnfavorite(note.id);
+        if (inFavorites) props.onUnfavorite(note.id, { undoable: true });
         else {
           props.onTrash(note.id);
           // Deleting the open note opens the next one, not an empty pane.
@@ -208,7 +244,10 @@ export function NotesSidebar(props: NotesSidebarProps) {
 
   const ctx: TreeCtx = {
     selectedId,
+    selectedKey,
     focusedKey: effectiveFocus,
+    menuKey,
+    onMenuKeyChange: setMenuKey,
     draftId: props.draftId,
     canEdit,
     favoriteIds,
@@ -222,14 +261,18 @@ export function NotesSidebar(props: NotesSidebarProps) {
     rowPopover: props.rowPopover,
     canShare: props.canShare,
     onFocusRow: setFocusedKey,
+    onOpenedFrom: setOpenedFrom,
     onCreateChild: props.onCreateChild,
   };
 
   const footerItem = (target: FooterView, icon: LucideIcon, label: string) => ({
     icon,
     label,
-    active: view === target,
-    onSelect: () => setView(view === target ? null : target),
+    active: view === target && !props.search.open,
+    onSelect: () => {
+      props.search.onOpenChange(false);
+      setView(view === target && !props.search.open ? null : target);
+    },
   });
 
   const inboxCount = sections.inbox.length;
@@ -237,7 +280,17 @@ export function NotesSidebar(props: NotesSidebarProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {view ? (
+      {props.search.open ? (
+        <NotesSearchView
+          notes={props.search.notes}
+          query={props.search.query}
+          onQueryChange={props.search.onQueryChange}
+          searchText={props.search.searchText}
+          selectedId={selectedId}
+          onOpen={props.onOpen}
+          onClose={() => props.search.onOpenChange(false)}
+        />
+      ) : view ? (
         <FooterSubView
           view={view}
           footer={sections.footer}
@@ -252,6 +305,16 @@ export function NotesSidebar(props: NotesSidebarProps) {
         />
       ) : (
         <>
+          <div className="px-1 pb-2">
+            <NavRow
+              label="Search"
+              icon={<Search />}
+              onSelect={() => {
+                setView(null);
+                props.search.onOpenChange(true);
+              }}
+            />
+          </div>
           <div
             ref={scrollerRef}
             className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 pb-4"
@@ -259,15 +322,9 @@ export function NotesSidebar(props: NotesSidebarProps) {
             {showSkeleton ? (
               <SkeletonRows />
             ) : (
-              <div
-                ref={treeRef}
-                role="tree"
-                aria-label="Notes"
-                onKeyDown={onTreeKeyDown}
-                className="flex flex-col gap-3"
-              >
+              <div ref={treeRef} className="flex flex-col gap-3">
                 {sections.favorites.length > 0 ? (
-                  <Section label="Favorites">
+                  <Section label="Favorites" onTreeKeyDown={onTreeKeyDown}>
                     {sections.favorites.map((note) => (
                       <TreeRow
                         key={rowKey("favorites", note.id)}
@@ -283,17 +340,20 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 ) : null}
                 <Section
                   label="Inbox"
+                  onTreeKeyDown={onTreeKeyDown}
                   dropSection="inbox"
                   dropActive={drag.headerHover === "inbox"}
                   count={inboxCount}
                   countLabel={`${inboxCount} in Inbox`}
                   onAdd={canEdit ? props.onNewCapture : undefined}
                   addLabel="New note (⌘N)"
+                  hint="New notes and captures land here until you file them into Pages."
+                  empty={inboxCount === 0}
                 >
                   {inboxCount === 0 ? (
                     // An empty section's line takes a drop like its header.
                     <p data-drop-header="inbox" className="px-2 py-1 text-xs text-muted-foreground">
-                      Captures land here.
+                      New notes land here until you file them.
                     </p>
                   ) : (
                     <TreeNodes nodes={sections.inbox} section="inbox" depth={0} ctx={ctx} />
@@ -301,10 +361,13 @@ export function NotesSidebar(props: NotesSidebarProps) {
                 </Section>
                 <Section
                   label="Pages"
+                  onTreeKeyDown={onTreeKeyDown}
                   dropSection="pages"
                   dropActive={drag.headerHover === "pages"}
                   onAdd={canEdit ? props.onNewPage : undefined}
                   addLabel="New page"
+                  hint="Your filed notes, nested however you like."
+                  empty={sections.pages.length === 0}
                 >
                   {sections.pages.length === 0 ? (
                     <p
@@ -314,7 +377,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                         drag.headerHover === "pages" && DROP_TARGET,
                       )}
                     >
-                      File a note here to keep it.
+                      Drag a note here to file it.
                     </p>
                   ) : (
                     <TreeNodes nodes={sections.pages} section="pages" depth={0} ctx={ctx} />
@@ -336,7 +399,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
           // still titled Recently deleted).
           footerItem("trash", Trash2, "Deleted"),
           ...(props.onImport
-            ? [{ icon: Import, label: "Import", onSelect: props.onImport, iconOnly: true }]
+            ? [{ icon: Import, label: "Import notes", onSelect: props.onImport, iconOnly: true }]
             : []),
         ]}
       />
@@ -367,9 +430,18 @@ function Section({
   countLabel,
   onAdd,
   addLabel,
+  hint,
+  empty = false,
+  onTreeKeyDown,
   children,
 }: {
   label: string;
+  /** The keys of the one roving tab stop shared by every section's tree. */
+  onTreeKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
+  /** What the section is for, on hover (Inbox vs Pages isn't self-evident). */
+  hint?: string;
+  /** No rows: the children are the empty line, not a tree. */
+  empty?: boolean;
   dropSection?: "inbox" | "pages";
   dropActive?: boolean;
   count?: number;
@@ -379,20 +451,29 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div role="none">
+    <div>
       <NavSectionHeader
-        role="none"
         label={label}
         count={count}
         countLabel={countLabel}
         onAdd={onAdd}
         addLabel={addLabel}
+        title={hint}
         data-drop-header={dropSection}
         className={cn(dropActive && DROP_TARGET)}
       />
-      <div role="group" aria-label={label} className="flex flex-col gap-px">
-        {children}
-      </div>
+      {empty ? (
+        children
+      ) : (
+        <div
+          role="tree"
+          aria-label={label}
+          onKeyDown={onTreeKeyDown}
+          className="flex flex-col gap-px"
+        >
+          {children}
+        </div>
+      )}
     </div>
   );
 }

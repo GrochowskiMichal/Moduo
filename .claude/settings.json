@@ -21,21 +21,27 @@
         ]
       },
       {
-        "matcher": "TaskCreate|TaskUpdate",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code post-todo'"
-          }
-        ]
-      },
-      {
         "matcher": "Edit|Write",
         "hooks": [
           {
             "type": "command",
             "asyncRewake": true,
             "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-design-tokens.sh\""
+          },
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-ast.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-ast.sh\""
           }
         ]
       }
@@ -55,15 +61,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-git.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-git.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-release.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-release.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
           },
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-secrets.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-secrets.sh\"",
+            "timeout": 120,
+            "onFailure": "block"
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-glob.sh\"",
+            "timeout": 10,
+            "onFailure": "block"
           }
         ]
       },
@@ -72,7 +90,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-prod-db.sh\""
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-prod-db.sh\"",
+            "timeout": 30,
+            "onFailure": "block"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|NotebookEdit|mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard-lane.sh\"",
+            "timeout": 10,
+            "onFailure": "block"
           }
         ]
       }
@@ -143,6 +174,38 @@
     ]
   },
   "permissions": {
+    "allow": [
+      "Bash(bun run verify)",
+      "Bash(bun run verify *)",
+      "Bash(bun run db:test)",
+      "Bash(bun run db:test *)",
+      "Bash(bun run lint:notes)",
+      "Bash(bun run lint:tw)",
+      "Bash(bun run lint:boundaries)",
+      "Bash(bun run lint:css)",
+      "Bash(bun run lint:js)",
+      "Bash(bun run test)",
+      "Bash(bun run test *)",
+      "Bash(bun fmt --check)",
+      "Bash(bun fmt --check *)",
+      "Bash(bun lint)",
+      "Bash(supabase status)",
+      "Bash(supabase status *)",
+      "Bash(npm view *)",
+      "Bash(gh run watch *)",
+      "mcp__moduo__tasks_search",
+      "mcp__moduo__tasks_get",
+      "mcp__moduo__tasks_list",
+      "mcp__moduo__statuses_list",
+      "mcp__moduo__projects_list",
+      "mcp__moduo__sections_list",
+      "mcp__Claude_Browser__find",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__supabase__list_edge_functions",
+      "mcp__supabase__search_docs"
+    ],
     "deny": [
       "Read(./.entire/metadata/**)",
       "Read(./.env)",

@@ -11,6 +11,11 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
 - 2026-10-23 · HV-11: supersession is data. Every decision entry has a status line (current, superseded, dropped) and links to what it replaces or what replaced it; `docs/decisions.md` is generated from the area files and CI fails when it is stale.
+- 2026-10-23 · HV-9: Cloudflare's security-audit skill is vendored at a pinned commit, its runs live outside the repo, and unfixed findings never reach git.
+- 2026-10-24 · MOD-552: the releases-repo token lives in tag-only environments, and builds after the bridge stop listing GitHub as an update endpoint.
+- 2026-10-23 · HV-5: the tier comes from `scripts/ci/tier.ts`, not the agent; ratchets run in `verify`; the weakening detector advises (agent's calls inside the Harness v3 spec).
+- 2026-10-23 · HV-1: auto mode is set per person, and bypass is enforced to the lane sandbox by a guard, not by project settings.
+- 2026-10-23 · HV-2: the worktree pool prunes on a merged PR only, never on ancestry, and never under a live process.
 - 2026-10-23 · HV-3: skill references are checked against a registry pinned in the repo; a user-only skill may be named only on a line that tells the person to type it.
 - 2026-10-23 · HV-4: the SQL/RLS tests, Rust gates and an e2e smoke run in CI, each only on its paths; the test DB is built from a prod schema snapshot kept in the Actions cache.
 - 2026-10-23 · Harness v3: the flow board becomes the harness, all of it before the closed alpha (Mike's call).
@@ -50,6 +55,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-24 · Four item checks closed (MOD-553, MOD-572, MOD-549, MOD-573): a note's new parent needs Edit and putting a note on the web by moving it needs ws.publish and Full; contact ops check the contact; removing a task dependency through its link needs Edit on the waiting task; member exceptions are checked as stored and when a role change would switch them on.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: at most 10 messages in 10 s and 30 in 60 s per person per workspace (a workspace's apps share one budget of the same size), and one "typing" broadcast per 2.5 s per person and conversation.
 - 2026-10-14 · Chat v1 privacy rules: a conversation keeps its read rule everywhere, typing is one server-written private topic per conversation, and chat capabilities and announcement mode answer only to people who can read.
 - 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
@@ -204,6 +210,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-23 · The Impeccable pass on Notes: search is back in the sidebar, publish names what goes public, every note action has a key, and the spine leads the slash menu.
 - 2026-10-24 · NR-12 flipped early: the new Notes is the only Notes; NR-5, NR-10 and NR-11 follow it.
 - 2026-10-22 · New Notes retires in-body page rows (MOD-81 follow-up).
 - 2026-10-22 · A note shows its real sub-pages as a live list under the body, not as hand-made page rows (MOD-81).
@@ -263,6 +270,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-24 · A task's status writes leave one at a time, in the order they were made, across stores; a write that comes back after its store stopped goes to the person's next store or device copy (MOD-587, MOD-569, MOD-561, HV-12 cache spot)
 - 2026-10-22 · DB-SEC-1: the security advisor's "SECURITY DEFINER callable by signed-in users" is expected for app RPCs and policy helpers; client EXECUTE goes only from trigger functions and helpers no client path reaches, and a callable helper must answer only about the caller
 - 2026-10-22 · DB-PERF-1: an advisor's "unused index" is not a reason to drop on a small database; drop only what is provably redundant, and make RLS cheap per row before adding indexes
 - 2026-10-20 · The web runtime and its port are one file per module: `runtime.web.<module>.ts` typed by `runtime.types.<module>.ts`, composed in `runtime.web.ts`; the Supabase client is its own light module (`runtime.web.client.ts`)
@@ -449,6 +457,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-23 · Product UI quality is measured by a lab and scored by blind critics: `/product-lab`, `/product-jury`, `/product-studio`
 - 2026-10-16 · A collection header's count is the tertiary text level, and 4 px sit between a header and its rows
 - 2026-10-16 · 8 px between two panels, 16 at the window's edges, and the resize handle still grabs over 16 px
 - 2026-10-16 · A text field marks focus on its own edge; the 2 px ring stays the keyboard's mark on controls, and no focus ring is offset

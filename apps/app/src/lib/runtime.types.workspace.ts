@@ -46,6 +46,8 @@ export type OAuthConsentRequest = {
   clientDomain: string | null;
   /** Its scheme ("https", "http" for localhost, or an app's own like "cursor"). */
   clientScheme: string | null;
+  /** The redirect as Supabase Auth answers it, for the page's own reading of the host (MOD-576). */
+  redirectUri: string | null;
   /** The person's live connection to this app (a reconnect), in whichever workspace. */
   connection: {
     id: string;

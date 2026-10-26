@@ -228,48 +228,49 @@ export function resolveRef(areas: Area[], from: Entry, ref: Ref): Entry[] {
 export const label = (e: Entry) =>
   `${e.area} ${e.date ? `${e.date} ` : ""}"${e.title.slice(0, 60)}"`;
 
-/** Every problem across the areas: missing statuses, superseded without a successor, dangling or ambiguous references. */
-export function validate(areas: Area[]): string[] {
+const showRef = (ref: Ref) =>
+  `${ref.area ? `${ref.area} ` : ""}${ref.date ? `${ref.date} ` : ""}"${ref.prefix}"`;
+
+/** What's wrong with one reference: it must hit exactly one other entry, and that entry must link back. */
+function checkRef(areas: Area[], e: Entry, kind: "supersedes" | "by", ref: Ref): string | null {
+  const back = kind === "supersedes" ? "by" : "supersedes";
+  const hits = resolveRef(areas, e, ref);
+  if (hits.length === 0) return `${kind}: ${showRef(ref)} matches no entry`;
+  if (hits.length > 1)
+    return `${kind}: ${showRef(ref)} matches ${hits.length} entries; quote more of the title`;
+  const [hit] = hits;
+  if (hit === e) return `${kind}: ${showRef(ref)} points at the entry itself`;
+  if (hit[back].some((r) => resolveRef(areas, hit, r)[0] === e)) return null;
+  return `${kind}: ${label(hit)} doesn't link back (add · ${back}: ${label(e)} to its status line)`;
+}
+
+/** One entry's problems, without the file:line prefix. */
+function checkEntry(areas: Area[], e: Entry): string[] {
+  if (e.status === null)
+    return [`no status line under ${label(e)} (add "status: current" right under the title)`];
   const problems: string[] = [];
-  for (const area of areas) {
-    for (const e of area.entries) {
-      const at = `docs/decisions/${e.area}.md:${e.line}`;
-      if (e.status === null) {
-        problems.push(
-          `${at}: no status line under ${label(e)} (add "status: current" right under the title)`,
-        );
-        continue;
-      }
-      if (e.status === "superseded" && e.by.length === 0)
-        problems.push(
-          `${at}: superseded but names no successor (add · by: <date> "<title start>")`,
-        );
-      if (e.status === "dropped" && e.by.length > 0)
-        problems.push(`${at}: by: is for superseded (or partly superseded, still current) entries`);
-      for (const [kind, refs] of [
-        ["supersedes", e.supersedes],
-        ["by", e.by],
-      ] as const) {
-        const back = kind === "supersedes" ? "by" : "supersedes";
-        for (const ref of refs) {
-          const hits = resolveRef(areas, e, ref);
-          const shown = `${ref.area ? `${ref.area} ` : ""}${ref.date ? `${ref.date} ` : ""}"${ref.prefix}"`;
-          if (hits.length === 0) problems.push(`${at}: ${kind}: ${shown} matches no entry`);
-          else if (hits.length > 1)
-            problems.push(
-              `${at}: ${kind}: ${shown} matches ${hits.length} entries; quote more of the title`,
-            );
-          else if (hits[0] === e)
-            problems.push(`${at}: ${kind}: ${shown} points at the entry itself`);
-          else if (!hits[0][back].some((r) => resolveRef(areas, hits[0], r)[0] === e))
-            problems.push(
-              `${at}: ${kind}: ${label(hits[0])} doesn't link back (add · ${back}: ${label(e)} to its status line)`,
-            );
-        }
-      }
-    }
+  if (e.status === "superseded" && e.by.length === 0)
+    problems.push(`superseded but names no successor (add · by: <date> "<title start>")`);
+  if (e.status === "dropped" && e.by.length > 0)
+    problems.push(`by: is for superseded (or partly superseded, still current) entries`);
+  const refs = [
+    ...e.supersedes.map((ref) => ["supersedes", ref] as const),
+    ...e.by.map((ref) => ["by", ref] as const),
+  ];
+  for (const [kind, ref] of refs) {
+    const problem = checkRef(areas, e, kind, ref);
+    if (problem) problems.push(problem);
   }
   return problems;
+}
+
+/** Every problem across the areas: missing statuses, superseded without a successor, dangling, ambiguous or one-way references. */
+export function validate(areas: Area[]): string[] {
+  return areas.flatMap((area) =>
+    area.entries.flatMap((e) =>
+      checkEntry(areas, e).map((p) => `docs/decisions/${e.area}.md:${e.line}: ${p}`),
+    ),
+  );
 }
 
 export function readAreas(dir = DIR): Area[] {

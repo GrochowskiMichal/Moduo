@@ -2,7 +2,13 @@ import { $convertFromMarkdownString } from "@lexical/markdown";
 import { describe, expect, it } from "@rstest/core";
 import { $getRoot } from "lexical";
 
-import { $blockMenuFor, $deleteBlock, $duplicateBlock, $turnBlockInto } from "./block-actions";
+import {
+  $blockMenuFor,
+  $deleteBlock,
+  $duplicateBlock,
+  $isTextBlock,
+  $turnBlockInto,
+} from "./block-actions";
 import { $noteMarkdown, createNotesHeadlessEditor } from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";
 import { $createTaskLineNode } from "./schema/task-line-node";
@@ -63,6 +69,24 @@ describe("block menu", () => {
         turnInto: true,
         duplicate: true,
       });
+    });
+  });
+
+  it("offers Task and Page for a block of words only", () => {
+    const { editor } = createNotesHeadlessEditor("text-block");
+    editor.update(
+      () =>
+        $convertFromMarkdownString(
+          "Words\n\n## A heading\n\n- a list\n\n> said",
+          NOTES_TRANSFORMERS,
+        ),
+      { discrete: true },
+    );
+    editor.getEditorState().read(() => {
+      const kinds = $getRoot()
+        .getChildren()
+        .map((b) => $isTextBlock(b));
+      expect(kinds).toEqual([true, true, false, true]);
     });
   });
 });

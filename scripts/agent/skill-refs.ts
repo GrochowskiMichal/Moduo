@@ -47,7 +47,15 @@ export const PLUGIN_SKILLS: Record<string, { version: string; skills: Record<str
   },
 };
 
-export type SkillDoc = { name: string; path: string; text: string; modelInvocable: boolean };
+// `vendored`: a third-party skill copied in verbatim with an UPSTREAM.md beside it (HV-9).
+// Its prose is upstream's, so references inside it aren't checked; it can still be named.
+export type SkillDoc = {
+  name: string;
+  path: string;
+  text: string;
+  modelInvocable: boolean;
+  vendored?: boolean;
+};
 export type Problem = { file: string; line: number; ref: string; reason: string };
 
 const userOnly = (text: string) =>
@@ -61,7 +69,13 @@ export function loadProjectSkills(root: string): Map<string, SkillDoc> {
     const file = path.join(dir, name, "SKILL.md");
     if (!existsSync(file)) continue;
     const text = readFileSync(file, "utf8");
-    out.set(name, { name, path: path.relative(root, file), text, modelInvocable: !userOnly(text) });
+    out.set(name, {
+      name,
+      path: path.relative(root, file),
+      text,
+      modelInvocable: !userOnly(text),
+      vendored: existsSync(path.join(dir, name, "UPSTREAM.md")),
+    });
   }
   return out;
 }
@@ -145,6 +159,7 @@ function refs(text: string, local: Map<string, SkillDoc>): Ref[] {
 export function findProblems(docs: SkillDoc[], local: Map<string, SkillDoc>): Problem[] {
   const problems: Problem[] = [];
   for (const doc of docs) {
+    if (doc.vendored) continue;
     for (const { ref, line, personLine, kind } of refs(doc.text, local)) {
       const report = (reason: string) => problems.push({ file: doc.path, line, ref, reason });
       if (kind === "named") {

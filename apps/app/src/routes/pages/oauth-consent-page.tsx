@@ -41,6 +41,7 @@ import {
   toKeyScopes,
 } from "../../features/settings/api-keys";
 import {
+  agreedDomain,
   appDisplayName,
   approveBlocker,
   consentCeilings,
@@ -252,7 +253,9 @@ function ConsentForm({
   onSignedOut: () => void;
 }) {
   const { runtime, isSignedIn } = useAuth();
-  const appName = appDisplayName(request);
+  // The host only where the browser's own reading of the redirect agrees (MOD-576).
+  const domain = agreedDomain(request);
+  const appName = appDisplayName({ appName: request.appName, clientDomain: domain });
   const connection = request.connection;
   const choices = useMemo(
     () => workspaceChoices(workspaces, request.fullWorkspaceIds),
@@ -278,7 +281,7 @@ function ConsentForm({
   const noneQualify = choices.every((c) => c.disabled);
   const shown = workspace ? shownScopes(scopes, workspace.actor) : scopes;
   const ceilings = workspace ? consentCeilings(workspace.actor) : null;
-  const returnAddress = returnsTo(request.clientScheme, request.clientDomain);
+  const returnAddress = returnsTo(request.clientScheme, domain);
   const blocker = approveBlocker(
     choice,
     shown,
@@ -373,7 +376,7 @@ function ConsentForm({
         ) : (
           "Its website isn't known."
         )}
-        {isCheckedApp(request.clientScheme, request.clientDomain) ? null : (
+        {isCheckedApp(request.clientScheme, domain) ? null : (
           <span className="block text-xs">{UNCHECKED_APP_NOTE}</span>
         )}
       </p>

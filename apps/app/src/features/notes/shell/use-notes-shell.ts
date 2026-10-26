@@ -165,18 +165,24 @@ export function useNotesShell() {
   const resumedFor = useRef<string | null>(null);
   useEffect(() => {
     if (!lastKey || loading || resumedFor.current === lastKey) return;
-    resumedFor.current = lastKey;
-    if (selectedId || search.action) return;
+    if (selectedId || search.action) {
+      resumedFor.current = lastKey;
+      return;
+    }
     let last: string | null = null;
     try {
       last = localStorage.getItem(lastKey);
     } catch {
+      resumedFor.current = lastKey;
       return;
     }
-    if (last && notes.some((n) => n.id === last && !n.deletedAt && !n.isArchived)) {
-      select(last, true);
-    }
-  }, [lastKey, loading, selectedId, search.action, notes, select]);
+    const found = last ? notes.find((n) => n.id === last) : undefined;
+    // A device cache that doesn't hold it yet: wait for the server's list
+    // before deciding it's gone (a first visit on a new device opened empty).
+    if (last && !found && !module.listFresh) return;
+    resumedFor.current = lastKey;
+    if (found && !found.deletedAt && !found.isArchived) select(found.id, true);
+  }, [lastKey, loading, selectedId, search.action, notes, select, module.listFresh]);
 
   // Opening a note jumps it to the front of the blank-note repair queue.
   useEffect(() => {
