@@ -583,7 +583,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-10 — Rules by path** · deps: HV-1 · 2026-10-26 `t/mike/hv-10-path-rules`
 - [x] **HV-18 — Frozen tests profile** · deps: HV-1 · 2026-10-26 `t/mike/hv-18-frozen-tests`
 - [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
-- [ ] **HV-23 — Router, scout** · deps: HV-1
+- [x] **HV-23 — Router, scout (Tier 2 by path)** · deps: HV-1 · 2026-10-26 `t/mike/hv-23-router`, PR #663
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
 - [x] **HV-16 — RLS access matrix** · deps: HV-4 · 2026-10-26 · `t/mike/hv-16-rls-matrix`, PR #655
 - [ ] **HV-21 — Weekly numbers** · deps: HV-5
