@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-26 · HV-23: the router is a command hook with keyword rules by default and Haiku as a budget-bound opt-in, not a `type: "prompt"` hook; the scout is its own read-only Haiku agent.
 - 2026-10-26 · HV-24: the Haiku risk hook is an async command hook that calls `claude -p --model haiku` itself and logs to the git common dir, not a `type: "prompt"` hook.
 - 2026-10-26 · HV-20: the A/B rig runs each attempt in a remote-less `git clone --shared` at the task's commit, inside srt through `srt-offline.mjs`, with the oracle copied in from the fix commit after the agent stops.
 - 2026-10-26 · HV-26: Tier 2 blocks race three drafts from a frozen contract commit, and `bun run drafts` keeps the smallest passing diff within 5 points of the best mutant kill rate.
