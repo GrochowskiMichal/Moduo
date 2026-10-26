@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-26 · HV-27: catching tests on Tier 2 PRs into develop run in three jobs, so the Claude token and PR code never share one.
 - 2026-10-26 · HV-28: the app Worker ships as a canary driven by our own script over Cloudflare's deployments API, judged by probes against the new version plus Workers analytics, and it needs zone-level version affinity to split.
 - 2026-10-26 · HV-7: GitHub events move a block's Moduo task through `moduo-sync.yml`, on `pull_request_target`, planning without the key and applying in the `moduo-sync` environment.
 - 2026-10-26 · HV-6: the AI review runs once per PR into develop, advisory, on Sonnet 5, with the workflow token and a Max OAuth token in its own environment.

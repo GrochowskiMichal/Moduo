@@ -592,7 +592,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **HV-25 — Experiment arms** · deps: HV-20
 - [ ] **HV-29 — MCP agent-experience eval** · deps: HV-20
 - [ ] **HV-26 — Build engine v3** · deps: HV-3, HV-18
-- [ ] **HV-27 — Catching tests (Tier 2)** · deps: HV-6
+- [x] **HV-27 — Catching tests (Tier 2)** · deps: HV-6 · 2026-10-26 `t/mike/hv-27-catching-tests` (live check on the next Tier 2 PR into develop)
 - [ ] **HV-22 — Routines** · deps: HV-15, HV-21
 - [ ] **HV-14a — Compile gotchas: Supabase + spine** · deps: HV-10, HV-12, HV-13
 - [ ] **HV-14b — Compile gotchas: UI + notes** · deps: HV-10, HV-12, HV-13
