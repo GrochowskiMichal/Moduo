@@ -56,6 +56,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-26 · A new link needs Edit on at least one of its two items; `exposed_notes` takes no writes (MOD-593, MOD-594, Mike's call).
 - 2026-10-24 · Four item checks closed (MOD-553, MOD-572, MOD-549, MOD-573): a note's new parent needs Edit and putting a note on the web by moving it needs ws.publish and Full; contact ops check the contact; removing a task dependency through its link needs Edit on the waiting task; member exceptions are checked as stored and when a role change would switch them on.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: at most 10 messages in 10 s and 30 in 60 s per person per workspace (a workspace's apps share one budget of the same size), and one "typing" broadcast per 2.5 s per person and conversation.
 - 2026-10-14 · Chat v1 privacy rules: a conversation keeps its read rule everywhere, typing is one server-written private topic per conversation, and chat capabilities and announcement mode answer only to people who can read.
