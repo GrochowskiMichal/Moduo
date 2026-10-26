@@ -125,6 +125,9 @@ describe("redact", () => {
     ["curl -H 'cookie: a=x1; b=y2secret' https://moduo.app", "y2secret"],
     ["alter role x with password 'pw10secret'", "pw10secret"],
     ["select vault.create_secret('pw11secret')", "pw11secret"],
+    ['curl -d \'{"password":"pw12secret"}\' https://x.moduo.app', "pw12secret"],
+    ["git push https://abcdefghijklmnopqrst12@github.com/x/y develop", "abcdefghijklmnopqrst12"],
+    ["curl -H 'X-Moduo-Key: pw13secret' https://moduo.app", "pw13secret"],
   ];
   it.each(cases)("hides the secret in %s", (input, secret) => {
     const out = redact(input);
@@ -167,6 +170,16 @@ describe("MultiEdit", () => {
     });
     expect(t?.chars).toBe(14);
     expect(t?.detail).toContain("drop policy p");
+  });
+});
+
+describe("cost on hostile input", () => {
+  it("stays fast on many hyphenated flags and long unbroken runs", () => {
+    const t0 = Date.now();
+    classify(bash(`supabase ${"--a-b ".repeat(40)}status`));
+    classify(bash(`supabase db push ${"a-".repeat(100_000)}`));
+    redact("token_".repeat(30_000).slice(0, 4_000));
+    expect(Date.now() - t0).toBeLessThan(2_000);
   });
 });
 

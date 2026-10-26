@@ -86,7 +86,7 @@ export interface RiskDecision {
 
 const R = "[REDACTED]";
 const SECRET_NAME =
-  "[A-Za-z0-9_-]*(?:token|secret|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|auth|bearer|cookie|credential|session)[A-Za-z0-9_-]*";
+  "[A-Za-z0-9_-]{0,40}(?:token|secret|passw(?:or)?d|pwd|api[_-]?key|access[_-]?key|private[_-]?key|auth|bearer|cookie|credential|session|signature|[_-]key)[A-Za-z0-9_-]{0,40}";
 
 /** A shell value: a quoted string (spaces allowed) or one bare word. */
 const VAL = `(?:"[^"\n]*"|'[^'\n]*'|[^\\s'"&;|]+)`;
@@ -105,15 +105,16 @@ export function redact(text: string): string {
       .replace(/\bbearer\s+[^\s'"]+/gi, `Bearer ${R}`)
       // URL userinfo up to the last @ before the host: scheme://user:p@ss@host
       .replace(/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@'"]+:)[^\s'"/]*@/gi, `$1${R}@`)
+      // "secretName": "value" (JSON in a command), X-Something-Key: value (headers)
+      .replace(re(`("${SECRET_NAME}"\\s*:\\s*)"(?:[^"\\\\\\n]|\\\\.)*"`), `$1"${R}"`)
+      // URL userinfo without a password: https://<token>@host
+      .replace(/(\b[a-z][a-z0-9+.-]*:\/\/)[^\s:/@'"]{16,}@/gi, `$1${R}@`)
       // NAME=value, NAME: value, --name value, --name=value, ?name=value
       .replace(re(`(\\b${SECRET_NAME}\\s*[=:]\\s*)${VAL}`), `$1${R}`)
       .replace(re(`(--${SECRET_NAME}(?:\\s+|=))${VAL}`), `$1${R}`)
       // curl -u user:pass, a CLI's -p <password>, SQL passwords, here-strings
       .replace(/((?:^|\s)(?:-u|--user)(?:\s+|=)?)(["']?)([^\s:'"]+):[^\s'"]+\2/g, `$1$2$3:${R}$2`)
-      .replace(
-        re(`(\\b(?:supabase|psql|mysql)\\b[^\\n;&|]*?\\s-p(?:\\s+|=)?)${VAL}`, "g"),
-        `$1${R}`,
-      )
+      .replace(re(`(\\b(?:supabase|mysql)\\b[^\\n;&|]*?\\s-p(?:\\s+|=)?)${VAL}`, "g"), `$1${R}`)
       .replace(/(\b(?:password|identified\s+by)\s+)'[^'\n]*'/gi, `$1'${R}'`)
       .replace(/(\bcreate_secret\s*\(\s*)'[^'\n]*'/gi, `$1'${R}'`)
       .replace(re(`(<<<\\s*)${VAL}`, "g"), `$1${R}`)
@@ -166,7 +167,7 @@ const clip = (s: string, n: number) =>
 const W = "(?:^|[^\\w-])"; // start of a command word (also inside quotes: bash -c '…')
 const RUNNER = "(?:(?:bunx|npx|pnpm\\s+dlx)\\s+)?";
 const AT = "(?:@\\S+)?"; // pinned version: bunx wrangler@4
-const FLAGS = "(?:--?[\\w-]+(?:[= ][^-\\s]\\S*)?\\s+)*"; // global flags before the subcommand
+const FLAGS = "(?:--?\\w[\\w-]*(?:[= ][^-\\s]\\S*)?\\s+)*"; // global flags before the subcommand
 /** Bash that reaches production, publishes, or rewrites shared history. Name → pattern. */
 export const BASH_TRIGGERS: readonly { name: string; re: RegExp }[] = [
   {
@@ -225,7 +226,7 @@ function classifyBash(cmd: unknown): Trigger | null {
   const text = typeof cmd === "string" ? cmd : "";
   const hit = BASH_TRIGGERS.find((t) => t.re.test(text));
   if (!hit) return null;
-  const safe = clip(redact(text), MAX_COMMAND);
+  const safe = clip(redact(text.slice(0, MAX_COMMAND * 2)), MAX_COMMAND);
   return { kind: "bash", rule: hit.name, subject: safe, detail: safe };
 }
 
@@ -238,7 +239,9 @@ function classifyEdit(tool: string, ti: Record<string, unknown>, cwd: string): T
   const parts = [ti, ...edits]
     .flatMap((e) => [e.old_string, e.new_string, e.content, e.new_source])
     .filter((v): v is string => typeof v === "string");
-  const text = parts.map((v, i) => `--- part ${i + 1}\n${clip(redact(v), MAX_EDIT)}`).join("\n");
+  const text = parts
+    .map((v, i) => `--- part ${i + 1}\n${clip(redact(v.slice(0, MAX_EDIT * 2)), MAX_EDIT)}`)
+    .join("\n");
   return {
     kind: "edit",
     rule: `tier2:${rule.why}`,
