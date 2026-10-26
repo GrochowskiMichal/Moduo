@@ -252,6 +252,7 @@ export type State = {
 export type RunResult = { outcome: Outcome; report: string[] };
 
 class Moved extends Error {}
+class Stopped extends Error {}
 
 /** The version override header that sends one request to `version`. */
 export function override(worker: string, version: string): Record<string, string> {
@@ -289,20 +290,29 @@ export async function probe(
  * the time. A failed request says nothing about affinity (errors are the soak's business), so only
  * two different builds both answering prove there is none.
  */
-export async function hasAffinity(f: Fetch, url: string, samples = 40): Promise<boolean> {
+export async function hasAffinity(
+  f: Fetch,
+  url: string,
+  samples = 40,
+): Promise<boolean | "unknown"> {
   const root = url.replace(/\/+$/, "");
   const builds = new Set<string>();
-  for (let i = 0; i < samples; i++) {
+  let answered = 0;
+  for (let i = 0; i < samples * 2 && answered < samples; i++) {
     try {
       const res = await f(`${root}/config.json`, { redirect: "manual", signal: timeout() });
       const build = res.ok ? ((await res.json()) as { build?: string }).build : undefined;
-      if (build) builds.add(build);
+      if (build) {
+        builds.add(build);
+        answered++;
+      }
     } catch {
       // ignored, see above
     }
     if (builds.size > 1) return false;
   }
-  return true;
+  // Mostly failing requests prove nothing either way, and are themselves a problem.
+  return answered >= samples ? true : "unknown";
 }
 
 type Stage = {
@@ -356,6 +366,9 @@ async function soak(s: Stage, started: number): Promise<string> {
   let failedRounds = 0;
   let lastAnalytics = 0;
   let analytics: Analytics = null;
+  let probesCounted = 0;
+  // Analytics lag about a minute behind: only probes older than that are surely in them.
+  const lagRounds = Math.ceil(60 / s.opts.intervalSeconds);
   while (s.now() < end) {
     const p = await probe(s.f, s.opts.url, s.headers, s.opts.build);
     rounds++;
@@ -368,12 +381,13 @@ async function soak(s: Stage, started: number): Promise<string> {
       const first = lastAnalytics === 0;
       lastAnalytics = s.now();
       analytics = await s.cf.analytics(new Date(started), s.opts.version, s.stable);
+      probesCounted = Math.max(0, rounds - lagRounds);
       if (!analytics && first)
         s.note(
           "Workers analytics unavailable (token needs Account Analytics: Read); probes decide alone.",
         );
     }
-    const v = judge(inARow, withoutProbes(analytics, rounds));
+    const v = judge(inARow, withoutProbes(analytics, probesCounted));
     if (v.spike) {
       s.note(`Spike after ${Math.round((s.now() - started) / 1000)} s: ${v.reason}.`);
       return v.reason;
@@ -387,6 +401,52 @@ async function soak(s: Stage, started: number): Promise<string> {
     `Soak: ${s.opts.minutes} min, ${rounds} probe rounds (${failedRounds} failed, never ${THRESHOLDS.probeRounds} in a row)${seen}.`,
   );
   return "";
+}
+
+/** What follows the 10% move, from the affinity check: soak, promote at once, or roll back. */
+async function afterSplit(s: Stage): Promise<"soak" | "promote" | "rollback"> {
+  const affinity = await hasAffinity(s.f, s.opts.url);
+  if (affinity === "unknown") {
+    s.note("The host mostly failed to answer during the affinity check.");
+    return "rollback";
+  }
+  if (affinity) return "soak";
+  if (s.opts.withoutAffinity === "promote") {
+    s.note(
+      "⚠️ No version affinity on this host: a split would serve pages and chunks from different builds. Promoted to 100% without the soak. Add the Transform Rule (docs/release.md §4).",
+    );
+    return "promote";
+  }
+  s.note("⚠️ No version affinity on this host; soaking anyway.");
+  return "soak";
+}
+
+/** A run that threw: cancelled, overtaken by someone else's deploy, or broken (roll back). */
+async function failed(
+  e: Error,
+  r: {
+    note: (line: string) => void;
+    report: string[];
+    finish: (o: Outcome) => RunResult;
+    rollback: (why: string, o: Outcome) => Promise<RunResult>;
+  },
+): Promise<RunResult> {
+  if (e instanceof Stopped) {
+    // No outcome saved: the cleanup step must still act if the signal handler's undo didn't.
+    r.note("The job is being cancelled; the cleanup puts the old version back.");
+    return { outcome: "failed", report: r.report };
+  }
+  if (e instanceof Moved) {
+    r.note(`Someone else deployed meanwhile (${e.message}); this run changed nothing more.`);
+    return r.finish("left-alone");
+  }
+  r.note(`Failed: ${e.message}`);
+  try {
+    return await r.rollback("canary error", "failed");
+  } catch (x) {
+    r.note(`Rollback failed too: ${(x as Error).message}. Roll back by hand (docs/release.md §4).`);
+    return r.finish("failed");
+  }
 }
 
 export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> {
@@ -417,7 +477,7 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
 
   // Every change after the first: only on top of the deployment this run made.
   const move = async (versions: Split, message: string, force = false) => {
-    if (env.stopped?.()) throw new Moved("the job is being cancelled");
+    if (env.stopped?.()) throw new Stopped();
     const live = await cf.current();
     if (live.id !== state.ours)
       throw new Moved(`deployment ${live.id} (${describe(live.versions)})`);
@@ -463,15 +523,11 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
     note(
       `${opts.percent}% of traffic on ${short(opts.version)}, ${100 - opts.percent}% on ${short(stable)}.`,
     );
-    if (!(await hasAffinity(s.f, opts.url))) {
-      if (opts.withoutAffinity === "promote") {
-        await move(at(100), `canary ${opts.build} 100% (no affinity)`);
-        note(
-          "⚠️ No version affinity on this host: a split would serve pages and chunks from different builds. Promoted to 100% without the soak. Add the Transform Rule (docs/release.md §4).",
-        );
-        return finish("promoted-without-soak");
-      }
-      note("⚠️ No version affinity on this host; soaking anyway.");
+    const next = await afterSplit(s);
+    if (next === "rollback") return await rollback("host failing at 10%", "rolled-back-soak");
+    if (next === "promote") {
+      await move(at(100), `canary ${opts.build} 100% (no affinity)`);
+      return finish("promoted-without-soak");
     }
 
     // 3. Soak.
@@ -483,17 +539,7 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
     note(`Promoted ${short(opts.version)} to 100%.`);
     return finish("promoted");
   } catch (e) {
-    if (e instanceof Moved) {
-      note(`Someone else deployed meanwhile (${e.message}); this run changed nothing more.`);
-      return finish("left-alone");
-    }
-    note(`Failed: ${(e as Error).message}`);
-    try {
-      await rollback("canary error", "failed");
-    } catch (r) {
-      note(`Rollback failed too: ${(r as Error).message}. Roll back by hand (docs/release.md §4).`);
-    }
-    return finish("failed");
+    return await failed(e as Error, { note, report, finish, rollback });
   }
 }
 
@@ -613,7 +659,8 @@ if (import.meta.main) {
         try {
           const state = JSON.parse(readFileSync(opts.statePath, "utf8")) as State;
           console.error(await abort(state, env));
-          writeFileSync(opts.statePath, JSON.stringify(state));
+          if (state.outcome === "rolled-back-cancelled")
+            writeFileSync(opts.statePath, JSON.stringify(state));
         } catch (e) {
           console.error(`abort failed: ${(e as Error).message}`);
         }

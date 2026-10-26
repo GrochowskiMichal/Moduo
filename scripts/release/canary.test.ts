@@ -237,7 +237,7 @@ describe("run", () => {
     const r = await run(OPTS, envFor(w));
     expect(r.outcome).toBe("rolled-back-soak");
     expect(w.posted).toEqual([at(0), at(10), OLD_100]);
-    expect(r.report.join("\n")).toMatch(/error rate 10\.3% over 97 requests/);
+    expect(r.report.join("\n")).toMatch(/error rate 10\.0% over 100 requests/);
   });
 
   it("a broken build fails the 0% smoke and never reaches users", async () => {
@@ -276,9 +276,20 @@ describe("run", () => {
     w.onRead = () => {
       reads++;
     };
-    const r = await run(OPTS, { ...e, stopped: () => reads >= 3 });
-    expect(r.outcome).toBe("left-alone");
+    const path = (await import("node:path")).join(
+      (await import("node:fs")).mkdtempSync(
+        (await import("node:path")).join((await import("node:os")).tmpdir(), "canary-"),
+      ),
+      "state.json",
+    );
+    const r = await run({ ...OPTS, statePath: path }, { ...e, stopped: () => reads >= 3 });
+    expect(r.outcome).toBe("failed");
+    // No outcome saved, so the cleanup step's abort still rolls back.
+    const saved = JSON.parse((await import("node:fs")).readFileSync(path, "utf8")) as State;
+    expect(saved.outcome).toBeUndefined();
     expect(w.posted).toEqual([at(0), at(10)]);
+    expect(await abort(saved, e)).toMatch(/Rolled back/);
+    expect(w.posted).toEqual([at(0), at(10), OLD_100]);
   });
 
   it("without affinity, --without-affinity soak still soaks (the staging rehearsal)", async () => {
