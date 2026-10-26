@@ -1,0 +1,24 @@
+{
+  "id": "587-status-race",
+  "title": "A task's status write overtakes an older one still on its way (MOD-587)",
+  "source": {
+    "pr": 642,
+    "escape": "587-status-ops-race"
+  },
+  "base": "fe7c968dffce1735e6bd5e0ad218d965f1324c43",
+  "fix": "a1623827b19c1f909ffb1e44343c9e5a39d5bc97",
+  "prompt": "Bug (MOD-587), found by the outbox property harness: in the Tasks sync store (apps/app/src/lib/sync/store.ts) a second status write for a task can go out live while an older status write for the same task is still unanswered, and when the older live write fails on the network it is queued behind the newer one. The server applies arrival order, so the older status wins. A status write must wait while anything for that task is queued or an older one is still on its way, and a live write that fails must go back in front of newer entries. Add regression tests. Don't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": [
+      "apps/app/src/lib/sync/store.fake.spec.ts",
+      "apps/app/src/lib/sync/store.order.test.ts"
+    ],
+    "checks": [
+      {
+        "name": "status writes keep their order",
+        "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts -t MOD-587"
+      }
+    ]
+  }
+}

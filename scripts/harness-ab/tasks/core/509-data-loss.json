@@ -1,0 +1,37 @@
+{
+  "id": "509-data-loss",
+  "title": "#509: four data-loss bugs from the 2026-10-20 audit (TypeScript part)",
+  "source": {
+    "pr": 509,
+    "escape": "509-1-error-read-as-empty",
+    "note": "509-1..509-4; 509-5 is Rust and stays out"
+  },
+  "base": "7d8d16b696d504fee42b80861cba8a1747bc4e8d",
+  "fix": "9a45905456d59aab9ea8535b25c284bcd2c901ff",
+  "prompt": "Four data-loss bugs were found in an audit of the web app's sync. Fix all four, each with a regression test.\n\n1. Preferences sync (apps/app/src/lib/prefs-sync.ts): when the cloud read of a person's preferences fails (a network or server error), the app treats it as \"no row yet\", applies the defaults and pushes them, overwriting the person's real preferences. A failed read must apply and push nothing.\n2. The Tasks outbox (apps/app/src/lib/sync/store.ts): a check-off made while an older check-off for the same task is still being sent can reach the server first, so the older status wins. A newer status write must wait behind the older one.\n3. Signing out (same store): sign-out drops the outbox, so writes that were still waiting to sync are lost. Rows may go, but what waits to sync must be kept for that person and sent when they sign back in.\n4. Due dates (apps/app/src/features/tasks/): the derived `dueOn` (the local calendar day of a task's due date) goes stale. A single due-date edit must carry the local day, and a task without `dueOn` must export its due date's local day.\n\nDon't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": [
+      "apps/app/src/lib/prefs-sync.test.ts",
+      "apps/app/src/lib/sync/store.test.ts",
+      "apps/app/src/features/tasks/due-on.test.ts"
+    ],
+    "checks": [
+      {
+        "name": "509-1 prefs read error",
+        "run": "bun run --cwd apps/app test src/lib/prefs-sync.test.ts"
+      },
+      {
+        "name": "509-2/3 outbox order and sign-out",
+        "run": "bun run --cwd apps/app test src/lib/sync/store.test.ts"
+      },
+      {
+        "name": "509-4 dueOn",
+        "run": "bun run --cwd apps/app test src/features/tasks/due-on.test.ts"
+      }
+    ],
+    "env": {
+      "TZ": "Pacific/Auckland"
+    }
+  }
+}
