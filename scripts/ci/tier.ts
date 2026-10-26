@@ -36,6 +36,7 @@ export const TIER2: readonly Tier2Rule[] = [
   { glob: "supabase/tests/**", why: "RLS/policy tests" },
   { glob: "supabase/functions/_shared/contracts/**", why: "contracts" },
   { glob: "supabase/functions/delete-account/**", why: "delete-account" },
+  { glob: ".claude/skills/security-audit/**", why: "vendored security skill (pinned)" },
   { glob: "supabase/functions/_shared/account-erasure.ts", why: "delete-account" },
   { glob: "supabase/functions/_shared/posthog-erasure.ts", why: "delete-account" },
   { glob: "supabase/functions/_shared/app-token.ts", why: "auth (app tokens)" },

@@ -572,7 +572,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-3 — Skill rewiring** · deps: — · 2026-10-23 `t/mike/hv-3-skill-rewiring`
 - [x] **HV-4 — Oracles in CI (Tier 2)** · deps: — · 2026-10-23 `t/mike/hv-4-ci-oracles`
 - [x] **HV-5 — Tier classifier, weakening detector, ratchets (Tier 2)** · deps: — · 2026-10-23 `t/mike/hv-5-tier-ratchets`
-- [ ] **HV-9 — Security pass before alpha** · deps: —
+- [x] **HV-9 — Security pass before alpha** · deps: — · 2026-10-23 `t/mike/hv-9-security-pass`
 - [ ] **HV-11 — Decisions current view** · deps: —
 - [x] **HV-12 — ast-grep pack** · deps: — · 2026-10-23 `t/mike/hv-12-ast-grep`
 - [x] **HV-15 — Variant hunt** · deps: — · 2026-10-23 `t/mike/hv-15-variant-hunt`
