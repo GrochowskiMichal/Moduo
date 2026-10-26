@@ -9,8 +9,13 @@ name: Deploy web (shared)
 # lockfile staging tested, and the edge Worker injects prod config. The previous 3 builds' static
 # files stay deployed (PLAT-4), so open tabs keep loading their chunks until they reload.
 #
-# Rollback: Cloudflare dashboard → Workers → moduo-app-production → Deployments → Rollback, or
-# `npx wrangler rollback --env production` in apps/app (same for apps/landing). See docs/release.md.
+# The app goes out as a canary (HV-28, scripts/release/canary.ts): the new version is uploaded,
+# smoke-tested at 0% through a version override, serves 10% for 15 minutes while probes and the
+# Workers analytics watch its errors, then 100%. An error spike puts the old version back at 100%
+# by itself and fails the job, so the landing, desktop and the release notes don't ship.
+#
+# Manual rollback: Cloudflare dashboard → Workers → moduo-app-production → Deployments → Rollback,
+# or `npx wrangler rollback --env production` in apps/app (same for apps/landing). See docs/release.md.
 on:
   workflow_call:
     inputs:
@@ -43,7 +48,8 @@ jobs:
   app:
     if: inputs.target != 'landing'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Build ~5 min + the canary's 15-minute soak + smoke.
+    timeout-minutes: 45
     # Only develop, mike and v* tags may use this environment.
     environment: cloudflare-deploy
     env:
@@ -93,12 +99,56 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bash scripts/hosting/retain-static.sh merge production "${SHA::7}" apps/app/dist/web
 
-      - name: Deploy
+      # A version, not a deploy: nothing serves it until the canary moves traffic.
+      - name: Upload the version
+        id: upload
         working-directory: apps/app
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: $WRANGLER deploy --env production --var "BUILD:${SHA::7}" --message "prod $LABEL ${SHA::7}"
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-upload.ndjson
+        run: |
+          $WRANGLER versions upload --env production --var "BUILD:${SHA::7}" \
+            --message "prod $LABEL ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/upload.log"
+          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1)"
+          [ -n "$id" ] || id="$(grep -oiE 'version id: *[0-9a-f-]{36}' "$RUNNER_TEMP/upload.log" | grep -oE '[0-9a-f-]{36}' | tail -1 || true)"
+          [ -n "$id" ] || { echo "::error::no version id in the wrangler output"; exit 1; }
+          echo "version=$id" >> "$GITHUB_OUTPUT"
+
+      - name: Canary (0% smoke, 10% for 15 minutes, then 100%)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.upload.outputs.version }}
+        run: |
+          old=()
+          [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
+          set +e
+          bun scripts/release/canary.ts run --worker moduo-app-production --version "$VERSION_ID" \
+            --url https://app.moduo.app --build "${SHA::7}" --state "$RUNNER_TEMP/canary.json" "${old[@]}" \
+            > "$RUNNER_TEMP/canary.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/canary.md"
+          exit $code
+
+      # A cancelled or crashed run must not leave production split: put the old version back when
+      # the deployment is still the canary's (a finished run, or anyone else's deploy, is left alone).
+      - name: Undo an unfinished canary
+        if: cancelled() || failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun scripts/release/canary.ts abort --state "$RUNNER_TEMP/canary.json" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # versions upload leaves routes alone; this keeps the custom domain in step with
+      # wrangler.jsonc, as `wrangler deploy` did.
+      - name: Apply routes
+        working-directory: apps/app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER triggers deploy --env production
 
       - name: Record this build's files
         env:

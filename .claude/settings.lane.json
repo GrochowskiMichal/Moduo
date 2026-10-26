@@ -10,6 +10,7 @@
       "Bash(wrangler versions upload*)",
       "Bash(wrangler rollback*)",
       "Bash(wrangler secret put*)",
+      "Bash(bun scripts/release/canary.ts *)",
       "Bash(bunx wrangler *)",
       "Bash(npx wrangler *)",
       "Bash(supabase db push*)",

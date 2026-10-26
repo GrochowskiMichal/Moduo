@@ -9,6 +9,7 @@ import {
   contentSecurityPolicy,
   IMMUTABLE,
   NO_CACHE,
+  rehearsalError,
   scriptHash,
   securityHeaders,
 } from "./config";
@@ -231,11 +232,46 @@ describe("wrangler.jsonc routes only the shell, /config.json and missing files t
     expect(config.assets.run_worker_first).toEqual(["/", "/index.html"]);
   });
 
+  it("no environment sets the canary rehearsal's forced error", () => {
+    for (const name of ["staging", "production"]) {
+      expect(config.env[name].vars.CANARY_FORCE_ERROR_AFTER).toBeUndefined();
+    }
+    expect(config.vars?.CANARY_FORCE_ERROR_AFTER).toBeUndefined();
+  });
+
   it("staging and production each set the Supabase pair", () => {
     for (const name of ["staging", "production"]) {
       const vars = config.env[name].vars;
       expect(vars.SUPABASE_URL).toMatch(/^https:\/\/[a-z]+\.supabase\.co$/);
       expect(vars.SUPABASE_PUBLISHABLE_KEY).toMatch(/^sb_publishable_/);
     }
+  });
+});
+
+describe("canary rehearsal forced error (HV-28)", () => {
+  const T = 1_800_000_000_000;
+
+  it("throws on staging once the time has passed, and only then", async () => {
+    const after = { ...STAGING, CANARY_FORCE_ERROR_AFTER: String(T) };
+    expect(rehearsalError(after, T - 1)).toBe(false);
+    expect(rehearsalError(after, T)).toBe(true);
+    const past = { ...STAGING, CANARY_FORCE_ERROR_AFTER: "1" };
+    const { env: e } = env(past);
+    await expect(handle(new Request("https://x/config.json"), e, stringInject)).rejects.toThrow(
+      "canary rehearsal",
+    );
+  });
+
+  it("never in production, whatever the var says", async () => {
+    expect(rehearsalError({ ...PROD, CANARY_FORCE_ERROR_AFTER: "1" }, T)).toBe(false);
+    const { env: e } = env({ ...PROD, CANARY_FORCE_ERROR_AFTER: "1" });
+    const res = await handle(new Request("https://x/config.json"), e, stringInject);
+    expect(res.status).toBe(200);
+  });
+
+  it("an unset, empty or garbage var does nothing", () => {
+    expect(rehearsalError(STAGING, T)).toBe(false);
+    expect(rehearsalError({ ...STAGING, CANARY_FORCE_ERROR_AFTER: "" }, T)).toBe(false);
+    expect(rehearsalError({ ...STAGING, CANARY_FORCE_ERROR_AFTER: "soon" }, T)).toBe(false);
   });
 });
