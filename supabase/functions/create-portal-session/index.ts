@@ -13,7 +13,7 @@
 import Stripe from "https://esm.sh/stripe@14?target=deno";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { createPortalSessionBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
 import { safeRedirect } from "../_shared/billing.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -58,14 +58,10 @@ Deno.serve(async (req: Request) => {
       { auth: { persistSession: false } }
     );
 
-    const authHeader = req.headers.get("Authorization");
-    if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
-    if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace("Bearer ", "")
-    );
-    if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
+    const caller = await verifiedPerson(supabase.auth, req.headers.get("Authorization"));
+    if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
+    if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
+    const user = caller.user;
 
     const rawBody = await req.json().catch(() => ({}));
     const parsedBody = parseJsonBody(createPortalSessionBodySchema, rawBody);

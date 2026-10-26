@@ -17,12 +17,15 @@ export function ActivityTrail({
   currentUserId,
   now,
   entityId,
+  showHeading = true,
 }: {
   activity: ActivityEntry[];
   currentUserId: string | null;
   now: Date;
   /** Collapses back when the selected record changes. */
   entityId: string;
+  /** Its own "Activity" heading; off where the host already titles it. */
+  showHeading?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   useEffect(() => setExpanded(false), [entityId]);
@@ -32,7 +35,7 @@ export function ActivityTrail({
 
   return (
     <section className="space-y-1">
-      <Eyebrow as="h3">Activity</Eyebrow>
+      {showHeading ? <Eyebrow as="h3">Activity</Eyebrow> : null}
       <ul className="space-y-1">
         {rows.map((entry) => (
           <li key={entry.id} className="flex items-baseline gap-2 text-sm">
@@ -40,7 +43,7 @@ export function ActivityTrail({
               <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
               {spineActivityLine(entry)}
             </span>
-            <span className="shrink-0 text-2xs text-muted-foreground/70">
+            <span className="shrink-0 text-2xs text-subtle-foreground">
               {timeAgo(entry.createdAt, now)}
             </span>
           </li>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests for guard-prod-db.sh: asks by default, allows only with the local opt-in,
 # stays silent for unrelated Bash.
-#   bash .claude/hooks/guard-prod-db.test.sh   (also run by scripts/release/guard-prod-db.test.ts)
+#   bash .claude/hooks/guard-prod-db.test.sh   (also run by scripts/agent/hooks.test.ts)
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 hook="$here/guard-prod-db.sh"

@@ -9,6 +9,7 @@
 # lifted per person (it outranks every allow, and a hook's "allow" too), while this
 # can. A developer who wants no prompt sets MODUO_SUPABASE_NO_PROMPT=1 in their own
 # gitignored .claude/settings.local.json (`"env": {...}`); everyone else is asked.
+command -v jq >/dev/null 2>&1 || { echo "guard-prod-db.sh: jq is missing (brew install jq)." >&2; exit 1; }
 input=$(cat)
 tool=$(jq -r '.tool_name // "this tool"' <<<"$input" 2>/dev/null)
 reason="$tool writes to a Supabase project. Confirm the target project and the change before it runs."

@@ -9,9 +9,12 @@
  *   whose thread was resolved elsewhere, or never got its first comment,
  *   reads as plain text.
  * - Clicking a highlight focuses its thread in the panel.
+ * - Each line with an open thread gets a small speech bubble with its count
+ *   in the right margin (Google Docs-style), so you see at a glance where the
+ *   conversations are; clicking it opens the thread.
  */
 
-import { $getMarkIDs, $isMarkNode } from "@lexical/mark";
+import { $getMarkIDs, $isMarkNode, MarkNode } from "@lexical/mark";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
   $getNodeByKey,
@@ -26,17 +29,21 @@ import {
   type LexicalCommand,
   type LexicalNode,
 } from "lexical";
-import { useEffect } from "react";
+import { MessageSquare } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { cn } from "@/lib/utils";
 
-import { anchorStore } from "../../comments/anchor-store";
+import { anchorStore, useNoteAnchors } from "../../comments/anchor-store";
 import {
   $anchorIdsInOrder,
   $anchorSelection,
   $firstMarkKey,
+  $firstMarkKeys,
   $unanchor,
 } from "../../comments/anchors";
+import { noteColumn } from "../note-column";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 
 export const ADD_COMMENT_COMMAND: LexicalCommand<void> = createCommand("NOTES_ADD_COMMENT");
@@ -110,15 +117,22 @@ export function CommentMarksPlugin({
 }) {
   const [editor] = useLexicalComposerContext();
   const bridge = useNotesEditorBridge();
+  const bridgeRef = useRef(bridge);
+  bridgeRef.current = bridge;
 
   useEffect(() => {
+    // The thread order and the highlights change only when a mark does
+    // (created, moved, re-drawn, its threads changed, removed): walk the doc
+    // then, never on every keystroke.
     const publish = () => {
       const order = editor.getEditorState().read(() => $anchorIdsInOrder());
       anchorStore.setDocOrder(noteId, order);
       paintMarks(editor, noteId);
     };
     publish();
-    const offUpdate = editor.registerUpdateListener(publish);
+    const offUpdate = editor.registerMutationListener(MarkNode, publish, {
+      skipInitialization: true,
+    });
     const offStore = anchorStore.subscribe(() => paintMarks(editor, noteId));
 
     // Which threads are open, without waiting for the panel: only their marks
@@ -132,7 +146,14 @@ export function CommentMarksPlugin({
           const open = new Set<string>();
           for (const c of rows) if (c.anchorId && !c.resolvedAt) open.add(c.anchorId);
           for (const c of rows) if (c.anchorId && c.resolvedAt) open.delete(c.anchorId);
+          const counts = new Map<string, number>();
+          for (const c of rows) {
+            if (c.anchorId && open.has(c.anchorId)) {
+              counts.set(c.anchorId, (counts.get(c.anchorId) ?? 0) + 1);
+            }
+          }
           anchorStore.setOpenThreads(noteId, open);
+          anchorStore.setCounts(noteId, counts);
         })
         .catch(() => {});
     }
@@ -156,7 +177,9 @@ export function CommentMarksPlugin({
         }),
     });
 
-    const offAdd = registerAddComment(editor, noteId, editable, () => bridge?.openComments?.());
+    const offAdd = registerAddComment(editor, noteId, editable, () =>
+      bridgeRef.current?.openComments?.(),
+    );
 
     // A click on a highlight opens its thread (never steals the caret).
     const offClick = editor.registerCommand(
@@ -173,7 +196,7 @@ export function CommentMarksPlugin({
         const id = sel.find((x) => openThreads?.has(x));
         if (!id) return false;
         anchorStore.focus(noteId, id);
-        bridge?.openComments?.();
+        bridgeRef.current?.openComments?.();
         return false;
       },
       COMMAND_PRIORITY_LOW,
@@ -190,7 +213,109 @@ export function CommentMarksPlugin({
       // The next mount reads the threads again (a peer may have started one).
       anchorStore.setOpenThreads(noteId, null);
     };
-  }, [editor, noteId, editable, bridge, runtime, workspaceId]);
+    // `bridge` rides a ref: its identity changes with every notes-list change,
+    // which re-ran all of this (marks flickered plain, comments re-fetched).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, noteId, editable, runtime, workspaceId]);
 
-  return null;
+  return (
+    <CommentGutter
+      noteId={noteId}
+      onOpen={(id) => {
+        anchorStore.focus(noteId, id);
+        bridgeRef.current?.openComments?.();
+      }}
+    />
+  );
+}
+
+type Bubble = { top: number; anchorId: string; count: number };
+
+/** The margin bubbles: one per line that holds open threads. */
+function CommentGutter({ noteId, onOpen }: { noteId: string; onOpen: (anchorId: string) => void }) {
+  const [editor] = useLexicalComposerContext();
+  const anchors = useNoteAnchors(noteId);
+  const [bubbles, setBubbles] = useState<Bubble[]>([]);
+
+  const measure = useCallback(() => {
+    const root = editor.getRootElement();
+    const column = noteColumn(root);
+    const { openThreads, docOrder, counts } = anchorStore.get(noteId);
+    if (!root || !column || !openThreads || !docOrder) {
+      setBubbles([]);
+      return;
+    }
+    const base = column.getBoundingClientRect().top;
+    const next: Bubble[] = [];
+    const firstKeys = editor.getEditorState().read(() => $firstMarkKeys());
+    for (const id of docOrder) {
+      if (!openThreads.has(id)) continue;
+      const key = firstKeys.get(id);
+      const el = key ? editor.getElementByKey(key) : null;
+      if (!el) continue;
+      const top = el.getBoundingClientRect().top - base;
+      const count = counts?.get(id) ?? 1;
+      // Threads on one line share one bubble (the first opens).
+      const same = next.find((b) => Math.abs(b.top - top) < 6);
+      if (same) same.count += count;
+      else next.push({ top, anchorId: id, count });
+    }
+    setBubbles((prev) =>
+      prev.length === next.length &&
+      prev.every(
+        (b, i) =>
+          b.top === next[i]!.top && b.count === next[i]!.count && b.anchorId === next[i]!.anchorId,
+      )
+        ? prev
+        : next,
+    );
+  }, [editor, noteId]);
+
+  useEffect(() => {
+    measure();
+    // One measure per frame however many updates land in it, and none at all
+    // while the note has no open thread (most notes).
+    let frame = 0;
+    const offUpdate = editor.registerUpdateListener(() => {
+      if (!anchorStore.get(noteId).openThreads?.size) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    });
+    const observer = new ResizeObserver(() => measure());
+    const offRoot = editor.registerRootListener((root, prev) => {
+      if (prev) observer.unobserve(prev);
+      if (root) observer.observe(root);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      offUpdate();
+      offRoot();
+      observer.disconnect();
+    };
+  }, [editor, measure, noteId]);
+  useEffect(() => measure(), [anchors.openThreads, anchors.docOrder, anchors.counts, measure]);
+
+  return (
+    <>
+      {bubbles.map((b) => (
+        <button
+          key={b.anchorId}
+          type="button"
+          aria-label={`${b.count} comment${b.count === 1 ? "" : "s"}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onOpen(b.anchorId)}
+          className={cn(
+            "absolute right-0.5 flex h-5 items-center gap-0.5 rounded-sm px-0.5 font-sans text-2xs tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out)",
+            anchors.focused === b.anchorId
+              ? "bg-state-active text-foreground"
+              : "text-muted-foreground hover:bg-state-hover hover:text-foreground",
+          )}
+          style={{ top: b.top }}
+        >
+          <MessageSquare aria-hidden className="size-3" />
+          {b.count}
+        </button>
+      ))}
+    </>
+  );
 }

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { fn } from "storybook/test";
 
 import type { Note, NoteFavorite } from "../model";
-import type { NoteSearchResult } from "../search";
 import { buildSidebarSections } from "../sections";
 import { NotesSidebar, type NotesSidebarProps } from "./notes-sidebar";
 import type { FooterView } from "./sidebar-footer-views";
@@ -37,7 +36,7 @@ function note(partial: Partial<Note> & { id: string; title: string }): Note {
 const NOTES: Note[] = [
   note({ id: "inbox-1", title: "Random thought about pricing", inInbox: true }),
   note({ id: "inbox-2", title: "", inInbox: true }),
-  note({ id: "inbox-3", title: "Call notes — Dana", inInbox: true }),
+  note({ id: "inbox-3", title: "Call notes — Dana, sync on pricing", inInbox: true }),
   note({ id: "inbox-3a", title: "Follow-ups", parentId: "inbox-3" }),
   note({ id: "clients", title: "Clients", icon: "🗂️" }),
   note({ id: "acme", title: "Acme", parentId: "clients" }),
@@ -59,28 +58,31 @@ const FAVORITES: NoteFavorite[] = [
   { noteId: "handbook", position: "0000002000", createdAt: "2026-10-01T00:00:00.000Z" },
 ];
 
-const RESULTS: NoteSearchResult[] = [
-  {
-    id: "acme",
-    title: "Acme",
-    snippet: "…renewal pricing came up again; Dana wants the annual plan…",
-    titleMatch: false,
-    archived: false,
-  },
-  {
-    id: "inbox-1",
-    title: "Random thought about pricing",
-    snippet: "",
-    titleMatch: true,
-    archived: false,
-  },
-];
+type Args = Partial<NotesSidebarProps> & {
+  favorites?: NoteFavorite[];
+  initialView?: FooterView;
+  /** Opens with the search showing this query. */
+  initialSearch?: string;
+};
 
-type Args = Partial<NotesSidebarProps> & { favorites?: NoteFavorite[]; initialView?: FooterView };
+/** The story's stand-in for the server's text search: notes whose title
+ * doesn't hold the words but whose (made-up) text does. */
+const STORY_TEXT: Record<string, string> = {
+  handbook: "How we work. Weekly sync on Mondays, decisions go in the meeting note.",
+  moduo: "Q4: sync engine, publish, comments. Meet moves to beta.",
+};
 
-function Harness({ favorites = FAVORITES, notes = NOTES, initialView, ...rest }: Args) {
+function Harness({
+  favorites = FAVORITES,
+  notes = NOTES,
+  initialView,
+  initialSearch,
+  ...rest
+}: Args) {
   const [selectedId, setSelectedId] = useState<string | null>(rest.selectedId ?? "acme");
   const [view, setView] = useState<FooterView | null>(initialView ?? null);
+  const [searchOpen, setSearchOpen] = useState(initialSearch !== undefined);
+  const [query, setQuery] = useState(initialSearch ?? "");
   // The shell's sensors: a drag starts after 6 px, so a click still selects.
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   return (
@@ -102,13 +104,30 @@ function Harness({ favorites = FAVORITES, notes = NOTES, initialView, ...rest }:
           onNewPage={fn()}
           onCreateChild={fn()}
           onUnfavorite={fn()}
+          onAction={fn()}
           onDropIntent={fn()}
           onUnarchive={fn()}
           onTrash={fn()}
           onRestore={fn()}
           onPurge={fn()}
           onImport={fn()}
-          onSearch={async () => RESULTS}
+          search={{
+            open: searchOpen,
+            query,
+            onQueryChange: setQuery,
+            onOpenChange: setSearchOpen,
+            notes,
+            searchText: async (q) =>
+              notes
+                .filter((n) => STORY_TEXT[n.id]?.toLowerCase().includes(q.toLowerCase()))
+                .map((n) => ({
+                  id: n.id,
+                  title: n.title,
+                  bodyText: STORY_TEXT[n.id] ?? "",
+                  isArchived: n.isArchived,
+                  deletedAt: n.deletedAt,
+                })),
+          }}
           {...rest}
         />
       </div>
@@ -126,6 +145,10 @@ type Story = StoryObj<typeof meta>;
 
 /** Favorites · Inbox (with a nested capture) · Pages, and the footer row. */
 export const Default: Story = {};
+
+/** Search: titles match at once, what notes say a beat later, with the line it
+ * was found in. */
+export const Searching: Story = { args: { initialSearch: "sync" } };
 
 /** Nothing captured: Inbox says where captures land, and Favorites hides. */
 export const EmptyInbox: Story = {

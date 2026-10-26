@@ -4,17 +4,31 @@
  * Each row is a real `treeitem` (aria-level / aria-expanded / aria-selected,
  * roving tabindex owned by the sidebar). Selection is the R5 tint
  * (`SELECTED_ROW`), hover a dimmed state fill, never the same as selected.
- * Rows carry no menu (Mike, 2026-10-24): `+` adds a subpage, ⌫ trashes, a
- * drag files or favorites. Rows are dragged with dnd-kit (the
+ * `⋯` and right-click open the same menu. Rows are dragged with dnd-kit (the
  * page owns the DndContext) and dropped by raw pointer at release: each row
  * carries `data-drop-*` attributes the sidebar hit-tests.
  */
 
 import { useDraggable } from "@dnd-kit/core";
-import { ChevronRight, FileText, Plus } from "lucide-react";
+import { ChevronRight, FileText, MoreHorizontal, Plus } from "lucide-react";
 import type * as React from "react";
+import { useId, useState } from "react";
 
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { DRAG_SOURCE, DROP_TARGET, InsertionLine } from "@/components/ui/drag-visuals";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
@@ -23,12 +37,19 @@ import type { Note } from "../model";
 import { displayTitle } from "../title";
 import type { NoteTreeNode } from "../tree";
 import type { SidebarSection } from "./drop-intent";
+import { type RowAction, rowMenuItems } from "./row-menu";
 
 export type RowHover = { key: string; zone: "before" | "after" | "into" } | null;
 
 export type TreeCtx = {
   selectedId: string | null;
+  /** The one row drawn as selected: a note can show twice (a Favorite and
+   * in Pages), and only the row you opened it from, or its home, lights up. */
+  selectedKey: string | null;
   focusedKey: string | null;
+  /** The row whose `⋯` menu the keyboard opened (⇧F10, the menu key, ⌥↵). */
+  menuKey: string | null;
+  onMenuKeyChange: (key: string | null) => void;
   draftId: string | null;
   canEdit: boolean;
   favoriteIds: ReadonlySet<string>;
@@ -39,12 +60,46 @@ export type TreeCtx = {
   onOpen: (id: string) => void;
   /** The pointer is on a row: start loading its note so the click paints. */
   onWarm?: (id: string) => void;
+  /** The workspace has someone to share with. */
+  canShare?: boolean;
+  /** A popover the menu opened for this row (Share…, Publish…), anchored to it. */
+  rowPopover?: (note: Note, rowKey: string) => React.ReactNode;
   onFocusRow: (key: string) => void;
+  /** The row a note was opened from: the one drawn selected. */
+  onOpenedFrom?: (key: string) => void;
   onCreateChild: (id: string) => void;
+  onAction: (action: RowAction, note: Note, rowKey: string) => void;
 };
 
 export function rowKey(section: SidebarSection, id: string): string {
   return `${section}:${id}`;
+}
+
+/**
+ * Put keyboard focus back on a note's row after a dialog or menu about it
+ * closes (Move to…, Change icon…): the row in the tree's tab stop if that's
+ * this note, else its first row. False when the note has no row on screen
+ * (the sidebar is collapsed), so the caller can leave focus to the default.
+ */
+export function focusNoteRow(noteId: string): boolean {
+  const rows = [
+    ...document.querySelectorAll<HTMLElement>('[role="treeitem"][data-row-key]'),
+  ].filter((el) => el.dataset.rowKey?.endsWith(`:${noteId}`));
+  const row = rows.find((el) => el.tabIndex === 0) ?? rows[0];
+  row?.focus();
+  return row !== undefined;
+}
+
+/** A dialog about a note closed: return focus to its row, once the tree has
+ * redrawn (a move changes the row's section). */
+export function returnFocusToRow(noteId: string | null | undefined, event: Event): void {
+  if (!noteId) return;
+  const rowsNow = document.querySelector(
+    `[role="treeitem"][data-row-key$=":${CSS.escape(noteId)}"]`,
+  );
+  if (!rowsNow) return;
+  event.preventDefault();
+  requestAnimationFrame(() => focusNoteRow(noteId));
 }
 
 export function TreeNodes({
@@ -101,13 +156,29 @@ export function TreeRow({
   ctx: TreeCtx;
 }) {
   const key = rowKey(section, note.id);
+  const titleId = useId();
+  const [menuOpen, setMenuOpen] = useState(false);
   const isDraft = note.id === ctx.draftId;
-  const selected = ctx.selectedId === note.id;
+  const selected = ctx.selectedKey === key;
   const hover = ctx.hover?.key === key ? ctx.hover : null;
+  const favorite = ctx.favoriteIds.has(note.id);
+  const items = isDraft
+    ? []
+    : rowMenuItems({
+        canEdit: ctx.canEdit,
+        favorite,
+        section,
+        hasChildren: expandable,
+        fullWidth: note.fullWidth,
+        canShare: ctx.canShare,
+      });
 
   const row = (
     <div
       role="treeitem"
+      // Named by its title alone: the row's buttons (Expand, New subpage,
+      // options) would otherwise be read into every row's name.
+      aria-labelledby={titleId}
       aria-level={depth + 1}
       aria-expanded={expandable ? expanded : undefined}
       aria-selected={selected}
@@ -120,6 +191,7 @@ export function TreeRow({
       data-drop-into={section === "favorites" ? undefined : "true"}
       onClick={() => {
         ctx.onFocusRow(key);
+        ctx.onOpenedFrom?.(key);
         ctx.onOpen(note.id);
       }}
       onFocus={(e) => {
@@ -165,6 +237,7 @@ export function TreeRow({
         />
         <span className="sr-only">{expanded ? "Collapse" : "Expand"}</span>
       </button>
+      {ctx.rowPopover?.(note, key)}
       <span className="flex w-icon shrink-0 items-center justify-center">
         {note.icon ? (
           <span className="text-sm leading-none">{note.icon}</span>
@@ -172,7 +245,10 @@ export function TreeRow({
           <FileText aria-hidden className="size-icon-sm" />
         )}
       </span>
-      <span className={cn("min-w-0 flex-1 truncate", note.title.trim() === "" && "italic")}>
+      <span
+        id={titleId}
+        className={cn("min-w-0 flex-1 truncate", note.title.trim() === "" && "italic")}
+      >
         {displayTitle(note.title)}
       </span>
       {!isDraft ? (
@@ -197,16 +273,113 @@ export function TreeRow({
               <Plus aria-hidden className="size-icon-sm" />
             </button>
           ) : null}
+          {items.length > 0 ? (
+            <DropdownMenu
+              // Controlled throughout: the ⋯ click and the keyboard (⇧F10)
+              // open the same menu.
+              open={menuOpen || ctx.menuKey === key}
+              onOpenChange={(open) => {
+                setMenuOpen(open);
+                if (!open && ctx.menuKey === key) ctx.onMenuKeyChange(null);
+              }}
+            >
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-label={`${displayTitle(note.title)} options`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hit-min flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-state-active hover:text-foreground"
+                >
+                  <MoreHorizontal aria-hidden className="size-icon-sm" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="start"
+                className="w-52"
+                onCloseAutoFocus={(e) => backToRow(e, key)}
+              >
+                <MenuItems items={items} note={note} section={section} ctx={ctx} kit="dropdown" />
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </span>
       ) : null}
     </div>
   );
 
-  if (!ctx.canEdit || isDraft) return row;
+  const withMenu =
+    items.length > 0 ? (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+        <ContextMenuContent className="w-52" onCloseAutoFocus={(e) => backToRow(e, key)}>
+          <MenuItems items={items} note={note} section={section} ctx={ctx} kit="context" />
+        </ContextMenuContent>
+      </ContextMenu>
+    ) : (
+      row
+    );
+
+  if (!ctx.canEdit || isDraft) return withMenu;
   return (
     <DraggableRow note={note} dragKey={key}>
-      {row}
+      {withMenu}
     </DraggableRow>
+  );
+}
+
+/** The item picked opens a popover on the row (Share…, Publish…) or a dialog
+ * (Move to…, Change icon…): the menu must not hand focus back as it closes,
+ * or that closes the popover; the dialog returns it to the row itself. */
+let opensSurface = false;
+const OPENS_SURFACE = new Set<RowAction>(["share", "publish", "move", "icon"]);
+/** As a menu closes, focus goes back to its row (not the hidden `⋯`), so the
+ * arrow keys keep walking the tree. */
+function backToRow(event: Event, key: string) {
+  event.preventDefault();
+  if (opensSurface) {
+    opensSurface = false;
+    return;
+  }
+  document.querySelector<HTMLElement>(`[data-row-key="${CSS.escape(key)}"]`)?.focus();
+}
+
+function MenuItems({
+  items,
+  note,
+  section,
+  ctx,
+  kit,
+}: {
+  items: ReturnType<typeof rowMenuItems>;
+  note: Note;
+  section: SidebarSection;
+  ctx: TreeCtx;
+  kit: "dropdown" | "context";
+}) {
+  const Item = kit === "dropdown" ? DropdownMenuItem : ContextMenuItem;
+  const Separator = kit === "dropdown" ? DropdownMenuSeparator : ContextMenuSeparator;
+  return (
+    <>
+      {items.map((item, i) =>
+        item === "separator" ? (
+          // eslint-disable-next-line react/no-array-index-key -- separators are positional
+          <Separator key={`sep-${i}`} />
+        ) : (
+          <Item
+            key={item.action}
+            variant={item.destructive ? "destructive" : "default"}
+            onSelect={() => {
+              opensSurface = OPENS_SURFACE.has(item.action);
+              ctx.onAction(item.action, note, rowKey(section, note.id));
+            }}
+          >
+            <item.icon aria-hidden />
+            {item.label}
+          </Item>
+        ),
+      )}
+    </>
   );
 }
 
