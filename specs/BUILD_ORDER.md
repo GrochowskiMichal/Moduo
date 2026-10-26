@@ -581,7 +581,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **HV-6 — AI review on PRs into develop (Tier 2)** · deps: HV-5
 - [ ] **HV-7 — GitHub → Moduo sync (Tier 2)** · deps: HV-2
 - [ ] **HV-10 — Rules by path** · deps: HV-1
-- [ ] **HV-18 — Frozen tests profile** · deps: HV-1
+- [x] **HV-18 — Frozen tests profile** · deps: HV-1 · 2026-10-26 `t/mike/hv-18-frozen-tests`
 - [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
 - [ ] **HV-23 — Router, scout** · deps: HV-1
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
