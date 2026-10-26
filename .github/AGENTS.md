@@ -53,3 +53,8 @@ The Worker is `infra/turbo-cache` (`moduo-turbo-cache` on workers.dev, R2 bucket
 - **`turbo-cache-write` may only be used by `develop`, `mike`, `maciej` and `v*` tags** (`cloudflare-deploy`: `develop`, `mike` and `v*` tags) (deployment branch policy). A job that needs the write token names the environment; a PR job never does.
 - **Rotate** a token: `openssl rand -hex 32 | gh secret set TURBO_READ_TOKEN` (add `--env turbo-cache-write` for the write token), then run `turbo-cache.yml` by hand so the Worker gets it. A new signing key invalidates every stored artifact (they become misses), which is harmless.
 - PR runs use `TURBO_CACHE=local:rw,remote:r`; `TURBO_REMOTE_CACHE_READ_ONLY` is deprecated in turbo 2.11.
+
+## Moduo sync (HV-7)
+
+- `moduo-sync.yml` moves a block's Moduo task from GitHub events (table in `scripts/agent/moduo-sync.ts`). It runs on `pull_request_target`, so **it runs as it is on the PR's base branch**: test a change by landing it on `mike` and opening a throwaway `[ID]` PR into `mike`, or locally with a fixture event file (`GITHUB_EVENT_NAME=pull_request_target GITHUB_EVENT_PATH=… bun scripts/agent/moduo-sync.ts --dry-run`). Never check out or run PR code in it.
+- `MODUO_CI_KEY` (a Moduo API key named "CI", Tasks at Edit, everything else None) is an environment secret of `moduo-sync`, whose deployment branches are `develop`, `mike` and `maciej`. The release half listens to `workflow_run` of `release`, which GitHub fires only from the default branch's copy of this file.
