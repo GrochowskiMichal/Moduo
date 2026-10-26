@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-26 · HV-7: GitHub events move a block's Moduo task through `moduo-sync.yml`, on `pull_request_target`, planning without the key and applying in the `moduo-sync` environment.
 - 2026-10-26 · HV-6: the AI review runs once per PR into develop, advisory, on Sonnet 5, with the workflow token and a Max OAuth token in its own environment.
 - 2026-10-26 · HV-16: the RLS access matrix is a markdown table generated into the existing SQL test harness, not pgTAP; policy mutants run in the test's own rolled-back transaction, and equivalent mutants are listed with a reason.
 - 2026-10-26 · HV-10: area rules are `.claude/rules/*.md` with `paths:`, `incident:` and `expires:`, and `lint:rules` fails `verify` on a rule or agent doc that names a missing file or `bun run` script.
