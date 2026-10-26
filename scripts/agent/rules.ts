@@ -209,10 +209,16 @@ export function repoAt(root: string): Repo {
     .split("\n")
     .filter(Boolean);
   const topLevel = new Set(files.map((f) => f.split("/")[0] ?? ""));
+  const known = new Set(files);
+  for (const f of files) {
+    for (let i = f.indexOf("/"); i > 0; i = f.indexOf("/", i + 1)) known.add(f.slice(0, i));
+  }
   return {
     root,
     topLevel,
-    exists: (rel) => existsSync(path.join(root, rel)),
+    // Tracked or new-but-not-ignored, so local and CI agree (a gitignored file
+    // that happens to exist here would pass locally and fail in CI).
+    exists: (rel) => known.has(rel),
     // A directory pattern (`docs/local/`) only matches a path inside it when the folder is absent.
     ignored: (rel) =>
       [rel, `${rel}/x`].some((p) => {

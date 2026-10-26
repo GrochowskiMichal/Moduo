@@ -5,7 +5,7 @@
 
 ## Instructions load
 - [ ] **Do:** open a new Claude Code session in the repo and ask "what are the must-hold rules?" → **Expect:** it lists the 9 rules from AGENTS.md without reading any file first _(Claude Code, both machines)_
-- [ ] **Do:** ask it to open any file under `supabase/migrations/` → **Expect:** the transcript shows `supabase/AGENTS.md` loading, and the answer mentions "applied migrations are history" _(Claude Code)_
+- [ ] **Do:** ask it to open any file under `supabase/migrations/` → **Expect:** the transcript shows `.claude/rules/supabase.md` loading, and the answer mentions "applied migrations are history" _(Claude Code)_
 - [ ] **Do:** look at the session-start preflight on `t/mike/*` and on `t/maciej/*` → **Expect:** it compares against `origin/mike` or `origin/maciej` respectively, and lists the short reading list _(Claude Code)_
 
 ## Plugins (first session after pulling)

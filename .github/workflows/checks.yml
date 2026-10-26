@@ -157,6 +157,7 @@ jobs:
         run: bun run lint:decisions
 
       - name: Path rules frontmatter, dead references in rules and agent docs (HV-10)
+        if: success() || failure()
         run: bun run lint:rules
 
   unit-tests:
