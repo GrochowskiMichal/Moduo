@@ -30,7 +30,7 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 - For a redesign of an existing surface, take a baseline first: `/product-lab --screens <id>` (read-only: it drives the built app on seeded local data) and, for a whole module, `/product-jury`. Cite the dossier's hard fails, gates and ranked fixes in the spec's problem statement, and name the journeys and states the blocks must add to `e2e/lab/lab.config.ts`.
 
 ## 4. Decompose into execution blocks
-- Cut tracer-bullet blocks with explicit blocking edges and write them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table + `specs/BUILD_ORDER.md`).
+- Cut tracer-bullet blocks with explicit blocking edges and write them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table, with the dependencies in its last column), then put them in the Moduo queue with `bun run queue:import specs/<feature>.md`.
 - Block-sizing is **your** responsibility: size each block to complete within one execution's context budget, vertical-slice where possible, sequence with dependencies, each self-contained (its behavior + acceptance criteria + tests). Make blocks recoverable — a fresh session must be able to read the spec + `docs/decisions.md` and resume.
 
 ## 5. Definition-of-Ready gate

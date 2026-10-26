@@ -1,13 +1,13 @@
 # Issue tracker (for the engineering skills)
 
-Moduo does not track work in GitHub Issues. Work lives in the repo:
+Moduo does not track work in GitHub Issues. Blocks are specced in the repo and queued in Moduo:
 
-- **A feature's tickets** are the execution blocks in its spec, `specs/<feature>.md` (section *Execution blocks*): ID, name, scope, acceptance criteria, tests, dependencies. Specs follow [specs/_template.md](../../specs/_template.md).
-- **The queue** is [specs/BUILD_ORDER.md](../../specs/BUILD_ORDER.md): one line per open block, `- [ ] **ID — name** · deps: … · lane …`, ordered so every dependency appears above its dependents. `[~]` means in progress. A session claims a block by opening a **draft PR** into the personal branch titled `[<ID>] <name>` before building; check `gh pr list --state open --search "<ID>"` first.
-- **Finished blocks** move to [specs/BUILD_LOG.md](../../specs/BUILD_LOG.md) with their date and branch.
+- **A feature's tickets** are the execution blocks in its spec, `specs/<feature>.md` (section *Execution blocks*): ID, name, scope, acceptance criteria, tests, and the blocks each depends on (last column). Specs follow [specs/_template.md](../../specs/_template.md).
+- **The queue** is Moduo: one task per open block, titled `<ID> — <name>`, tagged `block`, in the milestone projects (Closed alpha, Open alpha, Beta & later), with a "blocks" edge from each dependency. `bun run queue` lists the ready, claimed and waiting blocks; `bun run queue next` is the one `/s2 next` takes. A session claims a block by opening a **draft PR** into the personal branch titled `[<ID>] <name>` before building.
+- **Finished blocks** need no record: GitHub events move their task to Awaiting release and Shipped, and git keeps the rest.
 
 ## How skills should use it
 
-- **`to-tickets` / `to-spec`:** write blocks into the spec's *Execution blocks* table and add one line per block to `BUILD_ORDER.md` under the feature's section, with `deps:` as the blocking edges. Never create GitHub issues.
+- **`to-tickets` / `to-spec`:** write blocks into the spec's *Execution blocks* table, with the dependencies as the blocking edges, then run `bun run queue:import specs/<feature>.md` (idempotent). Never create GitHub issues, and never write block tasks into Moduo by hand.
 - **`triage`:** not used. There are no triage labels; the designer ratifies blocks during `/s1`.
-- **Blocking edges:** a block is ready only when every block in its `deps:` is merged into the personal branch the session starts from.
+- **Blocking edges:** a block is ready only when every dependency is merged (Awaiting release or Shipped) or closed.

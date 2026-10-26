@@ -60,6 +60,8 @@
     "lint:ratchets": "bun scripts/ci/ratchets.ts",
     "lint:decisions": "bun scripts/docs/decisions.ts check",
     "lint:rules": "bun scripts/agent/rules.ts",
+    "queue": "bun scripts/agent/queue.ts",
+    "queue:import": "bun scripts/agent/queue-import.ts",
     "docs:current": "bun scripts/docs/decisions.ts current",
     "docs:index": "bun scripts/docs/decisions.ts index",
     "build:notes-doc": "bun ./scripts/build-notes-doc.ts",
