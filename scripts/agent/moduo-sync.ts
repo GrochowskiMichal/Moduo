@@ -54,6 +54,8 @@ export interface PrFacts {
   url: string;
   /** The title before an `edited` event, when the title changed. */
   previousTitle?: string;
+  /** "open" or "closed"; a retitled closed PR moves nothing. */
+  state?: string;
 }
 
 // "[HV-7] …", "[TV-D16] …", "[CV-2-fix] …": an upper-case prefix, then dash-joined parts.
@@ -84,7 +86,8 @@ export function planPullRequest(pr: PrFacts, openTitles: readonly string[] = [])
       };
     case "edited":
       // Only a title that newly names this block counts as opening it.
-      if (pr.previousTitle === undefined || blockIdFromTitle(pr.previousTitle) === id) return null;
+      if (pr.state === "closed" || pr.previousTitle === undefined) return null;
+      if (blockIdFromTitle(pr.previousTitle) === id) return null;
       return { id, status: openStage, reason: `${at} retitled to ${id}` };
     case "converted_to_draft":
       return { id, status: "Building", reason: `${at} back to draft` };
@@ -167,37 +170,47 @@ const CLOSED = new Set(["done", "wont_do"]);
 
 export interface Outcome {
   move: Move;
-  result: "moved" | "no task" | "ambiguous" | "closed";
+  result: "moved" | "no task" | "ambiguous" | "closed" | "failed";
   task?: string;
+  error?: string;
+}
+
+/** Moves one found task, falling back to the stage's category word. */
+async function setStage(rpc: Rpc, ref: string, status: Stage): Promise<void> {
+  try {
+    await rpc("tasks_set_status", { task_id: ref, status });
+  } catch (err) {
+    // A project without the stage's name takes the category word (moduo-agent §Stages).
+    if (!/unknown task status/i.test(String(err))) throw err;
+    await rpc("tasks_set_status", { task_id: ref, status: STAGE_CATEGORY[status] });
+  }
+}
+
+async function applyOne(move: Move, rpc: Rpc): Promise<Outcome> {
+  // The search matches words anywhere (descriptions too), so take the widest page and filter.
+  const rows = await rpc("tasks_search", { q: move.id, limit: 100 });
+  const task = pickBlockTask(Array.isArray(rows) ? (rows as TaskRow[]) : [], move.id);
+  if (task === "none") return { move, result: "no task" };
+  if (task === "ambiguous") return { move, result: "ambiguous" };
+  const ref = task.handle ?? task.id;
+  // Done and won't do are people's calls (or already shipped): never reopen them from GitHub.
+  if (CLOSED.has(task.status_category ?? "")) return { move, result: "closed", task: ref };
+  await setStage(rpc, ref, move.status);
+  if (move.comment)
+    await rpc("comments_add", { entity_type: "task", entity_id: ref, body: move.comment });
+  return { move, result: "moved", task: ref };
 }
 
 /** Applies each move: one tasks_set_status (plus its comment) per found, open task. */
 export async function apply(moves: readonly Move[], rpc: Rpc): Promise<Outcome[]> {
   const out: Outcome[] = [];
+  // One failing move (a task the key can't change) must not skip the rest of a release.
   for (const move of moves) {
-    // The search matches words anywhere (descriptions too), so take the widest page and filter.
-    const rows = (await rpc("tasks_search", { q: move.id, limit: 100 })) as TaskRow[];
-    const task = pickBlockTask(Array.isArray(rows) ? rows : [], move.id);
-    if (task === "none" || task === "ambiguous") {
-      out.push({ move, result: task === "none" ? "no task" : "ambiguous" });
-      continue;
-    }
-    const ref = task.handle ?? task.id;
-    // Done and won't do are people's calls (or already shipped): never reopen them from GitHub.
-    if (task.status_category && CLOSED.has(task.status_category)) {
-      out.push({ move, result: "closed", task: ref });
-      continue;
-    }
     try {
-      await rpc("tasks_set_status", { task_id: ref, status: move.status });
+      out.push(await applyOne(move, rpc));
     } catch (err) {
-      // A project without the stage's name takes the category word (moduo-agent §Stages).
-      if (!/unknown task status/i.test(String(err))) throw err;
-      await rpc("tasks_set_status", { task_id: ref, status: STAGE_CATEGORY[move.status] });
+      out.push({ move, result: "failed", error: err instanceof Error ? err.message : String(err) });
     }
-    if (move.comment)
-      await rpc("comments_add", { entity_type: "task", entity_id: ref, body: move.comment });
-    out.push({ move, result: "moved", task: ref });
   }
   return out;
 }
@@ -253,45 +266,53 @@ export interface GitHubFacts {
   tagsAt?: (sha: string) => string[];
 }
 
+function prFacts(event: Record<string, any>): PrFacts {
+  const p = event.pull_request ?? {};
+  const from = event.changes?.title?.from;
+  return {
+    action: String(event.action ?? ""),
+    number: Number(p.number),
+    title: String(p.title ?? ""),
+    draft: Boolean(p.draft),
+    merged: Boolean(p.merged),
+    url: String(p.html_url ?? ""),
+    previousTitle: typeof from === "string" ? from : undefined,
+    state: typeof p.state === "string" ? p.state : undefined,
+  };
+}
+
+async function planPrEvent(event: Record<string, any>, gh: GitHubFacts): Promise<Move[]> {
+  const pr = prFacts(event);
+  const needsOpen = pr.action === "closed" && !pr.merged && blockIdFromTitle(pr.title) !== null;
+  // The closed PR itself may still be listed for a moment: leave it out.
+  const open = needsOpen
+    ? (await gh.openPrs()).filter((o) => o.number !== pr.number).map((o) => o.title)
+    : [];
+  const move = planPullRequest(pr, open);
+  return move ? [move] : [];
+}
+
+/** The release tag a successful release run shipped, or "". */
+function releaseTagOf(run: Record<string, any>, gh: GitHubFacts): string {
+  if (run.conclusion !== "success" || run.event !== "push") return "";
+  // A tag push's run names the tag as its head_branch; else find the tag on its commit.
+  const named = String(run.head_branch ?? "");
+  if (RELEASE_TAG.test(named)) return named;
+  const sha = String(run.head_sha ?? "");
+  if (!/^[0-9a-f]{40}$/.test(sha)) return "";
+  return (gh.tagsAt?.(sha) ?? []).find((t) => RELEASE_TAG.test(t)) ?? "";
+}
+
 /** The moves one GitHub event makes. Unknown events make none. */
 export async function planEvent(
   name: string,
   event: Record<string, any>,
   gh: GitHubFacts,
 ): Promise<Move[]> {
-  if (name === "pull_request" || name === "pull_request_target") {
-    const p = event.pull_request ?? {};
-    const pr: PrFacts = {
-      action: String(event.action ?? ""),
-      number: Number(p.number),
-      title: String(p.title ?? ""),
-      draft: Boolean(p.draft),
-      merged: Boolean(p.merged),
-      url: String(p.html_url ?? ""),
-      previousTitle:
-        typeof event.changes?.title?.from === "string" ? event.changes.title.from : undefined,
-    };
-    const needsOpen = pr.action === "closed" && !pr.merged && blockIdFromTitle(pr.title) !== null;
-    // The closed PR itself may still be listed for a moment: leave it out.
-    const open = needsOpen
-      ? (await gh.openPrs()).filter((o) => o.number !== pr.number).map((o) => o.title)
-      : [];
-    const move = planPullRequest(pr, open);
-    return move ? [move] : [];
-  }
+  if (name === "pull_request" || name === "pull_request_target") return planPrEvent(event, gh);
   if (name === "workflow_run") {
-    const run = event.workflow_run ?? {};
-    if (run.conclusion !== "success" || run.event !== "push") return [];
-    // A tag push's run names the tag as its head_branch; else find the tag on its commit.
-    let tag = String(run.head_branch ?? "");
-    if (!RELEASE_TAG.test(tag)) {
-      const sha = String(run.head_sha ?? "");
-      tag = /^[0-9a-f]{40}$/.test(sha)
-        ? ((gh.tagsAt?.(sha) ?? []).find((t) => RELEASE_TAG.test(t)) ?? "")
-        : "";
-    }
-    if (!tag) return [];
-    return planRelease(tag, blockIdsInLog(gh.log(tag)));
+    const tag = releaseTagOf(event.workflow_run ?? {}, gh);
+    return tag ? planRelease(tag, blockIdsInLog(gh.log(tag))) : [];
   }
   if (name === "workflow_dispatch") {
     const tag = String(event.inputs?.tag ?? "");
@@ -321,6 +342,14 @@ async function githubOpenPrs(
     if (rows.length < 100) break;
   }
   return out;
+}
+
+/** One log line per outcome; a missing, doubled or unreachable task is a warning on the run. */
+export function outcomeLine(o: Outcome): string {
+  const where = o.task ? ` ${o.task}` : "";
+  const line = `${o.result}:${where} ${o.move.id} → ${o.move.status} (${o.move.reason})`;
+  if (o.result === "moved" || o.result === "closed") return line;
+  return `::warning::${line}${o.error ? ` · ${o.error}` : ""}`;
 }
 
 async function main(argv: string[]): Promise<void> {
@@ -356,10 +385,9 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
   const rpc = connectorRpc(process.env.MODUO_MCP_URL || "https://mcp.moduo.app", key);
-  for (const o of await apply(moves, rpc)) {
-    const where = o.task ? ` ${o.task}` : "";
-    console.log(`${o.result}:${where} ${o.move.id} → ${o.move.status} (${o.move.reason})`);
-  }
+  const outcomes = await apply(moves, rpc);
+  for (const o of outcomes) console.log(outcomeLine(o));
+  if (outcomes.some((o) => o.result === "failed")) process.exit(1);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

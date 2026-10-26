@@ -190,6 +190,16 @@ describe("no call", () => {
     ],
     ["labels", "pull_request_target", prEvent("labeled", {})],
     [
+      "a merged PR retitled to name a block",
+      "pull_request_target",
+      {
+        ...prEvent("closed", { merged: true }),
+        action: "edited",
+        changes: { title: { from: "WIP" } },
+        pull_request: { ...prEvent("closed", { merged: true }).pull_request, state: "closed" },
+      },
+    ],
+    [
       "a failed release run",
       "workflow_run",
       { workflow_run: { conclusion: "failure", event: "push", head_branch: "v1.5.0" } },
@@ -308,14 +318,38 @@ describe("finding the block's task", () => {
     expect(calls).toEqual(["Awaiting release", "in_progress"]);
   });
 
-  it("lets any other error stop the run", async () => {
+  it("records any other error as failed and still applies the remaining moves", async () => {
+    const moved: string[] = [];
+    const rpc: Rpc = async (tool, args) => {
+      if (tool === "tasks_search")
+        return [{ ...HV7, handle: `T-${args.q}`, title: `${args.q} — block` }];
+      if (args.task_id === "T-A-1")
+        throw new Error("tasks_set_status: You can't change this task.");
+      moved.push(String(args.task_id));
+      return {};
+    };
+    const out = await apply(
+      [
+        { id: "A-1", status: "Shipped", reason: "x" },
+        { id: "B-1", status: "Shipped", reason: "x" },
+      ],
+      rpc,
+    );
+    expect(out.map((o) => o.result)).toEqual(["failed", "moved"]);
+    expect(out[0]!.error).toContain("can't change");
+    expect(moved).toEqual(["T-B-1"]);
+  });
+
+  it("a refused comment (a key without Links: Edit) fails the move after the status changed", async () => {
     const rpc: Rpc = async (tool) => {
       if (tool === "tasks_search") return [HV7];
-      throw new Error("tasks_set_status: You can't change this task.");
+      if (tool === "comments_add")
+        throw new Error("comments_add: This API key can't use comments_add: it needs Links: Edit");
+      return {};
     };
-    await expect(apply([{ id: "HV-7", status: "Building", reason: "x" }], rpc)).rejects.toThrow(
-      "can't change",
-    );
+    const out = await apply([{ id: "HV-7", status: "To do", reason: "x", comment: "c" }], rpc);
+    expect(out[0]).toMatchObject({ result: "failed" });
+    expect(out[0]!.error).toContain("Links: Edit");
   });
 });
 

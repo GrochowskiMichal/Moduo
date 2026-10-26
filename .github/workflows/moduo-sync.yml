@@ -6,13 +6,15 @@ name: moduo-sync
 # Shipped for every "[ID]" merged since the previous tag. The table and its tests live in
 # scripts/agent/moduo-sync.ts and moduo-sync.test.ts.
 #
-# Why pull_request_target: it runs this file and the script as they are on the PR's base branch
-# (develop, mike or maciej), never the PR's own copy, so a PR can't rewrite the job that holds
-# MODUO_CI_KEY. Nothing from the PR is checked out or run; its title reaches the script only
-# through the event file, never through the shell.
+# Why pull_request_target: it runs this file and the script as they are on the default branch
+# (develop; GitHub's rule since 2025-12-08, whatever the PR's base), never the PR's own copy, so a
+# PR can't rewrite the job that holds MODUO_CI_KEY. Nothing from the PR is checked out or run; its
+# title reaches the script only through the event file, never through the shell. A change to this
+# file or the script therefore takes effect only once it is on develop.
 #
-# MODUO_CI_KEY is the "CI" agent's Moduo key (tasks edit, links none), an environment secret of
-# `moduo-sync` (deployment branches: develop, mike, maciej). Unset → a notice, nothing moves.
+# MODUO_CI_KEY is the "CI" agent's Moduo key (Tasks: Edit for the moves, Links: Edit for the
+# closed-PR comment, everything else None), an environment secret of `moduo-sync` (deployment
+# branches: develop only; every trigger here runs as develop). Unset → a notice, nothing moves.
 on:
   pull_request_target:
     types: [opened, reopened, ready_for_review, converted_to_draft, closed, edited]
@@ -25,11 +27,6 @@ on:
       tag:
         description: "Release tag to mark Shipped (vX.Y.Z), when the automatic run missed it"
         required: true
-
-# One move at a time per PR (or per release), in event order.
-concurrency:
-  group: moduo-sync-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || inputs.tag }}
-  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -73,6 +70,11 @@ jobs:
   apply:
     needs: plan
     if: needs.plan.outputs.moves != '0' && needs.plan.outputs.moves != ''
+    # One move at a time per PR (or release). Here, not on the workflow: GitHub keeps one pending
+    # run per group, so a no-op event (a body edit) queued at workflow level could cancel a real move.
+    concurrency:
+      group: moduo-sync-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || inputs.tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 5
     environment: moduo-sync
