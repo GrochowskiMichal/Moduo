@@ -576,12 +576,12 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-11 — Decisions current view** · deps: — · 2026-10-23 `t/mike/hv-11-decisions`
 - [x] **HV-12 — ast-grep pack** · deps: — · 2026-10-23 `t/mike/hv-12-ast-grep`
 - [x] **HV-15 — Variant hunt** · deps: — · 2026-10-23 `t/mike/hv-15-variant-hunt`
-- [ ] **HV-17 — Sync outbox property harness** · deps: —
+- [x] **HV-17 — Sync outbox property harness** · deps: — · 2026-10-23 `t/mike/hv-17-sync-property` (PR #626)
 - [ ] **HV-28 — Canary and rollback (Tier 2)** · deps: —
 - [ ] **HV-6 — AI review on PRs into develop (Tier 2)** · deps: HV-5
 - [ ] **HV-7 — GitHub → Moduo sync (Tier 2)** · deps: HV-2
-- [ ] **HV-10 — Rules by path** · deps: HV-1
-- [ ] **HV-18 — Frozen tests profile** · deps: HV-1
+- [x] **HV-10 — Rules by path** · deps: HV-1 · 2026-10-26 `t/mike/hv-10-path-rules`
+- [x] **HV-18 — Frozen tests profile** · deps: HV-1 · 2026-10-26 `t/mike/hv-18-frozen-tests`
 - [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
 - [ ] **HV-23 — Router, scout** · deps: HV-1
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
