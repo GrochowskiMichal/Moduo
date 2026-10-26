@@ -6,7 +6,7 @@
 
 > This doc is a **map**, not a replacement for the source-of-truth docs. Where it points you at `docs/…`, read that — it's more detailed and kept current per-block. There is a companion memo, [backend-refactor-memo.md](./backend-refactor-memo.md), specifically for the "should we change the backend?" question.
 >
-> **⚠ Authority:** [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) is the **status of record** — what is done, what is next, what is blocked. This file is a narrative snapshot that goes stale between reconciles; where the two disagree, **the ledger wins**. (It has drifted before: between 2026-07-11 and 2026-08-14 it listed ~14 already-shipped blocks as "ready" or "blocked".)
+> **⚠ Authority:** the block queue in Moduo (`bun run queue`; [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) points to it since 2026-10-26) is the **status of record** — what is done, what is next, what is blocked. This file is a narrative snapshot that goes stale between reconciles; where the two disagree, **the queue wins**. (It has drifted before: between 2026-07-11 and 2026-08-14 it listed ~14 already-shipped blocks as "ready" or "blocked".)
 
 ---
 
@@ -230,7 +230,7 @@ Nearly every shipped block has a `docs/testing/<block>.md` checklist (80 files) 
 
 ## 11. Doc-accuracy caveats (so you're not misled)
 
-**The general rule: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) is the only status-of-record. Every other doc here — including this one — is narrative that goes stale between reconciles.** Specific known offsets:
+**The general rule: the block queue in Moduo (`bun run queue`) is the only status-of-record. Every other doc here — including this one — is narrative that goes stale between reconciles.** Specific known offsets:
 
 - **[`docs/data-layers.md`](../data-layers.md) is stale on *status*** (dated 2026-06-24; describes "~16 migrations, only Tasks cloud-first, spine aspirational"). Reality: 43 migrations, 7+ modules cloud-first, spine built, MCP exposes 6 modules. It carries its own ⚠ banner saying so. Read it for **intent/philosophy**, not current status — where doc and code disagree, the code wins.
 - **[`docs/ROADMAP.md`](../ROADMAP.md) is a *direction* doc, not a status doc** — reconciled 2026-08-14, but most of its wave sections describe the plan as conceived 2026-06-24. The DF wave, Wave 6 (Dashboard) and Wave D were added after it was written; short back-filled sections now cover them, but the ledger is the authority on their contents.
