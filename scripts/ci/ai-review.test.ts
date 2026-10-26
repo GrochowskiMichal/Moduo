@@ -117,7 +117,10 @@ describe("ai-review.yml", () => {
     expect(job("tier")).toContain(
       'git show "$PR_BASE:scripts/ci/tier.ts" > "$RUNNER_TEMP/tier.ts"',
     );
-    expect(job("tier")).toContain('bun "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD"');
+    // An empty bunfig, so the PR's own bunfig.toml (preload) can't change the classification.
+    expect(job("tier")).toContain(
+      'bun --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD"',
+    );
     expect(job("tier")).toMatch(/\^\[0-9a-f\]\{40\}\$/);
   });
 
@@ -167,6 +170,8 @@ describe("ai-review.yml", () => {
     expect(permsOf(post)).toEqual(["pull-requests: write"]);
     expect(post).not.toMatch(/actions\/checkout|bun |secrets\.|environment:/);
     expect(post).toContain('gh pr comment "$PR" --repo "$REPO" --body-file "$f"');
+    // A re-run doesn't repeat a catch that is already on the PR.
+    expect(post).toContain('grep -qxF "$head_line" posted.txt');
   });
 
   it("puts no PR-authored text into the prompt or a shell step", () => {

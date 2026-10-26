@@ -38,6 +38,7 @@ describe("suiteFor", () => {
       args: ["-c", "scripts/rstest.config.ts"],
     });
     expect(suiteFor("apps/desktop/src/a.catching.test.ts")).toBeNull();
+    expect(suiteFor("tools/ast-grep/a.catching.test.ts")).toBeNull();
   });
 });
 
@@ -70,17 +71,22 @@ describe("rejectReason", () => {
     );
     expect(rejectReason(ok({ code: "x".repeat(20_001) }), never, new Set())).toMatch(/too long/);
     expect(rejectReason({} as Proposal, never, new Set())).toBe("malformed proposal");
+    const noBehavior = { path: ok().path, code: ok().code } as Proposal;
+    expect(rejectReason(noBehavior, never, new Set())).toBe("malformed proposal");
   });
 });
 
 const report = (over: object) =>
-  JSON.stringify({ summary: { testFiles: 1, tests: 1, failedTests: 0 }, ...over });
+  JSON.stringify({ summary: { testFiles: 1, tests: 1, failedTests: 0, passedTests: 1 }, ...over });
 
 describe("parseRun", () => {
   it("passes only on exit 0 with at least one test and no failures", () => {
     expect(parseRun(0, report({})).status).toBe("pass");
     expect(parseRun(0, report({ summary: { testFiles: 1, tests: 0 } })).status).toBe("fail");
     expect(parseRun(0, report({ summary: { testFiles: 0 } })).status).toBe("not-collected");
+    // Only skipped tests: nothing passed, so the parent proves nothing.
+    const skipped = { testFiles: 1, tests: 1, failedTests: 0, passedTests: 0, skippedTests: 1 };
+    expect(parseRun(0, report({ summary: skipped })).status).toBe("fail");
   });
 
   it("names the first failing test or the load error", () => {
@@ -107,7 +113,8 @@ describe("parseRun", () => {
 
   it("treats a timeout or a missing report as an error, never a failure", () => {
     expect(parseRun(null, "", true).status).toBe("error");
-    expect(parseRun(1, "boom").status).toBe("error");
+    expect(parseRun(2, "boom").status).toBe("error");
+    expect(parseRun(1, "No test files found").status).toBe("not-collected");
   });
 });
 

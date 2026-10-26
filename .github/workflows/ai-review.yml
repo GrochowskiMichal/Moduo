@@ -98,7 +98,8 @@ jobs:
             --disallowedTools "Edit,Write,NotebookEdit,Bash(gh api:*),Bash(bun:*),Bash(bunx:*),Bash(npm:*),Bash(npx:*),Bash(gh run:*),mcp__supabase,mcp__moduo"
 
   # The tier and the parent commit, from the base branch's classifier (as pr-tier.yml does), so
-  # a PR can't opt out by loosening the list. No secrets.
+  # a PR can't opt out by loosening the list. Bun gets an empty config, so the PR's bunfig.toml
+  # (and any preload in it) doesn't load. No secrets.
   tier:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -132,7 +133,8 @@ jobs:
           PR_HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           git show "$PR_BASE:scripts/ci/tier.ts" > "$RUNNER_TEMP/tier.ts"
-          tier=$(bun "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD" | head -n1)
+          : > "$RUNNER_TEMP/bunfig.toml"
+          tier=$(bun --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD" | head -n1)
           parent=$(git merge-base "$PR_BASE" "$PR_HEAD")
           case "$tier" in tier-0|tier-1|tier-2) ;; *) echo "Unexpected tier: $tier"; exit 1 ;; esac
           [[ "$parent" =~ ^[0-9a-f]{40}$ ]] || { echo "Unexpected merge base: $parent"; exit 1; }
@@ -198,7 +200,7 @@ jobs:
           claude_args: |
             --model claude-opus-5-5
             --max-turns 60
-            --json-schema '{"type":"object","properties":{"tests":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"path":{"type":"string"},"behavior":{"type":"string"},"code":{"type":"string"}},"required":["path","behavior","code"],"additionalProperties":false}},"note":{"type":"string"}},"required":["tests","note"],"additionalProperties":false}'
+            --json-schema '{"type":"object","properties":{"tests":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"path":{"type":"string","maxLength":200},"behavior":{"type":"string","maxLength":1500},"code":{"type":"string","maxLength":20000}},"required":["path","behavior","code"],"additionalProperties":false}},"note":{"type":"string","maxLength":1500}},"required":["tests","note"],"additionalProperties":false}'
             --allowedTools "Read,Glob,Grep,Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
             --disallowedTools "Edit,Write,NotebookEdit,Agent,Bash(gh:*),Bash(bun:*),Bash(bunx:*),Bash(npm:*),Bash(npx:*),Bash(node:*),mcp__github_inline_comment__create_inline_comment,mcp__supabase,mcp__moduo"
 
@@ -206,7 +208,8 @@ jobs:
   # environment, no secrets and a token that can only read.
   catching-tests-run:
     needs: [tier, catching-tests]
-    if: ${{ !cancelled() && needs.catching-tests.outputs.tests != '' }}
+    # Only when Claude proposed at least one test: otherwise there is nothing to install for.
+    if: ${{ !cancelled() && needs.catching-tests.outputs.tests != '' && fromJSON(needs.catching-tests.outputs.tests).tests[0] != null }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -261,7 +264,8 @@ jobs:
           path: ${{ runner.temp }}/catching/comments/
           retention-days: 7
 
-  # Posts each catch. No checkout and no repo code: it only reads the Markdown bodies.
+  # Posts each catch. No checkout and no repo code: it only reads the Markdown bodies. A re-run
+  # (the ai-review label) skips a catch whose first two lines (marker and path) are already posted.
   catching-tests-post:
     needs: catching-tests-run
     if: ${{ !cancelled() && needs.catching-tests-run.outputs.caught > 0 }}
@@ -283,10 +287,13 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
+          gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body' > posted.txt
           n=0
           for f in comments/*.md; do
             n=$((n + 1))
             [ "$n" -le 5 ] || break
             [ "$(wc -c < "$f")" -le 60000 ] || { echo "Skipping $f: too long"; continue; }
+            head_line=$(sed -n 2p "$f")
+            if grep -qxF "$head_line" posted.txt; then echo "Already posted: $head_line"; continue; fi
             gh pr comment "$PR" --repo "$REPO" --body-file "$f"
           done

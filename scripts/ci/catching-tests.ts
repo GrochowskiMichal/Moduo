@@ -45,7 +45,7 @@ export interface Suite {
 export function suiteFor(file: string): Suite | null {
   if (file.startsWith("apps/app/")) return { name: "app", cwd: "apps/app", args: [] };
   if (file.startsWith("supabase/")) return { name: "backend", cwd: "supabase", args: [] };
-  if (file.startsWith("scripts/") || file.startsWith("tools/")) {
+  if (file.startsWith("scripts/")) {
     return { name: "scripts", cwd: ".", args: ["-c", "scripts/rstest.config.ts"] };
   }
   return null;
@@ -57,7 +57,8 @@ export function rejectReason(
   exists: (file: string) => boolean,
   seen: ReadonlySet<string>,
 ): string | null {
-  if (typeof p?.path !== "string" || typeof p.code !== "string") return "malformed proposal";
+  if (typeof p?.path !== "string" || typeof p.code !== "string" || typeof p.behavior !== "string")
+    return "malformed proposal";
   if (!/^[A-Za-z0-9_./-]+$/.test(p.path) || p.path.split("/").some((s) => s === "" || s === ".."))
     return "path is not a plain relative path";
   if (!/\.catching\.test\.tsx?$/.test(p.path)) return "name must end in .catching.test.ts(x)";
@@ -77,7 +78,7 @@ export interface RunResult {
 }
 
 interface RstestJson {
-  summary?: { testFiles?: number; tests?: number; failedTests?: number };
+  summary?: { testFiles?: number; tests?: number; failedTests?: number; passedTests?: number };
   files?: { errors?: { message?: string }[] }[];
   tests?: { status?: string; fullName?: string; errors?: { message?: string }[] }[];
 }
@@ -89,11 +90,15 @@ export function parseRun(exitCode: number | null, stdout: string, timedOut = fal
   try {
     report = JSON.parse(stdout.slice(stdout.indexOf("{")));
   } catch {
-    return { status: "error", message: `no rstest report (exit ${exitCode})` };
+    // With --passWithNoTests=false, rstest exits 1 without a report when no suite includes the file.
+    return exitCode === 1
+      ? { status: "not-collected", message: "no suite collected it" }
+      : { status: "error", message: `no rstest report (exit ${exitCode})` };
   }
   const summary = report.summary ?? {};
   if (!summary.testFiles) return { status: "not-collected", message: "no suite collected it" };
-  if (exitCode === 0 && (summary.tests ?? 0) > 0 && !summary.failedTests) {
+  // At least one test must really pass: a file of skipped tests proves nothing on the parent.
+  if (exitCode === 0 && (summary.passedTests ?? 0) > 0 && !summary.failedTests) {
     return { status: "pass", message: "" };
   }
   const failed = report.tests?.find((t) => t.status === "fail");
@@ -250,7 +255,8 @@ function main(argv: string[]): void {
       fs.writeFileSync(path.join(out, "comments", `${caught}.md`), commentBody(p, outcome, shas));
     }
   }
-  fs.writeFileSync(path.join(out, "summary.md"), summary(rows, input.note ?? ""));
+  const note = typeof input.note === "string" ? input.note : "";
+  fs.writeFileSync(path.join(out, "summary.md"), summary(rows, note));
   console.log(`caught=${caught}`);
 }
 
