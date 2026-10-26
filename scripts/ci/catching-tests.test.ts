@@ -114,7 +114,9 @@ describe("parseRun", () => {
   it("treats a timeout or a missing report as an error, never a failure", () => {
     expect(parseRun(null, "", true).status).toBe("error");
     expect(parseRun(2, "boom").status).toBe("error");
-    expect(parseRun(1, "No test files found").status).toBe("not-collected");
+    // A preamble with a brace before the report doesn't break the parse.
+    const preamble = `exclude: **/.{idea,git}/**\n${JSON.stringify({ summary: { testFiles: 0 } }, null, 2)}`;
+    expect(parseRun(1, preamble).status).toBe("not-collected");
   });
 });
 

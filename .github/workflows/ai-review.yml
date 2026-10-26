@@ -98,8 +98,8 @@ jobs:
             --disallowedTools "Edit,Write,NotebookEdit,Bash(gh api:*),Bash(bun:*),Bash(bunx:*),Bash(npm:*),Bash(npx:*),Bash(gh run:*),mcp__supabase,mcp__moduo"
 
   # The tier and the parent commit, from the base branch's classifier (as pr-tier.yml does), so
-  # a PR can't opt out by loosening the list. Bun gets an empty config, so the PR's bunfig.toml
-  # (and any preload in it) doesn't load. No secrets.
+  # a PR can't opt out by loosening the list. Bun gets an empty config and no env file, so the
+  # PR's bunfig.toml (preload) and .env (GIT_* variables) don't load. No secrets.
   tier:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -134,7 +134,7 @@ jobs:
         run: |
           git show "$PR_BASE:scripts/ci/tier.ts" > "$RUNNER_TEMP/tier.ts"
           : > "$RUNNER_TEMP/bunfig.toml"
-          tier=$(bun --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD" | head -n1)
+          tier=$(bun --no-env-file --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD" | head -n1)
           parent=$(git merge-base "$PR_BASE" "$PR_HEAD")
           case "$tier" in tier-0|tier-1|tier-2) ;; *) echo "Unexpected tier: $tier"; exit 1 ;; esac
           [[ "$parent" =~ ^[0-9a-f]{40}$ ]] || { echo "Unexpected merge base: $parent"; exit 1; }
@@ -265,7 +265,7 @@ jobs:
           retention-days: 7
 
   # Posts each catch. No checkout and no repo code: it only reads the Markdown bodies. A re-run
-  # (the ai-review label) skips a catch whose first two lines (marker and path) are already posted.
+  # (the ai-review label) skips a catch whose path line is already in a comment on the PR.
   catching-tests-post:
     needs: catching-tests-run
     if: ${{ !cancelled() && needs.catching-tests-run.outputs.caught > 0 }}
@@ -287,7 +287,7 @@ jobs:
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body' > posted.txt
+          gh pr view "$PR" --repo "$REPO" --json comments --jq '.comments[].body' > posted.txt || : > posted.txt
           n=0
           for f in comments/*.md; do
             n=$((n + 1))

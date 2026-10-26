@@ -83,18 +83,22 @@ interface RstestJson {
   tests?: { status?: string; fullName?: string; errors?: { message?: string }[] }[];
 }
 
+/** The JSON report, which starts at the first line that is exactly `{` (a preamble may hold braces). */
+function readReport(stdout: string): RstestJson | null {
+  const start = stdout.startsWith("{") ? 0 : stdout.indexOf("\n{\n") + 1;
+  if (start === 0 && !stdout.startsWith("{")) return null;
+  try {
+    return JSON.parse(stdout.slice(start)) as RstestJson;
+  } catch {
+    return null;
+  }
+}
+
 /** One rstest run's outcome from its exit code and `--reporter json` output. */
 export function parseRun(exitCode: number | null, stdout: string, timedOut = false): RunResult {
   if (timedOut) return { status: "error", message: "timed out" };
-  let report: RstestJson;
-  try {
-    report = JSON.parse(stdout.slice(stdout.indexOf("{")));
-  } catch {
-    // With --passWithNoTests=false, rstest exits 1 without a report when no suite includes the file.
-    return exitCode === 1
-      ? { status: "not-collected", message: "no suite collected it" }
-      : { status: "error", message: `no rstest report (exit ${exitCode})` };
-  }
+  const report = readReport(stdout);
+  if (!report) return { status: "error", message: `no rstest report (exit ${exitCode})` };
   const summary = report.summary ?? {};
   if (!summary.testFiles) return { status: "not-collected", message: "no suite collected it" };
   // At least one test must really pass: a file of skipped tests proves nothing on the parent.

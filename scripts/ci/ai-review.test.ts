@@ -117,9 +117,9 @@ describe("ai-review.yml", () => {
     expect(job("tier")).toContain(
       'git show "$PR_BASE:scripts/ci/tier.ts" > "$RUNNER_TEMP/tier.ts"',
     );
-    // An empty bunfig, so the PR's own bunfig.toml (preload) can't change the classification.
+    // No env file and an empty bunfig: the PR's .env and bunfig.toml can't steer the classifier.
     expect(job("tier")).toContain(
-      'bun --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD"',
+      'bun --no-env-file --config="$RUNNER_TEMP/bunfig.toml" "$RUNNER_TEMP/tier.ts" --range "$PR_BASE...$PR_HEAD"',
     );
     expect(job("tier")).toMatch(/\^\[0-9a-f\]\{40\}\$/);
   });
