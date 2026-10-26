@@ -29,6 +29,8 @@
     "db:reconcile": "bun scripts/db-reconcile.ts",
     "db:preflight": "bun scripts/db-contract-preflight.ts",
     "db:test": "bun scripts/db-test.ts",
+    "db:matrix": "bun scripts/db/rls-matrix.ts",
+    "db:mutants": "bun scripts/db/policy-mutants.ts",
     "db:types": "bun scripts/db-types.ts",
     "db:types:local": "bun scripts/db-types.ts --local",
     "functions:reconcile": "bun scripts/functions-reconcile.ts",
