@@ -1,8 +1,8 @@
 // HV-15 variant of benchmarks/escapes/509-2-outbox-overtaken: a bulk status
 // change (and a board drop) goes straight to the server while an older
 // check-off for the same task still waits in the outbox, so the older one
-// lands last and wins. Fails until the fix lands.
-// Run: MODUO_HUNT=1 bun run --cwd apps/app test src/features/tasks/commands/bulk-write.509-2.variant.test.ts
+// lands last and wins. Fixed by MOD-561: the bulk status part waits in the
+// outbox behind it, the drop's waits its turn.
 
 import { describe, expect, it, rs } from "@rstest/core";
 import { act, waitFor } from "@testing-library/react";
@@ -125,9 +125,7 @@ async function mountWithFlushingCheckOff() {
   return { server, hook, store };
 }
 
-const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
-
-hunt("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting check-off", () => {
+describe("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting check-off", () => {
   it("a bulk 'To do' on a task whose check-off is still flushing stays To do", async () => {
     const { server, hook } = await mountWithFlushingCheckOff();
     // The person reopens it from a selection before that answer comes back.
@@ -144,6 +142,32 @@ hunt("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting 
     expect(server.rows.get("a")?.status).toBe("todo");
   });
 
+  it("Undo of that bulk change puts the check-off back, after both have landed", async () => {
+    const { server, hook } = await mountWithFlushingCheckOff();
+    toastMock.mockClear();
+    await act(async () => {
+      await hook.result.current.commands.bulkWrite([{ taskId: "a", status: "todo" }], {
+        label: () => "Moved to To do",
+      });
+    });
+    const undo = (
+      toastMock.mock.calls as unknown as [
+        string,
+        { action?: { label: string; onClick: () => void } }?,
+      ][]
+    ).find(([, opts]) => opts?.action?.label === "Undo")?.[1]?.action;
+    expect(undo).toBeDefined();
+    await act(async () => {
+      undo!.onClick();
+      await new Promise((r) => setTimeout(r, 5));
+      server.release();
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    // done (the old check-off), todo (the bulk change), done (its Undo), in that order.
+    expect(server.statusLog).toEqual(["done", "todo", "done"]);
+    expect(server.rows.get("a")?.status).toBe("done");
+  });
+
   it("a board drop into To do on a task whose check-off is still flushing stays To do", async () => {
     const { server, hook } = await mountWithFlushingCheckOff();
     let dropped: Promise<boolean> | null = null;
@@ -156,6 +180,8 @@ hunt("HV-15 variant 509-2-outbox-overtaken: a live status write jumps a waiting 
       await dropped;
       await new Promise((r) => setTimeout(r, 40));
     });
+    // The drop saved (so it offers its Undo) once its turn came.
+    expect(await dropped).toBe(true);
     expect(server.rows.get("a")?.status).toBe("todo");
   });
 });
