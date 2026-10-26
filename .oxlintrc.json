@@ -26,7 +26,8 @@
     "release-notes/**",
     "scripts/icons/source/**",
     "brand/masters/**",
-    "brand/exports/**"
+    "brand/exports/**",
+    "tools/ast-grep/rules/**"
   ],
   "rules": {
     "eslint/prefer-const": "error",
