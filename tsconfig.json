@@ -5,6 +5,7 @@
     "scripts/ci",
     "scripts/docs",
     "scripts/harness-ab/*.ts",
+    "scripts/harness-ab/mcp-eval/*.ts",
     "scripts/rstest.config.ts",
     "scripts/release/check-notes.ts",
     "scripts/release/check-notes.test.ts",

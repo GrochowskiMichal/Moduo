@@ -206,3 +206,24 @@ export function agentEnv(from: NodeJS.ProcessEnv, extra: Record<string, string> 
     if (v !== undefined && (ENV_ALLOW.includes(k) || k.startsWith("LC_"))) env[k] = v;
   return { ...env, ...extra };
 }
+
+/** The shared stack's ports; the MCP eval's own stack (mcp-eval/stack.ts) lives outside them. */
+export const SHARED_STACK_PORTS = { from: 54320, to: 54329 };
+
+/**
+ * The one MCP server a rig run may get (HV-29): the connector on the eval's own local stack,
+ * `http://127.0.0.1:<port>/functions/v1/moduo-mcp`, on a port outside the shared stack's. Never
+ * production, a hosted project or the shared stack; everything else in this file still applies.
+ */
+export function refuseMcpTarget(url: string): Refusal[] {
+  const where = "mcp target";
+  const m = url.match(/^http:\/\/127\.0\.0\.1:(\d{2,5})\/functions\/v1\/moduo-mcp$/);
+  const out = scan(where, url);
+  if (!m) out.push({ where, reason: `${url} is not a local moduo-mcp URL on 127.0.0.1` });
+  else {
+    const port = Number(m[1]);
+    if (port >= SHARED_STACK_PORTS.from && port <= SHARED_STACK_PORTS.to)
+      out.push({ where, reason: `port ${port} is the shared local Supabase stack's` });
+  }
+  return out;
+}
