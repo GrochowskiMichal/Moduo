@@ -340,8 +340,43 @@ async function preflight(s: Omit<Stage, "stable" | "headers">): Promise<Deployme
   return stable && stable !== s.opts.version ? before : null;
 }
 
+/** How long a new deployment may take to honour the version override everywhere. */
+export const OVERRIDE_WAIT_MS = 60_000;
+
+/**
+ * Waits until a request carrying the override is answered by the new version. A deployment can
+ * take a few seconds to reach every location, and until then the override is ignored and the
+ * request goes to the old version (the first staging rehearsal smoke-tested the old build that
+ * way, 1.7 s after the 0% deployment). The build the host kept naming, or "" once it's ready.
+ */
+async function overrideReady(s: Stage): Promise<string> {
+  const root = s.opts.url.replace(/\/+$/, "");
+  const until = s.now() + OVERRIDE_WAIT_MS;
+  let seen = "";
+  for (;;) {
+    try {
+      const res = await s.f(`${root}/config.json`, {
+        headers: s.headers,
+        redirect: "manual",
+        signal: timeout(),
+      });
+      seen = res.ok
+        ? (((await res.json()) as { build?: string }).build ?? "")
+        : `HTTP ${res.status}`;
+    } catch (e) {
+      seen = (e as Error).message;
+    }
+    if (seen === s.opts.build) return "";
+    if (s.now() >= until) return seen || "nothing";
+    await s.sleep(2_000);
+  }
+}
+
 /** The hosting smoke test against the new version alone; the failures, or "" when it passed. */
 async function smokeAtZero(s: Stage): Promise<string> {
+  const stuck = await overrideReady(s);
+  if (stuck)
+    return `the version override never reached ${short(s.opts.version)} within ${OVERRIDE_WAIT_MS / 1000} s (/config.json kept answering ${stuck})`;
   const checks: Check[] = await smoke(s.opts.url, {
     old: s.opts.old,
     expect: { ...s.opts.expect, build: s.opts.build },
