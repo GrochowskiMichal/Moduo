@@ -1,6 +1,6 @@
 # Agent setup — Claude Code
 
-How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is built with **Claude Code only**, on Anthropic models (Claude Max plan). `AGENTS.md` is the single instruction file: Claude Code reads it natively (v2.1.277+), and there is deliberately no `CLAUDE.md`. Folder-level `AGENTS.md` files load when work touches `supabase/`, `apps/desktop/src-tauri/`, `apps/app/src/components/ui/` or `.github/`.
+How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is built with **Claude Code only**, on Anthropic models (Claude Max plan). `AGENTS.md` is the single instruction file: Claude Code reads it natively (v2.1.277+), and there is deliberately no `CLAUDE.md`. Area rules in `.claude/rules/` load when a session views a matching file, including through a single-file `cat`, `sed -n`, `grep` or `head` (folder `AGENTS.md` files loaded only on Read, so HV-10 moved them there).
 
 ## What the repo provides (committed)
 
@@ -104,7 +104,7 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 - `.mcp.json`: the `moduo` server. The root `.mcp.json` carries the same entry for phase 0; keep them equal.
 - `skills/moduo-agent/SKILL.md`: pick up, checkpoint, needs you, hand back, finish, hand off. `.claude/skills/moduo-agent` links to it; `/s2` and `/s3` follow it.
 - `hooks/moduo-report.sh` (+ `hooks.json` in plugin form): presence. It reads `.claude/MODUO_TASK` (gitignored; written by the skill: `task=MOD-123`, `state=working`, `step`, `steps`) and posts only while the state is `working`, in the background, with the key on stdin. Tests: `hooks/moduo-report.test.sh`, run in verify.
-- Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add `.claude-plugin/plugin.json` and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
+- Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add a plugin manifest (`plugin.json` in `.claude-plugin/`) and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
 
 **The Build project** holds one task per open block in `specs/BUILD_ORDER.md`, titled `<ID> — <block name>`. The file stays the source of truth for the first two weeks; Moduo mirrors it. `/s2` creates a missing task; a task assigned to someone else is left alone.
 

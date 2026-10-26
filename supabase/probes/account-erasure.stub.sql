@@ -1,5 +1,5 @@
 -- Stub of production for supabase/probes/account-erasure.probe.sql (PRIV-2a).
--- The repo can't bootstrap a database (supabase/AGENTS.md), so this recreates
+-- The repo can't bootstrap a database (.claude/rules/supabase.md), so this recreates
 -- only what 20261008013000_account_erase_workspace_data.sql touches, as
 -- production has it on 2026-10-08 (project wtoonrvuqumihpkbvwvs, read from the
 -- catalog): columns the probe uses, foreign-key delete rules, unique indexes,
