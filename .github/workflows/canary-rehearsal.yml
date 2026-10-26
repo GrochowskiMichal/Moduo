@@ -10,11 +10,12 @@ name: canary-rehearsal
 # old version back at 100%. The job passes only on that rollback (--expect-rollback). Staging is
 # left on the version it ran before.
 #
-# Runs when the canary or the edge Worker changes on develop or mike, and by hand.
+# Runs when the canary or the edge Worker changes on develop (not mike: staging would serve
+# unmerged code to its 10%), and by hand from the Actions tab.
 on:
   workflow_dispatch:
   push:
-    branches: [develop, mike]
+    branches: [develop]
     paths:
       - scripts/release/canary.ts
       - scripts/smoke-hosting.ts
@@ -23,7 +24,12 @@ on:
       - .github/workflows/_deploy-web.yml
 
 # One rehearsal at a time; never cancelled mid-way (it would leave staging split; the cleanup
-# step undoes it anyway). A staging deploy landing mid-rehearsal wins: the canary leaves it alone.
+# step undoes it anyway). A staging deploy landing mid-rehearsal wins: the canary leaves it alone
+# and the rehearsal goes red ("left alone"); run it again. Not app-staging's group: GitHub keeps one
+# waiting run per group, so sharing it could cancel a waiting staging deploy.
+#
+# The rehearsal version stays in the Worker's version list with its forced error armed: never pick
+# it in the dashboard's Rollback (its message says "canary rehearsal").
 concurrency:
   group: canary-rehearsal
   cancel-in-progress: false
@@ -84,7 +90,7 @@ jobs:
           after=$(( ($(date +%s) + 180) * 1000 ))
           $WRANGLER versions upload --env staging --var "BUILD:$build" --var "CANARY_FORCE_ERROR_AFTER:$after" \
             --message "canary rehearsal ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/upload.log"
-          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1)"
+          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1 || true)"
           [ -n "$id" ] || id="$(grep -oiE 'version id: *[0-9a-f-]{36}' "$RUNNER_TEMP/upload.log" | grep -oE '[0-9a-f-]{36}' | tail -1 || true)"
           [ -n "$id" ] || { echo "::error::no version id in the wrangler output"; exit 1; }
           echo "version=$id" >> "$GITHUB_OUTPUT"

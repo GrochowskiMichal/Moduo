@@ -110,7 +110,7 @@ jobs:
         run: |
           $WRANGLER versions upload --env production --var "BUILD:${SHA::7}" \
             --message "prod $LABEL ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/upload.log"
-          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1)"
+          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1 || true)"
           [ -n "$id" ] || id="$(grep -oiE 'version id: *[0-9a-f-]{36}' "$RUNNER_TEMP/upload.log" | grep -oE '[0-9a-f-]{36}' | tail -1 || true)"
           [ -n "$id" ] || { echo "::error::no version id in the wrangler output"; exit 1; }
           echo "version=$id" >> "$GITHUB_OUTPUT"

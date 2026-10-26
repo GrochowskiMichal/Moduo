@@ -7,8 +7,10 @@ import {
   judge,
   run,
   type RunOptions,
+  single,
   type Split,
   type State,
+  withoutProbes,
 } from "./canary";
 
 const OLD = "00000000-old0-0000-0000-000000000000";
@@ -39,6 +41,8 @@ type World = {
   noAffinity?: boolean;
   /** Analytics per version, or "denied" for a token without Account Analytics: Read. */
   analytics?: Record<string, { requests: number; errors: number }> | "denied";
+  /** The first n unpinned /config.json requests answer 500 (a flake during the affinity check). */
+  flakyConfig?: number;
   /** Called before each deployments read: lets a test deploy "by someone else". */
   onRead?: (w: World) => void;
 };
@@ -112,6 +116,8 @@ function fake(w: World): CanaryEnv["fetchFn"] {
         `<html><head><script>window.__MODUO_CONFIG__={"supabaseUrl":"https://x.supabase.co"};</script><script src="/static/js/index.${build}.js"></script></head></html>`,
         { headers: { ...SEC, "Content-Type": "text/html", "Cache-Control": "no-cache" } },
       );
+    if (path === "/config.json" && !init?.headers && w.flakyConfig && w.flakyConfig-- > 0)
+      return new Response("error code: 1101", { status: 500 });
     if (path === "/config.json")
       return Response.json({ supabaseUrl: "https://x.supabase.co", build }, { headers: SEC });
     if (path.startsWith("/static/js/index."))
@@ -173,6 +179,25 @@ describe("judge", () => {
     expect(judge(2, null).spike).toBe(true);
   });
 
+  it("the canary's own probe requests are taken out before judging", () => {
+    // 30 rounds = 90 probe requests; 100 - 90 = 10 user requests, too few to say.
+    expect(judge(0, withoutProbes(a(100, 3, 1000, 0), 30)).spike).toBe(false);
+    expect(judge(0, withoutProbes(a(190, 3, 1000, 0), 30)).spike).toBe(true);
+  });
+
+  it("a version at 0% next to one at 100% is a single deployment", () => {
+    expect(
+      single({
+        id: "d",
+        versions: [
+          { version_id: OLD, percentage: 100 },
+          { version_id: NEW, percentage: 0 },
+        ],
+      }),
+    ).toBe(OLD);
+    expect(single({ id: "d", versions: at(10) })).toBeNull();
+  });
+
   it("an error rate over max(2%, 2x the old version's) on 20+ requests is a spike", () => {
     expect(judge(0, a(100, 3, 1000, 0)).spike).toBe(true); // 3% > 2%
     expect(judge(0, a(100, 2, 1000, 0)).spike).toBe(false); // 2% is not over 2%
@@ -212,7 +237,7 @@ describe("run", () => {
     const r = await run(OPTS, envFor(w));
     expect(r.outcome).toBe("rolled-back-soak");
     expect(w.posted).toEqual([at(0), at(10), OLD_100]);
-    expect(r.report.join("\n")).toMatch(/error rate 10\.0% over 100 requests/);
+    expect(r.report.join("\n")).toMatch(/error rate 10\.3% over 97 requests/);
   });
 
   it("a broken build fails the 0% smoke and never reaches users", async () => {
@@ -235,6 +260,25 @@ describe("run", () => {
     expect(r.outcome).toBe("promoted-without-soak");
     expect(w.posted).toEqual([at(0), at(10), at(100)]);
     expect(r.report.join("\n")).toMatch(/No version affinity/);
+  });
+
+  it("a failed request during the affinity check is not 'no affinity'", async () => {
+    const w = world({ flakyConfig: 3 });
+    const r = await run(OPTS, envFor(w));
+    expect(r.outcome).toBe("promoted");
+    expect(w.posted).toEqual([at(0), at(10), at(100)]);
+  });
+
+  it("a cancelled job makes no further change", async () => {
+    const w = world();
+    const e = envFor(w);
+    let reads = 0;
+    w.onRead = () => {
+      reads++;
+    };
+    const r = await run(OPTS, { ...e, stopped: () => reads >= 3 });
+    expect(r.outcome).toBe("left-alone");
+    expect(w.posted).toEqual([at(0), at(10)]);
   });
 
   it("without affinity, --without-affinity soak still soaks (the staging rehearsal)", async () => {
@@ -295,6 +339,19 @@ describe("abort", () => {
     });
     expect(await abort(state("d1"), envFor(w))).toMatch(/Rolled back/);
     expect(w.posted).toEqual([OLD_100]);
+  });
+
+  it("retries the rollback of a run that failed half-way", async () => {
+    const w = world({
+      deployments: [
+        { id: "d0", versions: OLD_100 },
+        { id: "d1", versions: at(10) },
+      ],
+    });
+    const st = state("d1", "failed");
+    expect(await abort(st, envFor(w))).toMatch(/Rolled back/);
+    expect(w.posted).toEqual([OLD_100]);
+    expect(st).toMatchObject({ outcome: "rolled-back-cancelled", ours: "d2" });
   });
 
   it("does nothing after a finished run or someone else's deploy", async () => {

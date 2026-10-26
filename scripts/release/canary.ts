@@ -36,6 +36,10 @@ import { type Check, smoke } from "../smoke-hosting";
 
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
+/** No call may hang the job: every request gives up after this. */
+const TIMEOUT_MS = 20_000;
+const timeout = () => AbortSignal.timeout(TIMEOUT_MS);
+
 export type Split = { version_id: string; percentage: number }[];
 export type Deployment = { id: string; versions: Split };
 
@@ -48,6 +52,21 @@ export type Thresholds = {
   /** Fewer canary requests than this say nothing. */
   minRequests: number;
 };
+
+/** Requests one probe round sends through the Worker (the shell, the deep link, /config.json). */
+export const PROBE_REQUESTS = 3;
+
+/** The canary's own probes are not users: take them out of its counts before judging. */
+export function withoutProbes(a: Analytics, rounds: number): Analytics {
+  if (!a) return a;
+  return {
+    stable: a.stable,
+    canary: {
+      requests: Math.max(0, a.canary.requests - PROBE_REQUESTS * rounds),
+      errors: a.canary.errors,
+    },
+  };
+}
 
 export const THRESHOLDS: Thresholds = {
   probeRounds: 2,
@@ -90,9 +109,8 @@ function pct(x: number): string {
 
 /** The one version a deployment runs at 100%, or null when it is split. */
 export function single(d: Deployment): string | null {
-  return d.versions.length === 1 && d.versions[0].percentage === 100
-    ? d.versions[0].version_id
-    : null;
+  const serving = d.versions.filter((v) => v.percentage > 0);
+  return serving.length === 1 && serving[0].percentage === 100 ? serving[0].version_id : null;
 }
 
 export type CanaryEnv = {
@@ -102,6 +120,8 @@ export type CanaryEnv = {
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
   log?: (line: string) => void;
+  /** True once the job is being cancelled: the run makes no further change. */
+  stopped?: () => boolean;
 };
 
 const API = "https://api.cloudflare.com/client/v4";
@@ -113,7 +133,7 @@ export function cloudflare(env: CanaryEnv, worker: string) {
   const base = `${API}/accounts/${env.accountId}/workers/scripts/${worker}/deployments`;
 
   const call = async (url: string, init: RequestInit): Promise<unknown> => {
-    const res = await f(url, { ...init, headers });
+    const res = await f(url, { ...init, headers, signal: timeout() });
     const body = (await res.json().catch(() => ({}))) as {
       success?: boolean;
       errors?: { message?: string }[];
@@ -149,17 +169,19 @@ export function cloudflare(env: CanaryEnv, worker: string) {
     },
     /** Requests and errors per version since `since`; null when the token can't read analytics. */
     async analytics(since: Date, canary: string, stable: string): Promise<Analytics> {
-      const query = `query($a: String!, $s: String!, $t: Time!) { viewer { accounts(filter: { accountTag: $a }) {
-        workersInvocationsAdaptive(limit: 100, filter: { scriptName: $s, datetime_geq: $t }) {
+      // Literals, not variables: the analytics schema has its own scalar names, and these three
+      // are checked to be plain ids and a timestamp first.
+      const t = since.toISOString();
+      if (!/^[0-9a-f]+$/i.test(env.accountId) || !/^[a-z0-9-]+$/.test(worker)) return null;
+      const query = `{ viewer { accounts(filter: { accountTag: "${env.accountId}" }) {
+        workersInvocationsAdaptive(limit: 100, filter: { scriptName: "${worker}", datetime_geq: "${t}" }) {
           sum { requests errors } dimensions { scriptVersion } } } } }`;
       try {
         const res = await f(`${API}/graphql`, {
           method: "POST",
           headers,
-          body: JSON.stringify({
-            query,
-            variables: { a: env.accountId, s: worker, t: since.toISOString() },
-          }),
+          body: JSON.stringify({ query }),
+          signal: timeout(),
         });
         const body = (await res.json()) as {
           errors?: unknown[] | null;
@@ -213,6 +235,7 @@ export type Outcome =
   | "promoted-without-soak"
   | "rolled-back-smoke"
   | "rolled-back-soak"
+  | "rolled-back-cancelled"
   | "refused"
   | "left-alone"
   | "failed";
@@ -246,7 +269,7 @@ export async function probe(
   const problems: string[] = [];
   for (const path of ["/", "/tasks", "/config.json"]) {
     try {
-      const res = await f(`${root}${path}`, { headers, redirect: "manual" });
+      const res = await f(`${root}${path}`, { headers, redirect: "manual", signal: timeout() });
       const text = await res.text();
       if (res.status !== 200) problems.push(`${path} → ${res.status}`);
       else if (path === "/config.json") {
@@ -263,17 +286,19 @@ export async function probe(
 /**
  * Whether the platform keeps this client on one version: `samples` requests without an override,
  * all naming the same build. Without affinity, a 10% split shows both within 40 requests 98.5% of
- * the time.
+ * the time. A failed request says nothing about affinity (errors are the soak's business), so only
+ * two different builds both answering prove there is none.
  */
 export async function hasAffinity(f: Fetch, url: string, samples = 40): Promise<boolean> {
   const root = url.replace(/\/+$/, "");
   const builds = new Set<string>();
   for (let i = 0; i < samples; i++) {
     try {
-      const res = await f(`${root}/config.json`, { redirect: "manual" });
-      builds.add(((await res.json()) as { build?: string }).build ?? "");
+      const res = await f(`${root}/config.json`, { redirect: "manual", signal: timeout() });
+      const build = res.ok ? ((await res.json()) as { build?: string }).build : undefined;
+      if (build) builds.add(build);
     } catch {
-      builds.add("(error)");
+      // ignored, see above
     }
     if (builds.size > 1) return false;
   }
@@ -348,7 +373,7 @@ async function soak(s: Stage, started: number): Promise<string> {
           "Workers analytics unavailable (token needs Account Analytics: Read); probes decide alone.",
         );
     }
-    const v = judge(inARow, analytics);
+    const v = judge(inARow, withoutProbes(analytics, rounds));
     if (v.spike) {
       s.note(`Spike after ${Math.round((s.now() - started) / 1000)} s: ${v.reason}.`);
       return v.reason;
@@ -381,7 +406,7 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
   };
   const before = await preflight(base);
   if (!before) return { outcome: "refused", report };
-  const stable = before.versions[0].version_id;
+  const stable = single(before) as string;
   const s: Stage = { ...base, stable, headers: override(opts.worker, opts.version) };
   const { note, cf } = s;
 
@@ -392,6 +417,7 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
 
   // Every change after the first: only on top of the deployment this run made.
   const move = async (versions: Split, message: string, force = false) => {
+    if (env.stopped?.()) throw new Moved("the job is being cancelled");
     const live = await cf.current();
     if (live.id !== state.ours)
       throw new Moved(`deployment ${live.id} (${describe(live.versions)})`);
@@ -473,17 +499,21 @@ export async function run(opts: RunOptions, env: CanaryEnv): Promise<RunResult> 
 
 /** Restores the old version when the deployment is still the one a cancelled run made. */
 export async function abort(state: State, env: CanaryEnv): Promise<string> {
-  if (state.outcome) return `Nothing to do: the run finished (${state.outcome}).`;
+  // "failed" means its own rollback may not have happened: try again.
+  if (state.outcome && state.outcome !== "failed")
+    return `Nothing to do: the run finished (${state.outcome}).`;
   const cf = cloudflare(env, state.worker);
   const live = await cf.current();
   if (live.id !== state.ours)
     return `Left alone: the Worker runs ${describe(live.versions)}, not this run's deployment.`;
   if (single(live) === state.stable) return `Nothing to do: ${short(state.stable)} serves 100%.`;
-  await cf.deploy(
+  const d = await cf.deploy(
     [{ version_id: state.stable, percentage: 100 }],
     "rollback: canary cancelled",
     true,
   );
+  state.ours = d.id;
+  state.outcome = "rolled-back-cancelled";
   return `Rolled back to ${short(state.stable)} (the canary run was cancelled).`;
 }
 
@@ -502,9 +532,11 @@ if (import.meta.main) {
     return i >= 0 ? args[i + 1] : undefined;
   };
   const all = (name: string) => args.flatMap((a, i) => (a === name ? [args[i + 1]] : []));
+  let stopping = false;
   const env: CanaryEnv = {
     accountId: process.env.CLOUDFLARE_ACCOUNT_ID ?? "",
     token: process.env.CLOUDFLARE_API_TOKEN ?? "",
+    stopped: () => stopping,
   };
   const usage = () => {
     console.error(
@@ -528,6 +560,7 @@ if (import.meta.main) {
       process.exit(0);
     }
     console.log(await abort(state, env));
+    writeFileSync(path as string, JSON.stringify(state));
     process.exit(0);
   }
 
@@ -572,7 +605,6 @@ if (import.meta.main) {
   const expectRollback = args.includes("--expect-rollback");
 
   // A cancelled job gets SIGINT, then SIGTERM: put the old version back before exiting.
-  let stopping = false;
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
     process.on(sig, async () => {
       if (stopping) return;
@@ -581,6 +613,7 @@ if (import.meta.main) {
         try {
           const state = JSON.parse(readFileSync(opts.statePath, "utf8")) as State;
           console.error(await abort(state, env));
+          writeFileSync(opts.statePath, JSON.stringify(state));
         } catch (e) {
           console.error(`abort failed: ${(e as Error).message}`);
         }
@@ -595,6 +628,10 @@ if (import.meta.main) {
     process.exit(1);
   });
   console.log(result.report.join("\n"));
+  if (result.outcome === "promoted-without-soak")
+    console.error(
+      "::warning title=Canary skipped::No version affinity on this host, so the new version went to 100% without the 15-minute soak. Add the Transform Rule (docs/release.md §4).",
+    );
   if (expectRollback) process.exit(result.outcome === "rolled-back-soak" ? 0 : 1);
   process.exit(
     result.outcome === "promoted" || result.outcome === "promoted-without-soak"
