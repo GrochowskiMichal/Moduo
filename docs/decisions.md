@@ -54,6 +54,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-24 · Item checks on note moves into published pages, contact ops, blocks-link removal and member exceptions (MOD-553/572/549/573): a new parent needs Edit; going public by a move needs ws.publish + Full (reorganising inside a published page doesn't); trash unpublishes.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: 10 messages per 10 s and 30 per 60 s per person per workspace (a workspace's apps share one budget), refused with `PT429` (a send waits at most 2 s for the previous one); "typing" at most once per 2.5 s per person and conversation, and a stop only once, to close a start that went out.
 - 2026-10-14 · Chat v1 privacy rules: a conversation's registry and activity rows follow its read rule, typing is one server-written private topic per conversation, `chat_caps_get` answers members only, announcement mode needs a readable channel and never a DM.
 - 2026-10-13 · SEC2: workspaces are created only for the signed-in person, and the free plan's one-workspace limit is enforced in the database.
