@@ -13,9 +13,3 @@ chat_wrappers.test.sql: min_build: at or above the first production desktop buil
 # storage__limits_for_owner away from signed-in people, which this check of
 # plan_helpers_scope (20261022100000) needs. One of the two is wrong on prod.
 plan_helpers_scope.test.sql: a member still reads the owner's storage limits
-
-# HV-16 RPC probe finding: see its Moduo task (handle in the HV-16 PR).
-rls_matrix_rpcs.test.sql: rpc · contacts_op_link · member leaks nothing and changes nothing private
-rls_matrix_rpcs.test.sql: rpc · links_op_create · member leaks nothing and changes nothing private
-rls_matrix_rpcs.test.sql: rpc · contacts_op_link · viewer leaks nothing and changes nothing private
-rls_matrix_rpcs.test.sql: rpc · links_op_create · viewer leaks nothing and changes nothing private

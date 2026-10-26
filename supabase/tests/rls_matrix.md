@@ -87,6 +87,10 @@ INSERT INTO public.user_preferences (user_id, show_agent_work) VALUES (test.id('
 ON CONFLICT (user_id) DO UPDATE SET show_agent_work = true;
 INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, now_task_id)
 VALUES (test.id('FR'), test.id('W'), test.id('owner'), 'running', 'per_task', 'hv16-device', test.id('T'));
+
+-- A page in the legacy exposed_notes table (notes publishing before publish_token).
+INSERT INTO public.exposed_notes (id, note_id, workspace_id, title, slug)
+VALUES (test.id('X'), test.id('N')::text, test.id('W')::text, 'Published', 'hv16-page');
 ```
 
 ## Table: tasks
@@ -494,6 +498,38 @@ DELETE FROM public.resource_grants WHERE resource_id = {N} AND subject_id = {vie
 | anon | ✗ | ✗ | ✗ | ✗ |
 | app | – | – | – | – |
 
+## Table: exposed_notes
+
+Legacy: nothing reads or writes it since notes publishing moved to `publish_token`, and its reads stay open to everyone, as they were. Nobody writes it, signed in or not (MOD-594). It has no owner column, so the rows for people inside W are `–`: the question is anyone at all.
+
+```sql select
+SELECT 1 FROM public.exposed_notes WHERE id = {X}
+```
+
+```sql insert
+INSERT INTO public.exposed_notes (id, note_id, title, slug) VALUES ({X-new}, 'planted', 'Planted', 'hv16-planted')
+```
+
+```sql update
+UPDATE public.exposed_notes SET title = 'Defaced' WHERE id = {X}
+```
+
+```sql delete
+DELETE FROM public.exposed_notes WHERE id = {X}
+```
+
+| persona | select | insert | update | delete |
+| --- | --- | --- | --- | --- |
+| owner | – | – | – | – |
+| admin | – | – | – | – |
+| editor | – | – | – | – |
+| viewer | – | – | – | – |
+| capped | – | – | – | – |
+| member | ✓ | ✗ | ✗ | ✗ |
+| outsider | ✓ | ✗ | ✗ | ✗ |
+| anon | ✓ | ✗ | ✗ | ✗ |
+| app | – | – | – | – |
+
 ## Equivalent mutants
 
 Mutants `bun run db:mutants` lets live because they can't change any outcome, each with the reason. A mutant listed here that a check catches fails the run, so the list can't go stale.
@@ -520,6 +556,8 @@ It is a net, not a proof: a call that fails on its arguments proves nothing, so 
 | `chat_op_pin` | viewer | Anyone in a conversation pins its messages (chat decisions). |
 | `chat_op_mark_decision` | viewer | Anyone in a conversation marks a decision. |
 | `comments_op_add` | viewer | View is enough to comment on an item. |
+| `links_op_create` | viewer:chat_channel | viewer is in the private channel: anyone in a conversation may link it to an item they can see (MOD-593's rule). |
+| `links_op_create` | viewer:chat_message | The same, from a message in that channel. |
 
 ## Not reached by the probe
 

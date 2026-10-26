@@ -10,7 +10,9 @@ INSERT INTO test.mx_allow (fn, persona, why) VALUES
   ('chat_op_mark_unread', 'viewer', 'Their own read marker in a channel they''re in.'),
   ('chat_op_pin', 'viewer', 'Anyone in a conversation pins its messages (chat decisions).'),
   ('chat_op_mark_decision', 'viewer', 'Anyone in a conversation marks a decision.'),
-  ('comments_op_add', 'viewer', 'View is enough to comment on an item.');
+  ('comments_op_add', 'viewer', 'View is enough to comment on an item.'),
+  ('links_op_create', 'viewer:chat_channel', 'viewer is in the private channel: anyone in a conversation may link it to an item they can see (MOD-593''s rule).'),
+  ('links_op_create', 'viewer:chat_message', 'The same, from a message in that channel.');
 
 CREATE TABLE test.mx_unreached (fn text PRIMARY KEY);
 INSERT INTO test.mx_unreached (fn) VALUES

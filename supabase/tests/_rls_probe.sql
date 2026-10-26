@@ -276,10 +276,21 @@ BEGIN
     (SELECT string_agg(fn, ', ') FROM (SELECT fn FROM test.mx_unreached
        EXCEPT SELECT fn FROM test.mx_result WHERE who = 'owner' GROUP BY fn HAVING bool_and(r NOT LIKE 'ok%')) x));
 
+  -- An allow line's `as` is a caller ('member'; 'key' for any key), or a caller
+  -- and one entity kind ('viewer:chat_channel'): only that kind's calls pass.
+  CREATE TEMP TABLE mx_flagged ON COMMIT DROP AS
+  SELECT r.*, CASE WHEN r.who LIKE 'key:%' THEN 'key' ELSE r.who END AS caller FROM test.mx_result r
+  -- viewer sees the shared items' text by right: only a change counts against them.
+  WHERE r.who <> 'owner' AND (r.changed OR (r.who <> 'viewer' AND r.r ~* 'hv16-secret'));
+  FOR g IN SELECT a.fn, a.persona, a.why FROM test.mx_allow a WHERE a.persona LIKE '%:%' ORDER BY 1, 2 LOOP
+    PERFORM test.ok(EXISTS (SELECT 1 FROM mx_flagged f WHERE f.fn = g.fn AND f.caller || ':' || f.kind = g.persona),
+      format('rpc · %s · %s: allowed (%s), and still needed', g.fn, g.persona, g.why));
+  END LOOP;
+
   FOR g IN SELECT fn, who FROM test.mx_result WHERE who <> 'owner' GROUP BY fn, who ORDER BY fn, who LOOP
-    SELECT * INTO v_bad FROM test.mx_result r
-    -- viewer sees the shared items' text by right: only a change counts against them.
-    WHERE r.fn = g.fn AND r.who = g.who AND (r.changed OR (g.who <> 'viewer' AND r.r ~* 'hv16-secret'))
+    SELECT * INTO v_bad FROM mx_flagged r
+    WHERE r.fn = g.fn AND r.who = g.who
+      AND NOT EXISTS (SELECT 1 FROM test.mx_allow a WHERE a.fn = r.fn AND a.persona = r.caller || ':' || r.kind)
     ORDER BY r.kind NULLS FIRST LIMIT 1;
     SELECT why INTO v_allowed FROM test.mx_allow a
     WHERE a.fn = g.fn AND a.persona = CASE WHEN g.who LIKE 'key:%' THEN 'key' ELSE g.who END;

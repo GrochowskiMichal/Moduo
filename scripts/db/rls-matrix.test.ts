@@ -158,13 +158,12 @@ describe("renderTable", () => {
 });
 
 describe("the committed matrix", () => {
-  it("covers ten tables, and its generated files match rls_matrix.md (else: bun run db:matrix)", () => {
+  it("covers at least ten tables, and its generated files match rls_matrix.md (else: bun run db:matrix)", () => {
     const files = generateFromDisk();
-    expect(
-      [...files.keys()].filter(
-        (f) => /^rls_matrix_.*\.test\.sql$/.test(f) && f !== "rls_matrix_rpcs.test.sql",
-      ),
-    ).toHaveLength(10);
+    const tables = [...files.keys()].filter(
+      (f) => /^rls_matrix_.*\.test\.sql$/.test(f) && f !== "rls_matrix_rpcs.test.sql",
+    );
+    expect(tables.length).toBeGreaterThanOrEqual(10);
     expect(stale(TESTS_DIR, files)).toEqual([]);
   });
 });
