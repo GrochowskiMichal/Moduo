@@ -271,6 +271,8 @@ function execute(
             MODUO_LANE_PROFILE: setup.laneProfile,
             MODUO_LANE_SETTINGS: setup.settings,
             MODUO_LANE_SRT: SRT,
+            // The risk hook (HV-24), where the task's base has it, logs into this run's artifacts.
+            MODUO_RISK_LOG: path.join(dir, "risk-decisions.jsonl"),
           }),
           timeout: AGENT_TIMEOUT_MS,
         },
