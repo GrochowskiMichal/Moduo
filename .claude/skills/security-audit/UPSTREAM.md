@@ -10,9 +10,9 @@ To bump the pin, from the repo root:
 
 ```bash
 git clone https://github.com/cloudflare/security-audit-skill /tmp/sas && git -C /tmp/sas checkout <sha>
-cp /tmp/sas/skills/security-audit/* .claude/skills/security-audit/ && cp /tmp/sas/LICENSE .claude/skills/security-audit/LICENSE
+rsync -a --delete --exclude UPSTREAM.md --exclude LICENSE /tmp/sas/skills/security-audit/ .claude/skills/security-audit/ && cp /tmp/sas/LICENSE .claude/skills/security-audit/LICENSE
 ```
 
-Then update the commit line above and review the diff like any Tier 2 change (it steers agents that read RLS, billing and MCP code).
+Then update the commit line above and review the diff like any Tier 2 change: it steers agents that read RLS, billing and MCP code, and `scripts/ci/tier.ts` labels this folder Tier 2.
 
 Moduo usage: full audit mode writes its run outside the repo (default `~/security-audit-skill/moduo/run-<N>`); never point the output into the repo, it is public. Findings that are unfixed holes stay out of git (AGENTS.md rule 2).

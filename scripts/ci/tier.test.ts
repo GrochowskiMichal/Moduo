@@ -8,6 +8,7 @@ const TIER2_FIXTURES = [
   "supabase/tests/rls_tasks.test.sql",
   "supabase/functions/_shared/contracts/vocabularies.ts",
   "supabase/functions/delete-account/index.ts",
+  ".claude/skills/security-audit/SKILL.md",
   "supabase/functions/_shared/account-erasure.ts",
   "supabase/functions/_shared/billing.ts",
   "supabase/functions/create-checkout-session/index.ts",

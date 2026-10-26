@@ -209,6 +209,8 @@ describe("ratchets", () => {
   it("skips generated, history and test files where they don't apply", () => {
     expect(sizeChecked("supabase/migrations/2026_x.sql")).toBe(false);
     expect(complexityChecked(".claude/skills/security-audit/validate-findings.cjs")).toBe(false);
+    expect(sizeChecked(".claude/skills/security-audit/validate-coverage-ledger.cjs")).toBe(false);
+    expect(complexityChecked(".claude/skills/security-audit-x/a.ts")).toBe(true);
     expect(sizeChecked("apps/app/src/types/supabase.ts")).toBe(false);
     expect(sizeChecked("supabase/functions/_shared/notes-doc/notes-doc.bundle.js")).toBe(false);
     expect(sizeChecked("supabase/functions/_shared/contracts/vocabularies.ts")).toBe(false);

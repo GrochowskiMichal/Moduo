@@ -8,8 +8,8 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
-- 2026-10-24 · MOD-552: `RELEASES_REPO_TOKEN` moved to `releases-production` (`v*` only) / `releases-staging` (develop, mike); bridge upload is its own job; builds after a frozen bridge drop the GitHub endpoint; per-channel keys and bridge retirement in release.md §7 → decisions/workflow.md
 - 2026-10-23 · HV-9: Cloudflare security-audit skill vendored at a pinned commit; runs live outside the repo, quick scoped with Fable verifiers, no target execution; unfixed findings go to Moduo tasks only → decisions/workflow.md
+- 2026-10-24 · MOD-552: `RELEASES_REPO_TOKEN` moved to `releases-production` (`v*` only) / `releases-staging` (develop, mike); bridge upload is its own job; builds after a frozen bridge drop the GitHub endpoint; per-channel keys and bridge retirement in release.md §7 → decisions/workflow.md
 - 2026-10-23 · HV-5: Tier 2 list lives once in `scripts/ci/tier.ts` (CI labels PRs from it); size/complexity ratchets frozen and run in verify; test-weakening detector advises, only `.only` fails → decisions/workflow.md
 - 2026-10-23 · HV-1: auto mode per person (`bun run agent:auto-mode`; project settings can't set it); bypass only inside `srt` lanes, enforced by `guard-lane.sh`; guards fail closed (`onFailure: "block"`) → decisions/workflow.md
 - 2026-10-23 · HV-2: `bun run wt` (ready worktree, own dev port via its launch.json) and `wt:prune` (merged PR + clean + no live process only); `moduo` at mcp.moduo.app; connector clean-up per person → decisions/workflow.md
