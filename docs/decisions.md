@@ -309,6 +309,7 @@ One line per locked product or architecture decision, grouped by area, newest fi
 
 ## Data layer, Supabase, contracts → [decisions/data.md](decisions/data.md)
 
+- 2026-10-24 · A task's status writes leave one at a time in the order made, across stores (a live one holds the next back); a write back after its store stopped goes to the next store or the device copy; a failed copy update throws, never reads as empty (MOD-587/569/561, HV-12) → decisions/data.md
 - 2026-10-22 · DB-SEC-1: the security advisor's "definer function callable by signed-in users" is expected for app RPCs and policy helpers; revoke client EXECUTE only from trigger functions and helpers no client path reaches, fix the ones that answer for any id → decisions/data.md
 - 2026-10-22 · DB-PERF-1: an advisor's "unused index" is no reason to drop on a small DB; drop only the provably redundant, make RLS cheap per row first (`can_access` fast path, initplan wraps, one permissive policy per command)
 - 2026-10-20 · The web runtime and its port are one file per module (`runtime.web.<module>.ts` + `runtime.types.<module>.ts`, composed in `runtime.web.ts`); the Supabase client, boot cache and auth listener are `runtime.web.client.ts` → decisions/data.md

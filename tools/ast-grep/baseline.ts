@@ -202,12 +202,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   {
     rule: "sync-catch-returns-empty",
     file: "apps/app/src/lib/sync/cache.ts",
-    snippet: "catch { return null; }",
-    why: 'Candidate bug: A failed update reads as "nothing kept", so keepOnlyWaiting deletes the copy and its queued outbox.',
-  },
-  {
-    rule: "sync-catch-returns-empty",
-    file: "apps/app/src/lib/sync/cache.ts",
     snippet: "catch { return []; }",
     why: "Risk: A failed key listing skips sign-out cleanup, leaving the previous person's rows on the device.",
   },

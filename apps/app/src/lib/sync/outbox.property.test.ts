@@ -59,10 +59,10 @@ import type { SyncReadInput, SyncReadResult } from "./types";
 const SEED = Number(process.env.FC_SEED ?? 1709);
 const RUNS = Number(process.env.FC_RUNS ?? 200);
 
-/** MOD-569 is open: see `Real.atRisk`. */
-const ALLOW_MOD_569 = true;
-/** MOD-587 is open: see `checkOff`. */
-const ALLOW_LIVE_RACE = true;
+/** MOD-569 is fixed (PR #642): no write may be lost. See `Real.atRisk`. */
+const ALLOW_MOD_569 = false;
+/** MOD-587 is fixed (PR #642): every task's order is checked. See `checkOff`. */
+const ALLOW_LIVE_RACE = false;
 
 const WS = "ws-1";
 const A = "u-a";
