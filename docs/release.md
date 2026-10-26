@@ -87,7 +87,7 @@ Every PR that touches the app or the landing also gets a preview URL comment on 
 
 **The canary** (HV-28, `scripts/release/canary.ts`). The app Worker is not deployed in one go: the job uploads the build as a version (`wrangler versions upload`), then
 
-1. **0%:** the full hosting smoke test runs against the new version alone, through the `Cloudflare-Workers-Version-Overrides` header. No visitor sees it. A failure ends here.
+1. **0%:** once a request with the `Cloudflare-Workers-Version-Overrides` header is answered by the new version (a fresh deployment can take a few seconds to honour it; the canary waits up to a minute), the full hosting smoke test runs against the new version alone, through that header. No visitor sees it. A failure ends here.
 2. **10% for 15 minutes:** every 30 s a probe round (the shell, a deep link, `/config.json` naming the build) hits the new version; every minute the Workers analytics compare its error rate with the old version's. A **spike** is two failed probe rounds in a row, or an error rate over max(2%, 2× the old version's) on at least 20 requests.
 3. **100%**, or on a spike the old version back at 100% (rollback by version id) and a red job. The run summary shows each stage, the soak's numbers and any rollback reason.
 
