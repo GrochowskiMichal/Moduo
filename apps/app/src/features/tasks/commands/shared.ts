@@ -220,17 +220,18 @@ export function createShared(ctx: TaskCommandsContext) {
         : null;
     const shown = { ...optimistic, ...toTodo, updatedAt: new Date().toISOString() };
     const queueing = opts.offline;
-    // Offline, a capture still waiting to sync, or an older check-off still
-    // waiting for this task: a check-off waits on the device, behind them (sent
-    // live it would land first and the older one would win); anything else
-    // says "Offline" (or "still saving" for a waiting capture).
-    if (store.isOffline() || store.isQueuedCreate(id) || (queueing && store.hasOutboxEntries(id))) {
+    // Offline, a capture still waiting to sync, or an older check-off for
+    // this task still on its way (waiting, or sent live and not answered): a
+    // check-off waits on the device, behind them (sent live it could land
+    // first and the older one would win); anything else says "Offline" (or
+    // "still saving" for a waiting capture).
+    if (store.isOffline() || store.isQueuedCreate(id) || (queueing && store.statusMustWait(id))) {
       if (!queueing) {
         if (store.isOffline()) sayOffline();
         else toast.error(STILL_SAVING);
         return;
       }
-      store.enqueue({
+      void store.enqueue({
         kind: "status",
         id: crypto.randomUUID(),
         taskId: id,
@@ -241,7 +242,7 @@ export function createShared(ctx: TaskCommandsContext) {
       return;
     }
     const write = store.begin([patchOf(id, shown), ...(opts.extra ?? [])]);
-    void op()
+    const sent = op()
       .then((saved) => {
         // One settle for every row the op answered, so nothing it moved
         // shows the old copy in between; the task's last answer is the newest.
@@ -259,15 +260,18 @@ export function createShared(ctx: TaskCommandsContext) {
           // server takes a repeated status as a no-op).
           write.fail();
           store.wentOffline();
-          store.enqueue({
-            kind: "status",
-            id: crypto.randomUUID(),
-            taskId: id,
-            status: queueing.status,
-            recurrence: queueing.recurrence,
-            fields: shown,
-          });
-          return;
+          // In front of anything queued for it since it left (it's older).
+          return store.enqueue(
+            {
+              kind: "status",
+              id: crypto.randomUUID(),
+              taskId: id,
+              status: queueing.status,
+              recurrence: queueing.recurrence,
+              fields: shown,
+            },
+            { wasLive: true },
+          );
         }
         // What already saved stays (its rows become the copy).
         const answered = opts.rows?.() ?? [];
@@ -275,6 +279,8 @@ export function createShared(ctx: TaskCommandsContext) {
         refused(write, e);
         opts.onRefused?.();
       });
+    // A check-off on its way: the task's next one waits behind it (MOD-587).
+    void (queueing ? store.sendingStatus(id, sent) : sent);
   };
 
   /**
