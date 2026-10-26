@@ -2,6 +2,7 @@
   "extends": "./tsconfig.base.json",
   "include": [
     "scripts/brand",
+    "scripts/ci",
     "scripts/rstest.config.ts",
     "scripts/release/check-notes.ts",
     "scripts/release/check-notes.test.ts",

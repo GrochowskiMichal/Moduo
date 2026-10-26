@@ -80,6 +80,9 @@
       ],
       "outputs": []
     },
+    "//#lint:ratchets": {
+      "cache": false
+    },
     "//#lint:notes": {
       "inputs": [
         ".changes/**",

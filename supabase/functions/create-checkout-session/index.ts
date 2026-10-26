@@ -39,7 +39,7 @@ import {
   TRIAL_DAYS_NO_CARD,
   TRIAL_DAYS_WITH_CARD,
 } from "../_shared/billing.ts";
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL } from "../_shared/app-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = makeStripe();
@@ -49,9 +49,6 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
 
   try {
-    if (isAppToken(req.headers.get("Authorization") ?? new URL(req.url).searchParams.get("access_token"))) {
-      return json(APP_TOKEN_REFUSAL, { status: 403 });
-    }
     const keyErr = stripeSecretKeyConfigError();
     if (keyErr) return json({ error: keyErr }, { status: 500 });
 
@@ -60,11 +57,13 @@ Deno.serve(async (req: Request) => {
     });
 
     const queryToken = new URL(req.url).searchParams.get("access_token")?.trim();
-    const user = await authenticate(
+    const caller = await authenticate(
       supabase,
       req.headers.get("Authorization") ?? (queryToken ? `Bearer ${queryToken}` : null),
     );
-    if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+    if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
+    if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
+    const user = caller.user;
 
     let rawInput: unknown;
     if (req.method === "GET") {

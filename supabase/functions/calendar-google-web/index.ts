@@ -17,7 +17,7 @@ import {
   listGoogleCalendars,
   listGoogleEvents,
 } from "../_shared/google-calendar.ts";
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { googleAccessForRow, googleClients } from "../_shared/google-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
@@ -104,13 +104,11 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
   if (!ENC) return json({ error: "google_not_configured" }, 503);
 
-  const jwt = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
-  if (!jwt) return json({ error: "unauthorized" }, 401);
-  if (isAppToken(jwt)) return json(APP_TOKEN_REFUSAL, 403);
   const db = createClient(SUPABASE_URL, SECRET, { auth: { persistSession: false } });
-  const user = await db.auth.getUser(jwt);
-  if (user.error || !user.data.user) return json({ error: "unauthorized" }, 401);
-  const userId = user.data.user.id;
+  const caller = await verifiedPerson(db.auth, req.headers.get("Authorization"));
+  if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, 403);
+  if (caller.kind !== "person") return json({ error: "unauthorized" }, 401);
+  const userId = caller.user.id;
 
   let body: Record<string, unknown> = {};
   try {

@@ -59,6 +59,8 @@ supabase/.temp/
 !.claude/commands/
 !.claude/hooks/
 !.claude/settings.json
+!.claude/settings.lane.json
+!.claude/sandbox/
 !.claude/agents/
 !.claude/rules/
 !.claude/workflows/
@@ -114,3 +116,6 @@ storybook-static/
 
 # Deno writes a lock wherever it runs; the real one is supabase/functions/deno.lock.
 /deno.lock
+
+# Product lab dossiers (/product-lab, /product-jury): screenshots of seeded data, never source.
+.lab/

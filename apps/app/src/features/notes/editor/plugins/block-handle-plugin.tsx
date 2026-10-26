@@ -1,7 +1,8 @@
 /**
  * Quiet block handles (NR-4, AC7). Hovering a top-level block shows a faint
  * ⋮⋮ in the left gutter: drag it to move the block, click it for Turn into ·
- * Duplicate · Delete · Comment. ⌥⇧↑ / ⌥⇧↓ move the block under the caret.
+ * Duplicate · Delete · Comment. From the keyboard, ⌥↵ opens that menu for the
+ * block under the caret and ⌥⇧↑ / ⌥⇧↓ move it.
  *
  * The handle is an overlay NEXT TO the contenteditable (Lexical reclaims
  * foreign DOM inside its root, the NO-5 trap), placed at the hovered block's
@@ -12,7 +13,9 @@
 import { $isCodeNode } from "@lexical/code";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
+  $createParagraphNode,
   $createRangeSelection,
+  $createTextNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
   $getRoot,
@@ -23,11 +26,21 @@ import {
   COMMAND_PRIORITY_HIGH,
   KEY_ARROW_DOWN_COMMAND,
   KEY_ARROW_UP_COMMAND,
+  KEY_ENTER_COMMAND,
   type LexicalNode,
   type NodeKey,
 } from "lexical";
-import { Copy, GripVertical, MessageSquare, Trash2, Type } from "lucide-react";
+import {
+  CheckSquare,
+  Copy,
+  FilePlus2,
+  GripVertical,
+  MessageSquare,
+  Trash2,
+  Type,
+} from "lucide-react";
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import * as Y from "yjs";
 
 import {
@@ -42,10 +55,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
+import { afterFocusRestore } from "../after-focus-restore";
 import {
   $blockMenuFor,
   $deleteBlock,
   $duplicateBlock,
+  $isTextBlock,
   $turnBlockInto,
   TURN_INTO,
 } from "../block-actions";
@@ -57,8 +72,10 @@ import {
 } from "../block-move";
 import { asUndoStep } from "../collab-undo";
 import { NOTES_DOC_ROOT } from "../doc-markdown";
+import { noteColumn } from "../note-column";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
+import { convertBlockToTask } from "./task-line-plugin";
 
 type Hovered = { key: NodeKey; top: number; height: number };
 
@@ -127,7 +144,19 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   // ── hover tracking on the scrolling pane that holds the editor ─────────────
   useEffect(() => {
     let pane: HTMLElement | null = null;
+    // At most one hit-test per frame: mousemove fires far more often, and each
+    // test reads every block's rect.
+    let frame = 0;
+    let last: MouseEvent | null = null;
     const onMove = (event: MouseEvent) => {
+      last = event;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (last) hitTest(last);
+      });
+    };
+    const hitTest = (event: MouseEvent) => {
       if (menuOpenRef.current || dragRef.current) return;
       const root = editor.getRootElement();
       if (!root) return;
@@ -151,21 +180,52 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
       );
     };
     const onLeave = () => {
+      cancelAnimationFrame(frame);
+      frame = 0;
       if (!menuOpenRef.current && !dragRef.current) setHovered(null);
     };
     const unregister = editor.registerRootListener((root) => {
       pane?.removeEventListener("mousemove", onMove);
       pane?.removeEventListener("mouseleave", onLeave);
-      pane = root?.parentElement ?? null;
+      pane = noteColumn(root);
       pane?.addEventListener("mousemove", onMove);
       pane?.addEventListener("mouseleave", onLeave);
     });
     return () => {
+      cancelAnimationFrame(frame);
       unregister();
       pane?.removeEventListener("mousemove", onMove);
       pane?.removeEventListener("mouseleave", onLeave);
     };
   }, [editor]);
+
+  // ── ⌥↵: the block menu for the block under the caret ──────────────────────
+  useEffect(
+    () =>
+      editor.registerCommand(
+        KEY_ENTER_COMMAND,
+        (event) => {
+          if (!event?.altKey || event.shiftKey || event.metaKey || event.ctrlKey) return false;
+          const key = editor.getEditorState().read(() => {
+            const selection = $getSelection();
+            if (!$isRangeSelection(selection)) return null;
+            const block = selection.anchor.getNode().getTopLevelElement();
+            // The title line has no block menu, as it has no handle.
+            return block && block.getIndexWithinParent() > 0 ? block.getKey() : null;
+          });
+          const el = key ? editor.getElementByKey(key) : null;
+          if (!key || !el) return false;
+          event.preventDefault();
+          setHovered({ key, ...gripSpot(el) });
+          // Not during this keystroke's update: Lexical would take the focus
+          // back and the menu would read that as a click away and close.
+          afterFocusRestore(() => setMenuOpen(true));
+          return true;
+        },
+        COMMAND_PRIORITY_HIGH,
+      ),
+    [editor],
+  );
 
   // A block that leaves the document takes its handle with it.
   useEffect(
@@ -216,6 +276,9 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   // grip, so the drop resolves against the blocks wherever the pointer goes,
   // and the pane scrolls when it nears an edge.
   const pressRef = useRef<{ x: number; y: number } | null>(null);
+  const dragFrame = useRef(0);
+  const dragY = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(dragFrame.current), []);
   const dropAt = (clientY: number): number | null => {
     const root = editor.getRootElement();
     if (!root) return null;
@@ -259,8 +322,15 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
       setDragging(true);
       setMenuOpen(false);
     }
-    scrollPane(event.clientY);
-    showDropLine(dropAt(event.clientY));
+    // Layout is read once a frame, not on every pointermove.
+    dragY.current = event.clientY;
+    if (dragFrame.current) return;
+    dragFrame.current = requestAnimationFrame(() => {
+      dragFrame.current = 0;
+      if (!dragRef.current) return;
+      scrollPane(dragY.current);
+      showDropLine(dropAt(dragY.current));
+    });
   };
   const onGripUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
     const drag = dragRef.current;
@@ -298,9 +368,49 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
   const menu = hovered
     ? editor.getEditorState().read(() => {
         const node = $getNodeByKey(hovered.key);
-        return node ? $blockMenuFor(node) : null;
+        return node
+          ? { ...$blockMenuFor(node), words: $isTextBlock(node), text: node.getTextContent() }
+          : null;
       })
     : null;
+  // Moduo's own two: the block becomes a live task, or a subpage of this note.
+  const canTask = Boolean(menu?.words && bridge?.tasks.canEditTasks);
+  const canPage = Boolean(menu?.words && bridge?.createSubpage);
+  const turnToTask = () => {
+    if (!hovered || !bridge) return;
+    editor.focus();
+    convertBlockToTask(editor, bridge.tasks, hovered.key);
+  };
+  const turnToPage = () => {
+    if (!hovered || !menu || !bridge?.createSubpage) return;
+    const key = hovered.key;
+    const made = bridge.createSubpage(menu.text.trim());
+    if (!made) {
+      toast.error("Couldn't make a subpage here.");
+      return;
+    }
+    // The words move into the subpage's title: the block leaves this note,
+    // and comes back as a line of text where it was if the subpage can't be saved.
+    const words = menu.text.trim();
+    let at = -1;
+    editor.update(() => {
+      const node = $getNodeByKey(key);
+      if (!node) return;
+      at = node.getIndexWithinParent();
+      $deleteBlock(node);
+    });
+    void made.created.then((ok) => {
+      if (ok || at < 0) return;
+      editor.update(() => {
+        const line = $createParagraphNode().append($createTextNode(words));
+        const root = $getRoot();
+        const before = root.getChildAtIndex(at);
+        if (before) before.insertBefore(line);
+        else root.append(line);
+      });
+      toast.error("The subpage couldn't be saved, so its words are back in the note.");
+    });
+  };
 
   return (
     <>
@@ -331,20 +441,32 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
+                // Out of the tab order: the keyboard opens this menu with ⌥↵
+                // from the text, and Tab must not land on a hidden handle.
+                tabIndex={-1}
                 onPointerDown={onGripDown}
                 onPointerMove={onGripMove}
                 onPointerUp={onGripUp}
                 onPointerCancel={onGripCancel}
                 aria-label="Block menu — drag to move"
                 className={cn(
-                  "grid size-5 cursor-grab touch-none place-items-center rounded-sm text-muted-foreground/40 transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent hover:text-muted-foreground active:cursor-grabbing",
-                  (menuOpen || dragging) && "bg-accent text-muted-foreground",
+                  "grid size-5 cursor-grab touch-none place-items-center rounded-sm text-subtle-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-muted-foreground active:cursor-grabbing",
+                  (menuOpen || dragging) && "bg-state-active text-muted-foreground",
                 )}
               >
                 <GripVertical className="size-3.5" aria-hidden />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" side="bottom" className="w-52">
+            <DropdownMenuContent
+              align="start"
+              side="bottom"
+              className="w-52"
+              // Back to the text, not the handle (it isn't a tab stop).
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                editor.focus();
+              }}
+            >
               {menu.turnInto ? (
                 <DropdownMenuSub>
                   <DropdownMenuSubTrigger>
@@ -352,6 +474,19 @@ export function BlockHandlePlugin({ doc }: { doc: Y.Doc }) {
                     Turn into
                   </DropdownMenuSubTrigger>
                   <DropdownMenuSubContent>
+                    {canTask ? (
+                      <DropdownMenuItem onSelect={turnToTask}>
+                        <CheckSquare aria-hidden />
+                        Task
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canPage ? (
+                      <DropdownMenuItem onSelect={turnToPage}>
+                        <FilePlus2 aria-hidden />
+                        Page
+                      </DropdownMenuItem>
+                    ) : null}
+                    {canTask || canPage ? <DropdownMenuSeparator /> : null}
                     {TURN_INTO.map((t) => (
                       <DropdownMenuItem
                         key={t.id}

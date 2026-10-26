@@ -11,8 +11,9 @@
  *
  * Full keyboard path: every format has a shortcut, so the bar is a mouse-first
  * discoverability aid, never the only way in. ⌘B/⌘I/⌘U are Lexical rich-text
- * core; this plugin adds ⌘⇧S (strikethrough) + ⌘E (inline code), the two the
- * core doesn't bind. The tooltips advertise all of them.
+ * core; this plugin adds ⌘⇧S (strikethrough), ⌘E (inline code) and ⌘⌥M
+ * (comment), the ones the core doesn't bind. The tooltips advertise all of
+ * them. ⌥F10 moves focus into the bar (← → walk it, Esc goes back to the text).
  */
 
 import { $isCodeNode } from "@lexical/code";
@@ -24,16 +25,25 @@ import {
   BLUR_COMMAND,
   COMMAND_PRIORITY_LOW,
   FORMAT_TEXT_COMMAND,
+  KEY_DOWN_COMMAND,
   KEY_MODIFIER_COMMAND,
   type LexicalNode,
   SELECTION_CHANGE_COMMAND,
   type TextFormatType,
 } from "lexical";
 import { Bold, Code, Italic, Link2, MessageSquarePlus, Strikethrough } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 
 import { IconButton } from "@/components/ui/icon-button";
+import { FLOATING_SURFACE } from "@/components/ui/surface";
+import { cn } from "@/lib/utils";
 
 import { ADD_COMMENT_COMMAND } from "./comment-marks-plugin";
 import { OPEN_LINK_DIALOG_COMMAND } from "./link-dialog-plugin";
@@ -111,6 +121,11 @@ export function FormatToolbarPlugin({
   const [state, setState] = useState<ToolbarState | null>(null);
   /** The mouse is down in the editor: a selection is still being made. */
   const selectingRef = useRef(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const commentRef = useRef(comment);
+  useEffect(() => {
+    commentRef.current = comment;
+  });
 
   const recompute = useCallback(() => {
     if (selectingRef.current) {
@@ -206,9 +221,24 @@ export function FormatToolbarPlugin({
     const offUpdate = editor.registerUpdateListener(() => recompute());
     const offBlur = editor.registerCommand(
       BLUR_COMMAND,
-      () => {
+      (event: FocusEvent) => {
+        // Focus moving into the bar (⌥F10) keeps it up.
+        if (barRef.current?.contains(event.relatedTarget as Node | null)) return false;
         setState(null);
         return false;
+      },
+      COMMAND_PRIORITY_LOW,
+    );
+    // ⌥F10 (the toolbar key of every platform's text editors): into the bar.
+    const offToolbarKey = editor.registerCommand(
+      KEY_DOWN_COMMAND,
+      (event: KeyboardEvent) => {
+        if (event.key !== "F10" || !event.altKey || event.metaKey || event.ctrlKey) return false;
+        const first = barRef.current?.querySelector<HTMLElement>("button");
+        if (!first) return false;
+        event.preventDefault();
+        first.focus();
+        return true;
       },
       COMMAND_PRIORITY_LOW,
     );
@@ -218,7 +248,18 @@ export function FormatToolbarPlugin({
     const offModifier = editor.registerCommand(
       KEY_MODIFIER_COMMAND,
       (event: KeyboardEvent) => {
-        if (!(event.metaKey || event.ctrlKey) || event.altKey) return false;
+        if (!(event.metaKey || event.ctrlKey)) return false;
+        // ⌘⌥M: comment on the selection (Docs' key). `code` survives the
+        // Option layer, which turns `key` into "µ" on a Mac.
+        if (event.altKey && !event.shiftKey && event.code === "KeyM") {
+          if (!commentRef.current) return false;
+          const selection = $getSelection();
+          if (!$isRangeSelection(selection) || selection.isCollapsed()) return false;
+          event.preventDefault();
+          editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined);
+          return true;
+        }
+        if (event.altKey) return false;
         const key = event.key.toLowerCase();
         for (const s of SHORTCUTS) {
           if (key === s.key && event.shiftKey === s.needsShift) {
@@ -237,6 +278,7 @@ export function FormatToolbarPlugin({
       offSelection();
       offUpdate();
       offBlur();
+      offToolbarKey();
       offModifier();
     };
   }, [editor, editable, recompute]);
@@ -295,14 +337,40 @@ export function FormatToolbarPlugin({
 
   if (!editable || !state) return null;
 
+  // A toolbar is one tab stop walked with ← →; Esc hands focus back to the text.
+  const onBarKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const buttons = [...(barRef.current?.querySelectorAll<HTMLElement>("button") ?? [])];
+    const at = buttons.indexOf(document.activeElement as HTMLElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      editor.focus();
+    } else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && at !== -1) {
+      event.preventDefault();
+      const step = event.key === "ArrowRight" ? 1 : -1;
+      buttons[(at + step + buttons.length) % buttons.length]?.focus();
+    }
+  };
+
   return createPortal(
     <div
-      className={`fixed z-[var(--z-popover)] flex -translate-x-1/2 items-center gap-0.5 rounded-md border border-border bg-popover p-0.5 shadow-lg ${
-        state.below ? "" : "-translate-y-full"
-      }`}
+      ref={barRef}
+      className={cn(
+        FLOATING_SURFACE,
+        "fixed z-(--z-popover) flex -translate-x-1/2 items-center gap-0.5 p-0.5 shadow-lg",
+        !state.below && "-translate-y-full",
+      )}
       style={{ top: state.top, left: state.left }}
       role="toolbar"
+      tabIndex={-1}
       aria-label="Text formatting"
+      aria-orientation="horizontal"
+      onKeyDown={onBarKeyDown}
+      onBlur={(event) => {
+        // Focus left the bar for somewhere other than the text: it goes.
+        const to = event.relatedTarget as Node | null;
+        if (barRef.current?.contains(to) || editor.getRootElement()?.contains(to)) return;
+        setState(null);
+      }}
     >
       {ACTIONS.map(({ format, label, icon }) => {
         const active = state.formats[format];
@@ -333,7 +401,7 @@ export function FormatToolbarPlugin({
       {comment ? (
         <IconButton
           icon={MessageSquarePlus}
-          label="Comment"
+          label="Comment ⌘⌥M"
           className="text-muted-foreground"
           onPointerDown={(e) => e.preventDefault()}
           onClick={() => editor.dispatchCommand(ADD_COMMENT_COMMAND, undefined)}

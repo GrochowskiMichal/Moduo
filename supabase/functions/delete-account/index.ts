@@ -38,7 +38,7 @@ import {
   ErasureError,
   erasureErrorMessage,
 } from "../_shared/account-erasure.ts";
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -63,15 +63,10 @@ Deno.serve(async (req: Request) => {
       { auth: { persistSession: false } },
     );
 
-    const authHeader = req.headers.get("Authorization");
-    if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
-    if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
+    const caller = await verifiedPerson(supabase.auth, req.headers.get("Authorization"));
+    if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
+    if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
+    const user = caller.user;
 
     // supabase-js parses select() column strings at the type level, which can't be
     // checked against ErasureDb (TS2589), so only `from` is cast; storage and auth check.
