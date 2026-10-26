@@ -5,7 +5,8 @@
 //
 //   bun run eval:docs                        the 46 questions at the baseline commit, compared with the baseline
 //   bun run eval:docs --base HEAD            the same questions on this branch's docs (a before/after run)
-//   bun run eval:docs score <results.jsonl> [--record]    score a rig batch; --record makes it the baseline
+//   bun run eval:docs score <results.jsonl> [--regrade] [--record]    score a rig batch; --regrade
+//                                            applies the current keys to its answers; --record makes it the baseline
 //   bun run eval:docs sync [--check]         regenerate scripts/harness-ab/tasks/docs/ from questions.jsonl
 
 import { spawnSync } from "node:child_process";
@@ -13,7 +14,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import path from "node:path";
 
 import type { Row, Task } from "../../harness-ab/model";
-import { EVAL_DIR, loadQuestions, type Question } from "./grade";
+import { summarize } from "../../harness-ab/stream";
+import { EVAL_DIR, grade, loadQuestions, type Question } from "./grade";
 
 const ROOT = path.resolve(EVAL_DIR, "../../..");
 export const SET = "docs";
@@ -130,6 +132,8 @@ export type Baseline = Score & {
   batch: string;
   recordedAt: string;
   costUsd: number;
+  /** The keys were corrected after the run and applied to its stored answers. */
+  regraded: boolean;
 };
 
 /** A run against the baseline: the score may not drop, and every lost question is named. */
@@ -149,36 +153,51 @@ const readRows = (file: string) =>
     .filter(Boolean)
     .map((l) => JSON.parse(l) as Row);
 
+/**
+ * A fixed key applied to answers already given: each scored row is graded again from its run's
+ * transcript, so correcting a key doesn't need the agents re-run.
+ */
+export function regrade(rows: Row[], answerOf: (row: Row) => string | null): Row[] {
+  const keys = new Map(loadQuestions().map((q) => [q.id, q]));
+  return rows.map((r) => {
+    const q = keys.get(r.task);
+    const answer = r.outcome === "pass" || r.outcome === "fail" ? answerOf(r) : null;
+    if (!q || answer === null) return r;
+    return { ...r, outcome: grade(q, answer).pass ? "pass" : "fail" };
+  });
+}
+
+const transcriptAnswer = (r: Row) => {
+  const file = r.artifacts && path.join(ROOT, r.artifacts, "stream.jsonl");
+  return file && existsSync(file) ? summarize(readFileSync(file, "utf8")).result : null;
+};
+
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
-function scoreFile(file: string, record: boolean) {
-  const rows = readRows(file);
-  const s = score(rows);
-  console.log(`docs eval: ${s.pass}/${s.runs} = ${pct(s.score)} (${path.relative(ROOT, file)})`);
-  if (s.errors.length) console.log(`  errored, not scored: ${s.errors.join(", ")}`);
-  const failed = Object.entries(s.questions).filter(([, share]) => share < 1);
-  if (failed.length) console.log(`  missed: ${failed.map(([id]) => id).join(", ")}`);
-  if (record) {
-    if (s.errors.length) {
-      console.error("not recorded: re-run the errored questions first");
-      return 1;
-    }
-    const first = rows[0];
-    const baseline: Baseline = {
-      ...s,
-      base: first?.base ?? BASE,
-      arm: first?.arm ?? ARM,
-      model: first?.model ?? "",
-      effort: first?.effort ?? null,
-      repeats: Math.max(...rows.map((r) => r.repeat)),
-      batch: first?.batch ?? "",
-      recordedAt: new Date().toISOString(),
-      costUsd: Number(rows.reduce((a, r) => a + (r.agent?.costUsd ?? 0), 0).toFixed(2)),
-    };
-    writeFileSync(BASELINE, json(baseline));
-    console.log(`baseline recorded: ${path.relative(ROOT, BASELINE)}`);
-    return 0;
+function recordBaseline(rows: Row[], s: Score, regraded: boolean) {
+  if (s.errors.length) {
+    console.error("not recorded: re-run the errored questions first");
+    return 1;
   }
+  const first = rows[0];
+  const baseline: Baseline = {
+    ...s,
+    base: first?.base ?? BASE,
+    arm: first?.arm ?? ARM,
+    model: first?.model ?? "",
+    effort: first?.effort ?? null,
+    repeats: Math.max(...rows.map((r) => r.repeat)),
+    batch: first?.batch ?? "",
+    regraded,
+    recordedAt: new Date().toISOString(),
+    costUsd: Number(rows.reduce((a, r) => a + (r.agent?.costUsd ?? 0), 0).toFixed(2)),
+  };
+  writeFileSync(BASELINE, json(baseline));
+  console.log(`baseline recorded: ${path.relative(ROOT, BASELINE)}`);
+  return 0;
+}
+
+function againstBaseline(s: Score) {
   if (!existsSync(BASELINE)) return 0;
   const baseline = JSON.parse(readFileSync(BASELINE, "utf8")) as Baseline;
   const c = compare(s, baseline);
@@ -189,6 +208,21 @@ function scoreFile(file: string, record: boolean) {
   if (c.gained.length) console.log(`  gained: ${c.gained.join(", ")}`);
   console.log(c.ok ? "OK: at least the baseline" : "BELOW THE BASELINE (or runs errored)");
   return c.ok ? 0 : 1;
+}
+
+function scoreFile(file: string, record: boolean, again = false) {
+  const read = readRows(file);
+  const rows = again ? regrade(read, transcriptAnswer) : read;
+  if (again) {
+    const changed = rows.filter((r, i) => r.outcome !== read[i]?.outcome).map((r) => r.task);
+    console.log(`regraded from the transcripts; changed: ${changed.join(", ") || "none"}`);
+  }
+  const s = score(rows);
+  console.log(`docs eval: ${s.pass}/${s.runs} = ${pct(s.score)} (${path.relative(ROOT, file)})`);
+  if (s.errors.length) console.log(`  errored, not scored: ${s.errors.join(", ")}`);
+  const failed = Object.entries(s.questions).filter(([, share]) => share < 1);
+  if (failed.length) console.log(`  missed: ${failed.map(([id]) => id).join(", ")}`);
+  return record ? recordBaseline(rows, s, again) : againstBaseline(s);
 }
 
 function run(argv: string[]) {
@@ -215,7 +249,7 @@ function main(argv: string[]) {
   if (cmd === "score") {
     const file = rest.find((a) => !a.startsWith("--"));
     if (!file) throw new Error("usage: score <results.jsonl> [--record]");
-    return scoreFile(path.resolve(file), rest.includes("--record"));
+    return scoreFile(path.resolve(file), rest.includes("--record"), rest.includes("--regrade"));
   }
   return run(cmd === "run" ? rest : argv);
 }

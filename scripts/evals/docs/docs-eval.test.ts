@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "@rstest/core";
 import { loadSet, plan, type Row, taskProblems } from "../../harness-ab/model";
 import { refuseTask } from "../../harness-ab/safety";
 import { EVAL_DIR, grade, loadQuestions } from "./grade";
-import { compare, drift, score, SET } from "./run";
+import { compare, drift, regrade, score, SET } from "./run";
 
 // The docs eval (specs/harness-v3.md, AC32): 46 questions with keys that accept their own gold answer
 // and reject an empty or outdated one, a rig task set generated from them, and a score that can't
@@ -137,6 +137,15 @@ describe("score", () => {
     expect(compare(worse, baseline).ok).toBe(false);
     const errored = score([row("E01", "pass"), row("E02", "error")]);
     expect(compare(errored, baseline).ok).toBe(false);
+  });
+
+  it("regrades stored answers with the current keys and leaves errored runs alone", () => {
+    const q = questions.find((x) => x.staleAnswer);
+    if (!q) throw new Error("no trap");
+    const rows = [row(q.id, "fail"), row(q.id, "pass", 2), row(q.id, "error", 3)];
+    const answers = [q.gold, q.staleAnswer ?? "", q.gold];
+    const out = regrade(rows, (r) => answers[r.repeat - 1] ?? null);
+    expect(out.map((r) => r.outcome)).toEqual(["pass", "fail", "error"]);
   });
 
   it("has a recorded baseline over all 46 questions", () => {
