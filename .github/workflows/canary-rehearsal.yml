@@ -1,0 +1,133 @@
+name: canary-rehearsal
+
+# Staging rehearsal of the production canary (specs/harness-v3.md, HV-28, AC23): proves on the
+# staging Worker that a forced error spike mid-soak rolls the version back by itself.
+#
+# Uploads the commit as a version of moduo-app-staging with CANARY_FORCE_ERROR_AFTER set three
+# minutes ahead (apps/app/edge/config.ts, rehearsalError: honoured on staging only), then runs
+# scripts/release/canary.ts as the production deploy does, with a short soak. The 0% smoke passes,
+# the version takes 10% of staging, starts throwing three minutes in, and the canary must put the
+# old version back at 100%. The job passes only on that rollback (--expect-rollback). Staging is
+# left on the version it ran before.
+#
+# Runs when the canary or the edge Worker changes on develop (not mike: staging would serve
+# unmerged code to its 10%), and by hand from the Actions tab.
+on:
+  workflow_dispatch:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/release/canary.ts
+      - scripts/smoke-hosting.ts
+      - apps/app/edge/**
+      - .github/workflows/canary-rehearsal.yml
+      - .github/workflows/_deploy-web.yml
+
+# One rehearsal at a time; never cancelled mid-way (it would leave staging split; the cleanup
+# step undoes it anyway). A staging deploy landing mid-rehearsal wins: the canary leaves it alone
+# and the rehearsal goes red ("left alone"); run it again. Not app-staging's group: GitHub keeps one
+# waiting run per group, so sharing it could cancel a waiting staging deploy.
+#
+# The rehearsal version stays in the Worker's version list with its forced error armed: never pick
+# it in the dashboard's Rollback (its message says "canary rehearsal").
+concurrency:
+  group: canary-rehearsal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  WRANGLER: npx --yes wrangler@4.147.0
+
+jobs:
+  rehearse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Only develop, mike and v* tags may use this environment, which holds CLOUDFLARE_API_TOKEN.
+    environment: cloudflare-deploy
+    env:
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build the web app
+        run: |
+          MODUO_VERSION="$(cat VERSION)-rc"
+          export MODUO_VERSION MODUO_BUILD="${SHA::7}"
+          bun run build:web
+
+      # Its own build label, so the canary can tell it from the version staging serves.
+      - name: Upload the rehearsal version
+        id: upload
+        working-directory: apps/app
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_OUTPUT_FILE_PATH: ${{ runner.temp }}/wrangler-upload.ndjson
+        run: |
+          build="r${SHA::7}"
+          after=$(( ($(date +%s) + 180) * 1000 ))
+          $WRANGLER versions upload --env staging --var "BUILD:$build" --var "CANARY_FORCE_ERROR_AFTER:$after" \
+            --message "canary rehearsal ${SHA::7}" 2>&1 | tee "$RUNNER_TEMP/upload.log"
+          id="$(jq -r 'select(.type == "version-upload") | .version_id // empty' "$WRANGLER_OUTPUT_FILE_PATH" 2>/dev/null | tail -1 || true)"
+          [ -n "$id" ] || id="$(grep -oiE 'version id: *[0-9a-f-]{36}' "$RUNNER_TEMP/upload.log" | grep -oE '[0-9a-f-]{36}' | tail -1 || true)"
+          [ -n "$id" ] || { echo "::error::no version id in the wrangler output"; exit 1; }
+          echo "version=$id" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Canary with a forced spike (must roll back)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERSION_ID: ${{ steps.upload.outputs.version }}
+          BUILD: ${{ steps.upload.outputs.build }}
+        run: |
+          set +e
+          bun scripts/release/canary.ts run --worker moduo-app-staging --version "$VERSION_ID" \
+            --url https://app.staging.moduo.app --build "$BUILD" --expect stagingPortal=true \
+            --minutes 8 --interval 15 --without-affinity soak --expect-rollback \
+            --state "$RUNNER_TEMP/canary.json" > "$RUNNER_TEMP/canary.md"
+          code=$?
+          set -e
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/canary.md"
+          exit $code
+
+      - name: Staging serves the old build again
+        env:
+          BUILD: ${{ steps.upload.outputs.build }}
+        run: |
+          for _ in $(seq 1 10); do
+            live="$(curl -s https://app.staging.moduo.app/config.json | jq -r '.build // empty')"
+            [ -n "$live" ] && [ "$live" != "$BUILD" ] && { echo "Staging serves $live: rolled back." | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; }
+            sleep 3
+          done
+          echo "::error::staging still serves the rehearsal build $BUILD"
+          exit 1
+
+      - name: Undo an unfinished canary
+        if: cancelled() || failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bun scripts/release/canary.ts abort --state "$RUNNER_TEMP/canary.json" | tee -a "$GITHUB_STEP_SUMMARY"

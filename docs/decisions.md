@@ -10,6 +10,11 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-26 · HV-28: the app Worker ships as a canary driven by our own script over Cloudflare's deployments API, judged by probes against the new version plus Workers analytics, and it needs zone-level version affinity to split.
+- 2026-10-26 · HV-7: GitHub events move a block's Moduo task through `moduo-sync.yml`, on `pull_request_target`, planning without the key and applying in the `moduo-sync` environment.
+- 2026-10-26 · HV-6: the AI review runs once per PR into develop, advisory, on Sonnet 5, with the workflow token and a Max OAuth token in its own environment.
+- 2026-10-26 · HV-16: the RLS access matrix is a markdown table generated into the existing SQL test harness, not pgTAP; policy mutants run in the test's own rolled-back transaction, and equivalent mutants are listed with a reason.
+- 2026-10-26 · HV-10: area rules are `.claude/rules/*.md` with `paths:`, `incident:` and `expires:`, and `lint:rules` fails `verify` on a rule or agent doc that names a missing file or `bun run` script.
 - 2026-10-23 · HV-11: supersession is data. Every decision entry has a status line (current, superseded, dropped) and links to what it replaces or what replaced it; `docs/decisions.md` is generated from the area files and CI fails when it is stale.
 - 2026-10-23 · HV-9: Cloudflare's security-audit skill is vendored at a pinned commit, its runs live outside the repo, and unfixed findings never reach git.
 - 2026-10-24 · MOD-552: the releases-repo token lives in tag-only environments, and builds after the bridge stop listing GitHub as an update endpoint.
@@ -55,6 +60,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-10-26 · A new link needs Edit on at least one of its two items; `exposed_notes` takes no writes (MOD-593, MOD-594, Mike's call).
 - 2026-10-24 · Four item checks closed (MOD-553, MOD-572, MOD-549, MOD-573): a note's new parent needs Edit and putting a note on the web by moving it needs ws.publish and Full; contact ops check the contact; removing a task dependency through its link needs Edit on the waiting task; member exceptions are checked as stored and when a role change would switch them on.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: at most 10 messages in 10 s and 30 in 60 s per person per workspace (a workspace's apps share one budget of the same size), and one "typing" broadcast per 2.5 s per person and conversation.
 - 2026-10-14 · Chat v1 privacy rules: a conversation keeps its read rule everywhere, typing is one server-written private topic per conversation, and chat capabilities and announcement mode answer only to people who can read.

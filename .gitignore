@@ -60,6 +60,7 @@ supabase/.temp/
 !.claude/hooks/
 !.claude/settings.json
 !.claude/settings.lane.json
+!.claude/settings.implement.json
 !.claude/sandbox/
 !.claude/agents/
 !.claude/rules/

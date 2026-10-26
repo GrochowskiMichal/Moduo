@@ -5,7 +5,8 @@ name: deploy-prod
 # (/ship); this is for re-runs: a deploy that failed half-way, a target deployed alone, or rolling
 # forward again after a Cloudflare rollback. Same check as the release
 # (scripts/release/check-tag.sh): the tag's commit is on develop, passed `checks`, and VERSION
-# equals the tag. The deploys themselves are _deploy-web.yml and _deploy-mcp-proxy.yml.
+# equals the tag. The deploys themselves are _deploy-web.yml (the app as a canary: 0%, 10% for
+# 15 minutes, then 100% or a rollback by itself; HV-28) and _deploy-mcp-proxy.yml.
 #
 # Manual, owner only. Production is tags only: Desktop Release (production) takes a tag too.
 # Rollback: docs/release.md §4.

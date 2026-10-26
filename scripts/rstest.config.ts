@@ -13,6 +13,7 @@ export default defineConfig({
     "scripts/dns-diff.test.ts",
     "scripts/db-types.test.ts",
     "scripts/db-test.test.ts",
+    "scripts/db/*.test.ts",
     "scripts/check-boundaries.test.ts",
     "scripts/check-bundle-size.test.ts",
     "tools/ast-grep/lint.test.ts",
