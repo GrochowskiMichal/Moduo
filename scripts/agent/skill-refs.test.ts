@@ -134,6 +134,28 @@ describe("project skills (AC15)", () => {
   });
 });
 
+describe("build engine (HV-26, AC16, AC18)", () => {
+  const build = () => steps(skill("s2").text).find((s) => /^4\. \*\*Build\.\*\*/.test(s)) ?? "";
+
+  it("writes and commits the contract tests before any code, then freezes them", () => {
+    const text = build();
+    expect(text).toMatch(/\*\*Contract first\.\*\*/);
+    expect(text).toMatch(/before any code/);
+    expect(text).toContain("`Contract tests for <ID>`");
+    expect(text).toContain(".claude/settings.implement.json");
+    expect(text).toContain("lane.sh --implement");
+  });
+
+  it("races three drafts in separate worktrees on Tier 2 and keeps one by mutants", () => {
+    const text = build();
+    expect(text).toMatch(/\*\*Tier 2: best of three\.\*\*/);
+    expect(text).toContain("`bun run wt <kebab>-d1` to `-d3`");
+    expect(text).toContain("`bun run drafts <task branch> <d1 path> <d2 path> <d3 path>`");
+    expect(text).toMatch(/mutant kill rate/);
+    expect(text).toMatch(/PR body under \*\*Drafts\*\*/);
+  });
+});
+
 describe("one validator step (AC17)", () => {
   const validatorSteps = (name: string) =>
     steps(skill(name).text).filter((s) => /\bvalidator\b/.test(s));
