@@ -1,5 +1,5 @@
 -- MOD-576 · The host an OAuth sign-in returns to, read the way a browser does
--- or not at all (supabase/migrations/20261024130000_oauth_redirect_host_userinfo.sql).
+-- or not at all (supabase/migrations/20261024160000_oauth_redirect_host_userinfo.sql).
 --
 -- Cast: E owns W. C is the real Claude (returns to claude.ai). A registered a
 -- redirect whose userinfo hides evil.com behind claude.ai, B one whose
