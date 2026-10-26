@@ -235,6 +235,8 @@ jobs:
             [ -n "$f" ] || continue
             case "$f" in
               # Edge Functions have their own unit tests; the SQL tests read the schema only.
+              # The RLS matrix's source and its generator and mutant runner (HV-16).
+              supabase/tests/rls_matrix.md|scripts/db/*) db=true ;;
               *.md|supabase/functions/*) ;;
               supabase/*|scripts/db-test.ts|scripts/local/stack.sh) db=true ;;
             esac

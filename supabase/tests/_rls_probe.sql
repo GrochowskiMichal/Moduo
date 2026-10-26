@@ -3,7 +3,7 @@
 -- test.mx_allow (the markdown's allow list).
 --
 -- Every SECURITY DEFINER function in public that `authenticated` may execute
--- is called as `outsider`, as `member` and with the outsider's API key KX
+-- is called as `outsider`, as `member`, as `viewer` and with the outsider's API key KX
 -- (the way the connector calls), and so is every service-role-only intent op
 -- the connector calls with a key (`*_op_*`, share_visible_ids). Each argument is filled
 -- from the world by its name and type, once per entity kind when it takes a
@@ -220,7 +220,7 @@ BEGIN
         THEN format('SELECT string_agg(x::text, E''\n'') FROM public.%I(%s) AS x', f.fn, coalesce(v_args, ''))
         ELSE format('SELECT (public.%I(%s))::text', f.fn, coalesce(v_args, '')) END;
       -- owner is the control: what they reach shows the probe can tell.
-      FOREACH v_who IN ARRAY CASE WHEN f.signed_in THEN ARRAY['outsider', 'member', 'key:KX', 'owner'] ELSE ARRAY['key:KX'] END LOOP
+      FOREACH v_who IN ARRAY CASE WHEN f.signed_in THEN ARRAY['outsider', 'member', 'viewer', 'key:KX', 'owner'] ELSE ARRAY['key:KX'] END LOOP
         SELECT * INTO v_call FROM test.mx_call(v_who, v_sql, v_base);
         INSERT INTO test.mx_result VALUES (f.fn, v_who, v_kind, v_sql, v_call.r, v_call.changed);
       END LOOP;
@@ -261,10 +261,25 @@ BEGIN
   PERFORM test.ok((SELECT count(DISTINCT fn) FROM test.mx_result WHERE who = 'owner' AND changed) >= 40,
     'control: the owner changes the private rows through at least 40 of them',
     (SELECT count(DISTINCT fn)::text FROM test.mx_result WHERE who = 'owner' AND changed));
+  -- A function whose filled-in arguments fail even for the owner proves nothing
+  -- for anyone else: rls_matrix.md lists each, and the list must stay exact.
+  PERFORM test.ok(NOT EXISTS (
+      SELECT fn FROM test.mx_result WHERE who = 'owner' GROUP BY fn HAVING bool_and(r NOT LIKE 'ok%')
+      EXCEPT SELECT fn FROM test.mx_unreached),
+    'every function the probe can''t reach as the owner is listed in rls_matrix.md',
+    (SELECT string_agg(fn, ', ') FROM (SELECT fn FROM test.mx_result WHERE who = 'owner' GROUP BY fn
+       HAVING bool_and(r NOT LIKE 'ok%') EXCEPT SELECT fn FROM test.mx_unreached) x));
+  PERFORM test.ok(NOT EXISTS (
+      SELECT fn FROM test.mx_unreached
+      EXCEPT SELECT fn FROM test.mx_result WHERE who = 'owner' GROUP BY fn HAVING bool_and(r NOT LIKE 'ok%')),
+    'every function rls_matrix.md lists as not reached is still out of reach (else drop it from the list)',
+    (SELECT string_agg(fn, ', ') FROM (SELECT fn FROM test.mx_unreached
+       EXCEPT SELECT fn FROM test.mx_result WHERE who = 'owner' GROUP BY fn HAVING bool_and(r NOT LIKE 'ok%')) x));
 
   FOR g IN SELECT fn, who FROM test.mx_result WHERE who <> 'owner' GROUP BY fn, who ORDER BY fn, who LOOP
     SELECT * INTO v_bad FROM test.mx_result r
-    WHERE r.fn = g.fn AND r.who = g.who AND (r.changed OR r.r ~* 'hv16-secret')
+    -- viewer sees the shared items' text by right: only a change counts against them.
+    WHERE r.fn = g.fn AND r.who = g.who AND (r.changed OR (g.who <> 'viewer' AND r.r ~* 'hv16-secret'))
     ORDER BY r.kind NULLS FIRST LIMIT 1;
     SELECT why INTO v_allowed FROM test.mx_allow a
     WHERE a.fn = g.fn AND a.persona = CASE WHEN g.who LIKE 'key:%' THEN 'key' ELSE g.who END;

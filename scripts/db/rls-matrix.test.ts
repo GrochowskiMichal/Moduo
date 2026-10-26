@@ -126,6 +126,13 @@ describe("parseMatrix", () => {
   });
 });
 
+describe("the not-reached list", () => {
+  it("reads the names in the ```text unreached block", () => {
+    const text = `${md(table(rows(() => "✗")))}\n## Not reached by the probe\n\n\`\`\`text unreached\nfn_a\nfn_b\n\`\`\`\n`;
+    expect(parseMatrix(text).unreached).toEqual(["fn_a", "fn_b"]);
+  });
+});
+
 describe("renderTable", () => {
   it("checks each op once without RLS, then every persona with a mark, skipping –", () => {
     const m = parseMatrix(md(table(rows((p) => (p === "owner" ? "✓" : p === "app" ? "–" : "✗")))));

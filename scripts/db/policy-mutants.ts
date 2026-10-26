@@ -238,14 +238,20 @@ type Outcome = "caught" | "survived" | "equivalent" | "stale" | "broken";
 
 /** Runs one mutant and says what became of it, printing a line. */
 function judge(m: Mutant, file: string, before: string[], why: string | undefined): Outcome {
-  writeFileSync(file, `${m.sql}\n`);
+  // A mutant waits at most 5 s for its lock: the stack is shared with other sessions.
+  writeFileSync(file, `SET LOCAL lock_timeout = '5s';\n${m.sql}\n`);
   const run = runTable(m.table, file);
-  const ownError = run.output.split("\n").find((l) => l.includes(file) && l.includes("ERROR"));
-  if (ownError) {
-    console.log(`! ${m.id} — the mutant didn't apply: ${ownError}`);
+  const fresh = failuresOf(run.output).filter((f) => !before.includes(f));
+  // Only a persona's cell catches a mutant. An SQL error (the mutant's own, the
+  // world's or a helper's) or a failed sanity run means the run proved nothing.
+  const broken = fresh.find(
+    (f) => f.startsWith("ERROR:") || f.endsWith("reaches its row as owner without RLS"),
+  );
+  if (broken !== undefined) {
+    console.log(`! ${m.id} — the run broke instead of judging: ${broken}`);
     return "broken";
   }
-  const caught = failuresOf(run.output).filter((f) => !before.includes(f));
+  const caught = fresh;
   if (why !== undefined) {
     if (caught.length > 0)
       console.log(

@@ -390,7 +390,7 @@ DELETE FROM public.focus_runs WHERE id = {FR}
 
 ## Table: workspace_members
 
-Everyone in W sees the roster. Nobody joins, changes a role or removes someone else by writing the table (invites and `workspace_op_*` do that); you may leave, and the owner may remove a member directly.
+Everyone in W sees the roster. Nobody joins, changes a role or removes someone else by writing the table (invites and `workspace_op_*` do that); you may leave, and the owner may remove a member directly. The owner deleting their own row (`leave`) goes through too; it costs them nothing, since their access comes from `workspaces.owner_id`, not the roster.
 
 ```sql select
 SELECT 1 FROM public.workspace_members WHERE workspace_id = {W} AND user_id = {member}
@@ -508,9 +508,135 @@ Mutants `bun run db:mutants` lets live because they can't change any outcome, ea
 
 ## RPC probe
 
-`rls_matrix_rpcs.test.sql` calls every SECURITY DEFINER function in `public` that `authenticated` may execute, as `outsider` and as `member`, with the world's private ids filled in by parameter name (and once per entity kind when it takes a type), and the `service_role`-only functions that act for an API key with the outsider's key. A call fails its check when its output carries `HV16-SECRET`, or when it changed the private rows (the fingerprint of T, P, N, C, the private channel and its messages, the agent session, the Focus run, the keys, W's roster, roles and grants). It also checks that every such function pins `search_path` and that `anon` executes none of them.
+`rls_matrix_rpcs.test.sql` calls every SECURITY DEFINER function in `public` that `authenticated` may execute, as `outsider`, `member` and `viewer`, with the world's private ids filled in by parameter name (and once per entity kind when it takes a type), and the `service_role`-only functions that act for an API key with the outsider's key. A call fails its check when its output carries `HV16-SECRET`, or when it changed the private rows (the fingerprint of T, P, N, C, the private channel and its messages, the agent session, the Focus run, the keys, W's roster, roles and grants). It also checks that every such function pins `search_path` and that `anon` executes none of them.
 
-It is a net, not a proof: a call that fails on its arguments proves nothing, so the matrix above and each module's own tests stay the depth. Calls allowed to show or change what they do:
+It is a net, not a proof: a call that fails on its arguments proves nothing, so the matrix above and each module's own tests stay the depth. The owner runs every call too, as the control; the functions whose filled-in arguments fail even for the owner are listed under **Not reached by the probe**, and the probe fails when that list is off either way. Calls allowed to show or change what they do:
 
 | function | as | why |
 | --- | --- | --- |
+| `chat_op_leave` | viewer | viewer is in the private channel; leaving changes their own membership. |
+| `chat_op_remove_member` | viewer | The probe names viewer as the person to remove, so this is viewer leaving. |
+| `chat_op_mark_unread` | viewer | Their own read marker in a channel they're in. |
+| `chat_op_pin` | viewer | Anyone in a conversation pins its messages (chat decisions). |
+| `chat_op_mark_decision` | viewer | Anyone in a conversation marks a decision. |
+| `comments_op_add` | viewer | View is enough to comment on an item. |
+
+## Not reached by the probe
+
+What the probe calls but can't get past argument checks, even as the owner (ids of rows the world lacks: areas, sections, events, email threads, imports; closed vocabularies it fills with a placeholder; JSON patches with other fields). These have only nominal probe coverage. Shrink the list by giving the world the row, or `test.mx_arg` the value, then drop the name here.
+
+```text unreached
+areas_op_move
+areas_op_update
+attachments_op_abandon
+attachments_op_begin
+attachments_op_delete
+attachments_op_finalize
+attachments_op_restore
+booking_hosts_set
+calendar_op_account_remove
+calendar_op_account_upsert
+calendar_op_event_create
+calendar_op_event_delete
+calendar_op_event_restore
+calendar_op_event_update
+calendar_op_mirror_events
+chat_op_attach_to_chain
+chat_op_create_channel
+chat_op_custom_emoji_add
+chat_op_custom_emoji_remove
+chat_op_move_messages
+chat_op_open_dm
+chat_op_react
+chat_op_remind
+chat_op_restore_channel
+chat_op_set_prefs
+chat_op_typing
+chat_op_wrap_up
+comments_op_add_anchored
+comments_op_react
+comments_op_resolve
+companies_op_delete
+companies_op_set_details
+companies_op_update
+contact_group_add
+contacts_op_add_field_def
+contacts_op_create
+contacts_op_restore
+contacts_op_update
+email_op_account_upsert
+email_op_clear_follow_up
+email_op_follow_up
+email_op_follow_up_due
+email_op_link
+email_op_ref_remove
+email_op_ref_upsert
+email_op_snooze
+email_op_snooze_due
+email_op_unsnooze
+focus_op_run_end
+focus_op_run_save
+focus_op_run_start
+imports_op_finish
+imports_op_project_create
+imports_op_section_create
+imports_op_undo
+links_op_set_kind
+notes_op_create
+notes_op_import
+notes_op_move
+notes_op_purge
+notes_op_restore
+project_statuses_op_create
+project_statuses_op_delete
+project_statuses_op_update
+project_templates_op_apply
+project_templates_op_starter
+projects_op_move
+push_op_subscribe
+sections_op_move
+sections_op_update
+share_defaults_set
+task_templates_op_apply
+task_views_op_move
+task_views_op_update
+tasks_op_agent_report
+tasks_op_agent_session_post
+tasks_op_claim
+tasks_op_create_with
+tasks_op_move_occurrence
+tasks_op_queue_add
+tasks_op_queue_move_to_end
+tasks_op_queue_reorder
+tasks_op_reminder_add
+tasks_op_reminder_remove
+tasks_op_session_add
+tasks_op_session_remove
+tasks_op_session_update
+tasks_op_set_status
+tasks_op_skip_occurrence
+tasks_op_track_time
+tasks_op_trash_purge
+tasks_op_update_with
+tasks_op_waiting_add
+tasks_op_waiting_remove
+teams_op_add_member
+teams_op_remove_member
+teams_op_update
+templates_op_update
+user_op_client_seen
+user_op_save_status
+user_op_set_chat_prefs
+user_op_set_status
+user_op_set_time_region
+user_op_set_time_zone
+workspace_api_keys_connect_oauth
+workspace_api_keys_create
+workspace_api_keys_oauth_request
+workspace_api_keys_set_scopes
+workspace_op_accept_invite
+workspace_op_role_delete
+workspace_op_role_upsert
+workspace_op_set_member_access
+workspace_op_set_task_key
+```

@@ -54,6 +54,8 @@ export type Matrix = {
   tables: Table[];
   rpcAllow: RpcAllow[];
   equivalent: Equivalent[];
+  /** Functions the probe can't call through to their body, even as the owner. */
+  unreached: string[];
 };
 
 const CELL: Record<string, Cell> = { "✓": "allow", "✗": "deny", "–": "skip" };
@@ -146,7 +148,7 @@ function parseList(lines: string[], width: number, what: string): string[][] {
 
 /** The markdown's sections: world, tables (ops + cells), equivalent mutants and the RPC allow list. */
 export function parseMatrix(md: string): Matrix {
-  const m: Matrix = { world: "", tables: [], rpcAllow: [], equivalent: [] };
+  const m: Matrix = { world: "", tables: [], rpcAllow: [], equivalent: [], unreached: [] };
   for (const section of md.split(/^## /m).slice(1)) {
     const heading = section.slice(0, section.indexOf("\n")).trim();
     const blocks = [...section.matchAll(/^```sql ([a-z_]+)( rls-alone)?\n([\s\S]*?)^```$/gm)].map(
@@ -157,6 +159,9 @@ export function parseMatrix(md: string): Matrix {
     else if (heading.startsWith("Table: ")) m.tables.push(parseTable(heading, blocks, lines));
     else if (heading === "RPC probe") {
       m.rpcAllow = parseList(lines, 3, "RPC allow line").map(([fn, as, why]) => ({ fn, as, why }));
+    } else if (heading === "Not reached by the probe") {
+      const list = section.match(/^```text unreached\n([\s\S]*?)^```$/m)?.[1] ?? "";
+      m.unreached = list.split(/\s+/).filter((f) => f.length > 0);
     } else if (heading === "Equivalent mutants") {
       m.equivalent = parseList(lines, 2, "equivalent mutant line").map(([id, why]) => ({
         id,
@@ -198,7 +203,7 @@ export function renderTable(t: Table): string {
   return out.join("\n");
 }
 
-export function renderRpcs(allow: RpcAllow[]): string {
+export function renderRpcs(allow: RpcAllow[], unreached: string[]): string {
   const values = allow.map((a) => `  (${lit(a.fn)}, ${lit(a.as)}, ${lit(a.why)})`);
   return [
     HEADER("RPC probe"),
@@ -207,6 +212,13 @@ export function renderRpcs(allow: RpcAllow[]): string {
     "CREATE TABLE test.mx_allow (fn text NOT NULL, persona text NOT NULL, why text NOT NULL);",
     ...(values.length > 0
       ? ["INSERT INTO test.mx_allow (fn, persona, why) VALUES", `${values.join(",\n")};`]
+      : []),
+    "",
+    "CREATE TABLE test.mx_unreached (fn text PRIMARY KEY);",
+    ...(unreached.length > 0
+      ? [
+          `INSERT INTO test.mx_unreached (fn) VALUES\n${unreached.map((f) => `  (${lit(f)})`).join(",\n")};`,
+        ]
       : []),
     "",
     "\\ir _rls_probe.sql",
@@ -224,7 +236,7 @@ export function generate(md: string): Map<string, string> {
   const files = new Map<string, string>();
   files.set("_rls_world.sql", renderWorld(m.world));
   for (const t of m.tables) files.set(`rls_matrix_${t.name}.test.sql`, renderTable(t));
-  files.set("rls_matrix_rpcs.test.sql", renderRpcs(m.rpcAllow));
+  files.set("rls_matrix_rpcs.test.sql", renderRpcs(m.rpcAllow, m.unreached));
   return files;
 }
 
