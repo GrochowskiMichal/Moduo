@@ -117,11 +117,16 @@ export const webAuth: AuthRuntime = {
         data: { display_name: displayName },
       });
       if (error) return { data: { displayName }, error: toError(error) };
-      // Also update profiles table
+      // Also update profiles table; teammates read the name from there, so a
+      // failed write is a failed rename.
       const uid = user?.id;
       if (uid) {
-        await supabaseClient.from("profiles").update({ display_name: displayName }).eq("id", uid);
+        const { error: profileError } = await supabaseClient
+          .from("profiles")
+          .update({ display_name: displayName })
+          .eq("id", uid);
         bootReads.invalidate(`profile:${uid}`); // the cached row now has a stale name
+        if (profileError) return { data: { displayName }, error: toError(profileError) };
       }
       return { data: { displayName }, error: null };
     } catch (error) {

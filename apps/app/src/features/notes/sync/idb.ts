@@ -171,15 +171,30 @@ function notesOpener() {
   return opener;
 }
 
+/** A count read from the device, or "unknown" when the database couldn't be read. */
+export type PendingCount = number | "unknown";
+
 /**
  * Total queued (unsynced) entries across BOTH notes outboxes, everyone's —
  * the Advanced → "reset local cache" data-loss guard reads this before wiping
- * the notes DBs (DF-19g). Fails soft to 0 when IndexedDB is unavailable.
+ * the notes DBs (DF-19g). 0 when this device has no IndexedDB (nothing can be
+ * queued here); "unknown" when the database or its stores couldn't be read,
+ * so a failed open never reads as "nothing to lose".
  */
-export async function countPendingOutbox(): Promise<number> {
-  const docs = await withStore("docOutbox", "readonly", (s) => req(s.count()), 0);
-  const metas = await withStore("metaOutbox", "readonly", (s) => req(s.count()), 0);
-  return docs + metas;
+export async function countPendingOutbox(): Promise<PendingCount> {
+  const opened = await openNotesDbResult();
+  if (opened.kind === "none") return 0;
+  if (opened.kind === "error") return "unknown";
+  try {
+    const tx = opened.db.transaction(["docOutbox", "metaOutbox"], "readonly");
+    const [docs, metas] = await Promise.all([
+      req(tx.objectStore("docOutbox").count()),
+      req(tx.objectStore("metaOutbox").count()),
+    ]);
+    return docs + metas;
+  } catch {
+    return "unknown";
+  }
 }
 
 /**
@@ -192,12 +207,23 @@ export async function closeNotesDb(): Promise<void> {
   await opener?.close();
 }
 
-export async function openNotesDb(): Promise<IDBDatabase | null> {
+type OpenResult = { kind: "ok"; db: IDBDatabase } | { kind: "none" } | { kind: "error" };
+
+/** "none": this device has no IndexedDB; "error": it has one that failed to open. */
+async function openNotesDbResult(): Promise<OpenResult> {
+  const o = notesOpener();
+  if (!o) return { kind: "none" };
   try {
-    return (await notesOpener()?.open()) ?? null;
+    return { kind: "ok", db: await o.open() };
   } catch {
-    return null;
+    return { kind: "error" };
   }
+}
+
+/** The notes DB, or null when there is none or it failed to open (callers fail soft). */
+export async function openNotesDb(): Promise<IDBDatabase | null> {
+  const opened = await openNotesDbResult();
+  return opened.kind === "ok" ? opened.db : null;
 }
 
 export async function withStore<T>(

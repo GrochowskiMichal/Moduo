@@ -14,6 +14,7 @@ export default defineConfig({
     "scripts/db-test.test.ts",
     "scripts/check-boundaries.test.ts",
     "scripts/check-bundle-size.test.ts",
+    "tools/ast-grep/lint.test.ts",
   ],
   globals: true,
   // CI shards every suite three ways (checks.yml); this one has few files, so a shard can be empty.

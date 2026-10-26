@@ -30,9 +30,8 @@ import { singleLine } from "../../escape.ts";
 import { button, type EmailDoc, heading, lockup, muted, paragraph } from "../blocks.ts";
 import { dayLong } from "../format.ts";
 import type { QueuedEmail } from "../outbox.ts";
-import { TEXT_LIMITS } from "../render.ts";
 import { viaModuo } from "../send.ts";
-import { isPlainName } from "./booking.ts";
+import { linkFree, plainPersonName } from "./names.ts";
 
 /** Where B4's button goes: Settings → Workspace. */
 export const WORKSPACE_SETTINGS_URL = `${CANONICAL_APP_ORIGIN}/settings?section=workspace`;
@@ -78,57 +77,14 @@ export type WorkspaceRemovedData = {
 const ZONE = "UTC";
 const EMAIL_RE = /^[^\s@]+@[^\s@]+$/;
 
-/**
- * Invisible format characters (zero-width space and joiner, word joiner, soft
- * hyphen, …). Removed before any check and before printing, so what is checked
- * is what the reader sees: "Mo\u200Bduo" must not pass as anything but "Moduo".
- */
-const INVISIBLE = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
-
-const name = (value: string) => singleLine(value.replace(INVISIBLE, ""), TEXT_LIMITS.name);
-
-/** A link, a domain or an address, in any dot (fullwidth and ideographic included). */
-const LINK_LIKE = /https?:|\/\/|www[.\uFF0E\u3002]|[\p{L}\p{N}][.\uFF0E\u3002]\p{L}{2,}|[@\uFF20]/iu;
-
-/** Latin look-alikes from other scripts, folded before the checks below (Cyrillic о, Greek ο, …). */
-const LOOKALIKES: Record<string, string> = {
-  "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "у": "y", "х": "x", "і": "i", "ј": "j", "ԁ": "d",
-  "м": "m", "υ": "u", "ο": "o", "α": "a", "ε": "e", "ι": "i", "κ": "k", "ν": "v", "ρ": "p", "τ": "t",
-};
-
-/** NFKC, lower case, look-alikes folded: what a reader takes the text to say. */
-function skeleton(value: string): string {
-  return Array.from(value.normalize("NFKC").replace(INVISIBLE, "").toLowerCase(), (ch) => LOOKALIKES[ch] ?? ch).join("");
-}
-
-/** Words that make a sender name read like us or like a department, not a person. */
-const OFFICIAL = /moduo|\b(?:security|support|billing|account|accounts|admin|administrator|service|help|helpdesk|team|staff|noreply|verification|compliance)\b/;
-
-/** Latin mixed with a look-alike script ("Ѕecurity", Cyrillic Ѕ) is a spoof, not a name. */
-const MIXED_SCRIPT = /(?=.*\p{Script=Latin})(?=.*[\p{Script=Cyrillic}\p{Script=Greek}\p{Script=Armenian}\p{Script=Cherokee}])/u;
-
-/**
- * The person's name when it is a plain one that reads like a person, else
- * null. Every check runs on the same flattened string the email prints.
- */
+/** The person's name when it is a plain one that reads like a person, else null (names.ts). */
 function plainName(person: WorkspacePerson): string | null {
-  const flat = name(person.name).replace(/\s+/g, " ").trim();
-  if (!isPlainName(flat) || MIXED_SCRIPT.test(flat.normalize("NFKC")) || OFFICIAL.test(skeleton(flat))) return null;
-  return flat;
+  return plainPersonName(person.name);
 }
 
 /** "Anna Carter", or their address when they have no plain name. */
 function who(person: WorkspacePerson): string {
   return plainName(person) ?? singleLine(person.email, 254);
-}
-
-/** A typed label (workspace, role) when it is set and doesn't read like a link, like us or like a spoof, else null. */
-function linkFree(value: string): string | null {
-  const label = name(value);
-  if (!label) return null;
-  const read = skeleton(label);
-  if (LINK_LIKE.test(read) || /moduo/.test(read) || MIXED_SCRIPT.test(label.normalize("NFKC"))) return null;
-  return label;
 }
 
 function workspaceLabel(value: string): string {
