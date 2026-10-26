@@ -585,7 +585,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
 - [ ] **HV-23 — Router, scout** · deps: HV-1
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
-- [ ] **HV-16 — RLS access matrix** · deps: HV-4
+- [x] **HV-16 — RLS access matrix** · deps: HV-4 · 2026-10-26 · `t/mike/hv-16-rls-matrix`, PR #655
 - [ ] **HV-21 — Weekly numbers** · deps: HV-5
 - [ ] **HV-8 — Moduo is the queue** · deps: HV-7
 - [ ] **HV-13 — Docs eval** · deps: HV-20

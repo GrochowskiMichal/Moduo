@@ -264,6 +264,7 @@ jobs:
   # cache, encrypted with DB_SNAPSHOT_KEY (never an artifact: the repo is public). A fork's pull
   # request gets no secrets, so it skips this job.
   # supabase/tests/known-failures.txt holds what is already red; anything else fails the job.
+  # Then the RLS matrix's policy mutants (HV-16).
   db-test:
     needs: oracle-paths
     if: needs.oracle-paths.outputs.db == 'true'
@@ -310,6 +311,11 @@ jobs:
 
       - name: SQL tests
         run: bun run db:test
+
+      # Loosens each policy on the RLS matrix's tables (supabase/tests/rls_matrix.md) inside a
+      # rolled-back transaction; a mutant the matrix doesn't catch fails the job.
+      - name: Policy mutants
+        run: bun run db:mutants
 
   # `bun run verify` covers no Rust (apps/desktop/src-tauri/AGENTS.md): the three Rust gates.
   rust-check:
