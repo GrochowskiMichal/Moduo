@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-27 · HV-13: the docs eval grades answers with regex keys, not a model judge, and keeps the key out of the agent's sight.
 - 2026-10-26 · HV-20: the A/B rig runs each attempt in a remote-less `git clone --shared` at the task's commit, inside srt through `srt-offline.mjs`, with the oracle copied in from the fix commit after the agent stops.
 - 2026-10-26 · HV-26: Tier 2 blocks race three drafts from a frozen contract commit, and `bun run drafts` keeps the smallest passing diff within 5 points of the best mutant kill rate.
 - 2026-10-26 · HV-8: the block queue is Moduo; specs keep the dependencies, `bun run queue` joins them with open PRs, and `bun run queue:import` is the only way blocks enter it.

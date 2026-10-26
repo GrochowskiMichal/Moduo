@@ -10,7 +10,7 @@ bun run ab check-tasks --set core                                   # calibrate 
 bun run ab report .harness-ab/results/<batch>-core.jsonl            # pass rate, cost, time per task × arm
 ```
 
-`run` flags: `--set` (default `core`), `--arms a,b` (default `control`), `--tasks a,b` (default all), `--repeats n` (default 3), `--dry-run`, `--keep` (keep the workspace), `--no-verify`. A full `core` sweep with two arms is 7 × 2 × 3 = 42 agent runs: plan the usage before starting one.
+`run` flags: `--set` (default `core`), `--arms a,b` (default `control`), `--tasks a,b` (default all), `--repeats n` (default 3), `--base <rev>` (clone every task at that commit instead of its own: the after run of a before/after pair), `--dry-run`, `--keep` (keep the workspace), `--no-verify`. A full `core` sweep with two arms is 7 × 2 × 3 = 42 agent runs: plan the usage before starting one.
 
 ## What one run does
 
@@ -46,10 +46,11 @@ A set is a folder `tasks/<set>/` with a `set.json` (`description`, `verify`) and
 | `oracle.checks` | `{ name, run, expect? }`: commands run in the workspace; `expect: "fail"` passes when the command fails. |
 | `oracle.env` | Extra environment for the checks (`TZ`, `MODUO_HUNT`). |
 | `fixtures`, `install`, `verify` | A folder copied in before the agent; `false` skips `bun install`; the task's own verify command or `null`. |
+| `hide` | Paths deleted (and committed) before the agent starts: an answer key that a later `--base` contains. |
 
 After adding a task, run `bun run ab check-tasks --set <set> --tasks <id>`: with no agent, the oracle must fail at `base` (the bug is there) and pass at `fix`. `rig.test.ts` checks every set's tasks are well formed and their commits exist.
 
-**Docs eval (HV-13) and similar question sets** fit the same shape: `base` is a fixed commit, the prompt is the question, `install: false`, and the oracle is a check script in the set's `fixtures` that reads the answer. The rig keeps the agent's final answer in the row (`agent.result`, first 2,000 characters) and the full transcript in the run folder.
+**Question sets** (the docs eval, `scripts/evals/docs/`) fit the same shape: `base` is a fixed commit, the prompt is the question, `install: false`, and the oracle grades the answer. After the agent finishes (and after the diff is taken) the rig writes its final message to `.harness-ab/answer.md` in the workspace; every check gets `HARNESS_AB_ANSWER` (that file) and `HARNESS_AB_RIG` (this folder), so a grader can live in this checkout, out of the agent's sight: `bun "$HARNESS_AB_RIG/../evals/docs/grade.ts" E01`. `check-tasks` writes no answer, so a grader fails at base. The row keeps the first 2,000 characters of the answer (`agent.result`), the run folder the full transcript.
 
 ## Adding an arm
 

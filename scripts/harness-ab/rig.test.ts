@@ -68,6 +68,18 @@ describe("dry run", () => {
     expect(readdirSync(out)).toEqual(["results"]);
   });
 
+  it("clones every task at --base when given (a before/after run)", () => {
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    const run = cli("run", "--set", "core", "--repeats", "1", "--base", "HEAD", "--dry-run");
+    expect(run.status).toBe(0);
+    const [file] = readdirSync(path.join(out, "results"));
+    const rows = readFileSync(path.join(out, "results", file ?? ""), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Row);
+    expect(new Set(rows.map((r) => r.base))).toEqual(new Set([head.stdout.trim()]));
+  });
+
   it("exits 3 and writes nothing for a remote source", () => {
     const run = cli("run", "--dry-run", "--source", "git@github.com:GrochowskiMichal/Moduo.git");
     expect(run.status).toBe(3);
