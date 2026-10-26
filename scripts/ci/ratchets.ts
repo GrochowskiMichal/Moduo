@@ -47,7 +47,7 @@ const SIZE_FILES = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts|rs|css|sh)$/;
 const COMPLEXITY_FILES = /\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/;
 // Generated, vendored, throwaway or append-only history: not code anyone splits.
 const EXCLUDED =
-  /^(\.design|storybook-static|scripts\/spikes|supabase\/migrations)\/|\.d\.[cm]?ts$|__snapshots__\/|\/notes-doc\.bundle\.js$|^apps\/app\/src\/types\/supabase\.ts$|(^|\/)node_modules\/|(^|\/)dist\//;
+  /^(\.design|storybook-static|scripts\/spikes|supabase\/migrations|\.claude\/skills\/security-audit)\/|\.d\.[cm]?ts$|__snapshots__\/|\/notes-doc\.bundle\.js$|^apps\/app\/src\/types\/supabase\.ts$|(^|\/)node_modules\/|(^|\/)dist\//;
 // Single sources the rules require editing (AGENTS.md rules 3 and 4): long lists, not logic.
 const SIZE_EXEMPT = new Set([
   "supabase/functions/_shared/contracts/vocabularies.ts",
@@ -303,6 +303,11 @@ export interface Violation {
   frozen: number | null;
 }
 
+/** A record without a prototype: function names come from source, and one may be `__proto__`. */
+function dict<T>(): Record<string, T> {
+  return Object.create(null) as Record<string, T>;
+}
+
 /** Measures the given files and keeps only what is over a limit. */
 export function measure(files: { path: string; source: string }[]): Measured {
   const m: Measured = { size: {}, complexity: {}, lines: {} };
@@ -314,8 +319,8 @@ export function measure(files: { path: string; source: string }[]): Measured {
     if (complexityChecked(file)) {
       for (const f of scoreFunctions(file, source)) {
         if (f.score <= COMPLEXITY_LIMIT) continue;
-        (m.complexity[file] ??= {})[f.name] = f.score;
-        (m.lines[file] ??= {})[f.name] = f.line;
+        (m.complexity[file] ??= dict())[f.name] = f.score;
+        (m.lines[file] ??= dict())[f.name] = f.line;
       }
     }
   }
@@ -428,7 +433,7 @@ export function tighten(measured: Measured, baseline: Baseline): Baseline {
   }
   const complexity: Baseline["complexity"] = {};
   for (const { file, fn, score, frozen } of assign(measured, baseline)) {
-    if (frozen !== null) (complexity[file] ??= {})[fn] = Math.min(score, frozen);
+    if (frozen !== null) (complexity[file] ??= dict())[fn] = Math.min(score, frozen);
   }
   return { ...baseline, size, complexity };
 }

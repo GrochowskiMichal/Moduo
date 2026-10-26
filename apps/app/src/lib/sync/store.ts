@@ -72,20 +72,17 @@ import {
   type CachedWorkspace,
   cacheKey,
   deviceCache,
+  ownedCopies,
   type SyncCache,
+  withEntryBefore,
 } from "./cache";
 import { createSyncedCollection, type SyncedCollection } from "./kernel/collection";
 import { Backoff, drainOutbox, Outbox } from "./kernel/outbox";
 import { openWrite, withOverlays } from "./kernel/overlay";
-import {
-  type OwnedCopies,
-  personLifecycle,
-  refcount,
-  StoreRegistry,
-  waitingEverywhere,
-} from "./kernel/registry";
+import { personLifecycle, refcount, StoreRegistry, waitingEverywhere } from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
-import { browserOffline, isNetworkError } from "./network";
+import { browserOffline, isNetworkError, waitedOfflineError } from "./network";
+import { liveStatusOf, nextTurn, trackLiveStatus, wakeTurns } from "./status-order";
 import { type KernelMirror, mirrorKernel } from "./tanstack/kernel-mirror";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
@@ -137,9 +134,22 @@ export type OutboxEntry =
       /** A status id, or a category word (`taskStatusWord`). */
       status: string;
       recurrence?: RecurrenceRule | null;
+      /** Where it goes in its new column (a Board drop or a selection's move). */
+      position?: string;
       /** What the row shows meanwhile. */
       fields: Partial<Task>;
     };
+
+/** The task an outbox entry writes. */
+const entryTaskId = (entry: OutboxEntry): string =>
+  entry.kind === "create" ? entry.task.id : entry.taskId;
+
+/** Whether a stored (unchecked) outbox entry writes the same task as `entry`. */
+function sameTaskAs(stored: unknown, entry: OutboxEntry): boolean {
+  const other = stored as Partial<OutboxEntry> | null;
+  if (other?.kind === "create") return other.task?.id === entryTaskId(entry);
+  return other?.kind === "status" && other.taskId === entryTaskId(entry);
+}
 
 /** What every reader gets. Shared until the next change — never mutate it. */
 export type StoreSnapshot = {
@@ -441,6 +451,8 @@ export class WorkspaceStore {
   private persistTimer: ReturnType<typeof setTimeout> | null = null;
   private flushing = false;
   private disposed = false;
+  /** Disposed with the account gone: a late write is dropped, not kept. */
+  private erased = false;
   private catchUpClaimed = 0;
 
   private listeners = new Set<() => void>();
@@ -534,7 +546,40 @@ export class WorkspaceStore {
    * those: sent live, it would land first and the older queued one would win.
    */
   hasOutboxEntries(taskId: string): boolean {
-    return this.outbox.some((e) => (e.kind === "create" ? e.task.id : e.taskId) === taskId);
+    return this.outbox.some((e) => entryTaskId(e) === taskId);
+  }
+
+  /**
+   * Whether a status write for this task must wait in the outbox: something
+   * for it waits there, or an older one is on its way live (this store's, or
+   * the one before it for this person). Sent live, it could land first.
+   */
+  statusMustWait(taskId: string): boolean {
+    return this.hasOutboxEntries(taskId) || liveStatusOf(this.liveKey(taskId)) !== undefined;
+  }
+
+  /** A live status write for this task is on its way until `run` (with its fallback) settles. */
+  sendingStatus<T>(taskId: string, run: Promise<T>): Promise<T> {
+    return trackLiveStatus(this.liveKey(taskId), run);
+  }
+
+  /**
+   * Send a status op for this task live once nothing older for it is on its
+   * way: a drop's status part, whose Undo needs the server's row (MOD-561).
+   * Offline or stopped first, it rejects as a lost connection.
+   */
+  async sendStatusInTurn<T>(taskId: string, op: () => Promise<T>): Promise<T> {
+    for (;;) {
+      if (this.disposed || this.offline) throw waitedOfflineError();
+      if (!this.statusMustWait(taskId)) return this.sendingStatus(taskId, op());
+      // What it waits behind goes out with the next flush.
+      if (this.hasOutboxEntries(taskId)) void this.flush();
+      await nextTurn();
+    }
+  }
+
+  private liveKey(taskId: string): string {
+    return `${cacheKey(this.userId, this.workspaceId)}:${taskId}`;
   }
 
   /** Claim the repeat roll-over for a load stamp: true once per stamp. */
@@ -588,10 +633,11 @@ export class WorkspaceStore {
    * Stop for good (sign-out, another person): nothing is written after this.
    * `persist: false` drops what wasn't written yet (the copy is being wiped).
    */
-  dispose(opts: { persist?: boolean } = {}): void {
+  dispose(opts: { persist?: boolean; erase?: boolean } = {}): void {
     if (this.persistTimer) clearTimeout(this.persistTimer);
     this.persistTimer = null;
     if (opts.persist === false) this.wiped = true;
+    if (opts.erase) this.erased = true;
     this.stop(opts);
     this.disposed = true;
     this.listeners.clear();
@@ -615,6 +661,7 @@ export class WorkspaceStore {
     const waiters = this.loadWaiters;
     this.loadWaiters = [];
     for (const fn of waiters) fn();
+    wakeTurns();
   }
 
   private onBrowserOffline = () => this.setOffline(true);
@@ -687,17 +734,23 @@ export class WorkspaceStore {
     let theirs: OutboxEntry[] = [];
     this.persisting = this.persisting.then(async () => {
       if (this.wiped) return;
-      await this.cache.update(key, (stored) => {
-        theirs = this.outbox.othersWaiting(stored?.outbox, outbox);
-        return {
-          v: CACHE_VERSION,
-          savedAt: Date.now(),
-          tables,
-          restLoaded,
-          fullReadAt,
-          outbox: [...outbox, ...theirs],
-        };
-      });
+      try {
+        await this.cache.update(key, (stored) => {
+          theirs = this.outbox.othersWaiting(stored?.outbox, outbox);
+          return {
+            v: CACHE_VERSION,
+            savedAt: Date.now(),
+            tables,
+            restLoaded,
+            fullReadAt,
+            outbox: [...outbox, ...theirs],
+          };
+        });
+      } catch (e) {
+        // A full or blocked disk: the next write tries again.
+        console.warn("[sync] couldn't write the device copy", e);
+        return;
+      }
       if (!this.disposed && theirs.length > 0) this.adoptOutbox(theirs);
     });
   };
@@ -1603,6 +1656,8 @@ export class WorkspaceStore {
       if (this.retryTimer) clearTimeout(this.retryTimer);
       this.retryTimer = null;
     }
+    // Who waits for a task's turn stops waiting offline.
+    wakeTurns();
     if (!opts.quiet) this.changed();
     else this.snapshot = null;
   }
@@ -1643,52 +1698,99 @@ export class WorkspaceStore {
     fields: Partial<Task>;
     recurrence?: RecurrenceRule | null;
   }): Promise<"saved" | "queued"> {
-    const queue = (): "queued" => {
-      this.enqueue({
-        kind: "status",
-        id: crypto.randomUUID(),
-        taskId: input.taskId,
-        status: input.status,
-        recurrence: input.recurrence,
-        fields: input.fields,
-      });
+    const entry = (): OutboxEntry => ({
+      kind: "status",
+      id: crypto.randomUUID(),
+      taskId: input.taskId,
+      status: input.status,
+      recurrence: input.recurrence,
+      fields: input.fields,
+    });
+    // Behind anything for this task still on its way (a capture or an older
+    // check-off in the outbox, or one sent live that hasn't answered yet), so
+    // the writes land in the order they were made.
+    if (this.offline || this.statusMustWait(input.taskId)) {
+      void this.enqueue(entry());
       return "queued";
-    };
-    // Behind anything already waiting for this task (a capture, or an older
-    // check-off the flush hasn't finished), so the writes land in order.
-    if (this.offline || this.hasOutboxEntries(input.taskId)) return queue();
-    const write = this.begin([
-      {
-        table: "tasks",
-        patch: { id: input.taskId, fields: input.fields as Record<string, unknown> },
-      },
-    ]);
-    try {
-      const saved = await this.runtime.tasks.opSetStatus({
-        workspaceId: this.workspaceId,
-        taskId: input.taskId,
-        status: input.status,
-        recurrence: input.recurrence ?? undefined,
-      });
-      write.settle({ tasks: [saved] });
-      return "saved";
-    } catch (e) {
-      write.fail();
-      if (isNetworkError(e)) {
-        this.wentOffline();
-        return queue();
-      }
-      throw e;
     }
+    return this.sendingStatus(
+      input.taskId,
+      (async (): Promise<"saved" | "queued"> => {
+        const write = this.begin([
+          {
+            table: "tasks",
+            patch: { id: input.taskId, fields: input.fields as Record<string, unknown> },
+          },
+        ]);
+        try {
+          const saved = await this.runtime.tasks.opSetStatus({
+            workspaceId: this.workspaceId,
+            taskId: input.taskId,
+            status: input.status,
+            recurrence: input.recurrence ?? undefined,
+          });
+          write.settle({ tasks: [saved] });
+          return "saved";
+        } catch (e) {
+          write.fail();
+          if (!isNetworkError(e)) throw e;
+          this.wentOffline();
+          await this.enqueue(entry(), { wasLive: true });
+          return "queued";
+        }
+      })(),
+    );
   }
 
-  /** A capture or a check-off for later: shown at once, kept with the device copy, sent in order. */
-  enqueue(entry: OutboxEntry): void {
-    this.outbox.push(entry);
-    this.showOutboxEntry(entry);
+  /**
+   * A capture or a check-off for later: shown at once, kept with the device
+   * copy, sent in order. `wasLive`: it was sent live and the connection went,
+   * so it goes in front of anything queued for its task since (newer, and
+   * still on show). Resolves once it is kept somewhere.
+   */
+  enqueue(entry: OutboxEntry, opts: { wasLive?: boolean } = {}): Promise<void> {
+    // Stopped while it was on its way (a sign-out, a lost session): it goes
+    // to the person's next store or device copy, never into an outbox
+    // nobody keeps (MOD-569).
+    if (this.disposed) return this.handOff(entry);
+    const taskId = entryTaskId(entry);
+    const inFront = opts.wasLive
+      ? this.outbox.pushBefore(entry, (e) => entryTaskId(e) === taskId)
+      : (this.outbox.push(entry), false);
+    if (!inFront) this.showOutboxEntry(entry);
     this.changed();
     this.persistNow();
     if (!this.offline) void this.flush();
+    return Promise.resolve();
+  }
+
+  /** A write back after this store stopped: to the person's next store, else their copy (MOD-569). */
+  private handOff(entry: OutboxEntry): Promise<void> {
+    if (this.erased) return Promise.resolve();
+    const next = registry.find(this.runtime.tasks, this.workspaceId);
+    if (next && next !== this && next.userId === this.userId && !next.isDisposed()) {
+      const taken = next.takeLate(entry);
+      if (taken) return taken;
+    }
+    const key = cacheKey(this.userId, this.workspaceId);
+    // After this store's last write of the copy.
+    const kept = this.persisting.then(async () => {
+      try {
+        await this.cache.update(key, (stored) =>
+          withEntryBefore(stored, entry, (e) => sameTaskAs(e, entry)),
+        );
+      } catch (e) {
+        console.warn("[sync] couldn't keep a late write on the device", e);
+      }
+    });
+    this.persisting = kept;
+    return kept;
+  }
+
+  /** The store before this one had it on its way: it joins once the copy is read (null: not started). */
+  private takeLate(entry: OutboxEntry): Promise<void> | null {
+    if (!this.hydrated) return null;
+    return this.hydrated.then(() => this.enqueue(entry, { wasLive: true }));
   }
 
   /** The network looks gone: hold writes until it's back. */
@@ -1711,7 +1813,7 @@ export class WorkspaceStore {
     const tasks = this.runtime.tasks;
     const clientId = task.id.replace(/^tmp-/, "") || crypto.randomUUID();
     const queueIt = () => {
-      this.enqueue({
+      void this.enqueue({
         kind: "create",
         id: crypto.randomUUID(),
         task: { ...task, id: clientId },
@@ -1755,6 +1857,14 @@ export class WorkspaceStore {
     try {
       await drainOutbox(this.outbox, {
         running: () => !this.offline && !this.disposed,
+        // An older status write for its task still on its way live: wait for
+        // it (MOD-587). One that failed came back in front: pick again.
+        before: async (entry) => {
+          const live = liveStatusOf(this.liveKey(entryTaskId(entry)));
+          if (!live) return "send";
+          await live;
+          return "skip";
+        },
         send: async (entry) => {
           try {
             return { ok: true, value: await this.send(entry) };
@@ -1770,6 +1880,7 @@ export class WorkspaceStore {
           if (op !== undefined) this.dropOverlays(op);
           this.persistNow();
           this.changed();
+          wakeTurns();
         },
         offline: () => this.setOffline(true),
         // Refused: it won't go through later either. It left the outbox; say
@@ -1780,6 +1891,7 @@ export class WorkspaceStore {
           if (op !== undefined) this.dropOverlays(op);
           this.persistNow();
           this.changed();
+          wakeTurns();
           const what = entry.kind === "create" ? `“${entry.task.title || "Untitled"}”` : "a change";
           toast.error(`Couldn't sync ${what}`, {
             description: e instanceof Error ? e.message : undefined,
@@ -1792,6 +1904,8 @@ export class WorkspaceStore {
       console.warn("[sync] outbox drain stopped", e);
     } finally {
       this.flushing = false;
+      // A drop waiting its turn re-checks, also after a drain that threw.
+      wakeTurns();
     }
   }
 
@@ -1818,6 +1932,7 @@ export class WorkspaceStore {
       taskId: entry.taskId,
       status: entry.status,
       recurrence: entry.recurrence ?? undefined,
+      ...(entry.position !== undefined ? { position: entry.position } : {}),
     });
     return { tasks: [saved] };
   }
@@ -2150,43 +2265,10 @@ export function findWorkspaceStore(
   return registry.find(runtime.tasks, workspaceId);
 }
 
-/**
- * The device copies as the person lifecycle sees them. Cutting a copy down
- * to what waits keeps its outbox (plus what the stores that just stopped
- * held) and no rows; an older version stamp makes the next store that opens
- * it take the outbox and read everything else again.
- */
-function taskCopies(cache: SyncCache): OwnedCopies<OutboxEntry> {
-  return {
-    keys: () => cache.keys(),
-    async keepOnlyWaiting(key, inMemory, handled) {
-      let kept = 0;
-      await cache.update(key, (stored) => {
-        const outbox: OutboxEntry[] = [];
-        const seen = new Set<string>();
-        const stack = [
-          ...(Array.isArray(stored?.outbox) ? (stored.outbox as OutboxEntry[]) : []),
-          ...inMemory,
-        ];
-        for (const entry of stack) {
-          if (!entry || typeof entry.id !== "string" || seen.has(entry.id)) continue;
-          seen.add(entry.id);
-          if (!handled.has(entry.id)) outbox.push(entry);
-        }
-        kept = outbox.length;
-        return { v: 0, savedAt: Date.now(), tables: {}, restLoaded: false, outbox };
-      });
-      return kept;
-    },
-    deleteWhere: (match) => cache.deleteWhere(match),
-    clear: () => cache.clear(),
-  };
-}
-
 const people = personLifecycle({
   registry,
   scopeOf: (store) => store.runtime.tasks,
-  copies: () => taskCopies(storeOptions.cache ?? deviceCache()),
+  copies: () => ownedCopies<OutboxEntry>(storeOptions.cache ?? deviceCache()),
   waiting: (store) => store.waitingEntries(),
   handled: (store) => store.handledEntryIds(),
 });

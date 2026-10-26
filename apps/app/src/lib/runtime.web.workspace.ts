@@ -468,6 +468,10 @@ export const webWorkspace: WorkspaceRuntime = {
       appName: typeof row.app_name === "string" ? row.app_name : null,
       clientDomain: typeof row.client_domain === "string" ? row.client_domain : null,
       clientScheme: typeof row.client_scheme === "string" ? row.client_scheme : null,
+      redirectUri:
+        details && "redirect_uri" in details && typeof details.redirect_uri === "string"
+          ? details.redirect_uri
+          : heldRedirect,
       connection: conn
         ? {
             id: conn.id,

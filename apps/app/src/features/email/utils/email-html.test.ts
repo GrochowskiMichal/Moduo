@@ -117,3 +117,101 @@ describe("buildEmailReaderDoc", () => {
     expect(srcDoc).toContain("https://cdn.example/photo.jpg");
   });
 });
+
+describe("buildEmailReaderDoc — navigation vectors (MOD-574)", () => {
+  it("drops meta refresh, in head or body, so an email can't load a page on open", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<html><head><meta http-equiv="refresh" content="0;url=https://phish.example/login"></head>` +
+        `<body><p>Hi</p><META HTTP-EQUIV="Refresh" CONTENT="1; URL=https://phish.example/2"></body></html>`,
+    );
+    expect(srcDoc).not.toContain("phish.example");
+    expect(srcDoc.toLowerCase()).not.toContain("refresh");
+  });
+
+  it("drops a refresh that hides behind a charset attribute", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<meta charset="utf-8" http-equiv="refresh" content="0;url=https://phish.example/">`,
+    );
+    expect(srcDoc).not.toContain("phish.example");
+  });
+
+  it("drops <noscript> and comments, which hide tags from a scripting-off parse", () => {
+    const payloadHtml =
+      `<noscript><!--</noscript><meta http-equiv="refresh" content="0;url=https://phish.example/x">--></noscript>` +
+      `<p>Hi</p><!-- <meta http-equiv="refresh" content="0;url=https://phish.example/y"> -->`;
+    for (const html of [payloadHtml, `<html><head>${payloadHtml}</head><body>x</body></html>`]) {
+      const { srcDoc } = buildEmailReaderDoc(html);
+      expect(srcDoc).not.toContain("phish.example");
+      expect(srcDoc).not.toContain("<noscript");
+      expect(srcDoc).not.toContain("<!--");
+    }
+  });
+
+  it("drops <template>, whose content a scripting-off parse never looks into", () => {
+    const html = `<template><noscript><!--</noscript></template><meta http-equiv="refresh" content="0;url=https://phish.example/t">--></noscript></template>`;
+    for (const raw of [html, `<html><head>${html}</head><body>x</body></html>`]) {
+      const { srcDoc } = buildEmailReaderDoc(raw);
+      expect(srcDoc).not.toContain("<template");
+      expect(srcDoc).not.toContain("phish.example");
+      expect(srcDoc.toLowerCase()).not.toContain("refresh");
+    }
+  });
+
+  it("re-sanitizes until a round trip changes nothing (nested-form/math mutation)", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<form><math><mtext></form><form><mglyph><style></math><meta http-equiv="refresh" content="0;url=https://phish.example/form">`,
+    );
+    expect(srcDoc.toLowerCase()).not.toContain('http-equiv="refresh"');
+    expect(srcDoc).not.toContain("phish.example");
+  });
+
+  it("keeps an ordinary email's markup through the extra passes", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<html><head><style>p{color:red}</style></head><body><table><tr><td><p>Hi <b>there</b></p></td></tr></table></body></html>`,
+    );
+    expect(srcDoc).toContain("<style>p{color:red}</style>");
+    expect(srcDoc).toContain(
+      "<table><tbody><tr><td><p>Hi <b>there</b></p></td></tr></tbody></table>",
+    );
+  });
+
+  it("drops <base> and every meta but charset/content-type", () => {
+    const { srcDoc } = buildEmailReaderDoc(
+      `<head><base href="https://evil.example/"><meta http-equiv="Content-Type" content="text/html; charset=iso-8859-2">` +
+        `<meta name="referrer" content="unsafe-url"><meta http-equiv="Content-Security-Policy" content="default-src *">` +
+        `<meta http-equiv="set-cookie" content="a=b"></head><body><a href="next">next</a></body>`,
+    );
+    expect(srcDoc).not.toContain("evil.example");
+    expect(srcDoc).not.toContain("<base");
+    expect(srcDoc).not.toContain("unsafe-url");
+    expect(srcDoc).not.toContain("default-src *");
+    expect(srcDoc).not.toContain("set-cookie");
+    expect(srcDoc).toContain('content="text/html; charset=iso-8859-2"');
+    // Our own CSP and charset still lead the document.
+    expect(srcDoc).toContain('<meta charset="utf-8" />');
+    expect(srcDoc).toContain("default-src 'none'");
+  });
+});
+
+describe("remote url() detection — linear time (MOD-577 F19)", () => {
+  it("still matches every spelling of a remote url()", () => {
+    for (const style of [
+      "background:url(https://x.example/a.png)",
+      "background:url( 'http://x.example/a.png')",
+      'background:url(" //x.example/a.png")',
+      "background:url(  ' https://x.example/a.png')",
+    ]) {
+      expect(countRemoteRefs(`<div style="${style.replace(/"/g, "&quot;")}">x</div>`)).toBe(1);
+    }
+    expect(countRemoteRefs(`<div style="background:url(data:image/png;base64,AAAA)">x</div>`)).toBe(
+      0,
+    );
+  });
+
+  it("scans a hostile style of long whitespace runs quickly", () => {
+    const hostile = `url(${" ".repeat(20_000)}x;`.repeat(20);
+    const started = performance.now();
+    expect(countRemoteRefs(`<style>${hostile}</style><div style="${hostile}">x</div>`)).toBe(0);
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+});

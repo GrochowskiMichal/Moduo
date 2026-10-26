@@ -20,22 +20,56 @@ export const APP_TOKEN_REFUSAL = {
   message: "This token belongs to an app. Apps reach Moduo only through its MCP connector.",
 } as const;
 
-/** The OAuth client_id an app's token carries; null for anything else, a malformed token included. */
-export function appTokenClientId(token: string | null | undefined): string | null {
-  const raw = (token ?? "").replace(/^Bearer\s+/i, "").trim();
-  const payload = raw.split(".")[1];
-  if (!payload) return null;
+/** A JWT's payload claims, unverified; null unless the token is three base64url parts with an object payload. */
+function jwtClaims(token: string): Record<string, unknown> | null {
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts.some((p) => !/^[\w-]+$/.test(p))) return null;
   try {
-    const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const claims: unknown = JSON.parse(atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, "=")));
-    const clientId = (claims as { client_id?: unknown } | null)?.client_id;
-    return typeof clientId === "string" && clientId !== "" ? clientId : null;
+    return claims !== null && typeof claims === "object" && !Array.isArray(claims)
+      ? (claims as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }
 }
 
-/** True when a bearer token (with or without "Bearer ") is an app's OAuth token. */
-export function isAppToken(token: string | null | undefined): boolean {
-  return appTokenClientId(token) !== null;
+/** What an Authorization header holds, for a function that takes a person's token. */
+export type Bearer = { kind: "person"; token: string } | { kind: "app" } | { kind: "unauthorized" };
+
+/**
+ * Reads the Authorization header exactly once (MOD-570). The caller hands
+ * `token` itself to `getUser()`, so the string checked for an app here is the
+ * string Auth verifies, and the claims read here are that verified token's.
+ * Fails closed: anything but `Bearer <three-part token>` with a readable
+ * payload is "unauthorized", and a `client_id` claim of any value is "app".
+ */
+export function personBearer(header: string | null | undefined): Bearer {
+  const match = (header ?? "").match(/^Bearer\s+(\S+)$/i);
+  if (!match) return { kind: "unauthorized" };
+  const claims = jwtClaims(match[1]);
+  if (!claims) return { kind: "unauthorized" };
+  if (claims.client_id !== undefined && claims.client_id !== null) return { kind: "app" };
+  return { kind: "person", token: match[1] };
+}
+
+/** The slice of `supabase.auth` that `verifiedPerson` needs. */
+export interface UserVerifier<U> {
+  getUser(jwt: string): Promise<{ data: { user: U | null }; error: unknown }>;
+}
+
+/**
+ * `personBearer`, then `getUser()` on that same token: a person's verified
+ * user, or why not. Each function maps "app" to 403 and "unauthorized" to 401
+ * in its own response shape.
+ */
+export async function verifiedPerson<U>(
+  auth: UserVerifier<U>,
+  header: string | null | undefined,
+): Promise<{ kind: "person"; user: U } | { kind: "app" } | { kind: "unauthorized" }> {
+  const bearer = personBearer(header);
+  if (bearer.kind !== "person") return bearer;
+  const { data, error } = await auth.getUser(bearer.token);
+  return error || !data.user ? { kind: "unauthorized" } : { kind: "person", user: data.user };
 }

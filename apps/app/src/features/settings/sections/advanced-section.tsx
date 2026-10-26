@@ -29,7 +29,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { allTimeCalendarWindow } from "../../calendar/window";
 import { downloadZip } from "../../notes/export";
-import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
+import { closeNotesDb, countPendingOutbox, type PendingCount } from "../../notes/sync/idb";
 import {
   attachmentsManifest,
   buildExportBundle,
@@ -180,12 +180,12 @@ export function AdvancedSection() {
   const [resetOpen, setResetOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [pendingNotes, setPendingNotes] = useState(0);
+  const [pendingNotes, setPendingNotes] = useState<PendingCount>(0);
   const [pendingUploads, setPendingUploads] = useState(0);
 
   // Diagnostics.
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
-  const [diagPending, setDiagPending] = useState(0);
+  const [diagPending, setDiagPending] = useState<PendingCount>(0);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [copiedDebug, setCopiedDebug] = useState(false);
 
@@ -323,7 +323,8 @@ export function AdvancedSection() {
     setTimeout(() => setCopiedDebug(false), 2000);
   }, [diagnostics]);
 
-  const blocked = pendingNotes > 0 || pendingUploads > 0;
+  // "unknown" (the notes DB couldn't be read) blocks too: it may hold unsynced changes.
+  const blocked = pendingNotes !== 0 || pendingUploads > 0;
 
   return (
     <SettingsSectionShell
@@ -426,9 +427,11 @@ export function AdvancedSection() {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  {pendingNotes > 0
-                    ? "You have unsynced note changes"
-                    : "Files are still uploading"}
+                  {pendingNotes === "unknown"
+                    ? "Couldn't check for unsynced notes"
+                    : pendingNotes > 0
+                      ? "You have unsynced note changes"
+                      : "Files are still uploading"}
                 </DialogTitle>
                 <DialogDescription>
                   {resetBlockedMessage({ pendingNotes, pendingUploads, online })}

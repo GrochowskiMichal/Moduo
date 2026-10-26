@@ -23,7 +23,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
-import { APP_TOKEN_REFUSAL, isAppToken } from "../_shared/app-token.ts";
+import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { forgetAnalytics } from "../_shared/analytics-forget.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
@@ -41,19 +41,14 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
-  const authHeader = req.headers.get("Authorization");
-  if (isAppToken(authHeader)) return json(APP_TOKEN_REFUSAL, { status: 403 });
-  if (!authHeader) return json({ error: "Unauthorized" }, { status: 401 });
-
   try {
     const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", getDefaultSecretKey(), {
       auth: { persistSession: false },
     });
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser(authHeader.replace(/^Bearer\s+/i, ""));
-    if (authError || !user) return json({ error: "Unauthorized" }, { status: 401 });
+    const caller = await verifiedPerson(supabase.auth, req.headers.get("Authorization"));
+    if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
+    if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
+    const user = caller.user;
 
     const { status, body } = await forgetAnalytics(
       {

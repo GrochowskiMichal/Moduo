@@ -18,8 +18,11 @@
 export type RegisteredStore = {
   readonly userId: string;
   readonly workspaceId: string;
-  /** Stop for good. `persist: false`: write nothing more (its copy is being wiped). */
-  dispose(opts: { persist: boolean }): void;
+  /**
+   * Stop for good. `persist: false`: write nothing more (its copy is being
+   * cut down). `erase`: the account is gone, so is anything that arrives late.
+   */
+  dispose(opts: { persist: boolean; erase?: boolean }): void;
 };
 
 /** A store's holds: the first `acquire` runs `start`, the last release runs `stop`. */
@@ -109,11 +112,16 @@ export class StoreRegistry<S extends RegisteredStore> {
     return [...this.every];
   }
 
-  /** Dispose every store `keep` doesn't keep (with `persist`), and forget it. */
-  disposeWhere(scopeOf: (store: S) => object, keep: (store: S) => boolean, persist: boolean): void {
+  /** Dispose every store `keep` doesn't keep (with `persist`, `erase`), and forget it. */
+  disposeWhere(
+    scopeOf: (store: S) => object,
+    keep: (store: S) => boolean,
+    persist: boolean,
+    erase = false,
+  ): void {
     for (const store of [...this.every]) {
       if (keep(store)) continue;
-      store.dispose({ persist });
+      store.dispose({ persist, erase });
       const byWorkspace = this.byScope.get(scopeOf(store));
       if (byWorkspace?.get(store.workspaceId) === store) byWorkspace.delete(store.workspaceId);
       this.every.delete(store);
@@ -128,13 +136,15 @@ export type OwnedCopies<E> = {
    * Cut one record down to its waiting entries (what it stored plus
    * `inMemory`, each id once, never one in `handled`: sent or dropped by a
    * store whose last write may not have landed); answers how many stayed.
-   * Zero: the caller deletes the record.
+   * Zero: the caller deletes the record. Null: nothing for the caller to do
+   * (the copy removed an emptied record in the same step). A failure throws:
+   * that record stays as it was.
    */
   keepOnlyWaiting(
     key: string,
     inMemory: readonly E[],
     handled: ReadonlySet<string>,
-  ): Promise<number>;
+  ): Promise<number | null>;
   deleteWhere(match: (key: string) => boolean): Promise<void>;
   clear(): Promise<void>;
 };
@@ -175,8 +185,8 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
 }): PersonLifecycle {
   const { registry } = opts;
   const keyOf = (store: S) => ownerKey(store.userId, store.workspaceId);
-  const dispose = (keep: (store: S) => boolean, persist: boolean) =>
-    registry.disposeWhere(opts.scopeOf, keep, persist);
+  const dispose = (keep: (store: S) => boolean, persist: boolean, erase = false) =>
+    registry.disposeWhere(opts.scopeOf, keep, persist, erase);
 
   /** What each matching running store still has waiting, by its copy's key (some may not be written yet). */
   const waitingByKey = (match: (store: S) => boolean): Leaving<E> => {
@@ -200,11 +210,19 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
     const empty = new Set<string>();
     for (const key of keys) {
       if (!match(key)) continue;
-      const kept = await copies.keepOnlyWaiting(
-        key,
-        leaving.waiting.get(key) ?? [],
-        leaving.handled.get(key) ?? new Set(),
-      );
+      let kept: number | null;
+      try {
+        kept = await copies.keepOnlyWaiting(
+          key,
+          leaving.waiting.get(key) ?? [],
+          leaving.handled.get(key) ?? new Set(),
+        );
+      } catch (e) {
+        // Unreadable now: the record stays whole (what waits in it too), and
+        // the next sign-in or sign-out cuts it down. Never read as "empty".
+        console.warn("[sync] couldn't cut a device copy down", e);
+        continue;
+      }
       if (kept === 0) empty.add(key);
     }
     if (empty.size > 0) await copies.deleteWhere((key) => empty.has(key));
@@ -223,7 +241,7 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
     },
     wipe(wipeOpts = {}) {
       if (wipeOpts.keepWaiting === false) {
-        dispose(() => false, false);
+        dispose(() => false, false, true);
         return opts.copies().clear();
       }
       const leaving = waitingByKey(() => true);
@@ -232,7 +250,8 @@ export function personLifecycle<S extends RegisteredStore, E>(opts: {
     },
     keepWorkspaces(userId, workspaceIds) {
       const keep = new Set(workspaceIds.map((ws) => ownerKey(userId, ws)));
-      dispose((store) => store.userId !== userId || keep.has(keyOf(store)), false);
+      // A late write for a workspace left behind can't land: dropped (`erase`).
+      dispose((store) => store.userId !== userId || keep.has(keyOf(store)), false, true);
       return opts.copies().deleteWhere((key) => isOwnedBy(key, userId) && !keep.has(key));
     },
     waitingCount() {
