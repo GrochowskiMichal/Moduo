@@ -6,7 +6,8 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 - **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `moduo-design-quality`, `moduo-agent` (a link into `tools/claude-plugins/moduo-agent/`; see §Moduo connector).
   - `libraries-dev` (third-party, MIT, `LICENSE` inside): the free [Libraries.dev](https://libraries.dev) skill for seven React UI-effect packages (`border-beam`, `thinking-orbs`, `liquid-gooey`, `voice-glow`, `bot-avatars`, `metal-fx`, `img-fx`). Commands: `libraries reveal` (list), `libraries review` (read-only fit scan), `libraries apply` (install one; it asks before adding a package). Its package-manager check looks for `bun.lockb` and misses our `bun.lock`, so it would fall back to npm: install with `bun add` only. Colour comes mostly from named palettes (`colorVariant`, `preset`, `theme`), which are the libraries' own colours, not our tokens; the two props that take a colour (`Liquid` `fill`, `MetalText` `color`) must get a value from `tokens.css`, never hex in code. Copied verbatim from [Jakubantalik/Libraries.dev](https://github.com/Jakubantalik/Libraries.dev/tree/main/skills/libraries-dev) at commit `bfcb863` (2026-10-17). Don't edit it in place: to update, copy the folder again from upstream as plain files and bump the commit here. The Pro skill (`npx libraries-dev skill --pro`) is a paid swap the designer would run.
-- **Subagent** (`.claude/agents/validator.md`): the skeptical staff review; runs on Tier 2 diffs only (see AGENTS.md §Review gates).
+- **Subagents** (`.claude/agents/`): `validator.md`, the skeptical staff review, runs on Tier 2 diffs only (see AGENTS.md §Review gates); `scout.md`, read-only recon on Haiku that returns files, symbols, current decisions and rules with line numbers.
+- **Router** (`scripts/agent/router.ts`, a UserPromptSubmit hook): adds the lane and risk areas to each prompt as hidden context; never blocks. `MODUO_ROUTER=off` silences it, `haiku` asks Haiku within a budget.
 - **Plugins** (enabled in `.claude/settings.json`, installed for you on first trust):
   - `mattpocock-skills`: grilling, prototype, to-tickets, tdd, diagnosing-bugs, handoff, retro, improve-codebase-architecture. Configured through [docs/agents/](./agents/).
   - `supabase` + `postgres-best-practices`: Supabase and Postgres/RLS rules.
@@ -37,7 +38,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 ## What GitHub and the cloud provide
 
 - **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, `bun lint`, gitleaks) passed. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
-- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, moves finished blocks to `BUILD_LOG.md`, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
+- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
 
 ## One-time setup per machine
 
@@ -106,7 +107,7 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 - `hooks/moduo-report.sh` (+ `hooks.json` in plugin form): presence. It reads `.claude/MODUO_TASK` (gitignored; written by the skill: `task=MOD-123`, `state=working`, `step`, `steps`) and posts only while the state is `working`, in the background, with the key on stdin. Tests: `hooks/moduo-report.test.sh`, run in verify.
 - Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add a plugin manifest (`plugin.json` in `.claude-plugin/`) and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
 
-**The Build project** holds one task per open block in `specs/BUILD_ORDER.md`, titled `<ID> — <block name>`. The file stays the source of truth for the first two weeks; Moduo mirrors it. `/s2` creates a missing task; a task assigned to someone else is left alone.
+**The queue** is Moduo: one task per open block in the milestone projects, titled `<ID> — <block name>`, tagged `block`, with "blocks" edges for its dependencies (`bun run queue:import`, idempotent). `bun run queue` reads it with your key; GitHub events move each task's stage (`moduo-sync.yml`, the CI key). A task assigned to someone else is left alone.
 
 ## The unsupervised flow
 

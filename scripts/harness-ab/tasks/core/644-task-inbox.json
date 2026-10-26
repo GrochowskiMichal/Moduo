@@ -1,0 +1,24 @@
+{
+  "id": "644-task-inbox",
+  "title": "A failed project read files a moved task in the Inbox (MOD-560)",
+  "source": {
+    "pr": 644,
+    "escape": "644-1-error-read-as-empty"
+  },
+  "base": "37ba4e54b2e5a4fae506018896756a4c8384b216",
+  "fix": "40468404ed931bcd279621d74210215273fdd5ea",
+  "prompt": "Bug (MOD-560): in the web runtime's task writes (apps/app/src/lib/runtime.web.tasks.ts), when the read that checks a task's project fails (a network or server error), the task is silently filed in the Inbox, and when the read that checks whether a task already exists fails, re-saving it goes down the create path. A failed read is an error, not \"nothing there\": the write must fail loudly so the caller rolls back and shows the error. Fix it and add regression tests. Don't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": ["apps/app/src/lib/runtime.web.tasks.509-1.variant.test.ts"],
+    "checks": [
+      {
+        "name": "failed reads fail the write",
+        "run": "bun run --cwd apps/app test src/lib/runtime.web.tasks.509-1.variant.test.ts"
+      }
+    ],
+    "env": {
+      "MODUO_HUNT": "1"
+    }
+  }
+}
