@@ -43,6 +43,7 @@
     "local:stripe": "docker run --rm -it -v \"$HOME/.config/stripe:/root/.config/stripe\" stripe/stripe-cli listen --print-json",
     "env:local": "bun scripts/local/env.ts local",
     "env:cloud": "bun scripts/local/env.ts cloud",
+    "drafts": "bun scripts/agent/drafts.ts",
     "wt": "bun scripts/agent/wt.ts",
     "wt:prune": "bun scripts/agent/wt.ts prune",
     "storybook": "bun run --cwd apps/storybook dev",
