@@ -1,0 +1,46 @@
+{
+  "id": "644-1-error-read-as-empty",
+  "title": "Four more failed reads (and one failed write) treated as \"nothing there\"",
+  "mechanism": "error-as-empty",
+  "sites": [
+    "apps/app/src/lib/runtime.web.tasks.ts",
+    "apps/app/src/features/dashboard/data/layout-repo.ts",
+    "apps/app/src/features/calendar/google-web.ts",
+    "apps/app/src/lib/runtime.web.auth.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/runtime.web.tasks.509-1.variant.test.ts",
+      "name": "moving a task to a project never sends it to the Inbox because the project read failed",
+      "run": "bun run --cwd apps/app test src/lib/runtime.web.tasks.509-1.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/runtime.web.tasks.509-1.variant.test.ts",
+      "name": "re-saving an existing task never goes down the create path because its existence read failed",
+      "run": "bun run --cwd apps/app test src/lib/runtime.web.tasks.509-1.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/dashboard/data/layout-repo.509-1.variant.test.ts",
+      "name": "after a failed first read, the next good read shows the account's layout and an edit keeps it",
+      "run": "bun run --cwd apps/app test src/features/dashboard/data/layout-repo.509-1.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/calendar/google-web.509-1.variant.test.ts",
+      "name": "a removed calendar stays removed when the read of removed calendars fails",
+      "run": "bun run --cwd apps/app test src/features/calendar/google-web.509-1.variant.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/runtime.web.auth.test.ts",
+      "name": "reports a failed profiles write as a failed rename",
+      "run": "bun run --cwd apps/app test src/lib/runtime.web.auth.test.ts"
+    }
+  ],
+  "pr": 644,
+  "fixCommit": "40468404ed931bcd279621d74210215273fdd5ea",
+  "foundBy": "HV-15 variant hunt + HV-12 ast-grep pack, 2026-10-23"
+}

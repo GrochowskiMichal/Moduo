@@ -2,6 +2,7 @@
 // desktop keychain is not available in the browser. Sync and create both go
 // through the calendar-google-web edge function.
 
+import { DbError } from "../../lib/runtime.db";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { supabaseClient } from "../../lib/runtime.web.client";
 import { finishConnectReturn, rememberConnectStart } from "./connect-return";
@@ -87,9 +88,11 @@ async function tombstonedGoogleIds(workspaceId: string): Promise<Set<string>> {
     .eq("workspace_id", workspaceId)
     .eq("provider", "google")
     .not("deleted_at", "is", null);
-  if (error || !data) return new Set();
+  // A failed read is not "none removed": re-adding from it would bring a removed
+  // calendar back. Throw; the callers skip this pass and the next load retries.
+  if (error) throw new DbError(error);
   return new Set(
-    data
+    (data ?? [])
       .map((row) => row.external_id)
       .filter((id): id is string => typeof id === "string" && id.length > 0),
   );

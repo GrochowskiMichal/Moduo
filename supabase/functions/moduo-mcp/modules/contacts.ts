@@ -267,8 +267,10 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_id"],
       },
       handler: async (args, ctx) => {
+        // A contact the key's person can't see reads as not found (MOD-572).
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
         const c = await callOp(ctx, "contacts_op_update", {
-          p_contact_id: str(args, "contact_id"),
+          p_contact_id: contactId,
           p_name: str(args, "name", false) || null,
           p_email: str(args, "email", false) || null,
           p_phone: str(args, "phone", false) || null,
@@ -291,8 +293,9 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_id", "status"],
       },
       handler: async (args, ctx) => {
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
         const c = await callOp(ctx, "contacts_op_set_status", {
-          p_contact_id: str(args, "contact_id"),
+          p_contact_id: contactId,
           p_status: str(args, "status"),
         });
         return c ? shapeContact(c) : null;
@@ -356,7 +359,8 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_id"],
       },
       handler: async (args, ctx) => {
-        const c = await callOp(ctx, "contacts_op_delete", { p_contact_id: str(args, "contact_id") });
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
+        const c = await callOp(ctx, "contacts_op_delete", { p_contact_id: contactId });
         return c ? shapeContact(c) : { ok: true };
       },
     },
