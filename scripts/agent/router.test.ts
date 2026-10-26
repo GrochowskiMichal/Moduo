@@ -23,6 +23,10 @@ describe("route (the rules)", () => {
     ["Rename the Inbox heading to Capture", "fast"],
     ["Can you rename the Inbox heading to Capture?", "fast"],
     ["Bump the size limit to 34 KB", "fast"],
+    ["Rename the error message on the login screen", "fast"],
+    ["Fix the crash when sharing a note", "bug"],
+    ["Add the fast lane section to the queue docs", "fast"],
+    ["Just answer the email from Maciej", "fast"],
   ])("%s → %s", (prompt, lane) => {
     expect(route(prompt).lane).toBe(lane);
   });
@@ -57,6 +61,23 @@ describe("route (the rules)", () => {
     const r = route(prompt);
     expect(r.lane).toBe(lane);
     expect(r.override).toBe(true);
+  });
+
+  it("keeps the rules' own lane next to an override, as the label's prediction", () => {
+    expect(route("Treat this as a block: the outbox drops a write")).toMatchObject({
+      lane: "block",
+      predicted: "bug",
+      override: true,
+    });
+    expect(route("Add the fast lane section to the queue docs").override).toBe(false);
+  });
+
+  it("classifies a huge paste quickly and names at most ten IDs", () => {
+    const paste = `${"AB-".repeat(200_000)} ${Array.from({ length: 30 }, (_, i) => `HV-${i}`).join(" ")}`;
+    const started = Date.now();
+    const r = route(paste);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(r.ids.length).toBeLessThanOrEqual(10);
   });
 });
 

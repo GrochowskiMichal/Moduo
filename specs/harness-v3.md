@@ -59,7 +59,7 @@ The "users" are the two founders and their agents. What changes for each:
 - **Two open PRs claim the same block.** The second gets a PR comment "claimed by #n" and no Moduo change.
 - **A release tag contains blocks from several PRs.** Every block task referenced by a PR merged between the previous tag and this one moves to Shipped.
 - **The router misclassifies.** The person overrides in words; the override is logged as a label for the router's A/B data. The router never blocks a prompt and adds at most ~2 s.
-- **Haiku hook model or quota fails.** The hook exits 0 with no context (fail open is correct here: it only advises).
+- **Haiku hook model or quota fails.** The hook exits 0 with no context (fail open is correct here: it only advises). *(HV-23: it exits 0 with the keyword rules' answer instead.)*
 - **A guard hook crashes or can't start.** `onFailure: "block"` stops the command; the error names the hook and the fix.
 - **`srt` blocks something a lane needs** (npm registry, GitHub, the local Supabase port). The allowlist covers registry.npmjs.org, github.com, api.github.com, the Turborepo cache Worker, 127.0.0.1 ports used by the local stack; anything else fails loudly with the host name.
 - **Auto mode prompts too often in interactive work.** Allow rules for the common read-only commands are added from transcripts (`fewer-permission-prompts`); bypass stays available only inside `srt`.

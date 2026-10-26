@@ -8,7 +8,9 @@
 //   MODUO_ROUTER=haiku   asks Haiku through `claude -p` within the budget and
 //                        falls back to the rules when it is late or wrong
 //   MODUO_ROUTER=off     adds nothing
-//   MODUO_ROUTER_BUDGET_MS  the Haiku budget (default 1800)
+//   MODUO_ROUTER_BUDGET_MS  the Haiku budget (default 1800); a rig arm that
+//                        wants Haiku's answers raises it and the hook's
+//                        timeout in .claude/settings.json together (~5–7 s)
 //
 // Haiku through `claude -p` on the Max login takes ~4.5 s today (CLI start
 // plus the call), over AC3's ~2 s, so the rules are the default and Haiku is
@@ -32,14 +34,18 @@ export type Route = {
   ids: string[];
   /** The person named the lane in words; it wins over any classifier. */
   override: boolean;
+  /** With an override, the lane the rules would have picked: the label's prediction. */
+  predicted?: Lane;
   source: "rules" | "haiku";
 };
 
+// "Treat this as …" anywhere; a bare "fast lane" only as the prompt's opening
+// words, so "add the fast lane section to the docs" isn't a label.
 const OVERRIDES: [RegExp, Lane][] = [
-  [/\btreat (?:this|it) as an? block\b|\bblock lane\b/i, "block"],
-  [/\btreat (?:this|it) as an? bug\b|\bbug lane\b/i, "bug"],
-  [/\btreat (?:this|it) as (?:a )?fast(?: lane)?\b|\bfast lane\b/i, "fast"],
-  [/\btreat (?:this|it) as an? question\b|\bjust answer\b/i, "answer"],
+  [/\btreat (?:this|it) as an? block\b|^block lane\b/i, "block"],
+  [/\btreat (?:this|it) as an? bug\b|^bug lane\b/i, "bug"],
+  [/\btreat (?:this|it) as (?:a )?fast(?: lane)?\b|^fast lane\b/i, "fast"],
+  [/\btreat (?:this|it) as an? question\b|^just answer\s*[:,-]/i, "answer"],
 ];
 
 const AREA_WORDS: [Area, RegExp][] = [
@@ -78,11 +84,10 @@ const CHANGE_START =
 
 /** The keyword rules: instant, deterministic, the default router. */
 export function route(prompt: string): Route {
-  const text = prompt.trim();
-  const ids = [...new Set(text.match(ID) ?? [])].filter((id) => !NOT_IDS.test(id));
+  // A huge paste is classified by its start: the ID pattern backtracks on long runs.
+  const text = prompt.trim().slice(0, 8000);
+  const ids = [...new Set(text.match(ID) ?? [])].filter((id) => !NOT_IDS.test(id)).slice(0, 10);
   const areas = AREA_WORDS.filter(([, re]) => re.test(text)).map(([area]) => area);
-  const override = OVERRIDES.find(([re]) => re.test(text));
-  if (override) return { lane: override[1], areas, ids, override: true, source: "rules" };
 
   const blockIds = ids.filter((id) => !id.startsWith("MOD-"));
   let lane: Lane = "fast";
@@ -92,10 +97,17 @@ export function route(prompt: string): Route {
     /\bspecs\/|\bnew (?:module|feature)\b/i.test(text)
   ) {
     lane = "block";
+  } else if (CHANGE_START.test(text) && !/^(?:\w+ you (?:please )?|please )?fix\b/i.test(text)) {
+    // "Rename the error message" is an edit that mentions an error, not a bug.
+    lane = "fast";
   } else if (BUG.test(text)) {
     lane = "bug";
   } else if ((text.endsWith("?") || QUESTION_START.test(text)) && !CHANGE_START.test(text)) {
     lane = "answer";
+  }
+  const override = OVERRIDES.find(([re]) => re.test(text));
+  if (override) {
+    return { lane: override[1], areas, ids, override: true, predicted: lane, source: "rules" };
   }
   return { lane, areas, ids, override: false, source: "rules" };
 }
