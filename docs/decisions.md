@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-27 · HV-22: the hunt, retro and prod watch are Claude cloud routines and the weekly numbers a desktop scheduled task on Mike's Mac; each routine's deterministic half is `bun run routine <command>`, and the agent only judges and writes.
 - 2026-10-26 · HV-23: the router is a command hook with keyword rules by default and Haiku as a budget-bound opt-in, not a `type: "prompt"` hook; the scout is its own read-only Haiku agent.
 - 2026-10-26 · HV-24: the Haiku risk hook is an async command hook that calls `claude -p --model haiku` itself and logs to the git common dir, not a `type: "prompt"` hook.
 - 2026-10-26 · HV-20: the A/B rig runs each attempt in a remote-less `git clone --shared` at the task's commit, inside srt through `srt-offline.mjs`, with the oracle copied in from the fix commit after the agent stops.
@@ -52,7 +53,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-14 · A release pushes only its own migrations, from a scratch folder, so prod's history keeps the file versions (agent's choice, deferred to by Maciej). *(partly superseded)*
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED; the CI part was applied by lean mode, #406, 2026-10-16).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
-- 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
+- 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files. *(partly superseded)*
 - 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
 - 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
 - 2026-08-17 · Agents land bigger chunks on `develop` (standing), Entire default is `develop`, domain values go through `@contracts`.
