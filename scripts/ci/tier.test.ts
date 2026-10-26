@@ -59,7 +59,7 @@ describe("paths → tier", () => {
 
   it("gives a docs-only change tier-0", () => {
     expect(classify(["README.md", "docs/gotchas/workflow.md", "specs/harness-v3.md"]).tier).toBe(0);
-    expect(classify(["docs/diagrams/flow.svg", "supabase/AGENTS.md"]).tier).toBe(0);
+    expect(classify(["docs/diagrams/flow.svg", "docs/agent-setup.md"]).tier).toBe(0);
     expect(classify([]).tier).toBe(0);
   });
 

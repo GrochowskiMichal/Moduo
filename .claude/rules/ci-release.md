@@ -1,18 +1,24 @@
-# .github/ (loads when an agent works in this folder)
+---
+paths: [".github/**", "infra/**", "scripts/release/**"]
+incident: "oven-sh/setup-bun ran unpinned next to the signing keys (2026-10-23, CodeQL triage), and RELEASES_REPO_TOKEN was readable from any branch (2026-10-24, MOD-552)"
+expires: 2027-01-31
+---
 
-Read [docs/gotchas/build-ci.md](../docs/gotchas/build-ci.md) before changing any workflow. Locked calls: [docs/decisions/desktop-release.md](../docs/decisions/desktop-release.md).
+# CI, release and infra workflows
+
+Read [docs/gotchas/build-ci.md](../../docs/gotchas/build-ci.md) before changing any workflow. Locked calls: [docs/decisions/desktop-release.md](../../docs/decisions/desktop-release.md).
 
 - **Both desktop release channels share `_desktop-release.yml`.** Fix a problem there once instead of in `desktop-release.yml` or `desktop-release-prod.yml`.
 - **Mac builds send three notarizations at once** (the universal `.dmg`, stapled, and each per-arch `.app` as a zip, REL-5). Don't pass `APPLE_ID`/`APPLE_PASSWORD` or `APPLE_CERTIFICATE` to `tauri build`; the workflow imports the cert itself. A slow run is usually Apple's queue; use *Re-run failed jobs*, which never resubmits.
 - **Shell pitfalls:** `export X="$(cmd)"` hides a failing `cmd` (assign first, then export); on Windows `shell: bash`, quote `"$GITHUB_WORKSPACE"` instead of `${{ github.workspace }}`.
-- **`checks.yml` matches `bun run verify`** (typecheck, `bun lint` + `bun fmt --check`, lint:tw, lint:boundaries, lint:css, the release-notes leak check `lint:notes`, tests) plus the gitleaks secret scan. Add any new check to both. Tests run through Turborepo (`turbo run test test:scripts -- --shard N/3`), so every suite takes the same shard. A docs-only diff skips lint and tests (the `scan` job decides); `static-checks` still passes. **Oracles (HV-4):** `db-test`, `rust-check` and `e2e-smoke` run only when `oracle-paths` finds one of their files in the diff, and `static-checks` needs each to pass or be skipped. `db-test` builds its database from prod's schema snapshot, which `db-snapshot.yml` writes to the Actions cache nightly from develop, encrypted with the repo secret `DB_SNAPSHOT_KEY` (a fork's PR can restore any cache entry by editing its own checks.yml, but gets no secret); `SUPABASE_ACCESS_TOKEN` lives in the `supabase-snapshot` environment (develop only). A cache miss fails the job with how to fix it. Release notes (`.changes/`, `release-notes/`, `CHANGELOG.md`) are Markdown but never count as docs-only, because they're published.
+- **`checks.yml` covers `bun run verify`** plus the gitleaks secret scan: the `lint` job runs typecheck, `lint:js`, lint:tw, lint:boundaries, lint:ast, lint:css and the release-notes leak check `lint:notes`; `lint:decisions` and `lint:rules` run in the `decisions` job, which docs-only diffs don't skip; `ratchets` and the `unit-tests` shards run the rest. Add any new check to both. Tests run through Turborepo (`turbo run test test:scripts -- --shard N/3`), so every suite takes the same shard. A docs-only diff skips lint and tests (the `scan` job decides); `static-checks` still passes. **Oracles (HV-4):** `db-test`, `rust-check` and `e2e-smoke` run only when `oracle-paths` finds one of their files in the diff, and `static-checks` needs each to pass or be skipped. `db-test` builds its database from prod's schema snapshot, which `db-snapshot.yml` writes to the Actions cache nightly from develop, encrypted with the repo secret `DB_SNAPSHOT_KEY` (a fork's PR can restore any cache entry by editing its own checks.yml, but gets no secret); `SUPABASE_ACCESS_TOKEN` lives in the `supabase-snapshot` environment (develop only). A cache miss fails the job with how to fix it. Release notes (`.changes/`, `release-notes/`, `CHANGELOG.md`) are Markdown but never count as docs-only, because they're published.
 - **The Turborepo remote cache decides what runs, not `--affected`** (which misses the app's alias inputs). A task whose declared inputs didn't change is restored from the cache. If a task reads a file outside its package, declare it in that package's `turbo.json` `inputs` (`$TURBO_ROOT$/…`), or the cache will replay a stale result.
 - **The desktop app is in `apps/desktop`** (since PLAT-2, 2026-10-17). `_desktop-release.yml` still finds it per build (`DESKTOP_DIR`); every release tag has the new layout, so the root fallback only serves a staging run of a pre-move commit.
 - Workflow changes are Tier 2 risk (see `/s3`). Watch a release run with `/loop` instead of polling by hand.
 
 ## Release reality
 
-How a release is applied: [docs/release.md](../docs/release.md).
+How a release is applied: [docs/release.md](../../docs/release.md).
 
 - `desktop-release-prod.yml` publishes to `GrochowskiMichal/moduo-releases` (rolling `prod-latest` release + `latest.json` for the updater). Look there, not in this repo.
 - This repo's own `prod-latest` release is stale (v0.1.0, 2026-10-05). Ignore it.
@@ -24,12 +30,12 @@ How a release is applied: [docs/release.md](../docs/release.md).
 ## Desktop update server (PLAT-6)
 
 - Installed apps ask `infra/update-server` at https://updates.moduo.app first (the repo variable `UPDATE_SERVER_URL`), the same Worker on workers.dev second, then GitHub. Builds from rc.43 up to PLAT-8 know only the workers.dev address, so `workers_dev` stays on. Releases go to R2 `moduo-releases` under `desktop/<channel>/<version>/` (never overwritten), and the channel pointer is written last. Deploy: `update-server.yml`.
-- **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert (`publish-github`). Never unfreeze it casually: pre-PLAT-6 installs read only GitHub, and a moving GitHub manifest would bypass the kill switch. Builds after the bridge no longer list GitHub as an endpoint (MOD-552). `RELEASES_REPO_TOKEN` lives only in the `releases-production` (`v*`) and `releases-staging` (develop, mike) environments; never put it back at repo level. Signing keys per channel and retiring the bridge: [docs/release.md](../docs/release.md) §7.
+- **The GitHub `latest.json` is frozen at each channel's bridge release** (`"bridge": true`), and later releases skip the GitHub upsert (`publish-github`). Never unfreeze it casually: pre-PLAT-6 installs read only GitHub, and a moving GitHub manifest would bypass the kill switch. Builds after the bridge no longer list GitHub as an endpoint (MOD-552). `RELEASES_REPO_TOKEN` lives only in the `releases-production` (`v*`) and `releases-staging` (develop, mike) environments; never put it back at repo level. Signing keys per channel and retiring the bridge: [docs/release.md](../../docs/release.md) §7.
 - Rollout share and kill switch: run `desktop-rollout.yml` (channel, rollout 0–100, paused). It takes effect in about a minute and never downgrades anyone.
 
 ## MCP connector address
 
-- `https://mcp.moduo.app` is the Worker `infra/mcp-proxy` (`moduo-mcp-proxy`), forwarding to the `moduo-mcp` Edge Function. It deploys with every release tag (`release.yml` job `mcp` → `_deploy-mcp-proxy.yml`; re-run: `deploy-prod.yml` target `mcp`), never from a branch push. It refuses to deploy until the function serving the public address is out: function first. Prod config is `env.production` (`wrangler deploy --env production`). Decision: [docs/decisions/mcp.md](../docs/decisions/mcp.md) (2026-10-23).
+- `https://mcp.moduo.app` is the Worker `infra/mcp-proxy` (`moduo-mcp-proxy`), forwarding to the `moduo-mcp` Edge Function. It deploys with every release tag (`release.yml` job `mcp` → `_deploy-mcp-proxy.yml`; re-run: `deploy-prod.yml` target `mcp`), never from a branch push. It refuses to deploy until the function serving the public address is out: function first. Prod config is `env.production` (`wrangler deploy --env production`). Decision: [docs/decisions/mcp.md](../../docs/decisions/mcp.md) (2026-10-23).
 
 ## Mac build runner (PLAT-7)
 

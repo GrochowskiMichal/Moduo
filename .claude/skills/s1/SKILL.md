@@ -11,7 +11,7 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 **Write no code. This is read-only research + questioning until the spec is approved.** Run in your tool's read-only/plan mode if it has one.
 
 ## 1. Orient (read first, silently)
-- Set the session title as soon as the topic is known: `[<Module>] <short title> plan` (AGENTS.md §Session naming).
+- Set the session title as soon as the topic is known: `[<Module>] <short title> plan` (AGENTS.md §Session start, item 4).
 - `AGENTS.md` → "Working posture" + "Knowledge map"; the indexes `docs/decisions.md` and `docs/gotchas.md`, then the area files (`docs/decisions/<area>.md`, `docs/gotchas/<area>.md`) for the module you're planning.
 - The north-star docs (`docs/PRODUCT_BRIEF.md`, `docs/ROADMAP.md`, `docs/data-layers.md`) and, if it's a known module, its `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md` and `docs/moduo-module-contract.md`.
 - Codebase recon belongs **here**, not in execution: use read-only explore/recon subagents to map existing patterns, data shapes, and reuse opportunities. Spawn parallel explores for breadth.

@@ -93,6 +93,9 @@
       ],
       "outputs": []
     },
+    "//#lint:rules": {
+      "cache": false
+    },
     "//#lint:decisions": {
       "inputs": ["docs/decisions.md", "docs/decisions/*.md", "scripts/docs/decisions.ts"],
       "outputs": []
@@ -103,6 +106,8 @@
         "tools/ast-grep/**",
         ".claude/hooks/guard-release*",
         ".claude/hooks/guard-git*",
+        ".claude/rules/**",
+        "AGENTS.md",
         "VERSION",
         "brand/**",
         "apps/app/src/**",
