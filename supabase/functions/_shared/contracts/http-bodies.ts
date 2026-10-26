@@ -43,8 +43,6 @@ export const createCheckoutSessionBodySchema = z.object({
   price_id: z.string().optional(),
   successUrl: z.string().optional(),
   cancelUrl: z.string().optional(),
-  coupon: z.string().optional(),
-  couponCode: z.string().optional(),
 });
 
 export const manageIntegrationBodySchema = z.object({

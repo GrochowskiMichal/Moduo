@@ -5,7 +5,10 @@
  * Stripe Sync Engine + DB trigger, never written here.
  *
  * POST { plan: "pro"|"duo"|"team", interval?: "monthly"|"yearly", seats?: number (team, min 3),
- *        withCard?: boolean, successUrl?, cancelUrl?, coupon? }
+ *        withCard?: boolean, successUrl?, cancelUrl? }, Authorization: Bearer <the person's JWT>.
+ * POST only: it creates Stripe objects, so a GET (a link, a prefetch) never reaches it. The
+ * token only ever comes in the header, never the URL. No coupon from the caller: a discount
+ * is a promotion code typed into Checkout (MOD-550, _shared/checkout-request.ts).
  * Returns { url }              — redirect to Stripe Checkout or the Billing Portal, or
  *         { switched: true }   — a trialing user changed plan in place (trial kept, no redirect).
  *
@@ -40,6 +43,7 @@ import {
   TRIAL_DAYS_WITH_CARD,
 } from "../_shared/billing.ts";
 import { APP_TOKEN_REFUSAL } from "../_shared/app-token.ts";
+import { checkoutBody } from "../_shared/checkout-request.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = makeStripe();
@@ -47,6 +51,7 @@ const DEFAULT_ORIGIN = "https://app.moduo.app";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   try {
     const keyErr = stripeSecretKeyConfigError();
@@ -56,41 +61,12 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false },
     });
 
-    const queryToken = new URL(req.url).searchParams.get("access_token")?.trim();
-    const caller = await authenticate(
-      supabase,
-      req.headers.get("Authorization") ?? (queryToken ? `Bearer ${queryToken}` : null),
-    );
+    const caller = await authenticate(supabase, req.headers.get("Authorization"));
     if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
     if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
     const user = caller.user;
 
-    let rawInput: unknown;
-    if (req.method === "GET") {
-      const q = new URL(req.url).searchParams;
-      rawInput = {
-        plan: q.get("plan") ?? undefined,
-        interval: q.get("interval") ?? q.get("billing") ?? undefined,
-        seats: q.get("seats") ? Number(q.get("seats")) : undefined,
-        withCard: q.get("withCard") === "true" ? true : undefined,
-        successUrl: q.get("successUrl") ?? undefined,
-        cancelUrl: q.get("cancelUrl") ?? undefined,
-        coupon: q.get("coupon") ?? undefined,
-      };
-    } else {
-      rawInput = await req.json().catch(() => ({}));
-    }
-    const input = (typeof rawInput === "object" && rawInput !== null ? rawInput : {}) as Record<string, unknown>;
-    const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-    const body = {
-      plan: str(input.plan),
-      interval: str(input.interval) ?? str(input.billing_cycle) ?? str(input.billing),
-      seats: typeof input.seats === "number" && Number.isInteger(input.seats) ? input.seats : undefined,
-      withCard: input.withCard === true,
-      successUrl: str(input.successUrl),
-      cancelUrl: str(input.cancelUrl),
-      coupon: str(input.coupon) ?? str(input.couponCode),
-    };
+    const body = checkoutBody(await req.json().catch(() => ({})));
 
     const plan = body.plan?.toLowerCase().trim();
     if (!isPaidPlan(plan)) {
@@ -145,7 +121,6 @@ Deno.serve(async (req: Request) => {
     // No live subscription. Trials are one per customer, ever.
     const everSubscribed = subs.data.length > 0;
     const withCard = body.withCard;
-    const couponCode = body.coupon;
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -167,7 +142,7 @@ Deno.serve(async (req: Request) => {
             }),
         metadata: { supabase_user_id: user.id },
       },
-      ...(couponCode ? { discounts: [{ coupon: couponCode }] } : { allow_promotion_codes: true }),
+      allow_promotion_codes: true,
     });
 
     return json({ url: session.url });
