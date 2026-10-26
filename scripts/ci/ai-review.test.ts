@@ -56,9 +56,11 @@ describe("ai-review.yml", () => {
     expect(step).toMatch(/^ {8}continue-on-error: true$/m);
   });
 
-  it("runs the built-in /code-review at medium on Sonnet, where medium votes", () => {
-    expect(code).toMatch(/prompt: \/code-review medium --comment \$\{\{ github\.event\.pull_request\.number \}\}$/m);
-    expect(code).toMatch(/--model sonnet$/m);
+  it("runs the built-in /code-review at medium on Sonnet 5, where medium votes", () => {
+    expect(code).toMatch(
+      /prompt: \/code-review medium --comment \$\{\{ github\.event\.pull_request\.number \}\}$/m,
+    );
+    expect(code).toMatch(/--model claude-sonnet-5$/m);
     expect(code).toContain("REVIEW.md");
     expect(code).toMatch(/classify_inline_comments: "false"/);
   });
@@ -72,10 +74,25 @@ describe("ai-review.yml", () => {
   it("can only comment: read contents, write pull requests, nothing else", () => {
     const perms = blocks(code, "permissions");
     expect(perms).toHaveLength(1);
-    const body = perms[0].split("\n").slice(1).map((l) => l.trim()).filter(Boolean);
+    const body = perms[0]
+      .split("\n")
+      .slice(1)
+      .map((l) => l.trim())
+      .filter(Boolean);
     expect(body).toEqual(["contents: read", "pull-requests: write"]);
     const allowed = code.match(/--allowedTools "([^"]*)"/)?.[1].split(",") ?? [];
     expect(allowed).toContain("mcp__github_inline_comment__create_inline_comment");
+    const denied = code.match(/--disallowedTools "([^"]*)"/)?.[1].split(",") ?? [];
+    // Project allow rules load in CI; these keep PR code from running with the token around.
+    for (const tool of [
+      "Bash(bun:*)",
+      "Bash(npm:*)",
+      "Bash(gh api:*)",
+      "mcp__supabase",
+      "mcp__moduo",
+    ]) {
+      expect(denied).toContain(tool);
+    }
     for (const tool of allowed) {
       expect(tool).not.toMatch(/^(Edit|Write|NotebookEdit|Bash|Bash\(gh api.*|Bash\(\*.*)$/);
     }

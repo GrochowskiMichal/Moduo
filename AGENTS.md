@@ -45,7 +45,7 @@ No other model providers. Pick by role, not "strongest everywhere"; raise effort
 | Advisor during `/s2` (Max only) | Fable 5.1, via `/advisor fable` | n/a |
 | The hardest plan syntheses (Max only) | Fable 5.1, via `/model fable` | `high` |
 | `validator` subagent | Opus 5.5 | `high` |
-| AI review on PRs into develop (`ai-review.yml`) | Sonnet 5.5 (its `/code-review medium` votes on findings) | `medium` |
+| AI review on PRs into develop (`ai-review.yml`) | Sonnet 5 (`claude-sonnet-5`: the one model whose `/code-review medium` votes on findings) | `medium` |
 | Read-only recon | built-in `Explore` subagent | default |
 | `/goal` evaluator | Haiku 5.5 (automatic) | n/a |
 
