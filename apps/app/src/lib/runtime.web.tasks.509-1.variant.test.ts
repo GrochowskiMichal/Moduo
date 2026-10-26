@@ -1,7 +1,7 @@
 // HV-15 variant of benchmarks/escapes/509-1-error-read-as-empty: `liveBucketOrInbox` drops the
 // error of its "is this project live?" read, so a failed read reads as "no such project" and a
-// move (or a capture) into a real project files the task in the Inbox. Fails until the fix lands.
-// Run: MODUO_HUNT=1 bun run --cwd apps/app test src/lib/runtime.web.tasks.509-1.variant.test.ts
+// move (or a capture) into a real project files the task in the Inbox. Fixed in MOD-560; kept as a regression test.
+// Run: bun run --cwd apps/app test src/lib/runtime.web.tasks.509-1.variant.test.ts
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 const h = rs.hoisted(() => ({
@@ -10,11 +10,14 @@ const h = rs.hoisted(() => ({
   ws: "00000000-0000-4000-8000-0000000000c3",
   inbox: "00000000-0000-4000-8000-0000000000aa",
   project: "00000000-0000-4000-8000-0000000000d4",
+  bucketMissing: false,
 }));
 
 rs.mock("@supabase/supabase-js", () => {
   type Call = [string, unknown[]];
   const answer = (table: string, calls: Call[]) => {
+    // The "does this task exist?" read fails too (HV-12: a re-save went down the create path).
+    if (table === "tasks") return { data: null, error: { message: "TypeError: Failed to fetch" } };
     if (table !== "buckets") return { data: null, error: null };
     const isInboxFind = calls.some(([m, a]) => m === "eq" && a[0] === "is_system");
     if (isInboxFind) {
@@ -33,6 +36,7 @@ rs.mock("@supabase/supabase-js", () => {
         error: null,
       };
     }
+    if (h.bucketMissing) return { data: null, error: null };
     // The project's "is it live?" read fails (a 5xx / a dropped connection).
     return { data: null, error: { message: "TypeError: Failed to fetch", code: "" } };
   };
@@ -73,25 +77,50 @@ rs.mock("@supabase/supabase-js", () => {
 
 import { webRuntime } from "./runtime.web";
 
-const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
-
-hunt("HV-15 variant 509-1: a failed project read files the task in the Inbox", () => {
+describe("HV-15 variant 509-1: a failed project read files the task in the Inbox", () => {
   beforeEach(() => {
     h.rpcs.length = 0;
   });
 
   it("moving a task to a project never sends it to the Inbox because the project read failed", async () => {
-    await webRuntime.tasks
-      .updateTask({
-        workspaceId: h.ws,
-        taskId: "00000000-0000-4000-8000-0000000000f6",
-        patch: { bucketId: h.project },
-      })
-      .catch(() => undefined);
+    const move = webRuntime.tasks.updateTask({
+      workspaceId: h.ws,
+      taskId: "00000000-0000-4000-8000-0000000000f6",
+      patch: { bucketId: h.project },
+    });
+    // The move fails loudly; nothing is sent, so never the Inbox.
+    await expect(move).rejects.toThrow("Failed to fetch");
+    expect(h.rpcs.map((r) => r.fn)).not.toContain("tasks_op_update");
+  });
+
+  it("a project that really isn't there (no error, no row) still files into the Inbox", async () => {
+    h.bucketMissing = true;
+    try {
+      await webRuntime.tasks
+        .updateTask({
+          workspaceId: h.ws,
+          taskId: "00000000-0000-4000-8000-0000000000f6",
+          patch: { bucketId: h.project },
+        })
+        .catch(() => undefined); // the stand-in op answers no rows
+    } finally {
+      h.bucketMissing = false;
+    }
     const sentBuckets = h.rpcs
       .filter((r) => r.fn === "tasks_op_update")
       .map((r) => (r.args.p_patch as Record<string, unknown>).bucket_id);
-    // Either the project goes through or nothing is sent; never the Inbox.
-    expect(sentBuckets).not.toContain(h.inbox);
+    expect(sentBuckets).toEqual([h.inbox]);
+  });
+
+  it("re-saving an existing task never goes down the create path because its existence read failed", async () => {
+    const save = webRuntime.tasks.upsertTask({
+      id: "00000000-0000-4000-8000-0000000000f7",
+      workspaceId: h.ws,
+      bucketId: null,
+      title: "Edited title",
+    } as never);
+    // The edit fails loudly (the caller rolls back and shows it) instead of resolving to the stored row.
+    await expect(save).rejects.toThrow("Failed to fetch");
+    expect(h.rpcs.map((r) => r.fn)).not.toContain("tasks_op_create");
   });
 });

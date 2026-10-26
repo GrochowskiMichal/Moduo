@@ -483,15 +483,20 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
         }
       }
       if (status) {
+        // After any older check-off for it still on its way (MOD-561): sent
+        // first, the older one would land last and win. The drop's Undo
+        // needs the server's row, so it waits its turn rather than queueing.
         saved.push(
-          await rt.tasks.opSetStatus({
-            workspaceId: ws,
-            taskId,
-            // By id when Undo puts a named status back, else the word.
-            status: status.status,
-            recurrence: status.recurrence,
-            position: status.position,
-          }),
+          await store.sendStatusInTurn(taskId, () =>
+            rt.tasks.opSetStatus({
+              workspaceId: ws,
+              taskId,
+              // By id when Undo puts a named status back, else the word.
+              status: status.status,
+              recurrence: status.recurrence,
+              position: status.position,
+            }),
+          ),
         );
       }
       if (assigneeId !== undefined) {

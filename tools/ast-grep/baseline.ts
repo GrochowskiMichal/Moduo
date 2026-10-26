@@ -61,13 +61,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   },
   {
     rule: "supabase-error-swallowed",
-    file: "apps/app/src/lib/runtime.web.auth.ts",
-    snippet:
-      'await supabaseClient.from("profiles").update({ display_name: displayName }).eq("id", uid);',
-    why: "Candidate bug: The profiles update error is dropped: the UI reports a rename while profiles keeps the old name.",
-  },
-  {
-    rule: "supabase-error-swallowed",
     file: "apps/app/src/lib/runtime.web.notes.ts",
     snippet: "if (error || !data) return null;",
     why: "Deliberate: Legacy web read nothing reaches; the redb import goes through the Tauri runtime.",
@@ -105,20 +98,6 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet:
       '{ data: prev } = await supabaseClient .from("buckets") .select("id") .eq("id", id) .maybeSingle()',
     why: "Risk: Wrong insert-vs-update on a failed read; the duplicate-id insert fails with a misleading error.",
-  },
-  {
-    rule: "supabase-error-swallowed",
-    file: "apps/app/src/lib/runtime.web.tasks.ts",
-    snippet:
-      '{ data: b } = await supabaseClient .from("buckets") .select("workspace_id, deleted_at") .eq("id", bucketId) .maybeSingle',
-    why: 'Candidate bug: A failed bucket read counts as "no bucket", so the task is filed into the Inbox and moves on re-save.',
-  },
-  {
-    rule: "supabase-error-swallowed",
-    file: "apps/app/src/lib/runtime.web.tasks.ts",
-    snippet:
-      '{ data: prev } = await supabaseClient .from("tasks") .select("id") .eq("id", task.id) .maybeSingle()',
-    why: "Candidate bug: A failed existence read sends a re-save of an existing task down the idempotent create path, dropping its edits.",
   },
   {
     rule: "supabase-error-swallowed",
@@ -192,12 +171,6 @@ export const BASELINE: readonly BaselineEntry[] = [
     file: "apps/app/src/lib/sync/cache.ts",
     snippet: "catch { return null; }",
     why: "Risk: Falls back to a server read, but offline captures in the copy wait for the next persist merge.",
-  },
-  {
-    rule: "sync-catch-returns-empty",
-    file: "apps/app/src/lib/sync/cache.ts",
-    snippet: "catch { return null; }",
-    why: 'Candidate bug: A failed update reads as "nothing kept", so keepOnlyWaiting deletes the copy and its queued outbox.',
   },
   {
     rule: "sync-catch-returns-empty",
