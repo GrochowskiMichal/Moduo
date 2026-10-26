@@ -41,6 +41,10 @@ type World = {
   noAffinity?: boolean;
   /** Analytics per version, or "denied" for a token without Account Analytics: Read. */
   analytics?: Record<string, { requests: number; errors: number }> | "denied";
+  /** A new deployment honours overrides only this long after it was made (propagation). */
+  overrideDelayMs?: number;
+  /** When the live deployment was made (set by the fake API). */
+  deployedAt?: number;
   /** The first n unpinned /config.json requests answer 500 (a flake during the affinity check). */
   flakyConfig?: number;
   /** Called before each deployments read: lets a test deploy "by someone else". */
@@ -65,7 +69,8 @@ function serving(w: World, headers: Headers, n: number): string {
   const o = headers.get("cloudflare-workers-version-overrides");
   const v = o?.match(/="([^"]+)"/)?.[1];
   const split = live(w).versions;
-  if (v && split.some((s) => s.version_id === v)) return v;
+  const propagated = w.clock >= (w.deployedAt ?? 0) + (w.overrideDelayMs ?? 0);
+  if (v && propagated && split.some((s) => s.version_id === v)) return v;
   // With affinity this client always lands on the old version (its IP hashes there).
   if (!w.noAffinity) return split.length === 1 ? split[0].version_id : OLD;
   return n % 3 === 0 && split.some((s) => s.version_id === NEW && s.percentage > 0) ? NEW : OLD;
@@ -100,6 +105,7 @@ function fake(w: World): CanaryEnv["fetchFn"] {
       expect(body.versions.reduce((a, v) => a + v.percentage, 0)).toBe(100);
       const d = { id: `d${w.deployments.length}`, versions: body.versions };
       w.deployments.push(d);
+      w.deployedAt = w.clock;
       w.posted.push(body.versions);
       return Response.json({ success: true, result: d });
     }
@@ -245,6 +251,26 @@ describe("run", () => {
     const r = await run(OPTS, envFor(w));
     expect(r.outcome).toBe("rolled-back-smoke");
     expect(w.posted).toEqual([at(0), OLD_100]);
+    // The smoke's own detail, not a propagation story, and no minute-long wait.
+    expect(r.report.join("\n")).toMatch(/Smoke at 0% failed: GET \/ \(status 500/);
+    expect(r.report.join("\n")).not.toMatch(/override never reached/);
+    expect(w.clock - 1_800_000_000_000).toBeLessThan(10_000);
+  });
+
+  it("waits for a fresh deployment to honour the override before the smoke", async () => {
+    const w = world({ overrideDelayMs: 5_000 });
+    const r = await run(OPTS, envFor(w));
+    expect(r.outcome).toBe("promoted");
+  });
+
+  it("an override that never reaches the new version fails the smoke, saying so", async () => {
+    const w = world({ overrideDelayMs: 10 * 60_000 });
+    const r = await run(OPTS, envFor(w));
+    expect(r.outcome).toBe("rolled-back-smoke");
+    expect(w.posted).toEqual([at(0), OLD_100]);
+    expect(r.report.join("\n")).toMatch(
+      /override never reached 11111111 within 60 s \(\/config.json kept answering the old build\)/,
+    );
   });
 
   it("without analytics access the probes decide alone, and the report says so", async () => {
