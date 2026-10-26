@@ -1,7 +1,7 @@
 // HV-15 variant of benchmarks/escapes/509-1-error-read-as-empty: a failed read of the removed
 // Google calendars (`tombstonedGoogleIds`) reads as "none removed", so opening Calendar
-// re-adds a calendar the person removed. Fails until the fix lands.
-// Run: MODUO_HUNT=1 bun run --cwd apps/app test src/features/calendar/google-web.509-1.variant.test.ts
+// re-adds a calendar the person removed. Fixed in MOD-559; kept as a regression test.
+// Run: bun run --cwd apps/app test src/features/calendar/google-web.509-1.variant.test.ts
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
@@ -54,9 +54,7 @@ rs.mock("./connect-return", () => ({
 
 import { ensureGoogleCalendarAccounts } from "./google-web";
 
-const hunt = process.env.MODUO_HUNT ? describe : describe.skip;
-
-hunt("HV-15 variant 509-1: a failed tombstone read brings back a removed Google calendar", () => {
+describe("HV-15 variant 509-1: a failed tombstone read brings back a removed Google calendar", () => {
   beforeEach(() => {
     sessionStorage.clear();
   });
