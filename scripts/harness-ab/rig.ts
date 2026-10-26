@@ -413,87 +413,94 @@ const csv = (v: string | boolean | undefined) =>
         .filter(Boolean)
     : undefined;
 
-function main(argv: string[]) {
-  const [cmd, ...args] = argv;
-  const { out: f, rest } = flags(args);
-  if (cmd === "list") {
-    console.log(`task sets (${path.relative(SOURCE, TASKS_DIR)}):`);
-    for (const name of listDir(TASKS_DIR, false)) {
-      const set = loadSet(name);
-      console.log(`  ${name}: ${set.description}`);
-      for (const t of set.tasks) console.log(`    ${t.id} [${t.expect}] ${t.title}`);
-    }
-    console.log(`arms (${path.relative(SOURCE, ARMS_DIR)}):`);
-    for (const id of listDir(ARMS_DIR, true)) {
-      const arm = loadArm(id);
-      console.log(
-        `  ${id}: ${arm.model}${arm.effort ? ` @${arm.effort}` : ""}, ${arm.description}`,
-      );
-    }
-    return 0;
+type Flags = Record<string, string | boolean>;
+const str = (f: Flags, key: string, fallback: string) =>
+  typeof f[key] === "string" ? (f[key] as string) : fallback;
+
+function listCommand() {
+  console.log(`task sets (${path.relative(SOURCE, TASKS_DIR)}):`);
+  for (const name of listDir(TASKS_DIR, false)) {
+    const set = loadSet(name);
+    console.log(`  ${name}: ${set.description}`);
+    for (const t of set.tasks) console.log(`    ${t.id} [${t.expect}] ${t.title}`);
   }
-  if (cmd === "report") {
-    const file = rest[0];
-    if (!file) throw new Error("usage: report <results.jsonl>");
-    const rows = readFileSync(file, "utf8")
-      .split("\n")
-      .filter(Boolean)
-      .map((l) => JSON.parse(l) as Row);
-    console.log(report(rows));
-    return 0;
+  console.log(`arms (${path.relative(SOURCE, ARMS_DIR)}):`);
+  for (const id of listDir(ARMS_DIR, true)) {
+    const arm = loadArm(id);
+    const effort = arm.effort ? ` @${arm.effort}` : "";
+    console.log(`  ${id}: ${arm.model}${effort}, ${arm.description}`);
   }
-  const setName = typeof f.set === "string" ? f.set : "core";
-  const set = loadSet(setName);
-  if (cmd === "check-tasks") {
-    const only = csv(f.tasks);
-    const tasks = only ? set.tasks.filter((t) => only.includes(t.id)) : set.tasks;
-    let bad = 0;
-    for (const t of tasks) {
-      const r = checkTask(t, set.dir);
-      if (!r.sound) bad++;
-      console.log(JSON.stringify(r));
-    }
-    return bad ? 1 : 0;
+  return 0;
+}
+
+function reportCommand(file: string | undefined) {
+  if (!file) throw new Error("usage: report <results.jsonl>");
+  const rows = readFileSync(file, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as Row);
+  console.log(report(rows));
+  return 0;
+}
+
+function checkTasksCommand(f: Flags) {
+  const set = loadSet(str(f, "set", "core"));
+  const only = csv(f.tasks);
+  const tasks = only ? set.tasks.filter((t) => only.includes(t.id)) : set.tasks;
+  let bad = 0;
+  for (const t of tasks) {
+    const r = checkTask(t, set.dir);
+    if (!r.sound) bad++;
+    console.log(JSON.stringify(r));
   }
-  if (cmd !== "run") {
-    console.error(
-      "usage: bun run ab list | run --set <set> --arms a,b [--tasks …] [--repeats 3] [--dry-run] [--keep] [--no-verify] | check-tasks --set <set> | report <file>",
-    );
-    return 64;
-  }
+  return bad ? 1 : 0;
+}
+
+function runCommand(f: Flags) {
+  const set = loadSet(str(f, "set", "core"));
+  const dry = f["dry-run"] === true;
   const arms = (csv(f.arms) ?? ["control"]).map((id) => loadArm(id));
   const batch = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   const rigSha = git(SOURCE, "rev-parse", "--short=12", "HEAD");
   const runs = plan({
     set,
     arms,
-    repeats: typeof f.repeats === "string" ? Number(f.repeats) : 3,
-    source: typeof f.source === "string" ? f.source : SOURCE,
+    repeats: Number(str(f, "repeats", "3")),
+    source: str(f, "source", SOURCE),
     only: csv(f.tasks),
     batch,
   });
   mkdirSync(path.join(OUT, "results"), { recursive: true });
-  const results = path.join(
-    OUT,
-    "results",
-    `${batch}-${set.name}${f["dry-run"] ? "-dry" : ""}.jsonl`,
-  );
+  const results = path.join(OUT, "results", `${batch}-${set.name}${dry ? "-dry" : ""}.jsonl`);
   console.error(`harness-ab: ${runs.length} run(s) → ${path.relative(SOURCE, results)}`);
+  const opts = {
+    batch,
+    rigSha,
+    keep: f.keep === true,
+    verify: f["no-verify"] !== true,
+    verifyDefault: set.verify,
+    setDir: set.dir,
+  };
   for (const run of runs) {
-    const row = f["dry-run"]
-      ? plannedRow(run, batch, rigSha)
-      : execute(run, {
-          batch,
-          rigSha,
-          keep: f.keep === true,
-          verify: f["no-verify"] !== true,
-          verifyDefault: set.verify,
-          setDir: set.dir,
-        });
+    const row = dry ? plannedRow(run, batch, rigSha) : execute(run, opts);
     appendFileSync(results, `${JSON.stringify(row)}\n`);
     console.error(`  ${row.runId}: ${row.outcome}${row.error ? ` (${row.error})` : ""}`);
   }
   return 0;
+}
+
+const USAGE =
+  "usage: bun run ab list | run --set <set> --arms a,b [--tasks …] [--repeats 3] [--dry-run] [--keep] [--no-verify] | check-tasks --set <set> | report <file>";
+
+function main(argv: string[]) {
+  const [cmd, ...args] = argv;
+  const { out: f, rest } = flags(args);
+  if (cmd === "list") return listCommand();
+  if (cmd === "report") return reportCommand(rest[0]);
+  if (cmd === "check-tasks") return checkTasksCommand(f);
+  if (cmd === "run") return runCommand(f);
+  console.error(USAGE);
+  return 64;
 }
 
 if (import.meta.main) {

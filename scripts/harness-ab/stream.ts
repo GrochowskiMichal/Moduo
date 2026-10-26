@@ -23,9 +23,52 @@ type Event = {
 };
 
 /** A Bash command that runs tests (counts the agent's tries). */
-const TEST_COMMAND = /\b(rstest|vitest|jest|bun\s+(run\s+)?test|cargo\s+test|db:test|playwright)\b/;
+const TEST_COMMAND =
+  /\b(rstest|vitest|jest|cargo\s+test|db:test|playwright)\b|\bbun\s+(run\s+)?(--cwd\s+\S+\s+)?test\b/;
 /** The defect report the impossible-spec task asks for: a line that starts with DEFECT REPORT. */
 const DEFECT = /^\s*[#*>\s]*DEFECT REPORT\b/im;
+
+const parse = (line: string): Event | null => {
+  if (!line.trim().startsWith("{")) return null;
+  try {
+    return JSON.parse(line) as Event;
+  } catch {
+    return null;
+  }
+};
+
+function onInit(out: AgentSummary, ev: Event) {
+  out.model = ev.model ?? null;
+  out.mcpServers = (ev.mcp_servers ?? []).map((s) => s.name);
+}
+
+function onAssistant(out: AgentSummary, content: Block[]) {
+  for (const block of content) {
+    if (block.type !== "tool_use" || !block.name) continue;
+    out.tools[block.name] = (out.tools[block.name] ?? 0) + 1;
+    if (block.name === "Bash" && TEST_COMMAND.test(block.input?.command ?? "")) out.testRuns++;
+  }
+}
+
+function onResult(out: AgentSummary, ev: Event) {
+  const u = ev.usage;
+  Object.assign(out, {
+    subtype: ev.subtype ?? null,
+    isError: ev.is_error ?? ev.subtype !== "success",
+    turns: ev.num_turns ?? null,
+    costUsd: ev.total_cost_usd ?? null,
+    durationMs: ev.duration_ms ?? null,
+    result: ev.result ?? "",
+    usage: u
+      ? {
+          input: u.input_tokens ?? 0,
+          output: u.output_tokens ?? 0,
+          cacheRead: u.cache_read_input_tokens ?? 0,
+          cacheWrite: u.cache_creation_input_tokens ?? 0,
+        }
+      : null,
+  });
+}
 
 export function summarize(stream: string): AgentSummary {
   const out: AgentSummary = {
@@ -43,39 +86,13 @@ export function summarize(stream: string): AgentSummary {
     result: "",
   };
   let sawResult = false;
-  for (const line of stream.split("\n")) {
-    if (!line.trim().startsWith("{")) continue;
-    let ev: Event;
-    try {
-      ev = JSON.parse(line) as Event;
-    } catch {
-      continue;
-    }
-    if (ev.type === "system" && ev.subtype === "init") {
-      out.model = ev.model ?? null;
-      out.mcpServers = (ev.mcp_servers ?? []).map((s) => s.name);
-    } else if (ev.type === "assistant" && Array.isArray(ev.message?.content)) {
-      for (const block of ev.message.content) {
-        if (block.type !== "tool_use" || !block.name) continue;
-        out.tools[block.name] = (out.tools[block.name] ?? 0) + 1;
-        if (block.name === "Bash" && TEST_COMMAND.test(block.input?.command ?? "")) out.testRuns++;
-      }
-    } else if (ev.type === "result") {
+  for (const ev of stream.split("\n").map(parse)) {
+    if (ev?.type === "system" && ev.subtype === "init") onInit(out, ev);
+    else if (ev?.type === "assistant" && Array.isArray(ev.message?.content))
+      onAssistant(out, ev.message.content);
+    else if (ev?.type === "result") {
       sawResult = true;
-      out.subtype = ev.subtype ?? null;
-      out.isError = ev.is_error ?? ev.subtype !== "success";
-      out.turns = ev.num_turns ?? null;
-      out.costUsd = ev.total_cost_usd ?? null;
-      out.durationMs = ev.duration_ms ?? null;
-      out.result = ev.result ?? "";
-      out.usage = ev.usage
-        ? {
-            input: ev.usage.input_tokens ?? 0,
-            output: ev.usage.output_tokens ?? 0,
-            cacheRead: ev.usage.cache_read_input_tokens ?? 0,
-            cacheWrite: ev.usage.cache_creation_input_tokens ?? 0,
-          }
-        : null;
+      onResult(out, ev);
     }
   }
   if (!sawResult) out.isError = true;

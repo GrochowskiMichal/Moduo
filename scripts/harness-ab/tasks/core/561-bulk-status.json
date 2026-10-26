@@ -11,9 +11,7 @@
   "prompt": "Bug (MOD-561): a person checks a task off while offline, comes back online, and while that check-off is still being sent they set the same task back to To do, either with a bulk status change in the Tasks list or by dropping it into the To do column on the Board. The task ends up Done: the bulk change and the Board drop send their status write straight away instead of waiting behind the older queued check-off, so the older write lands last. Make both paths wait their turn behind an older status write for the same task, and add regression tests. The code is in apps/app/src/features/tasks/commands/ and apps/app/src/lib/sync/. Don't commit or push.",
   "expect": "fix",
   "oracle": {
-    "files": [
-      "apps/app/src/features/tasks/commands/bulk-write.509-2.variant.test.ts"
-    ],
+    "files": ["apps/app/src/features/tasks/commands/bulk-write.509-2.variant.test.ts"],
     "checks": [
       {
         "name": "bulk and drop wait behind the check-off",

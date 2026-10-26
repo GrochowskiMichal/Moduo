@@ -242,7 +242,8 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
         }
       }
       const other = await listen(0);
-      const otherPort = (other?.address() as import("node:net").AddressInfo).port;
+      if (!other) throw new Error("no free local port");
+      const otherPort = (other.address() as import("node:net").AddressInfo).port;
       const dir = mkdtempSync(path.join(tmpdir(), "harness-ab-srt-"));
       try {
         const file = path.join(dir, "p.json");
@@ -270,7 +271,7 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
         expect(run.stdout).toContain(`${otherPort}=open`);
       } finally {
         stack?.close();
-        other?.close();
+        other.close();
         rmSync(dir, { recursive: true, force: true });
       }
     },
@@ -289,6 +290,12 @@ describe("rows", () => {
         content: [
           { type: "tool_use", name: "Bash", input: { command: "bun test ./harness-fixture" } },
           { type: "tool_use", name: "Edit", input: {} },
+          {
+            type: "tool_use",
+            name: "Bash",
+            input: { command: "bun run --cwd apps/app test src/lib/x.test.ts" },
+          },
+          { type: "tool_use", name: "Bash", input: { command: "bun run typecheck" } },
         ],
       },
     }),
@@ -312,8 +319,8 @@ describe("rows", () => {
       mcpServers: [],
       turns: 4,
       costUsd: 0.12,
-      testRuns: 1,
-      tools: { Bash: 1, Edit: 1 },
+      testRuns: 2,
+      tools: { Bash: 3, Edit: 1 },
       defectReport: true,
       isError: false,
     });

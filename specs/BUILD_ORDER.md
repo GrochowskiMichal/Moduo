@@ -582,7 +582,7 @@ One row-sync kernel (`apps/app/src/lib/sync/kernel/`) under the Tasks and Chat s
 - [x] **HV-7 — GitHub → Moduo sync (Tier 2)** · deps: HV-2 · 2026-10-26 `t/mike/hv-7-github-sync` (live check pending the key and a develop sync)
 - [x] **HV-10 — Rules by path** · deps: HV-1 · 2026-10-26 `t/mike/hv-10-path-rules`
 - [x] **HV-18 — Frozen tests profile** · deps: HV-1 · 2026-10-26 `t/mike/hv-18-frozen-tests`
-- [ ] **HV-20 — A/B rig** · deps: HV-1, HV-2
+- [x] **HV-20 — A/B rig** · deps: HV-1, HV-2 · 2026-10-26 `t/mike/hv-20-ab-rig` (PR #662)
 - [ ] **HV-23 — Router, scout** · deps: HV-1
 - [ ] **HV-24 — Haiku risk hook (shadow)** · deps: HV-1
 - [x] **HV-16 — RLS access matrix** · deps: HV-4 · 2026-10-26 · `t/mike/hv-16-rls-matrix`, PR #655
