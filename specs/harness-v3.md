@@ -1,6 +1,6 @@
 # Spec: Harness v3 — the flow board, built
 
-> Status: **Ready to execute** · Owner: mike · Planned 2026-10-23 (engineer mode); Maciej agreed to all of it the same day · Target: everything before the closed alpha (2 Nov 2026), Mike's call · Board: [Moduo Flow Board](https://claude.ai/artifact/PV3Ay6K4Jg96FTPp9syPP3) · Evidence: `docs/local/claude_science/harness/harness-audit-2026-10-23.md` and `docs/local/claude_science/harness/reports/Moduo harness experiments deep dive.md` (local, not committed)
+> Status: **Built 2026-10-27**: HV-1..HV-30 merged into `mike` (HV-30 is the close-out; waves 1–3 also on `develop`). Open: HV-8 AC14 (presence through an `mcp_tool` hook) needs a connector change; HV-22's schedules and the Claude GitHub App are Mike's to enable; HV-28 needs a Cloudflare Transform Rule and an Account Analytics Read token; the live checks of HV-6/HV-27 (AC21, AC22) and HV-7 (AC11) run after the next `develop` sync; HV-26's AC18 live check waits for the next Tier 2 block · Owner: mike · Planned 2026-10-23 (engineer mode); Maciej agreed to all of it the same day · Target: everything before the closed alpha (2 Nov 2026), Mike's call · Board: [Moduo Flow Board](https://claude.ai/artifact/PV3Ay6K4Jg96FTPp9syPP3) · Evidence: `docs/local/claude_science/harness/harness-audit-2026-10-23.md` and `docs/local/claude_science/harness/reports/Moduo harness experiments deep dive.md` (local, not committed)
 
 ## Scope
 
