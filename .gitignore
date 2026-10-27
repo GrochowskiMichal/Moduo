@@ -65,6 +65,7 @@ supabase/.temp/
 !.claude/agents/
 !.claude/rules/
 !.claude/workflows/
+!.claude/routines/
 
 # design-sync (claude.ai/design) — transient build/verification state
 .ds-sync/

@@ -647,28 +647,41 @@ async function findNote(rpc: Rpc, title: string): Promise<NoteRow | undefined> {
   return rows.find((r) => r.title === title);
 }
 
-async function ensureParent(rpc: Rpc): Promise<string> {
-  const had = await findNote(rpc, PARENT_TITLE);
+/** A top-level note that holds one child note per run (title + the text it starts with). */
+export interface ParentNote {
+  title: string;
+  intro: string;
+}
+
+const NUMBERS_PARENT: ParentNote = {
+  title: PARENT_TITLE,
+  intro:
+    "One child note per week: the harness's outcome numbers (specs/harness-v3.md AC34), written every Monday by `bun run numbers`.",
+};
+
+async function ensureParent(rpc: Rpc, parent: ParentNote): Promise<string> {
+  const had = await findNote(rpc, parent.title);
   if (had) return had.id;
   const made = (await rpc("notes_create", {
-    title: PARENT_TITLE,
-    markdown:
-      "One child note per week: the harness's outcome numbers (specs/harness-v3.md AC34), written every Monday by `bun run numbers`.",
+    title: parent.title,
+    markdown: parent.intro,
   })) as { id: string };
   return made.id;
 }
 
 /**
  * Writes the week's note under the parent: updates it when this week's note already exists (a
- * re-run replaces it), else creates it. Returns the note id and what happened.
+ * re-run replaces it), else creates it. Returns the note id and what happened. The weekly retro
+ * (HV-22) passes its own parent.
  */
 export async function writeNote(
   rpc: Rpc,
   title: string,
   markdown: string,
+  parentNote: ParentNote = NUMBERS_PARENT,
 ): Promise<{ id: string; action: "created" | "updated" }> {
   assertPublishable(markdown);
-  const parent = await ensureParent(rpc);
+  const parent = await ensureParent(rpc, parentNote);
   const had = await findNote(rpc, title);
   if (had) {
     await rpc("notes_update", { note_id: had.id, title, markdown });

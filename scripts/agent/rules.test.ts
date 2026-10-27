@@ -139,6 +139,22 @@ describe("dead references (AC31)", () => {
     ]);
   });
 
+  it("reads past `--silent` and leaves a script family (`local:*`) alone", () => {
+    expect(
+      deadRefs(
+        "AGENTS.md",
+        "`bun run --silent nope` · `bun run local:*` · `bun run --silent verify`",
+        repo,
+      ),
+    ).toEqual([
+      {
+        file: "AGENTS.md",
+        line: 1,
+        reason: "`bun run nope`: no such script in the root package.json",
+      },
+    ]);
+  });
+
   it("leaves globs, placeholders, URLs, gitignored and folder-relative paths alone", () => {
     const text = [
       "`supabase/**` · `docs/gotchas/<area>.md` · [x](https://a.b/c) · `docs/local/` · `functions/_shared/contracts/`",
