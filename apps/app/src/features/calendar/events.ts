@@ -2,7 +2,9 @@
 // calendar_events table) and the pure occurrence selectors that put event
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
+import { type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { Truncation } from "../../lib/paged-select";
+import { formatTime } from "../../lib/time-format";
 import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
@@ -100,10 +102,38 @@ export type EventChip = {
   /** The mirrored account this chip belongs to (null = native Moduo) — the
    * grid resolves its hue from this for external attribution (CAL-6). */
   sourceAccountId: string | null;
+  /** The event's own stored color (a label name for native events). */
+  color: string | null;
+  /** An overnight piece: the event began on an earlier day (its start), or
+   * goes on into a later one (its end). Null when it starts / ends today. */
+  continuesFromMs: number | null;
+  continuesToMs: number | null;
 };
 
+/** The calendar hue an event chip takes (AC7): a mirrored event its
+ * account's, a native one its own stored label (Your calendar is gray). */
+export function eventHue(
+  chip: Pick<EventChip, "sourceAccountId" | "color">,
+  accountHues: Record<string, string>,
+): LabelColor {
+  return normalizeLabelColor(chip.sourceAccountId ? accountHues[chip.sourceAccountId] : chip.color);
+}
+
+/** "→ Thu 7:10" on the first day of an overnight event, "from Wed 22:40" on
+ * the next; null for an event that starts and ends on its day (AC9). */
+export function continuationLabel(
+  chip: Pick<EventChip, "continuesFromMs" | "continuesToMs">,
+  time: (ms: number) => string = formatTime,
+): string | null {
+  const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short" });
+  if (chip.continuesFromMs != null)
+    return `from ${day(chip.continuesFromMs)} ${time(chip.continuesFromMs)}`;
+  if (chip.continuesToMs != null) return `→ ${day(chip.continuesToMs)} ${time(chip.continuesToMs)}`;
+  return null;
+}
+
 export type EventChipsByDay = {
-  /** Timed chips per local day (assigned to their start's day, like blocks). */
+  /** Timed chips per local day (an overnight event has a piece on each day). */
   timed: Map<string, EventChip[]>;
   /** All-day chips per local day — one chip per covered day. */
   allDay: Map<string, EventChip[]>;
@@ -120,6 +150,61 @@ function push(map: Map<string, EventChip[]>, key: string, chip: EventChip) {
  * and deleted events never render; a hidden weekend day simply has no column
  * so its key is never read.
  */
+type ChipBase = Omit<EventChip, "dayKey">;
+
+function occurrenceChip(
+  event: CalendarEventModel,
+  occ: { startMs: number; endMs: number },
+): ChipBase {
+  return {
+    eventId: event.id,
+    occurrenceKey: `${event.id}:${occ.startMs}`,
+    title: event.title,
+    startMs: occ.startMs,
+    endMs: occ.endMs,
+    allDay: event.allDay,
+    external: !isNativeEvent(event),
+    recurring: Boolean(event.rrule),
+    sourceAccountId: event.sourceAccountId,
+    color: event.color,
+    continuesFromMs: null,
+    continuesToMs: null,
+  };
+}
+
+/** One all-day chip per covered local day, END-EXCLUSIVE on exact midnights
+ * (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only). Provider
+ * all-day events arriving as UTC midnights still spill a day east of UTC —
+ * CAL-6's mirror mapper normalizes them to local dates. */
+function pushAllDayPieces(into: Map<string, EventChip[]>, base: ChipBase, range: VisibleRange) {
+  const lastCovered = startOfLocalDay(new Date(Math.min(base.endMs - 1, range.endMs - 1)));
+  let day = startOfLocalDay(new Date(Math.max(base.startMs, range.startMs)));
+  while (day.getTime() <= lastCovered.getTime()) {
+    push(into, localDayKey(day), { ...base, dayKey: localDayKey(day) });
+    day = addDays(day, 1);
+  }
+}
+
+/** One timed piece per local day the event touches (overnight events cross
+ * midnight, AC9), end-exclusive so an event ending at midnight stays on its
+ * day. Each piece keeps the occurrence's own start and end. */
+function pushTimedPieces(into: Map<string, EventChip[]>, base: ChipBase, range: VisibleRange) {
+  const from = Math.max(base.startMs, range.startMs);
+  const lastDay = startOfLocalDay(new Date(Math.max(from, Math.min(base.endMs, range.endMs) - 1)));
+  let day = startOfLocalDay(new Date(from));
+  while (day.getTime() <= lastDay.getTime()) {
+    const next = addDays(day, 1);
+    const dayKey = localDayKey(day);
+    push(into, dayKey, {
+      ...base,
+      dayKey,
+      continuesFromMs: base.startMs < day.getTime() ? base.startMs : null,
+      continuesToMs: base.endMs > next.getTime() ? base.endMs : null,
+    });
+    day = next;
+  }
+}
+
 export function eventChipsInRange(
   events: CalendarEventModel[],
   range: VisibleRange,
@@ -135,32 +220,9 @@ export function eventChipsInRange(
       range.endMs,
     );
     for (const occ of occurrences) {
-      const base = {
-        eventId: event.id,
-        occurrenceKey: `${event.id}:${occ.startMs}`,
-        title: event.title,
-        startMs: occ.startMs,
-        endMs: occ.endMs,
-        allDay: event.allDay,
-        external: !isNativeEvent(event),
-        recurring: Boolean(event.rrule),
-        sourceAccountId: event.sourceAccountId,
-      };
-      if (event.allDay) {
-        // One chip per covered local day, END-EXCLUSIVE on exact midnights
-        // (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only).
-        // Provider all-day events arriving as UTC midnights still spill a day
-        // east of UTC — CAL-6's mirror mapper normalizes them to local dates.
-        const lastCovered = startOfLocalDay(new Date(Math.min(occ.endMs - 1, range.endMs - 1)));
-        let day = startOfLocalDay(new Date(Math.max(occ.startMs, range.startMs)));
-        while (day.getTime() <= lastCovered.getTime()) {
-          push(allDay, localDayKey(day), { ...base, dayKey: localDayKey(day) });
-          day = addDays(day, 1);
-        }
-      } else {
-        const dayKey = localDayKey(new Date(occ.startMs));
-        push(timed, dayKey, { ...base, dayKey });
-      }
+      const base = occurrenceChip(event, occ);
+      if (event.allDay) pushAllDayPieces(allDay, base, range);
+      else pushTimedPieces(timed, base, range);
     }
   }
   for (const list of timed.values()) list.sort((a, b) => a.startMs - b.startMs);

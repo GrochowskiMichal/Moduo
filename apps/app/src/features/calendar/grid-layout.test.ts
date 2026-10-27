@@ -1,148 +1,230 @@
-// NOTE: the DST suite pins TZ before any Date math. Vitest isolates each test
-// file in its own environment (default isolate:true), so this never leaks into
-// other files.
+// NOTE: the DST suite pins TZ before any Date math. Rstest isolates each test
+// file in its own environment, so this never leaks into other files.
 process.env.TZ = "Europe/Warsaw";
 
 import { describe, expect, it } from "@rstest/core";
 
+import { type CalendarEventModel, continuationLabel, eventChipsInRange } from "./events";
 import {
   chipSpanInDay,
+  DAY_COLUMNS,
   dayGeometry,
+  GRID_LAYER,
+  instantAtWallMinute,
   type LayoutChip,
   layoutDayChips,
   minutesIntoDay,
-  wallClockToRealMinutes,
+  WEEK_COLUMNS,
 } from "./grid-layout";
+
+const MIN = 60_000;
 
 function chip(id: string, startHour: number, endHour: number): LayoutChip {
   // An ordinary (non-DST) local day.
-  const day = new Date(2026, 5, 30);
   const at = (h: number) =>
-    new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(h), (h % 1) * 60);
-  return { id, startMs: at(startHour).getTime(), endMs: at(endHour).getTime() };
+    new Date(2026, 5, 30, Math.floor(h), Math.round((h % 1) * 60)).getTime();
+  return { id, startMs: at(startHour), endMs: at(endHour) };
 }
 
-describe("layoutDayChips — overlap clusters", () => {
-  it("non-overlapping chips each get the full width", () => {
-    const { placed, overflow } = layoutDayChips([chip("a", 9, 10), chip("b", 11, 12)]);
-    expect(overflow).toHaveLength(0);
-    expect(placed).toEqual([
-      { id: "a", col: 0, cols: 1 },
-      { id: "b", col: 0, cols: 1 },
-    ]);
+function byId<T extends { id: string }>(list: T[]): Record<string, T> {
+  return Object.fromEntries(list.map((p) => [p.id, p]));
+}
+
+// ── AC1 ─────────────────────────────────────────────────────────────────────
+
+describe("clock-change week keeps wall-clock hours", () => {
+  // Mon 19 Oct – Sun 25 Oct 2026; Warsaw falls back on Sunday 25 Oct at 03:00.
+  const week = Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 19 + i));
+
+  it("every day of the week has 24 hour labels, each on the hour it names", () => {
+    for (const day of week) {
+      const geom = dayGeometry(day);
+      expect(geom.totalMinutes).toBe(1440);
+      expect(geom.hourMarks).toHaveLength(24);
+      for (const mark of geom.hourMarks) expect(mark.minuteOfDay).toBe(mark.hour * 60);
+    }
   });
 
-  it("three overlapping chips split the column side-by-side", () => {
-    const { placed, overflow } = layoutDayChips([
-      chip("a", 9, 10.5),
-      chip("b", 9.5, 11),
-      chip("c", 10, 12),
-    ]);
-    expect(overflow).toHaveLength(0);
-    expect(placed.map((p) => p.cols)).toEqual([3, 3, 3]);
-    expect(new Set(placed.map((p) => p.col))).toEqual(new Set([0, 1, 2]));
+  it("an event on the clock-change day sits on the hour its label shows", () => {
+    const geom = dayGeometry(new Date(2026, 9, 25));
+    const three = new Date(2026, 9, 25, 15, 0).getTime();
+    const span = chipSpanInDay(three, three + 60 * MIN, geom);
+    expect(span).toEqual({ topMinutes: 15 * 60, heightMinutes: 60 });
+    const mark = geom.hourMarks.find((m) => m.hour === 15);
+    expect(mark?.minuteOfDay).toBe(span?.topMinutes);
   });
 
-  it("a fourth overlapping chip collapses into '+1'", () => {
-    const { placed, overflow } = layoutDayChips([
-      chip("a", 9, 12),
-      chip("b", 9, 12),
-      chip("c", 9, 12),
-      chip("d", 9.25, 12),
-    ]);
-    expect(placed).toHaveLength(3);
-    expect(placed.every((p) => p.cols === 3)).toBe(true);
-    expect(overflow).toHaveLength(1);
-    expect(overflow[0].ids).toEqual(["d"]);
-    expect(overflow[0].startMs).toBe(chip("d", 9.25, 12).startMs);
+  it("a click at the 3 PM line saves 3 PM on the clock-change day", () => {
+    const geom = dayGeometry(new Date(2026, 9, 25));
+    const clickedMinute = geom.totalMinutes * (15 / 24);
+    expect(instantAtWallMinute(clickedMinute, geom)).toBe(new Date(2026, 9, 25, 15, 0).getTime());
   });
 
-  it("a chip after a freed column reuses it (cluster columns are greedy)", () => {
-    const { placed } = layoutDayChips([
-      chip("a", 9, 10),
-      chip("b", 9, 12),
-      chip("c", 10.5, 11.5), // overlaps only b — reuses a's column
-    ]);
-    const byId = Object.fromEntries(placed.map((p) => [p.id, p]));
-    // Longer chips sort first: b takes col 0, a col 1; c reuses a's freed col.
-    expect(byId.b.col).toBe(0);
-    expect(byId.a.col).toBe(1);
-    expect(byId.c.col).toBe(1);
-    expect(byId.c.cols).toBe(2);
+  it("the spring-forward day keeps 24 wall-clock rows too", () => {
+    const geom = dayGeometry(new Date(2026, 2, 29));
+    expect(geom.hourMarks.map((m) => m.hour)).toEqual(Array.from({ length: 24 }, (_, h) => h));
+    const nine = new Date(2026, 2, 29, 9, 0).getTime();
+    expect(chipSpanInDay(nine, nine + 30 * MIN, geom)).toEqual({
+      topMinutes: 540,
+      heightMinutes: 30,
+    });
   });
 
-  it("separate clusters don't share width", () => {
-    const { placed } = layoutDayChips([chip("a", 9, 10), chip("b", 9, 10), chip("c", 14, 15)]);
-    const byId = Object.fromEntries(placed.map((p) => [p.id, p]));
-    expect(byId.a.cols).toBe(2);
-    expect(byId.c.cols).toBe(1);
+  it("the now line sits on the wall clock, and only inside its day", () => {
+    const geom = dayGeometry(new Date(2026, 9, 25));
+    expect(minutesIntoDay(new Date(2026, 9, 25, 11, 37).getTime(), geom)).toBe(697);
+    expect(minutesIntoDay(new Date(2026, 9, 26, 0, 0).getTime(), geom)).toBeNull();
   });
 });
 
-describe("dayGeometry — DST days (real instants, not hour indices)", () => {
-  it("an ordinary day is 1440 minutes with 24 hour marks", () => {
-    const geom = dayGeometry(new Date(2026, 5, 30));
-    expect(geom.totalMinutes).toBe(1440);
-    expect(geom.hourMarks).toHaveLength(24);
-    expect(geom.hourMarks[9]).toEqual({ minuteOfDay: 540, hour: 9 });
+// ── AC8 ─────────────────────────────────────────────────────────────────────
+
+describe("overlaps split, cascade and fold", () => {
+  it("non-overlapping events each take the full width", () => {
+    const { placed, overflow } = layoutDayChips(
+      [chip("a", 9, 10), chip("b", 11, 12)],
+      WEEK_COLUMNS,
+    );
+    expect(overflow).toHaveLength(0);
+    expect(byId(placed).a).toMatchObject({ left: 0, width: 1, coveredFromMs: null });
+    expect(byId(placed).b).toMatchObject({ left: 0, width: 1, coveredFromMs: null });
   });
 
-  it("the spring-forward day (Warsaw 2026-03-29) is 23 real hours", () => {
-    const geom = dayGeometry(new Date(2026, 2, 29));
-    expect(geom.totalMinutes).toBe(1380);
-    expect(geom.hourMarks).toHaveLength(23);
-    // 02:00 doesn't exist — the mark after 01:00 labels 03:00.
-    const labels = geom.hourMarks.map((m) => m.hour);
-    expect(labels).not.toContain(2);
-    expect(labels[1]).toBe(1);
-    expect(labels[2]).toBe(3);
+  it("starts within 30 minutes sit side by side", () => {
+    const { placed } = layoutDayChips([chip("a", 9, 10), chip("b", 9.25, 10)], WEEK_COLUMNS);
+    const p = byId(placed);
+    expect(p.a).toMatchObject({ left: 0, width: 0.5 });
+    expect(p.b).toMatchObject({ left: 0.5, width: 0.5 });
   });
 
-  it("the fall-back day (Warsaw 2026-10-25) is 25 real hours", () => {
-    const geom = dayGeometry(new Date(2026, 9, 25));
-    expect(geom.totalMinutes).toBe(1500);
-    expect(geom.hourMarks).toHaveLength(25);
-    // 02:00 occurs twice.
-    const twos = geom.hourMarks.filter((m) => m.hour === 2);
-    expect(twos).toHaveLength(2);
+  it("Week shows two side by side and folds the rest into +N", () => {
+    const { placed, overflow } = layoutDayChips(
+      [chip("a", 9, 11), chip("b", 9 + 10 / 60, 11), chip("c", 9 + 20 / 60, 11)],
+      WEEK_COLUMNS,
+    );
+    expect(placed.map((p) => p.id).sort()).toEqual(["a", "b"]);
+    expect(overflow).toHaveLength(1);
+    expect(overflow[0].ids).toEqual(["c"]);
+    expect(overflow[0].startMs).toBe(chip("c", 9 + 20 / 60, 11).startMs);
   });
 
-  it("chips after the transition don't drift — positions use real elapsed minutes", () => {
-    const geom = dayGeometry(new Date(2026, 2, 29)); // 23h day
-    // A 9:00 local meeting is 8 real hours after midnight (02:00 skipped).
-    const nine = new Date(2026, 2, 29, 9, 0).getTime();
-    const span = chipSpanInDay(nine, nine + 30 * 60_000, geom);
-    expect(span).toEqual({ topMinutes: 480, heightMinutes: 30 });
-    // The 9:00 hour mark sits at the same real minute — chip and line agree.
-    const nineMark = geom.hourMarks.find((m) => m.hour === 9);
-    expect(nineMark?.minuteOfDay).toBe(480);
+  it("Day shows four side by side and folds the fifth", () => {
+    const five = ["a", "b", "c", "d", "e"].map((id, i) => chip(id, 9 + (i * 5) / 60, 11));
+    const { placed, overflow } = layoutDayChips(five, DAY_COLUMNS);
+    expect(placed).toHaveLength(4);
+    expect(placed.every((p) => p.width === 0.25)).toBe(true);
+    expect(overflow.map((o) => o.ids)).toEqual([["e"]]);
   });
 
-  it("clamps chips that cross the day boundary and rejects outside chips", () => {
-    const geom = dayGeometry(new Date(2026, 5, 30));
-    const lateStart = new Date(2026, 5, 30, 23, 30).getTime();
-    expect(chipSpanInDay(lateStart, lateStart + 60 * 60_000, geom)).toEqual({
-      topMinutes: 1410,
-      heightMinutes: 30,
+  it("a start 30+ minutes into an earlier event cascades over it from 25%", () => {
+    const { placed, overflow } = layoutDayChips(
+      [chip("a", 9, 11), chip("b", 10, 11)],
+      WEEK_COLUMNS,
+    );
+    expect(overflow).toHaveLength(0);
+    const p = byId(placed);
+    // The covered card keeps full width; it knows where it starts being covered.
+    expect(p.a).toMatchObject({ left: 0, width: 1, coveredFromMs: chip("b", 10, 11).startMs });
+    expect(p.b).toMatchObject({ left: 0.25, width: 0.75, coveredFromMs: null });
+    expect(p.b.layer).toBeGreaterThan(p.a.layer);
+  });
+
+  it("the 30-minute line: 29 minutes splits, 30 cascades", () => {
+    const split = byId(
+      layoutDayChips([chip("a", 9, 11), chip("b", 9 + 29 / 60, 11)], WEEK_COLUMNS).placed,
+    );
+    expect(split.b).toMatchObject({ left: 0.5, width: 0.5 });
+    const cascade = byId(
+      layoutDayChips([chip("a", 9, 11), chip("b", 9.5, 11)], WEEK_COLUMNS).placed,
+    );
+    expect(cascade.b).toMatchObject({ left: 0.25, width: 0.75 });
+  });
+
+  it("a later event cascades over a side-by-side pair", () => {
+    const { placed } = layoutDayChips(
+      [chip("a", 9, 12), chip("b", 9 + 10 / 60, 12), chip("c", 10.5, 11.5)],
+      WEEK_COLUMNS,
+    );
+    const p = byId(placed);
+    expect(p.a).toMatchObject({ left: 0, width: 0.5 });
+    expect(p.b).toMatchObject({ left: 0.5, width: 0.5 });
+    expect(p.c).toMatchObject({ left: 0.25, width: 0.75 });
+    expect(p.c.layer).toBeGreaterThan(Math.max(p.a.layer, p.b.layer));
+    expect(p.c.layer).toBeLessThanOrEqual(GRID_LAYER.chipMax);
+  });
+});
+
+// ── AC9 ─────────────────────────────────────────────────────────────────────
+
+function event(id: string, start: Date, end: Date): CalendarEventModel {
+  return {
+    id,
+    workspaceId: "w1",
+    ownerId: "u1",
+    sourceAccountId: null,
+    externalEventId: null,
+    calendarId: "c1",
+    title: id,
+    description: "",
+    startsAt: start.toISOString(),
+    endsAt: end.toISOString(),
+    allDay: false,
+    rrule: null,
+    status: "confirmed",
+    color: null,
+    createdAt: start.toISOString(),
+    updatedAt: start.toISOString(),
+    deletedAt: null,
+  };
+}
+
+const weekRange = {
+  view: "week" as const,
+  days: Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 19 + i)),
+  startMs: new Date(2026, 9, 19).getTime(),
+  endMs: new Date(2026, 9, 26).getTime(),
+};
+
+const clock24 = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+
+describe("overnight events cross midnight", () => {
+  const wed = new Date(2026, 9, 21);
+  const thu = new Date(2026, 9, 22);
+  const red = event("red-eye", new Date(2026, 9, 21, 22, 40), new Date(2026, 9, 22, 7, 10));
+
+  it("shows on both days with its continuation labels", () => {
+    const { timed } = eventChipsInRange([red], weekRange);
+    const first = timed.get("2026-10-21")?.[0];
+    const second = timed.get("2026-10-22")?.[0];
+    expect(first?.eventId).toBe("red-eye");
+    expect(second?.eventId).toBe("red-eye");
+    expect(continuationLabel(first!, clock24)).toBe("→ Thu 7:10");
+    expect(continuationLabel(second!, clock24)).toBe("from Wed 22:40");
+    expect(chipSpanInDay(first!.startMs, first!.endMs, dayGeometry(wed))).toEqual({
+      topMinutes: 22 * 60 + 40,
+      heightMinutes: 80,
     });
-    const yesterday = new Date(2026, 5, 29, 10, 0).getTime();
-    expect(chipSpanInDay(yesterday, yesterday + 30 * 60_000, geom)).toBeNull();
+    expect(chipSpanInDay(second!.startMs, second!.endMs, dayGeometry(thu))).toEqual({
+      topMinutes: 0,
+      heightMinutes: 7 * 60 + 10,
+    });
   });
 
-  it("wallClockToRealMinutes maps prefs times through the DST shift", () => {
-    // Ordinary day: wall-clock == real.
-    expect(wallClockToRealMinutes(480, dayGeometry(new Date(2026, 5, 30)))).toBe(480);
-    // Spring-forward day: 08:00 local is only 7 real hours after midnight.
-    expect(wallClockToRealMinutes(480, dayGeometry(new Date(2026, 2, 29)))).toBe(420);
-    // Fall-back day: 08:00 local is 9 real hours after midnight.
-    expect(wallClockToRealMinutes(480, dayGeometry(new Date(2026, 9, 25)))).toBe(540);
-    // Clamped to the day's real span.
-    expect(wallClockToRealMinutes(1500, dayGeometry(new Date(2026, 5, 30)))).toBe(1440);
+  it("an event ending exactly at midnight stays on its own day, with no label", () => {
+    const late = event("late", new Date(2026, 9, 21, 23, 0), new Date(2026, 9, 22, 0, 0));
+    const { timed } = eventChipsInRange([late], weekRange);
+    expect(timed.get("2026-10-21")).toHaveLength(1);
+    expect(timed.get("2026-10-22")).toBeUndefined();
+    expect(continuationLabel(timed.get("2026-10-21")![0], clock24)).toBeNull();
   });
 
-  it("minutesIntoDay places the now-line only inside its day", () => {
-    const geom = dayGeometry(new Date(2026, 5, 30));
-    expect(minutesIntoDay(new Date(2026, 5, 30, 11, 37).getTime(), geom)).toBe(697);
-    expect(minutesIntoDay(new Date(2026, 6, 1, 0, 0).getTime(), geom)).toBeNull();
+  it("an event that started before the range shows from the first visible day", () => {
+    const early = event("early", new Date(2026, 9, 18, 21, 0), new Date(2026, 9, 19, 2, 0));
+    const { timed } = eventChipsInRange([early], weekRange);
+    expect(timed.get("2026-10-18")).toBeUndefined();
+    expect(continuationLabel(timed.get("2026-10-19")![0], clock24)).toBe("from Sun 21:00");
   });
 });

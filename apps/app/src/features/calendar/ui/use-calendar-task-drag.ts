@@ -13,7 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { asDragPayload } from "../../../lib/drag-payload";
 import type { Task } from "../../tasks/model";
 import type { useTaskCommands } from "../../tasks/tasks-context";
-import { dayGeometry } from "../grid-layout";
+import { dayGeometry, instantAtWallMinute } from "../grid-layout";
 import { parseDayKey } from "../lens";
 
 /** Default duration when a drop schedules a task that has none (AC6). */
@@ -76,7 +76,7 @@ export function useCalendarTaskDrag({ tasks, canEdit, commands }: Input) {
         geom.totalMinutes - duration,
       );
       commands.patchTask(task.id, {
-        scheduledAt: new Date(geom.dayStartMs + startMin * 60_000).toISOString(),
+        scheduledAt: new Date(instantAtWallMinute(startMin, geom)).toISOString(),
         durationMinutes: duration,
       });
     },
