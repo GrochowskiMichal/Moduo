@@ -41,6 +41,9 @@ const importedFromSchema = z
   .object({ source: z.string().trim().min(1).max(40), key: z.string().trim().min(1).max(200) })
   .strict();
 
+// What a call keeps: `parseToolArgs` strips any key a schema here lacks, even one the tool's
+// `inputSchema` promises (MOD-92). Add a field to both; moduo-mcp/tool-schemas.test.ts checks they
+// agree, and handler tests should call through `parseToolArgs` (tasks-v3.test.ts's `call`).
 export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>> = {
   // ── Tasks (TV-D16: v3 surface; tasks take a handle or a uuid) ───────────
   projects_list: z.object({ include_archived: z.boolean().optional() }),

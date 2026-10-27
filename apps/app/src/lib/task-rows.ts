@@ -434,6 +434,8 @@ export function taskRowToModel(raw: unknown): Task {
     description: r.description ?? "",
     // TV-D9: the due date is a date; the app's readers get its local midnight
     // here, so everyone sees the same day. Before TV-D9: the stored instant.
+    // Never take the day from `due_date` when `due_on` is there: the server writes
+    // it as noon UTC of `due_on`, which is the next day at UTC+12 to +14.
     dueDate: r.due_on !== undefined ? dueOnToLocalInstant(r.due_on) : (r.due_date ?? null),
     dueOn: r.due_on ?? localDayOf(r.due_date),
     dueTime: r.due_time ?? null,

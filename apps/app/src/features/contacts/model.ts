@@ -64,7 +64,9 @@ export type Contact = {
   workspaceId: string;
   ownerId: string;
   name: string;
-  /** Primary email (the dedupe/suggest fast-path; mirrors the primary of {@link emails}). */
+  /** Primary email (the dedupe/suggest fast-path; mirrors the primary of {@link emails}).
+   *  Derived, like `phone`: `contacts_op_set_details` recomputes it from the list, so
+   *  never write the scalar and the list apart; go through the ops. */
   email: string | null;
   /** Labelled emails (v2). The flat dedupe key is the `email` scalar. */
   emails: ContactChannel[];

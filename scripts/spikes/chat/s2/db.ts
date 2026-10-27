@@ -9,6 +9,8 @@ export const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres
 export const DRAFT = new URL("../../../../docs/build/chat-v2/drafts/store.sql", import.meta.url)
   .pathname;
 
+// Bun.sql double-encodes a string parameter cast `$n::jsonb` (a JSON string is
+// stored, not an object): cast `$n::text::jsonb`.
 export function connect(): SQL {
   const url = process.env.SPIKE_DB_URL ?? LOCAL_DB;
   if (!/@(127\.0\.0\.1|localhost):54322\//.test(url)) {

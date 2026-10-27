@@ -12,6 +12,11 @@
 --     -f supabase/migrations/20261008050000_account_scrub_stripe_mirror.sql \
 --     -f supabase/probes/account-erasure.probe.sql
 --
+-- These are PRIV-2a/2b's bodies, not the one prod runs: later migrations redefine
+-- account_erase_workspace_data (git grep it in supabase/migrations/) and need
+-- columns the stub lacks (comments.author_kind, …). Before changing erasure SQL,
+-- extend the stub and add the newest definition to the file list above.
+--
 -- Every check stops the run with the failing check's message. A clean run
 -- prints one PASS line per acceptance criterion and ends with "PASS: all".
 --

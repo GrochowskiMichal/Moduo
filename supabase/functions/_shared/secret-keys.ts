@@ -7,7 +7,8 @@
  *
  * Strict by design: a missing/malformed secret throws at module load, so a
  * function deployed without the secret fails loudly instead of booting with an
- * empty key.
+ * empty key. Never add a fallback to the legacy key variables: the point is that
+ * an old dependency fails at deploy time instead of surviving silently.
  */
 
 export class SecretKeyConfigError extends Error {

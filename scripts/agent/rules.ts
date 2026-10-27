@@ -12,7 +12,13 @@ import { fileURLToPath } from "node:url";
 export const AGENTS_MAX_LINES = 150;
 
 /** Agent-facing docs whose references are checked, besides every rule. */
-export const CHECKED_DOCS = ["AGENTS.md", "CONTRIBUTING.md", "docs/agent-setup.md"];
+export const CHECKED_DOCS = [
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/agent-setup.md",
+  "docs/gotchas/supabase.md",
+  "docs/gotchas/spine.md",
+];
 
 export type Rule = {
   file: string;

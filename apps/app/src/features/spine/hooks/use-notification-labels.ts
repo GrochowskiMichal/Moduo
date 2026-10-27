@@ -2,6 +2,8 @@
 // only an excerpt), so every task card names its task (TV-P0, tasks-v3 AC1.7).
 // Looked up in the entity registry, which only answers for items you can see;
 // TV-D8 registers every task at creation, so the lookup then always finds it.
+// Never name one from a client task list: it may hold tasks this reader can't
+// open, so a title would leak into the bell.
 
 import { useEffect, useMemo, useState } from "react";
 

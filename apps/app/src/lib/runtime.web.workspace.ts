@@ -100,6 +100,8 @@ export const webWorkspace: WorkspaceRuntime = {
     );
   },
   async softDelete(workspaceId) {
+    // `workspaces` UPDATE RLS is owner-only, and with no `.select()` a refused
+    // update is 0 rows and no error: gate the UI on the owner (as rename's is).
     await runQuery(
       supabaseClient
         .from("workspaces")
@@ -443,6 +445,8 @@ export const webWorkspace: WorkspaceRuntime = {
     // Read through Auth first: that ties the sign-in to the signed-in person,
     // and for an app they approved before it approves it on the spot and
     // answers only the redirect (with the code), which the page holds.
+    // Approving without this read fails; a reconnect never sits `pending`, and
+    // an authorization expires 3 minutes after the app starts it.
     const { data: details, error: authError } =
       await supabaseClient.auth.oauth.getAuthorizationDetails(authorizationId);
     if (authError) {

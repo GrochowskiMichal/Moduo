@@ -11,6 +11,11 @@
 #   scripts/local/oauth-auth.sh down   # remove it
 #
 # Then: MODUO_OAUTH_AUTH_URL=http://127.0.0.1:54399 bun scripts/oauth-lockout-probe.ts
+#
+# It isn't behind the stack's API URL: the app's `supabase.auth.oauth.*` calls
+# (54321/auth/v1/oauth/…) 404 until the stack restarts. Route them here, as
+# e2e/tests/oauth-consent.spec.ts does with page.route. A fake app's callback
+# must be https:// (dynamic registration refuses http:// unless localhost).
 set -euo pipefail
 
 NAME=moduo_oauth_probe_auth

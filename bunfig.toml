@@ -4,7 +4,8 @@
 # app bundle. Revisit when the app moves into apps/ (PLAT-2).
 linker = "hoisted"
 # Skip npm versions published in the last three days: most hijacked releases
-# are caught and pulled within that window.
+# are caught and pulled within that window. Keep it a number of seconds: the
+# Supabase CLI's bundled older Bun reads this file too and rejects "3d".
 minimumReleaseAge = 259200
 
 [fmt]

@@ -8,6 +8,9 @@
 //   • chat_channels  filtered workspace_id=eq.<ws>;
 //   • chat_members   filtered to you;
 //   • chat_catchup   filtered to you.
+// A published table is keyed by its own row id (CV-22): a removed row sends
+// only that key, past every read rule, and a subscription filtered on another
+// column gets no deletes at all, so removals the store needs arrive as updates.
 // Realtime applies each subscriber's read rules. It is latency, never truth:
 // every join (and every rejoin) says `joined` only once Realtime answers
 // "Subscribed to PostgreSQL", and the store fills the gap by a delta read.
@@ -173,7 +176,9 @@ export function postgresChangesSource(socket: ChatSocket): ChatLiveSource {
     const channels = bindings.map((b) => {
       const channel = socket.channel(`chat-${b.name}:${ws}:${me}:${n}`);
       // The installed realtime-js types don't name `select`; the server reads it
-      // (realtime.subscription.selected_columns, spike 3).
+      // (realtime.subscription.selected_columns, spike 3). A `select` binding once
+      // joined with no subscription and no events: after changing it, run
+      // supabase/probes/chat-store.probe.ts (it checks the narrowed payload arrives).
       const binding = {
         event: "*",
         schema: "public",

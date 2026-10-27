@@ -13,6 +13,18 @@
 --                          (service_role + x-moduo-key-id)
 --   test.try(who, sql)     as_user, then undoes whatever the statement did
 -- Each returns 'ok <rows>' or '<sqlstate> <message>'.
+--
+-- Traps:
+--   One transaction, so every now() is the same: stamp created_at / started_at
+--   yourself to order rows (chat_chains.test.sql's test.post), and write many
+--   messages straight in (chat_op_send's sending limit counts them).
+--   As authenticated or service_role (as_user, value_as, as_key) the test
+--   schema can't be read: build ids and request.* claims before switching
+--   role, map returned ids to names after.
+--   A check in the same statement as a volatile call reads the snapshot from
+--   before it ran: call the function first, then test.ok what it wrote.
+--   test.try is for refusals (it rolls back): a write a later check needs goes
+--   through test.as_user.
 
 BEGIN;
 SET LOCAL client_min_messages = notice;
