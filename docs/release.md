@@ -36,6 +36,8 @@ Before either path:
 2. Dry run: `supabase db push --include-all --skip-vault --dry-run`. It must list only the release files.
 3. Push: `supabase db push --include-all --skip-vault`. Always `--skip-vault`: without it the CLI writes `config.toml`'s Vault secrets to prod.
 
+The scratch folder also needs `supabase/templates/` copied next to it (the auth email templates are config paths) and `[db.migrations] enabled = true` in its copy of `config.toml` only, or the push silently says "up to date". Another session may apply a migration to prod between your snapshot and your push: re-read prod's history count and newest version right before pushing, and grep your release files for every function the newcomer redefines.
+
 **One or two files: a direct query, in one transaction.**
 
 ```sql

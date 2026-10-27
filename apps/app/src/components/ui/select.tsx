@@ -113,6 +113,8 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
   );
 }
 
+// Radix throws on an empty-string item `value`: an optional choice ("No status")
+// rides a sentinel such as "__none__", mapped back in `onValueChange`.
 function SelectItem({
   className,
   children,

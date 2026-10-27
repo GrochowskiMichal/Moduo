@@ -38,7 +38,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 ## What GitHub and the cloud provide
 
 - **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, `bun lint`, gitleaks) passed. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
-- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
+- **Routines** (HV-22): three Claude cloud routines on Mike's account and one scheduled task on his Mac, see §Routines. The old weekly knowledge gardener is gone (it died for want of the Claude GitHub App); the weekly retro took over its knowledge pruning.
 
 ## One-time setup per machine
 
@@ -108,6 +108,31 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 - Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add a plugin manifest (`plugin.json` in `.claude-plugin/`) and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
 
 **The queue** is Moduo: one task per open block in the milestone projects, titled `<ID> — <block name>`, tagged `block`, with "blocks" edges for its dependencies (`bun run queue:import`, idempotent). `bun run queue` reads it with your key; GitHub events move each task's stage (`moduo-sync.yml`, the CI key). A task assigned to someone else is left alone.
+
+## Routines
+
+The learn loop's four scheduled jobs (specs/harness-v3.md HV-22, AC35). The prompts live in `.claude/routines/<id>.md` and the deterministic halves in `scripts/agent/routines.ts`; `bun run routine list` prints what follows. Each job runs where its data is:
+
+| Routine | Cadence | Where, model | What it does | Needs |
+| --- | --- | --- | --- | --- |
+| Moduo nightly variant hunt (`variant-hunt`) | daily 01:00 UTC | cloud, Opus 5.5 | `bun run routine seed` picks an escape (a new one the night after it lands, else they take turns), then the `variant-hunt` skill; confirmed variants become parked proof tests on a `t/mike/hunt-<date>` draft PR into `mike` and `bug` tasks in the Moduo project. Quiet nights push nothing. | GitHub App, cloud key |
+| Moduo weekly retro (`retro`) | Mondays 08:00 UTC | cloud, Opus 5.5 | `bun run routine retro-facts` (escapes, new gotchas and decisions, path-rule activity over 30 days) plus the weekly numbers; at most three lessons compiled into an ast-grep rule, hook or test, else a path rule with an incident and an expiry; stale or expired path rules deleted in the same draft PR into `mike`; a "Weekly retro · …" note under "Harness weekly retro". | GitHub App, cloud key |
+| Moduo daily prod watch (`prod-watch`) | daily 06:00 UTC | cloud, Haiku 5.5, Bash and Read only | `bun run routine watch` (GET only: app and landing smoke, MCP connector, Supabase auth health, red Actions runs on shared branches, tags and schedules), then a digest of at most 12 lines to the Moduo chat channel `prod-watch`. One line when all is clear, so silence means the watch itself broke. | cloud key, network allowlist, the channel |
+| Moduo weekly numbers (`numbers`) | Mondays 07:00 Warsaw | Mike's Mac, desktop scheduled task | `bun run numbers` in a detached worktree at `origin/mike`. Local because the per-block usage section reads the Entire refs, which are never pushed. | `MODUO_MCP_KEY` in the app's environment, `gh` signed in |
+
+**Read-only prod watch.** It has no file tools, its prompt allows only `watch` and `post`, and the cloud environment holds no Supabase or Cloudflare credentials, so it has no way to migrate or deploy. Its one write path to GitHub is the app's repo access every routine in the environment shares; the repo's guard hooks still apply in the cloud session (no pushes to shared branches, no release tags), and the rulesets hold server-side. Edge Function logs and database advisors aren't in it: they need a Supabase token, and every Supabase token can also write.
+
+**Moduo writes** go only through the connector with an agent key (`bun run routine post | note | bug`), and every body passes the same leak check as the numbers note. `post` never creates a channel.
+
+**Setting them up (Mike, once):**
+
+1. Install the [Claude GitHub App](https://github.com/apps/claude) on `GrochowskiMichal/Moduo` (the hunt and the retro push branches).
+2. Make a Moduo agent key "Routines" (Tasks, Notes and Chat at Edit, nothing else) and add it as `MODUO_MCP_KEY` to the cloud environment "Default" at claude.ai/code. In the same environment, allow network access to `app.moduo.app`, `moduo.app`, `mcp.moduo.app`, `*.supabase.co`, `api.github.com` and the npm registry (or use Full access).
+3. Create each cloud routine from a session in this repo: `bun run --silent routine body <id> > /tmp/<id>.json`, then RemoteTrigger `create` with that file's JSON as the body (or `/schedule` and paste it). `--env <id>` names another environment.
+4. Create the local task: `bun run --silent routine task numbers` prints the desktop app's `create_scheduled_task` arguments. It runs while the app is open, or at the next launch.
+5. Run each once by hand (RemoteTrigger `run`, or Run now on the task) and check its output: the `prod-watch` post, the "Weekly numbers" note, and the hunt's and retro's run logs (`list_runs`, then `get_run_log`).
+
+Manage them at [claude.ai/code/routines](https://claude.ai/code/routines) and in the desktop app's scheduled tasks. A routine can't be deleted from the API: delete it on that page.
 
 ## The unsupervised flow
 

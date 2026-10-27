@@ -2,6 +2,12 @@
 // start, how a refused write says so, the single-task intent op, the queue
 // op chain, the project op chain. Made once per command set (`createShared`),
 // reading the store's data when they run.
+//
+// A write's `settle` gets the rows the server returned: a row left on its client-clock
+// stamp hides a teammate's change until the next refetch (Realtime lands only a
+// strictly newer stamp). A status change doesn't touch the queue, and the copy may
+// still hold a queue row the server dropped: place a task in the line-up from a
+// queue op's answer, never from the copy.
 
 import {
   isBacklogTask,

@@ -17,7 +17,8 @@
 // once. Live-query results carry TanStack's virtual props and are their own
 // objects; the hooks hand back the store's objects (by key), so a row here is
 // the same object every other surface holds. Writes stay on the store (TS-3c
-// moves them).
+// moves them). Never spread a live-query row into a write: it carries
+// `$synced`, `$origin`, `$key`, `$collectionId` and `$hasPendingWrites`.
 
 import {
   BasicIndex,

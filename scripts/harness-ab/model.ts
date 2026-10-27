@@ -69,7 +69,63 @@ export type Arm = ArmLike & {
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Claude setting sources loaded in the workspace (default "project": the harness at that commit). */
   settingSources?: string;
+  /** The experiment this arm belongs to and the arm it is compared with (HV-25, AC37). */
+  experiment?: { name: Experiment; baseline: string };
 };
+
+/** The fields an arm may change against its baseline, per experiment (rig.test.ts holds them). */
+export const EXPERIMENTS = {
+  effort: ["effort"],
+  ponytail: ["settings"],
+  "test-prompt": ["promptPrefix", "promptSuffix", "appendSystemPrompt"],
+} as const satisfies Record<string, readonly (keyof Arm)[]>;
+export type Experiment = keyof typeof EXPERIMENTS;
+
+/** Plugins an arm turns on through its settings ("name@marketplace"). */
+export const armPlugins = (arm: Arm) =>
+  Object.entries(
+    (arm.settings as { enabledPlugins?: Record<string, boolean> } | undefined)?.enabledPlugins ??
+      {},
+  )
+    .filter(([, on]) => on === true)
+    .map(([id]) => id)
+    .sort();
+
+/** An arm's plugins missing from the session's init event: the run would be its baseline. */
+export const pluginsNotLoaded = (arm: Arm, loaded: string[]) =>
+  armPlugins(arm).filter((id) => !loaded.includes(id));
+
+/**
+ * Plugins the arms enable that aren't installed at user scope. The rig's workspace is a temp clone,
+ * so a project-scoped install (keyed to the main checkout's path) never loads there.
+ */
+export function missingPlugins(
+  arms: Arm[],
+  installed: { plugins?: Record<string, { scope?: string }[]> },
+) {
+  const user = (id: string) => (installed.plugins?.[id] ?? []).some((p) => p.scope === "user");
+  return [...new Set(arms.flatMap(armPlugins))].filter((id) => !user(id)).sort();
+}
+
+/** How an arm differs from its baseline: one message per problem (empty when it is a clean pair). */
+export function experimentProblems(arm: Arm, baseline: Arm): string[] {
+  if (!arm.experiment) return [];
+  const allowed: readonly string[] = EXPERIMENTS[arm.experiment.name] ?? [];
+  if (allowed.length === 0) return [`${arm.id}: unknown experiment "${arm.experiment.name}"`];
+  const fields = new Set([...Object.keys(arm), ...Object.keys(baseline)]);
+  for (const f of ["id", "description", "experiment"]) fields.delete(f);
+  const differs = [...fields].filter(
+    (f) => JSON.stringify(arm[f as keyof Arm]) !== JSON.stringify(baseline[f as keyof Arm]),
+  );
+  const out = differs
+    .filter((f) => !allowed.includes(f))
+    .map(
+      (f) =>
+        `${arm.id}: ${f} differs from ${baseline.id}, outside the ${arm.experiment?.name} experiment`,
+    );
+  if (differs.length === 0) out.push(`${arm.id}: identical to ${baseline.id}`);
+  return out;
+}
 
 export type PlannedRun = {
   runId: string;
@@ -113,6 +169,8 @@ export type Row = {
 export type AgentSummary = {
   model: string | null;
   mcpServers: string[];
+  /** Plugins the session loaded ("name@marketplace", builtins left out). */
+  plugins: string[];
   subtype: string | null;
   isError: boolean;
   turns: number | null;

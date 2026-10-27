@@ -5,6 +5,11 @@
 // `runtime.spine.previews` (row-level security = `can_access`) and answers per
 // id: ready with facts, deleted, or private. An id that didn't come back is
 // private: the answer carries no title and no type, by construction.
+// Never name a reference from the entity registry instead: projects aren't
+// registered and `perm_can_see_entity` falls back to module access for unknown
+// types, so a private project's name would show. (`can_access` on a contact or
+// event filters `deleted_at`, so a deleted one reads "Private item" even to its
+// owner.)
 //
 // The mappers are pure and exported for the tests; dates go through the one
 // date grammar (lib/time-format.ts).

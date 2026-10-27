@@ -1,0 +1,34 @@
+id: async-iife-finally-reset
+language: typescript
+severity: error
+message: An async IIFE with a `finally` is stored as the "running" promise, so a body that settles before its first await runs `finally` before the store.
+note: |
+  The `finally` that clears the field (or map entry) then runs first, the promise is
+  stored after it, and every later call waits on a finished promise (Chat store, CV-3).
+  Chain instead: `this.running = this.work().finally(() => { this.running = null; })`,
+  as the chat store's `sync`, `checkAccess` and `drain` do.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: parenthesized_expression
+    has:
+      any:
+        - kind: arrow_function
+        - kind: function_expression
+      regex: ^async\b
+      has:
+        field: body
+        stopBy: end
+        kind: finally_clause
+  inside:
+    any:
+      - kind: assignment_expression
+      - kind: augmented_assignment_expression
+      - kind: variable_declarator

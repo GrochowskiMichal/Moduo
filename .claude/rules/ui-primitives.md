@@ -6,7 +6,7 @@ expires: 2027-01-31
 
 # UI primitives (apps/app/src/components/ui/)
 
-Design-system primitives with no domain knowledge. Read [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) and [docs/gotchas/ui.md](../../docs/gotchas/ui.md) first.
+Design-system primitives with no domain knowledge. Read [docs/DESIGN_RULES.md](../../docs/DESIGN_RULES.md) first; `.claude/rules/ui-css.md` and `.claude/rules/ui-radix.md` hold the traps.
 
 - **Primitives wrap shadcn** wherever shadcn has the component (Dialog, Dropdown, Popover, Command, Tabs, Tooltip, Sheet, Toast, Switch, Select, RadioGroup, Separator, Card, ScrollArea, Avatar, Badge, ContextMenu). Add it with the shadcn CLI; never roll your own.
 - **Every new primitive ships a Storybook story** next to it: `<name>.stories.tsx`.

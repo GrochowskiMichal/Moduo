@@ -10,6 +10,10 @@
 //   view.store.answer({ tasks: [{ ...other, title: "Renamed" }] }); // a teammate's edit
 //
 // `rerender` keeps the provider (it's the render's wrapper).
+//
+// A hand-made test store without `listen: () => () => {}` (setStoreOptionsForTests)
+// opens a real Realtime channel and fails with 'The "event" argument must be an
+// instance of Event': use this or `renderTasksHook`, which set it.
 
 import { render, type RenderResult } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";

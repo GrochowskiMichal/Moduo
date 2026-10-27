@@ -117,7 +117,10 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  *  all, any future type) has no toggle and is NEVER muted — mutes are opt-in per
  *  known type. `comments.add` reaches the feed as an @mention-to-me OR a comment on
  *  your entity (DF-21d), both governed by `mention`; the two `email.*_due` ops
- *  share the `dueFollowUp` toggle. */
+ *  share the `dueFollowUp` toggle. A new notification type extends
+ *  `NotificationType` and this map, and every feed filtering through
+ *  `isNotificationEnabled` picks it up: never build a second prefs classifier
+ *  (DF-21a's parallel taxonomy was a permanent no-op). */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "comments.add": "comments",
   // TV-U13: an edit only reaches the people it newly names, so it's a mention.

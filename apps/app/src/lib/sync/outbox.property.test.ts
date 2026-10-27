@@ -21,6 +21,10 @@
 // failed-read contract (the other #509 read bug) is
 // `../prefs-sync.property.test.ts`. Seeds are fixed; set FC_SEED / FC_RUNS
 // to explore.
+//
+// The commands must make the calls the app makes, guards included (`applyOp`,
+// `planTaskWrite`'s refusals): before reading a counterexample as a store bug,
+// check the command isn't doing something the app refuses.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 import fc from "fast-check";
@@ -136,6 +140,8 @@ function fakeServer(s: fc.Scheduler) {
   let refuseReads = false;
   const stamp = () => stampOf((clock += 1));
 
+  // An op applies when the scheduler lets it through, never at call time:
+  // holding only the answer keeps arrival in call order and hides overtaking (#509).
   const arrive = async (label: string) => {
     await s.schedule(Promise.resolve(label), label);
     if (offline) throw offlineError();
@@ -839,7 +845,8 @@ describe("sync outbox: model-based property (HV-17)", () => {
 
   // The #509 race, every way it can land: a check-off waits offline, the
   // network comes back and the flush sends it, and the person changes it
-  // again before that answer is in.
+  // again before that answer is in. Random streams rarely hit a race this
+  // narrow (#509-2 survived 120 runs): keep a focused property per known race.
   it("a check-off made while an older one is on its way never lands first", async () => {
     await fc.assert(
       fc.asyncProperty(

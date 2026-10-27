@@ -10,6 +10,9 @@
 #   bun run local:status    URLs and keys
 #   stack.sh ci             GitHub Actions only (checks.yml db-test): a throwaway
 #                           stack in the runner, built from the cached snapshot
+#   stack.sh isolated <url> bootstrap a second, throwaway stack on its own ports
+#                           (the MCP eval's, scripts/harness-ab/mcp-eval/stack.ts);
+#                           refuses the shared stack's ports
 #
 # Why not `supabase db reset`: the repo cannot rebuild the DB from
 # supabase/migrations (22 prod tables have no migration; see
@@ -31,6 +34,9 @@ need docker "Install OrbStack: brew install --cask orbstack, then open it once."
 need supabase "brew install supabase/tap/supabase"
 need psql "brew install libpq && brew link --force libpq"
 need jq "brew install jq"
+# The stack runs in OrbStack. "No such container: supabase_db_moduo" while it is up means
+# Docker's machine-wide context went to another engine: prefix your own commands with
+# DOCKER_CONTEXT=orbstack (as scripts/agent/e2e.sh does); never switch the context back.
 docker info >/dev/null 2>&1 || { open -ga OrbStack 2>/dev/null || true; sleep 5; docker info >/dev/null 2>&1 || { echo "✗ Docker is not running. Open OrbStack." >&2; exit 1; }; }
 
 snapshot() {
@@ -103,6 +109,8 @@ alter default privileges for role supabase_admin in schema public grant all on t
 alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
 SQL
   # Storage tables/functions already exist locally; take only prod's policies.
+  # So prod's public-function triggers on storage.objects (attachments_guard_object:
+  # a finalized file's bytes can't change) are missing here: probe that rule on prod.
   awk '/^CREATE POLICY/{p=1} p{print} p&&/;[[:space:]]*$/{p=0}' "$SNAP/storage.sql" | "${PSQL[@]}"
   # Same for auth: only prod's triggers on auth.* (signup → profile, …).
   grep -E '^CREATE (OR REPLACE )?TRIGGER' "$SNAP/auth.sql" | "${PSQL[@]}"
@@ -134,6 +142,8 @@ SQL
     else
       [[ "$v" > "$at" ]] || continue
     fi
+    # Replayed as supabase_admin, so these tables are owned by it here (postgres on
+    # prod): DDL on them as postgres fails "must be owner of table"; use supabase_admin.
     echo "  + $f"; "${PSQL[@]}" -f "$f"
   done
   "${PSQL[@]}" -f supabase/seed.sql
@@ -212,9 +222,24 @@ case "${1:-up}" in
     if bootstrapped; then echo "✗ $DB_URL is already bootstrapped: not a fresh runner." >&2; exit 1; fi
     bootstrap
     ;;
+  isolated)
+    # HV-29's eval stack: its own project id and ports, brought up and torn down
+    # by scripts/harness-ab/mcp-eval/stack.ts. Only the bootstrap lives here, so
+    # the eval's DB is built exactly like the shared one. Never the shared
+    # stack's ports, never a dump of prod (the snapshot must already exist).
+    url="${2:-}"
+    [[ "$url" =~ ^postgresql://[a-z_]+:postgres@127\.0\.0\.1:([0-9]+)/postgres$ ]] || { echo "usage: stack.sh isolated postgresql://supabase_admin:postgres@127.0.0.1:<port>/postgres" >&2; exit 2; }
+    port="${BASH_REMATCH[1]}"
+    if (( port >= 54320 && port <= 54329 )); then echo "✗ $port is the shared stack's port: the isolated bootstrap refuses it." >&2; exit 1; fi
+    for f in public.sql auth.sql storage.sql realtime.sql extensions.sql roles.sql buckets.sql publication.sql cron.sql applied-migrations snapshot-at; do
+      [[ -f "$SNAP/$f" ]] || { echo "✗ $SNAP/$f is missing: run bun run local:snapshot first." >&2; exit 1; }
+    done
+    DB_URL="$url"; PSQL=(psql "$DB_URL" -v ON_ERROR_STOP=1 -q -X)
+    if bootstrapped; then echo "✓ $DB_URL is already bootstrapped"; else bootstrap; fi
+    ;;
   functions)
     [[ -f supabase/functions/.env ]] || cp supabase/functions/.env.example supabase/functions/.env
     supabase functions serve --env-file supabase/functions/.env --import-map supabase/functions/deno.json
     ;;
-  *) echo "usage: stack.sh up|reset|snapshot|down|status|functions|ci" >&2; exit 2 ;;
+  *) echo "usage: stack.sh up|reset|snapshot|down|status|functions|ci|isolated <url>" >&2; exit 2 ;;
 esac

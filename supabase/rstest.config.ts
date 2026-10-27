@@ -26,7 +26,9 @@ export default defineConfig({
   include: [
     "functions/_shared/contracts/**/*.test.ts",
     "functions/_shared/*.test.ts",
-    // The MCP connector's own tests mock its esm.sh imports (Deno-only).
+    // The MCP connector's own tests mock its esm.sh imports (Deno-only). For the
+    // database, copy key-scopes.test.ts's in-memory `fakeDb`. moduo-mcp isn't in
+    // tsconfig.json, so `bun check` doesn't type-check these tests.
     "functions/moduo-mcp/**/*.test.ts",
     "functions/_shared/email/**/*.test.ts",
     "functions/auth-email-hook/*.test.ts",

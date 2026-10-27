@@ -1,0 +1,17 @@
+id: auth-getuser-uncached
+language: typescript
+severity: error
+message: "`auth.getUser()` is a network round-trip to /auth/v1/user on every call; app code reads the current user through `getAuthedUser()`."
+note: |
+  Call `getAuthedUser()` (apps/app/src/lib/runtime.web.shared.ts): one deduped read
+  over `request-cache`, which caches only a real user, so a boot blip never pins
+  `null` for the session (DF-12: one boot fired `/auth/v1/user` eight times).
+# Only .ts: `language: typescript` doesn't parse .tsx (a .tsx caller needs a tsx twin).
+files:
+  - apps/app/src/**/*.ts
+ignores:
+  - "**/*.test.ts"
+  # The one cached read itself.
+  - apps/app/src/lib/runtime.web.shared.ts
+rule:
+  pattern: $CLIENT.auth.getUser()
