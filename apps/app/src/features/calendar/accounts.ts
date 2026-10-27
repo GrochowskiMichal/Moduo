@@ -103,6 +103,19 @@ export function visibleEvents(
   });
 }
 
+/**
+ * Showing a saved set hides everything else: each known id (account ids and
+ * Moduo or custom calendar ids) that the set doesn't list. The result feeds
+ * `visibleEvents` (CALR-6: sets apply to custom calendars too).
+ */
+export function hiddenIdsForSet(
+  visibleIds: Iterable<string>,
+  knownIds: Iterable<string>,
+): string[] {
+  const show = new Set(visibleIds);
+  return [...new Set(knownIds)].filter((id) => !show.has(id));
+}
+
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────
 //
 // The left rail (§3a) shows OAuth accounts as flat rows (Google/Outlook parity),

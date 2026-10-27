@@ -24,7 +24,11 @@ ALTER TABLE public.calendar_events
   ADD COLUMN IF NOT EXISTS conference_url text,
   ADD COLUMN IF NOT EXISTS conference_provider text,
   ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'event',
-  ADD COLUMN IF NOT EXISTS focus_task_id uuid REFERENCES public.tasks(id) ON DELETE SET NULL,
+  -- The task focus time holds. No foreign key on purpose: ON DELETE SET NULL would
+  -- run perm_enforce_write as the person purging the task, who can't edit a
+  -- teammate's focus time, so the purge would fail. Readers resolve it through
+  -- can_access('task', …), which answers false for a task that is gone.
+  ADD COLUMN IF NOT EXISTS focus_task_id uuid,
   -- The slot offer a hold came from. No foreign key yet: slot_offers arrives in CALR-19,
   -- which adds the reference.
   ADD COLUMN IF NOT EXISTS offer_id uuid,
@@ -38,6 +42,8 @@ ALTER TABLE public.calendar_events
 -- no app or MCP surface offers privacy, so nobody is told an event is hidden.
 COMMENT ON COLUMN public.calendar_events.is_private IS
   'CALR-6: stored, not yet enforced; CALR-15 masks private rows for non-owners.';
+
+ALTER TABLE public.calendar_events DROP CONSTRAINT IF EXISTS calendar_events_focus_task_id_fkey;
 
 -- The IN-lists mirror CONFERENCE_PROVIDERS and CALENDAR_ITEM_KINDS in
 -- supabase/functions/_shared/contracts/vocabularies.ts (drift-gates.test.ts reads this text).
@@ -610,6 +616,9 @@ DECLARE
   e public.calendar_events;
   v_ext text;
   v_link text;
+  v_split record;
+  v_set_link boolean;
+  v_new_link text;
   v_upserted int := 0;
   v_removed int := 0;
   v_skipped int := 0;
@@ -639,6 +648,14 @@ BEGIN
         END IF;
         -- The provider's meeting link, or NULL when absent, null or no web address.
         v_link := public.calendar__web_address(r->>'conferenceUrl');
+        -- Split the place here rather than leave it to the trigger: the trigger
+        -- can't tell a re-sent link from an unchanged one, so a Meet link plus a
+        -- Zoom URL in the location would swap on every sync. The provider's own
+        -- link wins; a meeting URL in the location fills in only when it has none.
+        SELECT * INTO v_split FROM public.calendar__split_location(
+          CASE WHEN r ? 'location' THEN NULLIF(r->>'location', '') END);
+        v_set_link := (r ? 'conferenceUrl') OR v_split.url IS NOT NULL;
+        v_new_link := CASE WHEN r ? 'conferenceUrl' THEN coalesce(v_link, v_split.url) ELSE v_split.url END;
         e := NULL;
         UPDATE public.calendar_events AS ce SET
           title = coalesce(r->>'title', ce.title),
@@ -656,13 +673,13 @@ BEGIN
           status = coalesce(NULLIF(r->>'status', ''), ce.status),
           calendar_id = coalesce(NULLIF(r->>'calendarId', ''), ce.calendar_id),
           -- Key PRESENT = the provider's place now; ABSENT keeps it.
-          location = CASE WHEN r ? 'location' THEN NULLIF(r->>'location', '')
+          location = CASE WHEN r ? 'location' THEN v_split.place
                           ELSE ce.location END,
           -- Key PRESENT = the provider's meeting link now; ABSENT keeps it.
-          conference_url = CASE WHEN r ? 'conferenceUrl' THEN v_link
+          conference_url = CASE WHEN v_set_link THEN v_new_link
                                 ELSE ce.conference_url END,
-          conference_provider = CASE WHEN r ? 'conferenceUrl'
-                                     THEN public.calendar__meeting_provider(v_link)
+          conference_provider = CASE WHEN v_set_link
+                                     THEN public.calendar__meeting_provider(v_new_link)
                                      ELSE ce.conference_provider END,
           updated_at = now()
         WHERE ce.source_account_id = a.id AND ce.external_event_id = v_ext
@@ -677,12 +694,12 @@ BEGIN
             (p_workspace_id, a.owner_id, a.id, v_ext,
              coalesce(NULLIF(r->>'calendarId', ''), a.provider),
              coalesce(r->>'title', ''), coalesce(r->>'description', ''),
-             NULLIF(r->>'location', ''),
+             v_split.place,
              (r->>'startsAt')::timestamptz, (r->>'endsAt')::timestamptz,
              coalesce((r->>'allDay')::boolean, false),
              coalesce(r->>'rrule', '') <> '', NULLIF(r->>'rrule', ''),
              coalesce(NULLIF(r->>'status', ''), 'confirmed'),
-             v_link, public.calendar__meeting_provider(v_link))
+             v_new_link, public.calendar__meeting_provider(v_new_link))
           RETURNING * INTO e;
         END IF;
         PERFORM public.entities_op_upsert(p_workspace_id, 'event', e.id, e.title, 'calendar');

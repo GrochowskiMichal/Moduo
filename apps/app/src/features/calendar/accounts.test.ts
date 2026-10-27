@@ -3,6 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   accountSourceLabel,
   groupRailAccounts,
+  hiddenIdsForSet,
   providerLabel,
   resolveAccountHues,
   syncAgeLabel,
@@ -97,6 +98,17 @@ describe("accounts — attribution (AC12)", () => {
     ];
     expect(visibleEvents(evs, ["cal-work"]).map((e) => e.id)).toEqual(["mine", "ext-a"]);
     expect(visibleEvents(evs, ["a"]).map((e) => e.id)).toEqual(["mine", "work"]);
+  });
+
+  it("a saved set with a custom calendar hides the rest, and its events show (CALR-6)", () => {
+    const evs = [
+      event({ id: "work", calendarRef: "cal-work" }),
+      event({ id: "mine", calendarRef: "cal-moduo" }),
+      event({ id: "ext-a", sourceAccountId: "a" }),
+    ];
+    const hidden = hiddenIdsForSet(["cal-work"], ["a", "cal-work", "cal-moduo", "a"]);
+    expect(hidden).toEqual(["a", "cal-moduo"]);
+    expect(visibleEvents(evs, hidden).map((e) => e.id)).toEqual(["work"]);
   });
 
   it("returns all events unfiltered when nothing is hidden", () => {
