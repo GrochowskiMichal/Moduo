@@ -27,6 +27,7 @@ describe("mirror — Google provider→row mapper (AC12)", () => {
       status: "confirmed",
       description: "daily sync",
       calendarId: "google:me@x.com:primary",
+      conferenceUrl: null,
     });
   });
 
@@ -196,10 +197,10 @@ describe("mirror — meeting link beside the place (CALR-6)", () => {
     expect(row && "location" in row).toBe(false);
   });
 
-  it("Google: no conference sends no conferenceUrl key, so the stored link is kept", () => {
+  it("Google: no conference sends conferenceUrl null, so a link removed in Google goes", () => {
     const row = mapGoogleEvent({ id: "g-3", summary: "Lunch", ...timed, location: "Café" });
     expect(row?.location).toBe("Café");
-    expect(row && "conferenceUrl" in row).toBe(false);
+    expect(row?.conferenceUrl).toBeNull();
   });
 
   it("Graph: the online meeting is the link and displayName the place", () => {

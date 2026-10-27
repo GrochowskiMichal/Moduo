@@ -299,3 +299,25 @@ BEGIN
     'the split helper is internal');
 END;
 $$;
+
+-- Follow-ups from the validator: brackets, the booking host's marker, a cap on people.
+DO $$
+DECLARE
+  r text;
+  s record;
+  e public.calendar_events;
+BEGIN
+  SELECT * INTO s FROM public.calendar__split_location('Call (https://zoom.us/j/9)');
+  PERFORM test.ok(s.place = 'Call' AND s.url = 'https://zoom.us/j/9', 'no empty brackets are left in the place', s::text);
+
+  r := test.as_user('O', pg_temp.create_sql('Booked', $x$,
+         p_attendees => '[{"email": "o@example.com", "self": true}, {"email": "guest@example.com", "self": "yes"}]'$x$));
+  e := pg_temp.ev('Booked');
+  PERFORM test.ok(r = 'ok 1' AND (e.attendees -> 0 -> 'self') = 'true'::jsonb AND NOT (e.attendees -> 1 ? 'self'),
+    'the host''s self: true survives normalising; anything else is dropped', e.attendees::text);
+
+  r := test.try('O', pg_temp.create_sql('Crowd', format($x$, p_attendees => %L$x$,
+         (SELECT jsonb_agg(jsonb_build_object('email', 'p' || i || '@example.com')) FROM generate_series(1, 201) i))));
+  PERFORM test.ok(r LIKE '%up to 200 people%', 'an event takes up to 200 people', r);
+END;
+$$;

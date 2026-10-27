@@ -140,7 +140,8 @@ BEGIN
   url := regexp_replace(v_found, '[.,;:!?]+$', '');
   provider := public.calendar__meeting_provider(url);
   -- The place is what is left, without the spaces and separators around the URL.
-  place := NULLIF(btrim(replace(p_location, v_found, ''), E' \t\r\n,;·|-'), '');
+  place := NULLIF(btrim(regexp_replace(replace(p_location, v_found, ''), '\(\s*\)|\[\s*\]', '', 'g'),
+                       E' \t\r\n,;·|-'), '');
 END;
 $$;
 
@@ -165,7 +166,7 @@ BEGIN
   provider := NULLIF(btrim(p_provider), '');
   IF provider IS NULL THEN
     provider := public.calendar__meeting_provider(url);
-  ELSIF provider NOT IN ('google_meet', 'zoom', 'teams', 'other') THEN
+  ELSIF provider NOT IN ('google_meet','zoom','teams','other') THEN
     RAISE EXCEPTION 'Unknown meeting link provider "%".', provider;
   END IF;
 END;
@@ -194,6 +195,9 @@ BEGIN
   IF jsonb_typeof(p_attendees) <> 'array' THEN
     RAISE EXCEPTION 'People must be a list, each with an email address.';
   END IF;
+  IF jsonb_array_length(p_attendees) > 200 THEN
+    RAISE EXCEPTION 'An event can have up to 200 people.';
+  END IF;
   FOR v_person IN
     SELECT a.value FROM jsonb_array_elements(p_attendees) WITH ORDINALITY AS a(value, n) ORDER BY a.n
   LOOP
@@ -209,14 +213,16 @@ BEGIN
     v_seen := v_seen || v_email;
     v_name := '';
     IF jsonb_typeof(v_person->'name') = 'string' THEN
-      v_name := btrim(v_person->>'name');
+      v_name := left(btrim(v_person->>'name'), 200);
     END IF;
     v_status := 'needsAction';
     IF jsonb_typeof(v_person->'status') = 'string' AND btrim(v_person->>'status') <> '' THEN
-      v_status := v_person->>'status';
+      v_status := left(btrim(v_person->>'status'), 32);
     END IF;
+    -- booking_op_commit marks the host's own row with self: true; keep it.
     v_out := v_out || jsonb_build_array(
-      jsonb_build_object('email', v_email, 'name', v_name, 'status', v_status));
+      jsonb_build_object('email', v_email, 'name', v_name, 'status', v_status)
+      || CASE WHEN v_person->'self' = 'true'::jsonb THEN '{"self": true}'::jsonb ELSE '{}'::jsonb END);
   END LOOP;
   RETURN v_out;
 END;
@@ -233,7 +239,7 @@ AS $$
 DECLARE
   v_kind text := coalesce(p_kind, 'event');
 BEGIN
-  IF v_kind NOT IN ('event', 'focus', 'hold') THEN
+  IF v_kind NOT IN ('event','focus','hold') THEN
     RAISE EXCEPTION 'Unknown event kind "%".', v_kind;
   END IF;
   IF v_kind = 'hold' THEN
@@ -259,7 +265,10 @@ BEGIN
   SELECT c.kind INTO v_kind
     FROM public.calendars c
    WHERE c.id = p_calendar_id AND c.workspace_id = p_workspace_id AND c.deleted_at IS NULL;
-  IF NOT FOUND THEN
+  -- One answer for missing, deleted, elsewhere and not shared with you, so an id
+  -- never tells an outsider that a calendar exists (supabase-access.md).
+  IF NOT FOUND OR (public.perm_actor_id() IS NOT NULL
+                   AND NOT public.can_access('calendar', p_calendar_id, 'freebusy')) THEN
     RAISE EXCEPTION 'Calendar not found in this workspace.';
   END IF;
   IF v_kind NOT IN ('moduo', 'custom') THEN

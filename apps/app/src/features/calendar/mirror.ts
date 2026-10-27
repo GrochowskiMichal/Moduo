@@ -79,11 +79,13 @@ function withLocation(value: string | null): { location?: string } {
 }
 
 /**
- * Only send `conferenceUrl` when there is one: an absent key keeps the stored link
- * (CALR-6). The op drops a value that is no web address.
+ * Always send `conferenceUrl`: the provider event is the whole truth, so null says
+ * its meeting link was removed and the op clears the stored one (CALR-6). A meeting
+ * URL someone pasted into the location still fills in: the op splits the location.
+ * The op drops a value that is no web address.
  */
-function withConferenceUrl(value: string | null): { conferenceUrl?: string } {
-  return value ? { conferenceUrl: value } : {};
+function withConferenceUrl(value: string | null): { conferenceUrl: string | null } {
+  return { conferenceUrl: value };
 }
 
 /** A trimmed, non-empty string or null. */

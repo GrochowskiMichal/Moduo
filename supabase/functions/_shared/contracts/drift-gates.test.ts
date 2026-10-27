@@ -121,6 +121,9 @@ describe("cross-runtime drift guards", () => {
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect(sql).toContain(`conference_provider IN (${inList(CONFERENCE_PROVIDERS)})`);
     expect(sql).toContain(`kind IN (${inList(CALENDAR_ITEM_KINDS)})`);
+    // The ops' friendly refusals repeat the lists; keep them in step too.
+    expect(sql).toContain(`provider NOT IN (${inList(CONFERENCE_PROVIDERS)})`);
+    expect(sql).toContain(`v_kind NOT IN (${inList(CALENDAR_ITEM_KINDS)})`);
   });
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {

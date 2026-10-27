@@ -77,7 +77,8 @@ BEGIN
   r := test.try('O', pg_temp.create_on('Panel', test.id('CV')));
   PERFORM test.ok(r LIKE '42501%can''t add events to this calendar%', 'not on a calendar you can only view', r);
   r := test.try('X', pg_temp.create_on('Panel', test.id('CW')));
-  PERFORM test.ok(r LIKE '42501%can''t add events to this calendar%', 'nor on one that isn''t shared with you', r);
+  PERFORM test.ok(r LIKE '%Calendar not found in this workspace%',
+    'one that isn''t shared with you answers like a missing one (no hint that it exists)', r);
   r := test.try('O', pg_temp.create_on('Panel', pg_temp.ci()));
   PERFORM test.ok(r LIKE '%connected calendar%', 'a connected account''s calendar is refused here (it saves through its account)', r);
   r := test.try('O', pg_temp.create_on('Panel', test.id('CD')));
