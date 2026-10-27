@@ -9,7 +9,6 @@ note: |
   the variable as "" with `rs.stubEnv` (lib/analytics.test.ts).
 files:
   - apps/app/src/**/*.ts
-  - apps/app/src/**/*.tsx
 ignores:
   - "**/*.test.ts"
 rule:

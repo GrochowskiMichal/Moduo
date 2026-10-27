@@ -48,7 +48,11 @@ describe("workflows", () => {
     // `export X="$(cmd)"` returns 0 when cmd fails: assign first, then export.
     const shells = [
       ...workflows,
-      ...[...filesUnder("scripts", /\.sh$/), ...filesUnder("infra", /\.sh$/)].map((file) => ({
+      ...[
+        ...filesUnder("scripts", /\.sh$/),
+        ...filesUnder("infra", /\.sh$/),
+        ...filesUnder(".claude/hooks", /\.sh$/),
+      ].map((file) => ({
         file,
         text: read(file),
       })),
@@ -56,7 +60,7 @@ describe("workflows", () => {
     const hits = shells.flatMap(({ file, text }) =>
       code(text)
         .split("\n")
-        .filter((l) => /\bexport\s+\w+="?\$\(/.test(l))
+        .filter((l) => /\bexport\s+\w+=\S*\$\(/.test(l))
         .map((l) => `${file}: ${l.trim()}`),
     );
     expect(hits).toEqual([]);
@@ -64,7 +68,9 @@ describe("workflows", () => {
 
   it("uses $GITHUB_WORKSPACE, not the expression, in scripts", () => {
     // On Windows `shell: bash`, `${{ github.workspace }}` loses its backslashes (D:aModuoModuo).
-    const hits = workflows.filter(({ text }) => code(text).includes("${{ github.workspace }}"));
+    const hits = workflows.filter(({ text }) =>
+      /\$\{\{\s*github\.workspace\s*\}\}/.test(code(text)),
+    );
     expect(hits.map((w) => w.file)).toEqual([]);
   });
 
@@ -114,10 +120,16 @@ describe("Workers", () => {
   it("export only handlers from their entry module", () => {
     // wrangler refuses a main module that exports a constant ("not of type 'function or
     // ExportedHandler'") though tsc and the tests pass. Logic and constants go in another module.
-    const entries = filesUnder("infra", /^index\.ts$/).filter((f) =>
-      /^infra\/[^/]+\/src\//.test(f),
-    );
-    expect(entries.length).toBeGreaterThan(0);
+    const entries = execFileSync("git", ["ls-files", "*wrangler.jsonc"], { cwd: root })
+      .toString()
+      .split("\n")
+      .filter(Boolean)
+      .map((config) => {
+        const main = /"main":\s*"([^"]+)"/.exec(read(config))?.[1];
+        return main ? path.posix.join(path.posix.dirname(config), main) : "";
+      })
+      .filter(Boolean);
+    expect(entries.length).toBeGreaterThan(4);
     for (const file of entries) {
       const exported = read(file).match(/^export\s+(?:const|let|var|class|enum)\s+\w+/gm) ?? [];
       expect({ file, exported }).toEqual({ file, exported: [] });

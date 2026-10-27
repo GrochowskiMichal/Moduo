@@ -98,8 +98,9 @@ export function useCalendarSync(opts: {
           // provider HARD-DELETED (they just vanish from the fetch, unlike
           // cancellations which carry status) get tombstoned, not left stale.
           // `events` spans the loaded −12/+24 months but the fetch only syncWindow's
-          // −30/+120 days, so anything outside it is tombstoned like a deletion too:
-          // bound the diff to the fetch window before anything that emails people relies on it.
+          // −30/+120 days, so anything outside it is tombstoned like a deletion too.
+          // calendar_events_booking_follow already reads such a tombstone of a booked
+          // meeting as a host cancel and emails its guests: bound this diff to the fetch window.
           const previouslyMirrored = events
             .filter((e) => e.sourceAccountId === acc.id && e.externalEventId)
             .map((e) => e.externalEventId as string);

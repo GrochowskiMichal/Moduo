@@ -12,7 +12,18 @@ import { fileURLToPath } from "node:url";
 export const AGENTS_MAX_LINES = 150;
 
 /** Agent-facing docs whose references are checked, besides every rule. */
-export const CHECKED_DOCS = ["AGENTS.md", "CONTRIBUTING.md", "docs/agent-setup.md"];
+export const CHECKED_DOCS = [
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/agent-setup.md",
+  // Compiled gotcha areas (HV-14c): pointers to where each trap lives now.
+  "docs/gotchas/build-ci.md",
+  "docs/gotchas/workflow.md",
+  "docs/gotchas/desktop.md",
+  "docs/gotchas/email.md",
+  "docs/gotchas/calendar.md",
+  "docs/desktop-live-verify.md",
+];
 
 export type Rule = {
   file: string;
