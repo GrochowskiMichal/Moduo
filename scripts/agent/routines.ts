@@ -639,6 +639,10 @@ export const COMMANDS: Record<string, (rest: string[]) => Promise<void>> = {
   body: async (rest) => {
     const r = routine(rest[0] ?? "");
     print(createBody(r, readPrompt(r.id), { environmentId: flag(rest, "--env") }));
+    // The server attaches every claude.ai connector to a new routine, whatever the body says.
+    console.error(
+      `${r.id}: after create, run RemoteTrigger update {"clear_mcp_connections": true} and check get shows no connectors (docs/agent-setup.md §Routines).`,
+    );
   },
   task: async (rest) => {
     const r = routine(rest[0] ?? "");
