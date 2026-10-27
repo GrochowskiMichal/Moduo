@@ -5,7 +5,7 @@ message: A `<DndContext>` without `sensors` uses dnd-kit's default PointerSensor
 note: |
   Pass the shell's sensors: `PointerSensor` with `activationConstraint: { distance: 6 }`.
   Stories and tests too: a synthetic `.click()` still works, so jsdom won't catch it
-  (docs/gotchas/notes.md).
+  (.claude/rules/ui-drag.md).
 files:
   - apps/app/src/**/*.tsx
 rule:
