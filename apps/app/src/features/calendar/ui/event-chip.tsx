@@ -64,7 +64,6 @@ export function EventChipView({
       className={cn(
         "cal-chip relative flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
         "transition-[filter,opacity] duration-(--motion-fast) ease-(--ease-out)",
-        past && "opacity-60",
         selected && "ring-2 ring-ring",
         compact && "py-0",
       )}

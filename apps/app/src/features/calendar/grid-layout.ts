@@ -101,8 +101,9 @@ const OPEN_HEADROOM_MINUTES = 30;
 /**
  * The minute at the top of the viewport when the week opens (AC5): just above
  * the start of working hours, unless today is visible and now would sit
- * outside the view (early or late), in which case now comes into view a third
- * of the way down.
+ * outside the view. Then it scrolls only as far as now needs (to near the
+ * bottom in the evening, near the top before work), keeping as much of the
+ * working day in view as it can.
  */
 export function openingScrollMinute(q: {
   workStartMinute: number;
@@ -117,7 +118,10 @@ export function openingScrollMinute(q: {
   if (q.nowMinute == null) return top;
   const margin = Math.min(60, q.viewportMinutes / 4);
   const nowInView = q.nowMinute >= top + margin && q.nowMinute <= top + q.viewportMinutes - margin;
-  return nowInView ? top : clamp(q.nowMinute - q.viewportMinutes / 3);
+  if (nowInView) return top;
+  return q.nowMinute < top
+    ? clamp(q.nowMinute - margin)
+    : clamp(q.nowMinute + margin - q.viewportMinutes);
 }
 
 // ── overlaps: side by side, cascade, fold ────────────────────────────────────

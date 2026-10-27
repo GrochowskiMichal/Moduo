@@ -144,13 +144,26 @@ body {
   background-color: var(--label);
 }
 
+/* The tint sits on an opaque base, so a card that cascades over another hides
+   what's under it instead of showing both through each other. */
 .cal-chip {
-  background-color: var(--label-surface);
+  background-color: var(--background);
+  background-image: linear-gradient(var(--label-surface), var(--label-surface));
   border-color: var(--label);
 }
 
+/* Past: a fainter tint, no hairline, the title stepped down to the muted ink
+   (no opacity, so the small time line keeps its contrast). */
 .cal-chip[data-past] {
+  background-image: linear-gradient(
+    color-mix(in oklab, var(--label-surface) 55%, transparent),
+    color-mix(in oklab, var(--label-surface) 55%, transparent)
+  );
   border-color: transparent;
+}
+
+.cal-chip[data-past] [data-chip-title] {
+  color: var(--muted-foreground);
 }
 
 /* Hover feedback — chips are clickable (open the popover). `filter` is an

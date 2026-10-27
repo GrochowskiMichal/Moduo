@@ -1110,11 +1110,20 @@ const DayColumn = memo(function DayColumn({
       {nowMinutes != null ? <NowLine minutes={nowMinutes} /> : null}
 
       {/* quiet empty hint (spec §9) */}
+      {/* The empty hint sits by now (today's column), where the week opens. */}
       {emptyHint ? (
-        <div className="pointer-events-none absolute inset-x-2 top-1/3 z-[1] text-center text-xs text-muted-foreground">
+        <div
+          className="pointer-events-none absolute inset-x-2 z-[1] text-center text-xs text-muted-foreground"
+          style={{ top: y(emptyHintMinute(nowMinutes ?? prefs.workStartMinute)) }}
+        >
           {emptyHint}
         </div>
       ) : null}
     </div>
   );
 });
+
+/** Just under now, or just above it late in the evening. */
+function emptyHintMinute(nowMinute: number): number {
+  return nowMinute > 22 * 60 ? nowMinute - 60 : nowMinute + 30;
+}
