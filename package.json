@@ -74,6 +74,7 @@
     "agent:auto-mode": "bun scripts/agent/auto-mode.ts",
     "agent:lane": "bash scripts/agent/lane.sh",
     "ab": "bun scripts/harness-ab/rig.ts",
+    "mcp-eval": "bun scripts/harness-ab/mcp-eval/eval.ts",
     "eval:docs": "bun scripts/evals/docs/run.ts",
     "test:watch": "bun run --cwd apps/app test:watch",
     "verify": "turbo run typecheck typecheck:root lint:js lint:tw lint:boundaries lint:ast lint:css lint:notes lint:ratchets lint:decisions lint:rules size test test:scripts",

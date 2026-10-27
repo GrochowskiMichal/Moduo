@@ -30,7 +30,7 @@ A run never touches the shared local Supabase stack, production (the app, its Su
 - **MCP:** none. An arm can't add MCP servers or pass `--mcp-config`, `--settings`, `--permission-mode`, `--add-dir` or the other flags the rig owns. A row whose transcript shows any MCP server is an `error`.
 - **Models:** Anthropic only (an alias or a `claude-*` ID).
 
-HV-29 runs against `moduo-local`, which is the shared stack: it needs its own stack (or a reviewed exception added to `safety.ts`), not a looser arm.
+HV-29's MCP eval doesn't loosen any of this: it runs on its own Supabase stack (project `moduo-mcp-eval`, ports 553xx) and `safety.ts` allows exactly one MCP target, that stack's connector (`refuseMcpTarget`). See [mcp-eval/README.md](./mcp-eval/README.md).
 
 ## Adding a task set
 

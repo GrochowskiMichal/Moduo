@@ -10,6 +10,7 @@ export default defineConfig({
     "scripts/docs/*.test.ts",
     "scripts/evals/docs/*.test.ts",
     "scripts/harness-ab/*.test.ts",
+    "scripts/harness-ab/mcp-eval/*.test.ts",
     "scripts/release/*.test.ts",
     "scripts/smoke-hosting.test.ts",
     "scripts/dns-diff.test.ts",
