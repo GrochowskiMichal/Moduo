@@ -1,0 +1,8 @@
+{
+  "id": "prompt-tdd",
+  "description": "Control with a test-first instruction after the task: one failing test, then the smallest fix.",
+  "experiment": { "name": "test-prompt", "baseline": "control" },
+  "model": "opus",
+  "effort": "high",
+  "promptSuffix": "Work test-first. Before you change any code, write one test that reproduces the behavior described above and run it to watch it fail. Then make the smallest change that makes it pass, run the tests again, and tidy up only while they stay green. If you find more than one behavior to fix, take them one at a time in the same way."
+}
