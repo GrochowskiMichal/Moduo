@@ -4,11 +4,32 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 
-import { type Arm, judge, loadArm, loadSet, plan, type Row, taskProblems } from "./model";
+import {
+  type Arm,
+  ARMS_DIR,
+  experimentProblems,
+  EXPERIMENTS,
+  judge,
+  listDir,
+  loadArm,
+  loadSet,
+  missingPlugins,
+  plan,
+  pluginsNotLoaded,
+  type Row,
+  taskProblems,
+} from "./model";
 import { claudeArgs, report } from "./rig";
-import { agentEnv, RefusedError, refuseWorkspace, rigProfile, type SrtProfile } from "./safety";
+import {
+  agentEnv,
+  refuseArm,
+  RefusedError,
+  refuseWorkspace,
+  rigProfile,
+  type SrtProfile,
+} from "./safety";
 import { ANCHOR, closeStackPorts, STACK_PORTS } from "./srt-offline.mjs";
 import { summarize } from "./stream";
 
@@ -66,6 +87,18 @@ describe("dry run", () => {
           1, 2, 3,
         ]);
     expect(readdirSync(out)).toEqual(["results"]);
+  });
+
+  it("clones every task at --base when given (a before/after run)", () => {
+    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    const run = cli("run", "--set", "core", "--repeats", "1", "--base", "HEAD", "--dry-run");
+    expect(run.status).toBe(0);
+    const [file] = readdirSync(path.join(out, "results"));
+    const rows = readFileSync(path.join(out, "results", file ?? ""), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as Row);
+    expect(new Set(rows.map((r) => r.base))).toEqual(new Set([head.stdout.trim()]));
   });
 
   it("exits 3 and writes nothing for a remote source", () => {
@@ -346,6 +379,132 @@ describe("rows", () => {
     expect(report([row("pass", 1), row("fail", 3), row("error", 9)]).split("\n")[1]).toBe(
       "t\ta\t1\t3\t1\t2.00\t1.0",
     );
+  });
+});
+
+describe("experiment arms (AC37)", () => {
+  const arms = listDir(ARMS_DIR, true).map((id) => loadArm(id));
+  const experiment = (name: string) => arms.filter((a) => a.experiment?.name === name);
+  const out = mkdtempSync(path.join(tmpdir(), "harness-ab-test-"));
+  const home = mkdtempSync(path.join(tmpdir(), "harness-ab-home-"));
+  afterAll(() => {
+    rmSync(out, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
+  });
+  // An empty HOME: no plugin is installed, so a real run of the Ponytail arm stops before it starts.
+  const cli = (...args: string[]) =>
+    spawnSync("bun", [RIG, ...args], {
+      cwd: ROOT,
+      encoding: "utf8",
+      env: { ...process.env, HARNESS_AB_OUT: out, HOME: home },
+    });
+
+  it("every arm is refusal-clean and runs an Anthropic model", () => {
+    expect(arms.flatMap(refuseArm)).toEqual([]);
+  });
+
+  it("each experiment arm differs from its baseline only in what the experiment varies", () => {
+    for (const a of arms.filter((x) => x.experiment))
+      expect(experimentProblems(a, loadArm(a.experiment?.baseline ?? ""))).toEqual([]);
+    expect(Object.keys(EXPERIMENTS).every((name) => experiment(name).length > 0)).toBe(true);
+    expect(
+      experimentProblems(
+        arm({
+          id: "sneaky",
+          experiment: { name: "effort", baseline: "control" },
+          effort: "medium",
+          model: "sonnet",
+        }),
+        control,
+      ),
+    ).toEqual(["sneaky: model differs from control, outside the effort experiment"]);
+    expect(
+      experimentProblems(
+        arm({ id: "same", experiment: { name: "effort", baseline: "control" } }),
+        control,
+      ),
+    ).toEqual(["same: identical to control"]);
+  });
+
+  it("effort is medium against control's high", () => {
+    expect(control.effort).toBe("high");
+    expect(experiment("effort").map((a) => [a.id, a.model, a.effort])).toEqual([
+      ["effort-medium", "opus", "medium"],
+    ]);
+  });
+
+  it("Ponytail is on only in its arm, and a run whose plugin didn't load is caught", () => {
+    const on = arms.filter((a) => JSON.stringify(a.settings ?? {}).includes("ponytail"));
+    expect(on.map((a) => a.id)).toEqual(["ponytail"]);
+    const ponytail = loadArm("ponytail");
+    expect(ponytail.model).toBe("opus");
+    expect(pluginsNotLoaded(ponytail, [])).toEqual(["ponytail@ponytail"]);
+    expect(pluginsNotLoaded(ponytail, ["ponytail@ponytail"])).toEqual([]);
+    expect(pluginsNotLoaded(control, [])).toEqual([]);
+    // Only a user-scope install loads in the rig's temp clone; a project-scoped one never does.
+    const install = (scope: string) => ({ plugins: { "ponytail@ponytail": [{ scope }] } });
+    expect(missingPlugins([ponytail], install("project"))).toEqual(["ponytail@ponytail"]);
+    expect(missingPlugins([ponytail], install("user"))).toEqual([]);
+    expect(missingPlugins([control], {})).toEqual([]);
+  });
+
+  it("the test-prompt arms are tdd and contract-first, framed after the task", () => {
+    const prompts = experiment("test-prompt");
+    expect(prompts.map((a) => a.id).sort()).toEqual(["prompt-contract-first", "prompt-tdd"]);
+    for (const a of prompts) {
+      expect(a.promptSuffix).toBeTruthy();
+      expect(a.promptPrefix).toBeUndefined();
+    }
+    expect(loadArm("prompt-tdd").promptSuffix).toMatch(/test-first/);
+    expect(loadArm("prompt-contract-first").promptSuffix).toMatch(/contract-first/);
+  });
+
+  it("a dry run plans every experiment arm; a real Ponytail run without the plugin stops first", () => {
+    const ids = arms.filter((a) => a.experiment).map((a) => a.id);
+    const dry = cli(
+      "run",
+      "--set",
+      "core",
+      "--arms",
+      ["control", ...ids].join(","),
+      "--repeats",
+      "1",
+      "--dry-run",
+    );
+    expect(dry.status).toBe(0);
+    expect(dry.stderr).toContain("warning: plugins not installed at user scope: ponytail@ponytail");
+    const [file] = readdirSync(path.join(out, "results"));
+    const rows = readFileSync(path.join(out, "results", file ?? ""), "utf8")
+      .trim()
+      .split("\n");
+    expect(rows).toHaveLength(core.tasks.length * (ids.length + 1));
+
+    const real = cli(
+      "run",
+      "--set",
+      "core",
+      "--tasks",
+      "impossible-spec",
+      "--arms",
+      "ponytail",
+      "--repeats",
+      "1",
+    );
+    expect(real.status).toBe(1);
+    expect(real.stderr).toContain("claude plugin install ponytail@ponytail --scope user");
+    expect(readdirSync(path.join(out, "results"))).toEqual([file]);
+  });
+
+  it("reads the plugins a session loaded, without the builtins", () => {
+    const init = {
+      type: "system",
+      subtype: "init",
+      plugins: [
+        { name: "ponytail", source: "ponytail@ponytail" },
+        { name: "cc-plugin-telemetry", source: "cc-plugin-telemetry@builtin" },
+      ],
+    };
+    expect(summarize(JSON.stringify(init)).plugins).toEqual(["ponytail@ponytail"]);
   });
 });
 

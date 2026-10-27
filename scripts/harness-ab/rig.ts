@@ -5,8 +5,8 @@
 // same sandbox. How to add tasks and arms: README.md here.
 //
 //   bun run ab list
-//   bun run ab run --set core --arms control,smoke [--tasks a,b] [--repeats 3] [--dry-run] [--keep] [--no-verify]
-//   bun run ab check-tasks --set core [--tasks a,b]     (no model: the oracle fails at base, passes at fix)
+//   bun run ab run --set core --arms control,smoke [--tasks a,b] [--repeats 3] [--base <rev>] [--dry-run] [--keep] [--no-verify]
+//   bun run ab check-tasks --set core [--tasks a,b] [--base <rev>]   (no model: the oracle fails at base, passes at fix)
 //   bun run ab report <results.jsonl>
 
 import { spawnSync } from "node:child_process";
@@ -20,25 +20,29 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   agentPrompt,
   type Arm,
   ARMS_DIR,
+  experimentProblems,
   isTestPath,
   judge,
   listDir,
   loadArm,
   loadSet,
+  missingPlugins,
   plan,
   plannedRow,
   type PlannedRun,
+  pluginsNotLoaded,
   RIG_DIR,
   type Row,
   type Task,
   TASKS_DIR,
+  type TaskSet,
 } from "./model";
 import { agentEnv, RefusedError, refuseWorkspace, rigProfile, type SrtProfile } from "./safety";
 import { summarize } from "./stream";
@@ -48,6 +52,7 @@ const OUT = process.env.HARNESS_AB_OUT ?? path.join(SOURCE, ".harness-ab");
 const LANE = path.join(SOURCE, "scripts/agent/lane.sh");
 /** srt with the shared stack's localhost ports closed (srt-offline.mjs). */
 const SRT = path.join(RIG_DIR, "srt-offline.mjs");
+const INSTALLED_PLUGINS = path.join(homedir(), ".claude/plugins/installed_plugins.json");
 const AGENT_TIMEOUT_MS = 45 * 60_000;
 const CHECK_TIMEOUT_MS = 20 * 60_000;
 
@@ -85,18 +90,18 @@ const timed = <T>(fn: () => T): [T, number] => {
 };
 
 /** A clone of the local repository at `sha`, with its remote removed: nothing to push to. */
-function makeWorkspace(sha: string, dir: string, fixtures?: string) {
+function makeWorkspace(sha: string, dir: string, fixtures?: string, hide: string[] = []) {
   git(SOURCE, "cat-file", "-e", `${sha}^{commit}`);
   git(tmpdir(), "clone", "--quiet", "--shared", "--no-checkout", SOURCE, dir);
   git(dir, "remote", "remove", "origin");
   git(dir, "checkout", "--quiet", "--detach", sha);
   git(dir, "config", "user.name", "harness-ab");
   git(dir, "config", "user.email", "harness-ab@localhost");
-  if (fixtures) {
-    cpSync(fixtures, dir, { recursive: true });
-    git(dir, "add", "--all");
+  if (fixtures) cpSync(fixtures, dir, { recursive: true });
+  for (const p of hide) rmSync(path.join(dir, p), { recursive: true, force: true });
+  git(dir, "add", "--all");
+  if (sh("git", ["diff", "--cached", "--quiet"], { cwd: dir }).status !== 0)
     git(dir, "commit", "--quiet", "--no-verify", "-m", "harness-ab fixtures");
-  }
   const remotes = git(dir, "remote").split("\n").filter(Boolean);
   const refused = refuseWorkspace({ dir, source: SOURCE, remotes });
   if (refused.length) throw new RefusedError(refused);
@@ -204,19 +209,21 @@ function diffStats(ws: string, start: string) {
   };
 }
 
+/**
+ * Where a question set's check finds the agent's final answer. The rig writes it after the diff is
+ * taken; check-tasks writes nothing, so a grader fails at base.
+ */
+const answerFile = (ws: string) => path.join(ws, ".harness-ab", "answer.md");
+
 function oracle(task: Task, ws: string, profile: string, dir: string) {
+  // A check can reach a grader kept in the rig's own checkout, out of the agent's sight.
+  const env = { HARNESS_AB_RIG: RIG_DIR, HARNESS_AB_ANSWER: answerFile(ws), ...task.oracle.env };
   for (const file of task.oracle.files ?? []) {
     mkdirSync(path.dirname(path.join(ws, file)), { recursive: true });
     writeFileSync(path.join(ws, file), git(SOURCE, "show", `${task.fix}:${file}`) + "\n");
   }
   const checks = task.oracle.checks.map((c, i) => {
-    const exit = sandboxed(
-      ws,
-      profile,
-      c.run,
-      task.oracle.env ?? {},
-      path.join(dir, `oracle-${i + 1}.log`),
-    );
+    const exit = sandboxed(ws, profile, c.run, env, path.join(dir, `oracle-${i + 1}.log`));
     return { name: c.name, expect: c.expect ?? "pass", exit };
   });
   const ok = checks.every((c) =>
@@ -250,7 +257,7 @@ function execute(
   try {
     const fixtures = run.task.fixtures ? path.join(opts.setDir, run.task.fixtures) : undefined;
     const [setup, setupMs] = timed(() => {
-      const w = makeWorkspace(run.task.base, ws, fixtures);
+      const w = makeWorkspace(run.task.base, ws, fixtures, run.task.hide);
       const p = writeProfiles(run, ws, dir);
       const exit = install(run.task, ws, p.checkProfile, dir);
       if (exit !== 0)
@@ -284,6 +291,8 @@ function execute(
 
     const diff = diffStats(ws, setup.start);
     writeFileSync(path.join(dir, "diff.patch"), diff.patch);
+    mkdirSync(path.dirname(answerFile(ws)), { recursive: true });
+    writeFileSync(answerFile(ws), summary.result);
     const [verdict, oracleMs] = timed(() => oracle(run.task, ws, setup.checkProfile, dir));
     const verifyCmd = run.task.verify === undefined ? opts.verifyDefault : run.task.verify;
     const [verify, verifyMs] = timed(() => {
@@ -305,9 +314,14 @@ function execute(
       verify,
       safety: { mcpServers: summary.mcpServers, remotes: setup.remotes, hosts: setup.hosts },
     });
+    const notLoaded = pluginsNotLoaded(run.arm, summary.plugins);
     if (summary.mcpServers.length > 0) {
       row.outcome = "error";
       row.error = `the agent saw MCP servers: ${summary.mcpServers.join(", ")}`;
+    } else if (notLoaded.length > 0 && agent.stdout.trim() !== "") {
+      // Without this the arm silently runs as its baseline.
+      row.outcome = "error";
+      row.error = `the arm's plugins didn't load: ${notLoaded.join(", ")}`;
     } else if (summary.isError && agent.stdout.trim() === "") {
       row.outcome = "error";
       row.error = `the agent produced no stream (exit ${agent.status}); see ${row.artifacts}/agent.stderr.log`;
@@ -344,7 +358,12 @@ function checkTask(task: Task, setDir: string) {
     const root = mkdtempSync(path.join(tmpdir(), "harness-ab-"));
     const ws = path.join(root, "ws");
     try {
-      makeWorkspace(sha, ws, task.fixtures ? path.join(setDir, task.fixtures) : undefined);
+      makeWorkspace(
+        sha,
+        ws,
+        task.fixtures ? path.join(setDir, task.fixtures) : undefined,
+        task.hide,
+      );
       const { checkProfile } = writeProfiles(
         { runId, set: "", task, arm: { id: "none", model: "opus", description: "" }, repeat: 0 },
         ws,
@@ -430,7 +449,8 @@ function listCommand() {
   for (const id of listDir(ARMS_DIR, true)) {
     const arm = loadArm(id);
     const effort = arm.effort ? ` @${arm.effort}` : "";
-    console.log(`  ${id}: ${arm.model}${effort}, ${arm.description}`);
+    const exp = arm.experiment ? ` [${arm.experiment.name} vs ${arm.experiment.baseline}]` : "";
+    console.log(`  ${id}: ${arm.model}${effort}${exp}, ${arm.description}`);
   }
   return 0;
 }
@@ -445,8 +465,15 @@ function reportCommand(file: string | undefined) {
   return 0;
 }
 
+/** `--base <rev>`: every task of the set cloned at that commit instead of its own (a before/after run). */
+function withBase(set: TaskSet, f: Flags): TaskSet {
+  if (typeof f.base !== "string" || !f.base) return set;
+  const base = git(SOURCE, "rev-parse", "--verify", `${f.base}^{commit}`);
+  return { ...set, tasks: set.tasks.map((t) => ({ ...t, base })) };
+}
+
 function checkTasksCommand(f: Flags) {
-  const set = loadSet(str(f, "set", "core"));
+  const set = withBase(loadSet(str(f, "set", "core")), f);
   const only = csv(f.tasks);
   const tasks = only ? set.tasks.filter((t) => only.includes(t.id)) : set.tasks;
   let bad = 0;
@@ -459,9 +486,28 @@ function checkTasksCommand(f: Flags) {
 }
 
 function runCommand(f: Flags) {
-  const set = loadSet(str(f, "set", "core"));
+  const set = withBase(loadSet(str(f, "set", "core")), f);
   const dry = f["dry-run"] === true;
   const arms = (csv(f.arms) ?? ["control"]).map((id) => loadArm(id));
+  const problems = arms.flatMap((a) =>
+    a.experiment ? experimentProblems(a, loadArm(a.experiment.baseline)) : [],
+  );
+  if (problems.length) throw new Error(problems.join("\n"));
+  const installed = existsSync(INSTALLED_PLUGINS)
+    ? JSON.parse(readFileSync(INSTALLED_PLUGINS, "utf8"))
+    : {};
+  const missing = missingPlugins(arms, installed);
+  if (missing.length) {
+    const how = missing
+      .map(
+        (id) =>
+          `claude plugin install ${id} --scope user && claude plugin disable ${id} --scope user`,
+      )
+      .join("; ");
+    const msg = `plugins not installed at user scope: ${missing.join(", ")} (install them disabled: ${how})`;
+    if (!dry) throw new Error(msg);
+    console.error(`harness-ab: warning: ${msg}`);
+  }
   const batch = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "").replace("T", "-");
   const rigSha = git(SOURCE, "rev-parse", "--short=12", "HEAD");
   const runs = plan({
@@ -492,7 +538,7 @@ function runCommand(f: Flags) {
 }
 
 const USAGE =
-  "usage: bun run ab list | run --set <set> --arms a,b [--tasks …] [--repeats 3] [--dry-run] [--keep] [--no-verify] | check-tasks --set <set> | report <file>";
+  "usage: bun run ab list | run --set <set> --arms a,b [--tasks …] [--repeats 3] [--base <rev>] [--dry-run] [--keep] [--no-verify] | check-tasks --set <set> [--base <rev>] | report <file>";
 
 function main(argv: string[]) {
   const [cmd, ...args] = argv;

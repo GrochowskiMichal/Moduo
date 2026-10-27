@@ -8,6 +8,7 @@ type Event = {
   subtype?: string;
   model?: string;
   mcp_servers?: { name: string; status?: string }[];
+  plugins?: { name: string; source?: string }[];
   message?: { content?: Block[] | string };
   is_error?: boolean;
   num_turns?: number;
@@ -40,6 +41,10 @@ const parse = (line: string): Event | null => {
 function onInit(out: AgentSummary, ev: Event) {
   out.model = ev.model ?? null;
   out.mcpServers = (ev.mcp_servers ?? []).map((s) => s.name);
+  out.plugins = (ev.plugins ?? [])
+    .map((p) => p.source ?? p.name)
+    .filter((id) => !id.endsWith("@builtin"))
+    .sort();
 }
 
 function onAssistant(out: AgentSummary, content: Block[]) {
@@ -74,6 +79,7 @@ export function summarize(stream: string): AgentSummary {
   const out: AgentSummary = {
     model: null,
     mcpServers: [],
+    plugins: [],
     subtype: null,
     isError: false,
     turns: null,
