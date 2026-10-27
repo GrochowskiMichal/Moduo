@@ -130,12 +130,17 @@ export function fence(text: string): string {
   return "`".repeat(longest + 1);
 }
 
-/** Model-written prose: no @-mentions or HTML comments, bounded length. */
+/**
+ * Model-written prose: no @-mentions and no raw HTML (comments, tags, images), bounded length.
+ * Escaping `<`/`>` rather than stripping patterns: a strip can be rebuilt from its own leftovers.
+ */
 export function plain(text: string): string {
   return text
     .slice(0, MAX_BEHAVIOR)
     .replace(/@(?=[\w-])/g, "@\u200b")
-    .replace(/<!--|-->/g, "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
     .trim();
 }
 

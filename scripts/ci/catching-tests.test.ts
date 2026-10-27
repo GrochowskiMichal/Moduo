@@ -139,8 +139,11 @@ describe("comment", () => {
     expect(fence("has ```` four")).toBe("`````");
   });
 
-  it("strips @-mentions and HTML comments from model prose", () => {
-    expect(plain("ping @mike <!-- x -->")).toBe(`ping @${"\u200b"}mike  x`);
+  it("defuses @-mentions and every HTML tag in model prose", () => {
+    expect(plain("ping @mike <!-- x -->")).toBe(`ping @${"\u200b"}mike &lt;!-- x --&gt;`);
+    // Stripping "<!--" once would rebuild a comment out of "<!<!---->": escaping can't be undone that way.
+    expect(plain("a <!<!---->-- hidden")).not.toMatch(/<!--/);
+    expect(plain('<img src="https://x.test/p.gif"><script>x</script >')).not.toMatch(/</);
   });
 
   it("carries the marker, the behaviour, both commits, the failure and the test", () => {
