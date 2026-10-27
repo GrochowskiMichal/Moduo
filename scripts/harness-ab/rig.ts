@@ -41,6 +41,7 @@ import {
   RIG_DIR,
   type Row,
   type Task,
+  taskProblems,
   TASKS_DIR,
   type TaskSet,
 } from "./model";
@@ -48,6 +49,7 @@ import {
   agentEnv,
   isSafeKey,
   RefusedError,
+  refuseTask,
   refuseWorkspace,
   rigProfile,
   type SrtProfile,
@@ -228,7 +230,7 @@ const answerFile = (ws: string) => path.join(ws, ".harness-ab", "answer.md");
 
 function oracle(task: Task, ws: string, profile: string, dir: string) {
   // A check can reach a grader kept in the rig's own checkout, out of the agent's sight.
-  const env = { HARNESS_AB_RIG: RIG_DIR, HARNESS_AB_ANSWER: answerFile(ws), ...task.oracle.env };
+  const env = { ...task.oracle.env, HARNESS_AB_RIG: RIG_DIR, HARNESS_AB_ANSWER: answerFile(ws) };
   for (const file of task.oracle.files ?? []) {
     mkdirSync(path.dirname(path.join(ws, file)), { recursive: true });
     writeFileSync(path.join(ws, file), git(SOURCE, "show", `${task.fix}:${file}`) + "\n");
@@ -289,7 +291,7 @@ function execute(
             MODUO_LANE_PROFILE: setup.laneProfile,
             MODUO_LANE_SETTINGS: setup.settings,
             MODUO_LANE_SRT: SRT,
-            // lane.sh would add TURBO_API's host to the allowlist; the rig's profile is final.
+            // A second guard: lane.sh already ignores TURBO_API under a caller's profile.
             TURBO_API: "",
             // The risk hook (HV-24), where the task's base has it, logs into this run's artifacts.
             MODUO_RISK_LOG: path.join(dir, "risk-decisions.jsonl"),
@@ -489,6 +491,11 @@ function checkTasksCommand(f: Flags) {
   const set = withBase(loadSet(str(f, "set", "core")), f);
   const only = csv(f.tasks);
   const tasks = only ? set.tasks.filter((t) => only.includes(t.id)) : set.tasks;
+  // The same checks a run gets: check-tasks runs the oracle too.
+  const problems = tasks.flatMap(taskProblems);
+  if (problems.length) throw new Error(problems.join("\n"));
+  const refusals = tasks.flatMap(refuseTask);
+  if (refusals.length) throw new RefusedError(refusals);
   let bad = 0;
   for (const t of tasks) {
     const r = checkTask(t, set.dir);

@@ -181,6 +181,21 @@ describe("refusals", () => {
     expect(() => rigProfile(lane, { source: ROOT, extraHosts: ["*.co"] })).toThrow(RefusedError);
   });
 
+  it("a task's oracle env is an allowlist and its paths stay inside the workspace", () => {
+    const t = core.tasks.find((x) => x.id === "impossible-spec")!;
+    const withEnv = (env: Record<string, string>) => ({ ...t, oracle: { ...t.oracle, env } });
+    expect(taskProblems(withEnv({ TZ: "UTC", MODUO_HUNT: "1" }))).toEqual([]);
+    for (const key of ["NODE_OPTIONS", "PATH", "HOME", "HARNESS_AB_RIG"])
+      expect(taskProblems(withEnv({ [key]: "x" })).join()).toMatch(/isn't allowed/);
+    for (const bad of [
+      { ...t, fixtures: "../../.env.cloud.local" },
+      { ...t, fixtures: "/etc" },
+      { ...t, hide: ["a/../../b"] },
+      { ...t, oracle: { ...t.oracle, files: ["../x.test.ts"] } },
+    ])
+      expect(taskProblems(bad).join()).toMatch(/relative path without \.\./);
+  });
+
   it("an arm can't set the environment the rig, lane.sh or srt read", () => {
     const envs: Record<string, string>[] = [
       { TURBO_API: "http://[::1]:54322" },
@@ -323,7 +338,7 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
     expect(lines.slice(at + 1, at + 1 + STACK_PORTS.length)).toEqual(
       STACK_PORTS.map((p) => `(deny network-outbound (remote tcp "localhost:${p}"))`),
     );
-    expect(STACK_PORTS).toEqual(expect.arrayContaining([54321, 54322]));
+    expect(STACK_PORTS).toEqual(expect.arrayContaining([54320, 54321, 54322, 54329]));
     expect(() => closeStackPorts("(version 1)")).toThrow(/refusing/);
   });
 

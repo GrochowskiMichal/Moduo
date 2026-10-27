@@ -229,6 +229,24 @@ export const listDir = (dir: string, json: boolean) =>
         .sort()
     : [];
 
+/** The only variables a task's oracle may set: they reach the rig's own, unsandboxed process. */
+export const ORACLE_ENV = ["TZ", "MODUO_HUNT"];
+
+/** A path the task names stays inside the workspace or its set folder: relative, no `..`. */
+const insidePath = (p: string) =>
+  p.length > 0 && !path.isAbsolute(p) && !p.split(/[\\/]/).includes("..");
+
+/** What keeps a task inside the rig: its oracle env and the paths it names. */
+function containmentProblems(task: Task): string[] {
+  const env = Object.keys(task.oracle.env ?? {})
+    .filter((key) => !ORACLE_ENV.includes(key))
+    .map((key) => `${task.id}: oracle.env ${key} isn't allowed (only ${ORACLE_ENV.join(", ")})`);
+  const paths = [task.fixtures ?? "fixtures", ...(task.hide ?? []), ...(task.oracle.files ?? [])]
+    .filter((p) => !insidePath(p))
+    .map((p) => `${task.id}: "${p}" must be a relative path without ..`);
+  return [...env, ...paths];
+}
+
 /** Structural checks the JSON can't express: one message per problem. */
 export function taskProblems(task: Task): string[] {
   const out: string[] = [];
@@ -238,6 +256,7 @@ export function taskProblems(task: Task): string[] {
   if ((task.oracle.files?.length ?? 0) > 0 && !task.fix)
     out.push(`${task.id}: oracle files need a fix commit to come from`);
   if (task.oracle.checks.length === 0) out.push(`${task.id}: needs at least one oracle check`);
+  out.push(...containmentProblems(task));
   if (task.expect === "defect-report" && !task.implement)
     out.push(`${task.id}: a defect-report task runs in the frozen-tests phase (implement: true)`);
   return out;

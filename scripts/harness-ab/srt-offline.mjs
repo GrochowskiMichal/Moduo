@@ -15,7 +15,8 @@ import { realpathSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const STACK_PORTS = [54321, 54322, 54323, 54324, 54325, 54326, 54327, 54328, 54329];
+/** The shared stack's ports, 54320 (the shadow DB) through 54329. */
+export const STACK_PORTS = Array.from({ length: 10 }, (_, i) => 54320 + i);
 export const ANCHOR = '(allow network-outbound (remote ip "localhost:*"))';
 
 /** The sandbox profile inside srt's wrapped command, with the stack ports denied after the anchor. */
