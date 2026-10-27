@@ -1,0 +1,24 @@
+id: env-define-nullish-fallback
+language: typescript
+severity: error
+message: "An unset `PUBLIC_*` variable reaches the bundle as \"\", so `import.meta.env.X ?? fallback` never falls back."
+note: |
+  rsbuild.config.ts defines every `source.define` variable with `readLocalEnvValue`, which
+  returns "" when it's missing. Write `(import.meta.env.X ?? "").trim() || fallback`. Tests
+  can't see it (Rstest compiles to `process.env`, where unset is undefined) unless they stub
+  the variable as "" with `rs.stubEnv` (lib/analytics.test.ts).
+files:
+  - apps/app/src/**/*.ts
+ignores:
+  - "**/*.test.ts"
+rule:
+  kind: binary_expression
+  has:
+    field: left
+    regex: ^import\.meta\.env\.\w+$
+  regex: ^import\.meta\.env\.\w+\s*\?\?
+  # `(import.meta.env.X ?? "").trim() || fallback` is the fix, not the trap.
+  not:
+    has:
+      field: right
+      regex: ^(""|'')$

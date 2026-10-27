@@ -106,6 +106,8 @@ const appBuild = readBuildId();
 const tauriStub = path.resolve(__dirname, "src/lib/tauri-api-stub.ts");
 
 export default defineConfig({
+  // React Compiler: Rules-of-React violations show as build warnings, not errors, so
+  // watch the dev terminal after adding a library. It breaks Legend State's `use$`.
   plugins: [pluginReact({ reactCompiler: true }), pluginTailwindcss()],
   source: {
     entry: {

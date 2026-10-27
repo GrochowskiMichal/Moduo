@@ -74,6 +74,8 @@ async function notifyDesktop(copy: FocusAlertCopy): Promise<void> {
     const notification = await import("@tauri-apps/plugin-notification");
     let granted = await notification.isPermissionGranted();
     if (!granted) granted = (await notification.requestPermission()) === "granted";
+    // Fire-and-forget: a failed delivery (a signing mismatch) never reaches the catch
+    // below. Check it on a signed build; under `tauri dev` it shows as Terminal's.
     if (granted) notification.sendNotification({ title: copy.title, body: copy.body });
   } catch (error) {
     console.warn("[focus] desktop notification failed", error);

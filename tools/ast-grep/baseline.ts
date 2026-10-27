@@ -330,4 +330,10 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet: "duration: 30_000",
     why: "Deliberate: A question, not an undo toast; it stays up long enough to answer.",
   },
+  {
+    rule: "webview-native-dialog-tsx",
+    file: "apps/app/src/features/email/ui/email-compose-editor.tsx",
+    snippet: 'window.prompt("Link URL")',
+    why: "Candidate bug: On the desktop this returns a Promise, so the link toolbar can't read the URL (added with the rule, HV-14c).",
+  },
 ];

@@ -56,3 +56,10 @@ The mechanical traps are checked by `apps/app/src/lib/migration-lint.test.ts` (g
 - PostgreSQL regex alternation is leftmost-longest and `+?` takes the whole expression's greediness: write pieces that exclude their delimiter (`(?:[^*\n]|\*(?!\*))+`). A bound past 255 (`{300,}`) raises; never build `{N,}` from data.
 - A plpgsql character loop is ~100× slower than JS: bound every look-ahead in a parser that runs from a trigger.
 - Match a marker comment positively: `obj_description(…) IS NOT DISTINCT FROM 'mark'`, never `coalesce(…, 'mark') = 'mark'`.
+
+## Across modules (HV-14c)
+- A block waiting to land re-cuts its functions from the live bodies the day it applies (another block may have redefined them), restates grants by name, stamps files in apply order, and merges the build head first.
+- A rolled-back probe proves the logic, not the deployment: after changing a shared function or predicate, check the deployed definition (`pg_get_functiondef('public.fn(args)'::regprocedure)`).
+- `*_op_*` helpers call `spine_op__guard`, which needs a signed-in member: a data fix inside a migration updates the table (`public.entities`) directly.
+- An optional parameter added to an existing `_op_` RPC is sent by clients only when non-null (PostgREST matches the exact named-arg set, so an older database answers PGRST202), and the old signature is DROPped, not overloaded.
+- A self-reminder sets `notify_user_ids`, not `mentioned_user_ids`: `spine_activity_targets_me` skips mentions where you are the actor.

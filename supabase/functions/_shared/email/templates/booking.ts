@@ -21,7 +21,7 @@
  *
  * Everything a template prints, the calendar file's DTSTAMP included, comes
  * from the payload (`booking-public/emails.ts` writes it): a retry must render
- * the same body, or Resend refuses the idempotency key (docs/gotchas/email.md).
+ * the same body, or Resend refuses the idempotency key (templates/index.ts).
  */
 
 import { CANONICAL_APP_ORIGIN } from "../../app-origin.ts";
@@ -103,9 +103,8 @@ function firstName(value: string): string {
 /**
  * The host as the guest emails name them. Their display name is typed by an
  * account holder and these emails go, from our domain, to addresses the booker
- * typed, so it gets the same allow-list as a workspace inviter (names.ts,
- * docs/gotchas/email.md); a name that fails it becomes "your host", and the
- * email comes from plain "Moduo".
+ * typed, so it gets the same allow-list as a workspace inviter (names.ts); a
+ * name that fails it becomes "your host", and the email comes from plain "Moduo".
  */
 type Host = { full: string; first: string; named: boolean };
 

@@ -1,0 +1,18 @@
+id: rust-dialog-blocking-show
+language: rust
+severity: error
+message: "`blocking_show()` on a tauri-plugin-dialog dialog can deadlock the event loop when it runs on the main thread."
+note: |
+  Use the non-blocking `.show(|confirmed| ..)`: its callback runs on a later loop turn. Guard
+  repeated gestures with an AtomicBool (`quit_prompt_open` in lib.rs), since `.show()` returns
+  at once and a second ⌘Q would stack another dialog.
+files:
+  - apps/desktop/src-tauri/src/**/*.rs
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: field_expression
+    has:
+      field: field
+      regex: ^blocking_show$

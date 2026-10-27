@@ -102,6 +102,9 @@ where
     Ok(serde_json::from_value(raw).unwrap_or_default())
 }
 
+/// Every connect path builds one: a new field has to reach the password connect
+/// (its new-account literal and its existing-account branch) and Gmail OAuth, whose
+/// own input type otherwise falls back to the default without a word.
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredEmailAccount {
@@ -122,8 +125,8 @@ pub(super) struct StoredEmailAccount {
     pub(super) status: String,
     pub(super) last_error: Option<String>,
     /// **Must stay defaulted AND tolerant of unknown values.** `read_accounts`
-    /// swallows a deserialize error into an EMPTY list, so anything unparseable here
-    /// silently disconnects every account (specs/import.md assumption 4). Missing is
+    /// refuses an undecodable list (`email_accounts_unreadable`), so anything
+    /// unparseable here takes every account offline (specs/import.md assumption 4). Missing is
     /// covered by `default`; an *unknown* value matters too, because the desktop
     /// binary is drop-in replaced — rolling back past a future depth variant must not
     /// wipe the user's accounts. Guarded by

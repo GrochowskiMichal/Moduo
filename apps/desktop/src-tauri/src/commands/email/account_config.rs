@@ -162,7 +162,9 @@ pub(super) fn ensure_account_config(
     account: &StoredEmailAccount,
 ) -> Result<EmailConfig, String> {
     // Reads the (already-refreshed, for OAuth) secret from the keychain — the async
-    // `oauth::ensure_fresh_access` step runs before any config build.
+    // `oauth::ensure_fresh_access` step runs before any config build. Never refresh
+    // here: this is sync yet also runs on the async command thread, where
+    // `reqwest::blocking` panics and `.await` isn't available.
     let Some(secret) = super::secrets::get_secret(state, &account.id)? else {
         return Err("account_reauth_required".to_string());
     };

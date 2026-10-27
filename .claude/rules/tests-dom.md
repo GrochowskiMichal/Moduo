@@ -6,7 +6,7 @@ expires: 2027-01-31
 
 # App unit tests (rstest + jsdom)
 
-Compiled from the UI and notes gotchas (HV-14b).
+Compiled from the UI, notes and build-ci gotchas (HV-14b, HV-14c).
 
 - `act(() => api.fn())` becomes an un-awaited async act the day `fn` returns a promise, and breaks the next test: write `act(() => { api.fn(); })` or `await act(async () => …)`. To find the culprit, pair the failing test with each earlier one by `--testNamePattern`.
 - A mocked provider value keeps one identity (`rs.hoisted`), as the real provider does; a fresh object per render loops an effect and hangs the runner. Run a new test file under a timeout.
@@ -17,3 +17,7 @@ Compiled from the UI and notes gotchas (HV-14b).
 - A `scrollTop` write inside `requestAnimationFrame` fires its `scroll` event a frame later: dispatch `new Event("scroll")` yourself.
 - A keyboard drag started in a test is cancelled (Escape on `document`) before cleanup; folds are reset with `resetFoldsForTests()`.
 - A source-scanning guard test reads string literals the way the parser does (comments skipped), or parses with TypeScript; one quote regex over a file reads an apostrophe in a comment as a string. `apps/app/src/global-css.test.ts` reads comments too: don't quote `pane-scroll` in one.
+- A test that mounts code calling `supabaseClient` directly talks to prod: `runtime.web.client.ts` falls back to the prod URL and key when no env is set, and a late reply after jsdom's teardown kills the worker. Stub the client (`rs.spyOn(supabaseClient, "rpc")`) or route the call through the runtime the test fakes.
+- Fake timers fake `Date` too. Model a throttled or sleeping timer with `rs.setSystemTime(Date.now() + ms)` then `rs.advanceTimersByTime(1000)`. Synchronous `advanceTimersByTime` runs no microtasks between timers: await only real promises in the code under test, or use `advanceTimersByTimeAsync`.
+- Rstest compiles `import.meta.env` to `process.env`, where an unset variable is `undefined`; the bundle gets `""`. Stub it as `""` with `rs.stubEnv` to test a fallback (`lib/analytics.test.ts`).
+- `URL.createObjectURL` is stubbed for every jsdom test in `apps/app/rstest.setup.ts`; don't stub it per file.

@@ -1,7 +1,7 @@
 /**
  * The allow-list for names a person typed that we print in an email to an
- * address someone else chose, from our domain (docs/gotchas/email.md: a sender
- * name is a phishing surface). Escaping stops markup; these stop the words.
+ * address someone else chose, from our domain: a sender name is a phishing
+ * surface. Escaping stops markup; these stop the words.
  * Used by the booking emails (C1–C7) and the workspace emails (B3–B5).
  */
 

@@ -25,6 +25,13 @@ export const CHECKED_DOCS = [
   ".claude/routines/retro.md",
   ".claude/routines/prod-watch.md",
   ".claude/routines/numbers.md",
+  // Compiled gotcha areas (HV-14c): pointers to where each trap lives now.
+  "docs/gotchas/build-ci.md",
+  "docs/gotchas/workflow.md",
+  "docs/gotchas/desktop.md",
+  "docs/gotchas/email.md",
+  "docs/gotchas/calendar.md",
+  "docs/desktop-live-verify.md",
 ];
 
 export type Rule = {

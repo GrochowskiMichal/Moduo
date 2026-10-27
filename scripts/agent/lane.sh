@@ -10,10 +10,14 @@
 # so a lane can't plant a hook or rewrite the remote. ~/.claude.json is read-only too: Claude runs fine
 # without writing it (checked live with srt 0.0.81, 2026-10-24). Tests: scripts/agent/settings.test.ts,
 # scripts/agent/frozen-tests.test.ts.
+# Lanes keep the shared ~/.claude, not their own CLAUDE_CONFIG_DIR: a new config folder answers
+# "Not logged in" (the macOS Keychain login is keyed by the folder) and loses the workspace trust.
 # The profiles come from this script's checkout, the workspace is the cwd's checkout, so the A/B rig
 # (scripts/harness-ab/) can run a lane in a clone at an old commit. The rig swaps the srt profile with
 # MODUO_LANE_PROFILE, the Claude settings with MODUO_LANE_SETTINGS (both default to the files below) and
 # srt itself with MODUO_LANE_SRT (scripts/harness-ab/srt-offline.mjs, which also closes the stack's ports).
+# The lane profile's allowLocalBinding opens every localhost port, the stack's included: a
+# `127.0.0.1:<port>` entry in allowedDomains restricts nothing.
 set -euo pipefail
 implement=0
 if [ "${1:-}" = "--implement" ]; then implement=1; shift; fi
@@ -53,5 +57,6 @@ jq --arg root "$root" --arg git "$gitdir" --arg turbo "$turbo" --argjson frozen 
 ' "$profile" >"$settings"
 
 cd "$root"
+# srt takes the command string with -c; a single positional string is read as the program name.
 inner=$(printf '%q ' claude -p --permission-mode bypassPermissions --settings "$claude_settings" "$@")
 MODUO_LANE=1 MODUO_LANE_SANDBOX=1 "${MODUO_LANE_SRT:-srt}" --settings "$settings" -c "$inner" </dev/null

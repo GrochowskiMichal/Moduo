@@ -18,6 +18,8 @@ import { withHotkeyScope } from "../../lib/hotkeys";
 import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
+// Only these three pages ship in the entry chunk. A heavy page (editors, XYFlow) loads via
+// `lazyRouteComponent` like /notes below; a heavy dep inside an eager page undoes the split.
 import { AuthPage } from "../../routes/pages/auth-page";
 import { HomePage } from "../../routes/pages/home-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
