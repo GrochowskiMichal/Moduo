@@ -43,6 +43,7 @@ function event(over: Partial<CalendarEventModel>): CalendarEventModel {
     rrule: null,
     status: "confirmed",
     color: null,
+    calendarRef: over.calendarRef ?? null,
     createdAt: "",
     updatedAt: "",
     deletedAt: null,
@@ -86,6 +87,16 @@ describe("accounts — attribution (AC12)", () => {
     ];
     const visible = visibleEvents(evs, ["a"]);
     expect(visible.map((e) => e.id)).toEqual(["native", "ext-b"]);
+  });
+
+  it("hides native events on a hidden calendar (custom calendars, CALR-6)", () => {
+    const evs = [
+      event({ id: "mine", calendarRef: "cal-moduo" }),
+      event({ id: "work", calendarRef: "cal-work" }),
+      event({ id: "ext-a", sourceAccountId: "a", calendarRef: "cal-a" }),
+    ];
+    expect(visibleEvents(evs, ["cal-work"]).map((e) => e.id)).toEqual(["mine", "ext-a"]);
+    expect(visibleEvents(evs, ["a"]).map((e) => e.id)).toEqual(["mine", "work"]);
   });
 
   it("returns all events unfiltered when nothing is hidden", () => {

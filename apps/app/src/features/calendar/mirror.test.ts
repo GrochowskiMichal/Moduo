@@ -166,3 +166,52 @@ describe("mirror — batch + deletion diff", () => {
     expect(deletedExternalIds(["a", "b", "c"], ["a", "c"])).toEqual(["b"]);
   });
 });
+
+describe("mirror — meeting link beside the place (CALR-6)", () => {
+  const timed = {
+    start: { dateTime: "2026-11-05T10:00:00Z" },
+    end: { dateTime: "2026-11-05T11:00:00Z" },
+  };
+
+  it("Google: the conference link goes to conferenceUrl, the location stays the place", () => {
+    const row = mapGoogleEvent({
+      id: "g-1",
+      summary: "Board",
+      ...timed,
+      location: "Hale & Co, 12 Rua Augusta",
+      hangoutLink: "https://meet.google.com/abc-defg-hij",
+    });
+    expect(row?.location).toBe("Hale & Co, 12 Rua Augusta");
+    expect(row?.conferenceUrl).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("Google: conferenceData's video entry point is the link", () => {
+    const row = mapGoogleEvent({
+      id: "g-2",
+      summary: "Zoom",
+      ...timed,
+      conferenceData: { entryPoints: [{ entryPointType: "video", uri: "https://zoom.us/j/1" }] },
+    });
+    expect(row?.conferenceUrl).toBe("https://zoom.us/j/1");
+    expect(row && "location" in row).toBe(false);
+  });
+
+  it("Google: no conference sends no conferenceUrl key, so the stored link is kept", () => {
+    const row = mapGoogleEvent({ id: "g-3", summary: "Lunch", ...timed, location: "Café" });
+    expect(row?.location).toBe("Café");
+    expect(row && "conferenceUrl" in row).toBe(false);
+  });
+
+  it("Graph: the online meeting is the link and displayName the place", () => {
+    const row = mapOutlookEvent({
+      id: "o-1",
+      subject: "Sync",
+      start: { dateTime: "2026-11-05T10:00:00.0000000", timeZone: "UTC" },
+      end: { dateTime: "2026-11-05T11:00:00.0000000", timeZone: "UTC" },
+      location: { displayName: "Room 4" },
+      onlineMeeting: { joinUrl: "https://teams.microsoft.com/l/meetup-join/abc" },
+    });
+    expect(row?.location).toBe("Room 4");
+    expect(row?.conferenceUrl).toBe("https://teams.microsoft.com/l/meetup-join/abc");
+  });
+});
