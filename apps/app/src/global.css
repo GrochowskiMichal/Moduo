@@ -136,23 +136,50 @@ body {
   text-decoration: underline dotted var(--muted-foreground);
 }
 
-/* CAL-6: external calendar chips + the left-rail swatch carry their account hue
-   through the SAME [data-label] tokens as tags (§13b) — the raw provider hex
-   maps to a bounded label name, never an inline color. `.cal-swatch` is the
-   left-rail dot; `.cal-chip-external` tints the grid chip. */
+/* CAL-6 / CALR-1: every grid event is the house calendar chip — its calendar's
+   hue through the SAME [data-label] tokens as tags (§13b), never an inline
+   color. `.cal-swatch` is the left-rail dot; `.cal-chip` is the tinted surface
+   with a hairline in its hue (past events keep the tint, drop the hairline). */
 .cal-swatch {
   background-color: var(--label);
 }
 
-.cal-chip-external {
+.cal-chip {
   background-color: var(--label-surface);
   border-color: var(--label);
 }
 
-/* Hover feedback — external chips are clickable (open the popover), so match the
-   native chip's subtle deepen. `filter` is an effect, not a design-system color. */
-.cal-chip-external:hover {
+.cal-chip[data-past] {
+  border-color: transparent;
+}
+
+/* Hover feedback — chips are clickable (open the popover). `filter` is an
+   effect, not a design-system color. */
+.cal-chip:hover {
   filter: brightness(1.12);
+}
+
+/* A one-line chip: title then start time on one row; when both don't fit the
+   time wraps onto a clipped second row, so it drops before the title truncates. */
+.cal-chip-line {
+  height: 1lh;
+}
+
+/* The meeting in progress carries the now line faintly, with a tick at its edge. */
+.cal-now-tick {
+  height: 1px;
+  background-color: color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+.cal-now-tick::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -3px;
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background-color: var(--primary);
 }
 
 /* ═══ Check-off "pop" — the one sanctioned delight moment (CompleteToggle).

@@ -54,7 +54,9 @@ describe("now line and the live meeting", () => {
   it("a meeting that isn't in progress carries neither", () => {
     const { container, queryByText } = render(<EventChipView {...chip} />);
     expect(container.querySelector("[data-now-tick]")).toBeNull();
-    expect(container.querySelector<HTMLElement>('[data-chip="event"]')?.dataset.live).toBeUndefined();
+    expect(
+      container.querySelector<HTMLElement>('[data-chip="event"]')?.dataset.live,
+    ).toBeUndefined();
     expect(queryByText(/happening now/)).toBeNull();
   });
 });

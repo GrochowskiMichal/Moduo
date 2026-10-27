@@ -21,7 +21,8 @@ const MIN = 60_000;
 
 function chip(id: string, startHour: number, endHour: number): LayoutChip {
   // An ordinary (non-DST) local day.
-  const at = (h: number) => new Date(2026, 5, 30, Math.floor(h), Math.round((h % 1) * 60)).getTime();
+  const at = (h: number) =>
+    new Date(2026, 5, 30, Math.floor(h), Math.round((h % 1) * 60)).getTime();
   return { id, startMs: at(startHour), endMs: at(endHour) };
 }
 
@@ -80,7 +81,10 @@ describe("clock-change week keeps wall-clock hours", () => {
 
 describe("overlaps split, cascade and fold", () => {
   it("non-overlapping events each take the full width", () => {
-    const { placed, overflow } = layoutDayChips([chip("a", 9, 10), chip("b", 11, 12)], WEEK_COLUMNS);
+    const { placed, overflow } = layoutDayChips(
+      [chip("a", 9, 10), chip("b", 11, 12)],
+      WEEK_COLUMNS,
+    );
     expect(overflow).toHaveLength(0);
     expect(byId(placed).a).toMatchObject({ left: 0, width: 1, coveredFromMs: null });
     expect(byId(placed).b).toMatchObject({ left: 0, width: 1, coveredFromMs: null });
@@ -113,7 +117,10 @@ describe("overlaps split, cascade and fold", () => {
   });
 
   it("a start 30+ minutes into an earlier event cascades over it from 25%", () => {
-    const { placed, overflow } = layoutDayChips([chip("a", 9, 11), chip("b", 10, 11)], WEEK_COLUMNS);
+    const { placed, overflow } = layoutDayChips(
+      [chip("a", 9, 11), chip("b", 10, 11)],
+      WEEK_COLUMNS,
+    );
     expect(overflow).toHaveLength(0);
     const p = byId(placed);
     // The covered card keeps full width; it knows where it starts being covered.
@@ -123,9 +130,13 @@ describe("overlaps split, cascade and fold", () => {
   });
 
   it("the 30-minute line: 29 minutes splits, 30 cascades", () => {
-    const split = byId(layoutDayChips([chip("a", 9, 11), chip("b", 9 + 29 / 60, 11)], WEEK_COLUMNS).placed);
+    const split = byId(
+      layoutDayChips([chip("a", 9, 11), chip("b", 9 + 29 / 60, 11)], WEEK_COLUMNS).placed,
+    );
     expect(split.b).toMatchObject({ left: 0.5, width: 0.5 });
-    const cascade = byId(layoutDayChips([chip("a", 9, 11), chip("b", 9.5, 11)], WEEK_COLUMNS).placed);
+    const cascade = byId(
+      layoutDayChips([chip("a", 9, 11), chip("b", 9.5, 11)], WEEK_COLUMNS).placed,
+    );
     expect(cascade.b).toMatchObject({ left: 0.25, width: 0.75 });
   });
 
