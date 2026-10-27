@@ -4,6 +4,7 @@
     "scripts/brand",
     "scripts/ci",
     "scripts/docs",
+    "scripts/evals/docs/*.ts",
     "scripts/harness-ab/*.ts",
     "scripts/rstest.config.ts",
     "scripts/release/check-notes.ts",

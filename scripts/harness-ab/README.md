@@ -10,12 +10,12 @@ bun run ab check-tasks --set core                                   # calibrate 
 bun run ab report .harness-ab/results/<batch>-core.jsonl            # pass rate, cost, time per task × arm
 ```
 
-`run` flags: `--set` (default `core`), `--arms a,b` (default `control`), `--tasks a,b` (default all), `--repeats n` (default 3), `--dry-run`, `--keep` (keep the workspace), `--no-verify`. A full `core` sweep with two arms is 7 × 2 × 3 = 42 agent runs: plan the usage before starting one.
+`run` flags: `--set` (default `core`), `--arms a,b` (default `control`), `--tasks a,b` (default all), `--repeats n` (default 3), `--base <rev>` (clone every task at that commit instead of its own: the after run of a before/after pair), `--dry-run`, `--keep` (keep the workspace), `--no-verify`. A full `core` sweep with two arms is 7 × 2 × 3 = 42 agent runs: plan the usage before starting one.
 
 ## What one run does
 
 1. **Workspace.** `git clone --shared` of this repository into a temp folder, checked out detached at the task's `base`, with `origin` removed (the rig refuses a workspace that still has a remote). A task's `fixtures` folder is copied in and committed, so the agent starts from a clean tree. Then `bun install --frozen-lockfile` (skip with `"install": false`).
-2. **Agent.** `scripts/agent/lane.sh` (HV-1, with `MODUO_LANE_PROFILE`, `MODUO_LANE_SETTINGS` and `MODUO_LANE_SRT` pointing at the rig's profile, settings and `srt-offline.mjs`) runs `claude -p --output-format stream-json --verbose` in bypass mode inside `srt`, with `--strict-mcp-config` and no MCP servers, `--setting-sources project` (the harness as committed at `base`, not your user settings), `--no-session-persistence`, and the arm's model and effort. `"implement": true` adds `--implement`, the frozen-tests phase (HV-18). The transcript is `stream.jsonl`.
+2. **Agent.** `scripts/agent/lane.sh` (HV-1, with `MODUO_LANE_PROFILE`, `MODUO_LANE_SETTINGS` and `MODUO_LANE_SRT` pointing at the rig's profile, settings and `srt-offline.mjs`) runs `claude -p --output-format stream-json --verbose` in bypass mode inside `srt`, with `--strict-mcp-config` and no MCP servers, `--setting-sources project` (the harness as committed at `base`, not your user settings), `--no-session-persistence`, and the arm's model and effort. `"implement": true` adds `--implement`, the frozen-tests phase (HV-18). The transcript is `stream.jsonl`. When the task's base has the shadow risk hook (HV-24), its decisions land in `risk-decisions.jsonl` beside it (`MODUO_RISK_LOG`); read them with `readDecisions()` from `scripts/agent/risk-hook.ts`.
 3. **Oracle, outside the agent.** The task's `oracle.files` are copied from its `fix` commit over whatever the agent wrote (the hidden tests), then each `oracle.checks` command runs in the same sandbox.
 4. **Verify.** The set's `verify` (or the task's; `null` skips it) runs the same way.
    The workspace isn't a trusted folder, so Claude Code ignores the project's `permissions.allow` (bypass mode allows everything anyway); its deny rules and hooks still apply.
@@ -46,10 +46,11 @@ A set is a folder `tasks/<set>/` with a `set.json` (`description`, `verify`) and
 | `oracle.checks` | `{ name, run, expect? }`: commands run in the workspace; `expect: "fail"` passes when the command fails. |
 | `oracle.env` | Extra environment for the checks (`TZ`, `MODUO_HUNT`). |
 | `fixtures`, `install`, `verify` | A folder copied in before the agent; `false` skips `bun install`; the task's own verify command or `null`. |
+| `hide` | Paths deleted (and committed) before the agent starts: an answer key that a later `--base` contains. |
 
 After adding a task, run `bun run ab check-tasks --set <set> --tasks <id>`: with no agent, the oracle must fail at `base` (the bug is there) and pass at `fix`. `rig.test.ts` checks every set's tasks are well formed and their commits exist.
 
-**Docs eval (HV-13) and similar question sets** fit the same shape: `base` is a fixed commit, the prompt is the question, `install: false`, and the oracle is a check script in the set's `fixtures` that reads the answer. The rig keeps the agent's final answer in the row (`agent.result`, first 2,000 characters) and the full transcript in the run folder.
+**Question sets** (the docs eval, `scripts/evals/docs/`) fit the same shape: `base` is a fixed commit, the prompt is the question, `install: false`, and the oracle grades the answer. After the agent finishes (and after the diff is taken) the rig writes its final message to `.harness-ab/answer.md` in the workspace; every check gets `HARNESS_AB_ANSWER` (that file) and `HARNESS_AB_RIG` (this folder), so a grader can live in this checkout, out of the agent's sight: `bun "$HARNESS_AB_RIG/../evals/docs/grade.ts" E01`. `check-tasks` writes no answer, so a grader fails at base. The row keeps the first 2,000 characters of the answer (`agent.result`), the run folder the full transcript.
 
 ## Adding an arm
 
