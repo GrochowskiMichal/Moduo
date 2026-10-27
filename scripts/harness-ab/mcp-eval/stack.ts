@@ -7,7 +7,15 @@
 //   bun scripts/harness-ab/mcp-eval/stack.ts up | status | down
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -20,7 +28,17 @@ export const DB_URL = `postgresql://supabase_admin:postgres@127.0.0.1:${DB_PORT}
 export const MCP_URL = `http://127.0.0.1:${API_PORT}/functions/v1/moduo-mcp`;
 
 const SOURCE = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../../..");
-export const WORKDIR = process.env.MODUO_MCP_EVAL_WORKDIR ?? path.join(tmpdir(), EVAL_PROJECT_ID);
+/**
+ * `up` makes a fresh private temp folder (`mkdtemp`: random name, mode 0700) and records its path
+ * here, so `status` and `down` find it from another process. MODUO_MCP_EVAL_WORKDIR overrides both.
+ */
+const POINTER = path.join(
+  process.env.HARNESS_AB_OUT ?? path.join(SOURCE, ".harness-ab"),
+  "mcp-eval-workdir",
+);
+const recorded = () =>
+  process.env.MODUO_MCP_EVAL_WORKDIR ??
+  (existsSync(POINTER) ? readFileSync(POINTER, "utf8").trim() || null : null);
 /** Services the connector doesn't need (the same list stack.sh ci skips, minus what MCP uses). */
 const EXCLUDE = "studio,imgproxy,logflare,vector,supavisor,mailpit,postgres-meta";
 
@@ -50,8 +68,8 @@ const run = (cmd: string, args: string[], cwd = SOURCE) => {
 };
 
 /** The workdir's config must be the eval's before any start or stop names it. */
-function assertEvalWorkdir() {
-  const config = path.join(WORKDIR, "supabase/config.toml");
+function assertEvalWorkdir(workdir: string) {
+  const config = path.join(workdir, "supabase/config.toml");
   const id =
     existsSync(config) && readFileSync(config, "utf8").match(/^project_id\s*=\s*"(.*)"$/m)?.[1];
   if (id !== EVAL_PROJECT_ID)
@@ -59,17 +77,23 @@ function assertEvalWorkdir() {
 }
 
 export function up() {
-  rmSync(WORKDIR, { recursive: true, force: true });
-  mkdirSync(WORKDIR, { recursive: true });
-  cpSync(path.join(SOURCE, "supabase"), path.join(WORKDIR, "supabase"), {
+  const old = recorded();
+  // A stack left from an earlier `up` is stopped first (down checks its project id).
+  if (old && existsSync(path.join(old, "supabase/config.toml"))) down();
+  const override = process.env.MODUO_MCP_EVAL_WORKDIR;
+  if (override) mkdirSync(override, { recursive: true });
+  const workdir = override ?? mkdtempSync(path.join(tmpdir(), `${EVAL_PROJECT_ID}-`));
+  mkdirSync(path.dirname(POINTER), { recursive: true });
+  writeFileSync(POINTER, `${workdir}\n`);
+  cpSync(path.join(SOURCE, "supabase"), path.join(workdir, "supabase"), {
     recursive: true,
     filter: (src) => !/\/(\.temp|\.branches|tests|node_modules)(\/|$)|\/\.env$/.test(src),
   });
-  const config = path.join(WORKDIR, "supabase/config.toml");
+  const config = path.join(workdir, "supabase/config.toml");
   writeFileSync(config, evalConfig(readFileSync(config, "utf8")));
-  assertEvalWorkdir();
+  assertEvalWorkdir(workdir);
   console.error(`mcp-eval: starting ${EVAL_PROJECT_ID} on :${API_PORT} (db :${DB_PORT}) …`);
-  const start = run("supabase", ["start", "--workdir", WORKDIR, "-x", EXCLUDE]);
+  const start = run("supabase", ["start", "--workdir", workdir, "-x", EXCLUDE]);
   if (start.status !== 0) throw new Error(`supabase start failed:\n${start.out}`);
   console.error("mcp-eval: bootstrapping the schema snapshot …");
   const boot = run("bash", ["scripts/local/stack.sh", "isolated", DB_URL]);
@@ -78,19 +102,23 @@ export function up() {
 }
 
 export function status(): { apiUrl: string; mcpUrl: string; dbUrl: string } {
-  assertEvalWorkdir();
-  const r = run("supabase", ["status", "--workdir", WORKDIR, "-o", "json"]);
+  const workdir = recorded();
+  if (!workdir) throw new Error("the eval stack isn't running (no workdir recorded; run up)");
+  assertEvalWorkdir(workdir);
+  const r = run("supabase", ["status", "--workdir", workdir, "-o", "json"]);
   if (r.status !== 0) throw new Error(`the eval stack isn't running:\n${r.out}`);
   return { apiUrl: `http://127.0.0.1:${API_PORT}`, mcpUrl: MCP_URL, dbUrl: DB_URL };
 }
 
 export function down() {
-  if (!existsSync(WORKDIR)) return;
-  assertEvalWorkdir();
+  const workdir = recorded();
+  if (!workdir || !existsSync(workdir)) return void rmSync(POINTER, { force: true });
+  assertEvalWorkdir(workdir);
   // --no-backup drops this project's volumes only: the project id is the eval's, checked above.
-  const r = run("supabase", ["stop", "--workdir", WORKDIR, "--no-backup"]);
+  const r = run("supabase", ["stop", "--workdir", workdir, "--no-backup"]);
   if (r.status !== 0) throw new Error(`supabase stop failed:\n${r.out}`);
-  rmSync(WORKDIR, { recursive: true, force: true });
+  rmSync(workdir, { recursive: true, force: true });
+  rmSync(POINTER, { force: true });
 }
 
 if (import.meta.main) {

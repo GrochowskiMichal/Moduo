@@ -24,6 +24,7 @@ import {
 import { claudeArgs, report } from "./rig";
 import {
   agentEnv,
+  hostProblem,
   refuseArm,
   RefusedError,
   refuseWorkspace,
@@ -155,6 +156,26 @@ describe("refusals", () => {
     expect(refused(() => planWith({ arms: [arm({ model: "gpt-5" })] }))).toMatch(/Anthropic/);
     expect(() => planWith({ arms: [arm({ model: "claude-opus-5-5" })] })).not.toThrow();
   });
+
+  it("an arm's hosts are whole host names, never a wildcard or a forbidden domain's subdomain", () => {
+    // A wildcard would let srt reach mcp.moduo.app, a supabase.co project or github.com.
+    for (const host of ["*", "*.app", "*.co", "*.com", "127.0.0.2", "[::1]", "a.b:443", "x.org."])
+      expect(hostProblem(host)).toMatch(/plain host name/);
+    for (const host of ["MCP.Moduo.app", "abc.supabase.co", "raw.githubusercontent.com"])
+      expect(hostProblem(host)).toMatch(/off limits/);
+    for (const host of ["foo.localhost", "db.internal", "printer.local"])
+      expect(hostProblem(host)).toMatch(/off limits/);
+    // Only a suffix after a dot counts: a look-alike name is just another host.
+    expect(hostProblem("notmoduo.app")).toBeNull();
+    expect(hostProblem("pypi.org")).toBeNull();
+    expect(refused(() => planWith({ arms: [arm({ network: ["*.app"] })] }))).toMatch(/plain host/);
+    expect(() => rigProfile(lane, { source: ROOT, extraHosts: ["*.co"] })).toThrow(RefusedError);
+  });
+
+  it("a set or arm name from the command line can't point outside the rig", () => {
+    expect(() => loadArm("../../../etc/x")).toThrow(/isn't a valid arm name/);
+    expect(() => loadSet("../core")).toThrow(/isn't a valid task set name/);
+  });
 });
 
 describe("sandbox and environment", () => {
@@ -188,6 +209,21 @@ describe("sandbox and environment", () => {
       ANTHROPIC_BASE_URL: "https://elsewhere.example",
     });
     expect(Object.keys(env).sort()).toEqual(["HOME", "PATH"]);
+  });
+
+  it("keys from parsed JSON never reach a prototype", () => {
+    const extra = JSON.parse('{"__proto__": {"polluted": "yes"}, "TZ": "UTC"}');
+    const env = agentEnv({ PATH: "/usr/bin" }, extra);
+    expect(Object.keys(env).sort()).toEqual(["PATH", "TZ"]);
+    expect(Object.getPrototypeOf(env)).toBe(Object.prototype);
+    const tools = summarize(
+      JSON.stringify({
+        type: "assistant",
+        message: { content: [{ type: "tool_use", name: "__proto__" }] },
+      }),
+    ).tools;
+    expect(Object.getPrototypeOf(tools)).toBe(Object.prototype);
+    expect(Object.keys(tools)).toEqual([]);
   });
 
   it("runs Claude with no MCP servers and a stream-json transcript", () => {

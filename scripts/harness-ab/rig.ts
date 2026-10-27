@@ -44,7 +44,14 @@ import {
   TASKS_DIR,
   type TaskSet,
 } from "./model";
-import { agentEnv, RefusedError, refuseWorkspace, rigProfile, type SrtProfile } from "./safety";
+import {
+  agentEnv,
+  isSafeKey,
+  RefusedError,
+  refuseWorkspace,
+  rigProfile,
+  type SrtProfile,
+} from "./safety";
 import { summarize } from "./stream";
 
 const SOURCE = path.resolve(RIG_DIR, "../..");
@@ -159,6 +166,7 @@ function writeProfiles(run: PlannedRun, ws: string, dir: string) {
 function merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
   const out = { ...a };
   for (const [k, v] of Object.entries(b)) {
+    if (!isSafeKey(k)) continue;
     const prev = out[k];
     if (Array.isArray(prev) && Array.isArray(v)) out[k] = [...prev, ...v];
     else if (prev && v && typeof prev === "object" && typeof v === "object")
