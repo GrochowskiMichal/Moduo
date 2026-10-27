@@ -14,6 +14,7 @@ import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import type { CalendarAccountModel, CalendarEventModel, CalendarModuleBundle } from "../events";
+import { openingScrollMinute } from "../grid-layout";
 import { allTimeCalendarWindow, defaultCalendarWindow } from "../window";
 import { type CalendarModuleApi, useCalendarModule } from "./use-calendar-module";
 
@@ -639,5 +640,49 @@ describe("useCalendarModule — busy overlay", () => {
     rerender({ permission: "none" });
     await act(async () => held[0].resolve(BUSY));
     expect(shown(result)).toEqual([]);
+  });
+});
+
+// CALR-1 · AC5: the week opens at the working day with now in view. The grid's
+// first scroll puts the top of the viewport at the minute this returns.
+describe("opens at the working day", () => {
+  const work = { workStartMinute: 9 * 60, workEndMinute: 18 * 60 };
+  const inView = (top: number, minute: number, viewportMinutes: number) =>
+    minute >= top && minute < top + viewportMinutes;
+
+  it("shows the start of working hours, just below the top, when today isn't in view", () => {
+    const top = openingScrollMinute({ ...work, nowMinute: null, viewportMinutes: 8 * 60 });
+    expect(top).toBeLessThan(9 * 60);
+    expect(top).toBeGreaterThanOrEqual(9 * 60 - 60);
+  });
+
+  it("keeps the working-day start when now is already in view", () => {
+    const top = openingScrollMinute({ ...work, nowMinute: 11 * 60, viewportMinutes: 8 * 60 });
+    expect(top).toBe(openingScrollMinute({ ...work, nowMinute: null, viewportMinutes: 8 * 60 }));
+  });
+
+  it("brings now into view in the evening", () => {
+    const now = 19 * 60 + 30;
+    const top = openingScrollMinute({ ...work, nowMinute: now, viewportMinutes: 6 * 60 });
+    expect(inView(top, now, 6 * 60)).toBe(true);
+    expect(top + 6 * 60).toBeLessThanOrEqual(24 * 60);
+  });
+
+  it("brings now into view early in the morning", () => {
+    const now = 6 * 60;
+    const top = openingScrollMinute({ ...work, nowMinute: now, viewportMinutes: 6 * 60 });
+    expect(inView(top, now, 6 * 60)).toBe(true);
+    expect(top).toBeGreaterThanOrEqual(0);
+  });
+
+  it("follows the working-hours preference", () => {
+    const early = openingScrollMinute({
+      workStartMinute: 7 * 60,
+      workEndMinute: 15 * 60,
+      nowMinute: null,
+      viewportMinutes: 8 * 60,
+    });
+    expect(early).toBeLessThan(7 * 60);
+    expect(early).toBeGreaterThanOrEqual(6 * 60);
   });
 });
