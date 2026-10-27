@@ -203,4 +203,110 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet: "seed().catch(() => null)",
     why: "Deliberate: An unreadable device copy falls back to a real server read.",
   },
+  {
+    rule: "lexical-update-in-command",
+    file: "apps/app/src/features/chat/composer/handle-chip.tsx",
+    snippet:
+      "editor.update(() => { const node = $getNodeByKey(made.nodeKey); if (!node || !node.isAttached()) return; const text = $c",
+    why: "Candidate bug: `undone` is read right after the queued update, so a keyboard Esc returns false (lets other Esc handlers run) while the chip is still undone.",
+  },
+  {
+    rule: "lexical-update-in-command",
+    file: "apps/app/src/features/chat/composer/plugins.tsx",
+    snippet:
+      "editor.update(() => { const selection = $getSelection(); if (!$isRangeSelection(selection)) return; if ($caretIn($isCode",
+    why: "Risk: Paste handler; nothing reads the queued update's result, it only runs a beat later.",
+  },
+  {
+    rule: "lexical-update-in-command",
+    file: "apps/app/src/features/notes/editor/plugins/markdown-clipboard-plugin.tsx",
+    snippet: "editor.update(() => { $convertFromMarkdownString(text, NOTES_TRANSFORMERS); })",
+    why: "Risk: Paste handler; returns true whatever the queued update does.",
+  },
+  {
+    rule: "lexical-update-in-command",
+    file: "apps/app/src/features/notes/editor/plugins/markdown-clipboard-plugin.tsx",
+    snippet:
+      "editor.update(() => { const selection = $getSelection(); if (!$isRangeSelection(selection)) return; $insertGeneratedNode",
+    why: "Risk: Paste handler; returns true whatever the queued update does.",
+  },
+  {
+    rule: "lexical-update-in-command",
+    file: "apps/app/src/features/tasks/capture/title-editor.tsx",
+    snippet:
+      "editor.update(() => { const selection = $getSelection(); if ($isRangeSelection(selection)) { selection.insertText(text.r",
+    why: "Risk: Paste handler; returns true whatever the queued update does.",
+  },
+  {
+    rule: "webview-origin-ts",
+    file: "apps/app/src/features/billing/checkout.ts",
+    snippet: "window.location.origin",
+    why: "Deliberate: Sent only when the page is on http(s); desktop lets the server's origin win.",
+  },
+  {
+    rule: "webview-origin-ts",
+    file: "apps/app/src/features/billing/checkout.ts",
+    snippet: "window.location.origin",
+    why: "Deliberate: Sent only when the page is on http(s); desktop lets the server's origin win.",
+  },
+  {
+    rule: "webview-origin",
+    file: "apps/app/src/features/settings/sections/billing-section.tsx",
+    snippet: "window.location.origin",
+    why: "Deliberate: Behind `isDesktopShell()`; desktop omits the return URL.",
+  },
+  {
+    rule: "webview-origin",
+    file: "apps/app/src/features/calendar/ui/booking-links.tsx",
+    snippet: "window.location.origin",
+    why: "Deliberate: Behind `isTauriRuntime()`; desktop uses the hosted origin.",
+  },
+  {
+    rule: "webview-origin-ts",
+    file: "apps/app/src/features/calendar/google-web.ts",
+    snippet: "window.location.origin",
+    why: "Deliberate: The web-only Google connect (the desktop build has its own flow).",
+  },
+  {
+    rule: "webview-origin",
+    file: "apps/app/src/features/chat/composer/chat-composer.tsx",
+    snippet: "window.location.origin",
+    why: "Deliberate: Which pasted links count as this app's own; compared, never sent.",
+  },
+  {
+    rule: "webview-origin",
+    file: "apps/app/src/features/chat/shell/chat-screen.tsx",
+    snippet: "window.location.origin",
+    why: "Risk: A local copy of `webOrigin()` (configured origin first); import lib/web-origin.ts instead.",
+  },
+  {
+    rule: "webview-origin-ts",
+    file: "apps/app/src/lib/runtime.web.workspace.ts",
+    snippet: "window.location.origin",
+    why: "Deliberate: The fallback after the configured web origin, as in `webOrigin()`.",
+  },
+  {
+    rule: "webview-origin-ts",
+    file: "apps/app/src/lib/runtime.web.notes.ts",
+    snippet: "window.location.origin",
+    why: "Deliberate: The fallback after the configured web origin, as in `webOrigin()`.",
+  },
+  {
+    rule: "webview-origin",
+    file: "apps/app/src/features/tasks/ui/use-saved-views.tsx",
+    snippet: "window.location.origin",
+    why: "Risk: A saved view's link built from the webview origin; on desktop it reads tauri://localhost.",
+  },
+  {
+    rule: "idb-listing-wipe",
+    file: "apps/app/src/features/settings/sections/advanced-section.tsx",
+    snippet: "indexedDB.databases",
+    why: "Candidate bug: Settings' local-data wipe finds per-note doc databases only through the listing, so on Firefox and older Safari they stay on disk.",
+  },
+  {
+    rule: "toast-literal-duration",
+    file: "apps/app/src/components/app/time-region-prompt.tsx",
+    snippet: "duration: 30_000",
+    why: "Deliberate: A question, not an undo toast; it stays up long enough to answer.",
+  },
 ];

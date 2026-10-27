@@ -1,0 +1,62 @@
+id: toast-literal-duration
+language: tsx
+severity: error
+message: "A toast with a hand-typed duration drifts from the app's one undo grammar."
+note: |
+  Use `undoToast` (apps/app/src/lib/undo-toast.tsx) for anything with Undo, or import
+  `UNDO_TOAST_MS` / a named constant. Durations that drift (4000, 8000, 10000) are how
+  the grammar died before DF-5. A destructive escalation goes in `undoToast`'s `danger`
+  link, never sonner's `cancel` slot (it reads as dismiss).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: pair
+  all:
+    - has:
+        field: key
+        regex: ^duration$
+    - has:
+        field: value
+        kind: number
+  inside:
+    kind: object
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^(toast(\.\w+)?|undoToast)$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: toast-literal-duration-ts
+language: typescript
+severity: error
+message: "A toast with a hand-typed duration drifts from the app's one undo grammar."
+note: |
+  Use `undoToast` (apps/app/src/lib/undo-toast.tsx) for anything with Undo, or import
+  `UNDO_TOAST_MS` / a named constant. Durations that drift (4000, 8000, 10000) are how
+  the grammar died before DF-5. A destructive escalation goes in `undoToast`'s `danger`
+  link, never sonner's `cancel` slot (it reads as dismiss).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: pair
+  all:
+    - has:
+        field: key
+        regex: ^duration$
+    - has:
+        field: value
+        kind: number
+  inside:
+    kind: object
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^(toast(\.\w+)?|undoToast)$
