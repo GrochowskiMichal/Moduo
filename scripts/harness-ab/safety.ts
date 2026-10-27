@@ -75,14 +75,11 @@ const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 export const isSafeKey = (key: string) => !UNSAFE_KEYS.has(key);
 
 /**
- * Environment an arm may not set: what the rig passes itself (HOME, PATH, TMPDIR: srt expands `~`
- * from HOME, so the deny rules would move), what lane.sh and srt read (TURBO_API adds an allowed
- * host after the profile is checked), model routing and proxies, and loader hooks.
+ * An arm's env is an allowlist: only ARM_, EXPERIMENT_ and FEATURE_ variables. Anything else could
+ * steer what runs outside the sandbox or widen it (BASH_ENV runs before srt starts, HOME moves srt's
+ * `~` deny rules, TURBO_API adds a host in lane.sh, proxies and loader hooks redirect the run).
  */
-export const reservedEnv = (key: string) =>
-  ENV_ALLOW.includes(key) ||
-  /^(MODUO_|TURBO_|SRT_|CLAUDE_|ANTHROPIC_|LC_|DYLD_|LD_|BUN_|NODE_|GIT_)/i.test(key) ||
-  /proxy/i.test(key);
+export const reservedEnv = (key: string) => !/^(ARM|EXPERIMENT|FEATURE)_[A-Z0-9_]+$/.test(key);
 
 /** Claude flags an arm may not pass: the rig owns MCP, settings, permissions and the workspace. */
 export const RESERVED_FLAGS = [

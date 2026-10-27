@@ -179,6 +179,9 @@ describe("refusals", () => {
       { HTTPS_PROXY: "http://127.0.0.1:9" },
       { MODUO_LANE_PROFILE: "/tmp/p.json" },
       { NODE_OPTIONS: "--require x" },
+      { BASH_ENV: "/tmp/x.sh" },
+      { IFS: "/" },
+      { feature_x: "1" },
     ];
     for (const env of envs)
       expect(refused(() => planWith({ arms: [arm({ env })] }))).toMatch(/set by the rig/);

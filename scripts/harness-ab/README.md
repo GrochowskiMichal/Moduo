@@ -62,7 +62,7 @@ One file `arms/<id>.json` (type `Arm` in `model.ts`):
 | `settings` | Merged into `.claude/settings.lane.json` for this arm (`enabledPlugins` for Ponytail, extra `permissions.deny`). |
 | `settingSources` | Default `project`; `user,project` to load your user settings (plugins installed at user level). |
 | `promptPrefix`, `promptSuffix`, `appendSystemPrompt` | Framing around the task's prompt (the tdd vs contract-first test prompt). |
-| `args`, `env`, `network` | Extra claude flags (not the rig's own), environment, hosts. All pass the refusal checks. |
+| `args`, `env`, `network` | Extra claude flags (not the rig's own); environment, only `ARM_*`, `EXPERIMENT_*` or `FEATURE_*` variables; hosts. All pass the refusal checks. |
 | `experiment` | `{ name, baseline }`: the experiment the arm belongs to and the arm it is compared with. `run` refuses an arm that differs from its baseline in anything the experiment doesn't vary (`EXPERIMENTS` in `model.ts`). |
 
 ## Experiment arms (HV-25, AC37)
