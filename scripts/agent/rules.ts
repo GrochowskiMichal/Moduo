@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { deadSymbols, readFrom } from "./rule-symbols.ts";
+
 // HV-10 (specs/harness-v3.md AC28, AC31): path rules live in .claude/rules/,
 // each with `paths:`, `incident:` and `expires:` frontmatter; root AGENTS.md
 // stays a map of at most 150 lines; and no rule or agent doc names a file or
@@ -263,6 +265,7 @@ export function check(root: string): Problem[] {
   const problems = rules.flatMap((r) => [
     ...ruleProblems(r, files),
     ...deadRefs(r.file, r.text, repo),
+    ...deadSymbols(r.file, r.text, readFrom(root)),
   ]);
   for (const doc of CHECKED_DOCS) {
     if (existsSync(path.join(root, doc)))

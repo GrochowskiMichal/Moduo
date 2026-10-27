@@ -1,0 +1,40 @@
+id: webview-origin
+language: tsx
+severity: error
+message: "In the desktop webview `window.location.origin` is `tauri://localhost` (or `http://tauri.localhost`), which Stripe refuses and a browser can't open."
+note: |
+  For a link someone opens elsewhere use `webOrigin()` (apps/app/src/lib/web-origin.ts,
+  backed by PUBLIC_WEB_ORIGIN). For a return URL sent to a service, omit it on desktop
+  and let the server's APP_URL win. Detect the desktop shell with
+  `"__TAURI_INTERNALS__" in window`, not `getRuntime()` (null before init). Bit DF-3's
+  Manage billing.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - apps/app/src/lib/web-origin.ts
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  pattern: window.location.origin
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: webview-origin-ts
+language: typescript
+severity: error
+message: "In the desktop webview `window.location.origin` is `tauri://localhost` (or `http://tauri.localhost`), which Stripe refuses and a browser can't open."
+note: |
+  For a link someone opens elsewhere use `webOrigin()` (apps/app/src/lib/web-origin.ts,
+  backed by PUBLIC_WEB_ORIGIN). For a return URL sent to a service, omit it on desktop
+  and let the server's APP_URL win. Detect the desktop shell with
+  `"__TAURI_INTERNALS__" in window`, not `getRuntime()` (null before init). Bit DF-3's
+  Manage billing.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - apps/app/src/lib/web-origin.ts
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  pattern: window.location.origin
