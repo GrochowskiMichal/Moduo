@@ -57,6 +57,14 @@ export const FORBIDDEN_DOMAINS = [
   "localhost",
   "local",
   "internal",
+  // Public wildcard DNS that resolves a name to any IP, loopback included.
+  "nip.io",
+  "sslip.io",
+  "xip.io",
+  "localtest.me",
+  "lvh.me",
+  "localho.st",
+  "traefik.me",
 ];
 
 /** A plain DNS name: no wildcard, port, path, IP address or trailing dot. */
@@ -66,6 +74,9 @@ const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]
 export function hostProblem(host: string): string | null {
   if (!HOSTNAME.test(host)) return "not a plain host name (no wildcards, IPs, ports or paths)";
   const h = host.toLowerCase();
+  if (h.split(".")[0] === "localhost") return "a localhost name reaches the shared stack";
+  // An IPv4 address inside a name (127.0.0.1.example, 127-0-0-1.example) is a resolver trick.
+  if (/(^|[.-])\d{1,3}([.-]\d{1,3}){3}([.-]|$)/.test(h)) return "an IP address inside a host name";
   const hit = FORBIDDEN_DOMAINS.find((d) => h === d || h.endsWith(`.${d}`));
   return hit ? `${hit} is off limits (shared stack, production or a git remote)` : null;
 }

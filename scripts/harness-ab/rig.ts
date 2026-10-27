@@ -163,7 +163,10 @@ function writeProfiles(run: PlannedRun, ws: string, dir: string) {
   return { laneProfile, checkProfile, settings, hosts: profile.network.allowedDomains };
 }
 
-function merge(a: Record<string, unknown>, b: Record<string, unknown>): Record<string, unknown> {
+export function merge(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>,
+): Record<string, unknown> {
   const out = { ...a };
   for (const [k, v] of Object.entries(b)) {
     if (!isSafeKey(k)) continue;
@@ -286,6 +289,8 @@ function execute(
             MODUO_LANE_PROFILE: setup.laneProfile,
             MODUO_LANE_SETTINGS: setup.settings,
             MODUO_LANE_SRT: SRT,
+            // lane.sh would add TURBO_API's host to the allowlist; the rig's profile is final.
+            TURBO_API: "",
             // The risk hook (HV-24), where the task's base has it, logs into this run's artifacts.
             MODUO_RISK_LOG: path.join(dir, "risk-decisions.jsonl"),
           }),

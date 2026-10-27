@@ -21,7 +21,7 @@ import {
   type Row,
   taskProblems,
 } from "./model";
-import { claudeArgs, report } from "./rig";
+import { claudeArgs, merge, report } from "./rig";
 import {
   agentEnv,
   hostProblem,
@@ -163,8 +163,17 @@ describe("refusals", () => {
       expect(hostProblem(host)).toMatch(/plain host name/);
     for (const host of ["MCP.Moduo.app", "abc.supabase.co", "raw.githubusercontent.com"])
       expect(hostProblem(host)).toMatch(/off limits/);
-    for (const host of ["foo.localhost", "db.internal", "printer.local"])
+    for (const host of ["foo.localhost", "db.internal", "printer.local", "x.nip.io", "a.lvh.me"])
       expect(hostProblem(host)).toMatch(/off limits/);
+    for (const host of ["localhost.localdomain", "LOCALHOST.localdomain", "localhost.example.com"])
+      expect(hostProblem(host)).toMatch(/localhost/);
+    for (const host of [
+      "127.0.0.1.nip.io",
+      "0.0.0.0.nip.io",
+      "127.0.0.1.sslip.io",
+      "127-0-0-1.example.com",
+    ])
+      expect(hostProblem(host)).toMatch(/IP address/);
     // Only a suffix after a dot counts: a look-alike name is just another host.
     expect(hostProblem("notmoduo.app")).toBeNull();
     expect(hostProblem("pypi.org")).toBeNull();
@@ -236,18 +245,25 @@ describe("sandbox and environment", () => {
   });
 
   it("keys from parsed JSON never reach a prototype", () => {
-    const extra = JSON.parse('{"__proto__": {"polluted": "yes"}, "TZ": "UTC"}');
+    const extra = JSON.parse('{"constructor": "x", "prototype": "y", "TZ": "UTC"}');
     const env = agentEnv({ PATH: "/usr/bin" }, extra);
     expect(Object.keys(env).sort()).toEqual(["PATH", "TZ"]);
     expect(Object.getPrototypeOf(env)).toBe(Object.prototype);
     const tools = summarize(
       JSON.stringify({
         type: "assistant",
-        message: { content: [{ type: "tool_use", name: "__proto__" }] },
+        message: { content: [{ type: "tool_use", name: "constructor" }] },
       }),
     ).tools;
     expect(Object.getPrototypeOf(tools)).toBe(Object.prototype);
     expect(Object.keys(tools)).toEqual([]);
+    const merged = merge(
+      { a: 1 },
+      JSON.parse('{"__proto__": {"polluted": 1}, "constructor": {"x": 1}, "b": 2}'),
+    );
+    expect(Object.keys(merged).sort()).toEqual(["a", "b"]);
+    expect(Object.getPrototypeOf(merged)).toBe(Object.prototype);
+    expect((merged as { polluted?: number }).polluted).toBeUndefined();
   });
 
   it("runs Claude with no MCP servers and a stream-json transcript", () => {
