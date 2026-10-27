@@ -43,6 +43,8 @@ export type Task = {
   install?: boolean;
   /** A folder next to the task file copied into the workspace before the agent starts. */
   fixtures?: string;
+  /** Paths deleted from the workspace before the agent starts: an answer key a later base contains. */
+  hide?: string[];
   oracle: {
     /** Files copied from `fix` into the workspace after the agent finishes (the hidden tests). */
     files?: string[];

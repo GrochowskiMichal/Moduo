@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-27 · HV-13: the docs eval grades answers with regex keys, not a model judge, and keeps the key out of the agent's sight.
 - 2026-10-26 · HV-27: catching tests on Tier 2 PRs into develop run in four jobs, so the Claude token and PR code never share one.
 - 2026-10-26 · HV-23: the router is a command hook with keyword rules by default and Haiku as a budget-bound opt-in, not a `type: "prompt"` hook; the scout is its own read-only Haiku agent.
 - 2026-10-26 · HV-24: the Haiku risk hook is an async command hook that calls `claude -p --model haiku` itself and logs to the git common dir, not a `type: "prompt"` hook.
