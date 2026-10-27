@@ -3,6 +3,7 @@ import { describe, expect, it } from "@rstest/core";
 import {
   accountSourceLabel,
   groupRailAccounts,
+  hiddenIdsForSet,
   providerLabel,
   resolveAccountHues,
   syncAgeLabel,
@@ -43,6 +44,7 @@ function event(over: Partial<CalendarEventModel>): CalendarEventModel {
     rrule: null,
     status: "confirmed",
     color: null,
+    calendarRef: over.calendarRef ?? null,
     createdAt: "",
     updatedAt: "",
     deletedAt: null,
@@ -86,6 +88,27 @@ describe("accounts — attribution (AC12)", () => {
     ];
     const visible = visibleEvents(evs, ["a"]);
     expect(visible.map((e) => e.id)).toEqual(["native", "ext-b"]);
+  });
+
+  it("hides native events on a hidden calendar (custom calendars, CALR-6)", () => {
+    const evs = [
+      event({ id: "mine", calendarRef: "cal-moduo" }),
+      event({ id: "work", calendarRef: "cal-work" }),
+      event({ id: "ext-a", sourceAccountId: "a", calendarRef: "cal-a" }),
+    ];
+    expect(visibleEvents(evs, ["cal-work"]).map((e) => e.id)).toEqual(["mine", "ext-a"]);
+    expect(visibleEvents(evs, ["a"]).map((e) => e.id)).toEqual(["mine", "work"]);
+  });
+
+  it("a saved set with a custom calendar hides the rest, and its events show (CALR-6)", () => {
+    const evs = [
+      event({ id: "work", calendarRef: "cal-work" }),
+      event({ id: "mine", calendarRef: "cal-moduo" }),
+      event({ id: "ext-a", sourceAccountId: "a" }),
+    ];
+    const hidden = hiddenIdsForSet(["cal-work"], ["a", "cal-work", "cal-moduo", "a"]);
+    expect(hidden).toEqual(["a", "cal-moduo"]);
+    expect(visibleEvents(evs, hidden).map((e) => e.id)).toEqual(["work"]);
   });
 
   it("returns all events unfiltered when nothing is hidden", () => {

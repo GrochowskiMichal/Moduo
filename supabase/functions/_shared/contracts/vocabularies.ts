@@ -1035,6 +1035,42 @@ export type CalendarAccountStatus = (typeof CALENDAR_ACCOUNT_STATUSES)[number];
 export const calendarAccountStatusSchema = z.enum(CALENDAR_ACCOUNT_STATUSES);
 
 // ---------------------------------------------------------------------------
+// Calendar events (CALR-6) — mirror the CHECKs on calendar_events.conference_provider
+// and calendar_events.kind in 20261027230000_calendar_event_data_v2.
+// ---------------------------------------------------------------------------
+
+/** Who hosts an event's meeting link; `other` is any web address we don't recognise. */
+export const CONFERENCE_PROVIDERS = ["google_meet", "zoom", "teams", "other"] as const;
+export type ConferenceProvider = (typeof CONFERENCE_PROVIDERS)[number];
+export const conferenceProviderSchema = z.enum(CONFERENCE_PROVIDERS);
+export function isConferenceProvider(value: unknown): value is ConferenceProvider {
+  return typeof value === "string" && (CONFERENCE_PROVIDERS as readonly string[]).includes(value);
+}
+export function parseConferenceProvider(input: unknown): SafeParseResult<ConferenceProvider> {
+  return parseOrError(conferenceProviderSchema, input);
+}
+/** Lax read: no provider stays none; a provider this build doesn't know is `other`. */
+export function normalizeConferenceProvider(input: unknown): ConferenceProvider | null {
+  if (input === null || input === undefined || input === "") return null;
+  return isConferenceProvider(input) ? input : "other";
+}
+
+/** What a calendar item is: a plain event, focus time for a task, or a hold from an offer. */
+export const CALENDAR_ITEM_KINDS = ["event", "focus", "hold"] as const;
+export type CalendarItemKind = (typeof CALENDAR_ITEM_KINDS)[number];
+export const calendarItemKindSchema = z.enum(CALENDAR_ITEM_KINDS);
+export function isCalendarItemKind(value: unknown): value is CalendarItemKind {
+  return typeof value === "string" && (CALENDAR_ITEM_KINDS as readonly string[]).includes(value);
+}
+export function parseCalendarItemKind(input: unknown): SafeParseResult<CalendarItemKind> {
+  return parseOrError(calendarItemKindSchema, input);
+}
+/** Lax read: an unknown kind is a plain event, so the row still shows. */
+export function normalizeCalendarItemKind(input: unknown): CalendarItemKind {
+  return isCalendarItemKind(input) ? input : "event";
+}
+
+// ---------------------------------------------------------------------------
 // Subscription status — Stripe-OWNED vocabulary (bounded, documented set).
 // Kept as a known set + strict schema for write paths; display code passes
 // unknown provider values through (a new Stripe status must never render as

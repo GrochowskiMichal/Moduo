@@ -16,17 +16,27 @@ type CalendarRow = {
   owner_id: string;
 };
 
-type SavedSet = { id: string; name: string; accountIds: string[] };
+type SavedSet = { id: string; name: string; visibleIds: string[] };
 
-function accountIdsFrom(items: unknown): string[] {
+/**
+ * The ids a saved set shows: a connected calendar by its account (mirrored events
+ * hide with their account), a Moduo or custom calendar by its own id (native events
+ * hide with the calendar they're on, CALR-6). See `visibleEvents` in accounts.ts.
+ */
+function visibleIdOf(row: { id: string; account_id: string | null }): string {
+  return row.account_id ?? row.id;
+}
+
+function visibleIdsFrom(items: unknown): string[] {
   if (!Array.isArray(items)) return [];
   return items
     .map((item) => {
-      const calendars = (
-        item as { calendars?: { account_id?: string | null } | { account_id?: string | null }[] }
-      ).calendars;
+      const { calendar_id: calendarId, calendars } = item as {
+        calendar_id?: string;
+        calendars?: { account_id?: string | null } | { account_id?: string | null }[];
+      };
       const row = Array.isArray(calendars) ? calendars[0] : calendars;
-      return row?.account_id ?? null;
+      return row?.account_id ?? calendarId ?? null;
     })
     .filter((id): id is string => Boolean(id));
 }
@@ -45,7 +55,8 @@ export function CalendarsPanel({
 }: {
   workspaceId: string;
   userId: string;
-  onShowAccounts?: (accountIds: string[]) => void;
+  /** Show a saved set: the ids it shows, and every calendar id this panel knows. */
+  onShowAccounts?: (visibleIds: string[], knownIds: string[]) => void;
 }) {
   const { members } = useWorkspace();
   const people = members
@@ -89,7 +100,7 @@ export function CalendarsPanel({
           data.map((row) => ({
             id: row.id as string,
             name: row.name as string,
-            accountIds: accountIdsFrom(row.calendar_set_items),
+            visibleIds: visibleIdsFrom(row.calendar_set_items),
           })),
         );
       });
@@ -142,7 +153,7 @@ export function CalendarsPanel({
       data.map((row) => ({
         id: row.id as string,
         name: row.name as string,
-        accountIds: accountIdsFrom(row.calendar_set_items),
+        visibleIds: visibleIdsFrom(row.calendar_set_items),
       })),
     );
   };
@@ -206,7 +217,7 @@ export function CalendarsPanel({
           variant="ghost"
           size="sm"
           className="justify-start"
-          onClick={() => onShowAccounts?.(set.accountIds)}
+          onClick={() => onShowAccounts?.(set.visibleIds, rows.map(visibleIdOf))}
         >
           {set.name}
         </Button>

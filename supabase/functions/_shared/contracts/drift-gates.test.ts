@@ -18,6 +18,7 @@ import {
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
+  CALENDAR_ITEM_KINDS,
   CHAT_CATCHUP_DONE_HOW,
   CHAT_CHANNEL_KINDS,
   CHAT_CATCHUP_REASONS,
@@ -27,6 +28,7 @@ import {
   CHAT_MESSAGE_KINDS,
   CHAT_NOTIFY_LEVELS,
   CLIENT_SURFACES,
+  CONFERENCE_PROVIDERS,
   CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
   DEFAULT_QUICK_REACTIONS,
@@ -109,6 +111,19 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`provider IN (${inList(CALENDAR_PROVIDERS)})`);
     expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
     expect(sql).toContain("founder");
+  });
+
+  it("calendar_events CHECKs list the canonical event vocabularies (CALR-6)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261027230000_calendar_event_data_v2.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`conference_provider IN (${inList(CONFERENCE_PROVIDERS)})`);
+    expect(sql).toContain(`kind IN (${inList(CALENDAR_ITEM_KINDS)})`);
+    // The ops' friendly refusals repeat the lists; keep them in step too.
+    expect(sql).toContain(`provider NOT IN (${inList(CONFERENCE_PROVIDERS)})`);
+    expect(sql).toContain(`v_kind NOT IN (${inList(CALENDAR_ITEM_KINDS)})`);
   });
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
