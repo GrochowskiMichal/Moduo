@@ -14,7 +14,16 @@ import { deadSymbols, readFrom } from "./rule-symbols.ts";
 export const AGENTS_MAX_LINES = 150;
 
 /** Agent-facing docs whose references are checked, besides every rule. */
-export const CHECKED_DOCS = ["AGENTS.md", "CONTRIBUTING.md", "docs/agent-setup.md"];
+export const CHECKED_DOCS = [
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "docs/agent-setup.md",
+  // HV-22: the routine prompts run unattended, so a dead reference fails there with nobody watching.
+  ".claude/routines/variant-hunt.md",
+  ".claude/routines/retro.md",
+  ".claude/routines/prod-watch.md",
+  ".claude/routines/numbers.md",
+];
 
 export type Rule = {
   file: string;
@@ -137,8 +146,9 @@ const linkRefs = (raw: string, line: number): Ref[] =>
 // Code-span paths get a leading `/` so deadRefs resolves them from the repo root.
 function spanRefs(span: string, line: number): Ref[] {
   const out: Ref[] = [];
-  const run = /^bun run (?:--cwd (\S+) )?([\w:.-]+)/.exec(span);
-  if (run?.[2] && !/\.(ts|mjs|js|sh)$/.test(run[2]))
+  const run = /^bun run (?:--silent )?(?:--cwd (\S+) )?([\w:.-]+)/.exec(span);
+  // `bun run local:*` names a family of scripts, not one.
+  if (run?.[2] && !/\.(ts|mjs|js|sh)$/.test(run[2]) && !run[2].endsWith(":"))
     out.push({ line, ref: run[2], kind: "script", cwd: run[1] });
   for (const token of span.split(/\s+/)) {
     const clean = token.replace(/[),.;]+$/, "").replace(/:\d+$/, "");
