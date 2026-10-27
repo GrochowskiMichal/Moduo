@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-27 · Calendar rethink planned: two-way Google, sharing with preview, offers with holds, focus as an item.
 - 2026-10-08 · Google and Zoom connects are finished by the signed-in app, not by the OAuth callback.
 - 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
