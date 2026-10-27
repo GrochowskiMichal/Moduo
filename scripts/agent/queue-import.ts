@@ -239,7 +239,10 @@ const RETRYABLE = new Set([
   "links_create",
 ]);
 
-/** Retries a read or an edge that timed out (the connector is slow under a burst), twice. */
+/**
+ * Retries a read or an edge that timed out (the connector is slow under a burst), twice.
+ * A burst can take a call to 7–20 s against `connectorRpc`'s 20 s limit: keep bursts to about four calls.
+ */
 export function retryingReads(rpc: Rpc): Rpc {
   return async (tool, args) => {
     for (let attempt = 0; ; attempt++) {

@@ -12,7 +12,6 @@
  *
  * PKCE ties a code to the state it was started with, so a code can only be
  * finished together with its own state, and so only by the user who started.
- * docs/gotchas/calendar.md
  */
 
 import { allowListedOrigin, APP_ORIGINS, CANONICAL_APP_ORIGIN } from "./app-origin.ts";

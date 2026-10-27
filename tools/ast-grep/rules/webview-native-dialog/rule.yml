@@ -1,0 +1,17 @@
+id: webview-native-dialog
+language: typescript
+severity: error
+message: "`window.confirm/alert/prompt` returns a Promise in the desktop webview and needs a capability we don't grant, so its answer can't drive control flow."
+note: |
+  `if (!window.confirm(..))` never prevents on the desktop: `!Promise` is always false
+  (the window-close guard did nothing until DF-19f-quit). Ask in the app's own dialog
+  (shadcn AlertDialog / Dialog), or for quit and close the native Rust confirm in lib.rs.
+files:
+  - apps/app/src/**/*.ts
+ignores:
+  - "**/*.test.ts"
+rule:
+  kind: call_expression
+  has:
+    field: function
+    regex: ^(window|globalThis)\.(confirm|alert|prompt)$

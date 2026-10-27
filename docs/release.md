@@ -52,7 +52,7 @@ Run it with `supabase db query --linked -f <file>`, so the history row carries t
 
 ## 3. Edge Functions
 
-Deploy each changed function with `supabase functions deploy <name>`, in dependency order (a function a migration queues work for goes first; see the Chat v2 record).
+Deploy each changed function with `supabase functions deploy <name>`, in dependency order (a function a migration queues work for goes first; see the Chat v2 record). A function that imports `zod` needs `--import-map supabase/functions/deno.json` (the hosted bundler fails without it), and one that does its own auth (a JWT check inside, a webhook signature, `moduo_sk_` keys, a public token) keeps `--no-verify-jwt`.
 
 `moduo-mcp` goes out **before** the release that deploys `mcp.moduo.app`'s Worker: the release's `mcp` job refuses to deploy while the function still names only its Supabase URL in discovery (re-run the job once the function is out).
 

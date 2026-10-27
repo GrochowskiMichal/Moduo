@@ -41,7 +41,11 @@ export type GoogleTokenDeps = {
   now?: () => number;
 };
 
-/** Google OAuth clients from env, dropping any without both id and secret. */
+/**
+ * Google OAuth clients from env, dropping any without both id and secret.
+ * A refresh token only works with the client that issued it: the Desktop client
+ * (desktop Connect uploads its token) first, then the Web client (booking-google-connect).
+ */
 export function googleClients(env: (name: string) => string | undefined): GoogleClient[] {
   return [
     { id: env("GOOGLE_CALENDAR_CLIENT_ID") ?? "", secret: env("GOOGLE_CALENDAR_CLIENT_SECRET") ?? "" },

@@ -20,6 +20,8 @@ function SelectValue({ ...props }: React.ComponentProps<typeof SelectPrimitive.V
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
+// Label it with a visible `<label htmlFor>` or `aria-labelledby`: an `aria-label` replaces the
+// selected value in what a screen reader announces.
 function SelectTrigger({
   className,
   size = "default",

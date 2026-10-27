@@ -152,6 +152,8 @@ export function useEmailConvert({
           }),
           position: endPosition([]),
         });
+        // Tasks write client-direct (no `tasks_op_create` to PERFORM), so keep this
+        // create here; a SQL-side create would re-implement taskModelToRow and drift.
         const saved = await runtime.tasks.upsertTask(task);
         createdTaskId = saved.id;
 

@@ -34,6 +34,8 @@ if (mode === "which") {
   if (!get(env, "PUBLIC_SUPABASE_URL")?.includes("127.0.0.1")) {
     writeFileSync(PARKED, KEYS.map((k) => `${k}=${get(env, k) ?? ""}`).join("\n") + "\n");
   }
+  // Read-only, safe while other sessions use the stack. The "Stopped services: […]" it prints
+  // lists services the stack runs without; nothing was stopped.
   const status = JSON.parse(execSync("supabase status -o json", { encoding: "utf8" }));
   const key: string = status.PUBLISHABLE_KEY ?? status.ANON_KEY;
   for (const k of KEYS) env = set(env, k, k.endsWith("_URL") ? LOCAL_URL : key);

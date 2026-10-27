@@ -1,0 +1,24 @@
+id: tauri-api-static-import
+language: typescript
+severity: error
+message: "Only `@tauri-apps/api/core` has a web stub; a static import of another `@tauri-apps/api/*` module lands in the web bundle."
+note: |
+  rsbuild.config.ts aliases `@tauri-apps/api/core` (and three plugins) to stubs for the web
+  target; everything else is real Tauri code. Load it behind `isTauriRuntime()` with a dynamic
+  `await import("@tauri-apps/api/window")`, so web never fetches the chunk, or add a web stub
+  next to the core one if shared code needs it statically. `import type` is fine.
+files:
+  - apps/app/src/**/*.ts
+ignores:
+  - "**/*.test.ts"
+rule:
+  kind: import_statement
+  has:
+    field: source
+    regex: ^["']@tauri-apps/api/
+  not:
+    any:
+      - has:
+          field: source
+          regex: ^["']@tauri-apps/api/core["']$
+      - regex: ^import\s+type\s

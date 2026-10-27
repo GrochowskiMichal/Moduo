@@ -231,6 +231,8 @@ export function buildEmailReaderDoc(
 
   let heightScript = "";
   if (autoHeight) {
+    // Never add 'unsafe-inline' here: with sandbox="allow-scripts", this nonce and the
+    // DOM strip are the only layers keeping email HTML from running.
     const nonce = scriptNonce();
     csp.push(`script-src 'nonce-${nonce}'`);
     heightScript = `<script nonce="${nonce}">${heightReporterJs()}</` + `script>`;

@@ -7,6 +7,8 @@
 //   • a due follow-up → one-shot due notification;
 //   • an awaiting follow-up whose COUNTERPART replied → clear it silently.
 // The IMAP side is desktop-only; the notification writes ride the cloud ops.
+// Don't move the loop into a Rust scheduler: Rust holds no Supabase session, so it
+// can't write `module_activity`.
 
 import { useEffect, useRef } from "react";
 

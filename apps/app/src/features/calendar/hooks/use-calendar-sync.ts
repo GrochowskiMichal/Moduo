@@ -97,6 +97,9 @@ export function useCalendarSync(opts: {
           // Diff against what we last mirrored for this account so events the
           // provider HARD-DELETED (they just vanish from the fetch, unlike
           // cancellations which carry status) get tombstoned, not left stale.
+          // `events` spans the loaded −12/+24 months but the fetch only syncWindow's
+          // −30/+120 days, so anything outside it is tombstoned like a deletion too:
+          // bound the diff to the fetch window before anything that emails people relies on it.
           const previouslyMirrored = events
             .filter((e) => e.sourceAccountId === acc.id && e.externalEventId)
             .map((e) => e.externalEventId as string);

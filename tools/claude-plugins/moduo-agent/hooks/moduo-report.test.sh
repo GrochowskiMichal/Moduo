@@ -23,7 +23,8 @@ key="moduo_sk_$(printf '0%.0s' $(seq 48))"
 run() { # run <event> [env…]: runs the hook, waits up to $tries tenths of a second for a request
   local event="$1"; shift
   rm -f "$out"
-  echo '{}' | env PATH="$tmp/bin:$PATH" CLAUDE_PROJECT_DIR="$tmp/proj" FAKE_CURL_OUT="$out" \
+  # -u: a developer shell exports both (docs/agent-setup.md); each case sets what it needs.
+  echo '{}' | env -u MODUO_AGENT_NAME -u MODUO_MCP_KEY PATH="$tmp/bin:$PATH" CLAUDE_PROJECT_DIR="$tmp/proj" FAKE_CURL_OUT="$out" \
     MODUO_MCP_URL="http://127.0.0.1:9/mcp" "$@" bash "$hook" "$event" >"$tmp/stdout" 2>&1
   for _ in $(seq "${tries:-100}"); do [ -f "$out" ] && break; sleep 0.1; done
 }
