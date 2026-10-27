@@ -1,0 +1,25 @@
+{
+  "id": "587-status-race",
+  "title": "A task's status write overtakes an older one on its way, or is lost at sign-out (MOD-587, MOD-569)",
+  "source": {
+    "pr": 642,
+    "escape": "587-status-ops-race",
+    "note": "PR #642 landed the fix in two commits: WIP fe7c968 and a1623827; base is before both, the oracle comes from the second. The oracle file covers MOD-569 too (escape 569-late-write-to-disposed-store)."
+  },
+  "base": "18ea192230467107f3445ac894d1a8fcf37201ac",
+  "fix": "a1623827b19c1f909ffb1e44343c9e5a39d5bc97",
+  "prompt": "Bug (MOD-587), found by the outbox property harness: in the Tasks sync store (apps/app/src/lib/sync/store.ts) a second status write for a task can go out live while an older status write for the same task is still unanswered, and when the older live write fails on the network it is queued behind the newer one. The server applies arrival order, so the older status wins. A status write must wait while anything for that task is queued or an older one is still on its way, and a live write that fails must go back in front of newer entries. Second bug (MOD-569), same store: a live check-off or capture still on its way when the session ends (sign-out, or the session goes null) whose request then fails on the network is queued into the stopped store's outbox, which nobody saves, so it is lost. It must be handed to that person's running store, or else to their device copy, in front of newer entries for its task, and sent once they're back. Add regression tests for both. Don't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": [
+      "apps/app/src/lib/sync/store.fake.spec.ts",
+      "apps/app/src/lib/sync/store.order.test.ts"
+    ],
+    "checks": [
+      {
+        "name": "status writes keep their order; late writes are kept",
+        "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts"
+      }
+    ]
+  }
+}

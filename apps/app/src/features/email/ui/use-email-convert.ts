@@ -152,6 +152,8 @@ export function useEmailConvert({
           }),
           position: endPosition([]),
         });
+        // Client-orchestrated on purpose (task, then link): upsertTask creates through
+        // tasks_op_create, and an email-side SQL op would re-implement its defaults.
         const saved = await runtime.tasks.upsertTask(task);
         createdTaskId = saved.id;
 

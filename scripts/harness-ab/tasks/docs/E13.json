@@ -1,0 +1,20 @@
+{
+  "id": "E13",
+  "title": "Can we trust the sender identity of a Realtime broadcast in notes?",
+  "source": {
+    "note": "docs eval (HV-13), how"
+  },
+  "base": "eacbbf7b7dc122067a292cc760e20045eed64e12",
+  "prompt": "Can we trust the sender identity of a Realtime broadcast in notes?\n\nAnswer from this repository: its docs, specs, rules and code. Search and read; edit no files. End with the answer in a few sentences and name the file it comes from. When the docs hold an older and a newer answer, give the current one. If the repository doesn't answer the question, say it isn't documented.",
+  "expect": "fix",
+  "install": false,
+  "hide": ["scripts/evals/docs", "scripts/harness-ab/tasks/docs"],
+  "oracle": {
+    "checks": [
+      {
+        "name": "grade",
+        "run": "bun \"$HARNESS_AB_RIG/../evals/docs/grade.ts\" E13"
+      }
+    ]
+  }
+}

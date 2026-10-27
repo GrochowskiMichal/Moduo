@@ -288,9 +288,13 @@ export function AdvancedSection() {
       const keepUploads = await otherAccountsHaveUploads(userId ?? null);
       // Clear only Moduo's own on-device caches — the auth session and other
       // apps' keys are left intact; cloud data re-syncs on the reload below.
+      // This drops `moduo.appearance` too, with its device-only fields (density, tab
+      // style) that never sync: the confirm copy says so. Keep them or keep saying so.
       for (const key of moduoCacheKeysToClear(Object.keys(localStorage))) {
         localStorage.removeItem(key);
       }
+      // Deleting the notes DBs is lossless only with both outboxes empty: the blocked
+      // dialog has no reset button at all, so keep it removed there, not disabled.
       await closeNotesDb();
       await closeUploadsDb();
       // The meta/outbox DB is deleted by name always; per-note doc DBs are

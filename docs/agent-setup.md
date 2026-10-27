@@ -6,7 +6,10 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 - **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `moduo-design-quality`, `moduo-agent` (a link into `tools/claude-plugins/moduo-agent/`; see §Moduo connector).
   - `libraries-dev` (third-party, MIT, `LICENSE` inside): the free [Libraries.dev](https://libraries.dev) skill for seven React UI-effect packages (`border-beam`, `thinking-orbs`, `liquid-gooey`, `voice-glow`, `bot-avatars`, `metal-fx`, `img-fx`). Commands: `libraries reveal` (list), `libraries review` (read-only fit scan), `libraries apply` (install one; it asks before adding a package). Its package-manager check looks for `bun.lockb` and misses our `bun.lock`, so it would fall back to npm: install with `bun add` only. Colour comes mostly from named palettes (`colorVariant`, `preset`, `theme`), which are the libraries' own colours, not our tokens; the two props that take a colour (`Liquid` `fill`, `MetalText` `color`) must get a value from `tokens.css`, never hex in code. Copied verbatim from [Jakubantalik/Libraries.dev](https://github.com/Jakubantalik/Libraries.dev/tree/main/skills/libraries-dev) at commit `bfcb863` (2026-10-17). Don't edit it in place: to update, copy the folder again from upstream as plain files and bump the commit here. The Pro skill (`npx libraries-dev skill --pro`) is a paid swap the designer would run.
-- **Subagent** (`.claude/agents/validator.md`): the skeptical staff review; runs on Tier 2 diffs only (see AGENTS.md §Review gates).
+- **Subagents** (`.claude/agents/`): `validator.md`, the skeptical staff review, runs on Tier 2 diffs only (see AGENTS.md §Review gates); `scout.md`, read-only recon on Haiku that returns files, symbols, current decisions and rules with line numbers.
+- **Router** (`scripts/agent/router.ts`, a UserPromptSubmit hook): adds the lane and risk areas to each prompt as hidden context; never blocks. `MODUO_ROUTER=off` silences it, `haiku` asks Haiku within a budget.
+- **Risk hook** (`scripts/agent/risk-hook.ts`, an async PreToolUse hook, shadow only): asks Haiku how risky each Bash, MCP and edit call is and logs the answer to `<git common dir>/moduo/risk-decisions.jsonl`; it never blocks. `bun scripts/agent/risk-hook.ts --summary` counts the log, `MODUO_RISK_HOOK=off` turns it off.
+- **Build engine and measurement:** `bun run drafts` picks one of the three Tier 2 drafts (`/s2` step 4); `.claude/settings.implement.json` freezes contract tests while implementing; `bun run ab` (A/B rig and arms, `scripts/harness-ab/README.md`), `bun run mcp-eval` (the connector's agent-experience eval on its own stack) and `bun run eval:docs` (the docs eval) measure a harness change before it lands.
 - **Plugins** (enabled in `.claude/settings.json`, installed for you on first trust):
   - `mattpocock-skills`: grilling, prototype, to-tickets, tdd, diagnosing-bugs, handoff, retro, improve-codebase-architecture. Configured through [docs/agents/](./agents/).
   - `supabase` + `postgres-best-practices`: Supabase and Postgres/RLS rules.
@@ -32,12 +35,12 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 - **`/ship` is user-only** (`disable-model-invocation`): only a person typing it starts a release.
 - **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase db query --linked`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
 - **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project) and `moduo`, our own connector at `https://mcp.moduo.app` (see §Moduo connector). A session should see exactly these two; `scripts/agent/mcp-config.test.ts` holds the file to that, and §One Moduo, one Supabase removes the copies that come from elsewhere. Vercel's was removed with Vercel (PLAT-8); Cloudflare is driven by `wrangler` in CI. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
-- **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `/s3`.
+- **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `scripts/ci/tier.ts` (the Tier 2 steps are `/s2` step 6).
 
 ## What GitHub and the cloud provide
 
 - **Branch ruleset** "Protect main and develop": both change only through a pull request whose `static-checks` job (`checks.yml`: verify, `bun lint`, gitleaks) passed. Force-pushes and deletion are blocked, and nobody bypasses it. `/s3` waits for the check before merging into `develop`. Personal and task branches are unprotected.
-- **Weekly knowledge gardener**, a Claude Code routine (Mondays 07:07 Warsaw, Sonnet 5.5, Anthropic cloud). It re-syncs the decisions and gotchas indexes, moves finished blocks to `BUILD_LOG.md`, lists possibly superseded decisions, duplicate gotchas and hook candidates, and opens one PR into `mike` for review. It never merges. Manage it at [claude.ai/code/routines](https://claude.ai/code/routines). It needs the [Claude GitHub App](https://github.com/apps/claude) installed on the repo to push.
+- **Routines** (HV-22): three Claude cloud routines on Mike's account and one scheduled task on his Mac, see §Routines. The old weekly knowledge gardener is gone (it died for want of the Claude GitHub App); the weekly retro took over its knowledge pruning.
 
 ## One-time setup per machine
 
@@ -106,7 +109,32 @@ claude mcp add --scope local --transport http moduo-local http://127.0.0.1:54321
 - `hooks/moduo-report.sh` (+ `hooks.json` in plugin form): presence. It reads `.claude/MODUO_TASK` (gitignored; written by the skill: `task=MOD-123`, `state=working`, `step`, `steps`) and posts only while the state is `working`, in the background, with the key on stdin. Tests: `hooks/moduo-report.test.sh`, run in verify.
 - Phase 2 (decision A9, needs Maciej) turns the folder into a plugin: add a plugin manifest (`plugin.json` in `.claude-plugin/`) and an entry in `.claude-plugin/marketplace.json`, hold the key as a sensitive plugin setting, and drop the root copies.
 
-**The Build project** holds one task per open block in `specs/BUILD_ORDER.md`, titled `<ID> — <block name>`. The file stays the source of truth for the first two weeks; Moduo mirrors it. `/s2` creates a missing task; a task assigned to someone else is left alone.
+**The queue** is Moduo: one task per open block in the milestone projects, titled `<ID> — <block name>`, tagged `block`, with "blocks" edges for its dependencies (`bun run queue:import`, idempotent). `bun run queue` reads it with your key; GitHub events move each task's stage (`moduo-sync.yml`, the CI key). A task assigned to someone else is left alone.
+
+## Routines
+
+The learn loop's four scheduled jobs (specs/harness-v3.md HV-22, AC35). The prompts live in `.claude/routines/<id>.md` and the deterministic halves in `scripts/agent/routines.ts`; `bun run routine list` prints what follows. Each job runs where its data is:
+
+| Routine | Cadence | Where, model | What it does | Needs |
+| --- | --- | --- | --- | --- |
+| Moduo nightly variant hunt (`variant-hunt`) | daily 01:00 UTC | cloud, Opus 5.5 | `bun run routine seed` picks an escape (a new one the night after it lands, else they take turns), then the `variant-hunt` skill; confirmed variants become parked proof tests on a `t/mike/hunt-<date>` draft PR into `mike` and `bug` tasks in the Moduo project. Quiet nights push nothing. | GitHub App, cloud key |
+| Moduo weekly retro (`retro`) | Mondays 08:00 UTC | cloud, Opus 5.5 | `bun run routine retro-facts` (escapes, new gotchas and decisions, path-rule activity over 30 days) plus the weekly numbers; at most three lessons compiled into an ast-grep rule, hook or test, else a path rule with an incident and an expiry; stale or expired path rules deleted in the same draft PR into `mike`; a "Weekly retro · …" note under "Harness weekly retro". | GitHub App, cloud key |
+| Moduo daily prod watch (`prod-watch`) | daily 06:00 UTC | cloud, Haiku 5.5, Bash and Read only | `bun run routine watch` (GET only: app and landing smoke, MCP connector, Supabase auth health, red Actions runs on shared branches, tags and schedules), then a digest of at most 12 lines to the Moduo chat channel `prod-watch`. One line when all is clear, so silence means the watch itself broke. | cloud key, network allowlist, the channel |
+| Moduo weekly numbers (`numbers`) | Mondays 07:00 Warsaw | Mike's Mac, desktop scheduled task | `bun run numbers` in a detached worktree at `origin/mike`. Local because the per-block usage section reads the Entire refs, which are never pushed. | `MODUO_MCP_KEY` in the app's environment, `gh` signed in |
+
+**Read-only prod watch.** It has no file tools, its prompt allows only `watch` and `post`, and the cloud environment holds no Supabase or Cloudflare credentials, so it has no way to migrate or deploy. Its one write path to GitHub is the app's repo access every routine in the environment shares; the repo's guard hooks still apply in the cloud session (no pushes to shared branches, no release tags), and the rulesets hold server-side. Edge Function logs and database advisors aren't in it: they need a Supabase token, and every Supabase token can also write.
+
+**Moduo writes** go only through the connector with an agent key (`bun run routine post | note | bug`), and every body passes the same leak check as the numbers note. `post` never creates a channel.
+
+**Setting them up (Mike, once):**
+
+1. Install the [Claude GitHub App](https://github.com/apps/claude) on `GrochowskiMichal/Moduo` (the hunt and the retro push branches).
+2. Make a Moduo agent key "Routines" (Tasks, Notes and Chat at Edit, nothing else) and add it as `MODUO_MCP_KEY` to the cloud environment "Default" at claude.ai/code. In the same environment, allow network access to `app.moduo.app`, `moduo.app`, `mcp.moduo.app`, `*.supabase.co`, `api.github.com` and the npm registry (or use Full access).
+3. Create each cloud routine from a session in this repo: `bun run --silent routine body <id> > /tmp/<id>.json`, then RemoteTrigger `create` with that file's JSON as the body (or `/schedule` and paste it). `--env <id>` names another environment.
+4. Create the local task: `bun run --silent routine task numbers` prints the desktop app's `create_scheduled_task` arguments. It runs while the app is open, or at the next launch.
+5. Run each once by hand (RemoteTrigger `run`, or Run now on the task) and check its output: the `prod-watch` post, the "Weekly numbers" note, and the hunt's and retro's run logs (`list_runs`, then `get_run_log`).
+
+Manage them at [claude.ai/code/routines](https://claude.ai/code/routines) and in the desktop app's scheduled tasks. A routine can't be deleted from the API: delete it on that page.
 
 ## The unsupervised flow
 
@@ -124,3 +152,10 @@ Never work in the shared main checkout (two sessions there switch the branch und
 - **`bun run wt <name>`** (from any checkout) makes `.claude/worktrees/<name>` on a new branch `t/<owner>/<name>` cut off `origin/<owner>` (the personal branch; `--base mike|maciej`, else `MODUO_OWNER`, else the owner of the branch you are on), with no upstream so it can't push into the personal branch. It copies your `.env.local`, `.env.cloud.local` and `.claude/settings.local.json`, runs `bun install --frozen-lockfile --prefer-offline` (Bun's global cache makes it a link step), and gives the worktree its own dev port from the `scripts/agent/e2e-env.ts` scheme (8200–8999, derived from its path, the same port `scripts/agent/e2e.sh` uses): the `web` entry in its `.claude/launch.json` starts Rsbuild on it, so `preview_start web` never collides with another worktree's 8081. `--no-install` skips the install.
 - **`bun run wt:prune`** removes worktrees whose branch has a **merged PR** on GitHub (`gh`), and deletes that local branch. It keeps a worktree with uncommitted or untracked work, commits after the merged head that never landed in `develop`/`mike`/`maciej`, a lock, a detached HEAD, a personal or landing branch checked out (`mike` → `develop` PRs merge too), any worktree a running process has as its working directory (`lsof`: a live session or shell), the main checkout and the one you're in, and prints why for each. `--dry-run` shows what it would do. A clean worktree without a merged PR is always kept, even an empty fresh one.
 
+
+## Known quirks
+
+- **`.env.local` decides which database a worktree's dev server uses.** `bun run wt` copies the main checkout's, which may point at the cloud while the tests read the local stack. For local work write the worktree's own with `bun scripts/local/env.ts local` (safe while other sessions use the stack), and check the served bundle names `127.0.0.1:54321` before signing in. If `supabase status` finds nothing while the stack is up, the shell's Docker context isn't OrbStack's: prefix `DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`.
+- **`git push` 403s, or `gh`/git say the repository doesn't exist:** another session switched `gh`'s active account. `gh auth status` shows which one is active; switch back with `gh auth switch --user <yours>`, and confirm the remote with `git ls-remote --heads origin` before trusting any "unreachable" conclusion.
+- **The TypeScript language server (`ts7-lsp`) reports no type errors** for `.ts`/`.tsx` files, only navigation; run `bun run typecheck`. `rust-analyzer-lsp` does report Rust diagnostics.
+- **A worktree session's Bash guard refuses heredocs, `python3 -c`, `psql -c` strings and pipelines it can't parse.** Write SQL or a script to a file (scratch files in a per-block subfolder) and run it by absolute path. **The Write and Edit tools turn `\uXXXX` in file text into the literal character:** spell code points as numbers (`String.fromCodePoint(n)`, `chr(n)`) or build the regex from a string.

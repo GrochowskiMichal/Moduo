@@ -11,7 +11,8 @@
 -- the public channel Q, so A manages it, and the private channel P with B); V is
 -- a viewer; E holds a custom role; X is in no workspace; K is A's API key with
 -- Chat at Edit. N is an announcement channel A manages. T is a team of W; T2 a
--- team of another workspace W2.
+-- team of another workspace W2. Later sections add F and H (CV-2a's limits), J
+-- and L2: test.person twice with one letter is a users_pkey error, so pick a new letter.
 
 SELECT test.person(n) FROM unnest(ARRAY['O', 'D', 'A', 'B', 'C', 'V', 'E', 'X', 'O2']) AS n;
 UPDATE public.profiles SET plan_tier = 'duo' WHERE id IN (test.id('O'), test.id('O2'));

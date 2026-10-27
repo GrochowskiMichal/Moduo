@@ -76,6 +76,8 @@ export default defineConfig({
           },
         ]
       : []),
+    // A bare `bun run e2e` runs this too: a spec with no baseline fails and
+    // writes one into visual/*-snapshots/. Delete those, never commit them unreviewed.
     {
       name: "visual",
       testMatch: ["**/visual/**/*.spec.ts"],

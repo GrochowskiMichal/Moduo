@@ -1,0 +1,4 @@
+{
+  "description": "5 past fixes, #509 and an impossible spec (HV-20). Each fix task clones the fix's parent; the fix's own tests are the hidden oracle.",
+  "verify": "bun run verify"
+}

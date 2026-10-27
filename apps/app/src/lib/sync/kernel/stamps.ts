@@ -1,6 +1,8 @@
 // Server timestamps as the sync code compares them (sync kernel, Track C).
 // Realtime and PostgREST spell timestamptz differently, and two saves can land
 // in the same millisecond, so every comparison goes through microseconds.
+// Carry stamps and keyset positions as text, never a JS `Date`: it drops the
+// microseconds, and a keyset page restarting from it repeats or skips rows.
 //
 // One question every caller answers differently is what a missing (or
 // unreadable) stamp means. The kernel names the two answers in use and each

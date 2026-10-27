@@ -41,6 +41,9 @@ const POS_STEP = 1 << 20;
 const POS_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"; // base 36 (Number#toString(36))
 const POS_MID_DIGIT = POS_ALPHABET[POS_ALPHABET.length >> 1]!; // "i" — a non-zero middle digit
 
+// The server mints queue keys with `tasks_queue__key` (task_queue.position is
+// COLLATE "C"): byte for byte these, so change both together, and compare keys
+// bytewise (`sortQueueEntries`), never with localeCompare.
 function encodePos(n: number): string {
   return Math.max(0, Math.floor(n)).toString(36).padStart(POS_WIDTH, "0");
 }

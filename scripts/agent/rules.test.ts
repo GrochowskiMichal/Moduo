@@ -139,6 +139,22 @@ describe("dead references (AC31)", () => {
     ]);
   });
 
+  it("reads past `--silent` and leaves a script family (`local:*`) alone", () => {
+    expect(
+      deadRefs(
+        "AGENTS.md",
+        "`bun run --silent nope` · `bun run local:*` · `bun run --silent verify`",
+        repo,
+      ),
+    ).toEqual([
+      {
+        file: "AGENTS.md",
+        line: 1,
+        reason: "`bun run nope`: no such script in the root package.json",
+      },
+    ]);
+  });
+
   it("leaves globs, placeholders, URLs, gitignored and folder-relative paths alone", () => {
     const text = [
       "`supabase/**` · `docs/gotchas/<area>.md` · [x](https://a.b/c) · `docs/local/` · `functions/_shared/contracts/`",
@@ -175,11 +191,15 @@ describe("this repo", () => {
     expect(check(ROOT)).toEqual([]);
   });
 
-  it("keeps AGENTS.md's policy lines (AC39, the parts landed so far)", () => {
+  it("keeps AGENTS.md's policy lines (AC39)", () => {
     const agents = readFileSync(path.join(ROOT, "AGENTS.md"), "utf8");
     expect(agents).toMatch(/Anthropic only/);
     expect(agents).toMatch(/\bauto mode\b/);
     expect(agents).toMatch(/one Moduo connection/);
     expect(agents).toMatch(/\.claude\/rules\//);
+    expect(agents).toMatch(
+      /\*\*Two lanes\.\*\*[\s\S]*\*\*Fast lane:\*\*[\s\S]*\*\*Block lane:\*\*/,
+    );
+    expect(agents).toMatch(/the queue is in Moduo/);
   });
 });

@@ -6,12 +6,13 @@
 // Two deliberate postures (spec assumptions 15–16):
 //
 // 1. **Recurrences expand HERE, at sync time, into occurrence rows** — id
-//    `uid::occurrenceStartISO`, `rrule: null` — within the sync window. ical.js
-//    applies EXDATE and RECURRENCE-ID overrides correctly, so a moved occurrence
-//    renders once at its moved time (better than the Graph best-effort), and the
-//    mirror needs no exception storage. This matches what Google already mirrors
-//    (its fetch uses `singleEvents=true`). The account-wide deletion diff
-//    tombstones rows that leave the window — identical to the Google path.
+//    `uid::<original slot wall time>` (`occurrenceKey`), `rrule: null` — within
+//    the sync window. ical.js applies EXDATE and RECURRENCE-ID overrides
+//    correctly, so a moved occurrence renders once at its moved time (better than
+//    the Graph best-effort), and the mirror needs no exception storage. This
+//    matches what Google already mirrors (its fetch uses `singleEvents=true`).
+//    The account-wide deletion diff tombstones rows that leave the window —
+//    identical to the Google path.
 //
 // 2. **Timezones never guess** (the Graph posture, extended): a TZID resolves
 //    from the resource's own VTIMEZONE; a bare TZID that is a valid IANA name

@@ -6,7 +6,7 @@ expires: 2027-01-31
 
 # Supabase: migrations, RLS, Edge Functions
 
-Read [docs/gotchas/supabase.md](../../docs/gotchas/supabase.md) before changing anything here; [docs/decisions/data.md](../../docs/decisions/data.md) and [permissions.md](../../docs/decisions/permissions.md) hold the locked calls.
+The area's traps live next to the code they bite: [supabase-sql.md](supabase-sql.md) and [supabase-access.md](supabase-access.md) (migrations), [supabase-chat-sql.md](supabase-chat-sql.md), [supabase-tests.md](supabase-tests.md), [supabase-functions.md](supabase-functions.md), the checks in `apps/app/src/lib/migration-lint.test.ts`, and comments at the trap. [docs/decisions/data.md](../../docs/decisions/data.md) and [permissions.md](../../docs/decisions/permissions.md) hold the locked calls.
 
 ## Migrations
 - Applied migrations are history. Never edit one; write a new migration. Every filename needs a unique timestamp prefix (a shared prefix leaves apply order undefined).

@@ -29,6 +29,9 @@ pub(super) fn read_accounts_from(store: &RedbStore) -> Result<Vec<StoredEmailAcc
     }
 }
 
+/// Replaces the whole list, and callers read-modify-write it without a lock: a send
+/// racing the IDLE worker's [`patch_account_sync_state`] can clobber the other's
+/// `status`/`last_sync_at`/`last_error`. The fix is a per-account patch, not more callers.
 pub(super) fn write_accounts(
     state: &AppState,
     accounts: &[StoredEmailAccount],
@@ -398,6 +401,9 @@ pub(super) fn list_envelopes_in_store(
         Some(id) => store
             .scan_email_envelopes_prefix(&format!("{id}{KEY_SEPARATOR}{folder}{KEY_SEPARATOR}"))
             .map_err(|e| e.to_string())?,
+        // Never derive an account prefix by cutting a key at the first `::`: a
+        // custom account on an IPv6 host (`custom:me@x.com:[::1]`) has the
+        // separator in its id, and its rows would silently drop out.
         None => store
             .scan_email_envelopes_in_folder(&format!("{KEY_SEPARATOR}{folder}{KEY_SEPARATOR}"))
             .map_err(|e| e.to_string())?,
@@ -454,7 +460,8 @@ pub(super) fn remove_body_cache(
         .remove_email_body(&body_key(account_id, folder, uid))
         .map_err(|e| e.to_string())?;
     // Co-prune the local-search body-text sidecar (EM-9) — same key, so it never
-    // outlives its body.
+    // outlives its body. Any future per-body sidecar is removed here too, never by
+    // a prune loop of its own.
     state
         .store
         .remove_email_body_text(&body_key(account_id, folder, uid))

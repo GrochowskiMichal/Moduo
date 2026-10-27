@@ -50,6 +50,9 @@ const emailPrefsSchema = z.object({
   imageAllowedSenders: z.array(z.unknown()).optional(),
 });
 
+// Drops unknown fields, and the `email` domain syncs as one LWW object: an older build
+// wipes a field it doesn't know on its next pref write. A new field needs a field-level
+// merge in prefs-sync's reconcileDomain or a domain version bump.
 export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
   const parsed = emailPrefsSchema.safeParse(raw);
   if (!parsed.success) {

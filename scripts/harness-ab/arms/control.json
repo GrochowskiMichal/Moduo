@@ -1,0 +1,6 @@
+{
+  "id": "control",
+  "description": "The harness as committed at the task's commit, on the default build model (AGENTS.md §Models).",
+  "model": "opus",
+  "effort": "high"
+}

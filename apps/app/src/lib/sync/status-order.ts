@@ -4,7 +4,8 @@
 // flush holds it until the live one has answered (or failed and gone back in
 // front). Kept per person, workspace and task across stores: one that stopped
 // (a sign-out, a lost session) may still have one out when the next store for
-// that person opens.
+// that person opens. The map is per tab: a second tab can still send a
+// check-off while this one waits; across tabs only the device copy's outbox orders them.
 
 const noop = () => {};
 

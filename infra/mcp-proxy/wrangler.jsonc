@@ -21,7 +21,11 @@
   "env": {
     "production": {
       "name": "moduo-mcp-proxy",
-      // One public address: the custom domain.
+      // One public address: the custom domain. The route stays here only: with it at the top level
+      // `wrangler dev` hands the Worker `request.url` on the route's host over plain http
+      // (http://mcp.moduo.app/…), so the forwarded origin is wrong. To test discovery end to end, give
+      // the function MCP_PUBLIC_URL=https://mcp.moduo.app,http://localhost:8787 and run
+      // `wrangler dev --var UPSTREAM:<the function's URL>`.
       "workers_dev": false,
       "preview_urls": false,
       "routes": [{ "pattern": "mcp.moduo.app", "custom_domain": true }],

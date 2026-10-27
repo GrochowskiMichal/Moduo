@@ -760,6 +760,9 @@ export class ChatStore {
     if (!this.live || this.stopLive || !this.running) return;
     this.stopLive = this.live({ workspaceId: this.workspaceId, userId: this.userId }, this.onLive);
     this.accessTimer = setInterval(() => void this.checkAccess(), this.timing.accessCheckMs);
+    // Realtime drops changes with every socket still SUBSCRIBED and no error: the
+    // local poller restarts about every 20 minutes, and past the plan's
+    // messages-per-second cap every change is dropped. A rejoin-only gap fill never notices.
     this.gapTimer = setInterval(() => {
       if (typeof document === "undefined" || document.visibilityState === "visible") {
         void this.sync("interval");

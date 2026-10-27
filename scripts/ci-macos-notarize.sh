@@ -53,6 +53,8 @@ with_retry() {
 cmd="${1:-}"; shift || true
 case "$cmd" in
   check)
+    # A 401 "Invalid credentials" means a wrong or revoked app-specific password: Apple revokes them
+    # whenever the Apple ID password changes. An API key (preferred above) isn't tied to it.
     if ! out=$(xcrun notarytool history "${AUTH[@]}" --output-format json 2>&1); then
       echo "$out" >&2
       if [[ -n "${NOTARY_KEYCHAIN_PROFILE:-}" ]]; then

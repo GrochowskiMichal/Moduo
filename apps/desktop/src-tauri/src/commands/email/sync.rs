@@ -228,6 +228,9 @@ pub(super) fn depth_window(depth: EmailHistoryDepth, now_ms: i64) -> Option<Dept
     // the two agree — otherwise every round re-fetches up to a day of mail that
     // `in_depth_window` then silently discards, which is the exact
     // pay-bandwidth-for-nothing pattern this block set out to remove.
+    // Don't treat the server's answer as already in-window: `in_depth_window` checks
+    // the `Date:` header, and on a migrated mailbox every INTERNALDATE is the
+    // migration day, so `SINCE` returns everything. The cutoff is also UTC.
     let midnight = cutoff.date_naive().and_hms_opt(0, 0, 0)?.and_utc();
     Some(DepthWindow {
         since: Some(midnight.format("%d-%b-%Y").to_string()),

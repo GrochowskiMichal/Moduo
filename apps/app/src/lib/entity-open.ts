@@ -14,6 +14,9 @@
 // return null; the listener shows a quiet "not available yet" toast, never a
 // crash.
 
+// Every surface that opens an entity (rows, chips, widgets, the bell in
+// notification-center.tsx) dispatches this, never `navigate({ to })`. A test for
+// a new target asserts the entity is selected on arrival, not just the route.
 export const ENTITY_OPEN_EVENT = "moduo:entity:open";
 
 export type EntityOpenTarget = {

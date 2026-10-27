@@ -10,6 +10,16 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-10-27 · HV-30: Harness v3 is closed out; work runs in two lanes, and AGENTS.md maps what landed rather than what was planned.
+- 2026-10-27 · HV-22: the hunt, retro and prod watch are Claude cloud routines and the weekly numbers a desktop scheduled task on Mike's Mac; each routine's deterministic half is `bun run routine <command>`, and the agent only judges and writes.
+- 2026-10-27 · HV-29: the MCP agent-experience eval runs on its own Supabase stack (project `moduo-mcp-eval`, ports 553xx), and its agent has no tools but the connector.
+- 2026-10-27 · HV-13: the docs eval grades answers with regex keys, not a model judge, and keeps the key out of the agent's sight.
+- 2026-10-26 · HV-27: catching tests on Tier 2 PRs into develop run in four jobs, so the Claude token and PR code never share one.
+- 2026-10-26 · HV-23: the router is a command hook with keyword rules by default and Haiku as a budget-bound opt-in, not a `type: "prompt"` hook; the scout is its own read-only Haiku agent.
+- 2026-10-26 · HV-24: the Haiku risk hook is an async command hook that calls `claude -p --model haiku` itself and logs to the git common dir, not a `type: "prompt"` hook.
+- 2026-10-26 · HV-20: the A/B rig runs each attempt in a remote-less `git clone --shared` at the task's commit, inside srt through `srt-offline.mjs`, with the oracle copied in from the fix commit after the agent stops.
+- 2026-10-26 · HV-26: Tier 2 blocks race three drafts from a frozen contract commit, and `bun run drafts` keeps the smallest passing diff within 5 points of the best mutant kill rate.
+- 2026-10-26 · HV-8: the block queue is Moduo; specs keep the dependencies, `bun run queue` joins them with open PRs, and `bun run queue:import` is the only way blocks enter it.
 - 2026-10-26 · HV-28: the app Worker ships as a canary driven by our own script over Cloudflare's deployments API, judged by probes against the new version plus Workers analytics, and it needs zone-level version affinity to split.
 - 2026-10-26 · HV-7: GitHub events move a block's Moduo task through `moduo-sync.yml`, on `pull_request_target`, planning without the key and applying in the `moduo-sync` environment.
 - 2026-10-26 · HV-6: the AI review runs once per PR into develop, advisory, on Sonnet 5, with the workflow token and a Max OAuth token in its own environment.
@@ -26,7 +36,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-23 · Harness v3: the flow board becomes the harness, all of it before the closed alpha (Mike's call).
 - 2026-10-23 · `oven-sh/setup-bun` is pinned to a commit like every other third-party action; the CodeQL backlog was triaged once and dismissed with reasons.
 - 2026-10-22 · MOD-60: the landing Worker answers unknown paths with a real 404 (`not_found_handling: "404-page"` + `apps/landing/404.html`), not index.html with a 200.
-- 2026-10-20 · Cross-person hand-offs go as a comment on the Moduo task, addressed to the person; an agent never instructs another person's agent. Phase 0 of "agents as workspace members" mirrors `/s2` and `/s3` into Moduo through our own connector.
+- 2026-10-20 · Cross-person hand-offs go as a comment on the Moduo task, addressed to the person; an agent never instructs another person's agent. Phase 0 of "agents as workspace members" mirrors `/s2` and `/s3` into Moduo through our own connector. *(partly superseded)*
 - 2026-10-19 · The sensitive CI secrets live in environments, behind their branch policy.
 - 2026-10-19 · REL-6: mirror branches retired; `mike` and `maciej` get a ruleset so delete-on-merge can't remove them; `guard-git.sh` guards the three long-lived branches, not the mirrors (agent's choices inside the approved spec)
 - 2026-10-19 · REL-3: how `/ship` and `guard-release.sh` decide (agent's choices inside the approved spec)
@@ -42,21 +52,21 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-19 · Release v2: a release is `/ship` → a `vX.Y.Z` tag → one workflow for web, landing and desktop; agent-written release notes behind a leak check; mirror branches retired.
 - 2026-10-17 · Platform v2: GitHub Pro (personal, private repo) + Cloudflare, Mike's Mac as the first-choice desktop runner, Bun workspaces + Turborepo.
 - 2026-10-17 · The release runbook lives in [docs/release.md](../release.md); prod migrations go one of two ways.
-- 2026-10-16 · Lean mode: the process is trimmed to a pre-alpha pace, with a list of what to re-tighten before the first external beta.
+- 2026-10-16 · Lean mode: the process is trimmed to a pre-alpha pace, with a list of what to re-tighten before the first external beta. *(partly superseded)*
 - 2026-10-14 · End-to-end runs on the local stack go through `scripts/agent/e2e.sh`: one run at a time across all worktrees, and each worktree starts its own dev server on its own port (agent's choice, deferred to by Maciej: confirmed for building, revisitable).
 - 2026-10-14 · A release pushes only its own migrations, from a scratch folder, so prod's history keeps the file versions (agent's choice, deferred to by Maciej). *(partly superseded)*
 - 2026-10-09 · Local-first cadence: build and test on the local stack; release to staging and prod in trains, not per block (PROPOSED; the CI part was applied by lean mode, #406, 2026-10-16).
 - 2026-10-08 · Every `/s2` and `/s3` report opens with a Status line and keeps "to finish this block" apart from findings; one block per session; unlanded work is always pushed.
-- 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files.
+- 2026-10-08 · `main` and `develop` change only through a pull request whose `static-checks` job passed, and a weekly cloud routine gardens the knowledge files. *(partly superseded)*
 - 2026-10-07 · The repo is public, so Entire checkpoints are local-only and never pushed.
-- 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file.
+- 2026-10-07 · Claude Code is the only harness, on Anthropic models, and AGENTS.md is the single instruction file. *(partly superseded)*
 - 2026-08-17 · Agents land bigger chunks on `develop` (standing), Entire default is `develop`, domain values go through `@contracts`.
 - 2026-08-14 · DOC-1 (doc reconcile) — the doc set now declares an explicit authority hierarchy, and stale *status* claims are neutralized by banner, not by rewriting history.
-- 2026-07-14 · Agent workflow ported to OpenCode + made tool/model-agnostic; `AGENTS.md` is now the single source of truth.
 - 2026-07-11 · Onboarding handoff + backend-refactor decision memo written (`docs/onboarding/`), for Mike picking the project back up.
 - 2026-07-02 · Session naming convention + title hook.
-- 2026-06-25 · Execution ledger + session hardening.
 - 2026-06-25 · Claude Code workflow upgrade.
+
+2 superseded or dropped entries are left out; they stay in the area file.
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 

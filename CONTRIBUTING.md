@@ -62,14 +62,12 @@ task branch  →  personal branch  →  develop  →  vX.Y.Z tag
   testing. Open a PR and merge it with a **merge commit — never fast-forward**
   (personal branches are hot; parallel sessions need the merge boundary). GitHub
   deletes the task branch on merge.
-- **Personal → develop**: **do this often.** GitHub's default branch is
-  `develop`. Entire.io repo Overview/Analytics only count checkpoints that
-  have landed there, so bigger chunks (a finished `/s2` block, any
-  user-visible or schema change) should reach `develop` in the same wrap
-  that lands them on the personal branch — agents have standing
-  authorization to open the PR and self-merge (2026-08-17). A 1-day fix can
-  sync immediately; do not wait for a "big bang" personal-branch dump.
-  Open a PR so there's a diff record, run `bun run verify`, then self-merge.
+- **Personal → develop**: in batches, not per block (lean mode,
+  2026-10-16). GitHub's default branch is `develop`, and the full CI suite,
+  the advisory AI review and (on Tier 2) the catching tests run only on PRs
+  into it, so sync once a chunk of work is worth those checks; agents have
+  standing authorization to open the PR and self-merge. Open a PR so there's
+  a diff record, run `bun run verify`, then self-merge.
   Peer review is welcome but never blocking. Prefer a merge commit when the
   personal branch is hot. The personal branch stays; refresh it from
   `develop` after so the two don't drift. Skip the develop sync only when
@@ -85,7 +83,7 @@ task branch  →  personal branch  →  develop  →  vX.Y.Z tag
 Each merge tier has a stricter testing bar. The PR author is responsible for
 running the gate; the reviewer verifies before approving.
 
-> **Lean mode (pre-alpha):** the gates below are the target for beta. Today a block lands on `bun run verify` plus the `validator` on Tier 2 diffs; see [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
+> **Lean mode (pre-alpha):** the gates below are the target for beta. Today a change lands on `bun run verify`, plus three raced drafts and one advisory `validator` pass on Tier 2 diffs (the tier comes from `scripts/ci/tier.ts`); see [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
 
 ### Task → personal (you alone)
 
@@ -147,9 +145,15 @@ conflicts only if `develop` moved; `/ship` re-prepares it.
 - LLM-authored commits include the `Co-Authored-By` trailer for the model
   that wrote them.
 
-## Rules for LLM agents (Claude Code, Cursor, Codex, …)
+## Rules for agents (Claude Code, Anthropic models only)
 
-These apply to every AI session in this repo regardless of tool:
+These apply to every agent session in this repo:
+
+0. **Pick the lane.** A change that fits one sentence takes the fast lane: no
+   spec, block or Moduo task, just a task branch, a PR with a short Test-this
+   and a merge into the personal branch. Everything else is a block in the
+   Moduo queue (`bun run queue`), built with `/s2` and landed with `/s3`.
+   Moduo task stages move from GitHub events (`moduo-sync.yml`), never by hand.
 
 1. **Default base branch is the user's personal branch.** Unless told otherwise,
    `git checkout -b t/<owner>/<task> <owner>` is the right starting point. Never

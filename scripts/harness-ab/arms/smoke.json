@@ -1,0 +1,6 @@
+{
+  "id": "smoke",
+  "description": "A cheap arm for checking the rig itself, not for comparing harness changes.",
+  "model": "haiku",
+  "effort": "low"
+}

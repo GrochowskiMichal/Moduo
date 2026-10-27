@@ -194,7 +194,8 @@ export async function addIcsFeed(args: {
  * Supabase row is removed. For CalDAV, only delete the shared (server,
  * username) credential when this was the LAST calendar row of that account
  * (`allAccounts` still includes the row being removed). No-op on non-desktop
- * or for OAuth/native rows.
+ * or for OAuth/native rows. The runtime's `removeAccount` can't reach the
+ * keychain, so any new remove path must call this first or orphan the secret.
  */
 export async function cleanupCredentialsForRemoval(args: {
   isDesktop: boolean;

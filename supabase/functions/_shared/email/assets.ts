@@ -7,6 +7,8 @@
  * dark background" (Paper artwork). Every image is @2x, PNG (Gmail drops SVG).
  */
 
+// A missing file here answers 200 with the app's HTML shell, not 404: check for
+// `content-type: image/png` (and the pixel size), not the status, before relying on one.
 export const DEFAULT_EMAIL_ASSET_BASE = "https://app.moduo.app/email";
 
 export type EmailAssets = {

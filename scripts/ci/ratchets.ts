@@ -53,6 +53,8 @@ const SIZE_EXEMPT = new Set([
   "supabase/functions/_shared/contracts/vocabularies.ts",
   "apps/app/src/styles/tokens.css",
 ]);
+// A shared test kit (a fake server) is named `*.spec.ts`: rstest runs only
+// `*.test.ts(x)`, and a plain `.ts` kit counts here as source over the limit.
 const TEST = /\.(test|spec)\.[cm]?[jt]sx?$|^e2e\//;
 
 export function sizeChecked(file: string): boolean {

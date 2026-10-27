@@ -36,6 +36,8 @@ Before either path:
 2. Dry run: `supabase db push --include-all --skip-vault --dry-run`. It must list only the release files.
 3. Push: `supabase db push --include-all --skip-vault`. Always `--skip-vault`: without it the CLI writes `config.toml`'s Vault secrets to prod.
 
+The scratch folder also needs `supabase/templates/` copied next to it (the auth email templates are config paths) and `[db.migrations] enabled = true` in its copy of `config.toml` only, or the push silently says "up to date". Another session may apply a migration to prod between your snapshot and your push: re-read prod's history count and newest version right before pushing, and grep your release files for every function the newcomer redefines.
+
 **One or two files: a direct query, in one transaction.**
 
 ```sql
@@ -52,7 +54,7 @@ Run it with `supabase db query --linked -f <file>`, so the history row carries t
 
 ## 3. Edge Functions
 
-Deploy each changed function with `supabase functions deploy <name>`, in dependency order (a function a migration queues work for goes first; see the Chat v2 record).
+Deploy each changed function with `supabase functions deploy <name>`, in dependency order (a function a migration queues work for goes first; see the Chat v2 record). A function that imports `zod` needs `--import-map supabase/functions/deno.json` (the hosted bundler fails without it), and one that does its own auth (a JWT check inside, a webhook signature, `moduo_sk_` keys, a public token) keeps `--no-verify-jwt`.
 
 `moduo-mcp` goes out **before** the release that deploys `mcp.moduo.app`'s Worker: the release's `mcp` job refuses to deploy while the function still names only its Supabase URL in discovery (re-run the job once the function is out).
 
