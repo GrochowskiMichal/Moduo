@@ -60,7 +60,8 @@ export type TagSeed = {
   /** The links the read covered (`scope`). */
   links: readonly TagLink[];
   scope: LinkScope;
-  /** When the read's request started (`Date.now()`). */
+  /** When the read's request started (`Date.now()` before sending it, never on
+   *  arrival: an arrival stamp lets a slow older read undo the last tag edit). */
   at: number;
   /**
    * False when the read's links hit their row cap (SCALE-1). A link missing

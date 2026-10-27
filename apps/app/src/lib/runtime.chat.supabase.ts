@@ -60,6 +60,8 @@ import {
   type ChatRuntime,
 } from "../features/chat/model";
 
+// Also chained on every op: `rpc(...).select(columns)` narrows a composite op
+// answer on PostgREST (probe-checked); without it each answer carries `search_tsv`.
 const MESSAGE_COLUMNS = CHAT_MESSAGE_COLUMNS;
 
 type Row = Record<string, unknown>;
@@ -207,6 +209,8 @@ export function chatRuntimeOn(db: () => Db): ChatRuntime {
 
     search: ({ workspaceId, query, channelId, fromId, after, hasFile, before, limit }) =>
       attempt(async () => {
+        // The index's `simple` parser splits "MOD-142" into `mod` and `-142`, so "142"
+        // alone doesn't find it. Known and low impact (a typed task key becomes a reference).
         const { data, error } = await db().rpc("chat_search", {
           p_workspace_id: workspaceId,
           p_query: query,
@@ -425,6 +429,7 @@ export function chatRuntimeOn(db: () => Db): ChatRuntime {
       attempt(async () => {
         if (messageIds.length === 0) return ok([]);
         // Read through the attachments policy: only what the reader may read.
+        // Chat files have their own branch there: can_access('chat_message', …) is always false.
         const { data, error } = await db()
           .from("attachments")
           .select(
@@ -534,6 +539,9 @@ export function chatRuntimeOn(db: () => Db): ChatRuntime {
       return mapRows(data, mapMember);
     },
 
+    // Chat rows outlive workspace membership: removing a member leaves their
+    // chat_members and chat_channel_managers rows until the account goes. For "who
+    // else is here" or "who can manage it", also check workspace_members (or the owner).
     async listChannelMembers(channelId) {
       const { data, error } = await db()
         .from("chat_members")

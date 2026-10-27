@@ -204,6 +204,27 @@ export const BASELINE: readonly BaselineEntry[] = [
     why: "Deliberate: An unreadable device copy falls back to a real server read.",
   },
   {
+    rule: "async-iife-finally-reset",
+    file: "apps/app/src/lib/request-cache.ts",
+    snippet:
+      "(async () => { try { const value = await fetcher(); // Retain only a successful read that wasn't invalidated mid-flight.",
+    why: "Risk: a fetcher that throws synchronously runs `finally` (inflight.delete) before inflight.set, so the rejected promise stays cached for that key.",
+  },
+  {
+    rule: "async-iife-finally-reset",
+    file: "apps/app/src/lib/sync/store.ts",
+    snippet:
+      "(async () => { try { await this.syncOnce(kind); } finally { this.syncing = null; } })()",
+    why: "Deliberate: the body awaits an async method first, so `finally` runs after the store.",
+  },
+  {
+    rule: "async-iife-finally-reset",
+    file: "apps/app/src/lib/sync/tanstack/supabase-collection.ts",
+    snippet:
+      "(async () => { const lossesBefore = losses; // Settles the read either way: access lost meanwhile drops what it // lande",
+    why: "Deliberate: awaits kernel.readChanges before anything can settle, so `reading = null` runs after the store.",
+  },
+  {
     rule: "lexical-update-in-command",
     file: "apps/app/src/features/chat/composer/handle-chip.tsx",
     snippet:

@@ -16,6 +16,24 @@
 // a different textual format than the client writes — never compare them as
 // strings. The desktop offline-lite build can later wrap pushDomain with a
 // durable queue; the dirty flag + the `online` listener are the seam for that.
+//
+// Adding a `user_preferences` sync domain needs EIGHT coordinated touchpoints, and
+// the untyped Supabase client catches none of the column ones:
+//   1. A migration adding `<domain> jsonb` + `<domain>_updated_at timestamptz`
+//      (the own-row RLS covers new columns), plus the domain in `prefs_op_set`'s list.
+//   2. The user_preferences Row/Insert/Update types in `apps/app/src/types/supabase.ts`
+//      (`bun run db:types`) and `prefsRowSchema` in `@contracts/rows`.
+//   3. `UserPreferences` + `PreferenceDomain` in `runtime.types.preferences.ts`.
+//   4. `prefsRowToModel`, `preferences.get`/`.set` and `prefsDomainPatch` in
+//      `runtime.web.preferences.ts` (tauri delegates); a non-base column also goes in
+//      `OPTIONAL_PREFS_COLS` + `optionalPrefsAvailable` (`prefs-columns.ts`). Miss the
+//      `.select` column in `set` and the write silently drops the domain.
+//   5. Here: `SyncDomain` (aliases `PreferenceDomain`), `META_KEY`, the `domainValue`
+//      switch, and what `pushDomain` sends (`setDomain`).
+//   6. A hook wired through `useDomainSync` (copy `useFocusPrefs`).
+//   7. `pushLocalChange` on every syncable mutation.
+//   8. Mount that hook APP-WIDE (as main.tsx mounts `<PreferencesSync/>`), not only in
+//      its Settings pane: a domain reconciles only while a `useDomainSync` caller is mounted.
 
 import { useCallback, useEffect, useRef } from "react";
 import { z } from "zod";
@@ -262,7 +280,8 @@ async function reconcileOnce(opts: {
   const cloud = read.kind === "row" ? read.prefs : null;
   const { value: cloudRaw, updatedAt: cloudUpdatedAt } = domainValue(cloud, domain);
   // An empty {} domain means "never synced" (e.g. the row was seeded by the
-  // other domain) — treat it as absent so local seeds it.
+  // other domain) — treat it as absent so local seeds it. The columns are NOT NULL:
+  // reset a test account's domain with `'{}'::jsonb`, never NULL (23502).
   const hasCloud = !!cloudRaw && Object.keys(cloudRaw).length > 0 && !!cloudUpdatedAt;
 
   const meta = getSyncMeta(domain);

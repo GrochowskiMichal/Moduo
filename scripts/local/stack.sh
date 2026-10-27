@@ -34,6 +34,9 @@ need docker "Install OrbStack: brew install --cask orbstack, then open it once."
 need supabase "brew install supabase/tap/supabase"
 need psql "brew install libpq && brew link --force libpq"
 need jq "brew install jq"
+# The stack runs in OrbStack. "No such container: supabase_db_moduo" while it is up means
+# Docker's machine-wide context went to another engine: prefix your own commands with
+# DOCKER_CONTEXT=orbstack (as scripts/agent/e2e.sh does); never switch the context back.
 docker info >/dev/null 2>&1 || { open -ga OrbStack 2>/dev/null || true; sleep 5; docker info >/dev/null 2>&1 || { echo "✗ Docker is not running. Open OrbStack." >&2; exit 1; }; }
 
 snapshot() {
@@ -106,6 +109,8 @@ alter default privileges for role supabase_admin in schema public grant all on t
 alter default privileges for role supabase_admin in schema public grant all on sequences to anon, authenticated, service_role;
 SQL
   # Storage tables/functions already exist locally; take only prod's policies.
+  # So prod's public-function triggers on storage.objects (attachments_guard_object:
+  # a finalized file's bytes can't change) are missing here: probe that rule on prod.
   awk '/^CREATE POLICY/{p=1} p{print} p&&/;[[:space:]]*$/{p=0}' "$SNAP/storage.sql" | "${PSQL[@]}"
   # Same for auth: only prod's triggers on auth.* (signup → profile, …).
   grep -E '^CREATE (OR REPLACE )?TRIGGER' "$SNAP/auth.sql" | "${PSQL[@]}"
@@ -137,6 +142,8 @@ SQL
     else
       [[ "$v" > "$at" ]] || continue
     fi
+    # Replayed as supabase_admin, so these tables are owned by it here (postgres on
+    # prod): DDL on them as postgres fails "must be owner of table"; use supabase_admin.
     echo "  + $f"; "${PSQL[@]}" -f "$f"
   done
   "${PSQL[@]}" -f supabase/seed.sql

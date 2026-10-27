@@ -166,6 +166,9 @@ function endpointToken(ref: EntityRef): string {
  * Identical regardless of which ref is passed first, so `(a,b)` and `(b,a)`
  * collapse to one link. Combine with a {@link RelationKind} for the full
  * uniqueness key (one live link per workspace, unordered pair, kind).
+ * JS `<=` is code-unit order, which SQL matches only under `COLLATE "C"` (the
+ * default locale collation orders non-ASCII differently): keep `spine_pair_key()`
+ * and this in lockstep.
  */
 export function deriveLinkKey(a: EntityRef, b: EntityRef): string {
   const ta = endpointToken(a);

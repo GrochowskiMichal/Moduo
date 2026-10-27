@@ -78,7 +78,12 @@ export async function makeChatRoom(
   return { owner, member, ws: created.id, general };
 }
 
-/** Send a v2 message as someone; returns its id. */
+/**
+ * Send a v2 message as someone; returns its id. Your own send reads the
+ * conversation through (closes your Catch up items there), and so does opening
+ * it: to seed someone's Catch up, send as the other person and check the list
+ * before opening the conversation.
+ */
 export async function sendAs(
   who: Session,
   channelId: string,

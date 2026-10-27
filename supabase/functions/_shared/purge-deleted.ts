@@ -13,6 +13,8 @@
  *                   account deletion that cascaded the rows, a lost begin).
  *   3. tasks        tasks and buckets trashed more than 30 days ago (SQL
  *                   tasks__purge_expired; a task waits for its file rows).
+ *                   `deleted_at` is the server's (trash_stamp_deleted_at), never
+ *                   the device's: any timestamp a job acts on must be server-stamped.
  *   4. pools        storage_usage recounted from the rows, so a missed delta
  *                   never outlives a day.
  * A dry run only counts (SQL purge__preview) and changes nothing.

@@ -74,6 +74,8 @@ CREATE FUNCTION test.catchup(p_who text, p_conv text) RETURNS text LANGUAGE sql 
     test.id('W'), test.ref(p_conv)))
 $$;
 -- Time passes: every put-off item of W comes p_by closer (the job then runs at now()).
+-- Not a future p_now to chat__fire_later: chat_unread_counts compares
+-- later_until with now(), so the item would be back in the list but not the count.
 CREATE FUNCTION test.elapse(p_by interval) RETURNS void LANGUAGE sql AS $$
   UPDATE public.chat_catchup SET later_until = later_until - p_by
    WHERE workspace_id = test.id('W') AND done_at IS NULL AND later_notified_at IS NULL AND later_until IS NOT NULL

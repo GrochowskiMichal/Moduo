@@ -18,6 +18,8 @@ export const CHECKED_DOCS = [
   "AGENTS.md",
   "CONTRIBUTING.md",
   "docs/agent-setup.md",
+  "docs/gotchas/supabase.md",
+  "docs/gotchas/spine.md",
   // HV-22: the routine prompts run unattended, so a dead reference fails there with nobody watching.
   ".claude/routines/variant-hunt.md",
   ".claude/routines/retro.md",

@@ -40,6 +40,9 @@ export async function enrichHubRows(
 ): Promise<HubEnrichment> {
   if (!refs.length) return EMPTY;
 
+  // A wanted id with no snippetMeta entry means its module read didn't return
+  // it (the item is soft-deleted but its link and registry entry outlived it),
+  // not a lookup miss: a "missing snippet" is that row's graceful path.
   const wantTask = new Set(refs.filter((r) => r.type === "task").map((r) => r.id));
   const wantNote = new Set(refs.filter((r) => r.type === "note").map((r) => r.id));
   const wantEvent = new Set(refs.filter((r) => r.type === "event").map((r) => r.id));

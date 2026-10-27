@@ -14,6 +14,8 @@
  *   bun scripts/mutants/sync-outbox.ts --only M3  # one of either
  *
  * Every file is put back after each run, also on Ctrl-C. Nothing is committed.
+ * It edits the sources in place: don't edit `apps/app/src/lib/sync/`,
+ * `prefs-sync.ts`, `task-rows.ts` or `features/tasks/write-plan.ts` while it runs.
  */
 
 import { spawnSync } from "node:child_process";

@@ -296,6 +296,9 @@ function sampleArgs(s: Schema): Row {
 // ---------------------------------------------------------------------------
 
 const SNAPSHOT_PATH = new URL("./sdk-parity.snapshot.json", import.meta.url);
+// Capture rewrites every case with today's answers, SDK_DIFFERENCES' too (they must keep the
+// pre-SDK answers). For a deliberate change to every answer (a CORS header), transform the old
+// snapshot instead (a string replace on the changed field) and check nothing else moved.
 const CAPTURE = process.env.MODUO_PARITY_CAPTURE === "1";
 
 /**

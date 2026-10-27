@@ -159,6 +159,8 @@ export const webAttachments: AttachmentsRuntime = {
     return attachmentOpResult(data, error);
   },
 
+  // attachments_op_restore and attachments_largest handle task files only;
+  // attachments_op_abandon and storage__unsettled_bytes cover chat uploads too.
   async restore(id) {
     const { data, error } = await supabaseClient.rpc("attachments_op_restore", { p_id: id });
     return attachmentOpResult(data, error);

@@ -138,6 +138,9 @@ export const webSpine: SpineRuntime = {
     targetLabel,
     targetIcon,
   }) {
+    // A `blocks` link between two tasks is a dependency (TV-D8): it fails without
+    // Tasks edit on the waiting task, or on a loop ("Dependencies cannot form a
+    // cycle"). Surface that error; never retry it as a plain link.
     const data = await runRpc(
       supabaseClient.rpc("links_op_create", {
         p_workspace_id: workspaceId,

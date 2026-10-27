@@ -72,6 +72,8 @@ function shortVerb(op: string): string {
  * Ops that are a *record edit* (someone changed the card), not a real
  * *interaction* (a link/email/task/meeting/comment). Last-touch prefers
  * interactions and only surfaces a record edit when nothing else exists (FX-4 AC7).
+ * A new contacts op: decide whether it's an interaction before it starts
+ * (mis)winning last-touch, and add it here if it isn't.
  */
 const RECORD_EDIT_OPS = new Set([
   "contacts.create",
@@ -93,6 +95,9 @@ type TouchStamp = { at: string; activity: ActivityEntry | null };
  * activity). Prefers the most-recent real *interaction* (a link, or any
  * non-record-edit op) over a bare record edit — "updated" only surfaces when
  * nothing else has happened (FX-4 AC7). Shared by the contact + company hubs.
+ * Edits to *linked* entities don't count (a linked task edited yesterday leaves
+ * it alone; that needs a cross-entity read, deferred in CO-2), so it isn't a
+ * real-time "anything related happened" signal.
  */
 export function computeLastTouch(
   activity: ActivityEntry[],

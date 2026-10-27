@@ -30,6 +30,11 @@
  *                     trace, shared ones get a new owner, their tasks are unassigned.
  *   8. waitlist       public.waitlist + founders_interest rows for the account email.
  *
+ * A new table keyed by a user gets an FK with ON DELETE CASCADE or a step here; so does a
+ * new place that stores user files or an external record. A column that copies a person's
+ * name or email (like module_activity.actor_label) needs clearing in
+ * account_erase_workspace_data. Never delete a user from the dashboard: that skips all this.
+ *
  * Every step is idempotent and the auth delete runs last, so a failure leaves the
  * account in place and a retry finishes the job. PostHog and Stripe run first: when
  * they fail, nothing in Moduo has been deleted yet.

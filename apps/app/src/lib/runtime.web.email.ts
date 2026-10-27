@@ -288,6 +288,9 @@ export const webEmail: EmailRuntime = {
     return row?.id ? emailRefRowToModel(row) : null;
   },
   async removeRef({ workspaceId, refId }) {
+    // The only way to remove a ref: email_refs is op-only write (a REST DELETE is
+    // RLS-swallowed, 200 + zero rows). It has no inverse (no restore op), and it
+    // also drops the thread's entity_links and tombstones its registry entry.
     await runRpc(
       supabaseClient.rpc("email_op_ref_remove", {
         p_workspace_id: workspaceId,

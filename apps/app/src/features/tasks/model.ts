@@ -309,7 +309,9 @@ export type Task = {
   dueOn?: string | null;
   /** An optional due time, HH:MM[:SS], the clock time in the assignee's zone (TV-D9). */
   dueTime?: string | null;
-  /** When the task is planned to a clock time. Works with Calendar hidden. */
+  /** When the task is planned to a clock time. Works with Calendar hidden.
+   *  It mirrors the next work session (TV-D10): clear it through `tasks_op_update` or
+   *  `tasks_op_unschedule`; a raw `scheduled_at = NULL` write is put back from the session. */
   scheduledAt: string | null;
   /**
    * The scheduled block's length in minutes (default-on-drop, resizable). It
