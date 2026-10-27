@@ -4,14 +4,15 @@ The retro's job: turn last week's lessons into checks, so knowledge is compiled 
 
 ## Setup
 
-1. `command -v bun || npm install -g bun`, then `git fetch --quiet --unshallow origin || git fetch --quiet origin`.
+1. `command -v bun || npm install -g bun`, then fetch full history: `if [ "$(git rev-parse --is-shallow-repository)" = true ]; then git fetch --quiet --unshallow origin; else git fetch --quiet origin; fi`.
 2. `git checkout --quiet -B "t/mike/retro-$(date -u +%F)" origin/mike`, then `bun install --frozen-lockfile`.
+3. Baseline: `bun run verify > /tmp/verify-baseline.log 2>&1`. If it fails before you change anything, compile nothing: write the note (below) with **Compiled** reading "nothing: `verify` is red on `mike` before the retro" and the failing task's lines, skip the PR, and report it.
 
 ## Read the week
 
 1. `bun run --silent routine retro-facts > /tmp/facts.md` and read it: escapes added, gotchas and decisions added, and the path-rule table (expired, stale, in use).
 2. If `gh` is signed in, also `bun run --silent numbers -- --json > /tmp/numbers.json` for the week's follow-up fix PRs, reverts and red shared-branch runs (its usage section is empty in the cloud; ignore it). Without `gh`, use `git log origin/mike --since="8 days ago"` subjects instead.
-3. Read `AGENTS.md`, `docs/gotchas.md`, and each escape README and gotcha entry the facts list.
+3. The facts list every decision entry the week added, superseded ones included: `bun run docs:current <area>` shows only the live ones. Read `AGENTS.md` (skip its §Session start: no title, queue or `docs/local/` in a routine), `docs/gotchas.md`, and each escape README and gotcha entry the facts list.
 
 ## Compile (at most three changes a week)
 
@@ -19,6 +20,8 @@ Pick the lessons that would most likely bite again, most expensive first. For ea
 
 - **Mechanical** (a pattern code can recognise): add an ast-grep rule under `tools/ast-grep/rules/` with its test cases (see how the existing rules and `tools/ast-grep/lint.test.ts` do it), a hook test, or a regression test next to the code. The rule must pass on today's code: if it would flag existing sites, add them to the baseline the way `tools/ast-grep/baseline.ts` does, never fix product code here.
 - **Not mechanical**: add or extend a path rule in `.claude/rules/` with `paths:`, an `incident:` naming what went wrong and when, and `expires:` 90 days out. Keep it to a few must-know lines; follow `docs/decisions/workflow.md` (HV-10) and keep `bun run lint:rules` green.
+- **Keep the maps true**: a new or deleted path rule updates the rule list at the top of `AGENTS.md`. A new test under `scripts/` that reads files outside its own folder needs those files in the `//#test:scripts` inputs of the root `turbo.json`, or Turborepo replays a cached pass after they change.
+- **Gotchas a check now covers**: you may delete a gotcha entry whose trap a test, hook or rule (yours or an existing one) now catches; name the check in the PR body. Leave every other entry alone.
 - **Path rules in the table marked expired or stale**: delete the file in this PR and say why in the PR body. A person who wants one kept renews `expires:` in review.
 
 Never edit an applied migration, a spec's acceptance criteria, `docs/local/`, or product code. No `supabase`, `wrangler` or `bun run local:*` commands.
