@@ -1,6 +1,6 @@
-// The video link of an event, from its location or, failing that, the first
-// known meeting URL in its description. Booked meetings and mirrored Google /
-// Outlook events both carry it in one of those two places.
+// The video link of an event: its stored meeting link (conference_url, CALR-6)
+// when it has one, else its location or, failing that, the first known meeting
+// URL in its description (events written before CALR-6 carry it there).
 
 export type MeetingLink = { url: string; label: string };
 
@@ -22,9 +22,12 @@ function labelFor(url: string): string {
 }
 
 export function meetingLinkOf(event: {
+  conferenceUrl?: string | null;
   location?: string | null;
   description?: string | null;
 }): MeetingLink | null {
+  const stored = event.conferenceUrl?.trim();
+  if (stored) return { url: stored, label: labelFor(stored) };
   const location = event.location?.trim() ?? "";
   if (/^https?:\/\/\S+$/i.test(location)) return { url: location, label: labelFor(location) };
   const found = `${location} ${event.description ?? ""}`
@@ -33,20 +36,32 @@ export function meetingLinkOf(event: {
   return found ? { url: found, label: labelFor(found) } : null;
 }
 
-/** The provider's join link for a raw Google Calendar event. */
-export function googleMeetingLink(raw: Record<string, unknown>): string | null {
+/** The provider's own join link for a raw Google Calendar event (hangoutLink or the video entry point). */
+export function googleConferenceUrl(raw: Record<string, unknown>): string | null {
   if (typeof raw.hangoutLink === "string" && raw.hangoutLink) return raw.hangoutLink;
   const conference = raw.conferenceData as
     { entryPoints?: { entryPointType?: string; uri?: string }[] } | undefined;
   const video = conference?.entryPoints?.find((point) => point.entryPointType === "video")?.uri;
-  if (video) return video;
+  return video || null;
+}
+
+/** The join link, or failing that the place, for a raw Google Calendar event. */
+export function googleMeetingLink(raw: Record<string, unknown>): string | null {
+  const link = googleConferenceUrl(raw);
+  if (link) return link;
   return typeof raw.location === "string" && raw.location.trim() ? raw.location.trim() : null;
 }
 
-/** The join link (or place) for a raw Microsoft Graph event. */
-export function graphMeetingLink(raw: Record<string, unknown>): string | null {
+/** The provider's own join link for a raw Microsoft Graph event (onlineMeeting.joinUrl). */
+export function graphConferenceUrl(raw: Record<string, unknown>): string | null {
   const online = raw.onlineMeeting as { joinUrl?: string } | null | undefined;
-  if (online?.joinUrl) return online.joinUrl;
+  return online?.joinUrl || null;
+}
+
+/** The join link, or failing that the place, for a raw Microsoft Graph event. */
+export function graphMeetingLink(raw: Record<string, unknown>): string | null {
+  const link = graphConferenceUrl(raw);
+  if (link) return link;
   const location = raw.location as { displayName?: string } | undefined;
   return location?.displayName?.trim() || null;
 }

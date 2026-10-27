@@ -2,6 +2,8 @@
 // calendar_events table) and the pure occurrence selectors that put event
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
+import type { CalendarItemKind, ConferenceProvider } from "@contracts/vocabularies";
+
 import { type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { Truncation } from "../../lib/paged-select";
 import { formatTime } from "../../lib/time-format";
@@ -23,13 +25,35 @@ export type CalendarEventModel = {
   allDay: boolean;
   rrule: string | null;
   status: string;
-  /** Join URL when the event was created from a booking link. */
+  /** The place. Before CALR-6 a booking's join URL sat here; now it moves to `conferenceUrl`. */
   location?: string | null;
   color: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  // ── Event data v2 (CALR-6). Optional: many fixtures build the model without them.
+  /** The calendars row the event is on (null = not resolved yet). */
+  calendarRef?: string | null;
+  isPrivate?: boolean;
+  /** The meeting link, kept apart from the place. */
+  conferenceUrl?: string | null;
+  conferenceProvider?: ConferenceProvider | null;
+  kind?: CalendarItemKind;
+  /** The task focus time is for (kind "focus" only). */
+  focusTaskId?: string | null;
+  attendees?: CalendarAttendee[];
 };
+
+/** One person on an event, as calendar_op_event_create/update store them. */
+export type CalendarAttendee = {
+  email: string;
+  name: string;
+  /** Google's response status words ("needsAction", "accepted", …). */
+  status: string;
+};
+
+/** A person as the create/update ops take them: name and status are optional. */
+export type CalendarAttendeeInput = { email: string; name?: string; status?: string };
 
 export type CalendarAccountModel = {
   id: string;
@@ -70,6 +94,20 @@ export type CalendarEventPatch = {
   allDay?: boolean;
   /** null clears the recurrence (one-off again). */
   rrule?: string | null;
+  // ── Event data v2 (CALR-6)
+  /** The calendars row id to move the event to; null = back to your Moduo calendar. */
+  calendarId?: string | null;
+  location?: string | null;
+  /** Replaces the people as a whole. */
+  attendees?: CalendarAttendeeInput[];
+  /** null removes the link and its provider. */
+  conferenceUrl?: string | null;
+  /** Omit to read it from the link. */
+  conferenceProvider?: ConferenceProvider | null;
+  isPrivate?: boolean;
+  /** "hold" is refused (holds come from offers); leaving "focus" lets the task go. */
+  kind?: CalendarItemKind;
+  focusTaskId?: string | null;
 };
 
 /** One provider event as the desktop sync engine hands it to the mirror op. */
@@ -83,8 +121,10 @@ export type CalendarMirrorEventInput = {
   status?: string;
   description?: string;
   calendarId?: string;
-  /** The meeting link or place. Sent only when the provider has one. */
+  /** The place. Sent only when the provider has one. */
   location?: string;
+  /** The provider's meeting link (CALR-6). Sent only when there is one; absent keeps the stored link. */
+  conferenceUrl?: string | null;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */

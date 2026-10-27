@@ -85,14 +85,22 @@ export function accountHue(color: string | null | undefined): LabelColor {
   return normalizeLabelColor(color);
 }
 
-/** Drop mirrored events whose account is toggled off. Native events always show. */
+/**
+ * Drop events that are toggled off. The hidden list holds account ids (a mirrored
+ * event hides with its account) and calendar ids (a native event hides with the
+ * calendar it is on, custom calendars included, CALR-6). A native event with no
+ * calendar always shows.
+ */
 export function visibleEvents(
   events: CalendarEventModel[],
-  hiddenAccountIds: Iterable<string>,
+  hiddenIds: Iterable<string>,
 ): CalendarEventModel[] {
-  const hidden = new Set(hiddenAccountIds);
+  const hidden = new Set(hiddenIds);
   if (hidden.size === 0) return events;
-  return events.filter((e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId));
+  return events.filter((e) => {
+    if (e.sourceAccountId !== null) return !hidden.has(e.sourceAccountId);
+    return !e.calendarRef || !hidden.has(e.calendarRef);
+  });
 }
 
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────

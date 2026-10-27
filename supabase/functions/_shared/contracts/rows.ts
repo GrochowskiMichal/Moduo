@@ -667,6 +667,14 @@ export const calendarEventRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  // CALR-6 (20261027230000_calendar_event_data_v2): optional, rows from before it lack them.
+  calendar_ref: optStr,
+  is_private: z.boolean().optional(),
+  conference_url: optStr,
+  conference_provider: optStr,
+  kind: optStr,
+  focus_task_id: optStr,
+  attendees: z.unknown().optional(),
 });
 
 export const calendarAccountRowSchema = z.object({

@@ -7,8 +7,13 @@ import {
   parsedCalendarProvider,
   requireRow,
 } from "@contracts/rows";
+import { normalizeCalendarItemKind, normalizeConferenceProvider } from "@contracts/vocabularies";
 
-import type { CalendarAccountModel, CalendarEventModel } from "../features/calendar/events";
+import type {
+  CalendarAccountModel,
+  CalendarAttendee,
+  CalendarEventModel,
+} from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
 import { collectTruncations, READ_CAPS } from "./paged-select";
 import { jsonObject, type RpcArgs, runRpc } from "./runtime.db";
@@ -19,6 +24,23 @@ import { firstRow, selectCapped } from "./runtime.web.shared";
 // ── Calendar module row⇄model mappers (Wave 2) ───────────────────────────────
 // snake_case legacy column names (start_time/end_time/recurrence_rule) stay in
 // the DB; the model speaks the Wave-2 vocabulary (startsAt/endsAt/rrule).
+
+/** The people on a row: only objects with a string email; name and status get their defaults. */
+function attendeesOf(raw: unknown): CalendarAttendee[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CalendarAttendee[] = [];
+  for (const person of raw) {
+    if (!person || typeof person !== "object") continue;
+    const { email, name, status } = person as Record<string, unknown>;
+    if (typeof email !== "string") continue;
+    out.push({
+      email,
+      name: typeof name === "string" ? name : "",
+      status: typeof status === "string" ? status : "needsAction",
+    });
+  }
+  return out;
+}
 
 function calendarEventRowToModel(raw: unknown): CalendarEventModel {
   const r = requireRow(calendarEventRowSchema, raw, "calendar event");
@@ -41,6 +63,14 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
+    // Event data v2 (CALR-6): a row from before the migration reads as the defaults.
+    calendarRef: r.calendar_ref ?? null,
+    isPrivate: Boolean(r.is_private),
+    conferenceUrl: r.conference_url ?? null,
+    conferenceProvider: normalizeConferenceProvider(r.conference_provider),
+    kind: normalizeCalendarItemKind(r.kind),
+    focusTaskId: r.focus_task_id ?? null,
+    attendees: attendeesOf(r.attendees),
   };
 }
 
@@ -123,17 +153,34 @@ export const webCalendar: CalendarRuntime = {
       return { events: [], accounts: [], degraded: true, truncated: [] };
     }
   },
-  async createEvent({ workspaceId, title, startsAt, endsAt, allDay, rrule, description }) {
+  async createEvent(input) {
+    const args: Record<string, unknown> = {
+      p_workspace_id: input.workspaceId,
+      p_title: input.title,
+      p_starts_at: input.startsAt,
+      p_ends_at: input.endsAt,
+      p_all_day: input.allDay ?? false,
+      p_rrule: input.rrule ?? null,
+      p_description: input.description ?? "",
+    };
+    // CALR-6's arguments go only when set: PostgREST matches an RPC by its named
+    // args, so an unset one left out keeps this working against a database that
+    // still has the old 7-argument op.
+    const v2: Record<string, unknown> = {
+      p_calendar_id: input.calendarId,
+      p_location: input.location,
+      p_attendees: input.attendees,
+      p_conference_url: input.conferenceUrl,
+      p_conference_provider: input.conferenceProvider,
+      p_is_private: input.isPrivate,
+      p_kind: input.kind,
+      p_focus_task_id: input.focusTaskId,
+    };
+    for (const [key, value] of Object.entries(v2)) if (value !== undefined) args[key] = value;
+    // The new arguments aren't in the generated Database types until the migration
+    // reaches prod (the upsertAccount pattern).
     const data = await runRpc(
-      supabaseClient.rpc("calendar_op_event_create", {
-        p_workspace_id: workspaceId,
-        p_title: title,
-        p_starts_at: startsAt,
-        p_ends_at: endsAt,
-        p_all_day: allDay ?? false,
-        p_rrule: rrule ?? null,
-        p_description: description ?? "",
-      }),
+      supabaseClient.rpc("calendar_op_event_create", args as RpcArgs<"calendar_op_event_create">),
     );
     return calendarEventRowToModel(firstRow(data, "calendar_op_event_create"));
   },
