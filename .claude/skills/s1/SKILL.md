@@ -27,7 +27,8 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 ## 3. Fill the spec
 - Copy `specs/_template.md` → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` with its `status:` line (then `bun run docs:index` regenerates the index).
 - For a UI feature, **reference** the `.design/<module>` briefs and the module contract — don't restate them.
-- For a redesign of an existing surface, take a baseline first: `/product-lab --screens <id>` (read-only: it drives the built app on seeded local data) and, for a whole module, `/product-jury`. Cite the dossier's hard fails, gates and ranked fixes in the spec's problem statement, and name the journeys and states the blocks must add to `e2e/lab/lab.config.ts`.
+- For a redesign of an existing surface, take a baseline first: `/product-studio criticise <module>` (read-only: lab plus blind critics on seeded local data). Cite its holes and gates in the spec's problem statement, and name the journeys and states the blocks must add to `e2e/lab/lab.config.ts`.
+- **A draft from `/product-studio`** ("Turn into spec") arrives with an artifact link and most sections filled. Treat the artifact as the agreed design: grill only its *Open questions* and what a prototype can't answer (data, permissions, sync, existing content), then re-cut the blocks and run the gate.
 
 ## 4. Decompose into execution blocks
 - Cut tracer-bullet blocks with explicit blocking edges and write them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table, with the dependencies in its last column), then put them in the Moduo queue with `bun run queue:import specs/<feature>.md`.
