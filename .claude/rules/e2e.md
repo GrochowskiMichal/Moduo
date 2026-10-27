@@ -33,4 +33,4 @@ Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). Run e2e through `scr
 - A bare `bun run e2e` also runs the visual project and writes a baseline for every screenshot without one: delete those, never commit them unreviewed.
 - Playwright can want a newer browser build than this Mac has ("Executable doesn't exist … chromium_headless_shell-<n>"). Don't download mid-block: use a local, uncommitted config with `use.channel: "chrome"`.
 - The perf spec needs the local stack and its 10,000-task fixture (`bun run perf`); CI runs neither, and medians compare only on one machine.
-- Run one `/product-lab` at a time per Mac: each run re-seeds the `lab*@moduo.local` people and soft-deletes their previous workspaces. Its preview server takes `LAB_PORT` when two lanes need the build.
+- Run one product-lab run (`lab.mjs`) at a time per Mac: each run re-seeds the `lab*@moduo.local` people and soft-deletes their previous workspaces. Its preview server takes `LAB_PORT` when two lanes need the build.

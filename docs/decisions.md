@@ -473,6 +473,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-27 · `/product-studio` is the only product-quality command, and its output is always one Claude Artifact, never code
 - 2026-10-23 · Product UI quality is measured by a lab and scored by blind critics: `/product-lab`, `/product-jury`, `/product-studio`
 - 2026-10-16 · A collection header's count is the tertiary text level, and 4 px sit between a header and its rows
 - 2026-10-16 · 8 px between two panels, 16 at the window's edges, and the resize handle still grabs over 16 px
