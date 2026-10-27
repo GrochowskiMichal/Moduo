@@ -33,6 +33,12 @@ ALTER TABLE public.calendar_events
   ADD COLUMN IF NOT EXISTS exdates timestamptz[] NOT NULL DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS external_series_id text;
 
+-- Stored only: nothing masks a private event from teammates yet. CALR-15 adds the
+-- masked view (calendar_events_visible) and the entities title redaction; until then
+-- no app or MCP surface offers privacy, so nobody is told an event is hidden.
+COMMENT ON COLUMN public.calendar_events.is_private IS
+  'CALR-6: stored, not yet enforced; CALR-15 masks private rows for non-owners.';
+
 -- The IN-lists mirror CONFERENCE_PROVIDERS and CALENDAR_ITEM_KINDS in
 -- supabase/functions/_shared/contracts/vocabularies.ts (drift-gates.test.ts reads this text).
 ALTER TABLE public.calendar_events
@@ -308,8 +314,23 @@ BEGIN
     SELECT * INTO s FROM public.calendar__split_location(NEW.location);
     IF s.url IS NOT NULL THEN
       NEW.location := s.place;
-      NEW.conference_url := coalesce(NEW.conference_url, s.url);
+      -- A link the statement sets explicitly wins; otherwise the URL just written
+      -- into location does (an older mirror client or a booking moving the link),
+      -- so a stale stored link never outlives the location-only writer's update.
+      IF TG_OP = 'UPDATE' AND NEW.conference_url IS NOT DISTINCT FROM OLD.conference_url THEN
+        IF NEW.conference_url IS DISTINCT FROM s.url THEN
+          NEW.conference_provider := NULL;
+        END IF;
+        NEW.conference_url := s.url;
+      ELSE
+        NEW.conference_url := coalesce(NEW.conference_url, s.url);
+      END IF;
     END IF;
+  END IF;
+  -- A new link with the old provider left as it was takes its own provider.
+  IF TG_OP = 'UPDATE' AND NEW.conference_url IS DISTINCT FROM OLD.conference_url
+     AND NEW.conference_provider IS NOT DISTINCT FROM OLD.conference_provider THEN
+    NEW.conference_provider := NULL;
   END IF;
   IF NEW.conference_url IS NOT NULL AND NEW.conference_provider IS NULL THEN
     NEW.conference_provider := public.calendar__meeting_provider(NEW.conference_url);
