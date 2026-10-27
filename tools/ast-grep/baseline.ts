@@ -295,7 +295,7 @@ export const BASELINE: readonly BaselineEntry[] = [
     rule: "webview-origin",
     file: "apps/app/src/features/tasks/ui/use-saved-views.tsx",
     snippet: "window.location.origin",
-    why: "Risk: A saved view's link built from the webview origin; on desktop it reads tauri://localhost.",
+    why: "Candidate bug: `viewLink` builds a copied saved-view link from the webview origin, so on desktop it reads tauri://localhost/…; use `webOrigin()`.",
   },
   {
     rule: "idb-listing-wipe",
