@@ -5,6 +5,8 @@ import type { Rpc } from "./moduo-sync";
 import { assertPublishable, writeNote } from "./numbers";
 import {
   addedEntries,
+  buildMatches,
+  COMMANDS,
   createBody,
   fileBug,
   isStale,
@@ -35,7 +37,6 @@ const SCRIPTS = Object.keys(
   (JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")) as { scripts: object })
     .scripts,
 );
-const COMMANDS = ["list", "body", "task", "seed", "watch", "retro-facts", "post", "note", "bug"];
 
 function fakeRpc(answers: Record<string, unknown>) {
   const calls: [string, Record<string, unknown>][] = [];
@@ -85,7 +86,7 @@ describe("the four routines", () => {
         // `bun run local:*` names a family the prompts forbid, not one script.
         if (m[1]!.endsWith(":")) continue;
         expect(SCRIPTS).toContain(m[1]);
-        if (m[1] === "routine") expect(COMMANDS).toContain(m[2]);
+        if (m[1] === "routine") expect(Object.keys(COMMANDS)).toContain(m[2]);
       }
     }
   });
@@ -200,6 +201,14 @@ describe("prod watch", () => {
       "v1.4.0/push",
       "t/mike/x/schedule",
     ]);
+  });
+
+  it("checks the app serves the release's commit", () => {
+    const rel = { tag: "v1.4.0", sha: "668a65d6a065ff27" };
+    expect(buildMatches("668a65d", rel)).toBe("build 668a65d = v1.4.0");
+    expect(() => buildMatches("7e41f30", rel)).toThrow(/build 7e41f30, but v1.4.0 is 668a65d/);
+    expect(() => buildMatches(undefined, rel)).toThrow(/no build/);
+    expect(buildMatches("668a65d", null)).toMatch(/no release tag/);
   });
 
   it("says all clear only when every check passed and nothing went red", () => {

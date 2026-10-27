@@ -315,6 +315,18 @@ export function latestRelease(lsRemote: string): { tag: string; sha: string } | 
   return { tag, sha: peeled.get(tag) ?? plain.get(tag)! };
 }
 
+/** "build X = vY" when the app serves the release's commit; throws (a failed check) otherwise. */
+export function buildMatches(
+  build: string | undefined,
+  release: { tag: string; sha: string } | null,
+): string {
+  if (!build) throw new Error("config.json has no build");
+  if (!release) return `build ${build} (no release tag to compare)`;
+  if (!release.sha.startsWith(build))
+    throw new Error(`build ${build}, but ${release.tag} is ${release.sha.slice(0, 7)}`);
+  return `build ${build} = ${release.tag}`;
+}
+
 /** Every production fact the watch reads. GET (and one keyless POST probe), never a write. */
 export async function gatherWatch(fetchFn: Fetch = fetch, now = new Date()): Promise<WatchFacts> {
   const { smoke, smokeLanding } = await import("../smoke-hosting");
@@ -348,11 +360,17 @@ export async function gatherWatch(fetchFn: Fetch = fetch, now = new Date()): Pro
       return `HTTP ${res.status}`;
     }),
   );
+  let cfg: { supabaseUrl?: string; supabasePublishableKey?: string; build?: string } = {};
+  checks.push(
+    await timed("app is on the latest release", async () => {
+      cfg = (await (
+        await fetchFn("https://app.moduo.app/config.json", { signal: AbortSignal.timeout(15_000) })
+      ).json()) as typeof cfg;
+      return buildMatches(cfg.build, release);
+    }),
+  );
   checks.push(
     await timed("Supabase auth health", async () => {
-      const cfg = (await (
-        await fetchFn("https://app.moduo.app/config.json", { signal: AbortSignal.timeout(15_000) })
-      ).json()) as { supabaseUrl?: string; supabasePublishableKey?: string };
       if (!cfg.supabaseUrl || !cfg.supabasePublishableKey)
         throw new Error("config.json has no Supabase URL");
       const res = await fetchFn(`${cfg.supabaseUrl}/auth/v1/health`, {
@@ -608,80 +626,63 @@ async function moduo(): Promise<Rpc> {
   return connectorRpc(process.env.MODUO_MCP_URL || "https://mcp.moduo.app", key);
 }
 
-async function main(argv: string[]): Promise<void> {
-  const [cmd, ...rest] = argv;
-  switch (cmd) {
-    case "list":
-      for (const r of ROUTINES)
-        console.log(
-          `${r.id.padEnd(13)} ${r.where.padEnd(6)} ${r.cron.padEnd(11)} ${r.model ?? "app default"}\n  ${r.name} · ${r.cadence}\n  needs: ${r.needs.join("; ")}`,
-        );
-      return;
-    case "body": {
-      const r = routine(rest[0] ?? "");
+const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+
+/** The CLI's commands; the routine prompts may name only these (routines.test.ts). */
+export const COMMANDS: Record<string, (rest: string[]) => Promise<void>> = {
+  list: async () => {
+    for (const r of ROUTINES)
       console.log(
-        JSON.stringify(
-          createBody(r, readPrompt(r.id), { environmentId: flag(rest, "--env") }),
-          null,
-          2,
-        ),
+        `${r.id.padEnd(13)} ${r.where.padEnd(6)} ${r.cron.padEnd(11)} ${r.model ?? "app default"}\n  ${r.name} · ${r.cadence}\n  needs: ${r.needs.join("; ")}`,
       );
-      return;
-    }
-    case "task": {
-      const r = routine(rest[0] ?? "");
-      console.log(JSON.stringify(localTask(r, readPrompt(r.id)), null, 2));
-      return;
-    }
-    case "seed": {
-      const date = flag(rest, "--date");
-      const seed = pickSeed(listEscapes(), date ? new Date(`${date}T01:00:00Z`) : new Date());
-      if (!seed) throw new Error("no escapes in benchmarks/escapes");
-      console.log(seed.id);
-      return;
-    }
-    case "watch": {
-      const facts = await gatherWatch();
-      console.log(rest.includes("--json") ? JSON.stringify(facts, null, 2) : renderWatch(facts));
-      return;
-    }
-    case "retro-facts": {
-      const w = weekWindow(new Date(), flag(rest, "--week"));
-      console.log(renderRetroFacts(gatherRetro(w)));
-      return;
-    }
-    case "post": {
-      const [channel, file] = rest;
-      if (!channel) throw new Error("post needs a channel name");
-      const text = await readBody(file);
-      const id = await postToChannel(await moduo(), channel, text.trim());
-      console.log(`routine: posted to #${channel} (${id})`);
-      return;
-    }
-    case "note": {
-      const [title, file] = rest;
-      if (!title) throw new Error("note needs a title");
-      const { writeNote } = await import("./numbers");
-      const done = await writeNote(
-        await moduo(),
-        title,
-        (await readBody(file)).trim(),
-        RETRO_PARENT,
-      );
-      console.log(`routine: note ${done.action} in Moduo: "${title}" (${done.id})`);
-      return;
-    }
-    case "bug": {
-      const [seed, title, file] = rest;
-      if (!seed || !title) throw new Error("bug needs a seed and a title");
-      console.log(await fileBug(await moduo(), seed, title, (await readBody(file)).trim()));
-      return;
-    }
-    default:
-      throw new Error(
-        "usage: bun run routine list | body <id> | task <id> | seed | watch | retro-facts | post <channel> [file] | note <title> [file] | bug <seed> <title> [file]",
-      );
-  }
+  },
+  body: async (rest) => {
+    const r = routine(rest[0] ?? "");
+    print(createBody(r, readPrompt(r.id), { environmentId: flag(rest, "--env") }));
+  },
+  task: async (rest) => {
+    const r = routine(rest[0] ?? "");
+    print(localTask(r, readPrompt(r.id)));
+  },
+  seed: async (rest) => {
+    const date = flag(rest, "--date");
+    const seed = pickSeed(listEscapes(), date ? new Date(`${date}T01:00:00Z`) : new Date());
+    if (!seed) throw new Error("no escapes in benchmarks/escapes");
+    console.log(seed.id);
+  },
+  watch: async (rest) => {
+    const facts = await gatherWatch();
+    if (rest.includes("--json")) print(facts);
+    else console.log(renderWatch(facts));
+  },
+  "retro-facts": async (rest) => {
+    console.log(renderRetroFacts(gatherRetro(weekWindow(new Date(), flag(rest, "--week")))));
+  },
+  post: async ([channel, file]) => {
+    if (!channel) throw new Error("post needs a channel name");
+    const id = await postToChannel(await moduo(), channel, (await readBody(file)).trim());
+    console.log(`routine: posted to #${channel} (${id})`);
+  },
+  note: async ([title, file]) => {
+    if (!title) throw new Error("note needs a title");
+    const { writeNote } = await import("./numbers");
+    const body = (await readBody(file)).trim();
+    const done = await writeNote(await moduo(), title, body, RETRO_PARENT);
+    console.log(`routine: note ${done.action} in Moduo: "${title}" (${done.id})`);
+  },
+  bug: async ([seed, title, file]) => {
+    if (!seed || !title) throw new Error("bug needs a seed and a title");
+    console.log(await fileBug(await moduo(), seed, title, (await readBody(file)).trim()));
+  },
+};
+
+async function main([cmd, ...rest]: string[]): Promise<void> {
+  const run = cmd ? COMMANDS[cmd] : undefined;
+  if (!run)
+    throw new Error(
+      "usage: bun run routine list | body <id> | task <id> | seed | watch | retro-facts | post <channel> [file] | note <title> [file] | bug <seed> <title> [file]",
+    );
+  await run(rest);
 }
 
 if (import.meta.main) {
