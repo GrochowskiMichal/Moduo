@@ -3,6 +3,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { deadSymbols, readFrom } from "./rule-symbols.ts";
+
 // HV-10 (specs/harness-v3.md AC28, AC31): path rules live in .claude/rules/,
 // each with `paths:`, `incident:` and `expires:` frontmatter; root AGENTS.md
 // stays a map of at most 150 lines; and no rule or agent doc names a file or
@@ -18,6 +20,11 @@ export const CHECKED_DOCS = [
   "docs/agent-setup.md",
   "docs/gotchas/supabase.md",
   "docs/gotchas/spine.md",
+  // HV-22: the routine prompts run unattended, so a dead reference fails there with nobody watching.
+  ".claude/routines/variant-hunt.md",
+  ".claude/routines/retro.md",
+  ".claude/routines/prod-watch.md",
+  ".claude/routines/numbers.md",
 ];
 
 export type Rule = {
@@ -141,8 +148,9 @@ const linkRefs = (raw: string, line: number): Ref[] =>
 // Code-span paths get a leading `/` so deadRefs resolves them from the repo root.
 function spanRefs(span: string, line: number): Ref[] {
   const out: Ref[] = [];
-  const run = /^bun run (?:--cwd (\S+) )?([\w:.-]+)/.exec(span);
-  if (run?.[2] && !/\.(ts|mjs|js|sh)$/.test(run[2]))
+  const run = /^bun run (?:--silent )?(?:--cwd (\S+) )?([\w:.-]+)/.exec(span);
+  // `bun run local:*` names a family of scripts, not one.
+  if (run?.[2] && !/\.(ts|mjs|js|sh)$/.test(run[2]) && !run[2].endsWith(":"))
     out.push({ line, ref: run[2], kind: "script", cwd: run[1] });
   for (const token of span.split(/\s+/)) {
     const clean = token.replace(/[),.;]+$/, "").replace(/:\d+$/, "");
@@ -259,6 +267,7 @@ export function check(root: string): Problem[] {
   const problems = rules.flatMap((r) => [
     ...ruleProblems(r, files),
     ...deadRefs(r.file, r.text, repo),
+    ...deadSymbols(r.file, r.text, readFrom(root)),
   ]);
   for (const doc of CHECKED_DOCS) {
     if (existsSync(path.join(root, doc)))

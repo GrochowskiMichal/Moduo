@@ -1,0 +1,48 @@
+id: state-shadows-window
+language: tsx
+severity: error
+message: "React state named `window` shadows the global for every closure in scope, so `window.localStorage` and friends throw (often inside a try, silently)."
+note: |
+  Name it after what it holds (`drawn`, `range`). The Timeline's folds never saved
+  because `const [window, setWindow] = useState(…)` shadowed the global (TV-TL1).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: identifier
+  regex: ^window$
+  inside:
+    kind: array_pattern
+    inside:
+      kind: variable_declarator
+      has:
+        field: value
+        kind: call_expression
+        has:
+          field: function
+          regex: (^|\.)use(State|Reducer)$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: state-shadows-window-ts
+language: typescript
+severity: error
+message: "React state named `window` shadows the global for every closure in scope, so `window.localStorage` and friends throw (often inside a try, silently)."
+note: |
+  Name it after what it holds (`drawn`, `range`). The Timeline's folds never saved
+  because `const [window, setWindow] = useState(…)` shadowed the global (TV-TL1).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: identifier
+  regex: ^window$
+  inside:
+    kind: array_pattern
+    inside:
+      kind: variable_declarator
+      has:
+        field: value
+        kind: call_expression
+        has:
+          field: function
+          regex: (^|\.)use(State|Reducer)$

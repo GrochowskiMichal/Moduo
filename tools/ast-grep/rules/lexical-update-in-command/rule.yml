@@ -1,0 +1,82 @@
+id: lexical-update-in-command
+language: tsx
+severity: error
+message: "A Lexical command handler already runs inside an update, so this `editor.update(…)` is queued, not run; anything read right after it (a flag it sets) is still the old value."
+note: |
+  Do the `$` work directly in the handler and decide synchronously. TV-U14's mention
+  pick inserted a person token and "@Name" text; NR-8's comment command reported failure
+  and then left an orphan mark in the shared doc. In a headless test, flush a
+  `dispatchCommand` made outside an update with an empty discrete update.
+files:
+  - apps/app/src/**/*.tsx
+  - apps/app/src/**/*.ts
+utils:
+  fn:
+    any:
+      - kind: arrow_function
+      - kind: function_expression
+      - kind: function_declaration
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: member_expression
+    has:
+      field: property
+      regex: ^update$
+  inside:
+    stopBy:
+      matches: fn
+    matches: fn
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          kind: member_expression
+          has:
+            field: property
+            regex: ^registerCommand$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: lexical-update-in-command-ts
+language: typescript
+severity: error
+message: "A Lexical command handler already runs inside an update, so this `editor.update(…)` is queued, not run; anything read right after it (a flag it sets) is still the old value."
+note: |
+  Do the `$` work directly in the handler and decide synchronously. TV-U14's mention
+  pick inserted a person token and "@Name" text; NR-8's comment command reported failure
+  and then left an orphan mark in the shared doc. In a headless test, flush a
+  `dispatchCommand` made outside an update with an empty discrete update.
+files:
+  - apps/app/src/**/*.tsx
+  - apps/app/src/**/*.ts
+utils:
+  fn:
+    any:
+      - kind: arrow_function
+      - kind: function_expression
+      - kind: function_declaration
+rule:
+  kind: call_expression
+  has:
+    field: function
+    kind: member_expression
+    has:
+      field: property
+      regex: ^update$
+  inside:
+    stopBy:
+      matches: fn
+    matches: fn
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          kind: member_expression
+          has:
+            field: property
+            regex: ^registerCommand$

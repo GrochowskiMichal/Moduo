@@ -1,0 +1,8 @@
+{
+  "id": "prompt-contract-first",
+  "description": "Control with a contract-first instruction after the task: state the contract, test it, then implement.",
+  "experiment": { "name": "test-prompt", "baseline": "control" },
+  "model": "opus",
+  "effort": "high",
+  "promptSuffix": "Work contract-first. Before you change any code, write down the contract of the code you will touch: its inputs and outputs, the invariants it keeps and its error cases, as types and a short comment where they belong. Then write tests that check that contract, including the edge cases it names, and only after that change the implementation until they pass."
+}
