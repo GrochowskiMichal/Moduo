@@ -8,6 +8,7 @@ export default defineConfig({
     "scripts/brand/*.test.ts",
     "scripts/ci/*.test.ts",
     "scripts/docs/*.test.ts",
+    "scripts/evals/docs/*.test.ts",
     "scripts/harness-ab/*.test.ts",
     "scripts/harness-ab/mcp-eval/*.test.ts",
     "scripts/release/*.test.ts",

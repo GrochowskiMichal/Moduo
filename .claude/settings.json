@@ -106,6 +106,17 @@
             "onFailure": "block"
           }
         ]
+      },
+      {
+        "matcher": "Bash|Edit|Write|MultiEdit|NotebookEdit|mcp__.*__(apply_migration|execute_sql|deploy_edge_function)",
+        "hooks": [
+          {
+            "type": "command",
+            "async": true,
+            "timeout": 40,
+            "command": "bun \"${CLAUDE_PROJECT_DIR}/scripts/agent/risk-hook.ts\""
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -168,6 +179,16 @@
           {
             "type": "command",
             "command": "sh -c 'if ! command -v entire >/dev/null 2>&1; then exit 0; fi; exec entire hooks claude-code user-prompt-submit'"
+          }
+        ]
+      },
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "timeout": 5,
+            "command": "sh -c 'command -v bun >/dev/null 2>&1 && bun \"${CLAUDE_PROJECT_DIR}/scripts/agent/router.ts\" 2>/dev/null; exit 0'"
           }
         ]
       }
