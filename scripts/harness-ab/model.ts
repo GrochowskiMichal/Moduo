@@ -110,7 +110,8 @@ export function missingPlugins(
 /** How an arm differs from its baseline: one message per problem (empty when it is a clean pair). */
 export function experimentProblems(arm: Arm, baseline: Arm): string[] {
   if (!arm.experiment) return [];
-  const allowed: readonly string[] = EXPERIMENTS[arm.experiment.name] ?? [];
+  const name = arm.experiment.name;
+  const allowed: readonly string[] = Object.hasOwn(EXPERIMENTS, name) ? EXPERIMENTS[name]! : [];
   if (allowed.length === 0) return [`${arm.id}: unknown experiment "${arm.experiment.name}"`];
   const fields = new Set([...Object.keys(arm), ...Object.keys(baseline)]);
   for (const f of ["id", "description", "experiment"]) fields.delete(f);
@@ -186,7 +187,15 @@ export type AgentSummary = {
 
 const readJson = <T>(file: string): T => JSON.parse(readFileSync(file, "utf8")) as T;
 
+/** A set or arm name from the command line names a folder or file here, never a path elsewhere. */
+const NAME = /^[a-z0-9][a-z0-9_-]*$/i;
+const checkName = (kind: string, name: string) => {
+  if (!NAME.test(name))
+    throw new Error(`"${name}" isn't a valid ${kind} name (letters, digits, - and _)`);
+};
+
 export function loadSet(name: string, root = TASKS_DIR): TaskSet {
+  checkName("task set", name);
   const dir = path.join(root, name);
   const meta = path.join(dir, "set.json");
   if (!existsSync(meta)) throw new Error(`no task set "${name}" (${meta} is missing)`);
@@ -204,6 +213,7 @@ export function loadSet(name: string, root = TASKS_DIR): TaskSet {
 }
 
 export function loadArm(id: string, root = ARMS_DIR): Arm {
+  checkName("arm", id);
   const file = path.join(root, `${id}.json`);
   if (!existsSync(file)) throw new Error(`no arm "${id}" (${file} is missing)`);
   const arm = readJson<Arm>(file);

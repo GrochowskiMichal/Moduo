@@ -34,7 +34,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 profile=${MODUO_LANE_PROFILE:-$here/.claude/sandbox/lane.srt.json}
 gitdir=$(git rev-parse --path-format=absolute --git-common-dir)
 turbo=""
-if [ -n "${TURBO_API:-}" ]; then turbo=${TURBO_API#*://}; turbo=${turbo%%/*}; fi
+# A caller's own profile (the A/B rig's) is final: TURBO_API never widens it.
+if [ -n "${TURBO_API:-}" ] && [ -z "${MODUO_LANE_PROFILE:-}" ]; then turbo=${TURBO_API#*://}; turbo=${turbo%%/*}; fi
 settings=$(mktemp "${TMPDIR:-/tmp}/lane-srt.XXXXXX")
 base_settings=${MODUO_LANE_SETTINGS:-$here/.claude/settings.lane.json}
 claude_settings=$base_settings

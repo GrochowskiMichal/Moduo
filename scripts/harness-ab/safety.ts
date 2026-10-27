@@ -41,6 +41,49 @@ export const ALLOWED_HOSTS = [
   "registry.npmjs.org",
 ];
 
+/**
+ * Domains a run never reaches, as the host itself or any subdomain. FORBIDDEN scans free text, so
+ * it matches anywhere on purpose; a host the sandbox will allow is checked whole with this list.
+ */
+export const FORBIDDEN_DOMAINS = [
+  "supabase.co",
+  "supabase.com",
+  "supabase.in",
+  "moduo.app",
+  "github.com",
+  "githubusercontent.com",
+  "gitlab.com",
+  "bitbucket.org",
+  "localhost",
+  "local",
+  "internal",
+];
+
+/** A plain DNS name: no wildcard, port, path, IP address or trailing dot. */
+const HOSTNAME = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i;
+
+/** Why the sandbox may not allow `host`, or null when it may. */
+export function hostProblem(host: string): string | null {
+  if (!HOSTNAME.test(host)) return "not a plain host name (no wildcards, IPs, ports or paths)";
+  const h = host.toLowerCase();
+  const hit = FORBIDDEN_DOMAINS.find((d) => h === d || h.endsWith(`.${d}`));
+  return hit ? `${hit} is off limits (shared stack, production or a git remote)` : null;
+}
+
+/** Keys never copied from parsed JSON (prototype pollution). */
+const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+export const isSafeKey = (key: string) => !UNSAFE_KEYS.has(key);
+
+/**
+ * Environment an arm may not set: what the rig passes itself (HOME, PATH, TMPDIR: srt expands `~`
+ * from HOME, so the deny rules would move), what lane.sh and srt read (TURBO_API adds an allowed
+ * host after the profile is checked), model routing and proxies, and loader hooks.
+ */
+export const reservedEnv = (key: string) =>
+  ENV_ALLOW.includes(key) ||
+  /^(MODUO_|TURBO_|SRT_|CLAUDE_|ANTHROPIC_|LC_|DYLD_|LD_|BUN_|NODE_|GIT_)/i.test(key) ||
+  /proxy/i.test(key);
+
 /** Claude flags an arm may not pass: the rig owns MCP, settings, permissions and the workspace. */
 export const RESERVED_FLAGS = [
   "--mcp-config",
@@ -108,9 +151,13 @@ export function refuseArm(arm: ArmLike): Refusal[] {
     if (RESERVED_FLAGS.includes(flag))
       out.push({ where, reason: `${flag} is set by the rig, not by an arm` });
   }
-  for (const host of arm.network ?? [])
-    if (/^(127\.|localhost|0\.0\.0\.0|\[?::1)/i.test(host))
-      out.push({ where, reason: `${host}: a local service is shared with other sessions` });
+  for (const key of Object.keys(arm.env ?? {}))
+    if (reservedEnv(key))
+      out.push({ where, reason: `env ${key} is set by the rig, lane.sh or srt, not by an arm` });
+  for (const host of arm.network ?? []) {
+    const problem = hostProblem(host);
+    if (problem) out.push({ where, reason: `network ${host}: ${problem}` });
+  }
   const servers = (arm.settings as { mcpServers?: unknown } | undefined)?.mcpServers;
   if (servers) out.push({ where, reason: "an arm can't add MCP servers (strict MCP config)" });
   return out;
@@ -179,6 +226,10 @@ export function rigProfile(lane: SrtProfile, opts: { source: string; extraHosts?
     },
   };
   const left = scan("sandbox profile", profile.network.allowedDomains);
+  for (const host of profile.network.allowedDomains) {
+    const problem = hostProblem(host);
+    if (problem) left.push({ where: "sandbox profile", reason: `${host}: ${problem}` });
+  }
   if (left.length > 0) throw new RefusedError(left);
   return profile;
 }
@@ -200,11 +251,16 @@ export const ENV_ALLOW = [
   "CLAUDE_CODE_OAUTH_TOKEN",
 ];
 
-export function agentEnv(from: NodeJS.ProcessEnv, extra: Record<string, string> = {}) {
-  const env: Record<string, string> = {};
-  for (const [k, v] of Object.entries(from))
-    if (v !== undefined && (ENV_ALLOW.includes(k) || k.startsWith("LC_"))) env[k] = v;
-  return { ...env, ...extra };
+export function agentEnv(
+  from: NodeJS.ProcessEnv,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  // Object.fromEntries defines own properties, so a "__proto__" key can't set a prototype.
+  const kept = Object.entries(from).filter(
+    (e): e is [string, string] =>
+      e[1] !== undefined && (ENV_ALLOW.includes(e[0]) || e[0].startsWith("LC_")),
+  );
+  return Object.fromEntries([...kept, ...Object.entries(extra)].filter(([k]) => isSafeKey(k)));
 }
 
 /** The shared stack's ports; the MCP eval's own stack (mcp-eval/stack.ts) lives outside them. */
