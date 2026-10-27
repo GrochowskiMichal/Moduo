@@ -131,16 +131,16 @@ export function fence(text: string): string {
 }
 
 /**
- * Model-written prose: no @-mentions and no raw HTML (comments, tags, images), bounded length.
- * Escaping `<`/`>` rather than stripping patterns: a strip can be rebuilt from its own leftovers.
+ * Model-written prose: no @-mentions and no raw HTML (comments, tags), bounded length.
+ * A zero-width space after every `<` means nothing can open a tag or a comment, and unlike
+ * stripping it can't be rebuilt from its own leftovers; unlike entities it reads the same
+ * inside code spans.
  */
 export function plain(text: string): string {
   return text
     .slice(0, MAX_BEHAVIOR)
     .replace(/@(?=[\w-])/g, "@\u200b")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
+    .replace(/</g, "<\u200b")
     .trim();
 }
 
@@ -191,7 +191,7 @@ export function summary(rows: { path: string; outcome: Outcome }[], note: string
   else {
     lines.push("| Test | Outcome |", "| --- | --- |");
     for (const r of rows)
-      lines.push(`| \`${r.path.replace(/\|/g, "")}\` | ${describe(r.outcome)} |`);
+      lines.push(`| \`${r.path.replace(/[|`\r\n]/g, "")}\` | ${describe(r.outcome)} |`);
   }
   return lines.join("\n") + "\n";
 }

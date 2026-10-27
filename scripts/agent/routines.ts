@@ -265,7 +265,7 @@ export function cell(text: string): string {
   return text
     .replace(/\\/g, "\\\\")
     .replace(/\|/g, "\\|")
-    .replace(/\s*\n\s*/g, " ");
+    .replace(/\s*[\r\n]+\s*/g, " ");
 }
 
 export function renderWatch(f: WatchFacts): string {
