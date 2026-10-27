@@ -147,7 +147,7 @@ conflicts only if `develop` moved; `/ship` re-prepares it.
 - LLM-authored commits include the `Co-Authored-By` trailer for the model
   that wrote them.
 
-## Rules for LLM agents (Claude Code, Cursor, Codex, …)
+## Rules for agents (Claude Code, Anthropic models only)
 
 These apply to every AI session in this repo regardless of tool:
 
