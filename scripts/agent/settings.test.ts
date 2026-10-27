@@ -179,6 +179,19 @@ describe("scripts/agent/lane.sh", () => {
       expect.arrayContaining([`${gitDir}/hooks`, `${gitDir}/config`, path.join(ROOT, ".mcp.json")]),
     );
   });
+
+  it("never widens a caller's own profile with TURBO_API (the A/B rig's)", () => {
+    const out = path.join(bin, "srt.out");
+    writeFileSync(path.join(bin, "srt"), `#!/bin/bash\ncat "$2" > "${out}"\n`);
+    chmodSync(path.join(bin, "srt"), 0o755);
+    const own = path.join(bin, "own.srt.json");
+    writeFileSync(own, readFileSync(path.join(ROOT, ".claude/sandbox/lane.srt.json"), "utf8"));
+    const run = lane({ TURBO_API: "http://localhost:54321/v8", MODUO_LANE_PROFILE: own });
+    expect(run.status).toBe(0);
+    const hosts: string[] = JSON.parse(readFileSync(out, "utf8")).network.allowedDomains;
+    expect(hosts).toEqual(json(".claude/sandbox/lane.srt.json").network.allowedDomains);
+    expect(hosts.some((h) => h.startsWith("localhost"))).toBe(false);
+  });
 });
 
 describe("bun run agent:auto-mode", () => {

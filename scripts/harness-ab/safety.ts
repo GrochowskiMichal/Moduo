@@ -19,7 +19,7 @@ export class RefusedError extends Error {
 export const FORBIDDEN: { pattern: RegExp; reason: string }[] = [
   {
     pattern: /\b(127\.0\.0\.1|localhost|0\.0\.0\.0|host\.docker\.internal):5432\d\b/i,
-    reason: "the shared local Supabase stack (ports 54321-54329)",
+    reason: "the shared local Supabase stack (ports 54320-54329)",
   },
   { pattern: /\bsupabase\.(co|com|in)\b/i, reason: "a hosted Supabase project (prod)" },
   { pattern: /\bmoduo\.app\b/i, reason: "production Moduo (the app or mcp.moduo.app)" },
