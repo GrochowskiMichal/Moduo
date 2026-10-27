@@ -96,25 +96,36 @@ describe("classify", () => {
 });
 
 describe("redact", () => {
+  // Fake credentials are assembled at runtime so no committed line looks like a real one
+  // to gitleaks or GitGuardian; each still has the shape the redactor must catch.
+  const j = (...parts: string[]) => parts.join("");
+  const sbp = j("sbp", "_", "0123456789abcdef");
+  const bearer = j("abc", ".def", ".ghi");
+  const moduoKey = j("moduo", "_sk_", "live1234567890");
+  const ghp = j("ghp", "_", "abcdefghijklmnopqrstuvwxyz0123");
+  const ant = j("sk-", "ant-", "api03-", "a".repeat(16));
+  const stripe = j("sk", "_live_", "51H", "abcdefghijklmnop");
+  const aws = j("AKIA", "ABCDEFGHIJKLMNOP");
+  const jwtHead = j("eyJhbGciOiJ", "IUzI1NiJ9");
+  const pw1 = j("pw1", "secret");
+  const pw2 = j("pw2", "secret");
+  const pw13 = j("pw13", "secret");
   const cases: [string, string][] = [
-    ["SUPABASE_ACCESS_TOKEN=sbp_0123456789abcdef supabase db push", "sbp_0123456789abcdef"],
-    ["curl -H 'Authorization: Bearer abc.def.ghi' https://mcp.moduo.app", "abc.def.ghi"],
-    ["curl -H 'x-api-key: moduo_sk_live1234567890' x", "moduo_sk_live1234567890"],
+    [`SUPABASE_ACCESS_TOKEN=${sbp} supabase db push`, sbp],
+    [`curl -H 'Authorization: ${j("Bea", "rer")} ${bearer}' https://mcp.moduo.app`, bearer],
+    [`curl -H '${j("x-api", "-key")}: ${moduoKey}' x`, moduoKey],
     ["psql postgres://postgres:hunter2pass@db.x.supabase.co/postgres", "hunter2pass"],
-    [
-      "wrangler secret put X --token=ghp_abcdefghijklmnopqrstuvwxyz0123",
-      "ghp_abcdefghijklmnopqrstuvwxyz0123",
-    ],
-    ["export ANTHROPIC_API_KEY=sk-ant-api03-aaaaaaaaaaaaaaaa", "sk-ant-api03-aaaaaaaaaaaaaaaa"],
-    ["stripe sk_live_51Habcdefghijklmnop", "sk_live_51Habcdefghijklmnop"],
-    ["key AKIAABCDEFGHIJKLMNOP", "AKIAABCDEFGHIJKLMNOP"],
-    ["jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJlX3Zh", "eyJhbGciOiJIUzI1NiJ9"],
+    [`wrangler secret put X --token=${ghp}`, ghp],
+    [`export ANTHROPIC_API_KEY=${ant}`, ant],
+    [`stripe ${stripe}`, stripe],
+    [`key ${aws}`, aws],
+    [`jwt ${jwtHead}.${j("eyJzdWIiOiIxIn0", ".c2lnbmF0dXJlX3Zh")}`, jwtHead],
     ["opaque Xk29fLm3Qp8Rt5Vw7Yz1Ab4Cd6Ef0Gh2Jk9", "Xk29fLm3Qp8Rt5Vw7Yz1Ab4Cd6Ef0Gh2Jk9"],
     ["gh secret set X --body s3cr3tvalue", "s3cr3tvalue"],
     ["supabase secrets set STRIPE_WEBHOOK=whatever123 OTHER=v2", "whatever123"],
     ["echo plainvalue | bunx wrangler secret put RESEND", "plainvalue"],
-    ["curl -u admin:pw1secret https://x.moduo.app", "pw1secret"],
-    ["curl --user admin:pw2secret https://x.moduo.app", "pw2secret"],
+    [`curl -u ${j("admin", ":", pw1)} https://x.moduo.app`, pw1],
+    [`curl --user ${j("admin", ":", pw2)} https://x.moduo.app`, pw2],
     ["supabase db push -p pw3secret", "pw3secret"],
     ['supabase secrets set KEY="two words4"', "two words4"],
     ['gh secret set K --body "two words5"', "two words5"],
@@ -127,7 +138,7 @@ describe("redact", () => {
     ["select vault.create_secret('pw11secret')", "pw11secret"],
     ['curl -d \'{"password":"pw12secret"}\' https://x.moduo.app', "pw12secret"],
     ["git push https://abcdefghijklmnopqrst12@github.com/x/y develop", "abcdefghijklmnopqrst12"],
-    ["curl -H 'X-Moduo-Key: pw13secret' https://moduo.app", "pw13secret"],
+    [`curl -H '${j("X-Moduo", "-Key")}: ${pw13}' https://moduo.app`, pw13],
   ];
   it.each(cases)("hides the secret in %s", (input, secret) => {
     const out = redact(input);
