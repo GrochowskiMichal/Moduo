@@ -1,6 +1,7 @@
 // Seed data for the product lab (e2e/lab/lab.config.ts). One person per variant, because a
 // plan allows one workspace per owner: "default" is a founder's realistic week, "empty" a new
-// workspace with nothing in it, "dense" a heavy one, "long" one where every name is too long,
+// workspace with nothing in it, "dense" a heavy one (300 tasks and a 60-event calendar week with
+// overlaps, all-day stacks and trips), "long" one where every name is too long,
 // and "first-run" a person who has never seen Tasks' welcome. Everything goes through the same
 // ops the app uses (RLS applies); nothing touches dev@moduo.local's workspace.
 
@@ -274,7 +275,134 @@ async function denseWorkspace(who: Session, ws: string): Promise<void> {
   }
 }
 
+type EventSeed = { title: string; starts: Date; ends: Date; allDay?: boolean };
+
+async function events(who: Session, ws: string, rows: EventSeed[]): Promise<void> {
+  for (const e of rows) {
+    await rpc(who, "calendar_op_event_create", {
+      p_workspace_id: ws,
+      p_title: e.title,
+      p_starts_at: e.starts.toISOString(),
+      p_ends_at: e.ends.toISOString(),
+      p_all_day: e.allDay ?? false,
+    });
+  }
+}
+
+/** This week's day `d` (0 = Sunday, as the week view starts) at h:m, local time. */
+const weekday = (d: number, h = 0, m = 0) => {
+  const t = new Date();
+  t.setDate(t.getDate() - t.getDay() + d);
+  t.setHours(h, m, 0, 0);
+  return t;
+};
+const timed = (d: number, h: number, m: number, mins: number, title: string): EventSeed => {
+  const starts = weekday(d, h, m);
+  return { title, starts, ends: new Date(starts.getTime() + mins * 60_000) };
+};
+/** An all-day event from day `from` through day `to`, inclusive. */
+const allDay = (from: number, to: number, title: string): EventSeed => ({
+  title,
+  starts: weekday(from),
+  ends: weekday(to + 1),
+  allDay: true,
+});
+
+/** A founder's heavy week: 50+ meetings with overlaps, a stack of all-day items and trips. */
+async function denseWeek(who: Session, ws: string): Promise<void> {
+  await events(who, ws, [
+    allDay(1, 5, "Launch week"),
+    allDay(3, 5, "Berlin trip"),
+    allDay(4, 5, "Ana out of office"),
+    allDay(1, 1, "Payroll run"),
+    allDay(1, 1, "Quarter close"),
+    allDay(1, 1, "Investor update due"),
+    allDay(1, 1, "Leo's birthday"),
+    allDay(6, 6, "Team offsite"),
+    // Monday
+    timed(1, 9, 0, 15, "Team standup"),
+    timed(1, 9, 30, 60, "Pipeline review"),
+    timed(1, 10, 0, 45, "Candidate screen: Leo Park"),
+    timed(1, 11, 0, 30, "1:1 with Ana"),
+    timed(1, 12, 30, 60, "Lunch with Jonas"),
+    timed(1, 14, 0, 45, "Customer call: Acme"),
+    timed(1, 14, 15, 60, "Design crit"),
+    timed(1, 14, 30, 30, "Bank: credit line"),
+    timed(1, 16, 0, 120, "Focus: investor update"),
+    timed(1, 17, 30, 60, "Gym"),
+    // Tuesday
+    timed(2, 9, 0, 15, "Team standup"),
+    timed(2, 9, 30, 30, "Hiring sync"),
+    timed(2, 10, 0, 60, "Investor call: Northwind"),
+    timed(2, 10, 30, 60, "Legal review with Tom"),
+    timed(2, 11, 0, 45, "Product review"),
+    timed(2, 13, 0, 30, "Lunch"),
+    timed(2, 14, 0, 90, "Focus: pricing page"),
+    timed(2, 15, 0, 45, "Interview: Mei Lin"),
+    timed(2, 16, 0, 30, "Sales pipeline"),
+    timed(2, 16, 15, 30, "Ops sync with Jonas"),
+    timed(2, 18, 0, 90, "Dinner with Sofia"),
+    // Wednesday
+    timed(3, 7, 30, 120, "Flight to Berlin"),
+    timed(3, 9, 30, 15, "Team standup"),
+    timed(3, 11, 0, 60, "Partner meeting: Acme Berlin"),
+    timed(3, 12, 0, 60, "Lunch with Priya"),
+    timed(3, 14, 0, 120, "Workshop: onboarding flow"),
+    timed(3, 14, 30, 30, "Call with Tom"),
+    timed(3, 15, 0, 30, "Recruiting call"),
+    timed(3, 17, 0, 90, "Board prep"),
+    timed(3, 19, 30, 120, "Meetup: SaaS founders"),
+    // Thursday
+    timed(4, 9, 0, 15, "Team standup"),
+    timed(4, 9, 30, 30, "Customer interview 1"),
+    timed(4, 10, 0, 30, "Customer interview 2"),
+    timed(4, 10, 30, 30, "Customer interview 3"),
+    timed(4, 10, 30, 60, "Design QA"),
+    timed(4, 12, 0, 60, "Lunch with Mei"),
+    timed(4, 13, 0, 120, "Focus: board deck"),
+    timed(4, 14, 0, 30, "Bank call"),
+    timed(4, 15, 30, 60, "All-hands"),
+    timed(4, 16, 30, 30, "Weekly metrics"),
+    timed(4, 17, 0, 45, "Retro"),
+    // Friday
+    timed(5, 9, 0, 15, "Team standup"),
+    timed(5, 10, 0, 45, "Investor call: Sofia"),
+    timed(5, 11, 0, 120, "Office hours"),
+    timed(5, 11, 30, 60, "Final interview: Mei Lin"),
+    timed(5, 13, 0, 60, "Lunch"),
+    timed(5, 14, 0, 60, "Ship review"),
+    timed(5, 15, 0, 60, "Weekly review"),
+    timed(5, 16, 0, 120, "Drinks with the team"),
+    // The weekend
+    timed(6, 11, 0, 90, "Brunch with investors"),
+    timed(6, 15, 0, 60, "Long run"),
+    timed(0, 18, 0, 30, "Plan the week"),
+  ]);
+}
+
 async function longWorkspace(who: Session, ws: string): Promise<void> {
+  const today = new Date().getDay();
+  await events(who, ws, [
+    timed(
+      today,
+      10,
+      0,
+      60,
+      "Quarterly business review with the enterprise customer success team, including churn analysis and the renewal risk register",
+    ),
+    timed(
+      today,
+      15,
+      0,
+      30,
+      "Zusammenfassung der Anforderungen für die Datenschutz-Folgenabschätzung besprechen",
+    ),
+    allDay(
+      today,
+      today,
+      "Vendor security questionnaire deadline (sections 4.2 to 9.7) for the DACH enterprise programme",
+    ),
+  ]);
   const id = await project(
     who,
     ws,
@@ -324,7 +452,10 @@ export async function seed(log: (...a: string[]) => void = () => {}): Promise<Se
       await founderWeek(session, workspaceId);
       await teamChat(session, workspaceId);
     }
-    if (variant === "dense") await denseWorkspace(session, workspaceId);
+    if (variant === "dense") {
+      await denseWorkspace(session, workspaceId);
+      await denseWeek(session, workspaceId);
+    }
     if (variant === "long") await longWorkspace(session, workspaceId);
     people[variant] = { session, workspaceId };
   }
