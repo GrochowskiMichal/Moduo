@@ -1,6 +1,7 @@
 ---
 name: product-jury
-description: Score a product app (desktop or web app UI, dashboard, SaaS screen, anything behind a login) blindly from lab evidence. Fresh critics that never see the code read journey frames, state contact sheets and measurements, score Usability, Craft, Speed and feel, Platform and keyboard, and Character, then code-computed gates cap the scores and a ranked fix list comes back. Use to review, critique, rate or score an app's UI, ask "is this Linear-grade", run design QA on an app behind a login, or build an alpha polish list. Not for marketing sites (that is /jury) or for building and redesigning (that is /product-studio).
+description: The blind product jury, an engine of /product-studio (not a command of its own). Fresh critics that never see the code read a lab or prototype dossier and score Usability, Craft, Speed and feel, Platform and keyboard, and Character; code-computed gates cap the scores and a ranked fix list comes back. Read it when /product-studio scores a module or a prototype. To ask for a critique, use /product-studio criticise <module>.
+user-invocable: false
 ---
 
 # /product-jury
@@ -30,6 +31,9 @@ the design idea, hold it until the score is in (step 6).
 ## Workflow
 
 ### 1. Target
+
+`/product-studio` runs this workflow for both the live app (its phase 2) and its prototypes (its
+phase 6, with the prototype note in `references/critic-brief.md`).
 
 - **An existing run:** a `.lab/<run-id>/` folder from `/product-lab`. Use it if it is from the
   build being judged; if the code changed since, run the lab again.

@@ -922,7 +922,7 @@
  *      [data-label="…"] sets two vars: `--label` (solid hue → the tag chip's
  *      dot and its active ring, .tag-dot / .tag-chip-active in global.css,
  *      plus project, account and team dots) and `--label-surface` (a faint
- *      tint → external calendar chips, .cal-chip-external). A tag chip's own
+ *      tint → calendar event chips, .cal-chip). A tag chip's own
  *      pill is neutral, --tag-chip-surface (§5b, MOD-97). Surfaces are
  *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
  *      component code stays hex/arbitrary-free per the design-system rules).

@@ -1,7 +1,10 @@
 /** The runtime port's calendar (implemented in runtime.web.calendar.ts). */
 
+import type { CalendarItemKind, ConferenceProvider } from "@contracts/vocabularies";
+
 import type {
   CalendarAccountModel,
+  CalendarAttendeeInput,
   CalendarEventModel,
   CalendarEventPatch,
   CalendarMirrorEventInput,
@@ -31,6 +34,19 @@ export type CalendarRuntime = {
     allDay?: boolean;
     rrule?: string | null;
     description?: string;
+    // Event data v2 (CALR-6): each is sent only when set, so this build still
+    // creates events against a database with the old 7-argument op.
+    /** The calendars row id; omitted = your Moduo calendar. */
+    calendarId?: string;
+    location?: string;
+    attendees?: CalendarAttendeeInput[];
+    conferenceUrl?: string;
+    /** Omit to read it from the link. */
+    conferenceProvider?: ConferenceProvider;
+    isPrivate?: boolean;
+    kind?: CalendarItemKind;
+    /** Only with kind "focus". */
+    focusTaskId?: string;
   }): Promise<CalendarEventModel>;
   updateEvent(input: {
     workspaceId: string;

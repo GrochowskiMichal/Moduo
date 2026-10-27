@@ -2,6 +2,13 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-27 · `/product-studio` is the only product-quality command, and its output is always one Claude Artifact, never code** → `.claude/skills/product-studio/`, prototype renderer `.claude/skills/product-lab/scripts/prototype.mjs`
+  - status: current
+  - Who: Mike (2026-10-27): "simplify yet advance it… produce in output only claude artifacts". He picked every recommended default: prototype plus rationale in one page, an automatic critic loop capped at three rounds, "Turn into spec" writes a draft spec and `/s1` grills only its gaps, and the lab and jury are hidden as commands.
+  - Decision: one request ("criticise", "improve" or "fully refine" a module) runs understand → lab and blind critics on the live app → research of best-in-class apps and designers' concept work → direction → an interactive prototype in the house tokens → fresh blind critics on the rendered prototype until overall 8+, no severity-3 finding and no gate below 8 (at most three rounds) → publish. The prototype keeps a `window.studio` state contract and a `?critic=1` mode so `prototype.mjs` renders it into a dossier the existing jury reads unchanged. Speed and feel is not judged on a prototype; the other four categories are re-weighted to sum to 1. `product-lab` and `product-jury` stay as engines (`user-invocable: false`); `/s2`'s per-block lab delta is unchanged.
+  - Why: the designer and Mike want to judge a module's future as something they can click, before any block is cut; code-first redesigns spent build time on directions nobody had seen.
+  - Rejected: keeping the studio's code-building phases (implementation belongs to `/s1` → `/s2`); embedding other products' screenshots in the artifact (link and describe instead); an uncapped loop (critics are near chance on close pairs, so later rounds mostly add noise).
+
 - **2026-10-23 · Product UI quality is measured by a lab and scored by blind critics: `/product-lab`, `/product-jury`, `/product-studio`** → `.claude/skills/product-{lab,jury,studio}/`, Moduo's config `e2e/lab/lab.config.ts`; research report in Mike's `docs/local/claude_science/product-jury/`
   - status: current
   - Who: Mike asked for a product-app counterpart of the awwwards + jury skills (juliobsz/skills) with Impeccable in the loop; Maciej approved the research defaults wholesale ("maciej approves everything", 2026-10-23). The architecture is the agent's, from a seven-thread research pass.

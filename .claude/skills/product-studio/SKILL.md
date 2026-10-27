@@ -1,218 +1,205 @@
 ---
 name: product-studio
-description: Build, design or redesign a product app surface to a top craft bar - a screen, feature, flow, dashboard, settings, onboarding or a whole module in a desktop app, web app or SaaS - using the project's own design system and brand guidelines, or defining them when none exist. Also for "make it feel like Linear, Things or Raycast" and product polish of a whole surface. Works state-first, then a feel pass, then measures itself with /product-lab and gets scored blind by /product-jury. Not for marketing sites or landing pages (use /awwwards), not for scoring without changing anything (use /product-jury), and not for a token audit of a diff (use the project's own design-quality skill when it has one).
+description: Analyse, criticise, improve or fully rethink a product module (Notes, Tasks, Calendar, a settings area, an onboarding flow), and always deliver one top-grade Claude Artifact - an interactive high-fidelity prototype with its rationale and score - never product code. It reads the module, runs the lab and blind critics on the live app, researches best-in-class apps and designers' concept work, designs the answer in the house design system, then loops fresh blind critics over the prototype until it clears the bar. Ends with two options - turn it into a spec for the /s1 to /s2 pipeline, or run another critic round. Use for "fully refine the notes module", "let's improve Tasks", "criticise Calendar", "is Notes Linear-grade", "find the holes in X", a redesign or polish of a whole surface. Not for marketing sites (use /awwwards) or a token audit of a diff (use the project's own design-quality skill).
 ---
 
 # /product-studio
 
-You are the product designer and front-end engineer of this surface in one person. One brief in,
-one finished, measured surface out. Make decisions, write down assumptions, and ship. Ask only
-when two readings of the brief would produce different products.
+You are the product designer of this module, with a lab, a jury and a research desk. One plain
+request in, one finished artifact out. Make the design decisions yourself, write down assumptions,
+and ask only when two readings of the request would produce different products.
 
-**The bar.** A product is judged by use, not by looks. A website gets three minutes; a product
-gets its hundredth day. Aim for the anchors of the product rubric used by `/product-jury`:
-every journey completes with no dead end, every state is designed, every action answers within
-100 ms, the keyboard path is short, and the surface could not be moved to another product
-unchanged. The lab measures most of this; the critic judges the rest. You never score yourself.
+**Always an artifact, never product code.** The deliverable is one published Claude Artifact
+(`references/artifact.md`). You don't edit `apps/` or any shipped code. Building the result is the
+normal pipeline's job, and it starts only when the person picks "Turn into spec".
 
-**Skill root:** the directory containing this file (`$SKILL`). Sibling skills:
-`$SKILL/../product-lab` (the evidence rig, `scripts/lab.mjs`) and `$SKILL/../product-jury` (the
-blind critic). Knowledge lives in `$SKILL/references`, starter files in `$SKILL/templates`.
+**The bar.** A product is judged by use, not looks: every journey completes with no dead end,
+every state is designed, every action answers at once, the keyboard path is short, and the surface
+couldn't be moved to another product unchanged. You never score yourself: fresh blind critics do.
 
-## What makes a product surface great
+**Skill root:** the directory holding this file (`$SKILL`). Engines next to it, not commands of
+their own: `$SKILL/../product-lab` (evidence: `scripts/lab.mjs` for the live app,
+`scripts/prototype.mjs` for a prototype) and `$SKILL/../product-jury` (blind critics: rubric,
+critic brief, chair rules, calibration).
 
-1. **The dumbest path is perfect.** The most common journey takes the fewest steps, and the
-   keyboard path is as short as the pointer path. Edge cases are designed, but they come second.
-2. **Every state is designed.** Empty, loading, error, offline, dense and long content are drawn
-   with the same care as the happy path. A missing state is a bug.
-3. **Instant acknowledgement.** Every input gets a visible answer within 100 ms. Mutations are
-   optimistic, with a visible rollback when they fail.
-4. **Calm, rare motion.** Motion explains a change of place or state. Frequent and
-   keyboard-triggered actions do not animate. This reverses the award-site bar.
-5. **Native manners.** Menus, shortcuts, undo, focus, context menus and settings behave the way
-   the platform has taught people to expect.
-6. **One idea, quietly.** The surface has a point of view that shapes its vocabulary and a few
-   signature moments. Character is small in weight but never zero.
+## Read the request
 
-## Workflow
+Pick the **module** and the **intent** from the person's words:
 
-Run the phases in order. Each phase ends on its completion criterion; do not start the next one
-until the current criterion holds.
+| Intent | Typical words | Runs | The artifact shows |
+|---|---|---|---|
+| `criticise` | criticise, review, score, find the holes, is it good | 1, 2, light 3, 7 | the module as it is: annotated frames, holes, comparison, score |
+| `improve` (default) | improve, polish, fix, tighten, refine X | all, with one direction in 4 | the improved module, holes closed, inside the current model |
+| `rethink` | fully refine, rebuild, redesign, rethink, top-notch | all, three concepts in 4 | the best module you can design, any interaction model |
 
-### Phase 0: Context
+Extra words narrow the scope ("improve the Notes editor", "criticise Tasks' empty states"). Write
+the module, intent and scope as the first line of the workspace's `brief.md`.
 
-Read `PRODUCT.md` at the project root. If it is missing, write it from `templates/PRODUCT.md`,
-filling it from the brief, the README, product docs and memory: users, their top jobs, how often
-they use the product, the platform, and the one idea. Unknown facts become explicit assumptions
-marked `assumption:` in the file and listed in your final message.
+**Workspace:** `.lab/studio/<module>-<YYYYMMDD>/` (gitignored, like every lab output). Everything
+below writes there, except the final hand-off spec.
 
-**Done when:** PRODUCT.md names the users, the three most frequent jobs and the platform, and
-you can say in one sentence what this surface is for.
+## Phases
 
-### Phase 1: Design system and brand (adopt, fill or define)
+Each phase ends on its "done when". Don't start the next one before it holds.
 
-Read `references/design-system.md` and `references/brand.md`, then:
+### 1. Understand the module
 
-1. **Detect.** Search for the house system: token files, DESIGN.md, design-system and
-   design-rules docs, brand guidelines and brand folders, the component library (shadcn,
-   Radix, MUI and so on), token lint rules and hooks, and project skills or rules files that
-   enforce design (for example a `<project>-design-quality` skill). The full checklist is in
-   `references/design-system.md`.
-2. **Adopt.** What you find is the **house rules**. Precedence is fixed: house rules, then brand
-   guidelines, then this skill's defaults. Read the house values before writing a line of UI and
-   use its primitives instead of new ones. If a project design skill exists, follow it for
-   tokens and relational rules.
-3. **Fill.** A partial system gets only its gaps filled, inside its own files and naming. Never a
-   parallel system.
-4. **Define.** No system at all: write `DESIGN.md` from `templates/DESIGN.md` and a tokens file
-   from `templates/tokens.css`, plus a minimal product brand in DESIGN.md (voice, accent, type,
-   icon style). Then build only with them.
+Read, using read-only Explore subagents for the code so you keep only the conclusions:
 
-**Done when:** you can name the file that holds every color, type size, spacing step, radius,
-shadow and motion value you will use, and the rules that relate them. Write that list into your
-working notes.
+- the product north star and the module's own design briefs, specs, decisions and gotchas;
+- the code of the module's views: what views, panels, overlays and states exist, what actions
+  and shortcuts it has, how it links to the rest of the product;
+- the house design system: token files, design rules, the project's design-quality skill
+  (`references/design-system.md` says what to look for). House rules beat this skill.
 
-### Phase 2: Interaction concept
+Write `brief.md`: what the module is for in one sentence, its users and their three most frequent
+jobs, an inventory (views, states, actions, shortcuts, links), what the product brief rules out,
+and the house files you will design with.
 
-Read `references/interaction.md`. Generate **three** concepts from **different** interaction
-models (command-first, direct manipulation, inline and progressive, spatial, timeline,
-conversational). For each: one sentence, the core loop, the signature interaction, the keyboard
-path for the most frequent job, and how it fails the **100th-use test** (is it still fast and
-calm the hundredth time?). Score each 1 to 5 on speed for the expert, clarity for the newcomer,
-fit with the house system and feasibility. Pick one and give the reason in one line.
+**Done when:** `brief.md` names the jobs, the inventory and every token file you'll use.
 
-When the brief is a redesign of something people already use, one of the three is "keep the
-model, fix the execution", and it wins unless another concept is clearly better on the scores.
+### 2. Critique what exists
 
-Write a short **Concept card** into PRODUCT.md under the surface's heading:
+1. **Evidence.** Run the lab on the module's screens against a production build with seeded local
+   data (`$SKILL/../product-lab/SKILL.md` covers the config and flags):
+   `node $SKILL/../product-lab/scripts/lab.mjs --screens <ids> --label <module>-baseline`.
+   When the module has no screens or journeys in the lab config yet, add them first (states,
+   10-15 essential journeys) and say so in the final message. No local seeded backend: start the
+   project's local stack; never point the lab at production.
+2. **Blind critics.** Score the dossier with `$SKILL/../product-jury/SKILL.md` steps 2 to 5:
+   three fresh critics with the generalist brief, the chair rules, then gates and caps by
+   arithmetic. Nothing from phase 1 reaches a critic.
+3. **Holes.** Write `holes.md`: confirmed findings ranked by expected score gain, then candidates,
+   then what the evidence can't show, each with its frame. Add holes that only you can see from
+   phase 1 (a promised link that doesn't exist, a job with no path) in a separate list marked
+   "from the code, not the critics".
+
+**Done when:** `holes.md` exists and every hole cites a frame, a measurement or a file.
+
+### 3. Research the best
+
+Read `references/inspiration.md`. `criticise` and `improve` research only what the holes need;
+`rethink` researches broadly. Write `inspiration.md`: a comparison of the module against three to
+five best-in-class products on the dimensions that matter for this module, and a list of patterns
+worth taking, each with the hole it answers, its source link and why it fits this product's brief.
+
+**Done when:** every severity-3 hole has at least one researched answer, or a note that nobody
+solves it well.
+
+### 4. Choose the direction
+
+Read `references/interaction.md`.
+
+- `improve`: one direction. Keep the module's interaction model; close the holes with the best
+  researched patterns. List each change with the hole it closes.
+- `rethink`: three concepts from different interaction models, each scored 1 to 5 on speed for
+  the expert, clarity for the newcomer, fit with the house system, fit with the product brief and
+  buildability. "Keep the model, fix the execution" is always one of the three. Pick one and give
+  the reason in one line.
+
+Write `direction.md` with a concept card:
 
 ```
 Idea:         one sentence a new user understands
 Core loop:    what people do here most often, in steps
-Signature:    the one interaction that makes this surface feel authored
+Signature:    the one interaction that makes this module feel authored
 Keyboard:     the shortest key path for the core loop
-Motion verb:  how things move here (e.g. "settle", "slide from origin", "snap")
+Motion verb:  how things move here (e.g. "settle", "slide from origin")
 100th use:    what stays fast and quiet after weeks of use
+Holes closed: the hole ids this direction answers
 ```
 
-**Done when:** the card is written and every field is specific to this product.
+Changes the project reserves for a person (new top-level routes, information-architecture moves,
+anything the product brief rules out) may be proposed but are marked "needs the designer" in the
+card and in the artifact.
 
-### Phase 3: State-first build
+**Done when:** every field is specific to this product and every severity-3 hole is closed or
+explicitly left open with a reason.
 
-Read `references/states.md` and `references/craft.md`.
+### 5. Build the prototype
 
-1. **Inventory.** For each view, list its states: default, hover, focus, active, disabled,
-   loading, empty, error, offline, dense, long content, first run, no permission. Mark the ones
-   that cannot occur and say why.
-2. **Build every state before any motion.** Semantic markup, the house primitives, tokens only.
-   If the project has Storybook or a similar catalogue, add one story per state.
-3. **Keyboard map.** Every action reachable by keyboard, focus visible and managed (trap in
-   dialogs, return on close), shortcuts for the most frequent commands only, shown in menus and
-   tooltips.
-4. **Copy.** Sentence case unless the house says otherwise, specific verbs, errors that say what
-   happened and what to do next. Rules in `references/craft.md`.
+Load the Claude app's built-in artifact-design skill, then read `references/artifact.md` (the page layout and the
+critic mode), `$SKILL/../product-lab/references/prototype.md` (the state contract the renderer
+needs), `references/states.md`, `references/craft.md` and `references/motion.md`.
 
-**Done when:** every state in the inventory renders with real-looking seeded data, without
-motion, and reads as intentional in a still frame.
+- One self-contained HTML file: `.lab/studio/<…>/rounds/r1.html`.
+- The house tokens declared on `:root` under their own names with their real values, and only
+  those used. No invented colors, sizes or radii.
+- Fictional data that looks like a real week of use: realistic titles, lengths and counts.
+- Every state from the inventory, declared on `window.studio`: default, empty and first run,
+  loading, error, offline, dense, long content, and each overlay the module has.
+- Real interaction: hover, focus, selection, the keyboard map, working shortcuts for the core loop.
 
-### Phase 4: Feel pass
+**Done when:** every state renders, reads as intentional in a still frame, and the core loop works
+with the keyboard alone.
 
-Read `references/motion.md`. Then:
+### 6. Critic loop (at most three rounds)
 
-- Every input acknowledged within 100 ms; mutations optimistic, with rollback and an undo where
-  the action is reversible.
-- The **frequency rule**: keyboard-triggered and very frequent actions get no animation. Menus
-  and popovers 120 to 200 ms, dialogs and panels 200 to 250 ms, exits shorter than entries.
-- Animate `transform` and `opacity` only; every animation interruptible; decelerating easing on
-  entry; reduced motion keeps fades, drops movement.
-- Layout stays put: skeletons hold the final size, nothing shifts after input.
+Each round:
 
-**Done when:** each motion in the surface has a reason you can state in one sentence, uses house
-motion tokens, and none fires on a keyboard-triggered action.
+1. **Render:** `node $SKILL/../product-lab/scripts/prototype.mjs rounds/r<n>.html --label
+   <module>-r<n> --tokens <house token files> --purpose "…" --users "…" --platform <platform>`.
+2. **Score:** three fresh critics with the generalist brief plus the prototype note in
+   `$SKILL/../product-jury/references/critic-brief.md`, then the chair rules. A critic never sees
+   an earlier round, the inspiration, the direction or this skill's notes.
+3. **Grade:** Speed and feel isn't judged on a prototype, so the overall is 0.375 Usability +
+   0.3125 Craft + 0.1875 Platform + 0.125 Character. Caps from `gates.json`: `states` below 8
+   caps Usability at 7; `system` below 8 caps Craft at 7; any serious or critical axe rule is a
+   fix before the next round.
+4. **Stop** when the overall is 8.0 or more, no confirmed finding is severity 3 or 4, and no gate
+   is below 8. Otherwise fix the ranked list into `rounds/r<n+1>.html` and go again. After round
+   three, stop anyway and say what's still open.
 
-### Phase 5: Lab loop
+Record each round in `scores.md`: overall, category levels, gates, findings closed and opened.
+Critics are close to chance on near-identical pairs, so judge progress by gates and by the
+findings list, not by a small move in a category.
 
-1. **Declare the evidence.** Add or update this surface in the project's `lab.config.mjs` (see
-   `$SKILL/../product-lab/references/config.md`): the screen, its seeded states, the essential
-   journeys with goals and shortest-path targets, and its overlays. A surface without journeys
-   cannot be judged.
-2. **Run `/product-lab`** on the touched screens and journeys. Fix in this order: hard fails
-   (ignored input, no response, lost input, blocking errors), then gate areas below 8, then the
-   measured budget rows in the fail band. Re-run until there are no hard fails and every measured
-   gate area is 8 or above.
-3. **Run `/product-jury`** at milestones: a finished surface, a redesign, a release. Always a
-   fresh critic, never one that saw an earlier score. Its ranked fix list is the next pass's
-   work. Dispute a finding only by pointing to evidence the critic misread.
-4. **Fix moves.** Name each fix by its move: `polish`, `harden` (errors, overflow, edge cases),
-   `onboard` (first run and empty states), `distill` (remove), `quieter`, `clarify` (copy),
-   `typeset`, `layout`. If Impeccable is installed, `/impeccable <move>` may carry one out, under
-   the house rules. Impeccable's detector output informs you, never the critic.
+`criticise` skips this phase: its artifact is the critique itself.
 
-**Done when:** the lab shows no hard fails, every measured gate area is 8 or above, and the last
-jury fix list has no severity 3 or 4 items left open.
+### 7. Publish and hand off
 
-### Phase 6: Hand-off
+Assemble the final page from the last round (or, for `criticise`, from the baseline evidence) as
+`references/artifact.md` lays out, and publish it with the Artifact tool. Republishing the same
+file path updates the same link, so keep one path for the whole run.
 
-Final message to the user:
+Final message, short:
 
-- the surface and its concept card idea, in one line
-- the design system used: adopted (which files), filled (which gaps) or defined (new files)
-- what changed, as a short list
-- the lab delta table from `scripts/delta.mjs <before> <after>`
-- the jury score if one ran, with the two fixes that would raise it most
-- assumptions and placeholders to confirm
+- the link, the module, the intent, and the concept card's idea in one line;
+- the round table (score, gates, severity-3 findings per round), and whether the bar was met;
+- anything marked "needs the designer", and the assumptions to confirm;
+- then the two next steps, as the closing question with buttons:
+  - **Turn into spec:** follow `references/handoff.md` (a draft spec from the artifact, then
+    `/s1` grills only the gaps).
+  - **Another critic round:** phase 6 once more, with fresh critics, then republish.
+
+For `criticise`, the next steps are **Improve it** (this skill again with `improve`) and **Turn
+the holes into a spec**.
 
 ## Hard rules
 
-**System**
-- Once a system exists, every design value comes from it. A missing value is added to the token
-  file as a system edit, never written inline.
-- Use the house primitives. A new primitive wraps the component library the house uses.
-- House rules beat this skill. When a default here contradicts the house, follow the house and
-  note the conflict in your final message.
-
-**Craft**
-- Align on both axes; adjacent controls share one height; nested radii are concentric; numbers
-  use tabular figures; neutrals carry the background's hue.
-- Accent marks only the primary action, the selection, focus and completion. Everything else is
-  neutral.
-- One sans family carries the UI unless the house defines more. Hierarchy comes from size,
-  weight and color.
-
-**States**
-- Every interactive element has default, hover, focus-visible, active and disabled states, plus
-  loading and error where it does work.
-- Skeletons over spinners; a spinner appears only after 150 to 300 ms and stays at least 300 ms.
-- Empty states teach the next action. Errors keep the user's input.
-
-**Motion**
-- `transform` and `opacity` only. Name the transitioned properties.
-- No motion on keyboard-triggered or high-frequency actions. Interruptible always.
-- Under reduced motion, fades of 100 ms or less and no movement.
-
-**Keyboard and platform**
-- Every journey completes keyboard-only, with visible focus at every stop.
-- Undo instead of confirm for reversible actions; confirm only what cannot be undone.
-- On macOS desktop: standard menus in order, ⌘, opens settings, ⌘Z undoes app actions,
-  context menus consistent with the main interface. Details in `references/interaction.md`.
-
-**Copy**
-- Sentence case, specific verbs, no filler, no exclamation marks in system copy.
-- The same noun for the same thing everywhere.
-
-**Data**
-- Build and screenshot with seeded, fictional data only. Never point the lab at production or a
-  real account.
+- **Artifact only.** No edits to shipped code. The only committed files a run may touch are the
+  lab config (to declare the module's screens and journeys) and, on hand-off, the spec.
+- **Blind critics.** A critic sees only the dossier's `critic.md` and the files it lists. Never
+  the code, the briefs, `holes.md`, `inspiration.md`, `direction.md`, an earlier score or your
+  own opinion. If subagents aren't available, say the score is a self-score and not blind.
+- **The house system.** Every design value comes from the house tokens. A value the system lacks
+  is proposed in the artifact's rationale as a token addition, never used silently.
+- **Other people's work.** Screenshots of other products and designers' shots stay in the
+  workspace for you. The artifact links to sources and describes patterns in your own words; it
+  never embeds or traces someone else's images.
+- **Fictional data only.** Seeded local data for the lab, invented data in the prototype. Never
+  production, never a real person's account, never a real workspace's content.
+- **Fonts:** only the families the house token files name.
 
 ## Reference map
 
 | File | Read when |
 |---|---|
-| `references/design-system.md` | Phase 1: detect, adopt, fill or define the system |
-| `references/brand.md` | Phase 1: adopt brand guidelines or define a minimal product brand |
-| `references/interaction.md` | Phase 2 and the keyboard map in Phase 3; platform conventions |
-| `references/states.md` | Phase 3: the state inventory and what the lab checks |
-| `references/craft.md` | Phase 3: craft checklist, anti-slop list, UX writing |
-| `references/motion.md` | Phase 4: motion rules and budget numbers |
-| `templates/PRODUCT.md` | Phase 0 when PRODUCT.md is missing |
-| `templates/DESIGN.md`, `templates/tokens.css` | Phase 1 when no system exists |
+| `references/design-system.md`, `references/brand.md` | Phase 1: find and adopt the house system (or define one when none exists, with `templates/`) |
+| `references/inspiration.md` | Phase 3: where to look, what to capture, the comparison |
+| `references/interaction.md` | Phase 4: interaction models, keyboard and platform conventions |
+| `references/states.md`, `references/craft.md`, `references/motion.md` | Phase 5: states, craft, copy, motion |
+| `references/artifact.md` | Phases 5 and 7: the artifact's layout and critic mode |
+| `references/handoff.md` | Phase 7: Turn into spec |
+| `$SKILL/../product-lab/references/prototype.md` | Phases 5 and 6: the state contract and the renderer |
+| `$SKILL/../product-jury/references/*` | Phases 2 and 6: rubric, critic brief, chair rules, calibration |

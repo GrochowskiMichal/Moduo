@@ -202,6 +202,9 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-27 · Meeting links live in `conference_url`, split out of `location` on every write (CALR-6).
+- 2026-10-27 · The calendar grid is laid out in wall-clock hours (CALR-1).
+- 2026-10-27 · Calendar rethink planned: two-way Google, sharing with preview, offers with holds, focus as an item.
 - 2026-10-08 · Google and Zoom connects are finished by the signed-in app, not by the OAuth callback.
 - 2026-10-07 · Emailed links use fixed, allow-listed origins, and public booking is rate-limited.
 - 2026-10-02 · A booked meeting is one event, and booking links can be deleted.
@@ -473,6 +476,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Design system and UI → [decisions/design-system.md](decisions/design-system.md)
 
+- 2026-10-27 · `/product-studio` is the only product-quality command, and its output is always one Claude Artifact, never code
 - 2026-10-23 · Product UI quality is measured by a lab and scored by blind critics: `/product-lab`, `/product-jury`, `/product-studio`
 - 2026-10-16 · A collection header's count is the tertiary text level, and 4 px sit between a header and its rows
 - 2026-10-16 · 8 px between two panels, 16 at the window's edges, and the resize handle still grabs over 16 px

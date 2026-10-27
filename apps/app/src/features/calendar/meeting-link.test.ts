@@ -38,3 +38,27 @@ describe("meeting link", () => {
     ).toBe("https://teams.microsoft.com/l/x");
   });
 });
+
+describe("meeting link from the event's own link (CALR-6)", () => {
+  test("the stored conference URL wins over location and description", () => {
+    expect(
+      meetingLinkOf({
+        conferenceUrl: "https://us02web.zoom.us/j/9",
+        location: "https://meet.google.com/abc-defg-hij",
+        description: "https://teams.microsoft.com/l/x",
+      }),
+    ).toEqual({ url: "https://us02web.zoom.us/j/9", label: "Join Zoom" });
+  });
+
+  test("a place stays a place when the event has a link", () => {
+    expect(
+      meetingLinkOf({ conferenceUrl: "https://meet.google.com/a-b-c", location: "Hale & Co" }),
+    ).toEqual({ url: "https://meet.google.com/a-b-c", label: "Join Google Meet" });
+  });
+
+  test("without a stored link it still reads location, then description", () => {
+    expect(meetingLinkOf({ conferenceUrl: null, location: "https://zoom.us/j/2" })?.url).toBe(
+      "https://zoom.us/j/2",
+    );
+  });
+});

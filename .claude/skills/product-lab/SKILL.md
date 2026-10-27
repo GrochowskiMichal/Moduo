@@ -1,6 +1,7 @@
 ---
 name: product-lab
-description: Run the product lab on a desktop or web app (works behind a login). It drives the running app through declared screens, states (empty, loading, error, offline, dense, long content, first run), journeys (keyboard-only and pointer-only) and overlays. It writes an evidence dossier and computes gate scores by code for accessibility, performance and feel, state coverage, reliability, platform and design-token conformance. Use after UI changes to a product app, before a PR for a measured before/after delta, to set up a project's lab.config, or as the evidence step of /product-jury and /product-studio. It measures; it never judges taste. For marketing sites use /jury.
+description: The product lab, an engine of /product-studio (not a command of its own). Drives the running app through declared screens, states (empty, loading, error, offline, dense, long content, first run), keyboard and pointer journeys and overlays, or renders a studio prototype (scripts/prototype.mjs), and writes an evidence dossier with gate scores computed by code for accessibility, performance and feel, state coverage, reliability, platform and design-token conformance. Read it when /product-studio, /s1 or /s2 calls for a lab run or a measured before/after delta. It measures; it never judges taste.
+user-invocable: false
 ---
 
 # /product-lab
@@ -103,3 +104,4 @@ the same ablations to measure the critic (`/product-jury`, references/calibratio
 | `references/dossier.md` | Reading a run, or handing one to the jury |
 | `references/budgets.md` | Interpreting gates and feel rows, or changing a budget |
 | `references/platform-brief.md` | What platform conventions the critic is told to expect |
+| `references/prototype.md` | Rendering a studio prototype (`scripts/prototype.mjs`) and the state contract it keeps |

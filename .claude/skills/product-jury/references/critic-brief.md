@@ -59,6 +59,20 @@ Reply with one JSON block and nothing after it:
 "level" is one of "below6", 6, 7, 8, 9.
 ```
 
+## Prototype note (studio rounds)
+
+When the dossier came from `scripts/prototype.mjs` (`gates.json` has `"kind": "prototype"`), add
+this paragraph to the generalist brief, just before "Findings:":
+
+```
+This evidence is a high-fidelity prototype of one module with fictional data, not a running
+build. There are no journeys and no latency or frame numbers: write null for speed and list it
+under cannotJudge. Judge flow from the states, and judge it as the shipped module.
+```
+
+The chair rules don't change. The studio grades the round without Speed and feel (its SKILL.md,
+phase 6).
+
 ## Panel roles (`--panel`: four roles, three runs each)
 
 Each role gets the generalist brief with two changes: replace the first sentence with the role

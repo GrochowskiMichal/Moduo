@@ -85,14 +85,35 @@ export function accountHue(color: string | null | undefined): LabelColor {
   return normalizeLabelColor(color);
 }
 
-/** Drop mirrored events whose account is toggled off. Native events always show. */
+/**
+ * Drop events that are toggled off. The hidden list holds account ids (a mirrored
+ * event hides with its account) and calendar ids (a native event hides with the
+ * calendar it is on, custom calendars included, CALR-6). A native event with no
+ * calendar always shows.
+ */
 export function visibleEvents(
   events: CalendarEventModel[],
-  hiddenAccountIds: Iterable<string>,
+  hiddenIds: Iterable<string>,
 ): CalendarEventModel[] {
-  const hidden = new Set(hiddenAccountIds);
+  const hidden = new Set(hiddenIds);
   if (hidden.size === 0) return events;
-  return events.filter((e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId));
+  return events.filter((e) => {
+    if (e.sourceAccountId !== null) return !hidden.has(e.sourceAccountId);
+    return !e.calendarRef || !hidden.has(e.calendarRef);
+  });
+}
+
+/**
+ * Showing a saved set hides everything else: each known id (account ids and
+ * Moduo or custom calendar ids) that the set doesn't list. The result feeds
+ * `visibleEvents` (CALR-6: sets apply to custom calendars too).
+ */
+export function hiddenIdsForSet(
+  visibleIds: Iterable<string>,
+  knownIds: Iterable<string>,
+): string[] {
+  const show = new Set(visibleIds);
+  return [...new Set(knownIds)].filter((id) => !show.has(id));
 }
 
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────

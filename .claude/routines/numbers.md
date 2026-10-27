@@ -2,12 +2,12 @@ You are the Moduo weekly numbers task (specs/harness-v3.md HV-21 and HV-22, AC34
 
 ## Steps
 
-Run these in one Bash call. They use a dedicated, detached worktree, so the main checkout and every other session's worktree stay untouched:
+Run these in one Bash call. They use a dedicated, detached worktree, so the main checkout and every other session's worktree stay untouched. The fetch goes over HTTPS with `gh`'s credentials, because SSH to GitHub can time out:
 
 ```bash
 set -euo pipefail
 cd "$HOME/Documents/moduo_latest"
-git fetch --quiet origin mike
+git -c url."https://github.com/".insteadOf="git@github.com:" -c credential.helper='!gh auth git-credential' fetch --quiet origin mike
 W=.claude/worktrees/routine-numbers
 [ -d "$W" ] || git worktree add --quiet --detach "$W" origin/mike
 cd "$W"

@@ -56,6 +56,68 @@ const readyWhen =
     await page.waitForLoadState("networkidle", { timeout: 10_000 }).catch(() => {});
   };
 const tasksNav = (page: Page) => page.getByRole("navigation", { name: "Tasks" });
+
+// ── Calendar ────────────────────────────────────────────────────────────────────────────
+const calToolbar = (page: Page) => page.getByRole("toolbar", { name: "Calendar controls" });
+/** The toolbar's text, which carries the visible range ("Oct 25 – Oct 31"). */
+const calRange = async (page: Page) => (await calToolbar(page).innerText()).replace(/\s+/g, " ");
+/** An event or task block on the grid (titles also show in the right panel, so stay in main). */
+const onGrid = (page: Page, title: string) =>
+  page.getByRole("main").getByText(title, { exact: true }).first();
+const quickCreateTitle = (page: Page) => page.getByRole("textbox", { name: "Event title" }).first();
+const localKey = (d: Date) =>
+  `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}-${`${d.getDate()}`.padStart(2, "0")}`;
+/**
+ * A point on empty grid inside the visible scroll area of day `offset` (tomorrow by default),
+ * relative to its column: the place a person would click or drop. Falls back to today's
+ * column when that day isn't in the visible week.
+ */
+async function freeSlot(page: Page, offset = 1) {
+  const day = new Date();
+  day.setDate(day.getDate() + offset);
+  const keys = [localKey(day), localKey(new Date())];
+  return page.evaluate((candidates) => {
+    for (const key of candidates) {
+      const col = document.querySelector<HTMLElement>(`[data-day-col][data-day-key='${key}']`);
+      if (!col) continue;
+      let scroller: HTMLElement | null = col.parentElement;
+      while (scroller && !(scroller.scrollHeight > scroller.clientHeight + 4)) {
+        scroller = scroller.parentElement;
+      }
+      const view = (scroller ?? col).getBoundingClientRect();
+      const box = col.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      for (let y = view.top + view.height * 0.3; y < view.bottom - 24; y += 14) {
+        const hit = document.elementFromPoint(x, y);
+        if (hit && col.contains(hit) && !hit.closest("[data-chip]")) {
+          return { key, x: box.width / 2, y: y - box.top, clientX: x, clientY: y };
+        }
+      }
+    }
+    return null;
+  }, keys);
+}
+/** The grid's scroller, scrolled so `hour` sits at the top. */
+const scrollGridTo = (page: Page, hour: number) =>
+  page.evaluate((h) => {
+    let el = document.querySelector("[data-day-col]")?.parentElement ?? null;
+    while (el && !(el.scrollHeight > el.clientHeight + 4)) el = el.parentElement;
+    if (el) el.scrollTop = (el.scrollHeight / 24) * h;
+  }, hour);
+/** The mini month's button for a day a week away, staying inside the month it shows. */
+const miniMonthDay = (page: Page) => {
+  const today = new Date();
+  const d = new Date(today);
+  d.setDate(today.getDate() - 7);
+  if (d.getMonth() !== today.getMonth()) d.setDate(today.getDate() + 7);
+  const month = d.toLocaleString("en-US", { month: "long" });
+  return page
+    .getByRole("complementary")
+    .getByRole("button", {
+      name: new RegExp(`${month} ${d.getDate()}(st|nd|rd|th), ${d.getFullYear()}$`),
+    })
+    .first();
+};
 /** The sidebar's Inbox row once it counts `n` (a capture lands there, not in All). */
 /** The Inbox's count now (journeys share one seeded person, so proofs are relative). */
 const inboxNow = async (page: Page) => {
@@ -149,8 +211,41 @@ export default {
       id: "calendar",
       title: "Calendar",
       path: "/calendar",
-      ready: readyWhen("nav[aria-label='Workspace navigation']"),
-      states: { default: {}, empty: { seed: "empty" } },
+      ready: readyWhen("[role='toolbar'][aria-label='Calendar controls']"),
+      // Day and Week are the only views; there is no Month or Agenda to capture.
+      states: {
+        default: {},
+        empty: { seed: "empty" },
+        day: {
+          act: async ({ page }: { page: Page }) => page.getByRole("radio", { name: "Day" }).click(),
+        },
+        // The dense person's week: 60 events, 300 tasks with due dates spread across it.
+        dense: { seed: "dense" },
+        // The same week in the afternoon, where three and four meetings overlap.
+        overlaps: {
+          seed: "dense",
+          act: async ({ page }: { page: Page }) => scrollGridTo(page, 13),
+        },
+        // Monday's stack of all-day items and trips at the smallest window (1024 x 700).
+        allDayOverflow: {
+          seed: "dense",
+          act: async ({ page }: { page: Page }) =>
+            page.setViewportSize({ width: 1024, height: 700 }),
+        },
+        long: { seed: "long" },
+        eventOpen: {
+          act: async ({ page }: { page: Page }) => onGrid(page, "Design review with Ana").click(),
+        },
+        eventDetail: {
+          act: async ({ page }: { page: Page }) => {
+            await onGrid(page, "Design review with Ana").click();
+            await page.getByRole("dialog").getByRole("button", { name: "Open" }).click();
+          },
+        },
+        loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
+        error: { fail: { match: "**/rest/v1/calendar_events*", status: 500 } },
+        offline: { offline: true },
+      },
     },
     {
       id: "contacts",
@@ -338,6 +433,246 @@ export default {
         });
       },
     },
+    // ── Calendar ──────────────────────────────────────────────────────────────────────────
+    {
+      id: "cal-jump",
+      screen: "tasks",
+      goal: "Jump to the calendar from another module without the mouse",
+      target: { keys: 2, clicks: 1 },
+      async keyboard({ press, step, page }: J) {
+        await press("Meta+4");
+        await step("calendar", { expect: calToolbar(page), view: true });
+      },
+    },
+    {
+      id: "cal-day-week",
+      screen: "calendar",
+      goal: "Zoom into one day, then back out to the whole week",
+      target: { keys: 2, clicks: 2 },
+      async keyboard({ press, step, page }: J) {
+        await press("d");
+        await step("day", {
+          expect: page.getByRole("radio", { name: "Day", checked: true }),
+          view: true,
+        });
+        await press("w");
+        await step("week", {
+          expect: page.getByRole("radio", { name: "Week", checked: true }),
+          view: true,
+        });
+      },
+      async pointer({ click, step, page }: J) {
+        await click(page.getByRole("radio", { name: "Day" }));
+        await step("day", {
+          expect: page.getByRole("radio", { name: "Day", checked: true }),
+          view: true,
+        });
+        await click(page.getByRole("radio", { name: "Week" }));
+        await step("week", {
+          expect: page.getByRole("radio", { name: "Week", checked: true }),
+          view: true,
+        });
+      },
+    },
+    {
+      id: "cal-next-week",
+      screen: "calendar",
+      goal: "Look ahead at next week, then come back to today",
+      target: { keys: 2, clicks: 2 },
+      async keyboard({ press, step, page }: J) {
+        const before = await calRange(page);
+        await press("ArrowRight");
+        await step("next week", {
+          expect: async () => (await calRange(page)) !== before,
+          view: true,
+        });
+        await press("t");
+        await step("back to today", {
+          expect: async () => (await calRange(page)) === before,
+          view: true,
+        });
+      },
+      async pointer({ click, step, page }: J) {
+        const before = await calRange(page);
+        await click(page.getByRole("button", { name: /^Next period/ }));
+        await step("next week", {
+          expect: async () => (await calRange(page)) !== before,
+          view: true,
+        });
+        await click(calToolbar(page).getByRole("button", { name: "Today", exact: true }));
+        await step("back to today", {
+          expect: async () => (await calRange(page)) === before,
+          view: true,
+        });
+      },
+    },
+    {
+      id: "cal-quick-create",
+      screen: "calendar",
+      goal: "Put a half-hour call on the calendar right now",
+      target: { keys: 22, clicks: 1 },
+      async keyboard({ press, type, step, page }: J) {
+        await press("Meta+n");
+        await step("quick create", { expect: quickCreateTitle(page) });
+        await type("Call the accountant");
+        await press("Enter");
+        await step("event on the grid", {
+          gone: quickCreateTitle(page),
+          expect: onGrid(page, "Call the accountant"),
+        });
+      },
+      async pointer({ click, type, press, step, page }: J) {
+        await click(page.getByRole("button", { name: /^Create new/ }));
+        await step("quick create", { expect: quickCreateTitle(page) });
+        await type("Pay the design invoice");
+        await press("Enter");
+        await step("event on the grid", {
+          gone: quickCreateTitle(page),
+          expect: onGrid(page, "Pay the design invoice"),
+        });
+      },
+    },
+    {
+      id: "cal-draw-block",
+      screen: "calendar",
+      goal: "Block time tomorrow by clicking an empty slot and naming it",
+      target: { keys: 24, clicks: 1 },
+      async pointer({ click, type, press, step, page }: J) {
+        const spot = await freeSlot(page);
+        if (!spot) throw new Error("no free slot in view");
+        await click(page.locator(`[data-day-col][data-day-key='${spot.key}']`), {
+          position: { x: spot.x, y: spot.y },
+        });
+        await step("new block", { expect: quickCreateTitle(page) });
+        await type("Prep for the board call");
+        await press("Enter");
+        await step("block saved", {
+          gone: quickCreateTitle(page),
+          expect: onGrid(page, "Prep for the board call"),
+        });
+      },
+    },
+    {
+      id: "cal-open-event",
+      screen: "calendar",
+      goal: "Open tomorrow's design review to see what it's about and who it's with",
+      target: { keys: 0, clicks: 2 },
+      async pointer({ click, step, page }: J) {
+        await click(onGrid(page, "Design review with Ana"));
+        await step("event card", {
+          expect: page.getByRole("dialog").getByRole("button", { name: "Open" }),
+        });
+        await click(page.getByRole("dialog").getByRole("button", { name: "Open" }));
+        await step("event details", {
+          expect: page.getByRole("complementary").getByRole("textbox", { name: "Event title" }),
+        });
+      },
+    },
+    {
+      id: "cal-delete-undo",
+      screen: "calendar",
+      goal: "Delete an event by mistake, then take it back",
+      target: { keys: 0, clicks: 3 },
+      async pointer({ click, step, page }: J) {
+        await click(onGrid(page, "Board prep"));
+        await step("event card", {
+          expect: page.getByRole("dialog").getByRole("button", { name: "Delete" }),
+        });
+        await click(page.getByRole("dialog").getByRole("button", { name: "Delete" }));
+        const confirm = page
+          .getByRole("alertdialog")
+          .or(page.getByRole("dialog", { name: /^Delete this/ }));
+        await step("confirm", { expect: confirm.first() });
+        await click(confirm.first().getByRole("button", { name: "Delete", exact: true }));
+        await step("deleted", { expect: page.getByRole("button", { name: "Undo" }) });
+        await click(page.getByRole("button", { name: "Undo" }));
+        await step("restored", { expect: onGrid(page, "Board prep") });
+      },
+    },
+    {
+      id: "cal-complete-due",
+      screen: "calendar",
+      goal: "Tick off a task that is due today without leaving the calendar",
+      target: { keys: 0, clicks: 1 },
+      async pointer({ click, step, page }: J) {
+        await click(
+          page.getByRole("complementary").getByRole("button", {
+            name: "Complete Draft the homepage copy",
+            exact: true,
+          }),
+        );
+        await step("task done", {
+          expect: async () =>
+            (await page.getByRole("button", { name: "Reopen Draft the homepage copy" }).count()) >
+              0 ||
+            (await page
+              .getByRole("button", { name: "Complete Draft the homepage copy" })
+              .count()) === 0,
+        });
+      },
+    },
+    {
+      // dnd-kit needs a real pointer drag, which the helpers don't count: this journey's
+      // click and travel figures read 0 for the drag itself.
+      id: "cal-schedule-task",
+      screen: "calendar",
+      goal: "Give a backlog task a time tomorrow by dragging it onto the week",
+      target: { keys: 0, clicks: 1 },
+      async pointer({ step, page }: J) {
+        const title = "Write the backend engineer role";
+        const row = page
+          .getByRole("complementary")
+          .getByRole("button", { name: new RegExp(title) })
+          .first();
+        const from = await row.boundingBox();
+        const spot = await freeSlot(page);
+        if (!from || !spot) throw new Error("no task row or free slot in view");
+        await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(from.x + from.width / 2 - 12, from.y + from.height / 2 + 8, {
+          steps: 4,
+        });
+        await page.waitForTimeout(100);
+        await page.mouse.move(spot.clientX, spot.clientY, { steps: 12 });
+        await page.waitForTimeout(150);
+        await page.mouse.up();
+        await step("task on the grid", { expect: onGrid(page, title) });
+      },
+    },
+    {
+      id: "cal-go-to-date",
+      screen: "calendar",
+      goal: "Look at the same day last week from the month in the sidebar",
+      target: { keys: 0, clicks: 1 },
+      async pointer({ click, step, page }: J) {
+        const before = await calRange(page);
+        await click(miniMonthDay(page));
+        await step("that week", {
+          expect: async () => (await calRange(page)) !== before,
+          view: true,
+        });
+      },
+    },
+    {
+      id: "cal-panel-switch",
+      screen: "calendar",
+      goal: "Swap the right panel from your task list to the notes about the selected event",
+      target: { keys: 0, clicks: 3 },
+      async pointer({ click, step, page }: J) {
+        await click(onGrid(page, "Team standup"));
+        await step("event selected", { expect: page.getByRole("dialog") });
+        await click(page.getByRole("button", { name: /^Panel view:/ }));
+        const notes = page
+          .getByRole("menuitemradio", { name: "Notes" })
+          .or(page.getByRole("menuitem", { name: "Notes" }))
+          .first();
+        await step("panel views", { expect: notes });
+        await click(notes);
+        await step("notes view", {
+          expect: page.getByRole("button", { name: "Panel view: Notes" }),
+        });
+      },
+    },
   ],
   overlays: [
     {
@@ -362,6 +697,22 @@ export default {
       kind: "popover",
       open: async ({ page }: { page: Page }) =>
         page.getByRole("button", { name: "Display", exact: true }).click(),
+      selector: "[role='dialog']",
+      close: "Escape",
+    },
+    {
+      id: "event-card",
+      screen: "calendar",
+      kind: "popover",
+      open: async ({ page }: { page: Page }) => onGrid(page, "Team standup").click(),
+      selector: "[role='dialog']",
+      close: "Escape",
+    },
+    {
+      id: "quick-create",
+      screen: "calendar",
+      kind: "popover",
+      open: "Meta+n",
       selector: "[role='dialog']",
       close: "Escape",
     },

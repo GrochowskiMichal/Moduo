@@ -48,7 +48,13 @@ import {
   useTasksStatus,
 } from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
-import { accountSourceLabel, resolveAccountHues, syncAgeLabel, visibleEvents } from "../accounts";
+import {
+  accountSourceLabel,
+  hiddenIdsForSet,
+  resolveAccountHues,
+  syncAgeLabel,
+  visibleEvents,
+} from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
@@ -649,13 +655,9 @@ export function CalendarPageView({
                 <CalendarsPanel
                   workspaceId={workspaceId}
                   userId={userId}
-                  onShowAccounts={(accountIds) => {
-                    const show = new Set(accountIds);
-                    updatePrefs(() => ({
-                      hiddenAccountIds: calendar.accounts
-                        .map((account) => account.id)
-                        .filter((id) => !show.has(id)),
-                    }));
+                  onShowAccounts={(visibleIds, knownIds) => {
+                    const known = [...calendar.accounts.map((account) => account.id), ...knownIds];
+                    updatePrefs(() => ({ hiddenAccountIds: hiddenIdsForSet(visibleIds, known) }));
                   }}
                 />
                 <BookingLinks

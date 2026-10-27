@@ -11,7 +11,7 @@
 // lands it on the right column.
 
 import type { CalendarMirrorEventInput } from "./events";
-import { googleMeetingLink, graphMeetingLink } from "./meeting-link";
+import { googleConferenceUrl, graphConferenceUrl } from "./meeting-link";
 
 /** Loosely-typed provider JSON — we read only the fields we normalize. */
 export type RawProviderEvent = Record<string, unknown>;
@@ -78,6 +78,21 @@ function withLocation(value: string | null): { location?: string } {
   return value ? { location: value } : {};
 }
 
+/**
+ * Always send `conferenceUrl`: the provider event is the whole truth, so null says
+ * its meeting link was removed and the op clears the stored one (CALR-6). A meeting
+ * URL someone pasted into the location still fills in: the op splits the location.
+ * The op drops a value that is no web address.
+ */
+function withConferenceUrl(value: string | null): { conferenceUrl: string | null } {
+  return { conferenceUrl: value };
+}
+
+/** A trimmed, non-empty string or null. */
+function trimmed(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
 // ── Google Calendar API v3 event → mirror input ──────────────────────────────
 
 /**
@@ -119,7 +134,9 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     status: normalizeStatus(str(raw.status)),
     description: str(raw.description) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
-    ...withLocation(googleMeetingLink(raw)),
+    // The place and the meeting link travel separately (CALR-6).
+    ...withLocation(trimmed(raw.location)),
+    ...withConferenceUrl(googleConferenceUrl(raw)),
   };
 }
 
@@ -196,7 +213,11 @@ export function mapOutlookEvent(raw: RawProviderEvent): CalendarMirrorEventInput
     status: cancelled ? "cancelled" : "confirmed",
     description: str(raw.bodyPreview) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
-    ...withLocation(graphMeetingLink(raw)),
+    // The place and the meeting link travel separately (CALR-6).
+    ...withLocation(
+      trimmed((raw.location as { displayName?: unknown } | null | undefined)?.displayName),
+    ),
+    ...withConferenceUrl(graphConferenceUrl(raw)),
   };
 }
 

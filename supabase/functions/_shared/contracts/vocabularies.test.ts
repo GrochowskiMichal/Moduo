@@ -804,3 +804,36 @@ describe("label hues and a new tag's colour (MOD-93: one rule for the app and th
     expect(v.pickTagColor(colored.map((color) => ({ color })))).toBe("gray");
   });
 });
+
+describe("calendar event vocabularies (CALR-6: conference providers and item kinds)", () => {
+  it("the canonical lists", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CONFERENCE_PROVIDERS]).toEqual(["google_meet", "zoom", "teams", "other"]);
+    expect([...v.CALENDAR_ITEM_KINDS]).toEqual(["event", "focus", "hold"]);
+  });
+
+  it("is* and parse* accept only the canonical values", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.isConferenceProvider("zoom")).toBe(true);
+    expect(v.isConferenceProvider("skype")).toBe(false);
+    expect(v.isConferenceProvider(null)).toBe(false);
+    expect(v.parseConferenceProvider("google_meet").success).toBe(true);
+    expect(v.parseConferenceProvider("meet").success).toBe(false);
+    expect(v.isCalendarItemKind("focus")).toBe(true);
+    expect(v.isCalendarItemKind("meeting")).toBe(false);
+    expect(v.parseCalendarItemKind("hold").success).toBe(true);
+    expect(v.parseCalendarItemKind("Focus").success).toBe(false);
+  });
+
+  it("normalize*: a missing provider is none, an unknown one is other; an unknown kind is a plain event", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeConferenceProvider("teams")).toBe("teams");
+    expect(v.normalizeConferenceProvider(null)).toBeNull();
+    expect(v.normalizeConferenceProvider(undefined)).toBeNull();
+    expect(v.normalizeConferenceProvider("")).toBeNull();
+    expect(v.normalizeConferenceProvider("webex")).toBe("other");
+    expect(v.normalizeCalendarItemKind("focus")).toBe("focus");
+    expect(v.normalizeCalendarItemKind("meeting")).toBe("event");
+    expect(v.normalizeCalendarItemKind(null)).toBe("event");
+  });
+});
