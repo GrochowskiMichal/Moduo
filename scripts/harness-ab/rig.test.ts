@@ -172,6 +172,27 @@ describe("refusals", () => {
     expect(() => rigProfile(lane, { source: ROOT, extraHosts: ["*.co"] })).toThrow(RefusedError);
   });
 
+  it("an arm can't set the environment the rig, lane.sh or srt read", () => {
+    const envs: Record<string, string>[] = [
+      { TURBO_API: "http://[::1]:54322" },
+      { HOME: "/tmp/fake" },
+      { HTTPS_PROXY: "http://127.0.0.1:9" },
+      { MODUO_LANE_PROFILE: "/tmp/p.json" },
+      { NODE_OPTIONS: "--require x" },
+    ];
+    for (const env of envs)
+      expect(refused(() => planWith({ arms: [arm({ env })] }))).toMatch(/set by the rig/);
+    expect(() => planWith({ arms: [arm({ env: { FEATURE_FLAG: "1" } })] })).not.toThrow();
+  });
+
+  it("summarize counts tools named like Object's own methods", () => {
+    const line = JSON.stringify({
+      type: "assistant",
+      message: { content: [{ type: "tool_use", name: "toString" }] },
+    });
+    expect(summarize(line).tools).toEqual({ toString: 1 });
+  });
+
   it("a set or arm name from the command line can't point outside the rig", () => {
     expect(() => loadArm("../../../etc/x")).toThrow(/isn't a valid arm name/);
     expect(() => loadSet("../core")).toThrow(/isn't a valid task set name/);

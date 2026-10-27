@@ -51,7 +51,7 @@ function onInit(out: AgentSummary, ev: Event) {
 function onAssistant(out: AgentSummary, content: Block[]) {
   for (const block of content) {
     if (block.type !== "tool_use" || !block.name || !isSafeKey(block.name)) continue;
-    out.tools[block.name] = (out.tools[block.name] ?? 0) + 1;
+    out.tools[block.name] = (Object.hasOwn(out.tools, block.name) ? out.tools[block.name]! : 0) + 1;
     if (block.name === "Bash" && TEST_COMMAND.test(block.input?.command ?? "")) out.testRuns++;
   }
 }

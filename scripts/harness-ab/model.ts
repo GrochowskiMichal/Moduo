@@ -110,7 +110,8 @@ export function missingPlugins(
 /** How an arm differs from its baseline: one message per problem (empty when it is a clean pair). */
 export function experimentProblems(arm: Arm, baseline: Arm): string[] {
   if (!arm.experiment) return [];
-  const allowed: readonly string[] = EXPERIMENTS[arm.experiment.name] ?? [];
+  const name = arm.experiment.name;
+  const allowed: readonly string[] = Object.hasOwn(EXPERIMENTS, name) ? EXPERIMENTS[name]! : [];
   if (allowed.length === 0) return [`${arm.id}: unknown experiment "${arm.experiment.name}"`];
   const fields = new Set([...Object.keys(arm), ...Object.keys(baseline)]);
   for (const f of ["id", "description", "experiment"]) fields.delete(f);

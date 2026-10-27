@@ -74,6 +74,16 @@ export function hostProblem(host: string): string | null {
 const UNSAFE_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 export const isSafeKey = (key: string) => !UNSAFE_KEYS.has(key);
 
+/**
+ * Environment an arm may not set: what the rig passes itself (HOME, PATH, TMPDIR: srt expands `~`
+ * from HOME, so the deny rules would move), what lane.sh and srt read (TURBO_API adds an allowed
+ * host after the profile is checked), model routing and proxies, and loader hooks.
+ */
+export const reservedEnv = (key: string) =>
+  ENV_ALLOW.includes(key) ||
+  /^(MODUO_|TURBO_|SRT_|CLAUDE_|ANTHROPIC_|LC_|DYLD_|LD_|BUN_|NODE_|GIT_)/i.test(key) ||
+  /proxy/i.test(key);
+
 /** Claude flags an arm may not pass: the rig owns MCP, settings, permissions and the workspace. */
 export const RESERVED_FLAGS = [
   "--mcp-config",
@@ -141,6 +151,9 @@ export function refuseArm(arm: ArmLike): Refusal[] {
     if (RESERVED_FLAGS.includes(flag))
       out.push({ where, reason: `${flag} is set by the rig, not by an arm` });
   }
+  for (const key of Object.keys(arm.env ?? {}))
+    if (reservedEnv(key))
+      out.push({ where, reason: `env ${key} is set by the rig, lane.sh or srt, not by an arm` });
   for (const host of arm.network ?? []) {
     const problem = hostProblem(host);
     if (problem) out.push({ where, reason: `network ${host}: ${problem}` });
