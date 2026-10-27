@@ -139,6 +139,20 @@ describe("score", () => {
     expect(compare(errored, baseline).ok).toBe(false);
   });
 
+  it("holds a run of some questions to those questions' baseline", () => {
+    const baseline = score([row("E01", "pass"), row("E02", "fail"), row("E03", "pass")]);
+    expect(compare(score([row("E01", "pass")]), baseline)).toEqual({
+      ok: true,
+      lost: [],
+      gained: [],
+    });
+    expect(compare(score([row("E01", "fail")]), baseline)).toMatchObject({
+      ok: false,
+      lost: ["E01"],
+    });
+    expect(compare(score([row("E02", "fail")]), baseline).ok).toBe(true);
+  });
+
   it("regrades stored answers with the current keys and leaves errored runs alone", () => {
     const q = questions.find((x) => x.staleAnswer);
     if (!q) throw new Error("no trap");

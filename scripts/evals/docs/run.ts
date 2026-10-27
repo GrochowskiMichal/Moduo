@@ -136,15 +136,18 @@ export type Baseline = Score & {
   regraded: boolean;
 };
 
-/** A run against the baseline: the score may not drop, and every lost question is named. */
+/**
+ * A run against the baseline: the score may not drop, and every lost question is named. A run of
+ * some questions (`--tasks`) is held to the baseline of those questions only.
+ */
 export function compare(now: Score, baseline: Pick<Score, "score" | "questions">) {
-  const lost = Object.entries(baseline.questions)
-    .filter(([id, share]) => (now.questions[id] ?? 0) < share)
-    .map(([id]) => id);
-  const gained = Object.entries(now.questions)
-    .filter(([id, share]) => share > (baseline.questions[id] ?? 0))
-    .map(([id]) => id);
-  return { ok: now.errors.length === 0 && now.score >= baseline.score, lost, gained };
+  const asked = Object.keys(now.questions);
+  const shares = asked.map((id) => baseline.questions[id] ?? 0);
+  const all = Object.keys(baseline.questions).every((id) => id in now.questions);
+  const floor = all ? baseline.score : shares.reduce((a, b) => a + b, 0) / (shares.length || 1);
+  const lost = asked.filter((id) => (now.questions[id] ?? 0) < (baseline.questions[id] ?? 0));
+  const gained = asked.filter((id) => (now.questions[id] ?? 0) > (baseline.questions[id] ?? 0));
+  return { ok: now.errors.length === 0 && now.score >= floor, lost, gained };
 }
 
 const readRows = (file: string) =>
