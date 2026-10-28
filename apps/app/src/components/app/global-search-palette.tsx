@@ -8,7 +8,7 @@
 
 import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { Eraser, MessageCircle, Paperclip, Search, X } from "lucide-react";
-import { type ComponentType, type KeyboardEvent, useState } from "react";
+import { type ComponentType, type KeyboardEvent, type ReactNode, useState } from "react";
 
 import { filesLabel } from "../../features/attachments/files";
 import { Snippet } from "../../features/chat/find/snippet";
@@ -142,7 +142,8 @@ function ResultRow({
   now,
   onOpen,
   ageAt,
-  onRemove,
+  kind = "entity",
+  trailing,
 }: {
   row: SearchHit;
   query: string;
@@ -152,9 +153,11 @@ function ResultRow({
   now: Date | undefined;
   onOpen: (row: SearchHit) => void;
   /** The time the age counts from: when it changed, or for Recent when you opened it. */
-  ageAt?: string;
-  /** Recent's remove control (GS-8, Q13). */
-  onRemove?: () => void;
+  ageAt: string;
+  /** The row's cmdk value prefix: a Recent row is its own row (GS-8). */
+  kind?: "entity" | "recent";
+  /** After the age (Recent's remove control, GS-8). */
+  trailing?: ReactNode;
 }) {
   const Icon = resolveEntityIcon(row.entity_type, row.icon);
   const title = row.title.trim() || "Untitled";
@@ -163,11 +166,10 @@ function ResultRow({
     row.match === "title" || row.match === "handle"
       ? titleSegments(title, query)
       : [{ text: title, marked: false }];
-  const at = ageAt ?? row.updated_at;
-  const age = at ? formatAge(at, now) : "";
+  const age = ageAt ? formatAge(ageAt, now) : "";
   return (
     <CommandItem
-      value={`${onRemove ? "recent" : "entity"}:${row.entity_type}:${row.entity_id}`}
+      value={`${kind}:${row.entity_type}:${row.entity_id}`}
       onSelect={() => onOpen(row)}
       className="group/row items-start"
     >
@@ -225,21 +227,26 @@ function ResultRow({
           {age}
         </span>
       ) : null}
-      {onRemove ? (
-        // Shown on hover and on the highlighted row; the click stays off the row.
-        <IconButton
-          icon={X}
-          label={`Remove ${title} from Recent`}
-          tooltip={null}
-          className="-my-1 shrink-0 opacity-0 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100 focus-visible:opacity-100"
-          onPointerDown={(e) => e.preventDefault()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-        />
-      ) : null}
+      {trailing}
     </CommandItem>
+  );
+}
+
+/** Recent's remove control: shown on hover and on the highlighted row; the
+ *  click stays off the row (it would open the item) and focus in the input. */
+function RemoveRecent({ title, onRemove }: { title: string; onRemove: () => void }) {
+  return (
+    <IconButton
+      icon={X}
+      label={`Remove ${title.trim() || "Untitled"} from Recent`}
+      tooltip={null}
+      className="-my-1 shrink-0 opacity-0 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100 focus-visible:opacity-100"
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onRemove();
+      }}
+    />
   );
 }
 
@@ -266,8 +273,9 @@ function RecentGroup({
           fileCount={0}
           now={now}
           onOpen={onOpen}
-          ageAt={r.last_opened_at || undefined}
-          onRemove={() => recent.onRemove(r)}
+          ageAt={r.last_opened_at}
+          kind="recent"
+          trailing={<RemoveRecent title={r.title} onRemove={() => recent.onRemove(r)} />}
         />
       ))}
       <CommandItem
@@ -499,6 +507,7 @@ export function GlobalSearchPalette({
       fileCount={fileCounts?.get(r.entity_id) ?? 0}
       now={now}
       onOpen={onOpenRow}
+      ageAt={r.updated_at}
     />
   );
   const groups = (list: PaletteView["groups"]) =>

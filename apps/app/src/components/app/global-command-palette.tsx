@@ -370,22 +370,18 @@ export function GlobalCommandPalette() {
 
   const chips = useMemo(() => paletteChips(modulePermissions), [modulePermissions]);
 
-  // Remove one, or clear: the list changes at once; a failed write reads
-  // Recent again, so it shows what the server kept.
-  const reloadRecents = useCallback(() => {
-    if (!runtime || !selectedWorkspaceId) return;
-    runtime.spine.recents({ workspaceId: selectedWorkspaceId, limit: RECENT_LIMIT }).then(
-      setRecents,
-      () => setRecents([]),
-    );
-  }, [runtime, selectedWorkspaceId]);
+  // Remove one, or clear: the list changes at once, and comes back as it was
+  // when the write fails (offline), since the server kept it.
   const recent: PaletteRecent | null =
     runtime && selectedWorkspaceId
       ? {
           rows: recents,
           onRemove: (row) => {
-            setRecents((list) =>
-              list.filter((r) => r.entity_type !== row.entity_type || r.entity_id !== row.entity_id),
+            const before = recents;
+            setRecents(
+              before.filter(
+                (r) => r.entity_type !== row.entity_type || r.entity_id !== row.entity_id,
+              ),
             );
             runtime.spine
               .forgetRecent({
@@ -393,11 +389,14 @@ export function GlobalCommandPalette() {
                 type: row.entity_type,
                 id: row.entity_id,
               })
-              .catch(reloadRecents);
+              .catch(() => setRecents(before));
           },
           onClear: () => {
+            const before = recents;
             setRecents([]);
-            runtime.spine.clearRecents({ workspaceId: selectedWorkspaceId }).catch(reloadRecents);
+            runtime.spine
+              .clearRecents({ workspaceId: selectedWorkspaceId })
+              .catch(() => setRecents(before));
           },
         }
       : null;

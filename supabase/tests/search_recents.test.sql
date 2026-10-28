@@ -150,6 +150,31 @@ SELECT test.ok(test.open_as('X', 'W', 'note', 'N2') = 'false' AND test.held('X',
 SELECT test.ok(test.open_as('A', 'W', 'nonsense', 'N2') = 'false',
   'an unknown type records nothing');
 
+-- Other types (validator): a task, a contact, and an event, read back with
+-- their titles; someone else's private event is never recorded (Q23).
+INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) VALUES
+  (test.id('TK'), test.id('W'), test.id('P1'), test.id('O'), 'Recents task', 'todo');
+INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
+  (test.id('CT'), test.id('W'), test.id('O'), 'Recents contact');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'contact', test.id('CT'), 'workspace', NULL, 'view', test.id('O'))
+ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO NOTHING;
+INSERT INTO public.calendar_events (id, workspace_id, owner_id, title, start_time, end_time, is_private) VALUES
+  (test.id('EP'), test.id('W'), test.id('O'), 'Private dentist', now() + interval '1 day', now() + interval '1 day 1 hour', true);
+INSERT INTO test.said VALUES ('TK', test.open_as('A', 'W', 'task', 'TK')), ('CT', test.open_as('A', 'W', 'contact', 'CT')),
+                             ('EP', test.open_as('A', 'W', 'event', 'EP')), ('EPO', test.open_as('O', 'W', 'event', 'EP'));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'TK') = 'true' AND (SELECT v FROM test.said WHERE k = 'CT') = 'true',
+  'a task and a contact are recorded', (SELECT string_agg(k || '=' || v, ' ') FROM test.said));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'EP') = 'false',
+  'someone else''s private event is never recorded');
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'EPO') = 'true'
+           AND (test.recent_as('O', 'W') -> 0 ->> 'title') = 'Private dentist',
+  'its owner''s is, with its title', test.recent_as('O', 'W')::text);
+SELECT test.ok((SELECT array_agg(h ->> 'title' ORDER BY h ->> 'title') FROM jsonb_array_elements(test.recent_as('A', 'W', 50)) h
+                 WHERE h ->> 'entity_type' IN ('task', 'contact')) = ARRAY['Recents contact', 'Recents task'],
+  'Recent reads a task''s and a contact''s titles', test.recent_as('A', 'W', 50)::text);
+DELETE FROM public.search_recents WHERE user_id IN (test.id('A'), test.id('O')) AND entity_id IN (test.id('TK'), test.id('CT'), test.id('EP'));
+
 -- Q19: an agent's opens never count.
 SELECT test.as_key('KA', format($q$SELECT public.search_op_record_open(%L, 'note', %L)$q$,
                                 test.id('W'), test.id('N3')));

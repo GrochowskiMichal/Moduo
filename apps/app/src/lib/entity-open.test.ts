@@ -8,6 +8,7 @@ import {
   entityOpenTarget,
   markEntityOpenIntent,
   recentRefFor,
+  recordEntityOpen,
   takeEntityOpenIntent,
 } from "./entity-open";
 
@@ -154,5 +155,47 @@ describe("recentRefFor", () => {
     expect(recentRefFor({ to: "/tasks" })).toBeNull();
     expect(recentRefFor({ type: "wat", id: "x" })).toBeNull();
     expect(recentRefFor(null)).toBeNull();
+  });
+});
+
+// GS-8: the host listener's record call (validator: the wiring had no test).
+describe("recordEntityOpen", () => {
+  const spy = (fail = false) => {
+    const calls: Array<{ workspaceId: string; type: string; id: string }> = [];
+    return {
+      calls,
+      spine: {
+        recordOpen: async (input: { workspaceId: string; type: string; id: string }) => {
+          calls.push(input);
+          if (fail) throw new Error("offline");
+        },
+      },
+    };
+  };
+
+  it("records an item in the link's workspace, else the current one", () => {
+    const a = spy();
+    recordEntityOpen(a.spine, "w1", { type: "project", id: "p1" });
+    recordEntityOpen(a.spine, "w1", { type: "note", id: "n1", workspaceId: "w2" });
+    expect(a.calls).toEqual([
+      { workspaceId: "w1", type: "bucket", id: "p1" },
+      { workspaceId: "w2", type: "note", id: "n1" },
+    ]);
+  });
+
+  it("records nothing that isn't an item, or without a workspace or runtime", () => {
+    const a = spy();
+    recordEntityOpen(a.spine, "w1", { to: "/tasks" });
+    recordEntityOpen(a.spine, "w1", { type: "settings", id: "storage" });
+    recordEntityOpen(a.spine, null, { type: "note", id: "n1" });
+    recordEntityOpen(null, "w1", { type: "note", id: "n1" });
+    expect(a.calls).toEqual([]);
+  });
+
+  it("lets a failed record go", async () => {
+    const a = spy(true);
+    expect(() => recordEntityOpen(a.spine, "w1", { type: "note", id: "n1" })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(a.calls).toHaveLength(1);
   });
 });

@@ -9,11 +9,7 @@ import {
   parsedRelationKind,
   requireRow,
 } from "@contracts/rows";
-import {
-  normalizeSearchAllRow,
-  normalizeSearchRecent,
-  type SearchAllRow,
-} from "@contracts/search";
+import { normalizeSearchAllRow, normalizeSearchRecent, type SearchAllRow } from "@contracts/search";
 import { normalizeContentAuthorKind, normalizeReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
@@ -281,15 +277,13 @@ export const webSpine: SpineRuntime = {
   async recordOpen({ workspaceId, type, id }) {
     // Only a uuid: a desktop mail thread's device id never leaves the device (EM-3).
     if (!UUID.test(id)) return;
-    try {
-      await untypedDb(supabaseClient).rpc("search_op_record_open", {
-        p_workspace_id: workspaceId,
-        p_entity_type: type,
-        p_entity_id: id,
-      });
-    } catch {
-      // Recording an open never gets in the way of opening it.
-    }
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_record_open", {
+      p_workspace_id: workspaceId,
+      p_entity_type: type,
+      p_entity_id: id,
+    });
+    // Before the migration reaches this database there is nothing to record.
+    if (error && !isMissingFunctionError(error, "search_op_record_open")) throw new DbError(error);
   },
 
   async recents({ workspaceId, limit }) {

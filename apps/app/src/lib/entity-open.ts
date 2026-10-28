@@ -14,6 +14,8 @@
 // return null; the listener shows a quiet "not available yet" toast, never a
 // crash.
 
+import type { SpineRuntime } from "./runtime.types.spine";
+
 // Every surface that opens an entity (rows, chips, widgets, the bell in
 // notification-center.tsx) dispatches this, never `navigate({ to })`. A test for
 // a new target asserts the entity is selected on arrival, not just the route.
@@ -120,4 +122,20 @@ export function recentRefFor(
   if (!detail || detail.to || !detail.type || !detail.id) return null;
   const type = RECENT_TYPES[detail.type];
   return type ? { type, id: detail.id } : null;
+}
+
+/**
+ * Record your open of an item (GS-8) from the host listener. Only this app's
+ * opens reach the listener, so an agent's never count (Q19). A failed record
+ * never gets in the way of the open itself.
+ */
+export function recordEntityOpen(
+  spine: Pick<SpineRuntime, "recordOpen"> | null | undefined,
+  workspaceId: string | null | undefined,
+  detail: { type?: string; id?: string; to?: string; workspaceId?: string } | null | undefined,
+): void {
+  const ref = recentRefFor(detail);
+  const ws = detail?.workspaceId ?? workspaceId;
+  if (!spine || !ref || !ws) return;
+  spine.recordOpen({ workspaceId: ws, ...ref }).catch(() => {});
 }

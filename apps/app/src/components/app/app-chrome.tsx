@@ -39,7 +39,7 @@ import {
   ENTITY_OPEN_EVENT,
   entityOpenTarget,
   markEntityOpenIntent,
-  recentRefFor,
+  recordEntityOpen,
 } from "../../lib/entity-open";
 import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
@@ -283,12 +283,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         chainId: detail.chainId,
       });
       // Your open of an item, for ⌘K's Recent and the personal ranking (GS-8).
-      // Only this app's opens reach here: an agent's never count (Q19).
-      const recent = target ? recentRefFor(detail) : null;
-      const recentWorkspace = detail.workspaceId ?? workspaceNav.current.selectedWorkspaceId;
-      if (recent && recentWorkspace && runtime) {
-        void runtime.spine.recordOpen({ workspaceId: recentWorkspace, ...recent });
-      }
+      recordEntityOpen(runtime?.spine, workspaceNav.current.selectedWorkspaceId, detail);
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,

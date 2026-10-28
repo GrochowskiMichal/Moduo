@@ -41,7 +41,13 @@ rs.mock("../../providers/workspace-provider", () => ({
   useWorkspace: () => ({
     selectedWorkspaceId: "w1",
     selectedWorkspace: { id: "w1", taskKey: "MOD" },
-    modulePermissions: { notes: "edit", tasks: "edit", calendar: "edit", contacts: "edit", chat: "edit" },
+    modulePermissions: {
+      notes: "edit",
+      tasks: "edit",
+      calendar: "edit",
+      contacts: "edit",
+      chat: "edit",
+    },
     members: [],
   }),
 }));
@@ -172,9 +178,9 @@ describe("⌘K Recent (GS-8)", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
-    expect(screen.getAllByRole("option").some((o) => (o.textContent ?? "").includes("Open Home"))).toBe(
-      true,
-    );
+    expect(
+      screen.getAllByRole("option").some((o) => (o.textContent ?? "").includes("Open Home")),
+    ).toBe(true);
   });
 
   it("keeps the actions and stays quiet when Recent can't be read", async () => {
@@ -184,8 +190,8 @@ describe("⌘K Recent (GS-8)", () => {
       await new Promise((r) => setTimeout(r, 0));
     });
     expect(screen.queryByRole("group", { name: "Recent" })).toBeNull();
-    expect(screen.getAllByRole("option").some((o) => (o.textContent ?? "").includes("Open Home"))).toBe(
-      true,
-    );
+    expect(
+      screen.getAllByRole("option").some((o) => (o.textContent ?? "").includes("Open Home")),
+    ).toBe(true);
   });
 });

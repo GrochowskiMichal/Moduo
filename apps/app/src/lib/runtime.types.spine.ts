@@ -107,7 +107,8 @@ export type SpineRuntime = {
    * Record your open of an item (GS-8): every `moduo:entity:open` of an item,
    * for ⌘K's Recent and the personal ranking. Sends only a uuid id (a desktop
    * mail thread's device id never leaves the device); the server records only
-   * an item you can see. Quiet: never throws.
+   * an item you can see. Throws a `DbError` on a failed write; the caller
+   * lets it go, since recording never gets in the way of opening.
    */
   recordOpen(input: { workspaceId: string; type: string; id: string }): Promise<void>;
   /**

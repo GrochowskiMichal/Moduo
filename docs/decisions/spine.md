@@ -2,6 +2,14 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · GS-8, recents are written only through ops; `search_all`'s personal term is cut into the live body; opens are recorded at the entity-open listener** → [specs/global-search.md](../../specs/global-search.md) Assumption 14 · `supabase/migrations/20261029150000_search_recents.sql`
+  - status: current
+  - Who: the agent (GS-8, Mike in engineer mode), 2026-10-28.
+  - Decision: clients may only SELECT their own `search_recents` rows. Every write is a SECURITY DEFINER op: `search_op_record_open` (refuses API keys, Q19; records only an item in that workspace the caller can see; keeps 50 per person per workspace), `search_op_forget_open` and `search_op_clear_recents`. `search_recents_list` re-checks every row's visibility when read. The personal term is `search__frecency` (log-scaled count, 20 opens = 1, halving every 14 days), weight 0.20, read under the caller's RLS inside the invoker `search_all`, so it is 0 for a key. It is cut into the live `search_all` body by replacing `+ 0.20 * 0` (`pg_temp.recut`), and is not a full redefinition. The app records an open from the `moduo:entity:open` host listener, and only for uuid ids.
+  - Why: with writes only through ops, the cap, the visibility check and the agents-never-count rule can't be bypassed by a direct insert. GS-4, GS-5 and GS-6 redefine `search_all` in parallel, and a text cut keeps whichever modules' sources the live body has. A desktop mail thread's device id must never reach Supabase (EM-3).
+  - Rejected: insert and update policies for clients (spec text before this change), localStorage recents (they can't follow you across devices, Q12), and a full `CREATE OR REPLACE` of `search_all`.
+  - Note: every later full rewrite of `search_all` must carry the `search__frecency` term. Opens made inside a module (Notes' sidebar, Tasks' list) don't dispatch the event, so they aren't recorded yet (a follow-up).
+
 - **2026-10-28 · GS-3, `search_all` is SECURITY INVOKER over module functions that resolve the actor; `SearchHit` gains `archived`; the registry adapter walks its matches best first** → [specs/global-search.md](../../specs/global-search.md) Assumptions 2, 5, 7, 8, 12, 18 · `supabase/migrations/20261029090000_search_all.sql`
   - status: current
   - supersedes: the GS-2 entry's "GS-3 settles `search_all`'s shape"
