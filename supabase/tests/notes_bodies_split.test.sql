@@ -200,7 +200,7 @@ SELECT test.ok(
   (SELECT pg_get_expr(d.adbin, d.adrelid) FROM pg_attrdef d
      JOIN pg_attribute a ON a.attrelid = d.adrelid AND a.attnum = d.adnum
     WHERE d.adrelid = 'public.note_bodies'::regclass AND a.attname = 'search_tsv')
-  LIKE '%left(COALESCE(body_text, ''''::text), 150000)%',
+  LIKE '%left"(COALESCE(body_text, ''''::text), 150000)%',
   'search_tsv still reads at most 150,000 characters of the body');
 
 DO $$
@@ -488,8 +488,10 @@ SELECT test.ok(
   'compat: a reader selecting n.doc_state, n.body_md, … from notes gets the stored content');
 SELECT test.ok(
   test.value_as('V', format($q$SELECT count(*)::text FROM public.notes n
-      WHERE n.workspace_id = %L AND n.search_tsv @@ websearch_to_tsquery('simple', 'zebra')$q$, test.id('W'))) = '1',
-  'compat: v1.4.0''s search filter on search_tsv still finds what V can see');
+      WHERE n.workspace_id = %L AND n.search_tsv @@ websearch_to_tsquery('simple', 'zebra')$q$, test.id('W')))
+  = jsonb_array_length(test.search_as('V', 'zebra'))::text
+  AND jsonb_array_length(test.search_as('V', 'zebra')) >= 1,
+  'compat: v1.4.0''s search filter on search_tsv finds what search finds for V (N and O''s copy, never H)');
 SELECT test.ok(
   test.value_as('V', format($q$SELECT coalesce(public.body_md(jsonb_populate_record(NULL::public.notes,
       jsonb_build_object('id', %L, 'workspace_id', %L))), 'NONE')$q$, test.id('H'), test.id('W'))) = 'NONE'

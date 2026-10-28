@@ -313,7 +313,7 @@ describe("content reads (NS-11)", () => {
 
   it("reads a note's stored body from note_bodies, in the key's workspace", async () => {
     const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"));
-    await tool("notes_update").handler({ note_id: NOTE, markdown: "Plan\n\nNew body" }, ctx);
+    await tool("notes_update").handler({ note_id: NOTE, markdown: "New body" }, ctx);
     expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("body_md"))).toBe(true);
     expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
     expect(clientMarkdown(tables, NOTE)).toBe("Plan\n\nNew body");
