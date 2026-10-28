@@ -2,9 +2,9 @@
 // event lands on, whether Google makes a Meet link, who Google invites, and
 // the lines the box says about it.
 //
-// - New events go to Your calendar. Outside guests with an email route it to
-//   your main Google calendar (the "New events go to" one when that's a Google
-//   calendar), so Google sends the invites. Without Google it saves on Your
+// - New events go to the "New events go to" calendar: Your calendar, or the
+//   chosen Google calendar for every event. Without a chosen one, outside guests
+//   with an email route it to your main Google calendar, so Google sends the invites. Without Google it saves on Your
 //   calendar without invites, and the box says so.
 // - A Meet link is added by default only when there are guests, it isn't a
 //   meal and no place says it's in person; only Google can make one, so it
@@ -72,7 +72,9 @@ function targetOf(
     if (account) return { kind: "google", accountId: account.id };
     return { kind: "moduo", calendarId: p.calendarId === "moduo" ? null : p.calendarId };
   }
-  const main = wantsGoogle ? mainGoogleAccount(accounts) : null;
+  // A chosen "New events go to" calendar takes every event; else guests route to Google.
+  const chosen = accounts.find((a) => a.isDefaultTarget && a.provider === "google");
+  const main = chosen ?? (wantsGoogle ? mainGoogleAccount(accounts) : null);
   return main ? { kind: "google", accountId: main.id } : { kind: "moduo", calendarId: null };
 }
 

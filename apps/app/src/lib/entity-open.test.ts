@@ -11,7 +11,10 @@ import {
   markEntityOpenHighlight,
   markEntityOpenIntent,
   recentRefFor,
+  recentRefFromLocation,
   recordEntityOpen,
+  recordLocationOpen,
+  resetOpenRecordingForTests,
   subscribeEntityOpenHighlight,
   takeEntityOpenIntent,
 } from "./entity-open";
@@ -259,5 +262,82 @@ describe("recordEntityOpen", () => {
     expect(() => recordEntityOpen(a.spine, "w1", { type: "note", id: "n1" })).not.toThrow();
     await new Promise((r) => setTimeout(r, 0));
     expect(a.calls).toHaveLength(1);
+  });
+});
+
+// Opens made inside a module (the Notes sidebar, the Tasks list, …) count too:
+// each module mirrors its selection into the URL, and the host records it there.
+describe("recentRefFromLocation", () => {
+  const ID = "0b9c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3";
+  it("reads each module's mirrored selection", () => {
+    expect(recentRefFromLocation("/notes", { id: ID })).toEqual({ type: "note", id: ID });
+    expect(recentRefFromLocation("/tasks", { place: "today", id: ID })).toEqual({
+      type: "task",
+      id: ID,
+    });
+    expect(recentRefFromLocation("/contacts", { type: "company", id: ID })).toEqual({
+      type: "company",
+      id: ID,
+    });
+    expect(recentRefFromLocation("/calendar", { event: ID })).toEqual({ type: "event", id: ID });
+    expect(recentRefFromLocation("/email", { thread: ID })).toEqual({
+      type: "email_thread",
+      id: ID,
+    });
+  });
+  it("ignores no selection, a handle, a device-only id and other pages", () => {
+    expect(recentRefFromLocation("/notes", {})).toBeNull();
+    expect(recentRefFromLocation("/tasks", { id: "MOD-142" })).toBeNull();
+    expect(recentRefFromLocation("/email", { thread: "gmail:abc" })).toBeNull();
+    expect(recentRefFromLocation("/contacts", { id: ID })).toBeNull();
+    expect(recentRefFromLocation("/chat", { c: ID })).toBeNull();
+    expect(recentRefFromLocation("/settings", { id: ID })).toBeNull();
+  });
+});
+
+describe("recordLocationOpen", () => {
+  const A = "1b9c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3";
+  const B = "2b9c1d2e-3f40-4a5b-8c6d-7e8f90a1b2c3";
+  const spy = () => {
+    const calls: Array<{ workspaceId: string; type: string; id: string }> = [];
+    return {
+      calls,
+      spine: {
+        recordOpen: async (input: { workspaceId: string; type: string; id: string }) => {
+          calls.push(input);
+        },
+      },
+    };
+  };
+
+  it("records a selection made inside a module once, until it changes", () => {
+    resetOpenRecordingForTests();
+    const a = spy();
+    recordLocationOpen(a.spine, "w1", "/notes", { id: A });
+    recordLocationOpen(a.spine, "w1", "/notes", { id: A });
+    recordLocationOpen(a.spine, "w1", "/tasks", { place: "today", id: B });
+    recordLocationOpen(a.spine, "w1", "/tasks", { place: "inbox", id: B });
+    recordLocationOpen(a.spine, "w1", "/notes", { id: A });
+    expect(a.calls).toEqual([
+      { workspaceId: "w1", type: "note", id: A },
+      { workspaceId: "w1", type: "task", id: B },
+      { workspaceId: "w1", type: "note", id: A },
+    ]);
+  });
+
+  it("doesn't count an entity-open twice when its page then mirrors the id", () => {
+    resetOpenRecordingForTests();
+    const a = spy();
+    recordEntityOpen(a.spine, "w1", { type: "project", id: A });
+    recordLocationOpen(a.spine, "w1", "/tasks", { id: A });
+    expect(a.calls).toEqual([{ workspaceId: "w1", type: "bucket", id: A }]);
+  });
+
+  it("records the same selection again in another workspace", () => {
+    resetOpenRecordingForTests();
+    const a = spy();
+    recordLocationOpen(a.spine, "w1", "/notes", { id: A });
+    recordLocationOpen(a.spine, "w2", "/notes", { id: A });
+    expect(a.calls).toHaveLength(2);
   });
 });

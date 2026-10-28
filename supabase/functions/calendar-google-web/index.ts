@@ -25,7 +25,9 @@ import {
   GoogleRefusal,
   googleSendUpdates,
   googleUserEmail,
+  getGoogleEvent,
   insertGoogleEvent,
+  isGoogleEventId,
   listGoogleCalendars,
   listGoogleEvents,
   patchGoogleEvent,
@@ -303,11 +305,25 @@ async function pushAction({ body, accessToken, email, calendarId }: AccountCtx):
       visibility: extras.visibility as "private" | undefined,
       conferenceData: extras.conferenceData as Record<string, unknown> | undefined,
       sendUpdates: guests && guests.length > 0 ? "all" : undefined,
+      // The app's own id for the event, when it sent a valid one (older apps send none).
+      id: isGoogleEventId(body.eventId) ? body.eventId : undefined,
     });
   } catch (err) {
     return writeFailure(err, "google_event_failed");
   }
   return json({ event: { ...created, calendarId: `google:${email}:${targetCalendar}` } });
+}
+
+/** One event by the id the app made for it: `{ event }`, or `{ event: null }` when Google has none. */
+async function getAction({ body, accessToken, email, calendarId }: AccountCtx): Promise<Response> {
+  if (!isGoogleEventId(body.eventId)) return json({ error: "bad_event" }, 400);
+  const targetCalendar = calendarId || "primary";
+  try {
+    const found = await getGoogleEvent({ accessToken, calendarId: targetCalendar, eventId: body.eventId });
+    return json({ event: found ? { ...found, calendarId: `google:${email}:${targetCalendar}` } : null });
+  } catch (err) {
+    return writeFailure(err, "google_event_failed");
+  }
 }
 
 /**
@@ -405,6 +421,7 @@ Deno.serve(async (req: Request) => {
   const ctx: AccountCtx = { body, accessToken, email, calendarId };
   if (action === "events") return eventsAction(ctx);
   if (action === "push") return pushAction(ctx);
+  if (action === "get") return getAction(ctx);
   if (action === "update" || action === "delete") return writeAction(action, ctx);
   return json({ error: "unknown_action" }, 400);
 });

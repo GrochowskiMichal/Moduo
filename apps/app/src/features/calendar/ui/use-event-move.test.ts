@@ -16,10 +16,11 @@ import { useEventMove } from "./use-event-move";
 
 const h = rs.hoisted(() => ({
   push: rs.fn(),
+  get: rs.fn(),
   toastError: rs.fn(),
   undoToast: rs.fn(() => "toast-1"),
 }));
-rs.mock("../google-web", () => ({ pushGoogleWebEvent: h.push }));
+rs.mock("../google-web", () => ({ pushGoogleWebEvent: h.push, getGoogleWebEvent: h.get }));
 rs.mock("sonner", () => ({
   toast: Object.assign(rs.fn(), { error: h.toastError, dismiss: rs.fn() }),
 }));
@@ -123,6 +124,7 @@ function setup(over: { removeFails?: boolean } = {}) {
 beforeEach(() => {
   clearUndo();
   h.push.mockReset();
+  h.get.mockReset();
   h.toastError.mockReset();
   h.undoToast.mockClear();
 });
@@ -206,5 +208,34 @@ describe("useEventMove", () => {
     });
     expect(h.push).not.toHaveBeenCalled();
     expect(runtime.calendar.removeEvent).not.toHaveBeenCalled();
+  });
+
+  it("a push whose answer was lost finds Google's copy by our id and finishes the move once", async () => {
+    h.push.mockRejectedValue(new Error("Gateway timeout"));
+    h.get.mockResolvedValue(GOOGLE_REPLY);
+    const { hook, runtime, state } = setup();
+    await act(async () => {
+      await hook.result.current("ev-a", "acc-work");
+    });
+
+    const sentId = (h.push.mock.calls[0]![0] as { eventId?: string }).eventId;
+    expect(sentId).toMatch(/^[a-v0-9]{5,1024}$/);
+    expect(h.get).toHaveBeenCalledWith({ externalAccountId: WORK.externalId, eventId: sentId });
+    expect(runtime.calendar.mirrorEvents).toHaveBeenCalledTimes(1);
+    expect(state.events.map((e) => e.id)).toEqual(["ev-g"]);
+    expect(h.toastError).not.toHaveBeenCalled();
+  });
+
+  it("a lost answer Google has no copy of leaves only the Moduo event", async () => {
+    h.push.mockRejectedValue(new Error("Gateway timeout"));
+    h.get.mockResolvedValue(null);
+    const { hook, runtime, state } = setup();
+    await act(async () => {
+      await hook.result.current("ev-a", "acc-work");
+    });
+    expect(runtime.calendar.mirrorEvents).not.toHaveBeenCalled();
+    expect(runtime.calendar.removeEvent).not.toHaveBeenCalled();
+    expect(state.events.map((e) => e.id)).toEqual(["ev-a"]);
+    expect(String(h.toastError.mock.calls[0]![0])).toContain("Gateway timeout");
   });
 });

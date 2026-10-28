@@ -5,6 +5,7 @@ import type { CalendarEventModel } from "../events";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
 import type { useCalendarPrefs } from "../hooks/use-calendar-prefs";
 import { localDayKey } from "../lens";
+import { oneChipPerMeeting } from "../one-meeting";
 
 type Prefs = ReturnType<typeof useCalendarPrefs>;
 type DatedTask = { scheduledAt?: string | null; status: string };
@@ -30,14 +31,21 @@ export function useCalendarShown(
   calendar: Pick<CalendarModuleApi, "accounts" | "events">,
   { prefs, updatePrefs }: Prefs,
   tasks: readonly DatedTask[],
+  userId: string | null,
 ) {
   const accountHues = useMemo(
     () => resolveAccountHues(calendar.accounts, prefs.accountColors),
     [calendar.accounts, prefs.accountColors],
   );
+  // One chip per meeting among the calendars shown (a hidden copy shows the other).
   const shownEvents = useMemo(
-    () => visibleEvents(calendar.events, prefs.hiddenAccountIds),
-    [calendar.events, prefs.hiddenAccountIds],
+    () =>
+      oneChipPerMeeting(
+        visibleEvents(calendar.events, prefs.hiddenAccountIds),
+        calendar.accounts,
+        userId,
+      ),
+    [calendar.events, prefs.hiddenAccountIds, calendar.accounts, userId],
   );
   const toggleAccountVisibility = useCallback(
     (accountId: string) => {

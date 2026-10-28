@@ -17,6 +17,7 @@ import {
   startWebGoogleConnect,
 } from "../../calendar/google-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
+import { NewEventsToSetting } from "../../calendar/ui/new-events-to-setting";
 import {
   asHistoryDepth,
   describeDepthChange,
@@ -52,7 +53,7 @@ const CAL_PROVIDERS = [
 ];
 
 export function IntegrationsSection() {
-  const { runtime } = useAuth();
+  const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
   const [calAccounts, setCalAccounts] = useState<CalendarAccountModel[]>([]);
@@ -341,6 +342,11 @@ export function IntegrationsSection() {
           Google Calendar is a two-way copy — events you add on a linked Google calendar are created
           in Google too. Outlook and CalDAV still connect from the desktop app.
         </p>
+        {workspaceId && userId ? (
+          <div className="mt-4">
+            <NewEventsToSetting {...{ workspaceId, userId }} accounts={calAccounts} />
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-col gap-2">
           {CAL_PROVIDERS.map(({ key, label, command }) => {
