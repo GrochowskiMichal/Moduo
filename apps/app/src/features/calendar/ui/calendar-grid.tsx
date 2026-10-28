@@ -148,6 +148,8 @@ export type CalendarGridProps = {
   prepFor?: (chip: EventChip) => ReactNode;
   /** The keyboard cursor (CALR-4); ⌘N and ↵ open a new event there. */
   cursor?: GridCursor | null;
+  /** Laid over the hours, scrolling with them (placing a task, CALR-5). */
+  gridLayer?: ReactNode;
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -228,6 +230,7 @@ export function CalendarGrid({
   overlay = null,
   prepFor,
   cursor = null,
+  gridLayer = null,
 }: CalendarGridProps) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -813,6 +816,7 @@ export function CalendarGrid({
             );
           })}
           {cursor ? <GridCursorMark cursor={cursor} days={days} /> : null}
+          {gridLayer}
         </div>
       </div>
       {overlay}

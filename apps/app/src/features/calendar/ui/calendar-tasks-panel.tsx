@@ -1,17 +1,17 @@
-// The right panel's Tasks view — the drag source (DESIGN_BRIEF §5, AC11):
-// Queue · Due soon · Backlog groups + search; rows drag onto the grid via the
-// universal drag contract (the legacy TaskDragData payload, adapted by
-// asDragPayload); the checkbox completes with the same op as everywhere.
-// Already-scheduled rows show their time and sink to the bottom of their
-// group — visibility beats purity.
+// Plan, the right panel's task view (CALR-5, AC20, AC24): your tasks in four
+// groups (From earlier, Due this week, Scheduled, No date), six rows each, then
+// Show more; Find a task (/) filters them all and reaches tasks due later.
+// A click selects a row, ↵ or a double-click opens it; S lifts the selected
+// task onto the grid (ui/use-plan-placement.tsx), "Find time" on an overdue
+// row does the same; rows still drag onto the grid (the universal drag
+// contract); the checkbox completes with the same op as everywhere.
 //
-// CAL-4 adds the Review sub-state (AC9): when the strip's "Review" is active a
-// curation section pins to the top — untick to exclude, "Move N to today",
-// rows drag onto the grid, per-row Remove. The normal groups stay below.
+// CAL-4's Review sub-state (AC9) pins to the top while the strip's "Review" is
+// active — untick to exclude, "Move N to today", rows drag onto the grid.
 
 import { useDraggable } from "@dnd-kit/core";
-import { CalendarCheck, GripVertical, Search, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { GripVertical, Search, X } from "lucide-react";
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -21,12 +21,12 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Kbd } from "../../../components/ui/kbd";
-import { formatDay, formatDuration, formatTime } from "../../../lib/time-format";
-import { formatDue, formatScheduled } from "../../tasks/helpers";
+import { formatDate, formatDay, formatDuration, formatTime } from "../../../lib/time-format";
+import { formatScheduled } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";
 import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks/tasks-context";
 import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
-import { groupPanelTasks } from "../panel";
+import { groupPlanTasks, PLAN_GROUP_ROWS, planRows } from "../panel";
 import type { StripItem } from "../strip";
 import { PlanSkeleton } from "./calendar-skeleton";
 
@@ -38,8 +38,18 @@ export type ReviewController = {
 };
 
 type Props = {
+  /** Only your tasks (assigned to you, or unassigned and yours). */
+  userId: string;
+  weekStartsOn: number;
   onOpenTask: (taskId: string) => void;
   onRequestCapture: () => void;
+  selectedTaskId: string | null;
+  onSelectTask: (taskId: string) => void;
+  /** The task S lifted onto the grid; its row keeps full contrast. */
+  liftedTaskId: string | null;
+  onLift: (taskId: string) => void;
+  /** Bumped by / : focus Find a task. */
+  findRequest: number;
   /** The strip's Review sub-state (AC9). Null when not reviewing. */
   review?: ReviewController | null;
   /** While tasks load: the groups' last known rows (CALR-3, AC4). */
@@ -48,38 +58,83 @@ type Props = {
   onShape?: (groups: number[]) => void;
 };
 
-/** A group's skeleton never draws more rows than Plan shows before Show more. */
-const SHAPE_ROWS_MAX = 6;
+type GroupId = "earlier" | "thisWeek" | "scheduled" | "noDate" | "later";
+const GROUP_TITLES: Record<GroupId, string> = {
+  earlier: "From earlier",
+  thisWeek: "Due this week",
+  scheduled: "Scheduled",
+  noDate: "No date",
+  later: "Due later",
+};
+
+/** The quiet date a row carries: never red. */
+function rowDate(task: Task, group: GroupId): string | null {
+  if (group === "scheduled") return formatScheduled(task.scheduledAt);
+  if (!task.dueDate) return null;
+  return group === "earlier" ? `Due ${formatDate(task.dueDate)}` : formatDay(task.dueDate);
+}
+
+/** ↑↓ between Plan's rows. */
+function moveRowFocus(e: KeyboardEvent<HTMLElement>) {
+  const list = e.currentTarget.closest("[data-plan-list]");
+  if (!list) return;
+  const rows = [...list.querySelectorAll<HTMLElement>("[data-plan-task-id]")];
+  const at = rows.indexOf(e.currentTarget);
+  const next = rows[at + (e.key === "ArrowDown" ? 1 : -1)];
+  if (next) {
+    e.preventDefault();
+    next.focus();
+    next.click();
+  }
+}
 
 export function CalendarTasksPanel({
+  userId,
+  weekStartsOn,
   onOpenTask,
   onRequestCapture,
+  selectedTaskId,
+  onSelectTask,
+  liftedTaskId,
+  onLift,
+  findRequest,
   review,
   skeletonGroups,
   onShape,
 }: Props) {
   const tasks = useTasksSelector((d) => d.liveTasks);
-  const queuedTasks = useTasksSelector((d) => d.queuedTasks);
   const { canEdit, loading } = useTasksStatus();
   const [query, setQuery] = useState("");
   const groups = useMemo(
-    () => groupPanelTasks({ tasks, queuedTasks, query }),
-    [tasks, queuedTasks, query],
+    () => groupPlanTasks({ tasks, me: userId, query, weekStartsOn }),
+    [tasks, userId, query, weekStartsOn],
   );
+  const searching = query.trim() !== "";
+  const order: GroupId[] = searching
+    ? ["earlier", "thisWeek", "scheduled", "noDate", "later"]
+    : ["earlier", "thisWeek", "scheduled", "noDate"];
+  const total = order.reduce((n, id) => n + groups[id].length, 0);
 
-  const total = groups.queue.length + groups.dueSoon.length + groups.backlog.length;
+  // / focuses Find a task (also when it opened the panel for it).
+  const findRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (findRequest > 0) findRef.current?.focus();
+  }, [findRequest]);
 
   // Remember the loaded shape (search off) so the next load draws it.
-  const shape = [groups.queue.length, groups.dueSoon.length, groups.backlog.length]
-    .map((n) => Math.min(n, SHAPE_ROWS_MAX))
+  const shape = [groups.earlier, groups.thisWeek, groups.scheduled, groups.noDate]
+    .map((g) => Math.min(g.length, PLAN_GROUP_ROWS))
     .join(",");
   useEffect(() => {
-    if (loading || query.trim() !== "" || !onShape) return;
+    if (loading || searching || !onShape) return;
     onShape(shape.split(",").map(Number));
-  }, [loading, query, shape, onShape]);
+  }, [loading, searching, shape, onShape]);
 
   return (
-    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
+    <div
+      data-plan-list=""
+      className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto"
+    >
       {review && review.items.length > 0 ? (
         <ReviewSection review={review} canEdit={canEdit} />
       ) : null}
@@ -90,10 +145,17 @@ export function CalendarTasksPanel({
           className="absolute left-2 top-1/2 size-icon-xs -translate-y-1/2 text-muted-foreground"
         />
         <Input
+          ref={findRef}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search tasks"
-          aria-label="Search tasks"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && query) {
+              e.preventDefault();
+              setQuery("");
+            }
+          }}
+          placeholder="Find a task"
+          aria-label="Find a task"
           className="pl-6.5"
           style={{ height: "var(--ctrl-h-sm)" }}
         />
@@ -104,7 +166,7 @@ export function CalendarTasksPanel({
       {!loading && total === 0 && !groups.emptyBySearch ? (
         <div className="flex flex-col items-start gap-2 px-1 py-3">
           <span className="text-sm text-muted-foreground">
-            Nothing to schedule — capture a task or enjoy the calm.
+            Nothing to plan. Capture a task, or enjoy the calm.
           </span>
           <Button variant="outline" size="sm" onClick={onRequestCapture}>
             Capture a task <Kbd>⇧⌘K</Kbd>
@@ -117,9 +179,20 @@ export function CalendarTasksPanel({
         </span>
       ) : null}
 
-      <TaskGroup title="Queue" tasks={groups.queue} onOpenTask={onOpenTask} />
-      <TaskGroup title="Due soon" tasks={groups.dueSoon} onOpenTask={onOpenTask} />
-      <TaskGroup title="Backlog" tasks={groups.backlog} onOpenTask={onOpenTask} />
+      {order.map((id) => (
+        <TaskGroup
+          key={id}
+          group={id}
+          tasks={groups[id]}
+          expandAll={searching}
+          selectedTaskId={selectedTaskId}
+          liftedTaskId={liftedTaskId}
+          canEdit={canEdit}
+          onSelect={onSelectTask}
+          onOpen={onOpenTask}
+          onLift={onLift}
+        />
+      ))}
     </div>
   );
 }
@@ -226,55 +299,120 @@ function ReviewRow({
 }
 
 function TaskGroup({
-  title,
+  group,
   tasks,
-  onOpenTask,
+  expandAll,
+  selectedTaskId,
+  liftedTaskId,
+  canEdit,
+  onSelect,
+  onOpen,
+  onLift,
 }: {
-  title: string;
+  group: GroupId;
   tasks: Task[];
-  onOpenTask: (taskId: string) => void;
+  expandAll: boolean;
+  selectedTaskId: string | null;
+  liftedTaskId: string | null;
+  canEdit: boolean;
+  onSelect: (taskId: string) => void;
+  onOpen: (taskId: string) => void;
+  onLift: (taskId: string) => void;
 }) {
+  const [expanded, setExpanded] = useState(false);
   if (tasks.length === 0) return null;
+  const { rows, more } = planRows(tasks, expanded || expandAll);
+  const title = GROUP_TITLES[group];
   return (
-    <div className="flex shrink-0 flex-col gap-0.5">
+    <div className="flex shrink-0 flex-col gap-0.5" data-plan-group={group}>
       <Eyebrow as="div" className="px-1">
         {title} ({tasks.length})
       </Eyebrow>
-      {tasks.map((task) => (
-        <PanelTaskRow key={task.id} task={task} onOpen={() => onOpenTask(task.id)} />
+      {rows.map((task) => (
+        <PlanTaskRow
+          key={task.id}
+          task={task}
+          date={rowDate(task, group)}
+          selected={task.id === selectedTaskId}
+          lifted={task.id === liftedTaskId}
+          findTime={group === "earlier" && canEdit}
+          onSelect={onSelect}
+          onOpen={onOpen}
+          onLift={onLift}
+        />
       ))}
+      {more > 0 ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="self-start text-muted-foreground"
+          onClick={() => setExpanded(true)}
+        >
+          Show {more} more
+        </Button>
+      ) : null}
     </div>
   );
 }
 
-function PanelTaskRow({ task, onOpen }: { task: Task; onOpen: () => void }) {
+function PlanTaskRow({
+  task,
+  date,
+  selected,
+  lifted,
+  findTime,
+  onSelect,
+  onOpen,
+  onLift,
+}: {
+  task: Task;
+  date: string | null;
+  selected: boolean;
+  lifted: boolean;
+  findTime: boolean;
+  onSelect: (taskId: string) => void;
+  onOpen: (taskId: string) => void;
+  onLift: (taskId: string) => void;
+}) {
   const { toggleDone } = useTaskCommands();
   const { canEdit } = useTasksStatus();
-  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+  const { setNodeRef, setActivatorNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: `cal-panel-task:${task.id}`,
     data: taskDrag(task.id, "list"),
     disabled: !canEdit,
   });
-  const scheduled = formatScheduled(task.scheduledAt);
-  const due = formatDue(task.dueDate);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(el) => {
+        setNodeRef(el);
+        setActivatorNodeRef(el);
+      }}
       {...listeners}
       {...attributes}
       role="button"
       tabIndex={0}
-      onClick={onOpen}
+      aria-pressed={selected}
+      data-plan-task-id={task.id}
+      onClick={() => onSelect(task.id)}
+      onDoubleClick={() => onOpen(task.id)}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault(); // Space must not scroll — it's the button key
-          onOpen();
+        if (e.target !== e.currentTarget) return;
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onOpen(task.id);
+        } else if (e.key === " ") {
+          e.preventDefault(); // Space must not scroll
+          onSelect(task.id);
+        } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+          moveRowFocus(e);
         }
       }}
       className={cn(
         "group flex cursor-grab items-center gap-2 rounded-md px-1.5 hover:bg-accent/60",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+        selected && "bg-state-active",
+        lifted && "ring-1 ring-primary/60",
         isDragging && "opacity-40",
       )}
       style={{ minHeight: "var(--row-h-sm)" }}
@@ -285,25 +423,33 @@ function PanelTaskRow({ task, onOpen }: { task: Task; onOpen: () => void }) {
         onToggle={() => toggleDone(task)}
         aria-label={task.status === "done" ? `Reopen ${task.title}` : `Complete ${task.title}`}
       />
-      <span className="min-w-0 flex-1 break-words py-0.5 text-sm text-foreground">
-        {task.title}
-      </span>
-      {task.durationMinutes ? (
-        <span className="shrink-0 text-2xs text-muted-foreground">
-          {formatDuration(task.durationMinutes)}
-        </span>
-      ) : null}
-      {scheduled ? (
-        <span
-          className="flex shrink-0 items-center gap-0.5 text-2xs text-muted-foreground"
-          aria-label={`Scheduled ${scheduled}`}
-        >
-          <CalendarCheck aria-hidden className="size-icon-xs" />
-          {scheduled}
-        </span>
-      ) : due ? (
-        <span className="shrink-0 text-2xs text-muted-foreground">{due}</span>
-      ) : null}
+      <div className="flex min-w-0 flex-1 flex-col py-0.5">
+        {/* Titles wrap, never truncate (TV-P0); the facts sit on a line of their own. */}
+        <span className="break-words text-sm text-foreground">{task.title}</span>
+        {date || task.durationMinutes || lifted || findTime ? (
+          <span className="flex flex-wrap items-center gap-x-1.5 text-2xs text-muted-foreground">
+            {date ? <span>{date}</span> : null}
+            {task.durationMinutes ? <span>{formatDuration(task.durationMinutes)}</span> : null}
+            {lifted ? (
+              <span>
+                <Kbd>↵</Kbd> places, <Kbd>⇥</Kbd> next free time
+              </span>
+            ) : findTime ? (
+              <button
+                type="button"
+                className="rounded-sm text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLift(task.id);
+                }}
+              >
+                Find time
+              </button>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
       <GripVertical
         aria-hidden
         className="size-icon-xs shrink-0 text-muted-foreground/0 transition-colors duration-(--motion-fade) group-hover:text-muted-foreground/60"

@@ -9,5 +9,6 @@ import type { PanelViewDef } from "../../lib/panel-registry";
 export const calendarPanelViews: readonly PanelViewDef[] = [
   { id: "detail", label: "Detail", group: "about", icon: Info },
   { id: "notes", label: "Notes", group: "about", icon: FileText },
-  { id: "tasks", label: "Tasks", group: "alongside", icon: CheckSquare },
+  // "Tasks" became Plan (CALR-5); the id stays, so remembered panels still open it.
+  { id: "tasks", label: "Plan", group: "alongside", icon: CheckSquare },
 ];

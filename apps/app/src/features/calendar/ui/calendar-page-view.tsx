@@ -87,6 +87,7 @@ import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
 import { useEventDelete } from "./use-event-delete";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
+import { usePlanPlacement } from "./use-plan-placement";
 import { useScheduleDue } from "./use-schedule-due";
 
 type Props = {
@@ -423,6 +424,22 @@ export function CalendarPageView({
     blocksByDay: grouped,
   });
 
+  // CALR-5: Plan's S lifts a task onto the grid; / finds a task.
+  const plan = usePlanPlacement({
+    tasks,
+    view: viewState.view,
+    days: range.days,
+    prefs,
+    commands,
+    canEdit,
+    eventsByDay: eventChips.timed,
+    blocksByDay: grouped,
+    panelVariant,
+    setPanelVariant,
+    setView,
+    goToDate,
+  });
+
   const onToggleDone = useCallback(
     (taskId: string) => {
       const task = tasks.find((t) => t.id === taskId);
@@ -495,6 +512,13 @@ export function CalendarPageView({
     () => ({
       tasks: () => (
         <CalendarTasksPanel
+          userId={userId}
+          weekStartsOn={prefs.weekStartsOn}
+          selectedTaskId={plan.selectedTaskId}
+          onSelectTask={plan.selectTask}
+          liftedTaskId={plan.liftedTaskId}
+          onLift={plan.lift}
+          findRequest={plan.findRequest}
           onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
           onRequestCapture={() => dispatchOpenCapture()}
           skeletonGroups={faults.loadShape.planGroups}
@@ -586,6 +610,12 @@ export function CalendarPageView({
       viewerMembers,
       faults.loadShape.planGroups,
       faults.rememberPlanShape,
+      prefs.weekStartsOn,
+      plan.selectedTaskId,
+      plan.selectTask,
+      plan.liftedTaskId,
+      plan.lift,
+      plan.findRequest,
     ],
   );
 
@@ -718,6 +748,7 @@ export function CalendarPageView({
               loadingAllDayRows={faults.loadShape.allDayRows}
               overlay={faults.firstWeekOverlay}
               cursor={keys.cursor}
+              gridLayer={plan.layer}
             />
           </div>
         }

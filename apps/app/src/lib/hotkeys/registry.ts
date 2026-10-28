@@ -187,6 +187,9 @@ export const HOTKEYS = {
   "calendar.link": { scope: "calendar", label: "Link a person, note or task", keys: ["L"] },
   "calendar.private": { scope: "calendar", label: "Make private or public", keys: ["P"] },
   "calendar.join": { scope: "calendar", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
+  // Plan (CALR-5): S lifts the selected task to the next free slot; / finds a task.
+  "calendar.place-task": { scope: "calendar", label: "Place the selected task", keys: ["S"] },
+  "calendar.find-task": { scope: "calendar", label: "Find a task", keys: ["/"] },
   "calendar.all-day": {
     scope: "calendar",
     label: "Show every all-day row",

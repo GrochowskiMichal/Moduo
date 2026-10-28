@@ -72,7 +72,7 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/settings/appearance/picker-row.tsx": ["tag"],
   // Tasks: no small caps any more (Focus since TV-F7; the Timeline's month
   // names are sentence case since TV-TL1).
-  // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), a weekday on
+  // Calendar: Plan's groups ("From earlier", "Due this week", …), a weekday on
   // the booking page; colour names ("blue" → "Blue") in the account colour menu.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
   "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
