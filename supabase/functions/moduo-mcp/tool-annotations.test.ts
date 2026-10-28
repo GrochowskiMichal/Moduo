@@ -26,6 +26,7 @@ const MAIN_READS = ["tasks_list", "tasks_get", "tasks_search", "tasks_today", "t
 /** Every tool that can delete, trash or overwrite, reviewed by hand. */
 const DESTRUCTIVE = [
   "calendar_delete_event",
+  "calendar_release_offer",
   "contacts_delete",
   "contacts_unlink",
   "email_clear_follow_up",
