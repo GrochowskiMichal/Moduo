@@ -12,14 +12,18 @@
 --   4. notes_meta loses is_pinned. ALTER TYPE … DROP ATTRIBUTE keeps every
 --      function that returns it, and their grants, as they are; only
 --      notes__meta, which builds the row, is re-cut.
---   5. The columns share_scope, share_permission, tags, kind and is_pinned go
---      (their CHECKs and indexes with them). Pins are gone; Favorites replace
---      them (PQ5).
+--   5. The columns share_scope, share_permission, tags and kind go (their
+--      CHECKs and indexes with them). Pins are gone; Favorites replace them
+--      (PQ5). The is_pinned column itself stays one more release, unread and
+--      unwritten: v1.4.0's notes list selects it, and migrations land before
+--      the app, so dropping it now would empty every open tab and desktop
+--      install until they update. A later migration drops it.
 --   6. notes_share_fields_owner_only keeps its remaining job: only the owner
 --      hands a note over (created_by) or moves it out of its workspace.
 --   7. The actor columns get foreign keys, ON DELETE SET NULL, each with a
---      partial index so a deleted person or key doesn't scan the table. Prod
---      has no dangling ids, so they are added validated.
+--      partial index so a deleted person or key doesn't scan the table. Ids
+--      left dangling by an account or key deleted before this lands are
+--      nulled first (prod had none on 2026-10-28), so the keys add validated.
 --   8. position sorts in byte order (COLLATE "C") on notes and
 --      note_favorites, the order the client sorts by.
 --
@@ -172,8 +176,7 @@ ALTER TABLE public.notes
   DROP COLUMN IF EXISTS share_scope,
   DROP COLUMN IF EXISTS share_permission,
   DROP COLUMN IF EXISTS tags,
-  DROP COLUMN IF EXISTS kind,
-  DROP COLUMN IF EXISTS is_pinned;
+  DROP COLUMN IF EXISTS kind;
 
 -- ── 7. Actor keys ───────────────────────────────────────────────────────────
 
@@ -183,6 +186,17 @@ CREATE INDEX IF NOT EXISTS note_updates_user_id_idx
   ON public.note_updates (user_id) WHERE user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS note_updates_actor_key_id_idx
   ON public.note_updates (actor_key_id) WHERE actor_key_id IS NOT NULL;
+
+-- No actor runs here, so perm_enforce_write lets these through.
+UPDATE public.notes n SET edited_by = NULL
+ WHERE n.edited_by IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = n.edited_by);
+UPDATE public.note_updates u SET user_id = NULL
+ WHERE u.user_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = u.user_id);
+UPDATE public.note_updates u SET actor_key_id = NULL
+ WHERE u.actor_key_id IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM public.workspace_api_keys k WHERE k.id = u.actor_key_id);
 
 ALTER TABLE public.notes DROP CONSTRAINT IF EXISTS notes_edited_by_fkey;
 ALTER TABLE public.notes ADD CONSTRAINT notes_edited_by_fkey

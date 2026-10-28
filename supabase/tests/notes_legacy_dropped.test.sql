@@ -1,7 +1,8 @@
 -- NS-9 · Legacy out, integrity in (specs/notes-schema-hardening.md, AC10,
 -- Assumption 9, PQ5; supabase/migrations/20261030180000_notes_legacy_out.sql).
 -- The legacy sharing objects and columns are gone, and the pin with them
--- (Favorites replace it). Every note op still writes without them, and
+-- (Favorites replace it). The is_pinned column stays one release, unread and
+-- unwritten, for v1.4.0's notes list (see the migration). Every note op still writes without them, and
 -- erasure still completes. The actor columns null out when their person or
 -- key goes, and position sorts in byte order, whatever the database collation.
 --
@@ -29,11 +30,11 @@ BEGIN
   PERFORM test.ok(NOT EXISTS (
       SELECT 1 FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = 'notes'
-         AND column_name IN ('share_scope', 'share_permission', 'tags', 'kind', 'is_pinned')),
-    'notes has no share_scope, share_permission, tags, kind or is_pinned',
+         AND column_name IN ('share_scope', 'share_permission', 'tags', 'kind')),
+    'notes has no share_scope, share_permission, tags or kind',
     (SELECT string_agg(column_name::text, ', ') FROM information_schema.columns
       WHERE table_schema = 'public' AND table_name = 'notes'
-        AND column_name IN ('share_scope', 'share_permission', 'tags', 'kind', 'is_pinned')));
+        AND column_name IN ('share_scope', 'share_permission', 'tags', 'kind')));
   PERFORM test.ok(NOT EXISTS (
       SELECT 1 FROM pg_attribute
        WHERE attrelid = (SELECT typrelid FROM pg_type WHERE oid = 'public.notes_meta'::regtype)
@@ -80,6 +81,8 @@ BEGIN
          '{"icon": "📌", "isPinned": true, "fullWidth": true}'));
   PERFORM test.ok(r = 'ok 1' AND (SELECT icon = '📌' AND full_width FROM public.notes WHERE id = v_p),
     'notes_op_set_meta sets icon and full width, and ignores isPinned', r);
+  PERFORM test.ok(NOT coalesce((SELECT to_jsonb(n) ->> 'is_pinned' FROM public.notes n WHERE id = v_p), 'false')::boolean,
+    'nothing writes a pin any more', r);
 END;
 $$;
 
