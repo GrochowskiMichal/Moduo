@@ -211,7 +211,15 @@ BEGIN
   PERFORM test.ok(NOT has_function_privilege('anon', 'public.calendar_shared_with_me(uuid)', 'EXECUTE')
               AND has_function_privilege('authenticated', 'public.calendar_shared_with_me(uuid)', 'EXECUTE'),
     'and so is Shared with you');
-  PERFORM test.ok(to_regprocedure('public.calendar_busy_blocks(uuid, timestamptz, timestamptz)') IS NULL,
-    'the old three-argument busy blocks is gone (no overloads): three-argument calls reach the new one');
+  -- Deployed clients call the three-argument form: it stays, with the new
+  -- columns, as a thin wrapper with the same grants.
+  PERFORM test.ok(to_regprocedure('public.calendar_busy_blocks(uuid, timestamptz, timestamptz)') IS NOT NULL
+              AND NOT has_function_privilege('anon', 'public.calendar_busy_blocks(uuid, timestamptz, timestamptz)', 'EXECUTE')
+              AND has_function_privilege('authenticated', 'public.calendar_busy_blocks(uuid, timestamptz, timestamptz)', 'EXECUTE')
+              AND has_function_privilege('service_role', 'public.calendar_busy_blocks(uuid, timestamptz, timestamptz)', 'EXECUTE'),
+    'the three-argument busy blocks stays for deployed clients, with the same grants');
+  PERFORM test.ok(test.value_as('B', format($q$SELECT count(*) FROM public.calendar_busy_blocks(%L::uuid, '2026-11-02 00:00+00'::timestamptz, '2026-11-09 00:00+00'::timestamptz)$q$, test.id('W')))
+              = test.value_as('B', format($q$SELECT count(*) FROM public.calendar_busy_blocks(%L::uuid, '2026-11-02 00:00+00'::timestamptz, '2026-11-09 00:00+00'::timestamptz, NULL::uuid)$q$, test.id('W'))),
+    'and a three-argument call reads what p_as NULL reads');
 END;
 $$;

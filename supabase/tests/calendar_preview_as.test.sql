@@ -194,7 +194,15 @@ BEGIN
               AND has_function_privilege('authenticated', 'public.calendar_events_visible(uuid, timestamptz, timestamptz, uuid)', 'EXECUTE')
               AND has_function_privilege('service_role', 'public.calendar_events_visible(uuid, timestamptz, timestamptz, uuid)', 'EXECUTE'),
     'grants: signed-in people and the connector, never anon');
-  PERFORM test.ok(to_regprocedure('public.calendar_events_visible(uuid, timestamptz, timestamptz)') IS NULL,
-    'the masked read has one signature (no overloads): three-argument calls reach it');
+  -- The deployed app and connector call the three-argument read: it stays,
+  -- as a thin wrapper with the same grants, and answers the normal week.
+  PERFORM test.ok(to_regprocedure('public.calendar_events_visible(uuid, timestamptz, timestamptz)') IS NOT NULL
+              AND NOT has_function_privilege('anon', 'public.calendar_events_visible(uuid, timestamptz, timestamptz)', 'EXECUTE')
+              AND has_function_privilege('authenticated', 'public.calendar_events_visible(uuid, timestamptz, timestamptz)', 'EXECUTE')
+              AND has_function_privilege('service_role', 'public.calendar_events_visible(uuid, timestamptz, timestamptz)', 'EXECUTE'),
+    'the three-argument masked read stays for deployed clients, with the same grants');
+  PERFORM test.ok(test.value_as('K', format($q$SELECT count(*) FROM public.calendar_events_visible(%L::uuid, '2026-11-02 00:00+00'::timestamptz, '2026-11-09 00:00+00'::timestamptz)$q$, test.id('W')))
+              = test.value_as('K', format($q$SELECT count(*) FROM public.calendar_events_visible(%L::uuid, '2026-11-02 00:00+00'::timestamptz, '2026-11-09 00:00+00'::timestamptz, NULL::uuid)$q$, test.id('W'))),
+    'and a three-argument call (positional, so never ambiguous) reads what p_as NULL reads');
 END;
 $$;
