@@ -3,11 +3,11 @@
 // deletes go through the module's own updateEvent / deleteEvent, and the rest
 // are here, optimistic with a surgical rollback like those two.
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
-import { undoToast } from "../../../lib/undo-toast";
+import { inversePatch, recordUndo, timeChangeLabel } from "../commands/undo";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import {
   type OccurrenceChange,
@@ -99,7 +99,7 @@ export function useOccurrenceWrites(deps: Deps) {
   );
 
   const updateOne = useCallback(
-    async (plan: Extract<OccurrenceWritePlan, { kind: "occurrence-update" }>) => {
+    async (plan: Extract<OccurrenceWritePlan, { kind: "occurrence-update" }>, undoable = true) => {
       const series = events.find((e) => e.id === plan.seriesId);
       if (!series) {
         toast.error(SERIES_GONE);
@@ -122,6 +122,15 @@ export function useOccurrenceWrites(deps: Deps) {
           ...prev.filter((e) => e.id !== draft.id && e.id !== saved.id),
           saved,
         ]);
+        if (!undoable) return;
+        // AC21: back to how the occurrence looked (the series' own, at its slot).
+        const before = draftOverride(series, plan.originalStart, {});
+        const label = timeChangeLabel(before, plan.patch);
+        const back = { ...plan, patch: inversePatch(before, plan.patch) };
+        recordUndo(label ?? "Event changed", () => updateOneRef.current(back, false), {
+          toast: label !== null,
+          description: series.title,
+        });
       } catch (err) {
         rollback([series], [draft.id]);
         toast.error(err instanceof Error ? err.message : "Couldn't change the event.");
@@ -129,6 +138,11 @@ export function useOccurrenceWrites(deps: Deps) {
     },
     [events, runtime, workspaceId, scope, setEventsIn, rollback],
   );
+
+  const updateOneRef = useRef(updateOne);
+  useEffect(() => {
+    updateOneRef.current = updateOne;
+  });
 
   const deleteOne = useCallback(
     async (
@@ -154,19 +168,16 @@ export function useOccurrenceWrites(deps: Deps) {
       const calendar = (runtime as ModuoRuntime).calendar;
       try {
         await calendar.removeOccurrence(args);
-        undoToast("Event deleted", {
-          description: event.title || undefined,
-          onUndo: () => {
-            void (async () => {
-              const restored = await calendar.restoreOccurrence(args);
-              setEventsIn(scope, (prev) => prev.map((e) => (e.id === restored.id ? restored : e)));
-              // A restored override comes back by the live channel; a reload makes sure.
-              await reload();
-            })().catch((err) =>
-              toast.error(err instanceof Error ? err.message : "Couldn't restore the event."),
-            );
+        recordUndo(
+          "Event deleted",
+          async () => {
+            const restored = await calendar.restoreOccurrence(args);
+            setEventsIn(scope, (prev) => prev.map((e) => (e.id === restored.id ? restored : e)));
+            // A restored override comes back by the live channel; a reload makes sure.
+            await reload();
           },
-        });
+          { toast: true, description: event.title },
+        );
       } catch (err) {
         rollback(override ? [series, override] : [series]);
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
@@ -202,6 +213,14 @@ export function useOccurrenceWrites(deps: Deps) {
             prev.map((e) => (ids.has(e.id) ? patchedInstance(e, plan.patch) : e)),
           );
           await calendar.updateGoogleSeries({ ...input, patch: plan.patch });
+          // Non-time fields only (CALR-11): undo writes the old ones back the same way.
+          const back = inversePatch(event, plan.patch);
+          recordUndo("Events changed", async () => {
+            setEventsIn(scope, (prev) =>
+              prev.map((e) => (ids.has(e.id) ? patchedInstance(e, back) : e)),
+            );
+            await calendar.updateGoogleSeries({ ...input, patch: back });
+          });
         }
       } catch (err) {
         rollback(instances);

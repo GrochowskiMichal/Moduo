@@ -110,6 +110,7 @@ export function AllDayLane({
             key={bar.chip.occurrenceKey}
             type="button"
             data-chip="event"
+            data-occurrence-key={bar.chip.occurrenceKey}
             className="relative block min-w-0 px-0.5 text-left"
             style={{ gridColumn: `${bar.startCol + 1} / span ${bar.span}`, gridRow: bar.row + 1 }}
             onClick={(e) => onPick(bar.chip, e.currentTarget.getBoundingClientRect())}

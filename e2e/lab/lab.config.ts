@@ -559,7 +559,8 @@ export default {
       target: { keys: 2, clicks: 2 },
       async keyboard({ press, step, page }: J) {
         const before = await calRange(page);
-        await press("ArrowRight");
+        // ⌘→ since CALR-4: bare arrows move the grid cursor.
+        await press("Meta+ArrowRight");
         await step("next week", {
           expect: async () => (await calRange(page)) !== before,
           view: true,
@@ -650,21 +651,45 @@ export default {
       id: "cal-delete-undo",
       screen: "calendar",
       goal: "Delete an event by mistake, then take it back",
-      target: { keys: 0, clicks: 3 },
+      target: { keys: 3, clicks: 3 },
+      // CALR-4: a Moduo event deletes at once; Undo (or ⌘Z) is the safety net.
+      async keyboard({ press, step, page }: J) {
+        await press("j");
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event deleted", { exact: true });
+        await press("Backspace");
+        await step("deleted", { expect: toast });
+        await press("Meta+z");
+        await step("restored", { gone: toast });
+      },
       async pointer({ click, step, page }: J) {
         await click(onGrid(page, "Board prep"));
         await step("event card", {
           expect: page.getByRole("dialog").getByRole("button", { name: "Delete" }),
         });
         await click(page.getByRole("dialog").getByRole("button", { name: "Delete" }));
-        const confirm = page
-          .getByRole("alertdialog")
-          .or(page.getByRole("dialog", { name: /^Delete this/ }));
-        await step("confirm", { expect: confirm.first() });
-        await click(confirm.first().getByRole("button", { name: "Delete", exact: true }));
         await step("deleted", { expect: page.getByRole("button", { name: "Undo" }) });
         await click(page.getByRole("button", { name: "Undo" }));
         await step("restored", { expect: onGrid(page, "Board prep") });
+      },
+    },
+    {
+      id: "cal-duplicate-undo",
+      screen: "calendar",
+      goal: "Pick an event by keys, duplicate it, then take the copy back",
+      target: { keys: 3, clicks: 0 },
+      async keyboard({ press, step, page }: J) {
+        await press("j");
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event added", { exact: true });
+        await press("Meta+d");
+        await step("duplicated", { expect: toast });
+        await press("Meta+z");
+        await step("taken back", { gone: toast });
       },
     },
     {
