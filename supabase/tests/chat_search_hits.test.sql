@@ -368,6 +368,73 @@ BEGIN
 END;
 $$;
 
+-- ── 6b. Review additions: Chat taken away, a direct message left, a key's post ─
+DO $$
+DECLARE
+  v text;
+BEGIN
+  -- A member whose role lost Chat finds no chat rows, and search_all still answers.
+  SET LOCAL session_replication_role = replica;
+  UPDATE public.workspace_members SET perms = array_remove(perms, 'chat.view')
+   WHERE workspace_id = test.id('W') AND user_id = test.id('C');
+  SET LOCAL session_replication_role = origin;
+  PERFORM test.ok(test.found('C', 'all', 'chat_message', 'zolw') = ''
+      AND test.found('C', 'all', 'chat_channel', 'plans') = ''
+      AND test.value_as('C', format($q$SELECT count(*)::text FROM public.search_all(%L, 'zolw', NULL, 8, NULL, NULL)$q$,
+                                    test.id('W'))) NOT LIKE 'ERROR%',
+    'review: a member without Chat finds no messages or conversations, and no error');
+  SET LOCAL session_replication_role = replica;
+  UPDATE public.workspace_members SET perms = array_append(perms, 'chat.view')
+   WHERE workspace_id = test.id('W') AND user_id = test.id('C');
+  SET LOCAL session_replication_role = origin;
+
+  -- A direct message C leaves stops matching for C, its message and its name.
+  v := test.as_user('A', format($q$SELECT public.chat_op_open_dm(%L, ARRAY[%L]::uuid[])$q$, test.id('W'), test.id('C')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: A opens a direct message E with C', v);
+  INSERT INTO test.ids SELECT 'E', id FROM public.chat_channels
+    WHERE workspace_id = test.id('W') AND kind = 'dm' AND id <> test.ref('D');
+  -- Written straight in: the 60 rows above count against A's sending limit.
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, author_kind, kind,
+                                    format_version, body, body_text, created_at)
+  VALUES (test.id('msg:e_zurek'), test.id('W'), test.ref('E'), test.id('A'), 'user', 'message', 2,
+          'Pożegnalny żurek', 'Pożegnalny żurek', now() - interval '2 hours');
+  SET LOCAL session_replication_role = origin;
+  INSERT INTO test.ids VALUES ('e_zurek', test.id('msg:e_zurek'));
+  PERFORM test.ok(test.found('C', 'all', 'chat_message', 'zurek') = 'e_zurek'
+      AND test.found('C', 'all', 'chat_channel', 'alicja') = 'E',
+    'review: C finds the direct message with A, and its message, while in it');
+  v := test.as_user('C', format($q$SELECT public.chat_op_leave(%L)$q$, test.ref('E')));
+  PERFORM test.ok(v LIKE 'ok %', 'setup: C leaves E', v);
+  PERFORM test.ok(test.found('C', 'all', 'chat_message', 'zurek') = ''
+      AND test.found('C', 'all', 'chat_channel', 'alicja') = '',
+    'review: after leaving it, C finds neither', test.found('C', 'all', 'chat_channel', 'alicja'));
+
+  -- A post made through a key reads as its creator "via" the key, as Chat shows it.
+  SET LOCAL session_replication_role = replica;
+  INSERT INTO public.chat_messages (id, workspace_id, channel_id, author_id, author_kind, author_label, kind,
+                                    format_version, body, body_text, created_at)
+  VALUES (test.id('msg:q_raport'), test.id('W'), test.ref('Q'), test.id('A'), 'api_key', 'CI key', 'message', 2,
+          'Raport wdrożenia gotowy', 'Raport wdrożenia gotowy', now() - interval '1 hour');
+  SET LOCAL session_replication_role = origin;
+  PERFORM test.ok(test.value_as('B', format(
+      $q$SELECT title FROM public.chat__search_hits(%L, 'raport wdroz', 50) WHERE entity_type = 'chat_message'$q$,
+      test.id('W'))) = 'Alicja Żak · via CI key',
+    'review: a post made through a key reads "Alicja Żak · via CI key"');
+END;
+$$;
+
+-- search_all keeps one chat branch, patched on its live body (other blocks' sources stay).
+DO $$
+DECLARE
+  v_def text := pg_get_functiondef('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure);
+BEGIN
+  PERFORM test.ok((length(v_def) - length(replace(v_def, 'chat__search_hits(', ''))) / length('chat__search_hits(') = 1
+      AND position('notes__search(' IN v_def) > 0 AND position('registry__search(' IN v_def) > 0,
+    'search_all: one chat branch beside the other modules'' sources');
+END;
+$$;
+
 -- ── 7. Grants ────────────────────────────────────────────────────────────────
 DO $$
 BEGIN

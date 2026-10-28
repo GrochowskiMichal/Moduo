@@ -56,7 +56,7 @@ Every `Q#` below refers to a ratified answer under *Product answers*.
 - **A very long query or paste.** Only the first 256 characters and 32 words are used, silently.
 - **Notes you can see only through a parent's sharing.** These are found. A note that inherits from a parent you can't see is not.
 - **Someone else's private calendar event** never matches by its title, description or attendees. It isn't searchable at all (Q23).
-- **A conversation you left, or a DM you're not in**, is never matched. A public channel you never joined is matched (Q24).
+- **A private conversation or DM you left, or one you're not in**, is never matched. A public channel is matched whether you joined it, never joined it or left it (Q24), as Chat's own Search reads it. (Amended in GS-6.)
 - **A trashed item** is hidden by default (Q7). An archived item appears under its group with an "Archived" tag (Q8).
 - **A renamed project** is found by its new name at once. Today its registry label goes stale; GS-4 fixes that.
 - **The same item reached two ways** (a task is also a top result) appears once.

@@ -150,7 +150,9 @@ describe("⌘K's Messages and Conversations (GS-6)", () => {
     ];
     await typeInPalette("plans");
     await screen.findByText("Alicja Żak", undefined, { timeout: 2000 });
-    const headings = [...document.querySelectorAll("[cmdk-group-heading]")].map((n) => n.textContent);
+    const headings = [...document.querySelectorAll("[cmdk-group-heading]")].map(
+      (n) => n.textContent,
+    );
     expect(headings.slice(0, 4)).toEqual(["Top result", "Messages", "Conversations", "Email"]);
     const messages = group("Messages") as HTMLElement;
     expect(within(messages).getByText("open-plans")).toBeTruthy();
@@ -164,7 +166,12 @@ describe("⌘K's Messages and Conversations (GS-6)", () => {
     await typeInPalette("plans");
     fireEvent.click(await screen.findByText("Alicja Żak", undefined, { timeout: 2000 }));
     await waitFor(() => expect(opened).toHaveLength(1));
-    expect(opened[0]).toEqual({ type: "chat_channel", id: "c1", messageId: "m1", chainId: "root1" });
+    expect(opened[0]).toEqual({
+      type: "chat_channel",
+      id: "c1",
+      messageId: "m1",
+      chainId: "root1",
+    });
   });
 
   it("opens a conversation in Chat", async () => {
@@ -187,7 +194,12 @@ describe("⌘K's Messages and Conversations (GS-6)", () => {
     await typeInPalette("plans");
     expect(await screen.findByText("See all in Chat")).toBeTruthy();
     cleanup();
-    h.workspace.modulePermissions = { tasks: "edit", notes: "edit", contacts: "edit", chat: "none" };
+    h.workspace.modulePermissions = {
+      tasks: "edit",
+      notes: "edit",
+      contacts: "edit",
+      chat: "none",
+    };
     h.types = [];
     await typeInPalette("plans");
     await waitFor(() => expect(h.types.length).toBeGreaterThan(0), { timeout: 2000 });

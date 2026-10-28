@@ -19,12 +19,12 @@
 --      - Visibility goes before the limit: the readable set is in the indexed
 --        query. SECURITY DEFINER: the actor comes from the request.
 --   3. search_all asks chat__search_hits for chat_message and chat_channel
---      (now among the default types). Built on GS-3's body
---      (20261029090000_search_all.sql); only the type lists and one UNION ALL
---      branch change.
+--      (now among the default types): three text patches on its live body,
+--      so GS-4's, GS-5's and GS-8's changes stay whichever lands first.
 --   4. Grants, by name.
 --
--- Re-runnable: functions OR REPLACE, grants re-stated by name.
+-- Re-runnable: functions OR REPLACE, search_all's patches skip themselves once
+-- applied, grants re-stated by name.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -155,7 +155,7 @@ BEGIN
   -- a place), then shaped for the rows returned only.
   RETURN QUERY
     WITH hits AS MATERIALIZED (
-      SELECT m.id, m.channel_id, m.author_id, m.author_label, m.created_at, m.body_text
+      SELECT m.id, m.channel_id, m.author_id, m.author_kind, m.author_label, m.created_at, m.body_text
         FROM public.chat_messages m
        WHERE m.search_tsv OPERATOR(pg_catalog.@@) v_q
          AND m.deleted_at IS NULL
@@ -170,8 +170,12 @@ BEGIN
     )
     SELECT 'chat_message'::text,
            h.id,
+           -- Who said it, as Chat shows it: "Alex · via CI key" for a post
+           -- made through a key, the app's own name for an older one.
            coalesce(CASE WHEN h.author_id IS NOT NULL THEN
-                      coalesce(nullif(pg_catalog.btrim(p.display_name), ''), 'Former member') END,
+                      coalesce(nullif(pg_catalog.btrim(p.display_name), ''), 'Former member')
+                      || CASE WHEN h.author_kind = 'api_key' AND nullif(pg_catalog.btrim(h.author_label), '') IS NOT NULL
+                              THEN ' · via ' || pg_catalog.btrim(h.author_label) ELSE '' END END,
                     nullif(pg_catalog.btrim(h.author_label), ''), 'An app'),
            c.label,
            public.search__snippet(h.body_text, v_q),
@@ -234,121 +238,78 @@ COMMENT ON FUNCTION public.chat__search_hits(uuid, text, integer) IS
   'Search (GS-6): Chat''s messages and conversations as SearchHit rows, at most p_limit of each, only from conversations the caller (a person, or a key by chat__key_channel_ids) reads. The actor comes from the request, never an argument.';
 
 -- ── 3. search_all, with Chat ─────────────────────────────────────────────────
--- GS-3's body; chat_message and chat_channel join the types and come from
--- chat__search_hits, never the registry.
+-- Patched in place on its live body, never re-cut from one block's copy:
+-- GS-4, GS-5 and GS-8 change search_all in parallel, and a whole-body
+-- CREATE OR REPLACE from GS-3's text would drop whichever sources landed
+-- first. Each patch finds text every one of those bodies keeps and refuses
+-- when it is gone; a re-run finds its own text and does nothing.
+--   a. chat_message and chat_channel join the default types and the allowed ones;
+--   b. they never go to the registry adapter;
+--   c. chat__search_hits answers them, one more branch of the hits.
 
-CREATE OR REPLACE FUNCTION public.search_all(p_workspace_id uuid, p_query text, p_types text[] DEFAULT NULL,
-                                             p_limit_per_type integer DEFAULT 8,
-                                             p_context_type text DEFAULT NULL, p_context_id uuid DEFAULT NULL)
-  RETURNS TABLE (entity_type text, entity_id uuid, title text, context text, snippet text,
-                 icon text, match text, rank real, updated_at timestamptz, archived boolean,
-                 score real, type_total integer, top boolean)
-  LANGUAGE plpgsql STABLE SECURITY INVOKER
-  SET search_path = ''
-  SET statement_timeout = '5s'
+CREATE OR REPLACE FUNCTION pg_temp.recut(p_fn regprocedure, p_old text, p_new text)
+RETURNS void
+LANGUAGE plpgsql
 AS $$
-#variable_conflict use_column
 DECLARE
-  v_limit integer := least(greatest(coalesce(p_limit_per_type, 8), 1), 50);
-  v_types text[];
-  v_registry text[];
-  v_chat boolean;
-  v_ctx_type text := CASE lower(btrim(coalesce(p_context_type, '')))
-                       WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread'
-                       ELSE nullif(lower(btrim(coalesce(p_context_type, ''))), '') END;
-  v_ctx boolean := false;
+  v_def text := pg_get_functiondef(p_fn);
 BEGIN
-  IF p_workspace_id IS NULL OR pg_catalog.length(pg_catalog.btrim(coalesce(p_query, ''))) < 2 THEN
+  -- Already cut (a re-run): the new text may contain the old, so look for it first.
+  IF position(p_new IN v_def) > 0 THEN
     RETURN;
   END IF;
-  -- The palette's types.
-  v_types := ARRAY(
-    SELECT DISTINCT t
-      FROM (SELECT CASE lower(btrim(x)) WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread'
-                                        ELSE lower(btrim(x)) END AS t
-              FROM unnest(coalesce(p_types, ARRAY['task', 'bucket', 'note', 'contact', 'company', 'event',
-                                                  'chat_message', 'chat_channel', 'email_thread'])) AS x) s
-     WHERE t IN ('task', 'bucket', 'note', 'contact', 'company', 'event', 'chat_message', 'chat_channel',
-                 'email_thread'));
-  v_registry := pg_catalog.array_remove(pg_catalog.array_remove(pg_catalog.array_remove(
-                  v_types, 'note'), 'chat_message'), 'chat_channel');
-  v_chat := v_types && ARRAY['chat_message', 'chat_channel'];
-  -- A person's context only: a key has no item open, and its creator's
-  -- visibility isn't the key's scope.
-  IF v_ctx_type IS NOT NULL AND p_context_id IS NOT NULL AND public.module_api_key_id() IS NULL THEN
-    v_ctx := coalesce(public.perm_can_see_entity(p_workspace_id, v_ctx_type, p_context_id), false);
+  IF position(p_old IN v_def) = 0 THEN
+    RAISE EXCEPTION '% isn''t the body this migration expects (missing: %); redefine it by hand.', p_fn, p_old;
   END IF;
-
-  RETURN QUERY
-    WITH hits AS MATERIALIZED (
-      SELECT n.entity_type, n.entity_id, n.title, n.context, n.snippet, n.icon, n.match, n.rank,
-             n.updated_at, n.archived
-        FROM public.notes__search(p_workspace_id, p_query, 50) n
-       WHERE 'note' = ANY (v_types)
-      UNION ALL
-      SELECT r.entity_type, r.entity_id, r.title, r.context, r.snippet, r.icon, r.match, r.rank,
-             r.updated_at, r.archived
-        FROM public.registry__search(p_workspace_id, p_query, 50, v_registry) r
-       WHERE cardinality(v_registry) > 0
-      UNION ALL
-      SELECT c.entity_type, c.entity_id, c.title, c.context, c.snippet, c.icon, c.match, c.rank,
-             c.updated_at, c.archived
-        FROM public.chat__search_hits(p_workspace_id, p_query, 50) c
-       WHERE v_chat AND c.entity_type = ANY (v_types)
-    ),
-    one_all AS MATERIALIZED (
-      SELECT DISTINCT ON (h.entity_type, h.entity_id) h.*,
-             CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END AS tier
-        FROM hits h
-       ORDER BY h.entity_type, h.entity_id,
-                CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END,
-                h.rank DESC
-    ),
-    -- Typo forgiveness holds across the merged list: once 3 exact hits exist
-    -- in any modules, every typo-forgiven row goes (each module decides on its
-    -- own count, so a typo task could otherwise sit above exact notes).
-    kept AS (
-      SELECT a.*
-        FROM one_all a
-       WHERE a.tier < 2 OR (SELECT count(*) FROM one_all b WHERE b.tier < 2) < 3
-    ),
-    linked AS MATERIALIZED (
-      SELECT CASE WHEN l.source_type = v_ctx_type AND l.source_id = p_context_id THEN l.target_type ELSE l.source_type END AS t,
-             CASE WHEN l.source_type = v_ctx_type AND l.source_id = p_context_id THEN l.target_id ELSE l.source_id END AS id
-        FROM public.entity_links l
-       WHERE v_ctx
-         AND l.workspace_id = p_workspace_id
-         AND l.deleted_at IS NULL
-         AND ((l.source_type = v_ctx_type AND l.source_id = p_context_id)
-              OR (l.target_type = v_ctx_type AND l.target_id = p_context_id))
-    ),
-    scored AS (
-      SELECT o.*,
-             least(1.0, greatest(0.0,
-               0.55 * o.rank
-               + 0.15 * pg_catalog.power(0.5, greatest(extract(epoch FROM (now() - o.updated_at)), 0) / (30 * 86400.0))
-               + 0.20 * 0
-               + 0.10 * (CASE WHEN EXISTS (SELECT 1 FROM linked k WHERE k.t = o.entity_type AND k.id = o.entity_id)
-                              THEN 1 ELSE 0 END)))::real AS sc,
-             (count(*) OVER (PARTITION BY o.entity_type))::integer AS total
-        FROM kept o
-    ),
-    ordered AS (
-      SELECT s.*,
-             row_number() OVER (ORDER BY s.tier, s.sc DESC, s.updated_at DESC, s.entity_id) AS pos,
-             row_number() OVER (PARTITION BY s.entity_type ORDER BY s.tier, s.sc DESC, s.updated_at DESC, s.entity_id) AS k
-        FROM scored s
-    )
-    SELECT o.entity_type, o.entity_id, o.title, o.context, o.snippet, o.icon, o.match, o.rank, o.updated_at,
-           o.archived, o.sc, o.total, o.pos = 1
-      FROM ordered o
-     WHERE o.k <= v_limit
-     ORDER BY o.pos;
+  EXECUTE replace(v_def, p_old, p_new);
 END;
 $$;
 
-COMMENT ON FUNCTION public.search_all(uuid, text, text[], integer, text, uuid) IS
-  'Search (GS-3, GS-6): ⌘K''s one search. Merges every module''s <module>__search (registry__search for types not yet on the contract; chat__search_hits for messages and conversations), ranks, and returns up to limit_per_type rows per type with the type''s total and one Top result. SECURITY INVOKER: every hit comes from a module function that resolves the caller.';
+-- a. The default types, then the allowed ones.
+SELECT pg_temp.recut('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure,
+$o$'email_thread'])) AS x) s$o$,
+$n$'chat_message', 'chat_channel', 'email_thread'])) AS x) s$n$);
+SELECT pg_temp.recut('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure,
+$o$'event', 'email_thread'));$o$,
+$n$'event', 'chat_message', 'chat_channel', 'email_thread'));$n$);
+
+-- b. Chat's types never go to the registry adapter.
+SELECT pg_temp.recut('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure,
+$o$  -- A person's context only: a key has no item open$o$,
+$n$  -- Chat answers its own types (GS-6), never the registry.
+  v_registry := pg_catalog.array_remove(pg_catalog.array_remove(v_registry, 'chat_message'), 'chat_channel');
+  -- A person's context only: a key has no item open$n$);
+
+-- c. One more source.
+SELECT pg_temp.recut('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure,
+$o$    ),
+    one_all AS MATERIALIZED ($o$,
+$n$      UNION ALL
+      SELECT ch.entity_type, ch.entity_id, ch.title, ch.context, ch.snippet, ch.icon, ch.match, ch.rank,
+             ch.updated_at, ch.archived
+        FROM public.chat__search_hits(p_workspace_id, p_query, 50) ch
+       WHERE v_types && ARRAY['chat_message', 'chat_channel']::text[]
+         AND ch.entity_type = ANY (v_types)
+    ),
+    one_all AS MATERIALIZED ($n$);
+
+DO $$
+DECLARE
+  v_def text := pg_get_functiondef('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure);
+  v_note text := obj_description('public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure, 'pg_proc');
+BEGIN
+  -- Exactly one chat branch, whatever order the blocks were applied in.
+  IF (length(v_def) - length(replace(v_def, 'public.chat__search_hits(', ''))) / length('public.chat__search_hits(') <> 1 THEN
+    RAISE EXCEPTION 'search_all should call chat__search_hits exactly once.';
+  END IF;
+  -- The comment says Chat is in, kept on whatever the other blocks wrote.
+  IF position('GS-6' IN coalesce(v_note, '')) = 0 THEN
+    EXECUTE format('COMMENT ON FUNCTION public.search_all(uuid, text, text[], integer, text, uuid) IS %L',
+      coalesce(v_note || ' ', '')
+      || 'GS-6: chat__search_hits answers messages (chat_message) and conversations (chat_channel).');
+  END IF;
+END;
+$$;
 
 -- ── 4. Grants ────────────────────────────────────────────────────────────────
 -- chat__search_hits and search_all read the actor from the request:

@@ -298,7 +298,9 @@ export function GlobalCommandPalette() {
         return;
       }
       window.dispatchEvent(
-        new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: row.entity_type, id: row.entity_id } }),
+        new CustomEvent(ENTITY_OPEN_EVENT, {
+          detail: { type: row.entity_type, id: row.entity_id },
+        }),
       );
     },
     [openMessage, trimmed],
