@@ -131,3 +131,24 @@ export function normalizeSearchAllRow(input: unknown): SearchAllRow | null {
     top: isTrue(row.top),
   };
 }
+
+/**
+ * A Recent row (GS-8, `search_recents_list`): a hit (match `title`, rank 0, no
+ * snippet or context) plus when you last opened it.
+ */
+export const searchRecentSchema = searchHitSchema.extend({
+  last_opened_at: z.string(),
+});
+export type SearchRecent = z.infer<typeof searchRecentSchema>;
+
+/** Strict parse of a Recent row. */
+export function parseSearchRecent(input: unknown): SafeParseResult<SearchRecent> {
+  return parseOrError(searchRecentSchema, input);
+}
+
+/** Lax read of a Recent row: the hit as {@link normalizeSearchHit} reads it, a missing open time as "". */
+export function normalizeSearchRecent(input: unknown): SearchRecent | null {
+  const hit = normalizeSearchHit(input);
+  if (!hit) return null;
+  return { ...hit, last_opened_at: textOrNull((input as Record<string, unknown>).last_opened_at) ?? "" };
+}

@@ -724,7 +724,7 @@ async function readAccessChanges(
   return { changes, maxChangedAt, supported: true };
 }
 
-/** `tasks_search` (TV-D11b): ids of the tasks you can see that match every word. */
+/** `tasks_search` (TV-D11b, GS-4): ids of the tasks you can see whose words start with every word typed. */
 async function searchTasksOnServer(
   workspaceId: string,
   query: string,

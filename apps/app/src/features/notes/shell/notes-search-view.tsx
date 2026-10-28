@@ -19,6 +19,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SELECTED_ROW } from "@/components/ui/selection";
+import { markEntityOpenHighlight } from "@/lib/entity-open";
 import { snippetSegments } from "@/lib/search-snippet";
 import { cn } from "@/lib/utils";
 
@@ -116,9 +117,11 @@ export function NotesSearchView({
       e.preventDefault();
       hitButtons()[0]?.focus();
     } else if (e.key === "Enter") {
-      const first = titleHits[0]?.id ?? textHits[0]?.id;
+      const text = titleHits.length === 0 ? textHits[0] : undefined;
+      const first = titleHits[0]?.id ?? text?.id;
       if (first) {
         e.preventDefault();
+        markEntityOpenHighlight(first, text?.match === "body" ? trimmed : "");
         onOpen(first);
       }
     } else if (e.key === "Escape") {
@@ -177,7 +180,10 @@ export function NotesSearchView({
                 key={note.id}
                 note={note}
                 selected={note.id === selectedId}
-                onOpen={() => onOpen(note.id)}
+                onOpen={() => {
+                  markEntityOpenHighlight(note.id, "");
+                  onOpen(note.id);
+                }}
               />
             ))}
           </HitGroup>
@@ -204,7 +210,11 @@ export function NotesSearchView({
                   context={hit.context}
                   snippet={hit.snippet}
                   selected={hit.id === selectedId}
-                  onOpen={() => onOpen(hit.id)}
+                  onOpen={() => {
+                    // A body hit lands on the match (GS-10); a title hit at the top.
+                    markEntityOpenHighlight(hit.id, hit.match === "body" ? trimmed : "");
+                    onOpen(hit.id);
+                  }}
                 />
               );
             })}

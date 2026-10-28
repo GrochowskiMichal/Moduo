@@ -3,14 +3,14 @@
 // stays in the input), one Top result, the groups in their fixed order with
 // "Show all N", then the matching actions. Pure presentation: the container
 // (`global-command-palette.tsx`) owns the search and passes the answer in, so
-// the stories can draw every state.
+// the stories can draw every state. GS-8: with an empty query, Recent (what you
+// opened last, each removable, and "Clear recent") sits above the actions.
 
-import type { SearchAllRow } from "@contracts/search";
-import { MessageCircle, Paperclip, Search } from "lucide-react";
-import { type ComponentType, type KeyboardEvent, useState } from "react";
+import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
+import { Eraser, Paperclip, Search, X } from "lucide-react";
+import { type ComponentType, type KeyboardEvent, type ReactNode, useState } from "react";
 
 import { filesLabel } from "../../features/attachments/files";
-import { Snippet } from "../../features/chat/find/snippet";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import {
   type PaletteChip,
@@ -33,6 +33,7 @@ import {
   CommandShortcut,
 } from "../ui/command";
 import { Eyebrow } from "../ui/eyebrow";
+import { IconButton } from "../ui/icon-button";
 import { MetaCount } from "../ui/meta-count";
 
 export type PaletteAction = {
@@ -45,13 +46,11 @@ export type PaletteAction = {
 
 export type PaletteActionGroup = { heading: string; actions: PaletteAction[] };
 
-/** Chat's half until GS-6: its own two calls, drawn in their places. */
-export type PaletteChat = {
-  messages: Array<{ id: string; snippet: string; meta: string; onSelect: () => void }>;
-  conversations: Array<{ id: string; name: string; archived: boolean; onSelect: () => void }>;
-  messagesFailed: boolean;
-  conversationsFailed: boolean;
-  onSeeAll: () => void;
+/** ⌘K's Recent (GS-8): what you opened last in this workspace, newest first. */
+export type PaletteRecent = {
+  rows: SearchRecent[];
+  onRemove: (row: SearchRecent) => void;
+  onClear: () => void;
 };
 
 /** Why the server's answer is missing: offline (or any error), or it gave up. */
@@ -73,6 +72,8 @@ const TYPE_LABEL: Record<string, string> = {
   email: "Email",
   email_thread: "Email",
   event: "Event",
+  chat_message: "Message",
+  chat_channel: "Conversation",
 };
 
 export type GlobalSearchPaletteProps = {
@@ -90,11 +91,14 @@ export type GlobalSearchPaletteProps = {
   /** A reply is taking longer than 300 ms: draw the thin progress line. */
   slow: boolean;
   notice: PaletteNotice;
-  /** The search finished and found nothing (no rows, no chat, no actions). */
+  /** The search finished and found nothing (no rows, no actions). */
   noResults: boolean;
   actionGroups: PaletteActionGroup[];
-  chat?: PaletteChat | null;
-  onOpenRow: (row: SearchAllRow) => void;
+  /** Shown while the query isn't searched (GS-8). */
+  recent?: PaletteRecent | null;
+  /** Chat's own search for the same words (filters, paging); null without Chat. */
+  onSeeAllInChat?: (() => void) | null;
+  onOpenRow: (row: SearchHit) => void;
   onShowAll: (group: PaletteGroupKey) => void;
   onSearchEverything: () => void;
   /** A task's ID by task id, from the workspace's Tasks copy (MOD-144). */
@@ -130,14 +134,23 @@ function ResultRow({
   fileCount,
   now,
   onOpen,
+  ageAt,
+  kind = "entity",
+  trailing,
 }: {
-  row: SearchAllRow;
+  row: SearchHit;
   query: string;
   isTop: boolean;
   taskId: string | undefined;
   fileCount: number;
   now: Date | undefined;
-  onOpen: (row: SearchAllRow) => void;
+  onOpen: (row: SearchHit) => void;
+  /** The time the age counts from: when it changed, or for Recent when you opened it. */
+  ageAt: string;
+  /** The row's cmdk value prefix: a Recent row is its own row (GS-8). */
+  kind?: "entity" | "recent";
+  /** After the age (Recent's remove control, GS-8). */
+  trailing?: ReactNode;
 }) {
   const Icon = resolveEntityIcon(row.entity_type, row.icon);
   const title = row.title.trim() || "Untitled";
@@ -146,12 +159,12 @@ function ResultRow({
     row.match === "title" || row.match === "handle"
       ? titleSegments(title, query)
       : [{ text: title, marked: false }];
-  const age = row.updated_at ? formatAge(row.updated_at, now) : "";
+  const age = ageAt ? formatAge(ageAt, now) : "";
   return (
     <CommandItem
-      value={`entity:${row.entity_type}:${row.entity_id}`}
+      value={`${kind}:${row.entity_type}:${row.entity_id}`}
       onSelect={() => onOpen(row)}
-      className="items-start"
+      className="group/row items-start"
     >
       <Icon />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -207,7 +220,66 @@ function ResultRow({
           {age}
         </span>
       ) : null}
+      {trailing}
     </CommandItem>
+  );
+}
+
+/** Recent's remove control: shown on hover and on the highlighted row; the
+ *  click stays off the row (it would open the item) and focus in the input. */
+function RemoveRecent({ title, onRemove }: { title: string; onRemove: () => void }) {
+  return (
+    <IconButton
+      icon={X}
+      label={`Remove ${title.trim() || "Untitled"} from Recent`}
+      tooltip={null}
+      className="-my-1 shrink-0 opacity-0 group-hover/row:opacity-100 group-data-[selected=true]/row:opacity-100 focus-visible:opacity-100"
+      onPointerDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        e.stopPropagation();
+        onRemove();
+      }}
+    />
+  );
+}
+
+function RecentGroup({
+  recent,
+  taskIds,
+  now,
+  onOpen,
+}: {
+  recent: PaletteRecent;
+  taskIds: ReadonlyMap<string, string> | null | undefined;
+  now: Date | undefined;
+  onOpen: (row: SearchHit) => void;
+}) {
+  return (
+    <CommandGroup heading="Recent">
+      {recent.rows.map((r) => (
+        <ResultRow
+          key={`${r.entity_type}:${r.entity_id}`}
+          row={r}
+          query=""
+          isTop={false}
+          taskId={r.entity_type === "task" ? taskIds?.get(r.entity_id) : undefined}
+          fileCount={0}
+          now={now}
+          onOpen={onOpen}
+          ageAt={r.last_opened_at}
+          kind="recent"
+          trailing={<RemoveRecent title={r.title} onRemove={() => recent.onRemove(r)} />}
+        />
+      ))}
+      <CommandItem
+        value="action:clear-recent"
+        onSelect={recent.onClear}
+        className="text-muted-foreground"
+      >
+        <Eraser />
+        <span>Clear recent</span>
+      </CommandItem>
+    </CommandGroup>
   );
 }
 
@@ -241,73 +313,6 @@ function TypeChips({
         </ChipButton>
       ))}
     </div>
-  );
-}
-
-function Unavailable() {
-  return (
-    <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
-      Search isn't available
-    </div>
-  );
-}
-
-/** Chat's Messages and Conversations (its own calls until GS-6), then "See all in Chat". */
-function ChatGroups({ chat }: { chat: PaletteChat }) {
-  const ConversationIcon = resolveEntityIcon("chat_channel");
-  return (
-    <>
-      {chat.messages.length > 0 || chat.messagesFailed ? (
-        <CommandGroup heading="Messages">
-          {chat.messagesFailed ? (
-            <Unavailable />
-          ) : (
-            chat.messages.map((m) => (
-              <CommandItem
-                key={`chat_message:${m.id}`}
-                value={`chat_message:${m.id}`}
-                onSelect={m.onSelect}
-              >
-                <MessageCircle />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <Snippet text={m.snippet} className="block truncate" />
-                  <span className="truncate text-xs text-muted-foreground">{m.meta}</span>
-                </span>
-              </CommandItem>
-            ))
-          )}
-        </CommandGroup>
-      ) : null}
-      {chat.conversationsFailed && !chat.messagesFailed ? (
-        <CommandGroup heading="Conversations">
-          <Unavailable />
-        </CommandGroup>
-      ) : null}
-      {chat.conversations.length > 0 ? (
-        <CommandGroup heading="Conversations">
-          {chat.conversations.map((c) => (
-            <CommandItem
-              key={`chat_channel:${c.id}`}
-              value={`entity:chat_channel:${c.id}`}
-              data-chat-conversation={c.id}
-              onSelect={c.onSelect}
-            >
-              <ConversationIcon />
-              <span className="min-w-0 flex-1 truncate">{c.name}</span>
-              {c.archived ? (
-                <span className="shrink-0 text-xs text-muted-foreground">Archived</span>
-              ) : null}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      ) : null}
-      <CommandGroup>
-        <CommandItem value="action:see-all-in-chat" onSelect={chat.onSeeAll}>
-          <Search />
-          <span>See all in Chat</span>
-        </CommandItem>
-      </CommandGroup>
-    </>
   );
 }
 
@@ -386,7 +391,8 @@ export function GlobalSearchPalette({
   notice,
   noResults,
   actionGroups,
-  chat,
+  recent,
+  onSeeAllInChat,
   onOpenRow,
   onShowAll,
   onSearchEverything,
@@ -398,7 +404,7 @@ export function GlobalSearchPalette({
   const results = searching ? view : { top: null, groups: [] };
 
   // cmdk keeps its highlight on whatever was first when the list last changed
-  // ("See all in Chat", an action) while the server's answer is on its way:
+  // (an action) while the server's answer is on its way:
   // when a new answer arrives, Enter opens its first row (the Top result, or
   // with a chip the first of its groups).
   const first = results.top ?? results.groups[0]?.rows[0] ?? null;
@@ -427,6 +433,7 @@ export function GlobalSearchPalette({
       fileCount={fileCounts?.get(r.entity_id) ?? 0}
       now={now}
       onOpen={onOpenRow}
+      ageAt={r.updated_at}
     />
   );
   const groups = (list: PaletteView["groups"]) =>
@@ -446,10 +453,8 @@ export function GlobalSearchPalette({
       </CommandGroup>
     ));
 
-  // Messages and Conversations sit between Events and Email in the fixed order.
-  const before = results.groups.filter((g) => g.key !== "email");
-  const email = results.groups.filter((g) => g.key === "email");
-  const showChat = chat && searching && (chip === "all" || chip === "chat");
+  const showSeeAllInChat = onSeeAllInChat && searching && (chip === "all" || chip === "chat");
+  const showRecent = !searching && !!recent && recent.rows.length > 0;
 
   return (
     <CommandDialog
@@ -479,15 +484,24 @@ export function GlobalSearchPalette({
         {results.top ? (
           <CommandGroup heading="Top result">{row(results.top, true)}</CommandGroup>
         ) : null}
-        {groups(before)}
-        {showChat ? <ChatGroups chat={chat} /> : null}
-        {groups(email)}
+        {groups(results.groups)}
+        {showSeeAllInChat ? (
+          <CommandGroup>
+            <CommandItem value="action:see-all-in-chat" onSelect={onSeeAllInChat}>
+              <Search />
+              <span>See all in Chat</span>
+            </CommandItem>
+          </CommandGroup>
+        ) : null}
         {noResults ? (
           <NoResults
             query={trimmed}
             narrowed={chip !== "all"}
             onSearchEverything={onSearchEverything}
           />
+        ) : null}
+        {showRecent ? (
+          <RecentGroup recent={recent} taskIds={taskIds} now={now} onOpen={onOpenRow} />
         ) : null}
         <ActionGroups groups={actionGroups} />
       </CommandList>

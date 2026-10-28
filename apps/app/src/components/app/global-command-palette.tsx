@@ -1,4 +1,4 @@
-import type { SearchAllRow } from "@contracts/search";
+import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar as CalendarIcon,
@@ -15,8 +15,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { hasSearchableWords } from "../../features/chat/find/model";
-import type { ChatConversationFound, ChatSearchHit } from "../../features/chat/model";
+import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
+import { mergeMailRows } from "../../features/email/search-palette";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { taskIdForHandle } from "../../features/tasks/search";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -38,8 +38,8 @@ import { announceOverlayOpen, onOtherOverlayOpen } from "./global-overlay-events
 import {
   GlobalSearchPalette,
   type PaletteAction,
-  type PaletteChat,
   type PaletteNotice,
+  type PaletteRecent,
 } from "./global-search-palette";
 
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
@@ -53,20 +53,8 @@ const SLOW_MS = 300;
 // chip's own groups in full (the server's most).
 const LIMIT_ALL = 8;
 const LIMIT_CHIP = 50;
-
-const NOTHING_FAILED = { messages: false, conversations: false };
-
-/** ⌘K's name for a found conversation: a channel's own, a direct message's people
- *  (everyone it was opened with besides you), a note-to-self your name or "You". */
-export function foundConversationName(
-  c: ChatConversationFound,
-  selfId: string | null,
-  nameOf: (id: string) => string | undefined,
-): string {
-  if (c.kind === "channel") return c.name ?? "Channel";
-  if (c.people.length === 0) return (selfId ? nameOf(selfId) : undefined) ?? "You";
-  return c.people.map((id) => nameOf(id) ?? "Former member").join(", ");
-}
+// Recent with an empty query (Q11).
+const RECENT_LIMIT = 8;
 
 export function dispatchOpenPalette() {
   if (typeof window === "undefined") return;
@@ -82,8 +70,8 @@ function noticeFor(error: unknown): Exclude<PaletteNotice, null> {
 
 export function GlobalCommandPalette() {
   const navigate = useNavigate();
-  const { runtime, userId } = useAuth();
-  const { selectedWorkspaceId, selectedWorkspace, modulePermissions, members } = useWorkspace();
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId, selectedWorkspace, modulePermissions } = useWorkspace();
   const taskKey = selectedWorkspace?.taskKey ?? null;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -97,15 +85,8 @@ export function GlobalCommandPalette() {
   // The item open when ⌘K opened: a hit linked to it ranks up.
   const [context, setContext] = useState<{ type: string; id: string } | null>(null);
   const reqRef = useRef(0);
-  // Chat (CV-19, until GS-6): Messages from the server search, Conversations by
-  // name (Polish without diacritics), the top five each, then "See all in Chat".
-  const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
-  const [chatConversations, setChatConversations] = useState<ChatConversationFound[]>([]);
-  // Which half failed: a failed read says "Search isn't available", never "No results".
-  const [chatFailed, setChatFailed] = useState(NOTHING_FAILED);
-  // While chat's answers are on their way, "No matches" waits.
-  const [chatSearching, setChatSearching] = useState(false);
-  const chatReqRef = useRef(0);
+  // ⌘K's Recent (GS-8): read each time the palette opens.
+  const [recents, setRecents] = useState<SearchRecent[]>([]);
   const chatOn = modulePermissions.chat !== "none";
   const trimmed = query.trim();
   const searchable = searchableQuery(trimmed);
@@ -141,50 +122,25 @@ export function GlobalCommandPalette() {
     setPending(false);
     setSlow(false);
     setNotice(null);
-    setChatHits([]);
-    setChatConversations([]);
-    setChatFailed(NOTHING_FAILED);
-    setChatSearching(false);
+    setRecents([]);
   }, [open]);
 
-  // Chat's half of the search: its own request counter, so a slow chat answer
-  // never overwrites a newer query's and the other modules never wait for it.
-  // A failed message search says so ("Search isn't available"), never "no results".
-  const chatWanted = chatOn && searchable && (chip === "all" || chip === "chat");
+  // Recent, read once per opening; a failed read just leaves it out.
   useEffect(() => {
-    if (!open) return;
-    const reqId = ++chatReqRef.current;
-    if (!chatWanted || !runtime || !selectedWorkspaceId) {
-      setChatHits([]);
-      setChatConversations([]);
-      setChatFailed(NOTHING_FAILED);
-      setChatSearching(false);
-      return;
-    }
-    setChatSearching(true);
-    const timer = setTimeout(() => {
-      // Negated words only ("-standup") name nothing to find: no Messages.
-      const messages = hasSearchableWords(trimmed)
-        ? runtime.chat.search({ workspaceId: selectedWorkspaceId, query: trimmed, limit: 5 })
-        : Promise.resolve({ data: [] as ChatSearchHit[], error: null });
-      const conversations = runtime.chat.findConversations({
-        workspaceId: selectedWorkspaceId,
-        query: trimmed,
-        limit: 5,
-      });
-      void Promise.all([messages, conversations]).then(([hits, convs]) => {
-        if (reqId !== chatReqRef.current) return;
-        setChatFailed({ messages: hits.error !== null, conversations: convs.error !== null });
-        setChatHits(hits.error ? [] : hits.data);
-        setChatConversations(convs.error ? [] : convs.data.slice(0, 5));
-        setChatSearching(false);
-      });
-    }, SEARCH_DEBOUNCE_MS);
+    if (!open || !runtime || !selectedWorkspaceId) return;
+    let live = true;
+    runtime.spine.recents({ workspaceId: selectedWorkspaceId, limit: RECENT_LIMIT }).then(
+      (rows) => {
+        if (live) setRecents(rows);
+      },
+      () => {
+        if (live) setRecents([]);
+      },
+    );
     return () => {
-      clearTimeout(timer);
-      chatReqRef.current++;
+      live = false;
     };
-  }, [open, trimmed, chatWanted, runtime, selectedWorkspaceId]);
+  }, [open, runtime, selectedWorkspaceId]);
 
   // search_all (GS-3), debounced, the last request winning. The previous
   // answer stays up until the new one arrives; a reply slower than 300 ms
@@ -202,15 +158,7 @@ export function GlobalCommandPalette() {
       setNotice(null);
       return;
     }
-    const wanted = typesKey ? typesKey.split(",") : [];
-    if (wanted.length === 0) {
-      // Chat's chip: its own calls answer (until GS-6).
-      setRows([]);
-      setPending(false);
-      setSlow(false);
-      setNotice(null);
-      return;
-    }
+    const wanted = typesKey.split(",");
     setPending(true);
     let slowTimer: ReturnType<typeof setTimeout> | undefined;
     const timer = setTimeout(() => {
@@ -256,11 +204,6 @@ export function GlobalCommandPalette() {
     };
   }, [open, searchable, trimmed, chip, typesKey, contextKey, runtime, selectedWorkspaceId]);
 
-  const memberNames = useMemo(
-    () => new Map(members.map((m) => [m.userId, m.displayName?.trim() || "Member"])),
-    [members],
-  );
-
   // A task's ID finds it (MOD-144): "MOD-99", "mod-99" or "mod 99", read in
   // the workspace's Tasks copy (open and archived tasks) with the handle rule
   // Tasks' own search and links use, and shown as the Top result at once,
@@ -295,7 +238,18 @@ export function GlobalCommandPalette() {
     };
   }, [open, trimmed, chip, taskKey, tasksReachable, runtime, selectedWorkspaceId]);
 
-  const view = useMemo(() => buildPaletteView(rows, { chip, lead }), [rows, chip, lead]);
+  // Email (GS-9): on desktop this device's own mail joins the Email group,
+  // merged here in the client; no mail body reaches the server. On web only
+  // the pulled-in threads search_all returned.
+  const mail = usePaletteMail({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    open,
+    query: trimmed,
+    wanted: searchable && (chip === "all" || chip === "email"),
+  });
+  const merged = useMemo(() => mergeMailRows(rows, mail.rows), [rows, mail.rows]);
+  const view = useMemo(() => buildPaletteView(merged, { chip, lead }), [merged, chip, lead]);
   // Every task row says its ID, quieter, as the details header does
   // (MOD-144), read from the same copy (a task it doesn't hold shows none).
   const shownTaskIds = useMemo(() => {
@@ -303,8 +257,9 @@ export function GlobalCommandPalette() {
     if (view.top?.entity_type === "task") ids.add(view.top.entity_id);
     for (const g of view.groups)
       for (const r of g.rows) if (r.entity_type === "task") ids.add(r.entity_id);
+    for (const r of recents) if (r.entity_type === "task") ids.add(r.entity_id);
     return ids;
-  }, [view]);
+  }, [view, recents]);
   const taskIds = useMemo(() => {
     if (!taskKey || !runtime || !selectedWorkspaceId || shownTaskIds.size === 0) return null;
     const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
@@ -336,15 +291,92 @@ export function GlobalCommandPalette() {
   // dispatch the spine's entity-open event; the app-chrome host listener resolves
   // the route, marks the external-open intent, and toasts if a type has no page
   // yet. Keeps one deep-link grammar app-wide.
-  const openRow = useCallback((row: SearchAllRow) => {
-    setOpen(false);
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(
-      new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: row.entity_type, id: row.entity_id } }),
-    );
-  }, []);
+  const seeAllInChat = useCallback(
+    (q: string) => {
+      setOpen(false);
+      void navigate({ to: "/chat", search: { view: "search", q } as Record<string, string> });
+    },
+    [navigate],
+  );
+  // A message opens in its conversation, at that message, and beside its chain
+  // when it is a reply (Q16b), read through Chat's own rules; one that can't be
+  // read any more lands in Chat's search for the query.
+  const openMessage = useCallback(
+    async (id: string, q: string) => {
+      let at: { channelId: string; id: string; parentId: string | null } | null = null;
+      try {
+        at = runtime ? (await runtime.chat.message(id)).data : null;
+      } catch {
+        at = null;
+      }
+      if (!at) {
+        seeAllInChat(q);
+        return;
+      }
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_OPEN_EVENT, {
+          detail: {
+            type: "chat_channel",
+            id: at.channelId,
+            messageId: at.id,
+            ...(at.parentId ? { chainId: at.parentId } : {}),
+          },
+        }),
+      );
+    },
+    [runtime, seeAllInChat],
+  );
+  const openRow = useCallback(
+    (row: SearchHit) => {
+      setOpen(false);
+      if (typeof window === "undefined") return;
+      if (row.entity_type === "chat_message") {
+        void openMessage(row.entity_id, trimmed);
+        return;
+      }
+      // A note found by its body lands on the match (GS-10).
+      const query = row.entity_type === "note" && row.match === "body" ? trimmed : undefined;
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_OPEN_EVENT, {
+          detail: { type: row.entity_type, id: row.entity_id, query },
+        }),
+      );
+    },
+    [openMessage, trimmed],
+  );
 
   const chips = useMemo(() => paletteChips(modulePermissions), [modulePermissions]);
+
+  // Remove one, or clear: the list changes at once, and comes back as it was
+  // when the write fails (offline), since the server kept it.
+  const recent: PaletteRecent | null =
+    runtime && selectedWorkspaceId
+      ? {
+          rows: recents,
+          onRemove: (row) => {
+            const before = recents;
+            setRecents(
+              before.filter(
+                (r) => r.entity_type !== row.entity_type || r.entity_id !== row.entity_id,
+              ),
+            );
+            runtime.spine
+              .forgetRecent({
+                workspaceId: selectedWorkspaceId,
+                type: row.entity_type,
+                id: row.entity_id,
+              })
+              .catch(() => setRecents(before));
+          },
+          onClear: () => {
+            const before = recents;
+            setRecents([]);
+            runtime.spine
+              .clearRecents({ workspaceId: selectedWorkspaceId })
+              .catch(() => setRecents(before));
+          },
+        }
+      : null;
 
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
@@ -447,53 +479,9 @@ export function GlobalCommandPalette() {
   ];
   const actionCount = actionGroups.reduce((n, g) => n + g.actions.length, 0);
 
-  // A message lands in its conversation, on it (and its chain when it is a reply).
-  const chat: PaletteChat | null = chatOn
-    ? {
-        messages: chatHits.map((hit) => ({
-          id: hit.messageId,
-          snippet: hit.snippet,
-          meta: `${
-            hit.authorLabel ??
-            (hit.authorId ? memberNames.get(hit.authorId) : null) ??
-            "Former member"
-          } · ${hit.channelName ?? "Direct message"}`,
-          onSelect: () => {
-            setOpen(false);
-            void navigate({
-              to: "/chat",
-              search: {
-                c: hit.channelId,
-                m: hit.messageId,
-                ...(hit.parentId ? { t: hit.parentId } : {}),
-              } as Record<string, string>,
-            });
-          },
-        })),
-        conversations: chatConversations.map((c) => ({
-          id: c.channelId,
-          // A direct message reads as its people, a note-to-self as you (as the sidebar).
-          name: foundConversationName(c, userId, (id) => memberNames.get(id)),
-          archived: c.archived,
-          onSelect: () => {
-            setOpen(false);
-            void navigate({ to: "/chat", search: { c: c.channelId } as Record<string, string> });
-          },
-        })),
-        messagesFailed: chatFailed.messages,
-        conversationsFailed: chatFailed.conversations,
-        onSeeAll: () => {
-          setOpen(false);
-          void navigate({
-            to: "/chat",
-            search: { view: "search", q: trimmed } as Record<string, string>,
-          });
-        },
-      }
-    : null;
+  // Chat's own search (filters, paging) for the same words.
+  const onSeeAllInChat = chatOn ? () => seeAllInChat(trimmed) : null;
 
-  const chatFound = chatHits.length + chatConversations.length;
-  const anyChatFailed = chatFailed.messages || chatFailed.conversations;
   const noResults =
     searchable &&
     !pending &&
@@ -501,9 +489,7 @@ export function GlobalCommandPalette() {
     view.top === null &&
     view.groups.length === 0 &&
     actionCount === 0 &&
-    chatFound === 0 &&
-    !chatSearching &&
-    !anyChatFailed;
+    !mail.searching;
 
   return (
     <GlobalSearchPalette
@@ -520,7 +506,8 @@ export function GlobalCommandPalette() {
       notice={notice}
       noResults={noResults}
       actionGroups={actionGroups}
-      chat={chat}
+      recent={recent}
+      onSeeAllInChat={onSeeAllInChat}
       onOpenRow={openRow}
       onShowAll={(group) => setChip(chipForGroup(group))}
       onSearchEverything={() => setChip("all")}
