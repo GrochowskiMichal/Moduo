@@ -38,6 +38,7 @@ import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
 import {
   ENTITY_OPEN_EVENT,
   entityOpenTarget,
+  markEntityOpenHighlight,
   markEntityOpenIntent,
   recordEntityOpen,
 } from "../../lib/entity-open";
@@ -245,6 +246,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           /** A chat notice's message and chain (CV-3). */
           messageId?: string;
           chainId?: string;
+          /** The search that found a note: it lands on the match (GS-10). */
+          query?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -281,6 +284,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       const target = entityOpenTarget(detail.type, detail.id ?? "", {
         messageId: detail.messageId,
         chainId: detail.chainId,
+        query: detail.query,
       });
       // Your open of an item, for ⌘K's Recent and the personal ranking (GS-8).
       recordEntityOpen(runtime?.spine, workspaceNav.current.selectedWorkspaceId, detail);
@@ -294,6 +298,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         // Mark the navigation as an external "take me there" so the target
         // page can distinguish it from its own mirrored id (refresh/back).
         if (target.intentId) markEntityOpenIntent(target.intentId);
+        // A note found by its body lands on the match; any other open drops a
+        // match still waiting to land (GS-10).
+        if (target.intentId) markEntityOpenHighlight(target.intentId, target.highlight ?? "");
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });

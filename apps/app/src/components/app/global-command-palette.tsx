@@ -334,9 +334,11 @@ export function GlobalCommandPalette() {
         void openMessage(row.entity_id, trimmed);
         return;
       }
+      // A note found by its body lands on the match (GS-10).
+      const query = row.entity_type === "note" && row.match === "body" ? trimmed : undefined;
       window.dispatchEvent(
         new CustomEvent(ENTITY_OPEN_EVENT, {
-          detail: { type: row.entity_type, id: row.entity_id },
+          detail: { type: row.entity_type, id: row.entity_id, query },
         }),
       );
     },
