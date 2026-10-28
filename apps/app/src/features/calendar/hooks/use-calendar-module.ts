@@ -473,6 +473,28 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     [guardEdit, runtime, workspaceId, events, accounts, userId, scope, setEventsIn],
   );
 
+  /** A Google event's delete, already removed from the list: Google first, back on refusal. */
+  const deleteFromGoogle = useCallback(
+    async (snapshot: CalendarEventModel, account: CalendarAccountModel): Promise<void> => {
+      try {
+        await (runtime as ModuoRuntime).calendar.removeGoogleEvent({
+          workspaceId: workspaceId as string,
+          event: snapshot,
+          account,
+        });
+        // No Undo: it would come back as a new Google event (out of scope).
+        toast.success("Event deleted");
+      } catch (err) {
+        setEventsIn(scope, (prev) =>
+          prev.some((e) => e.id === snapshot.id) ? prev : [...prev, snapshot],
+        );
+        const reason = err instanceof Error ? err.message : "";
+        toast.error(`Google didn't delete it${reason ? `: ${reason}` : "."}`);
+      }
+    },
+    [runtime, workspaceId, scope, setEventsIn],
+  );
+
   const deleteEvent = useCallback(
     async (eventId: string): Promise<void> => {
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
@@ -486,21 +508,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
       setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId));
       if (writer === "google" && account) {
-        try {
-          await (runtime as ModuoRuntime).calendar.removeGoogleEvent({
-            workspaceId: workspaceId as string,
-            event: snapshot,
-            account,
-          });
-          // No Undo: it would come back as a new Google event (out of scope).
-          toast.success("Event deleted");
-        } catch (err) {
-          setEventsIn(scope, (prev) =>
-            prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot],
-          );
-          const reason = err instanceof Error ? err.message : "";
-          toast.error(`Google didn't delete it${reason ? `: ${reason}` : "."}`);
-        }
+        await deleteFromGoogle(snapshot, account);
         return;
       }
       try {
@@ -535,7 +543,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },
-    [guardEdit, runtime, workspaceId, events, accounts, userId, scope, setEventsIn],
+    [
+      guardEdit,
+      runtime,
+      workspaceId,
+      events,
+      accounts,
+      userId,
+      scope,
+      setEventsIn,
+      deleteFromGoogle,
+    ],
   );
 
   return {

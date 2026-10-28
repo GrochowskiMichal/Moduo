@@ -1044,7 +1044,7 @@
       "Deno.serve(cb)": 29
     },
     "supabase/functions/calendar-google-web/index.ts": {
-      "Deno.serve(cb)": 92
+      "Deno.serve(cb)": 25
     },
     "supabase/functions/create-checkout-session/index.ts": {
       "Deno.serve(cb)": 45
