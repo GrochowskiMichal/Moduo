@@ -261,8 +261,8 @@ export function CalendarPageView({
     [calendar.accounts, userId],
   );
   const eventChips = useMemo(
-    () => eventChipsInRange(shownEvents, range, isWritable),
-    [shownEvents, range, isWritable],
+    () => eventChipsInRange(shownEvents, range, isWritable, userId),
+    [shownEvents, range, isWritable, userId],
   );
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),

@@ -1,8 +1,8 @@
 // The Event view (CALR-10, AC25; the popover's big sibling): title, when and
-// repeats, Join, the calendar, who sees it, the booking it came through, Where
-// (place with Map, link with Copy, Add a place / Add a Meet link), people with
-// their replies, linked notes and tasks as two-line rows, Link (L), the
-// description, the quiet activity trail and Delete. Events you can't change
+// repeats, Join, Private (P, CALR-15), the calendar, who sees it, the booking
+// it came through, Where (place with Map, link with Copy, Add a place / Add a
+// Meet link), people with their replies, linked notes and tasks as two-line
+// rows, Link (L), the description, the quiet activity trail and Delete. Events you can't change
 // render the same layout read-only with where they come from.
 
 import { Trash2, Video, X } from "lucide-react";
@@ -18,6 +18,7 @@ import { Input } from "../../../components/ui/input";
 import { Separator } from "../../../components/ui/separator";
 import { Switch } from "../../../components/ui/switch";
 import type { EntityRef } from "../../../lib/entity-links";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { timeAgo } from "../../contacts/rollup";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
@@ -28,7 +29,7 @@ import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { toLocalInputValue } from "../../tasks/helpers";
 import type { ActivityEntry } from "../../tasks/model";
 import { loadEventContext } from "../event-context";
-import { canAddMeet, type EventContext } from "../event-view";
+import { canAddMeet, canMakePrivate, type EventContext } from "../event-view";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import { meetingLinkOf } from "../meeting-link";
 import type { EventWriter } from "../writable";
@@ -40,6 +41,7 @@ import {
   type ViewerMember,
 } from "./event-view-rows";
 import { RepeatPicker } from "./repeat-picker";
+import { inCalendarOverlay } from "./use-calendar-hotkeys";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -204,6 +206,15 @@ export function EventDetailPanel({
     [event.id, onPatch],
   );
 
+  // Private (P, CALR-15): the owner's call; Google events send visibility first.
+  const privateOffered = canMakePrivate(event, currentUserId, editable);
+  useAppHotkeys({
+    "calendar.private": (e) => {
+      if (!privateOffered || e.repeat || inCalendarOverlay(e)) return false;
+      onPatch(event.id, { isPrivate: !event.isPrivate });
+    },
+  });
+
   const now = new Date();
 
   return (
@@ -281,6 +292,15 @@ export function EventDetailPanel({
           aria-label="All day"
         />
       </Field>
+      {privateOffered ? (
+        <Field label="Private">
+          <Switch
+            checked={!!event.isPrivate}
+            onCheckedChange={(v) => onPatch(event.id, { isPrivate: v })}
+            aria-label="Private"
+          />
+        </Field>
+      ) : null}
 
       <RepeatsField
         rrule={event.rrule}

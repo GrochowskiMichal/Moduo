@@ -41,6 +41,7 @@ import {
   mapUrl,
   placeLines,
   replyLabel,
+  showsLock,
   whoSeesLine,
 } from "../event-view";
 import type {
@@ -253,8 +254,12 @@ export function EventCalendarRows({
   // workspace's people, or an empty list would read as "Only you see it".
   // (The calendar's owner when read, else the event's own.)
   const owned = !!currentUserId && (context?.calendarOwnerId ?? event.ownerId) === currentUserId;
-  const line =
-    owned && context?.share && members.length > 0
+  // Your own private event says so whatever has loaded (CALR-15).
+  const line = showsLock(event, currentUserId)
+    ? whoSeesLine({ workspaceLevel: null, people: [] }, members, currentUserId, {
+        isPrivate: true,
+      })
+    : owned && context?.share && members.length > 0
       ? whoSeesLine(context.share, members, currentUserId)
       : null;
   const booked = context?.bookedThrough ?? null;

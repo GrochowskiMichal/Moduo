@@ -6264,6 +6264,16 @@ export type Database = {
           start_time: string
         }[]
       }
+      calendar_events_visible: {
+        Args: { p_from: string; p_to: string; p_workspace_id: string }
+        Returns: Database["public"]["Tables"]["calendar_events"]["Row"][]
+        SetofOptions: {
+          from: "*"
+          to: "calendar_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       calendar_module_permission: {
         Args: { p_workspace_id: string | null }
         Returns: string

@@ -50,6 +50,19 @@ async function rows(
   return data ?? [];
 }
 
+/**
+ * Events read through the masked read (calendar_events_visible, CALR-15: it
+ * answers for the key's person, a teammate's private event arrives as "Busy")
+ * kept to those overlapping [from, to), by start. The read also returns every
+ * recurring series.
+ */
+function inRange(events: Row[], from: string, to: string): Row[] {
+  const [fromMs, toMs] = [Date.parse(from), Date.parse(to)];
+  return events
+    .filter((e) => Date.parse(e.start_time) < toMs && Date.parse(e.end_time) >= fromMs)
+    .sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time));
+}
+
 /** Call an op RPC (workspace-scoped) and return its raw result row. */
 async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row | null> {
   const { data, error } = await ctx.db.rpc(fn, { p_workspace_id: ctx.key.workspaceId, ...args });
@@ -118,20 +131,13 @@ export const calendarConnectorModule: ConnectorModule = {
         const from = str(args, "from");
         const to = str(args, "to");
         const data = await rows(
-          ctx.db
-            .from("calendar_events")
-            .select("*")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .is("deleted_at", null)
-            .lt("start_time", to)
-            .gte("end_time", from)
-            .order("start_time")
-            .limit(clampLimit(args, 200, 500)),
+          ctx.db.rpc("calendar_events_visible", {
+            p_workspace_id: ctx.key.workspaceId,
+            p_from: from,
+            p_to: to,
+          }),
         );
-        const calendars = await visibleIds(ctx, "calendar");
-        return data
-          .filter((e) => e.owner_id === ctx.key.createdBy || calendars.has(e.calendar_ref))
-          .map(shapeEvent);
+        return inRange(data, from, to).slice(0, clampLimit(args, 200, 500)).map(shapeEvent);
       },
     },
     {
@@ -153,15 +159,12 @@ export const calendarConnectorModule: ConnectorModule = {
         const noTasks = Promise.resolve([] as Row[]);
         const [events, blocks, strip] = await Promise.all([
           rows(
-            ctx.db
-              .from("calendar_events")
-              .select("*")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .lt("start_time", endIso)
-              .gte("end_time", startIso)
-              .order("start_time"),
-          ),
+            ctx.db.rpc("calendar_events_visible", {
+              p_workspace_id: ctx.key.workspaceId,
+              p_from: startIso,
+              p_to: endIso,
+            }),
+          ).then((e) => inRange(e, startIso, endIso)),
           seesTasks
             ? rows(
                 ctx.db
@@ -197,15 +200,10 @@ export const calendarConnectorModule: ConnectorModule = {
           const durMs = (Number(t.duration_minutes) > 0 ? Number(t.duration_minutes) : 30) * 60_000;
           return Number.isFinite(start) && start + durMs <= nowMsLocal;
         });
-        const [calendars, tasks] = await Promise.all([
-          visibleIds(ctx, "calendar"),
-          seesTasks ? visibleIds(ctx, "task") : Promise.resolve(new Set<string>()),
-        ]);
+        const tasks = seesTasks ? await visibleIds(ctx, "task") : new Set<string>();
         return {
           date: startIso.slice(0, 10),
-          events: events
-            .filter((e) => e.owner_id === ctx.key.createdBy || calendars.has(e.calendar_ref))
-            .map(shapeEvent),
+          events: events.map(shapeEvent),
           blocks: blocks.filter((t) => tasks.has(t.id)).map(shapeBlock),
           strip: stripEnded.filter((t) => tasks.has(t.id)).map(shapeBlock),
           ...(seesTasks

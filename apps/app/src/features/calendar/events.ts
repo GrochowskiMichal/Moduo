@@ -7,6 +7,7 @@ import type { CalendarItemKind, ConferenceProvider } from "@contracts/vocabulari
 import { type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { Truncation } from "../../lib/paged-select";
 import { formatTime } from "../../lib/time-format";
+import { showsLock } from "./event-view";
 import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
@@ -176,6 +177,8 @@ export type EventChip = {
    * goes on into a later one (its end). Null when it starts / ends today. */
   continuesFromMs: number | null;
   continuesToMs: number | null;
+  /** Your own private event: the chip carries a lock (CALR-15). */
+  locked: boolean;
 };
 
 /** The calendar hue an event chip takes (AC7): a mirrored event its
@@ -224,6 +227,7 @@ function occurrenceChip(
   event: CalendarEventModel,
   occ: { startMs: number; endMs: number },
   isWritable: (event: CalendarEventModel) => boolean,
+  me: string | null,
 ): ChipBase {
   return {
     eventId: event.id,
@@ -239,6 +243,7 @@ function occurrenceChip(
     color: event.color,
     continuesFromMs: null,
     continuesToMs: null,
+    locked: showsLock(event, me),
   };
 }
 
@@ -275,11 +280,13 @@ function pushTimedPieces(into: Map<string, EventChip[]>, base: ChipBase, range: 
   }
 }
 
-/** `isWritable` says which events can change here; omitted = native events only. */
+/** `isWritable` says which events can change here; omitted = native events only.
+ * `me` puts the lock on your own private events. */
 export function eventChipsInRange(
   events: CalendarEventModel[],
   range: VisibleRange,
   isWritable: (event: CalendarEventModel) => boolean = isNativeEvent,
+  me: string | null = null,
 ): EventChipsByDay {
   const timed = new Map<string, EventChip[]>();
   const allDay = new Map<string, EventChip[]>();
@@ -292,7 +299,7 @@ export function eventChipsInRange(
       range.endMs,
     );
     for (const occ of occurrences) {
-      const base = occurrenceChip(event, occ, isWritable);
+      const base = occurrenceChip(event, occ, isWritable, me);
       if (event.allDay) pushAllDayPieces(allDay, base, range);
       else pushTimedPieces(timed, base, range);
     }

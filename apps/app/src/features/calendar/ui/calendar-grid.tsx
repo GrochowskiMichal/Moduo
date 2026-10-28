@@ -698,6 +698,7 @@ export function CalendarGrid({
                       recurring={chip.recurring}
                       selected={selectedOccurrenceKey === chip.occurrenceKey}
                       past={false}
+                      locked={chip.locked}
                     />
                   </button>
                 ))}
