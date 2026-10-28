@@ -32,3 +32,6 @@ fe4ad9821a96de1a91440d46884544a1e6b4e68c:.design/chat-v2/research/current-state.
 9f68d8fefcee25ac285fc7705f1fe5a692ff8edf:scripts/agent/risk-hook.test.ts:generic-api-key:100
 9f68d8fefcee25ac285fc7705f1fe5a692ff8edf:scripts/agent/risk-hook.test.ts:stripe-access-token:109
 ca67ab1aad4cfda5b40179a2b3dce9cff5aeba0d:scripts/agent/risk-hook.test.ts:curl-auth-header:128
+
+# NS-5: a fake publish_token in a test fixture ("0f64…"); low-entropy since.
+38201c7f18a093f7afa3ea87be745c7f3f5600ee:apps/app/src/lib/runtime.web.notes.test.ts:generic-api-key:37
