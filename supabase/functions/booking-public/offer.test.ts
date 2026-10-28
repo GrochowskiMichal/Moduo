@@ -6,6 +6,8 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  guestPageUrl,
+  OFFER_SLUG_PREFIX,
   type OfferRow,
   type OfferTimeRow,
   offerAsLink,
@@ -116,5 +118,13 @@ describe("offerBookFailure", () => {
 
   it("anything else failed the booking", () => {
     expect(offerBookFailure("connection reset")).toEqual({ error: "book_failed", status: 500 });
+  });
+});
+
+describe("an offer never leads to the host's booking link", () => {
+  it("an offer's guest page is /book/r/<token>, a link's /book/<slug>", () => {
+    const token = "0f3a9c2be4d14c7f8a6b5e2d1c0f9a8b";
+    expect(guestPageUrl("https://moduo.app", OFFER_SLUG_PREFIX + token)).toBe(`https://moduo.app/book/r/${token}`);
+    expect(guestPageUrl("https://moduo.app", "intro")).toBe("https://moduo.app/book/intro");
   });
 });

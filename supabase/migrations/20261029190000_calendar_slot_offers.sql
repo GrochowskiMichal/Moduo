@@ -96,7 +96,9 @@ BEGIN
   INSERT INTO public.slot_offers
     (workspace_id, owner_id, link_id, slug, title, duration_minutes, video_provider, hold, expires_at)
   VALUES (p_workspace_id, public.perm_actor_id(), l.id,
-          l.slug || '-' || left(replace(gen_random_uuid()::text, '-', ''), 10),
+          -- Its own random token, never the link's slug: an offer sent to one guest must
+          -- not lead them to the host's open booking page.
+          encode(extensions.gen_random_bytes(16), 'hex'),
           coalesce(NULLIF(btrim(p_title), ''), NULLIF(btrim(l.name), ''), l.link_name),
           coalesce(p_duration_minutes, l.duration_minutes), p_video_provider,
           coalesce(p_hold, true), now() + interval '48 hours')

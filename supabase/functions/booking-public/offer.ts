@@ -64,7 +64,22 @@ export function offerBookFailure(message: string): { error: string; status: numb
   return { error: "book_failed", status: 500 };
 }
 
-type LinkLike = { name: string; duration_minutes: number; video_provider: string | null };
+type LinkLike = { name: string; duration_minutes: number; video_provider: string | null; slug: string };
+
+/**
+ * An offer's guest page lives at /book/r/<token>. The overlaid link carries
+ * that path as its slug, so nothing a guest of an offer sees (the preview, the
+ * emails' rebook links) names the host's booking link: the token is the whole
+ * capability, and it never reaches the link's open booking page.
+ */
+export const OFFER_SLUG_PREFIX = "r/";
+
+/** The guest page for a link slug, or for an offer's `r/<token>`. */
+export function guestPageUrl(origin: string, slug: string): string {
+  return slug.startsWith(OFFER_SLUG_PREFIX)
+    ? `${origin}/book/r/${encodeURIComponent(slug.slice(OFFER_SLUG_PREFIX.length))}`
+    : `${origin}/book/${encodeURIComponent(slug)}`;
+}
 export type LoadedOffer<L> = { offer: OfferRow; times: OfferTimeRow[]; link: L };
 
 /** An offer by its slug (service role), with its times and its live link overlaid. */
@@ -76,7 +91,7 @@ export async function loadOffer<L extends LinkLike>(db: SupabaseClient, slug: st
   ).data as L | null;
   if (!link) return null;
   const times = ((await db.from("slot_offer_times").select("*").eq("offer_id", offer.id)).data ?? []) as OfferTimeRow[];
-  return { offer, times, link: offerAsLink(link, offer) };
+  return { offer, times, link: { ...offerAsLink(link, offer), slug: OFFER_SLUG_PREFIX + offer.slug } };
 }
 
 /** The guest's pick: booked, and every hold released, in one transaction (booking_op_offer_book). */

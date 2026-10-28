@@ -57,7 +57,16 @@ import {
   emailContext,
   guestTimeZone,
 } from "./emails.ts";
-import { bookOffer, commitFailure, type LoadedOffer, loadOffer, offerSlots, offerState } from "./offer.ts";
+import {
+  bookOffer,
+  commitFailure,
+  guestPageUrl,
+  type LoadedOffer,
+  loadOffer,
+  OFFER_SLUG_PREFIX,
+  offerSlots,
+  offerState,
+} from "./offer.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../apps/app/src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -513,6 +522,7 @@ Deno.serve(async (req: Request) => {
       attendee_email: string;
       guest_emails: string[] | null;
       timezone: string | null;
+      slot_slug: string | null;
     };
     const linkRes = await db
       .from("exposed_slot_links")
@@ -592,7 +602,11 @@ Deno.serve(async (req: Request) => {
         at: cancelledAt.toISOString(),
       };
       const planned = cancelEmails(facts, {
-        rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
+        // An offer's booking rebooks on the offer's page, never the host's link.
+        rebookUrl: guestPageUrl(
+          CANONICAL_BOOKING_ORIGIN,
+          row.slot_slug?.startsWith(OFFER_SLUG_PREFIX) ? row.slot_slug : link.slug,
+        ),
         nowMs: cancelledAt.getTime(),
         googleDropped,
       });
@@ -888,7 +902,7 @@ Deno.serve(async (req: Request) => {
     calendar_synced: true,
     updated_at: new Date().toISOString(),
   };
-  const context = emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` });
+  const context = emailContext(facts, { cancelUrl, rebookUrl: guestPageUrl(origin, link.slug) });
   const withContext = {
     ...(await db
       .from("slot_bookings")

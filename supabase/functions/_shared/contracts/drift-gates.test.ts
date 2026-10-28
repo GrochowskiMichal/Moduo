@@ -137,7 +137,7 @@ describe("cross-runtime drift guards", () => {
   });
 
   it("slot_offers CHECK lists the canonical offer statuses (CALR-19)", () => {
-    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261029180000_calendar_slot_offers.sql"), "utf8");
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261029190000_calendar_slot_offers.sql"), "utf8");
     const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
     expect([...SLOT_OFFER_STATUSES]).toEqual(["open", "booked", "released", "expired"]);
     expect(sql).toContain(`status IN (${inList(SLOT_OFFER_STATUSES)})`);

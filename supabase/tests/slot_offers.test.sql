@@ -69,8 +69,8 @@ BEGIN
   PERFORM test.ok(o.title = 'Investor meeting' AND o.duration_minutes = 45 AND o.hold,
     'it keeps the title, length and hold it was made with');
   PERFORM test.ok(o.expires_at = now() + interval '48 hours', 'holds last 48 hours', o.expires_at::text);
-  PERFORM test.ok(o.slug LIKE 'db-test-intro-%' AND length(o.slug) >= length('db-test-intro-') + 6,
-    'its slug is the link''s with a random tail', o.slug);
+  PERFORM test.ok(o.slug ~ '^[0-9a-f]{32}$' AND position('db-test-intro' IN o.slug) = 0,
+    'its slug is a random token of its own that never names the link', o.slug);
   PERFORM test.ok((SELECT count(*) FROM public.slot_offer_times t WHERE t.offer_id = v_offer
                     AND t.end_at = t.start_at + interval '45 minutes') = 3,
     'three offered times, each as long as the meeting');
