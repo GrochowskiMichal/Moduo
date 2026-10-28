@@ -49,15 +49,16 @@ type PgError = { code?: string; message: string };
  * over 1,000 notes pages. Null while the function isn't deployed yet.
  */
 async function listMetaViaRpc(workspaceId: string) {
+  // One cutoff for every page: a note crossing it between pages would shift the offsets.
+  const trashSince = trashWindowCutoffIso(new Date());
   const res = await readPaged<unknown, PgError>({
     scope: "notes",
     cap: READ_CAPS.notes,
     page: async (offset, limit) => {
+      // The server stops at the cap: past it there is nothing to ask for.
+      if (offset >= READ_CAPS.notes) return { data: [], error: null };
       const { data, error } = await untypedDb(supabaseClient)
-        .rpc("notes_list_meta", {
-          p_workspace_id: workspaceId,
-          p_trash_since: trashWindowCutoffIso(new Date()),
-        })
+        .rpc("notes_list_meta", { p_workspace_id: workspaceId, p_trash_since: trashSince })
         .range(offset, offset + limit - 1);
       return { data: (data ?? null) as unknown[] | null, error };
     },
