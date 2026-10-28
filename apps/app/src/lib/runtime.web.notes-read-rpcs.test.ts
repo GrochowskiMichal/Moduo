@@ -87,7 +87,6 @@ const meta = (i: number) => ({
   parent_id: null,
   title: `Note ${i}`,
   icon: null,
-  is_pinned: false,
   position: `a${i}`,
   is_archived: false,
   published_at: null,

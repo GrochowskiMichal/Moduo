@@ -7,7 +7,12 @@
  * ./types.ts stays until the old surfaces retire with NO-2/NO-3.
  */
 
-import { type ContentAuthorKind, normalizeContentAuthorKind } from "@contracts/vocabularies";
+import {
+  type ContentAuthorKind,
+  normalizeContentAuthorKind,
+  normalizeNoteShareMode,
+  type NoteShareMode,
+} from "@contracts/vocabularies";
 
 import type { Truncation } from "../../lib/paged-select";
 
@@ -18,7 +23,6 @@ export type Note = {
   parentId: string | null;
   title: string;
   icon: string | null;
-  isPinned: boolean;
   position: string;
   isArchived: boolean;
   publishedAt: string | null;
@@ -29,7 +33,7 @@ export type Note = {
   /** Set = the note is in the trash (30-day window). */
   deletedAt: string | null;
   /** `inherit` follows the parent; `custom` uses this note's own grants. */
-  shareMode: "inherit" | "custom";
+  shareMode: NoteShareMode;
   /** A workspace grant exists on this note (children may still inherit one). */
   workspaceShared: boolean;
   /** NR-1: the note sits in the stored Inbox (only ever true for roots).
@@ -103,7 +107,6 @@ export function noteRowToModel(r: any): Note {
     parentId: r.parent_id ?? null,
     title: r.title ?? "",
     icon: r.icon ?? null,
-    isPinned: Boolean(r.is_pinned),
     position: r.position ?? "",
     isArchived: Boolean(r.is_archived),
     publishedAt: r.published_at ?? null,
@@ -112,7 +115,7 @@ export function noteRowToModel(r: any): Note {
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     deletedAt: r.deleted_at ?? null,
-    shareMode: r.share_mode === "inherit" ? "inherit" : "custom",
+    shareMode: normalizeNoteShareMode(r.share_mode),
     workspaceShared: r.workspace_shared === true,
     inInbox: typeof r.in_inbox === "boolean" ? r.in_inbox : null,
     fullWidth: r.full_width === true,

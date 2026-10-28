@@ -2,6 +2,18 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`** → `supabase/migrations/20261030180000_notes_legacy_out.sql`
+  - status: current
+  - Who: Mike (engineer mode, PQ5), built in NS-9 (MOD-659).
+  - Decision:
+    - `exposed_notes`, `note_shares` and `private.user_owns_note` are dropped, and the columns `share_scope`, `share_permission`, `tags`, `kind` and `is_pinned`. Erasure is cut in place (`pg_temp.recut`), as are create, duplicate, import and set_meta. An old client's `isPinned` patch is ignored, not refused.
+    - `notes_meta` loses `is_pinned` by `ALTER TYPE … DROP ATTRIBUTE`, not DROP + CREATE: the twelve functions that return it keep their bodies and grants, so no grant can re-open to `anon`. Only `notes__meta`, which builds the row, is re-cut. `runtime.web.notes.test.ts` reads the type's columns as the latest `CREATE TYPE` less later `DROP ATTRIBUTE`s.
+    - `notes_share_fields_owner_only` keeps ownership only: a non-owner can't change `created_by` or `workspace_id`. The workspace clause stays because nothing else refuses that move.
+    - `notes.edited_by`, `note_updates.user_id` → `profiles` and `note_updates.actor_key_id` → `workspace_api_keys` are `ON DELETE SET NULL`, each with a partial index so deleting a person or key doesn't scan the log.
+    - `share_mode` is `NOTE_SHARE_MODES` in the contracts, pinned to `notes_share_mode_chk`; it normalizes to `custom`.
+    - The dormant desktop REST sync (`apps/desktop/src-tauri`) still names some dropped columns. It is dead code and left alone; reviving it means rewriting it against the ops.
+  - Why: nothing read the legacy objects; dangling actor ids were possible; the database sorted `position` by `en_US` collation while the client sorts by code unit.
+
 - **2026-10-28 · NS-7: a note's document and the notes list are definer reads that check access once (`notes_pull`, `notes_list_meta`), with a table-read fallback until deployed** → `supabase/migrations/20261030160000_notes_read_rpcs.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-7 (MOD-657).

@@ -66,7 +66,7 @@ describe("rollupSections snippet enrichment (DF-7)", () => {
       registry([note, "Spec"], [event, "Kickoff"]),
       {
         snippetMeta: metaMap(
-          [note, { kind: "note", updatedAt: dayOffset(-2), isPinned: false, isArchived: false }],
+          [note, { kind: "note", updatedAt: dayOffset(-2), isArchived: false }],
           [event, { kind: "event", startsAt: dayOffset(1), endsAt: dayOffset(1), allDay: true }],
         ),
         now: NOW,

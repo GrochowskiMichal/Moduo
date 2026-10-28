@@ -39,7 +39,6 @@ export type TaskSnippetMeta = {
 export type NoteSnippetMeta = {
   kind: "note";
   updatedAt: string;
-  isPinned: boolean;
   isArchived: boolean;
 };
 
