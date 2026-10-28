@@ -5,6 +5,7 @@ import {
   noteUpdateRowSchema,
   requireRow,
 } from "@contracts/rows";
+import { normalizeSearchHit } from "@contracts/search";
 
 import {
   type Note,
@@ -555,26 +556,33 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
     async search({ workspaceId, query, limit }) {
       const q = query.trim();
       if (!q) return [];
-      const { data, error } = await supabaseClient
-        .from("notes")
-        .select("id, title, body_text, is_archived, deleted_at")
-        .eq("workspace_id", workspaceId)
-        .is("deleted_at", null)
-        .textSearch("search_tsv", q, { type: "websearch", config: "simple" })
-        .limit(limit ?? 30);
-      // Pre-migration the v2 columns (search_tsv/body_text/is_archived) 42703 —
-      // degrade to no results rather than an error, like listMeta.
+      // Untyped until the generated types are regenerated from prod after the
+      // migration ships (20261028230000_notes_search.sql).
+      const { data, error } = await untypedDb(supabaseClient).rpc("notes__search", {
+        p_workspace_id: workspaceId,
+        p_query: q,
+        p_limit: limit ?? 30,
+      });
+      // Before the migration reaches this database the function is missing:
+      // no text hits (the title matches still come from this device).
       if (error) {
-        if (error.code === "42703") return [];
+        if (isMissingFunctionError(error, "notes__search")) return [];
         throw new DbError(error);
       }
-      return (Array.isArray(data) ? data : []).map((r: any) => ({
-        id: r.id as string,
-        title: (r.title as string) ?? "",
-        bodyText: (r.body_text as string) ?? "",
-        isArchived: Boolean(r.is_archived),
-        deletedAt: (r.deleted_at as string | null) ?? null,
-      }));
+      return (Array.isArray(data) ? data : []).flatMap((raw: unknown) => {
+        const hit = normalizeSearchHit(raw);
+        if (!hit) return [];
+        return [
+          {
+            id: hit.entity_id,
+            title: hit.title,
+            icon: hit.icon,
+            context: hit.context,
+            snippet: hit.snippet,
+            match: hit.match,
+          },
+        ];
+      });
     },
 
     async fetchExportDocs({ workspaceId, ids }) {

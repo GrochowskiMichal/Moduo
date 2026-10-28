@@ -102,7 +102,7 @@ function trimEnd(text: string): string {
 
 /** Notes found by their text that weren't already found by their title, in the
  * server's order, trashed ones dropped. */
-export function bodyOnlyHits<T extends { id: string; deletedAt: string | null }>(
+export function bodyOnlyHits<T extends { id: string; deletedAt?: string | null }>(
   hits: T[],
   titleHits: Note[],
 ): T[] {
