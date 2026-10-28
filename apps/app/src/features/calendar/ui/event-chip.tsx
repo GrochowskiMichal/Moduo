@@ -42,6 +42,8 @@ type Props = {
   stale?: boolean;
   /** A change to it waits to sync: the cloud-off mark (CALR-3). */
   waiting?: boolean;
+  /** Day view's prep in the chip's free width (CALR-12): people, notes, follow-up, where. */
+  aside?: ReactNode;
 };
 
 /** The chip's tooltip: what it is, when, and what's true of it. */
@@ -78,6 +80,7 @@ export function EventChipView({
   locked = false,
   stale = false,
   waiting = false,
+  aside = null,
 }: Props) {
   const live = nowFraction != null;
   const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
@@ -107,24 +110,39 @@ export function EventChipView({
       )}
     >
       {live ? <NowTick fraction={nowFraction} /> : null}
-      {compact ? (
-        <ChipOneLine
-          title={title}
-          time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
-          locked={locked}
-          marks={marks}
-        />
-      ) : (
-        <ChipStacked
-          title={title}
-          time={timeLabel}
-          recurring={recurring}
-          continuation={continuation}
-          locked={locked}
-          marks={marks}
-        />
-      )}
+      <WithAside aside={aside}>
+        {compact ? (
+          <ChipOneLine
+            title={title}
+            time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
+            locked={locked}
+            marks={marks}
+          />
+        ) : (
+          <ChipStacked
+            title={title}
+            time={timeLabel}
+            recurring={recurring}
+            continuation={continuation}
+            locked={locked}
+            marks={marks}
+          />
+        )}
+      </WithAside>
       {live ? <span className="sr-only">, happening now</span> : null}
+    </div>
+  );
+}
+
+/** The chip's text, and beside it (when there is one) the prep in the free width. */
+function WithAside({ aside, children }: { aside: ReactNode; children: ReactNode }) {
+  if (!aside) return <>{children}</>;
+  return (
+    <div className="relative flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 max-w-3/5 shrink-0 flex-col">{children}</div>
+      <div data-chip-aside className="flex min-w-0 flex-1 justify-start overflow-hidden">
+        {aside}
+      </div>
     </div>
   );
 }

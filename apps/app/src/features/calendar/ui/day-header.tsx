@@ -84,7 +84,8 @@ export function DayHeader({
   );
 }
 
-function DueList({
+/** The due count and its list (shared with the Month view's dates, CALR-12). */
+export function DueList({
   day,
   due,
   onOpenTask,

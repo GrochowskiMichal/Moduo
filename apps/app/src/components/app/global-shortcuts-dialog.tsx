@@ -10,6 +10,7 @@
 
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 
+import { CalendarKeysSection } from "../../features/calendar/ui/calendar-keys-section";
 import { useReturnFocus } from "../../hooks/use-return-focus";
 import {
   chatKeyRows,
@@ -91,6 +92,9 @@ export function GlobalShortcutsDialog() {
     chatGroups.set(row.scope, list);
   }
 
+  // On Calendar its keys come first (CALR-4); elsewhere they follow Chat's.
+  const onCalendar = open && window.location.pathname.startsWith("/calendar");
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent
@@ -109,6 +113,7 @@ export function GlobalShortcutsDialog() {
             </Fragment>
           ))}
         </dl>
+        {onCalendar ? <CalendarKeysSection /> : null}
         <section aria-label="Chat" className="flex flex-col gap-2" data-shortcuts-chat="">
           <h3 className="font-display text-sm text-foreground">Chat</h3>
           {[...chatGroups.entries()].map(([scope, list]) => (
@@ -129,6 +134,7 @@ export function GlobalShortcutsDialog() {
             </div>
           ))}
         </section>
+        {onCalendar ? null : <CalendarKeysSection />}
       </DialogContent>
     </Dialog>
   );

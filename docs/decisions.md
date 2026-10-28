@@ -203,6 +203,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
 - 2026-10-28 · Only picked Google calendars sync; a revoked token is `reauth`; Remove is soft with a one-day Undo (CALR-20).
+- 2026-10-28 · Month is a layout over the same day maps; Day view's prep reads one links call per meeting (CALR-12).
+- 2026-10-28 · One undo stack for Calendar; a Moduo event deletes without asking; the grid is one Tab stop with a 30-minute cursor (CALR-4).
 - 2026-10-28 · Sync faults are scoped to the account that failed; loading draws the last shape; offline and first week are states of their own (CALR-3).
 - 2026-10-28 · One occurrence is an override row or an exdate, and every override's original start is an exdate too (CALR-11).
 - 2026-10-28 · Due work is a count in the day header; the all-day lane caps at two rows; now-and-next fits the toolbar's free room (CALR-2).
