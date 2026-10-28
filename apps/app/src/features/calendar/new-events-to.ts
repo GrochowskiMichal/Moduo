@@ -77,7 +77,8 @@ export function quickCreateCalendars(
   return [
     { id: "moduo", label: "Moduo" },
     ...accounts
-      .filter((account) => account.provider === "google" && !account.deletedAt)
+      // Only calendars Google lets you write now: the others would refuse the create.
+      .filter(canTakeEvents)
       .map((account) => ({
         id: account.id,
         label: account.displayLabel || "Google",

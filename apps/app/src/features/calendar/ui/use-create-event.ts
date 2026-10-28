@@ -43,7 +43,13 @@ export function useCreateEvent(
             await calendar.reload();
           },
           onRefused: ({ reason, saveToYourCalendar }) => {
+            // Kept until dismissed: the composer has closed, and this is the only
+            // place the typed event still lives.
             toast.error(reason, {
+              duration: Number.POSITIVE_INFINITY,
+              description: draft.attendees?.length
+                ? "On Your calendar instead, the guests won't be invited."
+                : undefined,
               action: {
                 label: "Save to Your calendar instead",
                 onClick: () => void saveToYourCalendar(),

@@ -206,6 +206,10 @@ BEGIN
               AND (pg_temp.live_for('g1')).source_account_id = v_new,
     'the old rows come back on the reconnected calendar, so links and bookings keep pointing at them');
   PERFORM test.ok(pg_temp.entity_live(v_g1), 'with their registry entries');
+  PERFORM test.ok((pg_temp.live_for('g1')).calendar_ref =
+                    (SELECT id FROM public.calendars WHERE account_id = v_new AND deleted_at IS NULL)
+              AND (pg_temp.live_for('g1')).calendar_ref IS NOT NULL,
+    'and on the reconnected calendar''s row, so its sharing follows that calendar');
 
   -- A second round trip still makes no twin.
   r := test.as_user('O', format($q$SELECT public.calendar_op_account_remove(%L, %L)$q$,

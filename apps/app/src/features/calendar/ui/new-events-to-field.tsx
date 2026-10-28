@@ -32,7 +32,12 @@ export function NewEventsToField({
 }) {
   const labelId = useId();
   if (calendars.length === 0) {
-    return <p className="text-xs text-muted-foreground">New events go to {YOUR_CALENDAR_LABEL}</p>;
+    return (
+      <div className="flex flex-col gap-1">
+        <p className="text-xs text-muted-foreground">New events go to {YOUR_CALENDAR_LABEL}</p>
+        {to.fallback ? <p className="text-xs text-muted-foreground">{to.fallback}</p> : null}
+      </div>
+    );
   }
   return (
     <div className="flex flex-col gap-1">

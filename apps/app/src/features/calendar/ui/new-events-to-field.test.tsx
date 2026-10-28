@@ -66,6 +66,18 @@ describe("New events go to", () => {
     expect(screen.getByText(/New events go to Your calendar · Moduo/)).toBeTruthy();
   });
 
+  it("says why when the only Google calendar can't take events any more", () => {
+    const fallback = "Work needs reconnecting, so new events go to Your calendar.";
+    render(
+      <NewEventsToField
+        calendars={[]}
+        to={{ accountId: null, label: YOUR_CALENDAR_LABEL, fallback }}
+        onChange={() => undefined}
+      />,
+    );
+    expect(screen.getByText(fallback)).toBeTruthy();
+  });
+
   it("reads Your calendar as no account, and a calendar as its account", () => {
     expect(accountIdFromOption("moduo")).toBeNull();
     expect(accountIdFromOption("acc-work")).toBe("acc-work");

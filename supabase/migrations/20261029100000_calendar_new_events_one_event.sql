@@ -9,7 +9,7 @@
 -- account's sync removed, or one of a removed account for the same calendar
 -- (Remove, then connect it again). Never across owners or workspaces. Re-runnable.
 --
---   calendar_events.ical_uid     new column + partial lookup index
+--   calendar_events.ical_uid     new column; a partial index for the revive's lookup
 --   calendar_op_mirror_events    ← 20261028170000_calendar_one_occurrence.sql, plus
 --                                  the iCalUID key and the revive
 --   calendar_events_visible      ← 20261028150000_calendar_private_masking.sql, plus
@@ -20,9 +20,10 @@ SET LOCAL lock_timeout = '5s';
 
 ALTER TABLE public.calendar_events ADD COLUMN IF NOT EXISTS ical_uid text;
 
-CREATE INDEX IF NOT EXISTS calendar_events_ical_uid_idx
-  ON public.calendar_events (owner_id, ical_uid)
-  WHERE ical_uid IS NOT NULL AND deleted_at IS NULL;
+-- The revive's lookup: a tombstone by its key (the live key is calendar_events_external_key).
+CREATE INDEX IF NOT EXISTS calendar_events_external_key_dead_idx
+  ON public.calendar_events (source_account_id, external_event_id)
+  WHERE external_event_id IS NOT NULL AND deleted_at IS NOT NULL;
 
 -- Mirror (20261028170000): new, the iCalUID key (present = stored, absent keeps)
 -- and the revive of a tombstoned row before any insert.
@@ -184,6 +185,10 @@ BEGIN
           UPDATE public.calendar_events AS ce SET
             deleted_at = NULL,
             source_account_id = a.id,
+            -- A removed account's row moves to the reconnected calendar, so its
+            -- sharing follows that calendar's grants, not the orphaned one's.
+            calendar_ref = CASE WHEN e.source_account_id = a.id THEN ce.calendar_ref
+                                ELSE public.share_ensure_account_calendar(a.id) END,
             calendar_id = coalesce(NULLIF(r->>'calendarId', ''), a.provider),
             title = coalesce(r->>'title', ''),
             description = coalesce(r->>'description', ''),
