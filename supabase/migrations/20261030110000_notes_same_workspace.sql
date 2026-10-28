@@ -19,14 +19,17 @@
 -- the note's own workspace.
 --
 -- notes_op_import checks every parentId before inserting anything: it must be
--- a note of this workspace or a new row of this batch, or the whole import
--- fails with 22023 "A note's parent isn't in this workspace" (PQ6). Before, the
--- key's violation was swallowed per row and the note silently skipped. Body
--- built on prod's (20261013120000_notes_refresh_organize.sql); its grants are
--- kept by CREATE OR REPLACE.
+-- a note of this workspace or a new row earlier in this batch, or the whole
+-- import fails with 22023 "A note's parent isn't in this workspace" and the
+-- parent's id (PQ6). Before, a parent in another workspace the caller could
+-- edit was linked silently, and a missing one failed with perm_enforce_write's
+-- 42501, which named no parent. Body built on prod's
+-- (20261013120000_notes_refresh_organize.sql); its grants are kept by
+-- CREATE OR REPLACE.
 --
 -- Prod has no cross-workspace parent, log row or favorite (checked
--- 2026-10-28), so the keys are added validated. Re-runnable.
+-- 2026-10-28), so the keys are added validated. Re-runnable until a later
+-- key references notes (workspace_id, id).
 
 SET LOCAL lock_timeout = '5s';
 
@@ -90,24 +93,14 @@ BEGIN
     RAISE EXCEPTION 'Import rows must be an array.';
   END IF;
 
-  -- PQ6: every parent is a note of this workspace or a new row of this batch,
-  -- checked before anything is written. A malformed id is left to the row
-  -- loop, which skips it as before.
-  FOR r IN SELECT value FROM jsonb_array_elements(p_rows) LOOP
-    BEGIN
-      v_id := nullif(r.value ->> 'id', '')::uuid;
-      IF v_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.notes WHERE id = v_id) THEN
-        v_batch := v_batch || v_id;
-      END IF;
-    EXCEPTION WHEN invalid_text_representation THEN
-      NULL;
-    END;
-  END LOOP;
+  -- PQ6: every parent is a note of this workspace or a new row earlier in
+  -- this batch, checked before anything is written. A malformed id is left
+  -- to the row loop, which skips it as before.
   FOR r IN SELECT value FROM jsonb_array_elements(p_rows) LOOP
     BEGIN
       v_parent := nullif(r.value ->> 'parentId', '')::uuid;
     EXCEPTION WHEN invalid_text_representation THEN
-      CONTINUE;
+      v_parent := NULL;
     END;
     IF v_parent IS NOT NULL
        AND v_parent <> ALL (v_batch)
@@ -117,6 +110,14 @@ BEGIN
         MESSAGE = format('A note''s parent isn''t in this workspace: %s', v_parent),
         DETAIL = json_build_object('parentId', v_parent)::text;
     END IF;
+    BEGIN
+      v_id := nullif(r.value ->> 'id', '')::uuid;
+      IF v_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.notes WHERE id = v_id) THEN
+        v_batch := v_batch || v_id;
+      END IF;
+    EXCEPTION WHEN invalid_text_representation THEN
+      NULL;
+    END;
   END LOOP;
 
   FOR r IN SELECT value FROM jsonb_array_elements(p_rows) LOOP
