@@ -68,18 +68,21 @@ export function legendLine(shown: Teammate[]): string {
   return ["Beside your week", ...parts].join(" · ");
 }
 
-const isTheirs = (e: CalendarEventModel, cals: Set<string>) =>
-  e.calendarId === "busy" || (!!e.calendarRef && cals.has(e.calendarRef));
+// Your own event on a teammate's calendar (you can edit it) stays in your week.
+const isTheirs = (e: CalendarEventModel, cals: Set<string>, self: string | null) =>
+  e.calendarId === "busy" ||
+  (!!e.calendarRef && cals.has(e.calendarRef) && (self === null || e.ownerId !== self));
 
 /** Teammates' events (on their calendars, and busy blocks) leave your week. */
 export function splitTeammateEvents(
   events: CalendarEventModel[],
   shared: SharedCalendar[],
+  self: string | null = null,
 ): { mine: CalendarEventModel[]; theirs: CalendarEventModel[] } {
   const cals = new Set(shared.map((s) => s.calendarId));
   return {
-    mine: events.filter((e) => !isTheirs(e, cals)),
-    theirs: events.filter((e) => isTheirs(e, cals)),
+    mine: events.filter((e) => !isTheirs(e, cals, self)),
+    theirs: events.filter((e) => isTheirs(e, cals, self)),
   };
 }
 

@@ -29,8 +29,18 @@ export function findTimeWith(id: string, name: string): void {
   dispatchCreateNew();
 }
 
-function LaneBlock({ block, name, hue }: { block: TeammateBlock; name: string; hue: LabelColor }) {
-  const geom = dayGeometry(new Date(block.startMs));
+function LaneBlock({
+  block,
+  name,
+  hue,
+  geom,
+}: {
+  block: TeammateBlock;
+  name: string;
+  hue: LabelColor;
+  /** The column's day: an overnight block sits on each day it crosses. */
+  geom: ReturnType<typeof dayGeometry>;
+}) {
   const span = chipSpanInDay(block.startMs, block.endMs, geom);
   if (!span) return null;
   const what = block.title ?? (block.kind === "focus" ? "Focus time" : "Busy");
@@ -91,6 +101,7 @@ export function TeammateLanes({ days, blocks, owners, hues, names }: Props) {
                     block={b}
                     name={names[lane.ownerId] ?? "Teammate"}
                     hue={hues[lane.ownerId] ?? "gray"}
+                    geom={geom}
                   />
                 ))}
               </div>

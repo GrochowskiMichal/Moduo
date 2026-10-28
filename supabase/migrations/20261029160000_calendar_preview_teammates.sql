@@ -52,21 +52,27 @@ RETURNS SETOF public.calendar_events LANGUAGE sql STABLE SECURITY DEFINER SET se
 $$;
 
 -- Each occurrence of an event overlapping [from, to): a repeat expanded as
--- the zone's wall clock (DST-correct), COUNT/UNTIL honoured, exdates skipped,
--- at most 200 past the window's start; no rule or an unparseable one is a one-off.
+-- the zone's wall clock (DST-correct, start and end alike, so an all-day item
+-- stays midnight to midnight), COUNT/UNTIL honoured, exdates skipped; the
+-- engine gives at most one occurrence a day, so the limit is the window's days
+-- (capped at about three years). No rule or an unparseable one is a one-off.
 CREATE OR REPLACE FUNCTION public.calendar__occurrences(p_start timestamptz, p_end timestamptz, p_rule text,
   p_exdates timestamptz[], p_zone text, p_from timestamptz, p_to timestamptz)
 RETURNS TABLE (o_start timestamptz, o_end timestamptz) LANGUAGE sql STABLE SET search_path = public AS $$
   SELECT p_start, p_end WHERE public.tasks__rrule_parse(p_rule) IS NULL AND p_start < p_to AND p_end > p_from
   UNION ALL
-  SELECT o.s, o.s + (p_end - p_start)
+  SELECT o.s, o.e
   FROM (SELECT public.tasks__rrule_parse(p_rule) AS p, p_start AT TIME ZONE z AS t0, z
         FROM (SELECT coalesce(nullif(p_zone, ''), 'UTC') AS z) q) r
   CROSS JOIN LATERAL public.tasks__rrule_days(r.p, r.t0,
     CASE WHEN r.p ? 'count' THEN r.t0::date ELSE ((p_from AT TIME ZONE r.z) - (p_end - p_start))::date - 1 END,
-    least((p_to AT TIME ZONE r.z)::date, r.t0::date + 7300), false, coalesce((r.p ->> 'count')::integer, 200)) d
-  CROSS JOIN LATERAL (SELECT (d + (r.t0 - date_trunc('day', r.t0))) AT TIME ZONE r.z AS s) o
-  WHERE r.p IS NOT NULL AND o.s < p_to AND o.s + (p_end - p_start) > p_from
+    least((p_to AT TIME ZONE r.z)::date, r.t0::date + 7300), false,
+    coalesce((r.p ->> 'count')::integer,
+      least((p_to AT TIME ZONE r.z)::date - (p_from AT TIME ZONE r.z)::date
+            + extract(day FROM (p_end - p_start))::integer + 3, 1100))) d
+  CROSS JOIN LATERAL (SELECT (d + (r.t0 - date_trunc('day', r.t0))) AT TIME ZONE r.z AS s,
+    (d + (r.t0 - date_trunc('day', r.t0)) + ((p_end AT TIME ZONE r.z) - r.t0)) AT TIME ZONE r.z AS e) o
+  WHERE r.p IS NOT NULL AND o.s < p_to AND o.e > p_from
     AND (r.p ->> 'until' IS NULL OR o.s <= (r.p ->> 'until')::timestamp AT TIME ZONE 'UTC')
     AND NOT (o.s = ANY (p_exdates))
 $$;
@@ -91,9 +97,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   FROM public.calendar_events e
   JOIN cals c ON c.id = e.calendar_ref
   LEFT JOIN public.user_preferences up ON up.user_id = e.owner_id
-  -- An all-day repeat is a run of dates: expanded in UTC, where its midnights are stored.
+  -- All-day items are stored at the owner's local midnight: the owner's zone too.
   CROSS JOIN LATERAL public.calendar__occurrences(e.start_time, e.end_time, e.recurrence_rule, e.exdates,
-    CASE WHEN e.all_day THEN 'UTC' ELSE up.time_zone END, p_from, p_to) o
+    up.time_zone, p_from, p_to) o
   WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
     -- One-offs outside the window never reach the expander (a mirrored calendar holds thousands).
     AND (e.recurrence_rule IS NOT NULL OR (e.start_time < p_to AND e.end_time > p_from))

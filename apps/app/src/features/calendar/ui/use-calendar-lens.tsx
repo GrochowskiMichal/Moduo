@@ -64,18 +64,30 @@ function usePreviewRead(
   // Esc leaves the preview.
   useEffect(() => {
     if (!as) return;
+    // Bubble phase, and only when nothing else wants Esc: an open menu,
+    // dialog or popover (the share menu, ⌘K) or a field closes first.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (
+        document.querySelector(
+          "[role='dialog'], [role='menu'], [role='listbox'], [data-radix-popper-content-wrapper]",
+        )
+      )
+        return;
       setTeammates({ previewAs: null });
     };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, [as]);
   return as && read?.key === key ? read.value : null;
 }
 
 const NO_SHARED: SharedCalendar[] = [];
+const DAY_MS = 86_400_000;
+/** How far past the visible range teammates' blocks reach (lanes cut them per day). */
+export const LOOKAHEAD_DAYS = 21;
 const EMPTY = new Map();
 
 export function useCalendarLens(q: {
@@ -112,8 +124,16 @@ export function useCalendarLens(q: {
   const named = useTeammatesStore((s) => s.named);
   const as = useTeammatesStore((s) => s.previewAs);
   const teammates = useMemo(() => teammatesSharing(list, people, userId), [list, people, userId]);
-  const split = useMemo(() => splitTeammateEvents(events, list), [events, list]);
-  const blocks = useMemo(() => teammateBlocks(split.theirs, list, range), [split, list, range]);
+  const split = useMemo(() => splitTeammateEvents(events, list, userId), [events, list, userId]);
+  // The composer's ⇥ walks up to two weeks past the draft: give it three past the view.
+  const blocks = useMemo(
+    () =>
+      teammateBlocks(split.theirs, list, {
+        startMs: range.startMs - DAY_MS,
+        endMs: range.endMs + LOOKAHEAD_DAYS * DAY_MS,
+      }),
+    [split, list, range.startMs, range.endMs],
+  );
   useEffect(() => setTeammates({ teammates, blocks }), [teammates, blocks]);
   const ids = teammates.map((t) => t.userId);
   const owners = laneOwners(

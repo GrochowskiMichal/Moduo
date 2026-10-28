@@ -405,7 +405,7 @@ export function CalendarPageView({
   );
 
   // ── drag-to-schedule (the universal drag contract, AC6)
-  const drag = useCalendarTaskDrag({ tasks, sessions, canEdit, commands });
+  const drag = useCalendarTaskDrag({ tasks, sessions, canEdit: lens.edit(canEdit), commands });
 
   useCalendarNarrowPanels(setPanelVariant);
   const keys = useCalendarHotkeys({
@@ -419,14 +419,14 @@ export function CalendarPageView({
     workspaceId,
     panelVariant,
     selectedOccurrenceKey,
-    select: setSelectedOccurrenceKey,
+    select: (k) => lens.select(k) || setSelectedOccurrenceKey(k),
     setView,
     goToday,
     step,
     occurrence: occurrenceQuestion,
     onMoveEvent,
     createEvent: onCreateEvent,
-    onEventClick,
+    onEventClick: (c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r),
     openDetail,
   });
 
@@ -437,7 +437,7 @@ export function CalendarPageView({
     eventsById,
     accounts: calendar.accounts,
     userId,
-    canEdit: canEdit && calendar.canEdit,
+    canEdit: lens.edit(canEdit && calendar.canEdit),
     selectedOccurrenceKey,
     select: setSelectedOccurrenceKey,
     openDetail,
@@ -464,7 +464,7 @@ export function CalendarPageView({
     days: range.days,
     prefs,
     commands,
-    canEdit,
+    canEdit: lens.edit(canEdit),
     eventsByDay: eventChips.timed,
     blocksByDay: grouped,
     panelVariant,
@@ -728,7 +728,7 @@ export function CalendarPageView({
                 <>
                   {lens.menu}
                   <CalendarNowNext
-                    events={shownEvents}
+                    events={lens.events}
                     onOpen={(item) => {
                       setSelectedOccurrenceKey(item.occurrenceKey);
                       openDetail({ type: "event", id: item.eventId });
