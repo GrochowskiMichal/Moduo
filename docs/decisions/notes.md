@@ -2,6 +2,16 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-8: `note_updates` is checked per statement, and a replay leaves the note alone** → `supabase/migrations/20261030170000_notes_writes_check_once.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-8 (MOD-658).
+  - Decision:
+    - INSERT and DELETE on `note_updates` are checked by `notes__updates_check`, an `AFTER … REFERENCING NEW/OLD TABLE FOR EACH STATEMENT` trigger. It checks once per distinct note, with `perm_enforce_write`'s rules: `share.bypass`, no actor, the role key `notes.edit`, then `can_access` edit. UPDATE keeps the row-level `perm_enforce_write`.
+    - Live notices are queued once per note per statement by `notes__updates_live`. NR-7's deferred send is unchanged.
+    - `notes_op_apply_updates` inserts the batch in one `INSERT … SELECT … ON CONFLICT DO NOTHING`. It updates `notes` only when rows went in or a body changed, so a replay doesn't move Recents.
+  - Why: a 500-update batch made 500 access checks, and compaction made one per folded row. An all-duplicate replay bumped `updated_at`.
+  - Trade-off: the check now runs after the statement, so a direct insert by a non-editor reports a unique or FK error (23505/23503) before 42501. Clients have no table grants, and every op calls `notes__require` first. Whoever grants direct writes later must re-check this.
+
 - **2026-10-28 · NS-6: every Notes op checks its level once, through `notes__require`, `notes__require_module` or `notes__require_parent`** → `supabase/migrations/20261030150000_notes_one_guard.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-6 (MOD-656).
