@@ -1758,3 +1758,27 @@ export function pickTagColor(existing: ReadonlyArray<{ color: string | null }>):
   }
   return best;
 }
+
+// ---------------------------------------------------------------------------
+// Search hit match (GS-1, specs/global-search.md Assumption 2) — how a
+// <module>__search row matched: a handle (MOD-142), a title word, a typo-forgiven
+// title (pg_trgm, ranked below every exact hit) or a body word. No table stores
+// it, so there is no CHECK: search_all.test.sql (GS-3) asserts every returned
+// value is in this list. The row shape lives in search.ts.
+// ---------------------------------------------------------------------------
+
+export const SEARCH_MATCHES = ["handle", "title", "title_fuzzy", "body"] as const;
+export type SearchMatch = (typeof SEARCH_MATCHES)[number];
+export const searchMatchSchema = z.enum(SEARCH_MATCHES);
+export function isSearchMatch(value: unknown): value is SearchMatch {
+  return typeof value === "string" && (SEARCH_MATCHES as readonly string[]).includes(value);
+}
+export function parseSearchMatch(input: unknown): SafeParseResult<SearchMatch> {
+  return parseOrError(searchMatchSchema, input);
+}
+/** Lax read: an unknown match claims the least, a body hit. */
+export function normalizeSearchMatch(input: unknown): SearchMatch {
+  if (typeof input !== "string") return "body";
+  const key = input.trim().toLowerCase();
+  return isSearchMatch(key) ? key : "body";
+}
