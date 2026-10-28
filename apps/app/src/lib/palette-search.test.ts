@@ -204,13 +204,13 @@ describe("type chips", () => {
     expect(chipForGroup("contacts")).toBe("contacts");
   });
 
-  it("each chip asks search_all for its types; Chat asks it nothing until GS-6", () => {
+  it("each chip asks search_all for its types, Chat's included (GS-6)", () => {
     expect(chipTypes("all")).toEqual(SEARCH_ALL_TYPES);
     expect(chipTypes("tasks")).toEqual(["task", "bucket", "project"]);
     expect(chipTypes("contacts")).toEqual(["contact", "company"]);
-    expect(chipTypes("chat")).toEqual([]);
-    expect(SEARCH_ALL_TYPES).not.toContain("chat_message");
-    expect(SEARCH_ALL_TYPES).not.toContain("chat_channel");
+    expect(chipTypes("chat")).toEqual(["chat_message", "chat_channel"]);
+    expect(SEARCH_ALL_TYPES).toContain("chat_message");
+    expect(SEARCH_ALL_TYPES).toContain("chat_channel");
   });
 });
 
