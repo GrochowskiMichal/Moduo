@@ -65,3 +65,27 @@ export function widenCalendarWindow(
     toIso: to > curTo ? shiftMonths(needTo, bufferMonths).toISOString() : current.toIso,
   };
 }
+
+/**
+ * The window busy blocks are read for (CALR-16): the days on screen, a day
+ * before, and three weeks after for the composer's ⇥ hops. Never the module's
+ * months-wide fetch window: the server expands every repeat into one row per
+ * occurrence, and a reply past PostgREST's 1000 rows would drop the current
+ * week first.
+ */
+export function busyWindowFor(from: Date, to: Date): CalendarWindow {
+  const day = 86_400_000;
+  return {
+    fromIso: new Date(from.getTime() - day).toISOString(),
+    toIso: new Date(to.getTime() + 21 * day).toISOString(),
+  };
+}
+
+/** Whether `outer` already holds the whole of [from, to). */
+export function windowCovers(outer: CalendarWindow | null, from: Date, to: Date): boolean {
+  return (
+    !!outer &&
+    Date.parse(outer.fromIso) <= from.getTime() &&
+    Date.parse(outer.toIso) >= to.getTime()
+  );
+}

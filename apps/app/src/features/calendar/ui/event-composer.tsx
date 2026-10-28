@@ -62,6 +62,8 @@ export type EventComposerProps = {
   plan: ComposerPlan;
   calendarLabel: string;
   clash: { title: string } | null;
+  /** Each named teammate's verdict (CALR-16): free, busy, in focus time. */
+  verdicts?: string;
   /** Fixed-position anchor, computed by the host from the draft on the grid. */
   position: { left: number; top: number };
   onText: (text: string) => void;
@@ -70,10 +72,13 @@ export type EventComposerProps = {
   onCancel: () => void;
 };
 
-type EchoProps = Pick<EventComposerProps, "parse" | "plan" | "calendarLabel" | "clash">;
+type EchoProps = Pick<
+  EventComposerProps,
+  "parse" | "plan" | "calendarLabel" | "clash" | "verdicts"
+>;
 
 /** Day · time · calendar · people, then where, then what happens (a clash first). */
-function ComposerEcho({ parse, plan, calendarLabel, clash }: EchoProps) {
+function ComposerEcho({ parse, plan, calendarLabel, clash, verdicts }: EchoProps) {
   const focus = parse.kind === "focus";
   const minutes = Math.round((parse.endMs - parse.startMs) / 60_000);
   const who = parse.people.map((p) => p.name);
@@ -130,6 +135,7 @@ function ComposerEcho({ parse, plan, calendarLabel, clash }: EchoProps) {
           </span>
         </span>
       ) : null}
+      {verdicts ? <span className="basis-full">{verdicts}</span> : null}
       {plan.inviteLine ? <span className="basis-full">{plan.inviteLine}</span> : null}
     </div>
   );
@@ -141,6 +147,7 @@ export function EventComposer({
   plan,
   calendarLabel,
   clash,
+  verdicts,
   position,
   onText,
   onHop,
@@ -218,7 +225,13 @@ export function EventComposer({
         </label>
       </div>
 
-      <ComposerEcho parse={parse} plan={plan} calendarLabel={calendarLabel} clash={clash} />
+      <ComposerEcho
+        parse={parse}
+        plan={plan}
+        calendarLabel={calendarLabel}
+        clash={clash}
+        verdicts={verdicts}
+      />
 
       <div className="mt-1.5 flex items-center gap-3 border-t border-hairline px-2.5 pt-2 text-xs whitespace-nowrap text-subtle-foreground">
         <span className="inline-flex items-center gap-1">

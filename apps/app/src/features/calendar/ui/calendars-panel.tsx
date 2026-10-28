@@ -7,6 +7,7 @@ import { Input } from "../../../components/ui/input";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { ShareMenu } from "../../sharing/share-menu";
 import { useWorkspace } from "../../workspaces/workspace-context";
+import { PreviewAsMenu, SharedWithYou, usePreviewBridge } from "./shared-with-you";
 
 type CalendarRow = {
   id: string;
@@ -74,6 +75,7 @@ export function CalendarsPanel({
   const [shareId, setShareId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [savedName, setSavedName] = useState("");
+  usePreviewBridge(rows, userId, setShareId);
 
   useEffect(() => {
     let cancelled = false;
@@ -193,6 +195,7 @@ export function CalendarsPanel({
           ) : null}
         </div>
       ))}
+      <PreviewAsMenu userId={userId} />
       <form
         className="flex items-center gap-1 px-1"
         onSubmit={(e) => {
@@ -244,6 +247,7 @@ export function CalendarsPanel({
           Save
         </Button>
       </form>
+      <SharedWithYou userId={userId} workspaceId={workspaceId} />
     </div>
   );
 }

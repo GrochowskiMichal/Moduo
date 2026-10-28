@@ -107,6 +107,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "calendar_busy_blocks",
   // CALR-15: the masked week.
   "calendar_events_visible",
+  "calendar_preview_levels",
+  "calendar_shared_with_me",
   "chat_caps_get",
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
