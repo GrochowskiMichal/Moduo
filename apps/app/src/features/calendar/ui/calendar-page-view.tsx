@@ -48,7 +48,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
-import { resolveNewEventsTo } from "../new-events-to";
+import { quickCreateCalendars } from "../new-events-to";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -367,22 +367,9 @@ export function CalendarPageView({
     setTaskPopover({ block, rect });
   }, []);
 
-  const newEventsTo = resolveNewEventsTo(
-    prefs.newEventsTo[workspaceId] ?? null,
-    calendar.accounts,
-  ).accountId;
   const createCalendars = useMemo(
-    () => [
-      { id: "moduo", label: "Moduo" },
-      ...calendar.accounts
-        .filter((account) => account.provider === "google" && !account.deletedAt)
-        .map((account) => ({
-          id: account.id,
-          label: account.displayLabel || "Google",
-          isDefault: account.id === newEventsTo,
-        })),
-    ],
-    [calendar.accounts, newEventsTo],
+    () => quickCreateCalendars(calendar.accounts, prefs, workspaceId),
+    [calendar.accounts, prefs, workspaceId],
   );
 
   const onCreateEvent = useCreateEvent(calendar, runtime, workspaceId);

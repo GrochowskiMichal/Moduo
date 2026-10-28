@@ -26,12 +26,12 @@ function meetingKey(
   return [e.icalUid, e.originalStart ?? "", start, end].join("\n");
 }
 
-/** The events with one copy per meeting; the same array when nothing merges. */
-export function oneChipPerMeeting(
+/** Your mergeable rows, grouped by meeting. */
+function meetings(
   events: CalendarEventModel[],
   accounts: readonly CalendarAccountModel[],
   userId: string | null,
-): CalendarEventModel[] {
+): CalendarEventModel[][] {
   const groups = new Map<string, CalendarEventModel[]>();
   for (const e of events) {
     const key = meetingKey(e, accounts, userId);
@@ -40,8 +40,17 @@ export function oneChipPerMeeting(
     if (group) group.push(e);
     else groups.set(key, [e]);
   }
+  return [...groups.values()];
+}
+
+/** The events with one copy per meeting; the same array when nothing merges. */
+export function oneChipPerMeeting(
+  events: CalendarEventModel[],
+  accounts: readonly CalendarAccountModel[],
+  userId: string | null,
+): CalendarEventModel[] {
   const hidden = new Set<CalendarEventModel>();
-  for (const group of groups.values()) {
+  for (const group of meetings(events, accounts, userId)) {
     if (group.length < 2) continue;
     const editable = group.filter((e) => writableEvent(e, accounts, userId) !== null);
     if (editable.length !== 1) continue;

@@ -50,7 +50,10 @@ export function resolveNewEventsTo(
   );
 }
 
-export function chosenNewEventsTo(prefs: CalendarPrefs, workspaceId: string): string | null {
+export function chosenNewEventsTo(
+  prefs: Pick<CalendarPrefs, "newEventsTo">,
+  workspaceId: string,
+): string | null {
   return prefs.newEventsTo[workspaceId] ?? null;
 }
 
@@ -62,4 +65,23 @@ export function withNewEventsTo(
 ): Pick<CalendarPrefs, "newEventsTo"> {
   const { [workspaceId]: _old, ...rest } = prefs.newEventsTo;
   return { newEventsTo: accountId ? { ...rest, [workspaceId]: accountId } : rest };
+}
+
+/** The grid's quick-create calendars, starting on where new events go now. */
+export function quickCreateCalendars(
+  accounts: readonly CalendarAccountModel[],
+  prefs: Pick<CalendarPrefs, "newEventsTo">,
+  workspaceId: string,
+): { id: string; label: string; isDefault?: boolean }[] {
+  const to = resolveNewEventsTo(chosenNewEventsTo(prefs, workspaceId), accounts).accountId;
+  return [
+    { id: "moduo", label: "Moduo" },
+    ...accounts
+      .filter((account) => account.provider === "google" && !account.deletedAt)
+      .map((account) => ({
+        id: account.id,
+        label: account.displayLabel || "Google",
+        isDefault: account.id === to,
+      })),
+  ];
 }
