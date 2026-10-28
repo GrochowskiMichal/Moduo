@@ -47,7 +47,8 @@ function input(busyCalendarIds: string[], kind: string): OpenTimesInput {
   };
 }
 
-const starts = (i: OpenTimesInput) => openTimes(i).times.map((t) => new Date(t.startMs).toISOString());
+const starts = (i: OpenTimesInput) =>
+  openTimes(i).times.map((t) => new Date(t.startMs).toISOString());
 
 describe("held times on the week's open times (AC34)", () => {
   it("skips a hold even when the link counts none of your calendars", () => {

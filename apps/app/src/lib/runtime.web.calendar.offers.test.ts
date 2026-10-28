@@ -65,7 +65,13 @@ describe("webCalendar.createOffer", () => {
 
   it("sends a title, length and video only when the offer sets them", async () => {
     h.reply = {
-      data: { id: "o2", slug: "intro-x", status: "open", expires_at: "2026-11-02T12:00:00+00:00", hold_event_ids: [] },
+      data: {
+        id: "o2",
+        slug: "intro-x",
+        status: "open",
+        expires_at: "2026-11-02T12:00:00+00:00",
+        hold_event_ids: [],
+      },
       error: null,
     };
     const offer = await webCalendar.createOffer!({
@@ -109,6 +115,8 @@ describe("webCalendar.releaseOffer", () => {
 
   it("throws what the database refused", async () => {
     h.reply = { data: null, error: { message: "Offer not found." } };
-    await expect(webCalendar.releaseOffer!({ workspaceId: "w1", offerId: "x" })).rejects.toThrow("Offer not found.");
+    await expect(webCalendar.releaseOffer!({ workspaceId: "w1", offerId: "x" })).rejects.toThrow(
+      "Offer not found.",
+    );
   });
 });

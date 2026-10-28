@@ -59,12 +59,17 @@ describe("held times (AC34)", () => {
   });
 
   it("an ordinary event's chip isn't held", () => {
-    const chip = eventChipsInRange([event({ kind: "event", offerId: null })], week).timed.get("2026-11-03")?.[0];
+    const chip = eventChipsInRange([event({ kind: "event", offerId: null })], week).timed.get(
+      "2026-11-03",
+    )?.[0];
     expect(chip?.held).toBe(false);
   });
 
   it("a released hold leaves the grid", () => {
-    const gone = eventChipsInRange([event({ deletedAt: new Date(2026, 10, 2).toISOString() })], week);
+    const gone = eventChipsInRange(
+      [event({ deletedAt: new Date(2026, 10, 2).toISOString() })],
+      week,
+    );
     expect(gone.timed.get("2026-11-03") ?? []).toEqual([]);
   });
 });

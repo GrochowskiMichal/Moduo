@@ -37,7 +37,9 @@ describe("OfferCard (AC34)", () => {
     const wed = screen.getAllByText(/Wed 4 Nov, 10:00–10:30/);
     expect(tue.length).toBeGreaterThan(0);
     expect(wed.length).toBeGreaterThan(0);
-    expect(tue[0]!.compareDocumentPosition(wed[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      tue[0]!.compareDocumentPosition(wed[0]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(screen.getByText(/Would one of these work\?/)).toBeTruthy();
     expect(screen.getAllByText(/Warsaw time/).length).toBeGreaterThan(0);
   });
@@ -51,7 +53,9 @@ describe("OfferCard (AC34)", () => {
     const onHoldChange = rs.fn();
     render(<OfferCard {...props({ onHoldChange })} />);
     const box = screen.getByRole("checkbox", { name: HOLD });
-    expect(box.getAttribute("aria-checked") === "true" || (box as HTMLInputElement).checked).toBe(true);
+    expect(box.getAttribute("aria-checked") === "true" || (box as HTMLInputElement).checked).toBe(
+      true,
+    );
     fireEvent.click(box);
     expect(onHoldChange).toHaveBeenCalledWith(false);
   });
@@ -79,7 +83,11 @@ describe("OfferCard (AC34)", () => {
     render(<OfferCard {...props({ url: "https://moduo.app/book/r/intro-4kq7xzt2" })} />);
     expect(screen.getAllByText(/moduo\.app\/book\/r\/intro-4kq7xzt2/).length).toBeGreaterThan(0);
     const box = screen.getByRole("checkbox", { name: HOLD }) as HTMLInputElement;
-    expect(box.disabled || box.getAttribute("aria-disabled") === "true" || box.hasAttribute("data-disabled")).toBe(true);
+    expect(
+      box.disabled ||
+        box.getAttribute("aria-disabled") === "true" ||
+        box.hasAttribute("data-disabled"),
+    ).toBe(true);
   });
 
   it("offers Release holds only when it holds times", () => {

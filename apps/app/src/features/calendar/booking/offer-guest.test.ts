@@ -10,7 +10,9 @@ describe("the guest page's offer mode", () => {
   it("an offer page asks by the offer, a link page by the link", () => {
     expect(offerRequest({ offer: "intro-4kq7xzt2" })).toEqual({ offer: "intro-4kq7xzt2" });
     expect(offerRequest({ slug: "intro" })).toEqual({ slug: "intro" });
-    expect(offerRequest({ slug: "intro", offer: "intro-4kq7xzt2" })).toEqual({ offer: "intro-4kq7xzt2" });
+    expect(offerRequest({ slug: "intro", offer: "intro-4kq7xzt2" })).toEqual({
+      offer: "intro-4kq7xzt2",
+    });
   });
 
   it("says a picked offer has its time", () => {

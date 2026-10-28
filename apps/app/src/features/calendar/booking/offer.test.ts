@@ -113,7 +113,10 @@ describe("the keys while offering", () => {
       picks: [TUE_0900],
       cursorMs: TUE_0900,
     });
-    const full = Array.from({ length: OFFER_MAX_TIMES }, (_, i) => at("2026-12-01T08:00:00.000Z") + i * 86_400_000);
+    const full = Array.from(
+      { length: OFFER_MAX_TIMES },
+      (_, i) => at("2026-12-01T08:00:00.000Z") + i * 86_400_000,
+    );
     expect(press({ picks: full, cursorMs: TUE_0900 }, "add").picks).toEqual(full);
   });
 
@@ -139,13 +142,18 @@ describe("the keys while offering", () => {
   it("⌫ removes the last pick and puts the cursor back on it", () => {
     const d = press(startOfferDraft(SLOTS), "add", "add", "remove-last");
     expect(d).toEqual({ picks: [TUE_0900], cursorMs: WED_0030 });
-    expect(press({ picks: [], cursorMs: TUE_0900 }, "remove-last")).toEqual({ picks: [], cursorMs: TUE_0900 });
+    expect(press({ picks: [], cursorMs: TUE_0900 }, "remove-last")).toEqual({
+      picks: [],
+      cursorMs: TUE_0900,
+    });
   });
 });
 
 describe("what the card copies", () => {
   it("the link lives under /book/r/", () => {
-    expect(offerUrl("https://moduo.app", "intro-4kq7xzt2")).toBe("https://moduo.app/book/r/intro-4kq7xzt2");
+    expect(offerUrl("https://moduo.app", "intro-4kq7xzt2")).toBe(
+      "https://moduo.app/book/r/intro-4kq7xzt2",
+    );
   });
 
   it("the times as text, in time order, in the host's zone, ending with the link", () => {
@@ -169,13 +177,25 @@ describe("what the card copies", () => {
 
   it("names a zone by its city, with spaces, and UTC as it is", () => {
     const one = (timeZone: string) =>
-      offerText({ picks: [TUE_0900], durationMinutes: 45, timeZone, url: "https://moduo.app/book/r/x" });
+      offerText({
+        picks: [TUE_0900],
+        durationMinutes: 45,
+        timeZone,
+        url: "https://moduo.app/book/r/x",
+      });
     expect(one("America/New_York")).toContain("Tue 3 Nov, 03:00–03:45\n(New York time)");
     expect(one("UTC")).toContain("Tue 3 Nov, 08:00–08:45\n(UTC time)");
   });
 
   it("is empty with nothing picked", () => {
-    expect(offerText({ picks: [], durationMinutes: 30, timeZone: ZONE, url: "https://moduo.app/book/r/x" })).toBe("");
+    expect(
+      offerText({
+        picks: [],
+        durationMinutes: 30,
+        timeZone: ZONE,
+        url: "https://moduo.app/book/r/x",
+      }),
+    ).toBe("");
   });
 
   it("holds last 48 hours", () => {
