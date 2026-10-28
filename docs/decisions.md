@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · Due work is a count in the day header; the all-day lane caps at two rows; now-and-next fits the toolbar's free room (CALR-2).
 - 2026-10-28 · Private events are masked by a definer read and dropped from the live channel's policy (CALR-15).
 - 2026-10-28 · The Event view follows the selection and says who sees it from the calendar's sharing (CALR-10).
 - 2026-10-28 · Google events save to Google first, then the mirror stores Google's answer (CALR-8).
