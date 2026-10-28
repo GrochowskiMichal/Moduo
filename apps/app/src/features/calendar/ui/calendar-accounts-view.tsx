@@ -5,6 +5,7 @@
 // revoked login's Reconnect. Presentational: calendar-accounts-dialog.tsx feeds it.
 
 import { AlertTriangle, Plus } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
 import type { CalendarPick } from "../account-picks";
@@ -39,6 +40,8 @@ type Props = {
   onConnectZoom: () => void;
   /** The login just removed, with Undo while it lasts. */
   removed: { label: string; onUndo: () => void } | null;
+  /** The "New events go to" field; absent shows where new events go by default. */
+  newEventsTo?: ReactNode;
 };
 
 function syncedLabel(lastSyncAt: string | null): string {
@@ -112,7 +115,9 @@ export function CalendarAccountsView(props: Props) {
           )}
         </div>
       </div>
-      <p className="text-xs text-muted-foreground">New events go to Your calendar · Moduo</p>
+      {props.newEventsTo ?? (
+        <p className="text-xs text-muted-foreground">New events go to Your calendar · Moduo</p>
+      )}
     </div>
   );
 }
