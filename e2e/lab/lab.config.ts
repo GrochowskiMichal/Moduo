@@ -68,6 +68,59 @@ const quickCreateTitle = (page: Page) => page.getByRole("textbox", { name: "Even
 const localKey = (d: Date) =>
   `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}-${`${d.getDate()}`.padStart(2, "0")}`;
 /**
+ * "Google Calendar didn't sync": the lab has no Google account, so the reads are rewritten in
+ * the browser. A connected Google calendar in the error state joins the accounts, the first
+ * few events of the week become its events, and its sync writes are answered without touching
+ * the stack. Then the page reads again.
+ */
+async function staleGoogleWeek(page: Page) {
+  const accountId = "00000000-0000-4000-8000-00000000a11b";
+  const lastSync = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  await page.route("**/rest/v1/calendar_accounts*", async (route) => {
+    const response = await route.fetch();
+    const rows = (await response.json()) as Record<string, unknown>[];
+    const workspaceId =
+      rows[0]?.workspace_id ??
+      new URL(route.request().url()).searchParams.get("workspace_id")?.replace(/^eq\./, "");
+    await route.fulfill({
+      response,
+      json: [
+        ...rows,
+        {
+          id: accountId,
+          workspace_id: workspaceId,
+          owner_id: null,
+          provider: "google",
+          external_id: "google:robin.hale@gmail.com:work",
+          display_label: "Work",
+          is_default_target: false,
+          color: null,
+          last_sync_at: lastSync,
+          status: "error",
+          sync_token: null,
+          deleted_at: null,
+          created_at: lastSync,
+          updated_at: lastSync,
+        },
+      ],
+    });
+  });
+  await page.route("**/rest/v1/rpc/calendar_events_visible*", async (route) => {
+    const response = await route.fetch();
+    const rows = (await response.json()) as Record<string, unknown>[];
+    await route.fulfill({
+      response,
+      json: rows.map((row, i) => (i % 3 === 0 ? { ...row, source_account_id: accountId } : row)),
+    });
+  });
+  await page.route("**/rest/v1/rpc/calendar_op_account_upsert*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "null" }),
+  );
+  await page.reload();
+  await page.getByText("didn't sync").first().waitFor({ timeout: 15_000 });
+}
+
+/**
  * A point on empty grid inside the visible scroll area of day `offset` (tomorrow by default),
  * relative to its column: the place a person would click or drop. Falls back to today's
  * column when that day isn't in the visible week.
@@ -244,6 +297,8 @@ export default {
         },
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
         error: { fail: { match: "**/rest/v1/rpc/calendar_events_visible*", status: 500 } },
+        // One Google calendar didn't sync: the banner, "Not synced" in the rail, stale marks.
+        syncError: { act: async ({ page }: { page: Page }) => staleGoogleWeek(page) },
         offline: { offline: true },
       },
     },
