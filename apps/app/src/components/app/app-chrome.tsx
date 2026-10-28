@@ -41,6 +41,7 @@ import {
   markEntityOpenHighlight,
   markEntityOpenIntent,
   recordEntityOpen,
+  recordLocationOpen,
 } from "../../lib/entity-open";
 import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
@@ -142,6 +143,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useLayoutEffect(() => {
     workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
   });
+  // An item picked inside its module (Notes sidebar, Tasks list, …) is your
+  // open of it too (GS-8): every module mirrors its selection into the URL.
+  const locationSearch = useRouterState({ select: (state) => state.location.search });
+  useEffect(() => {
+    recordLocationOpen(
+      runtime?.spine,
+      selectedWorkspaceId,
+      pathname,
+      locationSearch as Record<string, unknown>,
+    );
+  }, [runtime, selectedWorkspaceId, pathname, locationSearch]);
   // Chat tab: its count, whether it shows, and app-wide presence (you show as
   // online anywhere in Moduo). It reads the chat store (CV-8a).
   const chatMemberCount = members.filter((m) => m.isActive && !m.removedAt).length;
