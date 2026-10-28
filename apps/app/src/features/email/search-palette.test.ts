@@ -14,20 +14,20 @@ import { localMailRows, mailBodyQuery, mergeMailRows } from "./search-palette";
 const ACCOUNTS: SavedAccount[] = [
   {
     id: "acc-1",
-    provider: "imap",
+    provider: "custom",
     email: "me@example.com",
     lastSyncAt: null,
-    status: "connected",
+    status: "active",
     lastError: null,
-  } as SavedAccount,
+  },
   {
     id: "acc-2",
-    provider: "imap",
+    provider: "custom",
     email: "work@example.com",
     lastSyncAt: null,
-    status: "connected",
+    status: "active",
     lastError: null,
-  } as SavedAccount,
+  },
 ];
 
 let uid = 0;
