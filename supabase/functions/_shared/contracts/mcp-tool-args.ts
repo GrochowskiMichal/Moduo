@@ -391,6 +391,9 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     target_id: nonempty,
     relation_kind: relationKindSchema.optional(),
   }),
+
+  // Global search (GS-7): a larger limit is read as the cap (50), not refused.
+  search: z.object({ query: nonempty, types: z.array(nonempty).optional(), limit: wideLimit }),
 };
 
 export function parseToolArgs(

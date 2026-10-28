@@ -221,7 +221,9 @@ async function liveKey(data: KeyRow, admin: SupabaseClient): Promise<KeyContext 
 }
 
 function instructionsFor(key: KeyContext, workspaceName: string): string {
-  const scopeSummary = connectorModules.map((m) => `${m.module}=${moduleScope(key, m.module)}`).join(", ");
+  const scopeSummary = connectorModules
+    .filter((m) => !m.keyAccess)
+    .map((m) => `${m.module}=${moduleScope(key, m.module)}`).join(", ");
   return (
     `Moduo workspace "${workspaceName}" via API key "${key.name}" ` +
     `(access: ${scopeSummary}). The key sees only modules it has View or Edit on, ` +
