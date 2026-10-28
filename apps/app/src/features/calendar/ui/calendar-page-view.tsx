@@ -422,7 +422,7 @@ export function CalendarPageView({
 
   // CALR-4b: the right-click / ⌃↵ menu and the Event panel's ⋯.
   const moveEvent = useEventMove(calendar, runtime, workspaceId, userId);
-  const eventMenu = useEventMenu({
+  const { menu: eventMenu, panelMenu } = useEventMenu({
     chips: eventChips,
     eventsById,
     accounts: calendar.accounts,
@@ -577,7 +577,7 @@ export function CalendarPageView({
             onPatch={patchEvent}
             onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
-            menu={eventMenu.panelMenu(detailEvent)}
+            menu={panelMenu(detailEvent)}
           />
         ) : detailTask ? (
           <TaskDetailPanel
@@ -632,7 +632,7 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
-      eventMenu.panelMenu,
+      panelMenu,
       faults.loadShape.planGroups,
       faults.rememberPlanShape,
       prefs.weekStartsOn,
@@ -849,7 +849,7 @@ export function CalendarPageView({
         />
       ) : null}
 
-      {eventMenu.menu}
+      {eventMenu}
       <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog {...del.dialog} />

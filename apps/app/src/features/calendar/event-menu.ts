@@ -87,7 +87,7 @@ function chordOf(id: HotkeyId, isMac: boolean): string {
 /**
  * Where "Move to another calendar" may take an event. Only a one-off Moduo
  * event with nothing Google's create would drop (people, place, link,
- * privacy, a repeat or an override, focus time) goes, to a Google calendar
+ * privacy, a repeat or an override, focus time) that is yours goes, to a Google calendar
  * you connected and can write: Google gets it first, then the Moduo row goes,
  * with one Undo. A Google event stays put for now: moving it off Google
  * deletes it there (its guests hear) and has no Undo.
@@ -97,7 +97,10 @@ export function moveTargets(
   accounts: readonly CalendarAccountModel[],
   userId: string | null,
 ): MoveTarget[] {
-  if (!userId || event.sourceAccountId !== null || isBusy(event)) return [];
+  // Your own: moving a teammate's event to your Google would take it off their week.
+  if (!userId || event.sourceAccountId !== null || isBusy(event) || event.ownerId !== userId) {
+    return [];
+  }
   const plain =
     !event.rrule &&
     !event.seriesId &&

@@ -267,16 +267,16 @@ export function useCalendarHotkeys(input: Input) {
   };
 
   // ⌘C and ⌘D on one occurrence; the event menus run these too (CALR-4b).
-  const copyChip = useCallback((chip: EventChip) => {
+  const copyChip = (chip: EventChip) => {
     if (chip.eventId.startsWith("busy")) return;
     copied.current = chip.eventId;
     toast("Event copied", { description: chip.title || undefined });
-  }, []);
-  const duplicateChip = useCallback((chip: EventChip) => {
+  };
+  const duplicateChip = (chip: EventChip) => {
     const k = keysRef.current;
     const source = k.eventsById.get(chip.eventId);
     if (source && k.canEdit) create(source, duplicateStartMs(chip));
-  }, []);
+  };
 
   useAppHotkeys({
     "calendar.today": (e) => (inCalendarOverlay(e) ? false : keysRef.current.goToday()),

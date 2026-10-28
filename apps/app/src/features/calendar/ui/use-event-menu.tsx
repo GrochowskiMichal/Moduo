@@ -56,6 +56,12 @@ type MenuState = {
 const GRID = "[data-calendar-grid]";
 const CHIP = '[data-chip="event"][data-occurrence-key]';
 
+/** The grid, an event chip or nothing focused: where ⌃↵ is the week's. */
+function fromTheWeek(target: EventTarget | null): boolean {
+  if (!(target instanceof Element) || target === document.body) return true;
+  return !!target.closest(`${GRID}, [data-chip="event"]`);
+}
+
 /** The chip on the page for an occurrence (no CSS.escape: keys hold ":"). */
 function chipElement(key: string): HTMLElement | null {
   for (const el of document.querySelectorAll<HTMLElement>("[data-occurrence-key]")) {
@@ -98,13 +104,14 @@ function chipFor(event: CalendarEventModel): EventChip {
     dayKey: "",
     allDay: event.allDay,
     external: event.sourceAccountId !== null,
+    // Only the menu's own checks read it, and they ask the writer, not the chip.
     readOnly: false,
-    recurring: Boolean(event.rrule),
+    recurring: Boolean(event.rrule || event.seriesId || event.externalSeriesId),
     sourceAccountId: event.sourceAccountId,
     color: event.color,
     continuesFromMs: null,
     continuesToMs: null,
-    locked: false,
+    locked: Boolean(event.isPrivate),
   };
 }
 
@@ -121,8 +128,6 @@ export function useEventMenu(input: Input): {
     latest.current = { ...input, all };
   });
   const [state, setState] = useState<MenuState | null>(null);
-
-  const find = (key: string | null, list: EventChip[] = latest.current.all) => findChip(key, list);
 
   const openAt = (chip: EventChip, anchor: MenuAnchor, byKey: boolean) => {
     const active = document.activeElement;
@@ -154,11 +159,11 @@ export function useEventMenu(input: Input): {
     return () => document.removeEventListener("contextmenu", onContextMenu);
   }, []);
 
-  // ⌃↵: the same menu, under the selected event.
+  // ⌃↵: the same menu, under the selected event, from the week (as ⌘C and ⌘D).
   useAppHotkeys({
     "calendar.menu": (e) => {
-      if (inCalendarOverlay(e)) return false;
-      const chip = find(latest.current.selectedOccurrenceKey);
+      if (inCalendarOverlay(e) || !fromTheWeek(e.target)) return false;
+      const chip = findChip(latest.current.selectedOccurrenceKey, latest.current.all);
       const el = chip ? chipElement(chip.occurrenceKey) : null;
       if (!chip || !el) return false;
       const r = el.getBoundingClientRect();
@@ -199,8 +204,11 @@ export function useEventMenu(input: Input): {
     }
   };
 
-  const menuChip = state ? find(state.key, all) : null;
+  const menuChip = state ? findChip(state.key, all) : null;
   const menuEvent = menuChip ? input.eventsById.get(menuChip.eventId) : undefined;
+  // Its event left the week (a live delete, another week): the menu goes for good
+  // (state adjusted while rendering, as React's docs do it).
+  if (state !== null && !menuEvent) setState(null);
   let menu: ReactNode = null;
   if (state && menuChip && menuEvent) {
     const { items, targets } = itemsFor(menuEvent, "grid", input);
