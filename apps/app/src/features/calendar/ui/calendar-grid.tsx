@@ -34,6 +34,7 @@ import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
 import { isElapsedBlock } from "../elapsed";
 import { type EventChip, eventHue } from "../events";
+import type { GridCursor } from "../grid-keys";
 import {
   chipSpanInDay,
   DAY_COLUMNS,
@@ -61,6 +62,8 @@ import {
 } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { type GestureTarget, GridEventCard, OverflowList, shownMinutes } from "./grid-cards";
+import { GridCursorMark } from "./grid-cursor";
+import { gridY, useNowTick } from "./grid-units";
 import { NowLine } from "./now-line";
 import { TaskBlockChip } from "./task-block-chip";
 import { formatHourLabel, formatTimeOfDay } from "./time-format";
@@ -141,29 +144,13 @@ type Props = {
   loadingAllDayRows?: number;
   /** Laid low over the hours, not scrolling with them (the first-week card). */
   overlay?: ReactNode;
+  /** The keyboard cursor (CALR-4); ⌘N and ↵ open a new event there. */
+  cursor?: GridCursor | null;
 };
 
 const NO_IDS: ReadonlySet<string> = new Set();
 
-/** Re-render tick for the now-line; catches up on tab wake. */
-function useNowTick(intervalMs: number): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), intervalMs);
-    const onWake = () => setNow(new Date());
-    document.addEventListener("visibilitychange", onWake);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onWake);
-    };
-  }, [intervalMs]);
-  return now;
-}
-
-/** CSS length for a minute offset: hour height × real hours. */
-function y(minutes: number): string {
-  return `calc(var(--cal-hour-h) * ${minutes / 60})`;
-}
+const y = gridY;
 
 function snapMin(minutes: number, fine: boolean): number {
   const step = fine ? 5 : 15;
@@ -237,6 +224,7 @@ export function CalendarGrid({
   faulted = false,
   loadingAllDayRows = 0,
   overlay = null,
+  cursor = null,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -624,10 +612,16 @@ export function CalendarGrid({
   openQuickCreateNowRef.current = () => {
     if (!canEdit) return;
     const todayIdx = days.findIndex((d) => localDayKey(d) === todayKey);
-    const dayIdx = todayIdx >= 0 ? todayIdx : 0;
+    const at = cursor ? days.findIndex((d) => localDayKey(d) === cursor.dayKey) : -1;
+    const dayIdx = at >= 0 ? at : todayIdx >= 0 ? todayIdx : 0;
     const geom = geoms[dayIdx];
     if (!geom) return;
-    const rawStart = todayIdx >= 0 ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60) : 9 * 60;
+    const rawStart =
+      at >= 0 && cursor
+        ? cursor.minute
+        : todayIdx >= 0
+          ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60)
+          : 9 * 60;
     const startMin = Math.max(snapMin(rawStart, false), 0);
     const endMin = Math.min(startMin + 30, geom.totalMinutes);
     const start = Math.min(startMin, endMin - 15);
@@ -727,7 +721,14 @@ export function CalendarGrid({
       ) : null}
 
       {/* the hours grid */}
-      <div ref={scrollRef} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        role="group"
+        aria-label="Calendar grid: arrows move the cursor, ? lists the keys"
+        data-calendar-grid=""
+        className="group/grid scrollbar-thin min-h-0 flex-1 overflow-y-auto outline-none"
+      >
         <div
           ref={gridRef}
           className="grid"
@@ -807,6 +808,7 @@ export function CalendarGrid({
               />
             );
           })}
+          {cursor ? <GridCursorMark cursor={cursor} days={days} /> : null}
         </div>
       </div>
       {overlay}
