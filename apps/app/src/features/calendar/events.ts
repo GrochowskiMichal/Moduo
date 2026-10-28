@@ -81,6 +81,12 @@ export type CalendarAccountModel = {
   /** CAL-8: the CalDAV/ICS connection descriptor JSON (see `CalendarSyncDescriptor` in sync.ts); null for OAuth/native rows. */
   syncToken: string | null;
   deletedAt: string | null;
+  /** CALR-20: Google doesn't let you write this calendar. */
+  readOnly?: boolean;
+  /** CALR-20: counts as busy for new booking links. */
+  busyDefault?: boolean;
+  /** CALR-20: why the account needs attention (Google's `invalid_grant` for reauth). */
+  lastError?: string | null;
 };
 
 export function isNativeEvent(e: Pick<CalendarEventModel, "sourceAccountId">): boolean {

@@ -59,6 +59,7 @@ import {
 import { type StripItem } from "../strip";
 import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
+import { CalendarAccountsDialog } from "./calendar-accounts-dialog";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
 import type { MoveEventDeltas } from "./calendar-grid";
@@ -839,6 +840,11 @@ export function CalendarPageView({
           onDone={() => void calendar.reload()}
         />
       ) : null}
+      <CalendarAccountsDialog
+        {...{ runtime, workspaceId, calendar, updatePrefs, syncNow }}
+        isDesktop={IS_DESKTOP}
+        hiddenAccountIds={prefs.hiddenAccountIds}
+      />
     </DndContext>
   );
 }

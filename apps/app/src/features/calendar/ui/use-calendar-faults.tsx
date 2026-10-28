@@ -13,6 +13,7 @@ import { readFirstWeekClosed, showFirstWeek, writeFirstWeekClosed } from "../fir
 import { localDayKey } from "../lens";
 import { allDayRowsOf, readLoadShape, writeLoadShape } from "../load-shape";
 import { calendarSyncStatus } from "../sync-status";
+import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
 import { FirstWeekCard } from "./first-week-card";
 import { SyncBanner } from "./sync-banner";
 
@@ -74,7 +75,12 @@ export function useCalendarFaults(input: {
   });
 
   const banner = (
-    <SyncBanner status={syncStatus} onRetry={input.onRetry} retrying={input.retrying} />
+    <SyncBanner
+      status={syncStatus}
+      onRetry={input.onRetry}
+      onReconnect={(login) => dispatchOpenCalendarAccounts({ reconnect: login })}
+      retrying={input.retrying}
+    />
   );
   const firstWeekOverlay = firstWeek ? (
     <FirstWeekCard
