@@ -34,12 +34,32 @@ export async function readFunctionError(error: unknown): Promise<string> {
   return fallback;
 }
 
+/** The function's own error codes, as sentences for a toast; Google's reasons pass through. */
+const FUNCTION_ERRORS: Record<string, string> = {
+  google_not_connected:
+    "Google isn't connected for this account on the web. Reconnect it in Settings › Integrations.",
+  google_not_configured: "Google Calendar isn't set up on this server.",
+  bad_patch: "Google events can't change that here yet.",
+  bad_event: "That event is missing something Google needs.",
+  bad_account: "That event belongs to another Google account.",
+  unknown_action:
+    "This version of the app is ahead of the server. Try again after the next update.",
+};
+
+function sentenceFor(reason: string): string {
+  return FUNCTION_ERRORS[reason] ?? reason;
+}
+
 async function invoke(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await supabaseClient.functions.invoke("calendar-google-web", { body });
-  if (error) throw new Error((await readFunctionError(error)) || "Google Calendar is unavailable.");
+  if (error) {
+    throw new Error(
+      sentenceFor(await readFunctionError(error)) || "Google Calendar is unavailable.",
+    );
+  }
   const payload = (data ?? {}) as Record<string, unknown>;
   if (typeof payload.error === "string" && payload.error.length > 0) {
-    throw new Error(payload.error);
+    throw new Error(sentenceFor(payload.error));
   }
   return payload;
 }

@@ -87,6 +87,21 @@ describe("googleEventBody", () => {
     ).toEqual({ start: { date: "2026-11-05" }, end: { date: "2026-11-07" } });
   });
 
+  it("a timed meeting switched to all day covers its day (Google's end date is exclusive)", () => {
+    expect(
+      googleEventBody(
+        { startsAt: "2026-11-05T08:00:00.000Z", endsAt: "2026-11-05T09:00:00.000Z", allDay: true },
+        { timeZone: "Europe/Warsaw" },
+      ),
+    ).toEqual({ start: { date: "2026-11-05" }, end: { date: "2026-11-06" } });
+    expect(
+      googleEventBody(
+        { startsAt: "2026-12-31T08:00:00.000Z", endsAt: "2026-12-31T09:00:00.000Z", allDay: true },
+        { timeZone: "UTC" },
+      ),
+    ).toEqual({ start: { date: "2026-12-31" }, end: { date: "2027-01-01" } });
+  });
+
   it("maps place, description, guests and privacy", () => {
     expect(
       googleEventBody(

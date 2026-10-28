@@ -6,10 +6,11 @@
 // (sanctioned); every color and radius is token-routed.
 //
 // Two chip kinds render here (DESIGN_BRIEF §2): task blocks (the lens,
-// muted/outline, checkbox) and events (calendar-colored; external = mirrored,
-// read-only). CAL-2 adds the planning gestures: draw-to-create (ghost + quick
-// popover), drag to move, edge resize — native events only; external chips
-// resist with a read-only tooltip (no write path exists, structurally).
+// muted/outline, checkbox) and events (calendar-colored; external = mirrored).
+// CAL-2 adds the planning gestures: draw-to-create (ghost + quick popover),
+// drag to move, edge resize — on events you can write (native ones, and since
+// CALR-8 your own Google ones, which save to Google first); read-only chips
+// (view-only accounts, teammates') resist with a read-only tooltip.
 //
 // Render economy: the 30s now-tick flows into the columns as ONE primitive
 // (`nowMinutes` on today's column, null elsewhere) and DayColumn is memoized,
@@ -497,7 +498,7 @@ export function CalendarGrid({
     [beginGesture, measureColumns],
   );
 
-  /** Move/resize (native events) or click-select (all events). */
+  /** Move/resize (writable events) or click-select (all events). */
   const onEventChipPointerDown = useCallback(
     (
       e: React.PointerEvent,

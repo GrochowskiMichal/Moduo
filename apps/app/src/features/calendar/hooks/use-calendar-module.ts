@@ -443,7 +443,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         return;
       }
       const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
-      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? applyPatch(e, patch) : e)));
+      const optimistic = applyPatch(snapshot, patch);
+      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? optimistic : e)));
       try {
         const calendar = (runtime as ModuoRuntime).calendar;
         const saved =
@@ -459,7 +460,13 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
                 eventId,
                 patch: withoutMeet(patch),
               });
-        setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? saved : e)));
+        // Only over our own optimistic row: a live echo that already landed
+        // (CALR-7) carries the server's split place and stamp, and stays.
+        setEventsIn(scope, (prev) =>
+          prev.map((e) =>
+            e.id === eventId && (e === optimistic || writer === "moduo") ? saved : e,
+          ),
+        );
       } catch (err) {
         setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
         const reason = err instanceof Error ? err.message : "";

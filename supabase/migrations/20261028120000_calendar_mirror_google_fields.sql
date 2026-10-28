@@ -1,7 +1,7 @@
 -- CALR-8 · Google two-way, online (specs/calendar-rethink.md block 8, AC43).
 --
--- A Google event edited in Moduo saves to Google first; the edge function then
--- hands Google's answer to calendar_op_mirror_events, so the mirror must store
+-- A Google event edited in Moduo saves to Google first (calendar-google-web);
+-- the app then hands Google's answer to calendar_op_mirror_events, so the mirror must store
 -- everything the app lets you change there. It already stored title, times,
 -- place and meeting link; this adds privacy (`isPrivate` -> is_private) and
 -- guests (`attendees` -> attendees, normalised by calendar__attendees).

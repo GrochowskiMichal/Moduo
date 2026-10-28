@@ -214,18 +214,12 @@ export function EventDetailPanel({
         />
       </Field>
 
-      <Field label="Repeats">
-        <div className="flex min-w-0 flex-col gap-1">
-          <RepeatPicker
-            value={event.rrule}
-            disabled={!editable}
-            onChange={(rrule) => onPatch(event.id, { rrule })}
-          />
-          {editable && event.rrule ? (
-            <span className="text-2xs text-muted-foreground">Edits apply to the whole series.</span>
-          ) : null}
-        </div>
-      </Field>
+      <RepeatsField
+        rrule={event.rrule}
+        // A Google event's repeats change in Google for now (CALR-11).
+        editable={editable && !external}
+        onChange={(rrule) => onPatch(event.id, { rrule })}
+      />
 
       <Field label="Notes">
         {editable ? (
@@ -301,5 +295,27 @@ export function EventDetailPanel({
         </>
       ) : null}
     </div>
+  );
+}
+
+/** The Repeats row: the picker, and the series note while it repeats. */
+function RepeatsField({
+  rrule,
+  editable,
+  onChange,
+}: {
+  rrule: string | null;
+  editable: boolean;
+  onChange: (rrule: string | null) => void;
+}) {
+  return (
+    <Field label="Repeats">
+      <div className="flex min-w-0 flex-col gap-1">
+        <RepeatPicker value={rrule} disabled={!editable} onChange={onChange} />
+        {editable && rrule ? (
+          <span className="text-2xs text-muted-foreground">Edits apply to the whole series.</span>
+        ) : null}
+      </div>
+    </Field>
   );
 }

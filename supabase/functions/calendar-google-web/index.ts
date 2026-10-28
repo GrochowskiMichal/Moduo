@@ -103,6 +103,9 @@ const PATCH_FIELDS: Record<keyof GoogleEventPatch, FieldReader> = {
 function readPatch(value: unknown): GoogleEventPatch | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const raw = value as Record<string, unknown>;
+  // A key this action can't send (repeats, another calendar, a kind) is a
+  // refusal, never a silent no-op the app would read as saved.
+  if (Object.keys(raw).some((key) => raw[key] !== undefined && !(key in PATCH_FIELDS))) return null;
   const patch: Record<string, unknown> = {};
   for (const [key, read] of Object.entries(PATCH_FIELDS)) {
     if (raw[key] === undefined) continue;
@@ -311,10 +314,26 @@ async function pushAction({ body, accessToken, email, calendarId }: AccountCtx):
   return json({ event: { ...created, calendarId: `google:${email}:${targetCalendar}` } });
 }
 
-async function writeAction(action: "update" | "delete", { body, accessToken, email }: AccountCtx): Promise<Response> {
+/**
+ * The Google calendar an event write goes to: the event's own (`google:<email>:<calId>`),
+ * else the account's, else primary. An event tagged with another login is refused
+ * (its token would answer 404, which a delete would read as already gone).
+ */
+function writeTarget(body: Record<string, unknown>, email: string, calendarId: string | null): string | null {
+  const tag = typeof body.calendarId === "string" ? body.calendarId : "";
+  if (tag.startsWith(`google:${email}:`)) return googleCalendarTarget(tag);
+  if (tag.startsWith("google:") && tag.includes(":", "google:".length)) return null;
+  return calendarId || "primary";
+}
+
+async function writeAction(
+  action: "update" | "delete",
+  { body, accessToken, email, calendarId }: AccountCtx,
+): Promise<Response> {
   const eventId = typeof body.eventId === "string" ? body.eventId : "";
   if (!eventId) return json({ error: "bad_event" }, 400);
-  const target = googleCalendarTarget(typeof body.calendarId === "string" ? body.calendarId : null);
+  const target = writeTarget(body, email, calendarId);
+  if (!target) return json({ error: "bad_account" }, 400);
   if (action === "delete") {
     try {
       await removeGoogleEvent({ accessToken, calendarId: target, eventId, sendUpdates: "all" });

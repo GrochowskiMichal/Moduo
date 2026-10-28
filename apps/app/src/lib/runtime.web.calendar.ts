@@ -460,7 +460,11 @@ export const webCalendar: CalendarRuntime = {
     // The mapper leaves an absent place out (a sync keeps what's stored), so a
     // place this edit cleared must be sent as empty to clear the stored one.
     if (patch.location !== undefined && mapped.location === undefined) mapped.location = "";
-    await webCalendar.mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] });
+    // Google has saved it; if storing the answer here fails, the next sync
+    // catches up, so that's no reason to roll the edit back.
+    await webCalendar
+      .mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] })
+      .catch(() => undefined);
     return {
       ...event,
       title: mapped.title,
@@ -485,11 +489,14 @@ export const webCalendar: CalendarRuntime = {
       calendarId: event.calendarId,
       eventId: externalEventId,
     });
-    await webCalendar.mirrorEvents({
-      workspaceId,
-      accountId: account.id,
-      events: [],
-      deletedExternalIds: [externalEventId],
-    });
+    // Gone in Google; a failed tombstone here is caught up by the next sync.
+    await webCalendar
+      .mirrorEvents({
+        workspaceId,
+        accountId: account.id,
+        events: [],
+        deletedExternalIds: [externalEventId],
+      })
+      .catch(() => undefined);
   },
 };

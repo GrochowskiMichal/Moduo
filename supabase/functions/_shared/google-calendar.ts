@@ -347,6 +347,29 @@ export type GoogleEventPatch = {
 };
 
 /** The Google events.patch body for a patch: only what changed. */
+/** The calendar day after a YYYY-MM-DD date. */
+function nextDay(date: string): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Start and end for Google, sent together or not at all. */
+function timesBody(patch: GoogleEventPatch, timeZone: string): Record<string, unknown> {
+  if (patch.startsAt === undefined || patch.endsAt === undefined) return {};
+  if (!patch.allDay) {
+    return {
+      start: { dateTime: patch.startsAt, timeZone },
+      end: { dateTime: patch.endsAt, timeZone },
+    };
+  }
+  // Google's all-day end date is exclusive: a range that ends on its start
+  // day (a 9–10 meeting switched to all day) covers that one day.
+  const start = ymdInZone(patch.startsAt, timeZone);
+  const end = ymdInZone(patch.endsAt, timeZone);
+  return { start: { date: start }, end: { date: end <= start ? nextDay(start) : end } };
+}
+
 export function googleEventBody(
   patch: GoogleEventPatch,
   options: { timeZone: string; requestId?: string },
@@ -355,13 +378,7 @@ export function googleEventBody(
   if (patch.title !== undefined) body.summary = patch.title;
   if (patch.description !== undefined) body.description = patch.description;
   if (patch.location !== undefined) body.location = patch.location ?? "";
-  if (patch.startsAt !== undefined && patch.endsAt !== undefined) {
-    const { timeZone } = options;
-    const at = (iso: string) =>
-      patch.allDay ? { date: ymdInZone(iso, timeZone) } : { dateTime: iso, timeZone };
-    body.start = at(patch.startsAt);
-    body.end = at(patch.endsAt);
-  }
+  Object.assign(body, timesBody(patch, options.timeZone));
   if (patch.attendees !== undefined) {
     body.attendees = patch.attendees.map((person) =>
       person.name ? { email: person.email, displayName: person.name } : { email: person.email },
