@@ -266,8 +266,9 @@ $$;
 
 -- ── The index is rebuilt unaccented, and people can still write notes ────────
 
-SELECT test.ok(test.as_user('A', format($q$UPDATE public.notes SET title = 'Café plans' WHERE id = %L$q$, test.id('ED'))) = 'ok 1',
-  'a member can still rename a note they may edit (the generated column runs as them)');
+SELECT test.ok(test.as_user('A', format($q$SELECT public.notes_op_rename(%L, %L, 'Café plans')$q$, test.id('W'), test.id('ED'))) = 'ok 1',
+  'a member can still rename a note they may edit (notes are written through definer ops)');
+SELECT test.ok((SELECT title FROM public.notes WHERE id = test.id('ED')) = 'Café plans', 'the rename landed');
 SELECT test.ok(test.search_as('A', 'cafe') -> 0 ->> 'entity_id' = test.id('ED')::text
            AND test.search_as('A', 'cafe') -> 0 ->> 'match' = 'title',
   'and the new title is searchable at once, accents ignored');
