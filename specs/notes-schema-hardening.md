@@ -170,7 +170,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 10. **Server compaction (NS-10).**
     - `notes__compact(p_note, p_snapshot_b64, p_upto_id, p_expected_version)`: service-only, with the same CAS as `notes_op_save_snapshot`, never writing bodies.
     - A nightly step in `purge-deleted` picks at most 50 notes with more than 200 log rows, last written more than 10 minutes ago, and nobody in `note_live_viewers`.
-    - It merges snapshot plus log with `Y.mergeUpdates` through a new `compactFromLog` export of the existing `notes-doc` bundle (`supabase/functions/_shared/notes-doc/`), then calls `notes__compact`.
+    - It merges snapshot plus log through a new `compactFromLog` export of the existing `notes-doc` bundle (`supabase/functions/_shared/notes-doc/`), then calls `notes__compact`. *(Built:* the merge rebuilds a `Y.Doc` and encodes it with `Y.encodeStateAsUpdate`, as the client's fold does, and refuses a log with a row Yjs can't decode, as the client vetoes its fold; it loads at most 5,000 rows a night per note.*)*
     - The client stays the only markdown serialiser (NR-6). Compaction only merges.
 11. **The hot/cold split (NS-11).**
     - `note_bodies (note_id uuid PK, workspace_id uuid, doc_state text, doc_version int, body_text text, body_md text, search_tsv tsvector GENERATED …)`, with the composite key to `notes` `ON DELETE CASCADE`, RLS SELECT through `can_access`, no client grants, and the GIN index moved there.

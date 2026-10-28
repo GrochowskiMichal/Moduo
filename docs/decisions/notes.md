@@ -2,6 +2,19 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-10: the nightly purge folds the log of notes nobody opens, by rebuilding the doc, under the client fold's CAS** → `supabase/migrations/20261030190000_notes_compact.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-10 (MOD-660).
+  - Decision:
+    - `purge-deleted` step 5 picks at most 50 notes with more than 200 log rows, none written in the last 10 minutes, not in the trash and with no row in `note_live_viewers` (`notes__compact_candidates`), loads each (`notes__compact_source`), merges with `compactFromLog` and folds with `notes__compact`. All three SQL functions are service-only.
+    - `compactFromLog` rebuilds a `Y.Doc` from snapshot plus log and returns `Y.encodeStateAsUpdate`, exactly as the client's fold encodes it (deleted content collected, pending structs kept), rather than `Y.mergeUpdates` over the raw rows.
+    - A row Yjs can't decode makes `compactFromLog` throw, and the note keeps its log (counted as failed): the fold deletes what it merged, and a client on another Yjs version may still read that row. The client vetoes its own fold the same way (`compactVeto` in `engine-v2.ts`).
+    - `notes__compact_source` loads at most 5,000 rows, oldest first: one huge log can't exhaust the function, and a fold up to the last loaded id is safe.
+    - `notes__compact` refuses (changes nothing, answers `refused: true`) on a moved `doc_version` or on any `note_live_viewers` row, under the note's row lock. It never writes `body_text`/`body_md` (NR-6) and leaves `updated_at` alone, so a fold doesn't move Recents.
+    - A failure (the pick, or one note's load, merge or fold) is counted in `notesCompactFailed` and logged; it never fails the run.
+  - Why: only an app client folds (past 40 rows), and the MCP writes one row per agent edit, so an agent-only note's log grew forever.
+  - Rejected: `Y.mergeUpdates` over the raw rows, because its result differs from what clients store (no garbage collection).
+  - Release: the migration first, then `purge-deleted` redeployed. Either order is tolerated (a missing RPC counts as a compaction failure), but nothing folds until both ship.
 - **2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`** → `supabase/migrations/20261030180000_notes_legacy_out.sql`
   - status: current
   - Who: Mike (engineer mode, PQ5), built in NS-9 (MOD-659).
