@@ -229,10 +229,11 @@ SELECT test.ok(
   'list: a NULL trash_since lists live notes only (N, C, L, S)');
 SELECT test.ok(test.rpc_list('R') = '{}', 'list: a role that can''t open notes gets nothing');
 SELECT test.ok(test.rpc_list('U') = '{}', 'list: an outsider gets nothing');
+-- The expected row is built outside E's role: notes__meta is service-only.
 SELECT test.ok(
-  test.value_as('E', format('SELECT (SELECT to_jsonb(m) FROM public.notes_list_meta(%L, NULL) m WHERE m.id = %L)
-    = to_jsonb(public.notes__meta(n))::text FROM public.notes n WHERE n.id = %L',
-    test.id('W'), test.id('N'), test.id('N'))) = 'true',
+  test.value_as('E', format('SELECT to_jsonb(m)::text FROM public.notes_list_meta(%L, NULL) m WHERE m.id = %L',
+    test.id('W'), test.id('N')))::jsonb
+  = (SELECT to_jsonb(public.notes__meta(n)) FROM public.notes n WHERE n.id = test.id('N')),
   'list: each row is the note''s notes_meta');
 SELECT test.ok(
   test.as_key('KV', format('SELECT * FROM public.notes_list_meta(%L, NULL)', test.id('W'))) = 'ok 5',
