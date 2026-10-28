@@ -12,11 +12,22 @@
 --   calendar_events.ical_uid     new column; a partial index for the revive's lookup
 --   calendar_op_mirror_events    ← 20261028170000_calendar_one_occurrence.sql, plus
 --                                  the iCalUID key and the revive
---   calendar_events_visible      ← 20261028150000_calendar_private_masking.sql, plus
+--   calendar_events_visible      ← 20261029100000_calendar_focus_time.sql, plus
 --                                  ical_uid in the mask list
 -- Test: supabase/tests/calendar_new_events_one_event.test.sql.
 
 SET LOCAL lock_timeout = '5s';
+
+-- Refuse to apply before the bodies this file re-cuts from: the masked read
+-- would lose focus masking, and a later apply of that file would drop this one's.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calendar_events_visible'
+                   AND prosrc LIKE '%Focus time%') THEN
+    RAISE EXCEPTION 'This migration needs 20261029100000_calendar_focus_time.sql applied first.';
+  END IF;
+END;
+$$;
 
 ALTER TABLE public.calendar_events ADD COLUMN IF NOT EXISTS ical_uid text;
 
@@ -267,9 +278,9 @@ $function$;
 REVOKE ALL ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[]) TO authenticated, service_role;
 
--- Masked read (20261028150000): new, a teammate's private row carries no
--- iCalUID. It would tell them which private rows are the same meeting (who
--- meets whom), so it joins the mask list with the other details.
+-- Masked read (20261029100000_calendar_focus_time.sql, focus masking kept): new,
+-- a teammate's masked row carries no iCalUID. It would tell them which private
+-- rows are the same meeting (who meets whom), so it joins the mask list.
 CREATE OR REPLACE FUNCTION public.calendar_events_visible(p_workspace_id uuid, p_from timestamptz, p_to timestamptz)
 RETURNS SETOF public.calendar_events LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $f$
 DECLARE v_user uuid := public.perm_actor_id();
@@ -284,8 +295,8 @@ BEGIN
   -- it once per column). A new sensitive column joins the mask list here.
   SELECT (m.r).*
   FROM public.calendar_events e
-  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = v_user OR NOT e.is_private THEN e
-     ELSE jsonb_populate_record(e, jsonb_build_object('title','Busy','description',null,'location',null,'attendees','[]'::jsonb,
+  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = v_user OR (NOT e.is_private AND e.kind <> 'focus') THEN e
+     ELSE jsonb_populate_record(e, jsonb_build_object('title',CASE WHEN e.is_private THEN 'Busy' ELSE 'Focus time' END,'description',null,'location',null,'attendees','[]'::jsonb,
        'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
        'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null,'ical_uid',null)) END AS r) m
   WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
