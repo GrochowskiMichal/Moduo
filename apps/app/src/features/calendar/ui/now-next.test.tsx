@@ -4,6 +4,8 @@
 // own box. jsdom lays nothing out, so the drop order is pinned on the width
 // rule and the box on its classes (shrinks, clips, truncates the title).
 
+/* eslint-disable unicorn/no-thenable -- "then" names the pill's "then …" part: a boolean, never a promise */
+
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
