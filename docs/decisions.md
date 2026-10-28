@@ -249,6 +249,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-28 · NS-11: a note's content lives in `note_bodies`; v1.4.0 reads it through computed fields of the old column names
 - 2026-10-28 · NS-10: the nightly purge folds the log of notes nobody opens, by rebuilding the doc, under the client fold's CAS
 - 2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`
 - 2026-10-28 · NS-7: a note's document and the notes list are definer reads that check access once (`notes_pull`, `notes_list_meta`), with a table-read fallback until deployed

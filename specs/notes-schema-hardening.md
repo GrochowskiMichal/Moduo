@@ -178,7 +178,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
       - backfills the 129 rows;
       - switches every SQL reader and writer (`notes_pull`, `save_snapshot`, `compact`, `seed_doc`, `apply_updates`, `duplicate`, `import`, `notes__search`, `notes_public_subtree`, the MCP's reads);
       - drops the columns from `notes`.
-    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here.
+    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here. *(Built: the app still selected `body_text`/`body_md` from `notes` (Recents, previews, export) and v1.4.0 reads all five columns plus `note_updates` directly, so each dropped column is a PostgREST computed field of the same name, access-checked, and the SELECT grants on `notes` and `note_updates` stay one release. `note_bodies` keeps a copy of the title for `search_tsv`'s weight A, written by `notes__bodies_sync`. See `docs/decisions/notes.md` NS-11.)*
 12. **Tier and verification.** Every block that ships a migration is Tier 2: the validator runs, and `bun run db:matrix` covers new functions.
     - **Migration timestamps:** assigned per block, starting at `20261030100000` and spaced an hour apart, in block order.
     - **Local stack:** each block applies on top of the shared local stack (`psql -1 -f`), never resetting it.

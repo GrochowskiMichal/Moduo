@@ -250,34 +250,6 @@ DELETE FROM public.notes WHERE id = {N}
 | anon | ✗ | ✗ | ✗ | ✗ | ✗ |
 | app | – | – | – | – | – |
 
-## Table: note_bodies
-
-A note's content (NS-11). No client grant: people read it only through `notes_pull`, `notes__search`, the published subtree and the access-checked computed fields on `notes` (`body_md(notes)`, …). Its SELECT policy (`can_access('note', …)`) is a second fence behind the missing grant.
-
-```sql select
-SELECT 1 FROM public.note_bodies WHERE note_id = {N}
-```
-
-```sql update
-UPDATE public.note_bodies SET body_md = 'Rewritten' WHERE note_id = {N}
-```
-
-```sql delete
-DELETE FROM public.note_bodies WHERE note_id = {N}
-```
-
-| persona | select | update | delete |
-| --- | --- | --- | --- |
-| owner | ✗ | ✗ | ✗ |
-| admin | ✗ | ✗ | ✗ |
-| editor | ✗ | ✗ | ✗ |
-| viewer | ✗ | ✗ | ✗ |
-| capped | ✗ | ✗ | ✗ |
-| member | ✗ | ✗ | ✗ |
-| outsider | ✗ | ✗ | ✗ |
-| anon | ✗ | ✗ | ✗ |
-| app | – | – | – |
-
 ## Table: contacts
 
 Reads by `can_access('contact', …)`; writes only through `contacts_op_*`.
