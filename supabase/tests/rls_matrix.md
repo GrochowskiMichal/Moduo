@@ -50,7 +50,7 @@ INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('P2'), test.id('W2'), test.id('outsider'), 'Outsider project', false);
 INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) VALUES
   (test.id('T'), test.id('W'), test.id('P'), test.id('owner'), 'Task HV16-SECRET', 'todo');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text) VALUES
   (test.id('N'), test.id('W'), test.id('owner'), 'Note HV16-SECRET', 'HV16-SECRET', 'HV16-SECRET');
 INSERT INTO public.contacts (id, workspace_id, owner_id, name, email) VALUES
   (test.id('C'), test.id('W'), test.id('owner'), 'Contact HV16-SECRET', 'hv16-secret@example.com');
@@ -249,6 +249,34 @@ DELETE FROM public.notes WHERE id = {N}
 | outsider | ✗ | ✗ | ✗ | ✗ | ✗ |
 | anon | ✗ | ✗ | ✗ | ✗ | ✗ |
 | app | – | – | – | – | – |
+
+## Table: note_bodies
+
+A note's content (NS-11). No client grant: people read it only through `notes_pull`, `notes__search`, the published subtree and the access-checked computed fields on `notes` (`body_md(notes)`, …). Its SELECT policy (`can_access('note', …)`) is a second fence behind the missing grant.
+
+```sql select
+SELECT 1 FROM public.note_bodies WHERE note_id = {N}
+```
+
+```sql update
+UPDATE public.note_bodies SET body_md = 'Rewritten' WHERE note_id = {N}
+```
+
+```sql delete
+DELETE FROM public.note_bodies WHERE note_id = {N}
+```
+
+| persona | select | update | delete |
+| --- | --- | --- | --- |
+| owner | ✗ | ✗ | ✗ |
+| admin | ✗ | ✗ | ✗ |
+| editor | ✗ | ✗ | ✗ |
+| viewer | ✗ | ✗ | ✗ |
+| capped | ✗ | ✗ | ✗ |
+| member | ✗ | ✗ | ✗ |
+| outsider | ✗ | ✗ | ✗ |
+| anon | ✗ | ✗ | ✗ |
+| app | – | – | – |
 
 ## Table: contacts
 

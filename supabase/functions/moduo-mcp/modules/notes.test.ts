@@ -44,20 +44,26 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void; pullMissing?: boole
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
   const pullCalls: Row[] = [];
   const fromTables: string[] = [];
+  const selects: Array<{ table: string; cols: string }> = [];
   let nextId = 1;
   function from(table: string) {
     fromTables.push(table);
     const filters: Array<(r: Row) => boolean> = [];
     let max = Number.POSITIVE_INFINITY;
     const query: any = {
-      select: () => query,
+      select: (cols: string) => (selects.push({ table, cols }), query),
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), query),
       is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), query),
       gt: (c: string, v: number) => (filters.push((r) => Number(r[c]) > v), query),
       order: () => query,
       limit: (n: number) => ((max = n), query),
       then<T>(resolve: (res: { data: Row[]; error: null }) => T) {
-        const data = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+        // NS-11: a note's content is its note_bodies row; here one record holds both.
+        const source =
+          table === "note_bodies"
+            ? tables.notes!.map((n) => ({ ...n, note_id: n.id }))
+            : (tables[table] ?? []);
+        const data = source.filter((r) => filters.every((f) => f(r)));
         return Promise.resolve({ data: data.slice(0, max), error: null }).then(resolve);
       },
     };
@@ -154,7 +160,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void; pullMissing?: boole
       update_b64: Buffer.from(update).toString("base64"),
       origin: "user",
     });
-  return { ctx, tables, rpcCalls, pullCalls, fromTables, pushRow };
+  return { ctx, tables, rpcCalls, pullCalls, fromTables, selects, pushRow };
 }
 
 function tool(name: string) {
@@ -299,6 +305,26 @@ describe("the connector's pull (NS-7)", () => {
     await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
     expect(fromTables).toContain("note_updates");
     expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+});
+
+describe("content reads (NS-11)", () => {
+  const CONTENT = /\b(doc_state|doc_version|body_text|body_md|search_tsv)\b/;
+
+  it("reads a note's stored body from note_bodies, in the key's workspace", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_update").handler({ note_id: NOTE, markdown: "Plan\n\nNew body" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("body_md"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("Plan\n\nNew body");
+  });
+
+  it("reads the snapshot from note_bodies too while notes_pull is missing", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"), { pullMissing: true });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("doc_state"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
   });
 });
 

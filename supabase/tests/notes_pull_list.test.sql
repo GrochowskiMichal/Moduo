@@ -38,19 +38,19 @@ INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_h
   (test.id('KV'), test.id('W'), 'Reader', 'mdo_ns7v', md5('db-test-ns7-kv'), '{"notes": "view"}', test.id('O')),
   (test.id('KT'), test.id('W'), 'Tasks', 'mdo_ns7t', md5('db-test-ns7-kt'), '{"tasks": "edit"}', test.id('O'));
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, position) VALUES
   (test.id('N'), test.id('W'), test.id('O'), 'Q4 plan', 'body', 'a'),
   (test.id('S'), test.id('W'), test.id('O'), 'Handbook', 'body', 'c'),
   (test.id('H'), test.id('W'), test.id('O'), 'Salaries', 'secret', 'd'),
   (test.id('T'), test.id('W'), test.id('O'), 'Old plan', 'body', 'e'),
   (test.id('TO'), test.id('W'), test.id('O'), 'Ancient plan', 'body', 'f'),
   (test.id('L'), test.id('W'), test.id('O'), 'Long log', 'body', 'g');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, position, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, position, parent_id) VALUES
   (test.id('C'), test.id('W'), test.id('O'), 'Q4 details', 'body', 'B', test.id('N'));
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false
   WHERE id IN (test.id('N'), test.id('S'), test.id('H'), test.id('T'), test.id('TO'), test.id('L'));
 UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false WHERE id = test.id('C');
-UPDATE public.notes SET doc_state = 'U05BUA==', doc_version = 2 WHERE id = test.id('N');
+UPDATE public.note_bodies SET doc_state = 'U05BUA==', doc_version = 2 WHERE note_id = test.id('N');
 -- Stamped with the triggers off, as rows trashed days ago would be.
 SET LOCAL session_replication_role = replica;
 UPDATE public.notes SET deleted_at = now() - interval '3 days' WHERE id = test.id('T');
@@ -126,8 +126,8 @@ CREATE TABLE test.old_pull AS SELECT
       'client_seq', client_seq, 'update_b64', update_b64, 'origin', origin,
       'actor_key_id', actor_key_id) ORDER BY id), '[]')::text
       FROM public.note_updates WHERE note_id = %L AND id > 0$q$, test.id('N')))::jsonb AS updates,
-  test.value_as('V', format($q$SELECT jsonb_build_object('doc_state', doc_state, 'doc_version', doc_version)::text
-      FROM public.notes WHERE id = %L AND workspace_id = %L$q$, test.id('N'), test.id('W')))::jsonb AS note;
+  test.value_as('V', format($q$SELECT jsonb_build_object('doc_state', n.doc_state, 'doc_version', n.doc_version)::text
+      FROM public.notes n WHERE n.id = %L AND n.workspace_id = %L$q$, test.id('N'), test.id('W')))::jsonb AS note;
 
 CREATE TABLE test.new_pull AS SELECT test.pull_as('V', 'N', 0, NULL) AS r;
 

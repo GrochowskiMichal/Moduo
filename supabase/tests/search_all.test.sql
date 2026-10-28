@@ -91,7 +91,7 @@ SELECT test.id('PEAR' || i), test.id('W'), test.id('P1'), test.id('O'), 'Pear cr
 INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status)
 SELECT test.id('FIG' || i), test.id('W'), test.id('P1'), test.id('O'), 'Fig box ' || i, 'todo' FROM generate_series(1, 60) i;
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at, is_archived) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at, is_archived) VALUES
   (test.id('NK'), test.id('W'), test.id('O'), 'Picking day', 'We picked a kumquat by the gate', now(), false),
   (test.id('L1'), test.id('W'), test.id('O'), 'Lemon plan', '', now() - interval '1 day', false),
   (test.id('L2'), test.id('W'), test.id('O'), 'Lemon plan', '', now(), false),
@@ -315,7 +315,7 @@ DO $$
 DECLARE
   v jsonb;
 BEGIN
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
     (test.id('HV1'), test.id('W'), test.id('O'), 'Field log 1', 'harvst notes'),
     (test.id('HV2'), test.id('W'), test.id('O'), 'Field log 2', 'harvst again'),
     (test.id('HV3'), test.id('W'), test.id('O'), 'Field log 3', 'one more harvst');

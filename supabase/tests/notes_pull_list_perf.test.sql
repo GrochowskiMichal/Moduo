@@ -15,14 +15,14 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.
 SELECT setseed(0.6);
 
 -- Roots first, then four levels of children under random earlier notes.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, position, updated_at)
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, position, updated_at)
 SELECT test.id('n' || i), test.id('W'), CASE WHEN i % 2 = 0 THEN test.id('O') ELSE test.id('A') END,
        'Note ' || i, 'body ' || i, md5(i::text), now() - (i || ' minutes')::interval
   FROM generate_series(1, 2000) i;
 DO $$
 BEGIN
   FOR lvl IN 1..4 LOOP
-    INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, position, parent_id, updated_at)
+    INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, position, parent_id, updated_at)
     SELECT test.id('n' || i), test.id('W'), CASE WHEN i % 2 = 0 THEN test.id('O') ELSE test.id('A') END,
            'Note ' || i, 'body ' || i, md5(i::text), test.id('n' || (1 + floor(random() * (2000 * lvl))::int)),
            now() - (i || ' minutes')::interval

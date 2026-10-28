@@ -21,7 +21,7 @@ INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id
 CREATE FUNCTION pg_temp.note(p_name text, p_rows int, p_fresh boolean DEFAULT false)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, body_md, doc_state)
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, body_md, doc_state)
   VALUES (test.id(p_name), test.id('W'), test.id('O'), p_name, 'text of ' || p_name,
           '# ' || p_name, 'SNAP-0');
   INSERT INTO public.note_updates (workspace_id, note_id, client_id, client_seq, update_b64, created_at)
@@ -67,7 +67,7 @@ $$;
 DO $$
 DECLARE
   v text;
-  n public.notes;
+  n record;
   v_upto bigint := (SELECT max(id) - 1 FROM public.note_updates WHERE note_id = test.id('BIG'));
   v_last bigint := (SELECT max(id) FROM public.note_updates WHERE note_id = test.id('BIG'));
   v_updated timestamptz := (SELECT updated_at FROM public.notes WHERE id = test.id('BIG'));
@@ -109,7 +109,7 @@ BEGIN
     test.id('BIG'), 'SNAP-STALE', v_upto, 7));
   PERFORM test.ok((v::jsonb ->> 'refused') = 'true' AND (v::jsonb ->> 'doc_version') = '0',
     'CAS: a stale version is refused and reports the current one', v);
-  SELECT * INTO n FROM public.notes WHERE id = test.id('BIG');
+  SELECT * INTO n FROM test.notes_in WHERE id = test.id('BIG');
   PERFORM test.ok(n.doc_state = 'SNAP-0' AND n.doc_version = 0
     AND (SELECT count(*) FROM public.note_updates WHERE note_id = test.id('BIG')) = 201,
     'CAS: a refused fold changes nothing');
@@ -118,12 +118,12 @@ BEGIN
     test.id('VIEWED'), 'SNAP-V', v_upto, 0));
   PERFORM test.ok((v::jsonb ->> 'refused') = 'true'
     AND (SELECT count(*) FROM public.note_updates WHERE note_id = test.id('VIEWED')) = 201
-    AND (SELECT doc_state FROM public.notes WHERE id = test.id('VIEWED')) = 'SNAP-0',
+    AND (SELECT doc_state FROM test.notes_in WHERE id = test.id('VIEWED')) = 'SNAP-0',
     'a note someone opened after the pick is refused', v);
 
   v := pg_temp.service(format('SELECT public.notes__compact(%L, %L, %s, NULL)::text',
     test.id('BIG'), 'SNAP-X', v_upto));
-  PERFORM test.ok(v LIKE 'error%' AND (SELECT doc_state FROM public.notes WHERE id = test.id('BIG')) = 'SNAP-0',
+  PERFORM test.ok(v LIKE 'error%' AND (SELECT doc_state FROM test.notes_in WHERE id = test.id('BIG')) = 'SNAP-0',
     'CAS: a fold without an expected version is an error', v);
 
   -- ── The fold ──────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ BEGIN
   PERFORM test.ok((v::jsonb ->> 'refused') = 'false' AND (v::jsonb ->> 'folded') = '200'
     AND (v::jsonb ->> 'doc_version') = '1',
     'fold: at the current version it folds the rows up to p_upto_id', v);
-  SELECT * INTO n FROM public.notes WHERE id = test.id('BIG');
+  SELECT * INTO n FROM test.notes_in WHERE id = test.id('BIG');
   PERFORM test.ok(n.doc_state = 'SNAP-1' AND n.doc_version = 1,
     'fold: the merged snapshot is stored and the version moves', n.doc_state || ' v' || n.doc_version);
   PERFORM test.ok(

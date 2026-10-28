@@ -21,7 +21,7 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
 CREATE FUNCTION pg_temp.note(p_ws text, p_name text, p_parent text, p_mode text, p_days int)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id)
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id)
   VALUES (test.id(p_name), test.id(p_ws), test.id('O'), p_name, p_name,
           CASE WHEN p_parent IS NOT NULL THEN test.id(p_parent) END);
   UPDATE public.notes SET share_mode = p_mode, workspace_shared = false WHERE id = test.id(p_name);

@@ -35,7 +35,7 @@ INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_h
   (test.id('KV'), test.id('W'), 'Reader', 'mdo_ns6v', md5('db-test-ns6-kv'), '{"notes": "view"}', test.id('O')),
   (test.id('KE'), test.id('W'), 'Writer', 'mdo_ns6e', md5('db-test-ns6-ke'), '{"notes": "edit"}', test.id('O'));
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, position) VALUES
   (test.id('N'), test.id('W'), test.id('O'), 'Q4 plan', 'body', 'a'),
   (test.id('P'), test.id('W'), test.id('O'), 'Roadmap', 'body', 'b'),
   (test.id('T'), test.id('W'), test.id('O'), 'Old plan', 'body', 'c'),
@@ -43,7 +43,7 @@ INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, position
   (test.id('HT'), test.id('W'), test.id('O'), 'Old salaries', 'secret', 'e'),
   (test.id('PR'), test.id('W'), test.id('O'), 'Drafts', 'private', 'f'),
   (test.id('PUB'), test.id('W'), test.id('O'), 'Changelog', 'public', 'g');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, position, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, position, parent_id) VALUES
   (test.id('IC'), test.id('W'), test.id('O'), 'v2 notes', 'draft', 'a', test.id('PR'));
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false
   WHERE id IN (test.id('N'), test.id('P'), test.id('T'), test.id('H'), test.id('HT'),

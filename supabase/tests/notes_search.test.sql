@@ -46,58 +46,58 @@ $$;
 -- ── Fixture ──────────────────────────────────────────────────────────────────
 
 -- A four-level tree, shared at the top: Company > Planning > Quarterly review > Retro.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('TOP'), test.id('W'), test.id('O'), 'Company', 'About us');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id) VALUES
   (test.id('PL'), test.id('W'), test.id('O'), 'Planning', 'Ideas for the kumquat jam stand', test.id('TOP'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id) VALUES
   (test.id('QR'), test.id('W'), test.id('O'), 'Quarterly review', 'Numbers', test.id('PL'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id) VALUES
   (test.id('DEEP'), test.id('W'), test.id('O'), 'Retro',
    'What went well. ' || repeat('Filler words about the quarter. ', 20)
    || 'We tasted a kumquat at lunch and liked it. ' || repeat('More filler. ', 10), test.id('QR'));
 
 -- Title above body.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('T1'), test.id('W'), test.id('O'), 'Budget plan', ''),
   (test.id('T2'), test.id('W'), test.id('O'), 'Expenses', 'The budget for the third quarter'),
   (test.id('T3'), test.id('W'), test.id('O'), 'Budget review', 'The budget, again');
 
 -- Accents, both ways.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('Z1'), test.id('W'), test.id('O'), 'Garden', 'Mój żółw śpi pod krzakiem'),
   (test.id('Z2'), test.id('W'), test.id('O'), 'Zolw notes', '');
 
 -- A shared note under a private parent.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('SEC'), test.id('W'), test.id('O'), 'Secret plans', 'Nothing here');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id) VALUES
   (test.id('SH'), test.id('W'), test.id('O'), 'Shared bit', 'A persimmon on the desk', test.id('SEC'));
 UPDATE public.notes SET share_mode = 'custom' WHERE id = test.id('SH');
 
 -- Trashed and archived.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, deleted_at, is_archived) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, deleted_at, is_archived) VALUES
   (test.id('TR'), test.id('W'), test.id('O'), 'Quince old', '', now(), false),
   (test.id('AR'), test.id('W'), test.id('O'), 'Quince jam', '', NULL, true),
   (test.id('LV'), test.id('W'), test.id('O'), 'Quince tart', '', NULL, false);
 
 -- Typo forgiveness.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('MT'), test.id('W'), test.id('O'), 'Weekly meeting notes', 'Agenda');
 
 -- A's own private note.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('AP'), test.id('W'), test.id('A'), 'Diary', 'An aubergine for dinner');
 
 -- One shared match, then 300 newer private ones with the same words.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at) VALUES
   (test.id('ZV'), test.id('W'), test.id('O'), 'Crossing', 'The zebra crossing by the office', now() - interval '30 days');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at)
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at)
 SELECT test.id('ZP' || i), test.id('W'), test.id('O'), 'Private ' || i, 'The zebra crossing by the office', now()
   FROM generate_series(1, 300) i;
 
 -- An edit-shared note A renames below.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('ED'), test.id('W'), test.id('O'), 'Draft', '');
 
 DELETE FROM public.resource_grants WHERE resource_type = 'note'
@@ -241,7 +241,7 @@ BEGIN
               AND test.hit_ids(test.search_as('A', 'meetng -retro')) = ARRAY[test.id('MT')],
     'an excluded word excludes typo-forgiven titles too');
 
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
     (test.id('MB1'), test.id('W'), test.id('O'), 'Typo one', 'Notes from the meetng');
   INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
   VALUES (test.id('W'), 'note', test.id('MB1'), 'workspace', NULL, 'view', test.id('O'))
@@ -252,7 +252,7 @@ BEGIN
               AND (test.hit(v, 'MT') ->> 'rank')::real < v_min_exact,
     'with fewer than 3 exact hits the fuzzy title still shows, ranked below them', v::text);
 
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
     (test.id('MB2'), test.id('W'), test.id('O'), 'Typo two', 'Another meetng'),
     (test.id('MB3'), test.id('W'), test.id('O'), 'Typo three', 'A third meetng');
   INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
@@ -275,11 +275,11 @@ SELECT test.ok((SELECT title FROM public.notes WHERE id = test.id('ED')) = 'Caf�
 SELECT test.ok(test.search_as('A', 'cafe') -> 0 ->> 'entity_id' = test.id('ED')::text
            AND test.search_as('A', 'cafe') -> 0 ->> 'match' = 'title',
   'and the new title is searchable at once, accents ignored');
-SELECT test.ok(EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'notes'
+SELECT test.ok(EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'note_bodies'
                          AND indexdef LIKE '%USING gin (search_tsv)%')
            AND EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'notes'
                          AND indexdef LIKE '%gin_trgm_ops%'),
-  'notes keep a GIN index on search_tsv and gain a trigram index on the title');
+  'the GIN index on search_tsv (note_bodies since NS-11) and a trigram index on the title');
 
 -- ── Grants and shape ─────────────────────────────────────────────────────────
 

@@ -21,9 +21,9 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('B'), 'member'),
   (test.id('W2'), test.id('A'), 'member');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at)
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at)
 SELECT test.id('N' || i), test.id('W'), test.id('O'), 'Recent note ' || i, '', now() FROM generate_series(1, 60) i;
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at) VALUES
   (test.id('NP'), test.id('W'), test.id('O'), 'Private recent', '', now()),
   (test.id('M1'), test.id('W2'), test.id('O'), 'Other workspace note', '', now()),
   -- Twins for the personal term: T1 is newer, so it leads until A opens T2.
