@@ -2,6 +2,9 @@
 // exposes optimistic event CRUD. Mirrors the Tasks hook posture — apply
 // locally first (<200ms perceived), reconcile with the server row, roll back
 // + quiet toast on error. Reads degrade to empty pre-migration (deploy gap).
+// Live events (CALR-7): while a workspace is open the hook follows its
+// calendar's inserts, updates and deletes (`runtime.calendar.listenLive`,
+// merged by `applyLiveChange`), and a resync refetches quietly.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -11,6 +14,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { undoToast } from "../../../lib/undo-toast";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
+import { applyLiveChange } from "../live";
 import {
   allTimeCalendarWindow,
   type CalendarWindow,
@@ -32,6 +36,13 @@ export type CreateEventDraft = {
   rrule?: string | null;
   description?: string;
 };
+
+/**
+ * A burst of resyncs (focus + visibilitychange on one return, a reconnect
+ * right after) refetches once: the first schedules a quiet read this long
+ * after it, and the rest inside that window ride along.
+ */
+const RESYNC_COALESCE_MS = 250;
 
 const isTempId = (id: string) => id.startsWith("tmp-");
 const isBusyId = (id: string) => id.startsWith("busy:");
@@ -128,80 +139,88 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     fetchWindow.fromIso === allTimeCalendarWindow().fromIso &&
     fetchWindow.toIso === allTimeCalendarWindow().toIso;
 
-  const load = useCallback(async () => {
-    if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
-    if (!runtime || !userId || !workspaceId || !canRead) {
-      setList({ scope, events: [] });
-      setAccounts([]);
-      setBusy([]);
-      setDegraded(false);
-      setTruncated([]);
-      setLoading(false);
-      return;
-    }
-    const req = ++reqRef.current;
-    setLoading(true);
-    const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
-    if (reqRef.current !== req) return;
-    // Keep unsettled optimistic creates: a reload is now also triggered by
-    // navigation (window widening), so it can land between a create's
-    // optimistic row and its server row — which would otherwise drop the
-    // event until the next reload (the tmp-id reconcile finds nothing).
-    // Only this scope's own: a create still saving in the workspace you just
-    // left stays there.
-    setList((prev) => {
-      const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
-      return {
-        scope,
-        events: pending.length > 0 ? [...bundle.events, ...pending] : bundle.events,
-      };
-    });
-    setAccounts(bundle.accounts);
-    setDegraded(bundle.degraded);
-    setTruncated(bundle.truncated);
-    setLoading(false);
-    void (async () => {
-      try {
-        const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
-          p_workspace_id: workspaceId,
-          p_from: fetchWindow.fromIso,
-          p_to: fetchWindow.toIso,
-        });
-        if (reqRef.current !== req) return;
-        setBusy(
-          busyRows.error || !Array.isArray(busyRows.data)
-            ? []
-            : busyRows.data.map(
-                (
-                  row: { calendar_id: string; start_time: string; end_time: string },
-                  i: number,
-                ) => ({
-                  // Two busy blocks can start at the same time; keep keys unique.
-                  id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
-                  workspaceId,
-                  ownerId: null,
-                  sourceAccountId: "busy",
-                  externalEventId: null,
-                  calendarId: "busy",
-                  title: "Busy",
-                  description: "",
-                  startsAt: row.start_time,
-                  endsAt: row.end_time,
-                  allDay: false,
-                  rrule: null,
-                  status: "confirmed",
-                  color: null,
-                  createdAt: row.start_time,
-                  updatedAt: row.start_time,
-                  deletedAt: null,
-                }),
-              ),
-        );
-      } catch {
-        if (reqRef.current === req) setBusy([]);
+  /**
+   * Read the bundle for the current scope and window. `quiet` (a live resync)
+   * leaves `loading` alone, so the grid refreshes in place instead of
+   * flashing a skeleton.
+   */
+  const load = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
+      if (!runtime || !userId || !workspaceId || !canRead) {
+        setList({ scope, events: [] });
+        setAccounts([]);
+        setBusy([]);
+        setDegraded(false);
+        setTruncated([]);
+        setLoading(false);
+        return;
       }
-    })();
-  }, [runtime, userId, workspaceId, canRead, fetchWindow, scope]);
+      const req = ++reqRef.current;
+      if (!options?.quiet) setLoading(true);
+      const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
+      if (reqRef.current !== req) return;
+      // Keep unsettled optimistic creates: a reload is now also triggered by
+      // navigation (window widening), so it can land between a create's
+      // optimistic row and its server row — which would otherwise drop the
+      // event until the next reload (the tmp-id reconcile finds nothing).
+      // Only this scope's own: a create still saving in the workspace you just
+      // left stays there.
+      setList((prev) => {
+        const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
+        return {
+          scope,
+          events: pending.length > 0 ? [...bundle.events, ...pending] : bundle.events,
+        };
+      });
+      setAccounts(bundle.accounts);
+      setDegraded(bundle.degraded);
+      setTruncated(bundle.truncated);
+      setLoading(false);
+      void (async () => {
+        try {
+          const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
+            p_workspace_id: workspaceId,
+            p_from: fetchWindow.fromIso,
+            p_to: fetchWindow.toIso,
+          });
+          if (reqRef.current !== req) return;
+          setBusy(
+            busyRows.error || !Array.isArray(busyRows.data)
+              ? []
+              : busyRows.data.map(
+                  (
+                    row: { calendar_id: string; start_time: string; end_time: string },
+                    i: number,
+                  ) => ({
+                    // Two busy blocks can start at the same time; keep keys unique.
+                    id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
+                    workspaceId,
+                    ownerId: null,
+                    sourceAccountId: "busy",
+                    externalEventId: null,
+                    calendarId: "busy",
+                    title: "Busy",
+                    description: "",
+                    startsAt: row.start_time,
+                    endsAt: row.end_time,
+                    allDay: false,
+                    rrule: null,
+                    status: "confirmed",
+                    color: null,
+                    createdAt: row.start_time,
+                    updatedAt: row.start_time,
+                    deletedAt: null,
+                  }),
+                ),
+          );
+        } catch {
+          if (reqRef.current === req) setBusy([]);
+        }
+      })();
+    },
+    [runtime, userId, workspaceId, canRead, fetchWindow, scope],
+  );
 
   useEffect(() => {
     aliveRef.current = true;
@@ -226,6 +245,32 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     loadRef.current = load;
   }, [load]);
   const reload = useCallback(() => loadRef.current(), []);
+
+  // Live events (CALR-7). Subscribed per scope as the signed-in person; a
+  // workspace switch or unmount stops it. A change goes through `setEventsIn`,
+  // so one that arrives late from the workspace you left is dropped. A resync
+  // runs the CURRENT `load` (via `loadRef`) quietly, once per burst. Runtimes
+  // without live events (test fakes) skip all of this.
+  useEffect(() => {
+    if (!runtime || !scope || !userId) return;
+    if (typeof runtime.calendar.listenLive !== "function") return;
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    const stop = runtime.calendar.listenLive({ workspaceId: scope, selfId: userId }, (event) => {
+      if (event.type === "change") {
+        setEventsIn(scope, (prev) => applyLiveChange(prev, event.change, scope));
+        return;
+      }
+      if (resyncTimer !== null) return;
+      resyncTimer = setTimeout(() => {
+        resyncTimer = null;
+        void loadRef.current({ quiet: true });
+      }, RESYNC_COALESCE_MS);
+    });
+    return () => {
+      stop();
+      if (resyncTimer !== null) clearTimeout(resyncTimer);
+    };
+  }, [runtime, scope, userId, setEventsIn]);
 
   /**
    * Tell the hook which days are actually on screen. Widens the fetch window

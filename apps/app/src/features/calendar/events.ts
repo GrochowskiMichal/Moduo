@@ -85,6 +85,24 @@ export type CalendarModuleBundle = {
   truncated: Truncation[];
 };
 
+/**
+ * One live change to the event list (CALR-7): an inserted or updated event
+ * (soft-deleted ones included, so the merge can drop them), or the id of a
+ * hard-deleted one.
+ */
+export type CalendarLiveChange =
+  { kind: "upsert"; event: CalendarEventModel } | { kind: "delete"; id: string };
+
+/**
+ * What `calendar.listenLive` hands its listener: a change, or a `resync` asking
+ * for a refetch — `reconnect` after the socket rejoined or the network came
+ * back (changes may have been missed), `return` when the window comes back
+ * into view or focus.
+ */
+export type CalendarLiveEvent =
+  | { type: "change"; change: CalendarLiveChange }
+  | { type: "resync"; reason: "reconnect" | "return" };
+
 /** Only-present keys apply (the contacts_op_set_details pattern). */
 export type CalendarEventPatch = {
   title?: string;

@@ -8,11 +8,14 @@ import {
   requireRow,
 } from "@contracts/rows";
 import { normalizeCalendarItemKind, normalizeConferenceProvider } from "@contracts/vocabularies";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import type {
   CalendarAccountModel,
   CalendarAttendee,
   CalendarEventModel,
+  CalendarLiveChange,
+  CalendarLiveEvent,
 } from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
 import { collectTruncations, READ_CAPS } from "./paged-select";
@@ -89,6 +92,156 @@ function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
     status: r.status ?? "ok",
     syncToken: r.sync_token ?? null,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+// ── Live events (CALR-7) ─────────────────────────────────────────────────────
+// One Supabase channel per workspace and person, `calendar-db:<ws>:<me>`, with
+// one `postgres_changes` listener on calendar_events filtered by workspace,
+// shared by every listener through a ref count (modelled on Tasks'
+// `TasksLink`, features/tasks/realtime.ts). Realtime applies the subscriber's
+// SELECT policy to inserts and updates; a DELETE carries only the row id. The
+// channel is calendar's own: a channel naming an unpublished table silently
+// delivers nothing for any of its tables.
+//
+// Realtime is a latency layer, not the source of truth: every rejoin after the
+// first and the network coming back ask for a `reconnect` resync, a return to
+// the window (focus, or the tab becoming visible) for a `return` one, and the
+// hook refetches.
+
+type LivePayload = {
+  eventType?: unknown;
+  new?: unknown;
+  old?: unknown;
+};
+
+/** A Realtime payload → the change, or null for anything it can't read. */
+function parseCalendarLiveChange(payload: unknown): CalendarLiveChange | null {
+  if (!payload || typeof payload !== "object") return null;
+  const { eventType, new: row, old } = payload as LivePayload;
+  if (eventType === "INSERT" || eventType === "UPDATE") {
+    try {
+      return { kind: "upsert", event: calendarEventRowToModel(row) };
+    } catch {
+      return null; // a row that doesn't parse is dropped, never thrown
+    }
+  }
+  if (eventType === "DELETE") {
+    const id = (old as { id?: unknown } | null | undefined)?.id;
+    return typeof id === "string" && id !== "" ? { kind: "delete", id } : null;
+  }
+  return null;
+}
+
+type LiveListener = (event: CalendarLiveEvent) => void;
+
+class CalendarLink {
+  private refs = 0;
+  private channel: RealtimeChannel | null = null;
+  private joinedOnce = false;
+  private listeners = new Set<LiveListener>();
+
+  constructor(
+    readonly workspaceId: string,
+    readonly selfId: string,
+  ) {}
+
+  get refCount(): number {
+    return this.refs;
+  }
+
+  acquire(): void {
+    this.refs += 1;
+    if (this.refs === 1) this.open();
+  }
+
+  release(): void {
+    this.refs -= 1;
+    if (this.refs <= 0) this.close();
+  }
+
+  subscribe(fn: LiveListener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private open(): void {
+    const ws = this.workspaceId;
+    const channel = supabaseClient
+      .channel(`calendar-db:${ws}:${this.selfId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "calendar_events", filter: `workspace_id=eq.${ws}` },
+        (payload) => {
+          const change = parseCalendarLiveChange(payload);
+          if (change) this.emit({ type: "change", change });
+        },
+      );
+    channel.subscribe((status) => {
+      if (status !== "SUBSCRIBED") return;
+      // The first join is the initial load's job; every later join is a
+      // reconnect that may have missed changes.
+      if (this.joinedOnce) this.emit({ type: "resync", reason: "reconnect" });
+      this.joinedOnce = true;
+    });
+    this.channel = channel;
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", this.onReturn);
+      window.addEventListener("online", this.onOnline);
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibility);
+    }
+  }
+
+  private close(): void {
+    if (this.channel) void supabaseClient.removeChannel(this.channel);
+    this.channel = null;
+    this.joinedOnce = false;
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", this.onReturn);
+      window.removeEventListener("online", this.onOnline);
+    }
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibility);
+    }
+  }
+
+  private onReturn = () => this.emit({ type: "resync", reason: "return" });
+
+  private onOnline = () => this.emit({ type: "resync", reason: "reconnect" });
+
+  private onVisibility = () => {
+    if (document.visibilityState === "visible") this.onReturn();
+  };
+
+  private emit(event: CalendarLiveEvent): void {
+    for (const fn of this.listeners) fn(event);
+  }
+}
+
+const liveLinks = new Map<string, CalendarLink>();
+
+function listenCalendarLive(
+  { workspaceId, selfId }: { workspaceId: string; selfId: string },
+  listener: LiveListener,
+): () => void {
+  const key = `${workspaceId}:${selfId}`;
+  let link = liveLinks.get(key);
+  if (!link) {
+    link = new CalendarLink(workspaceId, selfId);
+    liveLinks.set(key, link);
+  }
+  const held = link;
+  const unsubscribe = held.subscribe(listener);
+  held.acquire();
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
+    held.release();
+    if (held.refCount <= 0) liveLinks.delete(key);
   };
 }
 
@@ -279,4 +432,5 @@ export const webCalendar: CalendarRuntime = {
     const { fetchGoogleWebEvents } = await import("../features/calendar/google-web");
     return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
   },
+  listenLive: listenCalendarLive,
 };
