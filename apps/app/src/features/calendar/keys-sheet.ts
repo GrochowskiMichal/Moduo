@@ -73,6 +73,7 @@ const ROWS: RowSpec[] = [
     ids: ["calendar.open"],
     desc: "Open the event, or a new event at the cursor",
   },
+  { group: "The grid", ids: ["calendar.menu"], desc: "The event menu" },
   {
     group: "The grid",
     ids: ["calendar.paste"],

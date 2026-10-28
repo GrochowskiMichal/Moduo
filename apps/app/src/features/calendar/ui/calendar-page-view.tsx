@@ -88,6 +88,8 @@ import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
 import { useEventDelete } from "./use-event-delete";
+import { useEventMenu } from "./use-event-menu";
+import { useEventMove } from "./use-event-move";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { usePlanPlacement } from "./use-plan-placement";
 import { useScheduleDue } from "./use-schedule-due";
@@ -418,6 +420,24 @@ export function CalendarPageView({
     openDetail,
   });
 
+  // CALR-4b: the right-click / ⌃↵ menu and the Event panel's ⋯.
+  const moveEvent = useEventMove(calendar, runtime, workspaceId, userId);
+  const eventMenu = useEventMenu({
+    chips: eventChips,
+    eventsById,
+    accounts: calendar.accounts,
+    userId,
+    canEdit: canEdit && calendar.canEdit,
+    selectedOccurrenceKey,
+    select: setSelectedOccurrenceKey,
+    openDetail,
+    patchEvent,
+    requestEventDelete,
+    copyChip: keys.copyChip,
+    duplicateChip: keys.duplicateChip,
+    moveEvent,
+  });
+
   // CALR-2: Schedule (S) in a day header's due list.
   const onScheduleDue = useScheduleDue({
     tasks,
@@ -557,6 +577,7 @@ export function CalendarPageView({
             onPatch={patchEvent}
             onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
+            menu={eventMenu.panelMenu(detailEvent)}
           />
         ) : detailTask ? (
           <TaskDetailPanel
@@ -611,6 +632,7 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
+      eventMenu.panelMenu,
       faults.loadShape.planGroups,
       faults.rememberPlanShape,
       prefs.weekStartsOn,
@@ -827,6 +849,7 @@ export function CalendarPageView({
         />
       ) : null}
 
+      {eventMenu.menu}
       <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog {...del.dialog} />
