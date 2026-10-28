@@ -10,6 +10,8 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
 import { atSmallestWindow, withSecondZone } from "./calendar-acts.ts";
+import { composeJourney, composerInput, composingState } from "./calendar-composer.ts";
+import { rightClickState } from "./calendar-menus.ts";
 import { planJourneys } from "./journeys-plan.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
@@ -313,6 +315,7 @@ export default {
             await page.getByRole("dialog").getByRole("button", { name: "Open" }).click();
           },
         },
+        rightClick: rightClickState,
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
         // The app is up and only the week's events are on their way: the skeletons in the
         // last known shape (the state above holds the whole app at its boot screen).
@@ -324,6 +327,7 @@ export default {
         // One Google calendar didn't sync: the banner, "Not synced" in the rail, stale marks.
         syncError: { act: async ({ page }: { page: Page }) => staleGoogleWeek(page) },
         offline: { offline: true },
+        composing: composingState,
       },
     },
     {
@@ -593,25 +597,26 @@ export default {
       target: { keys: 22, clicks: 1 },
       async keyboard({ press, type, step, page }: J) {
         await press("Meta+n");
-        await step("quick create", { expect: quickCreateTitle(page) });
+        await step("composer", { expect: composerInput(page) });
         await type("Call the accountant");
         await press("Enter");
         await step("event on the grid", {
-          gone: quickCreateTitle(page),
+          gone: composerInput(page),
           expect: onGrid(page, "Call the accountant"),
         });
       },
       async pointer({ click, type, press, step, page }: J) {
         await click(page.getByRole("button", { name: /^Create new/ }));
-        await step("quick create", { expect: quickCreateTitle(page) });
+        await step("composer", { expect: composerInput(page) });
         await type("Pay the design invoice");
         await press("Enter");
         await step("event on the grid", {
-          gone: quickCreateTitle(page),
+          gone: composerInput(page),
           expect: onGrid(page, "Pay the design invoice"),
         });
       },
     },
+    composeJourney,
     {
       id: "cal-draw-block",
       screen: "calendar",

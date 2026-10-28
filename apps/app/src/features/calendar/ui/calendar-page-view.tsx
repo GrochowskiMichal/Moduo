@@ -60,6 +60,7 @@ import { type StripItem } from "../strip";
 import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
 import { CalendarAccountsDialog } from "./calendar-accounts-dialog";
+import { CalendarComposer } from "./calendar-composer";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
 import type { MoveEventDeltas } from "./calendar-grid";
@@ -88,6 +89,8 @@ import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
 import { useEventDelete } from "./use-event-delete";
+import { useEventMenu } from "./use-event-menu";
+import { useEventMove } from "./use-event-move";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { usePlanPlacement } from "./use-plan-placement";
 import { useScheduleDue } from "./use-schedule-due";
@@ -418,6 +421,24 @@ export function CalendarPageView({
     openDetail,
   });
 
+  // CALR-4b: the right-click / ⌃↵ menu and the Event panel's ⋯.
+  const moveEvent = useEventMove(calendar, runtime, workspaceId, userId);
+  const { menu: eventMenu, panelMenu } = useEventMenu({
+    chips: eventChips,
+    eventsById,
+    accounts: calendar.accounts,
+    userId,
+    canEdit: canEdit && calendar.canEdit,
+    selectedOccurrenceKey,
+    select: setSelectedOccurrenceKey,
+    openDetail,
+    patchEvent,
+    requestEventDelete,
+    copyChip: keys.copyChip,
+    duplicateChip: keys.duplicateChip,
+    moveEvent,
+  });
+
   // CALR-2: Schedule (S) in a day header's due list.
   const onScheduleDue = useScheduleDue({
     tasks,
@@ -558,6 +579,7 @@ export function CalendarPageView({
             onPatch={patchEvent}
             onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
+            menu={panelMenu(detailEvent)}
           />
         ) : detailTask ? (
           <TaskDetailPanel
@@ -612,6 +634,7 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
+      panelMenu,
       faults.loadShape.planGroups,
       faults.rememberPlanShape,
       prefs.weekStartsOn,
@@ -759,6 +782,17 @@ export function CalendarPageView({
         }
       />
 
+      <CalendarComposer
+        calendar={calendar}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        userId={userId}
+        prefs={prefs}
+        members={viewerMembers}
+        cursor={keys.cursor}
+        canEdit={canEdit && calendar.canEdit}
+        createEvent={onCreateEvent}
+      />
       <DragOverlay dropAnimation={null}>
         {drag.dragTask ? (
           <div className="w-44 truncate rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground">
@@ -828,6 +862,7 @@ export function CalendarPageView({
         />
       ) : null}
 
+      {eventMenu}
       <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog {...del.dialog} />
