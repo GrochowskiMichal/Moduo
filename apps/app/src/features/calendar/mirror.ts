@@ -162,6 +162,8 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     attendees: googleAttendees(raw.attendees),
     // CALR-11: an instance of a repeat says which one, and which occurrence it replaces.
     ...googleInstance(raw),
+    // Sent only when Google gives one, so the stored iCalUID stays otherwise.
+    ...(str(raw.iCalUID) ? { iCalUID: str(raw.iCalUID) as string } : {}),
   };
 }
 

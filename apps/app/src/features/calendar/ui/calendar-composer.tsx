@@ -26,6 +26,7 @@ import {
 import { type CalendarEventModel, eventChipsInRange } from "../events";
 import type { GridCursor } from "../grid-keys";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
+import { chosenNewEventsTo, resolveNewEventsTo } from "../new-events-to";
 import type { CalendarPrefs } from "../prefs";
 import { EventComposer } from "./event-composer";
 import type { NewEventDraft } from "./use-create-event";
@@ -137,6 +138,10 @@ export function CalendarComposer({
   const boxRef = useRef<HTMLDivElement>(null);
 
   const busyOn = useMemo(() => busyReader(calendar.events, userId), [calendar.events, userId]);
+  const newEventsTo = resolveNewEventsTo(
+    chosenNewEventsTo(prefs, workspaceId),
+    calendar.accounts,
+  ).accountId;
   const accounts: ComposerAccount[] = useMemo(
     () =>
       calendar.accounts
@@ -148,9 +153,10 @@ export function CalendarComposer({
           provider: a.provider,
           externalId: a.externalId,
           label: a.displayLabel || "Google",
-          isDefaultTarget: a.isDefaultTarget,
+          // The "New events go to" calendar, from the synced setting (not the old column).
+          isDefaultTarget: a.id === newEventsTo,
         })),
-    [calendar.accounts],
+    [calendar.accounts, newEventsTo],
   );
   const calendars: ComposerCalendar[] = useMemo(
     () => [

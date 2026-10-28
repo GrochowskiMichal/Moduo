@@ -680,6 +680,8 @@ export const calendarEventRowSchema = z.object({
   original_start: optStr,
   exdates: z.array(z.string()).nullable().optional(),
   external_series_id: optStr,
+  // Google's iCalUID: one meeting reached through two logins shows once.
+  ical_uid: optStr,
 });
 
 export const calendarAccountRowSchema = z.object({

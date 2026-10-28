@@ -52,6 +52,8 @@ export type CalendarEventModel = {
   exdates?: string[];
   /** A Google instance's recurringEventId. */
   externalSeriesId?: string | null;
+  /** Google's iCalUID: the same meeting through two logins shares it. */
+  icalUid?: string | null;
 };
 
 /** One person on an event, as calendar_op_event_create/update store them. */
@@ -171,6 +173,8 @@ export type CalendarMirrorEventInput = {
   externalSeriesId?: string;
   /** A repeat instance's originalStartTime as an ISO instant (CALR-11). Absent keeps the stored one. */
   originalStart?: string;
+  /** Google's iCalUID. Absent keeps the stored one. */
+  iCalUID?: string;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */

@@ -48,6 +48,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
+import { resolveNewEventsTo } from "../new-events-to";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -149,6 +150,7 @@ export function CalendarPageView({
     calendar,
     { prefs, updatePrefs },
     tasks,
+    userId,
   );
   // Google syncs on the web. Outlook, CalDAV, and ICS still sync from the desktop app.
   const { syncNow } = useCalendarSync({
@@ -363,6 +365,10 @@ export function CalendarPageView({
     setTaskPopover({ block, rect });
   }, []);
 
+  const newEventsTo = resolveNewEventsTo(
+    prefs.newEventsTo[workspaceId] ?? null,
+    calendar.accounts,
+  ).accountId;
   const createCalendars = useMemo(
     () => [
       { id: "moduo", label: "Moduo" },
@@ -371,9 +377,10 @@ export function CalendarPageView({
         .map((account) => ({
           id: account.id,
           label: account.displayLabel || "Google",
+          isDefault: account.id === newEventsTo,
         })),
     ],
-    [calendar.accounts],
+    [calendar.accounts, newEventsTo],
   );
 
   const onCreateEvent = useCreateEvent(calendar, runtime, workspaceId);
@@ -859,6 +866,7 @@ export function CalendarPageView({
         {...{ runtime, workspaceId, calendar, updatePrefs, syncNow }}
         isDesktop={IS_DESKTOP}
         hiddenAccountIds={prefs.hiddenAccountIds}
+        newEventsTo={prefs.newEventsTo}
       />
     </DndContext>
   );

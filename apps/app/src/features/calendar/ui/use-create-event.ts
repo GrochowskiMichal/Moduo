@@ -1,8 +1,8 @@
-// A new event from the grid (draw, ⌘N, ↵, ⌘V, ⌘D): on Your calendar through
-// the module, on a connected Google calendar through Google first, then the
-// mirror. Either way one Undo (CALR-4, AC21).
+// A new event from the grid (draw, ⌘N, ↵, ⌘V, ⌘D) or the composer: one event,
+// never two (new-event-create.ts). On Google it is created there first and kept
+// as the mirror of Google's reply; if Google refuses, the toast offers Your
+// calendar instead. One Undo for a saved Google event (CALR-4, AC21).
 
-import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
 
@@ -10,23 +10,9 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { recordUndo } from "../commands/undo";
 import { pushGoogleWebEvent } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
-import { mapGoogleEvent } from "../mirror";
-import type { QuickCreateDraft } from "./event-quick-create";
+import { createNewEvent, type NewEventDraft, type NewEventPorts } from "../new-event-create";
 
-/**
- * What a new event can carry. The composer (CALR-9) adds a place, people, a
- * kind, a Meet link Google makes, and a Moduo or custom calendar row.
- */
-export type NewEventDraft = QuickCreateDraft & {
-  description?: string;
-  location?: string;
-  attendees?: { email: string; name?: string }[];
-  kind?: CalendarItemKind;
-  /** Google only: ask it for a Meet link. */
-  meet?: "add";
-  /** A Moduo or custom calendar's row id, when `calendarId` is "moduo". */
-  nativeCalendarId?: string;
-};
+export type { NewEventDraft } from "../new-event-create";
 
 export function useCreateEvent(
   calendar: CalendarModuleApi,
@@ -41,50 +27,43 @@ export function useCreateEvent(
 
   return useCallback(
     (draft: NewEventDraft) => {
-      const target = calendar.accounts.find((account) => account.id === draft.calendarId);
-      if (!target || target.provider !== "google" || !runtime || !workspaceId) {
-        const { nativeCalendarId, meet: _meet, calendarId: _account, ...rest } = draft;
-        void calendar.createEvent({ ...rest, calendarId: nativeCalendarId });
-        return;
-      }
       void (async () => {
-        try {
-          const raw = await pushGoogleWebEvent({
-            externalAccountId: target.externalId,
-            title: draft.title,
-            startsAt: draft.startsAt,
-            endsAt: draft.endsAt,
-            allDay: draft.allDay,
-            rrule: draft.rrule,
-            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-            description: draft.description || undefined,
-            location: draft.location,
-            attendees: draft.attendees?.length ? draft.attendees : undefined,
-            meet: draft.meet,
-          });
-          const mapped = mapGoogleEvent(raw);
-          if (!mapped) throw new Error("Google did not return the event.");
-          await runtime.calendar.mirrorEvents({
-            workspaceId,
-            accountId: target.id,
-            events: [mapped],
-            deletedExternalIds: [],
-          });
-          await calendar.reload();
-          recordUndo(
-            "Event added",
-            async () => {
-              const row = latest.current.events.find(
-                (e) =>
-                  e.sourceAccountId === target.id && e.externalEventId === mapped.externalEventId,
-              );
-              if (row) await latest.current.deleteEvent(row.id, { quiet: true });
-            },
-            { toast: true, description: draft.title },
-          );
-        } catch (err) {
-          toast.error(err instanceof Error ? err.message : "Couldn't save the event on Google.");
-        }
+        const ports: NewEventPorts = {
+          // Without a runtime nothing can reach Google: the event stays native.
+          accounts: runtime && workspaceId ? calendar.accounts : [],
+          createNative: (native) => calendar.createEvent(native),
+          pushGoogle: pushGoogleWebEvent,
+          mirror: async (accountId, event) => {
+            await runtime?.calendar.mirrorEvents({
+              workspaceId,
+              accountId,
+              events: [event],
+              deletedExternalIds: [],
+            });
+            await calendar.reload();
+          },
+          onRefused: ({ reason, saveToYourCalendar }) => {
+            toast.error(reason, {
+              action: {
+                label: "Save to Your calendar instead",
+                onClick: () => void saveToYourCalendar(),
+              },
+            });
+          },
+        };
+        const out = await createNewEvent(draft, ports);
+        if (out.saved !== "google") return;
+        recordUndo(
+          "Event added",
+          async () => {
+            const row = latest.current.events.find(
+              (e) =>
+                e.sourceAccountId === out.accountId && e.externalEventId === out.externalEventId,
+            );
+            if (row) await latest.current.deleteEvent(row.id, { quiet: true });
+          },
+          { toast: true, description: draft.title },
+        );
       })();
     },
     [calendar, runtime, workspaceId],

@@ -659,6 +659,7 @@ export type Database = {
           description: string | null
           end_time: string
           external_event_id: string | null
+          ical_uid: string | null
           id: string
           location: string | null
           owner_id: string
@@ -684,6 +685,7 @@ export type Database = {
           description?: string | null
           end_time: string
           external_event_id?: string | null
+          ical_uid?: string | null
           id?: string
           location?: string | null
           owner_id: string
@@ -709,6 +711,7 @@ export type Database = {
           description?: string | null
           end_time?: string
           external_event_id?: string | null
+          ical_uid?: string | null
           id?: string
           location?: string | null
           owner_id?: string
