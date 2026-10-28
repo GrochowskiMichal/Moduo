@@ -24,6 +24,8 @@ type Props = {
   onSchedule: (taskId: string) => void;
   /** False for a view-only reader: the list opens tasks but schedules nothing. */
   canSchedule?: boolean;
+  /** A clock change on this day ("PT clocks go back"), under the date (CALR-13). */
+  note?: string | null;
 };
 
 export function DayHeader({
@@ -34,6 +36,7 @@ export function DayHeader({
   onOpenTask,
   onSchedule,
   canSchedule = true,
+  note = null,
 }: Props) {
   const open = due.filter((d) => !d.done);
   const weekend = day.getDay() === 0 || day.getDay() === 6;
@@ -80,6 +83,15 @@ export function DayHeader({
           />
         ) : null}
       </div>
+      {note ? (
+        <div
+          data-day-note
+          // Wraps rather than clips in a narrow column (1024 px, AC14).
+          className="text-2xs leading-tight text-muted-foreground"
+        >
+          {note}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -161,29 +173,4 @@ export function DueList({
   );
 }
 
-/** The short name of the zone the grid's hours are in ("CET", "PT"). */
-export function zoneAbbreviation(at: Date, timeZone?: string): string {
-  const read = (locale: string | undefined) =>
-    new Intl.DateTimeFormat(locale, { timeZone, timeZoneName: "short" })
-      .formatToParts(at)
-      .find((p) => p.type === "timeZoneName")?.value ?? "";
-  const own = read(undefined);
-  // Many locales spell European zones as "GMT+1"; British English names them.
-  if (!/^(GMT|UTC)[+-]/.test(own)) return own;
-  const gb = read("en-GB");
-  return /^(GMT|UTC)[+-]/.test(gb) ? own : gb;
-}
-
-/** The corner above the hours: the zone the grid reads in. */
-export function ZoneCorner({ at }: { at: Date }) {
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return (
-    <div
-      data-zone-corner
-      title={zone ? `Times in ${zone.replace(/_/g, " ")}` : undefined}
-      className="flex items-end justify-end pb-2 pr-1.5 text-2xs text-subtle-foreground"
-    >
-      <span className="flex h-(--ctrl-h-xs) items-center">{zoneAbbreviation(at)}</span>
-    </div>
-  );
-}
+export { ZoneCorner, zoneAbbreviation } from "./zone-corner";

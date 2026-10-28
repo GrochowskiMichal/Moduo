@@ -212,3 +212,14 @@ export function readCalendarPrefs(userId: string): CalendarPrefs {
 export function writeCalendarPrefs(userId: string, prefs: CalendarPrefs): void {
   writeStored(prefsKey(userId), sanitizeCalendarPrefs(prefs));
 }
+
+/** The quiet wash over a day column (CALR-13, AC45): off-hours above `top` and
+ * from `bottomFrom` down, in wall-clock minutes; a weekend day is all wash. */
+export function offHoursWash(
+  prefs: Pick<CalendarPrefs, "workStartMinute" | "workEndMinute">,
+  day: Date,
+): { top: number; bottomFrom: number } {
+  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  if (weekend) return { top: 24 * 60, bottomFrom: 24 * 60 };
+  return { top: prefs.workStartMinute, bottomFrom: prefs.workEndMinute };
+}
