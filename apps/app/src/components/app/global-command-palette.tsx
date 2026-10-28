@@ -336,13 +336,20 @@ export function GlobalCommandPalette() {
   // dispatch the spine's entity-open event; the app-chrome host listener resolves
   // the route, marks the external-open intent, and toasts if a type has no page
   // yet. Keeps one deep-link grammar app-wide.
-  const openRow = useCallback((row: SearchAllRow) => {
-    setOpen(false);
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(
-      new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: row.entity_type, id: row.entity_id } }),
-    );
-  }, []);
+  // A note found by its body lands on the match (GS-10).
+  const openRow = useCallback(
+    (row: SearchAllRow) => {
+      setOpen(false);
+      if (typeof window === "undefined") return;
+      const query = row.entity_type === "note" && row.match === "body" ? trimmed : undefined;
+      window.dispatchEvent(
+        new CustomEvent(ENTITY_OPEN_EVENT, {
+          detail: { type: row.entity_type, id: row.entity_id, query },
+        }),
+      );
+    },
+    [trimmed],
+  );
 
   const chips = useMemo(() => paletteChips(modulePermissions), [modulePermissions]);
 

@@ -35,7 +35,12 @@ import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
-import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import {
+  ENTITY_OPEN_EVENT,
+  entityOpenTarget,
+  markEntityOpenHighlight,
+  markEntityOpenIntent,
+} from "../../lib/entity-open";
 import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
 import {
@@ -240,6 +245,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           /** A chat notice's message and chain (CV-3). */
           messageId?: string;
           chainId?: string;
+          /** The search that found a note: it lands on the match (GS-10). */
+          query?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -276,6 +283,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       const target = entityOpenTarget(detail.type, detail.id ?? "", {
         messageId: detail.messageId,
         chainId: detail.chainId,
+        query: detail.query,
       });
       if (!target) {
         toast("Nothing to open yet", {
@@ -287,6 +295,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         // Mark the navigation as an external "take me there" so the target
         // page can distinguish it from its own mirrored id (refresh/back).
         if (target.intentId) markEntityOpenIntent(target.intentId);
+        if (target.intentId && target.highlight) {
+          markEntityOpenHighlight(target.intentId, target.highlight);
+        }
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });

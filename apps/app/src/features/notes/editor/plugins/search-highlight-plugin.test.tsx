@@ -50,7 +50,9 @@ const settle = () => act(async () => new Promise((r) => setTimeout(r, 30)));
 
 function Grab({ onEditor }: { onEditor: (e: LexicalEditor) => void }) {
   const [editor] = useLexicalComposerContext();
-  useEffect(() => onEditor(editor), [editor, onEditor]);
+  useEffect(() => {
+    onEditor(editor);
+  }, [editor, onEditor]);
   return null;
 }
 
