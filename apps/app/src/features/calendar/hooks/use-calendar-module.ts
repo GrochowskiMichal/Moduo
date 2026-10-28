@@ -26,6 +26,7 @@ import {
   defaultCalendarWindow,
   widenCalendarWindow,
 } from "../window";
+import { writableEvent } from "../writable";
 
 type Params = {
   userId: string | null;
@@ -54,6 +55,15 @@ const RESYNC_COALESCE_MS = 250;
  */
 const RETURN_RESYNC_GAP_MS = 30_000;
 
+const VIEW_ONLY_EVENT = "This calendar is view only here.";
+
+/** `meet` is Google's; the Moduo op never gets it. */
+function withoutMeet(patch: CalendarEventPatch): CalendarEventPatch {
+  if (patch.meet === undefined) return patch;
+  const { meet: _meet, ...rest } = patch;
+  return rest;
+}
+
 const isTempId = (id: string) => id.startsWith("tmp-");
 const isBusyId = (id: string) => id.startsWith("busy:");
 
@@ -66,6 +76,17 @@ function applyPatch(e: CalendarEventModel, patch: CalendarEventPatch): CalendarE
     endsAt: patch.endsAt !== undefined ? patch.endsAt : e.endsAt,
     allDay: patch.allDay !== undefined ? patch.allDay : e.allDay,
     rrule: patch.rrule !== undefined ? patch.rrule : e.rrule,
+    ...(patch.location !== undefined ? { location: patch.location } : {}),
+    ...(patch.isPrivate !== undefined ? { isPrivate: patch.isPrivate } : {}),
+    ...(patch.attendees !== undefined
+      ? {
+          attendees: patch.attendees.map((a) => ({
+            email: a.email,
+            name: a.name ?? "",
+            status: a.status ?? "needsAction",
+          })),
+        }
+      : {}),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -416,20 +437,69 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       const snapshot = events.find((e) => e.id === eventId);
       if (!snapshot) return;
-      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? applyPatch(e, patch) : e)));
+      const writer = writableEvent(snapshot, accounts, userId);
+      if (!writer) {
+        toast.error(VIEW_ONLY_EVENT);
+        return;
+      }
+      const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
+      const optimistic = applyPatch(snapshot, patch);
+      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? optimistic : e)));
       try {
-        const saved = await (runtime as ModuoRuntime).calendar.updateEvent({
-          workspaceId: workspaceId as string,
-          eventId,
-          patch,
-        });
-        setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? saved : e)));
+        const calendar = (runtime as ModuoRuntime).calendar;
+        const saved =
+          writer === "google" && account
+            ? await calendar.updateGoogleEvent({
+                workspaceId: workspaceId as string,
+                event: snapshot,
+                account,
+                patch,
+              })
+            : await calendar.updateEvent({
+                workspaceId: workspaceId as string,
+                eventId,
+                patch: withoutMeet(patch),
+              });
+        // Only over our own optimistic row: a live echo that already landed
+        // (CALR-7) carries the server's split place and stamp, and stays.
+        setEventsIn(scope, (prev) =>
+          prev.map((e) =>
+            e.id === eventId && (e === optimistic || writer === "moduo") ? saved : e,
+          ),
+        );
       } catch (err) {
         setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
-        toast.error(err instanceof Error ? err.message : "Couldn't update the event.");
+        const reason = err instanceof Error ? err.message : "";
+        toast.error(
+          writer === "google"
+            ? `Google didn't save it${reason ? `: ${reason}` : "."}`
+            : reason || "Couldn't update the event.",
+        );
       }
     },
-    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
+    [guardEdit, runtime, workspaceId, events, accounts, userId, scope, setEventsIn],
+  );
+
+  /** A Google event's delete, already removed from the list: Google first, back on refusal. */
+  const deleteFromGoogle = useCallback(
+    async (snapshot: CalendarEventModel, account: CalendarAccountModel): Promise<void> => {
+      try {
+        await (runtime as ModuoRuntime).calendar.removeGoogleEvent({
+          workspaceId: workspaceId as string,
+          event: snapshot,
+          account,
+        });
+        // No Undo: it would come back as a new Google event (out of scope).
+        toast.success("Event deleted");
+      } catch (err) {
+        setEventsIn(scope, (prev) =>
+          prev.some((e) => e.id === snapshot.id) ? prev : [...prev, snapshot],
+        );
+        const reason = err instanceof Error ? err.message : "";
+        toast.error(`Google didn't delete it${reason ? `: ${reason}` : "."}`);
+      }
+    },
+    [runtime, workspaceId, scope, setEventsIn],
   );
 
   const deleteEvent = useCallback(
@@ -437,7 +507,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       const snapshot = events.find((e) => e.id === eventId);
       if (!snapshot) return;
+      const writer = writableEvent(snapshot, accounts, userId);
+      if (!writer) {
+        toast.error(VIEW_ONLY_EVENT);
+        return;
+      }
+      const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
       setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId));
+      if (writer === "google" && account) {
+        await deleteFromGoogle(snapshot, account);
+        return;
+      }
       try {
         await (runtime as ModuoRuntime).calendar.removeEvent({
           workspaceId: workspaceId as string,
@@ -470,7 +550,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },
-    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
+    [
+      guardEdit,
+      runtime,
+      workspaceId,
+      events,
+      accounts,
+      userId,
+      scope,
+      setEventsIn,
+      deleteFromGoogle,
+    ],
   );
 
   return {

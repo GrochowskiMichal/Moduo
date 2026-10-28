@@ -433,4 +433,70 @@ export const webCalendar: CalendarRuntime = {
     return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
   },
   listenLive: listenCalendarLive,
+  // CALR-8: Google first, then the mirror stores Google's answer.
+  async updateGoogleEvent({ workspaceId, event, account, patch }) {
+    const { updateGoogleWebEvent } = await import("../features/calendar/google-web");
+    // Google takes start and end together: a patch that moves one edge (the
+    // detail panel, a resize) sends both, keeping the event's all-day-ness
+    // unless the patch changes it.
+    const movesTime =
+      patch.startsAt !== undefined || patch.endsAt !== undefined || patch.allDay !== undefined;
+    const sent = movesTime
+      ? {
+          ...patch,
+          startsAt: patch.startsAt ?? event.startsAt,
+          endsAt: patch.endsAt ?? event.endsAt,
+          allDay: patch.allDay ?? event.allDay,
+        }
+      : patch;
+    const mapped = await updateGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: event.externalEventId ?? "",
+      patch: sent,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    if (!mapped) return event;
+    // The mapper leaves an absent place out (a sync keeps what's stored), so a
+    // place this edit cleared must be sent as empty to clear the stored one.
+    if (patch.location !== undefined && mapped.location === undefined) mapped.location = "";
+    // Google has saved it; if storing the answer here fails, the next sync
+    // catches up, so that's no reason to roll the edit back.
+    await webCalendar
+      .mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] })
+      .catch(() => undefined);
+    return {
+      ...event,
+      title: mapped.title,
+      description: mapped.description ?? event.description,
+      startsAt: mapped.startsAt,
+      endsAt: mapped.endsAt,
+      allDay: mapped.allDay ?? event.allDay,
+      location: mapped.location || null,
+      conferenceUrl: mapped.conferenceUrl ?? null,
+      isPrivate: mapped.isPrivate ?? false,
+      attendees: mapped.attendees ?? [],
+      // The server's stamp, not this device's clock: the live row that follows
+      // carries the real one and replaces this.
+      updatedAt: event.updatedAt,
+    };
+  },
+  async removeGoogleEvent({ workspaceId, event, account }) {
+    const { removeGoogleWebEvent } = await import("../features/calendar/google-web");
+    const externalEventId = event.externalEventId ?? "";
+    await removeGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: externalEventId,
+    });
+    // Gone in Google; a failed tombstone here is caught up by the next sync.
+    await webCalendar
+      .mirrorEvents({
+        workspaceId,
+        accountId: account.id,
+        events: [],
+        deletedExternalIds: [externalEventId],
+      })
+      .catch(() => undefined);
+  },
 };

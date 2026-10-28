@@ -59,7 +59,7 @@ import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
 import type { CalendarAccountModel } from "../events";
-import { type EventChip, eventChipsInRange } from "../events";
+import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock } from "../focus";
 import { type BusyInterval, findNextGap } from "../gap-finder";
 import { ensureGoogleCalendarAccounts, pushGoogleWebEvent } from "../google-web";
@@ -100,6 +100,7 @@ import {
 import { resolveCalendarDeepLink } from "../search";
 import { type StripItem, stripItems } from "../strip";
 import { tookLongerDeltaSeconds } from "../triage";
+import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
@@ -252,7 +253,15 @@ export function CalendarPageView({
     [tasks, sessions, range, userId],
   );
   const grouped = useMemo(() => blocksByDay(blocks), [blocks]);
-  const eventChips = useMemo(() => eventChipsInRange(shownEvents, range), [shownEvents, range]);
+  // CALR-8: native events and Google events you connected change here; the rest are view only.
+  const isWritable = useCallback(
+    (event: CalendarEventModel) => writableEvent(event, calendar.accounts, userId) !== null,
+    [calendar.accounts, userId],
+  );
+  const eventChips = useMemo(
+    () => eventChipsInRange(shownEvents, range, isWritable),
+    [shownEvents, range, isWritable],
+  );
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
     [calendar.events],
@@ -455,11 +464,11 @@ export function CalendarPageView({
       if (!occKey) return;
       const eventId = occKey.split(":")[0];
       const event = eventsById.get(eventId);
-      if (event && event.sourceAccountId === null && calendar.canEdit) {
+      if (event && isWritable(event) && calendar.canEdit) {
         setDeleteEventId(eventId);
       }
     },
-    [eventsById, calendar.canEdit],
+    [eventsById, calendar.canEdit, isWritable],
   );
 
   useCalendarHotkeys({ setView, goToday, step, selectedOccurrenceKey, requestDelete });
@@ -564,6 +573,7 @@ export function CalendarPageView({
             event={detailEvent}
             accounts={calendar.accounts}
             canEdit={calendar.canEdit}
+            writable={isWritable(detailEvent)}
             onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
             onDeleteRequest={setDeleteEventId}
             onClose={() => setPanelVariant("tasks")}
@@ -619,6 +629,7 @@ export function CalendarPageView({
       strip,
       rollForward,
       onTriageRemove,
+      isWritable,
     ],
   );
 
@@ -750,6 +761,7 @@ export function CalendarPageView({
           occEndMs={eventPopover.chip.endMs}
           anchorRect={eventPopover.rect}
           canEdit={calendar.canEdit}
+          writable={isWritable(popoverEvent)}
           sourceLabel={sourceLabelFor(popoverEvent.sourceAccountId)}
           onOpenDetail={() => {
             setEventPopover(null);

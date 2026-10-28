@@ -35,6 +35,8 @@ type Props = {
   event: CalendarEventModel;
   accounts: CalendarAccountModel[];
   canEdit: boolean;
+  /** The event can change here (native, or a Google event you connected, CALR-8). Omitted = native only. */
+  writable?: boolean;
   onPatch: (eventId: string, patch: CalendarEventPatch) => void;
   onDeleteRequest: (eventId: string) => void;
   onClose: () => void;
@@ -47,13 +49,14 @@ export function EventDetailPanel({
   event,
   accounts,
   canEdit,
+  writable,
   onPatch,
   onDeleteRequest,
   onClose,
 }: Props) {
   const external = event.sourceAccountId !== null;
   const meeting = meetingLinkOf(event);
-  const editable = canEdit && !external;
+  const editable = canEdit && (writable ?? !external);
   const account = useMemo(
     () => accounts.find((a) => a.id === event.sourceAccountId) ?? null,
     [accounts, event.sourceAccountId],
@@ -163,8 +166,8 @@ export function EventDetailPanel({
       {external ? (
         <span className="text-xs text-muted-foreground">
           {account ? `${account.displayLabel} — ${account.provider}` : "External calendar"}
-          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""} · managed in
-          its source calendar
+          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""}
+          {editable ? "" : " · managed in its source calendar"}
         </span>
       ) : null}
 
@@ -211,18 +214,12 @@ export function EventDetailPanel({
         />
       </Field>
 
-      <Field label="Repeats">
-        <div className="flex min-w-0 flex-col gap-1">
-          <RepeatPicker
-            value={event.rrule}
-            disabled={!editable}
-            onChange={(rrule) => onPatch(event.id, { rrule })}
-          />
-          {editable && event.rrule ? (
-            <span className="text-2xs text-muted-foreground">Edits apply to the whole series.</span>
-          ) : null}
-        </div>
-      </Field>
+      <RepeatsField
+        rrule={event.rrule}
+        // A Google event's repeats change in Google for now (CALR-11).
+        editable={editable && !external}
+        onChange={(rrule) => onPatch(event.id, { rrule })}
+      />
 
       <Field label="Notes">
         {editable ? (
@@ -298,5 +295,27 @@ export function EventDetailPanel({
         </>
       ) : null}
     </div>
+  );
+}
+
+/** The Repeats row: the picker, and the series note while it repeats. */
+function RepeatsField({
+  rrule,
+  editable,
+  onChange,
+}: {
+  rrule: string | null;
+  editable: boolean;
+  onChange: (rrule: string | null) => void;
+}) {
+  return (
+    <Field label="Repeats">
+      <div className="flex min-w-0 flex-col gap-1">
+        <RepeatPicker value={rrule} disabled={!editable} onChange={onChange} />
+        {editable && rrule ? (
+          <span className="text-2xs text-muted-foreground">Edits apply to the whole series.</span>
+        ) : null}
+      </div>
+    </Field>
   );
 }

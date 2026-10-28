@@ -10,7 +10,7 @@
 // east of UTC. We resolve it to LOCAL midnight so the grid's local-day math
 // lands it on the right column.
 
-import type { CalendarMirrorEventInput } from "./events";
+import type { CalendarAttendee, CalendarMirrorEventInput } from "./events";
 import { googleConferenceUrl, graphConferenceUrl } from "./meeting-link";
 
 /** Loosely-typed provider JSON — we read only the fields we normalize. */
@@ -95,6 +95,25 @@ function trimmed(v: unknown): string | null {
 
 // ── Google Calendar API v3 event → mirror input ──────────────────────────────
 
+/** Google's guests → the stored shape; guests without an email are dropped. */
+function googleAttendees(value: unknown): CalendarAttendee[] {
+  if (!Array.isArray(value)) return [];
+  const out: CalendarAttendee[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const email = str(raw.email);
+    if (!email) continue;
+    out.push({
+      email,
+      name: str(raw.displayName) ?? "",
+      status: str(raw.responseStatus) ?? "needsAction",
+      ...(raw.self === true ? { self: true } : {}),
+    });
+  }
+  return out;
+}
+
 /**
  * Map one Google event. Returns null when it lacks an id or resolvable times.
  * Google `recurrence` is an array of RFC-5545 lines — we take the RRULE line.
@@ -137,6 +156,9 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     // The place and the meeting link travel separately (CALR-6).
     ...withLocation(trimmed(raw.location)),
     ...withConferenceUrl(googleConferenceUrl(raw)),
+    // CALR-8: privacy and guests, always sent (Google's event is the whole truth).
+    isPrivate: raw.visibility === "private" || raw.visibility === "confidential",
+    attendees: googleAttendees(raw.attendees),
   };
 }
 
