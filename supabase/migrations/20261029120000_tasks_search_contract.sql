@@ -34,6 +34,14 @@ BEGIN
      OR to_regprocedure('public.search_all(uuid, text, text[], integer, text, uuid)') IS NULL THEN
     RAISE EXCEPTION 'GS-4 needs GS-3 (20261029090000_search_all.sql) applied first.';
   END IF;
+  -- This file's search_all is GS-3's plus tasks and projects. A later block's
+  -- search_all (more sources) must never be replaced by it: re-cut instead.
+  IF EXISTS (SELECT 1 FROM pg_proc
+              WHERE oid = 'public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure
+                AND (prosrc LIKE '%contacts__search%' OR prosrc LIKE '%chat__search_hits%'
+                     OR prosrc LIKE '%search_recents%')) THEN
+    RAISE EXCEPTION 'search_all already has a later block''s sources; applying GS-4''s would drop them. Merge GS-4''s tasks and projects branches into the newest search_all instead.';
+  END IF;
 END;
 $$;
 
