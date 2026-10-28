@@ -159,7 +159,7 @@ function link(id: string, eventId: string, type: string, otherId: string): Entit
     sourceId: eventId,
     targetType: type,
     targetId: otherId,
-    relationKind: "relates_to",
+    relationKind: "references",
     origin: "manual",
     createdBy: null,
     createdAt: "2026-10-01T00:00:00Z",

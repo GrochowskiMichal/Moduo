@@ -1,5 +1,5 @@
 // Calendar toolbar: period nav · Today · range label · the now-and-next line
-// (CALR-2, in the free room between) · Day|Week switch.
+// (CALR-2, in the free room between) · Day|Week|Month switch (Month, CALR-12).
 // Controls sit on the standard rungs; the sync affordance (external
 // calendars) joins the right side with CAL-6.
 
@@ -30,6 +30,7 @@ type Props = {
 const VIEW_ITEMS = [
   { value: "day", label: "Day" },
   { value: "week", label: "Week" },
+  { value: "month", label: "Month" },
 ];
 
 export function CalendarToolbar({

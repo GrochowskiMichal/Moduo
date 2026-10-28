@@ -54,7 +54,7 @@ export function defaultViewState(now: Date = new Date()): CalendarViewState {
 }
 
 const viewStateSchema = z.object({
-  view: z.enum(["day", "week"]).optional(),
+  view: z.enum(["day", "week", "month"]).optional(),
   anchor: z.string().optional(),
 });
 
@@ -62,8 +62,7 @@ export function sanitizeViewState(raw: unknown, now: Date = new Date()): Calenda
   const fallback = defaultViewState(now);
   const parsed = viewStateSchema.safeParse(raw);
   if (!parsed.success) return fallback;
-  const view: CalendarView =
-    parsed.data.view === "day" || parsed.data.view === "week" ? parsed.data.view : fallback.view;
+  const view: CalendarView = parsed.data.view ?? fallback.view;
   const anchor =
     typeof parsed.data.anchor === "string" && parseDayKey(parsed.data.anchor)
       ? parsed.data.anchor
