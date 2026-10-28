@@ -86,7 +86,8 @@ const OPS = [
   [
     "move",
     "notes_op_move",
-    () => webNotes.notesV2.move({ workspaceId: WS, noteId: NOTE, parentId: PARENT }),
+    () =>
+      webNotes.notesV2.move({ workspaceId: WS, noteId: NOTE, parentId: PARENT, position: "a1" }),
   ],
   [
     "setMeta",
@@ -137,8 +138,9 @@ afterEach(() => {
 
 describe("meta results still map", () => {
   it("notes_meta holds exactly the columns noteRowSchema reads", () => {
-    expect(notesMetaColumns().toSorted()).toEqual(Object.keys(noteRowSchema.shape).toSorted());
-    expect(Object.keys(LEAN).toSorted()).toEqual(Object.keys(noteRowSchema.shape).toSorted());
+    const appColumns = [...Object.keys(noteRowSchema.shape)].sort();
+    expect([...notesMetaColumns()].sort()).toEqual(appColumns);
+    expect([...Object.keys(LEAN)].sort()).toEqual(appColumns);
   });
 
   for (const [method, rpcName, call] of OPS) {
