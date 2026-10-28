@@ -168,6 +168,7 @@ export const HOTKEYS = {
   "calendar.prev-event": { scope: "calendar", label: "Previous event", keys: ["K"] },
   "calendar.card": { scope: "calendar", label: "Open the card", keys: ["Space"] },
   "calendar.open": { scope: "calendar", label: "Open, or a new event", keys: ["Enter"] },
+  "calendar.new": { scope: "calendar", label: "New event", keys: ["N"] },
   "calendar.earlier": { scope: "calendar", label: "15 minutes earlier", keys: ["Alt+ArrowUp"] },
   "calendar.later": { scope: "calendar", label: "15 minutes later", keys: ["Alt+ArrowDown"] },
   "calendar.prev-day": { scope: "calendar", label: "A day earlier", keys: ["Alt+ArrowLeft"] },

@@ -7,6 +7,7 @@
 // merged by `applyLiveChange`), and a resync refetches quietly. A read that
 // fails keeps the week it had (CALR-3).
 
+import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,6 +17,7 @@ import { supabaseClient } from "../../../lib/runtime.web.client";
 import { recordEventUndo, recordUndo } from "../commands/undo";
 import type {
   CalendarAccountModel,
+  CalendarAttendeeInput,
   CalendarEventModel,
   CalendarEventPatch,
   CalendarLiveChange,
@@ -43,6 +45,12 @@ export type CreateEventDraft = {
   allDay?: boolean;
   rrule?: string | null;
   description?: string;
+  // CALR-9's composer: sent only when set (the op still takes the old seven arguments).
+  /** A Moduo or custom calendar's row id; omitted = Your calendar. */
+  calendarId?: string;
+  location?: string;
+  attendees?: CalendarAttendeeInput[];
+  kind?: CalendarItemKind;
 };
 
 /**
@@ -421,6 +429,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         endsAt: draft.endsAt,
         allDay: draft.allDay ?? false,
         rrule: draft.rrule ?? null,
+        location: draft.location ?? null,
+        kind: draft.kind ?? "event",
         status: "confirmed",
         color: null,
         createdAt: nowIso,
@@ -437,6 +447,10 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           allDay: draft.allDay,
           rrule: draft.rrule,
           description: draft.description,
+          calendarId: draft.calendarId,
+          location: draft.location,
+          attendees: draft.attendees,
+          kind: draft.kind,
         });
         // Filter-then-append, not map: a widen-triggered reload can land
         // between the optimistic row and this reconcile, in which case the

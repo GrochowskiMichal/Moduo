@@ -102,8 +102,15 @@ export async function pushGoogleWebEvent(input: {
   description?: string;
   rrule?: string | null;
   timeZone: string;
+  /** CALR-9: a place, the guests Google invites, and a Meet link Google makes. */
+  location?: string;
+  attendees?: { email: string; name?: string }[];
+  meet?: "add";
 }): Promise<Record<string, unknown>> {
-  const payload = await invoke({ action: "push", ...input });
+  // Optional keys go only when set: the push action reads each one if present.
+  const body: Record<string, unknown> = { action: "push" };
+  for (const [key, value] of Object.entries(input)) if (value !== undefined) body[key] = value;
+  const payload = await invoke(body);
   const event = payload.event;
   if (!event || typeof event !== "object") throw new Error("Google did not return the event.");
   return event as Record<string, unknown>;

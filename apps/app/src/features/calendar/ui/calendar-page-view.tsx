@@ -60,6 +60,7 @@ import { type StripItem } from "../strip";
 import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
 import { CalendarAccountsDialog } from "./calendar-accounts-dialog";
+import { CalendarComposer } from "./calendar-composer";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
 import type { MoveEventDeltas } from "./calendar-grid";
@@ -758,6 +759,17 @@ export function CalendarPageView({
         }
       />
 
+      <CalendarComposer
+        calendar={calendar}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        userId={userId}
+        prefs={prefs}
+        members={viewerMembers}
+        cursor={keys.cursor}
+        canEdit={canEdit && calendar.canEdit}
+        createEvent={onCreateEvent}
+      />
       <DragOverlay dropAnimation={null}>
         {drag.dragTask ? (
           <div className="w-44 truncate rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground">
