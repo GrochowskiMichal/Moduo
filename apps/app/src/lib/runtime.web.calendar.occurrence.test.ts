@@ -271,7 +271,7 @@ describe("Google All events", () => {
       },
     ]);
     const tomb = h.rpcs.find((r) => r.fn === "calendar_op_mirror_events");
-    expect((tomb?.args.p_deleted_external_ids as string[]).sort()).toEqual([
+    expect([...((tomb?.args.p_deleted_external_ids ?? []) as string[])].sort()).toEqual([
       "g-weekly_20261103T080000Z",
       "g-weekly_20261110T080000Z",
     ]);
