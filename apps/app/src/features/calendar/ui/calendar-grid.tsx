@@ -94,7 +94,12 @@ type Props = {
   /** Moduo plus each connected calendar the new event can land on. */
   createCalendars: QuickCreateCalendar[];
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
-  onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
+  onMoveEvent: (
+    eventId: string,
+    deltas: MoveEventDeltas,
+    /** The occurrence's span before the move (a repeat asks This event / All events). */
+    occurrence?: { startMs: number; endMs: number },
+  ) => void;
   /** Task-block drag/resize writes the task's schedule/duration (AC6); a
    *  block from a work session moves that session (`sessionId`). */
   onMoveTask: (taskId: string, result: MoveTaskResult, sessionId: string | null) => void;
@@ -388,10 +393,12 @@ export function CalendarGrid({
           const origEnd = instantAtWallMinute(g.endMin, geomFrom);
           const nextStart = instantAtWallMinute(v.startMin, geomTo);
           const nextEnd = instantAtWallMinute(v.endMin, geomTo);
-          p.onMoveEvent(g.target.chip.eventId, {
-            startDeltaMs: nextStart - origStart,
-            endDeltaMs: nextEnd - origEnd,
-          });
+          const { chip } = g.target;
+          p.onMoveEvent(
+            chip.eventId,
+            { startDeltaMs: nextStart - origStart, endDeltaMs: nextEnd - origEnd },
+            { startMs: chip.startMs, endMs: chip.endMs },
+          );
         } else {
           // A MOVE keeps the task's stored duration — the rendered span is
           // day-clipped (a 23:00+2h block draws as 1h), so deriving duration

@@ -116,6 +116,7 @@ import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
+import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
 import { useCalendarAccountActions } from "./use-calendar-account-actions";
@@ -125,6 +126,7 @@ import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
+import { useOccurrenceQuestion } from "./use-occurrence-question";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -367,6 +369,16 @@ export function CalendarPageView({
 
   const deleteEvent = deleteEventId ? (eventsById.get(deleteEventId) ?? null) : null;
 
+  // CALR-11: a change to one occurrence of a repeat asks This event / All events.
+  const occurrenceQuestion = useOccurrenceQuestion({
+    eventsById,
+    selectedOccurrenceKey,
+    updateEvent: calendar.updateEvent,
+    writeOccurrence: calendar.writeOccurrence,
+    confirmDelete: setDeleteEventId,
+  });
+  const { requestEventDelete, patchEvent, occurrenceStartOf } = occurrenceQuestion;
+
   // ── inbound `?event=` deep link (DF-2) ────────────────────────────────────
   useCalendarEventDeepLink({
     urlEventId,
@@ -447,9 +459,10 @@ export function CalendarPageView({
   );
 
   const onMoveEvent = useCallback(
-    (eventId: string, deltas: MoveEventDeltas) => {
+    (eventId: string, deltas: MoveEventDeltas, occurrence?: { startMs: number; endMs: number }) => {
       const event = eventsById.get(eventId);
       if (!event) return;
+      if (occurrence && occurrenceQuestion.askMove(eventId, deltas, occurrence)) return;
       // Occurrence deltas map onto the series anchor (v1 = series edits).
       const startsAt = new Date(
         new Date(event.startsAt).getTime() + deltas.startDeltaMs,
@@ -457,7 +470,7 @@ export function CalendarPageView({
       const endsAt = new Date(new Date(event.endsAt).getTime() + deltas.endDeltaMs).toISOString();
       void calendar.updateEvent(eventId, { startsAt, endsAt });
     },
-    [calendar, eventsById],
+    [calendar, eventsById, occurrenceQuestion],
   );
 
   // Task-block drag/resize writes the schedule — the same patch path the
@@ -499,10 +512,10 @@ export function CalendarPageView({
       const eventId = occKey.split(":")[0];
       const event = eventsById.get(eventId);
       if (event && isWritable(event) && calendar.canEdit) {
-        setDeleteEventId(eventId);
+        requestEventDelete(eventId, occurrenceStartOf(event, occKey));
       }
     },
-    [eventsById, calendar.canEdit, isWritable],
+    [eventsById, calendar.canEdit, isWritable, requestEventDelete, occurrenceStartOf],
   );
 
   useCalendarHotkeys({ setView, goToday, step, selectedOccurrenceKey, requestDelete });
@@ -609,8 +622,8 @@ export function CalendarPageView({
             canEdit={calendar.canEdit}
             writable={isWritable(detailEvent)}
             members={viewerMembers}
-            onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
-            onDeleteRequest={setDeleteEventId}
+            onPatch={patchEvent}
+            onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
           />
         ) : detailTask ? (
@@ -805,7 +818,7 @@ export function CalendarPageView({
           }}
           onDelete={() => {
             setEventPopover(null);
-            setDeleteEventId(popoverEvent.id);
+            requestEventDelete(popoverEvent.id, eventPopover.chip.startMs);
           }}
           onClose={() => setEventPopover(null)}
         />
@@ -850,6 +863,8 @@ export function CalendarPageView({
           onClose={() => setTaskPopover(null)}
         />
       ) : null}
+
+      <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog
         event={deleteEvent}
