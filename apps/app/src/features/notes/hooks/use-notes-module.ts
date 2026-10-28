@@ -365,7 +365,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         parentId,
         title: "",
         icon: null,
-        isPinned: false,
         position,
         isArchived: false,
         publishedAt: null,
@@ -455,18 +454,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       if (!engine || !workspaceId) return;
       patchLocal(noteId, { fullWidth });
       guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { fullWidth } }));
-    },
-    [engine, workspaceId, patchLocal, guard],
-  );
-
-  const togglePin = useCallback(
-    (noteId: string) => {
-      if (!engine || !workspaceId) return;
-      const existing = notesRef.current.find((n) => n.id === noteId);
-      if (!existing) return;
-      const isPinned = !existing.isPinned;
-      patchLocal(noteId, { isPinned });
-      guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { isPinned } }));
     },
     [engine, workspaceId, patchLocal, guard],
   );
@@ -608,7 +595,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         parentId,
         title,
         icon: null,
-        isPinned: false,
         position,
         isArchived: false,
         publishedAt: null,
@@ -790,7 +776,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     renameNote,
     moveNote,
     setIcon,
-    togglePin,
     duplicateNote,
     archiveNote,
     trashNote,

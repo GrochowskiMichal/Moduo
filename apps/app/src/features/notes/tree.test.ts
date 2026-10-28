@@ -12,7 +12,6 @@ function note(partial: Partial<Note> & { id: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     position: String(seq).padStart(10, "0"),
     isArchived: false,
     publishedAt: null,
@@ -131,13 +130,13 @@ describe("buildNoteSections (AC2)", () => {
     expect(s.inbox.map((n) => n.id)).toEqual(["keep"]);
   });
 
-  it("pinned lists any live pinned note; published lists tokened notes", () => {
+  it("published lists tokened notes, and there is no pinned section (NS-9)", () => {
     const notes = [
-      note({ id: "p", isPinned: true }),
+      note({ id: "p" }),
       note({ id: "pub", publishedAt: "2026-07-01T00:00:00.000Z", publishToken: "t" }),
     ];
     const s = buildNoteSections(notes);
-    expect(s.pinned.map((n) => n.id)).toEqual(["p"]);
+    expect("pinned" in s).toBe(false);
     expect(s.published.map((n) => n.id)).toEqual(["pub"]);
   });
 });

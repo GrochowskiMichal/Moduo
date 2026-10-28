@@ -88,9 +88,6 @@ ON CONFLICT (user_id) DO UPDATE SET show_agent_work = true;
 INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, now_task_id)
 VALUES (test.id('FR'), test.id('W'), test.id('owner'), 'running', 'per_task', 'hv16-device', test.id('T'));
 
--- A page in the legacy exposed_notes table (notes publishing before publish_token).
-INSERT INTO public.exposed_notes (id, note_id, workspace_id, title, slug)
-VALUES (test.id('X'), test.id('N')::text, test.id('W')::text, 'Published', 'hv16-page');
 ```
 
 ## Table: tasks
@@ -498,38 +495,6 @@ DELETE FROM public.resource_grants WHERE resource_id = {N} AND subject_id = {vie
 | anon | ✗ | ✗ | ✗ | ✗ |
 | app | – | – | – | – |
 
-## Table: exposed_notes
-
-Legacy: nothing reads or writes it since notes publishing moved to `publish_token`. Nobody writes it, signed in or not (MOD-594), and since NS-1 nobody reads it either: no client holds a grant on it and its public read is gone. It goes in NS-9. It has no owner column, so the rows for people inside W are `–`: the question is anyone at all.
-
-```sql select
-SELECT 1 FROM public.exposed_notes WHERE id = {X}
-```
-
-```sql insert
-INSERT INTO public.exposed_notes (id, note_id, title, slug) VALUES ({X-new}, 'planted', 'Planted', 'hv16-planted')
-```
-
-```sql update
-UPDATE public.exposed_notes SET title = 'Defaced' WHERE id = {X}
-```
-
-```sql delete
-DELETE FROM public.exposed_notes WHERE id = {X}
-```
-
-| persona | select | insert | update | delete |
-| --- | --- | --- | --- | --- |
-| owner | – | – | – | – |
-| admin | – | – | – | – |
-| editor | – | – | – | – |
-| viewer | – | – | – | – |
-| capped | – | – | – | – |
-| member | ✗ | ✗ | ✗ | ✗ |
-| outsider | ✗ | ✗ | ✗ | ✗ |
-| anon | ✗ | ✗ | ✗ | ✗ |
-| app | – | – | – | – |
-
 ## Equivalent mutants
 
 Mutants `bun run db:mutants` lets live because they can't change any outcome, each with the reason. A mutant listed here that a check catches fails the run, so the list can't go stale.
@@ -541,9 +506,6 @@ Mutants `bun run db:mutants` lets live because they can't change any outcome, ea
 | `buckets: buckets_update USING true` | WITH CHECK asks the same `can_access('bucket', id, 'edit')` of the old row. |
 | `buckets: buckets_update WITH CHECK without term 1 of 2` | The dropped term is that same `can_access('bucket', id, 'edit')`, which USING still asks. |
 | `workspace_members: drop restrictive paid_plan_required_to_add_member` | It narrows an INSERT no permissive policy allows: nobody inserts a member row directly (`join` is ✗ for all), and `workspace_op_accept_invite` writes as the table owner, past RLS. |
-| `exposed_notes: RLS off` | No client role holds any grant on it since NS-1, so with RLS off every select, insert, update and delete is still refused by the missing privilege. |
-| `exposed_notes: UPDATE opened to everyone` | The mutant grants UPDATE but not SELECT: the `WHERE id = …` needs SELECT on `id`, so the statement is refused before any policy runs. |
-| `exposed_notes: DELETE opened to everyone` | The same: DELETE with a `WHERE` needs SELECT on the column it filters, which no client holds. |
 
 ## RPC probe
 

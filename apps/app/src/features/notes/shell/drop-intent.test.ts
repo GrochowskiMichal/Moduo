@@ -19,7 +19,6 @@ function note(partial: Partial<Note> & { id: string; position: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     isArchived: false,
     publishedAt: null,
     publishToken: null,

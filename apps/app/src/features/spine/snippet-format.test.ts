@@ -63,7 +63,6 @@ describe("formatNoteSnippet", () => {
   const note = (over: Partial<NoteSnippetMeta>): NoteSnippetMeta => ({
     kind: "note",
     updatedAt: dayOffset(-3),
-    isPinned: false,
     isArchived: false,
     ...over,
   });
@@ -72,8 +71,7 @@ describe("formatNoteSnippet", () => {
     expect(formatNoteSnippet(note({}), NOW)).toBe("Edited 3 days ago");
   });
 
-  it("prefixes a pinned / archived state", () => {
-    expect(formatNoteSnippet(note({ isPinned: true }), NOW)).toBe("Pinned · Edited 3 days ago");
+  it("prefixes an archived state", () => {
     expect(formatNoteSnippet(note({ isArchived: true }), NOW)).toBe("Archived · Edited 3 days ago");
   });
 });

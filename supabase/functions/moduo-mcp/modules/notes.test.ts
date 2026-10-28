@@ -468,7 +468,6 @@ describe("meta results still map", () => {
     parent_id: PARENT,
     title: "  Q4 plan ",
     icon: "📌",
-    is_pinned: false,
     position: "a0",
     is_archived: true,
     published_at: null,

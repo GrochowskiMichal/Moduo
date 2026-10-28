@@ -1292,6 +1292,26 @@ export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
 }
 
 // ---------------------------------------------------------------------------
+// Note share modes (PERM-3, NS-9) — mirrors notes_share_mode_chk
+// (20261006210000_perm_sharing). `inherit` follows the parent note's sharing,
+// `custom` uses the note's own grants.
+// ---------------------------------------------------------------------------
+
+export const NOTE_SHARE_MODES = ["inherit", "custom"] as const;
+export type NoteShareMode = (typeof NOTE_SHARE_MODES)[number];
+export const noteShareModeSchema = z.enum(NOTE_SHARE_MODES);
+export function isNoteShareMode(value: unknown): value is NoteShareMode {
+  return typeof value === "string" && (NOTE_SHARE_MODES as readonly string[]).includes(value);
+}
+export function parseNoteShareMode(input: unknown): SafeParseResult<NoteShareMode> {
+  return parseOrError(noteShareModeSchema, input);
+}
+/** Read-side normalization: anything but `inherit` is the note's own grants (the column's default). */
+export function normalizeNoteShareMode(input: unknown): NoteShareMode {
+  return input === "inherit" ? "inherit" : "custom";
+}
+
+// ---------------------------------------------------------------------------
 // Reactions (CV-7c; round-3 §2.8, Assumptions #18, #29) — one key for chat
 // messages, task and note comments and your quick row. Mirrors
 // public.reactions__key_ok(text) in 20261017108000_chat_v2_reactions: exactly

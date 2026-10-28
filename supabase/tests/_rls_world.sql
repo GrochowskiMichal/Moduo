@@ -58,7 +58,3 @@ INSERT INTO public.user_preferences (user_id, show_agent_work) VALUES (test.id('
 ON CONFLICT (user_id) DO UPDATE SET show_agent_work = true;
 INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, now_task_id)
 VALUES (test.id('FR'), test.id('W'), test.id('owner'), 'running', 'per_task', 'hv16-device', test.id('T'));
-
--- A page in the legacy exposed_notes table (notes publishing before publish_token).
-INSERT INTO public.exposed_notes (id, note_id, workspace_id, title, slug)
-VALUES (test.id('X'), test.id('N')::text, test.id('W')::text, 'Published', 'hv16-page');
