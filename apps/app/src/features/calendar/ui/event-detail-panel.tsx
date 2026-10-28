@@ -1,11 +1,13 @@
-// The event Detail (the popover's big sibling, DESIGN_BRIEF §5): inline title,
-// time range + all-day, repeat control (series-edit only in v1 — said plainly),
-// notes, spine Links (EntityHub, rail variant), the quiet activity trail, and
-// Delete. External events render the same layout read-only with source
-// attribution. CAL-3's switcher will host this as the "Detail" variant.
+// The Event view (CALR-10, AC25; the popover's big sibling): title, when and
+// repeats, Join, the calendar, who sees it, the booking it came through, Where
+// (place with Map, link with Copy, Add a place / Add a Meet link), people with
+// their replies, linked notes and tasks as two-line rows, Link (L), the
+// description, the quiet activity trail and Delete. Events you can't change
+// render the same layout read-only with where they come from.
 
 import { Trash2, Video, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { DetailTitle, detailTitleVariants } from "../../../components/ui/detail-title";
@@ -15,17 +17,28 @@ import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Separator } from "../../../components/ui/separator";
 import { Switch } from "../../../components/ui/switch";
+import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { timeAgo } from "../../contacts/rollup";
 import { spineActivityLine, spineActorName } from "../../spine/activity";
 import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
-import { EntityHub } from "../../spine/ui/entity-hub";
+import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
 import { toLocalInputValue } from "../../tasks/helpers";
 import type { ActivityEntry } from "../../tasks/model";
+import { loadEventContext } from "../event-context";
+import { canAddMeet, type EventContext } from "../event-view";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import { meetingLinkOf } from "../meeting-link";
+import type { EventWriter } from "../writable";
+import {
+  EventCalendarRows,
+  EventLinkedRows,
+  EventPeopleRows,
+  EventWhereRows,
+  type ViewerMember,
+} from "./event-view-rows";
 import { RepeatPicker } from "./repeat-picker";
 
 type Props = {
@@ -37,6 +50,13 @@ type Props = {
   canEdit: boolean;
   /** The event can change here (native, or a Google event you connected, CALR-8). Omitted = native only. */
   writable?: boolean;
+  /** The workspace's people, for the who-sees-it line. */
+  members?: readonly ViewerMember[];
+  /** Reads the calendar, its sharing and the booking (injected in tests). */
+  loadContext?: (
+    event: CalendarEventModel,
+    viewer: { userId: string | null; members: readonly ViewerMember[] },
+  ) => Promise<EventContext>;
   onPatch: (eventId: string, patch: CalendarEventPatch) => void;
   onDeleteRequest: (eventId: string) => void;
   onClose: () => void;
@@ -50,6 +70,8 @@ export function EventDetailPanel({
   accounts,
   canEdit,
   writable,
+  members = NO_MEMBERS,
+  loadContext,
   onPatch,
   onDeleteRequest,
   onClose,
@@ -57,6 +79,13 @@ export function EventDetailPanel({
   const external = event.sourceAccountId !== null;
   const meeting = meetingLinkOf(event);
   const editable = canEdit && (writable ?? !external);
+  // Only Google events are writable from outside Moduo (CALR-8).
+  const writer: EventWriter | null = editable ? (external ? "google" : "moduo") : null;
+  const defaultLoad = useCallback<NonNullable<Props["loadContext"]>>(
+    (e, viewer) => loadEventContext(runtime, e, viewer),
+    [runtime],
+  );
+  const context = useEventContext(event, currentUserId, members, loadContext ?? defaultLoad);
   const account = useMemo(
     () => accounts.find((a) => a.id === event.sourceAccountId) ?? null,
     [accounts, event.sourceAccountId],
@@ -78,6 +107,54 @@ export function EventDetailPanel({
 
   const focus = useMemo(() => ({ type: "event", id: event.id }) as const, [event.id]);
   const hub = useEntityHub(runtime, workspaceId, focus);
+  const hubReload = hub.reload;
+
+  const linkEntity = useCallback(
+    (ref: EntityRef, label: string, icon: string | null) => {
+      if (!runtime || !workspaceId) return;
+      void (async () => {
+        // An edge that already exists isn't news (FX-9 parity).
+        try {
+          const links = await runtime.spine.listLinks({
+            workspaceId,
+            entityType: "event",
+            entityId: event.id,
+          });
+          const linked = links.some(
+            (l) =>
+              (l.sourceType === ref.type && l.sourceId === ref.id) ||
+              (l.targetType === ref.type && l.targetId === ref.id),
+          );
+          if (linked) {
+            toast("Already linked");
+            return;
+          }
+        } catch {
+          // a failed pre-check must not block a legitimate link
+        }
+        await createLinkWithToast({
+          runtime,
+          workspaceId,
+          source: { kind: "entity-drag", entityType: ref.type, entityId: ref.id, label, icon },
+          target: { kind: "link-target", entityType: "event", entityId: event.id },
+          origin: "manual",
+          onChanged: hubReload,
+        });
+      })();
+    },
+    [runtime, workspaceId, event.id, hubReload],
+  );
+
+  const unlink = useCallback(
+    (linkId: string) => {
+      if (!runtime || !workspaceId) return;
+      void runtime.spine
+        .deleteLink({ workspaceId, linkId })
+        .then(hubReload)
+        .catch(() => toast.error("Couldn't remove the link."));
+    },
+    [runtime, workspaceId, hubReload],
+  );
 
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   useEffect(() => {
@@ -159,16 +236,7 @@ export function EventDetailPanel({
               {meeting.label}
             </a>
           </Button>
-          <span className="truncate text-xs text-muted-foreground">{meeting.url}</span>
         </div>
-      ) : null}
-
-      {external ? (
-        <span className="text-xs text-muted-foreground">
-          {account ? `${account.displayLabel} — ${account.provider}` : "External calendar"}
-          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""}
-          {editable ? "" : " · managed in its source calendar"}
-        </span>
       ) : null}
 
       <Field label="Starts">
@@ -221,7 +289,39 @@ export function EventDetailPanel({
         onChange={(rrule) => onPatch(event.id, { rrule })}
       />
 
-      <Field label="Notes">
+      <EventCalendarRows
+        event={event}
+        account={account}
+        external={external}
+        editable={editable}
+        context={context.value}
+        currentUserId={currentUserId}
+        members={members}
+        syncedAgo={account?.lastSyncAt ? timeAgo(account.lastSyncAt, now) : null}
+        onReload={context.reload}
+      />
+
+      <EventWhereRows
+        event={event}
+        editable={editable}
+        canMeet={canAddMeet(writer, event)}
+        onPatch={(patch) => onPatch(event.id, patch)}
+      />
+
+      <EventPeopleRows attendees={event.attendees ?? []} />
+
+      <EventLinkedRows
+        runtime={runtime}
+        workspaceId={workspaceId}
+        status={hub.status}
+        sections={hub.sections}
+        canEdit={canEdit}
+        onLink={linkEntity}
+        onUnlink={unlink}
+        onRetry={hubReload}
+      />
+
+      <Field label="Description">
         {editable ? (
           <EntityTextEditor
             key={event.id}
@@ -233,8 +333,8 @@ export function EventDetailPanel({
             sourceLabel={event.title}
             sourceIcon="event"
             currentUserId={currentUserId}
-            ariaLabel="Notes"
-            placeholder="Notes…  @ or / to link"
+            ariaLabel="Description"
+            placeholder="Description…  @ or / to link"
             onCommit={(html) => {
               if (html !== event.description) onPatch(event.id, { description: html });
             }}
@@ -245,19 +345,6 @@ export function EventDetailPanel({
           <span className="text-sm text-foreground">—</span>
         )}
       </Field>
-
-      <Separator />
-
-      {/* Spine links — linking external events into the workspace is the whole
-          point of mirroring their metadata (§8). */}
-      <EntityHub
-        variant="rail"
-        focus={focus}
-        status={hub.status}
-        sections={hub.sections}
-        canEdit={canEdit}
-        onRetry={hub.reload}
-      />
 
       <Separator />
 
@@ -296,6 +383,44 @@ export function EventDetailPanel({
       ) : null}
     </div>
   );
+}
+
+const NO_MEMBERS: readonly ViewerMember[] = [];
+
+/**
+ * The event's context (calendar, sharing, booking), read again when the event
+ * or its calendar changes; a reply for an event no longer shown is dropped.
+ */
+function useEventContext(
+  event: CalendarEventModel,
+  userId: string | null,
+  members: readonly ViewerMember[],
+  load: NonNullable<Props["loadContext"]>,
+): { value: EventContext | null; reload: () => void } {
+  const [state, setState] = useState<{ id: string; value: EventContext } | null>(null);
+  const [tick, setTick] = useState(0);
+  const reload = useCallback(() => setTick((t) => t + 1), []);
+  // The row's own fields don't change what is read; its id and calendar do.
+  const eventRef = useRef(event);
+  useEffect(() => {
+    eventRef.current = event;
+  });
+  const eventId = event.id;
+  const calendarRef = event.calendarRef;
+  useEffect(() => {
+    let active = true;
+    load(eventRef.current, { userId, members })
+      .then((value) => {
+        if (active) setState({ id: event.id, value });
+      })
+      .catch(() => {
+        if (active) setState(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [eventId, calendarRef, userId, members, load, tick]);
+  return { value: state?.id === eventId ? state.value : null, reload };
 }
 
 /** The Repeats row: the picker, and the series note while it repeats. */

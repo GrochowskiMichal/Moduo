@@ -481,6 +481,61 @@ export const webCalendar: CalendarRuntime = {
       updatedAt: event.updatedAt,
     };
   },
+  async eventContext({ eventId, calendarRef }) {
+    const calendarOf = async () => {
+      if (!calendarRef) return null;
+      const { data, error } = await supabaseClient
+        .from("calendars")
+        .select("name, kind, owner_id")
+        .eq("id", calendarRef)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return null;
+      return { name: data.name, kind: data.kind, ownerId: data.owner_id };
+    };
+    const shareOf = async () => {
+      if (!calendarRef) return null;
+      const { data, error } = await supabaseClient.rpc("share_op_state", {
+        p_type: "calendar",
+        p_id: calendarRef,
+      });
+      if (error) throw error;
+      const state = data as Record<string, unknown> | null;
+      if (!state || state.visible === false) return null;
+      return {
+        workspaceLevel: (state.workspaceLevel as string | null) ?? null,
+        people: Array.isArray(state.people)
+          ? (state.people as { userId: string; level: string }[])
+          : [],
+      };
+    };
+    const bookingOf = async () => {
+      const booking = await supabaseClient
+        .from("slot_bookings")
+        .select("slot_id, created_at")
+        .eq("calendar_event_id", eventId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (booking.error) throw booking.error;
+      if (!booking.data) return null;
+      const link = await supabaseClient
+        .from("exposed_slot_links")
+        .select("name")
+        .eq("slot_id", booking.data.slot_id)
+        .limit(1)
+        .maybeSingle();
+      return { linkName: link.data?.name?.trim() || null, bookedAt: booking.data.created_at };
+    };
+    // Fail soft per part: a refused or failed read hides that row of the
+    // Event view, it never blanks the panel.
+    const [calendar, share, booking] = await Promise.all([
+      calendarOf().catch(() => null),
+      shareOf().catch(() => null),
+      bookingOf().catch(() => null),
+    ]);
+    return { calendar, share, booking };
+  },
   async removeGoogleEvent({ workspaceId, event, account }) {
     const { removeGoogleWebEvent } = await import("../features/calendar/google-web");
     const externalEventId = event.externalEventId ?? "";

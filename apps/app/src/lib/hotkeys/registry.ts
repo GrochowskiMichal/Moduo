@@ -163,6 +163,8 @@ export const HOTKEYS = {
     label: "Delete the event",
     keys: ["Delete", "Backspace"],
   },
+  "calendar.add-meet": { scope: "calendar", label: "Add a Meet link", keys: ["V"] },
+  "calendar.link": { scope: "calendar", label: "Link a person, note or task", keys: ["L"] },
 
   // ── home (dashboard) ───────────────────────────────────────────────────────
   "home.prev-page": { scope: "home", label: "Previous page", keys: ["ArrowLeft"] },
