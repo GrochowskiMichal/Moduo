@@ -966,6 +966,9 @@
      starts below a 320 px panel (AC1.16). A view sits inside the panel body's
      4 px sides (MOD-121), so its container is 320 − 8 = 312 px wide there. */
   --container-panel-narrow: 19.5rem; /* 312 */
+  /* A calendar day header below 104 px (a week at 1024 px) drops the word in
+     "6 due" and keeps the count, so it never prints over the date (CALR-2). */
+  --container-day-narrow: 6.5rem; /* 104 */
   --color-background:           var(--background);
   --color-foreground:           var(--foreground);
   --color-card:                 var(--card);
