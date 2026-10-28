@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { eventChipsInRange } from "@/features/calendar/events";
 import { localDayKey, startOfLocalDay, taskBlocks, visibleRange } from "@/features/calendar/lens";
 import { todayNowNext } from "@/features/calendar/now-next";
+import { oneChipPerMeeting } from "@/features/calendar/one-meeting";
 import { DEFAULT_CALENDAR_PREFS } from "@/features/calendar/prefs";
 import { planRollForward, rollForwardMessage } from "@/features/calendar/roll-forward";
 import { stripItems } from "@/features/calendar/strip";
@@ -83,7 +84,12 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
   const { userId } = useAuth();
   const shared = useSharedCalendars(workspaceId);
   const nowMs = useMinuteTick();
-  const nowNext = todayNowNext(events, nowMs, userId, shared);
+  // One chip per meeting reached through two logins, as the Calendar toolbar reads it.
+  const meetings = useMemo(
+    () => oneChipPerMeeting(events, calendarSource.data.accounts, userId),
+    [events, calendarSource.data.accounts, userId],
+  );
+  const nowNext = todayNowNext(meetings, nowMs, userId, shared);
   const joinUrl = nowNext?.now?.joinUrl ?? null;
   useAppHotkeys({
     "home.join": () => {

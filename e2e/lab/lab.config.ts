@@ -10,6 +10,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
 import { calendarStates, onGrid } from "./calendar-states.ts";
+import { homeNowNextState } from "./home-states.ts";
 import { calendarJourneys } from "./journeys-calendar.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
@@ -133,7 +134,13 @@ export default {
       title: "Home",
       path: "/",
       ready: readyWhen("nav[aria-label='Workspace navigation']"),
-      states: { default: {}, firstRun: { seed: "first-run" }, offline: { offline: true } },
+      states: {
+        default: {},
+        firstRun: { seed: "first-run" },
+        offline: { offline: true },
+        // The Today widget's now-and-next line with Join (⇧⌘J).
+        nowNext: homeNowNextState,
+      },
     },
     {
       id: "notes",
