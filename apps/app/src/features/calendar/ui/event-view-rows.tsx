@@ -266,7 +266,7 @@ export function EventCalendarRows({
         !(event.isPrivate && event.ownerId !== currentUserId) &&
         context?.share &&
         members.length > 0
-      ? whoSeesLine(context.share, members, currentUserId)
+      ? whoSeesLine(context.share, members, currentUserId, { isFocus: event.kind === "focus" })
       : null;
   const booked = context?.bookedThrough ?? null;
 

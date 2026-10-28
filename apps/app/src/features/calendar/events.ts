@@ -198,6 +198,9 @@ export type EventChip = {
   continuesToMs: number | null;
   /** Your own private event: the chip carries a lock (CALR-15). */
   locked: boolean;
+  /** Focus time (CALR-14), and whether it holds a task (a teammate's never shows one). */
+  focus?: boolean;
+  holdsTask?: boolean;
 };
 
 /** The calendar hue an event chip takes (AC7): a mirrored event its
@@ -264,6 +267,8 @@ function occurrenceChip(
     continuesFromMs: null,
     continuesToMs: null,
     locked: showsLock(event, me),
+    focus: event.kind === "focus",
+    holdsTask: event.kind === "focus" && !!event.focusTaskId,
   };
 }
 
