@@ -37,6 +37,10 @@
 --     pullDoc reads note_updates and notes directly.
 -- Account erasure deletes notes, and note_bodies goes with them by cascade.
 
+-- One transaction: LOCK TABLE and SET LOCAL need one, and CI applies each
+-- file with plain psql, not inside a transaction as Supabase does.
+BEGIN;
+
 SET LOCAL lock_timeout = '5s';
 -- One acquisition: the key below and the DROP COLUMN both lock notes.
 LOCK TABLE public.notes IN ACCESS EXCLUSIVE MODE;
@@ -971,3 +975,5 @@ COMMENT ON FUNCTION public.search_tsv(public.notes) IS
   'NS-11: notes.search_tsv as a computed field, read from note_bodies for a note the caller can open.';
 
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
