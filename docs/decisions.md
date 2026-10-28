@@ -249,6 +249,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-28 · NS-8: `note_updates` is checked per statement, and a replay leaves the note alone
 - 2026-10-28 · NS-6: every Notes op checks its level once, through `notes__require`, `notes__require_module` or `notes__require_parent`
 - 2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows
 - 2026-10-28 · Notes schema hardening planned: client grants read-only, one tree per workspace by key, deleting a parent never takes access away, trash purged on the server, one guard per op, reads and writes checked once, legacy out, content split into `note_bodies`
