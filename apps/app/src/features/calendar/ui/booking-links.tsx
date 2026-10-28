@@ -12,7 +12,8 @@ import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { busyIdsFromJson, DEFAULT_BUSY_IDS, questionsFromJson, slugFor } from "../booking/model";
+import { defaultBusyIds } from "../account-picks";
+import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
 import { videoSetting } from "../booking/video";
@@ -63,11 +64,11 @@ type LinkRow = {
 export type ZoomState = { configured: boolean; connected: boolean };
 
 /** Where Zoom sends the host back. The desktop app hands off to the web app. */
-function connectOrigin(): string {
+export function connectOrigin(): string {
   return isTauriRuntime() ? "https://app.moduo.app" : window.location.origin;
 }
 
-async function zoomRequest(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+export async function zoomRequest(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await supabaseClient.functions.invoke("booking-zoom-connect", { body });
   if (error) throw new Error(error.message || "Zoom is unavailable.");
   return (data ?? {}) as Record<string, unknown>;
@@ -82,7 +83,7 @@ function linkReady(row: LinkRow, googleOn: boolean, zoomOn: boolean): boolean {
 
 type Draft = LinkDraft;
 
-function emptyDraft(): Draft {
+function emptyDraft(accounts: CalendarAccountModel[]): Draft {
   return {
     id: null,
     slotId: null,
@@ -96,7 +97,7 @@ function emptyDraft(): Draft {
     minNoticeMinutes: 240,
     hostTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     weeklyHours: normalizeWeeklyHours(DEFAULT_WEEKLY_HOURS),
-    busyCalendarIds: [...DEFAULT_BUSY_IDS],
+    busyCalendarIds: defaultBusyIds(accounts),
     noteEnabled: true,
     guestsEnabled: true,
     questions: [],
@@ -554,7 +555,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         className="justify-start text-muted-foreground"
         onClick={() => {
           setError(null);
-          setDraft(emptyDraft());
+          setDraft(emptyDraft(accounts));
         }}
       >
         <Plus aria-hidden />

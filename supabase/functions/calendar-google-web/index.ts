@@ -12,6 +12,8 @@
  * POST { action: "delete", externalAccountId, calendarId, eventId } → { ok }
  *
  * Google refusing a write (no writer access, …) answers 409 { error: Google's reason }.
+ * A login whose token Google revoked is marked reauth (calendar_op__google_reauth)
+ * and its account actions answer 409 { error: "google_reauth" }; a working token clears it.
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
@@ -31,8 +33,9 @@ import {
   ymdInZone,
 } from "../_shared/google-calendar.ts";
 import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
-import { googleAccessForRow, googleClients } from "../_shared/google-token.ts";
+import { googleAccessOutcome, googleClients } from "../_shared/google-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+import { recordGoogleAccess, type StatusCalendar, statusCalendars } from "./accounts.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
@@ -116,18 +119,25 @@ function readPatch(value: unknown): GoogleEventPatch | null {
   return patch as GoogleEventPatch;
 }
 
+/** The row's token and login; "revoked" (marked reauth) when Google revoked it; null when unavailable. */
 async function accessForRow(
   db: SupabaseClient,
   userId: string,
   row: TokenRow,
-): Promise<{ accessToken: string; email: string } | null> {
-  const access = await googleAccessForRow({ db, encSecret: ENC, clients: GOOGLE_CLIENTS }, userId, row);
-  if (!access) return null;
+): Promise<{ accessToken: string; email: string } | "revoked" | null> {
+  const outcome = await googleAccessOutcome({ db, encSecret: ENC, clients: GOOGLE_CLIENTS }, userId, row);
+  if (outcome.kind === "revoked") {
+    await recordGoogleAccess(db, userId, row.account_key, outcome);
+    return "revoked";
+  }
+  if (outcome.kind !== "ok") return null;
+  const access = outcome.accessToken;
   const email = (await googleUserEmail(access))?.toLowerCase() ?? row.account_key;
   if (!email) return null;
   if (row.account_key !== email) {
     await db.from("user_integrations").update({ account_key: email }).eq("id", row.id);
   }
+  await recordGoogleAccess(db, userId, email, outcome);
   return { accessToken: access, email };
 }
 
@@ -144,17 +154,19 @@ async function accessForEmail(
   db: SupabaseClient,
   userId: string,
   email: string,
-): Promise<string | null> {
+): Promise<string | "revoked" | null> {
   const rows = await tokensForUser(db, userId);
   const wanted = email.toLowerCase();
   for (const row of rows) {
     const access = await accessForRow(db, userId, row);
-    if (access && access.email === wanted) return access.accessToken;
+    if (access === "revoked") {
+      if (row.account_key === wanted) return "revoked";
+    } else if (access && access.email === wanted) return access.accessToken;
   }
   // A token saved before account_key existed: one row, email still blank until refresh.
   if (rows.length === 1 && !rows[0].account_key) {
     const access = await accessForRow(db, userId, rows[0]);
-    if (access) return access.accessToken;
+    if (access && access !== "revoked") return access.accessToken;
   }
   return null;
 }
@@ -170,40 +182,24 @@ type AccountCtx = {
 
 async function statusAction(db: SupabaseClient, userId: string): Promise<Response> {
   const rows = await tokensForUser(db, userId);
-  const calendars: {
-    email: string;
-    accountId: string;
-    summary: string;
-    googleCalendarId: string;
-  }[] = [];
+  const calendars: StatusCalendar[] = [];
+  const reauth: string[] = [];
   for (const row of rows) {
     const access = await accessForRow(db, userId, row);
+    if (access === "revoked") {
+      if (row.account_key) reauth.push(row.account_key);
+      continue;
+    }
     if (!access) continue;
-    let listed: { id: string; summary: string; primary: boolean }[] = [];
+    let listed: Awaited<ReturnType<typeof listGoogleCalendars>> = [];
     try {
       listed = await listGoogleCalendars(access.accessToken);
     } catch {
       listed = [];
     }
-    if (listed.length === 0) {
-      calendars.push({
-        email: access.email,
-        accountId: `google:${access.email}:primary`,
-        summary: access.email,
-        googleCalendarId: "primary",
-      });
-      continue;
-    }
-    for (const cal of listed) {
-      calendars.push({
-        email: access.email,
-        accountId: `google:${access.email}:${cal.id}`,
-        summary: cal.summary,
-        googleCalendarId: cal.id,
-      });
-    }
+    calendars.push(...statusCalendars(access.email, listed));
   }
-  return json({ calendars });
+  return json({ calendars, reauth });
 }
 
 async function eventsAction({ body, accessToken, email, calendarId }: AccountCtx): Promise<Response> {
@@ -403,6 +399,7 @@ Deno.serve(async (req: Request) => {
   const calendarId = colon < 0 ? null : rest.slice(colon + 1);
   if (!email) return json({ error: "bad_account" }, 400);
   const accessToken = await accessForEmail(db, userId, email);
+  if (accessToken === "revoked") return json({ error: "google_reauth" }, 409);
   if (!accessToken) return json({ error: "google_not_connected" }, 409);
 
   const ctx: AccountCtx = { body, accessToken, email, calendarId };
