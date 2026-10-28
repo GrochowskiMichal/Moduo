@@ -15,13 +15,14 @@ import type { BookingLinkRow } from "../../../lib/runtime.types.calendar";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
 import type { Task, TaskSession } from "../../tasks/model";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { openTimes } from "../booking/availability";
+import { openTimes, type OpenTimesInput } from "../booking/availability";
 import {
   type BookingLink,
   busyIdsFromJson,
   FOCUS_BUSY_ID,
   questionsFromJson,
 } from "../booking/model";
+import { offerSlots } from "../booking/offer";
 import { bookingRequest } from "../booking/public-client";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { normalizeWeeklyHours } from "../booking/slots";
@@ -31,6 +32,7 @@ import type { CalendarView } from "../lens";
 import { BookingLinkPanel, type BookingLinkPanelProps } from "./booking-link-panel";
 import { BookingOpenLayer } from "./booking-open-layer";
 import { useNowTick } from "./grid-units";
+import { useOfferMode } from "./use-offer-mode";
 
 export const BOOKING_LINKS_CHANGED_EVENT = "moduo:booking-links-changed";
 export const BOOKING_LINK_EDIT_EVENT = "moduo:booking-link-edit";
@@ -211,9 +213,9 @@ export function useBookingPanel(input: Input): {
   }, [hosts, events, data]);
   const from = days[0];
   const last = days[days.length - 1];
-  const result = useMemo(() => {
-    if (!data || !from || !last) return { state: "open" as const, times: [] };
-    return openTimes({
+  const openInput = useMemo((): OpenTimesInput | null => {
+    if (!data || !from || !last) return null;
+    return {
       link: data.link,
       hostId: userId,
       events,
@@ -225,8 +227,14 @@ export function useBookingPanel(input: Input): {
       now,
       from,
       to: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1),
-    });
+    };
   }, [data, userId, events, sessions, hosts, coHostBusy, guestSlots, from, last, now]);
+  const result = useMemo(
+    () => (openInput ? openTimes(openInput) : { state: "open" as const, times: [] }),
+    [openInput],
+  );
+  const slots = useMemo(() => (openInput ? offerSlots(openInput) : []), [openInput]);
+  const offer = useOfferMode({ runtime, workspaceId, userId, link, slots, openLink: open });
 
   const patch = useCallback(
     (change: Patch) => {
@@ -252,32 +260,46 @@ export function useBookingPanel(input: Input): {
       key: `booking:${link.id}`,
       title: link.name,
       icon: CalendarClock,
-      render: () => (
-        <BookingLinkPanel
-          link={link}
-          url={url}
-          hosts={hosts}
-          bookings={data.bookings}
-          open={result}
-          accounts={accounts}
-          landsIn={
-            accounts.some((a) => a.provider === "google")
-              ? "Your main Google calendar"
-              : "Your calendar · Moduo"
-          }
-          hasSelection={input.hasSelection}
-          onPatch={patch}
-          onEdit={() => requestBookingLinkEdit(data.row)}
-          onGuestView={() => {
-            if (isTauriRuntime() && runtime) void runtime.window.openExternalUrl(url);
-            else window.open(url, "_blank", "noopener");
-          }}
-        />
-      ),
+      render: () =>
+        offer.active ? (
+          offer.card()
+        ) : (
+          <BookingLinkPanel
+            link={link}
+            url={url}
+            hosts={hosts}
+            bookings={data.bookings}
+            open={result}
+            accounts={accounts}
+            landsIn={
+              accounts.some((a) => a.provider === "google")
+                ? "Your main Google calendar"
+                : "Your calendar · Moduo"
+            }
+            hasSelection={input.hasSelection}
+            onPatch={patch}
+            onEdit={() => requestBookingLinkEdit(data.row)}
+            onGuestView={() => {
+              if (isTauriRuntime() && runtime) void runtime.window.openExternalUrl(url);
+              else window.open(url, "_blank", "noopener");
+            }}
+            onOffer={offer.start}
+          />
+        ),
     });
   }
 
+  const { picks, cursorMs } = offer.draft;
+  const length = (link?.durationMinutes ?? 0) * 60_000;
+  const shown = offer.active
+    ? [...picks, ...(cursorMs == null ? [] : [cursorMs])].map((ms) => ({
+        startMs: ms,
+        endMs: ms + length,
+      }))
+    : result.times;
   const layer =
-    link && input.view !== "month" ? <BookingOpenLayer days={days} times={result.times} /> : null;
+    link && input.view !== "month" ? (
+      <BookingOpenLayer days={days} times={shown} picked={offer.active ? picks : undefined} />
+    ) : null;
   return { open, items, close, layer };
 }
