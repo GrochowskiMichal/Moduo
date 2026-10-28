@@ -2,4 +2,4 @@
 type: improved
 internal: false
 ---
-Run your week from the keyboard: move through the calendar with the arrow keys, nudge, copy and duplicate events, and undo any change with ⌘Z. Press ? to see every key.
+Run your week from the keyboard: move with the arrows, nudge, copy and duplicate events, and undo any change with ⌘Z (press ? for every key).
