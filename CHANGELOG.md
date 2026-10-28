@@ -5,6 +5,45 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.5.0 · 2026-10-28
+
+### New
+
+- Change or delete just one day of a repeating event, or all of them, including Google repeats. Undo brings back exactly what you changed.
+- Calendar has a Month view (press M), and Day view now shows each meeting's people, linked notes, next task and where it happens beside it.
+- Hold a task in focus time: in Plan, press S, then F, then Enter. Teammates see only "Focus time", and booking links stay open over it unless you tick Focus time.
+- Mark any event you own as private with P: teammates see only "Busy" at that time, and it stays out of their search, mentions and assistant answers.
+- See teammates who share their calendar as lanes beside your week, and find a time you're all free by naming them in the box. Preview your week exactly as a teammate sees it.
+- Open a booking link from the calendar to see its settings beside your week, with its open times outlined on it. Pause it, change its length or let Focus time block it without leaving the week.
+- Press O in Calendar to offer a guest a few specific times as one link or as text, held on your calendar as busy until they pick one; the rest release at once, or after 48 hours.
+- Choose where new events go: Moduo or one of your Google calendars. Events made for Google are created there first and show once, even after syncing.
+- Your calendar updates live: events added or changed on another device, by an assistant or by a teammate appear in the open week within seconds, no reload needed.
+- Google Calendar events now edit both ways: move, resize, rename or delete them in Moduo and the change saves to Google. If Google refuses, the change rolls back and says why.
+- Press N in Calendar and type an event the way you'd say it, like "Investor prep thu morning 90m". It finds the free time, adds a Meet link when there are guests, and invites them through Google.
+
+### Improved
+
+- The calendar week reads cleaner: overlapping events sit side by side or stack neatly, overnight events show on both days, and hours stay right when the clocks change.
+- The event panel now follows what you select and shows where it happens (place with a map, meeting link to copy), who's coming and their replies, and who can see it.
+- Calendar fits smaller windows by folding its side panels, shows a second time zone with Z, and has a Working hours sheet for your day and week.
+- Booking pages are easier for guests: one details step, a button that says what's next, and a quick way to see the other open times that day.
+- Week headers now show how many tasks are due each day, with a quick way to schedule them. All-day items stay in two tidy rows, and a "now and next" pill shows your current meeting.
+- Connect, pick and manage your calendar accounts right from Calendar, with a clear Reconnect when Google stops accepting access and Undo when you remove one.
+- Home's Today widget now shows what's on now and next with a Join button, and assistants can read your calendar the way teammates see it, offer times and say who sees an event.
+- Calendar now says when a calendar didn't sync and lets you try again, keeps its shape while loading, shows when you're offline, and welcomes you with a short guide on an empty first week.
+- Run your week from the keyboard: move with the arrows, nudge, copy and duplicate events, and undo any change with ⌘Z (press ? for every key).
+- Right-click any event, or press ⌃↵, for a quick menu to open, copy, duplicate, make private, link, move to Google or delete it. The Event panel's ⋯ has the same actions with their keys.
+- The Calendar's side panel is now Plan: your tasks grouped by what's overdue, due this week, scheduled and undated. Select one and press S to drop it into the next free time.
+- Events can now live on your own custom calendars, and saved calendar sets include them. Meeting links are kept apart from the place, so Join works for booked and synced meetings alike.
+
+### Fixed
+
+- Booking links no longer offer times taken by your repeating events: a weekly meeting that started weeks ago now blocks this week's slots too, and a skipped or moved occurrence frees its old time.
+
+### Security
+
+- Security and reliability improvements.
+
 ## 1.4.0 · 2026-10-26
 
 ### New
