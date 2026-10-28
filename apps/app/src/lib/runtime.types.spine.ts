@@ -1,6 +1,6 @@
 /** The runtime port's spine (implemented in runtime.web.spine.ts). */
 
-import type { SearchAllRow } from "@contracts/search";
+import type { SearchAllRow, SearchRecent } from "@contracts/search";
 import type { ContentAuthorKind, ReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
@@ -103,6 +103,22 @@ export type SpineRuntime = {
     limitPerType?: number;
     context?: EntityRef | null;
   }): Promise<SearchAllRow[]>;
+  /**
+   * Record your open of an item (GS-8): every `moduo:entity:open` of an item,
+   * for ⌘K's Recent and the personal ranking. Sends only a uuid id (a desktop
+   * mail thread's device id never leaves the device); the server records only
+   * an item you can see. Quiet: never throws.
+   */
+  recordOpen(input: { workspaceId: string; type: string; id: string }): Promise<void>;
+  /**
+   * ⌘K's Recent (GS-8): your last opened items in this workspace, newest
+   * first, each one you can still open (8 by default). Throws on a failed read.
+   */
+  recents(input: { workspaceId: string; limit?: number }): Promise<SearchRecent[]>;
+  /** Remove one item from your Recent (Q13). Throws on a failed write. */
+  forgetRecent(input: { workspaceId: string; type: string; id: string }): Promise<void>;
+  /** Clear your Recent in this workspace (Q13). Throws on a failed write. */
+  clearRecents(input: { workspaceId: string }): Promise<void>;
   /**
    * Tombstone a registry entry (the delete half of the registry contract) — a
    * module's own delete op calls this; exposed for testing + pre-adoption use.

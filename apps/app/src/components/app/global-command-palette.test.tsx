@@ -31,7 +31,11 @@ const h = rs.hoisted(() => ({
   // One runtime object, as the real provider keeps (a new one each render
   // would restart the palette's search effect forever).
   runtime: {
-    spine: { searchAll: async (_call: Call) => [] as Row[] },
+    // Recent (GS-8) is empty here: its own tests are global-command-palette-recent.test.tsx.
+    spine: {
+      searchAll: async (_call: Call) => [] as Row[],
+      recents: async () => [] as Row[],
+    },
     // Chat's half of ⌘K (CV-19, until GS-6) answers with nothing here.
     chat: {
       search: async () => ({ data: [], error: null }),

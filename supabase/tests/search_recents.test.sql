@@ -127,15 +127,21 @@ SELECT test.ok((SELECT open_count FROM public.search_recents
                  WHERE user_id = test.id('A') AND entity_id = test.id('N1')) = 2 AND test.held('A', 'W') = 1,
   'opening it again counts again on the same row');
 
-SELECT test.ok(test.open_as('A', 'W', 'project', 'P1') = 'true'
+-- (Each op runs in its own statement first: a check in the same statement
+-- reads the snapshot from before it ran.)
+CREATE TABLE test.said (k text PRIMARY KEY, v text);
+INSERT INTO test.said VALUES ('P1', test.open_as('A', 'W', 'project', 'P1'));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'P1') = 'true'
            AND EXISTS (SELECT 1 FROM public.search_recents
                         WHERE user_id = test.id('A') AND entity_type = 'bucket' AND entity_id = test.id('P1')),
   'a project open is kept under search_all''s type, bucket');
 
-SELECT test.ok(test.open_as('A', 'W', 'note', 'NP') = 'false'
+INSERT INTO test.said VALUES ('NP', test.open_as('A', 'W', 'note', 'NP'));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'NP') = 'false'
            AND NOT EXISTS (SELECT 1 FROM public.search_recents WHERE entity_id = test.id('NP')),
   'an item you can''t see is never recorded');
-SELECT test.ok(test.open_as('A', 'W', 'note', 'M1') = 'false'
+INSERT INTO test.said VALUES ('M1', test.open_as('A', 'W', 'note', 'M1'));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'M1') = 'false'
            AND NOT EXISTS (SELECT 1 FROM public.search_recents
                             WHERE workspace_id = test.id('W') AND entity_id = test.id('M1')),
   'an item from another workspace isn''t recorded under this one');
@@ -239,8 +245,9 @@ SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.search_recents
 
 -- ── Remove one, clear all ────────────────────────────────────────────────────
 
-SELECT test.ok(test.value_as('A', format($q$SELECT public.search_op_forget_open(%L, 'note', %L)::text$q$,
-                                         test.id('W'), test.id('N60'))) = 'true'
+INSERT INTO test.said VALUES ('N60', test.value_as('A', format($q$SELECT public.search_op_forget_open(%L, 'note', %L)::text$q$,
+                                                              test.id('W'), test.id('N60'))));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'N60') = 'true'
            AND NOT EXISTS (SELECT 1 FROM public.search_recents
                             WHERE user_id = test.id('A') AND entity_id = test.id('N60')),
   'removing one item takes it out of Recent');
@@ -251,7 +258,9 @@ SELECT test.ok(EXISTS (SELECT 1 FROM public.search_recents
   'someone else can''t remove your items');
 SELECT test.value_as('B', format($q$SELECT public.search_op_clear_recents(%L)$q$, test.id('W')));
 SELECT test.ok(test.held('A', 'W') = 49, 'nor clear your Recent');
-SELECT test.ok(test.value_as('A', format($q$SELECT public.search_op_clear_recents(%L)::text$q$, test.id('W'))) = '49'
+INSERT INTO test.said VALUES ('clear', test.value_as('A', format($q$SELECT public.search_op_clear_recents(%L)::text$q$,
+                                                                test.id('W'))));
+SELECT test.ok((SELECT v FROM test.said WHERE k = 'clear') = '49'
            AND test.held('A', 'W') = 0 AND test.held('A', 'W2') = 1,
   'Clear empties Recent in this workspace only');
 

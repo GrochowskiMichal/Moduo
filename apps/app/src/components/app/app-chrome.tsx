@@ -35,7 +35,12 @@ import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
 import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
-import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import {
+  ENTITY_OPEN_EVENT,
+  entityOpenTarget,
+  markEntityOpenIntent,
+  recentRefFor,
+} from "../../lib/entity-open";
 import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
 import {
@@ -277,6 +282,13 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         messageId: detail.messageId,
         chainId: detail.chainId,
       });
+      // Your open of an item, for ⌘K's Recent and the personal ranking (GS-8).
+      // Only this app's opens reach here: an agent's never count (Q19).
+      const recent = target ? recentRefFor(detail) : null;
+      const recentWorkspace = detail.workspaceId ?? workspaceNav.current.selectedWorkspaceId;
+      if (recent && recentWorkspace && runtime) {
+        void runtime.spine.recordOpen({ workspaceId: recentWorkspace, ...recent });
+      }
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,
@@ -294,7 +306,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     };
     window.addEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
-  }, [navigate]);
+  }, [navigate, runtime]);
 
   const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(

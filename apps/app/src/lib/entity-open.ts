@@ -96,3 +96,28 @@ export function entityOpenTarget(
       return null;
   }
 }
+
+// ── Recent (GS-8) ────────────────────────────────────────────────────────────
+// Every entity-open of an item is your open of it: the host listener records it
+// for ⌘K's Recent and the personal ranking, under search_all's type names.
+// A module's own page (`to`), a settings section and an id-less open are not
+// items. Chat joins when it joins search_all (GS-6).
+const RECENT_TYPES: Record<string, string> = {
+  task: "task",
+  project: "bucket",
+  bucket: "bucket",
+  note: "note",
+  contact: "contact",
+  company: "company",
+  event: "event",
+  email: "email_thread",
+  email_thread: "email_thread",
+};
+
+export function recentRefFor(
+  detail: { type?: string; id?: string; to?: string } | null | undefined,
+): { type: string; id: string } | null {
+  if (!detail || detail.to || !detail.type || !detail.id) return null;
+  const type = RECENT_TYPES[detail.type];
+  return type ? { type, id: detail.id } : null;
+}

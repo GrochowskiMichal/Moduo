@@ -1,4 +1,4 @@
-import type { SearchAllRow } from "@contracts/search";
+import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar as CalendarIcon,
@@ -40,6 +40,7 @@ import {
   type PaletteAction,
   type PaletteChat,
   type PaletteNotice,
+  type PaletteRecent,
 } from "./global-search-palette";
 
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
@@ -53,6 +54,8 @@ const SLOW_MS = 300;
 // chip's own groups in full (the server's most).
 const LIMIT_ALL = 8;
 const LIMIT_CHIP = 50;
+// Recent with an empty query (Q11).
+const RECENT_LIMIT = 8;
 
 const NOTHING_FAILED = { messages: false, conversations: false };
 
@@ -97,6 +100,8 @@ export function GlobalCommandPalette() {
   // The item open when ⌘K opened: a hit linked to it ranks up.
   const [context, setContext] = useState<{ type: string; id: string } | null>(null);
   const reqRef = useRef(0);
+  // ⌘K's Recent (GS-8): read each time the palette opens.
+  const [recents, setRecents] = useState<SearchRecent[]>([]);
   // Chat (CV-19, until GS-6): Messages from the server search, Conversations by
   // name (Polish without diacritics), the top five each, then "See all in Chat".
   const [chatHits, setChatHits] = useState<ChatSearchHit[]>([]);
@@ -145,7 +150,25 @@ export function GlobalCommandPalette() {
     setChatConversations([]);
     setChatFailed(NOTHING_FAILED);
     setChatSearching(false);
+    setRecents([]);
   }, [open]);
+
+  // Recent, read once per opening; a failed read just leaves it out.
+  useEffect(() => {
+    if (!open || !runtime || !selectedWorkspaceId) return;
+    let live = true;
+    runtime.spine.recents({ workspaceId: selectedWorkspaceId, limit: RECENT_LIMIT }).then(
+      (rows) => {
+        if (live) setRecents(rows);
+      },
+      () => {
+        if (live) setRecents([]);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [open, runtime, selectedWorkspaceId]);
 
   // Chat's half of the search: its own request counter, so a slow chat answer
   // never overwrites a newer query's and the other modules never wait for it.
@@ -303,8 +326,9 @@ export function GlobalCommandPalette() {
     if (view.top?.entity_type === "task") ids.add(view.top.entity_id);
     for (const g of view.groups)
       for (const r of g.rows) if (r.entity_type === "task") ids.add(r.entity_id);
+    for (const r of recents) if (r.entity_type === "task") ids.add(r.entity_id);
     return ids;
-  }, [view]);
+  }, [view, recents]);
   const taskIds = useMemo(() => {
     if (!taskKey || !runtime || !selectedWorkspaceId || shownTaskIds.size === 0) return null;
     const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
@@ -336,7 +360,7 @@ export function GlobalCommandPalette() {
   // dispatch the spine's entity-open event; the app-chrome host listener resolves
   // the route, marks the external-open intent, and toasts if a type has no page
   // yet. Keeps one deep-link grammar app-wide.
-  const openRow = useCallback((row: SearchAllRow) => {
+  const openRow = useCallback((row: SearchHit) => {
     setOpen(false);
     if (typeof window === "undefined") return;
     window.dispatchEvent(
@@ -345,6 +369,38 @@ export function GlobalCommandPalette() {
   }, []);
 
   const chips = useMemo(() => paletteChips(modulePermissions), [modulePermissions]);
+
+  // Remove one, or clear: the list changes at once; a failed write reads
+  // Recent again, so it shows what the server kept.
+  const reloadRecents = useCallback(() => {
+    if (!runtime || !selectedWorkspaceId) return;
+    runtime.spine.recents({ workspaceId: selectedWorkspaceId, limit: RECENT_LIMIT }).then(
+      setRecents,
+      () => setRecents([]),
+    );
+  }, [runtime, selectedWorkspaceId]);
+  const recent: PaletteRecent | null =
+    runtime && selectedWorkspaceId
+      ? {
+          rows: recents,
+          onRemove: (row) => {
+            setRecents((list) =>
+              list.filter((r) => r.entity_type !== row.entity_type || r.entity_id !== row.entity_id),
+            );
+            runtime.spine
+              .forgetRecent({
+                workspaceId: selectedWorkspaceId,
+                type: row.entity_type,
+                id: row.entity_id,
+              })
+              .catch(reloadRecents);
+          },
+          onClear: () => {
+            setRecents([]);
+            runtime.spine.clearRecents({ workspaceId: selectedWorkspaceId }).catch(reloadRecents);
+          },
+        }
+      : null;
 
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
@@ -521,6 +577,7 @@ export function GlobalCommandPalette() {
       noResults={noResults}
       actionGroups={actionGroups}
       chat={chat}
+      recent={recent}
       onOpenRow={openRow}
       onShowAll={(group) => setChip(chipForGroup(group))}
       onSearchEverything={() => setChip("all")}
