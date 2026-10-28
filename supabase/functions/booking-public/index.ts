@@ -224,6 +224,8 @@ async function busyIntervals(
   let events = await hostEvents(`${columns}, kind`);
   // A database before the kind column: every row is then an ordinary event.
   if (events.error) events = await hostEvents(columns);
+  // A read that still fails must not offer the host's busy time as free.
+  if (events.error) throw new Error(`host events: ${events.error.message}`);
   const intervals: Interval[] = busyFromHostEvents(
     (events.data ?? []) as unknown as HostEventRow[],
     ids,
