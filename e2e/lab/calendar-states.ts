@@ -159,7 +159,7 @@ export const calendarStates = {
   }),
   // Connect Google's consent step. It stops before Continue: nothing leaves for Google.
   connectConsent: act(async (page) => {
-    await page.route(/accounts\.google\.com/, (route) => route.abort());
+    await page.route(/^https:\/\/accounts\.google\.com\//, (route) => route.abort());
     await noGoogle(page);
     await leftPanel(page);
     await page.getByRole("button", { name: "Connect a calendar…" }).click();

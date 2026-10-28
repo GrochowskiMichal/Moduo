@@ -541,6 +541,9 @@ Mutants `bun run db:mutants` lets live because they can't change any outcome, ea
 | `buckets: buckets_update USING true` | WITH CHECK asks the same `can_access('bucket', id, 'edit')` of the old row. |
 | `buckets: buckets_update WITH CHECK without term 1 of 2` | The dropped term is that same `can_access('bucket', id, 'edit')`, which USING still asks. |
 | `workspace_members: drop restrictive paid_plan_required_to_add_member` | It narrows an INSERT no permissive policy allows: nobody inserts a member row directly (`join` is ✗ for all), and `workspace_op_accept_invite` writes as the table owner, past RLS. |
+| `exposed_notes: RLS off` | No client role holds any grant on it since NS-1, so with RLS off every select, insert, update and delete is still refused by the missing privilege. |
+| `exposed_notes: UPDATE opened to everyone` | The mutant grants UPDATE but not SELECT: the `WHERE id = …` needs SELECT on `id`, so the statement is refused before any policy runs. |
+| `exposed_notes: DELETE opened to everyone` | The same: DELETE with a `WHERE` needs SELECT on the column it filters, which no client holds. |
 
 ## RPC probe
 
