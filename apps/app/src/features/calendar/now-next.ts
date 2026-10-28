@@ -2,7 +2,11 @@
 // when, what's next and the join key (⇧⌘J). Pure: which events those are, and
 // which parts fit the room the toolbar leaves it. Parts drop in a fixed order
 // as the room narrows: "then …" first, then the key, then "until", then the
-// whole pill.
+// whole pill. The Home Today widget (CALR-21) reads the same items.
+
+import { type CalendarEventModel, eventChipsInRange } from "./events";
+import { localDayKey, startOfLocalDay, visibleRange } from "./lens";
+import { splitTeammateEvents } from "./teammates";
 
 export type NowNextItem = {
   eventId: string;
@@ -31,6 +35,41 @@ export function nowAndNext(items: readonly NowNextItem[], nowMs: number): NowNex
     }
   }
   return now || next ? { now, next } : null;
+}
+
+/**
+ * Today's timed meetings at `nowMs`, occurrences of repeats included, each
+ * with its join link. Focus time is your own work and a hold a time you
+ * offered, so neither is a meeting (CALR-14, CALR-19).
+ */
+export function nowNextItems(events: readonly CalendarEventModel[], nowMs: number): NowNextItem[] {
+  const today = startOfLocalDay(new Date(nowMs));
+  const range = visibleRange("day", today, { weekStartsOn: 1, showWeekends: true });
+  const eventById = new Map(events.map((e) => [e.id, e]));
+  const todaysChips = eventChipsInRange([...events], range).timed.get(localDayKey(today)) ?? [];
+  const meetings = todaysChips.filter((chip) => !chip.focus && !chip.held);
+  return meetings.map((chip) => ({
+    eventId: chip.eventId,
+    occurrenceKey: chip.occurrenceKey,
+    title: chip.title || "Untitled",
+    startMs: chip.startMs,
+    endMs: chip.endMs,
+    joinUrl: eventById.get(chip.eventId)?.conferenceUrl ?? null,
+  }));
+}
+
+/**
+ * The Home Today widget's now and next: your own events only (a teammate's
+ * shown calendar leaves it; your events on it stay), as the toolbar reads them.
+ */
+export function todayNowNext(
+  events: readonly CalendarEventModel[],
+  nowMs: number,
+  self: string | null,
+  shared: readonly { calendarId: string }[] = [],
+): NowNext | null {
+  const { mine } = splitTeammateEvents(events, shared, self);
+  return nowAndNext(nowNextItems(mine, nowMs), nowMs);
 }
 
 export type NowNextParts = { pill: boolean; until: boolean; key: boolean; then: boolean };

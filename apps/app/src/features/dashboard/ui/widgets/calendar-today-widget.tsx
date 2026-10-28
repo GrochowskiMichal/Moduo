@@ -4,19 +4,23 @@
 // Move-to-today (edit-gated by `canWrite`). Rows deep-link; never a guilt wall.
 
 import { ArrowRight, CalendarClock } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { eventChipsInRange } from "@/features/calendar/events";
 import { localDayKey, startOfLocalDay, taskBlocks, visibleRange } from "@/features/calendar/lens";
+import { todayNowNext } from "@/features/calendar/now-next";
 import { DEFAULT_CALENDAR_PREFS } from "@/features/calendar/prefs";
 import { planRollForward, rollForwardMessage } from "@/features/calendar/roll-forward";
 import { stripItems } from "@/features/calendar/strip";
 import { shapeToday, type TodayChip } from "@/features/calendar/today";
 import { formatTimeOfDay } from "@/features/calendar/ui/time-format";
+import { useMinuteTick } from "@/features/calendar/ui/use-minute-tick";
+import { useAppHotkeys } from "@/lib/hotkeys";
 import { getRuntime } from "@/lib/runtime";
 import { findWorkspaceStore } from "@/lib/sync/store";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import {
   requestDashboardDataRefresh,
@@ -26,7 +30,31 @@ import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
 import { openEntity } from "../../widget-nav";
+import { TodayNowNext } from "./today-now-next";
 import { WidgetBodyRoot } from "./widget-primitives";
+
+type SharedCalendars = { workspaceId: string; list: readonly { calendarId: string }[] };
+
+/** Teammates' calendars shown to you in this workspace, read once per workspace; [] if the read fails. */
+function useSharedCalendars(workspaceId: string | null): readonly { calendarId: string }[] {
+  const [shared, setShared] = useState<SharedCalendars | null>(null);
+  useEffect(() => {
+    if (!workspaceId) return;
+    let live = true;
+    const read = getRuntime()?.calendar.sharedWithMe?.(workspaceId) ?? Promise.resolve([]);
+    void read
+      .catch(() => [])
+      .then((list) => {
+        if (live) setShared({ workspaceId, list });
+      });
+    return () => {
+      live = false;
+    };
+  }, [workspaceId]);
+  return shared && shared.workspaceId === workspaceId ? shared.list : NO_SHARED;
+}
+
+const NO_SHARED: readonly { calendarId: string }[] = [];
 
 export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
   const taskSource = useDashboardSource("tasks");
@@ -50,6 +78,19 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
     () => shapeToday({ tasks: liveTasks, events, weekStartsOn: 1, now: new Date() }),
     [liveTasks, events],
   );
+
+  // The now-and-next line: the Calendar toolbar's answer, your own events only.
+  const { userId } = useAuth();
+  const shared = useSharedCalendars(workspaceId);
+  const nowMs = useMinuteTick();
+  const nowNext = todayNowNext(events, nowMs, userId, shared);
+  const joinUrl = nowNext?.now?.joinUrl ?? null;
+  useAppHotkeys({
+    "home.join": () => {
+      if (!joinUrl) return false;
+      window.open(joinUrl, "_blank", "noopener,noreferrer");
+    },
+  });
 
   const onMoveToToday = useCallback(() => {
     const runtime = getRuntime();
@@ -116,6 +157,7 @@ export function CalendarTodayWidget({ size, canWrite }: WidgetComponentProps) {
 
   return (
     <WidgetBodyRoot>
+      <TodayNowNext data={nowNext} onOpen={(item) => openEntity("event", item.eventId)} />
       {view.stripCount > 0 ? (
         <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
           <span className="min-w-0 flex-1 truncate">{view.stripCount} unfinished from earlier</span>

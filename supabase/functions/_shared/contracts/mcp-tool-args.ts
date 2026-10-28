@@ -41,6 +41,16 @@ const importedFromSchema = z
   .object({ source: z.string().trim().min(1).max(40), key: z.string().trim().min(1).max(200) })
   .strict();
 
+/** A calendar event's place, link, privacy, calendar and people (CALR-21). `link: ""` and
+ *  `calendar_id: null` clear them on an update. */
+const eventDetailFields = {
+  place: z.string().optional(),
+  link: z.string().nullable().optional(),
+  private: z.boolean().optional(),
+  calendar_id: z.string().trim().min(1).nullable().optional(),
+  people: z.array(z.object({ email: z.string().trim().min(1), name: z.string().optional() })).max(100).optional(),
+};
+
 // What a call keeps: `parseToolArgs` strips any key a schema here lacks, even one the tool's
 // `inputSchema` promises (MOD-92). Add a field to both; moduo-mcp/tool-schemas.test.ts checks they
 // agree, and handler tests should call through `parseToolArgs` (tasks-v3.test.ts's `call`).
@@ -258,6 +268,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     description: z.string().optional(),
     all_day: z.boolean().optional(),
     rrule: z.string().optional(),
+    ...eventDetailFields,
   }),
   calendar_update_event: z.object({
     event_id: nonempty,
@@ -267,12 +278,23 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     description: z.string().optional(),
     all_day: z.boolean().optional(),
     rrule: z.string().optional(),
+    ...eventDetailFields,
   }),
   calendar_delete_event: z.object({ event_id: nonempty }),
   calendar_schedule_task: z.object({ task_id: nonempty, scheduled_at: iso }),
   calendar_move_block: z.object({ task_id: nonempty, scheduled_at: iso }),
   calendar_complete_block: z.object({ task_id: nonempty }),
   calendar_roll_forward: z.object({}),
+  calendar_offer_times: z.object({
+    times: z.array(iso).min(1).max(10),
+    link_id: nonempty.optional(),
+    hold: z.boolean().optional(),
+    title: z.string().optional(),
+    duration_minutes: z.coerce.number().int().min(5).max(1440).optional(),
+    video_provider: z.enum(["google_meet", "zoom", "guest_choice"]).optional(),
+  }),
+  calendar_release_offer: z.object({ offer_id: nonempty }),
+  calendar_who_sees: z.object({ event_id: nonempty.optional() }),
 
   contacts_list: z.object({ limit: wideLimit }),
   contacts_get: z.object({ entity_id: nonempty, entity_type: nonempty.optional() }),

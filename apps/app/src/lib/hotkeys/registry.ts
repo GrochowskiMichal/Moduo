@@ -208,6 +208,7 @@ export const HOTKEYS = {
   "home.prev-page": { scope: "home", label: "Previous page", keys: ["ArrowLeft"] },
   "home.next-page": { scope: "home", label: "Next page", keys: ["ArrowRight"] },
   "home.exit-edit": { scope: "home", label: "Leave edit mode", keys: ["Escape"] },
+  "home.join": { scope: "home", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
 
   // ── email ──────────────────────────────────────────────────────────────────
   "email.next": { scope: "email", label: "Next thread", keys: ["J"] },
