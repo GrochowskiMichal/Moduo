@@ -166,6 +166,12 @@ export const HOTKEYS = {
   "calendar.add-meet": { scope: "calendar", label: "Add a Meet link", keys: ["V"] },
   "calendar.link": { scope: "calendar", label: "Link a person, note or task", keys: ["L"] },
   "calendar.private": { scope: "calendar", label: "Make private or public", keys: ["P"] },
+  "calendar.join": { scope: "calendar", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
+  "calendar.all-day": {
+    scope: "calendar",
+    label: "Show every all-day row",
+    keys: ["Shift+A"],
+  },
 
   // ── home (dashboard) ───────────────────────────────────────────────────────
   "home.prev-page": { scope: "home", label: "Previous page", keys: ["ArrowLeft"] },

@@ -17,15 +17,12 @@
 // so a tick re-renders today's column only — not the whole week.
 
 import { useDroppable } from "@dnd-kit/core";
-import { Circle, CircleCheck, Paperclip } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
-import { MetaCount } from "../../../components/ui/meta-count";
-import { filesLabel } from "../../attachments/files";
 import { isElapsedBlock } from "../elapsed";
 import { type EventChip, eventHue } from "../events";
 import {
@@ -43,7 +40,9 @@ import {
 } from "../grid-layout";
 import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
 import type { CalendarPrefs } from "../prefs";
-import { COMPACT_BELOW_MINUTES, EventChipView } from "./event-chip";
+import { AllDayLane } from "./allday-lane";
+import { DayHeader, ZoneCorner } from "./day-header";
+import { COMPACT_BELOW_MINUTES } from "./event-chip";
 import {
   EventQuickCreate,
   type QuickCreateCalendar,
@@ -80,8 +79,10 @@ type Props = {
   allDayByDay: Map<string, EventChip[]>;
   /** Due-only tasks per day, in the all-day lane (TV-F6, AC2.3/AC7.3). */
   dueByDay?: Map<string, DueChip[]>;
-  /** A due chip was clicked: open its task. */
+  /** A task in a day header's due list was picked: open it. */
   onDueClick?: (taskId: string) => void;
+  /** Schedule (S) in a day header's due list: put the task on that day. */
+  onScheduleDue?: (taskId: string, day: Date) => void;
   /** Task id → its finished files (AT-3's 📎 mark on blocks and due chips). */
   fileCounts?: ReadonlyMap<string, number>;
   prefs: CalendarPrefs;
@@ -185,6 +186,7 @@ export function CalendarGrid({
   allDayByDay,
   dueByDay = NO_DUE,
   onDueClick,
+  onScheduleDue,
   fileCounts,
   prefs,
   loading,
@@ -227,10 +229,9 @@ export function CalendarGrid({
   const hasAllDay = useMemo(
     () =>
       days.some((d) => {
-        const key = localDayKey(d);
-        return (allDayByDay.get(key) ?? []).length > 0 || (dueByDay.get(key) ?? []).length > 0;
+        return (allDayByDay.get(localDayKey(d)) ?? []).length > 0;
       }),
-    [days, allDayByDay, dueByDay],
+    [days, allDayByDay],
   );
 
   const [pending, setPending] = useState<PendingCreate | null>(null);
@@ -644,105 +645,51 @@ export function CalendarGrid({
         </div>
       ) : null}
 
-      {/* day headers */}
+      {/* day headers: the zone in the corner above the hours, then each day */}
       <div
-        className="grid shrink-0 border-b border-border pb-1.5"
+        className="grid shrink-0 border-b border-border"
         style={{ gridTemplateColumns: columns }}
       >
-        <div aria-hidden />
-        {days.map((day) => {
-          const isToday = localDayKey(day) === todayKey;
+        {/* The zone now when today is on show, else at noon of the first day
+            (midnight of a clock-change Sunday still reads summer time). */}
+        <ZoneCorner
+          at={
+            days.some((d) => localDayKey(d) === todayKey) || !days[0]
+              ? now
+              : new Date(days[0].getFullYear(), days[0].getMonth(), days[0].getDate(), 12)
+          }
+        />
+        {days.map((day, i) => {
+          const key = localDayKey(day);
           return (
-            <div
-              key={localDayKey(day)}
-              className={cn(
-                "flex items-baseline gap-1.5 px-2 text-sm",
-                isToday ? "font-medium text-foreground" : "text-muted-foreground",
-              )}
-            >
-              <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
-              <span className={cn(!isToday && "text-muted-foreground/70")}>{day.getDate()}</span>
-            </div>
+            <DayHeader
+              key={key}
+              day={day}
+              today={key === todayKey}
+              past={geoms[i].dayEndMs <= now.getTime()}
+              due={dueByDay.get(key) ?? EMPTY_DUE}
+              onOpenTask={(id) => onDueClick?.(id)}
+              onSchedule={(id) => onScheduleDue?.(id, day)}
+              canSchedule={Boolean(onScheduleDue)}
+            />
           );
         })}
       </div>
 
-      {/* all-day lane — pinned above the hours, only when it has content */}
+      {/* all-day lane: at most two rows, pinned above the hours */}
       {hasAllDay ? (
-        <div
-          className="grid shrink-0 border-b border-border py-1"
-          style={{ gridTemplateColumns: columns }}
-        >
-          <div className="pr-2 text-right text-2xs text-muted-foreground">all-day</div>
-          {days.map((day) => {
-            const key = localDayKey(day);
-            const chips = allDayByDay.get(key) ?? EMPTY_EVENTS;
-            return (
-              <div
-                key={key}
-                className="flex min-w-0 flex-col gap-0.5 border-l border-border px-0.5"
-              >
-                {chips.map((chip) => (
-                  <button
-                    key={chip.occurrenceKey}
-                    type="button"
-                    data-chip="event"
-                    className="block w-full text-left"
-                    style={{ height: "var(--ctrl-h-sm)" }}
-                    onClick={(e) => {
-                      onSelectOccurrence(chip.occurrenceKey);
-                      onEventClick(chip, (e.currentTarget as HTMLElement).getBoundingClientRect());
-                    }}
-                  >
-                    <EventChipView
-                      title={chip.title}
-                      startMs={chip.startMs}
-                      endMs={chip.endMs}
-                      compact
-                      allDay
-                      hue={eventHue(chip, accountHues)}
-                      readOnly={chip.readOnly}
-                      recurring={chip.recurring}
-                      selected={selectedOccurrenceKey === chip.occurrenceKey}
-                      past={false}
-                      locked={chip.locked}
-                    />
-                  </button>
-                ))}
-                {/* Due-only tasks: due that day, in nobody's calendar (AC2.3). */}
-                {(dueByDay.get(key) ?? EMPTY_DUE).map((due) => (
-                  <button
-                    key={`due:${due.taskId}`}
-                    type="button"
-                    data-chip="due"
-                    onClick={() => onDueClick?.(due.taskId)}
-                    aria-label={`${due.title || "Untitled"} · due${due.done ? " · done" : ""}`}
-                    className="flex h-(--ctrl-h-sm) w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-left text-xs text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {due.done ? (
-                      <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                    ) : (
-                      <Circle className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                    )}
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        due.done && "text-muted-foreground line-through",
-                      )}
-                    >
-                      {due.title || "Untitled"}
-                    </span>
-                    <MetaCount
-                      icon={Paperclip}
-                      count={fileCounts?.get(due.taskId) ?? 0}
-                      label={filesLabel}
-                    />
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        <AllDayLane
+          days={days}
+          columns={columns}
+          allDayByDay={allDayByDay}
+          accountHues={accountHues}
+          selectedOccurrenceKey={selectedOccurrenceKey}
+          nowMs={now.getTime()}
+          onPick={(chip, rect) => {
+            onSelectOccurrence(chip.occurrenceKey);
+            onEventClick(chip, rect);
+          }}
+        />
       ) : null}
 
       {/* the hours grid */}

@@ -1,8 +1,10 @@
-// Calendar toolbar: period nav · Today · range label · Day|Week switch.
+// Calendar toolbar: period nav · Today · range label · the now-and-next line
+// (CALR-2, in the free room between) · Day|Week switch.
 // Controls sit on the standard rungs; the sync affordance (external
 // calendars) joins the right side with CAL-6.
 
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
@@ -21,6 +23,8 @@ type Props = {
   syncLabel?: string | null;
   onRefresh?: () => void;
   refreshing?: boolean;
+  /** The now-and-next line; it fills the free room, so it is the spacer too. */
+  nowNext?: ReactNode;
 };
 
 const VIEW_ITEMS = [
@@ -38,6 +42,7 @@ export function CalendarToolbar({
   syncLabel,
   onRefresh,
   refreshing = false,
+  nowNext,
 }: Props) {
   return (
     <Toolbar aria-label="Calendar controls" className="shrink-0 pb-3">
@@ -48,8 +53,10 @@ export function CalendarToolbar({
       <Button variant="outline" size="sm" onClick={onToday}>
         Today
       </Button>
-      <span className="font-display text-sm font-medium text-foreground">{label}</span>
-      <Toolbar.Spacer />
+      <span className="shrink-0 font-display text-sm font-medium whitespace-nowrap text-foreground">
+        {label}
+      </span>
+      {nowNext ?? <Toolbar.Spacer />}
       <Toolbar.Group>
         {onRefresh ? (
           <Toolbar.Group gap="snug">

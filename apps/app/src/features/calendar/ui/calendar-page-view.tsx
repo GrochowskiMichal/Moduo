@@ -116,6 +116,7 @@ import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
+import { CalendarNowNext } from "./now-next";
 import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
@@ -127,6 +128,7 @@ import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
+import { useScheduleDue } from "./use-schedule-due";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -520,6 +522,15 @@ export function CalendarPageView({
 
   useCalendarHotkeys({ setView, goToday, step, selectedOccurrenceKey, requestDelete });
 
+  // CALR-2: Schedule (S) in a day header's due list.
+  const onScheduleDue = useScheduleDue({
+    tasks,
+    prefs,
+    commands,
+    eventsByDay: eventChips.timed,
+    blocksByDay: grouped,
+  });
+
   const onToggleDone = useCallback(
     (taskId: string) => {
       const task = tasks.find((t) => t.id === taskId);
@@ -750,6 +761,15 @@ export function CalendarPageView({
               syncLabel={calendar.accounts.length > 0 ? syncAgeLabel(calendar.accounts) : null}
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
+              nowNext={
+                <CalendarNowNext
+                  events={shownEvents}
+                  onOpen={(item) => {
+                    setSelectedOccurrenceKey(item.occurrenceKey);
+                    openDetail({ type: "event", id: item.eventId });
+                  }}
+                />
+              }
             />
             <CalendarStrip
               count={strip.length}
@@ -766,6 +786,7 @@ export function CalendarPageView({
               allDayByDay={eventChips.allDay}
               dueByDay={dueByDay}
               onDueClick={(id) => openDetail({ type: "task", id })}
+              onScheduleDue={canEdit ? onScheduleDue : undefined}
               fileCounts={attachmentCounts}
               prefs={prefs}
               loading={loading}
