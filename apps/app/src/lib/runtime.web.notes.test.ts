@@ -34,7 +34,7 @@ const LEAN = {
   position: "a0",
   is_archived: false,
   published_at: "2026-10-28T09:00:00+00:00",
-  publish_token: "0f64b653891cb81ef8f293f866e85bf4",
+  publish_token: "publish-token-fixture",
   doc_version: 7,
   share_mode: "inherit",
   workspace_shared: false,
