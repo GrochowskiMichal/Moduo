@@ -5,10 +5,12 @@
  * Search while Notes is open.
  *
  * Titles match at once from this device; what notes say comes from the
- * server's full-text index a beat later, each hit with the line it was found
- * in. A failed text search says so and keeps the title matches.
+ * server's notes__search a beat later (the same search ⌘K and agents use),
+ * each hit with the line it was found in and where the note lives. A failed
+ * text search says so and keeps the title matches.
  */
 
+import type { SearchMatch } from "@contracts/vocabularies";
 import { ArrowLeft, FileText } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,19 +19,24 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SELECTED_ROW } from "@/components/ui/selection";
+import { snippetSegments } from "@/lib/search-snippet";
 import { cn } from "@/lib/utils";
 
-import { bodyOnlyHits, bodySnippet, findByTitle, queryWords, type SnippetParts } from "../find";
+import { bodyOnlyHits, findByTitle, queryWords } from "../find";
 import type { Note } from "../model";
 import { displayTitle } from "../title";
 
-/** What the server's text search returns (runtime.notesV2.search). */
+/** What the server's text search returns (runtime.notesV2.search, over
+ * notes__search): only notes this person can open, trashed ones never. */
 export type NoteTextHit = {
   id: string;
   title: string;
-  bodyText: string;
-  isArchived: boolean;
-  deletedAt: string | null;
+  icon: string | null;
+  /** The parent path, "… / Grandparent / Parent". */
+  context: string | null;
+  /** Matches between U+E000 and U+E001; only for a hit in the body. */
+  snippet: string | null;
+  match: SearchMatch;
 };
 
 const DEBOUNCE_MS = 200;
@@ -193,10 +200,9 @@ export function NotesSearchView({
                 <HitRow
                   onKeyDown={onHitKeyDown}
                   key={hit.id}
-                  note={
-                    note ?? { id: hit.id, title: hit.title, icon: null, isArchived: hit.isArchived }
-                  }
-                  snippet={bodySnippet(hit.bodyText, trimmed)}
+                  note={note ?? { id: hit.id, title: hit.title, icon: hit.icon, isArchived: false }}
+                  context={hit.context}
+                  snippet={hit.snippet}
                   selected={hit.id === selectedId}
                   onOpen={() => onOpen(hit.id)}
                 />
@@ -228,13 +234,16 @@ function HitGroup({ label, children }: { label: string; children: ReactNode }) {
 
 function HitRow({
   note,
+  context = null,
   snippet = null,
   selected,
   onOpen,
   onKeyDown,
 }: {
   note: Pick<Note, "id" | "title" | "icon" | "isArchived">;
-  snippet?: SnippetParts | null;
+  context?: string | null;
+  /** The server's snippet, matches between U+E000 and U+E001. */
+  snippet?: string | null;
   selected: boolean;
   onOpen: () => void;
   /** ↑ ↓ between results, Esc back to the tree. */
@@ -270,15 +279,25 @@ function HitRow({
               </Eyebrow>
             ) : null}
           </span>
+          {context ? (
+            <span className="truncate text-xs text-subtle-foreground">{context}</span>
+          ) : null}
           {snippet ? (
             <span className="line-clamp-2 text-xs text-subtle-foreground">
-              {snippet.before}
-              {snippet.match ? (
-                <mark className="rounded-sm bg-state-selected font-medium text-foreground">
-                  {snippet.match}
-                </mark>
-              ) : null}
-              {snippet.after}
+              {snippetSegments(snippet).map((part, i) =>
+                part.marked ? (
+                  <mark
+                    // eslint-disable-next-line react/no-array-index-key -- segments have no identity; the list is rebuilt whole
+                    key={i}
+                    className="rounded-sm bg-state-selected font-medium text-foreground"
+                  >
+                    {part.text}
+                  </mark>
+                ) : (
+                  // eslint-disable-next-line react/no-array-index-key -- as above
+                  <span key={i}>{part.text}</span>
+                ),
+              )}
             </span>
           ) : null}
         </span>

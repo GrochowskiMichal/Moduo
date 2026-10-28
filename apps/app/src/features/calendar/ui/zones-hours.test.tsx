@@ -3,6 +3,9 @@
 // the second zone; the Working hours sheet sets start, end, weekends and the
 // week start.
 
+// Pin TZ before any Date math (CI runs in UTC); rstest isolates each file.
+process.env.TZ = "Europe/Warsaw";
+
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 

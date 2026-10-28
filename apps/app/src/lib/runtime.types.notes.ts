@@ -1,5 +1,7 @@
 /** The runtime port's notes, notesV2 (implemented in runtime.web.notes.ts). */
 
+import type { SearchMatch } from "@contracts/vocabularies";
+
 import type {
   Note as NoteV2,
   NoteDocPull,
@@ -181,15 +183,20 @@ export type NotesV2Runtime = {
     noteId: string;
     mentionedUserIds: string[];
   }): Promise<void>;
-  /** Full-text sidebar search (NO-8, AC8) over the server `search_tsv` GIN
-   * index; trashed excluded, archived flagged. Degrades to [] pre-migration. */
+  /** Notes' own text search, through the server's `notes__search` (GS-2): the
+   * same rows MCP `notes_search` and ⌘K get. Only notes the caller can open,
+   * trashed excluded, best first; a body hit carries a snippet with its
+   * matches between U+E000 and U+E001. Answers [] before the function is
+   * deployed. */
   search(input: { workspaceId: string; query: string; limit?: number }): Promise<
     {
       id: string;
       title: string;
-      bodyText: string;
-      isArchived: boolean;
-      deletedAt: string | null;
+      icon: string | null;
+      /** The parent path: "… / Grandparent / Parent", or null at the top. */
+      context: string | null;
+      snippet: string | null;
+      match: SearchMatch;
     }[]
   >;
   /** `body_md` for a set of notes — the per-note / tree markdown export source. */

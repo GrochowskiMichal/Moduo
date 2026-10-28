@@ -170,6 +170,7 @@ export const HOTKEYS = {
   "calendar.open": { scope: "calendar", label: "Open, or a new event", keys: ["Enter"] },
   // CALR-4b: the event menu at the selection (the right-click menu by key).
   "calendar.menu": { scope: "calendar", label: "Open the event menu", keys: ["Control+Enter"] },
+  "calendar.new": { scope: "calendar", label: "New event", keys: ["N"] },
   "calendar.earlier": { scope: "calendar", label: "15 minutes earlier", keys: ["Alt+ArrowUp"] },
   "calendar.later": { scope: "calendar", label: "15 minutes later", keys: ["Alt+ArrowDown"] },
   "calendar.prev-day": { scope: "calendar", label: "A day earlier", keys: ["Alt+ArrowLeft"] },

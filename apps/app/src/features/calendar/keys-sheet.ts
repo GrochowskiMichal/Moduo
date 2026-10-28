@@ -25,6 +25,11 @@ const ROWS: RowSpec[] = [
   { group: "Anywhere in Calendar", ids: ["calendar.today"], desc: "Today" },
   {
     group: "Anywhere in Calendar",
+    ids: ["calendar.new"],
+    desc: "New event: type what and when, ⇥ finds free time",
+  },
+  {
+    group: "Anywhere in Calendar",
     ids: ["calendar.day", "calendar.week", "calendar.month"],
     desc: "Day · Week · Month",
   },

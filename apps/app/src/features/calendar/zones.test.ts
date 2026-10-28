@@ -1,7 +1,10 @@
 // AC15 (CALR-13): Z adds a second zone; the event shows its time there; a clock
 // change (yours, or the second zone's) is labelled on its day. Tests run on
-// Europe/Warsaw time (rstest.setup.ts): Europe goes back on Sun 25 Oct 2026,
+// Europe/Warsaw time (pinned below): Europe goes back on Sun 25 Oct 2026,
 // the US on Sun 1 Nov 2026, so the week of 26 Oct is the two-zone week.
+
+// Pin TZ before any Date math (CI runs in UTC); rstest isolates each file.
+process.env.TZ = "Europe/Warsaw";
 
 import { beforeEach, describe, expect, it } from "@rstest/core";
 
