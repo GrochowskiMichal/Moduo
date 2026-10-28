@@ -7,7 +7,12 @@ import { dayGeometry, instantAtWallMinute, wallMinuteOf } from "./grid-layout";
 import { parseDayKey } from "./lens";
 
 /** A slot on the grid: a day and the wall-clock minute its 30 minutes start at. */
-export type GridCursor = { dayKey: string; minute: number };
+export type GridCursor = {
+  dayKey: string;
+  minute: number;
+  /** An event sits under it: the event's ring shows instead of the slot's. */
+  busy?: boolean;
+};
 
 export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 

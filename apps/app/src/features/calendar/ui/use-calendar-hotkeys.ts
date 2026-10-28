@@ -160,6 +160,22 @@ export function useCalendarHotkeys(input: Input) {
     return () => document.removeEventListener("focusin", onFocus);
   }, [startCursor]);
 
+  // Space and ↵ open a card or a new event without a trigger: when it closes
+  // and focus falls to the page, it goes back to the grid (rules: ui-radix).
+  const backToGrid = useRef(false);
+  useEffect(() => {
+    const onFocusOut = (e: FocusEvent) => {
+      if (!backToGrid.current || e.relatedTarget) return;
+      window.setTimeout(() => {
+        if (document.activeElement && document.activeElement !== document.body) return;
+        backToGrid.current = false;
+        document.querySelector<HTMLElement>(GRID)?.focus({ preventScroll: true });
+      }, 0);
+    };
+    document.addEventListener("focusout", onFocusOut);
+    return () => document.removeEventListener("focusout", onFocusOut);
+  }, []);
+
   const selectedChip = useCallback((): EventChip | null => {
     const k = keysRef.current;
     return k.all.find((c) => c.occurrenceKey === k.selectedOccurrenceKey) ?? null;
@@ -276,7 +292,9 @@ export function useCalendarHotkeys(input: Input) {
       const el = document.querySelector(
         `[data-occurrence-key="${CSS.escape(chip.occurrenceKey)}"]`,
       );
-      if (el) k.onEventClick(chip, el.getBoundingClientRect());
+      if (!el) return false;
+      backToGrid.current = true;
+      k.onEventClick(chip, el.getBoundingClientRect());
     },
     "calendar.open": (e) => {
       if (!onTheGridItself(e)) return false;
@@ -288,6 +306,7 @@ export function useCalendarHotkeys(input: Input) {
       }
       if (!k.canEdit) return false;
       if (!k.cursor) setCursor(startCursor());
+      backToGrid.current = true;
       dispatchCreateNew();
     },
     "calendar.earlier": change("earlier"),
@@ -338,5 +357,9 @@ export function useCalendarHotkeys(input: Input) {
     "calendar.undo": (e) => (inCalendarOverlay(e) ? false : undoLast() ? undefined : false),
   });
 
-  return { cursor };
+  const shown = useMemo(
+    () => (cursor ? { ...cursor, busy: chipAtCursor(cursor, timed) !== null } : null),
+    [cursor, timed],
+  );
+  return { cursor: shown };
 }

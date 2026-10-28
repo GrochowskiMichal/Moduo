@@ -14,13 +14,14 @@ export function GridCursorMark({ cursor, days }: { cursor: GridCursor; days: Dat
   useLayoutEffect(() => {
     ref.current?.scrollIntoView?.({ block: "nearest" });
   }, [cursor.dayKey, cursor.minute]);
-  if (col < 0) return null;
+  if (col < 0 || cursor.busy) return null;
   return (
     <div
       aria-hidden
-      className="pointer-events-none relative hidden group-focus-visible/grid:block"
-      // Column 1 is the hour gutter; the cursor shares row 1 with the columns.
-      style={{ gridColumn: col + 2, gridRow: 1 }}
+      className="pointer-events-none absolute inset-0 hidden group-focus-visible/grid:block"
+      // Out of flow, so the day columns keep their places; the placement makes
+      // its column the box it sits in (column 1 is the hour gutter).
+      style={{ gridColumn: `${col + 2} / span 1`, gridRow: "1 / span 1" }}
     >
       <div
         ref={ref}

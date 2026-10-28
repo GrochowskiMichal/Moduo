@@ -74,55 +74,54 @@ function attendeesOf(event: CalendarEventModel): CalendarAttendeeInput[] {
   return (event.attendees ?? []).map((a) => ({ email: a.email, name: a.name, status: a.status }));
 }
 
+type Back = (before: CalendarEventModel, patch: CalendarEventPatch) => unknown;
+
+/** Per field, what it was before (an unset optional field reads as its default). */
+const BACK: Record<keyof CalendarEventPatch, Back> = {
+  title: (b) => b.title,
+  description: (b) => b.description,
+  startsAt: (b) => b.startsAt,
+  endsAt: (b) => b.endsAt,
+  allDay: (b) => b.allDay,
+  rrule: (b) => b.rrule ?? null,
+  calendarId: (b) => b.calendarRef ?? null,
+  location: (b) => b.location ?? null,
+  attendees: (b) => attendeesOf(b),
+  conferenceUrl: (b) => b.conferenceUrl ?? null,
+  conferenceProvider: (b) => b.conferenceProvider ?? null,
+  isPrivate: (b) => b.isPrivate ?? false,
+  kind: (b) => b.kind ?? "event",
+  focusTaskId: (b) => b.focusTaskId ?? null,
+  meet: (_b, p) => (p.meet === "add" ? "remove" : "add"),
+};
+
 /** The patch that puts back exactly the fields `patch` touched. */
 export function inversePatch(
   before: CalendarEventModel,
   patch: CalendarEventPatch,
 ): CalendarEventPatch {
-  const back: CalendarEventPatch = {};
+  const back: Record<string, unknown> = {};
   for (const field of Object.keys(patch) as (keyof CalendarEventPatch)[]) {
-    if (patch[field] === undefined) continue;
-    switch (field) {
-      case "title":
-      case "description":
-      case "startsAt":
-      case "endsAt":
-      case "allDay":
-        back[field] = before[field] as never;
-        break;
-      case "rrule":
-        back.rrule = before.rrule ?? null;
-        break;
-      case "calendarId":
-        back.calendarId = before.calendarRef ?? null;
-        break;
-      case "location":
-        back.location = before.location ?? null;
-        break;
-      case "attendees":
-        back.attendees = attendeesOf(before);
-        break;
-      case "conferenceUrl":
-        back.conferenceUrl = before.conferenceUrl ?? null;
-        break;
-      case "conferenceProvider":
-        back.conferenceProvider = before.conferenceProvider ?? null;
-        break;
-      case "isPrivate":
-        back.isPrivate = before.isPrivate ?? false;
-        break;
-      case "kind":
-        back.kind = before.kind ?? "event";
-        break;
-      case "focusTaskId":
-        back.focusTaskId = before.focusTaskId ?? null;
-        break;
-      case "meet":
-        back.meet = patch.meet === "add" ? "remove" : "add";
-        break;
-    }
+    if (patch[field] !== undefined) back[field] = BACK[field](before, patch);
   }
-  return back;
+  return back as CalendarEventPatch;
+}
+
+/**
+ * One edit's undo step: the old values written back by `write`; a move or a
+ * resize also shows the toast (AC21), any other edit is a quiet ⌘Z step.
+ */
+export function recordEventUndo(
+  before: CalendarEventModel,
+  patch: CalendarEventPatch,
+  write: (back: CalendarEventPatch) => void | Promise<void>,
+): void {
+  const back = inversePatch(before, patch);
+  const moved = timeChangeLabel(before, patch);
+  recordUndo(moved ?? "Event changed", () => write(back), {
+    toast: moved !== null,
+    description: before.title,
+  });
 }
 
 /** The toast a time change speaks: same shift at both ends is a move, else a resize. */

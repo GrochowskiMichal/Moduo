@@ -731,7 +731,7 @@ export function CalendarGrid({
       >
         <div
           ref={gridRef}
-          className="grid"
+          className="relative grid"
           style={{ gridTemplateColumns: columns, height: y(maxMinutes) }}
         >
           {/* hour gutter */}

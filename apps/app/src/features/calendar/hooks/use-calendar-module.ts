@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
-import { inversePatch, recordUndo, timeChangeLabel } from "../commands/undo";
+import { recordEventUndo, recordUndo } from "../commands/undo";
 import type {
   CalendarAccountModel,
   CalendarEventModel,
@@ -456,19 +456,16 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   // four setStates first, never reached the server, and edits often didn't.
   // The rendered row is only stale for a second edit made inside the same
   // handler as the first, and nothing does that.
-  const updateEvent = useCallback(
-    async (
-      eventId: string,
-      patch: CalendarEventPatch,
-      opts: { undo?: boolean } = {},
-    ): Promise<void> => {
-      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
+  /** The write itself; resolves to the row as it was when the save landed, else null. */
+  const saveEvent = useCallback(
+    async (eventId: string, patch: CalendarEventPatch): Promise<CalendarEventModel | null> => {
+      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return null;
       const snapshot = events.find((e) => e.id === eventId);
-      if (!snapshot) return;
+      if (!snapshot) return null;
       const writer = writableEvent(snapshot, accounts, userId);
       if (!writer) {
         toast.error(VIEW_ONLY_EVENT);
-        return;
+        return null;
       }
       const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
       const optimistic = applyPatch(snapshot, patch);
@@ -495,16 +492,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
             e.id === eventId && (e === optimistic || writer === "moduo") ? saved : e,
           ),
         );
-        // AC21: every edit is one ⌘Z step; a move or resize also shows the toast.
-        if (opts.undo !== false) {
-          const back = inversePatch(snapshot, patch);
-          const moved = timeChangeLabel(snapshot, patch);
-          recordUndo(
-            moved ?? "Event changed",
-            () => writesRef.current.updateEvent(eventId, back, { undo: false }),
-            { toast: moved !== null, description: snapshot.title },
-          );
-        }
+        return snapshot;
       } catch (err) {
         setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
         const reason = err instanceof Error ? err.message : "";
@@ -513,9 +501,27 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
             ? `Google didn't save it${reason ? `: ${reason}` : "."}`
             : reason || "Couldn't update the event.",
         );
+        return null;
       }
     },
     [guardEdit, runtime, workspaceId, events, accounts, userId, scope, setEventsIn],
+  );
+
+  const updateEvent = useCallback(
+    async (
+      eventId: string,
+      patch: CalendarEventPatch,
+      opts: { undo?: boolean } = {},
+    ): Promise<void> => {
+      const before = await saveEvent(eventId, patch);
+      // AC21: every edit is one ⌘Z step; a move or resize also shows the toast.
+      if (before && opts.undo !== false) {
+        recordEventUndo(before, patch, (back) =>
+          writesRef.current.updateEvent(eventId, back, { undo: false }),
+        );
+      }
+    },
+    [saveEvent],
   );
 
   /** A Google event's delete, already removed from the list: Google first, back on refusal. */
