@@ -26,6 +26,7 @@ import { groupRailAccounts, providerLabel } from "../accounts";
 import type { CalendarAccountModel } from "../events";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
+import { notSyncedLabel } from "../sync-status";
 
 type Props = {
   /** Booking links, rendered under the calendar list. */
@@ -126,7 +127,7 @@ export function CalendarRail({
               Reconnect
             </button>
           ) : (
-            <span className="shrink-0 text-2xs text-warning">Sync error</span>
+            <span className="shrink-0 text-2xs text-warning">{notSyncedLabel(account)}</span>
           )
         ) : null}
         <IconButton
@@ -223,7 +224,8 @@ export function CalendarRail({
           }
           return (
             <div key={group.key} className="mt-3 flex flex-col gap-1">
-              <Eyebrow as="div" className="px-1" tone="muted">
+              {/* Full eyebrow tone: the muted one fails contrast on the panel (4.4:1). */}
+              <Eyebrow as="div" className="px-1">
                 {group.header}
               </Eyebrow>
               {group.detail ? (

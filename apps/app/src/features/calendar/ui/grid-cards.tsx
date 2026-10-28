@@ -49,6 +49,8 @@ export function GridEventCard({
   nowMs,
   nowMinutes,
   onPointerDown,
+  stale = false,
+  waiting = false,
 }: {
   chip: EventChip;
   span: ChipSpan;
@@ -62,6 +64,10 @@ export function GridEventCard({
   /** Now's wall-clock minute on today's column; null elsewhere. */
   nowMinutes: number | null;
   onPointerDown: (e: React.PointerEvent) => void;
+  /** Its account didn't sync (CALR-3). */
+  stale?: boolean;
+  /** A change to it waits to sync (CALR-3). */
+  waiting?: boolean;
 }) {
   // The meeting in progress sits over the now line and carries it faintly
   // under its title (AC10).
@@ -92,6 +98,8 @@ export function GridEventCard({
         continuation={continuationLabel(chip, formatTimeOfDay)}
         nowFraction={live ? (nowMinutes - span.topMinutes) / Math.max(span.heightMinutes, 1) : null}
         locked={chip.locked}
+        stale={stale}
+        waiting={waiting}
       />
     </div>
   );

@@ -12,6 +12,7 @@ import { useAppHotkeys } from "../../../lib/hotkeys";
 import { ALL_DAY_MAX_ROWS, layoutAllDayLane } from "../allday-lane";
 import { type EventChip, eventHue } from "../events";
 import { localDayKey } from "../lens";
+import { ALL_DAY_LANE_CLASS } from "./calendar-skeleton";
 import { EventChipView } from "./event-chip";
 
 type Props = {
@@ -24,7 +25,13 @@ type Props = {
   /** The grid's ticking now: bars that ended dim. */
   nowMs: number;
   onPick: (chip: EventChip, rect: DOMRect) => void;
+  /** Accounts that didn't sync: their bars carry the sync mark (CALR-3). */
+  staleAccountIds?: ReadonlySet<string>;
+  /** Events whose change waits to sync: the cloud-off mark. */
+  waitingEventIds?: ReadonlySet<string>;
 };
+
+const NONE: ReadonlySet<string> = new Set();
 
 export function AllDayLane({
   days,
@@ -34,6 +41,8 @@ export function AllDayLane({
   selectedOccurrenceKey,
   nowMs,
   onPick,
+  staleAccountIds = NONE,
+  waitingEventIds = NONE,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const dayKeys = useMemo(() => days.map(localDayKey), [days]);
@@ -60,7 +69,8 @@ export function AllDayLane({
   return (
     <div
       data-allday-lane
-      className="grid shrink-0 border-b border-border py-1"
+      data-allday-rows={lane.rows}
+      className={ALL_DAY_LANE_CLASS}
       style={{ gridTemplateColumns: columns }}
     >
       <div className="flex flex-col items-end gap-0.5 pr-1.5 text-2xs text-subtle-foreground">
@@ -117,6 +127,10 @@ export function AllDayLane({
               selected={selectedOccurrenceKey === bar.chip.occurrenceKey}
               past={bar.chip.endMs <= nowMs}
               locked={bar.chip.locked}
+              stale={
+                bar.chip.sourceAccountId !== null && staleAccountIds.has(bar.chip.sourceAccountId)
+              }
+              waiting={waitingEventIds.has(bar.chip.eventId)}
             />
           </button>
         ))}
