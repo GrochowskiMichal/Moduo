@@ -172,14 +172,17 @@ export function CalendarNowNext({ events, onOpen, waiting = NO_WAITING }: Props)
     const range = visibleRange("day", today, { weekStartsOn: 1, showWeekends: true });
     const byId = new Map(events.map((e) => [e.id, e]));
     const timed = eventChipsInRange([...events], range).timed.get(localDayKey(today)) ?? [];
-    return timed.map((chip): NowNextItem => ({
-      eventId: chip.eventId,
-      occurrenceKey: chip.occurrenceKey,
-      title: chip.title || "Untitled",
-      startMs: chip.startMs,
-      endMs: chip.endMs,
-      joinUrl: byId.get(chip.eventId)?.conferenceUrl ?? null,
-    }));
+    // Meetings only: focus time is your own work, not a meeting to join (CALR-14).
+    return timed
+      .filter((chip) => !chip.focus)
+      .map((chip): NowNextItem => ({
+        eventId: chip.eventId,
+        occurrenceKey: chip.occurrenceKey,
+        title: chip.title || "Untitled",
+        startMs: chip.startMs,
+        endMs: chip.endMs,
+        joinUrl: byId.get(chip.eventId)?.conferenceUrl ?? null,
+      }));
     // The day's list only changes with the events or when the day turns.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [events, todayKey]);

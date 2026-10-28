@@ -1,6 +1,6 @@
 // What placing a task draws over the hours grid (CALR-5, AC20): free time that
 // fits the task as a soft wash, outlined only under the pointer, and the lifted
-// task where ↵ would put it. A click in the wash places it there. Lives in the
+// task where ↵ would put it (as "Focus · title" once F made it focus time). A click in the wash places it there. Lives in the
 // hours grid's own CSS grid, like the cursor, so it scrolls with the hours;
 // inline styles are geometry only.
 
@@ -93,6 +93,7 @@ export function PlacementLayer({ days, placement, title, freeByDay, onPlaceAt }:
               <div
                 ref={draftRef}
                 data-placement-draft=""
+                data-kind={placement.kind === "focus" ? "focus" : undefined}
                 className="absolute inset-x-0.5 overflow-hidden rounded-md border border-primary bg-primary/15 px-1.5 py-0.5"
                 style={{
                   top: gridY(draft.topMinutes),
@@ -101,7 +102,8 @@ export function PlacementLayer({ days, placement, title, freeByDay, onPlaceAt }:
                 }}
               >
                 <span className="block truncate text-2xs text-foreground">
-                  {title} · {formatTimeOfDay(placement.startMs)} – {formatTimeOfDay(endMs)}
+                  {placement.kind === "focus" ? `Focus · ${title}` : title} ·{" "}
+                  {formatTimeOfDay(placement.startMs)} – {formatTimeOfDay(endMs)}
                 </span>
               </div>
             ) : null}

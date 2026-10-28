@@ -50,7 +50,9 @@ export type CreateEventDraft = {
   calendarId?: string;
   location?: string;
   attendees?: CalendarAttendeeInput[];
+  /** Focus time (CALR-14) holds `focusTaskId`. */
   kind?: CalendarItemKind;
+  focusTaskId?: string;
 };
 
 /**
@@ -436,6 +438,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         createdAt: nowIso,
         updatedAt: nowIso,
         deletedAt: null,
+        ...(draft.focusTaskId ? { focusTaskId: draft.focusTaskId } : {}),
       };
       setEventsIn(scope, (prev) => [...prev, optimistic]);
       try {
@@ -451,6 +454,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           location: draft.location,
           attendees: draft.attendees,
           kind: draft.kind,
+          focusTaskId: draft.focusTaskId,
         });
         // Filter-then-append, not map: a widen-triggered reload can land
         // between the optimistic row and this reconcile, in which case the

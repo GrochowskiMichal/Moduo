@@ -456,6 +456,7 @@ export function CalendarPageView({
     setPanelVariant,
     setView,
     goToDate,
+    createEvent: calendar.createEvent,
   });
 
   const onToggleDone = useCallback(

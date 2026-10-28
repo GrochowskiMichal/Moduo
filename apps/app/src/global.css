@@ -166,6 +166,31 @@ body {
   color: var(--muted-foreground);
 }
 
+/* CALR-14: focus time is a quiet band (past focus keeps it), with the calendar
+   focus edge on its left that takes the accent while selected or live. */
+.cal-chip[data-kind="focus"] {
+  background-color: var(--card);
+  background-image: linear-gradient(var(--timeline-band), var(--timeline-band));
+  border-color: var(--border);
+  padding-left: calc(var(--spacing) * 3);
+}
+
+.cal-chip[data-kind="focus"]::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  bottom: 3px;
+  width: 2px;
+  border-radius: var(--radius-full);
+  background: var(--timeline-outline);
+  pointer-events: none;
+}
+
+.cal-chip[data-kind="focus"]:is([data-selected], [data-live])::after {
+  background: var(--primary);
+}
+
 /* Hover feedback — chips are clickable (open the popover). `filter` is an
    effect, not a design-system color. */
 .cal-chip:hover {
