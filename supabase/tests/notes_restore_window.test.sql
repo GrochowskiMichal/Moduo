@@ -7,9 +7,9 @@
 SELECT test.person('O');
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Moduo Labs');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'P', 'P', NULL);
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('C'), test.id('W'), test.id('O'), 'C', 'C', test.id('P')),
   (test.id('D'), test.id('W'), test.id('O'), 'D', 'D', test.id('P'));
 UPDATE public.notes SET deleted_at = now() - interval '31 days' WHERE id = test.id('C');

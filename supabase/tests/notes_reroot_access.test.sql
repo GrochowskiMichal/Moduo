@@ -23,7 +23,7 @@ SELECT test.id('W'), test.id(n), 'member' FROM unnest(ARRAY['X', 'B', 'T', 'D', 
 CREATE FUNCTION pg_temp.note(p_name text, p_creator text, p_parent text, p_mode text)
 RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
-  INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id)
+  INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id)
   VALUES (test.id(p_name), test.id('W'), test.id(p_creator), p_name, p_name,
           CASE WHEN p_parent IS NOT NULL THEN test.id(p_parent) END);
   UPDATE public.notes SET share_mode = p_mode, workspace_shared = false WHERE id = test.id(p_name);
@@ -213,9 +213,9 @@ END;
 $$;
 
 -- ── Workspace deletion still cascades a nested tree ─────────────────────────
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('W2P'), test.id('W2'), test.id('O'), 'Top', 't');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('W2C'), test.id('W2'), test.id('O'), 'Child', 'c', test.id('W2P'));
 UPDATE public.notes SET share_mode = 'inherit' WHERE id = test.id('W2C');
 

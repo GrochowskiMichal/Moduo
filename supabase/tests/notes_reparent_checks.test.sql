@@ -20,23 +20,23 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
 UPDATE public.workspace_members SET overrides = '{"ws.publish": false}'::jsonb
   WHERE workspace_id = test.id('W') AND user_id = test.id('X');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('PUB'), test.id('W'), test.id('O'), 'Changelog', 'public'),
   (test.id('PUB2'), test.id('W'), test.id('O'), 'Press kit', 'public'),
   (test.id('PRIV'), test.id('W'), test.id('O'), 'Salaries', 'secret'),
   (test.id('PRIV2'), test.id('W'), test.id('O'), 'Board', 'secret'),
   (test.id('XP'), test.id('W'), test.id('X'), 'Accounts', 'private'),
   (test.id('NE'), test.id('W'), test.id('E'), 'Release notes', 'draft');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('NX'), test.id('W'), test.id('X'), 'Customer list', 'private', test.id('XP')),
   (test.id('NXE'), test.id('W'), test.id('O'), 'Board prep', 'private', test.id('PRIV2'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('CX'), test.id('W'), test.id('X'), 'Internal FAQ', 'private', test.id('PUB'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('S1'), test.id('W'), test.id('O'), 'Q3', 'public', test.id('PUB')),
   (test.id('S2'), test.id('W'), test.id('O'), 'Q4', 'public', test.id('PUB')),
   (test.id('ARCH'), test.id('W'), test.id('O'), 'Old releases', 'public', test.id('PUB'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('D'), test.id('W'), test.id('O'), 'v1.2', 'public', test.id('S1'));
 UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false
   WHERE id IN (test.id('S1'), test.id('S2'), test.id('ARCH'), test.id('D'));

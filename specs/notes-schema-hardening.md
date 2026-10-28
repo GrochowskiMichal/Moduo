@@ -153,7 +153,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - **`notes_pull`:** `notes_pull(p_ws, p_note, p_after_id bigint, p_known_version int) RETURNS jsonb {updates: [...≤1000], has_more, doc_version, snapshot?}`, STABLE. Access is checked once, and the result comes from one MVCC snapshot, so the log-first ordering trick goes away.
    - **`notes_list_meta`:** `notes_list_meta(p_ws, p_trash_since timestamptz) RETURNS SETOF public.notes_meta`, filtered by `notes__visible_ids` once, ordered by `position COLLATE "C", id`, capped at 5,000.
    - App `pullDoc`, `listMeta` and the MCP pull move onto them, with a fallback to the current queries while the function is missing (the GS pattern).
-   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly.
+   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly. *(NS-11 kept them one release: v1.4.0 and the app's Recents, previews and export still read them.)*
 8. **The statement-level write path (NS-8).**
    - `notes_op_apply_updates` inserts with one `INSERT … SELECT FROM jsonb_to_recordset(p_updates) … ON CONFLICT DO NOTHING RETURNING id`.
    - It updates `notes` only when rows were inserted or a body actually changed.
@@ -178,7 +178,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
       - backfills the 129 rows;
       - switches every SQL reader and writer (`notes_pull`, `save_snapshot`, `compact`, `seed_doc`, `apply_updates`, `duplicate`, `import`, `notes__search`, `notes_public_subtree`, the MCP's reads);
       - drops the columns from `notes`.
-    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here.
+    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here. *(Built: the app still selected `body_text`/`body_md` from `notes` (Recents, previews, export) and v1.4.0 reads all five columns plus `note_updates` directly, so each dropped column is a PostgREST computed field of the same name, access-checked, and the SELECT grants on `notes` and `note_updates` stay one release. `note_bodies` keeps a copy of the title for `search_tsv`'s weight A, written by `notes__bodies_sync`. See `docs/decisions/notes.md` NS-11.)*
 12. **Tier and verification.** Every block that ships a migration is Tier 2: the validator runs, and `bun run db:matrix` covers new functions.
     - **Migration timestamps:** assigned per block, starting at `20261030100000` and spaced an hour apart, in block order.
     - **Local stack:** each block applies on top of the shared local stack (`psql -1 -f`), never resetting it.

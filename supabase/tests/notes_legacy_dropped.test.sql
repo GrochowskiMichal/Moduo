@@ -15,7 +15,7 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role)
 SELECT test.id('W'), test.id(n), 'member' FROM unnest(ARRAY['X', 'Y']) AS n;
 INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
   (test.id('K'), test.id('W'), 'Claude Desktop', 'mdo_ns9', md5('db-test-ns9'), '{"notes": "edit"}'::jsonb, test.id('O'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Roadmap', 'body', 'body', 'a');
 
 -- ── The objects and columns are gone ────────────────────────────────────────
@@ -88,7 +88,7 @@ $$;
 
 -- ── Only the owner hands a note to someone else ─────────────────────────────
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
   (test.id('YN'), test.id('W'), test.id('Y'), 'Y''s note', 'body', 'body', 'd');
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
 VALUES (test.id('W'), 'note', test.id('YN'), 'member', test.id('X'), 'full', test.id('Y'));
@@ -163,7 +163,7 @@ $$;
 -- ── Erasure completes ───────────────────────────────────────────────────────
 -- X writes a page of their own and is erased.
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
   (test.id('XP'), test.id('W'), test.id('X'), 'X''s page', 'body', 'body', 'e');
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false WHERE id = test.id('XP');
 DELETE FROM public.resource_grants WHERE resource_type = 'note' AND resource_id = test.id('XP');
@@ -199,7 +199,7 @@ BEGIN
 END;
 $$;
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, parent_id, position)
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, parent_id, position)
 SELECT test.id('S' || p), test.id('W'), test.id('O'), 'S' || p, '', '', test.id('P'), p
   FROM unnest(ARRAY['a', 'B', 'b', 'Z', 'a0', 'A']) AS p;
 INSERT INTO public.note_favorites (user_id, workspace_id, note_id, position)

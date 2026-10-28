@@ -13,11 +13,11 @@ SELECT test.person(n) FROM unnest(ARRAY['O', 'T']) AS n;
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Moduo Labs');
 INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES (test.id('W'), test.id('T'), 'member');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Handbook', 'p');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('M'), test.id('W'), test.id('O'), 'Hiring', 'm', test.id('P'));
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('L'), test.id('W'), test.id('T'), 'Interview loop', 'l', test.id('M')),
   (test.id('Z'), test.id('W'), test.id('T'), 'Old loop', 'z', test.id('M'));
 UPDATE public.notes SET share_mode = 'custom' WHERE id = test.id('P');

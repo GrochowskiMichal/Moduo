@@ -2,6 +2,17 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-11: a note's content lives in `note_bodies`; v1.4.0 reads it through computed fields of the old column names** → `supabase/migrations/20261030200000_notes_bodies_split.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-11 (MOD-662).
+  - Decision:
+    - `note_bodies` (one row per note, `(workspace_id, note_id)` → `notes` `ON DELETE CASCADE`) holds `doc_state`, `doc_version`, `body_text`, `body_md` and `search_tsv`, generated exactly as `notes.search_tsv` was, with the GIN index. RLS SELECT through `can_access`, and no client grant. An edit push now writes the body there and touches only `updated_at`/`edited_*` on `notes`, and `notes` keeps no tsvector index, so those updates can be HOT.
+    - The title stays on `notes`, and `note_bodies.title` is a copy for `search_tsv`'s weight A, kept by the trigger `notes__bodies_sync` (after insert, after a rename). The same trigger gives every new note its body row, so ops that create notes write content with an UPDATE.
+    - Every writer still serialises on the `notes` row lock (`notes__require`, `notes__compact`'s `FOR UPDATE`), then reads and writes the version in `note_bodies`. `notes_list_meta` joins `note_bodies` once rather than calling `notes__meta` per row (that kept the 10k-note list under its 80 ms p95).
+    - v1.4.0 selects `doc_state`, `doc_version`, `body_text`, `body_md` from `notes` and filters on `search_tsv`, and migrations land before the app. So each dropped column is a PostgREST computed field, `public.<column>(notes)`: SECURITY DEFINER, answering only for a note `can_access` lets `perm_actor_id()` view (so a row forged through `/rpc` gets nothing, and the deployed MCP's key still reads). `body_text` and `body_md` are kept as the content read for excerpts, Recents and the export. `doc_state`, `doc_version` and `search_tsv` go in the follow-up that drops `is_pinned`.
+    - The `authenticated` SELECT grants on `notes` and `note_updates` stay one release: v1.4.0's `pullDoc` reads `note_updates` directly.
+  - Why: every keystroke push rewrote two TOASTed bodies, the search vector and its GIN entries, and a tuple in every index of the row the list reads.
+  - Rejected: a title vector on `notes` with the body vector in `note_bodies`, because it keeps a GIN index on the hot row and splits each search over two indexes. Keeping the old columns written for v1.4.0, because that is the write this block removes. Leaving them unwritten, because v1.4.0 would then open stale documents.
 - **2026-10-28 · NS-10: the nightly purge folds the log of notes nobody opens, by rebuilding the doc, under the client fold's CAS** → `supabase/migrations/20261030190000_notes_compact.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-10 (MOD-660).

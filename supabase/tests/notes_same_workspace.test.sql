@@ -17,10 +17,10 @@ INSERT INTO public.workspace_members (workspace_id, user_id, role) VALUES
   (test.id('W'), test.id('E'), 'member'),
   (test.id('W2'), test.id('U'), 'member');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Roadmap', 'w'),
   (test.id('Q'), test.id('W2'), test.id('O'), 'Side notes', 'w2');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, parent_id) VALUES
   (test.id('C'), test.id('W'), test.id('O'), 'Q4 plan', 'w', test.id('P'));
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false WHERE id = test.id('P');
 UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false WHERE id = test.id('C');

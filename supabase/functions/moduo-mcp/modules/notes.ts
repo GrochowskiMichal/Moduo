@@ -132,6 +132,20 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
   return found[0] ?? null;
 }
 
+/** A note's content (NS-11: note_bodies, keyed on note_id), or null. Read as
+ * service_role, so scoped to the key's workspace here; callers check the note. */
+async function getNoteBody(ctx: ToolContext, id: string, cols: string): Promise<Row | null> {
+  const found = await rows(
+    ctx.db
+      .from("note_bodies")
+      .select(cols)
+      .eq("workspace_id", ctx.key.workspaceId)
+      .eq("note_id", id)
+      .limit(1),
+  );
+  return found[0] ?? null;
+}
+
 const UPDATE_PAGE = 1000;
 
 /** A note's update log after `after` and, when asked, its snapshot, through
@@ -235,8 +249,8 @@ async function noteUpdateLog(
   return noteUpdateLogFromTable(ctx, noteId, after);
 }
 
-/** The note's doc (snapshot + log) and stored body. The live check and the
- * body come from the note's row; the doc from notes_pull, or before NS-7 log
+/** The note's doc (snapshot + log) and stored body. The live check comes from
+ * the note's row, the body from its note_bodies row (NS-11); the doc from notes_pull, or before NS-7 log
  * first, snapshot second (a compaction in between only makes the snapshot
  * newer than the log, and applying both is lossless). */
 async function readNoteDoc(ctx: ToolContext, noteId: string) {
@@ -244,14 +258,15 @@ async function readNoteDoc(ctx: ToolContext, noteId: string) {
   const log = pulled
     ? { updates: pulled.updates, upto: pulled.upto }
     : await noteUpdateLogFromTable(ctx, noteId);
-  const note = await getNote(ctx, noteId, pulled ? "id, body_md" : "id, body_md, doc_state");
-  if (!note) throw new Error("Note not found in this workspace.");
+  const note = await getNote(ctx, noteId, "id");
+  const body = note ? await getNoteBody(ctx, noteId, pulled ? "body_md" : "body_md, doc_state") : null;
+  if (!note || !body) throw new Error("Note not found in this workspace.");
   const snapshotB64 = pulled
     ? pulled.snapshotB64
-    : typeof note.doc_state === "string" && note.doc_state
-    ? note.doc_state
+    : typeof body.doc_state === "string" && body.doc_state
+    ? body.doc_state
     : null;
-  return { log, snapshotB64, bodyMd: String(note.body_md ?? "") };
+  return { log, snapshotB64, bodyMd: String(body.body_md ?? "") };
 }
 
 type AgentPlan =
@@ -376,12 +391,13 @@ export const notesConnectorModule: ConnectorModule = {
         const n = await getNote(
           ctx,
           str(args, "note_id"),
-          "id, title, parent_id, icon, is_archived, published_at, publish_token, body_md",
+          "id, title, parent_id, icon, is_archived, published_at, publish_token",
         );
         if (!n || !(await visibleIds(ctx, "note")).has(n.id)) return null;
+        const body = await getNoteBody(ctx, n.id, "body_md");
         return {
           ...shapeNote(n),
-          markdown: n.body_md ?? "",
+          markdown: body?.body_md ?? "",
           // Only expose a token an agent could act on when actually published.
           publish_token: n.published_at != null ? (n.publish_token ?? null) : null,
         };

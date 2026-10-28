@@ -25,7 +25,7 @@ UPDATE public.workspace_members SET overrides = '{"notes.edit": false}'::jsonb
 INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
   (test.id('KE'), test.id('W'), 'Writer', 'mdo_ns8e', md5('db-test-ns8-ke'), '{"notes": "edit"}', test.id('O'));
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
   (test.id('N'), test.id('W'), test.id('O'), 'Q4 plan', 'body', 'body', 'a'),
   (test.id('H'), test.id('W'), test.id('O'), 'Salaries', 'secret', 'secret', 'b');
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false
@@ -172,7 +172,7 @@ SELECT test.ok((SELECT updated_at FROM public.notes WHERE id = test.id('N')) = '
 -- A body that really changed is still saved, even with no new updates.
 SELECT test.apply('E', 'tab-e', test.batch(1, 3), 'new body', 'new body');
 SELECT test.ok((SELECT updated_at = now() AND body_text = 'new body' AND body_md = 'new body'
-                FROM public.notes WHERE id = test.id('N')),
+                FROM test.notes_in WHERE id = test.id('N')),
   'body: a changed body is saved and bumps updated_at');
 SELECT test.ok((SELECT edited_at = '2020-01-01T00:00:00Z' FROM public.notes WHERE id = test.id('N')),
   'body: a body change alone does not mark the note edited');
