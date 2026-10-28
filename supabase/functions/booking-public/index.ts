@@ -5,6 +5,7 @@
  *
  * POST { action: "preview", slug, timeZone }
  * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video, origin }
+ * An offer (/book/r/<slug>) sends `offer: <slug>` instead of `slug` (offer.ts).
  *
  * `book` is rate-limited per IP and per host (booking_rate_check). `origin` is
  * only a hint for which of our own hosts the guest email's cancel link uses;
@@ -56,6 +57,7 @@ import {
   emailContext,
   guestTimeZone,
 } from "./emails.ts";
+import { bookOffer, commitFailure, type LoadedOffer, loadOffer, offerSlots, offerState } from "./offer.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../apps/app/src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -175,6 +177,25 @@ async function loadLink(db: SupabaseClient, slug: string): Promise<LinkRow | nul
     .maybeSingle();
   if (res.error || !res.data) return null;
   return res.data as LinkRow;
+}
+
+/** The request's link: by the offer (overlaid) when it names one, else by its slug. */
+async function requestedLink(db: SupabaseClient, body: Record<string, unknown>) {
+  const offer = typeof body.offer === "string" ? body.offer.trim() : "";
+  if (offer) {
+    const found = await loadOffer<LinkRow>(db, offer);
+    return { link: found?.link ?? null, found };
+  }
+  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+  return { link: slug ? await loadLink(db, slug) : null, found: null };
+}
+
+/** A picked, released or expired offer's answer: a 409 to book, its status to preview. */
+function offerClosed(found: LoadedOffer<LinkRow>, action: string, base: object): Response | null {
+  const status = offerState(found.offer, new Date());
+  if (status === "open") return null;
+  if (action === "book") return json({ error: "offer_closed" }, 409);
+  return json({ ...base, slots: [], offer: { status } });
 }
 
 async function googleAccess(
@@ -583,10 +604,11 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, status: "cancelled", googleInvites: googleCreated && googleDropped, emailed });
   }
 
-  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
-  const link = slug ? await loadLink(db, slug) : null;
+  const { link, found } = await requestedLink(db, body);
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
   const host = await hostIdentity(db, link);
+  const closed = found ? offerClosed(found, action, publicLink(link, host, [])) : null;
+  if (closed) return closed;
   const setting = videoSetting(link.video_provider);
   // A `book` on a link that can't take bookings is an error, never the preview
   // payload: the guest page treats any 200 as booked.
@@ -615,10 +637,12 @@ Deno.serve(async (req: Request) => {
     return json({ ...publicLink(link, host, video), slots: [] });
   }
   // A busy read that failed answers "can't check times", never every slot free.
-  const collective = await collectiveOpenSlots(db, link, now, horizonEnd).catch((err: unknown) => {
-    console.error("[booking-public] availability read failed:", err);
-    return null;
-  });
+  const collective = found
+    ? offerSlots(found.offer, found.times, now)
+    : await collectiveOpenSlots(db, link, now, horizonEnd).catch((err: unknown) => {
+        console.error("[booking-public] availability read failed:", err);
+        return null;
+      });
   if (collective === null) return json({ error: "unavailable" }, 503);
   if (collective === "paused") {
     if (action === "book") return json({ error: "paused" }, 409);
@@ -630,6 +654,7 @@ Deno.serve(async (req: Request) => {
     return json({
       ...publicLink(link, host, video),
       slots: slots.map((slot) => slot.toISOString()),
+      ...(found && { offer: { status: "open" } }),
     });
   }
 
@@ -797,7 +822,16 @@ Deno.serve(async (req: Request) => {
   const mirror = meet.eventId && access?.email
     ? await googleMirrorAccount(db, link, access.email)
     : null;
-  const committed = await db.rpc("booking_op_commit", {
+  const committed = found
+    ? await bookOffer(db, found, start, {
+        description,
+        location: meet.meetLink,
+        name,
+        email,
+        hostEmail,
+        mirror: mirror && { ...mirror, eventId: meet.eventId },
+      })
+    : await db.rpc("booking_op_commit", {
     p_workspace_id: link.workspace_id,
     p_owner_id: link.owner_user_id,
     p_title: link.name || "Meeting",
@@ -818,7 +852,8 @@ Deno.serve(async (req: Request) => {
   });
   if (committed.error || !committed.data) {
     await undoMeeting();
-    return fail("book_failed");
+    const failure = commitFailure(found, committed.error);
+    return fail(failure.error, failure.status);
   }
   const ids = committed.data as { event_id?: string; contact_id?: string };
 

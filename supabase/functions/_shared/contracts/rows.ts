@@ -674,6 +674,7 @@ export const calendarEventRowSchema = z.object({
   conference_provider: optStr,
   kind: optStr,
   focus_task_id: optStr,
+  offer_id: optStr,
   attendees: z.unknown().optional(),
   // CALR-11: repeat exceptions (columns from CALR-6).
   series_id: optStr,

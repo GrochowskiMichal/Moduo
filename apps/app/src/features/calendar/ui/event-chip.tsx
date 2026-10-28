@@ -50,6 +50,8 @@ type Props = {
   /** Focus time (CALR-14): the band, the eyebrow; `holdsTask` adds the task mark. */
   focus?: boolean;
   holdsTask?: boolean;
+  /** An offer's held time (CALR-19): dashed. */
+  held?: boolean;
 };
 
 /** The chip's tooltip: what it is, when, and what's true of it. */
@@ -89,6 +91,7 @@ export function EventChipView({
   aside = null,
   focus = false,
   holdsTask = false,
+  held = false,
 }: Props) {
   const live = nowFraction != null;
   const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
@@ -109,7 +112,7 @@ export function EventChipView({
     <div
       data-chip="event"
       data-label={hue}
-      data-kind={focus ? "focus" : undefined}
+      data-kind={focus ? "focus" : held ? "hold" : undefined}
       {...onlyTrue({
         "data-past": past,
         "data-selected": selected,
@@ -128,6 +131,7 @@ export function EventChipView({
         "cal-chip relative flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
         "transition-[filter] duration-(--motion-fast) ease-(--ease-out)",
         selected && "ring-2 ring-ring",
+        held && "border-dashed",
         compact && "py-0",
       )}
     >

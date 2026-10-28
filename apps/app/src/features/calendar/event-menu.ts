@@ -12,7 +12,7 @@ import { formatChord } from "./keys-sheet";
 import type { EventWriter } from "./writable";
 
 export type EventMenuItemId =
-  "open" | "copy" | "duplicate" | "meet" | "private" | "move" | "link" | "delete";
+  "open" | "copy" | "duplicate" | "meet" | "private" | "move" | "link" | "release" | "delete";
 
 /** The grid's right-click menu (no shortcuts) or the Event panel's ⋯ (with them). */
 export type EventMenuSurface = "grid" | "panel";
@@ -64,6 +64,10 @@ export function eventMenuItems(input: {
   // Linking changes the links, not the event: as in the Event panel, any event.
   if (canEdit)
     items.push({ id: "link", label: "Link a person, note or task", hotkey: "calendar.link" });
+  // An offer's hold (CALR-19): its holds go together.
+  if (writes && event.kind === "hold" && event.offerId) {
+    items.push({ id: "release", label: "Release holds", hotkey: null });
+  }
   if (writes) {
     items.push({ id: "delete", label: "Delete", hotkey: "calendar.delete", destructive: true });
   }

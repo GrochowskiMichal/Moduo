@@ -59,6 +59,7 @@ const span = (r: { startsAt: string; endsAt: string }): Interval => ({
 });
 
 function eventIsBusy(e: Ev, ids: Set<string>): boolean {
+  if (e.kind === "hold") return true; // an offer's hold is busy for every link (AC34)
   if (e.kind === "focus") return ids.has(FOCUS_BUSY_ID);
   const calendarId = e.calendarId ?? "moduo";
   if (e.sourceAccountId != null) return ids.has(e.sourceAccountId);

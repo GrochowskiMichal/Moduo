@@ -42,6 +42,8 @@ export type CalendarEventModel = {
   kind?: CalendarItemKind;
   /** The task focus time is for (kind "focus" only). */
   focusTaskId?: string | null;
+  /** The offer a hold is for (kind "hold" only, CALR-19). */
+  offerId?: string | null;
   attendees?: CalendarAttendee[];
   // ── One occurrence (CALR-11)
   /** Set on an override: the Moduo series this row replaces one occurrence of. */
@@ -209,6 +211,8 @@ export type EventChip = {
   /** Focus time (CALR-14), and whether it holds a task (a teammate's never shows one). */
   focus?: boolean;
   holdsTask?: boolean;
+  /** An offer's held time (CALR-19): drawn dashed, its card releases the holds. */
+  held?: boolean;
 };
 
 /** The calendar hue an event chip takes (AC7): a mirrored event its
@@ -277,6 +281,7 @@ function occurrenceChip(
     locked: showsLock(event, me),
     focus: event.kind === "focus",
     holdsTask: event.kind === "focus" && !!event.focusTaskId,
+    held: event.kind === "hold",
   };
 }
 
