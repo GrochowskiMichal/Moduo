@@ -13,8 +13,10 @@ import {
   isSearchHit,
   normalizeSearchAllRow,
   normalizeSearchHit,
+  normalizeSearchRecent,
   parseSearchAllRow,
   parseSearchHit,
+  parseSearchRecent,
 } from "./search.ts";
 import {
   SEARCH_MATCHES,
@@ -178,5 +180,25 @@ describe("search_all row", () => {
     expect(normalizeSearchAllRow({ ...row, top: "t" })?.top).toBe(true);
     expect(normalizeSearchAllRow({ ...row, top: 1 })?.top).toBe(false);
     expect(normalizeSearchAllRow({ ...row, entity_id: "" })).toBeNull();
+  });
+});
+
+// GS-8: a Recent row (search_recents_list) is a hit plus when you last opened it.
+describe("search recent row", () => {
+  const recent = { ...hit, match: "title", rank: 0, snippet: null, last_opened_at: "2026-10-28T10:00:00+00:00" };
+
+  it("parses strictly", () => {
+    const parsed = parseSearchRecent(recent);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(recent);
+    expect(parseSearchRecent(hit).success).toBe(false);
+    expect(parseSearchRecent({ ...recent, last_opened_at: null }).success).toBe(false);
+  });
+
+  it("reads loosely: the hit as normalizeSearchHit reads it, a missing open time as empty", () => {
+    expect(normalizeSearchRecent({ ...recent, rank: 9 })?.rank).toBe(1);
+    expect(normalizeSearchRecent({ ...recent, last_opened_at: null })?.last_opened_at).toBe("");
+    expect(normalizeSearchRecent({ ...recent, entity_id: null })).toBeNull();
+    expect(normalizeSearchRecent("nope")).toBeNull();
   });
 });
