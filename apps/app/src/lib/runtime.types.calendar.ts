@@ -12,7 +12,20 @@ import type {
   CalendarModuleBundle,
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
+import type { Database } from "../types/supabase";
 import type { SharedCalendar } from "./calendar-busy";
+
+/** A booking link as stored (`exposed_slot_links`); the calendar feature reads it into a BookingLink. */
+export type BookingLinkRow = Database["public"]["Tables"]["exposed_slot_links"]["Row"];
+
+/** An offer as made (CALR-19). */
+export type SlotOffer = {
+  id: string;
+  slug: string;
+  status: string;
+  expiresAt: string;
+  holdEventIds: string[];
+};
 
 export type CalendarRuntime = {
   // ── Wave-2 module surface (workspace-scoped, Supabase-first) ──────────
@@ -188,6 +201,36 @@ export type CalendarRuntime = {
     } | null;
     booking: { linkName: string | null; bookedAt: string } | null;
   }>;
+
+  /**
+   * A booking link as its panel shows it (CALR-17): the link, its co-hosts and
+   * their answers, and its upcoming bookings. Null when there is no such link (a failed read throws);
+   * hosts and bookings fail soft to empty.
+   */
+  bookingLink(input: { linkId: string; workspaceId: string }): Promise<{
+    link: BookingLinkRow;
+    hosts: { userId: string; status: string }[];
+    bookings: { id: string; name: string; email: string; startsAt: string; endsAt: string }[];
+  } | null>;
+  /** Write only the fields set on a booking link (CALR-17). */
+  updateBookingLink(input: {
+    linkId: string;
+    patch: { paused?: boolean; durationMinutes?: number; busyCalendarIds?: string[] };
+  }): Promise<void>;
+  /** Offer specific times from a booking link, held or not (CALR-19); title, length and video default to the link's. Web only. */
+  createOffer?(input: {
+    workspaceId: string;
+    linkId: string;
+    startsAt: string[];
+    hold: boolean;
+    title?: string;
+    durationMinutes?: number;
+    videoProvider?: string;
+  }): Promise<SlotOffer>;
+  /** Release an offer's holds together; answers its status after. Web only. */
+  releaseOffer?(input: { workspaceId: string; offerId: string }): Promise<string>;
+  /** Your first unpaused booking link in the workspace, the one O offers from with none open. */
+  firstOpenBookingLink?(input: { workspaceId: string; userId: string }): Promise<string | null>;
 
   /**
    * Fetch a connected account's RAW provider events for a window. Desktop

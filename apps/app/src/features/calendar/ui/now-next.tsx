@@ -12,17 +12,19 @@ import { cn } from "@/lib/utils";
 
 import { Kbd } from "../../../components/ui/kbd";
 import { useAppHotkeys } from "../../../lib/hotkeys";
-import { type CalendarEventModel, eventChipsInRange } from "../events";
-import { localDayKey, startOfLocalDay, visibleRange } from "../lens";
+import type { CalendarEventModel } from "../events";
+import { localDayKey } from "../lens";
 import {
   nowAndNext,
   type NowNext,
   type NowNextItem,
+  nowNextItems,
   type NowNextParts,
   nowNextParts,
 } from "../now-next";
 import { OfflineLine, type WaitingChange } from "./offline-line";
 import { formatTimeOfDay } from "./time-format";
+import { useMinuteTick } from "./use-minute-tick";
 
 type PillProps = {
   data: NowNext;
@@ -101,21 +103,6 @@ function pillLabel({ now, next }: NowNext): string {
   return next ? `Next: ${next.title} at ${formatTimeOfDay(next.startMs)}` : "";
 }
 
-/** Re-render tick; catches up when the tab wakes. */
-function useMinuteTick(): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const id = window.setInterval(tick, 30_000);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, []);
-  return now;
-}
-
 function useOnline(): boolean {
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine !== false,
@@ -167,25 +154,9 @@ export function CalendarNowNext({ events, onOpen, waiting = NO_WAITING }: Props)
   const [ref, width] = useWidth<HTMLDivElement>();
   const todayKey = localDayKey(new Date(nowMs));
 
-  const items = useMemo(() => {
-    const today = startOfLocalDay(new Date(nowMs));
-    const range = visibleRange("day", today, { weekStartsOn: 1, showWeekends: true });
-    const byId = new Map(events.map((e) => [e.id, e]));
-    const timed = eventChipsInRange([...events], range).timed.get(localDayKey(today)) ?? [];
-    // Meetings only: focus time is your own work, not a meeting to join (CALR-14).
-    return timed
-      .filter((chip) => !chip.focus)
-      .map((chip): NowNextItem => ({
-        eventId: chip.eventId,
-        occurrenceKey: chip.occurrenceKey,
-        title: chip.title || "Untitled",
-        startMs: chip.startMs,
-        endMs: chip.endMs,
-        joinUrl: byId.get(chip.eventId)?.conferenceUrl ?? null,
-      }));
-    // The day's list only changes with the events or when the day turns.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [events, todayKey]);
+  // The day's list only changes with the events or when the day turns.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const items = useMemo(() => nowNextItems(events, nowMs), [events, todayKey]);
 
   const data = online ? nowAndNext(items, nowMs) : null;
   const joinUrl = data?.now?.joinUrl ?? null;

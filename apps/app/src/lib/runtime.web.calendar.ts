@@ -22,6 +22,7 @@ import { type BusyBlockRow, busyBlockToEvent, type SharedCalendar } from "./cale
 import { collectTruncations, READ_CAPS } from "./paged-select";
 import { jsonObject, type RpcArgs, runRpc } from "./runtime.db";
 import type { CalendarRuntime } from "./runtime.types";
+import { webCalendarOffers } from "./runtime.web.calendar.offers";
 import { supabaseClient } from "./runtime.web.client";
 import { firstRow, selectCapped } from "./runtime.web.shared";
 
@@ -74,6 +75,7 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     conferenceProvider: normalizeConferenceProvider(r.conference_provider),
     kind: normalizeCalendarItemKind(r.kind),
     focusTaskId: r.focus_task_id ?? null,
+    offerId: r.offer_id,
     attendees: attendeesOf(r.attendees),
     ...seriesFieldsOf(r),
   };
@@ -275,6 +277,42 @@ function listenCalendarLive(
 function googleSeriesId(instance: CalendarEventModel): string {
   if (!instance.externalSeriesId) throw new Error("This event isn't part of a Google repeat.");
   return instance.externalSeriesId;
+}
+
+// ── Booking link panel (CALR-17) ─────────────────────────────────────────────
+
+async function bookingLinkHosts(linkId: string) {
+  const { data, error } = await supabaseClient
+    .from("booking_link_hosts")
+    .select("user_id, status")
+    .eq("link_id", linkId);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ userId: row.user_id, status: row.status }));
+}
+
+async function bookingLinkBookings(slotId: string) {
+  const { data, error } = await supabaseClient
+    .from("slot_bookings")
+    .select("id, attendee_name, attendee_email, start_at, end_at, status, updated_at")
+    .eq("slot_id", slotId)
+    .in("status", ["pending", "confirmed"])
+    .gte("end_at", new Date().toISOString())
+    .order("start_at", { ascending: true })
+    .limit(20);
+  if (error) throw error;
+  // A pending booking older than five minutes is abandoned: booking-public
+  // neither counts it nor keeps it.
+  const staleBefore = Date.now() - 5 * 60_000;
+  const live = (data ?? []).filter(
+    (row) => row.status !== "pending" || Date.parse(row.updated_at) >= staleBefore,
+  );
+  return live.map((row) => ({
+    id: row.id,
+    name: row.attendee_name,
+    email: row.attendee_email,
+    startsAt: row.start_at,
+    endsAt: row.end_at,
+  }));
 }
 
 export const webCalendar: CalendarRuntime = {
@@ -604,6 +642,41 @@ export const webCalendar: CalendarRuntime = {
       updatedAt: event.updatedAt,
     };
   },
+  async bookingLink({ linkId, workspaceId }) {
+    const { data: row, error } = await supabaseClient
+      .from("exposed_slot_links")
+      .select("*")
+      .eq("id", linkId)
+      .eq("workspace_id", workspaceId)
+      // A link deleted from the editor closes its view.
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) return null;
+    const [hosts, bookings] = await Promise.all([
+      bookingLinkHosts(linkId).catch(() => []),
+      bookingLinkBookings(row.slot_id).catch(() => []),
+    ]);
+    return { link: row, hosts, bookings };
+  },
+  async updateBookingLink({ linkId, patch }) {
+    const { paused, durationMinutes, busyCalendarIds } = patch;
+    const { error } = await supabaseClient
+      .from("exposed_slot_links")
+      .update({
+        ...(paused !== undefined ? { paused } : {}),
+        ...(durationMinutes !== undefined ? { duration_minutes: durationMinutes } : {}),
+        ...(busyCalendarIds
+          ? {
+              busy_calendar_ids: busyCalendarIds,
+              conflict_calendars: JSON.stringify(busyCalendarIds),
+            }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", linkId);
+    if (error) throw error;
+  },
   async eventContext({ eventId, calendarRef }) {
     const calendarOf = async () => {
       if (!calendarRef) return null;
@@ -742,4 +815,6 @@ export const webCalendar: CalendarRuntime = {
       })
       .catch(() => undefined);
   },
+
+  ...webCalendarOffers,
 };

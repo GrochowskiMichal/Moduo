@@ -75,8 +75,8 @@ const isTheirs = (e: CalendarEventModel, cals: Set<string>, self: string | null)
 
 /** Teammates' events (on their calendars, and busy blocks) leave your week. */
 export function splitTeammateEvents(
-  events: CalendarEventModel[],
-  shared: SharedCalendar[],
+  events: readonly CalendarEventModel[],
+  shared: readonly Pick<SharedCalendar, "calendarId">[],
   self: string | null = null,
 ): { mine: CalendarEventModel[]; theirs: CalendarEventModel[] } {
   const cals = new Set(shared.map((s) => s.calendarId));

@@ -202,7 +202,10 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · The connector reads one item per occurrence through the masked read; who sees what is one definer read; Home's Today widget shares the toolbar's now and next (CALR-21).
+- 2026-10-28 · An offer is its own token, its holds are ordinary busy rows, and one trigger releases them (CALR-19).
 - 2026-10-28 · New events go to is a synced per-workspace pref; Google-first is the only Google create; the mirror revives a tombstone before it inserts; the iCalUID only merges your own copies (CALR-20b).
+- 2026-10-28 · A booking link opens as a right-panel item; its open times are the app's own reckoning cut to the guest page's answer (CALR-17).
 - 2026-10-28 · The event menus reuse the week's keys; Move goes only where Moduo can undo it whole (CALR-4b).
 - 2026-10-28 · Preview as is the real masked read run for the teammate; busy blocks expand repeats on the server; teammates are opt-in lanes (CALR-16).
 - 2026-10-28 · The composer reads the line locally, routes outside guests to Google, and names teammates without inviting them (CALR-9).
@@ -246,6 +249,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-28 · Notes schema hardening planned: client grants read-only, one tree per workspace by key, deleting a parent never takes access away, trash purged on the server, one guard per op, reads and writes checked once, legacy out, content split into `note_bodies`
 - 2026-10-23 · The Impeccable pass on Notes: search is back in the sidebar, publish names what goes public, every note action has a key, and the spine leads the slash menu.
 - 2026-10-24 · NR-12 flipped early: the new Notes is the only Notes; NR-5, NR-10 and NR-11 follow it.
 - 2026-10-22 · New Notes retires in-body page rows (MOD-81 follow-up).

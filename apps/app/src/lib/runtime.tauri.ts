@@ -286,6 +286,12 @@ export const tauriRuntime: ModuoRuntime = {
     updateGoogleSeries: webRuntime.calendar.updateGoogleSeries,
     removeGoogleSeries: webRuntime.calendar.removeGoogleSeries,
     eventContext: webRuntime.calendar.eventContext,
+    bookingLink: webRuntime.calendar.bookingLink,
+    updateBookingLink: webRuntime.calendar.updateBookingLink,
+    // CALR-19: offers are Supabase-direct too.
+    createOffer: webRuntime.calendar.createOffer,
+    releaseOffer: webRuntime.calendar.releaseOffer,
+    firstOpenBookingLink: webRuntime.calendar.firstOpenBookingLink,
 
     // CAL-6b: fetch raw provider events via the OAuth engine so the frontend
     // maps + mirrors them to Supabase (the desktop is the sync writer).

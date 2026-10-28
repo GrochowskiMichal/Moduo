@@ -23,7 +23,7 @@ Compiled from the notes gotchas (HV-14b). Decisions: [docs/decisions/notes.md](.
 
 ## Server rules (migrations and functions)
 - Any path that re-roots a note calls `notes__keep_access_on_reroot` first, or a shared inherit sub-note goes private.
-- `notes_op_import` doesn't guard `parent_id`: a caller passing an external parent validates it.
+- `notes_op_import` refuses a parent outside the workspace and the batch (22023, NS-2), but checks no access to it: a caller passing an external parent still checks the caller can reach it.
 - Archiving unpublishes the whole subtree; unarchive never re-publishes.
 - Edge Functions can't serve HTML (the platform rewrites `text/html` to `text/plain`): public pages render client-side from JSON. Untrusted Markdown to HTML escapes raw HTML and allow-lists link schemes (`http(s):`, `mailto:`); react-markdown shows HTML comments as text (`stripTaskIdComments`).
 - Each module's api-key lane is its own module id (`permissionKey` in `apps/app/src/features/notes/ops-manifest.ts`).

@@ -28,6 +28,7 @@ import {
   MAX_BOOKING_GUESTS,
   parseGuestEmails,
 } from "../../features/calendar/booking/guests";
+import { offerClosedNotice, offerRequest } from "../../features/calendar/booking/offer";
 import {
   type BookingPreview,
   bookingRequest,
@@ -181,8 +182,12 @@ function Notice({ title, body, action }: { title: string; body: string; action?:
   );
 }
 
-export function BookPage() {
-  const { slug } = useParams({ from: "/book/$slug" });
+/** An offer's page (/book/r/$slug, CALR-19): the same page, asking by the offer. */
+export const BookOfferPage = () => <BookPage offer />;
+
+export function BookPage({ offer = false }: { offer?: boolean }) {
+  const { slug = "" } = useParams({ strict: false });
+  const ask = offerRequest(offer ? { offer: slug } : { slug });
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [zone, setZone] = useState(detectedZone);
   const [dayKey, setDayKey] = useState<string | null>(null);
@@ -214,7 +219,7 @@ export function BookPage() {
     setPhase({ kind: "loading" });
     void (async () => {
       try {
-        const res = await bookingRequest({ action: "preview", slug });
+        const res = await bookingRequest({ action: "preview", ...ask });
         if (!active) return;
         if (res.status === 404) return setPhase({ kind: "missing" });
         if (!res.ok) return setPhase({ kind: "error" });
@@ -346,6 +351,16 @@ export function BookPage() {
             </Button>
           ) : null}
         </section>
+      </Page>
+    );
+  }
+
+  const closed = preview.offer ? offerClosedNotice(preview.offer.status, preview.hostName) : null;
+  if (closed) {
+    return (
+      <Page>
+        <Host preview={preview} />
+        <Notice title={closed} body="" />
       </Page>
     );
   }
@@ -498,7 +513,7 @@ export function BookPage() {
     try {
       res = await bookingRequest({
         action: "book",
-        slug,
+        ...ask,
         start,
         timeZone: zone,
         name: name.trim(),
@@ -519,6 +534,8 @@ export function BookPage() {
     }
     setSubmitting(false);
     if (!res.ok) {
+      // Picked, released or run out meanwhile: read it again for the notice.
+      if (res.json.error === "offer_closed") return setAttempt((n) => n + 1);
       if (res.json.error === "slot_taken") {
         const taken = start;
         setPhase({

@@ -109,6 +109,15 @@ const bookCancelRoute = createRoute({
   },
 });
 
+// An offer's specific times (CALR-19): the same page, asking by the offer.
+const bookOfferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/r/$slug",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-page"), "BookOfferPage"),
+  ),
+});
+
 const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/$slug",
@@ -275,6 +284,7 @@ export const routeTree = rootRoute.addChildren([
   paywallRoute,
   publishedNoteRoute,
   bookCancelRoute,
+  bookOfferRoute,
   bookRoute,
   joinRoute,
   oauthConsentRoute,
