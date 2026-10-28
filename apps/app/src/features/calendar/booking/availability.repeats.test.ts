@@ -117,11 +117,19 @@ describe("openTimes · repeating events", () => {
   });
 
   it("weekly focus time is free unless the link ticks focus", () => {
-    const focus = weekly({ id: "focus-1", kind: "focus", startsAt: "2026-10-07T08:00:00.000Z", endsAt: "2026-10-07T09:00:00.000Z" });
+    const focus = weekly({
+      id: "focus-1",
+      kind: "focus",
+      startsAt: "2026-10-07T08:00:00.000Z",
+      endsAt: "2026-10-07T09:00:00.000Z",
+    });
     expect(starts(openTimes(input({ events: [focus] })))).toEqual(ALL_WEDNESDAY);
     const ticked = input({ events: [focus] });
     ticked.link = { ...ticked.link, busyCalendarIds: ["moduo", FOCUS_BUSY_ID] };
-    expect(starts(openTimes(ticked))).toEqual(["2026-10-28T08:00:00.000Z", "2026-10-28T08:30:00.000Z"]);
+    expect(starts(openTimes(ticked))).toEqual([
+      "2026-10-28T08:00:00.000Z",
+      "2026-10-28T08:30:00.000Z",
+    ]);
   });
 
   it("a teammate's repeat on the host's week doesn't count", () => {
@@ -133,7 +141,14 @@ describe("openTimes · repeating events", () => {
       input({
         hosts: [{ userId: KAI, name: "Kai", status: "accepted" }],
         guestSlots: ALL_WEDNESDAY,
-        coHostBusy: [weekly({ id: "kai-1", ownerId: KAI, startsAt: "2026-10-07T08:30:00.000Z", endsAt: "2026-10-07T09:00:00.000Z" })],
+        coHostBusy: [
+          weekly({
+            id: "kai-1",
+            ownerId: KAI,
+            startsAt: "2026-10-07T08:30:00.000Z",
+            endsAt: "2026-10-07T09:00:00.000Z",
+          }),
+        ],
       }),
     );
     expect(starts(result)).toEqual([

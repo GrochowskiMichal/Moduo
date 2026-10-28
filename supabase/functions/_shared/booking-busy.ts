@@ -36,22 +36,40 @@ export function busyFromHostEvents(rows: readonly HostEventRow[], busyIds: Itera
   return out.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
-/** The host-event columns booking availability reads; `kind` rides on top when the database has it. */
-export const HOST_EVENT_COLUMNS = "start_time, end_time, source_account_id, calendar_id";
-
 type Read = { data: unknown; error: { code?: string; message: string } | null };
 
+/** The server read of a host's busy rows, repeats expanded (20261029180000_booking_host_events.sql). */
+export const HOST_EVENTS_FN = "calendar__booking_host_events";
+
+export type HostEventsWindow = {
+  workspaceId: string | null;
+  hostId: string;
+  from: Date;
+  to: Date;
+  /** The link's host zone: the server expands repeats in the host's saved zone, else this one. */
+  zone: string;
+};
+
 /**
- * The host's events for the window, with their kind. A database before the
- * kind column (42703, undefined column) is read again without it, every row
- * then an ordinary event. Any other failed read throws: a link must never offer
- * the host's busy time as free.
+ * The host's events for the window, one row per occurrence: the server
+ * expands Moduo repeats (COUNT/UNTIL, skipped and moved occurrences, the
+ * host's wall clock), so a weekly 1:1 that began weeks ago blocks this week.
+ * Any failed read throws, a missing function (migration not applied yet)
+ * included: a link must never offer the host's busy time as free, and the
+ * table alone would count a repeat only at its first start.
  */
 export async function readHostEvents(
-  select: (columns: string) => PromiseLike<Read>,
+  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<Read>,
+  window: HostEventsWindow,
 ): Promise<HostEventRow[]> {
-  let res = await select(`${HOST_EVENT_COLUMNS}, kind`);
-  if (res.error?.code === "42703") res = await select(HOST_EVENT_COLUMNS);
+  const res = await rpc(HOST_EVENTS_FN, {
+    p_workspace_id: window.workspaceId,
+    p_owner_id: window.hostId,
+    p_from: window.from.toISOString(),
+    p_to: window.to.toISOString(),
+    p_zone: window.zone || "UTC",
+  });
   if (res.error) throw new Error(`host events: ${res.error.message}`);
-  return (Array.isArray(res.data) ? res.data : []) as HostEventRow[];
+  if (!Array.isArray(res.data)) throw new Error("host events: the answer is not a list");
+  return res.data as HostEventRow[];
 }

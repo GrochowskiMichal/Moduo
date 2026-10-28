@@ -209,18 +209,16 @@ async function busyIntervals(
   accessToken: string | null,
 ): Promise<Interval[]> {
   const ids = new Set(busyIds(link.busy_calendar_ids));
-  const rows = await readHostEvents((columns) =>
-    db
-      .from("calendar_events")
-      .select(columns)
-      .eq("workspace_id", link.workspace_id)
-      // PERM-0: only the host's own calendar decides their availability —
-      // a teammate's events must neither block slots nor be inferable here.
-      .eq("owner_id", link.owner_user_id)
-      .is("deleted_at", null)
-      .lt("start_time", to.toISOString())
-      .gt("end_time", from.toISOString()),
-  );
+  // PERM-0: only the host's own calendar decides their availability (a
+  // teammate's events must neither block slots nor be inferable here), with
+  // repeats expanded over the window on the server.
+  const rows = await readHostEvents((fn, args) => db.rpc(fn, args), {
+    workspaceId: link.workspace_id,
+    hostId: link.owner_user_id,
+    from,
+    to,
+    zone: link.host_timezone,
+  });
   const intervals: Interval[] = busyFromHostEvents(rows, ids);
 
   // TV-D10 (default d): the host's work sessions from Tasks, when the link's
