@@ -79,23 +79,26 @@ function inRange(events: Row[], from: string, to: string): Row[] {
 
 /**
  * Every row of a set-returning read RPC, page by page: PostgREST answers at
- * most 1,000 rows a request.
+ * most 1,000 rows a request. `order` names the columns that keep the pages
+ * stable (the function's own ORDER BY, stated again for the offset).
  */
-function readRpcPages(ctx: ToolContext, fn: string, args: Row): Promise<Row[]> {
+function readRpcPages(ctx: ToolContext, fn: string, args: Row, order: string[] = []): Promise<Row[]> {
   return readAllPages<Row>((from, to) => {
-    const query = ctx.db.rpc(fn, args);
+    let query = ctx.db.rpc(fn, args);
     // A stand-in database may answer without a query builder: one page, then.
-    return typeof query.range === "function" ? query.range(from, to) : query;
+    if (typeof query.range !== "function") return query;
+    for (const column of order) query = query.order(column);
+    return query.range(from, to);
   });
 }
 
 /**
- * The occurrences read's answer has no function behind it yet: PGRST202 (a
- * connector deployed before its migration), or an answer without any code.
+ * The occurrences read has no function behind it yet (PGRST202: a connector
+ * deployed before its migration). Any other failure is an error, never a
+ * quiet fallback.
  */
 function occurrencesReadMissing(err: unknown): boolean {
-  const code = (err as { code?: string } | null)?.code;
-  return !code || code === "PGRST202";
+  return (err as { code?: string } | null)?.code === "PGRST202";
 }
 
 /**
@@ -107,8 +110,8 @@ function occurrencesReadMissing(err: unknown): boolean {
 async function eventsInWindow(ctx: ToolContext, from: string, to: string): Promise<Row[]> {
   const window = { p_workspace_id: ctx.key.workspaceId, p_from: from, p_to: to };
   const [events, occurrences] = await Promise.all([
-    readRpcPages(ctx, "calendar_events_visible", window),
-    readRpcPages(ctx, "calendar_event_occurrences", window).catch((err) => {
+    readRpcPages(ctx, "calendar_events_visible", window, ["start_time", "id"]),
+    readRpcPages(ctx, "calendar_event_occurrences", window, ["starts_at", "event_id"]).catch((err) => {
       if (occurrencesReadMissing(err)) return null;
       throw err;
     }),
@@ -120,7 +123,9 @@ async function eventsInWindow(ctx: ToolContext, from: string, to: string): Promi
   for (const occurrence of occurrences) {
     const event = eventById.get(occurrence.event_id);
     if (!event) continue;
-    items.push({ ...event, start_time: occurrence.starts_at, end_time: occurrence.ends_at });
+    // A repeat keeps its own first times beside the occurrence's: its id is the series.
+    const series = event.recurrence_rule ? { series_start_time: event.start_time, series_end_time: event.end_time } : {};
+    items.push({ ...event, ...series, start_time: occurrence.starts_at, end_time: occurrence.ends_at });
   }
   return items.sort(byStart);
 }
@@ -145,6 +150,9 @@ function shapeEventExtras(e: Row): Row {
     // and a series the occurrences it skips (deleted or replaced).
     ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
     ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
+    // One occurrence of a repeat: the series' own first times. Its id is the series,
+    // so an update or delete by that id changes every occurrence.
+    ...(e.series_start_time ? { series_starts_at: e.series_start_time, series_ends_at: e.series_end_time ?? null } : {}),
     // Focus time (CALR-14): the task it holds, which the masked read nulls for
     // anyone but its owner (a teammate's arrives titled "Focus time").
     ...(e.kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
@@ -180,7 +188,8 @@ function shapeEvent(e: Row, me: string): Row {
     external: e.source_account_id !== null,
     source_account_id: e.source_account_id ?? null,
     description: e.description ?? "",
-    kind: e.kind ?? "event",
+    // A teammate's private item says only Busy, never whether it is focus time or a hold.
+    kind: e.is_private && e.owner_id !== me ? "event" : (e.kind ?? "event"),
     private: Boolean(e.is_private),
     ...shapeEventWhere(e),
     owner_id: e.owner_id ?? null,
@@ -206,7 +215,7 @@ const OPEN_STATUSES = ["todo", "in_progress"];
 /** The place, link, privacy, calendar and people fields create and update share. */
 const EVENT_DETAIL_PROPERTIES = {
   place: { type: "string", description: "Where it happens (a place or address)." },
-  link: { type: "string", description: "The meeting link (a URL); empty removes it." },
+  link: { type: ["string", "null"], description: "The meeting link (a URL); empty or null removes it." },
   private: {
     type: "boolean",
     description: "Private: teammates see only \"Busy\", whatever they can see of the calendar.",
@@ -255,7 +264,7 @@ export const calendarConnectorModule: ConnectorModule = {
     {
       name: "calendar_list_events",
       description:
-        "Events in a date range, one item per occurrence (repeats included): native Moduo events and mirrored-external ones (read-only through MCP, source-attributed). Each says its kind, place, link, people, privacy and whether it is yours; a teammate's private event reads \"Busy\" and their focus time \"Focus time\". Times are ISO 8601.",
+        "Events in a date range, one item per occurrence (repeats included; a repeat's item carries series_starts_at, and its id is the whole series): native Moduo events and mirrored-external ones (read-only through MCP, source-attributed). Each says its kind, place, link, people, privacy and whether it is yours; a teammate's private event reads \"Busy\" and their focus time \"Focus time\". Times are ISO 8601; a range spans at most a year.",
       access: "view",
       hints: "read",
       inputSchema: {
@@ -384,7 +393,7 @@ export const calendarConnectorModule: ConnectorModule = {
     {
       name: "calendar_update_event",
       description:
-        "Edit a native event (only the fields you pass change): times, title, place, link, people, privacy, calendar. External events are read-only through MCP and are rejected.",
+        "Edit a native event (only the fields you pass change): times, title, place, link, people, privacy, calendar. A repeating event's id is the whole series: new times move every occurrence (give times relative to series_starts_at). External events are read-only through MCP and are rejected.",
       access: "edit",
       hints: { destructive: false, idempotent: true },
       inputSchema: {
@@ -424,7 +433,7 @@ export const calendarConnectorModule: ConnectorModule = {
     },
     {
       name: "calendar_delete_event",
-      description: "Delete a native event (tombstoned; spine links cascade). External events are rejected.",
+      description: "Delete a native event (tombstoned; spine links cascade). A repeating event's id is the whole series: every occurrence goes. External events are rejected.",
       access: "edit",
       hints: { destructive: true, idempotent: true },
       inputSchema: {
@@ -528,7 +537,11 @@ export const calendarConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const eventId = str(args, "event_id", false) || null;
         const [levels, members] = await Promise.all([
-          rows(ctx.db.rpc("calendar_who_sees", { p_workspace_id: ctx.key.workspaceId, p_event_id: eventId })),
+          readRpcPages(ctx, "calendar_who_sees", { p_workspace_id: ctx.key.workspaceId, p_event_id: eventId }, [
+            "calendar_name",
+            "calendar_id",
+            "user_id",
+          ]),
           workspaceMembers(ctx),
         ]);
         const nameById = new Map(members.map((m) => [m.user_id, m.name]));

@@ -290,7 +290,7 @@ export const TOOL_ARG_SCHEMAS: Record<string, z.ZodType<Record<string, unknown>>
     link_id: nonempty.optional(),
     hold: z.boolean().optional(),
     title: z.string().optional(),
-    duration_minutes: z.coerce.number().int().min(5).max(1440).optional(),
+    duration_minutes: z.coerce.number().int().min(1).max(1440).optional(),
     video_provider: z.enum(["google_meet", "zoom", "guest_choice"]).optional(),
   }),
   calendar_release_offer: z.object({ offer_id: nonempty }),
