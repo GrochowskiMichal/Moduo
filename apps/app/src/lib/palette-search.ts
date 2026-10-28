@@ -4,9 +4,8 @@
 // The server ranks; this file only lays the answer out: one Top result, then
 // groups in a fixed order (ranking moves rows inside a group, never the
 // groups), up to 3 rows each with "Show all N", and type chips that narrow the
-// search. Messages and Conversations come from Chat's own calls until GS-6, so
-// they have a place in the order but no types here. Pure so it is testable
-// without a runtime.
+// search. Messages and Conversations come from search_all too (GS-6). Pure so
+// it is testable without a runtime.
 
 import type { SearchAllRow } from "@contracts/search";
 
@@ -33,12 +32,12 @@ export const PALETTE_GROUPS: readonly GroupDef[] = [
   { key: "notes", heading: "Notes", types: ["note"], chip: "notes" },
   { key: "contacts", heading: "Contacts", types: ["contact", "company"], chip: "contacts" },
   { key: "events", heading: "Events", types: ["event"], chip: "events" },
-  { key: "messages", heading: "Messages", types: [], chip: "chat" },
-  { key: "conversations", heading: "Conversations", types: [], chip: "chat" },
+  { key: "messages", heading: "Messages", types: ["chat_message"], chip: "chat" },
+  { key: "conversations", heading: "Conversations", types: ["chat_channel"], chip: "chat" },
   { key: "email", heading: "Email", types: ["email_thread", "email"], chip: "email" },
 ];
 
-/** Every type ⌘K asks `search_all` for (chat joins with GS-6). */
+/** Every type ⌘K asks `search_all` for. */
 export const SEARCH_ALL_TYPES: string[] = PALETTE_GROUPS.flatMap((g) => [...g.types]);
 
 const CHIPS: ReadonlyArray<{ key: PaletteChipKey; label: string; module?: string }> = [
@@ -168,7 +167,7 @@ export function buildPaletteView(
   const all = opts.chip === "all";
   const top = all ? pickTop(known, opts.lead) : null;
   const perGroup = all ? (opts.perGroup ?? 3) : null;
-  const groups = PALETTE_GROUPS.filter((def) => wanted.has(def.key) && def.types.length > 0)
+  const groups = PALETTE_GROUPS.filter((def) => wanted.has(def.key))
     .map((def) =>
       groupView(
         def,

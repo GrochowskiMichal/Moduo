@@ -9,7 +9,7 @@ import {
   parsedRelationKind,
   requireRow,
 } from "@contracts/rows";
-import { normalizeSearchAllRow, type SearchAllRow } from "@contracts/search";
+import { normalizeSearchAllRow, normalizeSearchRecent, type SearchAllRow } from "@contracts/search";
 import { normalizeContentAuthorKind, normalizeReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
@@ -23,6 +23,8 @@ import { createReferencePreviews } from "./runtime.web.previews";
 import { entityLinkRowToModel } from "./runtime.web.shared";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
 import { isMissingFunctionError } from "./task-rows";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function entityRecordRowToModel(raw: unknown): EntityRecord {
   const r = requireRow(entityRecordRowSchema, raw, "entity");
@@ -268,6 +270,51 @@ export const webSpine: SpineRuntime = {
       const row = normalizeSearchAllRow(raw);
       return row ? [row] : [];
     });
+  },
+
+  // Recents (GS-8). Untyped until the generated types are regenerated from
+  // prod after 20261029150000_search_recents.sql ships.
+  async recordOpen({ workspaceId, type, id }) {
+    // Only a uuid: a desktop mail thread's device id never leaves the device (EM-3).
+    if (!UUID.test(id)) return;
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_record_open", {
+      p_workspace_id: workspaceId,
+      p_entity_type: type,
+      p_entity_id: id,
+    });
+    // Before the migration reaches this database there is nothing to record.
+    if (error && !isMissingFunctionError(error, "search_op_record_open")) throw new DbError(error);
+  },
+
+  async recents({ workspaceId, limit }) {
+    const { data, error } = await untypedDb(supabaseClient).rpc("search_recents_list", {
+      p_workspace_id: workspaceId,
+      p_limit: limit ?? 8,
+    });
+    if (error) {
+      if (isMissingFunctionError(error, "search_recents_list")) return [];
+      throw new DbError(error);
+    }
+    return (Array.isArray(data) ? data : []).flatMap((raw: unknown) => {
+      const row = normalizeSearchRecent(raw);
+      return row ? [row] : [];
+    });
+  },
+
+  async forgetRecent({ workspaceId, type, id }) {
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_forget_open", {
+      p_workspace_id: workspaceId,
+      p_entity_type: type,
+      p_entity_id: id,
+    });
+    if (error) throw new DbError(error);
+  },
+
+  async clearRecents({ workspaceId }) {
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_clear_recents", {
+      p_workspace_id: workspaceId,
+    });
+    if (error) throw new DbError(error);
   },
 
   async getEntities({ workspaceId, refs }) {
