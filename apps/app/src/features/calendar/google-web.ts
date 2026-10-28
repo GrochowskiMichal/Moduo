@@ -5,6 +5,13 @@
 import { DbError } from "../../lib/runtime.db";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { supabaseClient } from "../../lib/runtime.web.client";
+import {
+  type CalendarPick,
+  type GoogleStatus,
+  loginsAwaitingPick,
+  parseGoogleStatus,
+  planGooglePicks,
+} from "./account-picks";
 import { finishConnectReturn, rememberConnectStart } from "./connect-return";
 import type { CalendarMirrorEventInput } from "./events";
 import { mapGoogleEvent } from "./mirror";
@@ -13,6 +20,9 @@ export type LinkedGoogleCalendar = {
   accountId: string;
   summary: string;
   googleCalendarId: string;
+  primary: boolean;
+  /** Google lets you only read it (reader, free/busy). */
+  readOnly: boolean;
 };
 
 /**
@@ -38,6 +48,7 @@ export async function readFunctionError(error: unknown): Promise<string> {
 const FUNCTION_ERRORS: Record<string, string> = {
   google_not_connected:
     "Google isn't connected for this account on the web. Reconnect it in Settings › Integrations.",
+  google_reauth: "Google stopped accepting Moduo's access. Reconnect it in Calendar accounts.",
   google_not_configured: "Google Calendar isn't set up on this server.",
   bad_patch: "Google events can't change that here yet.",
   bad_event: "That event is missing something Google needs.",
@@ -64,19 +75,13 @@ async function invoke(body: Record<string, unknown>): Promise<Record<string, unk
   return payload;
 }
 
+/** Every Google calendar behind a stored token, and the logins Google stopped accepting. */
+export async function loadGoogleStatus(): Promise<GoogleStatus> {
+  return parseGoogleStatus(await invoke({ action: "status" }));
+}
+
 export async function loadLinkedGoogleCalendars(): Promise<LinkedGoogleCalendar[]> {
-  const payload = await invoke({ action: "status" });
-  const rows = Array.isArray(payload.calendars) ? payload.calendars : [];
-  return rows.filter((row): row is LinkedGoogleCalendar => {
-    if (!row || typeof row !== "object") return false;
-    const item = row as LinkedGoogleCalendar;
-    return (
-      typeof item.email === "string" &&
-      typeof item.accountId === "string" &&
-      typeof item.summary === "string" &&
-      typeof item.googleCalendarId === "string"
-    );
-  });
+  return (await loadGoogleStatus()).calendars;
 }
 
 export async function fetchGoogleWebEvents(input: {
@@ -163,40 +168,52 @@ async function tombstonedGoogleIds(workspaceId: string): Promise<Set<string>> {
 }
 
 /**
- * Make sure each Google calendar behind a stored token has a calendar-account
- * row. A desktop connect already stores one row per login (`google:{email}`)
- * that mirrors every calendar in that login — don't add a second copy.
+ * Back from connecting Google: finish the connect, then name the logins whose
+ * calendars wait for the picker (CALR-20: only picked calendars sync). A login
+ * removed here doesn't come back unless this tab just connected it again.
  */
 export async function ensureGoogleCalendarAccounts(opts: {
-  runtime: ModuoRuntime;
+  /** Unused since only picked calendars sync (saveGooglePicks writes them). */
+  runtime?: ModuoRuntime;
   workspaceId: string;
   accounts: { provider: string; externalId: string; deletedAt: string | null }[];
-}): Promise<boolean> {
+}): Promise<{ awaiting: string[]; linked: LinkedGoogleCalendar[] }> {
   // Back from Google: the new token is only saved once the connect finishes.
   await finishConnectReturn();
   const linked = await loadLinkedGoogleCalendars();
-  const live = opts.accounts.filter((account) => !account.deletedAt);
   const revive = sessionStorage.getItem("moduo:google-connect") === "1";
   if (revive) sessionStorage.removeItem("moduo:google-connect");
   const removed = revive ? new Set<string>() : await tombstonedGoogleIds(opts.workspaceId);
-  let added = false;
-  for (const cal of linked) {
-    const loginId = `google:${cal.email}`;
-    if (live.some((account) => account.provider === "google" && account.externalId === loginId)) {
-      continue;
-    }
-    if (live.some((account) => account.externalId === cal.accountId)) continue;
-    if (removed.has(cal.accountId)) continue;
-    await opts.runtime.calendar.upsertAccount({
+  const awaiting = loginsAwaitingPick(linked, opts.accounts).filter(
+    (email) =>
+      ![...removed].some((id) => id === `google:${email}` || id.startsWith(`google:${email}:`)),
+  );
+  return { awaiting, linked };
+}
+
+/** Sync the picked calendars of a login; returns the new account ids to hide from the week. */
+export async function saveGooglePicks(opts: {
+  runtime: ModuoRuntime;
+  workspaceId: string;
+  picks: readonly CalendarPick[];
+}): Promise<{ accountIds: string[]; hiddenIds: string[] }> {
+  const plan = planGooglePicks(opts.picks);
+  const accountIds: string[] = [];
+  const hiddenIds: string[] = [];
+  for (const cal of plan.add) {
+    const account = await opts.runtime.calendar.upsertAccount({
       workspaceId: opts.workspaceId,
       provider: "google",
-      externalId: cal.accountId,
-      displayLabel: cal.summary || cal.email,
+      externalId: cal.externalId,
+      displayLabel: cal.displayLabel,
       color: null,
       status: "ok",
       lastSyncAt: null,
+      readOnly: cal.readOnly,
+      busyDefault: cal.busyDefault,
     });
-    added = true;
+    accountIds.push(account.id);
+    if (plan.hide.includes(cal.externalId)) hiddenIds.push(account.id);
   }
-  return added;
+  return { accountIds, hiddenIds };
 }

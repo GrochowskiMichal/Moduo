@@ -1,6 +1,6 @@
 // Back from connecting Google or Zoom (say when it didn't take, ask first when
-// this tab didn't start it: see connect-return.ts), and link the signed-in
-// Google accounts into the calendar once they're known.
+// this tab didn't start it: see connect-return.ts), and open the calendar
+// picker for a signed-in Google login with nothing picked yet (CALR-20).
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +9,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { ensureGoogleCalendarAccounts } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
+import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
 
 type Input = {
   runtime: ModuoRuntime | null;
@@ -55,12 +56,11 @@ export function useCalendarConnectReturn({ runtime, workspaceId, calendar }: Inp
     let cancelled = false;
     void (async () => {
       try {
-        const added = await ensureGoogleCalendarAccounts({
-          runtime,
+        const { awaiting } = await ensureGoogleCalendarAccounts({
           workspaceId,
           accounts: accountsRef.current,
         });
-        if (!cancelled && added) await calendar.reload();
+        if (!cancelled && awaiting[0]) dispatchOpenCalendarAccounts({ pick: awaiting[0] });
       } catch (err) {
         console.warn("[calendar] google link", err);
       }

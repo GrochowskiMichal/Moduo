@@ -58,7 +58,7 @@ import type { CalendarAccountModel } from "../events";
 import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock } from "../focus";
 import { type BusyInterval, findNextGap } from "../gap-finder";
-import { ensureGoogleCalendarAccounts, pushGoogleWebEvent } from "../google-web";
+import { pushGoogleWebEvent } from "../google-web";
 import { dayGeometry } from "../grid-layout";
 import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
 import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
@@ -98,6 +98,7 @@ import { type StripItem, stripItems } from "../strip";
 import { tookLongerDeltaSeconds } from "../triage";
 import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
+import { CalendarAccountsDialog } from "./calendar-accounts-dialog";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
 import { CalendarGrid, type MoveEventDeltas, type MoveTaskResult } from "./calendar-grid";
@@ -891,6 +892,11 @@ export function CalendarPageView({
           onDone={() => void calendar.reload()}
         />
       ) : null}
+      <CalendarAccountsDialog
+        {...{ runtime, workspaceId, calendar, updatePrefs, syncNow }}
+        isDesktop={IS_DESKTOP}
+        hiddenAccountIds={prefs.hiddenAccountIds}
+      />
     </DndContext>
   );
 }

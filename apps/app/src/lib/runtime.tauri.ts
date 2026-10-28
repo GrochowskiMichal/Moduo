@@ -277,6 +277,8 @@ export const tauriRuntime: ModuoRuntime = {
     restoreOccurrence: webRuntime.calendar.restoreOccurrence,
     upsertAccount: webRuntime.calendar.upsertAccount,
     removeAccount: webRuntime.calendar.removeAccount,
+    restoreAccount: webRuntime.calendar.restoreAccount,
+    setAccountBusy: webRuntime.calendar.setAccountBusy,
     mirrorEvents: webRuntime.calendar.mirrorEvents,
     listenLive: webRuntime.calendar.listenLive,
     updateGoogleEvent: webRuntime.calendar.updateGoogleEvent,

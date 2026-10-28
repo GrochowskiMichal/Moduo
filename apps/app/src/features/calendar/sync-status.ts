@@ -4,6 +4,8 @@
 // names its login, says what is stale since when and what is current, and the
 // week never reads "Nothing scheduled" while anything failed. A read that
 // failed outright (`degraded`) is a fault of its own.
+// CALR-20 (AC37): a login Google stopped accepting (`status = 'reauth'`) is
+// stale the same way, and its fault asks to reconnect.
 
 import { providerLabel } from "./accounts";
 import type { CalendarAccountModel } from "./events";
@@ -24,6 +26,8 @@ export type SyncFault = {
   staleSinceMs: number | null;
   /** True when a calendar of this login never synced at all. */
   neverSynced: boolean;
+  /** Google stopped accepting Moduo's access to this login: Reconnect, not Try again. */
+  reauth: boolean;
 };
 
 export type CalendarSyncStatus = {
@@ -82,7 +86,7 @@ export function calendarSyncStatus(input: {
   const byLogin = new Map<string, SyncFault>();
   const current = [YOUR_CALENDAR];
   for (const account of live) {
-    if (account.status !== "error") {
+    if (account.status !== "error" && account.status !== "reauth") {
       current.push(calendarName(account));
       continue;
     }
@@ -98,10 +102,12 @@ export function calendarSyncStatus(input: {
         accountIds: [],
         staleSinceMs: null,
         neverSynced: false,
+        reauth: false,
       } satisfies SyncFault);
     byLogin.set(key, fault);
     fault.calendars.push(calendarName(account));
     fault.accountIds.push(account.id);
+    if (account.status === "reauth") fault.reauth = true;
     const at = syncedAtMs(account);
     if (at === null) fault.neverSynced = true;
     else fault.staleSinceMs = fault.staleSinceMs === null ? at : Math.min(fault.staleSinceMs, at);
@@ -143,6 +149,16 @@ export function notSyncedLabel(
   return at === null ? "Not synced" : `Not synced · ${syncSinceLabel(at, now)}`;
 }
 
+/** The account group's state: "Reconnect", "Not synced · 9:12", or null when it synced. */
+export function accountStateLabel(
+  account: Pick<CalendarAccountModel, "status" | "lastSyncAt">,
+  now: number = Date.now(),
+): string | null {
+  if (account.status === "reauth") return "Reconnect";
+  if (account.status === "error") return notSyncedLabel(account, now);
+  return null;
+}
+
 /** "A", "A and B", "A, B and C". */
 function joinNames(names: readonly string[]): string {
   if (names.length <= 1) return names[0] ?? "";
@@ -165,23 +181,36 @@ export function syncBannerText(
     return "Your calendar didn't load, so events may be missing. Tasks are current.";
   }
   if (status.faults.length === 0) return null;
-  const providers = new Set(status.faults.map((f) => f.provider));
-  const logins = joinNames(status.faults.map((f) => f.login));
+  const reauth = status.faults
+    .filter((f) => f.reauth)
+    .map(
+      (f) =>
+        `Google stopped accepting Moduo's access to ${f.login}. ${staleClause([f], now)}, and booking links can't see ${f.calendars.length === 1 ? "it" : "them"} until you reconnect.`,
+    );
+  const faults = status.faults.filter((f) => !f.reauth);
+  if (faults.length === 0) return reauth.join(" ");
+  const providers = new Set(faults.map((f) => f.provider));
+  const logins = joinNames(faults.map((f) => f.login));
   const who =
     providers.size === 1
-      ? `${PROVIDER_NAMES[status.faults[0].provider] ?? providerLabel(status.faults[0].provider)} didn't sync ${logins}.`
-      : `${status.faults.length} calendar accounts didn't sync: ${logins}.`;
-  const calendars = status.faults.flatMap((f) => f.calendars);
-  const neverSynced = status.faults.some((f) => f.neverSynced);
-  const since = status.faults
+      ? `${PROVIDER_NAMES[faults[0].provider] ?? providerLabel(faults[0].provider)} didn't sync ${logins}.`
+      : `${faults.length} calendar accounts didn't sync: ${logins}.`;
+  return [...reauth, `${who} ${staleClause(faults, now)}; ${currentClause(status.current)}.`].join(
+    " ",
+  );
+}
+
+/** "Work and Family show as of Sunday 6:02 PM", or "… haven't synced yet". */
+function staleClause(faults: readonly SyncFault[], now: number): string {
+  const calendars = faults.flatMap((f) => f.calendars);
+  const neverSynced = faults.some((f) => f.neverSynced);
+  const since = faults
     .map((f) => f.staleSinceMs)
     .filter((ms): ms is number => ms !== null)
     .reduce<number | null>((min, ms) => (min === null ? ms : Math.min(min, ms)), null);
-  const stale =
-    neverSynced || since === null
-      ? `${joinNames(calendars)} ${calendars.length === 1 ? "hasn't" : "haven't"} synced yet`
-      : `${joinNames(calendars)} ${calendars.length === 1 ? "shows" : "show"} as of ${syncSinceLabel(since, now)}`;
-  return `${who} ${stale}; ${currentClause(status.current)}.`;
+  return neverSynced || since === null
+    ? `${joinNames(calendars)} ${calendars.length === 1 ? "hasn't" : "haven't"} synced yet`
+    : `${joinNames(calendars)} ${calendars.length === 1 ? "shows" : "show"} as of ${syncSinceLabel(since, now)}`;
 }
 
 /** The quiet hint on an empty today, never over a fault, a load or a draft. */
