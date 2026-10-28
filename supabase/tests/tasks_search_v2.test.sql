@@ -303,11 +303,13 @@ SELECT test.ok(test.row_of(test.all_as('O', 'nectarine'), 'PN') IS NOT NULL
            AND test.row_of(test.all_as('O', 'apricot'), 'PN') IS NULL,
   'a renamed project is found by its new name at once, and not by the old one');
 SELECT test.ok(test.as_user('O', format($q$INSERT INTO public.buckets (id, workspace_id, owner_id, name) VALUES (%L, %L, %L, 'Damson board')$q$,
-                                         test.id('PD'), test.id('W'), test.id('O'))) LIKE 'ok%'
-           AND (SELECT label FROM public.entities WHERE entity_type = 'bucket' AND entity_id = test.id('PD')) = 'Damson board',
+                                         test.id('PD'), test.id('W'), test.id('O'))) LIKE 'ok%',
+  'the app inserts a project directly');
+SELECT test.ok((SELECT label FROM public.entities WHERE entity_type = 'bucket' AND entity_id = test.id('PD')) = 'Damson board',
   'a project the app writes directly is registered too');
-SELECT test.ok(test.as_user('O', format($q$UPDATE public.buckets SET deleted_at = now() WHERE id = %L$q$, test.id('PD'))) LIKE 'ok%'
-           AND (SELECT deleted_at IS NOT NULL FROM public.entities WHERE entity_type = 'bucket' AND entity_id = test.id('PD'))
+SELECT test.ok(test.as_user('O', format($q$UPDATE public.buckets SET deleted_at = now() WHERE id = %L$q$, test.id('PD'))) LIKE 'ok%',
+  'the app trashes it');
+SELECT test.ok((SELECT deleted_at IS NOT NULL FROM public.entities WHERE entity_type = 'bucket' AND entity_id = test.id('PD'))
            AND test.row_of(test.all_as('O', 'damson'), 'PD') IS NULL,
   'a trashed project leaves the registry and the results');
 SELECT test.ok(NOT EXISTS (SELECT 1 FROM public.entities e JOIN public.buckets b ON b.id = e.entity_id
