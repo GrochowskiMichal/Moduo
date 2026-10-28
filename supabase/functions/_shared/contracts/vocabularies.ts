@@ -1070,7 +1070,7 @@ export function normalizeCalendarItemKind(input: unknown): CalendarItemKind {
   return isCalendarItemKind(input) ? input : "event";
 }
 
-/** A slot offer's lifecycle (CALR-19, slot_offers.status CHECK in 20261029180000). */
+/** A slot offer's lifecycle (CALR-19, slot_offers.status CHECK in 20261029190000). */
 export const SLOT_OFFER_STATUSES = ["open", "booked", "released", "expired"] as const;
 export type SlotOfferStatus = (typeof SLOT_OFFER_STATUSES)[number];
 export const slotOfferStatusSchema = z.enum(SLOT_OFFER_STATUSES);

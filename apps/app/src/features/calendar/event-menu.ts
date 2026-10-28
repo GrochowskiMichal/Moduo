@@ -45,6 +45,9 @@ export function eventMenuItems(input: {
   // A teammate's private event reaches you as "Busy": nothing to copy or change.
   if (isBusy(event)) return items;
   const writes = canEdit && writer !== null;
+  // An offer's hold (CALR-19) goes with its offer: one hold moved or deleted
+  // alone would leave its offered time bookable but unheld.
+  if (event.kind === "hold") return [...items, ...holdMenuItems(event, writes)];
   items.push({ id: "copy", label: "Copy", hotkey: "calendar.copy" });
   // A copy of an event you can't write to lands on Your calendar (as ⌘D).
   if (canEdit) items.push({ id: "duplicate", label: "Duplicate", hotkey: "calendar.duplicate" });
@@ -64,14 +67,18 @@ export function eventMenuItems(input: {
   // Linking changes the links, not the event: as in the Event panel, any event.
   if (canEdit)
     items.push({ id: "link", label: "Link a person, note or task", hotkey: "calendar.link" });
-  // An offer's hold (CALR-19): its holds go together.
-  if (writes && event.kind === "hold" && event.offerId) {
-    items.push({ id: "release", label: "Release holds", hotkey: null });
-  }
   if (writes) {
     items.push({ id: "delete", label: "Delete", hotkey: "calendar.delete", destructive: true });
   }
   return items;
+}
+
+/** An offer's hold: Copy, and Release holds when you can write it. */
+function holdMenuItems(event: CalendarEventModel, writes: boolean): EventMenuItem[] {
+  const copy: EventMenuItem = { id: "copy", label: "Copy", hotkey: "calendar.copy" };
+  return writes && event.offerId
+    ? [copy, { id: "release", label: "Release holds", hotkey: null }]
+    : [copy];
 }
 
 /** The key as the keys sheet says it: ⌫ over Delete, ⌃↵, ⌘C (Ctrl C elsewhere). */

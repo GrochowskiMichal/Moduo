@@ -22,7 +22,13 @@ export type OfferRow = {
   status: string;
 };
 
-export type OfferTimeRow = { id: string; offer_id: string; start_at: string; end_at: string };
+export type OfferTimeRow = {
+  id: string;
+  offer_id: string;
+  start_at: string;
+  end_at: string;
+  hold_event_id?: string | null;
+};
 
 /** The status a guest sees: an open offer past its 48 hours is expired; an unknown one is never open. */
 export function offerState(offer: OfferRow, now: Date): SlotOfferStatus {
@@ -37,6 +43,34 @@ export function offerSlots(offer: OfferRow, times: readonly OfferTimeRow[], now:
     .map((t) => new Date(t.start_at))
     .filter((d) => d.getTime() > now.getTime())
     .sort((a, b) => a.getTime() - b.getTime());
+}
+
+/**
+ * The offered starts the host is still free for. `busy` is the host's busy
+ * time as the link reads it, which includes this offer's own holds: each held
+ * window takes out one busy interval of exactly its span, so a hold never
+ * blocks its own time while anything else there (another event, a booking
+ * through the link, a second copy of the same span) still does.
+ */
+export function freeOfferSlots(
+  slots: readonly Date[],
+  durationMinutes: number,
+  busy: readonly { start: Date; end: Date }[],
+  times: readonly OfferTimeRow[],
+): Date[] {
+  const left = [...busy];
+  for (const t of times) {
+    if (!t.hold_event_id) continue;
+    const at = left.findIndex(
+      (b) => b.start.getTime() === Date.parse(t.start_at) && b.end.getTime() === Date.parse(t.end_at),
+    );
+    if (at >= 0) left.splice(at, 1);
+  }
+  const span = durationMinutes * 60_000;
+  return slots.filter((slot) => {
+    const start = slot.getTime();
+    return !left.some((b) => b.start.getTime() < start + span && b.end.getTime() > start);
+  });
 }
 
 /** The offered time a guest picked, to the second. */

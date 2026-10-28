@@ -60,6 +60,7 @@ import {
 import {
   bookOffer,
   commitFailure,
+  freeOfferSlots,
   guestPageUrl,
   type LoadedOffer,
   loadOffer,
@@ -197,6 +198,30 @@ async function requestedLink(db: SupabaseClient, body: Record<string, unknown>) 
   }
   const slug = typeof body.slug === "string" ? body.slug.trim() : "";
   return { link: slug ? await loadLink(db, slug) : null, found: null };
+}
+
+/**
+ * An open offer's times the host is still free for (their busy calendars as the
+ * link reads them, bookings through the link included), its own holds aside.
+ * null when the busy read fails: "can't check times", never every time free.
+ */
+async function offerOpenSlots(
+  db: SupabaseClient,
+  link: LinkRow,
+  found: LoadedOffer<LinkRow>,
+  now: Date,
+  access: { accessToken: string } | null,
+): Promise<Date[] | null> {
+  const slots = offerSlots(found.offer, found.times, now);
+  if (slots.length === 0) return slots;
+  const last = new Date(Math.max(...found.times.map((t) => Date.parse(t.end_at))));
+  try {
+    const busy = await busyIntervals(db, link, now, last, access?.accessToken ?? null);
+    return freeOfferSlots(slots, found.offer.duration_minutes, busy, found.times);
+  } catch (err) {
+    console.error("[booking-public] offer availability read failed:", err);
+    return null;
+  }
 }
 
 /** A picked, released or expired offer's answer: a 409 to book, its status to preview. */
@@ -648,7 +673,7 @@ Deno.serve(async (req: Request) => {
   }
   // A busy read that failed answers "can't check times", never every slot free.
   const collective = found
-    ? offerSlots(found.offer, found.times, now)
+    ? await offerOpenSlots(db, link, found, now, access)
     : await collectiveOpenSlots(db, link, now, horizonEnd).catch((err: unknown) => {
         console.error("[booking-public] availability read failed:", err);
         return null;
@@ -701,10 +726,10 @@ Deno.serve(async (req: Request) => {
   for (const question of questions) {
     const id = typeof question.id === "string" ? question.id : "";
     const label = typeof question.label === "string" ? question.label : "";
-    const found = answersIn.find(
+    const answer = answersIn.find(
       (item) => item && typeof item === "object" && (item as { id?: string }).id === id,
     ) as { value?: string } | undefined;
-    const value = typeof found?.value === "string" ? found.value.trim() : "";
+    const value = typeof answer?.value === "string" ? answer.value.trim() : "";
     if (question.required && !value) return json({ error: "missing_answer", id }, 400);
     if (id && value) answers.push({ id, label, value });
   }

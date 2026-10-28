@@ -428,6 +428,24 @@ BEGIN
 END;
 $$;
 
+-- ── The app deletes a link by stamping it: its open offers release ─────────
+DO $$
+DECLARE
+  r text;
+  v_soft uuid;
+BEGIN
+  r := test.value_as('O', pg_temp.create_sql($t$ARRAY['2030-03-25 09:00+00']::timestamptz[]$t$, ', p_hold => true'));
+  v_soft := r::uuid;
+  INSERT INTO offer_ids VALUES ('soft', v_soft);
+  UPDATE public.exposed_slot_links SET deleted_at = now(), paused = true WHERE id = test.id('L');
+  PERFORM test.ok((SELECT status FROM public.slot_offers WHERE id = v_soft) = 'released' AND pg_temp.live_holds(v_soft) = 0,
+    'a link the app deletes releases its open offers and their holds');
+  PERFORM test.ok((SELECT status FROM public.slot_offers WHERE id = pg_temp.offer('held')) = 'booked',
+    'a booked offer stays booked');
+  UPDATE public.exposed_slot_links SET deleted_at = NULL, paused = false WHERE id = test.id('L');
+END;
+$$;
+
 -- ── Erasure: offers go with their link and their person ─────────────────────
 DO $$
 DECLARE
@@ -448,5 +466,41 @@ BEGIN
   PERFORM test.ok(pg_temp.live_holds(v_fresh) = 0, 'and an open offer''s holds stop being busy');
   PERFORM test.ok((SELECT count(*) FROM public.calendar_events WHERE id = (SELECT event_id FROM picked) AND deleted_at IS NULL) = 1,
     'a meeting already booked from an offer stays');
+END;
+$$;
+
+-- Deleting a workspace or an account with live holds goes through.
+DO $$
+DECLARE
+  r text;
+  v_state text := 'ok';
+BEGIN
+  INSERT INTO public.exposed_slot_links
+    (id, slot_id, workspace_id, owner_user_id, owner_email, name, link_name, slug, duration_minutes, video_provider)
+  VALUES (test.id('L2'), 'db-test-slot-l2', test.id('W')::text, test.id('O')::text, 'db-test-o@example.com',
+          'Second', 'Second', 'db-test-second', 30, 'google_meet');
+  r := test.value_as('O', format($q$SELECT (public.calendar_op_offer_create(p_workspace_id => %L, p_link_id => %L,
+    p_starts_at => ARRAY['2030-04-02 09:00+00']::timestamptz[]))->>'id'$q$, test.id('W'), test.id('L2')));
+  PERFORM test.ok(r ~ '^[0-9a-f-]{36}$', 'O holds a time on a second link', r);
+  BEGIN
+    DELETE FROM auth.users WHERE id = test.id('O');
+  EXCEPTION WHEN OTHERS THEN
+    v_state := SQLERRM;
+  END;
+  PERFORM test.ok(v_state = 'ok', 'deleting the account with live holds goes through', v_state);
+  PERFORM test.ok((SELECT count(*) FROM public.slot_offers WHERE owner_id = test.id('O')) = 0, 'and takes its offers');
+
+  -- A workspace too (X's, with an offer on X's own link).
+  r := test.value_as('X', format($q$SELECT (public.calendar_op_offer_create(p_workspace_id => %L, p_link_id => %L,
+    p_starts_at => ARRAY['2030-04-03 09:00+00']::timestamptz[]))->>'id'$q$, test.id('W2'), test.id('LX')));
+  PERFORM test.ok(r ~ '^[0-9a-f-]{36}$', 'X holds a time in W2', r);
+  v_state := 'ok';
+  BEGIN
+    DELETE FROM public.workspaces WHERE id = test.id('W2');
+  EXCEPTION WHEN OTHERS THEN
+    v_state := SQLERRM;
+  END;
+  PERFORM test.ok(v_state = 'ok', 'deleting the workspace with live holds goes through', v_state);
+  PERFORM test.ok((SELECT count(*) FROM public.slot_offers WHERE workspace_id = test.id('W2')) = 0, 'and takes its offers');
 END;
 $$;

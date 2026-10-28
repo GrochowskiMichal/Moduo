@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@rstest/core";
 
 import {
+  freeOfferSlots,
   guestPageUrl,
   OFFER_SLUG_PREFIX,
   type OfferRow,
@@ -133,5 +134,32 @@ describe("an offer never leads to the host's booking link", () => {
     expect(rebookSlug("r/0f3a9c", "intro")).toBe("r/0f3a9c");
     expect(rebookSlug("intro-old", "intro")).toBe("intro");
     expect(rebookSlug(null, "intro")).toBe("intro");
+  });
+});
+
+describe("freeOfferSlots", () => {
+  const held = [
+    { ...time("t2", "2026-11-03T14:00:00.000Z"), hold_event_id: "h2" },
+    { ...time("t3", "2026-11-05T09:00:00.000Z"), hold_event_id: "h3" },
+  ];
+  const slots = held.map((t) => new Date(t.start_at));
+  const span = (t: OfferTimeRow) => ({ start: new Date(t.start_at), end: new Date(t.end_at) });
+
+  it("an offer's own holds never block its times", () => {
+    expect(freeOfferSlots(slots, 45, held.map(span), held)).toEqual(slots);
+  });
+
+  it("anything else over an offered time takes it away", () => {
+    const meeting = { start: new Date("2026-11-03T14:30:00.000Z"), end: new Date("2026-11-03T15:00:00.000Z") };
+    expect(freeOfferSlots(slots, 45, [...held.map(span), meeting], held)).toEqual([slots[1]]);
+  });
+
+  it("a second busy copy of a held span still blocks it", () => {
+    expect(freeOfferSlots(slots, 45, [...held.map(span), span(held[0]!)], held)).toEqual([slots[1]]);
+  });
+
+  it("an unheld offer's times are blocked by whatever is there", () => {
+    const unheld = held.map((t) => ({ ...t, hold_event_id: null }));
+    expect(freeOfferSlots(slots, 45, [span(unheld[1]!)], unheld)).toEqual([slots[0]]);
   });
 });

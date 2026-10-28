@@ -3,7 +3,8 @@
 -- (/book/r/<slug>). With hold, each time is a calendar item of kind 'hold' on
 -- your Moduo calendar, so every availability read counts it as busy. The holds
 -- release together: when the offer stops being open (booked, released, expired)
--- or is deleted (its link goes), one trigger soft-deletes them.
+-- or is deleted (its link or person goes), one trigger soft-deletes them; a
+-- link soft-deleted in the app releases its open offers.
 -- calendar_events.offer_id has no FK on purpose (CALR-6). Re-runnable.
 -- Test: supabase/tests/slot_offers.test.sql.
 
@@ -35,6 +36,7 @@ CREATE TABLE IF NOT EXISTS public.slot_offer_times (
   hold_event_id uuid,
   UNIQUE (offer_id, start_at)
 );
+SET LOCAL lock_timeout = '5s';
 CREATE INDEX IF NOT EXISTS calendar_events_offer_idx ON public.calendar_events (offer_id) WHERE offer_id IS NOT NULL;
 
 -- RLS: the owner reads their own; nobody writes directly (the ops do).
@@ -65,6 +67,21 @@ $$;
 DROP TRIGGER IF EXISTS slot_offers_release_holds ON public.slot_offers;
 CREATE TRIGGER slot_offers_release_holds AFTER UPDATE OF status OR DELETE ON public.slot_offers
   FOR EACH ROW EXECUTE FUNCTION public.slot_offers__release_holds();
+
+-- The app deletes a link by stamping deleted_at: its open offers release with it.
+CREATE OR REPLACE FUNCTION public.exposed_slot_links__release_offers()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF NEW.deleted_at IS NOT NULL AND OLD.deleted_at IS NULL THEN
+    UPDATE public.slot_offers SET status = 'released', updated_at = now()
+     WHERE link_id = NEW.id AND status = 'open';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS exposed_slot_links_release_offers ON public.exposed_slot_links;
+CREATE TRIGGER exposed_slot_links_release_offers AFTER UPDATE OF deleted_at ON public.exposed_slot_links
+  FOR EACH ROW EXECUTE FUNCTION public.exposed_slot_links__release_offers();
 
 CREATE OR REPLACE FUNCTION public.calendar_op_offer_create(
   p_workspace_id uuid,
@@ -120,7 +137,8 @@ BEGIN
   END LOOP;
 
   PERFORM public.module_activity_log(p_workspace_id, 'calendar', 'offer', o.id, 'calendar.offer_create',
-    jsonb_build_object('title', o.title, 'times', cardinality(p_starts_at), 'hold', o.hold));
+    jsonb_build_object('title', o.title,
+      'times', (SELECT count(DISTINCT s) FROM unnest(p_starts_at) s), 'hold', o.hold));
   RETURN jsonb_build_object('id', o.id, 'slug', o.slug, 'status', o.status,
                             'expires_at', o.expires_at, 'hold_event_ids', to_jsonb(v_holds));
 END;
@@ -192,6 +210,8 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.slot_offers__release_holds() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.exposed_slot_links__release_offers() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.exposed_slot_links__release_offers() TO service_role;
 GRANT EXECUTE ON FUNCTION public.slot_offers__release_holds() TO service_role;
 REVOKE ALL ON FUNCTION public.calendar_op_offer_create(uuid, uuid, timestamptz[], boolean, text, integer, text) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.calendar_op_offer_create(uuid, uuid, timestamptz[], boolean, text, integer, text) TO authenticated, service_role;
