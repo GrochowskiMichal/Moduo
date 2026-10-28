@@ -22,6 +22,7 @@ import { type BusyBlockRow, busyBlockToEvent, type SharedCalendar } from "./cale
 import { collectTruncations, READ_CAPS } from "./paged-select";
 import { jsonObject, type RpcArgs, runRpc } from "./runtime.db";
 import type { CalendarRuntime } from "./runtime.types";
+import { webCalendarOffers } from "./runtime.web.calendar.offers";
 import { supabaseClient } from "./runtime.web.client";
 import { firstRow, selectCapped } from "./runtime.web.shared";
 
@@ -74,6 +75,7 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     conferenceProvider: normalizeConferenceProvider(r.conference_provider),
     kind: normalizeCalendarItemKind(r.kind),
     focusTaskId: r.focus_task_id ?? null,
+    offerId: r.offer_id,
     attendees: attendeesOf(r.attendees),
     ...seriesFieldsOf(r),
   };
@@ -813,4 +815,6 @@ export const webCalendar: CalendarRuntime = {
       })
       .catch(() => undefined);
   },
+
+  ...webCalendarOffers,
 };

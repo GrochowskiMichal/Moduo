@@ -1070,6 +1070,21 @@ export function normalizeCalendarItemKind(input: unknown): CalendarItemKind {
   return isCalendarItemKind(input) ? input : "event";
 }
 
+/** A slot offer's lifecycle (CALR-19, slot_offers.status CHECK in 20261029190000). */
+export const SLOT_OFFER_STATUSES = ["open", "booked", "released", "expired"] as const;
+export type SlotOfferStatus = (typeof SLOT_OFFER_STATUSES)[number];
+export const slotOfferStatusSchema = z.enum(SLOT_OFFER_STATUSES);
+export function isSlotOfferStatus(value: unknown): value is SlotOfferStatus {
+  return typeof value === "string" && (SLOT_OFFER_STATUSES as readonly string[]).includes(value);
+}
+export function parseSlotOfferStatus(input: unknown): SafeParseResult<SlotOfferStatus> {
+  return parseOrError(slotOfferStatusSchema, input);
+}
+/** Lax read: an unknown status is closed (expired), never open. */
+export function normalizeSlotOfferStatus(input: unknown): SlotOfferStatus {
+  return isSlotOfferStatus(input) ? input : "expired";
+}
+
 // ---------------------------------------------------------------------------
 // Subscription status — Stripe-OWNED vocabulary (bounded, documented set).
 // Kept as a known set + strict schema for write paths; display code passes

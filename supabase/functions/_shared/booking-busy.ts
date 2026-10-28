@@ -3,6 +3,7 @@
  * Focus time is free for links unless the busy list has the pseudo-calendar
  * "focus"; every other row is busy when its account is ticked, or when it is a
  * Moduo row (no account, calendar "moduo" or empty) and "moduo" is ticked.
+ * An offer's hold (CALR-19, AC34) is busy for every link, whatever the list ticks.
  * Intervals come back in start order.
  */
 
@@ -27,9 +28,10 @@ export function busyFromHostEvents(rows: readonly HostEventRow[], busyIds: Itera
     const calendarId = (row.calendar_id as string | null | undefined) ?? "moduo";
     const isModuo = account == null && (calendarId === "moduo" || calendarId === "");
     const selected =
-      row.kind === "focus"
+      row.kind === "hold" ||
+      (row.kind === "focus"
         ? ids.has(FOCUS_BUSY_ID)
-        : (account != null && ids.has(account)) || (isModuo && ids.has("moduo"));
+        : (account != null && ids.has(account)) || (isModuo && ids.has("moduo")));
     if (selected) out.push({ start: new Date(String(row.start_time)), end: new Date(String(row.end_time)) });
   }
   return out.sort((a, b) => a.start.getTime() - b.start.getTime());

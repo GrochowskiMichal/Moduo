@@ -196,6 +196,8 @@ export const HOTKEYS = {
   // Plan (CALR-5): S lifts the selected task to the next free slot; / finds a task.
   "calendar.place-task": { scope: "calendar", label: "Place the selected task", keys: ["S"] },
   "calendar.find-task": { scope: "calendar", label: "Find a task", keys: ["/"] },
+  // CALR-19: offer specific times from a booking link (↵ ⇥ ←→ ⌫ ⌘C ⇧⌘C esc while offering).
+  "calendar.offer": { scope: "calendar", label: "Offer specific times", keys: ["O"] },
   "calendar.all-day": {
     scope: "calendar",
     label: "Show every all-day row",

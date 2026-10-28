@@ -3,12 +3,23 @@
 // layer; decoration only, so it never catches the pointer. Inline styles are
 // geometry only.
 
+import { cn } from "@/lib/utils";
+
 import type { OpenTime } from "../booking/availability";
 import { chipSpanInDay, dayGeometry } from "../grid-layout";
 import { localDayKey } from "../lens";
 import { gridY } from "./grid-units";
 
-export function BookingOpenLayer({ days, times }: { days: Date[]; times: readonly OpenTime[] }) {
+export function BookingOpenLayer({
+  days,
+  times,
+  picked,
+}: {
+  days: Date[];
+  times: readonly OpenTime[];
+  /** Offer mode (CALR-19): the picked times fill; the rest is the cursor. */
+  picked?: readonly number[];
+}) {
   return (
     <>
       {days.map((day, col) => {
@@ -28,7 +39,12 @@ export function BookingOpenLayer({ days, times }: { days: Date[]; times: readonl
                 <div
                   key={t.startMs}
                   data-open-time=""
-                  className="pointer-events-none absolute inset-x-0.5 rounded-md border border-dashed border-primary/60"
+                  data-picked={picked?.includes(t.startMs) || undefined}
+                  className={cn(
+                    "pointer-events-none absolute inset-x-0.5 rounded-md border border-dashed border-primary/60",
+                    picked && "border-2 border-primary",
+                    picked?.includes(t.startMs) && "bg-primary/10",
+                  )}
                   style={{ top: gridY(span.topMinutes), height: gridY(span.heightMinutes) }}
                 />
               );

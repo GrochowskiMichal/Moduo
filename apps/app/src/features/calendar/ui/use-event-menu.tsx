@@ -26,6 +26,7 @@ import {
   type MenuAnchor,
 } from "./event-menu";
 import { inCalendarOverlay } from "./use-calendar-hotkeys";
+import { requestOfferRelease } from "./use-offer-mode";
 
 type Input = {
   chips: EventChipsByDay;
@@ -197,6 +198,9 @@ export function useEventMenu(input: Input): {
       case "link":
         k.openDetail({ type: "event", id: event.id });
         requestEventLink(event.id);
+        return;
+      case "release":
+        if (event.offerId) requestOfferRelease(event.offerId);
         return;
       case "delete":
         k.requestEventDelete(event.id, chip.startMs);

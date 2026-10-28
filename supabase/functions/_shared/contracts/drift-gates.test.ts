@@ -85,6 +85,7 @@ import {
   STATUS_CLEAR_AFTER,
   STATUS_PRESETS,
   WAITLIST_STATUSES,
+  SLOT_OFFER_STATUSES,
 } from "./vocabularies.ts";
 
 const MIGRATIONS_DIR = resolve(
@@ -133,6 +134,13 @@ describe("cross-runtime drift guards", () => {
     // The ops' friendly refusals repeat the lists; keep them in step too.
     expect(sql).toContain(`provider NOT IN (${inList(CONFERENCE_PROVIDERS)})`);
     expect(sql).toContain(`v_kind NOT IN (${inList(CALENDAR_ITEM_KINDS)})`);
+  });
+
+  it("slot_offers CHECK lists the canonical offer statuses (CALR-19)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261029190000_calendar_slot_offers.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect([...SLOT_OFFER_STATUSES]).toEqual(["open", "booked", "released", "expired"]);
+    expect(sql).toContain(`status IN (${inList(SLOT_OFFER_STATUSES)})`);
   });
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {

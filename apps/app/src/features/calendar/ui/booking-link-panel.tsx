@@ -37,6 +37,8 @@ export type BookingLinkPanelProps = {
   }) => void;
   onEdit: () => void;
   onGuestView: () => void;
+  /** Offer specific times from this link instead (CALR-19). */
+  onOffer?: () => void;
 };
 
 // "15 30 45 60 min" fits the panel's value column; each segment still says "N min".
@@ -264,6 +266,17 @@ export function BookingLinkPanel(props: BookingLinkPanelProps) {
       >
         Edit…
       </Button>
+      {props.onOffer ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="self-start"
+          onClick={props.onOffer}
+        >
+          Offer specific times instead
+        </Button>
+      ) : null}
     </div>
   );
 }

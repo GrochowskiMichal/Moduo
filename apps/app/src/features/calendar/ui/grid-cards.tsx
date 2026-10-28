@@ -104,6 +104,7 @@ export function GridEventCard({
         locked={chip.locked}
         focus={chip.focus}
         holdsTask={chip.holdsTask}
+        held={chip.held}
         stale={stale}
         waiting={waiting}
         aside={aside}
