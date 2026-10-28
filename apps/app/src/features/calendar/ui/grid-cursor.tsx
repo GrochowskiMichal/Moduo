@@ -1,10 +1,11 @@
 // The grid cursor (CALR-4, AC22): a 30-minute slot outlined on its day
-// column, shown while the grid has focus. Lives in the hours grid's own CSS
+// column (on a busy slot, the event under it: `cursorBox`), shown while the
+// grid has focus. Lives in the hours grid's own CSS
 // grid, so it scrolls with the hours; inline styles are geometry only.
 
 import { useLayoutEffect, useRef } from "react";
 
-import { CURSOR_MINUTES, type GridCursor } from "../grid-keys";
+import type { GridCursor } from "../grid-keys";
 import { localDayKey } from "../lens";
 import { gridY } from "./grid-units";
 
@@ -14,7 +15,8 @@ export function GridCursorMark({ cursor, days }: { cursor: GridCursor; days: Dat
   useLayoutEffect(() => {
     ref.current?.scrollIntoView?.({ block: "nearest" });
   }, [cursor.dayKey, cursor.minute]);
-  if (col < 0 || cursor.busy) return null;
+  const box = cursor.box;
+  if (col < 0 || !box) return null;
   return (
     <div
       aria-hidden
@@ -27,7 +29,7 @@ export function GridCursorMark({ cursor, days }: { cursor: GridCursor; days: Dat
         ref={ref}
         data-grid-cursor=""
         className="absolute inset-x-px rounded-sm border-2 border-ring"
-        style={{ top: gridY(cursor.minute), height: gridY(CURSOR_MINUTES) }}
+        style={{ top: gridY(box.minute), height: gridY(box.minutes) }}
       />
     </div>
   );

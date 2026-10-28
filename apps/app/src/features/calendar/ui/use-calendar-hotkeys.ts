@@ -19,6 +19,7 @@ import {
   chipAtCursor,
   copyDraft,
   cursorAfterPeriod,
+  cursorBox,
   type CursorDir,
   cursorForChip,
   duplicateStartMs,
@@ -378,9 +379,10 @@ export function useCalendarHotkeys(input: Input) {
     "calendar.undo": (e) => (inCalendarOverlay(e) ? false : undoLast() ? undefined : false),
   });
 
+  // A busy slot outlines its event instead of hiding the cursor.
   const shown = useMemo(
-    () => (cursor ? { ...cursor, busy: chipAtCursor(cursor, timed) !== null } : null),
-    [cursor, timed],
+    () => (cursor ? { ...cursor, box: cursorBox(cursor, timed, selectedOccurrenceKey) } : null),
+    [cursor, timed, selectedOccurrenceKey],
   );
   return { cursor: shown, copyChip, duplicateChip };
 }
