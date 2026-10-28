@@ -3,9 +3,9 @@
 // reply words, whether "Add a Meet link" can work, and the who-sees-it line.
 //
 // The who-sees-it line says what the calendar's sharing gives each teammate
-// today (can_access('event') follows the calendar's grants). It never mentions
-// private events: `is_private` isn't enforced until CALR-15's masked view, so
-// "Private · teammates see Busy" would be a claim the data doesn't keep.
+// (can_access('event') follows the calendar's grants), and for a private event
+// that teammates see "Busy": CALR-15 enforces it (the masked read,
+// calendar_events_visible, and can_access giving others only freebusy).
 
 import { type ConferenceProvider, GRANT_LEVELS } from "@contracts/vocabularies";
 
@@ -139,12 +139,15 @@ function verb(count: number): string {
 /**
  * The one line on who sees the event, from its calendar's sharing: who gets
  * all the details, who gets "Busy", and nothing about anyone who gets neither.
+ * A private event is "Busy" to every teammate, whatever the sharing.
  */
 export function whoSeesLine(
   share: ShareState,
   members: readonly { userId: string; name: string }[],
   selfUserId: string | null,
+  opts?: { isPrivate?: boolean },
 ): string {
+  if (opts?.isPrivate) return "Private · teammates see “Busy”";
   const others = members.filter((m) => m.userId !== selfUserId);
   const workspace = rankOf(share.workspaceLevel);
   const levelOf = (userId: string) =>
@@ -166,4 +169,21 @@ export function whoSeesLine(
     );
   }
   return parts.join(" · ");
+}
+
+/** Private is the owner's call, on an event that can change (Google's too). */
+export function canMakePrivate(
+  event: { ownerId: string | null },
+  currentUserId: string | null,
+  editable: boolean,
+): boolean {
+  return editable && currentUserId !== null && event.ownerId === currentUserId;
+}
+
+/** The lock shows on your own private events; a teammate's reaches you as "Busy". */
+export function showsLock(
+  event: { ownerId: string | null; isPrivate?: boolean },
+  currentUserId: string | null,
+): boolean {
+  return !!event.isPrivate && currentUserId !== null && event.ownerId === currentUserId;
 }

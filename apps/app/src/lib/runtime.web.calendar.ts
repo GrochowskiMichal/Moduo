@@ -101,6 +101,8 @@ function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
 // shared by every listener through a ref count (modelled on Tasks'
 // `TasksLink`, features/tasks/realtime.ts). Realtime applies the subscriber's
 // SELECT policy to inserts and updates; a DELETE carries only the row id. The
+// channel streams the raw table, not the masked read: its policy drops
+// teammates' private rows (CALR-15), so they reach the week on a resync. The
 // channel is calendar's own: a channel naming an unpublished table silently
 // delivers nothing for any of its tables.
 //
@@ -252,27 +254,24 @@ export const webCalendar: CalendarRuntime = {
   // works as a task-lens calendar with zero calendar tables).
   async listModule(workspaceId, window) {
     try {
-      // SCALE-1: the events read used to pull ALL history. It now rides a
-      // date window (the hook widens it as you navigate). Two rows always
-      // come through regardless of the window: none — but a RECURRING series
-      // must, because its stored start_time is the FIRST occurrence (often
-      // years back) while its occurrences run into the window. Hence the
-      // `recurrence_rule.not.is.null` arm; the other arm is the standard
-      // overlap test, so multi-day events spanning the edge survive too.
+      // SCALE-1: the events read rides a date window (the hook widens it as
+      // you navigate). CALR-15: it goes through the masked read,
+      // `calendar_events_visible`, which returns a teammate's private event
+      // as "Busy" and applies the window itself: every RECURRING series
+      // (its stored start_time is the FIRST occurrence, often years back)
+      // plus the standard overlap test, so multi-day events spanning the
+      // edge survive too.
       const { fromIso, toIso } = window ?? defaultCalendarWindow();
       const [eventsRes, accountsRes] = await Promise.all([
         selectCapped<any>({
           scope: "events",
           cap: READ_CAPS.calendarEvents,
           build: (opts) =>
-            supabaseClient
-              .from("calendar_events")
-              .select("*", opts)
-              .eq("workspace_id", workspaceId)
-              .is("deleted_at", null)
-              .or(
-                `recurrence_rule.not.is.null,and(start_time.lte.${toIso},end_time.gte.${fromIso})`,
-              ),
+            supabaseClient.rpc(
+              "calendar_events_visible",
+              { p_workspace_id: workspaceId, p_from: fromIso, p_to: toIso },
+              opts,
+            ),
           order: (q) => q.order("start_time", { ascending: true }).order("id"),
         }),
         selectCapped<any>({

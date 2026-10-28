@@ -243,7 +243,7 @@ export default {
           },
         },
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
-        error: { fail: { match: "**/rest/v1/calendar_events*", status: 500 } },
+        error: { fail: { match: "**/rest/v1/rpc/calendar_events_visible*", status: 500 } },
         offline: { offline: true },
       },
     },

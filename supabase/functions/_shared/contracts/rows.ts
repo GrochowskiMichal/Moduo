@@ -656,7 +656,7 @@ export const calendarEventRowSchema = z.object({
   external_event_id: optStr,
   calendar_id: z.string().optional(),
   title: z.string().optional(),
-  description: z.string().optional(),
+  description: optStr, // NULL in the masked read (CALR-15)
   start_time: z.string(),
   end_time: z.string(),
   all_day: z.boolean().optional(),
