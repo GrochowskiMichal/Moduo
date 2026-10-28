@@ -96,7 +96,7 @@ function setup(over: { removeFails?: boolean } = {}) {
   };
   const runtime = {
     calendar: {
-      mirrorEvents: rs.fn(async () => {
+      mirrorEvents: rs.fn(async (_input: object) => {
         state.events = [...state.events, MIRRORED];
       }),
       removeEvent: rs.fn(async () => {
