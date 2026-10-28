@@ -78,6 +78,7 @@ import { FocusReadout } from "./focus-readout";
 import { CalendarNowNext } from "./now-next";
 import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
 import { TaskPopover } from "./task-popover";
+import { useBookingPanel } from "./use-booking-panel";
 import { useCalendarAccountActions } from "./use-calendar-account-actions";
 import { useCalendarCompletionLoop } from "./use-calendar-completion-loop";
 import { useCalendarConnectReturn } from "./use-calendar-connect-return";
@@ -468,6 +469,20 @@ export function CalendarPageView({
     createEvent: calendar.createEvent,
   });
 
+  const booking = useBookingPanel({
+    runtime,
+    workspaceId,
+    userId,
+    accounts: calendar.accounts,
+    events: calendar.events,
+    sessions,
+    tasks,
+    days: range.days,
+    view: viewState.view,
+    hasSelection: selectedOccurrenceKey !== null,
+    closeKey: detailTarget,
+  });
+
   const onToggleDone = useCallback(
     (taskId: string) => {
       const task = tasks.find((t) => t.id === taskId);
@@ -693,6 +708,7 @@ export function CalendarPageView({
                   workspaceId={workspaceId}
                   userId={userId}
                   accounts={calendar.accounts}
+                  onOpen={booking.open}
                 />
               </>
             }
@@ -704,6 +720,8 @@ export function CalendarPageView({
             views={panelViews}
             activeId={panelVariant}
             onChange={(id) => setPanelVariant(id as PanelVariantId)}
+            items={booking.items}
+            onBack={booking.close}
           />
         }
         center={
@@ -787,6 +805,7 @@ export function CalendarPageView({
                 <>
                   {plan.layer}
                   {lens.layer}
+                  {booking.layer}
                 </>
               }
             />
