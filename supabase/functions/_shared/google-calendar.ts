@@ -175,7 +175,8 @@ export async function createGoogleMeetEvent(input: {
   return { eventId: json.id, meetLink: meet };
 }
 
-export type GoogleCalendarInfo = { id: string; summary: string; primary: boolean };
+/** accessRole is Google's (owner · writer · reader · freeBusyReader); '' when absent. */
+export type GoogleCalendarInfo = { id: string; summary: string; primary: boolean; accessRole: string };
 
 export async function listGoogleCalendars(accessToken: string): Promise<GoogleCalendarInfo[]> {
   const res = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList", {
@@ -183,7 +184,7 @@ export async function listGoogleCalendars(accessToken: string): Promise<GoogleCa
   });
   if (!res.ok) throw new Error("google_calendars_failed");
   const json = (await res.json()) as {
-    items?: { id?: string; summary?: string; primary?: boolean }[];
+    items?: { id?: string; summary?: string; primary?: boolean; accessRole?: string }[];
   };
   return (json.items ?? [])
     .filter((item) => typeof item.id === "string" && item.id.length > 0)
@@ -191,6 +192,7 @@ export async function listGoogleCalendars(accessToken: string): Promise<GoogleCa
       id: item.id as string,
       summary: item.summary?.trim() || (item.id as string),
       primary: Boolean(item.primary),
+      accessRole: item.accessRole ?? "",
     }));
 }
 
