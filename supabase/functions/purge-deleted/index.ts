@@ -48,6 +48,9 @@ Deno.serve(async (req: Request) => {
   try {
     const result = await purgeDeleted(db, { dryRun });
     console.log(JSON.stringify({ purge: result }));
+    if (!result.dryRun && result.notesFailed > 0) {
+      console.error(JSON.stringify({ purge_notes_refused: result.notesFailed }));
+    }
     return json(result);
   } catch (err) {
     if (err instanceof PurgeError) {

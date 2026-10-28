@@ -187,12 +187,15 @@ async function purgeNotes(call: Call, counts: PurgeCounts, batch: number, maxRou
       notes?: number;
       viewers?: number;
       failed?: number;
+      picked?: number;
     };
     const notes = Number(result.notes ?? 0);
     counts.notes += notes;
     counts.noteViewers += Number(result.viewers ?? 0);
     counts.notesFailed += Number(result.failed ?? 0);
-    if (notes < batch) break;
+    // A refused workspace purges nothing but was still taken: stop on what the
+    // round took, not on what it purged.
+    if (Number(result.picked ?? notes) < batch) break;
   }
 }
 
