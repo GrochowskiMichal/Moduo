@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · Calendar events stream live through the runtime port (CALR-7).
 - 2026-10-27 · Meeting links live in `conference_url`, split out of `location` on every write (CALR-6).
 - 2026-10-27 · The calendar grid is laid out in wall-clock hours (CALR-1).
 - 2026-10-27 · Calendar rethink planned: two-way Google, sharing with preview, offers with holds, focus as an item.

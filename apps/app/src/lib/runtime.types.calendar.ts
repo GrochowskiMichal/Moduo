@@ -7,6 +7,7 @@ import type {
   CalendarAttendeeInput,
   CalendarEventModel,
   CalendarEventPatch,
+  CalendarLiveEvent,
   CalendarMirrorEventInput,
   CalendarModuleBundle,
 } from "../features/calendar/events";
@@ -72,6 +73,17 @@ export type CalendarRuntime = {
     syncToken?: string | null;
   }): Promise<CalendarAccountModel>;
   removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+  /**
+   * Live events (CALR-7): follow inserts, updates and deletes of the
+   * workspace's calendar events as they happen, plus a `resync` whenever
+   * changes may have been missed (a rejoin, the network coming back) or you
+   * come back to the window. One channel per workspace and person is shared
+   * by every listener. Returns the stop function (safe to call twice).
+   */
+  listenLive(
+    input: { workspaceId: string; selfId: string },
+    listener: (event: CalendarLiveEvent) => void,
+  ): () => void;
   /** Batched idempotent mirror upsert (the desktop sync engine's write). */
   mirrorEvents(input: {
     workspaceId: string;
