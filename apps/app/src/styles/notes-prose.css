@@ -470,6 +470,13 @@
 }
 
 /* NR-8 comment anchors: only marks whose thread is open are highlighted. */
+/* A note opened from a search's body hit (GS-10): the query's matches, painted
+   through the CSS Custom Highlight API until a click or a key (no DOM, no doc). */
+::highlight(note-search-match) {
+  background-color: var(--search-match-bg);
+  color: inherit;
+}
+
 .notes-editor-v2 mark.notes-comment-mark {
   background: none;
   color: inherit;

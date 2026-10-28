@@ -26,7 +26,7 @@ import {
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 import { cn } from "../../../lib/utils";
-import { type GuestQuestion, newQuestionId, TASKS_BUSY_ID } from "../booking/model";
+import { FOCUS_BUSY_ID, type GuestQuestion, newQuestionId, TASKS_BUSY_ID } from "../booking/model";
 import { type Weekday, WEEKDAYS, type WeeklyHours } from "../booking/slots";
 import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
@@ -716,6 +716,19 @@ export function BookingLinkDialog({
                       }}
                     />
                     Moduo
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-foreground">
+                    <Checkbox
+                      checked={draft.busyCalendarIds.includes(FOCUS_BUSY_ID)}
+                      onCheckedChange={(checked) => {
+                        const rest = draft.busyCalendarIds.filter((id) => id !== FOCUS_BUSY_ID);
+                        onChange({
+                          ...draft,
+                          busyCalendarIds: checked ? [...rest, FOCUS_BUSY_ID] : rest,
+                        });
+                      }}
+                    />
+                    Focus time
                   </label>
                   <label className="flex items-center gap-2 text-sm text-foreground">
                     <Checkbox

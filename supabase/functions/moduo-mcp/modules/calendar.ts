@@ -88,6 +88,9 @@ function shapeEvent(e: Row): Row {
     // and a series the occurrences it skips (deleted or replaced).
     ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
     ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
+    // Focus time (CALR-14): the task it holds, which the masked read nulls for
+    // anyone but its owner (a teammate's arrives titled "Focus time").
+    ...(e.kind === "focus" ? { kind: "focus", focus_task_id: e.focus_task_id ?? null } : {}),
   };
 }
 

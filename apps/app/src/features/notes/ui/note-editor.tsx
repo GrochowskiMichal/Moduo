@@ -69,6 +69,7 @@ import { dispatchCreateNew } from "@/components/app/create-events";
 import { Skeleton } from "@/components/ui/skeleton";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { MentionMenuPlugin } from "@/features/spine/editor/mention-menu-plugin";
+import { entityOpenHighlight } from "@/lib/entity-open";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -90,6 +91,7 @@ import { LinkBarPlugin } from "../editor/plugins/link-bar-plugin";
 import { LinkDialogPlugin } from "../editor/plugins/link-dialog-plugin";
 import { MarkdownClipboardPlugin } from "../editor/plugins/markdown-clipboard-plugin";
 import { NoteLinkPlugin } from "../editor/plugins/note-link-plugin";
+import { SearchHighlightPlugin } from "../editor/plugins/search-highlight-plugin";
 import { SlashMenuPlugin } from "../editor/plugins/slash-menu-plugin";
 import { TableActionsPlugin } from "../editor/plugins/table-actions-plugin";
 import { TaskLinePlugin } from "../editor/plugins/task-line-plugin";
@@ -814,7 +816,8 @@ export function NoteEditor({
       }
       frame = requestAnimationFrame(restore);
     };
-    if (saved > 0) frame = requestAnimationFrame(restore);
+    // Opened from a search hit, it lands on the match instead (GS-10).
+    if (saved > 0 && !entityOpenHighlight(noteId)) frame = requestAnimationFrame(restore);
     const onScroll = () => scrollPositions.set(noteId, pane.scrollTop);
     pane.addEventListener("scroll", onScroll, { passive: true });
     return () => {
@@ -1033,6 +1036,7 @@ export function NoteEditor({
               <TaskLinePlugin editable={editable} noteId={noteId} />
               <InsertPageRowPlugin noteId={noteId} bridge={bridge} />
               <InsertEntityChipPlugin noteId={noteId} editable={editable} />
+              <SearchHighlightPlugin noteId={noteId} />
               <CollaborationPluginV2__EXPERIMENTAL
                 id={noteId}
                 doc={session.doc}

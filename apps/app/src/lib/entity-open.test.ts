@@ -2,13 +2,17 @@
 // page (contacts with URL selection params), unknown types resolve to null so
 // the listener can no-op with a quiet toast instead of crashing.
 
-import { describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "@rstest/core";
 
 import {
+  clearEntityOpenHighlight,
+  entityOpenHighlight,
   entityOpenTarget,
+  markEntityOpenHighlight,
   markEntityOpenIntent,
   recentRefFor,
   recordEntityOpen,
+  subscribeEntityOpenHighlight,
   takeEntityOpenIntent,
 } from "./entity-open";
 
@@ -129,6 +133,64 @@ describe("entity-open intent (DF-1)", () => {
     expect(takeEntityOpenIntent("t1")).toBe(false);
     markEntityOpenIntent("");
     expect(takeEntityOpenIntent("")).toBe(false);
+  });
+});
+
+// GS-10 (specs/global-search.md Q16, AC13): a note opened from a body hit
+// carries the query, and the editor highlights it until a click or a key.
+describe("entity-open query for a note (GS-10)", () => {
+  afterEach(() => clearEntityOpenHighlight());
+
+  it("carries a note's query as the highlight to land on", () => {
+    expect(entityOpenTarget("note", "n1", { query: "  zolw plan " })).toEqual({
+      to: "/notes",
+      search: { id: "n1" },
+      intentId: "n1",
+      highlight: "zolw plan",
+    });
+  });
+
+  it("ignores a blank query, and a query on anything but a note", () => {
+    expect(entityOpenTarget("note", "n1", { query: "  " })).toEqual({
+      to: "/notes",
+      search: { id: "n1" },
+      intentId: "n1",
+    });
+    expect(entityOpenTarget("task", "t1", { query: "plan" })).toEqual({
+      to: "/tasks",
+      search: { id: "t1" },
+      intentId: "t1",
+    });
+  });
+
+  it("keeps one pending highlight, read for its own note only", () => {
+    markEntityOpenHighlight("n1", "plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    expect(entityOpenHighlight("n2")).toBeNull();
+    markEntityOpenHighlight("n2", "zolw");
+    expect(entityOpenHighlight("n1")).toBeNull();
+    expect(entityOpenHighlight("n2")).toBe("zolw");
+  });
+
+  it("is read until cleared, and clearing another note's leaves it", () => {
+    markEntityOpenHighlight("n1", "plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    clearEntityOpenHighlight("n2");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    clearEntityOpenHighlight("n1");
+    expect(entityOpenHighlight("n1")).toBeNull();
+  });
+
+  it("tells subscribers when it changes, and a blank mark clears", () => {
+    let calls = 0;
+    const off = subscribeEntityOpenHighlight(() => calls++);
+    markEntityOpenHighlight("n1", "plan");
+    markEntityOpenHighlight("n1", " ");
+    expect(entityOpenHighlight("n1")).toBeNull();
+    off();
+    markEntityOpenHighlight("n1", "plan");
+    expect(calls).toBe(2);
   });
 });
 

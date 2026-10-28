@@ -7,12 +7,15 @@
 // progress carries the now line across faintly, under its text (AC10).
 // CALR-3: an event of an account that didn't sync carries the sync mark and
 // keeps full strength; a change waiting to sync carries the cloud-off mark.
+// CALR-14: focus time is a quiet band (`.cal-chip[data-kind="focus"]`) with a
+// "Focus" eyebrow, and a task mark when it holds a task.
 
-import { CloudOff, Lock, RefreshCwOff, Repeat } from "lucide-react";
+import { CircleDashed, CloudOff, Crosshair, Lock, RefreshCwOff, Repeat } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
+import { focusChipTitle } from "../focus-item";
 import { formatTimeOfDay } from "./time-format";
 
 /** Chips with less visible height than this render the one-line layout. */
@@ -44,6 +47,9 @@ type Props = {
   waiting?: boolean;
   /** Day view's prep in the chip's free width (CALR-12): people, notes, follow-up, where. */
   aside?: ReactNode;
+  /** Focus time (CALR-14): the band, the eyebrow; `holdsTask` adds the task mark. */
+  focus?: boolean;
+  holdsTask?: boolean;
 };
 
 /** The chip's tooltip: what it is, when, and what's true of it. */
@@ -81,14 +87,29 @@ export function EventChipView({
   stale = false,
   waiting = false,
   aside = null,
+  focus = false,
+  holdsTask = false,
 }: Props) {
   const live = nowFraction != null;
   const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
-  const marks = <SyncMarks stale={stale} waiting={waiting} />;
+  const marks = (
+    <>
+      <SyncMarks stale={stale} waiting={waiting} />
+      {holdsTask ? (
+        <CircleDashed
+          role="img"
+          aria-label="Holds a task"
+          data-mark="task"
+          className="size-icon-xs shrink-0 self-center text-muted-foreground"
+        />
+      ) : null}
+    </>
+  );
   return (
     <div
       data-chip="event"
       data-label={hue}
+      data-kind={focus ? "focus" : undefined}
       {...onlyTrue({
         "data-past": past,
         "data-selected": selected,
@@ -101,6 +122,7 @@ export function EventChipView({
         "read-only": readOnly,
         "not synced": stale,
         "waiting to sync": waiting,
+        "holds a task": holdsTask,
       })}
       className={cn(
         "cal-chip relative flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
@@ -113,7 +135,7 @@ export function EventChipView({
       <WithAside aside={aside}>
         {compact ? (
           <ChipOneLine
-            title={title}
+            title={focusChipTitle(title, focus)}
             time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
             locked={locked}
             marks={marks}
@@ -126,6 +148,7 @@ export function EventChipView({
             continuation={continuation}
             locked={locked}
             marks={marks}
+            focus={focus}
           />
         )}
       </WithAside>
@@ -206,6 +229,7 @@ function ChipStacked({
   continuation,
   locked,
   marks,
+  focus,
 }: {
   title: string;
   time: string;
@@ -213,9 +237,19 @@ function ChipStacked({
   continuation: string | null;
   locked: boolean;
   marks: ReactNode;
+  focus: boolean;
 }) {
   return (
     <>
+      {focus ? (
+        <span
+          data-focus-eyebrow
+          className="relative flex items-center gap-1 text-2xs text-muted-foreground"
+        >
+          <Crosshair aria-hidden className="size-icon-xs shrink-0" />
+          Focus
+        </span>
+      ) : null}
       <div className="relative flex min-w-0 items-center gap-1">
         <span data-chip-title className="min-w-0 flex-1 truncate text-xs text-foreground">
           {title}

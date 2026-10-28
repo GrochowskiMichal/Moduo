@@ -3,6 +3,8 @@
 // arrows move an event 15 minutes or a day (wall time kept) and ⌥⇧ arrows
 // change its length; ⌘C/⌘V/⌘D copy, paste and duplicate it.
 
+process.env.TZ = "Europe/Warsaw";
+
 import { describe, expect, it } from "@rstest/core";
 
 import type { CalendarEventModel, EventChip } from "./events";
@@ -11,6 +13,7 @@ import {
   chipAtCursor,
   copyDraft,
   cursorAfterPeriod,
+  cursorBox,
   cursorForChip,
   duplicateStartMs,
   type GridCursor,
@@ -115,6 +118,37 @@ describe("the cursor and events", () => {
     expect(adjacentChip(CHIPS, { selectedKey: null, cursor: noon3 }, -1)).toBe(STANDUP);
     expect(adjacentChip(CHIPS, { selectedKey: null, cursor: null }, 1)).toBe(STANDUP);
     expect(adjacentChip(CHIPS, { selectedKey: null, cursor: null }, -1)).toBe(LUNCH);
+  });
+});
+
+describe("cursorBox (what the cursor outlines)", () => {
+  const meeting = chip("meeting", 3, 10, 0, 60);
+  const lunch = chip("lunch", 3, 13, 0, 30);
+  const c = (minute: number): GridCursor => ({ dayKey: key(3), minute });
+
+  it("a free slot outlines its 30 minutes", () => {
+    expect(cursorBox(c(14 * 60), [meeting, lunch], null)).toEqual({ minute: 14 * 60, minutes: 30 });
+  });
+
+  it("a busy slot outlines the event under it, never nothing", () => {
+    expect(cursorBox(c(10 * 60 + 30), [meeting, lunch], null)).toEqual({
+      minute: 10 * 60,
+      minutes: 60,
+    });
+    // Another event's selection doesn't hide it.
+    expect(cursorBox(c(10 * 60 + 30), [meeting, lunch], lunch.occurrenceKey)).toEqual({
+      minute: 10 * 60,
+      minutes: 60,
+    });
+  });
+
+  it("on the selected event it draws nothing: the selection ring shows", () => {
+    expect(cursorBox(c(10 * 60), [meeting, lunch], meeting.occurrenceKey)).toBeNull();
+  });
+
+  it("a short event still gets a 15-minute box", () => {
+    const quick = chip("quick", 3, 9, 0, 5);
+    expect(cursorBox(c(9 * 60), [quick], null)).toEqual({ minute: 9 * 60, minutes: 15 });
   });
 });
 
