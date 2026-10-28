@@ -10,6 +10,7 @@
  * text search says so and keeps the title matches.
  */
 
+import type { SearchMatch } from "@contracts/vocabularies";
 import { ArrowLeft, FileText } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
@@ -18,11 +19,8 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { SELECTED_ROW } from "@/components/ui/selection";
-import { cn } from "@/lib/utils";
-
-import type { SearchMatch } from "@contracts/vocabularies";
-
 import { snippetSegments } from "@/lib/search-snippet";
+import { cn } from "@/lib/utils";
 
 import { bodyOnlyHits, findByTitle, queryWords } from "../find";
 import type { Note } from "../model";
@@ -202,9 +200,7 @@ export function NotesSearchView({
                 <HitRow
                   onKeyDown={onHitKeyDown}
                   key={hit.id}
-                  note={
-                    note ?? { id: hit.id, title: hit.title, icon: hit.icon, isArchived: false }
-                  }
+                  note={note ?? { id: hit.id, title: hit.title, icon: hit.icon, isArchived: false }}
                   context={hit.context}
                   snippet={hit.snippet}
                   selected={hit.id === selectedId}

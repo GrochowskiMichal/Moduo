@@ -54,7 +54,9 @@ describe("NotesSearchView reads notes__search hits", () => {
   });
 
   it("lists a fuzzy title hit under the text hits, without a snippet", async () => {
-    renderSearch("meetng", [hit({ id: "n2", title: "Weekly meeting notes", match: "title_fuzzy" })]);
+    renderSearch("meetng", [
+      hit({ id: "n2", title: "Weekly meeting notes", match: "title_fuzzy" }),
+    ]);
     const group = await screen.findByRole("region", { name: "In the text" }, { timeout: 2000 });
     expect(within(group).getByText("Weekly meeting notes")).toBeTruthy();
     expect(group.querySelector("mark")).toBeNull();

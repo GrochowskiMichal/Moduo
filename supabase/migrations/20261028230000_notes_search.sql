@@ -153,6 +153,8 @@ CREATE OR REPLACE FUNCTION public.notes__search(p_workspace_id uuid, p_query tex
   -- how many ids the visible set holds and reads every visible note (17 ms →
   -- 50 ms at 10k notes). Planning each call costs ~1 ms.
   SET plan_cache_mode = 'force_custom_plan'
+  -- An empty websearch query ("no excluded words") notices; keep it quiet.
+  SET client_min_messages = warning
 AS $$
 #variable_conflict use_column
 DECLARE
@@ -162,6 +164,8 @@ DECLARE
   v_vis uuid[];
   v_fuzzy text;
   v_threshold text;
+  v_words text[];
+  v_not tsquery;
   v_ids uuid[] := '{}';
   v_ranks real[] := '{}';
   v_kinds text[] := '{}';
@@ -215,10 +219,14 @@ BEGIN
   -- this one query and put back (a function's own SET of an extension setting
   -- needs a superuser on Supabase); calling pg_trgm first loads the setting.
   IF cardinality(v_ids) < 3 AND cardinality(v_ids) < v_limit THEN
-    v_fuzzy := pg_catalog.lower(public.search__unaccent(pg_catalog.translate(pg_catalog.array_to_string(
-      ARRAY(SELECT w FROM unnest((pg_catalog.regexp_split_to_array(
-                pg_catalog.btrim(pg_catalog.left(p_query, 256)), '\s+'))[1:32]) AS w
-             WHERE w NOT LIKE '-%'), ' '), '"', '')));
+    v_words := (pg_catalog.regexp_split_to_array(
+      pg_catalog.translate(pg_catalog.btrim(pg_catalog.left(p_query, 256)), '"', ''), '\s+'))[1:32];
+    v_fuzzy := pg_catalog.lower(public.search__unaccent(pg_catalog.array_to_string(
+      ARRAY(SELECT w FROM unnest(v_words) AS w WHERE w NOT LIKE '-%'), ' ')));
+    -- An excluded word still excludes ("meetng -weekly"): exact, as in search__query.
+    v_not := pg_catalog.websearch_to_tsquery('pg_catalog.simple'::regconfig,
+      public.search__unaccent(pg_catalog.array_to_string(
+        ARRAY(SELECT pg_catalog.substr(w, 2) FROM unnest(v_words) AS w WHERE w LIKE '-_%'), ' or ')));
     IF pg_catalog.length(pg_catalog.btrim(v_fuzzy)) >= 3 THEN
       PERFORM extensions.word_similarity('', '');
       v_threshold := pg_catalog.current_setting('pg_trgm.word_similarity_threshold');
@@ -230,6 +238,7 @@ BEGIN
          WHERE n.workspace_id = p_workspace_id
            AND n.deleted_at IS NULL
            AND v_fuzzy OPERATOR(extensions.<%) pg_catalog.lower(public.search__unaccent(n.title))
+           AND (pg_catalog.numnode(v_not) = 0 OR NOT (n.search_tsv OPERATOR(pg_catalog.@@) v_not))
       ),
       vis AS MATERIALIZED (SELECT u.id FROM unnest(v_vis) AS u(id)),
       fuzzy AS (

@@ -237,6 +237,9 @@ BEGIN
   PERFORM test.ok(test.hit_ids(v) = ARRAY[test.id('MT')] AND v -> 0 ->> 'match' = 'title_fuzzy'
               AND v -> 0 -> 'snippet' = 'null'::jsonb,
     'a typo finds the title when nothing matches exactly', v::text);
+  PERFORM test.ok(jsonb_array_length(test.search_as('A', 'meetng -weekly')) = 0
+              AND test.hit_ids(test.search_as('A', 'meetng -retro')) = ARRAY[test.id('MT')],
+    'an excluded word excludes typo-forgiven titles too');
 
   INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
     (test.id('MB1'), test.id('W'), test.id('O'), 'Typo one', 'Notes from the meetng');

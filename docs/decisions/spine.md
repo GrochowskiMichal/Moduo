@@ -2,6 +2,13 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · GS-2, Notes on the search contract: rank bands instead of ts_rank, word similarity for typos, `notes__search` callable by signed-in people, `search__unaccent` stays server-only** → [specs/global-search.md](../../specs/global-search.md) · `supabase/migrations/20261028230000_notes_search.sql`
+  - status: current
+  - Who: the agent (GS-2, Mike in engineer mode), 2026-10-28.
+  - Decision: `notes__search` ranks in fixed bands (title 0.75, archived title 0.60, body 0.40, archived body 0.25, typo-forgiven title 0.2 × word similarity), newer first within a band. Typo forgiveness uses `word_similarity ≥ 0.5` on the unaccented title, not `similarity ≥ 0.3`. `notes__search` takes the actor from the request and is granted to `authenticated` and `service_role`; `notes__visible_ids(ws, actor)` returns `uuid[]` and stays server-only. `search__unaccent` stays server-only because notes have no client write policy (every write is a `notes_op_*` definer op).
+  - Why: `ts_rank` doubled the cost of a common word-start at 10k notes (p95 over the 60 ms budget), and `search_all` adds its own recency and context terms. Whole-title similarity punishes long titles ("meetng" vs "Weekly meeting notes" is 0.29). Assumption 7's "module functions not callable by clients" can't hold beside a SECURITY INVOKER `search_all`; resolving the actor inside is the safe form (GS-3 settles `search_all`'s shape). An array, because PostgREST caps a returned set at 1,000 rows and the MCP reads it.
+  - Rejected: `ts_rank` (cost), `similarity ≥ 0.3` (misses typos in long titles), granting `search__unaccent` to clients (no path needs it).
+
 - **2026-10-28 · Global search is federated: each module answers `<module>__search` with one hit shape, `search_all` merges and ranks, and one set of `search__*` text primitives (lifted from Chat's CV-19) makes matching identical everywhere** → [specs/global-search.md](../../specs/global-search.md)
   - status: current
   - Who: Mike (engineer mode), 2026-10-28. This entry is the technical layer. The 35 product answers were given by Mike on Maciej's behalf, with his acceptance, the same day ("all rec"). Every block, GS-1 to GS-10, is built now, independent of the alpha and beta schedule.

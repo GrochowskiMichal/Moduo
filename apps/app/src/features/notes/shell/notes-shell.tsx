@@ -99,10 +99,13 @@ function NotesShellBody() {
       }),
     [openSearch],
   );
+  // notes__search's most (50): titles rank above bodies there, and the title
+  // hits this device already shows are dropped, so a smaller page would leave
+  // "In the text" empty whenever many titles match.
   const searchText = useCallback(
     (query: string) =>
       runtime && workspaceId
-        ? runtime.notesV2.search({ workspaceId, query, limit: 30 })
+        ? runtime.notesV2.search({ workspaceId, query, limit: 50 })
         : Promise.resolve([]),
     [runtime, workspaceId],
   );

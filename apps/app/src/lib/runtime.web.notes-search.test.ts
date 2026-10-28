@@ -76,7 +76,10 @@ describe("notesV2.search goes through notes__search", () => {
     });
     expect(await webNotes.notesV2.search({ workspaceId: WS, query: "plan" })).toEqual([]);
     rs.restoreAllMocks();
-    stubRpc({ data: null, error: { code: "57014", message: "canceling statement due to timeout" } });
+    stubRpc({
+      data: null,
+      error: { code: "57014", message: "canceling statement due to timeout" },
+    });
     await expect(webNotes.notesV2.search({ workspaceId: WS, query: "plan" })).rejects.toThrow();
   });
 });

@@ -275,7 +275,9 @@ export const notesConnectorModule: ConnectorModule = {
               .range(from, from + LIST_PAGE - 1),
           );
           for (const n of page) if (visible.has(n.id) && out.length < limit) out.push(n);
-          if (page.length < LIST_PAGE) break;
+          // Only an empty page ends the tree: PostgREST may answer fewer rows
+          // than asked (its max_rows) before the end.
+          if (page.length === 0) break;
         }
         return out.map(shapeNote);
       },
