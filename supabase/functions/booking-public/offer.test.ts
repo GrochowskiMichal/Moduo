@@ -9,6 +9,7 @@ import {
   guestPageUrl,
   OFFER_SLUG_PREFIX,
   type OfferRow,
+  rebookSlug,
   type OfferTimeRow,
   offerAsLink,
   offerBookFailure,
@@ -126,5 +127,11 @@ describe("an offer never leads to the host's booking link", () => {
     const token = "0f3a9c2be4d14c7f8a6b5e2d1c0f9a8b";
     expect(guestPageUrl("https://moduo.app", OFFER_SLUG_PREFIX + token)).toBe(`https://moduo.app/book/r/${token}`);
     expect(guestPageUrl("https://moduo.app", "intro")).toBe("https://moduo.app/book/intro");
+  });
+
+  it("a cancelled offer booking rebooks on the offer's page, a link booking on the link", () => {
+    expect(rebookSlug("r/0f3a9c", "intro")).toBe("r/0f3a9c");
+    expect(rebookSlug("intro-old", "intro")).toBe("intro");
+    expect(rebookSlug(null, "intro")).toBe("intro");
   });
 });

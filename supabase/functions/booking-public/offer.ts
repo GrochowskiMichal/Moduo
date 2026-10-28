@@ -74,6 +74,11 @@ type LinkLike = { name: string; duration_minutes: number; video_provider: string
  */
 export const OFFER_SLUG_PREFIX = "r/";
 
+/** The slug a cancelled booking rebooks on: its offer's page when it came from one, else the link's. */
+export function rebookSlug(bookedSlug: string | null, linkSlug: string): string {
+  return bookedSlug !== null && bookedSlug.startsWith(OFFER_SLUG_PREFIX) ? bookedSlug : linkSlug;
+}
+
 /** The guest page for a link slug, or for an offer's `r/<token>`. */
 export function guestPageUrl(origin: string, slug: string): string {
   return slug.startsWith(OFFER_SLUG_PREFIX)

@@ -63,9 +63,9 @@ import {
   guestPageUrl,
   type LoadedOffer,
   loadOffer,
-  OFFER_SLUG_PREFIX,
   offerSlots,
   offerState,
+  rebookSlug,
 } from "./offer.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../apps/app/src/features/calendar/booking/guests.ts";
 import {
@@ -603,10 +603,7 @@ Deno.serve(async (req: Request) => {
       };
       const planned = cancelEmails(facts, {
         // An offer's booking rebooks on the offer's page, never the host's link.
-        rebookUrl: guestPageUrl(
-          CANONICAL_BOOKING_ORIGIN,
-          row.slot_slug?.startsWith(OFFER_SLUG_PREFIX) ? row.slot_slug : link.slug,
-        ),
+        rebookUrl: guestPageUrl(CANONICAL_BOOKING_ORIGIN, rebookSlug(row.slot_slug, link.slug)),
         nowMs: cancelledAt.getTime(),
         googleDropped,
       });
