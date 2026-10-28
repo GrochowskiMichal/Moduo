@@ -50,6 +50,8 @@ export type CalendarAttendee = {
   name: string;
   /** Google's response status words ("needsAction", "accepted", …). */
   status: string;
+  /** The account's own person (Google's `self`). */
+  self?: boolean;
 };
 
 /** A person as the create/update ops take them: name and status are optional. */
@@ -85,6 +87,24 @@ export type CalendarModuleBundle = {
   truncated: Truncation[];
 };
 
+/**
+ * One live change to the event list (CALR-7): an inserted or updated event
+ * (soft-deleted ones included, so the merge can drop them), or the id of a
+ * hard-deleted one.
+ */
+export type CalendarLiveChange =
+  { kind: "upsert"; event: CalendarEventModel } | { kind: "delete"; id: string };
+
+/**
+ * What `calendar.listenLive` hands its listener: a change, or a `resync` asking
+ * for a refetch — `reconnect` after the socket rejoined or the network came
+ * back (changes may have been missed), `return` when the window comes back
+ * into view or focus.
+ */
+export type CalendarLiveEvent =
+  | { type: "change"; change: CalendarLiveChange }
+  | { type: "resync"; reason: "reconnect" | "return" };
+
 /** Only-present keys apply (the contacts_op_set_details pattern). */
 export type CalendarEventPatch = {
   title?: string;
@@ -108,6 +128,8 @@ export type CalendarEventPatch = {
   /** "hold" is refused (holds come from offers); leaving "focus" lets the task go. */
   kind?: CalendarItemKind;
   focusTaskId?: string | null;
+  /** Google events only (CALR-8): add a Meet link, or remove the one there. Never sent to the Moduo op. */
+  meet?: "add" | "remove";
 };
 
 /** One provider event as the desktop sync engine hands it to the mirror op. */
@@ -125,6 +147,10 @@ export type CalendarMirrorEventInput = {
   location?: string;
   /** The provider's meeting link (CALR-6). Sent only when there is one; absent keeps the stored link. */
   conferenceUrl?: string | null;
+  /** The provider's privacy (CALR-8). Absent keeps the stored value. */
+  isPrivate?: boolean;
+  /** The provider's guests (CALR-8), the list as a whole. Absent keeps the stored ones. */
+  attendees?: CalendarAttendee[];
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */
@@ -138,6 +164,8 @@ export type EventChip = {
   dayKey: string;
   allDay: boolean;
   external: boolean;
+  /** Can't be moved, resized or deleted here (CALR-8: a Google event you connected can). */
+  readOnly: boolean;
   recurring: boolean;
   /** The mirrored account this chip belongs to (null = native Moduo) — the
    * grid resolves its hue from this for external attribution (CAL-6). */
@@ -195,6 +223,7 @@ type ChipBase = Omit<EventChip, "dayKey">;
 function occurrenceChip(
   event: CalendarEventModel,
   occ: { startMs: number; endMs: number },
+  isWritable: (event: CalendarEventModel) => boolean,
 ): ChipBase {
   return {
     eventId: event.id,
@@ -204,6 +233,7 @@ function occurrenceChip(
     endMs: occ.endMs,
     allDay: event.allDay,
     external: !isNativeEvent(event),
+    readOnly: !isWritable(event),
     recurring: Boolean(event.rrule),
     sourceAccountId: event.sourceAccountId,
     color: event.color,
@@ -245,9 +275,11 @@ function pushTimedPieces(into: Map<string, EventChip[]>, base: ChipBase, range: 
   }
 }
 
+/** `isWritable` says which events can change here; omitted = native events only. */
 export function eventChipsInRange(
   events: CalendarEventModel[],
   range: VisibleRange,
+  isWritable: (event: CalendarEventModel) => boolean = isNativeEvent,
 ): EventChipsByDay {
   const timed = new Map<string, EventChip[]>();
   const allDay = new Map<string, EventChip[]>();
@@ -260,7 +292,7 @@ export function eventChipsInRange(
       range.endMs,
     );
     for (const occ of occurrences) {
-      const base = occurrenceChip(event, occ);
+      const base = occurrenceChip(event, occ, isWritable);
       if (event.allDay) pushAllDayPieces(allDay, base, range);
       else pushTimedPieces(timed, base, range);
     }

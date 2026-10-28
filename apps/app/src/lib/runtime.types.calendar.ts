@@ -7,6 +7,7 @@ import type {
   CalendarAttendeeInput,
   CalendarEventModel,
   CalendarEventPatch,
+  CalendarLiveEvent,
   CalendarMirrorEventInput,
   CalendarModuleBundle,
 } from "../features/calendar/events";
@@ -72,6 +73,17 @@ export type CalendarRuntime = {
     syncToken?: string | null;
   }): Promise<CalendarAccountModel>;
   removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+  /**
+   * Live events (CALR-7): follow inserts, updates and deletes of the
+   * workspace's calendar events as they happen, plus a `resync` whenever
+   * changes may have been missed (a rejoin, the network coming back) or you
+   * come back to the window. One channel per workspace and person is shared
+   * by every listener. Returns the stop function (safe to call twice).
+   */
+  listenLive(
+    input: { workspaceId: string; selfId: string },
+    listener: (event: CalendarLiveEvent) => void,
+  ): () => void;
   /** Batched idempotent mirror upsert (the desktop sync engine's write). */
   mirrorEvents(input: {
     workspaceId: string;
@@ -79,6 +91,24 @@ export type CalendarRuntime = {
     events: CalendarMirrorEventInput[];
     deletedExternalIds?: string[];
   }): Promise<{ upserted: number; removed: number }>;
+
+  /**
+   * Save a change to a mirrored Google event on Google first (CALR-8), then
+   * mirror Google's answer. Resolves with the event as saved; throws Google's
+   * reason when it refuses, and nothing is stored.
+   */
+  updateGoogleEvent(input: {
+    workspaceId: string;
+    event: CalendarEventModel;
+    account: CalendarAccountModel;
+    patch: CalendarEventPatch;
+  }): Promise<CalendarEventModel>;
+  /** Delete a mirrored Google event on Google (guests are told), then tombstone the mirror (CALR-8). */
+  removeGoogleEvent(input: {
+    workspaceId: string;
+    event: CalendarEventModel;
+    account: CalendarAccountModel;
+  }): Promise<void>;
 
   /**
    * Fetch a connected account's RAW provider events for a window. Desktop

@@ -28,6 +28,8 @@ describe("mirror — Google provider→row mapper (AC12)", () => {
       description: "daily sync",
       calendarId: "google:me@x.com:primary",
       conferenceUrl: null,
+      isPrivate: false,
+      attendees: [],
     });
   });
 

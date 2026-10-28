@@ -8,11 +8,14 @@ import {
   requireRow,
 } from "@contracts/rows";
 import { normalizeCalendarItemKind, normalizeConferenceProvider } from "@contracts/vocabularies";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import type {
   CalendarAccountModel,
   CalendarAttendee,
   CalendarEventModel,
+  CalendarLiveChange,
+  CalendarLiveEvent,
 } from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
 import { collectTruncations, READ_CAPS } from "./paged-select";
@@ -89,6 +92,156 @@ function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
     status: r.status ?? "ok",
     syncToken: r.sync_token ?? null,
     deletedAt: r.deleted_at ?? null,
+  };
+}
+
+// ── Live events (CALR-7) ─────────────────────────────────────────────────────
+// One Supabase channel per workspace and person, `calendar-db:<ws>:<me>`, with
+// one `postgres_changes` listener on calendar_events filtered by workspace,
+// shared by every listener through a ref count (modelled on Tasks'
+// `TasksLink`, features/tasks/realtime.ts). Realtime applies the subscriber's
+// SELECT policy to inserts and updates; a DELETE carries only the row id. The
+// channel is calendar's own: a channel naming an unpublished table silently
+// delivers nothing for any of its tables.
+//
+// Realtime is a latency layer, not the source of truth: every rejoin after the
+// first and the network coming back ask for a `reconnect` resync, a return to
+// the window (focus, or the tab becoming visible) for a `return` one, and the
+// hook refetches.
+
+type LivePayload = {
+  eventType?: unknown;
+  new?: unknown;
+  old?: unknown;
+};
+
+/** A Realtime payload → the change, or null for anything it can't read. */
+function parseCalendarLiveChange(payload: unknown): CalendarLiveChange | null {
+  if (!payload || typeof payload !== "object") return null;
+  const { eventType, new: row, old } = payload as LivePayload;
+  if (eventType === "INSERT" || eventType === "UPDATE") {
+    try {
+      return { kind: "upsert", event: calendarEventRowToModel(row) };
+    } catch {
+      return null; // a row that doesn't parse is dropped, never thrown
+    }
+  }
+  if (eventType === "DELETE") {
+    const id = (old as { id?: unknown } | null | undefined)?.id;
+    return typeof id === "string" && id !== "" ? { kind: "delete", id } : null;
+  }
+  return null;
+}
+
+type LiveListener = (event: CalendarLiveEvent) => void;
+
+class CalendarLink {
+  private refs = 0;
+  private channel: RealtimeChannel | null = null;
+  private joinedOnce = false;
+  private listeners = new Set<LiveListener>();
+
+  constructor(
+    readonly workspaceId: string,
+    readonly selfId: string,
+  ) {}
+
+  get refCount(): number {
+    return this.refs;
+  }
+
+  acquire(): void {
+    this.refs += 1;
+    if (this.refs === 1) this.open();
+  }
+
+  release(): void {
+    this.refs -= 1;
+    if (this.refs <= 0) this.close();
+  }
+
+  subscribe(fn: LiveListener): () => void {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private open(): void {
+    const ws = this.workspaceId;
+    const channel = supabaseClient
+      .channel(`calendar-db:${ws}:${this.selfId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "calendar_events", filter: `workspace_id=eq.${ws}` },
+        (payload) => {
+          const change = parseCalendarLiveChange(payload);
+          if (change) this.emit({ type: "change", change });
+        },
+      );
+    channel.subscribe((status) => {
+      if (status !== "SUBSCRIBED") return;
+      // The first join is the initial load's job; every later join is a
+      // reconnect that may have missed changes.
+      if (this.joinedOnce) this.emit({ type: "resync", reason: "reconnect" });
+      this.joinedOnce = true;
+    });
+    this.channel = channel;
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", this.onReturn);
+      window.addEventListener("online", this.onOnline);
+    }
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.onVisibility);
+    }
+  }
+
+  private close(): void {
+    if (this.channel) void supabaseClient.removeChannel(this.channel);
+    this.channel = null;
+    this.joinedOnce = false;
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", this.onReturn);
+      window.removeEventListener("online", this.onOnline);
+    }
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.onVisibility);
+    }
+  }
+
+  private onReturn = () => this.emit({ type: "resync", reason: "return" });
+
+  private onOnline = () => this.emit({ type: "resync", reason: "reconnect" });
+
+  private onVisibility = () => {
+    if (document.visibilityState === "visible") this.onReturn();
+  };
+
+  private emit(event: CalendarLiveEvent): void {
+    for (const fn of this.listeners) fn(event);
+  }
+}
+
+const liveLinks = new Map<string, CalendarLink>();
+
+function listenCalendarLive(
+  { workspaceId, selfId }: { workspaceId: string; selfId: string },
+  listener: LiveListener,
+): () => void {
+  const key = `${workspaceId}:${selfId}`;
+  let link = liveLinks.get(key);
+  if (!link) {
+    link = new CalendarLink(workspaceId, selfId);
+    liveLinks.set(key, link);
+  }
+  const held = link;
+  const unsubscribe = held.subscribe(listener);
+  held.acquire();
+  let stopped = false;
+  return () => {
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
+    held.release();
+    if (held.refCount <= 0) liveLinks.delete(key);
   };
 }
 
@@ -278,5 +431,72 @@ export const webCalendar: CalendarRuntime = {
     if (provider !== "google") throw new Error("web_provider_sync_skipped");
     const { fetchGoogleWebEvents } = await import("../features/calendar/google-web");
     return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
+  },
+  listenLive: listenCalendarLive,
+  // CALR-8: Google first, then the mirror stores Google's answer.
+  async updateGoogleEvent({ workspaceId, event, account, patch }) {
+    const { updateGoogleWebEvent } = await import("../features/calendar/google-web");
+    // Google takes start and end together: a patch that moves one edge (the
+    // detail panel, a resize) sends both, keeping the event's all-day-ness
+    // unless the patch changes it.
+    const movesTime =
+      patch.startsAt !== undefined || patch.endsAt !== undefined || patch.allDay !== undefined;
+    const sent = movesTime
+      ? {
+          ...patch,
+          startsAt: patch.startsAt ?? event.startsAt,
+          endsAt: patch.endsAt ?? event.endsAt,
+          allDay: patch.allDay ?? event.allDay,
+        }
+      : patch;
+    const mapped = await updateGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: event.externalEventId ?? "",
+      patch: sent,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    if (!mapped) return event;
+    // The mapper leaves an absent place out (a sync keeps what's stored), so a
+    // place this edit cleared must be sent as empty to clear the stored one.
+    if (patch.location !== undefined && mapped.location === undefined) mapped.location = "";
+    // Google has saved it; if storing the answer here fails, the next sync
+    // catches up, so that's no reason to roll the edit back.
+    await webCalendar
+      .mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] })
+      .catch(() => undefined);
+    return {
+      ...event,
+      title: mapped.title,
+      description: mapped.description ?? event.description,
+      startsAt: mapped.startsAt,
+      endsAt: mapped.endsAt,
+      allDay: mapped.allDay ?? event.allDay,
+      location: mapped.location || null,
+      conferenceUrl: mapped.conferenceUrl ?? null,
+      isPrivate: mapped.isPrivate ?? false,
+      attendees: mapped.attendees ?? [],
+      // The server's stamp, not this device's clock: the live row that follows
+      // carries the real one and replaces this.
+      updatedAt: event.updatedAt,
+    };
+  },
+  async removeGoogleEvent({ workspaceId, event, account }) {
+    const { removeGoogleWebEvent } = await import("../features/calendar/google-web");
+    const externalEventId = event.externalEventId ?? "";
+    await removeGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: externalEventId,
+    });
+    // Gone in Google; a failed tombstone here is caught up by the next sync.
+    await webCalendar
+      .mirrorEvents({
+        workspaceId,
+        accountId: account.id,
+        events: [],
+        deletedExternalIds: [externalEventId],
+      })
+      .catch(() => undefined);
   },
 };

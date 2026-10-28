@@ -2,6 +2,9 @@
 // exposes optimistic event CRUD. Mirrors the Tasks hook posture — apply
 // locally first (<200ms perceived), reconcile with the server row, roll back
 // + quiet toast on error. Reads degrade to empty pre-migration (deploy gap).
+// Live events (CALR-7): while a workspace is open the hook follows its
+// calendar's inserts, updates and deletes (`runtime.calendar.listenLive`,
+// merged by `applyLiveChange`), and a resync refetches quietly.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -10,13 +13,20 @@ import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { undoToast } from "../../../lib/undo-toast";
-import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
+import type {
+  CalendarAccountModel,
+  CalendarEventModel,
+  CalendarEventPatch,
+  CalendarLiveChange,
+} from "../events";
+import { applyLiveChange } from "../live";
 import {
   allTimeCalendarWindow,
   type CalendarWindow,
   defaultCalendarWindow,
   widenCalendarWindow,
 } from "../window";
+import { writableEvent } from "../writable";
 
 type Params = {
   userId: string | null;
@@ -33,6 +43,27 @@ export type CreateEventDraft = {
   description?: string;
 };
 
+/**
+ * A burst of resyncs (focus + visibilitychange on one return, a reconnect
+ * right after) refetches once: the first schedules a quiet read this long
+ * after it, and the rest inside that window ride along.
+ */
+const RESYNC_COALESCE_MS = 250;
+/**
+ * A return to the window refetches at most this often (every app switch fires
+ * `focus` on desktop); a reconnect, which may have missed changes, always does.
+ */
+const RETURN_RESYNC_GAP_MS = 30_000;
+
+const VIEW_ONLY_EVENT = "This calendar is view only here.";
+
+/** `meet` is Google's; the Moduo op never gets it. */
+function withoutMeet(patch: CalendarEventPatch): CalendarEventPatch {
+  if (patch.meet === undefined) return patch;
+  const { meet: _meet, ...rest } = patch;
+  return rest;
+}
+
 const isTempId = (id: string) => id.startsWith("tmp-");
 const isBusyId = (id: string) => id.startsWith("busy:");
 
@@ -45,6 +76,17 @@ function applyPatch(e: CalendarEventModel, patch: CalendarEventPatch): CalendarE
     endsAt: patch.endsAt !== undefined ? patch.endsAt : e.endsAt,
     allDay: patch.allDay !== undefined ? patch.allDay : e.allDay,
     rrule: patch.rrule !== undefined ? patch.rrule : e.rrule,
+    ...(patch.location !== undefined ? { location: patch.location } : {}),
+    ...(patch.isPrivate !== undefined ? { isPrivate: patch.isPrivate } : {}),
+    ...(patch.attendees !== undefined
+      ? {
+          attendees: patch.attendees.map((a) => ({
+            email: a.email,
+            name: a.name ?? "",
+            status: a.status ?? "needsAction",
+          })),
+        }
+      : {}),
     updatedAt: new Date().toISOString(),
   };
 }
@@ -99,6 +141,12 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     [],
   );
   const reqRef = useRef(0);
+  /**
+   * Live changes that arrived while a read was in flight. The read's snapshot
+   * may predate them, so they are replayed onto its reply (as the Tasks store's
+   * `applyWhole` does) instead of being overwritten by it.
+   */
+  const liveDuringReadRef = useRef<{ req: number; changes: CalendarLiveChange[] } | null>(null);
   const aliveRef = useRef(true); // the load effect clears it; only unmount leaves it false
   // SCALE-1: the events read is windowed instead of "all history". The window
   // only ever grows (see ensureRange), so walking back and forth over months
@@ -128,80 +176,99 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     fetchWindow.fromIso === allTimeCalendarWindow().fromIso &&
     fetchWindow.toIso === allTimeCalendarWindow().toIso;
 
-  const load = useCallback(async () => {
-    if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
-    if (!runtime || !userId || !workspaceId || !canRead) {
-      setList({ scope, events: [] });
-      setAccounts([]);
-      setBusy([]);
-      setDegraded(false);
-      setTruncated([]);
-      setLoading(false);
-      return;
-    }
-    const req = ++reqRef.current;
-    setLoading(true);
-    const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
-    if (reqRef.current !== req) return;
-    // Keep unsettled optimistic creates: a reload is now also triggered by
-    // navigation (window widening), so it can land between a create's
-    // optimistic row and its server row — which would otherwise drop the
-    // event until the next reload (the tmp-id reconcile finds nothing).
-    // Only this scope's own: a create still saving in the workspace you just
-    // left stays there.
-    setList((prev) => {
-      const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
-      return {
-        scope,
-        events: pending.length > 0 ? [...bundle.events, ...pending] : bundle.events,
-      };
-    });
-    setAccounts(bundle.accounts);
-    setDegraded(bundle.degraded);
-    setTruncated(bundle.truncated);
-    setLoading(false);
-    void (async () => {
-      try {
-        const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
-          p_workspace_id: workspaceId,
-          p_from: fetchWindow.fromIso,
-          p_to: fetchWindow.toIso,
-        });
-        if (reqRef.current !== req) return;
-        setBusy(
-          busyRows.error || !Array.isArray(busyRows.data)
-            ? []
-            : busyRows.data.map(
-                (
-                  row: { calendar_id: string; start_time: string; end_time: string },
-                  i: number,
-                ) => ({
-                  // Two busy blocks can start at the same time; keep keys unique.
-                  id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
-                  workspaceId,
-                  ownerId: null,
-                  sourceAccountId: "busy",
-                  externalEventId: null,
-                  calendarId: "busy",
-                  title: "Busy",
-                  description: "",
-                  startsAt: row.start_time,
-                  endsAt: row.end_time,
-                  allDay: false,
-                  rrule: null,
-                  status: "confirmed",
-                  color: null,
-                  createdAt: row.start_time,
-                  updatedAt: row.start_time,
-                  deletedAt: null,
-                }),
-              ),
-        );
-      } catch {
-        if (reqRef.current === req) setBusy([]);
+  /**
+   * Read the bundle for the current scope and window. `quiet` (a live resync)
+   * leaves `loading` alone, so the grid refreshes in place instead of
+   * flashing a skeleton.
+   */
+  const load = useCallback(
+    async (options?: { quiet?: boolean }) => {
+      if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
+      if (!runtime || !userId || !workspaceId || !canRead) {
+        setList({ scope, events: [] });
+        setAccounts([]);
+        setBusy([]);
+        setDegraded(false);
+        setTruncated([]);
+        setLoading(false);
+        return;
       }
-    })();
-  }, [runtime, userId, workspaceId, canRead, fetchWindow, scope]);
+      const req = ++reqRef.current;
+      liveDuringReadRef.current = { req, changes: [] };
+      if (!options?.quiet) setLoading(true);
+      const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
+      if (reqRef.current !== req) return;
+      const missed =
+        liveDuringReadRef.current?.req === req ? liveDuringReadRef.current.changes : [];
+      liveDuringReadRef.current = null;
+      const fresh =
+        scope === null
+          ? bundle.events
+          : missed.reduce(
+              (events, change) => applyLiveChange(events, change, scope),
+              bundle.events,
+            );
+      // Keep unsettled optimistic creates: a reload is now also triggered by
+      // navigation (window widening), so it can land between a create's
+      // optimistic row and its server row — which would otherwise drop the
+      // event until the next reload (the tmp-id reconcile finds nothing).
+      // Only this scope's own: a create still saving in the workspace you just
+      // left stays there.
+      setList((prev) => {
+        const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
+        return {
+          scope,
+          events: pending.length > 0 ? [...fresh, ...pending] : fresh,
+        };
+      });
+      setAccounts(bundle.accounts);
+      setDegraded(bundle.degraded);
+      setTruncated(bundle.truncated);
+      setLoading(false);
+      void (async () => {
+        try {
+          const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
+            p_workspace_id: workspaceId,
+            p_from: fetchWindow.fromIso,
+            p_to: fetchWindow.toIso,
+          });
+          if (reqRef.current !== req) return;
+          setBusy(
+            busyRows.error || !Array.isArray(busyRows.data)
+              ? []
+              : busyRows.data.map(
+                  (
+                    row: { calendar_id: string; start_time: string; end_time: string },
+                    i: number,
+                  ) => ({
+                    // Two busy blocks can start at the same time; keep keys unique.
+                    id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
+                    workspaceId,
+                    ownerId: null,
+                    sourceAccountId: "busy",
+                    externalEventId: null,
+                    calendarId: "busy",
+                    title: "Busy",
+                    description: "",
+                    startsAt: row.start_time,
+                    endsAt: row.end_time,
+                    allDay: false,
+                    rrule: null,
+                    status: "confirmed",
+                    color: null,
+                    createdAt: row.start_time,
+                    updatedAt: row.start_time,
+                    deletedAt: null,
+                  }),
+                ),
+          );
+        } catch {
+          if (reqRef.current === req) setBusy([]);
+        }
+      })();
+    },
+    [runtime, userId, workspaceId, canRead, fetchWindow, scope],
+  );
 
   useEffect(() => {
     aliveRef.current = true;
@@ -226,6 +293,36 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     loadRef.current = load;
   }, [load]);
   const reload = useCallback(() => loadRef.current(), []);
+
+  // Live events (CALR-7). Subscribed per scope as the signed-in person; a
+  // workspace switch or unmount stops it. A change goes through `setEventsIn`,
+  // so one that arrives late from the workspace you left is dropped. A resync
+  // runs the CURRENT `load` (via `loadRef`) quietly, once per burst. Runtimes
+  // without live events (test fakes) skip all of this.
+  useEffect(() => {
+    if (!runtime || !scope || !userId) return;
+    if (typeof runtime.calendar.listenLive !== "function") return;
+    let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastResyncAt = Number.NEGATIVE_INFINITY;
+    const stop = runtime.calendar.listenLive({ workspaceId: scope, selfId: userId }, (event) => {
+      if (event.type === "change") {
+        liveDuringReadRef.current?.changes.push(event.change);
+        setEventsIn(scope, (prev) => applyLiveChange(prev, event.change, scope));
+        return;
+      }
+      if (resyncTimer !== null) return;
+      if (event.reason === "return" && Date.now() - lastResyncAt < RETURN_RESYNC_GAP_MS) return;
+      resyncTimer = setTimeout(() => {
+        resyncTimer = null;
+        lastResyncAt = Date.now();
+        void loadRef.current({ quiet: true });
+      }, RESYNC_COALESCE_MS);
+    });
+    return () => {
+      stop();
+      if (resyncTimer !== null) clearTimeout(resyncTimer);
+    };
+  }, [runtime, scope, userId, setEventsIn]);
 
   /**
    * Tell the hook which days are actually on screen. Widens the fetch window
@@ -340,20 +437,69 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       const snapshot = events.find((e) => e.id === eventId);
       if (!snapshot) return;
-      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? applyPatch(e, patch) : e)));
+      const writer = writableEvent(snapshot, accounts, userId);
+      if (!writer) {
+        toast.error(VIEW_ONLY_EVENT);
+        return;
+      }
+      const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
+      const optimistic = applyPatch(snapshot, patch);
+      setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? optimistic : e)));
       try {
-        const saved = await (runtime as ModuoRuntime).calendar.updateEvent({
-          workspaceId: workspaceId as string,
-          eventId,
-          patch,
-        });
-        setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? saved : e)));
+        const calendar = (runtime as ModuoRuntime).calendar;
+        const saved =
+          writer === "google" && account
+            ? await calendar.updateGoogleEvent({
+                workspaceId: workspaceId as string,
+                event: snapshot,
+                account,
+                patch,
+              })
+            : await calendar.updateEvent({
+                workspaceId: workspaceId as string,
+                eventId,
+                patch: withoutMeet(patch),
+              });
+        // Only over our own optimistic row: a live echo that already landed
+        // (CALR-7) carries the server's split place and stamp, and stays.
+        setEventsIn(scope, (prev) =>
+          prev.map((e) =>
+            e.id === eventId && (e === optimistic || writer === "moduo") ? saved : e,
+          ),
+        );
       } catch (err) {
         setEventsIn(scope, (prev) => prev.map((e) => (e.id === eventId ? snapshot : e)));
-        toast.error(err instanceof Error ? err.message : "Couldn't update the event.");
+        const reason = err instanceof Error ? err.message : "";
+        toast.error(
+          writer === "google"
+            ? `Google didn't save it${reason ? `: ${reason}` : "."}`
+            : reason || "Couldn't update the event.",
+        );
       }
     },
-    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
+    [guardEdit, runtime, workspaceId, events, accounts, userId, scope, setEventsIn],
+  );
+
+  /** A Google event's delete, already removed from the list: Google first, back on refusal. */
+  const deleteFromGoogle = useCallback(
+    async (snapshot: CalendarEventModel, account: CalendarAccountModel): Promise<void> => {
+      try {
+        await (runtime as ModuoRuntime).calendar.removeGoogleEvent({
+          workspaceId: workspaceId as string,
+          event: snapshot,
+          account,
+        });
+        // No Undo: it would come back as a new Google event (out of scope).
+        toast.success("Event deleted");
+      } catch (err) {
+        setEventsIn(scope, (prev) =>
+          prev.some((e) => e.id === snapshot.id) ? prev : [...prev, snapshot],
+        );
+        const reason = err instanceof Error ? err.message : "";
+        toast.error(`Google didn't delete it${reason ? `: ${reason}` : "."}`);
+      }
+    },
+    [runtime, workspaceId, scope, setEventsIn],
   );
 
   const deleteEvent = useCallback(
@@ -361,7 +507,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
       const snapshot = events.find((e) => e.id === eventId);
       if (!snapshot) return;
+      const writer = writableEvent(snapshot, accounts, userId);
+      if (!writer) {
+        toast.error(VIEW_ONLY_EVENT);
+        return;
+      }
+      const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
       setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId));
+      if (writer === "google" && account) {
+        await deleteFromGoogle(snapshot, account);
+        return;
+      }
       try {
         await (runtime as ModuoRuntime).calendar.removeEvent({
           workspaceId: workspaceId as string,
@@ -394,7 +550,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },
-    [guardEdit, runtime, workspaceId, events, scope, setEventsIn],
+    [
+      guardEdit,
+      runtime,
+      workspaceId,
+      events,
+      accounts,
+      userId,
+      scope,
+      setEventsIn,
+      deleteFromGoogle,
+    ],
   );
 
   return {
