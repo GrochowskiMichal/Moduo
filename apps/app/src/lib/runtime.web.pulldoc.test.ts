@@ -1,6 +1,9 @@
 // NR-7: every save now reaches open editors as "pull", so a live pull must
 // not download the note's snapshot again when it hasn't changed. Runs the real
-// runtime over a recording stand-in for the Supabase client.
+// runtime over a recording stand-in for the Supabase client. Since NS-7 the
+// pull is notes_pull (runtime.web.notes-read-rpcs.test.ts); this stand-in has
+// no such function, so these cases pin the table-read fallback a database
+// without the migration still gets.
 
 import { describe, expect, it, rs } from "@rstest/core";
 
@@ -36,6 +39,12 @@ rs.mock("@supabase/supabase-js", () => {
         recorded.queries.push(q);
         return chain(q);
       },
+      // A database before NS-7: notes_pull isn't there yet.
+      rpc: (fn: string) =>
+        Promise.resolve({
+          data: null,
+          error: { code: "PGRST202", message: `Could not find the function public.${fn}` },
+        }),
       auth: new Proxy({ onAuthStateChange: noop }, { get: (t, p) => (t as never)[p] ?? noop }),
     },
     { get: (t, p) => (t as never)[p] ?? noop },
@@ -50,7 +59,7 @@ const selects = () =>
     .filter((q) => q.table === "notes")
     .map((q) => q.calls.find(([m]) => m === "select")?.[1][0]);
 
-describe("pullDoc({ knownDocVersion }) (NR-7)", () => {
+describe("pullDoc({ knownDocVersion }) (NR-7), the table-read fallback", () => {
   it("skips the snapshot when the version is the one this session holds", async () => {
     recorded.queries = [];
     recorded.rows = { note_updates: [], notes: { doc_state: "U05BUA==", doc_version: 7 } };

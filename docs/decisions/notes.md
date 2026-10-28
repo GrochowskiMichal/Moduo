@@ -2,6 +2,17 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-7: a note's document and the notes list are definer reads that check access once (`notes_pull`, `notes_list_meta`), with a table-read fallback until deployed** → `supabase/migrations/20261030160000_notes_read_rpcs.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-7 (MOD-657).
+  - Decision:
+    - `notes_pull` checks access with `notes__require_module(ws, 'view')` plus one `can_access(view)`. That is `notes__require` without its row lock, which a STABLE function can't take. Hidden, missing and wrong-workspace all answer P0002. A trashed note still pulls, as RLS allowed (the trash preview).
+    - STABLE is the "one MVCC snapshot": every statement in a STABLE function sees the calling query's snapshot, so the log page and the snapshot can't straddle a compaction. Across pages (a log over 1,000 rows), a later page's snapshot wins, which stays lossless.
+    - `notes_list_meta` returns nothing, not an error, for a role or key that can't open notes, which is the answer RLS gave.
+    - PostgREST caps an RPC's row set at `max_rows` (1,000), so the app pages the list with `.range()`. Each call computes visibility once. Up to 1,000 notes the list is one request; a 5,000-note workspace is five. A full 5,000 shows as a truncation with no total.
+    - The connector-guard test (`api-keys.test.ts`) exempts a helper's own-module lane at View, as it already did for tool bodies: every key that reaches a notes tool holds it.
+  - Why: the log read through RLS ran `can_access` (an ancestor walk) once per row, and the list ran it once per note.
+  - Rejected: returning the list as one jsonb array to dodge `max_rows`, because the spec fixes `SETOF notes_meta` for NS-9 and the MCP.
 - **2026-10-28 · NS-8: `note_updates` is checked per statement, and a replay leaves the note alone** → `supabase/migrations/20261030170000_notes_writes_check_once.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-8 (MOD-658).

@@ -134,9 +134,70 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
 
 const UPDATE_PAGE = 1000;
 
+/** A note's update log after `after` and, when asked, its snapshot, through
+ * notes_pull (NS-7): access checked once on the server for the key's person
+ * (and its Notes scope), the page and the snapshot from one snapshot, a call
+ * per 1,000 rows. A later page that brings a snapshot (a compaction ran
+ * between calls) is the newer one; the rows read stay lossless on top of it.
+ * Null while the function isn't deployed yet. */
+async function pullNote(
+  ctx: ToolContext,
+  noteId: string,
+  after: number,
+): Promise<{ updates: string[]; upto: number; snapshotB64: string | null } | null> {
+  const updates: string[] = [];
+  let upto = after;
+  let known: number | null = null;
+  let snapshotB64: string | null = null;
+  for (let first = true; ; first = false) {
+    const { data, error } = await ctx.db.rpc("notes_pull", {
+      p_workspace_id: ctx.key.workspaceId,
+      p_note_id: noteId,
+      p_after_id: upto,
+      p_known_version: known,
+    });
+    if (error) {
+      if (first && isMissingPull(error)) return null;
+      throw new Error(error.message);
+    }
+    const page = readPullPage(data);
+    if (page.snapshot !== undefined) snapshotB64 = page.snapshot;
+    known = page.docVersion;
+    updates.push(...page.updates);
+    const before = upto;
+    upto = Math.max(upto, page.upto);
+    if (!page.hasMore || upto === before) return { updates, upto, snapshotB64 };
+  }
+}
+
+/** PostgREST's answer before NS-7's migration: no notes_pull yet. */
+function isMissingPull(error: { code?: string; message?: string }): boolean {
+  return (error.code === "PGRST202" || error.code === "42883") &&
+    String(error.message ?? "").includes("notes_pull");
+}
+
+/** One notes_pull answer. `snapshot` is undefined when the server left it
+ * out (the version asked for is current), null for a note with no snapshot. */
+function readPullPage(data: unknown) {
+  const page = (data ?? {}) as Row;
+  const rowsRead = Array.isArray(page.updates) ? (page.updates as Row[]) : [];
+  const snapshot = !("snapshot" in page)
+    ? undefined
+    : typeof page.snapshot === "string" && page.snapshot
+    ? page.snapshot as string
+    : null;
+  return {
+    snapshot,
+    docVersion: Number(page.doc_version ?? 0),
+    updates: rowsRead.map((r) => r.update_b64).filter((u): u is string => typeof u === "string"),
+    upto: rowsRead.reduce((max, r) => Math.max(max, Number(r.id)), 0),
+    hasMore: page.has_more === true,
+  };
+}
+
 /** Every update row after `after`, paged past PostgREST's 1000-row cap, and
- * the highest id read. */
-async function noteUpdateLog(
+ * the highest id read. Before NS-7's migration: the table, as service_role. */
+async function noteUpdateLogFromTable(
   ctx: ToolContext,
   noteId: string,
   after = 0,
@@ -163,14 +224,33 @@ async function noteUpdateLog(
   }
 }
 
-/** Log first, snapshot second (the app's pull order): a compaction in
- * between only makes the snapshot newer than the log, and applying both is
- * lossless. */
+/** Every update row after `after`, and the highest id read. */
+async function noteUpdateLog(
+  ctx: ToolContext,
+  noteId: string,
+  after = 0,
+): Promise<{ updates: string[]; upto: number }> {
+  const pulled = await pullNote(ctx, noteId, after);
+  if (pulled) return { updates: pulled.updates, upto: pulled.upto };
+  return noteUpdateLogFromTable(ctx, noteId, after);
+}
+
+/** The note's doc (snapshot + log) and stored body. The live check and the
+ * body come from the note's row; the doc from notes_pull, or before NS-7 log
+ * first, snapshot second (a compaction in between only makes the snapshot
+ * newer than the log, and applying both is lossless). */
 async function readNoteDoc(ctx: ToolContext, noteId: string) {
-  const log = await noteUpdateLog(ctx, noteId);
-  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
+  const pulled = await pullNote(ctx, noteId, 0);
+  const log = pulled
+    ? { updates: pulled.updates, upto: pulled.upto }
+    : await noteUpdateLogFromTable(ctx, noteId);
+  const note = await getNote(ctx, noteId, pulled ? "id, body_md" : "id, body_md, doc_state");
   if (!note) throw new Error("Note not found in this workspace.");
-  const snapshotB64 = typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null;
+  const snapshotB64 = pulled
+    ? pulled.snapshotB64
+    : typeof note.doc_state === "string" && note.doc_state
+    ? note.doc_state
+    : null;
   return { log, snapshotB64, bodyMd: String(note.body_md ?? "") };
 }
 
