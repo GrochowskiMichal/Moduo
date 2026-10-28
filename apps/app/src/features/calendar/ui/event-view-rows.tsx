@@ -16,7 +16,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
@@ -50,6 +50,7 @@ import type {
   CalendarEventModel,
   CalendarEventPatch,
 } from "../events";
+import { useEventLinkRequest } from "./event-link-request";
 import { inCalendarOverlay } from "./use-calendar-hotkeys";
 
 export type ViewerMember = { userId: string; name: string };
@@ -497,10 +498,13 @@ export function EventLinkedRows({
   status,
   sections,
   canEdit,
+  eventId,
   onLink,
   onUnlink,
   onRetry,
 }: {
+  /** The event shown: an event menu's Link opens this picker (CALR-4b). */
+  eventId?: string;
   runtime: ModuoRuntime | null;
   workspaceId: string;
   status: HubStatus;
@@ -515,6 +519,7 @@ export function EventLinkedRows({
   const tasks = rows.filter((r) => r.other.type === "task");
   const rest = rows.filter((r) => r.other.type !== "note" && r.other.type !== "task");
   const [open, setOpen] = useState(false);
+  const openPicker = useCallback(() => setOpen(true), []);
   const linking = canEdit && !!runtime;
   const search = useMentionSearch({
     runtime,
@@ -532,6 +537,7 @@ export function EventLinkedRows({
       setOpen(true);
     },
   });
+  useEventLinkRequest(eventId ?? "", linking && !!eventId, openPicker);
 
   const row = (r: HubRow) => (
     <TwoLineRow

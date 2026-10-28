@@ -40,6 +40,7 @@ import {
   entityOpenTarget,
   markEntityOpenHighlight,
   markEntityOpenIntent,
+  recordEntityOpen,
 } from "../../lib/entity-open";
 import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
@@ -285,6 +286,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         chainId: detail.chainId,
         query: detail.query,
       });
+      // Your open of an item, for ⌘K's Recent and the personal ranking (GS-8).
+      recordEntityOpen(runtime?.spine, workspaceNav.current.selectedWorkspaceId, detail);
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,
@@ -305,7 +308,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     };
     window.addEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
-  }, [navigate]);
+  }, [navigate, runtime]);
 
   const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(
