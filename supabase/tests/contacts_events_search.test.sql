@@ -184,15 +184,18 @@ BEGIN
               AND (v -> 0 ->> 'archived')::boolean = false
               AND v -> 0 ->> 'snippet' IS NULL,
     'a name hit says the person''s company as its context, with no snippet', v::text);
-  PERFORM test.ok(test.found(e) = 'CE' AND e -> 0 ->> 'match' = 'body'
+  -- Only CE matches exactly; the typo rule may add names after it (fewer than 3 exact hits).
+  PERFORM test.ok(e -> 0 ->> 'entity_id' = test.id('CE')::text AND e -> 0 ->> 'match' = 'body'
+              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e) h WHERE h ->> 'match' <> 'title_fuzzy'
+                                AND h ->> 'entity_id' <> test.id('CE')::text)
               AND e -> 0 ->> 'snippet' LIKE '%' || chr(57344) || '%' || chr(57345) || '%'
               AND e -> 0 ->> 'context' IS NULL,
     'a word only in the email finds the person as a body hit, with a highlighted snippet', e::text);
   PERFORM test.ok(test.as_who('M', 'contacts__search', 'edith@quincefarm.example') = 'CE',
     'a whole email address finds its person');
-  PERFORM test.ok(test.as_who('M', 'contacts__search', 'wnda') = 'CW'
-              AND test.hits_as('M', 'contacts__search', 'wnda') -> 0 ->> 'match' = 'title_fuzzy',
-    'a typo in a name is forgiven, as title_fuzzy', test.hits_as('M', 'contacts__search', 'wnda')::text);
+  PERFORM test.ok(test.as_who('M', 'contacts__search', 'wandq') = 'CW'
+              AND test.hits_as('M', 'contacts__search', 'wandq') -> 0 ->> 'match' = 'title_fuzzy',
+    'a typo in a name is forgiven, as title_fuzzy', test.hits_as('M', 'contacts__search', 'wandq')::text);
 END;
 $$;
 
@@ -299,7 +302,9 @@ SELECT test.ok(test.as_key_found('KMC', 'contacts__search', 'quince') = 'CE,CW'
 
 DO $$
 DECLARE
-  v jsonb := test.hits_as('S', 'search_all', 'quince');
+  v jsonb := test.value_as('S', format(
+    $q$SELECT coalesce(jsonb_agg(to_jsonb(h)), '[]')::text FROM public.search_all(%L, %L, NULL, 50) h$q$,
+    test.id('W'), 'quince'))::jsonb;
 BEGIN
   v := (SELECT coalesce(jsonb_agg(h), '[]') FROM jsonb_array_elements(v) h
          WHERE h ->> 'entity_type' IN ('contact', 'company', 'event'));
