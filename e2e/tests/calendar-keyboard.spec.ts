@@ -56,7 +56,11 @@ async function rows(): Promise<Row[]> {
   );
 }
 
-const live = async () => (await rows()).filter((r) => !r.deleted_at);
+// PostgREST answers "…+00:00": compare as ISO instants.
+const live = async () =>
+  (await rows())
+    .filter((r) => !r.deleted_at)
+    .map((r) => ({ ...r, start_time: new Date(r.start_time).toISOString() }));
 
 async function openWeek(page: Page) {
   await signInPage(page, dev, ws.id);
