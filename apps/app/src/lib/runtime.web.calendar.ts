@@ -74,6 +74,22 @@ function calendarEventRowToModel(raw: unknown): CalendarEventModel {
     kind: normalizeCalendarItemKind(r.kind),
     focusTaskId: r.focus_task_id ?? null,
     attendees: attendeesOf(r.attendees),
+    ...seriesFieldsOf(r),
+  };
+}
+
+/** One occurrence (CALR-11): which series a row belongs to, and what its series skips. */
+function seriesFieldsOf(r: {
+  series_id?: string | null;
+  original_start?: string | null;
+  exdates?: string[] | null;
+  external_series_id?: string | null;
+}) {
+  return {
+    seriesId: r.series_id ?? null,
+    originalStart: r.original_start ?? null,
+    exdates: r.exdates ?? [],
+    externalSeriesId: r.external_series_id ?? null,
   };
 }
 
@@ -92,6 +108,9 @@ function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
     status: r.status ?? "ok",
     syncToken: r.sync_token ?? null,
     deletedAt: r.deleted_at ?? null,
+    readOnly: r.read_only ?? false,
+    busyDefault: r.busy_default ?? true,
+    lastError: r.last_error ?? null,
   };
 }
 
@@ -247,6 +266,12 @@ function listenCalendarLive(
   };
 }
 
+/** A Google instance's series id; never an empty id that Google would read as another event. */
+function googleSeriesId(instance: CalendarEventModel): string {
+  if (!instance.externalSeriesId) throw new Error("This event isn't part of a Google repeat.");
+  return instance.externalSeriesId;
+}
+
 export const webCalendar: CalendarRuntime = {
   // ── Wave-2 module surface. Writes = calendar_op_* RPCs (guard + write +
   // entities upsert + attributed activity); reads = indexed SELECTs that
@@ -363,6 +388,37 @@ export const webCalendar: CalendarRuntime = {
     );
     return calendarEventRowToModel(firstRow(data, "calendar_op_event_restore"));
   },
+  // CALR-11: This event on a Moduo repeat.
+  async updateOccurrence({ workspaceId, seriesId, originalStart, patch }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_event_occurrence_update", {
+        p_workspace_id: workspaceId,
+        p_series_id: seriesId,
+        p_original_start: originalStart,
+        p_patch: patch,
+      }),
+    );
+    return calendarEventRowToModel(firstRow(data, "calendar_op_event_occurrence_update"));
+  },
+  async removeOccurrence({ workspaceId, seriesId, originalStart }) {
+    await runRpc(
+      supabaseClient.rpc("calendar_op_event_occurrence_delete", {
+        p_workspace_id: workspaceId,
+        p_series_id: seriesId,
+        p_original_start: originalStart,
+      }),
+    );
+  },
+  async restoreOccurrence({ workspaceId, seriesId, originalStart }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_event_occurrence_restore", {
+        p_workspace_id: workspaceId,
+        p_series_id: seriesId,
+        p_original_start: originalStart,
+      }),
+    );
+    return calendarEventRowToModel(firstRow(data, "calendar_op_event_occurrence_restore"));
+  },
   async upsertAccount({
     workspaceId,
     provider,
@@ -372,6 +428,8 @@ export const webCalendar: CalendarRuntime = {
     status,
     lastSyncAt,
     syncToken,
+    readOnly,
+    busyDefault,
   }) {
     const args: Record<string, unknown> = {
       p_workspace_id: workspaceId,
@@ -390,6 +448,9 @@ export const webCalendar: CalendarRuntime = {
     // null too, so omitting is equivalent AND keeps OAuth callers (who pass
     // `?? null` in the house style) working against a pre-migration database.
     if (syncToken != null) args.p_sync_token = syncToken;
+    // CALR-20's arguments, the same way: only when set (an older database lacks them).
+    if (readOnly !== undefined) args.p_read_only = readOnly;
+    if (busyDefault !== undefined) args.p_busy_default = busyDefault;
     const data = await runRpc(
       supabaseClient.rpc(
         "calendar_op_account_upsert",
@@ -405,6 +466,25 @@ export const webCalendar: CalendarRuntime = {
         p_account_id: accountId,
       }),
     );
+  },
+  async restoreAccount({ workspaceId, accountId }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_account_restore", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+      }),
+    );
+    return calendarAccountRowToModel(firstRow(data, "calendar_op_account_restore"));
+  },
+  async setAccountBusy({ workspaceId, accountId, busy }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_account_set", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+        p_busy_default: busy,
+      }),
+    );
+    return calendarAccountRowToModel(firstRow(data, "calendar_op_account_set"));
   },
   async mirrorEvents({ workspaceId, accountId, events, deletedExternalIds }) {
     const data = jsonObject(
@@ -535,6 +615,70 @@ export const webCalendar: CalendarRuntime = {
       bookingOf().catch(() => null),
     ]);
     return { calendar, share, booking };
+  },
+  // CALR-11: All events on a Google repeat goes to its series (recurringEventId).
+  // Google answers with the series itself; mirroring that would add it as a row
+  // of its own, so the change is stored on the instances shown instead.
+  async updateGoogleSeries({ workspaceId, account, instance, instances, patch }) {
+    const { updateGoogleWebEvent } = await import("../features/calendar/google-web");
+    const { startsAt: _s, endsAt: _e, allDay: _a, ...rest } = patch;
+    await updateGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: instance.calendarId,
+      eventId: googleSeriesId(instance),
+      patch: rest,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    const { meet: _m, rrule: _r, calendarId: _c, kind: _k, focusTaskId: _f, ...fields } = rest;
+    const events = instances.flatMap((e) =>
+      e.externalEventId
+        ? [
+            {
+              externalEventId: e.externalEventId,
+              title: fields.title ?? e.title,
+              startsAt: e.startsAt,
+              endsAt: e.endsAt,
+              ...(fields.description !== undefined ? { description: fields.description } : {}),
+              ...(fields.location !== undefined ? { location: fields.location ?? "" } : {}),
+              ...(fields.conferenceUrl !== undefined
+                ? { conferenceUrl: fields.conferenceUrl }
+                : {}),
+              ...(fields.isPrivate !== undefined ? { isPrivate: fields.isPrivate } : {}),
+              ...(fields.attendees !== undefined
+                ? {
+                    attendees: fields.attendees.map((a) => ({
+                      email: a.email,
+                      name: a.name ?? "",
+                      status: a.status ?? "needsAction",
+                    })),
+                  }
+                : {}),
+            },
+          ]
+        : [],
+    );
+    // Google has saved it; the next sync catches up if storing here fails.
+    await webCalendar
+      .mirrorEvents({ workspaceId, accountId: account.id, events })
+      .catch(() => undefined);
+  },
+  async removeGoogleSeries({ workspaceId, account, instance, instances }) {
+    const { removeGoogleWebEvent } = await import("../features/calendar/google-web");
+    await removeGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: instance.calendarId,
+      eventId: googleSeriesId(instance),
+    });
+    await webCalendar
+      .mirrorEvents({
+        workspaceId,
+        accountId: account.id,
+        events: [],
+        deletedExternalIds: instances.flatMap((e) =>
+          e.externalEventId ? [e.externalEventId] : [],
+        ),
+      })
+      .catch(() => undefined);
   },
   async removeGoogleEvent({ workspaceId, event, account }) {
     const { removeGoogleWebEvent } = await import("../features/calendar/google-web");

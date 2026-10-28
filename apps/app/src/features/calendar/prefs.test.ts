@@ -1,8 +1,13 @@
-import { beforeEach, describe, expect, it } from "@rstest/core";
+import { beforeEach, describe, expect, it, rs } from "@rstest/core";
+import { act, renderHook } from "@testing-library/react";
 
+import { findNextGap } from "./gap-finder";
+import { openingScrollMinute } from "./grid-layout";
+import { useCalendarPrefs } from "./hooks/use-calendar-prefs";
 import {
   DEFAULT_CALENDAR_PREFS,
   defaultViewState,
+  offHoursWash,
   readCalendarPrefs,
   readViewState,
   sanitizeCalendarPrefs,
@@ -10,6 +15,11 @@ import {
   writeCalendarPrefs,
   writeViewState,
 } from "./prefs";
+
+const pushed = rs.hoisted(() => ({ list: [] as unknown[] }));
+rs.mock("../../lib/prefs-sync", () => ({
+  useDomainSync: () => ({ pushLocalChange: (v: unknown) => pushed.list.push(v) }),
+}));
 
 const NOW = new Date(2026, 6, 2, 11, 0); // Thu Jul 2 2026, local
 
@@ -84,11 +94,65 @@ describe("view state — the localStorage half", () => {
   });
 
   it("sanitizes corrupt values back to defaults", () => {
-    expect(sanitizeViewState({ view: "month", anchor: "07/01" }, NOW)).toEqual({
+    expect(sanitizeViewState({ view: "agenda", anchor: "07/01" }, NOW)).toEqual({
       view: "week",
       anchor: "2026-07-02",
     });
     window.localStorage.setItem("moduo:calendar:view:u1:w1", "{not json");
     expect(readViewState("u1", "w1", NOW)).toEqual(defaultViewState(NOW));
+  });
+});
+
+// AC45 (CALR-13): working hours, weekends and week start are set from the
+// calendar; the wash, the opening scroll and free-time hops follow them, and
+// they sync to user preferences.
+describe("working hours drive the week", () => {
+  const tue = new Date(2026, 9, 27);
+  const sat = new Date(2026, 9, 31);
+  const hours = { ...DEFAULT_CALENDAR_PREFS, workStartMinute: 10 * 60, workEndMinute: 16 * 60 };
+
+  it("moves the off-hours wash and washes a whole weekend day", () => {
+    expect(offHoursWash(DEFAULT_CALENDAR_PREFS, tue)).toEqual({ top: 480, bottomFrom: 1080 });
+    expect(offHoursWash(hours, tue)).toEqual({ top: 600, bottomFrom: 960 });
+    expect(offHoursWash(hours, sat)).toEqual({ top: 1440, bottomFrom: 1440 });
+  });
+
+  it("opens the grid at the new start", () => {
+    const at = (p: typeof hours) =>
+      openingScrollMinute({
+        workStartMinute: p.workStartMinute,
+        workEndMinute: p.workEndMinute,
+        nowMinute: null,
+        viewportMinutes: 600,
+      });
+    expect(at(hours) - at(DEFAULT_CALENDAR_PREFS)).toBe(120);
+  });
+
+  it("hops to free time inside the new hours", () => {
+    const gap = findNextGap({
+      nowMs: new Date(2026, 9, 27, 6).getTime(),
+      dayStartMs: tue.getTime(),
+      workStartMinute: hours.workStartMinute,
+      workEndMinute: hours.workEndMinute,
+      durationMinutes: 30,
+      busy: [],
+    });
+    expect(gap).toBe(new Date(2026, 9, 27, 10).getTime());
+  });
+
+  it("saves new hours and weekends to user preferences", () => {
+    pushed.list.length = 0;
+    const { result } = renderHook(() => useCalendarPrefs("u-hours"));
+    act(() => {
+      result.current.updatePrefs({ workStartMinute: 600, workEndMinute: 960, showWeekends: false });
+    });
+    expect(result.current.prefs.workStartMinute).toBe(600);
+    expect(result.current.prefs.showWeekends).toBe(false);
+    expect(pushed.list.at(-1)).toMatchObject({
+      workStartMinute: 600,
+      workEndMinute: 960,
+      showWeekends: false,
+    });
+    expect(readCalendarPrefs("u-hours").workEndMinute).toBe(960);
   });
 });

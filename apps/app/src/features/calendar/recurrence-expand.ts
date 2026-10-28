@@ -17,6 +17,8 @@ export type ExpandableEvent = {
   endsAt: string;
   /** RFC 5545 RRULE body (no "RRULE:" prefix) or null for one-off events. */
   rrule: string | null;
+  /** CALR-11: ISO instants of occurrences the series no longer draws (deleted, or replaced by an override). */
+  exdates?: string[];
 };
 
 export type EventOccurrence = {
@@ -96,11 +98,18 @@ export function expandEventOccurrences(
   const windowEnd = toFloating(new Date(rangeEndMs - 1));
   const floats = rule.between(windowStart, windowEnd, true, (_d, len) => len <= MAX_OCCURRENCES);
 
+  // Compared as instants: an exdate written in another offset still matches.
+  // TRAP: occurrences are worked out in the VIEWER's wall clock, so a teammate
+  // whose clocks change on another date (US vs EU, ~3 weeks a year) gets
+  // instants an hour off the owner's exdates and sees a replaced or deleted
+  // occurrence again. The fix is storing the series' zone and expanding in it.
+  const skipped = new Set((event.exdates ?? []).map((d) => Date.parse(d)));
   const out: EventOccurrence[] = [];
   for (const f of floats) {
     if (out.length >= MAX_OCCURRENCES) break;
     const occStart = fromFloating(f).getTime();
     const occEnd = occStart + durationMs;
+    if (skipped.has(occStart)) continue;
     if (occStart < rangeEndMs && occEnd > rangeStartMs) {
       out.push({ eventId: event.id, startMs: occStart, endMs: occEnd });
     }

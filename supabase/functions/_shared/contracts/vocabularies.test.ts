@@ -188,7 +188,7 @@ describe("vocabulary value sets", () => {
     expect(CALENDAR_PROVIDERS).toEqual(["google", "microsoft", "caldav", "ics", "moduo"]);
     expect(SYNCABLE_PROVIDERS).toEqual(["google", "microsoft", "caldav", "ics"]);
     expect(SYNCABLE_PROVIDERS).not.toContain("moduo");
-    expect(CALENDAR_ACCOUNT_STATUSES).toEqual(["ok", "error"]);
+    expect(CALENDAR_ACCOUNT_STATUSES).toEqual(["ok", "error", "reauth"]);
   });
 
   it("subscription statuses are the bounded Stripe set plus local `none`", () => {

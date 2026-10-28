@@ -57,6 +57,27 @@ export type CalendarRuntime = {
   removeEvent(input: { workspaceId: string; eventId: string }): Promise<void>;
   /** Un-delete a soft-deleted native event (the delete toast's Undo, DF-5). */
   restoreEvent(input: { workspaceId: string; eventId: string }): Promise<CalendarEventModel>;
+  // ── One occurrence (CALR-11): This event on a Moduo repeat. `originalStart` is
+  // the occurrence's start as the series draws it (an ISO instant).
+  /** Change one occurrence: its override, made the first time. Resolves with the override. */
+  updateOccurrence(input: {
+    workspaceId: string;
+    seriesId: string;
+    originalStart: string;
+    patch: CalendarEventPatch;
+  }): Promise<CalendarEventModel>;
+  /** Delete one occurrence: an exdate on the series, and its override if it has one. */
+  removeOccurrence(input: {
+    workspaceId: string;
+    seriesId: string;
+    originalStart: string;
+  }): Promise<void>;
+  /** The occurrence delete's Undo. Resolves with the series. */
+  restoreOccurrence(input: {
+    workspaceId: string;
+    seriesId: string;
+    originalStart: string;
+  }): Promise<CalendarEventModel>;
   upsertAccount(input: {
     workspaceId: string;
     provider: string;
@@ -71,8 +92,19 @@ export type CalendarRuntime = {
      * OAuth callers keep working against a pre-CAL-8 database.
      */
     syncToken?: string | null;
+    /** CALR-20: sent only when defined, like syncToken. */
+    readOnly?: boolean;
+    busyDefault?: boolean;
   }): Promise<CalendarAccountModel>;
   removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+  /** CALR-20: Remove's Undo; brings back the account and the events that Remove took. */
+  restoreAccount(input: { workspaceId: string; accountId: string }): Promise<CalendarAccountModel>;
+  /** CALR-20: Counts as busy for booking links. */
+  setAccountBusy(input: {
+    workspaceId: string;
+    accountId: string;
+    busy: boolean;
+  }): Promise<CalendarAccountModel>;
   /**
    * Live events (CALR-7): follow inserts, updates and deletes of the
    * workspace's calendar events as they happen, plus a `resync` whenever
@@ -103,6 +135,24 @@ export type CalendarRuntime = {
     account: CalendarAccountModel;
     patch: CalendarEventPatch;
   }): Promise<CalendarEventModel>;
+  /**
+   * All events on a Google repeat (CALR-11): patch the series (`instance.externalSeriesId`)
+   * on Google, without times, then store the change on `instances`, the ones shown.
+   */
+  updateGoogleSeries(input: {
+    workspaceId: string;
+    account: CalendarAccountModel;
+    instance: CalendarEventModel;
+    instances: CalendarEventModel[];
+    patch: CalendarEventPatch;
+  }): Promise<void>;
+  /** Delete a Google repeat's series on Google, then tombstone `instances` (CALR-11). */
+  removeGoogleSeries(input: {
+    workspaceId: string;
+    account: CalendarAccountModel;
+    instance: CalendarEventModel;
+    instances: CalendarEventModel[];
+  }): Promise<void>;
   /** Delete a mirrored Google event on Google (guests are told), then tombstone the mirror (CALR-8). */
   removeGoogleEvent(input: {
     workspaceId: string;

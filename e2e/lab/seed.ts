@@ -192,9 +192,25 @@ async function founderWeek(who: Session, ws: string): Promise<void> {
       p_title: title,
       p_starts_at: start,
       p_ends_at: end,
+      ...MEETING_PREP[title],
     });
   }
 }
+
+/** People, a link and a place on two meetings, for Day view's prep beside them (CALR-12). */
+const MEETING_PREP: Record<string, Record<string, unknown>> = {
+  "Design review with Ana": {
+    p_attendees: [
+      { email: "ana@moduo.local", name: "Ana Ruiz" },
+      { email: "priya@acme.example", name: "Priya Shah" },
+    ],
+    p_conference_url: "https://meet.google.com/abc-defg-hij",
+  },
+  "Board prep": {
+    p_attendees: [{ email: "sofia@costa.example", name: "Sofia Costa" }],
+    p_location: "Founders Café, 12 Market St",
+  },
+};
 
 /** Chat needs a Duo plan and a second member; both bootstrap, then talk in General. */
 async function teamChat(owner: Session, ws: string): Promise<void> {

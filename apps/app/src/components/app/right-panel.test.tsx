@@ -83,24 +83,22 @@ function escapeFrom(el: HTMLElement) {
 describe("the title row names the view and switches it", () => {
   it("shows the active view and its body", () => {
     renderPanel();
-    expect(screen.getByRole("button", { name: "Panel view: Tasks" }).textContent).toContain(
-      "Tasks",
-    );
+    expect(screen.getByRole("button", { name: "Panel view: Plan" }).textContent).toContain("Plan");
     expect(screen.getByText("Tasks body")).toBeTruthy();
     expect(screen.queryByText("Detail body")).toBeNull();
   });
 
   it("lists about-this views, a hairline, then alongside views, each with ⌥n", () => {
     renderPanel();
-    const menu = openMenu("Panel view: Tasks");
+    const menu = openMenu("Panel view: Plan");
     const items = within(menu).getAllByRole("menuitemradio");
     expect(items.map((i) => i.textContent)).toEqual([
       expect.stringMatching(/^Detail(⌥|Alt )1$/),
       expect.stringMatching(/^Notes(⌥|Alt )2$/),
-      expect.stringMatching(/^Tasks(⌥|Alt )3$/),
+      expect.stringMatching(/^Plan(⌥|Alt )3$/),
     ]);
     expect(items[2].getAttribute("aria-checked")).toBe("true");
-    // One hairline, between Notes (about this) and Tasks (alongside).
+    // One hairline, between Notes (about this) and Plan (alongside).
     const separators = within(menu).getAllByRole("separator");
     expect(separators).toHaveLength(1);
     expect(separators[0].previousElementSibling).toBe(items[1]);
@@ -108,7 +106,7 @@ describe("the title row names the view and switches it", () => {
 
   it("picking a view from the menu asks the page to switch", () => {
     const { onChange } = renderPanel();
-    const menu = openMenu("Panel view: Tasks");
+    const menu = openMenu("Panel view: Plan");
     fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Notes/ }));
     expect(onChange).toHaveBeenCalledWith("notes");
   });
@@ -129,7 +127,7 @@ describe("the title row names the view and switches it", () => {
 
   it("only lists the views the page renders", () => {
     renderPanel({ views: { tasks: CALENDAR_VIEWS.tasks, detail: CALENDAR_VIEWS.detail } });
-    const menu = openMenu("Panel view: Tasks");
+    const menu = openMenu("Panel view: Plan");
     expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(2);
   });
 
@@ -182,7 +180,7 @@ describe("the ← item stack", () => {
   it("shows the item's name with a back arrow to the view, and its body", () => {
     renderPanel({ items: [item], onBack: () => {} });
     expect(screen.getByRole("heading", { name: "Collect assets" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Back to Tasks" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Open in Tasks" })).toBeTruthy();
     expect(screen.getByText("Task body")).toBeTruthy();
     expect(screen.queryByText("Tasks body")).toBeNull();
@@ -192,7 +190,7 @@ describe("the ← item stack", () => {
   it("the back arrow and Esc step back", () => {
     const onBack = rs.fn();
     renderPanel({ items: [item], onBack });
-    fireEvent.click(screen.getByRole("button", { name: "Back to Tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to Plan" }));
     escapeFrom(screen.getByText("Task body"));
     expect(onBack).toHaveBeenCalledTimes(2);
   });
@@ -259,10 +257,10 @@ describe("focus after going back", () => {
     const back = screen.getByRole("button", { name: "Back to Collect assets" });
     back.focus();
     fireEvent.click(back);
-    const next = screen.getByRole("button", { name: "Back to Tasks" });
+    const next = screen.getByRole("button", { name: "Back to Plan" });
     expect(document.activeElement).toBe(next);
     fireEvent.click(next);
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Panel view: Tasks" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Panel view: Plan" }));
   });
 });
 
@@ -341,7 +339,7 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
   it("a view's actions show at the row's right end, not in its body, and leave with it", () => {
     const views = { ...CALENDAR_VIEWS, tasks: withActions("Tasks body") };
     const { rerender } = renderPanel({ views });
-    const row = screen.getByRole("button", { name: "Panel view: Tasks" })
+    const row = screen.getByRole("button", { name: "Panel view: Plan" })
       .parentElement as HTMLElement;
     const slot = row.querySelector("[data-slot=panel-title-actions]") as HTMLElement;
     expect(row.lastElementChild).toBe(slot);
@@ -374,7 +372,7 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
       within(row)
         .getAllByRole("button")
         .map((b) => b.getAttribute("aria-label") ?? b.textContent),
-    ).toEqual(["Back to Tasks", "Pin", "Open in Tasks"]);
+    ).toEqual(["Back to Plan", "Pin", "Open in Tasks"]);
   });
 
   it("with no host around them, they render in place", () => {
@@ -400,7 +398,7 @@ describe("the title row's frame (MOD-121)", () => {
   // it as round-2b frame 7 draws it; a full row (36) dwarfed them.
   it("is a row tall, and the ▾ chip is a small row tall with no pull into the padding", () => {
     renderPanel();
-    const trigger = screen.getByRole("button", { name: "Panel view: Tasks" });
+    const trigger = screen.getByRole("button", { name: "Panel view: Plan" });
     expect(trigger.style.height).toBe("var(--row-h-sm)");
     expect(trigger.className).toMatch(/(^|\s)px-2(\s|$)/);
     expect(trigger.className).not.toMatch(pulled);
@@ -425,7 +423,7 @@ describe("the title row's frame (MOD-121)", () => {
       items: [{ key: "task:1", title: "Collect assets", render: () => <p>Task body</p> }],
       onBack: () => {},
     });
-    expect(screen.getByRole("button", { name: "Back to Tasks" }).className).not.toMatch(pulled);
+    expect(screen.getByRole("button", { name: "Back to Plan" }).className).not.toMatch(pulled);
   });
 
   it("the body steps in 4, so a view's text lines up with the title's", () => {

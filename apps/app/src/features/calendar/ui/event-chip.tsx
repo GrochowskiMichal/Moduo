@@ -5,8 +5,11 @@
 // "title  start" and drops the time before the title truncates. Past events
 // dim and lose the hairline; the selected one gets the ring. The meeting in
 // progress carries the now line across faintly, under its text (AC10).
+// CALR-3: an event of an account that didn't sync carries the sync mark and
+// keeps full strength; a change waiting to sync carries the cloud-off mark.
 
-import { Lock, Repeat } from "lucide-react";
+import { CloudOff, Lock, RefreshCwOff, Repeat } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -35,7 +38,31 @@ type Props = {
   nowFraction?: number | null;
   /** Your own private event (CALR-15): a lock. */
   locked?: boolean;
+  /** Its account didn't sync: the sync mark, at full strength (CALR-3). */
+  stale?: boolean;
+  /** A change to it waits to sync: the cloud-off mark (CALR-3). */
+  waiting?: boolean;
+  /** Day view's prep in the chip's free width (CALR-12): people, notes, follow-up, where. */
+  aside?: ReactNode;
 };
+
+/** The chip's tooltip: what it is, when, and what's true of it. */
+function chipTooltip(
+  title: string,
+  timeLabel: string,
+  continuation: string | null,
+  notes: Record<string, boolean>,
+): string {
+  const flags = Object.entries(notes)
+    .filter(([, on]) => on)
+    .map(([note]) => note);
+  return [title, timeLabel, continuation, ...flags].filter(Boolean).join(" · ");
+}
+
+/** `data-*` flags that are present only when true. */
+function onlyTrue(flags: Record<string, boolean>): Record<string, true | undefined> {
+  return Object.fromEntries(Object.entries(flags).map(([k, v]) => [k, v || undefined]));
+}
 
 export function EventChipView({
   title,
@@ -51,44 +78,71 @@ export function EventChipView({
   continuation = null,
   nowFraction = null,
   locked = false,
+  stale = false,
+  waiting = false,
+  aside = null,
 }: Props) {
   const live = nowFraction != null;
   const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
+  const marks = <SyncMarks stale={stale} waiting={waiting} />;
   return (
     <div
       data-chip="event"
       data-label={hue}
-      data-past={past || undefined}
-      data-selected={selected || undefined}
-      data-live={live || undefined}
-      data-private={locked || undefined}
-      title={[title, timeLabel, continuation, readOnly ? "read-only" : null]
-        .filter(Boolean)
-        .join(" · ")}
+      {...onlyTrue({
+        "data-past": past,
+        "data-selected": selected,
+        "data-live": live,
+        "data-private": locked,
+        "data-stale": stale,
+        "data-waiting": waiting,
+      })}
+      title={chipTooltip(title, timeLabel, continuation, {
+        "read-only": readOnly,
+        "not synced": stale,
+        "waiting to sync": waiting,
+      })}
       className={cn(
         "cal-chip relative flex h-full w-full flex-col overflow-hidden rounded-md border px-1.5 py-0.5 text-left",
-        "transition-[filter,opacity] duration-(--motion-fast) ease-(--ease-out)",
+        "transition-[filter] duration-(--motion-fast) ease-(--ease-out)",
         selected && "ring-2 ring-ring",
         compact && "py-0",
       )}
     >
       {live ? <NowTick fraction={nowFraction} /> : null}
-      {compact ? (
-        <ChipOneLine
-          title={title}
-          time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
-          locked={locked}
-        />
-      ) : (
-        <ChipStacked
-          title={title}
-          time={timeLabel}
-          recurring={recurring}
-          continuation={continuation}
-          locked={locked}
-        />
-      )}
+      <WithAside aside={aside}>
+        {compact ? (
+          <ChipOneLine
+            title={title}
+            time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
+            locked={locked}
+            marks={marks}
+          />
+        ) : (
+          <ChipStacked
+            title={title}
+            time={timeLabel}
+            recurring={recurring}
+            continuation={continuation}
+            locked={locked}
+            marks={marks}
+          />
+        )}
+      </WithAside>
       {live ? <span className="sr-only">, happening now</span> : null}
+    </div>
+  );
+}
+
+/** The chip's text, and beside it (when there is one) the prep in the free width. */
+function WithAside({ aside, children }: { aside: ReactNode; children: ReactNode }) {
+  if (!aside) return <>{children}</>;
+  return (
+    <div className="relative flex min-w-0 items-start gap-3">
+      <div className="flex min-w-0 max-w-3/5 shrink-0 flex-col">{children}</div>
+      <div data-chip-aside className="flex min-w-0 flex-1 justify-start overflow-hidden">
+        {aside}
+      </div>
     </div>
   );
 }
@@ -111,19 +165,26 @@ function ChipOneLine({
   title,
   time,
   locked,
+  marks,
 }: {
   title: string;
   time: string | null;
   locked: boolean;
+  marks: ReactNode;
 }) {
   return (
     <div
       data-chip-line
       className="cal-chip-line relative flex flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs"
     >
-      {locked ? <PrivateLock /> : null}
-      <span data-chip-title className="min-w-0 max-w-full truncate text-foreground">
-        {title}
+      {/* The lock and marks ride with the title as one item, so they never
+          push it onto the clipped second row. */}
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+        {locked ? <PrivateLock /> : null}
+        {marks}
+        <span data-chip-title className="min-w-0 truncate text-foreground">
+          {title}
+        </span>
       </span>
       {time ? (
         <span
@@ -144,12 +205,14 @@ function ChipStacked({
   recurring,
   continuation,
   locked,
+  marks,
 }: {
   title: string;
   time: string;
   recurring: boolean;
   continuation: string | null;
   locked: boolean;
+  marks: ReactNode;
 }) {
   return (
     <>
@@ -161,6 +224,7 @@ function ChipStacked({
           <Repeat aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
         ) : null}
         {locked ? <PrivateLock /> : null}
+        {marks}
       </div>
       <span
         data-chip-time
@@ -170,6 +234,30 @@ function ChipStacked({
       </span>
       {continuation ? (
         <span className="relative truncate text-2xs text-muted-foreground">{continuation}</span>
+      ) : null}
+    </>
+  );
+}
+
+/** The stale mark (its account didn't sync) and the cloud-off mark (waiting to sync). */
+function SyncMarks({ stale, waiting }: { stale: boolean; waiting: boolean }) {
+  return (
+    <>
+      {stale ? (
+        <RefreshCwOff
+          role="img"
+          aria-label="Not synced"
+          data-mark="stale"
+          className="size-icon-xs shrink-0 self-center text-warning"
+        />
+      ) : null}
+      {waiting ? (
+        <CloudOff
+          role="img"
+          aria-label="Waiting to sync"
+          data-mark="waiting"
+          className="size-icon-xs shrink-0 self-center text-muted-foreground"
+        />
       ) : null}
     </>
   );

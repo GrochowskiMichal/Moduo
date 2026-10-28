@@ -84,6 +84,10 @@ function shapeEvent(e: Row): Row {
     external: e.source_account_id !== null,
     source_account_id: e.source_account_id ?? null,
     description: e.description ?? "",
+    // One occurrence (CALR-11): an override names the occurrence it replaces,
+    // and a series the occurrences it skips (deleted or replaced).
+    ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
+    ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
   };
 }
 

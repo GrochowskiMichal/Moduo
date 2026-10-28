@@ -3,7 +3,7 @@
 // renders the house chip; the meeting in progress rises over the now line.
 // "+N" lists what didn't fit side by side, and a row opens it like a click.
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -49,6 +49,9 @@ export function GridEventCard({
   nowMs,
   nowMinutes,
   onPointerDown,
+  stale = false,
+  waiting = false,
+  aside = null,
 }: {
   chip: EventChip;
   span: ChipSpan;
@@ -62,6 +65,12 @@ export function GridEventCard({
   /** Now's wall-clock minute on today's column; null elsewhere. */
   nowMinutes: number | null;
   onPointerDown: (e: React.PointerEvent) => void;
+  /** Its account didn't sync (CALR-3). */
+  stale?: boolean;
+  /** A change to it waits to sync (CALR-3). */
+  waiting?: boolean;
+  /** Day view's prep in the card's free width (CALR-12). */
+  aside?: ReactNode;
 }) {
   // The meeting in progress sits over the now line and carries it faintly
   // under its title (AC10).
@@ -69,6 +78,7 @@ export function GridEventCard({
   return (
     <div
       data-chip="event"
+      data-occurrence-key={chip.occurrenceKey}
       className={cn("absolute pl-px pr-0.5", draggable && "cursor-grab")}
       style={{
         top: y(span.topMinutes),
@@ -92,6 +102,9 @@ export function GridEventCard({
         continuation={continuationLabel(chip, formatTimeOfDay)}
         nowFraction={live ? (nowMinutes - span.topMinutes) / Math.max(span.heightMinutes, 1) : null}
         locked={chip.locked}
+        stale={stale}
+        waiting={waiting}
+        aside={aside}
       />
     </div>
   );

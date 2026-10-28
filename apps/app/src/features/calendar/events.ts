@@ -43,6 +43,15 @@ export type CalendarEventModel = {
   /** The task focus time is for (kind "focus" only). */
   focusTaskId?: string | null;
   attendees?: CalendarAttendee[];
+  // ── One occurrence (CALR-11)
+  /** Set on an override: the Moduo series this row replaces one occurrence of. */
+  seriesId?: string | null;
+  /** The occurrence an override (or a Google instance) replaces, as an ISO instant. */
+  originalStart?: string | null;
+  /** On a series: the occurrences it no longer draws. */
+  exdates?: string[];
+  /** A Google instance's recurringEventId. */
+  externalSeriesId?: string | null;
 };
 
 /** One person on an event, as calendar_op_event_create/update store them. */
@@ -72,6 +81,12 @@ export type CalendarAccountModel = {
   /** CAL-8: the CalDAV/ICS connection descriptor JSON (see `CalendarSyncDescriptor` in sync.ts); null for OAuth/native rows. */
   syncToken: string | null;
   deletedAt: string | null;
+  /** CALR-20: Google doesn't let you write this calendar. */
+  readOnly?: boolean;
+  /** CALR-20: counts as busy for new booking links. */
+  busyDefault?: boolean;
+  /** CALR-20: why the account needs attention (Google's `invalid_grant` for reauth). */
+  lastError?: string | null;
 };
 
 export function isNativeEvent(e: Pick<CalendarEventModel, "sourceAccountId">): boolean {
@@ -152,6 +167,10 @@ export type CalendarMirrorEventInput = {
   isPrivate?: boolean;
   /** The provider's guests (CALR-8), the list as a whole. Absent keeps the stored ones. */
   attendees?: CalendarAttendee[];
+  /** A repeat instance's recurringEventId (CALR-11). Absent keeps the stored one. */
+  externalSeriesId?: string;
+  /** A repeat instance's originalStartTime as an ISO instant (CALR-11). Absent keeps the stored one. */
+  originalStart?: string;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */
@@ -238,7 +257,8 @@ function occurrenceChip(
     allDay: event.allDay,
     external: !isNativeEvent(event),
     readOnly: !isWritable(event),
-    recurring: Boolean(event.rrule),
+    // An override and a Google instance are occurrences of a repeat too (CALR-11).
+    recurring: Boolean(event.rrule || event.seriesId || event.externalSeriesId),
     sourceAccountId: event.sourceAccountId,
     color: event.color,
     continuesFromMs: null,
@@ -290,11 +310,21 @@ export function eventChipsInRange(
 ): EventChipsByDay {
   const timed = new Map<string, EventChip[]>();
   const allDay = new Map<string, EventChip[]>();
+  // An override goes with its series: a deleted series takes it off the grid
+  // even before its own row's delete arrives.
+  const deleted = new Set(events.filter((e) => e.deletedAt).map((e) => e.id));
   for (const event of events) {
     if (event.deletedAt) continue;
     if (event.status === "cancelled") continue;
+    if (event.seriesId && deleted.has(event.seriesId)) continue;
     const occurrences = expandEventOccurrences(
-      { id: event.id, startsAt: event.startsAt, endsAt: event.endsAt, rrule: event.rrule },
+      {
+        id: event.id,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        rrule: event.rrule,
+        exdates: event.exdates,
+      },
       range.startMs,
       range.endMs,
     );

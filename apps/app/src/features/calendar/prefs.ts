@@ -54,7 +54,7 @@ export function defaultViewState(now: Date = new Date()): CalendarViewState {
 }
 
 const viewStateSchema = z.object({
-  view: z.enum(["day", "week"]).optional(),
+  view: z.enum(["day", "week", "month"]).optional(),
   anchor: z.string().optional(),
 });
 
@@ -62,8 +62,7 @@ export function sanitizeViewState(raw: unknown, now: Date = new Date()): Calenda
   const fallback = defaultViewState(now);
   const parsed = viewStateSchema.safeParse(raw);
   if (!parsed.success) return fallback;
-  const view: CalendarView =
-    parsed.data.view === "day" || parsed.data.view === "week" ? parsed.data.view : fallback.view;
+  const view: CalendarView = parsed.data.view ?? fallback.view;
   const anchor =
     typeof parsed.data.anchor === "string" && parseDayKey(parsed.data.anchor)
       ? parsed.data.anchor
@@ -212,4 +211,15 @@ export function readCalendarPrefs(userId: string): CalendarPrefs {
 
 export function writeCalendarPrefs(userId: string, prefs: CalendarPrefs): void {
   writeStored(prefsKey(userId), sanitizeCalendarPrefs(prefs));
+}
+
+/** The quiet wash over a day column (CALR-13, AC45): off-hours above `top` and
+ * from `bottomFrom` down, in wall-clock minutes; a weekend day is all wash. */
+export function offHoursWash(
+  prefs: Pick<CalendarPrefs, "workStartMinute" | "workEndMinute">,
+  day: Date,
+): { top: number; bottomFrom: number } {
+  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  if (weekend) return { top: 24 * 60, bottomFrom: 24 * 60 };
+  return { top: prefs.workStartMinute, bottomFrom: prefs.workEndMinute };
 }

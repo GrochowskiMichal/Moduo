@@ -72,7 +72,7 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/settings/appearance/picker-row.tsx": ["tag"],
   // Tasks: no small caps any more (Focus since TV-F7; the Timeline's month
   // names are sentence case since TV-TL1).
-  // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), a weekday on
+  // Calendar: Plan's groups ("From earlier", "Due this week", …), a weekday on
   // the booking page; colour names ("blue" → "Blue") in the account colour menu.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
   "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
@@ -126,8 +126,6 @@ const SMALL_CAPS_DEBT: Record<string, string[]> = {
   "src/features/calendar/ui/calendar-rail.tsx": ["group.header"],
   // The sender's address heads the row menu.
   "src/features/email/ui/email-thread-list.tsx": ["thread.fromEmail || senderText(thread)"],
-  // "<Host> also asks": the host's name on the public booking page.
-  "src/routes/pages/book-page.tsx": ["host"],
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────

@@ -13,8 +13,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { asDragPayload } from "../../../lib/drag-payload";
 import type { Task } from "../../tasks/model";
 import type { useTaskCommands } from "../../tasks/tasks-context";
+import { placeTask, recordUndo } from "../commands/undo";
 import { dayGeometry, instantAtWallMinute } from "../grid-layout";
-import { parseDayKey } from "../lens";
+import { type LensSession, parseDayKey } from "../lens";
+import type { MoveTaskResult } from "./calendar-grid";
 
 /** Default duration when a drop schedules a task that has none (AC6). */
 const DEFAULT_DROP_MINUTES = 30;
@@ -22,11 +24,13 @@ const DROP_SNAP_MINUTES = 15;
 
 type Input = {
   tasks: Task[];
+  /** Work sessions: a block of one moves the session (TV-F6). */
+  sessions: readonly LensSession[];
   canEdit: boolean;
   commands: ReturnType<typeof useTaskCommands>;
 };
 
-export function useCalendarTaskDrag({ tasks, canEdit, commands }: Input) {
+export function useCalendarTaskDrag({ tasks, sessions, canEdit, commands }: Input) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
   const [dragTaskId, setDragTaskId] = useState<string | null>(null);
   const dragTask = dragTaskId ? tasks.find((t) => t.id === dragTaskId) : null;
@@ -75,16 +79,53 @@ export function useCalendarTaskDrag({ tasks, canEdit, commands }: Input) {
         Math.max(Math.round(rawMin / DROP_SNAP_MINUTES) * DROP_SNAP_MINUTES, 0),
         geom.totalMinutes - duration,
       );
-      commands.patchTask(task.id, {
-        scheduledAt: new Date(instantAtWallMinute(startMin, geom)).toISOString(),
-        durationMinutes: duration,
-      });
+      placeTask(
+        commands,
+        task,
+        {
+          scheduledAt: new Date(instantAtWallMinute(startMin, geom)).toISOString(),
+          durationMinutes: duration,
+        },
+        "Task placed",
+        task.title,
+      );
     },
     [commands, tasks, canEdit],
   );
 
+  // Task-block drag/resize writes the schedule, the same patch path the Tasks
+  // detail panel uses, so Calendar and Tasks stay one truth (AC6); one Undo (CALR-4).
+  const onMoveTask = useCallback(
+    (taskId: string, result: MoveTaskResult, sessionId: string | null) => {
+      const startsAt = new Date(result.startMs).toISOString();
+      if (sessionId) {
+        const before = sessions.find((s) => s.id === sessionId);
+        const endsAt = new Date(result.startMs + result.durationMinutes * 60_000).toISOString();
+        commands.updateSession(sessionId, { startsAt, endsAt });
+        if (before?.startsAt && before.endsAt) {
+          const back = { startsAt: before.startsAt, endsAt: before.endsAt };
+          recordUndo("Session moved", () => void commands.updateSession(sessionId, back), {
+            toast: true,
+          });
+        }
+        return;
+      }
+      const task = tasks.find((t) => t.id === taskId);
+      if (!task) return;
+      placeTask(
+        commands,
+        task,
+        { scheduledAt: startsAt, durationMinutes: result.durationMinutes },
+        "Task moved",
+        task.title,
+      );
+    },
+    [commands, sessions, tasks],
+  );
+
   return {
     sensors,
+    onMoveTask,
     dragTask,
     onDragStart: (e: DragStartEvent) => {
       const payload = asDragPayload(e.active.data.current);

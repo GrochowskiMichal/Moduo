@@ -1,7 +1,9 @@
 // The calendar left rail: mini-month navigator + the calendar list. The list is
 // the account map (CAL-6, §3a): native Moduo first, then each connected account
 // with its hue swatch + a visibility toggle. Hiding an account drops its
-// mirrored events from the grid. "+ Connect calendar…" opens Integrations.
+// mirrored events from the grid. "+ Connect calendar…" and an account group's
+// header open Calendar accounts in place; a login Google stopped accepting says
+// Reconnect (CALR-20).
 
 import { Eye, EyeOff, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -21,11 +23,13 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
-import { dispatchOpenSettings } from "../../settings/settings-events";
 import { groupRailAccounts, providerLabel } from "../accounts";
 import type { CalendarAccountModel } from "../events";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
+import { notSyncedLabel } from "../sync-status";
+import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
+import { CalendarsMenu } from "./working-hours-sheet";
 
 type Props = {
   /** Booking links, rendered under the calendar list. */
@@ -36,6 +40,8 @@ type Props = {
   /** Local day keys carrying blocks — rendered as subtle density dots. */
   busyDayKeys: Set<string>;
   prefs: CalendarPrefs;
+  /** Working hours… in the ⋯ beside "Calendars" (CALR-13); absent, no menu. */
+  onPrefs?: (patch: Partial<CalendarPrefs>) => void;
   /** Connected external accounts (mirrored) — the account map. */
   accounts: CalendarAccountModel[];
   /** Account id → bounded hue name. */
@@ -60,6 +66,7 @@ export function CalendarRail({
   onSelectDate,
   busyDayKeys,
   prefs,
+  onPrefs,
   accounts,
   accountHues,
   hiddenAccountIds,
@@ -126,7 +133,7 @@ export function CalendarRail({
               Reconnect
             </button>
           ) : (
-            <span className="shrink-0 text-2xs text-warning">Sync error</span>
+            <span className="shrink-0 text-2xs text-warning">{notSyncedLabel(account)}</span>
           )
         ) : null}
         <IconButton
@@ -202,9 +209,10 @@ export function CalendarRail({
       />
 
       <div className="flex flex-col gap-1">
-        <Eyebrow as="div" className="px-1">
-          Calendars
-        </Eyebrow>
+        <div className="flex items-center justify-between gap-1 pl-1">
+          <Eyebrow as="div">Calendars</Eyebrow>
+          {onPrefs ? <CalendarsMenu prefs={prefs} onChange={onPrefs} /> : null}
+        </div>
 
         {/* Native Moduo — always on. */}
         <div
@@ -223,13 +231,30 @@ export function CalendarRail({
           }
           return (
             <div key={group.key} className="mt-3 flex flex-col gap-1">
-              <Eyebrow as="div" className="px-1" tone="muted">
+              {/* Full eyebrow tone: the muted one fails contrast on the panel (4.4:1). */}
+              <Eyebrow as="div" className="px-1">
                 {group.header}
               </Eyebrow>
               {group.detail ? (
-                <p className="truncate px-1 text-xs text-muted-foreground" title={group.detail}>
-                  {group.detail}
-                </p>
+                <div className="flex items-center gap-2 px-1 text-xs">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 truncate text-left text-muted-foreground hover:underline"
+                    title={`${group.detail} · Calendar accounts`}
+                    onClick={() => dispatchOpenCalendarAccounts({ login: group.key })}
+                  >
+                    {group.detail}
+                  </button>
+                  {group.rows.some((row) => row.account.status === "reauth") ? (
+                    <button
+                      type="button"
+                      className="shrink-0 text-warning hover:underline"
+                      onClick={() => dispatchOpenCalendarAccounts({ reconnect: group.detail })}
+                    >
+                      Reconnect
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
               {group.rows.map((row) => renderAccountRow(row.account, row.label, row.scope))}
             </div>
@@ -240,10 +265,10 @@ export function CalendarRail({
           variant="ghost"
           size="sm"
           className="justify-start text-muted-foreground"
-          onClick={() => dispatchOpenSettings({ section: "integrations" })}
+          onClick={() => dispatchOpenCalendarAccounts({ connect: true })}
         >
           <Plus aria-hidden />
-          Connect calendar…
+          Connect a calendar…
         </Button>
       </div>
       {footer}

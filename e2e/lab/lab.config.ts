@@ -9,6 +9,8 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
+import { atSmallestWindow, withSecondZone } from "./calendar-acts.ts";
+import { planJourneys } from "./journeys-plan.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
 const PORT = Number(process.env.LAB_PORT ?? 4317);
@@ -67,6 +69,59 @@ const onGrid = (page: Page, title: string) =>
 const quickCreateTitle = (page: Page) => page.getByRole("textbox", { name: "Event title" }).first();
 const localKey = (d: Date) =>
   `${d.getFullYear()}-${`${d.getMonth() + 1}`.padStart(2, "0")}-${`${d.getDate()}`.padStart(2, "0")}`;
+/**
+ * "Google Calendar didn't sync": the lab has no Google account, so the reads are rewritten in
+ * the browser. A connected Google calendar in the error state joins the accounts, the first
+ * few events of the week become its events, and its sync writes are answered without touching
+ * the stack. Then the page reads again.
+ */
+async function staleGoogleWeek(page: Page) {
+  const accountId = "00000000-0000-4000-8000-00000000a11b";
+  const lastSync = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  await page.route("**/rest/v1/calendar_accounts*", async (route) => {
+    const response = await route.fetch();
+    const rows = (await response.json()) as Record<string, unknown>[];
+    const workspaceId =
+      rows[0]?.workspace_id ??
+      new URL(route.request().url()).searchParams.get("workspace_id")?.replace(/^eq\./, "");
+    await route.fulfill({
+      response,
+      json: [
+        ...rows,
+        {
+          id: accountId,
+          workspace_id: workspaceId,
+          owner_id: null,
+          provider: "google",
+          external_id: "google:robin.hale@gmail.com:work",
+          display_label: "Work",
+          is_default_target: false,
+          color: null,
+          last_sync_at: lastSync,
+          status: "error",
+          sync_token: null,
+          deleted_at: null,
+          created_at: lastSync,
+          updated_at: lastSync,
+        },
+      ],
+    });
+  });
+  await page.route("**/rest/v1/rpc/calendar_events_visible*", async (route) => {
+    const response = await route.fetch();
+    const rows = (await response.json()) as Record<string, unknown>[];
+    await route.fulfill({
+      response,
+      json: rows.map((row, i) => (i % 3 === 0 ? { ...row, source_account_id: accountId } : row)),
+    });
+  });
+  await page.route("**/rest/v1/rpc/calendar_op_account_upsert*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: "null" }),
+  );
+  await page.reload();
+  await page.getByText("didn't sync").first().waitFor({ timeout: 15_000 });
+}
+
 /**
  * A point on empty grid inside the visible scroll area of day `offset` (tomorrow by default),
  * relative to its column: the place a person would click or drop. Falls back to today's
@@ -212,12 +267,29 @@ export default {
       title: "Calendar",
       path: "/calendar",
       ready: readyWhen("[role='toolbar'][aria-label='Calendar controls']"),
-      // Day and Week are the only views; there is no Month or Agenda to capture.
+      // Day, Week and Month (CALR-12); no Agenda yet.
       states: {
         default: {},
         empty: { seed: "empty" },
         day: {
           act: async ({ page }: { page: Page }) => page.getByRole("radio", { name: "Day" }).click(),
+        },
+        // Day view, tomorrow: the design review carries its people and Meet beside it.
+        dayPrep: {
+          act: async ({ page }: { page: Page }) => {
+            await page.getByRole("radio", { name: "Day" }).click();
+            await page.getByRole("button", { name: "Next period (→)" }).click();
+          },
+        },
+        month: {
+          act: async ({ page }: { page: Page }) =>
+            page.getByRole("radio", { name: "Month" }).click(),
+        },
+        // A crowded month: "N more" on the busy days, bars, due counts.
+        monthDense: {
+          seed: "dense",
+          act: async ({ page }: { page: Page }) =>
+            page.getByRole("radio", { name: "Month" }).click(),
         },
         // The dense person's week: 60 events, 300 tasks with due dates spread across it.
         dense: { seed: "dense" },
@@ -227,12 +299,11 @@ export default {
           act: async ({ page }: { page: Page }) => scrollGridTo(page, 13),
         },
         // Monday's stack of all-day items and trips at the smallest window (1024 x 700).
-        allDayOverflow: {
-          seed: "dense",
-          act: async ({ page }: { page: Page }) =>
-            page.setViewportSize({ width: 1024, height: 700 }),
-        },
+        allDayOverflow: { seed: "dense", act: atSmallestWindow },
         long: { seed: "long" },
+        // CALR-13: one side panel (Plan) at the smallest window; a second zone (Z).
+        narrow: { act: atSmallestWindow },
+        twoZones: { act: withSecondZone },
         eventOpen: {
           act: async ({ page }: { page: Page }) => onGrid(page, "Design review with Ana").click(),
         },
@@ -243,7 +314,15 @@ export default {
           },
         },
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
+        // The app is up and only the week's events are on their way: the skeletons in the
+        // last known shape (the state above holds the whole app at its boot screen).
+        loadingEvents: {
+          delay: { match: "**/rest/v1/rpc/calendar_events_visible*", ms: 5000 },
+          capture: "early",
+        },
         error: { fail: { match: "**/rest/v1/rpc/calendar_events_visible*", status: 500 } },
+        // One Google calendar didn't sync: the banner, "Not synced" in the rail, stale marks.
+        syncError: { act: async ({ page }: { page: Page }) => staleGoogleWeek(page) },
         offline: { offline: true },
       },
     },
@@ -481,7 +560,8 @@ export default {
       target: { keys: 2, clicks: 2 },
       async keyboard({ press, step, page }: J) {
         const before = await calRange(page);
-        await press("ArrowRight");
+        // ⌘→ since CALR-4: bare arrows move the grid cursor.
+        await press("Meta+ArrowRight");
         await step("next week", {
           expect: async () => (await calRange(page)) !== before,
           view: true,
@@ -572,21 +652,45 @@ export default {
       id: "cal-delete-undo",
       screen: "calendar",
       goal: "Delete an event by mistake, then take it back",
-      target: { keys: 0, clicks: 3 },
+      target: { keys: 3, clicks: 3 },
+      // CALR-4: a Moduo event deletes at once; Undo (or ⌘Z) is the safety net.
+      async keyboard({ press, step, page }: J) {
+        await press("j");
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event deleted", { exact: true });
+        await press("Backspace");
+        await step("deleted", { expect: toast });
+        await press("Meta+z");
+        await step("restored", { gone: toast });
+      },
       async pointer({ click, step, page }: J) {
         await click(onGrid(page, "Board prep"));
         await step("event card", {
           expect: page.getByRole("dialog").getByRole("button", { name: "Delete" }),
         });
         await click(page.getByRole("dialog").getByRole("button", { name: "Delete" }));
-        const confirm = page
-          .getByRole("alertdialog")
-          .or(page.getByRole("dialog", { name: /^Delete this/ }));
-        await step("confirm", { expect: confirm.first() });
-        await click(confirm.first().getByRole("button", { name: "Delete", exact: true }));
         await step("deleted", { expect: page.getByRole("button", { name: "Undo" }) });
         await click(page.getByRole("button", { name: "Undo" }));
         await step("restored", { expect: onGrid(page, "Board prep") });
+      },
+    },
+    {
+      id: "cal-duplicate-undo",
+      screen: "calendar",
+      goal: "Pick an event by keys, duplicate it, then take the copy back",
+      target: { keys: 3, clicks: 0 },
+      async keyboard({ press, step, page }: J) {
+        await press("j");
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event added", { exact: true });
+        await press("Meta+d");
+        await step("duplicated", { expect: toast });
+        await press("Meta+z");
+        await step("taken back", { gone: toast });
       },
     },
     {
@@ -639,13 +743,17 @@ export default {
         await step("task on the grid", { expect: onGrid(page, title) });
       },
     },
+    ...planJourneys,
     {
       id: "cal-go-to-date",
       screen: "calendar",
       goal: "Look at the same day last week from the month in the sidebar",
-      target: { keys: 0, clicks: 1 },
+      // Below 1600 px the calendars panel starts folded (CALR-13): open it first.
+      target: { keys: 0, clicks: 2 },
       async pointer({ click, step, page }: J) {
         const before = await calRange(page);
+        const expand = page.getByRole("button", { name: "Expand left panel" });
+        if (await expand.isVisible()) await click(expand);
         await click(miniMonthDay(page));
         await step("that week", {
           expect: async () => (await calRange(page)) !== before,

@@ -17,17 +17,24 @@
 // so a tick re-renders today's column only — not the whole week.
 
 import { useDroppable } from "@dnd-kit/core";
-import { Circle, CircleCheck, Paperclip } from "lucide-react";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
 import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
-import { MetaCount } from "../../../components/ui/meta-count";
-import { filesLabel } from "../../attachments/files";
 import { isElapsedBlock } from "../elapsed";
 import { type EventChip, eventHue } from "../events";
+import type { GridCursor } from "../grid-keys";
 import {
   chipSpanInDay,
   DAY_COLUMNS,
@@ -42,8 +49,13 @@ import {
   WEEK_COLUMNS,
 } from "../grid-layout";
 import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
-import type { CalendarPrefs } from "../prefs";
-import { COMPACT_BELOW_MINUTES, EventChipView } from "./event-chip";
+import { type CalendarPrefs, offHoursWash } from "../prefs";
+import { emptyWeekHint } from "../sync-status";
+import { dayZoneNote, useSecondZone } from "../zones";
+import { AllDayLane } from "./allday-lane";
+import { AllDayLaneSkeleton } from "./calendar-skeleton";
+import { DayHeader, ZoneCorner } from "./day-header";
+import { COMPACT_BELOW_MINUTES } from "./event-chip";
 import {
   EventQuickCreate,
   type QuickCreateCalendar,
@@ -51,9 +63,12 @@ import {
 } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { type GestureTarget, GridEventCard, OverflowList, shownMinutes } from "./grid-cards";
+import { GridCursorMark } from "./grid-cursor";
+import { gridY, useNowTick } from "./grid-units";
 import { NowLine } from "./now-line";
 import { TaskBlockChip } from "./task-block-chip";
 import { formatHourLabel, formatTimeOfDay } from "./time-format";
+import { SecondZoneHours, ZONE_GUTTER_W } from "./zone-gutter";
 
 const GUTTER_W = "3.25rem";
 /** An elapsed block needs at least this rendered height for the inline triage
@@ -72,7 +87,7 @@ const RESIZE_EDGE_PX = 6;
 export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 export type MoveTaskResult = { startMs: number; durationMinutes: number };
 
-type Props = {
+export type CalendarGridProps = {
   view: CalendarView;
   days: Date[];
   blocksByDay: Map<string, TaskBlock[]>;
@@ -80,8 +95,10 @@ type Props = {
   allDayByDay: Map<string, EventChip[]>;
   /** Due-only tasks per day, in the all-day lane (TV-F6, AC2.3/AC7.3). */
   dueByDay?: Map<string, DueChip[]>;
-  /** A due chip was clicked: open its task. */
+  /** A task in a day header's due list was picked: open it. */
   onDueClick?: (taskId: string) => void;
+  /** Schedule (S) in a day header's due list: put the task on that day. */
+  onScheduleDue?: (taskId: string, day: Date) => void;
   /** Task id → its finished files (AT-3's 📎 mark on blocks and due chips). */
   fileCounts?: ReadonlyMap<string, number>;
   prefs: CalendarPrefs;
@@ -94,7 +111,12 @@ type Props = {
   /** Moduo plus each connected calendar the new event can land on. */
   createCalendars: QuickCreateCalendar[];
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
-  onMoveEvent: (eventId: string, deltas: MoveEventDeltas) => void;
+  onMoveEvent: (
+    eventId: string,
+    deltas: MoveEventDeltas,
+    /** The occurrence's span before the move (a repeat asks This event / All events). */
+    occurrence?: { startMs: number; endMs: number },
+  ) => void;
   /** Task-block drag/resize writes the task's schedule/duration (AC6); a
    *  block from a work session moves that session (`sessionId`). */
   onMoveTask: (taskId: string, result: MoveTaskResult, sessionId: string | null) => void;
@@ -113,27 +135,28 @@ type Props = {
   onTriageRemove: (taskId: string, sessionId?: string | null) => void;
   /** The block the focus session shows on (the one time engine; null when idle). */
   focusBlockId: string | null;
+  // ── faults and loading (CALR-3) ──
+  /** Accounts that didn't sync: their events carry the sync mark. */
+  staleAccountIds?: ReadonlySet<string>;
+  /** Events whose change waits to sync: the cloud-off mark. */
+  waitingEventIds?: ReadonlySet<string>;
+  /** Something failed (a sync, the read) or the first-week card speaks: no empty hint. */
+  faulted?: boolean;
+  /** While loading, the all-day rows the lane last drew (its skeleton). */
+  loadingAllDayRows?: number;
+  /** Laid low over the hours, not scrolling with them (the first-week card). */
+  overlay?: ReactNode;
+  /** Day view's prep beside each meeting (CALR-12); absent in Week. */
+  prepFor?: (chip: EventChip) => ReactNode;
+  /** The keyboard cursor (CALR-4); ⌘N and ↵ open a new event there. */
+  cursor?: GridCursor | null;
+  /** Laid over the hours, scrolling with them (placing a task, CALR-5). */
+  gridLayer?: ReactNode;
 };
 
-/** Re-render tick for the now-line; catches up on tab wake. */
-function useNowTick(intervalMs: number): Date {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), intervalMs);
-    const onWake = () => setNow(new Date());
-    document.addEventListener("visibilitychange", onWake);
-    return () => {
-      window.clearInterval(id);
-      document.removeEventListener("visibilitychange", onWake);
-    };
-  }, [intervalMs]);
-  return now;
-}
+const NO_IDS: ReadonlySet<string> = new Set();
 
-/** CSS length for a minute offset: hour height × real hours. */
-function y(minutes: number): string {
-  return `calc(var(--cal-hour-h) * ${minutes / 60})`;
-}
+const y = gridY;
 
 function snapMin(minutes: number, fine: boolean): number {
   const step = fine ? 5 : 15;
@@ -180,6 +203,7 @@ export function CalendarGrid({
   allDayByDay,
   dueByDay = NO_DUE,
   onDueClick,
+  onScheduleDue,
   fileCounts,
   prefs,
   loading,
@@ -201,7 +225,15 @@ export function CalendarGrid({
   onTriageLonger,
   onTriageRemove,
   focusBlockId,
-}: Props) {
+  staleAccountIds = NO_IDS,
+  waitingEventIds = NO_IDS,
+  faulted = false,
+  loadingAllDayRows = 0,
+  overlay = null,
+  prepFor,
+  cursor = null,
+  gridLayer = null,
+}: CalendarGridProps) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -222,10 +254,9 @@ export function CalendarGrid({
   const hasAllDay = useMemo(
     () =>
       days.some((d) => {
-        const key = localDayKey(d);
-        return (allDayByDay.get(key) ?? []).length > 0 || (dueByDay.get(key) ?? []).length > 0;
+        return (allDayByDay.get(localDayKey(d)) ?? []).length > 0;
       }),
-    [days, allDayByDay, dueByDay],
+    [days, allDayByDay],
   );
 
   const [pending, setPending] = useState<PendingCreate | null>(null);
@@ -388,10 +419,12 @@ export function CalendarGrid({
           const origEnd = instantAtWallMinute(g.endMin, geomFrom);
           const nextStart = instantAtWallMinute(v.startMin, geomTo);
           const nextEnd = instantAtWallMinute(v.endMin, geomTo);
-          p.onMoveEvent(g.target.chip.eventId, {
-            startDeltaMs: nextStart - origStart,
-            endDeltaMs: nextEnd - origEnd,
-          });
+          const { chip } = g.target;
+          p.onMoveEvent(
+            chip.eventId,
+            { startDeltaMs: nextStart - origStart, endDeltaMs: nextEnd - origEnd },
+            { startMs: chip.startMs, endMs: chip.endMs },
+          );
         } else {
           // A MOVE keeps the task's stored duration — the rendered span is
           // day-clipped (a 23:00+2h block draws as 1h), so deriving duration
@@ -587,10 +620,16 @@ export function CalendarGrid({
   openQuickCreateNowRef.current = () => {
     if (!canEdit) return;
     const todayIdx = days.findIndex((d) => localDayKey(d) === todayKey);
-    const dayIdx = todayIdx >= 0 ? todayIdx : 0;
+    const at = cursor ? days.findIndex((d) => localDayKey(d) === cursor.dayKey) : -1;
+    const dayIdx = at >= 0 ? at : todayIdx >= 0 ? todayIdx : 0;
     const geom = geoms[dayIdx];
     if (!geom) return;
-    const rawStart = todayIdx >= 0 ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60) : 9 * 60;
+    const rawStart =
+      at >= 0 && cursor
+        ? cursor.minute
+        : todayIdx >= 0
+          ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60)
+          : 9 * 60;
     const startMin = Math.max(snapMin(rawStart, false), 0);
     const endMin = Math.min(startMin + 30, geom.totalMinutes);
     const start = Math.min(startMin, endMin - 15);
@@ -624,10 +663,14 @@ export function CalendarGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  const columns = `${GUTTER_W} repeat(${days.length}, minmax(0, 1fr))`;
+  // CALR-13: Z widens the gutter for the second zone's hours.
+  const zone = useSecondZone();
+  const second = zone.shown ? zone.zone : null;
+  const refDay = days.find((d) => localDayKey(d) === todayKey) ?? days[0];
+  const columns = `${second ? ZONE_GUTTER_W : GUTTER_W} repeat(${days.length}, minmax(0, 1fr))`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {error ? (
         <div className="mb-2 flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <span>Couldn't load your tasks — the grid may be incomplete.</span>
@@ -637,116 +680,76 @@ export function CalendarGrid({
         </div>
       ) : null}
 
-      {/* day headers */}
+      {/* day headers: the zone in the corner above the hours, then each day */}
       <div
-        className="grid shrink-0 border-b border-border pb-1.5"
+        className="grid shrink-0 border-b border-border"
         style={{ gridTemplateColumns: columns }}
       >
-        <div aria-hidden />
-        {days.map((day) => {
-          const isToday = localDayKey(day) === todayKey;
+        {/* The zone now when today is on show, else at noon of the first day
+            (midnight of a clock-change Sunday still reads summer time). */}
+        <ZoneCorner
+          at={
+            days.some((d) => localDayKey(d) === todayKey) || !days[0]
+              ? now
+              : new Date(days[0].getFullYear(), days[0].getMonth(), days[0].getDate(), 12)
+          }
+        />
+        {days.map((day, i) => {
+          const key = localDayKey(day);
           return (
-            <div
-              key={localDayKey(day)}
-              className={cn(
-                "flex items-baseline gap-1.5 px-2 text-sm",
-                isToday ? "font-medium text-foreground" : "text-muted-foreground",
-              )}
-            >
-              <span>{day.toLocaleDateString(undefined, { weekday: "short" })}</span>
-              <span className={cn(!isToday && "text-muted-foreground/70")}>{day.getDate()}</span>
-            </div>
+            <DayHeader
+              key={key}
+              day={day}
+              today={key === todayKey}
+              past={geoms[i].dayEndMs <= now.getTime()}
+              due={dueByDay.get(key) ?? EMPTY_DUE}
+              onOpenTask={(id) => onDueClick?.(id)}
+              onSchedule={(id) => onScheduleDue?.(id, day)}
+              canSchedule={Boolean(onScheduleDue)}
+              note={dayZoneNote(day, second)}
+            />
           );
         })}
       </div>
 
-      {/* all-day lane — pinned above the hours, only when it has content */}
+      {/* all-day lane: at most two rows, pinned above the hours */}
       {hasAllDay ? (
-        <div
-          className="grid shrink-0 border-b border-border py-1"
-          style={{ gridTemplateColumns: columns }}
-        >
-          <div className="pr-2 text-right text-2xs text-muted-foreground">all-day</div>
-          {days.map((day) => {
-            const key = localDayKey(day);
-            const chips = allDayByDay.get(key) ?? EMPTY_EVENTS;
-            return (
-              <div
-                key={key}
-                className="flex min-w-0 flex-col gap-0.5 border-l border-border px-0.5"
-              >
-                {chips.map((chip) => (
-                  <button
-                    key={chip.occurrenceKey}
-                    type="button"
-                    data-chip="event"
-                    className="block w-full text-left"
-                    style={{ height: "var(--ctrl-h-sm)" }}
-                    onClick={(e) => {
-                      onSelectOccurrence(chip.occurrenceKey);
-                      onEventClick(chip, (e.currentTarget as HTMLElement).getBoundingClientRect());
-                    }}
-                  >
-                    <EventChipView
-                      title={chip.title}
-                      startMs={chip.startMs}
-                      endMs={chip.endMs}
-                      compact
-                      allDay
-                      hue={eventHue(chip, accountHues)}
-                      readOnly={chip.readOnly}
-                      recurring={chip.recurring}
-                      selected={selectedOccurrenceKey === chip.occurrenceKey}
-                      past={false}
-                      locked={chip.locked}
-                    />
-                  </button>
-                ))}
-                {/* Due-only tasks: due that day, in nobody's calendar (AC2.3). */}
-                {(dueByDay.get(key) ?? EMPTY_DUE).map((due) => (
-                  <button
-                    key={`due:${due.taskId}`}
-                    type="button"
-                    data-chip="due"
-                    onClick={() => onDueClick?.(due.taskId)}
-                    aria-label={`${due.title || "Untitled"} · due${due.done ? " · done" : ""}`}
-                    className="flex h-(--ctrl-h-sm) w-full min-w-0 items-center gap-1 rounded-sm border border-border bg-background px-1.5 text-left text-xs text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {due.done ? (
-                      <CircleCheck className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                    ) : (
-                      <Circle className="size-3 shrink-0 text-muted-foreground" aria-hidden />
-                    )}
-                    <span
-                      className={cn(
-                        "min-w-0 truncate",
-                        due.done && "text-muted-foreground line-through",
-                      )}
-                    >
-                      {due.title || "Untitled"}
-                    </span>
-                    <MetaCount
-                      icon={Paperclip}
-                      count={fileCounts?.get(due.taskId) ?? 0}
-                      label={filesLabel}
-                    />
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        <AllDayLane
+          days={days}
+          columns={columns}
+          allDayByDay={allDayByDay}
+          accountHues={accountHues}
+          selectedOccurrenceKey={selectedOccurrenceKey}
+          nowMs={now.getTime()}
+          onPick={(chip, rect) => {
+            onSelectOccurrence(chip.occurrenceKey);
+            onEventClick(chip, rect);
+          }}
+          staleAccountIds={staleAccountIds}
+          waitingEventIds={waitingEventIds}
+        />
+      ) : loading ? (
+        // The last known lane, so the hours don't move when the events land (AC4).
+        <AllDayLaneSkeleton days={days.length} columns={columns} rows={loadingAllDayRows} />
       ) : null}
 
       {/* the hours grid */}
-      <div ref={scrollRef} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        role="group"
+        aria-label="Calendar grid: arrows move the cursor, ? lists the keys"
+        data-calendar-grid=""
+        className="group/grid scrollbar-thin min-h-0 flex-1 overflow-y-auto outline-none"
+      >
         <div
           ref={gridRef}
-          className="grid"
+          className="relative grid"
           style={{ gridTemplateColumns: columns, height: y(maxMinutes) }}
         >
           {/* hour gutter */}
           <div className="relative" aria-hidden>
+            {second && refDay ? <SecondZoneHours zone={second} day={refDay} /> : null}
             {hourMarks.slice(1).map((mark, i) => (
               <span
                 key={`${mark.minuteOfDay}-${i}`}
@@ -803,17 +806,28 @@ export function CalendarGrid({
                 onCancelCreate={cancelCreate}
                 onAdjustPendingTimes={adjustPendingTimes}
                 dragVisual={dragVisual?.dayIdx === i ? dragVisual : null}
+                staleAccountIds={staleAccountIds}
+                waitingEventIds={waitingEventIds}
                 showLoadingChips={loading && !hasAnyChips && i < 2}
+                prepFor={prepFor}
                 emptyHint={
-                  isToday && !loading && !error && !hasAnyChips && !pending
-                    ? "Nothing scheduled — draw a block or schedule a task."
+                  isToday
+                    ? emptyWeekHint({
+                        loading,
+                        failed: Boolean(error) || faulted,
+                        hasAnyChips,
+                        drafting: pending !== null,
+                      })
                     : null
                 }
               />
             );
           })}
+          {cursor ? <GridCursorMark cursor={cursor} days={days} /> : null}
+          {gridLayer}
         </div>
       </div>
+      {overlay}
     </div>
   );
 }
@@ -849,8 +863,11 @@ const DayColumn = memo(function DayColumn({
   onCancelCreate,
   onAdjustPendingTimes,
   dragVisual,
+  staleAccountIds,
+  waitingEventIds,
   showLoadingChips,
   emptyHint,
+  prepFor,
 }: {
   dayIdx: number;
   dayKey: string;
@@ -898,8 +915,11 @@ const DayColumn = memo(function DayColumn({
   onCancelCreate: () => void;
   onAdjustPendingTimes: (startMs: number, endMs: number) => void;
   dragVisual: DragVisual | null;
+  staleAccountIds: ReadonlySet<string>;
+  waitingEventIds: ReadonlySet<string>;
   showLoadingChips: boolean;
   emptyHint: string | null;
+  prepFor?: (chip: EventChip) => ReactNode;
 }) {
   // Drop target for the panel's task rows (the universal drag contract):
   // the page's DndContext resolves which column the pointer is over; the
@@ -924,8 +944,8 @@ const DayColumn = memo(function DayColumn({
   const blockById = useMemo(() => new Map(blocks.map((b) => [b.blockId, b])), [blocks]);
   const eventByKey = useMemo(() => new Map(events.map((c) => [c.occurrenceKey, c])), [events]);
   // Working hours are wall-clock minutes, like the grid.
-  const washTop = prefs.workStartMinute;
-  const washBottom = prefs.workEndMinute;
+  // A weekend day is all wash (CALR-13).
+  const { top: washTop, bottomFrom: washBottom } = offHoursWash(prefs, new Date(geom.dayStartMs));
   // Absolute "now" for elapsed detection + event past-styling: the live tick on
   // today, else the day-past flag collapses to +∞ (a fully-past day → EVERY open
   // block/event on it is elapsed/past, incl. midnight-spanners whose end sits in
@@ -1028,6 +1048,10 @@ const DayColumn = memo(function DayColumn({
             nowMs={nowMs}
             nowMinutes={nowMinutes}
             onPointerDown={(e) => onEventChipPointerDown(e, chip, dayIdx, span)}
+            stale={chip.sourceAccountId !== null && staleAccountIds.has(chip.sourceAccountId)}
+            waiting={waitingEventIds.has(chip.eventId)}
+            // The prep needs the free width: a card sharing its slot goes without.
+            aside={prepFor && p.width > 0.5 ? prepFor(chip) : null}
           />
         );
       })}
