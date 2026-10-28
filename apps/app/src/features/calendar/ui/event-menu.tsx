@@ -131,7 +131,9 @@ export function EventContextMenu({
     return () => window.clearTimeout(id);
   }, [open, focusFirst]);
   return (
-    <DropdownMenu open={open} onOpenChange={(next) => !next && onClose()}>
+    // Not modal, like the system's own context menu: the page stays readable
+    // (nothing aria-hidden behind it) and a click elsewhere just closes it.
+    <DropdownMenu modal={false} open={open} onOpenChange={(next) => !next && onClose()}>
       <DropdownMenuTrigger asChild>
         <span
           aria-hidden

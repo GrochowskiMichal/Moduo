@@ -313,6 +313,11 @@ export default {
             await page.getByRole("dialog").getByRole("button", { name: "Open" }).click();
           },
         },
+        // CALR-4b: the right-click menu on an event (no shortcuts).
+        rightClick: {
+          act: async ({ page }: { page: Page }) =>
+            onGrid(page, "Design review with Ana").click({ button: "right" }),
+        },
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
         // The app is up and only the week's events are on their way: the skeletons in the
         // last known shape (the state above holds the whole app at its boot screen).
