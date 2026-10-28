@@ -8,6 +8,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import type { CalendarAccountModel } from "./events";
 import {
+  accountStateLabel,
   calendarSyncStatus,
   emptyWeekHint,
   notSyncedLabel,
@@ -151,5 +152,70 @@ describe("the week never reads Nothing scheduled over a fault", () => {
     expect(emptyWeekHint({ ...quiet, loading: true })).toBeNull();
     expect(emptyWeekHint({ ...quiet, hasAnyChips: true })).toBeNull();
     expect(emptyWeekHint({ ...quiet, drafting: true })).toBeNull();
+  });
+});
+
+describe("a revoked Google connection asks to reconnect (AC37)", () => {
+  const familyReauth = account({
+    id: "family",
+    externalId: "google:robin.hale@gmail.com:family",
+    displayLabel: "Family",
+    status: "reauth",
+    lastError: "invalid_grant",
+    lastSyncAt: sundayEvening.toISOString(),
+  });
+
+  it("a reauth account is stale like a failed one: its events keep the sync mark", () => {
+    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false });
+    expect([...status.staleAccountIds]).toEqual(["family"]);
+    expect(status.faulted).toBe(true);
+    expect(status.faults).toHaveLength(1);
+    expect(status.faults[0].reauth).toBe(true);
+    expect(status.faults[0].login).toBe("robin.hale@gmail.com");
+    expect(status.current).not.toContain("Family");
+  });
+
+  it("a plain sync failure is not a reauth", () => {
+    const status = calendarSyncStatus({ accounts: [personal, work], degraded: false });
+    expect(status.faults[0].reauth).toBe(false);
+  });
+
+  it("one calendar needing reconnecting makes its whole login a reauth fault", () => {
+    const status = calendarSyncStatus({ accounts: [work, familyReauth], degraded: false });
+    expect(status.faults).toHaveLength(1);
+    expect(status.faults[0].reauth).toBe(true);
+    expect(status.faults[0].accountIds).toEqual(["work", "family"]);
+  });
+
+  it("the banner names the address, what shows as of when, and the booking-link risk", () => {
+    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false });
+    expect(syncBannerText(status, now)).toBe(
+      `Google stopped accepting Moduo's access to robin.hale@gmail.com. Family shows as of ${syncSinceLabel(sundayEvening.getTime(), now)}, and booking links can't see it until you reconnect.`,
+    );
+  });
+
+  it("two calendars of the revoked login: they show, and booking links can't see them", () => {
+    const workReauth = { ...work, status: "reauth" };
+    const status = calendarSyncStatus({ accounts: [workReauth, familyReauth], degraded: false });
+    const text = syncBannerText(status, now) ?? "";
+    expect(text).toContain("Work and Family show as of");
+    expect(text).toContain("booking links can't see them until you reconnect.");
+  });
+
+  it("a reauth next to another account's sync failure says both", () => {
+    const anaFailed = { ...ana, status: "error" };
+    const status = calendarSyncStatus({
+      accounts: [personal, familyReauth, anaFailed],
+      degraded: false,
+    });
+    const text = syncBannerText(status, now) ?? "";
+    expect(text).toContain("Google stopped accepting Moduo's access to robin.hale@gmail.com.");
+    expect(text).toContain("ana@halefounders.co");
+  });
+
+  it("the account group says Reconnect", () => {
+    expect(accountStateLabel(familyReauth, now)).toBe("Reconnect");
+    expect(accountStateLabel(work, now)).toBe(notSyncedLabel(work, now));
+    expect(accountStateLabel(personal, now)).toBeNull();
   });
 });

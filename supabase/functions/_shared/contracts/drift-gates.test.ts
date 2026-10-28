@@ -109,8 +109,17 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`provider IN (${inList(EMAIL_PROVIDERS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_ACCOUNT_STATUSES)})`);
     expect(sql).toContain(`provider IN (${inList(CALENDAR_PROVIDERS)})`);
-    expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
+    expect(sql).toContain(`status IN ('ok','error')`);
     expect(sql).toContain("founder");
+  });
+
+  it("calendar_accounts.status CHECK lists the canonical account statuses (CALR-20)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261028193000_calendar_accounts_reconnect.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
   });
 
   it("calendar_events CHECKs list the canonical event vocabularies (CALR-6)", () => {

@@ -51,3 +51,42 @@ describe("the sync banner", () => {
     expect(container.innerHTML).toBe("");
   });
 });
+
+describe("the banner for a revoked Google connection (AC37)", () => {
+  const revoked = calendarSyncStatus({
+    accounts: [
+      {
+        id: "family",
+        workspaceId: "w1",
+        ownerId: "u1",
+        provider: "google",
+        externalId: "google:robin.hale@gmail.com:family",
+        displayLabel: "Family",
+        isDefaultTarget: false,
+        color: null,
+        lastSyncAt: "2026-10-25T17:02:00.000Z",
+        status: "reauth",
+        syncToken: null,
+        deletedAt: null,
+      },
+    ],
+    degraded: false,
+  });
+
+  it("offers Reconnect, naming the login, instead of Try again", () => {
+    const onRetry = rs.fn();
+    const onReconnect = rs.fn();
+    render(<SyncBanner status={revoked} onRetry={onRetry} onReconnect={onReconnect} />);
+    expect(screen.getByRole("status").textContent).toContain("booking links can't see it");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+    expect(onReconnect).toHaveBeenCalledWith("robin.hale@gmail.com");
+    expect(onRetry).not.toHaveBeenCalled();
+  });
+
+  it("a plain failure still offers Try again only", () => {
+    render(<SyncBanner status={failed} onRetry={() => {}} onReconnect={() => {}} />);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  });
+});
