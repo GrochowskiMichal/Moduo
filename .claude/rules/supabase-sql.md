@@ -39,6 +39,7 @@ The mechanical traps are checked by `apps/app/src/lib/migration-lint.test.ts` (g
 - A partial unique index used as an `ON CONFLICT` arbiter needs its predicate in the clause (`ON CONFLICT (user_id, chain_root_id) WHERE reason = 'reply' AND done_at IS NULL`).
 - A CHECK passes on NULL: write `x IS NULL OR coalesce(<chain>, false)`, `x IS NOT NULL AND x BETWEEN …` inside an OR, and test NULL and missing keys.
 - Don't UPDATE the same row inside its own AFTER INSERT trigger ("tuple already modified").
+- A BEFORE DELETE row trigger must not write another row of the same table (nor fire a trigger that does): when the same DELETE reaches that row later it fails ("tuple to be updated was already modified by an operation triggered by the current command"). Write other tables, and change the row on the key's own SET NULL write (`notes__freeze_children`).
 - An AFTER DELETE trigger that inserts a row referencing the deleted row's parent breaks cascading workspace and account deletes (23503): return early when the parent is gone, and delete a workspace and an account in its test (`sync_feed.test.sql`).
 - A trigger on `workspace_members` DELETE also fires on account deletion: read the profile to tell the two apart, never the cascade order (`share_member_removed`).
 - `pg_trigger_depth() > 1` is reachable from a client write: exempt only the exact system write, or mark it with `share.bypass` from a definer function.

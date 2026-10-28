@@ -22,7 +22,7 @@ Compiled from the notes gotchas (HV-14b). Decisions: [docs/decisions/notes.md](.
 - Each `callOp` stays in its tool handler (`api-keys.test.ts` reads tool bodies); key-callable SQL uses `perm_actor_id()`, not `auth.uid()`. Adding a column tier to `selectFirstDeployedTier` shifts every index: compare against `tiers.length - 1`.
 
 ## Server rules (migrations and functions)
-- Any path that re-roots a note calls `notes__keep_access_on_reroot` first, or a shared inherit sub-note goes private.
+- Any path that re-roots a live parent's inherit sub-note calls `notes__keep_access_on_reroot` first; the CHECK `notes_inherit_has_parent` refuses it otherwise. Hard deletes are covered by the `notes_freeze_children` trigger (NS-3).
 - `notes_op_import` refuses a parent outside the workspace and the batch (22023, NS-2), but checks no access to it: a caller passing an external parent still checks the caller can reach it.
 - Archiving unpublishes the whole subtree; unarchive never re-publishes.
 - Edge Functions can't serve HTML (the platform rewrites `text/html` to `text/plain`): public pages render client-side from JSON. Untrusted Markdown to HTML escapes raw HTML and allow-lists link schemes (`http(s):`, `mailto:`); react-markdown shows HTML comments as text (`stripTaskIdComments`).
