@@ -181,5 +181,76 @@ export function recordEntityOpen(
   const ref = recentRefFor(detail);
   const ws = detail?.workspaceId ?? workspaceId;
   if (!spine || !ref || !ws) return;
+  lastEntityOpen = { ws, id: ref.id, at: Date.now() };
   spine.recordOpen({ workspaceId: ws, ...ref }).catch(() => {});
+}
+
+// Opens made inside a module (the Notes sidebar, the Tasks list, a contact or
+// event picked on its page) count too. Each module mirrors its selection into
+// the URL, so the host reads it there: one rule, no per-module calls. Only a
+// uuid is an item (a task handle like MOD-142 resolves to one in the URL a
+// moment later; a desktop mail thread's device id never leaves the device).
+// Tasks' `?place=` is a scope, not an open, so projects count through ⌘K and
+// links only.
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function recentRefFromLocation(
+  pathname: string,
+  search: Record<string, unknown>,
+): { type: string; id: string } | null {
+  const pick = (key: string) => {
+    const v = search[key];
+    return typeof v === "string" && UUID.test(v) ? v : null;
+  };
+  const ref = (type: string, id: string | null) => (id ? { type, id } : null);
+  switch (pathname) {
+    case "/notes":
+      return ref("note", pick("id"));
+    case "/tasks":
+      return ref("task", pick("id"));
+    case "/contacts":
+      return search.type === "contact" || search.type === "company"
+        ? ref(search.type, pick("id"))
+        : null;
+    case "/calendar":
+      return ref("event", pick("event"));
+    case "/email":
+      return ref("email_thread", pick("thread"));
+    default:
+      return null;
+  }
+}
+
+// An entity-open already recorded its item; the page it lands on then mirrors
+// the same id (and Tasks reads a project's id from `?id` too), which must not
+// count again or record the project as a task.
+const ENTITY_OPEN_ECHO_MS = 10_000;
+let lastEntityOpen: { ws: string; id: string; at: number } | null = null;
+let lastLocationKey: string | null = null;
+
+/** Record a selection made inside a module, once per change of selection. */
+export function recordLocationOpen(
+  spine: Pick<SpineRuntime, "recordOpen"> | null | undefined,
+  workspaceId: string | null | undefined,
+  pathname: string,
+  search: Record<string, unknown>,
+): void {
+  const ref = recentRefFromLocation(pathname, search);
+  if (!spine || !workspaceId) return;
+  const key = ref ? `${workspaceId}:${ref.type}:${ref.id}` : null;
+  if (key === lastLocationKey) return;
+  lastLocationKey = key;
+  if (!ref) return;
+  const echo =
+    lastEntityOpen &&
+    lastEntityOpen.ws === workspaceId &&
+    lastEntityOpen.id === ref.id &&
+    Date.now() - lastEntityOpen.at < ENTITY_OPEN_ECHO_MS;
+  if (echo) return;
+  spine.recordOpen({ workspaceId, ...ref }).catch(() => {});
+}
+
+export function resetOpenRecordingForTests(): void {
+  lastEntityOpen = null;
+  lastLocationKey = null;
 }
