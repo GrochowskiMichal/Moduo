@@ -436,11 +436,19 @@ export const webCalendar: CalendarRuntime = {
   // CALR-8: Google first, then the mirror stores Google's answer.
   async updateGoogleEvent({ workspaceId, event, account, patch }) {
     const { updateGoogleWebEvent } = await import("../features/calendar/google-web");
-    // A move keeps the event's all-day-ness unless the patch changes it.
-    const sent =
-      patch.startsAt !== undefined && patch.allDay === undefined
-        ? { ...patch, allDay: event.allDay }
-        : patch;
+    // Google takes start and end together: a patch that moves one edge (the
+    // detail panel, a resize) sends both, keeping the event's all-day-ness
+    // unless the patch changes it.
+    const movesTime =
+      patch.startsAt !== undefined || patch.endsAt !== undefined || patch.allDay !== undefined;
+    const sent = movesTime
+      ? {
+          ...patch,
+          startsAt: patch.startsAt ?? event.startsAt,
+          endsAt: patch.endsAt ?? event.endsAt,
+          allDay: patch.allDay ?? event.allDay,
+        }
+      : patch;
     const mapped = await updateGoogleWebEvent({
       externalAccountId: account.externalId,
       calendarId: event.calendarId,
@@ -449,6 +457,9 @@ export const webCalendar: CalendarRuntime = {
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
     if (!mapped) return event;
+    // The mapper leaves an absent place out (a sync keeps what's stored), so a
+    // place this edit cleared must be sent as empty to clear the stored one.
+    if (patch.location !== undefined && mapped.location === undefined) mapped.location = "";
     await webCalendar.mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] });
     return {
       ...event,
@@ -457,11 +468,13 @@ export const webCalendar: CalendarRuntime = {
       startsAt: mapped.startsAt,
       endsAt: mapped.endsAt,
       allDay: mapped.allDay ?? event.allDay,
-      location: mapped.location ?? null,
+      location: mapped.location || null,
       conferenceUrl: mapped.conferenceUrl ?? null,
       isPrivate: mapped.isPrivate ?? false,
       attendees: mapped.attendees ?? [],
-      updatedAt: new Date().toISOString(),
+      // The server's stamp, not this device's clock: the live row that follows
+      // carries the real one and replaces this.
+      updatedAt: event.updatedAt,
     };
   },
   async removeGoogleEvent({ workspaceId, event, account }) {
