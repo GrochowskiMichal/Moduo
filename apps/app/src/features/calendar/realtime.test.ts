@@ -83,6 +83,12 @@ describe("applyLiveChange", () => {
     expect(applyLiveChange(list, { kind: "upsert", event: deletedElsewhere }, "w1")).toBe(list);
   });
 
+  it("keeps the list when only the stamp moved (a re-stamped sync write)", () => {
+    const list = [a];
+    const restamped = { ...a, updatedAt: "2026-10-28T09:00:00Z" };
+    expect(applyLiveChange(list, { kind: "upsert", event: restamped }, "w1")).toBe(list);
+  });
+
   it("ignores an event from another workspace", () => {
     const list = [a];
     const other = ev({ id: "x", workspaceId: "w2" });
@@ -184,6 +190,57 @@ describe("useCalendarModule — live events", () => {
     await waitFor(() => expect(listModule.mock.calls.length).toBe(reads + 1));
     seenLoading.push(result.current.loading);
     expect(seenLoading).toEqual([false, false]);
+  });
+
+  it("never shows the loading state for a resync", async () => {
+    const { runtime, listens, listModule } = liveRuntime([ev({ id: "a" })]);
+    const rendered: boolean[] = [];
+    const { result } = renderHook(() => {
+      const api = useCalendarModule(runtime, params("w1"));
+      rendered.push(api.loading);
+      return api;
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const reads = listModule.mock.calls.length;
+    const from = rendered.length;
+    await act(async () => {
+      listens.at(-1)!.listener({ type: "resync", reason: "reconnect" });
+    });
+    await waitFor(() => expect(listModule.mock.calls.length).toBe(reads + 1));
+    await act(async () => {});
+    expect(rendered.slice(from).every((loading) => loading === false)).toBe(true);
+  });
+
+  it("a change that lands while a refetch is in flight survives its reply", async () => {
+    const { runtime, listens, listModule } = liveRuntime([ev({ id: "a" })]);
+    const { result } = renderHook(() => useCalendarModule(runtime, params("w1")));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // The next read answers with a snapshot taken before the change below.
+    let answer!: (bundle: unknown) => void;
+    listModule.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve as never)));
+    await act(async () => {
+      listens.at(-1)!.listener({ type: "resync", reason: "reconnect" });
+    });
+    await waitFor(() => expect(answer).toBeTypeOf("function"));
+
+    const moved = ev({ id: "a", title: "Moved meanwhile", updatedAt: "2026-10-28T08:30:00Z" });
+    act(() =>
+      listens.at(-1)!.listener({ type: "change", change: { kind: "upsert", event: moved } }),
+    );
+    act(() =>
+      listens.at(-1)!.listener({
+        type: "change",
+        change: { kind: "upsert", event: ev({ id: "c", title: "Added meanwhile" }) },
+      }),
+    );
+    await act(async () => {
+      answer({ events: [ev({ id: "a" })], accounts: [], degraded: false, truncated: [] });
+    });
+    expect(result.current.events.map((e) => e.title)).toEqual([
+      "Moved meanwhile",
+      "Added meanwhile",
+    ]);
   });
 
   it("stops listening on a workspace switch and on unmount", async () => {

@@ -13,7 +13,12 @@ import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { undoToast } from "../../../lib/undo-toast";
-import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
+import type {
+  CalendarAccountModel,
+  CalendarEventModel,
+  CalendarEventPatch,
+  CalendarLiveChange,
+} from "../events";
 import { applyLiveChange } from "../live";
 import {
   allTimeCalendarWindow,
@@ -43,6 +48,11 @@ export type CreateEventDraft = {
  * after it, and the rest inside that window ride along.
  */
 const RESYNC_COALESCE_MS = 250;
+/**
+ * A return to the window refetches at most this often (every app switch fires
+ * `focus` on desktop); a reconnect, which may have missed changes, always does.
+ */
+const RETURN_RESYNC_GAP_MS = 30_000;
 
 const isTempId = (id: string) => id.startsWith("tmp-");
 const isBusyId = (id: string) => id.startsWith("busy:");
@@ -110,6 +120,12 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     [],
   );
   const reqRef = useRef(0);
+  /**
+   * Live changes that arrived while a read was in flight. The read's snapshot
+   * may predate them, so they are replayed onto its reply (as the Tasks store's
+   * `applyWhole` does) instead of being overwritten by it.
+   */
+  const liveDuringReadRef = useRef<{ req: number; changes: CalendarLiveChange[] } | null>(null);
   const aliveRef = useRef(true); // the load effect clears it; only unmount leaves it false
   // SCALE-1: the events read is windowed instead of "all history". The window
   // only ever grows (see ensureRange), so walking back and forth over months
@@ -157,9 +173,20 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         return;
       }
       const req = ++reqRef.current;
+      liveDuringReadRef.current = { req, changes: [] };
       if (!options?.quiet) setLoading(true);
       const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
       if (reqRef.current !== req) return;
+      const missed =
+        liveDuringReadRef.current?.req === req ? liveDuringReadRef.current.changes : [];
+      liveDuringReadRef.current = null;
+      const fresh =
+        scope === null
+          ? bundle.events
+          : missed.reduce(
+              (events, change) => applyLiveChange(events, change, scope),
+              bundle.events,
+            );
       // Keep unsettled optimistic creates: a reload is now also triggered by
       // navigation (window widening), so it can land between a create's
       // optimistic row and its server row — which would otherwise drop the
@@ -170,7 +197,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
         return {
           scope,
-          events: pending.length > 0 ? [...bundle.events, ...pending] : bundle.events,
+          events: pending.length > 0 ? [...fresh, ...pending] : fresh,
         };
       });
       setAccounts(bundle.accounts);
@@ -255,14 +282,18 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     if (!runtime || !scope || !userId) return;
     if (typeof runtime.calendar.listenLive !== "function") return;
     let resyncTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastResyncAt = Number.NEGATIVE_INFINITY;
     const stop = runtime.calendar.listenLive({ workspaceId: scope, selfId: userId }, (event) => {
       if (event.type === "change") {
+        liveDuringReadRef.current?.changes.push(event.change);
         setEventsIn(scope, (prev) => applyLiveChange(prev, event.change, scope));
         return;
       }
       if (resyncTimer !== null) return;
+      if (event.reason === "return" && Date.now() - lastResyncAt < RETURN_RESYNC_GAP_MS) return;
       resyncTimer = setTimeout(() => {
         resyncTimer = null;
+        lastResyncAt = Date.now();
         void loadRef.current({ quiet: true });
       }, RESYNC_COALESCE_MS);
     });
