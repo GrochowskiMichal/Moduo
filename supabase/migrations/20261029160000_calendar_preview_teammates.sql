@@ -89,9 +89,12 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   FROM public.calendar_events e
   JOIN cals c ON c.id = e.calendar_ref
   LEFT JOIN public.user_preferences up ON up.user_id = e.owner_id
+  -- An all-day repeat is a run of dates: expanded in UTC, where its midnights are stored.
   CROSS JOIN LATERAL public.calendar__occurrences(e.start_time, e.end_time, e.recurrence_rule, e.exdates,
-    up.time_zone, p_from, p_to) o
+    CASE WHEN e.all_day THEN 'UTC' ELSE up.time_zone END, p_from, p_to) o
   WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
+    -- One-offs outside the window never reach the expander (a mirrored calendar holds thousands).
+    AND (e.recurrence_rule IS NOT NULL OR (e.start_time < p_to AND e.end_time > p_from))
     AND (p_as IS NULL OR e.owner_id = public.perm_actor_id())
   ORDER BY o.o_start, c.id
 $$;
