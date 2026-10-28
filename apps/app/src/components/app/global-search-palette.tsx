@@ -7,7 +7,7 @@
 
 import type { SearchAllRow } from "@contracts/search";
 import { MessageCircle, Paperclip, Search } from "lucide-react";
-import type { ComponentType, KeyboardEvent } from "react";
+import { type ComponentType, type KeyboardEvent, useState } from "react";
 
 import { filesLabel } from "../../features/attachments/files";
 import { Snippet } from "../../features/chat/find/snippet";
@@ -395,6 +395,20 @@ export function GlobalSearchPalette({
   now,
 }: GlobalSearchPaletteProps) {
   const trimmed = query.trim();
+  const results = searching ? view : { top: null, groups: [] };
+
+  // cmdk keeps its highlight on whatever was first when the list last changed
+  // ("See all in Chat", an action) while the server's answer is on its way:
+  // when a new answer arrives, Enter opens its first row (the Top result, or
+  // with a chip the first of its groups).
+  const first = results.top ?? results.groups[0]?.rows[0] ?? null;
+  const topValue = first ? `entity:${first.entity_type}:${first.entity_id}` : null;
+  const [selected, setSelected] = useState("");
+  const [seenTop, setSeenTop] = useState<string | null>(null);
+  if (topValue !== seenTop) {
+    setSeenTop(topValue);
+    if (topValue) setSelected(topValue);
+  }
 
   // Tab and Shift+Tab move between the chips; focus never leaves the input.
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -432,7 +446,6 @@ export function GlobalSearchPalette({
       </CommandGroup>
     ));
 
-  const results = searching ? view : { top: null, groups: [] };
   // Messages and Conversations sit between Events and Email in the fixed order.
   const before = results.groups.filter((g) => g.key !== "email");
   const email = results.groups.filter((g) => g.key === "email");
@@ -443,7 +456,7 @@ export function GlobalSearchPalette({
       open={open}
       onOpenChange={onOpenChange}
       className="max-w-xl"
-      commandProps={{ shouldFilter: false }}
+      commandProps={{ shouldFilter: false, value: selected, onValueChange: setSelected }}
     >
       <CommandInput
         value={query}
