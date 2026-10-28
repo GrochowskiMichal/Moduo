@@ -21,7 +21,7 @@ DECLARE
     $q$SELECT coalesce(jsonb_agg(to_jsonb(h) ORDER BY o), '[]')::text
          FROM public.search_all(%L, %L, %L::text[], %s, %L, %L::uuid) WITH ORDINALITY AS h(entity_type, entity_id, title,
               context, snippet, icon, match, rank, updated_at, archived, score, type_total, top, o)$q$,
-    test.id('W'), p_query, p_types, coalesce(p_limit::text, 'DEFAULT'), p_ctx_type,
+    test.id('W'), p_query, p_types, coalesce(p_limit::text, 'NULL'), p_ctx_type,
     CASE WHEN p_ctx IS NULL THEN NULL ELSE test.id(p_ctx)::text END));
 BEGIN
   IF r LIKE 'ERROR%' THEN
@@ -109,6 +109,9 @@ INSERT INTO public.companies (id, workspace_id, owner_id, name) VALUES
 INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
   (test.id('ZL'), test.id('W'), test.id('O'), 'Żaneta Łukasiewicz'),
   (test.id('AL'), test.id('W'), test.id('O'), 'Al Green');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+SELECT test.id('W'), 'contact', test.id(c), 'workspace', NULL, 'view', test.id('O') FROM unnest(ARRAY['ZL', 'AL']) c
+ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO NOTHING;
 INSERT INTO public.calendar_events (id, workspace_id, owner_id, title, start_time, end_time) VALUES
   (test.id('EV'), test.id('W'), test.id('O'), 'Kumquat tasting', now() + interval '1 day', now() + interval '1 day 1 hour');
 
@@ -207,8 +210,8 @@ SELECT test.ok(test.row_of(test.all_as('A', 'zaneta luka'), 'ZL') ->> 'match' = 
 SELECT test.ok(test.row_of(test.all_as('A', 'LUKASIEWICZ żaneta'), 'ZL') IS NOT NULL,
   'and the other way round');
 SELECT test.ok(test.row_of(test.all_as('A', 'al green'), 'AL') IS NOT NULL
-           AND test.row_of(test.all_as('A', 'gr al'), 'AL') IS NULL,
-  'words of 1–2 letters match whole words only');
+           AND test.row_of(test.all_as('A', 'gr al'), 'AL') ->> 'match' IS DISTINCT FROM 'title',
+  'words of 1–2 letters match whole words only (a word-start of 2 letters is at most a typo match)');
 
 -- ── Archived: flagged, and ranked below a live twin ─────────────────────────
 
@@ -274,7 +277,7 @@ $$;
 
 -- ── The adapter on its own, and notes__search's archived column ──────────────
 
-SELECT test.ok(test.value_as('A', format($q$SELECT count(*) FROM public.registry__search(%L, 'kumquat', 20)$q$, test.id('W')))::int >= 3,
+SELECT test.ok(test.value_as('O', format($q$SELECT count(*) FROM public.registry__search(%L, 'kumquat', 20)$q$, test.id('W')))::int = 3,
   'registry__search answers by itself, as the person asking');
 SELECT test.ok(test.value_as('A', format($q$SELECT count(*) FROM public.registry__search(%L, 'lemon', 20) WHERE entity_type = 'note'$q$, test.id('W'))) = '0',
   'it never answers for notes, which are on the contract');

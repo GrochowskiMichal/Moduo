@@ -337,6 +337,7 @@ export const notesConnectorModule: ConnectorModule = {
           context: h.context ?? null,
           snippet: typeof h.snippet === "string" ? h.snippet.replace(SNIPPET_MARKS, "**") : null,
           match: h.match,
+          archived: h.archived === true,
         }));
       },
     },

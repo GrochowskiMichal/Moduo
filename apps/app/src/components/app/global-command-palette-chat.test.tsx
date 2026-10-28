@@ -30,7 +30,7 @@ const h = rs.hoisted(() => {
         search: async () => h.messages,
         findConversations: async () => h.conversations,
       },
-      spine: { searchEntities: async () => [] },
+      spine: { searchAll: async () => [] },
     },
   };
   return h;

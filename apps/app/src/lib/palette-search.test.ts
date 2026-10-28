@@ -3,9 +3,8 @@
 // fixed groups of 3 with "Show all N", type chips that narrow, and the title's
 // matched word-starts.
 
-import { describe, expect, it } from "@rstest/core";
-
 import type { SearchAllRow } from "@contracts/search";
+import { describe, expect, it } from "@rstest/core";
 
 import {
   buildPaletteView,

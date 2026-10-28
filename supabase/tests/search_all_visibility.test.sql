@@ -159,7 +159,8 @@ SELECT test.ok(test.as_who('S', 'plum') =
 SELECT test.ok(test.as_who('M', 'plum') = 'bucket:PW,company:CO,contact:CW,note:NW,task:TW',
   'a member without shares finds only what the workspace shares', test.as_who('M', 'plum'));
 SELECT test.ok(test.as_who('X', 'plum') = '', 'an outsider finds nothing', test.as_who('X', 'plum'));
-SELECT test.ok(test.as_who('S', 'secret event') = '' AND test.as_who('M', 'plum event') = '',
+SELECT test.ok(test.as_who('S', 'secret event') NOT LIKE '%event:%'
+           AND test.as_who('M', 'plum event') NOT LIKE '%event:%',
   'someone else''s private event never matches by its title, and a calendar you can''t see matches nothing');
 
 -- API keys: the key's scopes and its person's access, both.

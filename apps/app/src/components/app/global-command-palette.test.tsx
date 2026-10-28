@@ -347,7 +347,9 @@ describe("type chips", () => {
     h.answer = () =>
       Promise.resolve([
         hit("note", "n1", "Budget plan", { top: true }),
-        ...Array.from({ length: 4 }, (_, i) => hit("task", `t${i}`, `Budget task ${i}`, { type_total: 4 })),
+        ...Array.from({ length: 4 }, (_, i) =>
+          hit("task", `t${i}`, `Budget task ${i}`, { type_total: 4 }),
+        ),
       ]);
     openAndType("budget");
     fireEvent.click(await screen.findByText("Show all 4", undefined, { timeout: 2000 }));
