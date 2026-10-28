@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · New events go to is a synced per-workspace pref; Google-first is the only Google create; the mirror revives a tombstone before it inserts; the iCalUID only merges your own copies (CALR-20b).
 - 2026-10-28 · The event menus reuse the week's keys; Move goes only where Moduo can undo it whole (CALR-4b).
 - 2026-10-28 · Preview as is the real masked read run for the teammate; busy blocks expand repeats on the server; teammates are opt-in lanes (CALR-16).
 - 2026-10-28 · The composer reads the line locally, routes outside guests to Google, and names teammates without inviting them (CALR-9).

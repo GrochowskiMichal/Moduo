@@ -659,7 +659,9 @@ export type Database = {
           description: string | null
           end_time: string
           external_event_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
           location: string | null
           owner_id: string
           recurrence_rule: string | null
@@ -684,7 +686,9 @@ export type Database = {
           description?: string | null
           end_time: string
           external_event_id?: string | null
+          ical_uid?: string | null
           id?: string
+          is_organizer?: boolean | null
           location?: string | null
           owner_id: string
           recurrence_rule?: string | null
@@ -709,7 +713,9 @@ export type Database = {
           description?: string | null
           end_time?: string
           external_event_id?: string | null
+          ical_uid?: string | null
           id?: string
+          is_organizer?: boolean | null
           location?: string | null
           owner_id?: string
           recurrence_rule?: string | null

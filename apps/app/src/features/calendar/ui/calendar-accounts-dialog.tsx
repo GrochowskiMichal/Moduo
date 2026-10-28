@@ -36,6 +36,7 @@ import {
   startWebGoogleConnect,
 } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
+import { newEventsCalendars, resolveNewEventsTo, withNewEventsTo } from "../new-events-to";
 import type { CalendarPrefs } from "../prefs";
 import { connectOrigin, zoomRequest } from "./booking-links";
 import {
@@ -52,6 +53,7 @@ import {
   GoogleConsent,
   ImportProgress,
 } from "./calendar-connect-steps";
+import { NewEventsToField } from "./new-events-to-field";
 
 const UNDO_MS = 10_000;
 
@@ -137,6 +139,7 @@ export function CalendarAccountsDialog({
   isDesktop,
   calendar,
   hiddenAccountIds,
+  newEventsTo,
   updatePrefs,
   syncNow,
 }: {
@@ -145,6 +148,7 @@ export function CalendarAccountsDialog({
   isDesktop: boolean;
   calendar: CalendarModuleApi;
   hiddenAccountIds: string[];
+  newEventsTo: CalendarPrefs["newEventsTo"];
   updatePrefs: (patch: (prev: CalendarPrefs) => Partial<CalendarPrefs>) => void;
   syncNow: () => Promise<void>;
 }) {
@@ -389,6 +393,13 @@ export function CalendarAccountsDialog({
         meetingLinks={{ googleMeet: logins.some((l) => l.provider === "google"), zoom }}
         onConnectZoom={() => void onConnectZoom()}
         removed={removedLabel ? { label: removedLabel, onUndo: () => void onUndo() } : null}
+        newEventsTo={
+          <NewEventsToField
+            calendars={newEventsCalendars(calendar.accounts)}
+            to={resolveNewEventsTo(newEventsTo[workspaceId] ?? null, calendar.accounts)}
+            onChange={(id) => updatePrefs((prev) => withNewEventsTo(prev, workspaceId, id))}
+          />
+        }
       />
     ),
     tiles: <ConnectTiles onPick={onTile} appOnly={!isDesktop} />,

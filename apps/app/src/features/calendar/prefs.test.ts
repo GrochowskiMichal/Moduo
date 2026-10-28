@@ -36,6 +36,7 @@ describe("calendar prefs domain — sane defaults + round-trip", () => {
       showWeekends: true,
       hiddenAccountIds: [],
       accountColors: {},
+      newEventsTo: {},
     });
   });
 
@@ -47,6 +48,7 @@ describe("calendar prefs domain — sane defaults + round-trip", () => {
       showWeekends: false,
       hiddenAccountIds: ["acct-1"],
       accountColors: { "acct-1": "teal" },
+      newEventsTo: { "ws-1": "acct-1" },
     };
     expect(sanitizeCalendarPrefs(JSON.parse(JSON.stringify(prefs)))).toEqual(prefs);
   });
