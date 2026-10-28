@@ -1,6 +1,7 @@
 // GS-3 — ⌘K's states for the design review and the token lint
 // (specs/global-search.md AC5, AC7, AC9): populated, empty query, no results,
-// offline, long titles, a narrowed chip and the progress line. The rows are
+// offline, long titles, a narrowed chip and the progress line. Messages and
+// Conversations come from search_all too (GS-6). The rows are
 // what search_all returns; "now" is pinned so the ages read the same.
 import type { SearchAllRow } from "@contracts/search";
 import type { Meta, StoryObj } from "@storybook/react";
@@ -85,6 +86,23 @@ const PLANNING: SearchAllRow[] = [
     context: "Thu, Oct 30",
     updated_at: ago(48),
   }),
+  hit("chat_message", "m1", "Ola Nowak", {
+    match: "body",
+    rank: 0.4,
+    type_total: 2,
+    context: "launch-room",
+    snippet: "can we move the \uE000planning\uE001 call to after lunch?",
+    updated_at: ago(2),
+  }),
+  hit("chat_message", "m2", "Bożena Wróbel", {
+    match: "body",
+    rank: 0.4,
+    type_total: 2,
+    context: "Ola Nowak",
+    snippet: "sent you the \uE000planning\uE001 deck",
+    updated_at: ago(20),
+  }),
+  hit("chat_channel", "ch1", "planning", { type_total: 1, updated_at: ago(4) }),
 ];
 
 const ACTIONS = [
@@ -144,7 +162,7 @@ function Harness({
       notice={notice}
       noResults={noResults}
       actionGroups={actions}
-      chat={null}
+      onSeeAllInChat={() => {}}
       onOpenRow={() => {}}
       onShowAll={(group) => setChip(chipForGroup(group))}
       onSearchEverything={() => setChip("all")}

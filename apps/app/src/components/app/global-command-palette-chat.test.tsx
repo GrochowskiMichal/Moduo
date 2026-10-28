@@ -122,9 +122,9 @@ async function typeInPalette(words: string) {
 }
 
 const group = (heading: string) =>
-  screen
-    .getAllByRole("group")
-    .find((g) => g.querySelector("[cmdk-group-heading]")?.textContent === heading);
+  [...document.querySelectorAll<HTMLElement>("[cmdk-group]")].find(
+    (g) => g.querySelector("[cmdk-group-heading]")?.textContent === heading,
+  );
 
 describe("⌘K's Messages and Conversations (GS-6)", () => {
   it("asks search_all for messages and conversations, and Chat for nothing of its own", async () => {
