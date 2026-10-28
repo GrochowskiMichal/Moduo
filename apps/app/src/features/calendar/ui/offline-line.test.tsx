@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { CalendarNowNext } from "./now-next";
-import { OfflineLine, offlineLabel } from "./offline-line";
+import { offlineLabel, OfflineLine } from "./offline-line";
 
 afterEach(() => {
   cleanup();

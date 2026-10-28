@@ -17,7 +17,16 @@
 // so a tick re-renders today's column only — not the whole week.
 
 import { useDroppable } from "@dnd-kit/core";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -40,7 +49,9 @@ import {
 } from "../grid-layout";
 import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
 import type { CalendarPrefs } from "../prefs";
+import { emptyWeekHint } from "../sync-status";
 import { AllDayLane } from "./allday-lane";
+import { AllDayLaneSkeleton } from "./calendar-skeleton";
 import { DayHeader, ZoneCorner } from "./day-header";
 import { COMPACT_BELOW_MINUTES } from "./event-chip";
 import {
@@ -114,7 +125,20 @@ type Props = {
   onTriageRemove: (taskId: string, sessionId?: string | null) => void;
   /** The block the focus session shows on (the one time engine; null when idle). */
   focusBlockId: string | null;
+  // ── faults and loading (CALR-3) ──
+  /** Accounts that didn't sync: their events carry the sync mark. */
+  staleAccountIds?: ReadonlySet<string>;
+  /** Events whose change waits to sync: the cloud-off mark. */
+  waitingEventIds?: ReadonlySet<string>;
+  /** Something failed (a sync, the read): never "Nothing scheduled". */
+  faulted?: boolean;
+  /** While loading, the all-day rows the lane last drew (its skeleton). */
+  loadingAllDayRows?: number;
+  /** Laid low over the hours, not scrolling with them (the first-week card). */
+  overlay?: ReactNode;
 };
+
+const NO_IDS: ReadonlySet<string> = new Set();
 
 /** Re-render tick for the now-line; catches up on tab wake. */
 function useNowTick(intervalMs: number): Date {
@@ -203,6 +227,11 @@ export function CalendarGrid({
   onTriageLonger,
   onTriageRemove,
   focusBlockId,
+  staleAccountIds = NO_IDS,
+  waitingEventIds = NO_IDS,
+  faulted = false,
+  loadingAllDayRows = 0,
+  overlay = null,
 }: Props) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -628,7 +657,7 @@ export function CalendarGrid({
   const columns = `${GUTTER_W} repeat(${days.length}, minmax(0, 1fr))`;
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="relative flex h-full min-h-0 flex-col">
       {error ? (
         <div className="mb-2 flex shrink-0 items-center gap-2 text-sm text-muted-foreground">
           <span>Couldn't load your tasks — the grid may be incomplete.</span>
@@ -682,7 +711,12 @@ export function CalendarGrid({
             onSelectOccurrence(chip.occurrenceKey);
             onEventClick(chip, rect);
           }}
+          staleAccountIds={staleAccountIds}
+          waitingEventIds={waitingEventIds}
         />
+      ) : loading ? (
+        // The last known lane, so the hours don't move when the events land (AC4).
+        <AllDayLaneSkeleton days={days.length} columns={columns} rows={loadingAllDayRows} />
       ) : null}
 
       {/* the hours grid */}
@@ -750,10 +784,17 @@ export function CalendarGrid({
                 onCancelCreate={cancelCreate}
                 onAdjustPendingTimes={adjustPendingTimes}
                 dragVisual={dragVisual?.dayIdx === i ? dragVisual : null}
+                staleAccountIds={staleAccountIds}
+                waitingEventIds={waitingEventIds}
                 showLoadingChips={loading && !hasAnyChips && i < 2}
                 emptyHint={
-                  isToday && !loading && !error && !hasAnyChips && !pending
-                    ? "Nothing scheduled — draw a block or schedule a task."
+                  isToday
+                    ? emptyWeekHint({
+                        loading,
+                        failed: Boolean(error) || faulted,
+                        hasAnyChips,
+                        drafting: pending !== null,
+                      })
                     : null
                 }
               />
@@ -761,6 +802,7 @@ export function CalendarGrid({
           })}
         </div>
       </div>
+      {overlay}
     </div>
   );
 }
@@ -796,6 +838,8 @@ const DayColumn = memo(function DayColumn({
   onCancelCreate,
   onAdjustPendingTimes,
   dragVisual,
+  staleAccountIds,
+  waitingEventIds,
   showLoadingChips,
   emptyHint,
 }: {
@@ -845,6 +889,8 @@ const DayColumn = memo(function DayColumn({
   onCancelCreate: () => void;
   onAdjustPendingTimes: (startMs: number, endMs: number) => void;
   dragVisual: DragVisual | null;
+  staleAccountIds: ReadonlySet<string>;
+  waitingEventIds: ReadonlySet<string>;
   showLoadingChips: boolean;
   emptyHint: string | null;
 }) {
@@ -975,6 +1021,8 @@ const DayColumn = memo(function DayColumn({
             nowMs={nowMs}
             nowMinutes={nowMinutes}
             onPointerDown={(e) => onEventChipPointerDown(e, chip, dayIdx, span)}
+            stale={chip.sourceAccountId !== null && staleAccountIds.has(chip.sourceAccountId)}
+            waiting={waitingEventIds.has(chip.eventId)}
           />
         );
       })}

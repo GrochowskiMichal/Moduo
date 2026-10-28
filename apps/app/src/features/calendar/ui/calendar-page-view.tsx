@@ -56,6 +56,7 @@ import {
   syncAgeLabel,
   visibleEvents,
 } from "../accounts";
+import { busyDayKeysOf } from "../busy-days";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
@@ -123,6 +124,7 @@ import { useCalendarAccountActions } from "./use-calendar-account-actions";
 import { useCalendarCompletionLoop } from "./use-calendar-completion-loop";
 import { useCalendarConnectReturn } from "./use-calendar-connect-return";
 import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
+import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
@@ -266,26 +268,25 @@ export function CalendarPageView({
     () => eventChipsInRange(shownEvents, range, isWritable, userId),
     [shownEvents, range, isWritable, userId],
   );
+  const faults = useCalendarFaults({
+    onRetry: refreshCalendars,
+    retrying: refreshing,
+    userId,
+    workspaceId,
+    accounts: calendar.accounts,
+    events: calendar.events,
+    degraded: calendar.degraded,
+    loading: loading || calendar.loading,
+    days: range.days,
+    allDayByDay: eventChips.allDay,
+  });
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
     [calendar.events],
   );
 
-  // Mini-month density dots cover EVERY scheduled task + event day the
-  // bundles know — the dots inform navigation to days you can't see.
-  const busyDayKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const t of tasks) {
-      if (!t.scheduledAt || t.status === "archived") continue;
-      const d = new Date(t.scheduledAt);
-      if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
-    }
-    for (const e of shownEvents) {
-      const d = new Date(e.startsAt);
-      if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
-    }
-    return keys;
-  }, [tasks, shownEvents]);
+  // Mini-month density dots over everything loaded.
+  const busyDayKeys = useMemo(() => busyDayKeysOf(tasks, shownEvents), [tasks, shownEvents]);
 
   const update = useCallback(
     (next: CalendarViewState) => {
@@ -592,6 +593,8 @@ export function CalendarPageView({
         <CalendarTasksPanel
           onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
           onRequestCapture={() => dispatchOpenCapture()}
+          skeletonGroups={faults.loadShape.planGroups}
+          onShape={faults.rememberPlanShape}
           review={
             reviewMode
               ? {
@@ -677,6 +680,8 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
+      faults.loadShape.planGroups,
+      faults.rememberPlanShape,
     ],
   );
 
@@ -758,6 +763,7 @@ export function CalendarPageView({
                 />
               }
             />
+            {faults.banner}
             <CalendarStrip
               count={strip.length}
               canEdit={canEdit}
@@ -776,7 +782,7 @@ export function CalendarPageView({
               onScheduleDue={canEdit ? onScheduleDue : undefined}
               fileCounts={attachmentCounts}
               prefs={prefs}
-              loading={loading}
+              loading={faults.loading}
               error={error}
               onRetry={() => {
                 void commands.load();
@@ -798,6 +804,10 @@ export function CalendarPageView({
               onTriageLonger={onTriageLonger}
               onTriageRemove={onTriageRemove}
               focusBlockId={focusBlockId}
+              staleAccountIds={faults.syncStatus.staleAccountIds}
+              faulted={faults.syncStatus.faulted}
+              loadingAllDayRows={faults.loadShape.allDayRows}
+              overlay={faults.firstWeekOverlay}
             />
           </div>
         }

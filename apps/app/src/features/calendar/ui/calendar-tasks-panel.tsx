@@ -11,7 +11,7 @@
 
 import { useDraggable } from "@dnd-kit/core";
 import { CalendarCheck, GripVertical, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -20,6 +20,7 @@ import { CompleteToggle } from "../../../components/ui/complete-toggle";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
+import { Kbd } from "../../../components/ui/kbd";
 import { formatDay, formatDuration, formatTime } from "../../../lib/time-format";
 import { formatDue, formatScheduled } from "../../tasks/helpers";
 import type { Task } from "../../tasks/model";
@@ -27,6 +28,7 @@ import { useTaskCommands, useTasksSelector, useTasksStatus } from "../../tasks/t
 import { taskDrag } from "../../tasks/ui/dnd/task-dnd";
 import { groupPanelTasks } from "../panel";
 import type { StripItem } from "../strip";
+import { PlanSkeleton } from "./calendar-skeleton";
 
 export type ReviewController = {
   items: StripItem[];
@@ -40,12 +42,25 @@ type Props = {
   onRequestCapture: () => void;
   /** The strip's Review sub-state (AC9). Null when not reviewing. */
   review?: ReviewController | null;
+  /** While tasks load: the groups' last known rows (CALR-3, AC4). */
+  skeletonGroups?: readonly number[];
+  /** Once loaded: the rows each group shows, for the next load's skeleton. */
+  onShape?: (groups: number[]) => void;
 };
 
-export function CalendarTasksPanel({ onOpenTask, onRequestCapture, review }: Props) {
+/** A group's skeleton never draws more rows than Plan shows before Show more. */
+const SHAPE_ROWS_MAX = 6;
+
+export function CalendarTasksPanel({
+  onOpenTask,
+  onRequestCapture,
+  review,
+  skeletonGroups,
+  onShape,
+}: Props) {
   const tasks = useTasksSelector((d) => d.liveTasks);
   const queuedTasks = useTasksSelector((d) => d.queuedTasks);
-  const { canEdit } = useTasksStatus();
+  const { canEdit, loading } = useTasksStatus();
   const [query, setQuery] = useState("");
   const groups = useMemo(
     () => groupPanelTasks({ tasks, queuedTasks, query }),
@@ -53,6 +68,15 @@ export function CalendarTasksPanel({ onOpenTask, onRequestCapture, review }: Pro
   );
 
   const total = groups.queue.length + groups.dueSoon.length + groups.backlog.length;
+
+  // Remember the loaded shape (search off) so the next load draws it.
+  const shape = [groups.queue.length, groups.dueSoon.length, groups.backlog.length]
+    .map((n) => Math.min(n, SHAPE_ROWS_MAX))
+    .join(",");
+  useEffect(() => {
+    if (loading || query.trim() !== "" || !onShape) return;
+    onShape(shape.split(",").map(Number));
+  }, [loading, query, shape, onShape]);
 
   return (
     <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-2 overflow-y-auto">
@@ -75,13 +99,15 @@ export function CalendarTasksPanel({ onOpenTask, onRequestCapture, review }: Pro
         />
       </div>
 
-      {total === 0 && !groups.emptyBySearch ? (
+      {loading && total === 0 && skeletonGroups ? <PlanSkeleton groups={skeletonGroups} /> : null}
+
+      {!loading && total === 0 && !groups.emptyBySearch ? (
         <div className="flex flex-col items-start gap-2 px-1 py-3">
           <span className="text-sm text-muted-foreground">
             Nothing to schedule — capture a task or enjoy the calm.
           </span>
           <Button variant="outline" size="sm" onClick={onRequestCapture}>
-            Capture
+            Capture a task <Kbd>⇧⌘K</Kbd>
           </Button>
         </div>
       ) : null}

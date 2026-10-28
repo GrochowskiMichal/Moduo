@@ -4,7 +4,8 @@
 // + quiet toast on error. Reads degrade to empty pre-migration (deploy gap).
 // Live events (CALR-7): while a workspace is open the hook follows its
 // calendar's inserts, updates and deletes (`runtime.calendar.listenLive`,
-// merged by `applyLiveChange`), and a resync refetches quietly.
+// merged by `applyLiveChange`), and a resync refetches quietly. A read that
+// fails keeps the week it had (CALR-3).
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -214,14 +215,21 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       // event until the next reload (the tmp-id reconcile finds nothing).
       // Only this scope's own: a create still saving in the workspace you just
       // left stays there.
+      // A failed read (CALR-3) returns nothing: keep what this scope's week
+      // already shows, so a failed resync never empties it into "Nothing
+      // scheduled". The banner says the read failed.
+      const failed = bundle.degraded && bundle.events.length === 0;
       setList((prev) => {
+        if (failed && prev.scope === scope && prev.events.length > 0) return prev;
         const pending = prev.scope === scope ? prev.events.filter((e) => isTempId(e.id)) : [];
         return {
           scope,
           events: pending.length > 0 ? [...fresh, ...pending] : fresh,
         };
       });
-      setAccounts(bundle.accounts);
+      setAccounts((prev) =>
+        bundle.degraded && bundle.accounts.length === 0 ? prev : bundle.accounts,
+      );
       setDegraded(bundle.degraded);
       setTruncated(bundle.truncated);
       setLoading(false);

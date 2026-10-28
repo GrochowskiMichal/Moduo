@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { cleanup, render } from "@testing-library/react";
 
 import type { EventChip } from "../events";
+import { localDayKey } from "../lens";
 import {
   allDayRowsOf,
   DEFAULT_LOAD_SHAPE,
@@ -16,7 +17,6 @@ import {
   sanitizeLoadShape,
   writeLoadShape,
 } from "../load-shape";
-import { localDayKey } from "../lens";
 import { AllDayLane } from "./allday-lane";
 import { AllDayLaneSkeleton, PlanSkeleton } from "./calendar-skeleton";
 
@@ -114,7 +114,9 @@ describe("skeleton keeps the last shape", () => {
       />,
     );
     const realLane = real.container.querySelector<HTMLElement>("[data-allday-lane]")!;
-    const skeleton = render(<AllDayLaneSkeleton days={days.length} columns={columns} rows={rows} />);
+    const skeleton = render(
+      <AllDayLaneSkeleton days={days.length} columns={columns} rows={rows} />,
+    );
     const skeletonLane = skeleton.container.querySelector<HTMLElement>("[data-allday-lane]")!;
     expect(skeletonLane).not.toBeNull();
     expect(skeletonLane.className).toBe(realLane.className);
