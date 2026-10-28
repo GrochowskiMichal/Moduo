@@ -136,6 +136,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   // GS-2: Notes' sidebar search (the global search contract).
   "notes__search",
   "notifications_list",
+  // GS-3: ⌘K's one search (search_all merges every module's search).
+  "search_all",
   "share_assign_preview",
   "share_defaults_get",
   "share_op_state",

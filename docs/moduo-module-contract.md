@@ -183,7 +183,8 @@ static, typed manifest — onboarding module N+1 is additive:
 - [ ] invariant-bearing mutations go through `<module>_op_*` RPCs;
 - [ ] every op writes an attributed `module_activity` row;
 - [ ] the activity trail renders in the module's detail surface;
-- [ ] the module has a manifest entry in the registry.
+- [ ] the module has a manifest entry in the registry;
+- [ ] the module answers `<module>__search(ws, query, limit)` with `SearchHit` rows, its own visibility applied before the limit and the actor read from the request, and `search_all` calls it (global search, [specs/global-search.md](../specs/global-search.md) Assumptions 1, 2, 7; until then the `registry__search` adapter covers its type).
 
 ---
 

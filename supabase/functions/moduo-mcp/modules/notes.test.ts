@@ -323,6 +323,7 @@ describe("notes_search uses notes__search", () => {
     match: "body",
     rank: 0.4,
     updated_at: "2026-10-28T09:00:00Z",
+    archived: false,
     ...over,
   });
 
@@ -345,8 +346,16 @@ describe("notes_search uses notes__search", () => {
       context: "Planning",
       snippet: "We tasted a **kumquat** at lunch",
       match: "body",
+      archived: false,
     });
     expect(out[0]).toMatchObject({ title: "Kumquat jam", snippet: null, match: "title" });
+  });
+
+  it("says whether each note is archived (GS-3, Q8)", async () => {
+    const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const { ctx } = searchDb({ hits: [hitRow(A, { archived: true })] });
+    const out = (await tool("notes_search").handler({ query: "kumquat" }, ctx)) as Row[];
+    expect(out[0].archived).toBe(true);
   });
 
   it("caps the limit at 50 and defaults it to 20", async () => {

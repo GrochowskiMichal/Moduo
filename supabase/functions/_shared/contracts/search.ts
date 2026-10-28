@@ -14,6 +14,12 @@
  * - `rank` is 0..1 within the module.
  * - `snippet` marks matches with U+E000 … U+E001; the client splits on them and
  *   draws text, never HTML.
+ * - `archived` (GS-3, Q8): the item is archived (a note, a task in an archived
+ *   project, a project); it is shown with a tag and ranked lower.
+ *
+ * `search_all` (GS-3) returns `SearchAllRow`: a hit plus its merged `score`
+ * (0..1), its type's `type_total` (what "Show all N" counts, capped at 50) and
+ * `top`, true on the one Top result.
  */
 
 import { z } from "zod";
@@ -44,8 +50,16 @@ export const searchHitSchema = z.object({
   match: searchMatchSchema,
   rank: z.number().min(0).max(1),
   updated_at: z.string(),
+  archived: z.boolean(),
 });
 export type SearchHit = z.infer<typeof searchHitSchema>;
+
+export const searchAllRowSchema = searchHitSchema.extend({
+  score: z.number().min(0).max(1),
+  type_total: z.number().int().min(0),
+  top: z.boolean(),
+});
+export type SearchAllRow = z.infer<typeof searchAllRowSchema>;
 
 export function isSearchHit(value: unknown): value is SearchHit {
   return searchHitSchema.safeParse(value).success;
@@ -58,11 +72,17 @@ export function parseSearchHit(input: unknown): SafeParseResult<SearchHit> {
 
 const textOrNull = (value: unknown): string | null => (typeof value === "string" ? value : null);
 
+const toNumber = (value: unknown): number =>
+  typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+
 function clampRank(value: unknown): number {
-  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  const n = toNumber(value);
   if (!Number.isFinite(n)) return 0;
   return Math.min(1, Math.max(0, n));
 }
+
+/** PostgREST sends booleans as JSON; a raw SQL read can say "t". */
+const isTrue = (value: unknown): boolean => value === true || value === "t";
 
 /**
  * Lax read for display: an unknown match reads as a body hit, the rank is
@@ -85,5 +105,29 @@ export function normalizeSearchHit(input: unknown): SearchHit | null {
     match: normalizeSearchMatch(row.match),
     rank: clampRank(row.rank),
     updated_at: textOrNull(row.updated_at) ?? "",
+    archived: isTrue(row.archived),
+  };
+}
+
+/** Strict parse of a search_all row. */
+export function parseSearchAllRow(input: unknown): SafeParseResult<SearchAllRow> {
+  return parseOrError(searchAllRowSchema, input);
+}
+
+/**
+ * Lax read of a search_all row: the hit as {@link normalizeSearchHit} reads it,
+ * the score clamped to 0..1, a missing or broken total counting the row itself,
+ * and `top` only when true.
+ */
+export function normalizeSearchAllRow(input: unknown): SearchAllRow | null {
+  const hit = normalizeSearchHit(input);
+  if (!hit) return null;
+  const row = input as Record<string, unknown>;
+  const total = Math.floor(toNumber(row.type_total));
+  return {
+    ...hit,
+    score: clampRank(row.score),
+    type_total: Number.isFinite(total) && total >= 1 ? total : 1,
+    top: isTrue(row.top),
   };
 }
