@@ -18,6 +18,7 @@ import type {
   CalendarLiveEvent,
 } from "../features/calendar/events";
 import { defaultCalendarWindow } from "../features/calendar/window";
+import { type BusyBlockRow, busyBlockToEvent, type SharedCalendar } from "./calendar-busy";
 import { collectTruncations, READ_CAPS } from "./paged-select";
 import { jsonObject, type RpcArgs, runRpc } from "./runtime.db";
 import type { CalendarRuntime } from "./runtime.types";
@@ -333,6 +334,45 @@ export const webCalendar: CalendarRuntime = {
     } catch {
       return { events: [], accounts: [], degraded: true, truncated: [] };
     }
+  },
+  async preview({ workspaceId, as, window }) {
+    const args = {
+      p_workspace_id: workspaceId,
+      p_from: window.fromIso,
+      p_to: window.toIso,
+      p_as: as,
+    };
+    const [rows, busy, levels] = await Promise.all([
+      supabaseClient.rpc("calendar_events_visible", args),
+      supabaseClient.rpc("calendar_busy_blocks", args),
+      supabaseClient.rpc("calendar_preview_levels", { p_workspace_id: workspaceId, p_as: as }),
+    ]);
+    if (rows.error || busy.error || levels.error) {
+      return { rows: [], busy: [], levels: [], failed: true };
+    }
+    return {
+      rows: mapKnownRows(rows.data ?? [], calendarEventRowToModel),
+      busy: ((busy.data ?? []) as BusyBlockRow[]).map((r, i) =>
+        busyBlockToEvent(r, workspaceId, i),
+      ),
+      levels: (levels.data ?? []).flatMap((r: { calendar_id: string; level: string }) =>
+        r.level === "view" || r.level === "freebusy" || r.level === "none"
+          ? [{ calendarId: r.calendar_id, level: r.level }]
+          : [],
+      ),
+      failed: false,
+    };
+  },
+  async sharedWithMe(workspaceId) {
+    // Before the migration lands the read fails: nobody shares with you yet.
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_shared_with_me", { p_workspace_id: workspaceId }),
+    ).catch(() => null);
+    return (data ?? []).flatMap((r: { calendar_id: string; owner_id: string; level: string }) =>
+      r.level === "view" || r.level === "freebusy"
+        ? [{ calendarId: r.calendar_id, ownerId: r.owner_id, level: r.level } as SharedCalendar]
+        : [],
+    );
   },
   async createEvent(input) {
     const args: Record<string, unknown> = {

@@ -6263,15 +6263,18 @@ export type Database = {
         Returns: string
       }
       calendar_busy_blocks: {
-        Args: { p_from: string | null; p_to: string | null; p_workspace_id: string | null }
+        Args: { p_as?: string; p_from: string; p_to: string; p_workspace_id: string }
         Returns: {
+          all_day: boolean
           calendar_id: string
           end_time: string
+          kind: string
+          owner_id: string
           start_time: string
         }[]
       }
       calendar_events_visible: {
-        Args: { p_from: string; p_to: string; p_workspace_id: string }
+        Args: { p_as?: string; p_from: string; p_to: string; p_workspace_id: string }
         Returns: Database["public"]["Tables"]["calendar_events"]["Row"][]
         SetofOptions: {
           from: "*"
@@ -6624,6 +6627,13 @@ export type Database = {
         }
         Returns: Json
       }
+      calendar_preview_levels: {
+        Args: { p_as: string; p_workspace_id: string }
+        Returns: {
+          calendar_id: string
+          level: string
+        }[]
+      }
       calendar_set_save: {
         Args: {
           p_calendar_ids: string[] | null
@@ -6631,6 +6641,14 @@ export type Database = {
           p_workspace_id: string | null
         }
         Returns: string
+      }
+      calendar_shared_with_me: {
+        Args: { p_workspace_id: string }
+        Returns: {
+          calendar_id: string
+          level: string
+          owner_id: string
+        }[]
       }
       can_access:
         | {

@@ -23,11 +23,14 @@ import type {
   CalendarLiveChange,
 } from "../events";
 import { applyLiveChange } from "../live";
+import { type BusyBlockRow, busyBlockToEvent } from "../teammates";
 import {
   allTimeCalendarWindow,
+  busyWindowFor,
   type CalendarWindow,
   defaultCalendarWindow,
   widenCalendarWindow,
+  windowCovers,
 } from "../window";
 import { writableEvent } from "../writable";
 import { useOccurrenceWrites } from "./use-occurrence-writes";
@@ -193,6 +196,31 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
    * leaves `loading` alone, so the grid refreshes in place instead of
    * flashing a skeleton.
    */
+  // Busy blocks are read for the days on screen and the composer's horizon
+  // (busyWindowFor), not the fetch window: a reply holds one row per occurrence.
+  const busyWindowRef = useRef<CalendarWindow | null>(null);
+  const readBusy = useCallback(async (req: number, ws: string) => {
+    const now = new Date();
+    const window =
+      busyWindowRef.current ?? busyWindowFor(now, new Date(now.getTime() + 7 * 86_400_000));
+    busyWindowRef.current = window;
+    try {
+      const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
+        p_workspace_id: ws,
+        p_from: window.fromIso,
+        p_to: window.toIso,
+      });
+      if (reqRef.current !== req) return;
+      setBusy(
+        busyRows.error || !Array.isArray(busyRows.data)
+          ? []
+          : busyRows.data.map((row: BusyBlockRow, i: number) => busyBlockToEvent(row, ws, i)),
+      );
+    } catch {
+      if (reqRef.current === req) setBusy([]);
+    }
+  }, []);
+
   const load = useCallback(
     async (options?: { quiet?: boolean }) => {
       if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
@@ -244,47 +272,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       setDegraded(bundle.degraded);
       setTruncated(bundle.truncated);
       setLoading(false);
-      void (async () => {
-        try {
-          const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
-            p_workspace_id: workspaceId,
-            p_from: fetchWindow.fromIso,
-            p_to: fetchWindow.toIso,
-          });
-          if (reqRef.current !== req) return;
-          setBusy(
-            busyRows.error || !Array.isArray(busyRows.data)
-              ? []
-              : busyRows.data.map(
-                  (
-                    row: { calendar_id: string; start_time: string; end_time: string },
-                    i: number,
-                  ) => ({
-                    // Two busy blocks can start at the same time; keep keys unique.
-                    id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
-                    workspaceId,
-                    ownerId: null,
-                    sourceAccountId: "busy",
-                    externalEventId: null,
-                    calendarId: "busy",
-                    title: "Busy",
-                    description: "",
-                    startsAt: row.start_time,
-                    endsAt: row.end_time,
-                    allDay: false,
-                    rrule: null,
-                    status: "confirmed",
-                    color: null,
-                    createdAt: row.start_time,
-                    updatedAt: row.start_time,
-                    deletedAt: null,
-                  }),
-                ),
-          );
-        } catch {
-          if (reqRef.current === req) setBusy([]);
-        }
-      })();
+      void readBusy(req, workspaceId);
     },
     [runtime, userId, workspaceId, canRead, fetchWindow, scope],
   );
@@ -363,8 +351,12 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const ensureRange = useCallback(
     (from: Date, to: Date) => {
       setFetchWindow((current) => widenCalendarWindow(current, from, to) ?? current);
+      // Days past what the busy blocks hold: read them again for the new days.
+      if (windowCovers(busyWindowRef.current, from, to)) return;
+      busyWindowRef.current = busyWindowFor(from, to);
+      if (workspaceId && canRead) void readBusy(reqRef.current, workspaceId);
     },
-    [setFetchWindow],
+    [setFetchWindow, workspaceId, canRead, readBusy],
   );
 
   /**

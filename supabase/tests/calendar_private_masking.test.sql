@@ -132,8 +132,8 @@ BEGIN
 
   PERFORM test.ok(test.value_as('B', pg_temp.visible('count(*)')) = '0',
     'Busy only gets no rows from the masked read');
-  PERFORM test.ok(test.value_as('B', format($q$SELECT count(*) FROM public.calendar_busy_blocks(%L, '2026-11-02 00:00+00', '2026-11-09 00:00+00')$q$, test.id('W'))) = '2',
-    'but busy blocks for the two Work events in that week');
+  PERFORM test.ok(test.value_as('B', format($q$SELECT count(*) FROM public.calendar_busy_blocks(%L, '2026-11-02 00:00+00', '2026-11-09 00:00+00')$q$, test.id('W'))) = '3',
+    'but busy blocks for the three Work events in that week (the weekly 1:1''s occurrence too, now that blocks expand repeats)');
   PERFORM test.ok(test.value_as('N', pg_temp.visible('count(*)')) = '0'
               AND test.value_as('N', format($q$SELECT count(*) FROM public.calendar_busy_blocks(%L, '2026-11-02 00:00+00', '2026-11-09 00:00+00')$q$, test.id('W'))) = '0',
     'N, who Work isn''t shared with, gets nothing either way');
