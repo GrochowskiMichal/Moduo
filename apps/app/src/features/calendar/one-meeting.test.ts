@@ -1,0 +1,171 @@
+// CALR-20b contract: the same meeting reached through two connected logins
+// shows once (specs/calendar-rethink.md, Assumptions "New events go to"),
+// matched on Google's iCalUID, and the copy you can edit wins. The mirror
+// starts storing iCalUID in this block.
+
+import { describe, expect, it } from "@rstest/core";
+
+import type { CalendarAccountModel, CalendarEventModel } from "./events";
+import { mapGoogleEvent } from "./mirror";
+import { oneChipPerMeeting } from "./one-meeting";
+
+const ME = "u-me";
+const KAI = "u-kai";
+
+function account(over: Partial<CalendarAccountModel> & { id: string }): CalendarAccountModel {
+  return {
+    workspaceId: "w1",
+    ownerId: ME,
+    provider: "google",
+    externalId: `google:x:${over.id}`,
+    displayLabel: over.id,
+    isDefaultTarget: false,
+    color: null,
+    lastSyncAt: null,
+    status: "ok",
+    syncToken: null,
+    deletedAt: null,
+    readOnly: false,
+    busyDefault: true,
+    lastError: null,
+    ...over,
+  };
+}
+
+const WORK = account({ id: "acc-work" });
+const GUEST = account({ id: "acc-guest", readOnly: true });
+const KAIS = account({ id: "acc-kai", ownerId: KAI });
+const ICS = account({ id: "acc-ics", provider: "ics" });
+const ACCOUNTS = [WORK, GUEST, KAIS, ICS];
+
+function ev(over: Partial<CalendarEventModel> & { id: string }): CalendarEventModel {
+  return {
+    workspaceId: "w1",
+    ownerId: ME,
+    sourceAccountId: null,
+    externalEventId: null,
+    calendarId: "primary",
+    title: "Board",
+    description: "",
+    startsAt: "2026-11-05T10:00:00.000Z",
+    endsAt: "2026-11-05T11:00:00.000Z",
+    allDay: false,
+    rrule: null,
+    status: "confirmed",
+    color: null,
+    createdAt: "2026-10-28T08:00:00.000Z",
+    updatedAt: "2026-10-28T08:00:00.000Z",
+    deletedAt: null,
+    ...over,
+  };
+}
+
+const ids = (events: CalendarEventModel[]) => events.map((e) => e.id);
+
+describe("one chip per meeting", () => {
+  it("shows a meeting two logins see once, keeping the copy you can edit", () => {
+    const readOnlyCopy = ev({
+      id: "e-guest",
+      sourceAccountId: "acc-guest",
+      externalEventId: "h1",
+      icalUid: "m1@google.com",
+    });
+    const mine = ev({
+      id: "e-work",
+      sourceAccountId: "acc-work",
+      externalEventId: "g1",
+      icalUid: "m1@google.com",
+    });
+    expect(ids(oneChipPerMeeting([readOnlyCopy, mine], ACCOUNTS, ME))).toEqual(["e-work"]);
+    expect(ids(oneChipPerMeeting([mine, readOnlyCopy], ACCOUNTS, ME))).toEqual(["e-work"]);
+  });
+
+  it("your own copy wins over a teammate's of the same meeting", () => {
+    const kais = ev({
+      id: "e-kai",
+      ownerId: KAI,
+      sourceAccountId: "acc-kai",
+      externalEventId: "k1",
+      icalUid: "m2@google.com",
+    });
+    const mine = ev({
+      id: "e-work",
+      sourceAccountId: "acc-work",
+      externalEventId: "g2",
+      icalUid: "m2@google.com",
+    });
+    expect(ids(oneChipPerMeeting([kais, mine], ACCOUNTS, ME))).toEqual(["e-work"]);
+  });
+
+  it("keeps exactly one when no copy is yours to edit", () => {
+    const a = ev({ id: "e-a", sourceAccountId: "acc-guest", externalEventId: "a", icalUid: "m3" });
+    const b = ev({ id: "e-b", sourceAccountId: "acc-ics", externalEventId: "b", icalUid: "m3" });
+    expect(oneChipPerMeeting([a, b], ACCOUNTS, ME)).toHaveLength(1);
+    expect(ids(oneChipPerMeeting([a, b], ACCOUNTS, ME))).toEqual(
+      ids(oneChipPerMeeting([b, a], ACCOUNTS, ME)),
+    );
+  });
+
+  it("keeps each occurrence of a repeating meeting (instances share the iCalUID)", () => {
+    const mon = ev({
+      id: "e-mon",
+      sourceAccountId: "acc-work",
+      externalEventId: "r_20261102",
+      icalUid: "r@google.com",
+      externalSeriesId: "r",
+      originalStart: "2026-11-02T09:00:00.000Z",
+    });
+    const tue = ev({
+      id: "e-tue",
+      sourceAccountId: "acc-work",
+      externalEventId: "r_20261103",
+      icalUid: "r@google.com",
+      externalSeriesId: "r",
+      originalStart: "2026-11-03T09:00:00.000Z",
+    });
+    const tueGuest = ev({
+      id: "e-tue-guest",
+      sourceAccountId: "acc-guest",
+      externalEventId: "x_20261103",
+      icalUid: "r@google.com",
+      externalSeriesId: "x",
+      originalStart: "2026-11-03T09:00:00.000Z",
+    });
+    expect(ids(oneChipPerMeeting([mon, tueGuest, tue], ACCOUNTS, ME))).toEqual(["e-mon", "e-tue"]);
+  });
+
+  it("leaves events without an iCalUID, and their order, alone", () => {
+    const a = ev({ id: "e-1" });
+    const b = ev({ id: "e-2", sourceAccountId: "acc-work", externalEventId: "g9" });
+    const c = ev({ id: "e-3", icalUid: null });
+    expect(ids(oneChipPerMeeting([c, a, b], ACCOUNTS, ME))).toEqual(["e-3", "e-1", "e-2"]);
+  });
+
+  it("returns the same list when nothing repeats", () => {
+    const list = [ev({ id: "e-1", icalUid: "u1" }), ev({ id: "e-2", icalUid: "u2" })];
+    expect(oneChipPerMeeting(list, ACCOUNTS, ME)).toBe(list);
+  });
+});
+
+describe("the mirror carries Google's iCalUID", () => {
+  it("maps iCalUID from Google's event", () => {
+    const mapped = mapGoogleEvent({
+      id: "g1",
+      iCalUID: "g1@google.com",
+      summary: "Board",
+      start: { dateTime: "2026-11-05T10:00:00Z" },
+      end: { dateTime: "2026-11-05T11:00:00Z" },
+    });
+    expect(mapped?.iCalUID).toBe("g1@google.com");
+  });
+
+  it("leaves the key out when Google sends none, so the stored one stays", () => {
+    const mapped = mapGoogleEvent({
+      id: "g1",
+      summary: "Board",
+      start: { dateTime: "2026-11-05T10:00:00Z" },
+      end: { dateTime: "2026-11-05T11:00:00Z" },
+    });
+    expect(mapped && "iCalUID" in mapped).toBe(false);
+  });
+});
