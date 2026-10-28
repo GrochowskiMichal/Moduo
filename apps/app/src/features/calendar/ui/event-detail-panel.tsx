@@ -6,7 +6,7 @@
 // render the same layout read-only with where they come from.
 
 import { Trash2, Video, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
@@ -63,6 +63,8 @@ type Props = {
   onPatch: (eventId: string, patch: CalendarEventPatch) => void;
   onDeleteRequest: (eventId: string) => void;
   onClose: () => void;
+  /** The ⋯ menu: the right-click menu's items with their keys (CALR-4b). */
+  menu?: ReactNode;
 };
 
 export function EventDetailPanel({
@@ -78,6 +80,7 @@ export function EventDetailPanel({
   onPatch,
   onDeleteRequest,
   onClose,
+  menu = null,
 }: Props) {
   const external = event.sourceAccountId !== null;
   const meeting = meetingLinkOf(event);
@@ -222,7 +225,10 @@ export function EventDetailPanel({
     <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
       <div className="flex items-center justify-between gap-2">
         <Eyebrow>Event</Eyebrow>
-        <IconButton icon={X} label="Close details" onClick={onClose} />
+        <div className="flex items-center gap-0.5">
+          {menu}
+          <IconButton icon={X} label="Close details" onClick={onClose} />
+        </div>
       </div>
 
       {editable ? (
@@ -333,6 +339,7 @@ export function EventDetailPanel({
       <EventPeopleRows attendees={event.attendees ?? []} />
 
       <EventLinkedRows
+        eventId={event.id}
         runtime={runtime}
         workspaceId={workspaceId}
         status={hub.status}

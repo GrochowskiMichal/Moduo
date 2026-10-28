@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · The event menus reuse the week's keys; Move goes only where Moduo can undo it whole (CALR-4b).
 - 2026-10-28 · The composer reads the line locally, routes outside guests to Google, and names teammates without inviting them (CALR-9).
 - 2026-10-28 · Narrow windows fold through the shell's panel events; the second zone is a device setting; working hours are a sheet over the synced prefs (CALR-13).
 - 2026-10-28 · Plan groups your week's tasks; a click selects a row and S places it; placing keys are a gesture, not registry keys (CALR-5).
