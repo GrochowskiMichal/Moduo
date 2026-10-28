@@ -35,3 +35,6 @@ ca67ab1aad4cfda5b40179a2b3dce9cff5aeba0d:scripts/agent/risk-hook.test.ts:curl-au
 
 # NS-5: a fake publish_token in a test fixture ("0f64…"); low-entropy since.
 38201c7f18a093f7afa3ea87be745c7f3f5600ee:apps/app/src/lib/runtime.web.notes.test.ts:generic-api-key:37
+
+# CALR-19: a fake 32-hex offer token in a test fixture (offer.test.ts); not a secret.
+05ff780902317979180a6896e9e64764d7550705:supabase/functions/booking-public/offer.test.ts:generic-api-key:126
