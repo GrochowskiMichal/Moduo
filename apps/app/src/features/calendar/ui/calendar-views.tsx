@@ -3,7 +3,7 @@
 // notes, a follow-up, where) in the free width beside it. Kept out of the page
 // so the page only names the view.
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { Task } from "../../tasks/model";
@@ -25,6 +25,7 @@ type Props = CalendarGridProps & {
 };
 
 const NO_IDS: string[] = [];
+const NO_DUE: ReadonlyMap<string, never[]> = new Map();
 
 /** Now, a minute at a time (Month dims what has passed). */
 function useMinuteNow(): Date {
@@ -45,6 +46,12 @@ export function CalendarViews({
   ...grid
 }: Props) {
   const now = useMinuteNow();
+  // The page hands a fresh opener each render; the month's days keep one.
+  const openDayRef = useRef(onOpenDay);
+  useEffect(() => {
+    openDayRef.current = onOpenDay;
+  });
+  const openDay = useCallback((day: Date) => openDayRef.current(day), []);
   const dayKey = grid.view === "day" && grid.days[0] ? localDayKey(grid.days[0]) : null;
   const dayChips = dayKey ? grid.eventsByDay.get(dayKey) : undefined;
   // Meetings, not focus time or holds.
@@ -80,14 +87,14 @@ export function CalendarViews({
         eventsByDay={grid.eventsByDay}
         allDayByDay={grid.allDayByDay}
         blocksByDay={grid.blocksByDay}
-        dueByDay={grid.dueByDay ?? new Map()}
+        dueByDay={grid.dueByDay ?? NO_DUE}
         accountHues={grid.accountHues}
         selectedOccurrenceKey={grid.selectedOccurrenceKey}
         onSelectOccurrence={grid.onSelectOccurrence}
         onEventClick={grid.onEventClick}
         onTaskClick={grid.onTaskClick}
-        onOpenDay={onOpenDay}
-        onDueClick={(id) => grid.onDueClick?.(id)}
+        onOpenDay={openDay}
+        onDueClick={grid.onDueClick}
         onScheduleDue={grid.onScheduleDue}
         staleAccountIds={grid.staleAccountIds}
       />

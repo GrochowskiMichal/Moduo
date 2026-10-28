@@ -6,7 +6,7 @@
 // `month-layout.ts`; this file measures how many lines a cell fits and draws.
 // Inline styles are runtime grid placement only (columns, rows, spans).
 
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -31,7 +31,7 @@ type Props = {
   onTaskClick: (block: TaskBlock, rect: DOMRect) => void;
   /** The date or "N more": show that day in Day view. */
   onOpenDay: (day: Date) => void;
-  onDueClick: (taskId: string) => void;
+  onDueClick?: (taskId: string) => void;
   /** Schedule (S) in a date's due list; absent for a view-only reader. */
   onScheduleDue?: (taskId: string, day: Date) => void;
   /** Accounts that didn't sync: their items carry the sync mark (CALR-3). */
@@ -41,6 +41,7 @@ type Props = {
 /** Lines a cell fits before it is measured (and in tests, which lay nothing out). */
 const DEFAULT_CAPACITY = 4;
 const NONE: ReadonlySet<string> = new Set();
+const NOOP = () => {};
 
 function dayLabel(day: Date): string {
   return day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
@@ -85,7 +86,7 @@ export function CalendarMonth({
   onEventClick,
   onTaskClick,
   onOpenDay,
-  onDueClick,
+  onDueClick = NOOP,
   onScheduleDue,
   staleAccountIds = NONE,
 }: Props) {
@@ -106,10 +107,13 @@ export function CalendarMonth({
   );
   const cols = weeks[0]?.cells.length ?? 7;
   const columns = `repeat(${cols}, minmax(0, 1fr))`;
-  const pickEvent = (chip: EventChip, el: HTMLElement) => {
-    onSelectOccurrence(chip.occurrenceKey);
-    onEventClick(chip, el.getBoundingClientRect());
-  };
+  const pickEvent = useCallback(
+    (chip: EventChip, el: HTMLElement) => {
+      onSelectOccurrence(chip.occurrenceKey);
+      onEventClick(chip, el.getBoundingClientRect());
+    },
+    [onSelectOccurrence, onEventClick],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -129,7 +133,7 @@ export function CalendarMonth({
       </div>
       <div
         ref={ref}
-        role="grid"
+        role="region"
         aria-label={monthOf({ days: [...days] }).toLocaleDateString(undefined, {
           month: "long",
           year: "numeric",
@@ -145,25 +149,26 @@ export function CalendarMonth({
         {weeks.map((week) => (
           <div
             key={week.cells[0]?.dayKey}
-            role="row"
             data-month-week
-            className="relative grid min-h-0 border-b border-border"
-            style={{ gridTemplateColumns: columns }}
+            className="relative min-h-0 border-b border-border"
           >
-            {week.cells.map((cell) => (
-              <MonthDay
-                key={cell.dayKey}
-                cell={cell}
-                accountHues={accountHues}
-                selectedOccurrenceKey={selectedOccurrenceKey}
-                staleAccountIds={staleAccountIds}
-                onPickEvent={pickEvent}
-                onTaskClick={onTaskClick}
-                onOpenDay={onOpenDay}
-                onDueClick={onDueClick}
-                onScheduleDue={onScheduleDue}
-              />
-            ))}
+            <div className="grid h-full min-h-0" style={{ gridTemplateColumns: columns }}>
+              {week.cells.map((cell) => (
+                <MonthDay
+                  key={cell.dayKey}
+                  cell={cell}
+                  accountHues={accountHues}
+                  selectedOccurrenceKey={selectedOccurrenceKey}
+                  staleAccountIds={staleAccountIds}
+                  onPickEvent={pickEvent}
+                  onTaskClick={onTaskClick}
+                  onOpenDay={onOpenDay}
+                  onDueClick={onDueClick}
+                  onScheduleDue={onScheduleDue}
+                />
+              ))}
+            </div>
+            {/* the bars sit over the week's days, under their dates */}
             {week.bars.length > 0 ? (
               <div
                 className="pointer-events-none absolute inset-x-0 top-8.5 grid gap-y-0.5"
@@ -210,7 +215,8 @@ export function CalendarMonth({
   );
 }
 
-function MonthDay({
+/** One day; memoised, so a selection or a tick redraws only the days it touches. */
+const MonthDay = memo(function MonthDay({
   cell,
   accountHues,
   selectedOccurrenceKey,
@@ -235,7 +241,8 @@ function MonthDay({
   const weekend = cell.day.getDay() === 0 || cell.day.getDay() === 6;
   return (
     <div
-      role="gridcell"
+      role="group"
+      aria-label={label}
       data-month-cell={cell.dayKey}
       data-past={cell.past || undefined}
       data-today={cell.today || undefined}
@@ -273,10 +280,7 @@ function MonthDay({
           />
         ) : null}
       </div>
-      <div
-        data-month-lines
-        className={cn("flex min-h-0 flex-col gap-0.5", !cell.inMonth && "opacity-60")}
-      >
+      <div data-month-lines className="flex min-h-0 flex-col gap-0.5">
         {Array.from({ length: cell.barRows }, (_, i) => (
           <div key={`bar-${i}`} aria-hidden className="h-(--ctrl-h-xs) shrink-0" />
         ))}
@@ -308,7 +312,7 @@ function MonthDay({
       </div>
     </div>
   );
-}
+});
 
 /** One line in a cell: the calendar's dot, the start, the title. Your work is ringed. */
 function MonthLineButton({
@@ -343,11 +347,14 @@ function MonthLineButton({
       className={cn(
         "flex h-(--ctrl-h-xs) min-w-0 shrink-0 items-center gap-1.5 rounded-sm px-1 text-left text-xs transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected && "bg-state-active ring-2 ring-ring",
-        line.past && "opacity-60",
       )}
     >
       {line.kind === "event" ? (
-        <span aria-hidden data-label={hue} className="cal-swatch size-1.5 shrink-0 rounded-full" />
+        <span
+          aria-hidden
+          data-label={hue}
+          className={cn("cal-swatch size-1.5 shrink-0 rounded-full", line.past && "opacity-50")}
+        />
       ) : (
         <span
           aria-hidden
@@ -355,7 +362,12 @@ function MonthLineButton({
         />
       )}
       <span className="shrink-0 text-2xs text-muted-foreground tabular-nums">{time}</span>
-      <span className="min-w-0 truncate text-foreground">{title}</span>
+      {/* The past steps down to the muted ink (no opacity, so it keeps its contrast). */}
+      <span
+        className={cn("min-w-0 truncate", line.past ? "text-muted-foreground" : "text-foreground")}
+      >
+        {title}
+      </span>
     </button>
   );
 }
