@@ -48,6 +48,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
+import { quickCreateCalendars } from "../new-events-to";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -60,6 +61,7 @@ import { type StripItem } from "../strip";
 import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
 import { CalendarAccountsDialog } from "./calendar-accounts-dialog";
+import { CalendarComposer } from "./calendar-composer";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
 import type { MoveEventDeltas } from "./calendar-grid";
@@ -83,11 +85,14 @@ import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
+import { useCalendarLens } from "./use-calendar-lens";
 import { useCalendarNarrowPanels } from "./use-calendar-narrow-panels";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
 import { useEventDelete } from "./use-event-delete";
+import { useEventMenu } from "./use-event-menu";
+import { useEventMove } from "./use-event-move";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { usePlanPlacement } from "./use-plan-placement";
 import { useScheduleDue } from "./use-schedule-due";
@@ -148,6 +153,7 @@ export function CalendarPageView({
     calendar,
     { prefs, updatePrefs },
     tasks,
+    userId,
   );
   // Google syncs on the web. Outlook, CalDAV, and ICS still sync from the desktop app.
   const { syncNow } = useCalendarSync({
@@ -187,6 +193,14 @@ export function CalendarPageView({
     () => visibleRange(viewState.view, anchor, prefs),
     [viewState.view, anchor, prefs],
   );
+  const lens = useCalendarLens({
+    runtime,
+    userId,
+    workspaceId,
+    events: shownEvents,
+    range,
+    accountHues,
+  });
   // SCALE-1: the events read is windowed, so tell the hook what's on screen —
   // navigating past the loaded window widens it and refetches instead of
   // rendering a silently empty month.
@@ -212,8 +226,8 @@ export function CalendarPageView({
     [calendar.accounts, userId],
   );
   const eventChips = useMemo(
-    () => eventChipsInRange(shownEvents, range, isWritable, userId),
-    [shownEvents, range, isWritable, userId],
+    () => eventChipsInRange(lens.events, range, isWritable, userId),
+    [lens.events, range, isWritable, userId],
   );
   const faults = useCalendarFaults({
     onRetry: refreshCalendars,
@@ -363,16 +377,8 @@ export function CalendarPageView({
   }, []);
 
   const createCalendars = useMemo(
-    () => [
-      { id: "moduo", label: "Moduo" },
-      ...calendar.accounts
-        .filter((account) => account.provider === "google" && !account.deletedAt)
-        .map((account) => ({
-          id: account.id,
-          label: account.displayLabel || "Google",
-        })),
-    ],
-    [calendar.accounts],
+    () => quickCreateCalendars(calendar.accounts, prefs, workspaceId),
+    [calendar.accounts, prefs, workspaceId],
   );
 
   const onCreateEvent = useCreateEvent(calendar, runtime, workspaceId);
@@ -393,7 +399,7 @@ export function CalendarPageView({
   );
 
   // ── drag-to-schedule (the universal drag contract, AC6)
-  const drag = useCalendarTaskDrag({ tasks, sessions, canEdit, commands });
+  const drag = useCalendarTaskDrag({ tasks, sessions, canEdit: lens.edit(canEdit), commands });
 
   useCalendarNarrowPanels(setPanelVariant);
   const keys = useCalendarHotkeys({
@@ -401,21 +407,39 @@ export function CalendarPageView({
     days: range.days,
     chips: eventChips,
     eventsById,
-    canEdit: canEdit && calendar.canEdit,
+    canEdit: lens.edit(canEdit && calendar.canEdit),
     isWritable,
     prefs,
     workspaceId,
     panelVariant,
     selectedOccurrenceKey,
-    select: setSelectedOccurrenceKey,
+    select: (k) => lens.select(k) || setSelectedOccurrenceKey(k),
     setView,
     goToday,
     step,
     occurrence: occurrenceQuestion,
     onMoveEvent,
     createEvent: onCreateEvent,
-    onEventClick,
+    onEventClick: (c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r),
     openDetail,
+  });
+
+  // CALR-4b: the right-click / ⌃↵ menu and the Event panel's ⋯.
+  const moveEvent = useEventMove(calendar, runtime, workspaceId, userId);
+  const { menu: eventMenu, panelMenu } = useEventMenu({
+    chips: eventChips,
+    eventsById,
+    accounts: calendar.accounts,
+    userId,
+    canEdit: lens.edit(canEdit && calendar.canEdit),
+    selectedOccurrenceKey,
+    select: setSelectedOccurrenceKey,
+    openDetail,
+    patchEvent,
+    requestEventDelete,
+    copyChip: keys.copyChip,
+    duplicateChip: keys.duplicateChip,
+    moveEvent,
   });
 
   // CALR-2: Schedule (S) in a day header's due list.
@@ -434,13 +458,14 @@ export function CalendarPageView({
     days: range.days,
     prefs,
     commands,
-    canEdit,
+    canEdit: lens.edit(canEdit),
     eventsByDay: eventChips.timed,
     blocksByDay: grouped,
     panelVariant,
     setPanelVariant,
     setView,
     goToDate,
+    createEvent: calendar.createEvent,
   });
 
   const onToggleDone = useCallback(
@@ -557,6 +582,7 @@ export function CalendarPageView({
             onPatch={patchEvent}
             onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
+            menu={panelMenu(detailEvent)}
           />
         ) : detailTask ? (
           <TaskDetailPanel
@@ -611,6 +637,7 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
+      panelMenu,
       faults.loadShape.planGroups,
       faults.rememberPlanShape,
       prefs.weekStartsOn,
@@ -692,13 +719,16 @@ export function CalendarPageView({
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
               nowNext={
-                <CalendarNowNext
-                  events={shownEvents}
-                  onOpen={(item) => {
-                    setSelectedOccurrenceKey(item.occurrenceKey);
-                    openDetail({ type: "event", id: item.eventId });
-                  }}
-                />
+                <>
+                  {lens.menu}
+                  <CalendarNowNext
+                    events={lens.events}
+                    onOpen={(item) => {
+                      setSelectedOccurrenceKey(item.occurrenceKey);
+                      openDetail({ type: "event", id: item.eventId });
+                    }}
+                  />
+                </>
               }
             />
             {faults.banner}
@@ -709,6 +739,7 @@ export function CalendarPageView({
               onMoveToToday={() => rollForward(strip)}
               onReview={openReview}
             />
+            {lens.top}
             <CalendarViews
               runtime={runtime}
               workspaceId={workspaceId}
@@ -717,10 +748,10 @@ export function CalendarPageView({
               onOpenDay={(d) => update({ view: "day", anchor: localDayKey(d) })}
               view={viewState.view}
               days={range.days}
-              blocksByDay={grouped}
+              blocksByDay={lens.tasks(grouped)}
               eventsByDay={eventChips.timed}
               allDayByDay={eventChips.allDay}
-              dueByDay={dueByDay}
+              dueByDay={lens.tasks(dueByDay)}
               onDueClick={(id) => openDetail({ type: "task", id })}
               onScheduleDue={canEdit ? onScheduleDue : undefined}
               fileCounts={attachmentCounts}
@@ -731,16 +762,16 @@ export function CalendarPageView({
                 void commands.load();
                 void calendar.reload();
               }}
-              canEdit={canEdit && calendar.canEdit}
+              canEdit={lens.edit(canEdit && calendar.canEdit)}
               onToggleDone={onToggleDone}
               onCreateEvent={onCreateEvent}
               createCalendars={createCalendars}
               onMoveEvent={onMoveEvent}
               onMoveTask={drag.onMoveTask}
-              onEventClick={onEventClick}
+              onEventClick={(c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r)}
               onTaskClick={onTaskClick}
               selectedOccurrenceKey={selectedOccurrenceKey}
-              onSelectOccurrence={setSelectedOccurrenceKey}
+              onSelectOccurrence={(k) => lens.select(k) || setSelectedOccurrenceKey(k)}
               accountHues={accountHues}
               workedTaskIds={workedTaskIds}
               onTriageLater={onTriageLater}
@@ -748,16 +779,32 @@ export function CalendarPageView({
               onTriageRemove={onTriageRemove}
               focusBlockId={focusBlockId}
               staleAccountIds={faults.syncStatus.staleAccountIds}
-              faulted={faults.hideEmptyHint}
+              faulted={lens.faulted(faults.hideEmptyHint)}
               loadingAllDayRows={faults.loadShape.allDayRows}
               overlay={faults.firstWeekOverlay}
               cursor={keys.cursor}
-              gridLayer={plan.layer}
+              gridLayer={
+                <>
+                  {plan.layer}
+                  {lens.layer}
+                </>
+              }
             />
           </div>
         }
       />
 
+      <CalendarComposer
+        calendar={calendar}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        userId={userId}
+        prefs={prefs}
+        members={viewerMembers}
+        cursor={keys.cursor}
+        canEdit={lens.edit(canEdit && calendar.canEdit)}
+        createEvent={onCreateEvent}
+      />
       <DragOverlay dropAnimation={null}>
         {drag.dragTask ? (
           <div className="w-44 truncate rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground">
@@ -827,6 +874,7 @@ export function CalendarPageView({
         />
       ) : null}
 
+      {eventMenu}
       <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog {...del.dialog} />
@@ -847,6 +895,7 @@ export function CalendarPageView({
         {...{ runtime, workspaceId, calendar, updatePrefs, syncNow }}
         isDesktop={IS_DESKTOP}
         hiddenAccountIds={prefs.hiddenAccountIds}
+        newEventsTo={prefs.newEventsTo}
       />
     </DndContext>
   );

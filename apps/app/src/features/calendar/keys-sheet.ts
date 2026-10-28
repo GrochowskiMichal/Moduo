@@ -25,6 +25,11 @@ const ROWS: RowSpec[] = [
   { group: "Anywhere in Calendar", ids: ["calendar.today"], desc: "Today" },
   {
     group: "Anywhere in Calendar",
+    ids: ["calendar.new"],
+    desc: "New event: type what and when, ⇥ finds free time",
+  },
+  {
+    group: "Anywhere in Calendar",
     ids: ["calendar.day", "calendar.week", "calendar.month"],
     desc: "Day · Week · Month",
   },
@@ -45,7 +50,7 @@ const ROWS: RowSpec[] = [
   {
     group: "Anywhere in Calendar",
     ids: ["calendar.place-task"],
-    desc: "Place the Plan task you picked: ⇥ next free time, arrows adjust, ↵ places, esc lets go",
+    desc: "Place the Plan task you picked: ⇥ next free time, arrows adjust, F focus time, ↵ places, esc lets go",
   },
   { group: "Anywhere in Calendar", ids: ["calendar.find-task"], desc: "Find a task in Plan" },
   {
@@ -73,6 +78,7 @@ const ROWS: RowSpec[] = [
     ids: ["calendar.open"],
     desc: "Open the event, or a new event at the cursor",
   },
+  { group: "The grid", ids: ["calendar.menu"], desc: "The event menu" },
   {
     group: "The grid",
     ids: ["calendar.paste"],

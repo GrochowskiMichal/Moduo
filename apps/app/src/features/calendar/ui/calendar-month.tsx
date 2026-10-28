@@ -179,6 +179,7 @@ export function CalendarMonth({
                     key={bar.chip.occurrenceKey}
                     type="button"
                     data-chip="event"
+                    data-occurrence-key={bar.chip.occurrenceKey}
                     className="pointer-events-auto relative block h-(--ctrl-h-xs) min-w-0 px-1 text-left"
                     style={{
                       gridColumn: `${bar.startCol + 1} / span ${bar.span}`,
@@ -199,6 +200,8 @@ export function CalendarMonth({
                       selected={selectedOccurrenceKey === bar.chip.occurrenceKey}
                       past={bar.past}
                       locked={bar.chip.locked}
+                      focus={bar.chip.focus}
+                      holdsTask={bar.chip.holdsTask}
                       stale={
                         bar.chip.sourceAccountId !== null &&
                         staleAccountIds.has(bar.chip.sourceAccountId)
@@ -337,6 +340,7 @@ function MonthLineButton({
     <button
       type="button"
       data-chip={line.kind}
+      data-occurrence-key={line.kind === "event" ? line.chip.occurrenceKey : undefined}
       data-past={line.past || undefined}
       aria-label={`${title}, ${time}${line.kind === "task" ? ", your task" : ""}${stale ? ", not synced" : ""}`}
       onClick={(e) =>

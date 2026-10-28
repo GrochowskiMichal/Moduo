@@ -26,6 +26,8 @@ The mechanical traps are checked by `apps/app/src/lib/migration-lint.test.ts` (g
 - In `RETURNS TABLE(...)` whose out-columns share names with a table it reads (`id`, `workspace_id`), table-qualify every column or prefix the out-params `o_`.
 - A plpgsql function returning a composite returns an all-NULL row after a `SELECT … INTO` that finds nothing: `IF v_row.id IS NULL THEN RETURN NULL; END IF;`. `row IS NOT NULL` is true only when every field is non-null; test a key field.
 - A function's `SET statement_timeout` doesn't bound a psql caller (PostgREST applies it per call): assert it through `pg_proc.proconfig`, not by timing.
+- A plpgsql query joining an id array (`unnest(v_ids)`) to a table is driven from the array and reads every listed row (the planner guesses 100), and after five calls a generic plan can make it 3× slower: match the text first in a `MATERIALIZED` CTE, join the array second, and `SET plan_cache_mode = 'force_custom_plan'` (`notes__search`).
+- A function's own `SET` of an extension setting (`pg_trgm.word_similarity_threshold`) needs a superuser on Supabase: call the extension once to load it, then `set_config(…, true)` around the one query and restore the old value (`notes__search`).
 - `module_activity_log` returns void (insert directly when you need the row id) and raises "No actor context" without an actor: system notices go through `tasks__notice`. `chat__activity` mirrors its attribution: change one, change the other.
 - When a loop needs a step cap, hitting the cap is its own outcome (raise or "unknown"), never the same value as a real end.
 - `RAISE SQLSTATE 'PGRST'` needs DETAIL with both `status` and `headers` (`json_build_object('status', 403, 'headers', json_build_object())`), or PostgREST answers 500 `PGRST121`.

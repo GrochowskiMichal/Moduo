@@ -107,6 +107,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "calendar_busy_blocks",
   // CALR-15: the masked week.
   "calendar_events_visible",
+  "calendar_preview_levels",
+  "calendar_shared_with_me",
   "chat_caps_get",
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
@@ -133,7 +135,13 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "focus_claims",
   "links_suggest",
   "notes_list_unmaterialized",
+  // GS-2: Notes' sidebar search (the global search contract).
+  "notes__search",
   "notifications_list",
+  // GS-3: ⌘K's one search (search_all merges every module's search).
+  "search_all",
+  // GS-8: ⌘K's Recent (what you opened last).
+  "search_recents_list",
   "share_assign_preview",
   "share_defaults_get",
   "share_op_state",

@@ -7,6 +7,7 @@
 // merged by `applyLiveChange`), and a resync refetches quietly. A read that
 // fails keeps the week it had (CALR-3).
 
+import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,16 +17,20 @@ import { supabaseClient } from "../../../lib/runtime.web.client";
 import { recordEventUndo, recordUndo } from "../commands/undo";
 import type {
   CalendarAccountModel,
+  CalendarAttendeeInput,
   CalendarEventModel,
   CalendarEventPatch,
   CalendarLiveChange,
 } from "../events";
 import { applyLiveChange } from "../live";
+import { type BusyBlockRow, busyBlockToEvent } from "../teammates";
 import {
   allTimeCalendarWindow,
+  busyWindowFor,
   type CalendarWindow,
   defaultCalendarWindow,
   widenCalendarWindow,
+  windowCovers,
 } from "../window";
 import { writableEvent } from "../writable";
 import { useOccurrenceWrites } from "./use-occurrence-writes";
@@ -43,6 +48,14 @@ export type CreateEventDraft = {
   allDay?: boolean;
   rrule?: string | null;
   description?: string;
+  // CALR-9's composer: sent only when set (the op still takes the old seven arguments).
+  /** A Moduo or custom calendar's row id; omitted = Your calendar. */
+  calendarId?: string;
+  location?: string;
+  attendees?: CalendarAttendeeInput[];
+  /** Focus time (CALR-14) holds `focusTaskId`. */
+  kind?: CalendarItemKind;
+  focusTaskId?: string;
 };
 
 /**
@@ -183,6 +196,31 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
    * leaves `loading` alone, so the grid refreshes in place instead of
    * flashing a skeleton.
    */
+  // Busy blocks are read for the days on screen and the composer's horizon
+  // (busyWindowFor), not the fetch window: a reply holds one row per occurrence.
+  const busyWindowRef = useRef<CalendarWindow | null>(null);
+  const readBusy = useCallback(async (req: number, ws: string) => {
+    const now = new Date();
+    const window =
+      busyWindowRef.current ?? busyWindowFor(now, new Date(now.getTime() + 7 * 86_400_000));
+    busyWindowRef.current = window;
+    try {
+      const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
+        p_workspace_id: ws,
+        p_from: window.fromIso,
+        p_to: window.toIso,
+      });
+      if (reqRef.current !== req) return;
+      setBusy(
+        busyRows.error || !Array.isArray(busyRows.data)
+          ? []
+          : busyRows.data.map((row: BusyBlockRow, i: number) => busyBlockToEvent(row, ws, i)),
+      );
+    } catch {
+      if (reqRef.current === req) setBusy([]);
+    }
+  }, []);
+
   const load = useCallback(
     async (options?: { quiet?: boolean }) => {
       if (!aliveRef.current) return; // a late `reload()` after unmount reads nothing
@@ -234,47 +272,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       setDegraded(bundle.degraded);
       setTruncated(bundle.truncated);
       setLoading(false);
-      void (async () => {
-        try {
-          const busyRows = await supabaseClient.rpc("calendar_busy_blocks", {
-            p_workspace_id: workspaceId,
-            p_from: fetchWindow.fromIso,
-            p_to: fetchWindow.toIso,
-          });
-          if (reqRef.current !== req) return;
-          setBusy(
-            busyRows.error || !Array.isArray(busyRows.data)
-              ? []
-              : busyRows.data.map(
-                  (
-                    row: { calendar_id: string; start_time: string; end_time: string },
-                    i: number,
-                  ) => ({
-                    // Two busy blocks can start at the same time; keep keys unique.
-                    id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
-                    workspaceId,
-                    ownerId: null,
-                    sourceAccountId: "busy",
-                    externalEventId: null,
-                    calendarId: "busy",
-                    title: "Busy",
-                    description: "",
-                    startsAt: row.start_time,
-                    endsAt: row.end_time,
-                    allDay: false,
-                    rrule: null,
-                    status: "confirmed",
-                    color: null,
-                    createdAt: row.start_time,
-                    updatedAt: row.start_time,
-                    deletedAt: null,
-                  }),
-                ),
-          );
-        } catch {
-          if (reqRef.current === req) setBusy([]);
-        }
-      })();
+      void readBusy(req, workspaceId);
     },
     [runtime, userId, workspaceId, canRead, fetchWindow, scope],
   );
@@ -353,8 +351,12 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   const ensureRange = useCallback(
     (from: Date, to: Date) => {
       setFetchWindow((current) => widenCalendarWindow(current, from, to) ?? current);
+      // Days past what the busy blocks hold: read them again for the new days.
+      if (windowCovers(busyWindowRef.current, from, to)) return;
+      busyWindowRef.current = busyWindowFor(from, to);
+      if (workspaceId && canRead) void readBusy(reqRef.current, workspaceId);
     },
-    [setFetchWindow],
+    [setFetchWindow, workspaceId, canRead, readBusy],
   );
 
   /**
@@ -400,8 +402,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       patch: CalendarEventPatch,
       opts?: { undo?: boolean },
     ) => Promise<void>;
-    deleteEvent: (id: string, opts?: { quiet?: boolean }) => Promise<void>;
-  }>({ updateEvent: async () => {}, deleteEvent: async () => {} });
+    deleteEvent: (id: string, opts?: { quiet?: boolean }) => Promise<boolean>;
+  }>({ updateEvent: async () => {}, deleteEvent: async () => false });
 
   const createEvent = useCallback(
     async (draft: CreateEventDraft): Promise<CalendarEventModel | null> => {
@@ -421,11 +423,14 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         endsAt: draft.endsAt,
         allDay: draft.allDay ?? false,
         rrule: draft.rrule ?? null,
+        location: draft.location ?? null,
+        kind: draft.kind ?? "event",
         status: "confirmed",
         color: null,
         createdAt: nowIso,
         updatedAt: nowIso,
         deletedAt: null,
+        ...(draft.focusTaskId ? { focusTaskId: draft.focusTaskId } : {}),
       };
       setEventsIn(scope, (prev) => [...prev, optimistic]);
       try {
@@ -437,6 +442,11 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           allDay: draft.allDay,
           rrule: draft.rrule,
           description: draft.description,
+          calendarId: draft.calendarId,
+          location: draft.location,
+          attendees: draft.attendees,
+          kind: draft.kind,
+          focusTaskId: draft.focusTaskId,
         });
         // Filter-then-append, not map: a widen-triggered reload can land
         // between the optimistic row and this reconcile, in which case the
@@ -446,10 +456,16 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           saved,
         ]);
         // AC21: an add undoes by deleting it again, quietly.
-        recordUndo("Event added", () => writesRef.current.deleteEvent(saved.id, { quiet: true }), {
-          toast: true,
-          description: saved.title,
-        });
+        recordUndo(
+          "Event added",
+          async () => {
+            await writesRef.current.deleteEvent(saved.id, { quiet: true });
+          },
+          {
+            toast: true,
+            description: saved.title,
+          },
+        );
         return saved;
       } catch (err) {
         setEventsIn(scope, (prev) => prev.filter((e) => e.id !== tempId));
@@ -542,7 +558,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       snapshot: CalendarEventModel,
       account: CalendarAccountModel,
       quiet = false,
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       try {
         await (runtime as ModuoRuntime).calendar.removeGoogleEvent({
           workspaceId: workspaceId as string,
@@ -551,6 +567,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         });
         // No Undo: it would come back as a new Google event (out of scope).
         if (!quiet) toast.success("Event deleted");
+        return true;
       } catch (err) {
         goneRef.current.delete(snapshot.id);
         setEventsIn(scope, (prev) =>
@@ -558,20 +575,22 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         );
         const reason = err instanceof Error ? err.message : "";
         toast.error(`Google didn't delete it${reason ? `: ${reason}` : "."}`);
+        return false;
       }
     },
     [runtime, workspaceId, scope, setEventsIn],
   );
 
   const deleteEvent = useCallback(
-    async (eventId: string, opts: { quiet?: boolean } = {}): Promise<void> => {
-      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return;
+    // Resolves whether the event went (a move's Undo checks it, CALR-4b).
+    async (eventId: string, opts: { quiet?: boolean } = {}): Promise<boolean> => {
+      if (!guardEdit() || isTempId(eventId) || isBusyId(eventId)) return false;
       const snapshot = events.find((e) => e.id === eventId);
-      if (!snapshot) return;
+      if (!snapshot) return false;
       const writer = writableEvent(snapshot, accounts, userId);
       if (!writer) {
         toast.error(VIEW_ONLY_EVENT);
-        return;
+        return false;
       }
       const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
       // A series takes its changed occurrences with it (CALR-11).
@@ -579,8 +598,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId && e.seriesId !== eventId));
       goneRef.current.add(eventId);
       if (writer === "google" && account) {
-        await deleteFromGoogle(snapshot, account, opts.quiet);
-        return;
+        return deleteFromGoogle(snapshot, account, opts.quiet);
       }
       try {
         await (runtime as ModuoRuntime).calendar.removeEvent({
@@ -589,7 +607,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         });
         // The delete is soft — Undo un-deletes server-side and re-inserts the
         // returned row (same 8s grammar as unschedule/move/extend, DF-5).
-        if (opts.quiet) return;
+        if (opts.quiet) return true;
         recordUndo(
           "Event deleted",
           async () => {
@@ -606,6 +624,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           },
           { toast: true, description: snapshot.title },
         );
+        return true;
       } catch (err) {
         goneRef.current.delete(eventId);
         // Surgical rollback: re-insert only the removed row — restoring a whole
@@ -615,6 +634,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           ...[snapshot, ...overrides].filter((row) => !prev.some((e) => e.id === row.id)),
         ]);
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
+        return false;
       }
     },
     [

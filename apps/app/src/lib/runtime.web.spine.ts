@@ -9,18 +9,22 @@ import {
   parsedRelationKind,
   requireRow,
 } from "@contracts/rows";
+import { normalizeSearchAllRow, normalizeSearchRecent, type SearchAllRow } from "@contracts/search";
 import { normalizeContentAuthorKind, normalizeReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
 import { shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { EntityRecord } from "./entity-links";
-import { DbError, runQuery, runRpc } from "./runtime.db";
+import { DbError, runQuery, runRpc, untypedDb } from "./runtime.db";
 import type { CommentReactionMark, SpineComment, SpineRuntime } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
 import { createReferencePreviews } from "./runtime.web.previews";
 import { entityLinkRowToModel } from "./runtime.web.shared";
 import { handleSearchPattern, handleWithCurrentKey } from "./task-handle";
+import { isMissingFunctionError } from "./task-rows";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function entityRecordRowToModel(raw: unknown): EntityRecord {
   const r = requireRow(entityRecordRowSchema, raw, "entity");
@@ -108,6 +112,27 @@ function notificationRowToModel(raw: unknown): NotificationItem {
 // Mutations go through links_op_* / entities_op_* RPCs (permission guard +
 // write + attributed activity row in one transaction); reads are direct,
 // indexed SELECTs over entity_links / entities.
+/** Registry records as search_all rows, best first (the pre-GS-3 fallback). */
+function registryRowsAsHits(records: EntityRecord[]): SearchAllRow[] {
+  const totals = new Map<string, number>();
+  for (const r of records) totals.set(r.type, (totals.get(r.type) ?? 0) + 1);
+  return records.map((r, i) => ({
+    entity_type: r.type,
+    entity_id: r.id,
+    title: r.label,
+    context: null,
+    snippet: null,
+    icon: r.icon,
+    match: "title",
+    rank: 0.75,
+    updated_at: "",
+    archived: false,
+    score: 0.5,
+    type_total: totals.get(r.type) ?? 1,
+    top: i === 0,
+  }));
+}
+
 export const webSpine: SpineRuntime = {
   async listLinks({ workspaceId, entityType, entityId }) {
     // entityType/entityId are app-owned tokens (type slugs + uuids), not user
@@ -211,6 +236,85 @@ export const webSpine: SpineRuntime = {
     if (types?.length) q = q.in("entity_type", types);
     const data = await runQuery(q.order("label").limit(limit ?? 20));
     return mapKnownRows(data, entityRecordRowToModel);
+  },
+
+  async searchAll({ workspaceId, query, types, limitPerType, context }) {
+    const q = query.trim();
+    if (!q) return [];
+    // Untyped until the generated types are regenerated from prod after the
+    // migration ships (20261029090000_search_all.sql).
+    const { data, error } = await untypedDb(supabaseClient).rpc("search_all", {
+      p_workspace_id: workspaceId,
+      p_query: q,
+      p_types: types ? [...types] : null,
+      p_limit_per_type: limitPerType ?? 8,
+      p_context_type: context?.type ?? null,
+      p_context_id: context?.id ?? null,
+    });
+    if (error) {
+      // Before the migration reaches this database: the registry's titles, as
+      // ⌘K searched before GS-3, shaped as rows.
+      if (isMissingFunctionError(error, "search_all")) {
+        return registryRowsAsHits(
+          await webSpine.searchEntities({
+            workspaceId,
+            query: q,
+            types: types ? [...types] : undefined,
+            limit: 20,
+          }),
+        );
+      }
+      throw new DbError(error);
+    }
+    return (Array.isArray(data) ? data : []).flatMap((raw: unknown) => {
+      const row = normalizeSearchAllRow(raw);
+      return row ? [row] : [];
+    });
+  },
+
+  // Recents (GS-8). Untyped until the generated types are regenerated from
+  // prod after 20261029150000_search_recents.sql ships.
+  async recordOpen({ workspaceId, type, id }) {
+    // Only a uuid: a desktop mail thread's device id never leaves the device (EM-3).
+    if (!UUID.test(id)) return;
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_record_open", {
+      p_workspace_id: workspaceId,
+      p_entity_type: type,
+      p_entity_id: id,
+    });
+    // Before the migration reaches this database there is nothing to record.
+    if (error && !isMissingFunctionError(error, "search_op_record_open")) throw new DbError(error);
+  },
+
+  async recents({ workspaceId, limit }) {
+    const { data, error } = await untypedDb(supabaseClient).rpc("search_recents_list", {
+      p_workspace_id: workspaceId,
+      p_limit: limit ?? 8,
+    });
+    if (error) {
+      if (isMissingFunctionError(error, "search_recents_list")) return [];
+      throw new DbError(error);
+    }
+    return (Array.isArray(data) ? data : []).flatMap((raw: unknown) => {
+      const row = normalizeSearchRecent(raw);
+      return row ? [row] : [];
+    });
+  },
+
+  async forgetRecent({ workspaceId, type, id }) {
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_forget_open", {
+      p_workspace_id: workspaceId,
+      p_entity_type: type,
+      p_entity_id: id,
+    });
+    if (error) throw new DbError(error);
+  },
+
+  async clearRecents({ workspaceId }) {
+    const { error } = await untypedDb(supabaseClient).rpc("search_op_clear_recents", {
+      p_workspace_id: workspaceId,
+    });
+    if (error) throw new DbError(error);
   },
 
   async getEntities({ workspaceId, refs }) {

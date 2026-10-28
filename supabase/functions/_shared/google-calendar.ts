@@ -238,6 +238,12 @@ export async function insertGoogleEvent(input: {
   visibility?: "private" | "default";
   conferenceData?: Record<string, unknown>;
   sendUpdates?: "all" | "none";
+  /**
+   * The id the app made for the event (base32hex, see isGoogleEventId), so a
+   * retried insert can't make a second copy: Google answers 409 for an id it
+   * has, and the event already there is the answer.
+   */
+  id?: string;
 }): Promise<Record<string, unknown>> {
   const url = new URL(
     `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`,
@@ -251,6 +257,7 @@ export async function insertGoogleEvent(input: {
       "content-type": "application/json",
     },
     body: JSON.stringify({
+      id: input.id,
       summary: input.summary,
       description: input.description,
       start: input.start,
@@ -262,11 +269,41 @@ export async function insertGoogleEvent(input: {
       conferenceData: input.conferenceData,
     }),
   });
+  if (res.status === 409 && input.id) {
+    const existing = await getGoogleEvent({
+      accessToken: input.accessToken,
+      calendarId: input.calendarId,
+      eventId: input.id,
+    });
+    if (existing) return existing;
+  }
   const json = (await res.json()) as Record<string, unknown> & { error?: { message?: string } };
   if (!res.ok || typeof json.id !== "string") {
     throw new Error(json.error?.message || "google_event_failed");
   }
   return json;
+}
+
+/** An id Google takes for a new event: base32hex (a–v, 0–9), 5 to 1024 characters. */
+export function isGoogleEventId(value: unknown): value is string {
+  return typeof value === "string" && /^[a-v0-9]{5,1024}$/.test(value);
+}
+
+/** One event by its id; null when Google has none (404, 410, or cancelled). Throws when it can't tell. */
+export async function getGoogleEvent(input: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+}): Promise<Record<string, unknown> | null> {
+  const res = await fetch(eventUrl(input.calendarId, input.eventId, {}), {
+    headers: { authorization: `Bearer ${input.accessToken}` },
+  });
+  if (res.status === 404 || res.status === 410) return null;
+  const json = (await res.json()) as Record<string, unknown> & { error?: { message?: string } };
+  if (!res.ok || typeof json.id !== "string") {
+    throw new Error(json.error?.message || "google_event_failed");
+  }
+  return json.status === "cancelled" ? null : json;
 }
 
 /** Deletes the event and has Google tell its guests. True when the event is gone (404/410: already gone). */

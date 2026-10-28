@@ -470,6 +470,8 @@ export function BookPage() {
         return `${host} isn't taking bookings on this link right now.`;
       case "rate_limited":
         return "Too many booking attempts from this network. Try again in an hour.";
+      case "unavailable":
+        return `Couldn't check ${host}'s open times just now. Try again in a minute.`;
       case "host_busy":
         return `${host} is getting a lot of booking requests right now. Try again in an hour.`;
       default:

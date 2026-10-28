@@ -31,7 +31,7 @@ type Deps = {
   /** The module's own checks (edit rights, temp and busy rows, writable): false = stop. */
   canWrite: (event: CalendarEventModel | undefined) => event is CalendarEventModel;
   updateEvent: (eventId: string, patch: CalendarEventPatch) => Promise<void>;
-  deleteEvent: (eventId: string) => Promise<void>;
+  deleteEvent: (eventId: string) => Promise<unknown>;
   reload: () => Promise<void>;
 };
 
@@ -271,12 +271,14 @@ export function useOccurrenceWrites(deps: Deps) {
           }
           return updateEvent(plan.eventId, plan.patch);
         case "event-delete":
-          return deleteEvent(plan.eventId);
+          await deleteEvent(plan.eventId);
+          return;
         // A Google instance is a row of its own: the module's Google-first path.
         case "google-update":
           return updateEvent(event.id, plan.patch);
         case "google-delete":
-          return deleteEvent(event.id);
+          await deleteEvent(event.id);
+          return;
         case "occurrence-update":
           return updateOne(plan);
         case "occurrence-delete":

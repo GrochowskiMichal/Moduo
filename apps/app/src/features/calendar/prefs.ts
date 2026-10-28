@@ -133,6 +133,8 @@ export type CalendarPrefs = {
   /** Per-account color override (a bounded label hue name; see tag-colors). The
    * provider's own color is the default until the user recolors it. */
   accountColors: Record<string, string>;
+  /** Per workspace, the Google account new events go to; absent = Your calendar. */
+  newEventsTo: Record<string, string>;
 };
 
 /** 08:00–18:00, Monday start, weekends shown (spec §10 defaults). */
@@ -143,6 +145,7 @@ export const DEFAULT_CALENDAR_PREFS: CalendarPrefs = {
   showWeekends: true,
   hiddenAccountIds: [],
   accountColors: {},
+  newEventsTo: {},
 };
 
 function asMinute(v: unknown, fallback: number): number {
@@ -158,6 +161,7 @@ const calendarPrefsShape = z.object({
   showWeekends: z.unknown().optional(),
   hiddenAccountIds: z.unknown().optional(),
   accountColors: z.unknown().optional(),
+  newEventsTo: z.unknown().optional(),
 });
 
 /** Coerce any stored/synced value into a valid prefs object (round-trips). */
@@ -183,12 +187,17 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
   const hiddenAccountIds = Array.isArray(o.hiddenAccountIds)
     ? o.hiddenAccountIds.filter((v): v is string => typeof v === "string")
     : [];
-  const accountColors: Record<string, string> = {};
-  if (o.accountColors && typeof o.accountColors === "object") {
-    for (const [k, v] of Object.entries(o.accountColors as Record<string, unknown>)) {
-      if (typeof v === "string") accountColors[k] = v;
+  const stringMap = (raw: unknown, keep: (v: string) => boolean) => {
+    const out: Record<string, string> = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof v === "string" && keep(v)) out[k] = v;
+      }
     }
-  }
+    return out;
+  };
+  const accountColors = stringMap(o.accountColors, () => true);
+  const newEventsTo = stringMap(o.newEventsTo, (v) => v !== "");
   return {
     workStartMinute,
     workEndMinute,
@@ -196,6 +205,7 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
     showWeekends,
     hiddenAccountIds,
     accountColors,
+    newEventsTo,
   };
 }
 

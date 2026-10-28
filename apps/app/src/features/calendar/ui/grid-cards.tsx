@@ -102,6 +102,8 @@ export function GridEventCard({
         continuation={continuationLabel(chip, formatTimeOfDay)}
         nowFraction={live ? (nowMinutes - span.topMinutes) / Math.max(span.heightMinutes, 1) : null}
         locked={chip.locked}
+        focus={chip.focus}
+        holdsTask={chip.holdsTask}
         stale={stale}
         waiting={waiting}
         aside={aside}

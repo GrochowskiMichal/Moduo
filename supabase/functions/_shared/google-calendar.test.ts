@@ -8,10 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import {
   deleteGoogleEvent,
+  getGoogleEvent,
   GoogleRefusal,
   googleCalendarTarget,
   googleEventBody,
   googleSendUpdates,
+  insertGoogleEvent,
+  isGoogleEventId,
   patchGoogleEvent,
   removeGoogleEvent,
 } from "./google-calendar.ts";
@@ -247,5 +250,87 @@ describe("deleteGoogleEvent (booking's)", () => {
     expect(new URL(calls[1]!.url).pathname).toBe(
       "/calendar/v3/calendars/team%40group.calendar.google.com/events/g1",
     );
+  });
+});
+
+// CALR-20b: the app names a new event's id, so a retried create can't make a second copy.
+describe("insertGoogleEvent with the app's id", () => {
+  const input = {
+    accessToken: "tok",
+    calendarId: "primary",
+    summary: "Board",
+    description: "",
+    start: { dateTime: "2026-11-05T10:00:00Z" },
+    end: { dateTime: "2026-11-05T11:00:00Z" },
+  };
+
+  it("sends the id in the insert", async () => {
+    answer = { status: 200, json: { id: "abc123def456" } };
+    await insertGoogleEvent({ ...input, id: "abc123def456" });
+    expect((calls[0]?.body as { id?: string }).id).toBe("abc123def456");
+  });
+
+  it("sends no id when the app gave none", async () => {
+    await insertGoogleEvent(input);
+    expect("id" in (calls[0]?.body as object)).toBe(false);
+  });
+
+  it("answers a 409 for its own id with the event already there, so a retry makes no second copy", async () => {
+    let n = 0;
+    rs.spyOn(globalThis, "fetch").mockImplementation((async (url: string, init?: RequestInit) => {
+      n += 1;
+      calls.push({ url: String(url), method: init?.method ?? "GET", body: undefined, auth: null });
+      return n === 1
+        ? new Response(JSON.stringify({ error: { message: "The requested identifier already exists." } }), {
+            status: 409,
+          })
+        : new Response(JSON.stringify({ id: "abc123def456", summary: "Board" }), { status: 200 });
+    }) as never);
+    const got = await insertGoogleEvent({ ...input, id: "abc123def456" });
+    expect(got.id).toBe("abc123def456");
+    expect(calls.map((c) => c.method)).toEqual(["POST", "GET"]);
+    expect(calls[1]?.url).toContain("/events/abc123def456");
+  });
+
+  it("still throws a 409 without an id of its own", async () => {
+    answer = { status: 409, json: { error: { message: "conflict" } } };
+    await expect(insertGoogleEvent(input)).rejects.toThrow("conflict");
+  });
+});
+
+describe("getGoogleEvent", () => {
+  it("returns the event", async () => {
+    answer = { status: 200, json: { id: "abc123def456", status: "confirmed" } };
+    expect((await getGoogleEvent({ accessToken: "t", calendarId: "primary", eventId: "abc123def456" }))?.id).toBe(
+      "abc123def456",
+    );
+  });
+
+  it.each([404, 410])("is null when Google has none (%i)", async (status) => {
+    answer = { status, json: { error: { message: "gone" } } };
+    expect(await getGoogleEvent({ accessToken: "t", calendarId: "primary", eventId: "abc123def456" })).toBeNull();
+  });
+
+  it("is null for a cancelled event", async () => {
+    answer = { status: 200, json: { id: "abc123def456", status: "cancelled" } };
+    expect(await getGoogleEvent({ accessToken: "t", calendarId: "primary", eventId: "abc123def456" })).toBeNull();
+  });
+
+  it("throws when it can't tell", async () => {
+    answer = { status: 500, json: { error: { message: "backend" } } };
+    await expect(
+      getGoogleEvent({ accessToken: "t", calendarId: "primary", eventId: "abc123def456" }),
+    ).rejects.toThrow("backend");
+  });
+});
+
+describe("isGoogleEventId", () => {
+  it("takes base32hex of 5 to 1024 characters, as a dashless lowercase uuid is", () => {
+    expect(isGoogleEventId("0f8fad5bd9cb469fa16570867728950e")).toBe(true);
+    expect(isGoogleEventId("abcd")).toBe(false);
+    expect(isGoogleEventId("abcdw")).toBe(false);
+    expect(isGoogleEventId("ABCDE")).toBe(false);
+    expect(isGoogleEventId("0f8fad5b-d9cb")).toBe(false);
+    expect(isGoogleEventId(42)).toBe(false);
   });
 });

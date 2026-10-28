@@ -30,7 +30,16 @@
  * key's person can reach the contact before calling the op, so their three
  * sample cases now answer "No contact with that id" after a reach lookup
  * instead of calling the op (their empty cases were only re-serialised and
- * still answer "contact_id: Invalid input"); nothing else moved.
+ * still answer "contact_id: Invalid input"); nothing else moved. GS-2
+ * (2026-10-28) moved notes_search onto the server's notes__search and
+ * notes_list onto notes__visible_ids (visibility before the limit): their
+ * three call cases now record those RPCs instead of the table reads and
+ * share_visible_ids, and notes_search's new description shows in the four
+ * tool lists and the two protocol answers that carry one; nothing else moved.
+ * GS-7 (2026-10-28) added the `search` tool (search_all, listed for any key
+ * with View on a searchable module): its three call cases are new, and it
+ * shows in the tool lists of every such key and the two protocol answers that
+ * list tools; nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

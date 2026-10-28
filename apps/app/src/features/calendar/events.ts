@@ -52,6 +52,10 @@ export type CalendarEventModel = {
   exdates?: string[];
   /** A Google instance's recurringEventId. */
   externalSeriesId?: string | null;
+  /** Google's iCalUID: the same meeting through two logins shares it. */
+  icalUid?: string | null;
+  /** Google's organizer.self: you organize it (null: unknown). */
+  isOrganizer?: boolean | null;
 };
 
 /** One person on an event, as calendar_op_event_create/update store them. */
@@ -171,6 +175,10 @@ export type CalendarMirrorEventInput = {
   externalSeriesId?: string;
   /** A repeat instance's originalStartTime as an ISO instant (CALR-11). Absent keeps the stored one. */
   originalStart?: string;
+  /** Google's iCalUID. Absent keeps the stored one. */
+  iCalUID?: string;
+  /** Google's organizer.self. Sent only when Google names an organizer; absent keeps the stored one. */
+  isOrganizer?: boolean;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */
@@ -198,6 +206,9 @@ export type EventChip = {
   continuesToMs: number | null;
   /** Your own private event: the chip carries a lock (CALR-15). */
   locked: boolean;
+  /** Focus time (CALR-14), and whether it holds a task (a teammate's never shows one). */
+  focus?: boolean;
+  holdsTask?: boolean;
 };
 
 /** The calendar hue an event chip takes (AC7): a mirrored event its
@@ -264,6 +275,8 @@ function occurrenceChip(
     continuesFromMs: null,
     continuesToMs: null,
     locked: showsLock(event, me),
+    focus: event.kind === "focus",
+    holdsTask: event.kind === "focus" && !!event.focusTaskId,
   };
 }
 

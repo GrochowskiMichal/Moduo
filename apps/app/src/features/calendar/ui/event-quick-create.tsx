@@ -20,7 +20,8 @@ import { formatWeekdayDate } from "../../../lib/time-format";
 import { RepeatPicker } from "./repeat-picker";
 import { formatTimeOfDay } from "./time-format";
 
-export type QuickCreateCalendar = { id: string; label: string };
+/** `isDefault`: where "New events go to" says new events go. */
+export type QuickCreateCalendar = { id: string; label: string; isDefault?: boolean };
 
 export type QuickCreateDraft = {
   title: string;
@@ -68,7 +69,9 @@ export function EventQuickCreate({
   const [endTime, setEndTime] = useState(() => toTimeInput(endMs));
   const [allDay, setAllDay] = useState(false);
   const [rrule, setRrule] = useState<string | null>(null);
-  const [calendarId, setCalendarId] = useState("moduo");
+  const [calendarId, setCalendarId] = useState(
+    () => calendars.find((c) => c.isDefault)?.id ?? "moduo",
+  );
   const inputRef = useRef<HTMLInputElement>(null);
   /** Guards double-firing when several dismiss paths run for one gesture. */
   const settledRef = useRef(false);

@@ -10,9 +10,12 @@ import { parseDayKey } from "./lens";
 export type GridCursor = {
   dayKey: string;
   minute: number;
-  /** An event sits under it: the event's ring shows instead of the slot's. */
-  busy?: boolean;
+  /** What it outlines on its day (`cursorBox`); null draws nothing. */
+  box?: CursorBox | null;
 };
+
+/** A box on the hours, in wall-clock minutes of the cursor's day. */
+export type CursorBox = { minute: number; minutes: number };
 
 export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 
@@ -74,6 +77,29 @@ export function chipAtCursor(cursor: GridCursor, chips: readonly EventChip[]): E
     if (!best || chip.startMs < best.startMs) best = chip;
   }
   return best;
+}
+
+/** The shortest box the cursor draws around an event under it. */
+const MIN_BOX_MINUTES = 15;
+
+/**
+ * What the cursor outlines: its 30-minute slot, or on a busy slot the event
+ * under it ("a busy slot outlines its event"), so the cursor never vanishes
+ * when it lands on an event (focus at 10:30 with a 10:00 meeting). Nothing
+ * when that event is the selected one: its selection ring already shows.
+ */
+export function cursorBox(
+  cursor: GridCursor,
+  chips: readonly EventChip[],
+  selectedKey: string | null,
+): CursorBox | null {
+  const chip = chipAtCursor(cursor, chips);
+  if (!chip) return { minute: cursor.minute, minutes: CURSOR_MINUTES };
+  if (chip.occurrenceKey === selectedKey) return null;
+  const geom = dayGeometry(parseDayKey(cursor.dayKey) ?? new Date(chip.startMs));
+  const top = Math.min(wallMinuteOf(chip.startMs, geom), 24 * 60 - MIN_BOX_MINUTES);
+  const bottom = wallMinuteOf(chip.endMs, geom);
+  return { minute: top, minutes: Math.max(bottom - top, MIN_BOX_MINUTES) };
 }
 
 /** The slot an event's piece starts in. */

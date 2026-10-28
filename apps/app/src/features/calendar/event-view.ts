@@ -145,7 +145,7 @@ export function whoSeesLine(
   share: ShareState,
   members: readonly { userId: string; name: string }[],
   selfUserId: string | null,
-  opts?: { isPrivate?: boolean },
+  opts?: { isPrivate?: boolean; isFocus?: boolean },
 ): string {
   if (opts?.isPrivate) return "Private · teammates see “Busy”";
   const others = members.filter((m) => m.userId !== selfUserId);
@@ -155,6 +155,8 @@ export function whoSeesLine(
   const all = others.filter((m) => levelOf(m.userId) >= 2);
   const busy = others.filter((m) => levelOf(m.userId) === 1);
   if (all.length === 0 && busy.length === 0) return "Only you see it";
+  // Focus time (CALR-14): the server masks it for every teammate.
+  if (opts?.isFocus) return "Teammates see “Focus time”, not the task";
   if (all.length === others.length) return "Everyone here sees it all";
   if (busy.length === others.length) return "Everyone here sees “Busy”";
 
