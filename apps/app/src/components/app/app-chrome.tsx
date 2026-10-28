@@ -295,9 +295,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         // Mark the navigation as an external "take me there" so the target
         // page can distinguish it from its own mirrored id (refresh/back).
         if (target.intentId) markEntityOpenIntent(target.intentId);
-        if (target.intentId && target.highlight) {
-          markEntityOpenHighlight(target.intentId, target.highlight);
-        }
+        // A note found by its body lands on the match; any other open drops a
+        // match still waiting to land (GS-10).
+        if (target.intentId) markEntityOpenHighlight(target.intentId, target.highlight ?? "");
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });

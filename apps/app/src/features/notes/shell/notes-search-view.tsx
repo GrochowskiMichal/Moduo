@@ -121,7 +121,7 @@ export function NotesSearchView({
       const first = titleHits[0]?.id ?? text?.id;
       if (first) {
         e.preventDefault();
-        if (text?.match === "body") markEntityOpenHighlight(text.id, trimmed);
+        markEntityOpenHighlight(first, text?.match === "body" ? trimmed : "");
         onOpen(first);
       }
     } else if (e.key === "Escape") {
@@ -180,7 +180,10 @@ export function NotesSearchView({
                 key={note.id}
                 note={note}
                 selected={note.id === selectedId}
-                onOpen={() => onOpen(note.id)}
+                onOpen={() => {
+                  markEntityOpenHighlight(note.id, "");
+                  onOpen(note.id);
+                }}
               />
             ))}
           </HitGroup>
@@ -209,7 +212,7 @@ export function NotesSearchView({
                   selected={hit.id === selectedId}
                   onOpen={() => {
                     // A body hit lands on the match (GS-10); a title hit at the top.
-                    if (hit.match === "body") markEntityOpenHighlight(hit.id, trimmed);
+                    markEntityOpenHighlight(hit.id, hit.match === "body" ? trimmed : "");
                     onOpen(hit.id);
                   }}
                 />
