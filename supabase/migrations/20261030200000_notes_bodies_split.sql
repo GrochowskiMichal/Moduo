@@ -38,6 +38,8 @@
 -- Account erasure deletes notes, and note_bodies goes with them by cascade.
 
 SET LOCAL lock_timeout = '5s';
+-- One acquisition: the key below and the DROP COLUMN both lock notes.
+LOCK TABLE public.notes IN ACCESS EXCLUSIVE MODE;
 
 -- Built on NS-7 to NS-10's bodies: refuse before anything changes when they
 -- are missing.
@@ -294,6 +296,9 @@ BEGIN
   END IF;
 
   SELECT b.body_text, b.body_md INTO v_text, v_md FROM public.note_bodies b WHERE b.note_id = n.id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Note % has no note_bodies row.', n.id;
+  END IF;
   v_body_changed := (p_body_text IS NOT NULL AND p_body_text IS DISTINCT FROM v_text)
                     OR (p_body_md IS NOT NULL AND p_body_md IS DISTINCT FROM v_md);
 
@@ -346,6 +351,9 @@ BEGIN
     RAISE EXCEPTION 'A snapshot is required.';
   END IF;
   SELECT b.doc_version INTO v_version FROM public.note_bodies b WHERE b.note_id = n.id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Note % has no note_bodies row.', n.id;
+  END IF;
 
   IF p_expected_doc_version IS NOT NULL
      AND v_version IS DISTINCT FROM p_expected_doc_version THEN
@@ -392,6 +400,9 @@ BEGIN
     RETURN jsonb_build_object('folded', 0, 'refused', true, 'doc_version', NULL);
   END IF;
   SELECT b.doc_version INTO v_version FROM public.note_bodies b WHERE b.note_id = p_note;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Note % has no note_bodies row.', p_note;
+  END IF;
 
   IF v_version IS DISTINCT FROM p_expected_version
      OR EXISTS (SELECT 1 FROM public.note_live_viewers v WHERE v.note_id = p_note) THEN
@@ -451,6 +462,9 @@ BEGIN
   END IF;
   SELECT b.doc_state, b.doc_version INTO v_state, v_version
     FROM public.note_bodies b WHERE b.note_id = n.id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Note % has no note_bodies row.', n.id;
+  END IF;
 
   -- Already has a snapshot → someone materialized it first.
   IF v_state IS NOT NULL AND v_state <> '' THEN
@@ -892,7 +906,8 @@ ALTER TABLE public.notes
 -- ── v1.4.0's reads: computed fields of the same names ───────────────────────
 -- PostgREST resolves `select=body_md` (and a filter on search_tsv) on notes to
 -- body_md(notes). Each answers only for a note the caller can open, so a row
--- forged through /rpc reveals nothing. SQL reads them as n.body_md too.
+-- forged through /rpc reveals nothing. In SQL, n.body_md on a notes row
+-- also resolves to these (NULL without an actor): new SQL joins note_bodies.
 
 CREATE OR REPLACE FUNCTION public.doc_state(n public.notes)
 RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''

@@ -153,7 +153,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - **`notes_pull`:** `notes_pull(p_ws, p_note, p_after_id bigint, p_known_version int) RETURNS jsonb {updates: [...≤1000], has_more, doc_version, snapshot?}`, STABLE. Access is checked once, and the result comes from one MVCC snapshot, so the log-first ordering trick goes away.
    - **`notes_list_meta`:** `notes_list_meta(p_ws, p_trash_since timestamptz) RETURNS SETOF public.notes_meta`, filtered by `notes__visible_ids` once, ordered by `position COLLATE "C", id`, capped at 5,000.
    - App `pullDoc`, `listMeta` and the MCP pull move onto them, with a fallback to the current queries while the function is missing (the GS pattern).
-   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly.
+   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly. *(NS-11 kept them one release: v1.4.0 and the app's Recents, previews and export still read them.)*
 8. **The statement-level write path (NS-8).**
    - `notes_op_apply_updates` inserts with one `INSERT … SELECT FROM jsonb_to_recordset(p_updates) … ON CONFLICT DO NOTHING RETURNING id`.
    - It updates `notes` only when rows were inserted or a body actually changed.
