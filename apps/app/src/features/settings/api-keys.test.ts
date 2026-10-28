@@ -298,10 +298,12 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       // skips it without: a best-effort extra, like the op-side BEST_EFFORT
       // above (tasks' linkDescribed links a description's references only
       // with Links at Edit, call #15). Without that lane the key just gets less.
+      // The module's own lane at View is held by every key that reaches one of
+      // its tools, as for the tools above (notes' pull helper, NS-7).
       for (const m of preamble.matchAll(RPC_CALL)) {
         const helper = enclosingFunction(preamble, m.index ?? 0);
         const ungated = [...keyLanes(m[1], bodies)].filter(
-          (lane) => !helperChecksLane(helper, lane),
+          (lane) => (!id || lane !== `${id}@view`) && !helperChecksLane(helper, lane),
         );
         expect(ungated, `${file}: helper call to ${m[1]}`).toEqual([]);
       }

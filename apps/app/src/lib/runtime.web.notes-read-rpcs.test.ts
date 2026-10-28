@@ -6,7 +6,12 @@
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-type Call = { kind: "rpc" | "from"; name: string; args?: unknown; chain: Array<[string, unknown[]]> };
+type Call = {
+  kind: "rpc" | "from";
+  name: string;
+  args?: unknown;
+  chain: Array<[string, unknown[]]>;
+};
 type Answer = { data: unknown; error: unknown };
 const recorded = rs.hoisted(() => ({
   calls: [] as Call[],
@@ -99,7 +104,8 @@ const meta = (i: number) => ({
   deleted_at: null,
 });
 
-const rpcCalls = (name: string) => recorded.calls.filter((c) => c.kind === "rpc" && c.name === name);
+const rpcCalls = (name: string) =>
+  recorded.calls.filter((c) => c.kind === "rpc" && c.name === name);
 const tableReads = () => recorded.calls.filter((c) => c.kind === "from").map((c) => c.name);
 
 beforeEach(() => {
@@ -110,10 +116,19 @@ beforeEach(() => {
 describe("pullDoc on notes_pull", () => {
   it("is one call that brings the log page and the snapshot, reading no table", async () => {
     recorded.answers.notes_pull = {
-      data: { updates: [update(11), update(12)], has_more: false, doc_version: 3, snapshot: "U05BUA==" },
+      data: {
+        updates: [update(11), update(12)],
+        has_more: false,
+        doc_version: 3,
+        snapshot: "U05BUA==",
+      },
       error: null,
     };
-    const res = await webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE, sinceUpdateId: 10 });
+    const res = await webRuntime.notesV2.pullDoc({
+      workspaceId: WS,
+      noteId: NOTE,
+      sinceUpdateId: 10,
+    });
     expect(rpcCalls("notes_pull")).toHaveLength(1);
     expect(rpcCalls("notes_pull")[0]!.args).toEqual({
       p_workspace_id: WS,
@@ -133,7 +148,11 @@ describe("pullDoc on notes_pull", () => {
       data: { updates: [], has_more: false, doc_version: 7 },
       error: null,
     };
-    const res = await webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE, knownDocVersion: 7 });
+    const res = await webRuntime.notesV2.pullDoc({
+      workspaceId: WS,
+      noteId: NOTE,
+      knownDocVersion: 7,
+    });
     expect(rpcCalls("notes_pull")[0]!.args).toMatchObject({ p_after_id: 0, p_known_version: 7 });
     // No snapshot key: the version didn't move, so there is nothing to download.
     expect(res.snapshotB64).toBeNull();
@@ -154,7 +173,15 @@ describe("pullDoc on notes_pull", () => {
     recorded.answers.notes_pull = (call) => {
       const { p_after_id } = call.args as { p_after_id: number };
       return p_after_id === 0
-        ? { data: { updates: [update(1), update(2)], has_more: true, doc_version: 4, snapshot: "U05BUA==" }, error: null }
+        ? {
+            data: {
+              updates: [update(1), update(2)],
+              has_more: true,
+              doc_version: 4,
+              snapshot: "U05BUA==",
+            },
+            error: null,
+          }
         : { data: { updates: [update(3)], has_more: false, doc_version: 4 }, error: null };
     };
     const res = await webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE });
@@ -170,8 +197,14 @@ describe("pullDoc on notes_pull", () => {
     recorded.answers.notes_pull = (call) => {
       const { p_after_id } = call.args as { p_after_id: number };
       return p_after_id === 0
-        ? { data: { updates: [update(1)], has_more: true, doc_version: 4, snapshot: "T0xE" }, error: null }
-        : { data: { updates: [update(2)], has_more: false, doc_version: 5, snapshot: "TkVX" }, error: null };
+        ? {
+            data: { updates: [update(1)], has_more: true, doc_version: 4, snapshot: "T0xE" },
+            error: null,
+          }
+        : {
+            data: { updates: [update(2)], has_more: false, doc_version: 5, snapshot: "TkVX" },
+            error: null,
+          };
     };
     const res = await webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE });
     expect(res.snapshotB64).toBe("TkVX");
