@@ -26,6 +26,7 @@ import {
   mailboxProviderSchema,
   normalizeEmailProvider,
   normalizeRelationKind,
+  noteShareModeSchema,
   priorityLevelSchema,
   relationKindSchema,
   taskTimeAdjustmentReasonSchema,
@@ -257,14 +258,13 @@ export const noteRowSchema = z.object({
   parent_id: optStr,
   title: z.string().optional(),
   icon: optStr,
-  is_pinned: z.union([z.boolean(), z.number()]).optional(),
   position: z.string().optional(),
   is_archived: z.union([z.boolean(), z.number()]).optional(),
   published_at: optStr,
   publish_token: optStr,
   doc_version: optNum,
   // PERM-3: a sub-note follows its parent ("inherit") or has its own sharing.
-  share_mode: z.enum(["inherit", "custom"]).optional(),
+  share_mode: noteShareModeSchema.optional(),
   workspace_shared: z.boolean().optional(),
   // NR-1: stored Inbox + per-note reading width (optional until deployed).
   in_inbox: z.boolean().optional(),

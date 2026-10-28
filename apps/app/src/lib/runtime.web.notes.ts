@@ -9,6 +9,7 @@ import { normalizeSearchHit } from "@contracts/search";
 
 import {
   type Note,
+  type NoteDocPull,
   noteRowToModel,
   type NoteUpdateRow,
   noteUpdateRowToModel,
@@ -16,7 +17,13 @@ import {
 } from "../features/notes/model";
 // Any missing table (develop's deploy-gap guard); task-rows' version names the table.
 import { isMissingTableError as isAnyTableMissing, selectFirstDeployedTier } from "./deploy-tiers";
-import { collectTruncations, READ_CAPS, readAfterCursor } from "./paged-select";
+import {
+  collectTruncations,
+  READ_CAPS,
+  readAfterCursor,
+  readPaged,
+  type Truncation,
+} from "./paged-select";
 import { publicConfig } from "./public-config";
 import { DbError, jsonObject, runQuery, runRpc, untypedDb } from "./runtime.db";
 import type { NotesRuntime, NotesV2Runtime } from "./runtime.types";
@@ -31,6 +38,172 @@ function mapNoteRow(raw: unknown): Note {
 
 function mapNoteUpdateRow(raw: unknown): NoteUpdateRow {
   return noteUpdateRowToModel(requireRow(noteUpdateRowSchema, raw, "note update"));
+}
+
+type PgError = { code?: string; message: string };
+
+/**
+ * The notes list through notes_list_meta (NS-7): visibility computed once per
+ * call on the server, in byte order of position. The function stops at 5,000
+ * rows (READ_CAPS.notes), and PostgREST at 1,000 a request, so a workspace
+ * over 1,000 notes pages. Null while the function isn't deployed yet.
+ */
+async function listMetaViaRpc(workspaceId: string) {
+  // One cutoff for every page: a note crossing it between pages would shift the offsets.
+  const trashSince = trashWindowCutoffIso(new Date());
+  const res = await readPaged<unknown, PgError>({
+    scope: "notes",
+    cap: READ_CAPS.notes,
+    page: async (offset, limit) => {
+      // The server stops at the cap: past it there is nothing to ask for.
+      if (offset >= READ_CAPS.notes) return { data: [], error: null };
+      const { data, error } = await untypedDb(supabaseClient)
+        .rpc("notes_list_meta", { p_workspace_id: workspaceId, p_trash_since: trashSince })
+        .range(offset, offset + limit - 1);
+      return { data: (data ?? null) as unknown[] | null, error };
+    },
+    keyOf: (row) => String((row as { id?: unknown })?.id),
+  });
+  if (res.error) {
+    if (res.rows.length === 0 && isMissingFunctionError(res.error, "notes_list_meta")) return null;
+    throw new DbError(res.error);
+  }
+  // The server's cap is the end of what it sends: a full cap means there may be more.
+  const truncation: Truncation | null =
+    res.rows.length >= READ_CAPS.notes
+      ? { scope: "notes", shown: READ_CAPS.notes, total: null }
+      : res.truncation;
+  return {
+    notes: mapKnownRows(res.rows, mapNoteRow),
+    degraded: false,
+    truncated: collectTruncations(truncation),
+  };
+}
+
+type PullArgs = Parameters<NotesV2Runtime["pullDoc"]>[0];
+
+/**
+ * A note's document through notes_pull (NS-7): the log page and, when the
+ * version moved, the snapshot, from one server snapshot with access checked
+ * once. A log over 1,000 rows takes one call per 1,000; a later page that
+ * brings a snapshot (a compaction ran between calls) is the newer one, and the
+ * rows already read stay lossless on top of it (Yjs is idempotent). Null while
+ * the function isn't deployed yet.
+ */
+async function pullDocViaRpc({ workspaceId, noteId, sinceUpdateId, knownDocVersion }: PullArgs) {
+  let after = sinceUpdateId ?? 0;
+  let known: number | null = knownDocVersion ?? null;
+  let snapshotB64: string | null = null;
+  const updates: NoteUpdateRow[] = [];
+  for (let first = true; ; first = false) {
+    const { data, error } = await untypedDb(supabaseClient).rpc("notes_pull", {
+      p_workspace_id: workspaceId,
+      p_note_id: noteId,
+      p_after_id: after,
+      p_known_version: known,
+    });
+    if (error) {
+      if (first && isMissingFunctionError(error, "notes_pull")) return null;
+      throw new DbError(error);
+    }
+    const page = readPullPage(data);
+    if (page.snapshot !== undefined) snapshotB64 = page.snapshot;
+    known = page.docVersion;
+    updates.push(...page.rows);
+    const last = page.rows.at(-1);
+    if (!page.hasMore || !last) return { snapshotB64, docVersion: page.docVersion, updates };
+    after = Number(last.id);
+  }
+}
+
+/** One notes_pull answer. `snapshot` is undefined when the server left it out
+ * (the caller's version is current), null for a note with no snapshot yet. */
+function readPullPage(data: unknown) {
+  const page = jsonObject(data as Parameters<typeof jsonObject>[0]);
+  const snapshot =
+    "snapshot" in page ? (typeof page.snapshot === "string" ? page.snapshot : null) : undefined;
+  return {
+    snapshot,
+    docVersion: Number(page.doc_version ?? 0),
+    rows: mapKnownRows(Array.isArray(page.updates) ? page.updates : [], mapNoteUpdateRow),
+    hasMore: page.has_more === true,
+  };
+}
+
+/** Before NS-7's migration: the two table reads through RLS. */
+async function pullDocFromTables({
+  workspaceId,
+  noteId,
+  sinceUpdateId,
+  knownDocVersion,
+}: PullArgs): Promise<NoteDocPull> {
+  // Log FIRST, snapshot SECOND. A concurrent compaction between the two
+  // reads then only ever makes the snapshot NEWER than the log we hold —
+  // applying both stays lossless (Yjs is idempotent). The reverse order
+  // could pair a stale snapshot with a log missing its folded tail.
+  // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
+  // ceiling, so a long log silently lost its tail. A failed page fails
+  // the pull rather than returning a partial log the cursor would skip.
+  // NR-6 adds who wrote each row; until that migration is applied the
+  // select 42703s, so retry once with the original columns.
+  const readLog = (cols: string) =>
+    readAfterCursor({
+      after: sinceUpdateId ?? 0,
+      idOf: (row: { id: number | string }) => Number(row.id),
+      page: async (after, limit) =>
+        supabaseClient
+          .from("note_updates")
+          .select<string, { id: number | string }>(cols)
+          .eq("note_id", noteId)
+          .gt("id", after)
+          .order("id", { ascending: true })
+          .limit(limit),
+    });
+  let updRes = await readLog("id, client_id, client_seq, update_b64, origin, actor_key_id");
+  if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
+    updRes = await readLog("id, client_id, client_seq, update_b64");
+  }
+  if (updRes.error) throw new DbError(updRes.error);
+  const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
+
+  // Every snapshot change (compaction, seed) bumps doc_version, so an
+  // unchanged version means the snapshot adds nothing to what we hold.
+  if (knownDocVersion != null) {
+    const ver = await supabaseClient
+      .from("notes")
+      .select("doc_version")
+      .eq("id", noteId)
+      .eq("workspace_id", workspaceId)
+      .single();
+    if (!ver.error && ver.data?.doc_version === knownDocVersion) {
+      return { snapshotB64: null, docVersion: knownDocVersion, updates };
+    }
+  }
+
+  const noteRes = await supabaseClient
+    .from("notes")
+    .select("doc_state, doc_version")
+    .eq("id", noteId)
+    .eq("workspace_id", workspaceId)
+    .single();
+  if (noteRes.error) {
+    if (noteRes.error.code !== "42703") throw new DbError(noteRes.error);
+    // Pre-migration there is no doc_version column — degrade to the
+    // legacy snapshot-only shape rather than breaking the open note.
+    const legacy = await supabaseClient
+      .from("notes")
+      .select("doc_state")
+      .eq("id", noteId)
+      .eq("workspace_id", workspaceId)
+      .single();
+    if (legacy.error) throw new DbError(legacy.error);
+    return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
+  }
+  return {
+    snapshotB64: noteRes.data?.doc_state ?? null,
+    docVersion: noteRes.data?.doc_version ?? 0,
+    updates,
+  };
 }
 
 export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
@@ -69,15 +242,18 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
     // the migration lands, so we fall back to the legacy columns and flag
     // the bundle degraded. Explicit mutations throw honest errors instead.
     async listMeta(workspaceId) {
+      const viaRpc = await listMetaViaRpc(workspaceId);
+      if (viaRpc) return viaRpc;
+      // Before NS-7's migration: the table read through RLS.
       const V2_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
       // NR-1 columns ride on top of v2; until that migration is applied the
       // v2 read still works fully (not degraded) and sections derive Inbox.
       const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
       // NR-6: the last human editor, for the header's "Edited … by …".
       const NR6_COLS = `${NR1_COLS}, edited_by, edited_at`;
       const LEGACY_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
       const query = (cols: string) =>
         selectCapped<any>({
@@ -104,74 +280,8 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
       };
     },
 
-    async pullDoc({ workspaceId, noteId, sinceUpdateId, knownDocVersion }) {
-      // Log FIRST, snapshot SECOND. A concurrent compaction between the two
-      // reads then only ever makes the snapshot NEWER than the log we hold —
-      // applying both stays lossless (Yjs is idempotent). The reverse order
-      // could pair a stale snapshot with a log missing its folded tail.
-      // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
-      // ceiling, so a long log silently lost its tail. A failed page fails
-      // the pull rather than returning a partial log the cursor would skip.
-      // NR-6 adds who wrote each row; until that migration is applied the
-      // select 42703s, so retry once with the original columns.
-      const readLog = (cols: string) =>
-        readAfterCursor({
-          after: sinceUpdateId ?? 0,
-          idOf: (row: { id: number | string }) => Number(row.id),
-          page: async (after, limit) =>
-            supabaseClient
-              .from("note_updates")
-              .select<string, { id: number | string }>(cols)
-              .eq("note_id", noteId)
-              .gt("id", after)
-              .order("id", { ascending: true })
-              .limit(limit),
-        });
-      let updRes = await readLog("id, client_id, client_seq, update_b64, origin, actor_key_id");
-      if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
-        updRes = await readLog("id, client_id, client_seq, update_b64");
-      }
-      if (updRes.error) throw new DbError(updRes.error);
-      const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
-
-      // Every snapshot change (compaction, seed) bumps doc_version, so an
-      // unchanged version means the snapshot adds nothing to what we hold.
-      if (knownDocVersion != null) {
-        const ver = await supabaseClient
-          .from("notes")
-          .select("doc_version")
-          .eq("id", noteId)
-          .eq("workspace_id", workspaceId)
-          .single();
-        if (!ver.error && ver.data?.doc_version === knownDocVersion) {
-          return { snapshotB64: null, docVersion: knownDocVersion, updates };
-        }
-      }
-
-      const noteRes = await supabaseClient
-        .from("notes")
-        .select("doc_state, doc_version")
-        .eq("id", noteId)
-        .eq("workspace_id", workspaceId)
-        .single();
-      if (noteRes.error) {
-        if (noteRes.error.code !== "42703") throw new DbError(noteRes.error);
-        // Pre-migration there is no doc_version column — degrade to the
-        // legacy snapshot-only shape rather than breaking the open note.
-        const legacy = await supabaseClient
-          .from("notes")
-          .select("doc_state")
-          .eq("id", noteId)
-          .eq("workspace_id", workspaceId)
-          .single();
-        if (legacy.error) throw new DbError(legacy.error);
-        return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
-      }
-      return {
-        snapshotB64: noteRes.data?.doc_state ?? null,
-        docVersion: noteRes.data?.doc_version ?? 0,
-        updates,
-      };
+    async pullDoc(args) {
+      return (await pullDocViaRpc(args)) ?? pullDocFromTables(args);
     },
 
     async create({ workspaceId, id, parentId, title, position, icon }) {

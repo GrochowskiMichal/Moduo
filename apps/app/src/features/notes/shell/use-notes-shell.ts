@@ -266,7 +266,6 @@ function draftAsNote(draft: Draft, workspaceId: string, userId: string | null): 
     parentId: draft.parentId,
     title: "",
     icon: null,
-    isPinned: false,
     // Sorts last among siblings until the real create assigns a position.
     position: "~",
     isArchived: false,

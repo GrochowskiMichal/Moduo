@@ -95,6 +95,7 @@ INSERT INTO test.mx_unreached (fn) VALUES
   ('sections_op_move'),
   ('sections_op_update'),
   ('share_defaults_set'),
+  ('share_op_follow_parent'),
   ('task_templates_op_apply'),
   ('task_views_op_move'),
   ('task_views_op_update'),

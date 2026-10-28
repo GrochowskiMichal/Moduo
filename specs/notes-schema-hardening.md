@@ -62,7 +62,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 - **AC7.** Every `notes_op_*` checks its level once, through one guard, and each op's effective level matches the matrix in Assumptions 6. "Not found" and "hidden" are the same answer.
 - **AC8.** Opening a note's document is one request that checks access once. The notes list is one request whose visibility is computed once per call.
 - **AC9.** A 500-row update batch checks access once per note, not once per row. An all-duplicate batch writes nothing to `notes`.
-- **AC10.** The legacy objects and columns (`exposed_notes`, `note_shares`, `private.user_owns_note`, `share_scope`, `share_permission`, `tags`, `kind`, `is_pinned`) are gone:
+- **AC10.** The legacy objects and columns (`exposed_notes`, `note_shares`, `private.user_owns_note`, `share_scope`, `share_permission`, `tags`, `kind`, and every reader and writer of `is_pinned`) are gone; the `is_pinned` column itself goes one release later, because v1.4.0's notes list selects it:
     - erasure still works;
     - the actor columns have foreign keys;
     - `position` sorts in byte order everywhere;
@@ -110,8 +110,8 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - *Rejected:* rewriting `can_access`, the shared 6 kB gate other modules depend on, for an invariant DDL now guarantees.
 3. **Re-rooting keeps access everywhere (NS-3).**
    - `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)`. Prod has 0 violations, so it is added validated.
-   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, runs `notes__keep_access_on_reroot` for each live inherit child of `OLD` before the key's SET NULL fires.
-   - When the deleted row's creator is the one being erased, the helper skips granting that creator. A new parameter `p_skip_creator` does this.
+   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, copies what the chain gives each inherit child of `OLD` (live or trashed) into `resource_grants` before the key's SET NULL fires; the SET NULL write itself makes the child `custom` (`notes__orphan_custom`). The trigger never writes the child's row: the same DELETE may remove it next (built in NS-3, see `docs/decisions/notes.md`).
+   - The helper gains `p_skip_creator` (a creator not to grant). The delete trigger passes none: the deleted row's creator keeps what they had (Mike, 2026-10-28, NS-3 review), and erasure's own step 7 removes every grant of the erased person.
    - Purge's cycle-break branch calls the same freeze.
    - Account erasure needs no change: its delete now fires the trigger.
    - *Rejected:* adding freeze calls to each delete path, the convention that missed erasure.
@@ -153,7 +153,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - **`notes_pull`:** `notes_pull(p_ws, p_note, p_after_id bigint, p_known_version int) RETURNS jsonb {updates: [...≤1000], has_more, doc_version, snapshot?}`, STABLE. Access is checked once, and the result comes from one MVCC snapshot, so the log-first ordering trick goes away.
    - **`notes_list_meta`:** `notes_list_meta(p_ws, p_trash_since timestamptz) RETURNS SETOF public.notes_meta`, filtered by `notes__visible_ids` once, ordered by `position COLLATE "C", id`, capped at 5,000.
    - App `pullDoc`, `listMeta` and the MCP pull move onto them, with a fallback to the current queries while the function is missing (the GS pattern).
-   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly.
+   - SELECT grants on `notes` and `note_updates` for `authenticated` are then revoked in NS-11, once nothing reads them directly. *(NS-11 kept them one release: v1.4.0 and the app's Recents, previews and export still read them.)*
 8. **The statement-level write path (NS-8).**
    - `notes_op_apply_updates` inserts with one `INSERT … SELECT FROM jsonb_to_recordset(p_updates) … ON CONFLICT DO NOTHING RETURNING id`.
    - It updates `notes` only when rows were inserted or a body actually changed.
@@ -161,7 +161,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - *Rejected:* keeping row triggers and batching in the op only, which leaves compaction deletes at one check per row.
 9. **Legacy removal and integrity (NS-9).**
    - Drop `exposed_notes`, `note_shares` (with its policies and trigger) and `private.user_owns_note`, and re-cut `account_erase_workspace_data` without them.
-   - Drop the columns `share_scope`, `share_permission`, `tags`, `kind` (ops stop writing it) and `is_pinned` (with `togglePin`, the snippet, the model field and `notes_meta`'s column; PQ5).
+   - Drop the columns `share_scope`, `share_permission`, `tags`, `kind` (ops stop writing it). Remove the pin (PQ5): `togglePin`, the snippet, the model field, `notes_meta`'s column and set_meta's `isPinned`. The `is_pinned` column stays one release unread, then a follow-up drops it: v1.4.0's `listMeta` selects it and migrations land before the app, so dropping it now breaks every old tab and desktop install (validator, NS-9).
    - Shrink `notes_share_fields_owner_only` to its remaining job: only the owner changes `created_by`.
    - Foreign keys `ON DELETE SET NULL`: `notes.edited_by` → `profiles`, `note_updates.user_id` → `profiles`, `note_updates.actor_key_id` → `workspace_api_keys`.
    - `ALTER COLUMN position TYPE text COLLATE "C"` on `notes` and `note_favorites`.
@@ -170,7 +170,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 10. **Server compaction (NS-10).**
     - `notes__compact(p_note, p_snapshot_b64, p_upto_id, p_expected_version)`: service-only, with the same CAS as `notes_op_save_snapshot`, never writing bodies.
     - A nightly step in `purge-deleted` picks at most 50 notes with more than 200 log rows, last written more than 10 minutes ago, and nobody in `note_live_viewers`.
-    - It merges snapshot plus log with `Y.mergeUpdates` through a new `compactFromLog` export of the existing `notes-doc` bundle (`supabase/functions/_shared/notes-doc/`), then calls `notes__compact`.
+    - It merges snapshot plus log through a new `compactFromLog` export of the existing `notes-doc` bundle (`supabase/functions/_shared/notes-doc/`), then calls `notes__compact`. *(Built:* the merge rebuilds a `Y.Doc` and encodes it with `Y.encodeStateAsUpdate`, as the client's fold does, and refuses a log with a row Yjs can't decode, as the client vetoes its fold; it loads at most 5,000 rows a night per note.*)*
     - The client stays the only markdown serialiser (NR-6). Compaction only merges.
 11. **The hot/cold split (NS-11).**
     - `note_bodies (note_id uuid PK, workspace_id uuid, doc_state text, doc_version int, body_text text, body_md text, search_tsv tsvector GENERATED …)`, with the composite key to `notes` `ON DELETE CASCADE`, RLS SELECT through `can_access`, no client grants, and the GIN index moved there.
@@ -178,7 +178,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
       - backfills the 129 rows;
       - switches every SQL reader and writer (`notes_pull`, `save_snapshot`, `compact`, `seed_doc`, `apply_updates`, `duplicate`, `import`, `notes__search`, `notes_public_subtree`, the MCP's reads);
       - drops the columns from `notes`.
-    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here.
+    - The app reads content only through `notes_pull` (NS-7), so no app change is needed. The `authenticated` SELECT grant on `note_updates` is revoked here. *(Built: the app still selected `body_text`/`body_md` from `notes` (Recents, previews, export) and v1.4.0 reads all five columns plus `note_updates` directly, so each dropped column is a PostgREST computed field of the same name, access-checked, and the SELECT grants on `notes` and `note_updates` stay one release. `note_bodies` keeps a copy of the title for `search_tsv`'s weight A, written by `notes__bodies_sync`. See `docs/decisions/notes.md` NS-11.)*
 12. **Tier and verification.** Every block that ships a migration is Tier 2: the validator runs, and `bun run db:matrix` covers new functions.
     - **Migration timestamps:** assigned per block, starting at `20261030100000` and spaced an hour apart, in block order.
     - **Local stack:** each block applies on top of the shared local stack (`psql -1 -f`), never resetting it.
@@ -190,7 +190,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 | --- | --- | --- | --- | --- |
 | NS-1 | **Close the open surface** | Migration `20261030100000`: grants, policy, prod-only helpers and indexes, the `notes_module_permission` grant (Assumption 1). `notes_grants.test.sql`; RLS matrix updated. **Tier 2.** | AC1, AC2 | — |
 | NS-2 | **One tree per workspace** | Migration `20261030110000`: composite keys on `notes`, `note_updates` and `note_favorites`; the import parent check (Assumption 2). `notes_same_workspace.test.sql`. **Tier 2.** | AC3 | — |
-| NS-3 | **Deleting a parent keeps access** | Migration `20261030120000`: the inherit-needs-parent CHECK, the `notes__freeze_children` trigger, `p_skip_creator`, the cycle-branch fix (Assumption 3). `notes_reroot_access.test.sql`. **Tier 2.** | AC4 | NS-2 |
+| NS-3 | **Deleting a parent keeps access** | Migration `20261030121000`: the inherit-needs-parent CHECK, the `notes__freeze_children` trigger, `p_skip_creator`, the cycle-branch fix (Assumption 3). `notes_reroot_access.test.sql`. **Tier 2.** | AC4 | NS-2 |
 | NS-4 | **Trash empties itself** | Migration `20261030130000`: `notes__purge_expired`, the restore-after-30-days refusal, the viewer sweep, the `purge__preview` count. The notes step in `_shared/purge-deleted.ts` (Assumption 4). **Tier 2.** | AC5 | NS-3 |
 | NS-5 | **Lean meta results** | Migration `20261030140000`: `notes_meta` type, the 10 ops re-declared with grants re-stated. App and MCP mapping tests (Assumption 5). **Tier 2.** | AC6 | NS-1 |
 | NS-6 | **One guard** | Migration `20261030150000`: `notes__require`, `notes__require_module`, every op moved onto them, the publish rule unified (Assumption 6). `notes_guard_matrix.test.sql`. **Tier 2.** | AC7 | NS-4, NS-5 |

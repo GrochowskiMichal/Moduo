@@ -80,7 +80,7 @@ export type NotesV2Runtime = {
   setMeta(input: {
     workspaceId: string;
     noteId: string;
-    patch: { icon?: string | null; isPinned?: boolean; fullWidth?: boolean };
+    patch: { icon?: string | null; fullWidth?: boolean };
   }): Promise<NoteV2>;
   /** NR-1: move a note between the stored Inbox and Pages. Filing INTO the
    * Inbox re-roots a nested note (Inbox only holds roots). */

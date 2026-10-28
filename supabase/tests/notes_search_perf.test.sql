@@ -28,14 +28,14 @@ CREATE FUNCTION test.words(p_count int) RETURNS text LANGUAGE sql VOLATILE AS $$
 $$;
 
 -- Roots first, then four levels of children under random earlier notes.
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, updated_at)
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, updated_at)
 SELECT test.id('n' || i), test.id('W'), CASE WHEN i % 2 = 0 THEN test.id('O') ELSE test.id('A') END,
        test.words(3), test.words(80), now() - (i || ' minutes')::interval
   FROM generate_series(1, 2000) i;
 DO $$
 BEGIN
   FOR lvl IN 1..4 LOOP
-    INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id, updated_at)
+    INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id, updated_at)
     SELECT test.id('n' || i), test.id('W'), CASE WHEN i % 2 = 0 THEN test.id('O') ELSE test.id('A') END,
            test.words(3), test.words(80), test.id('n' || (1 + floor(random() * (2000 * lvl))::int)),
            now() - (i || ' minutes')::interval

@@ -36,29 +36,73 @@ const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 
 /** notes + note_updates + the RPCs the write path calls.
  * `beforeApply` runs inside the next apply call, before its insert (to
- * stage a write that races the connector's). */
-function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
+ * stage a write that races the connector's). The connector reads a note's doc
+ * through notes_pull (NS-7), recorded apart in `pullCalls`; `pullMissing`
+ * answers it as a database before NS-7 would (PGRST202). */
+function fakeDb(note: Row, opts: { beforeApply?: () => void; pullMissing?: boolean } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const pullCalls: Row[] = [];
+  const fromTables: string[] = [];
+  const selects: Array<{ table: string; cols: string }> = [];
   let nextId = 1;
   function from(table: string) {
+    fromTables.push(table);
     const filters: Array<(r: Row) => boolean> = [];
     let max = Number.POSITIVE_INFINITY;
     const query: any = {
-      select: () => query,
+      select: (cols: string) => (selects.push({ table, cols }), query),
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), query),
       is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), query),
       gt: (c: string, v: number) => (filters.push((r) => Number(r[c]) > v), query),
       order: () => query,
       limit: (n: number) => ((max = n), query),
       then<T>(resolve: (res: { data: Row[]; error: null }) => T) {
-        const data = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+        // NS-11: a note's content is its note_bodies row; here one record holds both.
+        const source =
+          table === "note_bodies"
+            ? tables.notes!.map((n) => ({ ...n, note_id: n.id }))
+            : (tables[table] ?? []);
+        const data = source.filter((r) => filters.every((f) => f(r)));
         return Promise.resolve({ data: data.slice(0, max), error: null }).then(resolve);
       },
     };
     return query;
   }
   async function rpc(fn: string, args: Row) {
+    if (fn === "notes_pull") {
+      pullCalls.push(args);
+      if (opts.pullMissing) {
+        return {
+          data: null,
+          error: { code: "PGRST202", message: "Could not find the function public.notes_pull" },
+        };
+      }
+      const n = tables.notes!.find(
+        (r) => r.id === args.p_note_id && r.workspace_id === args.p_workspace_id,
+      );
+      if (!n) return { data: null, error: { code: "P0002", message: "Note not found in this workspace." } };
+      const after = tables
+        .note_updates!.filter((u) => u.note_id === n.id && Number(u.id) > Number(args.p_after_id))
+        .sort((a, b) => Number(a.id) - Number(b.id));
+      const version = Number(n.doc_version ?? 0);
+      const out: Row = {
+        updates: after.slice(0, 1000).map((u) => ({
+          id: u.id,
+          client_id: u.client_id ?? "c",
+          client_seq: u.client_seq ?? 1,
+          update_b64: u.update_b64,
+          origin: u.origin,
+          actor_key_id: null,
+        })),
+        has_more: after.length > 1000,
+        doc_version: version,
+      };
+      if (args.p_known_version == null || Number(args.p_known_version) !== version) {
+        out.snapshot = n.doc_state ?? null;
+      }
+      return { data: out, error: null };
+    }
     rpcCalls.push({ fn, args });
     if (fn === "notes_op_apply_updates") {
       const stage = opts.beforeApply;
@@ -116,7 +160,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
       update_b64: Buffer.from(update).toString("base64"),
       origin: "user",
     });
-  return { ctx, tables, rpcCalls, pushRow };
+  return { ctx, tables, rpcCalls, pullCalls, fromTables, selects, pushRow };
 }
 
 function tool(name: string) {
@@ -233,6 +277,54 @@ describe("crdt write", () => {
     expect(row.docStateB64).toBeTruthy();
     expect(row.bodyMd).toBe("Brief\n\nSome **bold** text");
     expect(clientMarkdown(tables, res.id)).toBe("Brief\n\nSome **bold** text");
+  });
+});
+
+describe("the connector's pull (NS-7)", () => {
+  it("reads a note's doc through notes_pull, never the log table", async () => {
+    const { ctx, tables, pullCalls, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(pullCalls.length).toBeGreaterThan(0);
+    expect(pullCalls[0]).toMatchObject({ p_workspace_id: WS, p_note_id: NOTE, p_after_id: 0 });
+    expect(fromTables).not.toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
+  });
+
+  it("builds on the logged updates notes_pull returns, not just the snapshot", async () => {
+    const { ctx, tables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+
+  it("falls back to the tables while notes_pull is missing", async () => {
+    const { ctx, tables, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"), {
+      pullMissing: true,
+    });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(fromTables).toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+});
+
+describe("content reads (NS-11)", () => {
+  const CONTENT = /\b(doc_state|doc_version|body_text|body_md|search_tsv)\b/;
+
+  it("reads a note's stored body from note_bodies, in the key's workspace", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_update").handler({ note_id: NOTE, markdown: "New body" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("body_md"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("Plan\n\nNew body");
+  });
+
+  it("reads the snapshot from note_bodies too while notes_pull is missing", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"), { pullMissing: true });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("doc_state"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
   });
 });
 
@@ -402,7 +494,6 @@ describe("meta results still map", () => {
     parent_id: PARENT,
     title: "  Q4 plan ",
     icon: "📌",
-    is_pinned: false,
     position: "a0",
     is_archived: true,
     published_at: null,

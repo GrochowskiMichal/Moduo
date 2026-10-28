@@ -30,7 +30,6 @@ function note(id: string, title: string, extra: Partial<Note> = {}): Note {
     parentId: null,
     title,
     icon: null,
-    isPinned: false,
     position: "a",
     isArchived: false,
     publishedAt: null,

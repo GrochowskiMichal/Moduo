@@ -139,3 +139,38 @@ BEGIN
   RETURN test.id(p_name);
 END;
 $$;
+
+-- A note with its content (NS-11). The content lives in note_bodies, so a
+-- fixture that sets doc_state, doc_version, body_text or body_md inserts
+-- through this view: the notes columns it names go to notes (defaults for the
+-- rest), the content to the note's note_bodies row. INSERT only, no ON CONFLICT.
+DO $do$
+BEGIN
+  IF to_regclass('public.note_bodies') IS NULL THEN
+    RETURN;
+  END IF;
+  CREATE VIEW test.notes_in AS
+    SELECT n.*, b.doc_state, b.doc_version, b.body_text, b.body_md
+      FROM public.notes n LEFT JOIN public.note_bodies b ON b.note_id = n.id;
+  CREATE FUNCTION test.notes_in_insert() RETURNS trigger LANGUAGE plpgsql AS $$
+  DECLARE
+    v jsonb := jsonb_strip_nulls(to_jsonb(NEW)) - ARRAY['doc_state', 'doc_version', 'body_text', 'body_md'];
+    v_cols text;
+    v_id uuid;
+  BEGIN
+    SELECT string_agg(quote_ident(k), ', ') INTO v_cols FROM jsonb_object_keys(v) AS k;
+    EXECUTE format('INSERT INTO public.notes (%1$s) SELECT %1$s FROM jsonb_populate_record(NULL::public.notes, $1) RETURNING id',
+                   v_cols) INTO v_id USING v;
+    UPDATE public.note_bodies SET
+      doc_state = NEW.doc_state,
+      doc_version = coalesce(NEW.doc_version, doc_version),
+      body_text = coalesce(NEW.body_text, body_text),
+      body_md = coalesce(NEW.body_md, body_md)
+     WHERE note_id = v_id;
+    RETURN NEW;
+  END;
+  $$;
+  CREATE TRIGGER notes_in_insert INSTEAD OF INSERT ON test.notes_in
+    FOR EACH ROW EXECUTE FUNCTION test.notes_in_insert();
+END;
+$do$;

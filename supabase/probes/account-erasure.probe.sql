@@ -144,6 +144,8 @@ INSERT INTO public.notes (id, workspace_id, created_by, title, share_mode, delet
 INSERT INTO public.notes (id, workspace_id, created_by, title, parent_id, share_mode) VALUES
   (probe.id('N1c'), probe.id('W'), probe.id('B'), 'B under X private', probe.id('N1'), 'custom'),
   (probe.id('N1x'), probe.id('W'), probe.id('X'), 'X under X private, inherits', probe.id('N1'), 'inherit'),
+  -- NS-3: erasure deletes N1 and N1x in one statement; N1y must survive it.
+  (probe.id('N1y'), probe.id('W'), probe.id('B'), 'B under X private sub-note, inherits', probe.id('N1x'), 'inherit'),
   (probe.id('N8'), probe.id('W'), probe.id('X'), 'X under B shared, inherits', probe.id('NB'), 'inherit');
 
 INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_at) VALUES
@@ -554,6 +556,13 @@ BEGIN
   -- A teammate's sub-note under a deleted note moves to the top level.
   ASSERT EXISTS (SELECT 1 FROM public.notes
     WHERE id = probe.id('N1c') AND parent_id IS NULL AND created_by = probe.id('B')), 'B sub-note not re-rooted';
+  -- NS-3: one that followed X's sub-page becomes top-level with its own
+  -- sharing, and X gets nothing from it.
+  ASSERT EXISTS (SELECT 1 FROM public.notes
+    WHERE id = probe.id('N1y') AND parent_id IS NULL AND share_mode = 'custom'), 'B inherit sub-note not frozen';
+  ASSERT NOT EXISTS (SELECT 1 FROM public.resource_grants
+    WHERE resource_type = 'note' AND resource_id = probe.id('N1y') AND subject_id = probe.id('X')),
+    'the erased person was granted a re-rooted sub-note';
   -- X's own workspace is untouched until the account goes.
   ASSERT EXISTS (SELECT 1 FROM public.notes WHERE id = probe.id('NX') AND created_by = probe.id('X')), 'WX note touched';
   ASSERT EXISTS (SELECT 1 FROM public.tasks WHERE id = probe.id('TX') AND owner_id = probe.id('X')), 'WX task touched';

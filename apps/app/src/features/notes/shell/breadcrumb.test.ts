@@ -10,7 +10,6 @@ function note(partial: Partial<Note> & { id: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     position: "0000001000",
     isArchived: false,
     publishedAt: null,

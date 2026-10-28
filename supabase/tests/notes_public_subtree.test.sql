@@ -13,7 +13,7 @@ INSERT INTO public.workspaces (id, owner_id, name) VALUES
   (test.id('W'), test.id('O'), 'Moduo Labs'),
   (test.id('W2'), test.id('O'), 'Side project');
 
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md) VALUES
   (test.id('R'), test.id('W'), test.id('O'), 'Handbook', 'Welcome <!-- moduo:task:abc -->');
 INSERT INTO public.notes (id, workspace_id, created_by, parent_id, title) VALUES
   (test.id('A'), test.id('W'), test.id('O'), test.id('R'), 'Onboarding'),

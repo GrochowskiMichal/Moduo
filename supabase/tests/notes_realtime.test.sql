@@ -184,7 +184,7 @@ BEGIN
   PERFORM test.ok(v LIKE '42501 %', 'topic: there is no per-note topic to send on', v);
 
   -- ── A live pull skips the snapshot while doc_version is unchanged, so
-  -- every function that writes notes.doc_state (an UPDATE … SET) must bump
+  -- every function that writes doc_state (note_bodies since NS-11) (an UPDATE … SET) must bump
   -- doc_version in the same statement.
   PERFORM test.ok(NOT EXISTS (
       SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

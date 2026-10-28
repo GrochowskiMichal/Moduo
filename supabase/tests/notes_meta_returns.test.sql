@@ -8,15 +8,14 @@
 
 SELECT test.person('O');
 INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W'), test.id('O'), 'Moduo Labs');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, position) VALUES
   (test.id('P'), test.id('W'), test.id('O'), 'Roadmap', 'secret body', 'secret body', 'a');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text, parent_id, position) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text, parent_id, position) VALUES
   (test.id('N'), test.id('W'), test.id('O'), 'Q4 plan', 'secret body', 'secret body', test.id('P'), 'a');
 
 -- The columns the app reads, in noteRowSchema's order.
 CREATE FUNCTION test.meta_cols() RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
-  SELECT ARRAY['id', 'workspace_id', 'created_by', 'parent_id', 'title', 'icon', 'is_pinned',
-    'position', 'is_archived', 'published_at', 'publish_token', 'doc_version', 'share_mode',
+  SELECT ARRAY['id', 'workspace_id', 'created_by', 'parent_id', 'title', 'icon', 'position', 'is_archived', 'published_at', 'publish_token', 'doc_version', 'share_mode',
     'workspace_shared', 'in_inbox', 'full_width', 'edited_by', 'edited_at', 'created_at',
     'updated_at', 'deleted_at']
 $$;
@@ -120,8 +119,9 @@ BEGIN
   v_r := test.call_op(format('public.notes_op_rename(%L, %L, %L)', v_ws, v_n, 'Final title'));
   PERFORM test.ok(
     v_r = (SELECT to_jsonb(m) FROM (SELECT n.id, n.workspace_id, n.created_by, n.parent_id, n.title,
-             n.icon, n.is_pinned, n.position, n.is_archived, n.published_at, n.publish_token,
-             n.doc_version, n.share_mode, n.workspace_shared, n.in_inbox, n.full_width, n.edited_by,
+             n.icon, n.position, n.is_archived, n.published_at, n.publish_token,
+             (SELECT b.doc_version FROM public.note_bodies b WHERE b.note_id = n.id) AS doc_version,
+             n.share_mode, n.workspace_shared, n.in_inbox, n.full_width, n.edited_by,
              n.edited_at, n.created_at, n.updated_at, n.deleted_at
            FROM public.notes n WHERE n.id = v_n) m),
     'a rename returns the stored values of every meta column', v_r::text);

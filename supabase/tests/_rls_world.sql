@@ -21,7 +21,7 @@ INSERT INTO public.buckets (id, workspace_id, owner_id, name, is_system) VALUES
   (test.id('P2'), test.id('W2'), test.id('outsider'), 'Outsider project', false);
 INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status) VALUES
   (test.id('T'), test.id('W'), test.id('P'), test.id('owner'), 'Task HV16-SECRET', 'todo');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_md, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_md, body_text) VALUES
   (test.id('N'), test.id('W'), test.id('owner'), 'Note HV16-SECRET', 'HV16-SECRET', 'HV16-SECRET');
 INSERT INTO public.contacts (id, workspace_id, owner_id, name, email) VALUES
   (test.id('C'), test.id('W'), test.id('owner'), 'Contact HV16-SECRET', 'hv16-secret@example.com');
@@ -58,7 +58,3 @@ INSERT INTO public.user_preferences (user_id, show_agent_work) VALUES (test.id('
 ON CONFLICT (user_id) DO UPDATE SET show_agent_work = true;
 INSERT INTO public.focus_runs (id, workspace_id, user_id, status, mode, device_id, now_task_id)
 VALUES (test.id('FR'), test.id('W'), test.id('owner'), 'running', 'per_task', 'hv16-device', test.id('T'));
-
--- A page in the legacy exposed_notes table (notes publishing before publish_token).
-INSERT INTO public.exposed_notes (id, note_id, workspace_id, title, slug)
-VALUES (test.id('X'), test.id('N')::text, test.id('W')::text, 'Published', 'hv16-page');

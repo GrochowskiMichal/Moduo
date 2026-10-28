@@ -19,8 +19,8 @@ hunt("HV-15 variant 509-4: an old edit shows its UTC day", () => {
     ).toBeLessThan(0);
     const edited = new Date(2026, 7, 2, 0, 30).toISOString();
     const now = new Date(2026, 9, 23, 12, 0);
-    expect(
-      formatNoteSnippet({ updatedAt: edited, isPinned: false, isArchived: false } as never, now),
-    ).toBe("Edited on 2026-08-02");
+    expect(formatNoteSnippet({ updatedAt: edited, isArchived: false } as never, now)).toBe(
+      "Edited on 2026-08-02",
+    );
   });
 });

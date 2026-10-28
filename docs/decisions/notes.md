@@ -2,6 +2,84 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-11: a note's content lives in `note_bodies`; v1.4.0 reads it through computed fields of the old column names** → `supabase/migrations/20261030200000_notes_bodies_split.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-11 (MOD-662).
+  - Decision:
+    - `note_bodies` (one row per note, `(workspace_id, note_id)` → `notes` `ON DELETE CASCADE`) holds `doc_state`, `doc_version`, `body_text`, `body_md` and `search_tsv`, generated exactly as `notes.search_tsv` was, with the GIN index. RLS SELECT through `can_access`, and no client grant. An edit push now writes the body there and touches only `updated_at`/`edited_*` on `notes`, and `notes` keeps no tsvector index, so those updates can be HOT.
+    - The title stays on `notes`, and `note_bodies.title` is a copy for `search_tsv`'s weight A, kept by the trigger `notes__bodies_sync` (after insert, after a rename). The same trigger gives every new note its body row, so ops that create notes write content with an UPDATE.
+    - Every writer still serialises on the `notes` row lock (`notes__require`, `notes__compact`'s `FOR UPDATE`), then reads and writes the version in `note_bodies`. `notes_list_meta` joins `note_bodies` once rather than calling `notes__meta` per row (that kept the 10k-note list under its 80 ms p95).
+    - v1.4.0 selects `doc_state`, `doc_version`, `body_text`, `body_md` from `notes` and filters on `search_tsv`, and migrations land before the app. So each dropped column is a PostgREST computed field, `public.<column>(notes)`: SECURITY DEFINER, answering only for a note `can_access` lets `perm_actor_id()` view (so a row forged through `/rpc` gets nothing, and the deployed MCP's key still reads). `body_text` and `body_md` are kept as the content read for excerpts, Recents and the export. `doc_state`, `doc_version` and `search_tsv` go in the follow-up that drops `is_pinned`.
+    - The `authenticated` SELECT grants on `notes` and `note_updates` stay one release: v1.4.0's `pullDoc` reads `note_updates` directly.
+  - Why: every keystroke push rewrote two TOASTed bodies, the search vector and its GIN entries, and a tuple in every index of the row the list reads.
+  - Rejected: a title vector on `notes` with the body vector in `note_bodies`, because it keeps a GIN index on the hot row and splits each search over two indexes. Keeping the old columns written for v1.4.0, because that is the write this block removes. Leaving them unwritten, because v1.4.0 would then open stale documents.
+- **2026-10-28 · NS-10: the nightly purge folds the log of notes nobody opens, by rebuilding the doc, under the client fold's CAS** → `supabase/migrations/20261030190000_notes_compact.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-10 (MOD-660).
+  - Decision:
+    - `purge-deleted` step 5 picks at most 50 notes with more than 200 log rows, none written in the last 10 minutes, not in the trash and with no row in `note_live_viewers` (`notes__compact_candidates`), loads each (`notes__compact_source`), merges with `compactFromLog` and folds with `notes__compact`. All three SQL functions are service-only.
+    - `compactFromLog` rebuilds a `Y.Doc` from snapshot plus log and returns `Y.encodeStateAsUpdate`, exactly as the client's fold encodes it (deleted content collected, pending structs kept), rather than `Y.mergeUpdates` over the raw rows.
+    - A row Yjs can't decode makes `compactFromLog` throw, and the note keeps its log (counted as failed): the fold deletes what it merged, and a client on another Yjs version may still read that row. The client vetoes its own fold the same way (`compactVeto` in `engine-v2.ts`).
+    - `notes__compact_source` loads at most 5,000 rows, oldest first: one huge log can't exhaust the function, and a fold up to the last loaded id is safe.
+    - `notes__compact` refuses (changes nothing, answers `refused: true`) on a moved `doc_version` or on any `note_live_viewers` row, under the note's row lock. It never writes `body_text`/`body_md` (NR-6) and leaves `updated_at` alone, so a fold doesn't move Recents.
+    - A failure (the pick, or one note's load, merge or fold) is counted in `notesCompactFailed` and logged; it never fails the run.
+  - Why: only an app client folds (past 40 rows), and the MCP writes one row per agent edit, so an agent-only note's log grew forever.
+  - Rejected: `Y.mergeUpdates` over the raw rows, because its result differs from what clients store (no garbage collection).
+  - Release: the migration first, then `purge-deleted` redeployed. Either order is tolerated (a missing RPC counts as a compaction failure), but nothing folds until both ship.
+- **2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`** → `supabase/migrations/20261030180000_notes_legacy_out.sql`
+  - status: current
+  - Who: Mike (engineer mode, PQ5), built in NS-9 (MOD-659).
+  - Decision:
+    - `exposed_notes`, `note_shares` and `private.user_owns_note` are dropped, and the columns `share_scope`, `share_permission`, `tags` and `kind`. The pin goes from the app, `notes_meta` and set_meta, but the `is_pinned` column stays one release, unread and unwritten: v1.4.0's `listMeta` selects it and migrations land before the app Worker, so dropping it now would break every open tab and desktop install until they update. A follow-up migration drops it. Erasure is cut in place (`pg_temp.recut`), as are create, duplicate, import and set_meta. An old client's `isPinned` patch is ignored, not refused.
+    - `notes_meta` loses `is_pinned` by `ALTER TYPE … DROP ATTRIBUTE`, not DROP + CREATE: the twelve functions that return it keep their bodies and grants, so no grant can re-open to `anon`. Only `notes__meta`, which builds the row, is re-cut. Trade-off: a connection that prepared one of those calls before the migration fails ("attribute … has been dropped") until it reconnects; PostgREST's schema reload flushes its pool, so the window is the reload. `runtime.web.notes.test.ts` reads the type's columns as the latest `CREATE TYPE` less later `DROP ATTRIBUTE`s.
+    - `notes_share_fields_owner_only` keeps ownership only: a non-owner can't change `created_by` or `workspace_id`. The workspace clause stays as a second guard: `perm_enforce_write` and the NS-2 composite keys already refuse the move.
+    - `notes.edited_by`, `note_updates.user_id` → `profiles` and `note_updates.actor_key_id` → `workspace_api_keys` are `ON DELETE SET NULL`, each with a partial index so deleting a person or key doesn't scan the log. Ids left dangling before the release are nulled first, so the keys add validated.
+    - `share_mode` is `NOTE_SHARE_MODES` in the contracts, pinned to `notes_share_mode_chk`; it normalizes to `custom`.
+    - The dormant desktop REST sync (`apps/desktop/src-tauri`) still names some dropped columns. It is dead code and left alone; reviving it means rewriting it against the ops.
+  - Why: nothing read the legacy objects; dangling actor ids were possible; the database sorted `position` by `en_US` collation while the client sorts by code unit.
+
+- **2026-10-28 · NS-7: a note's document and the notes list are definer reads that check access once (`notes_pull`, `notes_list_meta`), with a table-read fallback until deployed** → `supabase/migrations/20261030160000_notes_read_rpcs.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-7 (MOD-657).
+  - Decision:
+    - `notes_pull` checks access with `notes__require_module(ws, 'view')` plus one `can_access(view)`. That is `notes__require` without its row lock, which a STABLE function can't take. Hidden, missing and wrong-workspace all answer P0002. A trashed note still pulls, as RLS allowed (the trash preview).
+    - STABLE is the "one MVCC snapshot": every statement in a STABLE function sees the calling query's snapshot, so the log page and the snapshot can't straddle a compaction. Across pages (a log over 1,000 rows), a later page's snapshot wins, which stays lossless.
+    - `notes_list_meta` returns nothing, not an error, for a role or key that can't open notes, which is the answer RLS gave.
+    - PostgREST caps an RPC's row set at `max_rows` (1,000), so the app pages the list with `.range()`. Each call computes visibility once. Up to 1,000 notes the list is one request; a 5,000-note workspace is five. A full 5,000 shows as a truncation with no total.
+    - The connector-guard test (`api-keys.test.ts`) exempts a helper's own-module lane at View, as it already did for tool bodies: every key that reaches a notes tool holds it.
+  - Why: the log read through RLS ran `can_access` (an ancestor walk) once per row, and the list ran it once per note.
+  - Rejected: returning the list as one jsonb array to dodge `max_rows`, because the spec fixes `SETOF notes_meta` for NS-9 and the MCP.
+- **2026-10-28 · NS-8: `note_updates` is checked per statement, and a replay leaves the note alone** → `supabase/migrations/20261030170000_notes_writes_check_once.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-8 (MOD-658).
+  - Decision:
+    - INSERT and DELETE on `note_updates` are checked by `notes__updates_check`, an `AFTER … REFERENCING NEW/OLD TABLE FOR EACH STATEMENT` trigger. It checks once per distinct note, with `perm_enforce_write`'s rules: `share.bypass`, no actor, the role key `notes.edit`, then `can_access` edit. UPDATE keeps the row-level `perm_enforce_write`.
+    - Live notices are queued once per note per statement by `notes__updates_live`. NR-7's deferred send is unchanged.
+    - `notes_op_apply_updates` inserts the batch in one `INSERT … SELECT … ON CONFLICT DO NOTHING`. It updates `notes` only when rows went in or a body changed, so a replay doesn't move Recents.
+  - Why: a 500-update batch made 500 access checks, and compaction made one per folded row. An all-duplicate replay bumped `updated_at`.
+  - Trade-off: the check now runs after the statement, so a direct insert by a non-editor reports a unique or FK error (23505/23503) before 42501. Clients have no table grants, and every op calls `notes__require` first. Whoever grants direct writes later must re-check this.
+
+- **2026-10-28 · NS-6: every Notes op checks its level once, through `notes__require`, `notes__require_module` or `notes__require_parent`** → `supabase/migrations/20261030150000_notes_one_guard.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-6 (MOD-656).
+  - Decision:
+    - The module key `notes.<action>` comes from `perm_user_has`; for a key, that is the creator's key, and the key's Notes scope must also reach view or edit. Then `can_access` gives view, edit or full. Hidden and missing both answer P0002 "Note not found in this workspace." Import keeps PQ6's 22023 for a hidden parent, as for a missing one.
+    - Create, move and duplicate check the parent through `notes__require_parent`, which asks edit on the parent, not the module edit key, the same rule as `perm_enforce_write`.
+    - Two writes run under `share.bypass`, saved and restored:
+      - duplicate's copy of the update tail, which is the new note's own content and part of the create already checked;
+      - `share_sync_note_flag`'s `workspace_shared` mirror, derived from a grant row that its writer already checked.
+    - Without these two, a create-only role passes the guard and then fails `perm_enforce_write`'s edit check.
+    - `notes__guard_reparent` asks edit, not Full, for an inherit note entering a published tree (PQ4).
+  - Why: the lossy `module_member_permission` mirror let a create-only role through the guard, only for the trigger to refuse it. Checks added op by op caused the duplicate/mention leak.
+  - Left as is: creating, importing or duplicating straight under a published page asks no `ws.publish`. Adding inside a published page counts as editing it, because an editor can already type onto it. A duplicate's audience is its new place's: the parent's for an inherit copy, the workspace default for a top-level one.
+
+- **2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows** → `supabase/migrations/20261030121000_notes_reroot_access.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-3 (MOD-653).
+  - Decision: the spec's `BEFORE DELETE` freeze copies grants only (`notes__copy_chain_access`, the deleted row's creator included: Mike chose exactness over the skip, since erasure's step 7 already removes every grant of the erased person), with `share_sync_note_flag` held by the transaction-local `notes.freezing`. The flip to `custom` rides on the key's own SET NULL write (`notes_orphan_custom`, only when the old parent row is gone). Trashed inherit children are frozen too. `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)` makes any other un-parenting path freeze first or fail. Purge's cycle branch freezes before it un-parents.
+  - Why: one DELETE often removes a parent and its child together (erasure removes a person's nested private pages in one statement). A `BEFORE DELETE` trigger that writes the child makes that DELETE fail ("tuple to be updated was already modified by an operation triggered by the current command"). Writing only `resource_grants`, then flipping on the SET NULL, works in either row order and walks the full chain while it still exists.
+  - Rejected: the helper itself in the trigger (the error above); an `AFTER DELETE` trigger named to fire before the key's `RI_ConstraintTrigger_*` (depends on name order, and the deleted ancestors are already gone).
+
 - **2026-10-28 · Notes schema hardening planned: client grants read-only, one tree per workspace by key, deleting a parent never takes access away, trash purged on the server, one guard per op, reads and writes checked once, legacy out, content split into `note_bodies`** → [specs/notes-schema-hardening.md](../../specs/notes-schema-hardening.md)
   - status: current
   - Who: Mike (engineer mode), 2026-10-28, from the architecture review of the Notes Supabase layer (P1–P10; GS-2 shipped P11 and the search half of P6).

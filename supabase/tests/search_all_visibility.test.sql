@@ -90,11 +90,11 @@ INSERT INTO public.tasks (id, workspace_id, bucket_id, owner_id, title, status, 
 
 -- Notes: NS shared with S, NW with the workspace, NO O's own, NC a child of
 -- NS that inherits (S sees it through the parent's sharing).
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text) VALUES
   (test.id('NS'), test.id('W'), test.id('O'), 'Plum secret note', ''),
   (test.id('NW'), test.id('W'), test.id('O'), 'Plum open note', ''),
   (test.id('NO'), test.id('W'), test.id('O'), 'Plum own secret note', '');
-INSERT INTO public.notes (id, workspace_id, created_by, title, body_text, parent_id) VALUES
+INSERT INTO test.notes_in (id, workspace_id, created_by, title, body_text, parent_id) VALUES
   (test.id('NC'), test.id('W'), test.id('O'), 'Plum inherited secret note', '', test.id('NS'));
 UPDATE public.notes SET share_mode = 'inherit' WHERE id = test.id('NC');
 DELETE FROM public.resource_grants WHERE resource_type = 'note'

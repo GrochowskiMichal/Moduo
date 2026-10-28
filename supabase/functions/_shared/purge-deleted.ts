@@ -15,7 +15,20 @@
  *                   tasks__purge_expired; a task waits for its file rows).
  *                   `deleted_at` is the server's (trash_stamp_deleted_at), never
  *                   the device's: any timestamp a job acts on must be server-stamped.
- *   4. pools        storage_usage recounted from the rows, so a missed delta
+ *   4. notes        notes trashed more than 30 days ago, in every workspace (SQL
+ *                   notes__purge_expired, NS-4: live sub-notes keep their access),
+ *                   and live-viewer rows older than 10 minutes. A workspace whose
+ *                   purge is refused is skipped and counted in notesFailed.
+ *   5. compaction   notes only agents write, which no client ever opens to fold
+ *                   (NS-10): at most 50 notes with more than 200 log rows,
+ *                   quiet for 10 minutes and open in no tab
+ *                   (notes__compact_candidates). Each one's snapshot and log are
+ *                   merged by compactFromLog (the notes-doc bundle; it only
+ *                   merges, the bodies stay the client's) and swapped in by
+ *                   notes__compact under the client fold's version CAS. A
+ *                   refusal (the note moved or was opened) skips it; a failure
+ *                   is counted and never fails the run.
+ *   6. pools        storage_usage recounted from the rows, so a missed delta
  *                   never outlives a day.
  * A dry run only counts (SQL purge__preview) and changes nothing.
  *
@@ -39,12 +52,18 @@ export interface PurgeDb {
   };
 }
 
+/** Snapshot plus log in, one merged snapshot out (base64). */
+export type CompactDoc = (input: { snapshotB64: string | null; updatesB64: string[] }) =>
+  string | PromiseLike<string>;
+
 export type PurgeOptions = {
   dryRun?: boolean;
   /** Rows per round (default 500). */
   batch?: number;
   /** Rounds per step before the run stops; the next day picks up the rest (default 20). */
   maxRounds?: number;
+  /** The merge (default: the notes-doc bundle's compactFromLog). */
+  compact?: CompactDoc;
 };
 
 export type PurgeCounts = {
@@ -56,6 +75,17 @@ export type PurgeCounts = {
   orphanObjects: number;
   tasks: number;
   buckets: number;
+  notes: number;
+  /** note_live_viewers rows older than 10 minutes. */
+  noteViewers: number;
+  /** Workspaces whose notes purge was refused this run (retried tomorrow). */
+  notesFailed: number;
+  /** Notes whose log was folded into their snapshot. */
+  notesCompacted: number;
+  /** Notes whose fold was refused (written to or opened meanwhile); tomorrow's run retries. */
+  notesCompactSkipped: number;
+  /** Compaction failures (the pick, or one note's load, merge or fold). */
+  notesCompactFailed: number;
   /** Pools whose recount changed them. */
   poolsRecounted: number;
 };
@@ -70,7 +100,7 @@ const REMOVE_CHUNK = 100;
 type Candidate = { id: string; object_path: string; preview_path: string | null };
 
 export class PurgeError extends Error {
-  readonly step: "preview" | "attachments" | "orphans" | "tasks" | "pools";
+  readonly step: "preview" | "attachments" | "orphans" | "tasks" | "notes" | "pools";
   readonly partial: PurgeCounts;
   constructor(step: PurgeError["step"], message: string, partial: PurgeCounts) {
     super(`${step}: ${message}`);
@@ -89,10 +119,16 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
     orphanObjects: 0,
     tasks: 0,
     buckets: 0,
+    notes: 0,
+    noteViewers: 0,
+    notesFailed: 0,
+    notesCompacted: 0,
+    notesCompactSkipped: 0,
+    notesCompactFailed: 0,
     poolsRecounted: 0,
   };
 
-  const call = async (step: PurgeError["step"], fn: string, args?: Record<string, unknown>) => {
+  const call: Call = async (step, fn, args) => {
     const { data, error } = await db.rpc(fn, args);
     if (error) throw new PurgeError(step, `${fn}: ${error.message}`, counts);
     return data;
@@ -142,6 +178,23 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
   }
 
   // 3. Tasks and buckets.
+  await purgeTasks(call, counts, batch, maxRounds);
+
+  // 4. Notes (and stale live viewers).
+  await purgeNotes(call, counts, batch, maxRounds);
+
+  // 5. Compaction of notes nobody opens.
+  await compactNotes(db, counts, options.compact ?? compactFromBundle);
+
+  // 6. Pools.
+  counts.poolsRecounted = Number(await call("pools", "storage_usage__reconcile"));
+
+  return { dryRun: false, ...counts };
+}
+
+type Call = (step: PurgeError["step"], fn: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+async function purgeTasks(call: Call, counts: PurgeCounts, batch: number, maxRounds: number) {
   for (let round = 0; round < maxRounds; round++) {
     const result = ((await call("tasks", "tasks__purge_expired", { p_limit: batch })) ?? {}) as {
       tasks?: number;
@@ -153,11 +206,84 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
     counts.buckets += buckets;
     if (tasks < batch && buckets < batch) break;
   }
+}
 
-  // 4. Pools.
-  counts.poolsRecounted = Number(await call("pools", "storage_usage__reconcile"));
+async function purgeNotes(call: Call, counts: PurgeCounts, batch: number, maxRounds: number) {
+  for (let round = 0; round < maxRounds; round++) {
+    const result = ((await call("notes", "notes__purge_expired", { p_limit: batch })) ?? {}) as {
+      notes?: number;
+      viewers?: number;
+      failed?: number;
+      picked?: number;
+    };
+    const notes = Number(result.notes ?? 0);
+    counts.notes += notes;
+    counts.noteViewers += Number(result.viewers ?? 0);
+    counts.notesFailed += Number(result.failed ?? 0);
+    // A refused workspace purges nothing but was still taken: stop on what the
+    // round took, not on what it purged.
+    if (Number(result.picked ?? notes) < batch) break;
+  }
+}
 
-  return { dryRun: false, ...counts };
+/** Notes picked per night. */
+const COMPACT_LIMIT = 50;
+
+type CompactSource = {
+  doc_state: string | null;
+  doc_version: number;
+  updates: { id: number; update_b64: string }[];
+};
+
+async function compactFromBundle(input: { snapshotB64: string | null; updatesB64: string[] }) {
+  const { compactFromLog } = await import("./notes-doc/notes-doc.bundle.js");
+  return compactFromLog(input);
+}
+
+/** Never throws: compaction is upkeep, and one bad note mustn't cost the recount. */
+async function compactNotes(db: PurgeDb, counts: PurgeCounts, compact: CompactDoc) {
+  const picked = await db.rpc("notes__compact_candidates", { p_limit: COMPACT_LIMIT });
+  if (picked.error) {
+    counts.notesCompactFailed += 1;
+    console.error(JSON.stringify({ notes_compact_pick: picked.error.message }));
+    return;
+  }
+  for (const id of (picked.data ?? []) as string[]) {
+    try {
+      const outcome = await compactNote(db, id, compact);
+      if (outcome === "folded") counts.notesCompacted += 1;
+      else if (outcome === "refused") counts.notesCompactSkipped += 1;
+    } catch (err) {
+      counts.notesCompactFailed += 1;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(JSON.stringify({ notes_compact_failed: id, message }));
+    }
+  }
+}
+
+/** Load, merge and fold one note. Throws on a failed call. */
+async function compactNote(
+  db: PurgeDb,
+  id: string,
+  compact: CompactDoc,
+): Promise<"folded" | "refused" | "empty"> {
+  const loaded = await db.rpc("notes__compact_source", { p_note: id });
+  if (loaded.error) throw new Error(loaded.error.message);
+  const source = loaded.data as CompactSource | null;
+  // Gone since the pick, or nothing to fold.
+  if (!source || source.updates.length === 0) return "empty";
+  const snapshot = await compact({
+    snapshotB64: source.doc_state,
+    updatesB64: source.updates.map((u) => u.update_b64),
+  });
+  const folded = await db.rpc("notes__compact", {
+    p_note: id,
+    p_snapshot_b64: snapshot,
+    p_upto_id: source.updates[source.updates.length - 1]!.id,
+    p_expected_version: source.doc_version,
+  });
+  if (folded.error) throw new Error(folded.error.message);
+  return (folded.data as { refused?: boolean } | null)?.refused ? "refused" : "folded";
 }
 
 /** Compare a presented secret with the configured one without an early exit

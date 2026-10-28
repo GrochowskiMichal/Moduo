@@ -135,6 +135,9 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "focus_claims",
   "links_suggest",
   "notes_list_unmaterialized",
+  // NS-7: the notes list and a note's document pull.
+  "notes_list_meta",
+  "notes_pull",
   // GS-2: Notes' sidebar search (the global search contract).
   "notes__search",
   "notifications_list",
