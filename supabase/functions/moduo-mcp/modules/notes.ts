@@ -361,10 +361,9 @@ export const notesConnectorModule: ConnectorModule = {
         const title = str(args, "title");
         const body = md(args, "markdown", false);
         const parentId = str(args, "parent_id", false) || null;
-        // notes_op_import (unlike notes_op_create) does NOT guard the parent —
-        // there's no FK on parent_id — so an unresolvable/foreign parent would
-        // silently import the note as an orphan root. Guard it here so the agent
-        // gets a clear error instead of a mis-parented note.
+        // notes_op_import refuses a parent outside the workspace (22023) but
+        // checks no access to it. Guard it here so the agent gets a clear
+        // error for a parent it can't reach.
         if (parentId) await assertReach(ctx, "note", parentId);
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);

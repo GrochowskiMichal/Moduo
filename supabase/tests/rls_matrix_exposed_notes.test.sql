@@ -6,9 +6,9 @@
 DO $mx$
 BEGIN
   PERFORM test.mx_cell('exposed_notes', 'select', 'sys', true, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
-  PERFORM test.mx_cell('exposed_notes', 'select', 'member', true, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
-  PERFORM test.mx_cell('exposed_notes', 'select', 'outsider', true, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
-  PERFORM test.mx_cell('exposed_notes', 'select', 'anon', true, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
+  PERFORM test.mx_cell('exposed_notes', 'select', 'member', false, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
+  PERFORM test.mx_cell('exposed_notes', 'select', 'outsider', false, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
+  PERFORM test.mx_cell('exposed_notes', 'select', 'anon', false, $op$SELECT 1 FROM public.exposed_notes WHERE id = 'e9fa602f-e3c6-4844-dba3-82194c107aad'::uuid$op$);
   PERFORM test.mx_cell('exposed_notes', 'insert', 'sys', true, $op$INSERT INTO public.exposed_notes (id, note_id, title, slug) VALUES ('fb76cd28-5377-eb25-cc58-640f5401b527'::uuid, 'planted', 'Planted', 'hv16-planted')$op$);
   PERFORM test.mx_cell('exposed_notes', 'insert', 'member', false, $op$INSERT INTO public.exposed_notes (id, note_id, title, slug) VALUES ('fb76cd28-5377-eb25-cc58-640f5401b527'::uuid, 'planted', 'Planted', 'hv16-planted')$op$);
   PERFORM test.mx_cell('exposed_notes', 'insert', 'outsider', false, $op$INSERT INTO public.exposed_notes (id, note_id, title, slug) VALUES ('fb76cd28-5377-eb25-cc58-640f5401b527'::uuid, 'planted', 'Planted', 'hv16-planted')$op$);
