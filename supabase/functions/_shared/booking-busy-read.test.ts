@@ -6,16 +6,19 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { busyFromHostEvents, HOST_EVENTS_FN, readHostEvents } from "./booking-busy.ts";
+import { busyFromHostEvents, HOST_EVENTS_FN, HOST_EVENTS_PAGE, readHostEvents } from "./booking-busy.ts";
 
 type Answer = { data: unknown; error: { code?: string; message: string } | null };
 
 function fake(answers: Answer[]) {
   const asked: { fn: string; args: Record<string, unknown> }[] = [];
+  const pages: { from: number; to: number }[] = [];
   return {
     asked,
-    rpc: (fn: string, args: Record<string, unknown>) => {
+    pages,
+    rpc: (fn: string, args: Record<string, unknown>, rows: { from: number; to: number }) => {
       asked.push({ fn, args });
+      pages.push(rows);
       return Promise.resolve(answers.shift() ?? { data: [], error: null });
     },
   };
@@ -63,7 +66,7 @@ describe("readHostEvents", () => {
     expect(db.asked[0]?.args.p_zone).toBe("UTC");
   });
 
-  it("every occurrence the server returns blocks time, and focus only when ticked", async () => {
+  it("the rows it hands on feed the kind filter: focus only when ticked", async () => {
     const db = fake([{ data: rows, error: null }]);
     const read = await readHostEvents(db.rpc, WINDOW);
     expect(busyFromHostEvents(read, ["moduo"]).map((i) => i.start.toISOString())).toEqual([
@@ -87,6 +90,34 @@ describe("readHostEvents", () => {
     ]);
     await expect(readHostEvents(db.rpc, WINDOW)).rejects.toThrow("host events: Could not find the function");
     expect(db.asked).toHaveLength(1);
+  });
+
+  it("pages past PostgREST's row cap instead of offering the rest as free", async () => {
+    const full = Array.from({ length: HOST_EVENTS_PAGE }, () => rows[0]);
+    const db = fake([
+      { data: full, error: null },
+      { data: full, error: null },
+      { data: [rows[3]], error: null },
+    ]);
+    const read = await readHostEvents(db.rpc, WINDOW);
+    expect(read).toHaveLength(2 * HOST_EVENTS_PAGE + 1);
+    expect(db.pages).toEqual([
+      { from: 0, to: HOST_EVENTS_PAGE - 1 },
+      { from: HOST_EVENTS_PAGE, to: 2 * HOST_EVENTS_PAGE - 1 },
+      { from: 2 * HOST_EVENTS_PAGE, to: 3 * HOST_EVENTS_PAGE - 1 },
+    ]);
+  });
+
+  it("gives up rather than read without end", async () => {
+    const full = Array.from({ length: HOST_EVENTS_PAGE }, () => rows[0]);
+    const db = fake(Array.from({ length: 30 }, () => ({ data: full, error: null })));
+    await expect(readHostEvents(db.rpc, WINDOW)).rejects.toThrow("host events: more than");
+  });
+
+  it("refuses a link without a workspace (it would match nothing: all free)", async () => {
+    const db = fake([]);
+    await expect(readHostEvents(db.rpc, { ...WINDOW, workspaceId: null })).rejects.toThrow("host events");
+    expect(db.asked).toHaveLength(0);
   });
 
   it("throws on an answer that isn't a list", async () => {

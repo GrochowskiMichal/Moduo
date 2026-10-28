@@ -2,8 +2,7 @@
  * Which of a booking link host's events hide times (CALR-14, AC23). Pure.
  * Focus time is free for links unless the busy list has the pseudo-calendar
  * "focus"; every other row is busy when its account is ticked, or when it is a
- * Moduo row (no account, calendar "moduo" or empty) and "moduo" is ticked. A
- * row without a kind (a database before the kind column) is an ordinary event.
+ * Moduo row (no account, calendar "moduo" or empty) and "moduo" is ticked.
  * Intervals come back in start order.
  */
 
@@ -58,18 +57,32 @@ export type HostEventsWindow = {
  * included: a link must never offer the host's busy time as free, and the
  * table alone would count a repeat only at its first start.
  */
+/** PostgREST answers at most max_rows (1000) a request: the read pages until a short page. */
+export const HOST_EVENTS_PAGE = 1000;
+/** Past this many pages the read gives up (503) rather than offer the rest as free. */
+const MAX_PAGES = 20;
+
 export async function readHostEvents(
-  rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<Read>,
+  rpc: (fn: string, args: Record<string, unknown>, rows: { from: number; to: number }) => PromiseLike<Read>,
   window: HostEventsWindow,
 ): Promise<HostEventRow[]> {
-  const res = await rpc(HOST_EVENTS_FN, {
+  // A null workspace matches nothing, which would read as all free.
+  if (!window.workspaceId) throw new Error("host events: the link has no workspace");
+  const args = {
     p_workspace_id: window.workspaceId,
     p_owner_id: window.hostId,
     p_from: window.from.toISOString(),
     p_to: window.to.toISOString(),
     p_zone: window.zone || "UTC",
-  });
-  if (res.error) throw new Error(`host events: ${res.error.message}`);
-  if (!Array.isArray(res.data)) throw new Error("host events: the answer is not a list");
-  return res.data as HostEventRow[];
+  };
+  const out: HostEventRow[] = [];
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const from = page * HOST_EVENTS_PAGE;
+    const res = await rpc(HOST_EVENTS_FN, args, { from, to: from + HOST_EVENTS_PAGE - 1 });
+    if (res.error) throw new Error(`host events: ${res.error.message}`);
+    if (!Array.isArray(res.data)) throw new Error("host events: the answer is not a list");
+    out.push(...(res.data as HostEventRow[]));
+    if (res.data.length < HOST_EVENTS_PAGE) return out;
+  }
+  throw new Error(`host events: more than ${MAX_PAGES * HOST_EVENTS_PAGE} rows`);
 }

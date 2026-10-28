@@ -112,6 +112,35 @@ BEGIN
 END;
 $$;
 
+-- What each row carries for the link's busy list: the stored calendar_id and
+-- account (never calendar_ref), and only workspace W's rows.
+INSERT INTO public.workspaces (id, owner_id, name) VALUES (test.id('W2'), test.id('H'), 'Side project');
+INSERT INTO public.calendars (id, workspace_id, owner_id, name, kind) VALUES
+  (test.id('CH2'), test.id('W2'), test.id('H'), 'Side', 'custom');
+INSERT INTO public.calendar_accounts (id, workspace_id, owner_id, provider, external_id, display_label)
+VALUES (test.id('A'), test.id('W'), test.id('H'), 'google', 'h@example.com', 'h@example.com');
+INSERT INTO public.calendar_events (workspace_id, owner_id, calendar_id, source_account_id, title, start_time, end_time)
+VALUES (test.id('W'), test.id('H'), 'google:h@example.com:h@example.com', test.id('A'), 'Board call',
+        '2026-10-29 09:00+00', '2026-10-29 10:00+00');
+
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.as_user('H', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Side standup', p_starts_at => '2026-10-07 06:00+00', p_ends_at => '2026-10-07 06:30+00',
+    p_rrule => 'FREQ=WEEKLY', p_calendar_id => %L)$q$, test.id('W2'), test.id('CH2')));
+  PERFORM test.ok(r = 'ok 1', 'H: a weekly standup in another workspace', r);
+
+  SELECT string_agg(coalesce(b.calendar_id, 'null') || ' ' || coalesce(b.source_account_id::text, 'none'), ', ' ORDER BY b.start_time)
+  INTO r
+  FROM public.calendar__booking_host_events(test.id('W'), test.id('H'), '2026-10-28 00:00+00', '2026-10-30 00:00+00', 'UTC') b;
+  PERFORM test.ok(r = (SELECT e.calendar_id FROM public.calendar_events e WHERE e.id = pg_temp.event_id('1:1 with Mei'))
+      || ' none, google:h@example.com:h@example.com ' || test.id('A'),
+    'the 1:1 comes back with its stored calendar_id, the mirrored call with its account; the other workspace''s standup stays out', r);
+END;
+$$;
+
 DO $$
 BEGIN
   PERFORM test.ok(NOT has_function_privilege('anon', 'public.calendar__booking_host_events(uuid, uuid, timestamptz, timestamptz, text)', 'EXECUTE')

@@ -211,12 +211,13 @@ async function busyIntervals(
   const ids = new Set(busyIds(link.busy_calendar_ids));
   // PERM-0: only the host's own calendar decides their availability (a
   // teammate's events must neither block slots nor be inferable here), with
-  // repeats expanded over the window on the server.
-  const rows = await readHostEvents((fn, args) => db.rpc(fn, args), {
+  // repeats expanded over the window on the server. A day either side, so an
+  // occurrence inside a buffer of the first or last slot still counts.
+  const rows = await readHostEvents((fn, args, page) => db.rpc(fn, args).range(page.from, page.to), {
     workspaceId: link.workspace_id,
     hostId: link.owner_user_id,
-    from,
-    to,
+    from: new Date(from.getTime() - 86_400_000),
+    to: new Date(to.getTime() + 86_400_000),
     zone: link.host_timezone,
   });
   const intervals: Interval[] = busyFromHostEvents(rows, ids);
