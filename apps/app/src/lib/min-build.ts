@@ -138,6 +138,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "notifications_list",
   // GS-3: ⌘K's one search (search_all merges every module's search).
   "search_all",
+  // GS-8: ⌘K's Recent (what you opened last).
+  "search_recents_list",
   "share_assign_preview",
   "share_defaults_get",
   "share_op_state",

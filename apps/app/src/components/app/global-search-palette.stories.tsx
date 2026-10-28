@@ -1,9 +1,10 @@
 // GS-3 — ⌘K's states for the design review and the token lint
 // (specs/global-search.md AC5, AC7, AC9): populated, empty query, no results,
-// offline, long titles, a narrowed chip and the progress line. Messages and
-// Conversations come from search_all too (GS-6). The rows are
-// what search_all returns; "now" is pinned so the ages read the same.
-import type { SearchAllRow } from "@contracts/search";
+// offline, long titles, a narrowed chip and the progress line, plus GS-8's
+// Recent with an empty query. Messages and Conversations come from search_all
+// too (GS-6). The rows are what search_all returns; "now" is pinned so the
+// ages read the same.
+import type { SearchAllRow, SearchRecent } from "@contracts/search";
 import type { Meta, StoryObj } from "@storybook/react";
 import { FilePlus2, FileText, House, Settings as SettingsIcon } from "lucide-react";
 import { useState } from "react";
@@ -125,9 +126,18 @@ const ALL_ACTIONS = [
   },
 ];
 
+// What you opened last (GS-8): newest first, the age is when you opened it.
+const RECENT: SearchRecent[] = [
+  { ...hit("note", "n1", "Q4 planning"), rank: 0, last_opened_at: ago(0.1) },
+  { ...hit("task", "t4", "Fix the login redirect"), rank: 0, last_opened_at: ago(2) },
+  { ...hit("contact", "c1", "Ola Nowak"), rank: 0, last_opened_at: ago(26) },
+  { ...hit("bucket", "p1", "Launch"), rank: 0, archived: true, last_opened_at: ago(72) },
+].map(({ score: _s, type_total: _t, top: _top, ...r }) => r);
+
 type Args = {
   query: string;
   rows: SearchAllRow[];
+  recent?: SearchRecent[];
   chip?: PaletteChipKey;
   slow?: boolean;
   notice?: GlobalSearchPaletteProps["notice"];
@@ -143,8 +153,10 @@ function Harness({
   notice = null,
   noResults = false,
   actions = [],
+  recent = [],
 }: Args) {
   const [query, setQuery] = useState(initial);
+  const [recentRows, setRecentRows] = useState(recent);
   const [chip, setChip] = useState<PaletteChipKey>(initialChip);
   const searching = query.trim().length >= 2;
   return (
@@ -162,6 +174,11 @@ function Harness({
       notice={notice}
       noResults={noResults}
       actionGroups={actions}
+      recent={{
+        rows: recentRows,
+        onRemove: (row) => setRecentRows((list) => list.filter((r) => r !== row)),
+        onClear: () => setRecentRows([]),
+      }}
       onSeeAllInChat={() => {}}
       onOpenRow={() => {}}
       onShowAll={(group) => setChip(chipForGroup(group))}
@@ -190,8 +207,13 @@ type Story = StoryObj<typeof meta>;
 /** A Top result, then the groups in their fixed order, 3 rows each and Show all N. */
 export const Populated: Story = { args: { query: "planning", rows: PLANNING } };
 
-/** An empty ⌘K: the actions (Recent joins above them with GS-8). */
+/** An empty ⌘K with nothing opened yet: the actions. */
 export const EmptyQuery: Story = { args: { query: "", rows: [], actions: ALL_ACTIONS } };
+
+/** An empty ⌘K: Recent (GS-8, Q11–Q13), each row removable, then the actions. */
+export const EmptyQueryWithRecent: Story = {
+  args: { query: "", rows: [], recent: RECENT, actions: ALL_ACTIONS },
+};
 
 /** Nothing matched. */
 export const NoResults: Story = { args: { query: "qwzx", rows: [], noResults: true } };
