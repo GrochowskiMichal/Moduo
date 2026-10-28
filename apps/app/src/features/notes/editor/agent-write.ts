@@ -186,6 +186,22 @@ export function bodyFromLog(input: { snapshotB64: string | null; updatesB64: str
   }
 }
 
+/**
+ * The server's fold (specs/notes-schema-hardening.md NS-10): snapshot plus log
+ * merged into one snapshot, base64, encoded the way the client's own fold
+ * encodes it (`Y.encodeStateAsUpdate` of the rebuilt doc). It only merges:
+ * the bodies stay the client's to derive (NR-6). A row Yjs can't decode is
+ * dropped, as every client already drops it.
+ */
+export function compactFromLog(input: { snapshotB64: string | null; updatesB64: string[] }): string {
+  const doc = docFromLog(input.snapshotB64, input.updatesB64);
+  try {
+    return encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
+  } finally {
+    doc.destroy();
+  }
+}
+
 /** A brand-new note's doc from markdown (the connector's `notes_create`). */
 export function agentCreateDoc(noteId: string, markdown: string): MaterializedDoc | null {
   return buildDocStateFromMarkdown(noteId, markdown);
