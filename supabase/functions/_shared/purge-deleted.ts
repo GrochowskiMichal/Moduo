@@ -237,7 +237,7 @@ type CompactSource = {
 
 async function compactFromBundle(input: { snapshotB64: string | null; updatesB64: string[] }) {
   const { compactFromLog } = await import("./notes-doc/notes-doc.bundle.js");
-  return compactFromLog(input) as string;
+  return compactFromLog(input);
 }
 
 /** Never throws: compaction is upkeep, and one bad note mustn't cost the recount. */
@@ -250,29 +250,40 @@ async function compactNotes(db: PurgeDb, counts: PurgeCounts, compact: CompactDo
   }
   for (const id of (picked.data ?? []) as string[]) {
     try {
-      const loaded = await db.rpc("notes__compact_source", { p_note: id });
-      if (loaded.error) throw new Error(loaded.error.message);
-      const source = loaded.data as CompactSource | null;
-      // Gone since the pick, or nothing to fold.
-      if (!source || source.updates.length === 0) continue;
-      const snapshot = await compact({
-        snapshotB64: source.doc_state,
-        updatesB64: source.updates.map((u) => u.update_b64),
-      });
-      const folded = await db.rpc("notes__compact", {
-        p_note: id,
-        p_snapshot_b64: snapshot,
-        p_upto_id: source.updates[source.updates.length - 1]!.id,
-        p_expected_version: source.doc_version,
-      });
-      if (folded.error) throw new Error(folded.error.message);
-      if ((folded.data as { refused?: boolean } | null)?.refused) counts.notesCompactSkipped += 1;
-      else counts.notesCompacted += 1;
+      const outcome = await compactNote(db, id, compact);
+      if (outcome === "folded") counts.notesCompacted += 1;
+      else if (outcome === "refused") counts.notesCompactSkipped += 1;
     } catch (err) {
       counts.notesCompactFailed += 1;
-      console.error(JSON.stringify({ notes_compact_failed: id, message: String((err as Error)?.message ?? err) }));
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(JSON.stringify({ notes_compact_failed: id, message }));
     }
   }
+}
+
+/** Load, merge and fold one note. Throws on a failed call. */
+async function compactNote(
+  db: PurgeDb,
+  id: string,
+  compact: CompactDoc,
+): Promise<"folded" | "refused" | "empty"> {
+  const loaded = await db.rpc("notes__compact_source", { p_note: id });
+  if (loaded.error) throw new Error(loaded.error.message);
+  const source = loaded.data as CompactSource | null;
+  // Gone since the pick, or nothing to fold.
+  if (!source || source.updates.length === 0) return "empty";
+  const snapshot = await compact({
+    snapshotB64: source.doc_state,
+    updatesB64: source.updates.map((u) => u.update_b64),
+  });
+  const folded = await db.rpc("notes__compact", {
+    p_note: id,
+    p_snapshot_b64: snapshot,
+    p_upto_id: source.updates[source.updates.length - 1]!.id,
+    p_expected_version: source.doc_version,
+  });
+  if (folded.error) throw new Error(folded.error.message);
+  return (folded.data as { refused?: boolean } | null)?.refused ? "refused" : "folded";
 }
 
 /** Compare a presented secret with the configured one without an early exit

@@ -193,7 +193,10 @@ export function bodyFromLog(input: { snapshotB64: string | null; updatesB64: str
  * the bodies stay the client's to derive (NR-6). A row Yjs can't decode is
  * dropped, as every client already drops it.
  */
-export function compactFromLog(input: { snapshotB64: string | null; updatesB64: string[] }): string {
+export function compactFromLog(input: {
+  snapshotB64: string | null;
+  updatesB64: string[];
+}): string {
   const doc = docFromLog(input.snapshotB64, input.updatesB64);
   try {
     return encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
