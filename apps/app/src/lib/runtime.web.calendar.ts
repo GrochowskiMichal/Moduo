@@ -595,6 +595,8 @@ export const webCalendar: CalendarRuntime = {
       .from("exposed_slot_links")
       .select("*")
       .eq("id", linkId)
+      // A link deleted from the editor closes its view.
+      .is("deleted_at", null)
       .maybeSingle();
     if (error) throw error;
     if (!row) return null;

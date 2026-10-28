@@ -92,11 +92,22 @@ function useLinkData(runtime: ModuoRuntime | null, linkId: string | null) {
   return [data, setData] as const;
 }
 
-/** The guest page's open times, read again ~1.5 s after the week or the link changes. */
-function useGuestSlots(slug: string | null, link: unknown, events: unknown, sessions: unknown) {
-  const [slots, setSlots] = useState<string[] | null>(null);
+/**
+ * The guest page's open times, read again ~1.5 s after the week or the link
+ * changes. An answer for another length is dropped, so a new Length doesn't
+ * filter its times by the old length's starts while the read is on its way.
+ */
+function useGuestSlots(
+  slug: string | null,
+  link: { durationMinutes: number } | null,
+  events: unknown,
+  sessions: unknown,
+) {
+  const [answer, setAnswer] = useState<{ key: string; slots: string[] | null } | null>(null);
+  const key = `${slug}:${link?.durationMinutes}`;
   useEffect(() => {
     if (!slug) return;
+    const setSlots = (slots: string[] | null) => setAnswer({ key, slots });
     let live = true;
     const timer = window.setTimeout(() => {
       bookingRequest({ action: "preview", slug })
@@ -113,8 +124,8 @@ function useGuestSlots(slug: string | null, link: unknown, events: unknown, sess
       live = false;
       window.clearTimeout(timer);
     };
-  }, [slug, link, events, sessions]);
-  return slots;
+  }, [slug, key, link, events, sessions]);
+  return answer?.key === key ? answer.slots : null;
 }
 
 export function useBookingPanel(input: Input): {
