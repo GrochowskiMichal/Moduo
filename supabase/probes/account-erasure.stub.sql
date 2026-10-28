@@ -60,20 +60,24 @@ CREATE TABLE public.notes (
   workspace_id uuid NOT NULL REFERENCES public.workspaces (id) ON DELETE CASCADE,
   created_by uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
   title text NOT NULL DEFAULT '',
-  parent_id uuid REFERENCES public.notes (id) ON DELETE SET NULL,
+  parent_id uuid,
   deleted_at timestamptz,
   share_mode text NOT NULL DEFAULT 'custom',
   share_scope text NOT NULL DEFAULT 'private',
   share_permission text NOT NULL DEFAULT 'edit',
   workspace_shared boolean NOT NULL DEFAULT false,
   publish_token text,
-  published_at timestamptz
+  published_at timestamptz,
+  -- NS-2 (20261030110000): a parent, like a log row, is in the note's own workspace.
+  UNIQUE (workspace_id, id),
+  FOREIGN KEY (workspace_id, parent_id) REFERENCES public.notes (workspace_id, id) ON DELETE SET NULL (parent_id)
 );
 CREATE TABLE public.note_updates (
   id bigserial PRIMARY KEY,
   workspace_id uuid NOT NULL,
-  note_id uuid NOT NULL REFERENCES public.notes (id) ON DELETE CASCADE,
-  update_b64 text NOT NULL DEFAULT ''
+  note_id uuid NOT NULL,
+  update_b64 text NOT NULL DEFAULT '',
+  FOREIGN KEY (workspace_id, note_id) REFERENCES public.notes (workspace_id, id) ON DELETE CASCADE
 );
 -- note_shares_note_id_fkey exists on production, but no migration records its
 -- delete rule; the stub takes the strictest one.

@@ -168,9 +168,9 @@ export function planMdZipImport(entries: ImportFileEntry[]): ImportPlan {
   });
 
   // Emit PARENTS BEFORE CHILDREN: `notes.parent_id` is a self-FK and
-  // `notes_op_import` inserts rows in array order, catching FK violations as
-  // "skipped". A zip that stores a child before its parent would otherwise
-  // silently drop the child (validator M1). Topological order is deterministic
+  // `notes_op_import` inserts rows in array order and refuses a whole batch
+  // whose child comes before its parent (22023, NS-2). A zip that stores a
+  // child before its parent would otherwise fail the import (validator M1). Topological order is deterministic
   // and the parent chain is acyclic (a strict path prefix).
   return { nodes: topoSortNodes(nodes), skipped, skippedByKind: countByKind(skipped) };
 }
