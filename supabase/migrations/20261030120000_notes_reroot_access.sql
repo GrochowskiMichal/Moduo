@@ -22,6 +22,7 @@
 -- 5. CHECK notes_inherit_has_parent: an inherit note always has a parent.
 --    Any future path that un-parents without freezing fails loudly.
 -- 6. notes__purge_ids' parent-cycle branch freezes before it un-parents.
+-- 7. share_op_follow_parent refuses a top-level note in words (22023).
 --
 -- Why the trigger never writes the child's row: one DELETE often removes a
 -- parent and its child together (erasure deletes a person's nested private
@@ -371,6 +372,36 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.notes__purge_ids(uuid, uuid[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.notes__purge_ids(uuid, uuid[]) TO service_role;
+
+-- ── 7. Following a parent needs a parent ─────────────────────────────────────
+
+-- The CHECK below would refuse a top-level note with a raw constraint error;
+-- say it in words first. Otherwise 20261024150000's body.
+CREATE OR REPLACE FUNCTION public.share_op_follow_parent(p_note_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_bypass text;
+BEGIN
+  IF NOT public.can_access('note', p_note_id, 'full') THEN
+    RAISE EXCEPTION 'You can''t change who has access to this.' USING ERRCODE = '42501';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.notes WHERE id = p_note_id AND parent_id IS NULL) THEN
+    RAISE EXCEPTION 'A top-level note has no parent to follow.' USING ERRCODE = '22023';
+  END IF;
+  UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false WHERE id = p_note_id;
+
+  v_bypass := current_setting('share.bypass', true);
+  PERFORM set_config('share.bypass', '1', true);
+  DELETE FROM public.resource_grants WHERE resource_type = 'note' AND resource_id = p_note_id;
+  PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.share_op_follow_parent(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.share_op_follow_parent(uuid) TO authenticated, service_role;
 
 -- ── 5. An inherit note always has a parent ───────────────────────────────────
 

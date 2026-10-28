@@ -110,7 +110,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - *Rejected:* rewriting `can_access`, the shared 6 kB gate other modules depend on, for an invariant DDL now guarantees.
 3. **Re-rooting keeps access everywhere (NS-3).**
    - `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)`. Prod has 0 violations, so it is added validated.
-   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, runs `notes__keep_access_on_reroot` for each live inherit child of `OLD` before the key's SET NULL fires.
+   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, copies what the chain gives each inherit child of `OLD` (live or trashed) into `resource_grants` before the key's SET NULL fires; the SET NULL write itself makes the child `custom` (`notes__orphan_custom`). The trigger never writes the child's row: the same DELETE may remove it next (built in NS-3, see `docs/decisions/notes.md`).
    - When the deleted row's creator is the one being erased, the helper skips granting that creator. A new parameter `p_skip_creator` does this.
    - Purge's cycle-break branch calls the same freeze.
    - Account erasure needs no change: its delete now fires the trigger.
