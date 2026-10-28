@@ -14,6 +14,8 @@
 // return null; the listener shows a quiet "not available yet" toast, never a
 // crash.
 
+import type { SpineRuntime } from "./runtime.types.spine";
+
 // Every surface that opens an entity (rows, chips, widgets, the bell in
 // notification-center.tsx) dispatches this, never `navigate({ to })`. A test for
 // a new target asserts the entity is selected on arrival, not just the route.
@@ -27,6 +29,8 @@ export type EntityOpenTarget = {
    * that mirrors its selection into the URL can tell this open apart from its
    * own mirrored id arriving back on refresh/back (DF-1). */
   intentId?: string;
+  /** A note opened from a body hit: the query to land on and highlight (GS-10). */
+  highlight?: string;
 };
 
 // ── deep-link intent (DF-1) ──────────────────────────────────────────────────
@@ -49,12 +53,52 @@ export function takeEntityOpenIntent(id: string): boolean {
   return hit;
 }
 
+// ── landing on a search match (GS-10, specs/global-search.md Q16) ────────────
+// A note opened from a body hit (⌘K or the Notes sidebar search) carries the
+// query; the note's editor scrolls to the first match and highlights it until
+// a click or a key. One pending highlight at a time, kept out of the URL (a
+// refresh lands at the top, as any reopen does), read by the editor of that
+// note only and cleared by it.
+let pendingHighlight: { id: string; query: string } | null = null;
+const highlightListeners = new Set<() => void>();
+
+function setPendingHighlight(next: { id: string; query: string } | null): void {
+  if (next?.id === pendingHighlight?.id && next?.query === pendingHighlight?.query) return;
+  pendingHighlight = next;
+  for (const listener of highlightListeners) listener();
+}
+
+/** Open note `id` at `query`'s first match; a blank query clears the mark. */
+export function markEntityOpenHighlight(id: string, query: string): void {
+  const q = query.trim();
+  setPendingHighlight(id && q ? { id, query: q } : null);
+}
+
+/** The query note `id` should land on, or null. Reading never clears it. */
+export function entityOpenHighlight(id: string): string | null {
+  return pendingHighlight?.id === id ? pendingHighlight.query : null;
+}
+
+/** Drop the pending highlight (only note `id`'s, when given). */
+export function clearEntityOpenHighlight(id?: string): void {
+  if (id === undefined || pendingHighlight?.id === id) setPendingHighlight(null);
+}
+
+export function subscribeEntityOpenHighlight(listener: () => void): () => void {
+  highlightListeners.add(listener);
+  return () => {
+    highlightListeners.delete(listener);
+  };
+}
+
 /** Where in an entity to land, when the link names it (a chat notice names its message). */
 export type EntityOpenAt = {
   /** A message in a conversation: the stream loads a window around it. */
   messageId?: string | null;
   /** The chain that message belongs to: it opens beside the stream. */
   chainId?: string | null;
+  /** The search that found it: a note lands on its first match (GS-10). */
+  query?: string | null;
 };
 
 export function entityOpenTarget(
@@ -79,8 +123,10 @@ export function entityOpenTarget(
     case "project":
     case "bucket":
       return { to: "/tasks", search: { id }, intentId: id };
-    case "note":
-      return { to: "/notes", search: { id }, intentId: id };
+    case "note": {
+      const highlight = at.query?.trim();
+      return { to: "/notes", search: { id }, intentId: id, ...(highlight ? { highlight } : {}) };
+    }
     case "event":
       return { to: "/calendar", search: { event: id }, intentId: id };
     // Chat notifications target the conversation (chat.mention / chat.reply / chat.announcement) and
@@ -95,4 +141,45 @@ export function entityOpenTarget(
     default:
       return null;
   }
+}
+
+// ── Recent (GS-8) ────────────────────────────────────────────────────────────
+// Every entity-open of an item is your open of it: the host listener records it
+// for ⌘K's Recent and the personal ranking, under search_all's type names.
+// A module's own page (`to`), a settings section and an id-less open are not
+// items. Chat joins when it joins search_all (GS-6).
+const RECENT_TYPES: Record<string, string> = {
+  task: "task",
+  project: "bucket",
+  bucket: "bucket",
+  note: "note",
+  contact: "contact",
+  company: "company",
+  event: "event",
+  email: "email_thread",
+  email_thread: "email_thread",
+};
+
+export function recentRefFor(
+  detail: { type?: string; id?: string; to?: string } | null | undefined,
+): { type: string; id: string } | null {
+  if (!detail || detail.to || !detail.type || !detail.id) return null;
+  const type = RECENT_TYPES[detail.type];
+  return type ? { type, id: detail.id } : null;
+}
+
+/**
+ * Record your open of an item (GS-8) from the host listener. Only this app's
+ * opens reach the listener, so an agent's never count (Q19). A failed record
+ * never gets in the way of the open itself.
+ */
+export function recordEntityOpen(
+  spine: Pick<SpineRuntime, "recordOpen"> | null | undefined,
+  workspaceId: string | null | undefined,
+  detail: { type?: string; id?: string; to?: string; workspaceId?: string } | null | undefined,
+): void {
+  const ref = recentRefFor(detail);
+  const ws = detail?.workspaceId ?? workspaceId;
+  if (!spine || !ref || !ws) return;
+  spine.recordOpen({ workspaceId: ws, ...ref }).catch(() => {});
 }

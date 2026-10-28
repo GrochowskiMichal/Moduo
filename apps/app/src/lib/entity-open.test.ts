@@ -2,9 +2,19 @@
 // page (contacts with URL selection params), unknown types resolve to null so
 // the listener can no-op with a quiet toast instead of crashing.
 
-import { describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it } from "@rstest/core";
 
-import { entityOpenTarget, markEntityOpenIntent, takeEntityOpenIntent } from "./entity-open";
+import {
+  clearEntityOpenHighlight,
+  entityOpenHighlight,
+  entityOpenTarget,
+  markEntityOpenHighlight,
+  markEntityOpenIntent,
+  recentRefFor,
+  recordEntityOpen,
+  subscribeEntityOpenHighlight,
+  takeEntityOpenIntent,
+} from "./entity-open";
 
 describe("entityOpenTarget", () => {
   it("routes a contact to /contacts with type+id selection params", () => {
@@ -123,5 +133,131 @@ describe("entity-open intent (DF-1)", () => {
     expect(takeEntityOpenIntent("t1")).toBe(false);
     markEntityOpenIntent("");
     expect(takeEntityOpenIntent("")).toBe(false);
+  });
+});
+
+// GS-10 (specs/global-search.md Q16, AC13): a note opened from a body hit
+// carries the query, and the editor highlights it until a click or a key.
+describe("entity-open query for a note (GS-10)", () => {
+  afterEach(() => clearEntityOpenHighlight());
+
+  it("carries a note's query as the highlight to land on", () => {
+    expect(entityOpenTarget("note", "n1", { query: "  zolw plan " })).toEqual({
+      to: "/notes",
+      search: { id: "n1" },
+      intentId: "n1",
+      highlight: "zolw plan",
+    });
+  });
+
+  it("ignores a blank query, and a query on anything but a note", () => {
+    expect(entityOpenTarget("note", "n1", { query: "  " })).toEqual({
+      to: "/notes",
+      search: { id: "n1" },
+      intentId: "n1",
+    });
+    expect(entityOpenTarget("task", "t1", { query: "plan" })).toEqual({
+      to: "/tasks",
+      search: { id: "t1" },
+      intentId: "t1",
+    });
+  });
+
+  it("keeps one pending highlight, read for its own note only", () => {
+    markEntityOpenHighlight("n1", "plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    expect(entityOpenHighlight("n2")).toBeNull();
+    markEntityOpenHighlight("n2", "zolw");
+    expect(entityOpenHighlight("n1")).toBeNull();
+    expect(entityOpenHighlight("n2")).toBe("zolw");
+  });
+
+  it("is read until cleared, and clearing another note's leaves it", () => {
+    markEntityOpenHighlight("n1", "plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    clearEntityOpenHighlight("n2");
+    expect(entityOpenHighlight("n1")).toBe("plan");
+    clearEntityOpenHighlight("n1");
+    expect(entityOpenHighlight("n1")).toBeNull();
+  });
+
+  it("tells subscribers when it changes, and a blank mark clears", () => {
+    let calls = 0;
+    const off = subscribeEntityOpenHighlight(() => calls++);
+    markEntityOpenHighlight("n1", "plan");
+    markEntityOpenHighlight("n1", " ");
+    expect(entityOpenHighlight("n1")).toBeNull();
+    off();
+    markEntityOpenHighlight("n1", "plan");
+    expect(calls).toBe(2);
+  });
+});
+
+// GS-8 (Q12, Q19): the app records your open of an item it can open, under
+// search_all's type names; an id-less open, a module's own page or a settings
+// section is not an item.
+describe("recentRefFor", () => {
+  it("names the item an open lands on", () => {
+    expect(recentRefFor({ type: "note", id: "n1" })).toEqual({ type: "note", id: "n1" });
+    expect(recentRefFor({ type: "task", id: "t1" })).toEqual({ type: "task", id: "t1" });
+    expect(recentRefFor({ type: "contact", id: "c1" })).toEqual({ type: "contact", id: "c1" });
+    expect(recentRefFor({ type: "event", id: "e1" })).toEqual({ type: "event", id: "e1" });
+  });
+
+  it("uses search_all's names: a project is a bucket, an email an email_thread", () => {
+    expect(recentRefFor({ type: "project", id: "p1" })).toEqual({ type: "bucket", id: "p1" });
+    expect(recentRefFor({ type: "email", id: "m1" })).toEqual({ type: "email_thread", id: "m1" });
+  });
+
+  it("records nothing that isn't an item", () => {
+    expect(recentRefFor({ type: "note" })).toBeNull();
+    expect(recentRefFor({ type: "email" })).toBeNull();
+    expect(recentRefFor({ type: "settings", id: "storage" })).toBeNull();
+    expect(recentRefFor({ to: "/tasks" })).toBeNull();
+    expect(recentRefFor({ type: "wat", id: "x" })).toBeNull();
+    expect(recentRefFor(null)).toBeNull();
+  });
+});
+
+// GS-8: the host listener's record call (validator: the wiring had no test).
+describe("recordEntityOpen", () => {
+  const spy = (fail = false) => {
+    const calls: Array<{ workspaceId: string; type: string; id: string }> = [];
+    return {
+      calls,
+      spine: {
+        recordOpen: async (input: { workspaceId: string; type: string; id: string }) => {
+          calls.push(input);
+          if (fail) throw new Error("offline");
+        },
+      },
+    };
+  };
+
+  it("records an item in the link's workspace, else the current one", () => {
+    const a = spy();
+    recordEntityOpen(a.spine, "w1", { type: "project", id: "p1" });
+    recordEntityOpen(a.spine, "w1", { type: "note", id: "n1", workspaceId: "w2" });
+    expect(a.calls).toEqual([
+      { workspaceId: "w1", type: "bucket", id: "p1" },
+      { workspaceId: "w2", type: "note", id: "n1" },
+    ]);
+  });
+
+  it("records nothing that isn't an item, or without a workspace or runtime", () => {
+    const a = spy();
+    recordEntityOpen(a.spine, "w1", { to: "/tasks" });
+    recordEntityOpen(a.spine, "w1", { type: "settings", id: "storage" });
+    recordEntityOpen(a.spine, null, { type: "note", id: "n1" });
+    recordEntityOpen(null, "w1", { type: "note", id: "n1" });
+    expect(a.calls).toEqual([]);
+  });
+
+  it("lets a failed record go", async () => {
+    const a = spy(true);
+    expect(() => recordEntityOpen(a.spine, "w1", { type: "note", id: "n1" })).not.toThrow();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(a.calls).toHaveLength(1);
   });
 });

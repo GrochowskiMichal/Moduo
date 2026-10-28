@@ -49,6 +49,7 @@ const h = rs.hoisted(() => {
           h.types.push(call.types);
           return h.rows;
         },
+        recents: async () => [],
       },
     },
   };

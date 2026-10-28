@@ -1,4 +1,4 @@
-import type { SearchAllRow } from "@contracts/search";
+import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar as CalendarIcon,
@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
+import { mergeMailRows } from "../../features/email/search-palette";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { taskIdForHandle } from "../../features/tasks/search";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -37,6 +39,7 @@ import {
   GlobalSearchPalette,
   type PaletteAction,
   type PaletteNotice,
+  type PaletteRecent,
 } from "./global-search-palette";
 
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
@@ -50,6 +53,8 @@ const SLOW_MS = 300;
 // chip's own groups in full (the server's most).
 const LIMIT_ALL = 8;
 const LIMIT_CHIP = 50;
+// Recent with an empty query (Q11).
+const RECENT_LIMIT = 8;
 
 export function dispatchOpenPalette() {
   if (typeof window === "undefined") return;
@@ -80,6 +85,8 @@ export function GlobalCommandPalette() {
   // The item open when ⌘K opened: a hit linked to it ranks up.
   const [context, setContext] = useState<{ type: string; id: string } | null>(null);
   const reqRef = useRef(0);
+  // ⌘K's Recent (GS-8): read each time the palette opens.
+  const [recents, setRecents] = useState<SearchRecent[]>([]);
   const chatOn = modulePermissions.chat !== "none";
   const trimmed = query.trim();
   const searchable = searchableQuery(trimmed);
@@ -115,7 +122,25 @@ export function GlobalCommandPalette() {
     setPending(false);
     setSlow(false);
     setNotice(null);
+    setRecents([]);
   }, [open]);
+
+  // Recent, read once per opening; a failed read just leaves it out.
+  useEffect(() => {
+    if (!open || !runtime || !selectedWorkspaceId) return;
+    let live = true;
+    runtime.spine.recents({ workspaceId: selectedWorkspaceId, limit: RECENT_LIMIT }).then(
+      (rows) => {
+        if (live) setRecents(rows);
+      },
+      () => {
+        if (live) setRecents([]);
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [open, runtime, selectedWorkspaceId]);
 
   // search_all (GS-3), debounced, the last request winning. The previous
   // answer stays up until the new one arrives; a reply slower than 300 ms
@@ -213,7 +238,18 @@ export function GlobalCommandPalette() {
     };
   }, [open, trimmed, chip, taskKey, tasksReachable, runtime, selectedWorkspaceId]);
 
-  const view = useMemo(() => buildPaletteView(rows, { chip, lead }), [rows, chip, lead]);
+  // Email (GS-9): on desktop this device's own mail joins the Email group,
+  // merged here in the client; no mail body reaches the server. On web only
+  // the pulled-in threads search_all returned.
+  const mail = usePaletteMail({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    open,
+    query: trimmed,
+    wanted: searchable && (chip === "all" || chip === "email"),
+  });
+  const merged = useMemo(() => mergeMailRows(rows, mail.rows), [rows, mail.rows]);
+  const view = useMemo(() => buildPaletteView(merged, { chip, lead }), [merged, chip, lead]);
   // Every task row says its ID, quieter, as the details header does
   // (MOD-144), read from the same copy (a task it doesn't hold shows none).
   const shownTaskIds = useMemo(() => {
@@ -221,8 +257,9 @@ export function GlobalCommandPalette() {
     if (view.top?.entity_type === "task") ids.add(view.top.entity_id);
     for (const g of view.groups)
       for (const r of g.rows) if (r.entity_type === "task") ids.add(r.entity_id);
+    for (const r of recents) if (r.entity_type === "task") ids.add(r.entity_id);
     return ids;
-  }, [view]);
+  }, [view, recents]);
   const taskIds = useMemo(() => {
     if (!taskKey || !runtime || !selectedWorkspaceId || shownTaskIds.size === 0) return null;
     const bundle = findWorkspaceStore(runtime, selectedWorkspaceId)?.getSnapshot().bundle;
@@ -290,16 +327,18 @@ export function GlobalCommandPalette() {
     [runtime, seeAllInChat],
   );
   const openRow = useCallback(
-    (row: SearchAllRow) => {
+    (row: SearchHit) => {
       setOpen(false);
       if (typeof window === "undefined") return;
       if (row.entity_type === "chat_message") {
         void openMessage(row.entity_id, trimmed);
         return;
       }
+      // A note found by its body lands on the match (GS-10).
+      const query = row.entity_type === "note" && row.match === "body" ? trimmed : undefined;
       window.dispatchEvent(
         new CustomEvent(ENTITY_OPEN_EVENT, {
-          detail: { type: row.entity_type, id: row.entity_id },
+          detail: { type: row.entity_type, id: row.entity_id, query },
         }),
       );
     },
@@ -307,6 +346,37 @@ export function GlobalCommandPalette() {
   );
 
   const chips = useMemo(() => paletteChips(modulePermissions), [modulePermissions]);
+
+  // Remove one, or clear: the list changes at once, and comes back as it was
+  // when the write fails (offline), since the server kept it.
+  const recent: PaletteRecent | null =
+    runtime && selectedWorkspaceId
+      ? {
+          rows: recents,
+          onRemove: (row) => {
+            const before = recents;
+            setRecents(
+              before.filter(
+                (r) => r.entity_type !== row.entity_type || r.entity_id !== row.entity_id,
+              ),
+            );
+            runtime.spine
+              .forgetRecent({
+                workspaceId: selectedWorkspaceId,
+                type: row.entity_type,
+                id: row.entity_id,
+              })
+              .catch(() => setRecents(before));
+          },
+          onClear: () => {
+            const before = recents;
+            setRecents([]);
+            runtime.spine
+              .clearRecents({ workspaceId: selectedWorkspaceId })
+              .catch(() => setRecents(before));
+          },
+        }
+      : null;
 
   const settingsShortcut = SHORTCUTS.find((s) => s.id === "settings");
   const settingsLabel = settingsShortcut ? formatShortcut(settingsShortcut) : "";
@@ -418,7 +488,8 @@ export function GlobalCommandPalette() {
     notice === null &&
     view.top === null &&
     view.groups.length === 0 &&
-    actionCount === 0;
+    actionCount === 0 &&
+    !mail.searching;
 
   return (
     <GlobalSearchPalette
@@ -435,6 +506,7 @@ export function GlobalCommandPalette() {
       notice={notice}
       noResults={noResults}
       actionGroups={actionGroups}
+      recent={recent}
       onSeeAllInChat={onSeeAllInChat}
       onOpenRow={openRow}
       onShowAll={(group) => setChip(chipForGroup(group))}

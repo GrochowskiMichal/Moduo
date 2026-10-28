@@ -331,6 +331,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-28 · GS-8, recents are written only through ops; `search_all`'s personal term is cut into the live body; opens are recorded at the entity-open listener
 - 2026-10-28 · GS-5, contacts, companies and events on the search contract: events are matched set-based with the calendar ceiling read once, people and companies per match with `can_access`, and an email's domain is a word
 - 2026-10-28 · GS-4, tasks are indexed by expression (not a stored column), so writers may run `search__unaccent`; `tasks_search` moves to the contract's word matching; projects are registered by a trigger
 - 2026-10-28 · GS-3, `search_all` is SECURITY INVOKER over module functions that resolve the actor; `SearchHit` gains `archived`; the registry adapter walks its matches best first
