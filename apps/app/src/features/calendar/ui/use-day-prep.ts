@@ -10,6 +10,46 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { entityRefKey, otherEndpoint } from "../../spine/rollup";
 import type { PrepLinks } from "../day-prep";
 
+/** Each meeting's linked notes and tasks: one links read per meeting, one registry batch. */
+export async function readPrepLinks(
+  runtime: ModuoRuntime,
+  workspaceId: string,
+  ids: readonly string[],
+): Promise<Map<string, PrepLinks>> {
+  const perEvent = await Promise.all(
+    ids.map(async (id) => {
+      const focus: EntityRef = { type: "event", id };
+      const links = await runtime.spine.listLinks({
+        workspaceId,
+        entityType: "event",
+        entityId: id,
+      });
+      const others = links
+        .map((l) => otherEndpoint(focus, l))
+        .filter((r): r is EntityRef => r !== null && (r.type === "note" || r.type === "task"));
+      return { id, others };
+    }),
+  );
+  const refs = new Map<string, EntityRef>();
+  for (const { others } of perEvent) for (const r of others) refs.set(entityRefKey(r), r);
+  const records = refs.size
+    ? await runtime.spine.getEntities({ workspaceId, refs: [...refs.values()] })
+    : [];
+  const byKey = new Map(records.filter((r) => !r.deletedAt).map((r) => [entityRefKey(r), r]));
+  const out = new Map<string, PrepLinks>();
+  for (const { id, others } of perEvent) {
+    const prep: PrepLinks = { notes: [], tasks: [] };
+    for (const ref of others) {
+      const rec = byKey.get(entityRefKey(ref));
+      if (!rec) continue;
+      if (ref.type === "note") prep.notes.push({ id: ref.id, title: rec.label });
+      else prep.tasks.push({ id: ref.id, title: rec.label, done: false });
+    }
+    out.set(id, prep);
+  }
+  return out;
+}
+
 /** Meetings a day reads links for; a busier day shows prep on the first ones. */
 export const PREP_MAX_EVENTS = 24;
 
@@ -32,49 +72,14 @@ export function useDayPrepLinks(
   useEffect(() => {
     if (!runtime || !workspaceId || ids.length === 0) return;
     let active = true;
-    void (async () => {
-      try {
-        const perEvent = await Promise.all(
-          ids.map(async (id) => {
-            const focus: EntityRef = { type: "event", id };
-            const links = await runtime.spine.listLinks({
-              workspaceId,
-              entityType: "event",
-              entityId: id,
-            });
-            const others = links
-              .map((l) => otherEndpoint(focus, l))
-              .filter(
-                (r): r is EntityRef => r !== null && (r.type === "note" || r.type === "task"),
-              );
-            return { id, others };
-          }),
-        );
-        const refs = new Map<string, EntityRef>();
-        for (const { others } of perEvent) for (const r of others) refs.set(entityRefKey(r), r);
-        const records = refs.size
-          ? await runtime.spine.getEntities({ workspaceId, refs: [...refs.values()] })
-          : [];
-        if (!active) return;
-        const byKey = new Map(
-          records.filter((r) => !r.deletedAt).map((r) => [entityRefKey(r), r] as const),
-        );
-        const out = new Map<string, PrepLinks>();
-        for (const { id, others } of perEvent) {
-          const prep: PrepLinks = { notes: [], tasks: [] };
-          for (const ref of others) {
-            const rec = byKey.get(entityRefKey(ref));
-            if (!rec) continue;
-            if (ref.type === "note") prep.notes.push({ id: ref.id, title: rec.label });
-            else prep.tasks.push({ id: ref.id, title: rec.label, done: false });
-          }
-          out.set(id, prep);
-        }
-        setState({ key, links: out });
-      } catch {
+    readPrepLinks(runtime, workspaceId, ids).then(
+      (links) => {
+        if (active) setState({ key, links });
+      },
+      () => {
         // Prep is a nicety: a failed read leaves the meetings as they are.
-      }
-    })();
+      },
+    );
     return () => {
       active = false;
     };
