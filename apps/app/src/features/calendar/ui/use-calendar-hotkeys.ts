@@ -315,6 +315,11 @@ export function useCalendarHotkeys(input: Input) {
       backToGrid.current = true;
       dispatchCreateNew();
     },
+    // CALR-9: N opens the composer, like ⌘N (at the cursor, else the next free time).
+    "calendar.new": (e) => {
+      if (inCalendarOverlay(e) || !keysRef.current.canEdit) return false;
+      dispatchCreateNew();
+    },
     "calendar.earlier": change("earlier"),
     "calendar.later": change("later"),
     "calendar.prev-day": change("prev-day"),

@@ -81,6 +81,7 @@ import { useCalendarConnectReturn } from "./use-calendar-connect-return";
 import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
+import { CalendarComposer } from "./calendar-composer";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
@@ -723,6 +724,17 @@ export function CalendarPageView({
         }
       />
 
+      <CalendarComposer
+        calendar={calendar}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        userId={userId}
+        prefs={prefs}
+        members={viewerMembers}
+        cursor={keys.cursor}
+        canEdit={canEdit && calendar.canEdit}
+        createEvent={onCreateEvent}
+      />
       <DragOverlay dropAnimation={null}>
         {drag.dragTask ? (
           <div className="w-44 truncate rounded-md border border-border bg-muted px-1.5 py-0.5 text-xs text-foreground">

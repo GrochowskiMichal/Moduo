@@ -30,7 +30,6 @@ import {
 
 import { cn } from "@/lib/utils";
 
-import { onCreateNew } from "../../../components/app/create-events";
 import { Button } from "../../../components/ui/button";
 import { isElapsedBlock } from "../elapsed";
 import { type EventChip, eventHue } from "../events";
@@ -54,6 +53,7 @@ import { emptyWeekHint } from "../sync-status";
 import { AllDayLane } from "./allday-lane";
 import { AllDayLaneSkeleton } from "./calendar-skeleton";
 import { DayHeader, ZoneCorner } from "./day-header";
+import { ComposerGhost } from "./composer-ghost";
 import { COMPACT_BELOW_MINUTES } from "./event-chip";
 import {
   EventQuickCreate,
@@ -605,39 +605,8 @@ export function CalendarGrid({
 
   useEffect(() => () => endGesture(), [endGesture]);
 
-  // ⌘N / global "+" → open quick-create at now on today's column (or 9:00 on
-  // the first visible day when today isn't in range), mirroring draw-to-create's
-  // 30-minute ghost. The pending popover autofocuses its title input. Held in a
-  // ref so the listener subscribes once yet always sees the latest days/geoms.
-  // The grid is the only /calendar surface (day + week), so this is the module's
-  // create handler; it no-ops for view-only members.
-  const openQuickCreateNowRef = useRef<() => void>(() => {});
-  openQuickCreateNowRef.current = () => {
-    if (!canEdit) return;
-    const todayIdx = days.findIndex((d) => localDayKey(d) === todayKey);
-    const at = cursor ? days.findIndex((d) => localDayKey(d) === cursor.dayKey) : -1;
-    const dayIdx = at >= 0 ? at : todayIdx >= 0 ? todayIdx : 0;
-    const geom = geoms[dayIdx];
-    if (!geom) return;
-    const rawStart =
-      at >= 0 && cursor
-        ? cursor.minute
-        : todayIdx >= 0
-          ? (minutesIntoDay(Date.now(), geom) ?? 9 * 60)
-          : 9 * 60;
-    const startMin = Math.max(snapMin(rawStart, false), 0);
-    const endMin = Math.min(startMin + 30, geom.totalMinutes);
-    const start = Math.min(startMin, endMin - 15);
-    setPending({ dayIdx, startMin: start, endMin });
-    // Center the ghost so the popover isn't stranded off-screen (mirrors the
-    // scroll-to-now effect's math).
-    const scroller = scrollRef.current;
-    if (scroller) {
-      const pxPerMinute = scroller.scrollHeight / maxMinutes;
-      scroller.scrollTop = Math.max(0, start * pxPerMinute - scroller.clientHeight / 2);
-    }
-  };
-  useEffect(() => onCreateNew(() => openQuickCreateNowRef.current()), []);
+  // ⌘N, N, the + button and ↵ on an empty slot open the composer (CALR-9,
+  // `calendar-composer.tsx`); its draft draws in each column (`ComposerGhost`).
 
   // On open: the working day at the top, with now in view when today is
   // visible (AC5). Not re-run on prev/next navigation — only on mount and
@@ -1082,6 +1051,8 @@ const DayColumn = memo(function DayColumn({
           </span>
         </div>
       ) : null}
+
+      <ComposerGhost geom={geom} />
 
       {/* the materialized ghost: inline title + quick-create popover */}
       {pending ? (
