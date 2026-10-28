@@ -263,6 +263,12 @@ function listenCalendarLive(
   };
 }
 
+/** A Google instance's series id; never an empty id that Google would read as another event. */
+function googleSeriesId(instance: CalendarEventModel): string {
+  if (!instance.externalSeriesId) throw new Error("This event isn't part of a Google repeat.");
+  return instance.externalSeriesId;
+}
+
 export const webCalendar: CalendarRuntime = {
   // ── Wave-2 module surface. Writes = calendar_op_* RPCs (guard + write +
   // entities upsert + attributed activity); reads = indexed SELECTs that
@@ -592,7 +598,7 @@ export const webCalendar: CalendarRuntime = {
     await updateGoogleWebEvent({
       externalAccountId: account.externalId,
       calendarId: instance.calendarId,
-      eventId: instance.externalSeriesId ?? "",
+      eventId: googleSeriesId(instance),
       patch: rest,
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
@@ -634,7 +640,7 @@ export const webCalendar: CalendarRuntime = {
     await removeGoogleWebEvent({
       externalAccountId: account.externalId,
       calendarId: instance.calendarId,
-      eventId: instance.externalSeriesId ?? "",
+      eventId: googleSeriesId(instance),
     });
     await webCalendar
       .mirrorEvents({

@@ -35,6 +35,8 @@ type Deps = {
   reload: () => Promise<void>;
 };
 
+const SERIES_GONE = "This repeat isn't loaded here any more. Reload and try again.";
+
 const withExdate = (series: CalendarEventModel, at: string): CalendarEventModel => {
   const exdates = series.exdates ?? [];
   const ms = Date.parse(at);
@@ -99,7 +101,10 @@ export function useOccurrenceWrites(deps: Deps) {
   const updateOne = useCallback(
     async (plan: Extract<OccurrenceWritePlan, { kind: "occurrence-update" }>) => {
       const series = events.find((e) => e.id === plan.seriesId);
-      if (!series) return;
+      if (!series) {
+        toast.error(SERIES_GONE);
+        return;
+      }
       const draft = draftOverride(series, plan.originalStart, plan.patch);
       setEventsIn(scope, (prev) => [
         ...prev.map((e) => (e.id === series.id ? withExdate(e, plan.originalStart) : e)),
@@ -131,7 +136,10 @@ export function useOccurrenceWrites(deps: Deps) {
       event: CalendarEventModel,
     ) => {
       const series = events.find((e) => e.id === plan.seriesId);
-      if (!series) return;
+      if (!series) {
+        toast.error(SERIES_GONE);
+        return;
+      }
       const override = event.seriesId ? event : null;
       setEventsIn(scope, (prev) =>
         prev
@@ -188,7 +196,7 @@ export function useOccurrenceWrites(deps: Deps) {
           setEventsIn(scope, (prev) => prev.filter((e) => !ids.has(e.id)));
           await calendar.removeGoogleSeries(input);
           // No Undo: it would come back as a new Google series.
-          toast.success("Events deleted");
+          toast("Events deleted");
         } else {
           setEventsIn(scope, (prev) =>
             prev.map((e) => (ids.has(e.id) ? patchedInstance(e, plan.patch) : e)),
@@ -235,6 +243,13 @@ export function useOccurrenceWrites(deps: Deps) {
       }
       switch (plan.kind) {
         case "event-update":
+          // All events dragged from a changed occurrence: that one moves too,
+          // or the chip you dragged would snap back while the rest move.
+          if (occurrenceScope === "all" && event.seriesId && change.kind === "patch") {
+            const { startsAt, endsAt, allDay } = change.patch;
+            if (startsAt !== undefined || endsAt !== undefined || allDay !== undefined)
+              await updateEvent(event.id, { startsAt, endsAt, allDay });
+          }
           return updateEvent(plan.eventId, plan.patch);
         case "event-delete":
           return deleteEvent(plan.eventId);

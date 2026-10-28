@@ -18,6 +18,19 @@
 
 SET LOCAL lock_timeout = '5s';
 
+-- Refuse to apply before the bodies this file re-cuts from: an older mirror or
+-- update op replaced here would lose their keys, and a later apply of them
+-- would silently drop this file's.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calendar__attendees_or_null')
+     OR NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calendar__kind')
+     OR NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'calendar_events_visible') THEN
+    RAISE EXCEPTION 'CALR-11 needs 20261027230000, 20261028120000 and 20261028150000 applied first.';
+  END IF;
+END;
+$$;
+
 -- ── 1. Index ────────────────────────────────────────────────────────────────────
 
 CREATE UNIQUE INDEX IF NOT EXISTS calendar_events_override_once_idx
@@ -41,8 +54,10 @@ BEGIN
   IF s.recurrence_rule IS NULL OR s.series_id IS NOT NULL THEN
     RAISE EXCEPTION 'This event doesn''t repeat, so it has no occurrences to change.';
   END IF;
-  IF p_original_start IS NULL THEN
-    RAISE EXCEPTION 'An occurrence needs its original start.';
+  -- Whether the time is really an occurrence of the rule is the app's to know
+  -- (it expands the rule); here only what can't be one is refused.
+  IF p_original_start IS NULL OR p_original_start < s.start_time THEN
+    RAISE EXCEPTION 'That isn''t an occurrence of this event.';
   END IF;
   RETURN s;
 END;
@@ -79,6 +94,9 @@ BEGIN
        s.kind, s.focus_task_id, s.id, p_original_start)
     RETURNING id INTO v_id;
     PERFORM public.entities_op_upsert(p_workspace_id, 'event', v_id, s.title, 'calendar');
+    PERFORM public.module_activity_log(
+      p_workspace_id, 'calendar', 'event', s.id, 'calendar.occurrence_update',
+      jsonb_build_object('originalStart', p_original_start, 'override', v_id));
   END IF;
 
   UPDATE public.calendar_events
@@ -111,6 +129,9 @@ BEGIN
   IF v_id IS NOT NULL THEN
     PERFORM public.calendar_op_event_delete(p_workspace_id, v_id);
   END IF;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'calendar', 'event', s.id, 'calendar.occurrence_delete',
+    jsonb_build_object('originalStart', p_original_start));
 END;
 $$;
 
@@ -137,12 +158,18 @@ BEGIN
     LIMIT 1;
   IF v_id IS NOT NULL THEN
     PERFORM public.calendar_op_event_restore(p_workspace_id, v_id);
-  ELSE
+  ELSIF NOT EXISTS (SELECT 1 FROM public.calendar_events
+                      WHERE series_id = s.id AND original_start = p_original_start
+                        AND deleted_at IS NULL) THEN
+    -- A live override keeps its exdate: a second Undo never draws the occurrence twice.
     UPDATE public.calendar_events
       SET exdates = array_remove(exdates, p_original_start), updated_at = now()
       WHERE id = s.id
       RETURNING * INTO s;
   END IF;
+  PERFORM public.module_activity_log(
+    p_workspace_id, 'calendar', 'event', s.id, 'calendar.occurrence_restore',
+    jsonb_build_object('originalStart', p_original_start));
   RETURN s;
 END;
 $$;
@@ -279,13 +306,16 @@ BEGIN
   -- overrides' original starts by the same amount, so the same occurrences stay
   -- replaced (overrides keep their own times); every other key carries over to
   -- the live overrides through this same op.
+  -- The exdates move even with no override (a deleted occurrence stays deleted).
+  IF e.series_id IS NULL AND e.start_time <> v_old_start AND cardinality(e.exdates) > 0 THEN
+    UPDATE public.calendar_events
+      SET exdates = ARRAY(SELECT x + (e.start_time - v_old_start) FROM unnest(exdates) AS x ORDER BY 1),
+          updated_at = now()
+      WHERE id = e.id
+      RETURNING * INTO e;
+  END IF;
   IF e.series_id IS NULL AND EXISTS (SELECT 1 FROM public.calendar_events WHERE series_id = e.id) THEN
     IF e.start_time <> v_old_start THEN
-      UPDATE public.calendar_events
-        SET exdates = ARRAY(SELECT x + (e.start_time - v_old_start) FROM unnest(exdates) AS x ORDER BY 1),
-            updated_at = now()
-        WHERE id = e.id
-        RETURNING * INTO e;
       -- One row at a time, the far end first: one UPDATE would trip the unique
       -- (series_id, original_start) index when one override lands on the next one's start.
       FOR v_override IN SELECT id FROM public.calendar_events WHERE series_id = e.id
