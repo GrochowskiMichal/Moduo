@@ -3,17 +3,21 @@
 // paint only (the CSS Custom Highlight API): it never writes into the editor,
 // so nothing reaches the note's Yjs document.
 
-import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { $createParagraphNode, $createTextNode, $getRoot, type LexicalEditor } from "lexical";
-import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useEffect } from "react";
 
-import { clearEntityOpenHighlight, entityOpenHighlight, markEntityOpenHighlight } from "@/lib/entity-open";
+import {
+  clearEntityOpenHighlight,
+  entityOpenHighlight,
+  markEntityOpenHighlight,
+} from "@/lib/entity-open";
 
 import {
   noteMatchRanges,

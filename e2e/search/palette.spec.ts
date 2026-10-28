@@ -79,7 +79,10 @@ test.describe("⌘K finds a note by a body word and opens it at the match (GS-10
       .toBe(false);
 
     // Clean up: trash it from the keyboard.
-    await page.getByRole("treeitem", { name: new RegExp(title) }).first().focus();
+    await page
+      .getByRole("treeitem", { name: new RegExp(title) })
+      .first()
+      .focus();
     await page.keyboard.press("Backspace");
   });
 });

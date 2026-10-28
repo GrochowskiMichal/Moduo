@@ -71,10 +71,8 @@ describe("NotesSearchView reads notes__search hits", () => {
 describe("NotesSearchView opens a text hit at the match", () => {
   it("passes the query along with the open", async () => {
     const opened: string[] = [];
-    renderSearch(
-      "kumquat",
-      [hit({ id: "n1", snippet: "We tasted a kumquat at lunch" })],
-      (id) => opened.push(id),
+    renderSearch("kumquat", [hit({ id: "n1", snippet: "We tasted a kumquat at lunch" })], (id) =>
+      opened.push(id),
     );
     const group = await screen.findByRole("region", { name: "In the text" }, { timeout: 2000 });
     fireEvent.click(within(group).getByRole("button"));
