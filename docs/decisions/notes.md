@@ -15,6 +15,18 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - Why: only an app client folds (past 40 rows), and the MCP writes one row per agent edit, so an agent-only note's log grew forever.
   - Rejected: `Y.mergeUpdates` over the raw rows, because its result differs from what clients store (no garbage collection).
   - Release: the migration first, then `purge-deleted` redeployed. Either order is tolerated (a missing RPC counts as a compaction failure), but nothing folds until both ship.
+- **2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`** → `supabase/migrations/20261030180000_notes_legacy_out.sql`
+  - status: current
+  - Who: Mike (engineer mode, PQ5), built in NS-9 (MOD-659).
+  - Decision:
+    - `exposed_notes`, `note_shares` and `private.user_owns_note` are dropped, and the columns `share_scope`, `share_permission`, `tags` and `kind`. The pin goes from the app, `notes_meta` and set_meta, but the `is_pinned` column stays one release, unread and unwritten: v1.4.0's `listMeta` selects it and migrations land before the app Worker, so dropping it now would break every open tab and desktop install until they update. A follow-up migration drops it. Erasure is cut in place (`pg_temp.recut`), as are create, duplicate, import and set_meta. An old client's `isPinned` patch is ignored, not refused.
+    - `notes_meta` loses `is_pinned` by `ALTER TYPE … DROP ATTRIBUTE`, not DROP + CREATE: the twelve functions that return it keep their bodies and grants, so no grant can re-open to `anon`. Only `notes__meta`, which builds the row, is re-cut. Trade-off: a connection that prepared one of those calls before the migration fails ("attribute … has been dropped") until it reconnects; PostgREST's schema reload flushes its pool, so the window is the reload. `runtime.web.notes.test.ts` reads the type's columns as the latest `CREATE TYPE` less later `DROP ATTRIBUTE`s.
+    - `notes_share_fields_owner_only` keeps ownership only: a non-owner can't change `created_by` or `workspace_id`. The workspace clause stays as a second guard: `perm_enforce_write` and the NS-2 composite keys already refuse the move.
+    - `notes.edited_by`, `note_updates.user_id` → `profiles` and `note_updates.actor_key_id` → `workspace_api_keys` are `ON DELETE SET NULL`, each with a partial index so deleting a person or key doesn't scan the log. Ids left dangling before the release are nulled first, so the keys add validated.
+    - `share_mode` is `NOTE_SHARE_MODES` in the contracts, pinned to `notes_share_mode_chk`; it normalizes to `custom`.
+    - The dormant desktop REST sync (`apps/desktop/src-tauri`) still names some dropped columns. It is dead code and left alone; reviving it means rewriting it against the ops.
+  - Why: nothing read the legacy objects; dangling actor ids were possible; the database sorted `position` by `en_US` collation while the client sorts by code unit.
+
 - **2026-10-28 · NS-7: a note's document and the notes list are definer reads that check access once (`notes_pull`, `notes_list_meta`), with a table-read fallback until deployed** → `supabase/migrations/20261030160000_notes_read_rpcs.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-7 (MOD-657).

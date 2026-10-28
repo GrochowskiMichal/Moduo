@@ -93,7 +93,6 @@ export async function enrichHubRows(
               snippetMeta.set(entityRefKey({ type: "note", id: n.id }), {
                 kind: "note",
                 updatedAt: n.updatedAt,
-                isPinned: n.isPinned,
                 isArchived: n.isArchived,
               });
             }

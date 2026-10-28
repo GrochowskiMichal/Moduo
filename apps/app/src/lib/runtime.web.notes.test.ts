@@ -30,7 +30,6 @@ const LEAN = {
   parent_id: PARENT,
   title: "Q4 plan",
   icon: "📌",
-  is_pinned: false,
   position: "a0",
   is_archived: false,
   published_at: "2026-10-28T09:00:00+00:00",
@@ -54,26 +53,32 @@ const FULL = {
   body_text: "The whole document",
   body_md: "The whole document",
   search_tsv: "'document':3B 'plan':2A 'q4':1A 'whole':2B",
-  kind: "note",
-  tags: [],
-  share_scope: "private",
-  share_permission: "view",
 };
 
-/** The columns of the latest `CREATE TYPE public.notes_meta` in the migrations. */
+/** The columns of the latest `CREATE TYPE public.notes_meta` in the migrations,
+ * less those a later `ALTER TYPE … DROP ATTRIBUTE` removed (NS-9). */
 function notesMetaColumns(): string[] {
-  const defs = readdirSync(MIGRATIONS_DIR)
+  let columns: string[] = [];
+  const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
-    .sort()
-    .map((f) => readFileSync(resolve(MIGRATIONS_DIR, f), "utf8"))
-    .map((sql) => /CREATE TYPE public\.notes_meta AS \(([\s\S]*?)\);/.exec(sql)?.[1])
-    .filter((body): body is string => body !== undefined);
-  const body = defs.at(-1) ?? "";
-  return body
-    .split("\n")
-    .map((line) => line.replace(/--.*$/, "").trim())
-    .filter(Boolean)
-    .map((line) => line.split(/\s+/)[0] ?? "");
+    .sort();
+  for (const f of files) {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, f), "utf8");
+    const body = /CREATE TYPE public\.notes_meta AS \(([\s\S]*?)\);/.exec(sql)?.[1];
+    if (body !== undefined) {
+      columns = body
+        .split("\n")
+        .map((line) => line.replace(/--.*$/, "").trim())
+        .filter(Boolean)
+        .map((line) => line.split(/\s+/)[0] ?? "");
+    }
+    for (const m of sql.matchAll(
+      /ALTER TYPE public\.notes_meta DROP ATTRIBUTE (?:IF EXISTS )?(\w+)/g,
+    )) {
+      columns = columns.filter((c) => c !== m[1]);
+    }
+  }
+  return columns;
 }
 
 const OPS = [

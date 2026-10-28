@@ -62,7 +62,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 - **AC7.** Every `notes_op_*` checks its level once, through one guard, and each op's effective level matches the matrix in Assumptions 6. "Not found" and "hidden" are the same answer.
 - **AC8.** Opening a note's document is one request that checks access once. The notes list is one request whose visibility is computed once per call.
 - **AC9.** A 500-row update batch checks access once per note, not once per row. An all-duplicate batch writes nothing to `notes`.
-- **AC10.** The legacy objects and columns (`exposed_notes`, `note_shares`, `private.user_owns_note`, `share_scope`, `share_permission`, `tags`, `kind`, `is_pinned`) are gone:
+- **AC10.** The legacy objects and columns (`exposed_notes`, `note_shares`, `private.user_owns_note`, `share_scope`, `share_permission`, `tags`, `kind`, and every reader and writer of `is_pinned`) are gone; the `is_pinned` column itself goes one release later, because v1.4.0's notes list selects it:
     - erasure still works;
     - the actor columns have foreign keys;
     - `position` sorts in byte order everywhere;
@@ -161,7 +161,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - *Rejected:* keeping row triggers and batching in the op only, which leaves compaction deletes at one check per row.
 9. **Legacy removal and integrity (NS-9).**
    - Drop `exposed_notes`, `note_shares` (with its policies and trigger) and `private.user_owns_note`, and re-cut `account_erase_workspace_data` without them.
-   - Drop the columns `share_scope`, `share_permission`, `tags`, `kind` (ops stop writing it) and `is_pinned` (with `togglePin`, the snippet, the model field and `notes_meta`'s column; PQ5).
+   - Drop the columns `share_scope`, `share_permission`, `tags`, `kind` (ops stop writing it). Remove the pin (PQ5): `togglePin`, the snippet, the model field, `notes_meta`'s column and set_meta's `isPinned`. The `is_pinned` column stays one release unread, then a follow-up drops it: v1.4.0's `listMeta` selects it and migrations land before the app, so dropping it now breaks every old tab and desktop install (validator, NS-9).
    - Shrink `notes_share_fields_owner_only` to its remaining job: only the owner changes `created_by`.
    - Foreign keys `ON DELETE SET NULL`: `notes.edited_by` → `profiles`, `note_updates.user_id` → `profiles`, `note_updates.actor_key_id` → `workspace_api_keys`.
    - `ALTER COLUMN position TYPE text COLLATE "C"` on `notes` and `note_favorites`.

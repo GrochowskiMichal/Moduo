@@ -3,7 +3,7 @@
  * these helpers draw the UI and the tests that lock the product rules.
  */
 
-import type { GrantLevel } from "@contracts/vocabularies";
+import type { GrantLevel, NoteShareMode } from "@contracts/vocabularies";
 
 export const GRANT_RANK: Record<GrantLevel, number> = {
   freebusy: 1,
@@ -33,7 +33,7 @@ export function rankAllows(rank: number, min: GrantLevel): boolean {
 export type NoteShare = {
   id: string;
   parentId: string | null;
-  shareMode: "inherit" | "custom";
+  shareMode: NoteShareMode;
   workspaceShared: boolean;
 };
 

@@ -39,7 +39,6 @@ describe("noteRowToModel", () => {
       parentId: "n0",
       title: "Weekly plan",
       icon: "📒",
-      isPinned: true,
       position: "0i00000000",
       isArchived: false,
       publishedAt: "2026-07-01T10:00:00.000Z",
@@ -75,7 +74,6 @@ describe("noteRowToModel", () => {
     expect(n.parentId).toBeNull();
     expect(n.createdBy).toBeNull();
     expect(n.icon).toBeNull();
-    expect(n.isPinned).toBe(false);
     expect(n.isArchived).toBe(true);
     expect(n.deletedAt).toBeNull();
     expect(n.title).toBe("Old note");

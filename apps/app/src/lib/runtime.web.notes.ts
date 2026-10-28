@@ -246,14 +246,14 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
       if (viaRpc) return viaRpc;
       // Before NS-7's migration: the table read through RLS.
       const V2_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, position, is_archived, published_at, publish_token, doc_version, share_mode, workspace_shared, created_at, updated_at, deleted_at";
       // NR-1 columns ride on top of v2; until that migration is applied the
       // v2 read still works fully (not degraded) and sections derive Inbox.
       const NR1_COLS = `${V2_COLS}, in_inbox, full_width`;
       // NR-6: the last human editor, for the header's "Edited … by …".
       const NR6_COLS = `${NR1_COLS}, edited_by, edited_at`;
       const LEGACY_COLS =
-        "id, workspace_id, created_by, parent_id, title, icon, is_pinned, position, is_archived, created_at, updated_at, deleted_at";
+        "id, workspace_id, created_by, parent_id, title, icon, position, is_archived, created_at, updated_at, deleted_at";
       const cutoff = trashWindowCutoffIso(new Date());
       const query = (cols: string) =>
         selectCapped<any>({
