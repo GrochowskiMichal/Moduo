@@ -186,6 +186,10 @@ $function$;
 REVOKE ALL ON FUNCTION public.can_access(text, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.can_access(text, uuid, text, uuid) TO postgres, service_role;
 
+-- Policy swaps take ACCESS EXCLUSIVE on two busy tables: wait briefly, never queue.
+-- Table grants are left as they are (prod gives the client roles ALL on both,
+-- RLS decides; narrowing them is out of this block).
+SET LOCAL lock_timeout = '5s';
 DROP POLICY IF EXISTS calendar_events_owner_read ON public.calendar_events;
 CREATE POLICY calendar_events_owner_read ON public.calendar_events FOR SELECT TO authenticated
 USING (workspace_id IS NOT NULL AND public.perm_can_view(workspace_id, 'calendar')
@@ -206,11 +210,14 @@ BEGIN
   -- on your calendar (they can edit it) is yours to see, as the table policy says.
   WITH cals AS (SELECT c.id FROM public.calendars c WHERE c.workspace_id = p_workspace_id AND c.deleted_at IS NULL
                   AND public.can_access('calendar', c.id, 'view', v_user))
-  SELECT (CASE WHEN e.owner_id = v_user OR NOT e.is_private THEN e
+  -- The row is built once in a LATERAL (a bare (CASE … END).* would rebuild
+  -- it once per column). A new sensitive column joins the mask list here.
+  SELECT (m.r).*
+  FROM public.calendar_events e
+  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = v_user OR NOT e.is_private THEN e
      ELSE jsonb_populate_record(e, jsonb_build_object('title','Busy','description',null,'location',null,'attendees','[]'::jsonb,
        'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
-       'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null)) END).*
-  FROM public.calendar_events e
+       'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null)) END AS r) m
   WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
     AND (e.owner_id = v_user OR e.calendar_ref IN (SELECT id FROM cals))
     AND (e.recurrence_rule IS NOT NULL OR (e.start_time <= p_to AND e.end_time >= p_from))

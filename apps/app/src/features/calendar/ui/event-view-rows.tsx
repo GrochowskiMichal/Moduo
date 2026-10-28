@@ -259,7 +259,12 @@ export function EventCalendarRows({
     ? whoSeesLine({ workspaceLevel: null, people: [] }, members, currentUserId, {
         isPrivate: true,
       })
-    : owned && context?.share && members.length > 0
+    : // A teammate's private event on your calendar reaches you as "Busy":
+      // your calendar's sharing doesn't describe it.
+      owned &&
+        !(event.isPrivate && event.ownerId !== currentUserId) &&
+        context?.share &&
+        members.length > 0
       ? whoSeesLine(context.share, members, currentUserId)
       : null;
   const booked = context?.bookedThrough ?? null;
