@@ -247,6 +247,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-28 · Notes schema hardening planned: client grants read-only, one tree per workspace by key, deleting a parent never takes access away, trash purged on the server, one guard per op, reads and writes checked once, legacy out, content split into `note_bodies`
 - 2026-10-23 · The Impeccable pass on Notes: search is back in the sidebar, publish names what goes public, every note action has a key, and the spine leads the slash menu.
 - 2026-10-24 · NR-12 flipped early: the new Notes is the only Notes; NR-5, NR-10 and NR-11 follow it.
 - 2026-10-22 · New Notes retires in-body page rows (MOD-81 follow-up).

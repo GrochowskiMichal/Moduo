@@ -1,8 +1,11 @@
 // A booking link's open times for the week shown (CALR-17, AC31, AC32). Pure.
 // The busy rule matches booking-public's (supabase/functions/_shared/booking-busy.ts)
 // and the slots come from the same computeOpenSlots, so the panel's outlines
-// are the guest page's times.
+// are the guest page's times. Repeats count at every occurrence in the week,
+// skipped ones left out (a moved one is its own row), as the server expands
+// them (calendar__booking_host_events).
 
+import { expandEventOccurrences } from "../recurrence-expand";
 import { FOCUS_BUSY_ID, TASKS_BUSY_ID } from "./model";
 import { computeOpenSlots, type Interval, type WeeklyHours } from "./slots";
 
@@ -19,7 +22,7 @@ export type OpenTimesInput = {
     paused: boolean;
   };
   hostId: string;
-  events: {
+  events: (Repeatable & {
     ownerId: string | null;
     sourceAccountId: string | null;
     calendarId: string | null;
@@ -27,7 +30,7 @@ export type OpenTimesInput = {
     endsAt: string;
     kind?: string | null;
     deletedAt: string | null;
-  }[];
+  })[];
   sessions?: { userId: string | null; startsAt: string; endsAt: string }[];
   bookings?: { startsAt: string; endsAt: string }[];
   /** Co-hosts, without the link's owner. */
@@ -36,12 +39,21 @@ export type OpenTimesInput = {
    * What the app can see of accepted co-hosts' time (their events and busy
    * blocks): it only ever takes times away from the guest page's answer.
    */
-  coHostBusy?: { startsAt: string; endsAt: string }[];
+  coHostBusy?: Repeatable[];
   /** The guest page's slots (its preview answer), once read. */
   guestSlots?: string[] | null;
   now: Date;
   from: Date;
   to: Date;
+};
+
+/** A busy span, or a repeat's first one with its rule and skipped starts. */
+type Repeatable = {
+  id?: string;
+  startsAt: string;
+  endsAt: string;
+  rrule?: string | null;
+  exdates?: string[];
 };
 
 export type OpenTime = { startMs: number; endMs: number };
@@ -66,6 +78,27 @@ function eventIsBusy(e: Ev, ids: Set<string>): boolean {
   return (calendarId === "moduo" || calendarId === "") && ids.has("moduo");
 }
 
+// A day either side of the week: room for buffers and an occurrence under way.
+const DAY_MS = 86_400_000;
+
+function occurrences(rows: readonly Repeatable[], fromMs: number, toMs: number): Interval[] {
+  return rows.flatMap((r) =>
+    r.rrule
+      ? expandEventOccurrences(
+          {
+            id: r.id ?? "",
+            startsAt: r.startsAt,
+            endsAt: r.endsAt,
+            rrule: r.rrule,
+            exdates: r.exdates,
+          },
+          fromMs,
+          toMs,
+        ).map((o) => ({ start: new Date(o.startMs), end: new Date(o.endMs) }))
+      : [span(r)],
+  );
+}
+
 function busyFor(input: OpenTimesInput): Interval[] {
   const ids = new Set(input.link.busyCalendarIds);
   const own = input.events.filter(
@@ -74,7 +107,12 @@ function busyFor(input: OpenTimesInput): Interval[] {
   const sessions = ids.has(TASKS_BUSY_ID)
     ? (input.sessions ?? []).filter((s) => s.userId === input.hostId)
     : [];
-  return [...own, ...sessions, ...(input.bookings ?? []), ...(input.coHostBusy ?? [])].map(span);
+  const fromMs = input.from.getTime() - DAY_MS;
+  const toMs = input.to.getTime() + DAY_MS;
+  return [
+    ...occurrences([...own, ...(input.coHostBusy ?? [])], fromMs, toMs),
+    ...[...sessions, ...(input.bookings ?? [])].map(span),
+  ];
 }
 
 function nearGuestSlot(ms: number, guest: number[]): boolean {
