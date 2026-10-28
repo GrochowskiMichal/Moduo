@@ -32,11 +32,8 @@ const h = rs.hoisted(() => ({
   // would restart the palette's search effect forever).
   runtime: {
     spine: { searchAll: async (_call: Call) => [] as Row[] },
-    // Chat's half of ⌘K (CV-19, until GS-6) answers with nothing here.
-    chat: {
-      search: async () => ({ data: [], error: null }),
-      findConversations: async () => ({ data: [], error: null }),
-    },
+    // A message is opened through Chat's own read (GS-6); none here.
+    chat: { message: async () => ({ data: null, error: { code: null, message: "none" } }) },
   },
 }));
 h.runtime.spine.searchAll = (call: Call) => {
@@ -173,7 +170,7 @@ describe("keeps results while typing; offline line", () => {
     await waitFor(() => expect(h.calls).toHaveLength(1), { timeout: 2000 });
     expect(h.calls[0]).toMatchObject({ workspaceId: "w1", query: "budget", limitPerType: 8 });
     expect(h.calls[0].types).toContain("note");
-    expect(h.calls[0].types).not.toContain("chat_message");
+    expect(h.calls[0].types).toContain("chat_message");
   });
 
   it("never asks for one letter or only excluded words", async () => {
