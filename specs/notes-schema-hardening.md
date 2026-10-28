@@ -1,6 +1,6 @@
 # Spec: Notes schema hardening
 
-> Status: **Draft: waiting on Mike's ratification of the product-felt calls (Open questions)** · Owner: mike (engineer mode) · Build: now, NS-1 to NS-11, independent of the alpha and beta schedule
+> Status: **Ready** · Owner: mike (engineer mode; PQ1–PQ7 ratified "all rec", 2026-10-28) · Build: now, NS-1 to NS-11, independent of the alpha and beta schedule
 > Related: the 2026-10-28 architecture review of the Notes Supabase layer (this session; proposals P1–P11), [specs/global-search.md](./global-search.md) (GS-2 already shipped P11 and the search half of P6), [docs/decisions/notes.md](../docs/decisions/notes.md) (NR-1, NR-6, NR-7, #412 CAS), [.claude/rules/supabase.md](../.claude/rules/supabase.md)
 
 ## Scope
@@ -27,7 +27,7 @@ Prod today (catalog plus counts, 2026-10-28) is clean, so every constraint can b
 
 ## Product behavior & UX
 
-Almost nothing changes for a person. The behaviour that does change, with recommended answers to ratify (`PQ#`):
+Almost nothing changes for a person. The behaviour that does change, each ratified under *Product answers* (`PQ#`):
 
 1. **Deleting a parent never takes access away from its sub-notes.** This covers account erasure, purge from trash, and any hard delete. Sub-notes that followed the parent's sharing move to the top level and keep exactly who could see and edit them (PQ1). Today purge and move do this; erasure and a plain hard delete don't.
 2. **Trash empties itself.** A note in the trash for 30 days is deleted overnight, even if nobody opens Notes (PQ2). After 30 days it can't be restored; today restore is unlimited until someone happens to open Notes (PQ3).
@@ -220,9 +220,9 @@ Order:
 
 ## Definition-of-Ready gate
 
-- [x] **Scope, Product behavior, Edge cases, Acceptance criteria** are filled. They become unambiguous once the PQs are ratified.
+- [x] **Scope, Product behavior, Edge cases, Acceptance criteria** are filled and unambiguous.
 - [x] **Every acceptance criterion has at least one test**, with its plain-English note.
-- [ ] **Open questions is empty.** It is not: 7 product-felt calls are waiting on Mike's ratification. Every technical unknown is decided above.
+- [x] **Open questions is empty.** PQ1–PQ7 are ratified (every recommendation accepted), and every technical unknown is decided above.
 - [x] **The data model is named and Supabase-first:**
   - new: `notes_meta`, `note_bodies`, `notes__require*`, `notes_pull`, `notes_list_meta`, `notes__purge_expired`, `notes__compact`, the freeze trigger, the composite keys;
   - dropped: `exposed_notes`, `note_shares`, 5 columns, 3 prod-only indexes, 3 prod-only helpers.
@@ -236,14 +236,18 @@ Order:
   - account deletion on a seeded person (local);
   - the nightly `purge-deleted` run (local invoke).
 
+## Product answers
+
+Ratified by Mike (engineer mode), 2026-10-28, "all rec": every recommendation below is the decision.
+
+- [x] **PQ1.** When a parent is deleted, its sub-notes move to the top level and keep exactly who could see them. → *Rec: yes.*
+- [x] **PQ2.** Trash is emptied after 30 days by a nightly job, even if nobody opens Notes. → *Rec: yes, 30 days* (unchanged period).
+- [x] **PQ3.** A note trashed more than 30 days ago can't be restored, even before the job runs, the same as tasks. → *Rec: yes.*
+- [x] **PQ4.** One rule for going public: edit on the note plus the workspace's publish permission, for both "publish" and "move into a published tree". Today the move needs Full. → *Rec: yes.*
+- [x] **PQ5.** Remove the old pin; Favorites replace it. → *Rec: yes.*
+- [x] **PQ6.** An import whose page points at a parent outside this workspace fails as a whole, with a readable error. → *Rec: yes.*
+- [x] **PQ7.** "Note not found" for both a missing note and one you can't see. → *Rec: yes.*
+
 ## Open questions
 
-Product-felt calls for Mike (engineer mode), each with a recommendation. Answer like "all rec".
-
-- [ ] **PQ1.** When a parent is deleted, its sub-notes move to the top level and keep exactly who could see them. → *Rec: yes.*
-- [ ] **PQ2.** Trash is emptied after 30 days by a nightly job, even if nobody opens Notes. → *Rec: yes, 30 days* (unchanged period).
-- [ ] **PQ3.** A note trashed more than 30 days ago can't be restored, even before the job runs, the same as tasks. → *Rec: yes.*
-- [ ] **PQ4.** One rule for going public: edit on the note plus the workspace's publish permission, for both "publish" and "move into a published tree". Today the move needs Full. → *Rec: yes.*
-- [ ] **PQ5.** Remove the old pin; Favorites replace it. → *Rec: yes.*
-- [ ] **PQ6.** An import whose page points at a parent outside this workspace fails as a whole, with a readable error. → *Rec: yes.*
-- [ ] **PQ7.** "Note not found" for both a missing note and one you can't see. → *Rec: yes.*
+- [x] (none)
