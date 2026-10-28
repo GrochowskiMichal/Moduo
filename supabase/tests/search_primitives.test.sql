@@ -164,7 +164,13 @@ DO $$
 DECLARE
   v_fn text;
 BEGIN
-  FOREACH v_fn IN ARRAY ARRAY['search__unaccent(text)', 'search__query(text)', 'search__snippet(text, tsquery)'] LOOP
+  -- search__unaccent is pure and runs in the tasks search index, so GS-4 lets
+  -- writers (authenticated) run it too; anon never.
+  PERFORM test.ok(NOT has_function_privilege('anon', 'public.search__unaccent(text)', 'EXECUTE')
+      AND has_function_privilege('authenticated', 'public.search__unaccent(text)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.search__unaccent(text)', 'EXECUTE'),
+    'grants: public.search__unaccent(text) runs for the server and writers, never anon');
+  FOREACH v_fn IN ARRAY ARRAY['search__query(text)', 'search__snippet(text, tsquery)'] LOOP
     PERFORM test.ok(NOT has_function_privilege('anon', 'public.' || v_fn, 'EXECUTE')
         AND NOT has_function_privilege('authenticated', 'public.' || v_fn, 'EXECUTE')
         AND has_function_privilege('service_role', 'public.' || v_fn, 'EXECUTE'),

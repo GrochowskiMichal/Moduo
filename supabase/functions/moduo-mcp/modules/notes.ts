@@ -95,6 +95,23 @@ function shapeNote(n: Row): Row {
   };
 }
 
+const LIST_PAGE = 1000;
+
+/** U+E000 / U+E001 around a match in a SearchHit snippet; agents read **bold**. */
+const SNIPPET_MARKS = /[\uE000\uE001]/g;
+
+/** Every note of the key's workspace its person can view (notes__visible_ids,
+ * the set form of can_access). The key's own notes scope is checked before
+ * any tool runs. */
+async function notesVisibleIds(ctx: ToolContext): Promise<Set<string>> {
+  const { data, error } = await ctx.db.rpc("notes__visible_ids", {
+    p_workspace_id: ctx.key.workspaceId,
+    p_actor: ctx.key.createdBy,
+  });
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []) as string[]);
+}
+
 async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row | null> {
   const { data, error } = await ctx.db.rpc(fn, { p_workspace_id: ctx.key.workspaceId, ...args });
   if (error) throw new Error(error.message);
@@ -240,17 +257,29 @@ export const notesConnectorModule: ConnectorModule = {
         properties: { limit: { type: "number", description: "Max notes (default 200, max 1000)." } },
       },
       handler: async (args, ctx) => {
-        const data = await rows(
-          ctx.db
-            .from("notes")
-            .select("id, title, parent_id, icon, is_archived, published_at, position")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .is("deleted_at", null)
-            .order("position")
-            .limit(clampLimit(args, 200, 1000)),
-        );
-        const visible = await visibleIds(ctx, "note");
-        return data.filter((n) => visible.has(n.id)).map(shapeNote);
+        // Visibility before the limit (GS-2): the visible set first, then the
+        // tree in pages until the limit is met, so notes the key's person
+        // can't see never crowd out the ones they can.
+        const limit = clampLimit(args, 200, 1000);
+        const visible = await notesVisibleIds(ctx);
+        const out: Row[] = [];
+        for (let from = 0; out.length < limit && visible.size > 0; from += LIST_PAGE) {
+          const page = await rows(
+            ctx.db
+              .from("notes")
+              .select("id, title, parent_id, icon, is_archived, published_at, position")
+              .eq("workspace_id", ctx.key.workspaceId)
+              .is("deleted_at", null)
+              .order("position")
+              .order("id")
+              .range(from, from + LIST_PAGE - 1),
+          );
+          for (const n of page) if (visible.has(n.id) && out.length < limit) out.push(n);
+          // Only an empty page ends the tree: PostgREST may answer fewer rows
+          // than asked (its max_rows) before the end.
+          if (page.length === 0) break;
+        }
+        return out.map(shapeNote);
       },
     },
     {
@@ -280,7 +309,8 @@ export const notesConnectorModule: ConnectorModule = {
     },
     {
       name: "notes_search",
-      description: "Full-text search over note titles and body — returns matches with a snippet.",
+      description:
+        "Search notes by words in their title or body (word-starts, any order, accents ignored; quotes for a phrase, -word to exclude). Returns the notes you can open, best first, each with where it lives and, for a body match, a snippet with the match in **bold**.",
       access: "view",
       hints: "read",
       inputSchema: {
@@ -291,23 +321,23 @@ export const notesConnectorModule: ConnectorModule = {
         },
         required: ["query"],
       },
+      // The server's notes__search, the same rows the sidebar and ⌘K get
+      // (GS-2): the key's scope and its person's access are applied there,
+      // before the limit, so nothing is filtered here.
       handler: async (args, ctx) => {
-        const q = str(args, "query");
-        const data = await rows(
-          ctx.db
-            .from("notes")
-            .select("id, title, body_text, is_archived")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .is("deleted_at", null)
-            .textSearch("search_tsv", q, { type: "websearch", config: "simple" })
-            .limit(clampLimit(args, 20, 50)),
-        );
-        const visible = await visibleIds(ctx, "note");
-        return data.filter((n) => visible.has(n.id)).map((n) => ({
-          id: n.id,
-          title: (n.title ?? "").trim() || "Untitled",
-          archived: Boolean(n.is_archived),
-          snippet: String(n.body_text ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
+        const { data, error } = await ctx.db.rpc("notes__search", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_query: str(args, "query"),
+          p_limit: clampLimit(args, 20, 50),
+        });
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as Row[]).map((h) => ({
+          id: h.entity_id,
+          title: (h.title ?? "").trim() || "Untitled",
+          context: h.context ?? null,
+          snippet: typeof h.snippet === "string" ? h.snippet.replace(SNIPPET_MARKS, "**") : null,
+          match: h.match,
+          archived: h.archived === true,
         }));
       },
     },

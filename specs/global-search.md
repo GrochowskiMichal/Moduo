@@ -56,7 +56,7 @@ Every `Q#` below refers to a ratified answer under *Product answers*.
 - **A very long query or paste.** Only the first 256 characters and 32 words are used, silently.
 - **Notes you can see only through a parent's sharing.** These are found. A note that inherits from a parent you can't see is not.
 - **Someone else's private calendar event** never matches by its title, description or attendees. It isn't searchable at all (Q23).
-- **A conversation you left, or a DM you're not in**, is never matched. A public channel you never joined is matched (Q24).
+- **A private conversation or DM you left, or one you're not in**, is never matched. A public channel is matched whether you joined it, never joined it or left it (Q24), as Chat's own Search reads it. (Amended in GS-6.)
 - **A trashed item** is hidden by default (Q7). An archived item appears under its group with an "Archived" tag (Q8).
 - **A renamed project** is found by its new name at once. Today its registry label goes stale; GS-4 fixes that.
 - **The same item reached two ways** (a task is also a top result) appears once.
@@ -112,8 +112,10 @@ The agent decided these on the team's behalf. Each is the decision, a one-clause
 2. **The row shape** (`SearchHit`, in `supabase/functions/_shared/contracts/search.ts`):
    ```
    entity_type text, entity_id uuid, title text, context text|null, snippet text|null,
-   icon text|null, match text, rank real, updated_at timestamptz
+   icon text|null, match text, rank real, updated_at timestamptz, archived boolean
    ```
+   - `archived` (amended in GS-3, Q8): the item is archived (a note, a task in an archived project, a project). The palette tags it "Archived" and it ranks lower; MCP `notes_search` returns it again.
+   - A `search_all` row is a `SearchHit` plus `score real` (0..1), `type_total integer` (the "Show all N" count, capped at 50) and `top boolean` (the one Top result).
    - `match` is closed (`handle | title | title_fuzzy | body`). It lives in `vocabularies.ts`, with `parse*`/`normalize*`/`is*`.
    - There is no table, so there is no CHECK. `search_all.test.sql` asserts that every returned `match` is in the vocabulary, as the drift gate.
    - `entity_type` stays an open string (polymorphic types, AGENTS.md §Domain contracts).
@@ -128,26 +130,26 @@ The agent decided these on the team's behalf. Each is the decision, a one-clause
 
    Chat keeps `chat__unaccent`, because its GIN index expression names it and swapping the function would mean rebuilding that index. Chat's `chat__search_query` becomes a one-line call to `search__query` in GS-6. *Rejected:* each module keeping its own dialect (today's state).
 4. **Text search config stays `simple`, with no stemming.** That matches the Notes decision. Polish stemming would need a dictionary Supabase doesn't ship (Q9b). Unaccent is applied to the indexed text and to the query.
-5. **Typo forgiveness uses `pg_trgm`, titles only.** Install it into `extensions`, with a GIN trigram index on the unaccented, lower-cased title per adopted table. It is used only when exact matching returns fewer than 3 hits, at similarity ≥ 0.3, and ranked below every exact hit. *Rejected:* fuzzy bodies (noisy and slow), and pgroonga (heavy, and it sits outside the rest of Postgres' FTS).
+5. **Typo forgiveness uses `pg_trgm`, titles only.** Install it into `extensions`, with a GIN trigram index on the unaccented, lower-cased title per adopted table. It is used only when exact matching returns fewer than 3 hits, at `word_similarity ≥ 0.5` (the typed words against the best-matching stretch of each title, so a typo in a long title still counts), and ranked below every exact hit. An excluded word still excludes. "Fewer than 3" counts exact hits across every module: each module function decides on its own count, and `search_all` drops every typo-forgiven row once the merged list holds 3 exact hits. (Amended in GS-3: whole-title `similarity ≥ 0.3` missed "meetng" in "Weekly meeting notes", 0.29.) *Rejected:* fuzzy bodies (noisy and slow), and pgroonga (heavy, and it sits outside the rest of Postgres' FTS).
 6. **Visibility goes before the limit, set-based where it can be.**
    - Notes get `notes__visible_ids(ws, actor)`: one recursive CTE down the tree (a root's rank from creator, grants and workspace sharing; `inherit` children take their parent's rank; the module ceiling applied once). It is proven equal to `can_access('note', …, 'view')` by a property test.
    - Types not yet set-based filter their text matches with their per-row rule **before** `LIMIT`, over a candidate set capped at 500 by rank. The 0.28 ms per 1,000 rows and the starvation numbers from CV-0 spike 5 make that safe at ≤ 10k rows per type.
    - Each module moves to a set when it adopts.
 
    *Rejected:* `share_visible_ids`, which runs `can_access` on every row of the type in the workspace on each keystroke; and limit-then-filter (today's MCP bug, `moduo-mcp/modules/notes.ts:300`).
-7. **The actor is never a parameter.** Every `<module>__search` is SECURITY DEFINER with `search_path = ''`. It resolves the actor with `perm_actor_id()` and the module ceiling with `module_api_key_scope` for keys or the member's module permission for people. Chat keys use `chat__key_channel_ids`. `search_all` is SECURITY INVOKER and granted to `authenticated` and `service_role` only; the module functions are not callable by clients directly. Grants are re-stated in every migration that DROPs or CREATEs (`.claude/rules/supabase.md`).
+7. **The actor is never a parameter.** Every `<module>__search`, and `registry__search`, is SECURITY DEFINER with `search_path = ''`. It resolves the actor with `perm_actor_id()` and the module ceiling with `module_api_key_scope` for keys or the member's module permission for people. Chat keys use `chat__key_channel_ids`. The module functions are granted to `authenticated` and `service_role`, never `anon`: the app calls them directly (the Notes sidebar), and so does the MCP through the service role with its key header. `search_all` is SECURITY INVOKER, granted the same way: it holds no privilege of its own, every hit comes from a module function that resolved the caller, it checks the context item with `perm_can_see_entity`, and it reads only `entity_links` itself (under the caller's RLS, and only to boost hits already returned). Grants are re-stated in every migration that DROPs or CREATEs (`.claude/rules/supabase.md`). (Amended in GS-3.)
 8. **Ranking in `search_all`.** `score = 0.55·text + 0.15·recency + 0.20·personal + 0.10·context`.
    - `text` is the module rank, with title > body and handle = 1.0.
    - `recency` is a 30-day half-life on `updated_at`.
    - `personal` is the recents frecency from GS-8, 0 until then.
    - `context` is 1 when a spine link joins the hit to the item open now (the client passes `p_context_type/id`, which is checked for visibility).
 
-   The Top result is the highest score overall. The weights are constants in one SQL function, tuned against a fixture of 40 real-shaped queries in `search_all.test.sql`. *Rejected:* type weights (any fixed type order is wrong for someone), and an ML ranker.
+   Rows are ordered by tier first, then by score: a task's exact handle, then exact hits, then typo-forgiven titles, so neither promise ("a task ID finds that task first", "typo forgiveness never beats an exact hit") depends on the weights. The Top result is the first row. The weights are constants in one SQL function, tuned against a fixture of 40 real-shaped queries in `search_all.test.sql`. *Rejected:* type weights (any fixed type order is wrong for someone), and an ML ranker.
 9. **Snippets are built only for returned rows**, with `ts_headline(search_headline, left(body_text, 20000), q, 'MaxWords=24, MinWords=8, MaxFragments=1')`, in the outer query after the limit. *Why:* headline cost grows with document size.
 10. **Notes' index.** `notes.search_tsv` is re-made as a generated column over `search__unaccent(title)` (weight A) and `search__unaccent(left(body_text,150000))` (weight B), with its GIN index rebuilt. Rebuilding 129 rows in prod is instant. The cold-body table split (architecture review P10) stays later; this contract hides it when it comes.
 11. **Context lines** come from each module: the note's parent path (up to 2 ancestors, "… / Parent"), the task's project name, the contact's company, the event's start date, the message's conversation name. They are computed in SQL so the MCP gets the same text.
-12. **The registry keeps its job, links and mentions, and stops being the search index.** `searchEntities` stays for the @/ref pickers. The palette moves to `search_all`. Until a type adopts the contract, `search_all` covers it through a `registry__search` adapter: an unaccented prefix match on `entities.label`, with visibility via `perm_can_see_entity` before the limit. Every type therefore appears from GS-3 on.
-13. **Projects get registered.** GS-4 adds `entities_op_upsert` to project create and rename. Today projects enter the registry only at link time, and their labels go stale (`20261017116000…:237`).
+12. **The registry keeps its job, links and mentions, and stops being the search index.** `searchEntities` stays for the @/ref pickers. The palette moves to `search_all`. Until a type adopts the contract, `search_all` covers it through a `registry__search` adapter: an unaccented word-start match on `entities.label` (indexed), a task's handle (with the workspace's earlier keys), typo-forgiven labels by Assumption 5's rule, and visibility via `perm_can_see_entity` before the limit. It walks the matches best first and stops for a type at its limit or after 500 candidates, so a common word-start doesn't cost a check per match. A key sees only the types its scopes cover. Its limit is per type. Every type therefore appears from GS-3 on; context lines for registry types come when each type adopts (GS-4, GS-5).
+13. **Projects get registered.** GS-4 adds `entities_op_upsert` to project create and rename. Today projects enter the registry only at link time, and their labels go stale (`20261017116000…:237`). (Amended in GS-4: a trigger on `buckets` makes the call on insert, rename, trash and restore, so the app's direct writes and duplicates count too; the system Inbox is never registered.)
 14. **Recents are `search_recents (user_id, workspace_id, entity_type, entity_id, last_opened_at, open_count)`.**
     - Owner-only RLS (select, insert and update own rows), written through `search_op_record_open`.
     - Pruned to 50 rows per user per workspace.
@@ -158,7 +160,7 @@ The agent decided these on the team's behalf. Each is the decision, a one-clause
 15. **Email stays on the device.** The palette merges the desktop's existing local search (`features/email/search.ts` plus the Rust body scan) into the Email group, client-side. `search_all` returns only `email_refs` rows, owner-only. No mail body ever reaches Supabase (Email EM-3).
 16. **The MCP gets one `search` tool** over `search_all` (limit ≤ 50, an optional `types` filter). The per-module `notes_search`, `contacts_search` and `tasks_search` tools stay, backed by their module's `__search`, so agents' existing calls keep working. The `sdk-parity` snapshot is updated.
 17. **No embeddings, no in-app RAG, no GraphRAG** in this spec. This follows the product brief's MCP-only AI. The spine is used as a ranking signal (decision 8). Semantic recall is a separate product decision (Q25). If it comes, it lands as a per-module chunk table behind this same contract.
-18. **Timeouts and bounds:** `search_all` runs under `statement_timeout = '5s'`, at most 8 rows per type (50 for "Show all" and MCP), and keyset paging is not needed at these limits.
+18. **Timeouts and bounds:** `search_all` runs under `statement_timeout = '5s'` (declared on the function; PostgREST applies it to the request, since Postgres itself ignores a function's own SET for the running statement), at most 8 rows per type (50 for "Show all" and MCP), and keyset paging is not needed at these limits. Each module is asked for 50 rows, so "Show all N" counts up to 50 ("Show all 50+" beyond).
 19. **Tier.** Every block that ships a migration is Tier 2 (`scripts/ci/tier.ts`). The RLS matrix (`bun run db:matrix`) gains every new function.
 
 ## Execution blocks

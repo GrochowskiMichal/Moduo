@@ -1,5 +1,6 @@
 /** The runtime port's spine (implemented in runtime.web.spine.ts). */
 
+import type { SearchAllRow } from "@contracts/search";
 import type { ContentAuthorKind, ReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
@@ -88,6 +89,20 @@ export type SpineRuntime = {
    * deleted targets), unlike `searchEntities`.
    */
   getEntities(input: { workspaceId: string; refs: EntityRef[] }): Promise<EntityRecord[]>;
+  /**
+   * ⌘K's one search (GS-3): the server's `search_all`, every module's
+   * `<module>__search` merged and ranked, up to `limitPerType` rows per type
+   * (8 by default, 50 at most) with each type's total and one Top result.
+   * `context` is the item open now (a linked hit ranks up). Throws a `DbError`
+   * (code 57014 when the server gave up after 5 s) or a network error.
+   */
+  searchAll(input: {
+    workspaceId: string;
+    query: string;
+    types?: readonly string[];
+    limitPerType?: number;
+    context?: EntityRef | null;
+  }): Promise<SearchAllRow[]>;
   /**
    * Tombstone a registry entry (the delete half of the registry contract) — a
    * module's own delete op calls this; exposed for testing + pre-adoption use.

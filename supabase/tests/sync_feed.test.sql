@@ -117,13 +117,16 @@ BEGIN
     'every word, in a title or the description''s text; never a private project''s task', test.search('M', 'quokka'));
   PERFORM test.ok(test.search('O', 'quokka') = test.ids('T1', 'T2', 'T3'),
     'its owner finds the private one', test.search('O', 'quokka'));
-  PERFORM test.ok(test.search('M', 'quokka friends') = test.ids('T2') AND test.search('M', 'QUOKKA &') = test.ids('T2'),
-    'all the words count, case aside; entities read as their characters', test.search('M', 'quokka friends'));
+  -- GS-4: tasks_search matches the search contract's words (word-starts,
+  -- unaccented), so punctuation is no word of its own.
+  PERFORM test.ok(test.search('M', 'quokka friends') = test.ids('T2') AND test.search('M', 'QUOKKA FRIE') = test.ids('T2')
+      AND test.search('M', 'QUOKKA &') = test.ids('T1', 'T2'),
+    'all the words count, case aside; entities are decoded, and punctuation is no word', test.search('M', 'quokka friends'));
   PERFORM test.ok(test.search('M', 'span') = '' AND test.search('M', 'secret') = '',
     'the HTML itself and a reference''s stored text are never searched', test.search('M', 'span'));
   PERFORM test.ok(test.search('M', '50%') = test.ids('T5') AND test.search('M', 'off_') = test.ids('T5')
-      AND test.search('M', '%') = test.ids('T5'),
-    '% and _ are just characters', test.search('M', '%'));
+      AND test.search('M', '%') = '',
+    '% and _ are no wildcards, and a query of punctuation only searches nothing', test.search('M', '%'));
   PERFORM test.ok(test.search('M', '   ') = '', 'an empty query finds nothing');
   PERFORM test.ok(test.search('X', 'quokka') = '', 'an outsider finds nothing', test.search('X', 'quokka'));
   r := test.value_as('M', format($q$SELECT count(*)::text FROM public.tasks_search(%L, 'quokka', 1)$q$, test.id('W')));

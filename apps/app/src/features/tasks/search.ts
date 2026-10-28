@@ -197,7 +197,8 @@ export function descriptionWords(description: string | null | undefined): string
  * Whether a task matches the search box: every word of the query appears in
  * its title, the text of its description or the key it was imported under
  * ("ENG-123", TV-D16, AC3.6), ignoring case. The server's `tasks_search`
- * reads the same fields but not quite the same text: it strips the old HTML
+ * (GS-4) reads the same fields but matches the search contract's way: word
+ * starts, accents ignored, punctuation no word. It also strips the old HTML
  * and reads Markdown as stored, so a word the editor escapes (`a\*b`) or a
  * reference's `moduo://` address can match differently there (call #15; the
  * editor escapes only what Markdown would read, so `file_name` is stored

@@ -72,6 +72,15 @@ const STORY_TEXT: Record<string, string> = {
   moduo: "Q4: sync engine, publish, comments. Meet moves to beta.",
 };
 
+/** The story's stand-in for notes__search's snippet: the first match marked
+ * with U+E000 … U+E001, as the server marks it. */
+function markFirst(text: string, query: string): string | null {
+  const at = text.toLowerCase().indexOf(query.toLowerCase());
+  if (at === -1 || !query) return null;
+  const end = at + query.length;
+  return `${text.slice(0, at)}\uE000${text.slice(at, end)}\uE001${text.slice(end)}`;
+}
+
 function Harness({
   favorites = FAVORITES,
   notes = NOTES,
@@ -123,9 +132,10 @@ function Harness({
                 .map((n) => ({
                   id: n.id,
                   title: n.title,
-                  bodyText: STORY_TEXT[n.id] ?? "",
-                  isArchived: n.isArchived,
-                  deletedAt: n.deletedAt,
+                  icon: n.icon,
+                  context: null,
+                  snippet: markFirst(STORY_TEXT[n.id] ?? "", q),
+                  match: "body" as const,
                 })),
           }}
           {...rest}

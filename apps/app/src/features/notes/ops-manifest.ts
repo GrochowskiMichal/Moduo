@@ -113,6 +113,10 @@ export const notesModuleManifest: ModuleManifest = {
       name: "notes.get",
       summary: "One note as markdown (`body_md`) plus its meta — the read source.",
     },
-    { name: "notes.search", summary: "Full-text search over note titles + body (the FTS index)." },
+    {
+      name: "notes.search",
+      summary:
+        "Search note titles and bodies through notes__search (the global search contract), with snippet and parent path.",
+    },
   ],
 };
