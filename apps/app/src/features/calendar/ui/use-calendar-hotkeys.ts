@@ -1,4 +1,4 @@
-// Keyboard nav (AC1): T today · ←/→ period · D/W views · Delete on the selected
+// Keyboard nav (AC1): T today · ←/→ period · D/W/M views · Delete on the selected
 // native chip. Registry bindings in the "calendar" scope (lib/hotkeys); handlers
 // route through a ref so the one listener never captures stale state.
 
@@ -42,6 +42,7 @@ export function useCalendarHotkeys(input: Input): void {
     "calendar.today": calendarKey(() => keysRef.current.goToday()),
     "calendar.day": calendarKey(() => keysRef.current.setView("day")),
     "calendar.week": calendarKey(() => keysRef.current.setView("week")),
+    "calendar.month": calendarKey(() => keysRef.current.setView("month")),
     "calendar.prev": calendarKey(() => keysRef.current.step(-1)),
     "calendar.next": calendarKey(() => keysRef.current.step(1)),
     // Destructive keys act only from a neutral focus (the grid/body) — never

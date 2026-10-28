@@ -577,6 +577,9 @@
   /* Calendar grid: height of one hour row. Density-scaled so the grid's
      rhythm follows the density axis like rows/controls do. */
   --cal-hour-h: 3.5rem;  /* 56 */
+  /* Day view prep (CALR-12): the widest a note or follow-up chip beside a
+     meeting grows before it truncates. */
+  --cal-prep-chip-max: 13.75rem; /* 220 */
   /* Board card width (tasks-v3 default o): fixed per density so the board
      never reflows as you scroll; the column adds its drop-tint inset. */
   --board-card-w: 18.5rem;  /* 296 */

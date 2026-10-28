@@ -3,7 +3,7 @@
 // renders the house chip; the meeting in progress rises over the now line.
 // "+N" lists what didn't fit side by side, and a row opens it like a click.
 
-import { useRef, useState } from "react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -51,6 +51,7 @@ export function GridEventCard({
   onPointerDown,
   stale = false,
   waiting = false,
+  aside = null,
 }: {
   chip: EventChip;
   span: ChipSpan;
@@ -68,6 +69,8 @@ export function GridEventCard({
   stale?: boolean;
   /** A change to it waits to sync (CALR-3). */
   waiting?: boolean;
+  /** Day view's prep in the card's free width (CALR-12). */
+  aside?: ReactNode;
 }) {
   // The meeting in progress sits over the now line and carries it faintly
   // under its title (AC10).
@@ -100,6 +103,7 @@ export function GridEventCard({
         locked={chip.locked}
         stale={stale}
         waiting={waiting}
+        aside={aside}
       />
     </div>
   );

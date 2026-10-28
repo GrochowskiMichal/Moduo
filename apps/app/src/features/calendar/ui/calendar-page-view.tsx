@@ -100,11 +100,12 @@ import { writableEvent } from "../writable";
 import { BookingLinks } from "./booking-links";
 import { CalendarConnectDialog } from "./calendar-connect-dialog";
 import { CalendarDeleteDialog } from "./calendar-delete-dialog";
-import { CalendarGrid, type MoveEventDeltas, type MoveTaskResult } from "./calendar-grid";
+import type { MoveEventDeltas, MoveTaskResult } from "./calendar-grid";
 import { CalendarRail } from "./calendar-rail";
 import { CalendarStrip } from "./calendar-strip";
 import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
+import { CalendarViews } from "./calendar-views";
 import { CalendarsPanel } from "./calendars-panel";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
@@ -760,7 +761,12 @@ export function CalendarPageView({
               onMoveToToday={() => rollForward(strip)}
               onReview={openReview}
             />
-            <CalendarGrid
+            <CalendarViews
+              runtime={runtime}
+              workspaceId={workspaceId}
+              eventsById={eventsById}
+              tasks={tasks}
+              onOpenDay={(d) => update({ view: "day", anchor: localDayKey(d) })}
               view={viewState.view}
               days={range.days}
               blocksByDay={grouped}
