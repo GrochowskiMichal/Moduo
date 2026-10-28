@@ -500,7 +500,7 @@ DELETE FROM public.resource_grants WHERE resource_id = {N} AND subject_id = {vie
 
 ## Table: exposed_notes
 
-Legacy: nothing reads or writes it since notes publishing moved to `publish_token`, and its reads stay open to everyone, as they were. Nobody writes it, signed in or not (MOD-594). It has no owner column, so the rows for people inside W are `–`: the question is anyone at all.
+Legacy: nothing reads or writes it since notes publishing moved to `publish_token`. Nobody writes it, signed in or not (MOD-594), and since NS-1 nobody reads it either: no client holds a grant on it and its public read is gone. It goes in NS-9. It has no owner column, so the rows for people inside W are `–`: the question is anyone at all.
 
 ```sql select
 SELECT 1 FROM public.exposed_notes WHERE id = {X}
@@ -525,9 +525,9 @@ DELETE FROM public.exposed_notes WHERE id = {X}
 | editor | – | – | – | – |
 | viewer | – | – | – | – |
 | capped | – | – | – | – |
-| member | ✓ | ✗ | ✗ | ✗ |
-| outsider | ✓ | ✗ | ✗ | ✗ |
-| anon | ✓ | ✗ | ✗ | ✗ |
+| member | ✗ | ✗ | ✗ | ✗ |
+| outsider | ✗ | ✗ | ✗ | ✗ |
+| anon | ✗ | ✗ | ✗ | ✗ |
 | app | – | – | – | – |
 
 ## Equivalent mutants
