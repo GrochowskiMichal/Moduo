@@ -10,10 +10,13 @@ import { webNotes } from "./runtime.web.notes";
 const WS = "00000000-0000-4000-8000-0000000000c3";
 const NOTE = "00000000-0000-4000-8000-0000000000d4";
 
-function stubRpc(answer: { data: unknown; error: unknown }) {
+// The recorded calls only: the typed rpc spy is too deep for the checker.
+function stubRpc(answer: { data: unknown; error: unknown }): { mock: { calls: unknown[][] } } {
   return rs
     .spyOn(supabaseClient, "rpc")
-    .mockImplementation((() => Promise.resolve(answer)) as never);
+    .mockImplementation((() => Promise.resolve(answer)) as never) as unknown as {
+    mock: { calls: unknown[][] };
+  };
 }
 
 afterEach(() => {

@@ -590,6 +590,7 @@ export type Database = {
       }
       calendar_accounts: {
         Row: {
+          busy_default: boolean
           color: string | null
           created_at: string
           deleted_at: string | null
@@ -597,15 +598,18 @@ export type Database = {
           external_id: string
           id: string
           is_default_target: boolean
+          last_error: string | null
           last_sync_at: string | null
           owner_id: string | null
           provider: string
+          read_only: boolean
           status: string
           sync_token: string | null
           updated_at: string
           workspace_id: string
         }
         Insert: {
+          busy_default?: boolean
           color?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -613,15 +617,18 @@ export type Database = {
           external_id?: string
           id?: string
           is_default_target?: boolean
+          last_error?: string | null
           last_sync_at?: string | null
           owner_id?: string | null
           provider: string
+          read_only?: boolean
           status?: string
           sync_token?: string | null
           updated_at?: string
           workspace_id: string
         }
         Update: {
+          busy_default?: boolean
           color?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -629,9 +636,11 @@ export type Database = {
           external_id?: string
           id?: string
           is_default_target?: boolean
+          last_error?: string | null
           last_sync_at?: string | null
           owner_id?: string | null
           provider?: string
+          read_only?: boolean
           status?: string
           sync_token?: string | null
           updated_at?: string
@@ -654,19 +663,29 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
           ical_uid: string | null
           id: string
           is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -681,19 +700,29 @@ export type Database = {
           calendar_id?: string
           calendar_ref?: string | null
           color?: string | null
+          conference_provider?: string | null
+          conference_url?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           end_time: string
+          exdates?: string[]
           external_event_id?: string | null
+          external_series_id?: string | null
+          focus_task_id?: string | null
           ical_uid?: string | null
           id?: string
           is_organizer?: boolean | null
+          is_private?: boolean
+          kind?: string
           location?: string | null
+          offer_id?: string | null
+          original_start?: string | null
           owner_id: string
           recurrence_rule?: string | null
           recurring?: boolean
           reminders?: Json
+          series_id?: string | null
           source_account_id?: string | null
           start_time: string
           status?: string
@@ -708,19 +737,29 @@ export type Database = {
           calendar_id?: string
           calendar_ref?: string | null
           color?: string | null
+          conference_provider?: string | null
+          conference_url?: string | null
           created_at?: string
           deleted_at?: string | null
           description?: string | null
           end_time?: string
+          exdates?: string[]
           external_event_id?: string | null
+          external_series_id?: string | null
+          focus_task_id?: string | null
           ical_uid?: string | null
           id?: string
           is_organizer?: boolean | null
+          is_private?: boolean
+          kind?: string
           location?: string | null
+          offer_id?: string | null
+          original_start?: string | null
           owner_id?: string
           recurrence_rule?: string | null
           recurring?: boolean
           reminders?: Json
+          series_id?: string | null
           source_account_id?: string | null
           start_time?: string
           status?: string
@@ -750,6 +789,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "user_entitlements"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "calendar_events_series_id_fkey"
+            columns: ["series_id"]
+            isOneToOne: false
+            referencedRelation: "calendar_events"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "calendar_events_source_account_id_fkey"
@@ -2404,45 +2450,6 @@ export type Database = {
           },
         ]
       }
-      exposed_notes: {
-        Row: {
-          content_b64: string
-          content_text: string
-          embeds_json: Json | null
-          exposed_at: string
-          id: string
-          note_id: string
-          slug: string
-          title: string
-          updated_at: string
-          workspace_id: string | null
-        }
-        Insert: {
-          content_b64?: string
-          content_text?: string
-          embeds_json?: Json | null
-          exposed_at?: string
-          id?: string
-          note_id: string
-          slug: string
-          title?: string
-          updated_at?: string
-          workspace_id?: string | null
-        }
-        Update: {
-          content_b64?: string
-          content_text?: string
-          embeds_json?: Json | null
-          exposed_at?: string
-          id?: string
-          note_id?: string
-          slug?: string
-          title?: string
-          updated_at?: string
-          workspace_id?: string | null
-        }
-        Relationships: []
-      }
       exposed_slot_links: {
         Row: {
           buffer_after_minutes: number
@@ -2950,6 +2957,47 @@ export type Database = {
           },
         ]
       }
+      note_bodies: {
+        Row: {
+          body_md: string
+          body_text: string
+          doc_state: string | null
+          doc_version: number
+          note_id: string
+          search_tsv: unknown
+          title: string
+          workspace_id: string
+        }
+        Insert: {
+          body_md?: string
+          body_text?: string
+          doc_state?: string | null
+          doc_version?: number
+          note_id: string
+          search_tsv?: unknown
+          title?: string
+          workspace_id: string
+        }
+        Update: {
+          body_md?: string
+          body_text?: string
+          doc_state?: string | null
+          doc_version?: number
+          note_id?: string
+          search_tsv?: unknown
+          title?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "note_bodies_note_id_fkey"
+            columns: ["workspace_id", "note_id"]
+            isOneToOne: false
+            referencedRelation: "notes"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       note_favorites: {
         Row: {
           created_at: string
@@ -2975,10 +3023,10 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "note_favorites_note_id_fkey"
-            columns: ["note_id"]
+            columns: ["workspace_id", "note_id"]
             isOneToOne: false
             referencedRelation: "notes"
-            referencedColumns: ["id"]
+            referencedColumns: ["workspace_id", "id"]
           },
           {
             foreignKeyName: "note_favorites_workspace_id_fkey"
@@ -3033,65 +3081,6 @@ export type Database = {
           },
         ]
       }
-      note_shares: {
-        Row: {
-          created_at: string
-          id: string
-          note_id: string
-          permission: string
-          updated_at: string
-          user_id: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          note_id: string
-          permission?: string
-          updated_at?: string
-          user_id: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          note_id?: string
-          permission?: string
-          updated_at?: string
-          user_id?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "note_shares_note_id_fkey"
-            columns: ["note_id"]
-            isOneToOne: false
-            referencedRelation: "notes"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "note_shares_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "note_shares_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "user_entitlements"
-            referencedColumns: ["user_id"]
-          },
-          {
-            foreignKeyName: "note_shares_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       note_updates: {
         Row: {
           actor_key_id: string | null
@@ -3131,11 +3120,32 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "note_updates_actor_key_id_fkey"
+            columns: ["actor_key_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_api_keys"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "note_updates_note_id_fkey"
-            columns: ["note_id"]
+            columns: ["workspace_id", "note_id"]
             isOneToOne: false
             referencedRelation: "notes"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "note_updates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "note_updates_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "note_updates_workspace_id_fkey"
@@ -3148,13 +3158,9 @@ export type Database = {
       }
       notes: {
         Row: {
-          body_md: string
-          body_text: string
           created_at: string
           created_by: string | null
           deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
           edited_at: string | null
           edited_by: string | null
           full_width: boolean
@@ -3163,29 +3169,20 @@ export type Database = {
           in_inbox: boolean
           is_archived: boolean
           is_pinned: boolean
-          kind: string
           parent_id: string | null
           position: string
           publish_token: string | null
           published_at: string | null
-          search_tsv: unknown
           share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
           title: string
           updated_at: string
           workspace_id: string
           workspace_shared: boolean
         }
         Insert: {
-          body_md?: string
-          body_text?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          doc_state?: string | null
-          doc_version?: number
           edited_at?: string | null
           edited_by?: string | null
           full_width?: boolean
@@ -3194,29 +3191,20 @@ export type Database = {
           in_inbox: boolean
           is_archived?: boolean
           is_pinned?: boolean
-          kind?: string
           parent_id?: string | null
           position?: string
           publish_token?: string | null
           published_at?: string | null
-          search_tsv?: unknown
           share_mode?: string
-          share_permission?: string
-          share_scope?: string
-          tags?: Json
           title?: string
           updated_at?: string
           workspace_id: string
           workspace_shared?: boolean
         }
         Update: {
-          body_md?: string
-          body_text?: string
           created_at?: string
           created_by?: string | null
           deleted_at?: string | null
-          doc_state?: string | null
-          doc_version?: number
           edited_at?: string | null
           edited_by?: string | null
           full_width?: boolean
@@ -3225,16 +3213,11 @@ export type Database = {
           in_inbox?: boolean
           is_archived?: boolean
           is_pinned?: boolean
-          kind?: string
           parent_id?: string | null
           position?: string
           publish_token?: string | null
           published_at?: string | null
-          search_tsv?: unknown
           share_mode?: string
-          share_permission?: string
-          share_scope?: string
-          tags?: Json
           title?: string
           updated_at?: string
           workspace_id?: string
@@ -3256,11 +3239,25 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
           {
+            foreignKeyName: "notes_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notes_edited_by_fkey"
+            columns: ["edited_by"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
             foreignKeyName: "notes_parent_id_fkey"
-            columns: ["parent_id"]
+            columns: ["workspace_id", "parent_id"]
             isOneToOne: false
             referencedRelation: "notes"
-            referencedColumns: ["id"]
+            referencedColumns: ["workspace_id", "id"]
           },
           {
             foreignKeyName: "notes_workspace_id_fkey"
@@ -3691,6 +3688,55 @@ export type Database = {
           },
         ]
       }
+      search_recents: {
+        Row: {
+          entity_id: string
+          entity_type: string
+          last_opened_at: string
+          open_count: number
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          entity_id: string
+          entity_type: string
+          last_opened_at?: string
+          open_count?: number
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          entity_id?: string
+          entity_type?: string
+          last_opened_at?: string
+          open_count?: number
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "search_recents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "search_recents_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "user_entitlements"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "search_recents_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sections: {
         Row: {
           created_at: string
@@ -3852,6 +3898,104 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      slot_offer_times: {
+        Row: {
+          end_at: string
+          hold_event_id: string | null
+          id: string
+          offer_id: string
+          start_at: string
+        }
+        Insert: {
+          end_at: string
+          hold_event_id?: string | null
+          id?: string
+          offer_id: string
+          start_at: string
+        }
+        Update: {
+          end_at?: string
+          hold_event_id?: string | null
+          id?: string
+          offer_id?: string
+          start_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slot_offer_times_offer_id_fkey"
+            columns: ["offer_id"]
+            isOneToOne: false
+            referencedRelation: "slot_offers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      slot_offers: {
+        Row: {
+          booked_event_id: string | null
+          created_at: string
+          duration_minutes: number
+          expires_at: string
+          hold: boolean
+          id: string
+          link_id: string
+          owner_id: string
+          slug: string
+          status: string
+          title: string
+          updated_at: string
+          video_provider: string | null
+          workspace_id: string
+        }
+        Insert: {
+          booked_event_id?: string | null
+          created_at?: string
+          duration_minutes: number
+          expires_at: string
+          hold?: boolean
+          id?: string
+          link_id: string
+          owner_id: string
+          slug: string
+          status?: string
+          title: string
+          updated_at?: string
+          video_provider?: string | null
+          workspace_id: string
+        }
+        Update: {
+          booked_event_id?: string | null
+          created_at?: string
+          duration_minutes?: number
+          expires_at?: string
+          hold?: boolean
+          id?: string
+          link_id?: string
+          owner_id?: string
+          slug?: string
+          status?: string
+          title?: string
+          updated_at?: string
+          video_provider?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slot_offers_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "exposed_slot_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "slot_offers_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       storage_usage: {
         Row: {
@@ -6206,6 +6350,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      body_md: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: string
+      }
+      body_text: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: string
+      }
       booking__follow_event: {
         Args: { p_booking_id: string | null; p_event_id: string | null }
         Returns: undefined
@@ -6254,6 +6406,21 @@ export type Database = {
         }
         Returns: Json
       }
+      booking_op_offer_book: {
+        Args: {
+          p_attendee_email: string | null
+          p_attendee_name: string | null
+          p_calendar_id?: string | null
+          p_description: string | null
+          p_external_event_id?: string | null
+          p_host_email: string | null
+          p_location: string | null
+          p_offer_id: string | null
+          p_source_account_id?: string | null
+          p_start_at: string | null
+        }
+        Returns: Json
+      }
       booking_op_release: {
         Args: { p_event_id: string | null; p_owner_id: string | null; p_workspace_id: string | null }
         Returns: undefined
@@ -6262,20 +6429,84 @@ export type Database = {
         Args: { p_ip_hash: string | null; p_owner_id: string | null }
         Returns: string
       }
-      calendar_busy_blocks: {
-        Args: { p_as?: string; p_from: string; p_to: string; p_workspace_id: string }
+      buckets__rls_fixed_kept: {
+        Args: {
+          p_id: string | null
+          p_is_system: boolean | null
+          p_owner_id: string | null
+          p_workspace_id: string | null
+        }
+        Returns: boolean
+      }
+      calendar__attendees: { Args: { p_attendees: Json | null }; Returns: Json }
+      calendar__attendees_or_null: {
+        Args: { p_attendees: Json | null }
+        Returns: Json
+      }
+      calendar__booking_host_events: {
+        Args: {
+          p_from: string | null
+          p_owner_id: string | null
+          p_to: string | null
+          p_workspace_id: string | null
+          p_zone: string | null
+        }
         Returns: {
-          all_day: boolean
           calendar_id: string
           end_time: string
           kind: string
-          owner_id: string
+          source_account_id: string
           start_time: string
         }[]
       }
-      calendar_events_visible: {
-        Args: { p_as?: string; p_from: string; p_to: string; p_workspace_id: string }
-        Returns: Database["public"]["Tables"]["calendar_events"]["Row"][]
+      calendar__conference: {
+        Args: { p_provider: string | null; p_url: string | null }
+        Returns: Record<string, unknown>
+      }
+      calendar__events_visible_for: {
+        Args: {
+          p_from: string | null
+          p_to: string | null
+          p_viewer: string | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          all_day: boolean
+          attendees: Json
+          calendar_id: string
+          calendar_ref: string | null
+          color: string | null
+          conference_provider: string | null
+          conference_url: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          end_time: string
+          exdates: string[]
+          external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
+          id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
+          location: string | null
+          offer_id: string | null
+          original_start: string | null
+          owner_id: string
+          recurrence_rule: string | null
+          recurring: boolean
+          reminders: Json
+          series_id: string | null
+          source_account_id: string | null
+          start_time: string
+          status: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string | null
+        }[]
         SetofOptions: {
           from: "*"
           to: "calendar_events"
@@ -6283,13 +6514,186 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      calendar__kind: { Args: { p_kind: string | null }; Returns: string }
+      calendar__meeting_provider: { Args: { p_url: string | null }; Returns: string }
+      calendar__occurrences: {
+        Args: {
+          p_end: string | null
+          p_exdates: string[] | null
+          p_from: string | null
+          p_rule: string | null
+          p_start: string | null
+          p_to: string | null
+          p_zone: string | null
+        }
+        Returns: {
+          o_end: string
+          o_start: string
+        }[]
+      }
+      calendar__split_location: {
+        Args: { p_location: string | null }
+        Returns: Record<string, unknown>
+      }
+      calendar__viewer: {
+        Args: { p_as: string | null; p_workspace_id: string | null }
+        Returns: string
+      }
+      calendar__web_address: { Args: { p_text: string | null }; Returns: string }
+      calendar_busy_blocks:
+        | {
+            Args: { p_from: string | null; p_to: string | null; p_workspace_id: string | null }
+            Returns: {
+              all_day: boolean
+              calendar_id: string
+              end_time: string
+              kind: string
+              owner_id: string
+              start_time: string
+            }[]
+          }
+        | {
+            Args: {
+              p_as: string | null
+              p_from: string | null
+              p_to: string | null
+              p_workspace_id: string | null
+            }
+            Returns: {
+              all_day: boolean
+              calendar_id: string
+              end_time: string
+              kind: string
+              owner_id: string
+              start_time: string
+            }[]
+          }
+      calendar_event_occurrences: {
+        Args: { p_from: string | null; p_to: string | null; p_workspace_id: string | null }
+        Returns: {
+          ends_at: string
+          event_id: string
+          starts_at: string
+        }[]
+      }
+      calendar_events_visible:
+        | {
+            Args: { p_from: string | null; p_to: string | null; p_workspace_id: string | null }
+            Returns: {
+              all_day: boolean
+              attendees: Json
+              calendar_id: string
+              calendar_ref: string | null
+              color: string | null
+              conference_provider: string | null
+              conference_url: string | null
+              created_at: string
+              deleted_at: string | null
+              description: string | null
+              end_time: string
+              exdates: string[]
+              external_event_id: string | null
+              external_series_id: string | null
+              focus_task_id: string | null
+              ical_uid: string | null
+              id: string
+              is_organizer: boolean | null
+              is_private: boolean
+              kind: string
+              location: string | null
+              offer_id: string | null
+              original_start: string | null
+              owner_id: string
+              recurrence_rule: string | null
+              recurring: boolean
+              reminders: Json
+              series_id: string | null
+              source_account_id: string | null
+              start_time: string
+              status: string
+              tags: Json
+              title: string
+              updated_at: string
+              workspace_id: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "calendar_events"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
+        | {
+            Args: {
+              p_as: string | null
+              p_from: string | null
+              p_to: string | null
+              p_workspace_id: string | null
+            }
+            Returns: {
+              all_day: boolean
+              attendees: Json
+              calendar_id: string
+              calendar_ref: string | null
+              color: string | null
+              conference_provider: string | null
+              conference_url: string | null
+              created_at: string
+              deleted_at: string | null
+              description: string | null
+              end_time: string
+              exdates: string[]
+              external_event_id: string | null
+              external_series_id: string | null
+              focus_task_id: string | null
+              ical_uid: string | null
+              id: string
+              is_organizer: boolean | null
+              is_private: boolean
+              kind: string
+              location: string | null
+              offer_id: string | null
+              original_start: string | null
+              owner_id: string
+              recurrence_rule: string | null
+              recurring: boolean
+              reminders: Json
+              series_id: string | null
+              source_account_id: string | null
+              start_time: string
+              status: string
+              tags: Json
+              title: string
+              updated_at: string
+              workspace_id: string | null
+            }[]
+            SetofOptions: {
+              from: "*"
+              to: "calendar_events"
+              isOneToOne: false
+              isSetofReturn: true
+            }
+          }
       calendar_module_permission: {
         Args: { p_workspace_id: string | null }
         Returns: string
       }
+      calendar_op__google_reauth: {
+        Args: {
+          p_email: string | null
+          p_error?: string | null
+          p_owner_id: string | null
+          p_reauth: boolean | null
+        }
+        Returns: number
+      }
       calendar_op__guard: {
         Args: { p_workspace_id: string | null }
         Returns: undefined
+      }
+      calendar_op__guard_calendar: {
+        Args: { p_calendar_id: string | null; p_workspace_id: string | null }
+        Returns: string
       }
       calendar_op__guard_event: {
         Args: {
@@ -6303,17 +6707,83 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
+          source_account_id: string | null
+          start_time: string
+          status: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "calendar_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      calendar_op__guard_focus_task: {
+        Args: { p_kind: string | null; p_task_id: string | null; p_workspace_id: string | null }
+        Returns: string
+      }
+      calendar_op__guard_series: {
+        Args: {
+          p_original_start: string | null
+          p_series_id: string | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          all_day: boolean
+          attendees: Json
+          calendar_id: string
+          calendar_ref: string | null
+          color: string | null
+          conference_provider: string | null
+          conference_url: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          end_time: string
+          exdates: string[]
+          external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
+          id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
+          location: string | null
+          offer_id: string | null
+          original_start: string | null
+          owner_id: string
+          recurrence_rule: string | null
+          recurring: boolean
+          reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6334,8 +6804,9 @@ export type Database = {
         Returns: undefined
       }
       calendar_op_account_restore: {
-        Args: { p_account_id: string; p_workspace_id: string }
+        Args: { p_account_id: string | null; p_workspace_id: string | null }
         Returns: {
+          busy_default: boolean
           color: string | null
           created_at: string
           deleted_at: string | null
@@ -6343,9 +6814,11 @@ export type Database = {
           external_id: string
           id: string
           is_default_target: boolean
+          last_error: string | null
           last_sync_at: string | null
           owner_id: string | null
           provider: string
+          read_only: boolean
           status: string
           sync_token: string | null
           updated_at: string
@@ -6360,11 +6833,12 @@ export type Database = {
       }
       calendar_op_account_set: {
         Args: {
-          p_account_id: string
+          p_account_id: string | null
           p_busy_default?: boolean | null
-          p_workspace_id: string
+          p_workspace_id: string | null
         }
         Returns: {
+          busy_default: boolean
           color: string | null
           created_at: string
           deleted_at: string | null
@@ -6372,9 +6846,11 @@ export type Database = {
           external_id: string
           id: string
           is_default_target: boolean
+          last_error: string | null
           last_sync_at: string | null
           owner_id: string | null
           provider: string
+          read_only: boolean
           status: string
           sync_token: string | null
           updated_at: string
@@ -6389,11 +6865,11 @@ export type Database = {
       }
       calendar_op_account_upsert: {
         Args: {
+          p_busy_default?: boolean | null
           p_color?: string | null
           p_display_label: string | null
           p_external_id: string | null
           p_last_sync_at?: string | null
-          p_busy_default?: boolean | null
           p_provider: string | null
           p_read_only?: boolean | null
           p_status?: string | null
@@ -6401,6 +6877,7 @@ export type Database = {
           p_workspace_id: string | null
         }
         Returns: {
+          busy_default: boolean
           color: string | null
           created_at: string
           deleted_at: string | null
@@ -6408,9 +6885,11 @@ export type Database = {
           external_id: string
           id: string
           is_default_target: boolean
+          last_error: string | null
           last_sync_at: string | null
           owner_id: string | null
           provider: string
+          read_only: boolean
           status: string
           sync_token: string | null
           updated_at: string
@@ -6430,8 +6909,16 @@ export type Database = {
       calendar_op_event_create: {
         Args: {
           p_all_day?: boolean | null
+          p_attendees?: Json | null
+          p_calendar_id?: string | null
+          p_conference_provider?: string | null
+          p_conference_url?: string | null
           p_description?: string | null
           p_ends_at: string | null
+          p_focus_task_id?: string | null
+          p_is_private?: boolean | null
+          p_kind?: string | null
+          p_location?: string | null
           p_rrule?: string | null
           p_starts_at: string | null
           p_title: string | null
@@ -6443,17 +6930,29 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6474,28 +6973,48 @@ export type Database = {
         Returns: undefined
       }
       calendar_op_event_occurrence_delete: {
-        Args: { p_original_start: string | null; p_series_id: string | null; p_workspace_id: string | null }
+        Args: {
+          p_original_start: string | null
+          p_series_id: string | null
+          p_workspace_id: string | null
+        }
         Returns: undefined
       }
       calendar_op_event_occurrence_restore: {
-        Args: { p_original_start: string | null; p_series_id: string | null; p_workspace_id: string | null }
+        Args: {
+          p_original_start: string | null
+          p_series_id: string | null
+          p_workspace_id: string | null
+        }
         Returns: {
           all_day: boolean
           attendees: Json
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6524,17 +7043,29 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6558,17 +7089,29 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6592,17 +7135,29 @@ export type Database = {
           calendar_id: string
           calendar_ref: string | null
           color: string | null
+          conference_provider: string | null
+          conference_url: string | null
           created_at: string
           deleted_at: string | null
           description: string | null
           end_time: string
+          exdates: string[]
           external_event_id: string | null
+          external_series_id: string | null
+          focus_task_id: string | null
+          ical_uid: string | null
           id: string
+          is_organizer: boolean | null
+          is_private: boolean
+          kind: string
           location: string | null
+          offer_id: string | null
+          original_start: string | null
           owner_id: string
           recurrence_rule: string | null
           recurring: boolean
           reminders: Json
+          series_id: string | null
           source_account_id: string | null
           start_time: string
           status: string
@@ -6627,8 +7182,24 @@ export type Database = {
         }
         Returns: Json
       }
+      calendar_op_offer_create: {
+        Args: {
+          p_duration_minutes?: number | null
+          p_hold?: boolean | null
+          p_link_id: string | null
+          p_starts_at: string[] | null
+          p_title?: string | null
+          p_video_provider?: string | null
+          p_workspace_id: string | null
+        }
+        Returns: Json
+      }
+      calendar_op_offer_release: {
+        Args: { p_offer_id: string | null; p_workspace_id: string | null }
+        Returns: string
+      }
       calendar_preview_levels: {
-        Args: { p_as: string; p_workspace_id: string }
+        Args: { p_as: string | null; p_workspace_id: string | null }
         Returns: {
           calendar_id: string
           level: string
@@ -6643,11 +7214,20 @@ export type Database = {
         Returns: string
       }
       calendar_shared_with_me: {
-        Args: { p_workspace_id: string }
+        Args: { p_workspace_id: string | null }
         Returns: {
           calendar_id: string
           level: string
           owner_id: string
+        }[]
+      }
+      calendar_who_sees: {
+        Args: { p_event_id: string | null; p_workspace_id: string | null }
+        Returns: {
+          calendar_id: string
+          calendar_name: string
+          sees: string
+          user_id: string
         }[]
       }
       can_access:
@@ -7329,6 +7909,21 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      chat__search_hits: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
       }
       chat__search_in: {
         Args: {
@@ -9368,6 +9963,29 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      companies__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      companies__search_body: {
+        Args: { p_domains: string[] | null; p_website: string | null }
+        Returns: string
+      }
+      companies__search_tsv: {
+        Args: { p_domains: string[] | null; p_name: string | null; p_website: string | null }
+        Returns: unknown
+      }
       companies_op_create: {
         Args: {
           p_domains?: string[] | null
@@ -9487,6 +10105,38 @@ export type Database = {
       }
       contact_merge_candidates: { Args: never; Returns: Json }
       contacts__primary_value: { Args: { p_list: Json | null }; Returns: string }
+      contacts__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      contacts__search_body: {
+        Args: { p_email: string | null; p_emails: Json | null; p_title: string | null }
+        Returns: string
+      }
+      contacts__search_emails: {
+        Args: { p_email: string | null; p_emails: Json | null }
+        Returns: string[]
+      }
+      contacts__search_tsv: {
+        Args: {
+          p_email: string | null
+          p_emails: Json | null
+          p_name: string | null
+          p_title: string | null
+        }
+        Returns: unknown
+      }
       contacts__works_at_company: {
         Args: { p_contact_id: string | null; p_workspace_id: string | null }
         Returns: string
@@ -9876,6 +10526,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      doc_state: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: string
+      }
+      doc_version: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: number
       }
       email_cancel: { Args: { p_dedupe_key_prefix: string | null }; Returns: number }
       email_enqueue: {
@@ -10346,6 +11004,34 @@ export type Database = {
         }
         Returns: undefined
       }
+      events__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      events__search_body: {
+        Args: { p_attendees: Json | null; p_description: string | null; p_location: string | null }
+        Returns: string
+      }
+      events__search_tsv: {
+        Args: {
+          p_attendees: Json | null
+          p_description: string | null
+          p_location: string | null
+          p_title: string | null
+        }
+        Returns: unknown
+      }
       focus__release_held: {
         Args: {
           p_summary: boolean | null
@@ -10624,6 +11310,20 @@ export type Database = {
         Args: { p_import_id: string | null; p_workspace_id: string | null }
         Returns: Json
       }
+      links__assert_can_unblock: {
+        Args: { p_link: Database["public"]["Tables"]["entity_links"]["Row"] | null }
+        Returns: undefined
+      }
+      links__assert_may_link: {
+        Args: {
+          p_source_id: string | null
+          p_source_type: string | null
+          p_target_id: string | null
+          p_target_type: string | null
+          p_workspace_id: string | null
+        }
+        Returns: undefined
+      }
       links_op_create: {
         Args: {
           p_origin?: string | null
@@ -10765,17 +11465,135 @@ export type Database = {
         Args: { p_lane: string | null; p_user_id: string | null; p_workspace_id: string | null }
         Returns: string
       }
-      notes__keep_access_on_reroot: {
-        Args: { p_note_id: string | null; p_workspace_id: string | null }
+      notes__compact: {
+        Args: {
+          p_expected_version: number | null
+          p_note: string | null
+          p_snapshot_b64: string | null
+          p_upto_id: number | null
+        }
+        Returns: Json
+      }
+      notes__compact_candidates: {
+        Args: { p_limit?: number | null }
+        Returns: string[]
+      }
+      notes__compact_source: { Args: { p_note: string | null }; Returns: Json }
+      notes__copy_chain_access: {
+        Args: {
+          p_note_id: string | null
+          p_skip_creator: string | null
+          p_workspace_id: string | null
+        }
         Returns: undefined
       }
+      notes__in_published_tree: {
+        Args: { p_note_id: string | null; p_through_hidden?: boolean | null }
+        Returns: boolean
+      }
+      notes__keep_access_on_reroot: {
+        Args: {
+          p_note_id: string | null
+          p_skip_creator?: string | null
+          p_workspace_id: string | null
+        }
+        Returns: undefined
+      }
+      notes__meta: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
+        SetofOptions: {
+          from: "notes"
+          to: "notes_meta"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes__purge_expired: { Args: { p_limit?: number | null }; Returns: Json }
       notes__purge_ids: {
         Args: { p_ids: string[] | null; p_workspace_id: string | null }
         Returns: number
       }
+      notes__require: {
+        Args: {
+          p_action: string | null
+          p_note_id: string | null
+          p_trashed?: boolean | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          edited_at: string | null
+          edited_by: string | null
+          full_width: boolean
+          icon: string | null
+          id: string
+          in_inbox: boolean
+          is_archived: boolean
+          is_pinned: boolean
+          parent_id: string | null
+          position: string
+          publish_token: string | null
+          published_at: string | null
+          share_mode: string
+          title: string
+          updated_at: string
+          workspace_id: string
+          workspace_shared: boolean
+        }
+        SetofOptions: {
+          from: "*"
+          to: "notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      notes__require_module: {
+        Args: { p_action: string | null; p_workspace_id: string | null }
+        Returns: undefined
+      }
+      notes__require_parent: {
+        Args: {
+          p_parent_id: string | null
+          p_trashed?: boolean | null
+          p_workspace_id: string | null
+        }
+        Returns: undefined
+      }
+      notes__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
       notes__subtree_ids: {
         Args: { p_note_id: string | null; p_workspace_id: string | null }
         Returns: string[]
+      }
+      notes__visible_ids: {
+        Args: { p_actor: string | null; p_workspace_id: string | null }
+        Returns: string[]
+      }
+      notes_list_meta: {
+        Args: { p_trash_since: string | null; p_workspace_id: string | null }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"][]
+        SetofOptions: {
+          from: "*"
+          to: "notes_meta"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       notes_list_unmaterialized: {
         Args: { p_limit?: number | null; p_workspace_id: string | null }
@@ -10798,51 +11616,6 @@ export type Database = {
         Args: { p_workspace_id: string | null }
         Returns: string
       }
-      notes_op__guard: { Args: { p_workspace_id: string | null }; Returns: undefined }
-      notes_op__guard_note: {
-        Args: {
-          p_include_trashed?: boolean | null
-          p_note_id: string | null
-          p_workspace_id: string | null
-        }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
-        SetofOptions: {
-          from: "*"
-          to: "notes"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       notes_op_apply_updates: {
         Args: {
           p_body_md?: string | null
@@ -10856,40 +11629,10 @@ export type Database = {
       }
       notes_op_archive: {
         Args: { p_note_id: string | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10903,40 +11646,10 @@ export type Database = {
           p_title?: string | null
           p_workspace_id: string | null
         }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10947,40 +11660,10 @@ export type Database = {
           p_source_note_id: string | null
           p_workspace_id: string | null
         }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10992,40 +11675,10 @@ export type Database = {
           p_position?: string | null
           p_workspace_id: string | null
         }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -11050,80 +11703,20 @@ export type Database = {
           p_position?: string | null
           p_workspace_id: string | null
         }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
       }
       notes_op_publish: {
         Args: { p_note_id: string | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -11138,40 +11731,10 @@ export type Database = {
       }
       notes_op_rename: {
         Args: { p_note_id: string | null; p_title: string | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -11213,40 +11776,10 @@ export type Database = {
       }
       notes_op_set_meta: {
         Args: { p_note_id: string | null; p_patch: Json | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -11257,85 +11790,34 @@ export type Database = {
       }
       notes_op_unarchive: {
         Args: { p_note_id: string | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
       }
       notes_op_unpublish: {
         Args: { p_note_id: string | null; p_workspace_id: string | null }
-        Returns: {
-          body_md: string
-          body_text: string
-          created_at: string
-          created_by: string | null
-          deleted_at: string | null
-          doc_state: string | null
-          doc_version: number
-          edited_at: string | null
-          edited_by: string | null
-          full_width: boolean
-          icon: string | null
-          id: string
-          in_inbox: boolean
-          is_archived: boolean
-          is_pinned: boolean
-          kind: string
-          parent_id: string | null
-          position: string
-          publish_token: string | null
-          published_at: string | null
-          search_tsv: unknown
-          share_mode: string
-          share_permission: string
-          share_scope: string
-          tags: Json
-          title: string
-          updated_at: string
-          workspace_id: string
-          workspace_shared: boolean
-        }
+        Returns: Database["public"]["CompositeTypes"]["notes_meta"]
         SetofOptions: {
           from: "*"
-          to: "notes"
+          to: "notes_meta"
           isOneToOne: true
           isSetofReturn: false
         }
       }
       notes_public_subtree: { Args: { p_token: string | null }; Returns: Json }
+      notes_pull: {
+        Args: {
+          p_after_id: number | null
+          p_known_version: number | null
+          p_note_id: string | null
+          p_workspace_id: string | null
+        }
+        Returns: Json
+      }
       notice__gate: {
         Args: {
           p_at: string | null
@@ -11485,6 +11967,12 @@ export type Database = {
         Returns: boolean
       }
       perm_validate_overrides: { Args: { p_overrides: Json | null }; Returns: Json }
+      plan__caller_may_ask_about: {
+        Args: { p_user_id: string | null }
+        Returns: boolean
+      }
+      plan__owned_count_of: { Args: { p_user_id: string | null }; Returns: number }
+      plan__tier_of: { Args: { p_user_id: string | null }; Returns: string }
       plan_tier_rank: { Args: { t: string | null }; Returns: number }
       prefs_op_set: {
         Args: { p_domain: string | null; p_updated_at: string | null; p_value: Json | null }
@@ -11715,6 +12203,21 @@ export type Database = {
         }
         Returns: string
       }
+      projects__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
       projects__visible: { Args: { p_project_id: string | null }; Returns: boolean }
       projects__visible_to: {
         Args: { p_project_id: string | null; p_user: string | null }
@@ -11894,6 +12397,113 @@ export type Database = {
       reactions__key_ok: { Args: { p_key: string | null }; Returns: boolean }
       reactions__key_pattern: { Args: never; Returns: string }
       recompute_entitlement: { Args: { p_user: string | null }; Returns: undefined }
+      refuse_app_tokens: { Args: never; Returns: undefined }
+      registry__search: {
+        Args: {
+          p_limit: number | null
+          p_query: string | null
+          p_types?: string[] | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      request_app_client_id: { Args: never; Returns: string }
+      search__frecency: {
+        Args: { p_count: number | null; p_last: string | null }
+        Returns: number
+      }
+      search__query: { Args: { p_query: string | null }; Returns: unknown }
+      search__recent_item: {
+        Args: { p_id: string | null; p_type: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          icon: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      search__recent_type: { Args: { p_type: string | null }; Returns: string }
+      search__snippet: {
+        Args: { p_query: unknown | null; p_text: string | null }
+        Returns: string
+      }
+      search__unaccent: { Args: { p_text: string | null }; Returns: string }
+      search_all: {
+        Args: {
+          p_context_id?: string | null
+          p_context_type?: string | null
+          p_limit_per_type?: number | null
+          p_query: string | null
+          p_types?: string[] | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          score: number
+          snippet: string
+          title: string
+          top: boolean
+          type_total: number
+          updated_at: string
+        }[]
+      }
+      search_op_clear_recents: {
+        Args: { p_workspace_id: string | null }
+        Returns: number
+      }
+      search_op_forget_open: {
+        Args: {
+          p_entity_id: string | null
+          p_entity_type: string | null
+          p_workspace_id: string | null
+        }
+        Returns: boolean
+      }
+      search_op_record_open: {
+        Args: {
+          p_entity_id: string | null
+          p_entity_type: string | null
+          p_workspace_id: string | null
+        }
+        Returns: boolean
+      }
+      search_recents_list: {
+        Args: { p_limit?: number | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          last_opened_at: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
+      search_tsv: {
+        Args: { n: Database["public"]["Tables"]["notes"]["Row"] | null }
+        Returns: unknown
+      }
       sections__check_dates: {
         Args: { p_ends: string | null; p_starts: string | null }
         Returns: undefined
@@ -12050,6 +12660,7 @@ export type Database = {
         Args: { p_resource_type: string | null; p_workspace_id: string | null }
         Returns: string[]
       }
+      slot_offers_expire: { Args: never; Returns: number }
       spine__visible_to: {
         Args: {
           p_id: string | null
@@ -12435,6 +13046,21 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      tasks__hits: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
+      }
       tasks__inbox: {
         Args: { p_user: string | null; p_workspace_id: string | null }
         Returns: string
@@ -12513,6 +13139,7 @@ export type Database = {
         Args: { p_task: Database["public"]["Tables"]["tasks"]["Row"] | null }
         Returns: string
       }
+      tasks__plain_text: { Args: { p_text: string | null }; Returns: string }
       tasks__pointer_on_complete: {
         Args: {
           p_now: string | null
@@ -12599,6 +13226,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      tasks__rls_bucket_here: {
+        Args: { p_bucket_id: string | null; p_workspace_id: string | null }
+        Returns: boolean
+      }
+      tasks__rls_move_ok: {
+        Args: { p_bucket_id: string | null; p_id: string | null; p_workspace_id: string | null }
+        Returns: boolean
       }
       tasks__roll_over: {
         Args: {
@@ -12708,6 +13343,21 @@ export type Database = {
           p_zone: string | null
         }
         Returns: string
+      }
+      tasks__search: {
+        Args: { p_limit: number | null; p_query: string | null; p_workspace_id: string | null }
+        Returns: {
+          archived: boolean
+          context: string
+          entity_id: string
+          entity_type: string
+          icon: string
+          match: string
+          rank: number
+          snippet: string
+          title: string
+          updated_at: string
+        }[]
       }
       tasks__session_mirror: { Args: { p_task_id: string | null }; Returns: undefined }
       tasks__session_mirror_refresh: {
@@ -14530,6 +15180,29 @@ export type Database = {
         }
         Returns: undefined
       }
+      workspace_api_keys__oauth_app_name: {
+        Args: { p_client_name: string | null; p_domain: string | null }
+        Returns: string
+      }
+      workspace_api_keys__oauth_redirect_host: {
+        Args: { p_redirect: string | null }
+        Returns: string
+      }
+      workspace_api_keys__recheck_oauth_domains: {
+        Args: never
+        Returns: number
+      }
+      workspace_api_keys__same_oauth_app: {
+        Args: {
+          k: Database["public"]["Tables"]["workspace_api_keys"]["Row"] | null
+          p_app_name: string | null
+          p_client_id: string | null
+          p_domain: string | null
+          p_person: string | null
+          p_scheme: string | null
+        }
+        Returns: boolean
+      }
       workspace_api_keys_can_manage: {
         Args: { p_workspace_id: string | null }
         Returns: boolean
@@ -14713,7 +15386,28 @@ export type Database = {
       plan_tier: "free" | "pro" | "team" | "founder" | "duo"
     }
     CompositeTypes: {
-      [_ in never]: never
+      notes_meta: {
+        id: string | null
+        workspace_id: string | null
+        created_by: string | null
+        parent_id: string | null
+        title: string | null
+        icon: string | null
+        position: string | null
+        is_archived: boolean | null
+        published_at: string | null
+        publish_token: string | null
+        doc_version: number | null
+        share_mode: string | null
+        workspace_shared: boolean | null
+        in_inbox: boolean | null
+        full_width: boolean | null
+        edited_by: string | null
+        edited_at: string | null
+        created_at: string | null
+        updated_at: string | null
+        deleted_at: string | null
+      }
     }
   }
 }

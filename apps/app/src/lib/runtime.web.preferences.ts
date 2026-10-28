@@ -6,7 +6,7 @@ import {
   optionalPrefsAvailable,
   prefsSelectCols,
 } from "./prefs-columns";
-import { DbError, type Json, runQuery, runRpc, type TableInsert, untypedDb } from "./runtime.db";
+import { DbError, type Json, runQuery, runRpc, type TableInsert } from "./runtime.db";
 import type {
   DashboardRuntime,
   PreferenceDomain,
@@ -130,11 +130,9 @@ export const webPreferences: { preferences: PreferencesRuntime; dashboard: Dashb
     async setDomain(domain, value, updatedAt) {
       const user = await getAuthedUser();
       if (!user) return null;
-      // Not in prod's types until 20261020140000 ships: untyped until then,
-      // then `bun run db:types` and drop untypedDb.
-      const { data, error } = await untypedDb(supabaseClient).rpc("prefs_op_set", {
+      const { data, error } = await supabaseClient.rpc("prefs_op_set", {
         p_domain: domain,
-        p_value: value ?? {},
+        p_value: (value ?? {}) as Json,
         p_updated_at: updatedAt,
       });
       if (!error) return data ? prefsRowToModel(data) : null;

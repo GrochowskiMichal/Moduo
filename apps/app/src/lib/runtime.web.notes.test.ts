@@ -131,10 +131,14 @@ const OPS = [
   ],
 ] as const;
 
-function stubRpc(row: object) {
+// The recorded calls only: the typed rpc spy is too deep for the checker.
+function stubRpc(row: object): { mock: { calls: unknown[][] } } {
   return rs
     .spyOn(supabaseClient, "rpc")
-    .mockImplementation((() => Promise.resolve({ data: row, error: null })) as never);
+    .mockImplementation((() =>
+      Promise.resolve({ data: row, error: null })) as never) as unknown as {
+    mock: { calls: unknown[][] };
+  };
 }
 
 afterEach(() => {
