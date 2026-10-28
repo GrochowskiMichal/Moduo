@@ -47,6 +47,10 @@
  * page by page: the new tools' call cases are new, the two reads' call cases
  * record the paged reads, and the changed tools show in the calendar tool
  * lists; nothing else moved.
+ * NS-11 (2026-10-28) moved a note's content into note_bodies: notes_get's
+ * sample case selects the note's meta without body_md (its body would come
+ * from note_bodies, but the sample note isn't found); edited in by hand,
+ * nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
