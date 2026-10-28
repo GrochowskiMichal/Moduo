@@ -17,7 +17,8 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       op: "calendar.create_event",
       rpc: "calendar_op_event_create",
-      summary: "Create a native Moduo event (title, times, all-day, optional repeat).",
+      summary:
+        "Create a native Moduo event (title, times, all-day, optional repeat, place, meeting link, privacy, calendar, people).",
       args: {
         p_workspace_id: "workspace uuid",
         p_title: "event title",
@@ -26,18 +27,24 @@ export const calendarModuleManifest: ModuleManifest = {
         p_all_day: "boolean — all-day event",
         p_rrule: "optional RFC-5545 RRULE for a repeating event, or null",
         p_description: "optional notes",
+        p_calendar_id:
+          "optional calendars uuid (a Moduo or custom calendar you can edit); default Your calendar",
+        p_location: "optional place",
+        p_attendees: "optional people: [{ email, name? }]",
+        p_conference_url: "optional meeting link (https://…); its provider is worked out",
+        p_is_private: "optional boolean — teammates see only Busy",
       },
     },
     {
       op: "calendar.update_event",
       rpc: "calendar_op_event_update",
       summary:
-        "Edit a native event via a camelCase JSON patch (title/times/allDay/rrule). External events are rejected.",
+        "Edit a native event via a camelCase JSON patch (title/times/allDay/rrule/place/link/privacy/calendar/people). External events are rejected.",
       args: {
         p_workspace_id: "workspace uuid",
         p_event_id: "event uuid",
         p_patch:
-          "jsonb of only-present camelCase keys: title, description, startsAt, endsAt, allDay, rrule",
+          "jsonb of only-present camelCase keys: title, description, startsAt, endsAt, allDay, rrule, location, conferenceUrl, isPrivate, calendarId (null = Your calendar), attendees",
       },
     },
     {
@@ -48,6 +55,30 @@ export const calendarModuleManifest: ModuleManifest = {
       args: {
         p_workspace_id: "workspace uuid",
         p_event_id: "event uuid",
+      },
+    },
+    {
+      op: "calendar.offer_times",
+      rpc: "calendar_op_offer_create",
+      summary:
+        "Offer up to ten times from one of your booking links as one link (/book/r/<token>); held times count as busy and release together when one is picked or after 48 hours.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_link_id: "your booking link's uuid",
+        p_starts_at: "the offered start instants (ISO 8601), 1 to 10",
+        p_hold: "boolean — hold them on your calendar (default true)",
+        p_title: "optional title (the link's name by default)",
+        p_duration_minutes: "optional length (the link's by default)",
+        p_video_provider: "optional google_meet | zoom | guest_choice",
+      },
+    },
+    {
+      op: "calendar.release_offer",
+      rpc: "calendar_op_offer_release",
+      summary: "Release an open offer: its held times leave your calendar together.",
+      args: {
+        p_workspace_id: "workspace uuid",
+        p_offer_id: "offer uuid",
       },
     },
     {
@@ -113,6 +144,11 @@ export const calendarModuleManifest: ModuleManifest = {
       name: "calendar.day",
       summary:
         "The composed day: native + external events, scheduled task blocks, and the unfinished-from-earlier strip.",
+    },
+    {
+      name: "calendar.who_sees",
+      summary:
+        "Who sees what of your calendars, or of one of your events: each teammate sees it all, as Busy, as Focus time, or not at all.",
     },
   ],
 };

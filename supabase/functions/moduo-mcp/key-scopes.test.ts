@@ -124,7 +124,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
   async function rpc(fn: string, args: Row) {
     rpcCalls.push({ fn, args });
     const impl = rpcs[fn];
-    return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}` } };
+    return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}`, code: "PGRST202" } };
   }
   return { db: { from, rpc }, queries, rpcCalls, ors };
 }

@@ -38,6 +38,7 @@ INSERT INTO test.mx_unreached (fn) VALUES
   ('calendar_op_mirror_events'),
   ('calendar_op_offer_create'),
   ('calendar_op_offer_release'),
+  ('calendar_who_sees'),
   ('chat_op_attach_to_chain'),
   ('chat_op_create_channel'),
   ('chat_op_custom_emoji_add'),

@@ -358,7 +358,7 @@ under [`modules/`](../supabase/functions/moduo-mcp/modules/).
 
 | Module | View | Edit |
 | --- | --- | --- |
-| Calendar (`calendar.ts`) | `calendar_list_events`, `calendar_day` | `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`, `calendar_schedule_task`, `calendar_move_block`, `calendar_complete_block`, `calendar_roll_forward` |
+| Calendar (`calendar.ts`; reads through the masked read, one item per occurrence) | `calendar_list_events`, `calendar_day`, `calendar_who_sees` | `calendar_create_event`, `calendar_update_event` (both with place, link, private, calendar and people), `calendar_delete_event`, `calendar_offer_times`, `calendar_release_offer`, `calendar_schedule_task`, `calendar_move_block`, `calendar_complete_block`, `calendar_roll_forward` |
 | Contacts (`contacts.ts`) | `contacts_list`, `contacts_get`, `contacts_search` | `contacts_create`, `contacts_update`, `contacts_set_status`, `contacts_link`, `contacts_unlink`, `contacts_delete`, `contacts_import` |
 | Email (`email.ts`, tissue threads, metadata only) | `email_list`, `email_get`, `email_search` | `email_snooze`, `email_unsnooze`, `email_follow_up`, `email_clear_follow_up`, `email_link`, `email_remove` |
 | Links (`links.ts`) | `links_search_entities`, `links_list`, `comments_list` | `links_suggest` (Edit: suggestions exist to be accepted), `links_create`, `links_set_kind`, `links_delete`, `comments_add` |

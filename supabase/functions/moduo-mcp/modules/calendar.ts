@@ -14,14 +14,24 @@
  * update/delete path for them (the ops reject them); the connector only exposes
  * native-event writes.
  *
+ * Reads (CALR-21) are two paged RPCs joined by event id: the masked read
+ * (calendar_events_visible: a teammate's private event arrives as "Busy", focus
+ * time as "Focus time") and calendar_event_occurrences (every occurrence in the
+ * window, repeats expanded). Each event says whose it is (`mine`), its place,
+ * link, people and privacy. Offers (calendar_offer_times / calendar_release_offer)
+ * and who-sees (calendar_who_sees) run through their own RPCs, as the key.
+ *
  * Task blocks ARE tasks, so they follow the key's Tasks scope: calendar_day
  * leaves them out for a key without Tasks View, and the four task-block tools
  * also need Tasks Edit (MCP_TOOL_NEEDS in contracts/mcp-key-scopes.ts).
  */
 
+import { CANONICAL_BOOKING_ORIGIN } from "../../_shared/app-origin.ts";
 import { keyScopeAllows } from "../../_shared/contracts/mcp-key-scopes.ts";
+import { readAllPages } from "../../_shared/tasks-connector.ts";
 import type { ConnectorModule, ToolContext } from "../registry.ts";
 import { visibleIds } from "../share.ts";
+import { workspaceMembers } from "../tasks-helpers.ts";
 
 type Row = Record<string, any>;
 
@@ -50,17 +60,74 @@ async function rows(
   return data ?? [];
 }
 
+/** Earliest start first. */
+function byStart(a: Row, b: Row): number {
+  return Date.parse(a.start_time) - Date.parse(b.start_time);
+}
+
 /**
- * Events read through the masked read (calendar_events_visible, CALR-15: it
- * answers for the key's person, a teammate's private event arrives as "Busy")
- * kept to those overlapping [from, to), by start. The read also returns every
- * recurring series.
+ * The fallback before calendar_event_occurrences is deployed: the masked read's
+ * rows overlapping [from, to), by start (a series counts only where its first
+ * occurrence falls, as before CALR-21).
  */
 function inRange(events: Row[], from: string, to: string): Row[] {
   const [fromMs, toMs] = [Date.parse(from), Date.parse(to)];
   return events
     .filter((e) => Date.parse(e.start_time) < toMs && Date.parse(e.end_time) >= fromMs)
-    .sort((a, b) => Date.parse(a.start_time) - Date.parse(b.start_time));
+    .sort(byStart);
+}
+
+/**
+ * Every row of a set-returning read RPC, page by page: PostgREST answers at
+ * most 1,000 rows a request. `order` names the columns that keep the pages
+ * stable (the function's own ORDER BY, stated again for the offset).
+ */
+function readRpcPages(ctx: ToolContext, fn: string, args: Row, order: string[] = []): Promise<Row[]> {
+  return readAllPages<Row>((from, to) => {
+    let query = ctx.db.rpc(fn, args);
+    // A stand-in database may answer without a query builder: one page, then.
+    if (typeof query.range !== "function") return query;
+    for (const column of order) query = query.order(column);
+    return query.range(from, to);
+  });
+}
+
+/**
+ * The occurrences read has no function behind it yet (PGRST202: a connector
+ * deployed before its migration). Any other failure is an error, never a
+ * quiet fallback.
+ */
+function occurrencesReadMissing(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "PGRST202";
+}
+
+/**
+ * The events in [from, to), one row per occurrence, by start. The masked read
+ * (calendar_events_visible, CALR-15: it answers for the key's person) gives the
+ * event rows; calendar_event_occurrences gives each occurrence's times. An
+ * occurrence whose event the masked read didn't return is dropped.
+ */
+async function eventsInWindow(ctx: ToolContext, from: string, to: string): Promise<Row[]> {
+  const window = { p_workspace_id: ctx.key.workspaceId, p_from: from, p_to: to };
+  const [events, occurrences] = await Promise.all([
+    readRpcPages(ctx, "calendar_events_visible", window, ["start_time", "id"]),
+    readRpcPages(ctx, "calendar_event_occurrences", window, ["starts_at", "event_id"]).catch((err) => {
+      if (occurrencesReadMissing(err)) return null;
+      throw err;
+    }),
+  ]);
+  if (occurrences === null) return inRange(events, from, to);
+
+  const eventById = new Map(events.map((e) => [e.id, e]));
+  const items: Row[] = [];
+  for (const occurrence of occurrences) {
+    const event = eventById.get(occurrence.event_id);
+    if (!event) continue;
+    // A repeat keeps its own first times beside the occurrence's: its id is the series.
+    const series = event.recurrence_rule ? { series_start_time: event.start_time, series_end_time: event.end_time } : {};
+    items.push({ ...event, ...series, start_time: occurrence.starts_at, end_time: occurrence.ends_at });
+  }
+  return items.sort(byStart);
 }
 
 /** Call an op RPC (workspace-scoped) and return its raw result row. */
@@ -70,8 +137,47 @@ async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row | nu
   return Array.isArray(data) ? (data[0] ?? null) : data;
 }
 
-/** Compact event shape for agents — the calendar_events legacy columns mapped. */
-function shapeEvent(e: Row): Row {
+/** An event's people as agents read them; [] when none. */
+function shapePeople(attendees: unknown): Row[] {
+  if (!Array.isArray(attendees)) return [];
+  return attendees.map((a: Row) => ({ email: a.email ?? null, name: a.name ?? null, status: a.status ?? null }));
+}
+
+/** The fields only some events carry: one occurrence, focus time, a hold. */
+function shapeEventExtras(e: Row, kind: string): Row {
+  return {
+    // One occurrence (CALR-11): an override names the occurrence it replaces,
+    // and a series the occurrences it skips (deleted or replaced).
+    ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
+    ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
+    // One occurrence of a repeat: the series' own first times. Its id is the series,
+    // so an update or delete by that id changes every occurrence.
+    ...(e.series_start_time ? { series_starts_at: e.series_start_time, series_ends_at: e.series_end_time ?? null } : {}),
+    // Focus time (CALR-14): the task it holds, which the masked read nulls for
+    // anyone but its owner (a teammate's arrives titled "Focus time").
+    ...(kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
+    // A hold (CALR-19) names the offer it is held for.
+    ...(kind === "hold" ? { offer_id: e.offer_id ?? null } : {}),
+  };
+}
+
+/** Where and with whom: place, meeting link and people. */
+function shapeEventWhere(e: Row): Row {
+  return {
+    place: e.location ?? null,
+    link: e.conference_url ? { url: e.conference_url, provider: e.conference_provider ?? null } : null,
+    people: shapePeople(e.attendees),
+  };
+}
+
+/**
+ * Compact event shape for agents — the calendar_events legacy columns mapped.
+ * `me` is the key's person, for `mine`. Google's iCalUID and organizer flag
+ * stay out.
+ */
+function shapeEvent(e: Row, me: string): Row {
+  // A teammate's private item says only Busy, never whether it is focus time or a hold.
+  const kind = e.is_private && e.owner_id !== me ? "event" : (e.kind ?? "event");
   return {
     id: e.id,
     title: e.title,
@@ -84,13 +190,13 @@ function shapeEvent(e: Row): Row {
     external: e.source_account_id !== null,
     source_account_id: e.source_account_id ?? null,
     description: e.description ?? "",
-    // One occurrence (CALR-11): an override names the occurrence it replaces,
-    // and a series the occurrences it skips (deleted or replaced).
-    ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
-    ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
-    // Focus time (CALR-14): the task it holds, which the masked read nulls for
-    // anyone but its owner (a teammate's arrives titled "Focus time").
-    ...(e.kind === "focus" ? { kind: "focus", focus_task_id: e.focus_task_id ?? null } : {}),
+    kind,
+    private: Boolean(e.is_private),
+    ...shapeEventWhere(e),
+    owner_id: e.owner_id ?? null,
+    mine: e.owner_id === me,
+    calendar_ref: e.calendar_ref ?? null,
+    ...shapeEventExtras(e, kind),
   };
 }
 
@@ -107,6 +213,43 @@ function shapeBlock(t: Row): Row {
 
 const OPEN_STATUSES = ["todo", "in_progress"];
 
+/** The place, link, privacy, calendar and people fields create and update share. */
+const EVENT_DETAIL_PROPERTIES = {
+  place: { type: "string", description: "Where it happens (a place or address)." },
+  link: { type: ["string", "null"], description: "The meeting link (a URL); empty or null removes it." },
+  private: {
+    type: "boolean",
+    description: "Private: teammates see only \"Busy\", whatever they can see of the calendar.",
+  },
+  calendar_id: {
+    type: ["string", "null"],
+    description: "The calendar (a calendars id, an event's calendar_ref) to put it on; null for Your calendar.",
+  },
+  people: {
+    type: "array",
+    description: "The people on it (replaces the list). Saved on the event; nobody is sent an invite.",
+    items: {
+      type: "object",
+      properties: { email: { type: "string" }, name: { type: "string" } },
+      required: ["email"],
+    },
+  },
+};
+
+/** What the people field sends to the ops: email and, when given, name. */
+function peopleArg(people: unknown): Row[] {
+  if (!Array.isArray(people)) return [];
+  return people.map((p: Row) => (p.name ? { email: p.email, name: p.name } : { email: p.email }));
+}
+
+/** What the who-sees levels read as in the summary line. */
+const SEES_WORDS: Record<string, string> = {
+  all: "sees it all",
+  busy: "sees “Busy”",
+  focus_time: "sees “Focus time”",
+  nothing: "sees nothing",
+};
+
 /** Resolve a YYYY-MM-DD (or server-today) to UTC day bounds. */
 function dayBounds(date: string | null): { startIso: string; endIso: string; startMs: number } {
   const base = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : new Date();
@@ -122,7 +265,7 @@ export const calendarConnectorModule: ConnectorModule = {
     {
       name: "calendar_list_events",
       description:
-        "Events in a date range — both native Moduo events and mirrored-external ones (read-only, source-attributed). Times are ISO 8601.",
+        "Events in a date range, one item per occurrence (repeats included; a repeat's item carries series_starts_at, and its id is the whole series): native Moduo events and mirrored-external ones (read-only through MCP, source-attributed). Each says its kind, place, link, people, privacy and whether it is yours; a teammate's private event reads \"Busy\" and their focus time \"Focus time\". Times are ISO 8601; a range spans at most a year.",
       access: "view",
       hints: "read",
       inputSchema: {
@@ -137,14 +280,9 @@ export const calendarConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const from = str(args, "from");
         const to = str(args, "to");
-        const data = await rows(
-          ctx.db.rpc("calendar_events_visible", {
-            p_workspace_id: ctx.key.workspaceId,
-            p_from: from,
-            p_to: to,
-          }),
-        );
-        return inRange(data, from, to).slice(0, clampLimit(args, 200, 500)).map(shapeEvent);
+        const events = await eventsInWindow(ctx, from, to);
+        const firstEvents = events.slice(0, clampLimit(args, 200, 500));
+        return firstEvents.map((e) => shapeEvent(e, ctx.key.createdBy));
       },
     },
     {
@@ -165,13 +303,7 @@ export const calendarConnectorModule: ConnectorModule = {
         const seesTasks = keyScopeAllows(ctx.key.scopes, "tasks", "view");
         const noTasks = Promise.resolve([] as Row[]);
         const [events, blocks, strip] = await Promise.all([
-          rows(
-            ctx.db.rpc("calendar_events_visible", {
-              p_workspace_id: ctx.key.workspaceId,
-              p_from: startIso,
-              p_to: endIso,
-            }),
-          ).then((e) => inRange(e, startIso, endIso)),
+          eventsInWindow(ctx, startIso, endIso),
           seesTasks
             ? rows(
                 ctx.db
@@ -210,7 +342,7 @@ export const calendarConnectorModule: ConnectorModule = {
         const tasks = seesTasks ? await visibleIds(ctx, "task") : new Set<string>();
         return {
           date: startIso.slice(0, 10),
-          events: events.map(shapeEvent),
+          events: events.map((e) => shapeEvent(e, ctx.key.createdBy)),
           blocks: blocks.filter((t) => tasks.has(t.id)).map(shapeBlock),
           strip: stripEnded.filter((t) => tasks.has(t.id)).map(shapeBlock),
           ...(seesTasks
@@ -223,7 +355,8 @@ export const calendarConnectorModule: ConnectorModule = {
     // ── writes (edit scope) ──────────────────────────────────────────────────
     {
       name: "calendar_create_event",
-      description: "Create a native Moduo event. Times ISO 8601; `rrule` an optional RFC-5545 rule.",
+      description:
+        "Create a native Moduo event, optionally with a place, a meeting link, people, privacy and a calendar (Your calendar by default). Times ISO 8601; `rrule` an optional RFC-5545 rule.",
       access: "edit",
       hints: { destructive: false, idempotent: false },
       inputSchema: {
@@ -235,24 +368,33 @@ export const calendarConnectorModule: ConnectorModule = {
           all_day: { type: "boolean", description: "All-day event (default false)." },
           rrule: { type: "string", description: "Optional RFC-5545 RRULE for a repeat." },
           description: { type: "string", description: "Optional notes." },
+          ...EVENT_DETAIL_PROPERTIES,
         },
         required: ["title", "starts_at", "ends_at"],
       },
       handler: async (args, ctx) => {
-        const event = await callOp(ctx, "calendar_op_event_create", {
+        const opArgs: Row = {
           p_title: str(args, "title"),
           p_starts_at: str(args, "starts_at"),
           p_ends_at: str(args, "ends_at"),
           p_all_day: bool(args, "all_day"),
           p_rrule: str(args, "rrule", false) || null,
           p_description: str(args, "description", false),
-        });
-        return event ? shapeEvent(event) : null;
+        };
+        // The new arguments go only when set: an older database matches the exact named set.
+        if (args.place !== undefined) opArgs.p_location = args.place;
+        if (args.link !== undefined) opArgs.p_conference_url = args.link || null;
+        if (args.private !== undefined) opArgs.p_is_private = bool(args, "private");
+        if (args.calendar_id !== undefined) opArgs.p_calendar_id = args.calendar_id;
+        if (args.people !== undefined) opArgs.p_attendees = peopleArg(args.people);
+        const event = await callOp(ctx, "calendar_op_event_create", opArgs);
+        return event ? shapeEvent(event, ctx.key.createdBy) : null;
       },
     },
     {
       name: "calendar_update_event",
-      description: "Edit a native event (only the fields you pass change). External events are rejected.",
+      description:
+        "Edit a native event (only the fields you pass change): times, title, place, link, people, privacy, calendar. A repeating event's id is the whole series: new times move every occurrence (give times relative to series_starts_at). External events are read-only through MCP and are rejected.",
       access: "edit",
       hints: { destructive: false, idempotent: true },
       inputSchema: {
@@ -265,6 +407,7 @@ export const calendarConnectorModule: ConnectorModule = {
           all_day: { type: "boolean", description: "All-day toggle." },
           rrule: { type: "string", description: "New RRULE, or empty to clear the repeat." },
           description: { type: "string", description: "New notes." },
+          ...EVENT_DETAIL_PROPERTIES,
         },
         required: ["event_id"],
       },
@@ -277,16 +420,21 @@ export const calendarConnectorModule: ConnectorModule = {
         if ("all_day" in args) patch.allDay = bool(args, "all_day");
         if ("rrule" in args) patch.rrule = str(args, "rrule", false) || null;
         if ("description" in args) patch.description = str(args, "description", false);
+        if ("place" in args) patch.location = args.place;
+        if ("link" in args) patch.conferenceUrl = args.link || null;
+        if ("private" in args) patch.isPrivate = bool(args, "private");
+        if ("calendar_id" in args) patch.calendarId = args.calendar_id ?? null;
+        if ("people" in args) patch.attendees = peopleArg(args.people);
         const event = await callOp(ctx, "calendar_op_event_update", {
           p_event_id: str(args, "event_id"),
           p_patch: patch,
         });
-        return event ? shapeEvent(event) : null;
+        return event ? shapeEvent(event, ctx.key.createdBy) : null;
       },
     },
     {
       name: "calendar_delete_event",
-      description: "Delete a native event (tombstoned; spine links cascade). External events are rejected.",
+      description: "Delete a native event (tombstoned; spine links cascade). A repeating event's id is the whole series: every occurrence goes. External events are rejected.",
       access: "edit",
       hints: { destructive: true, idempotent: true },
       inputSchema: {
@@ -297,6 +445,134 @@ export const calendarConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         await callOp(ctx, "calendar_op_event_delete", { p_event_id: str(args, "event_id") });
         return { ok: true };
+      },
+    },
+    {
+      name: "calendar_offer_times",
+      description:
+        "Offer up to 10 times from one of your booking links: returns a link the guest picks one time from. The times are held on your calendar (48 hours, released together) unless `hold` is false. Without `link_id`, your first booking link in this workspace is used.",
+      access: "edit",
+      hints: { destructive: false, idempotent: false },
+      inputSchema: {
+        type: "object",
+        properties: {
+          times: {
+            type: "array",
+            items: { type: "string" },
+            description: "The start instants to offer (ISO 8601), 1 to 10.",
+          },
+          link_id: { type: "string", description: "The booking link to offer from (default: your first one)." },
+          hold: { type: "boolean", description: "Hold the times on your calendar until the guest picks (default true)." },
+          title: { type: "string", description: "The meeting's title (default: the link's)." },
+          duration_minutes: { type: "number", description: "The meeting's length (default: the link's)." },
+          video_provider: {
+            type: "string",
+            enum: ["google_meet", "zoom", "guest_choice"],
+            description: "The video call (default: the link's).",
+          },
+        },
+        required: ["times"],
+      },
+      handler: async (args, ctx) => {
+        const times: string[] = Array.isArray(args.times) ? args.times : [];
+        if (times.length === 0) throw new Error("Offer at least one time.");
+
+        let linkId = str(args, "link_id", false);
+        if (!linkId) {
+          const links = await rows(
+            ctx.db
+              .from("exposed_slot_links")
+              .select("id")
+              .eq("workspace_id", ctx.key.workspaceId)
+              .eq("owner_user_id", ctx.key.createdBy)
+              .is("deleted_at", null)
+              .order("created_at")
+              .limit(1),
+          );
+          if (links.length === 0) throw new Error("No booking link yet: make one in Calendar first.");
+          linkId = links[0]!.id;
+        }
+
+        const opArgs: Row = { p_link_id: linkId, p_starts_at: times, p_hold: args.hold !== false };
+        if (args.title !== undefined) opArgs.p_title = args.title;
+        if (args.duration_minutes !== undefined) opArgs.p_duration_minutes = args.duration_minutes;
+        if (args.video_provider !== undefined) opArgs.p_video_provider = args.video_provider;
+        const offer = await callOp(ctx, "calendar_op_offer_create", opArgs);
+        if (!offer) return null;
+        return {
+          offer_id: offer.id,
+          url: `${CANONICAL_BOOKING_ORIGIN}/book/r/${offer.slug}`,
+          status: offer.status,
+          expires_at: offer.expires_at,
+          held: Array.isArray(offer.hold_event_ids) ? offer.hold_event_ids.length : 0,
+          times,
+        };
+      },
+    },
+    {
+      name: "calendar_release_offer",
+      description: "Withdraw an offer of times: its link stops working and every time it held is released.",
+      access: "edit",
+      hints: { destructive: true, idempotent: true },
+      inputSchema: {
+        type: "object",
+        properties: { offer_id: { type: "string", description: "The offer uuid (offer_id)." } },
+        required: ["offer_id"],
+      },
+      handler: async (args, ctx) => {
+        const offerId = str(args, "offer_id");
+        const status = await callOp(ctx, "calendar_op_offer_release", { p_offer_id: offerId });
+        return { offer_id: offerId, status };
+      },
+    },
+    {
+      name: "calendar_who_sees",
+      description:
+        "Who sees what of your calendars: each teammate's level (all, busy, focus_time or nothing). With `event_id` (one of your own events), what each teammate sees of that event: a private event reads \"Busy\", focus time \"Focus time\".",
+      access: "view",
+      hints: "read",
+      inputSchema: {
+        type: "object",
+        properties: { event_id: { type: "string", description: "One of your own events (omit for all your calendars)." } },
+      },
+      handler: async (args, ctx) => {
+        const eventId = str(args, "event_id", false) || null;
+        const [levels, members] = await Promise.all([
+          readRpcPages(ctx, "calendar_who_sees", { p_workspace_id: ctx.key.workspaceId, p_event_id: eventId }, [
+            "calendar_name",
+            "calendar_id",
+            "user_id",
+          ]),
+          workspaceMembers(ctx),
+        ]);
+        const nameById = new Map(members.map((m) => [m.user_id, m.name]));
+        const person = (r: Row) => ({ user_id: r.user_id, name: nameById.get(r.user_id) ?? "Member", sees: r.sees });
+
+        if (eventId) {
+          const people = levels.map(person);
+          const summary = people.length === 0
+            ? "Only you see it."
+            : people.map((p) => `${p.name} ${SEES_WORDS[p.sees] ?? p.sees}`).join(" · ");
+          return {
+            event_id: eventId,
+            calendar_id: levels[0]?.calendar_id ?? null,
+            calendar: levels[0]?.calendar_name ?? null,
+            people,
+            summary,
+          };
+        }
+
+        // One entry per calendar, in the RPC's order (by calendar name).
+        const calendars: Row[] = [];
+        for (const r of levels) {
+          let entry = calendars.find((c) => c.calendar_id === r.calendar_id);
+          if (!entry) {
+            entry = { calendar_id: r.calendar_id, name: r.calendar_name, people: [] };
+            calendars.push(entry);
+          }
+          entry.people.push(person(r));
+        }
+        return { calendars };
       },
     },
     {
