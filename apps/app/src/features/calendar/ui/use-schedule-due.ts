@@ -5,9 +5,9 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import { UNDO_TOAST_MS } from "../../../lib/undo-toast";
 import type { Task } from "../../tasks/model";
 import type { useTaskCommands } from "../../tasks/tasks-context";
+import { placeTask } from "../commands/undo";
 import type { EventChip } from "../events";
 import { type BusyInterval, findNextGap } from "../gap-finder";
 import { DEFAULT_BLOCK_MINUTES, localDayKey, startOfLocalDay, type TaskBlock } from "../lens";
@@ -49,22 +49,13 @@ export function useScheduleDue({ tasks, prefs, commands, eventsByDay, blocksByDa
         toast(`No free time left on ${formatDayLabel(dayStart.getTime())} fits it.`);
         return;
       }
-      // The same write as dropping the task on the grid (AC6 of CAL-2).
-      commands.patchTask(taskId, {
-        scheduledAt: new Date(gap).toISOString(),
-        durationMinutes,
-      });
-      toast(`Scheduled ${formatDayLabel(gap)} at ${formatTimeOfDay(gap)}`, {
-        duration: UNDO_TOAST_MS,
-        action: {
-          label: "Undo",
-          onClick: () =>
-            commands.patchTask(taskId, {
-              scheduledAt: null,
-              durationMinutes: task.durationMinutes ?? null,
-            }),
-        },
-      });
+      // The same write as dropping the task on the grid (AC6 of CAL-2); one Undo (CALR-4).
+      placeTask(
+        commands,
+        task,
+        { scheduledAt: new Date(gap).toISOString(), durationMinutes },
+        `Scheduled ${formatDayLabel(gap)} at ${formatTimeOfDay(gap)}`,
+      );
     },
     [tasks, prefs, commands, eventsByDay, blocksByDay],
   );

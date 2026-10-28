@@ -10,6 +10,8 @@ import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Toolbar } from "../../../components/ui/toolbar";
+import { isMacPlatform } from "../../../lib/hotkeys";
+import { formatChord } from "../keys-sheet";
 import type { CalendarView } from "../lens";
 
 type Props = {
@@ -48,13 +50,24 @@ export function CalendarToolbar({
   return (
     <Toolbar aria-label="Calendar controls" className="shrink-0 pb-3">
       <Toolbar.Group gap="tight">
-        <IconButton icon={ChevronLeft} label="Previous period (←)" onClick={onPrev} />
-        <IconButton icon={ChevronRight} label="Next period (→)" onClick={onNext} />
+        <IconButton
+          icon={ChevronLeft}
+          label={`Previous period (${formatChord("Mod+ArrowLeft", isMacPlatform())})`}
+          onClick={onPrev}
+        />
+        <IconButton
+          icon={ChevronRight}
+          label={`Next period (${formatChord("Mod+ArrowRight", isMacPlatform())})`}
+          onClick={onNext}
+        />
       </Toolbar.Group>
       <Button variant="outline" size="sm" onClick={onToday}>
         Today
       </Button>
-      <span className="shrink-0 font-display text-sm font-medium whitespace-nowrap text-foreground">
+      <span
+        data-calendar-range=""
+        className="shrink-0 font-display text-sm font-medium whitespace-nowrap text-foreground"
+      >
         {label}
       </span>
       {nowNext ?? <Toolbar.Spacer />}

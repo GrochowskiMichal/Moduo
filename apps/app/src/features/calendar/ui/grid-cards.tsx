@@ -78,6 +78,7 @@ export function GridEventCard({
   return (
     <div
       data-chip="event"
+      data-occurrence-key={chip.occurrenceKey}
       className={cn("absolute pl-px pr-0.5", draggable && "cursor-grab")}
       style={{
         top: y(span.topMinutes),
