@@ -3,8 +3,8 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import type { ComposerBusy } from "./parse";
 import { clashFor, hopFreeTime, openingSlot } from "./hops";
+import type { ComposerBusy } from "./parse";
 
 const NOW = new Date(2026, 9, 28, 10, 7).getTime(); // Wed
 const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m).getTime();
@@ -93,9 +93,10 @@ describe("free-time hops", () => {
   });
 
   it("after hours, N opens at the next working day's first free time", () => {
-    expect(
-      openingSlot({ nowMs: at(28, 18, 30), cursor: null, busyOn: busy, ...WORK }),
-    ).toEqual({ dayStartMs: new Date(2026, 9, 29).getTime(), startMinute: 9 * 60 + 30 });
+    expect(openingSlot({ nowMs: at(28, 18, 30), cursor: null, busyOn: busy, ...WORK })).toEqual({
+      dayStartMs: new Date(2026, 9, 29).getTime(),
+      startMinute: 9 * 60 + 30,
+    });
   });
 
   it("a clash names what it overlaps", () => {

@@ -2,10 +2,9 @@
 // the module, on a connected Google calendar through Google first, then the
 // mirror. Either way one Undo (CALR-4, AC21).
 
+import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
-
-import type { CalendarItemKind } from "@contracts/vocabularies";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { recordUndo } from "../commands/undo";

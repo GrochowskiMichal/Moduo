@@ -139,7 +139,9 @@ export function CalendarComposer({
   const accounts: ComposerAccount[] = useMemo(
     () =>
       calendar.accounts
-        .filter((a) => !a.deletedAt)
+        // Only calendars an event can be written to: not removed, not read-only,
+        // not waiting on a reconnect (Google would refuse the write).
+        .filter((a) => !a.deletedAt && !a.readOnly && a.status !== "reauth")
         .map((a) => ({
           id: a.id,
           provider: a.provider,
@@ -184,7 +186,8 @@ export function CalendarComposer({
           box.focus();
           return;
         }
-        opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        opener.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
         const base = openingSlot({
           nowMs: Date.now(),
           cursor: k.cursor
@@ -218,7 +221,10 @@ export function CalendarComposer({
     }
     return p;
   }, [open, prefs.workStartMinute, prefs.workEndMinute, busyOn, calendars, people]);
-  const plan = useMemo(() => (parsed ? planComposer(parsed, { accounts }) : null), [parsed, accounts]);
+  const plan = useMemo(
+    () => (parsed ? planComposer(parsed, { accounts }) : null),
+    [parsed, accounts],
+  );
 
   // The draft on the grid, and the box beside it.
   const draftStart = parsed?.startMs;
@@ -243,7 +249,8 @@ export function CalendarComposer({
   const isOpen = open !== null;
   useEffect(() => {
     if (!isOpen) return;
-    const follow = () => setPosition(placeBox(boxRef.current?.firstElementChild as HTMLElement | null));
+    const follow = () =>
+      setPosition(placeBox(boxRef.current?.firstElementChild as HTMLElement | null));
     window.addEventListener("scroll", follow, true);
     window.addEventListener("resize", follow);
     return () => {

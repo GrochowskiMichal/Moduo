@@ -63,6 +63,14 @@ type Hours = {
   busyOn: (dayStartMs: number) => FreeBusy[];
 };
 
+/** The day's candidate starts for a hop, nearest first in the hop's direction. */
+function hopCandidates(day: number, length: number, q: Hours, direction: 1 | -1): number[] {
+  const low = Math.ceil(lowerBound(day, q.workStartMinute, q.nowMs) / STEP) * STEP;
+  const out: number[] = [];
+  for (let m = low; m + length <= q.workEndMinute; m += STEP) out.push(m);
+  return direction < 0 ? out.reverse() : out;
+}
+
 /** ⇥ (1) / ⇧⇥ (-1): the next / previous free slot of the draft's length, or null. */
 export function hopFreeTime(
   q: Hours & { startMs: number; endMs: number; direction: 1 | -1 },
@@ -70,28 +78,25 @@ export function hopFreeTime(
   const length = Math.max(STEP, Math.round((q.endMs - q.startMs) / 60_000));
   const startDay = dayOf(q.startMs);
   const fromMinute = minuteOf(q.startMs);
+  const beyond = (m: number) => (q.direction > 0 ? m > fromMinute : m < fromMinute);
   for (let i = 0; i < HOP_DAYS; i++) {
     const day = addDays(startDay, i * q.direction);
     if (q.direction < 0 && day < dayOf(q.nowMs)) return null;
     const busy = q.busyOn(day);
-    const low = Math.ceil(lowerBound(day, q.workStartMinute, q.nowMs) / STEP) * STEP;
-    const candidates: number[] = [];
-    for (let m = low; m + length <= q.workEndMinute; m += STEP) candidates.push(m);
-    if (q.direction < 0) candidates.reverse();
-    for (const m of candidates) {
-      if (i === 0 && (q.direction > 0 ? m <= fromMinute : m >= fromMinute)) continue;
-      const s = atMinute(day, m);
-      const e = s + length * 60_000;
-      if (!overlaps(s, e, busy)) return { startMs: s, endMs: e };
-    }
+    const hit = hopCandidates(day, length, q, q.direction)
+      .filter((m) => i > 0 || beyond(m))
+      .map((m) => atMinute(day, m))
+      .find((s) => !overlaps(s, s + length * 60_000, busy));
+    if (hit !== undefined) return { startMs: hit, endMs: hit + length * 60_000 };
   }
   return null;
 }
 
 /** Where N opens: the grid cursor, else the next free 30 minutes from now (today, then later days). */
-export function openingSlot(
-  q: Hours & { cursor: { dayStartMs: number; minute: number } | null },
-): { dayStartMs: number; startMinute: number } {
+export function openingSlot(q: Hours & { cursor: { dayStartMs: number; minute: number } | null }): {
+  dayStartMs: number;
+  startMinute: number;
+} {
   if (q.cursor) return { dayStartMs: q.cursor.dayStartMs, startMinute: q.cursor.minute };
   const today = dayOf(q.nowMs);
   for (let i = 0; i < HOP_DAYS; i++) {

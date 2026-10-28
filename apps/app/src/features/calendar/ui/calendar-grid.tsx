@@ -52,8 +52,8 @@ import type { CalendarPrefs } from "../prefs";
 import { emptyWeekHint } from "../sync-status";
 import { AllDayLane } from "./allday-lane";
 import { AllDayLaneSkeleton } from "./calendar-skeleton";
-import { DayHeader, ZoneCorner } from "./day-header";
 import { ComposerGhost } from "./composer-ghost";
+import { DayHeader, ZoneCorner } from "./day-header";
 import { COMPACT_BELOW_MINUTES } from "./event-chip";
 import {
   EventQuickCreate,

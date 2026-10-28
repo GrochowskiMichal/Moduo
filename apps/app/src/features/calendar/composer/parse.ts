@@ -123,7 +123,8 @@ type Reader = {
 
 function reader(text: string): Reader {
   const tokens: ComposerToken[] = [];
-  const free = (start: number, end: number) => tokens.every((t) => end <= t.start || start >= t.end);
+  const free = (start: number, end: number) =>
+    tokens.every((t) => end <= t.start || start >= t.end);
   return {
     text,
     lower: text.toLowerCase(),
@@ -137,7 +138,10 @@ function reader(text: string): Reader {
 }
 
 /** The named day, if any: today, tomorrow, a weekday (the next one, today included) or a date. */
-function readDay(r: Reader, nowMs: number): { dayStartMs: number; window: [number, number] | null } | null {
+function readDay(
+  r: Reader,
+  nowMs: number,
+): { dayStartMs: number; window: [number, number] | null } | null {
   const today = dayOf(nowMs);
   let m = DAY_RE.exec(r.lower);
   if (m) {
@@ -252,7 +256,11 @@ function readOnline(r: Reader): OnlineProvider | null {
   return w === "zoom" ? "zoom" : w === "teams" ? "teams" : "meet";
 }
 
-function readPlace(r: Reader, people: ComposerPerson[], directory: ComposerPerson[]): string | null {
+function readPlace(
+  r: Reader,
+  people: ComposerPerson[],
+  directory: ComposerPerson[],
+): string | null {
   let m = OFFICE_RE.exec(r.lower);
   if (m) {
     r.take(m, "where");
@@ -261,7 +269,10 @@ function readPlace(r: Reader, people: ComposerPerson[], directory: ComposerPerso
   m = PLACE_RE.exec(r.text);
   if (!m) return null;
   const name = m[1].trim();
-  const first = name.split(/\s+/)[0].toLowerCase().replace(/['’]s$/, "");
+  const first = name
+    .split(/\s+/)[0]
+    .toLowerCase()
+    .replace(/['’]s$/, "");
   const isDay = DAY_RE.test(first) && DAY_RE.exec(first)?.[0] === first;
   const isPerson = [...people, ...directory].some((p) =>
     firstName(p).toLowerCase().startsWith(first),
@@ -297,6 +308,51 @@ function defaultLength(kind: ComposerKind, lower: string): number {
   return LONG_MEAL.test(lower) ? 60 : 30;
 }
 
+function lengthOf(
+  time: { start: number | null; end: number | null },
+  kind: ComposerKind,
+  lower: string,
+): number {
+  if (time.start !== null && time.end !== null) return time.end - time.start;
+  return defaultLength(kind, lower);
+}
+
+/** The start: the typed time, else where the box opened, else the day's first free time. */
+function resolveStart(
+  ctx: ComposerContext,
+  dayStartMs: number,
+  startMinute: number | null,
+  window: [number, number] | null,
+  length: number,
+): { startMs: number; firstFree: boolean } {
+  if (startMinute !== null) return { startMs: atMinute(dayStartMs, startMinute), firstFree: false };
+  if (!window && ctx.base.startMinute !== null && dayStartMs === ctx.base.dayStartMs) {
+    // Nothing names a time and the day is where the box opened: stay there.
+    return { startMs: atMinute(dayStartMs, ctx.base.startMinute), firstFree: false };
+  }
+  // A day without a time lands at that day's first free time.
+  const from = window ? window[0] : ctx.workStartMinute;
+  const until = window ? window[1] : ctx.workEndMinute;
+  const free = firstFreeStart({
+    dayStartMs,
+    fromMinute: from,
+    untilMinute: Math.max(until, from + length),
+    lengthMinutes: length,
+    nowMs: ctx.nowMs,
+    busy: ctx.busyOn(dayStartMs),
+  });
+  return { startMs: free ?? atMinute(dayStartMs, from), firstFree: true };
+}
+
+/** A window word (morning, afternoon, evening) when no time is typed. */
+function readWindow(r: Reader, hasTime: boolean, dayWindow: [number, number] | null) {
+  if (hasTime) return dayWindow;
+  const w = /\b(morning|afternoon|evening)\b/.exec(r.lower);
+  if (!w) return dayWindow;
+  r.take(w, "time");
+  return WINDOWS[w[1]];
+}
+
 export function parseComposer(text: string, ctx: ComposerContext): ComposerParse {
   const r = reader(text);
   let kind: ComposerKind = "event";
@@ -308,48 +364,16 @@ export function parseComposer(text: string, ctx: ComposerContext): ComposerParse
   const named = readDay(r, ctx.nowMs);
   const time = readTime(r);
   const duration = readDuration(r);
-  let window = named?.window ?? null;
-  if (time.start === null) {
-    const w = /\b(morning|afternoon|evening)\b/.exec(r.lower);
-    if (w) {
-      r.take(w, "time");
-      window = WINDOWS[w[1]];
-    }
-  }
+  const window = readWindow(r, time.start !== null, named?.window ?? null);
   const calendarId = readCalendar(r, ctx.calendars);
   const people = readPeople(r, ctx.people);
   const online = readOnline(r);
   const place = readPlace(r, people, ctx.people);
   const meal = MEAL.test(r.lower);
 
-  const length =
-    duration ??
-    (time.start !== null && time.end !== null
-      ? time.end - time.start
-      : defaultLength(kind, r.lower));
+  const length = duration ?? lengthOf(time, kind, r.lower);
   const dayStartMs = named?.dayStartMs ?? ctx.base.dayStartMs;
-  let startMs: number;
-  let firstFree = false;
-  if (time.start !== null) {
-    startMs = atMinute(dayStartMs, time.start);
-  } else if (!window && ctx.base.startMinute !== null && dayStartMs === ctx.base.dayStartMs) {
-    // Nothing names a time and the day is where the box opened: stay there.
-    startMs = atMinute(dayStartMs, ctx.base.startMinute);
-  } else {
-    // A day without a time lands at that day's first free time.
-    const from = window ? window[0] : ctx.workStartMinute;
-    const until = window ? window[1] : ctx.workEndMinute;
-    const free = firstFreeStart({
-      dayStartMs,
-      fromMinute: from,
-      untilMinute: Math.max(until, from + length),
-      lengthMinutes: length,
-      nowMs: ctx.nowMs,
-      busy: ctx.busyOn(dayStartMs),
-    });
-    startMs = free ?? atMinute(dayStartMs, from);
-    firstFree = true;
-  }
+  const { startMs, firstFree } = resolveStart(ctx, dayStartMs, time.start, window, length);
   const whenKey = r.tokens
     .filter((t) => t.kind === "day" || t.kind === "time")
     .sort((a, b) => a.start - b.start)

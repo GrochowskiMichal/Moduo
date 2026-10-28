@@ -7,6 +7,7 @@
 // merged by `applyLiveChange`), and a resync refetches quietly. A read that
 // fails keeps the week it had (CALR-3).
 
+import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -14,8 +15,6 @@ import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
 import { recordEventUndo, recordUndo } from "../commands/undo";
-import type { CalendarItemKind } from "@contracts/vocabularies";
-
 import type {
   CalendarAccountModel,
   CalendarAttendeeInput,

@@ -70,6 +70,71 @@ export type EventComposerProps = {
   onCancel: () => void;
 };
 
+type EchoProps = Pick<EventComposerProps, "parse" | "plan" | "calendarLabel" | "clash">;
+
+/** Day · time · calendar · people, then where, then what happens (a clash first). */
+function ComposerEcho({ parse, plan, calendarLabel, clash }: EchoProps) {
+  const focus = parse.kind === "focus";
+  const minutes = Math.round((parse.endMs - parse.startMs) / 60_000);
+  const who = parse.people.map((p) => p.name);
+  const google = plan.target.kind === "google";
+  return (
+    <div
+      id="calendar-composer-echo"
+      aria-live="polite"
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 pt-2 text-sm text-muted-foreground tabular-nums"
+    >
+      <span className="text-foreground">{formatWeekdayDate(parse.startMs)}</span>
+      <span className="text-subtle-foreground">·</span>
+      <span className="text-foreground">
+        {formatTimeOfDay(parse.startMs)} – {formatTimeOfDay(parse.endMs)}
+      </span>
+      {parse.firstFree ? (
+        <>
+          <span className="text-subtle-foreground">·</span>
+          <span>first free {lengthLabel(minutes)}</span>
+        </>
+      ) : null}
+      <span className="text-subtle-foreground">·</span>
+      <span>
+        {calendarLabel}
+        {google ? " (Google)" : ""}
+      </span>
+      {who.length > 0 && !focus ? (
+        <>
+          <span className="text-subtle-foreground">·</span>
+          <span>with {andList(who)}</span>
+        </>
+      ) : null}
+      {parse.place || plan.linkLine ? (
+        <span className="flex basis-full flex-wrap items-center gap-x-3">
+          {parse.place ? (
+            <span className="inline-flex items-center gap-1">
+              <MapPin aria-hidden className="size-icon-xs" />
+              {parse.place}
+            </span>
+          ) : null}
+          {plan.linkLine ? (
+            <span className="inline-flex items-center gap-1">
+              <Video aria-hidden className="size-icon-xs" />
+              {plan.linkLine}
+            </span>
+          ) : null}
+        </span>
+      ) : null}
+      {clash ? (
+        <span className="flex basis-full items-center gap-1.5 text-foreground">
+          <TriangleAlert aria-hidden className="size-icon-xs text-warning" />
+          <span>
+            Overlaps your {clash.title || "event"} · <Kbd>⇥</Kbd> finds the next time you're free
+          </span>
+        </span>
+      ) : null}
+      {plan.inviteLine ? <span className="basis-full">{plan.inviteLine}</span> : null}
+    </div>
+  );
+}
+
 export function EventComposer({
   text,
   parse,
@@ -96,9 +161,6 @@ export function EventComposer({
   };
 
   const focus = parse.kind === "focus";
-  const minutes = Math.round((parse.endMs - parse.startMs) / 60_000);
-  const who = parse.people.map((p) => p.name);
-  const google = plan.target.kind === "google";
 
   return (
     <div
@@ -153,60 +215,7 @@ export function EventComposer({
         </label>
       </div>
 
-      <div
-        id="calendar-composer-echo"
-        aria-live="polite"
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 pt-2 text-sm text-muted-foreground tabular-nums"
-      >
-        <span className="text-foreground">{formatWeekdayDate(parse.startMs)}</span>
-        <span className="text-subtle-foreground">·</span>
-        <span className="text-foreground">
-          {formatTimeOfDay(parse.startMs)} – {formatTimeOfDay(parse.endMs)}
-        </span>
-        {parse.firstFree ? (
-          <>
-            <span className="text-subtle-foreground">·</span>
-            <span>first free {lengthLabel(minutes)}</span>
-          </>
-        ) : null}
-        <span className="text-subtle-foreground">·</span>
-        <span>
-          {calendarLabel}
-          {google ? " (Google)" : ""}
-        </span>
-        {who.length > 0 && !focus ? (
-          <>
-            <span className="text-subtle-foreground">·</span>
-            <span>with {andList(who)}</span>
-          </>
-        ) : null}
-        {parse.place || plan.linkLine ? (
-          <span className="flex basis-full flex-wrap items-center gap-x-3">
-            {parse.place ? (
-              <span className="inline-flex items-center gap-1">
-                <MapPin aria-hidden className="size-icon-xs" />
-                {parse.place}
-              </span>
-            ) : null}
-            {plan.linkLine ? (
-              <span className="inline-flex items-center gap-1">
-                <Video aria-hidden className="size-icon-xs" />
-                {plan.linkLine}
-              </span>
-            ) : null}
-          </span>
-        ) : null}
-        {clash ? (
-          <span className="flex basis-full items-center gap-1.5 text-foreground">
-            <TriangleAlert aria-hidden className="size-icon-xs text-warning" />
-            <span>
-              Overlaps your {clash.title || "event"} · <Kbd>⇥</Kbd> finds the next time you're
-              free
-            </span>
-          </span>
-        ) : null}
-        {plan.inviteLine ? <span className="basis-full">{plan.inviteLine}</span> : null}
-      </div>
+      <ComposerEcho parse={parse} plan={plan} calendarLabel={calendarLabel} clash={clash} />
 
       <div className="mt-1.5 flex items-center gap-3 border-t border-hairline px-2.5 pt-2 text-xs whitespace-nowrap text-subtle-foreground">
         <span className="inline-flex items-center gap-1">

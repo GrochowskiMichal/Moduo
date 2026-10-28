@@ -24,8 +24,7 @@ export type ComposerAccount = {
 };
 
 export type ComposerTarget =
-  | { kind: "moduo"; calendarId: string | null }
-  | { kind: "google"; accountId: string };
+  { kind: "moduo"; calendarId: string | null } | { kind: "google"; accountId: string };
 
 export type ComposerPlan = {
   target: ComposerTarget;
@@ -111,10 +110,7 @@ function linkLineFor(p: ComposerParse, meet: boolean, defaulted: boolean, hasGoo
   return null;
 }
 
-export function planComposer(
-  p: ComposerParse,
-  ctx: { accounts: ComposerAccount[] },
-): ComposerPlan {
+export function planComposer(p: ComposerParse, ctx: { accounts: ComposerAccount[] }): ComposerPlan {
   if (p.kind === "focus") {
     return {
       target: { kind: "moduo", calendarId: null },
