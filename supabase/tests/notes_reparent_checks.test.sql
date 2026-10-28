@@ -5,8 +5,9 @@
 -- Cast: O owns workspace W. E is a member (the member role can publish). X is
 -- a member whose exception blocks ws.publish. PUB is O's published page; E
 -- and X can edit it. PRIV is O's private note. NE is E's own note, NX is X's
--- own note, NXE is O's note X can only edit; all three follow their parent
--- (share_mode 'inherit'). CX is X's own note under PUB with its own sharing.
+-- own note, NXE is O's note X can only edit; all three are top-level with
+-- their own sharing, and the moves into PUB ask to follow it (an inherit note
+-- always has a parent, NS-3). CX is X's own note under PUB with its own sharing.
 -- Under PUB, sections S1 and S2 and page D (in S1) follow it, so they are on
 -- the web already; ARCH follows it too but is archived.
 
@@ -39,9 +40,8 @@ UPDATE public.notes SET is_archived = true WHERE id = test.id('ARCH');
 DELETE FROM public.resource_grants WHERE resource_type = 'note'
   AND resource_id IN (test.id('S1'), test.id('S2'), test.id('ARCH'), test.id('D'));
 UPDATE public.notes SET share_mode = 'custom', workspace_shared = false
-  WHERE id IN (test.id('PUB'), test.id('PUB2'), test.id('PRIV'), test.id('CX'));
-UPDATE public.notes SET share_mode = 'inherit', workspace_shared = false
-  WHERE id IN (test.id('NE'), test.id('NX'), test.id('NXE'));
+  WHERE id IN (test.id('PUB'), test.id('PUB2'), test.id('PRIV'), test.id('CX'),
+               test.id('NE'), test.id('NX'), test.id('NXE'));
 UPDATE public.notes SET publish_token = 'db-test-pub', published_at = now() WHERE id = test.id('PUB');
 UPDATE public.notes SET publish_token = 'db-test-pub2', published_at = now() WHERE id = test.id('PUB2');
 DELETE FROM public.resource_grants WHERE resource_type = 'note'
@@ -78,7 +78,7 @@ BEGIN
     'so is the same move as a raw UPDATE', r);
 
   -- Into a published page: X can edit PUB but can't publish.
-  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b')$q$,
+  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b', true)$q$,
     test.id('W'), test.id('NX'), test.id('PUB')));
   PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NX') IS NULL AND NOT test.on_web('NX'),
     'a member who can''t publish can''t put a note on the web by moving it under a published page', r);
@@ -87,7 +87,7 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%' AND NOT test.on_web('CX'),
     'nor by making a sub-note of the page follow it', r);
   -- An archived step inside the page still counts: unarchiving needs only Edit.
-  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b2')$q$,
+  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'b2', true)$q$,
     test.id('W'), test.id('NX'), test.id('ARCH')));
   PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NX') IS NULL,
     'nor by moving it under an archived page inside the published one', r);
@@ -100,13 +100,13 @@ BEGIN
   -- With ws.publish but only Edit on the note (changing its audience needs Full).
   UPDATE public.workspace_members SET overrides = '{}'::jsonb
     WHERE workspace_id = test.id('W') AND user_id = test.id('X');
-  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'c')$q$,
+  r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'c', true)$q$,
     test.id('W'), test.id('NXE'), test.id('PUB')));
   PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NXE') IS NULL AND NOT test.on_web('NXE'),
     'publishing someone else''s note by moving it needs Full on it', r);
 
   -- Allowed: E can publish, owns NE and can edit PUB.
-  r := test.as_user('E', format($q$SELECT public.notes_op_move(%L, %L, %L, 'd')$q$,
+  r := test.as_user('E', format($q$SELECT public.notes_op_move(%L, %L, %L, 'd', true)$q$,
     test.id('W'), test.id('NE'), test.id('PUB')));
   PERFORM test.ok(r = 'ok 1' AND test.parent_of('NE') = test.id('PUB') AND test.on_web('NE'),
     'someone who may publish moves their own note under the published page', r);
