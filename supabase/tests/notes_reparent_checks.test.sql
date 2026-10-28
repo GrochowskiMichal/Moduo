@@ -1,6 +1,6 @@
 -- MOD-553 · Moving a note checks the new parent, and following a parent
--- inside a published page needs ws.publish and Full on the note; trashing a
--- note takes it off the web (supabase/migrations/20261024131500_notes_reparent_checks.sql).
+-- inside a published page needs ws.publish and edit on the note (Full until
+-- NS-6, PQ4); trashing a note takes it off the web (supabase/migrations/20261024131500_notes_reparent_checks.sql).
 --
 -- Cast: O owns workspace W. E is a member (the member role can publish). X is
 -- a member whose exception blocks ws.publish. PUB is O's published page; E
@@ -76,8 +76,9 @@ BEGIN
   -- The finding: a note moved under a note you can't open.
   r := test.as_user('E', format($q$SELECT public.notes_op_move(%L, %L, %L, 'a')$q$,
     test.id('W'), test.id('NE'), test.id('PRIV')));
-  PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NE') IS NULL,
-    'moving a note under a note you can''t edit is refused', r);
+  -- A parent you can't open answers like a missing one (NS-6, PQ7).
+  PERFORM test.ok(r LIKE 'P0002 Parent note not found%' AND test.parent_of('NE') IS NULL,
+    'moving a note under a note you can''t open is refused as not found', r);
   r := test.as_user('E', format('UPDATE public.notes SET parent_id = %L WHERE id = %L',
     test.id('PRIV'), test.id('NE')));
   PERFORM test.ok((r LIKE '42501%' OR r = 'ok 0') AND test.parent_of('NE') IS NULL,
@@ -103,13 +104,14 @@ BEGIN
   PERFORM test.ok(r = 'ok 1' AND test.parent_of('D') = test.id('S2') AND test.on_web('D'),
     'moving a page within the published page needs only Edit (it was public already)', r);
 
-  -- With ws.publish but only Edit on the note (changing its audience needs Full).
+  -- With ws.publish and only Edit on the note: going public needs edit plus
+  -- publish, not Full (NS-6, PQ4).
   UPDATE public.workspace_members SET overrides = '{}'::jsonb
     WHERE workspace_id = test.id('W') AND user_id = test.id('X');
   r := test.as_user('X', format($q$SELECT public.notes_op_move(%L, %L, %L, 'c')$q$,
     test.id('W'), test.id('NXE'), test.id('PUB')));
-  PERFORM test.ok(r LIKE '42501%' AND test.parent_of('NXE') = test.id('PRIV2') AND NOT test.on_web('NXE'),
-    'publishing someone else''s note by moving it needs Full on it', r);
+  PERFORM test.ok(r = 'ok 1' AND test.parent_of('NXE') = test.id('PUB') AND test.on_web('NXE'),
+    'edit plus ws.publish carries someone else''s inherit note onto the web by a move', r);
 
   -- Allowed: E can publish, owns NE and can edit PUB.
   r := test.as_user('E', format($q$SELECT public.notes_op_move(%L, %L, %L, 'd', true)$q$,

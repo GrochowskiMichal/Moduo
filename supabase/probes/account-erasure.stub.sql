@@ -768,16 +768,21 @@ AS $function$
 DECLARE
   v_type text := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_type ELSE NEW.resource_type END;
   v_id uuid := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_id ELSE NEW.resource_id END;
+  v_bypass text;
 BEGIN
   -- NS-3 (20261030121000): held while notes__freeze_children copies grants.
   IF coalesce(current_setting('notes.freezing', true), '') = '1' THEN
     RETURN coalesce(NEW, OLD);
   END IF;
   IF v_type = 'note' THEN
+    -- NS-6 (20261030150000): the derived flag write is not an edit.
+    v_bypass := current_setting('share.bypass', true);
+    PERFORM set_config('share.bypass', '1', true);
     UPDATE public.notes SET workspace_shared = EXISTS (
       SELECT 1 FROM public.resource_grants g
       WHERE g.resource_type = 'note' AND g.resource_id = v_id AND g.subject_type = 'workspace'
     ) WHERE id = v_id;
+    PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
   END IF;
   RETURN coalesce(NEW, OLD);
 END;

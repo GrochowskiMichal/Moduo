@@ -141,14 +141,15 @@ function latestSqlFunctionBodies(): Map<string, string> {
 
 const PEOPLE_ONLY =
   /if\s+(?:public\.)?module_api_key_id\(\)\s+is\s+null\s+then([\s\S]*?)end\s+if\s*;/g;
-const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|module_permission|key_scope)\s*\(/g;
+const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|_require\w*|module_permission|key_scope)\s*\(/g;
 const BEST_EFFORT =
   /\bbegin\s+perform\s[^;]*;\s*exception\s+when\s+insufficient_privilege\s+or\s+raise_exception\s+then\s+null\s*;\s*end\s*;/g;
 
 /**
  * The key-scope lanes a call into `fn` is checked against, following its calls:
- * `<module>_op__guard*`, inline `<module>_module_permission(…)` and
- * `<module>_key_scope(…)` (spine = Links). Those are leaves: their insides
+ * `<module>_op__guard*`, `<module>__require*` (Notes' one guard, NS-6),
+ * inline `<module>_module_permission(…)` and `<module>_key_scope(…)` (spine =
+ * Links). Those are leaves: their insides
  * resolve a lane, they don't add one. Blocks under `IF module_api_key_id() IS
  * NULL` are people-only, so keys never reach them (such a block must be a plain
  * IF). An auth.uid()-only `*_can_access_workspace` check refuses every key; it
@@ -176,13 +177,14 @@ function keyLanes(fn: string, bodies: Map<string, string>, seen = new Set<string
     // A permission read that lets View through (`… NOT IN ('view', 'edit',
     // 'admin')`, TV-D12/D16 reads) is a View lane, not an Edit one.
     const tail = body.slice((m.index ?? 0) + m[0].length).split(/;|\bthen\b/)[0] ?? "";
-    const viewLevel = /_module_permission\s*\($/.test(m[0]) && /'view'/.test(tail);
+    const viewLevel = /(?:_module_permission|__require\w*)\s*\($/.test(m[0]) && /'view'/.test(tail);
     lanes.add(viewLevel ? `${owner}@view` : owner);
   }
   if (/\b\w+_can_access_workspace\s*\(/.test(body)) lanes.add("no-key");
   for (const [, callee] of body.matchAll(/\b(\w+)\s*\(/g)) {
     if (callee === fn || !bodies.has(callee)) continue;
     if (callee.endsWith("_module_permission") || callee.endsWith("_key_scope")) continue;
+    if (/__require/.test(callee)) continue;
     for (const lane of keyLanes(callee, bodies, seen)) lanes.add(lane);
   }
   return lanes;

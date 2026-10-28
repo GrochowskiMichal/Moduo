@@ -2,6 +2,20 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · NS-6: every Notes op checks its level once, through `notes__require`, `notes__require_module` or `notes__require_parent`** → `supabase/migrations/20261030150000_notes_one_guard.sql`
+  - status: current
+  - Who: Mike (engineer mode), built in NS-6 (MOD-656).
+  - Decision:
+    - The module key `notes.<action>` comes from `perm_user_has`; for a key, that is the creator's key, and the key's Notes scope must also reach view or edit. Then `can_access` gives view, edit or full. Hidden and missing both answer P0002 "Note not found in this workspace." Import keeps PQ6's 22023 for a hidden parent, as for a missing one.
+    - Create, move and duplicate check the parent through `notes__require_parent`, which asks edit on the parent, not the module edit key, the same rule as `perm_enforce_write`.
+    - Two writes run under `share.bypass`, saved and restored:
+      - duplicate's copy of the update tail, which is the new note's own content and part of the create already checked;
+      - `share_sync_note_flag`'s `workspace_shared` mirror, derived from a grant row that its writer already checked.
+    - Without these two, a create-only role passes the guard and then fails `perm_enforce_write`'s edit check.
+    - `notes__guard_reparent` asks edit, not Full, for an inherit note entering a published tree (PQ4).
+  - Why: the lossy `module_member_permission` mirror let a create-only role through the guard, only for the trigger to refuse it. Checks added op by op caused the duplicate/mention leak.
+  - Left as is: creating, importing or duplicating straight under a published page asks no `ws.publish`. Adding inside a published page counts as editing it, because an editor can already type onto it. A duplicate's audience is its new place's: the parent's for an inherit copy, the workspace default for a top-level one.
+
 - **2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows** → `supabase/migrations/20261030121000_notes_reroot_access.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-3 (MOD-653).
