@@ -10,6 +10,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
 import { atSmallestWindow, withSecondZone } from "./calendar-acts.ts";
+import { bookingLinkState } from "./calendar-booking.ts";
 import { composeJourney, composerInput, composingState } from "./calendar-composer.ts";
 import { rightClickState } from "./calendar-menus.ts";
 import { planJourneys } from "./journeys-plan.ts";
@@ -316,6 +317,7 @@ export default {
           },
         },
         rightClick: rightClickState,
+        bookingLink: bookingLinkState,
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
         // The app is up and only the week's events are on their way: the skeletons in the
         // last known shape (the state above holds the whole app at its boot screen).

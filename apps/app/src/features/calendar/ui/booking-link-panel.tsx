@@ -38,7 +38,12 @@ export type BookingLinkPanelProps = {
   onGuestView: () => void;
 };
 
-const LENGTHS = [15, 30, 45, 60].map((n) => ({ value: String(n), label: `${n} min` }));
+// "15 30 45 60 min" fits the panel's value column; each segment still says "N min".
+const LENGTHS = [15, 30, 45, 60].map((n) => ({
+  value: String(n),
+  label: String(n),
+  ariaLabel: `${n} min`,
+}));
 
 const HOST_STATUS: Record<string, string> = {
   accepted: "accepted",
@@ -101,7 +106,7 @@ function limitsText(link: BookingLink): string {
   const buffer = link.bufferBeforeMinutes + link.bufferAfterMinutes;
   return [
     buffer > 0 ? `${buffer} min buffer` : "No buffer",
-    `${durationPhrase(link.minNoticeMinutes)} notice`,
+    link.minNoticeMinutes > 0 ? `${durationPhrase(link.minNoticeMinutes)} notice` : "No notice",
     `${link.horizonDays} days ahead`,
   ].join(" · ");
 }
@@ -212,6 +217,9 @@ export function BookingLinkPanel(props: BookingLinkPanelProps) {
             items={LENGTHS}
             onValueChange={(v) => onPatch({ durationMinutes: Number(v) })}
           />
+          <span aria-hidden className="ml-1.5 text-sm text-muted-foreground">
+            min
+          </span>
         </PropertyRow>
         <PropertyRow label="When" align="start">
           <span className={value}>
