@@ -32,6 +32,11 @@ export type OpenTimesInput = {
   bookings?: { startsAt: string; endsAt: string }[];
   /** Co-hosts, without the link's owner. */
   hosts?: { userId: string; name: string; status: string }[];
+  /**
+   * What the app can see of accepted co-hosts' time (their events and busy
+   * blocks): it only ever takes times away from the guest page's answer.
+   */
+  coHostBusy?: { startsAt: string; endsAt: string }[];
   /** The guest page's slots (its preview answer), once read. */
   guestSlots?: string[] | null;
   now: Date;
@@ -68,7 +73,7 @@ function busyFor(input: OpenTimesInput): Interval[] {
   const sessions = ids.has(TASKS_BUSY_ID)
     ? (input.sessions ?? []).filter((s) => s.userId === input.hostId)
     : [];
-  return [...own, ...sessions, ...(input.bookings ?? [])].map(span);
+  return [...own, ...sessions, ...(input.bookings ?? []), ...(input.coHostBusy ?? [])].map(span);
 }
 
 function nearGuestSlot(ms: number, guest: number[]): boolean {

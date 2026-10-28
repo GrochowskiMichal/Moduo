@@ -15,7 +15,12 @@ import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/pan
 import type { TaskSession } from "../../tasks/model";
 import { useWorkspace } from "../../workspaces/workspace-context";
 import { openTimes } from "../booking/availability";
-import { type BookingLink, busyIdsFromJson, questionsFromJson } from "../booking/model";
+import {
+  type BookingLink,
+  busyIdsFromJson,
+  FOCUS_BUSY_ID,
+  questionsFromJson,
+} from "../booking/model";
 import { bookingRequest } from "../booking/public-client";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { normalizeWeeklyHours } from "../booking/slots";
@@ -162,6 +167,19 @@ export function useBookingPanel(input: Input): {
       })),
     [data, members],
   );
+  // Accepted co-hosts' events and busy blocks the app can read (focus stays
+  // free unless the link ticks it): never more times than the guest page.
+  const coHostBusy = useMemo(() => {
+    const ids = new Set(hosts.filter((h) => h.status === "accepted").map((h) => h.userId));
+    const focusBusy = data?.link.busyCalendarIds.includes(FOCUS_BUSY_ID) ?? false;
+    return events.filter(
+      (e) =>
+        e.ownerId != null &&
+        ids.has(e.ownerId) &&
+        !e.deletedAt &&
+        (focusBusy || e.kind !== "focus"),
+    );
+  }, [hosts, events, data]);
   const from = days[0];
   const last = days[days.length - 1];
   const result = useMemo(() => {
@@ -172,13 +190,14 @@ export function useBookingPanel(input: Input): {
       events,
       sessions,
       bookings: data.bookings,
+      coHostBusy,
       hosts,
       guestSlots,
       now: new Date(),
       from,
       to: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1),
     });
-  }, [data, userId, events, sessions, hosts, guestSlots, from, last]);
+  }, [data, userId, events, sessions, hosts, coHostBusy, guestSlots, from, last]);
 
   const patch = useCallback(
     (change: Patch) => {
