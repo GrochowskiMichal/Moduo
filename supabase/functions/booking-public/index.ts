@@ -35,6 +35,7 @@ import {
   bookingOrigin,
   CANONICAL_BOOKING_ORIGIN,
 } from "../_shared/app-origin.ts";
+import { busyFromHostEvents, type HostEventRow } from "../_shared/booking-busy.ts";
 import { sessionBusyIntervals, TASKS_BUSY_ID } from "../_shared/booking-sessions.ts";
 import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, singleLine } from "../_shared/escape.ts";
@@ -208,28 +209,25 @@ async function busyIntervals(
   accessToken: string | null,
 ): Promise<Interval[]> {
   const ids = new Set(busyIds(link.busy_calendar_ids));
-  const events = await db
-    .from("calendar_events")
-    .select("start_time, end_time, source_account_id, calendar_id")
-    .eq("workspace_id", link.workspace_id)
-    // PERM-0: only the host's own calendar decides their availability —
-    // a teammate's events must neither block slots nor be inferable here.
-    .eq("owner_id", link.owner_user_id)
-    .is("deleted_at", null)
-    .lt("start_time", to.toISOString())
-    .gt("end_time", from.toISOString());
-  const intervals: Interval[] = [];
-  for (const row of events.data ?? []) {
-    const account = (row.source_account_id as string | null) ?? null;
-    const calendarId = (row.calendar_id as string | null) ?? "moduo";
-    const isModuo = account == null && (calendarId === "moduo" || calendarId === "");
-    const selected = (account != null && ids.has(account)) || (isModuo && ids.has("moduo"));
-    if (!selected) continue;
-    intervals.push({
-      start: new Date(String(row.start_time)),
-      end: new Date(String(row.end_time)),
-    });
-  }
+  const hostEvents = (columns: string) =>
+    db
+      .from("calendar_events")
+      .select(columns)
+      .eq("workspace_id", link.workspace_id)
+      // PERM-0: only the host's own calendar decides their availability —
+      // a teammate's events must neither block slots nor be inferable here.
+      .eq("owner_id", link.owner_user_id)
+      .is("deleted_at", null)
+      .lt("start_time", to.toISOString())
+      .gt("end_time", from.toISOString());
+  const columns = "start_time, end_time, source_account_id, calendar_id";
+  let events = await hostEvents(`${columns}, kind`);
+  // A database before the kind column: every row is then an ordinary event.
+  if (events.error) events = await hostEvents(columns);
+  const intervals: Interval[] = busyFromHostEvents(
+    (events.data ?? []) as unknown as HostEventRow[],
+    ids,
+  );
 
   // TV-D10 (default d): the host's work sessions from Tasks, when the link's
   // busy list has them. Times only; a guest never learns what the work is.

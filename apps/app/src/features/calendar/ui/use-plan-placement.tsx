@@ -1,7 +1,8 @@
 // Placing a task from Plan (CALR-5, AC20). S lifts the selected Plan task to
 // the next free slot that fits its estimate; while it's lifted ⇥ hops to the
 // next free time, ↑↓ move it 15 minutes, ←→ a day, ↵ places it and esc lets
-// go; a click in the free-time wash places it there. Placing is one patchTask
+// go, F toggles task block ⇄ focus time holding it (CALR-14); a click in the
+// free-time wash places it there. Placing is one patchTask
 // with one Undo (commands/undo.ts), so nothing else on the grid moves. The keys
 // while lifted are a transient gesture (a window capture listener, outside the
 // registry, like a drag); S and / are registry keys. / focuses Find a task.
@@ -16,6 +17,7 @@ import type { Task } from "../../tasks/model";
 import type { useTaskCommands } from "../../tasks/tasks-context";
 import { placeTask } from "../commands/undo";
 import type { EventChip } from "../events";
+import { focusDraftForTask } from "../focus-item";
 import { type BusyInterval, findFreeSlot, freeSlots, nextFreeSlot } from "../gap-finder";
 import { type CalendarView, localDayKey, startOfLocalDay, type TaskBlock } from "../lens";
 import {
@@ -25,6 +27,7 @@ import {
   placementBusy,
   placementMinutes,
   type PlacementNudge,
+  togglePlacementKind,
 } from "../place-task";
 import type { CalendarPrefs, PanelVariantId } from "../prefs";
 import { PlacementLayer } from "./placement-layer";
@@ -43,6 +46,8 @@ type Input = {
   setPanelVariant: (id: PanelVariantId) => void;
   setView: (view: CalendarView) => void;
   goToDate: (day: Date) => void;
+  /** Creates the focus time a focus placement lands as. */
+  createEvent: (draft: ReturnType<typeof focusDraftForTask>) => Promise<unknown>;
 };
 
 const KEY_NUDGE: Record<string, PlacementNudge> = {
@@ -138,6 +143,10 @@ export function usePlanPlacement(input: Input) {
     const task = p ? k.tasks.find((t) => t.id === p.taskId) : undefined;
     setPlacement(null);
     if (!p || !task) return;
+    if (p.kind === "focus") {
+      void k.createEvent(focusDraftForTask(task, startMs, p.durationMinutes));
+      return;
+    }
     placeTask(
       k.commands,
       task,
@@ -180,12 +189,18 @@ export function usePlanPlacement(input: Input) {
       const k = ref.current;
       if (!k.days.some((d) => localDayKey(d) === dayKey)) k.goToDate(new Date(moved.startMs));
     };
+    /** F: task block ⇄ focus time holding it. */
+    const toggleKind = (p: Placement) => {
+      const task = ref.current.tasks.find((t) => t.id === p.taskId);
+      if (task) setPlacement(togglePlacementKind(p, task));
+    };
     /** True when the key was the gesture's. */
     const act = (e: KeyboardEvent, p: Placement): boolean => {
       if (e.key === "Escape") setPlacement(null);
       else if (e.key === "Enter") place(p.startMs);
       else if (e.key === "Tab" && !e.shiftKey) hop(p);
       else if (KEY_NUDGE[e.key] && !e.shiftKey) nudge(p, KEY_NUDGE[e.key]);
+      else if (e.key === "f" || e.key === "F") toggleKind(p);
       else return false;
       return true;
     };

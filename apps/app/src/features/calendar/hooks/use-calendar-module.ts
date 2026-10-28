@@ -7,6 +7,7 @@
 // merged by `applyLiveChange`), and a resync refetches quietly. A read that
 // fails keeps the week it had (CALR-3).
 
+import type { CalendarItemKind } from "@contracts/vocabularies";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -43,6 +44,9 @@ export type CreateEventDraft = {
   allDay?: boolean;
   rrule?: string | null;
   description?: string;
+  /** CALR-14: focus time (holding `focusTaskId`). Sent only when set. */
+  kind?: CalendarItemKind;
+  focusTaskId?: string;
 };
 
 /**
@@ -426,6 +430,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         createdAt: nowIso,
         updatedAt: nowIso,
         deletedAt: null,
+        ...(draft.kind ? { kind: draft.kind } : {}),
+        ...(draft.focusTaskId ? { focusTaskId: draft.focusTaskId } : {}),
       };
       setEventsIn(scope, (prev) => [...prev, optimistic]);
       try {
@@ -437,6 +443,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           allDay: draft.allDay,
           rrule: draft.rrule,
           description: draft.description,
+          ...(draft.kind ? { kind: draft.kind } : {}),
+          ...(draft.focusTaskId ? { focusTaskId: draft.focusTaskId } : {}),
         });
         // Filter-then-append, not map: a widen-triggered reload can land
         // between the optimistic row and this reconcile, in which case the

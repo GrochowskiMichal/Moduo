@@ -128,6 +128,8 @@ export function AllDayLane({
               selected={selectedOccurrenceKey === bar.chip.occurrenceKey}
               past={bar.chip.endMs <= nowMs}
               locked={bar.chip.locked}
+              focus={bar.chip.focus}
+              holdsTask={bar.chip.holdsTask}
               stale={
                 bar.chip.sourceAccountId !== null && staleAccountIds.has(bar.chip.sourceAccountId)
               }
@@ -217,6 +219,8 @@ function DayAllDayList({
                 selected={false}
                 past={false}
                 locked={chip.locked}
+                focus={chip.focus}
+                holdsTask={chip.holdsTask}
               />
             </button>
           ))}

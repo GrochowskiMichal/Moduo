@@ -3,11 +3,18 @@
 // free slot places it. Pure, so the hook that draws and binds it stays thin.
 // Nothing else on the grid moves: busy time is read, never changed.
 
+import { focusMinutes } from "./focus-item";
 import type { BusyInterval } from "./gap-finder";
 import { DEFAULT_BLOCK_MINUTES, startOfLocalDay } from "./lens";
 
 /** A lifted task: where it would land, and for how long. */
-export type Placement = { taskId: string; startMs: number; durationMinutes: number };
+export type Placement = {
+  taskId: string;
+  startMs: number;
+  durationMinutes: number;
+  /** CALR-14: F turns the lift into focus time holding the task. */
+  kind?: "task" | "focus";
+};
 
 export type PlacementNudge = "earlier" | "later" | "prev-day" | "next-day";
 
@@ -18,6 +25,16 @@ const NUDGE_MINUTES = 15;
 export function placementMinutes(task: { durationMinutes: number | null | undefined }): number {
   const d = task.durationMinutes;
   return d && d > 0 ? d : DEFAULT_BLOCK_MINUTES;
+}
+
+/** F while lifted: task block ⇄ focus time holding it, where it sits. */
+export function togglePlacementKind(
+  p: Placement,
+  task: { durationMinutes: number | null | undefined },
+): Placement {
+  return p.kind === "focus"
+    ? { ...p, kind: "task", durationMinutes: placementMinutes(task) }
+    : { ...p, kind: "focus", durationMinutes: focusMinutes(task) };
 }
 
 function nextMidnight(ms: number): number {

@@ -199,6 +199,8 @@ export function CalendarMonth({
                       selected={selectedOccurrenceKey === bar.chip.occurrenceKey}
                       past={bar.past}
                       locked={bar.chip.locked}
+                      focus={bar.chip.focus}
+                      holdsTask={bar.chip.holdsTask}
                       stale={
                         bar.chip.sourceAccountId !== null &&
                         staleAccountIds.has(bar.chip.sourceAccountId)
