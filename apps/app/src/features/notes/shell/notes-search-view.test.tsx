@@ -3,13 +3,17 @@
 // title search already shows.
 
 import { afterEach, describe, expect, it } from "@rstest/core";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { clearEntityOpenHighlight, entityOpenHighlight } from "@/lib/entity-open";
 
 import { NotesSearchView, type NoteTextHit } from "./notes-search-view";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  clearEntityOpenHighlight();
+});
 
 const hit = (over: Partial<NoteTextHit> & { id: string }): NoteTextHit => ({
   title: "Retro",
@@ -20,7 +24,7 @@ const hit = (over: Partial<NoteTextHit> & { id: string }): NoteTextHit => ({
   ...over,
 });
 
-function renderSearch(query: string, hits: NoteTextHit[]) {
+function renderSearch(query: string, hits: NoteTextHit[], onOpen: (id: string) => void = () => {}) {
   return render(
     <TooltipProvider>
       <NotesSearchView
@@ -29,7 +33,7 @@ function renderSearch(query: string, hits: NoteTextHit[]) {
         onQueryChange={() => {}}
         searchText={() => Promise.resolve(hits)}
         selectedId={null}
-        onOpen={() => {}}
+        onOpen={onOpen}
         onClose={() => {}}
       />
     </TooltipProvider>,
@@ -60,5 +64,21 @@ describe("NotesSearchView reads notes__search hits", () => {
     const group = await screen.findByRole("region", { name: "In the text" }, { timeout: 2000 });
     expect(within(group).getByText("Weekly meeting notes")).toBeTruthy();
     expect(group.querySelector("mark")).toBeNull();
+  });
+});
+
+// GS-10 (Q16, AC13): opening a note from a text hit lands on the match.
+describe("NotesSearchView opens a text hit at the match", () => {
+  it("passes the query along with the open", async () => {
+    const opened: string[] = [];
+    renderSearch(
+      "kumquat",
+      [hit({ id: "n1", snippet: "We tasted a kumquat at lunch" })],
+      (id) => opened.push(id),
+    );
+    const group = await screen.findByRole("region", { name: "In the text" }, { timeout: 2000 });
+    fireEvent.click(within(group).getByRole("button"));
+    expect(opened).toEqual(["n1"]);
+    expect(entityOpenHighlight("n1")).toBe("kumquat");
   });
 });
