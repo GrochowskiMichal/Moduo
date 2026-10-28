@@ -15,9 +15,11 @@ import { describe, expect, it, rs } from "@rstest/core";
 // The registry loads Calendar, which imports rrule from esm.sh (Deno only).
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
+import { entityOpenTarget } from "../../../../apps/app/src/lib/entity-open";
+import { MCP_ENTITY_TYPE_MODULES } from "../../_shared/contracts/mcp-key-scopes.ts";
 import { parseToolArgs } from "../../_shared/contracts/mcp-tool-args.ts";
 import { type KeyContext, type ToolContext, toolAllowed, toolsForKey } from "../registry.ts";
-import { searchConnectorModule } from "./search.ts";
+import { openPath, searchConnectorModule } from "./search.ts";
 
 type Row = Record<string, any>;
 
@@ -223,6 +225,16 @@ describe("which keys list search", () => {
     for (const scopes of [{}, { links: "edit" }, { tasks: "none", notes: "none" }, { tasks: "admin" }]) {
       expect(toolsForKey(key(scopes)).map((t) => t.name), JSON.stringify(scopes)).not.toContain("search");
       expect(toolAllowed(key(scopes), searchConnectorModule.module, tool)).toBe(false);
+    }
+  });
+});
+
+describe("the open link matches the app's entity-open map", () => {
+  it("routes every searchable type where the app opens it, or nowhere when the app can't", () => {
+    for (const type of Object.keys(MCP_ENTITY_TYPE_MODULES)) {
+      const target = entityOpenTarget(type, "x-1");
+      const expected = target ? `${target.to}?${new URLSearchParams(target.search).toString()}` : null;
+      expect(openPath(type, "x-1"), type).toBe(expected);
     }
   });
 });

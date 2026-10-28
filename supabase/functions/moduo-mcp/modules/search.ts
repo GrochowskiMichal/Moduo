@@ -16,14 +16,26 @@
  */
 
 import { appOrigin } from "../../_shared/app-origin.ts";
-import { keyCanSeeEntityType, keyVisibleEntityTypes } from "../../_shared/contracts/mcp-key-scopes.ts";
+import {
+  keyCanSeeEntityType,
+  keyVisibleEntityTypes,
+  MCP_ENTITY_TYPE_MODULES,
+  MCP_KEY_MODULE_LABELS,
+} from "../../_shared/contracts/mcp-key-scopes.ts";
+import { SEARCH_SNIPPET_END, SEARCH_SNIPPET_START } from "../../_shared/contracts/search.ts";
 import type { ConnectorModule } from "../registry.ts";
 import { clampLimit, str } from "../tasks-helpers.ts";
 
 type Row = Record<string, any>;
 
-/** U+E000 / U+E001 around a match in a SearchHit snippet; agents read **bold**. */
-const SNIPPET_MARKS = /[]/g;
+/** The marks around a match in a SearchHit snippet; agents read **bold**. */
+const SNIPPET_MARKS = new RegExp(`[${SEARCH_SNIPPET_START}${SEARCH_SNIPPET_END}]`, "g");
+
+/** The modules whose items search can return, in words: "Tasks, Notes, … or Chat". */
+const SEARCHED_MODULES = (() => {
+  const labels = [...new Set(Object.values(MCP_ENTITY_TYPE_MODULES))].map((m) => MCP_KEY_MODULE_LABELS[m]);
+  return `${labels.slice(0, -1).join(", ")} or ${labels.at(-1)}`;
+})();
 
 /** The web app's origin: the APP_URL secret when it is one of ours, else app.moduo.app. */
 function webOrigin(): string {
@@ -36,7 +48,7 @@ function webOrigin(): string {
  * app's entity-open map (apps/app/src/lib/entity-open.ts, which Deno can't
  * import). Null for a type the app opens no other way yet (a chat message).
  */
-function openPath(type: string, id: string): string | null {
+export function openPath(type: string, id: string): string | null {
   const q = encodeURIComponent(id);
   switch (type) {
     case "note":
@@ -63,7 +75,7 @@ export const searchConnectorModule: ConnectorModule = {
   module: "search",
   keyAccess: {
     allows: (key) => keyVisibleEntityTypes(key.scopes).length > 0,
-    needs: "View on at least one module it searches",
+    needs: `View on at least one of ${SEARCHED_MODULES}`,
   },
   tools: [
     {
@@ -79,7 +91,7 @@ export const searchConnectorModule: ConnectorModule = {
           types: {
             type: "array",
             items: { type: "string" },
-            description: "Only these result types, e.g. [\"note\", \"task\"] (optional; default every type the key can see).",
+            description: "Only these result types, e.g. [\"note\", \"task\"] (optional; omitted or empty means every type the key can see).",
           },
           limit: { type: "number", description: "Max results (default 20, max 50)." },
         },
