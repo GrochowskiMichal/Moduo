@@ -144,7 +144,7 @@ function shapePeople(attendees: unknown): Row[] {
 }
 
 /** The fields only some events carry: one occurrence, focus time, a hold. */
-function shapeEventExtras(e: Row): Row {
+function shapeEventExtras(e: Row, kind: string): Row {
   return {
     // One occurrence (CALR-11): an override names the occurrence it replaces,
     // and a series the occurrences it skips (deleted or replaced).
@@ -155,9 +155,9 @@ function shapeEventExtras(e: Row): Row {
     ...(e.series_start_time ? { series_starts_at: e.series_start_time, series_ends_at: e.series_end_time ?? null } : {}),
     // Focus time (CALR-14): the task it holds, which the masked read nulls for
     // anyone but its owner (a teammate's arrives titled "Focus time").
-    ...(e.kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
+    ...(kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
     // A hold (CALR-19) names the offer it is held for.
-    ...(e.kind === "hold" ? { offer_id: e.offer_id ?? null } : {}),
+    ...(kind === "hold" ? { offer_id: e.offer_id ?? null } : {}),
   };
 }
 
@@ -176,6 +176,8 @@ function shapeEventWhere(e: Row): Row {
  * stay out.
  */
 function shapeEvent(e: Row, me: string): Row {
+  // A teammate's private item says only Busy, never whether it is focus time or a hold.
+  const kind = e.is_private && e.owner_id !== me ? "event" : (e.kind ?? "event");
   return {
     id: e.id,
     title: e.title,
@@ -188,14 +190,13 @@ function shapeEvent(e: Row, me: string): Row {
     external: e.source_account_id !== null,
     source_account_id: e.source_account_id ?? null,
     description: e.description ?? "",
-    // A teammate's private item says only Busy, never whether it is focus time or a hold.
-    kind: e.is_private && e.owner_id !== me ? "event" : (e.kind ?? "event"),
+    kind,
     private: Boolean(e.is_private),
     ...shapeEventWhere(e),
     owner_id: e.owner_id ?? null,
     mine: e.owner_id === me,
     calendar_ref: e.calendar_ref ?? null,
-    ...shapeEventExtras(e),
+    ...shapeEventExtras(e, kind),
   };
 }
 
