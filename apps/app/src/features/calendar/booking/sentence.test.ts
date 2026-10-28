@@ -12,6 +12,8 @@ import {
   firstName,
   groupByDay,
   groupByPart,
+  nextBookStep,
+  otherOpenTimes,
   quickPicks,
   time24,
   timeLabel,
@@ -94,5 +96,94 @@ describe("dates as Moduo writes them (page and emails)", () => {
   it("reads a clock in a zone, and stays quiet for one it doesn't know", () => {
     expect(clockIn("Asia/Tokyo", new Date(MEETING))).toBe("21:00");
     expect(clockIn("Mars/Olympus")).toBe("");
+  });
+});
+
+// CALR-18 · AC33: the guest page is the sentence page with carets on choices,
+// "See the other N open times", and one details step ending in "Book <day> at <time>".
+describe("one details step ends in Book", () => {
+  const LISBON = "Europe/Lisbon";
+  const NOON = "2026-10-28T12:00:00.000Z"; // Wednesday 28 October, 12:00 in Lisbon (WET)
+  const ready = {
+    videoToPick: null,
+    dayKey: "2026-10-28",
+    start: NOON,
+    timeZone: LISBON,
+    detailsOpen: true,
+    nameOk: true,
+    emailOk: true,
+    question: null,
+  };
+
+  it("names the choice still missing before the details", () => {
+    expect(nextBookStep({ ...ready, videoToPick: "Google Meet or Zoom" })).toEqual({
+      kind: "video",
+      label: "Pick Google Meet or Zoom",
+    });
+    expect(nextBookStep({ ...ready, dayKey: null, start: null })).toEqual({
+      kind: "day",
+      label: "Pick a day",
+    });
+    expect(nextBookStep({ ...ready, start: null })).toEqual({ kind: "time", label: "Pick a time" });
+  });
+
+  it("asks for the details as one step once a time is picked", () => {
+    const closed = { ...ready, detailsOpen: false };
+    expect(nextBookStep({ ...closed, nameOk: false, emailOk: false })).toEqual({
+      kind: "details",
+      field: "name",
+      label: "Next: your details",
+    });
+    expect(nextBookStep({ ...closed, emailOk: false })).toEqual({
+      kind: "details",
+      field: "email",
+      label: "Next: your details",
+    });
+    expect(nextBookStep({ ...closed, question: "Robin" })).toEqual({
+      kind: "details",
+      field: "question",
+      label: "Next: your details",
+    });
+  });
+
+  it("inside the details step, names the next missing field", () => {
+    expect(nextBookStep({ ...ready, nameOk: false, emailOk: false })).toEqual({
+      kind: "details",
+      field: "name",
+      label: "Add your name",
+    });
+    expect(nextBookStep({ ...ready, emailOk: false })).toEqual({
+      kind: "details",
+      field: "email",
+      label: "Add your email",
+    });
+    expect(nextBookStep({ ...ready, question: "Robin" })).toEqual({
+      kind: "details",
+      field: "question",
+      label: "Answer Robin's question",
+    });
+  });
+
+  it("ends in Book with the day and time in the guest's zone", () => {
+    expect(nextBookStep(ready)).toEqual({
+      kind: "book",
+      label: "Book Wednesday 28 October at 12:00",
+    });
+    // The optional answer never holds the button back, and a closed step that is complete books.
+    expect(nextBookStep({ ...ready, detailsOpen: false })).toEqual({
+      kind: "book",
+      label: "Book Wednesday 28 October at 12:00",
+    });
+    expect(nextBookStep({ ...ready, timeZone: "Asia/Tokyo" }).label).toBe(
+      "Book Wednesday 28 October at 21:00",
+    );
+  });
+
+  it("offers the other open times, counting every open time but the picked one", () => {
+    const slots = [NOON, "2026-10-28T13:00:00.000Z", "2026-10-29T09:00:00.000Z"];
+    expect(otherOpenTimes(slots, NOON)).toBe("See the other 2 open times");
+    expect(otherOpenTimes(slots.slice(0, 2), NOON)).toBe("See the one other open time");
+    expect(otherOpenTimes([NOON], NOON)).toBeNull();
+    expect(otherOpenTimes(slots, null)).toBeNull();
   });
 });
