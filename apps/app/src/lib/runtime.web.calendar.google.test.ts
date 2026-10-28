@@ -113,7 +113,8 @@ describe("webCalendar.updateGoogleEvent", () => {
       patch: { location: null },
     });
     const mirror = h.rpcs.find((r) => r.fn === "calendar_op_mirror_events");
-    expect((mirror?.args.p_events as { location?: string }[])[0]?.location).toBe("");
+    const sentEvents = (mirror?.args.p_events ?? []) as { location?: string }[];
+    expect(sentEvents[0]?.location).toBe("");
     expect(saved.location).toBeNull();
   });
 
