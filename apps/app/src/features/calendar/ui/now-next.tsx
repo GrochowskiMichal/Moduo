@@ -21,6 +21,7 @@ import {
   type NowNextParts,
   nowNextParts,
 } from "../now-next";
+import { OfflineLine, type WaitingChange } from "./offline-line";
 import { formatTimeOfDay } from "./time-format";
 
 type PillProps = {
@@ -153,10 +154,14 @@ type Props = {
   events: readonly CalendarEventModel[];
   /** Opens the meeting the pill names. */
   onOpen: (item: NowNextItem) => void;
+  /** Offline: the changes waiting to sync (the offline line counts them). */
+  waiting?: readonly WaitingChange[];
 };
 
+const NO_WAITING: readonly WaitingChange[] = [];
+
 /** Today's now and next, fitted into the toolbar's free room. */
-export function CalendarNowNext({ events, onOpen }: Props) {
+export function CalendarNowNext({ events, onOpen, waiting = NO_WAITING }: Props) {
   const nowMs = useMinuteTick();
   const online = useOnline();
   const [ref, width] = useWidth<HTMLDivElement>();
@@ -191,7 +196,11 @@ export function CalendarNowNext({ events, onOpen }: Props) {
 
   return (
     <div ref={ref} className={cn("flex min-w-0 flex-1 items-center")}>
-      {data ? <NowNextPill data={data} parts={nowNextParts(width)} onOpen={onOpen} /> : null}
+      {!online ? (
+        <OfflineLine waiting={waiting} />
+      ) : data ? (
+        <NowNextPill data={data} parts={nowNextParts(width)} onOpen={onOpen} />
+      ) : null}
     </div>
   );
 }

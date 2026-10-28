@@ -118,6 +118,7 @@ import { useCalendarAccountActions } from "./use-calendar-account-actions";
 import { useCalendarCompletionLoop } from "./use-calendar-completion-loop";
 import { useCalendarConnectReturn } from "./use-calendar-connect-return";
 import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
+import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarShown } from "./use-calendar-shown";
@@ -248,6 +249,18 @@ export function CalendarPageView({
     () => eventChipsInRange(shownEvents, range, isWritable, userId),
     [shownEvents, range, isWritable, userId],
   );
+  const faults = useCalendarFaults({
+    onRetry: refreshCalendars,
+    retrying: refreshing,
+    userId,
+    workspaceId,
+    accounts: calendar.accounts,
+    events: calendar.events,
+    degraded: calendar.degraded,
+    loading: loading || calendar.loading,
+    days: range.days,
+    allDayByDay: eventChips.allDay,
+  });
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
     [calendar.events],
@@ -282,7 +295,7 @@ export function CalendarPageView({
     [update, viewState],
   );
 
-  // ── right panel: the switchable Tasks | Detail surface (AC11) ─────────────
+  // ── right panel: the switchable Tasks | Detail surface (AC11)
   const [panelVariant, setPanelVariantState] = useState<PanelVariantId>(() =>
     readPanelVariant(userId, workspaceId),
   );
@@ -307,7 +320,7 @@ export function CalendarPageView({
     [setPanelVariant],
   );
 
-  // ── chip interaction state ─────────────────────────────────────────────────
+  // ── chip interaction state
   const [selectedOccurrenceKey, setSelectedOccurrenceKeyState] = useState<string | null>(null);
   // CALR-10: while Event or Notes is showing, it follows the selected event.
   const setSelectedOccurrenceKey = useCallback(
@@ -345,7 +358,7 @@ export function CalendarPageView({
   });
   const { requestEventDelete, patchEvent, occurrenceStartOf } = occurrenceQuestion;
 
-  // ── inbound `?event=` deep link (DF-2) ────────────────────────────────────
+  // ── inbound `?event=` deep link (DF-2)
   useCalendarEventDeepLink({
     urlEventId,
     onConsumeEventDeepLink,
@@ -469,7 +482,7 @@ export function CalendarPageView({
     void calendar.deleteEvent(deleteEventId);
   }, [calendar, deleteEventId]);
 
-  // ── drag-to-schedule (the universal drag contract, AC6) ───────────────────
+  // ── drag-to-schedule (the universal drag contract, AC6)
   const drag = useCalendarTaskDrag({ tasks, canEdit, commands });
 
   const requestDelete = useCallback(
@@ -503,7 +516,7 @@ export function CalendarPageView({
     [commands, tasks],
   );
 
-  // ── the completion loop (CAL-4) ───────────────────────────────────────────
+  // ── the completion loop (CAL-4)
   const {
     nowTick,
     workedTaskIds,
@@ -569,6 +582,8 @@ export function CalendarPageView({
         <CalendarTasksPanel
           onOpenTask={(taskId) => openDetail({ type: "task", id: taskId })}
           onRequestCapture={() => dispatchOpenCapture()}
+          skeletonGroups={faults.loadShape.planGroups}
+          onShape={faults.rememberPlanShape}
           review={
             reviewMode
               ? {
@@ -654,6 +669,8 @@ export function CalendarPageView({
       onTriageRemove,
       isWritable,
       viewerMembers,
+      faults.loadShape.planGroups,
+      faults.rememberPlanShape,
     ],
   );
 
@@ -735,6 +752,7 @@ export function CalendarPageView({
                 />
               }
             />
+            {faults.banner}
             <CalendarStrip
               count={strip.length}
               canEdit={canEdit}
@@ -753,7 +771,7 @@ export function CalendarPageView({
               onScheduleDue={canEdit ? onScheduleDue : undefined}
               fileCounts={attachmentCounts}
               prefs={prefs}
-              loading={loading}
+              loading={faults.loading}
               error={error}
               onRetry={() => {
                 void commands.load();
@@ -775,6 +793,10 @@ export function CalendarPageView({
               onTriageLonger={onTriageLonger}
               onTriageRemove={onTriageRemove}
               focusBlockId={focusBlockId}
+              staleAccountIds={faults.syncStatus.staleAccountIds}
+              faulted={faults.hideEmptyHint}
+              loadingAllDayRows={faults.loadShape.allDayRows}
+              overlay={faults.firstWeekOverlay}
             />
           </div>
         }
