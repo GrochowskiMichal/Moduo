@@ -4,7 +4,12 @@
 
 import { describe, expect, it } from "@rstest/core";
 
-import { entityOpenTarget, markEntityOpenIntent, takeEntityOpenIntent } from "./entity-open";
+import {
+  entityOpenTarget,
+  markEntityOpenIntent,
+  recentRefFor,
+  takeEntityOpenIntent,
+} from "./entity-open";
 
 describe("entityOpenTarget", () => {
   it("routes a contact to /contacts with type+id selection params", () => {
@@ -123,5 +128,31 @@ describe("entity-open intent (DF-1)", () => {
     expect(takeEntityOpenIntent("t1")).toBe(false);
     markEntityOpenIntent("");
     expect(takeEntityOpenIntent("")).toBe(false);
+  });
+});
+
+// GS-8 (Q12, Q19): the app records your open of an item it can open, under
+// search_all's type names; an id-less open, a module's own page or a settings
+// section is not an item.
+describe("recentRefFor", () => {
+  it("names the item an open lands on", () => {
+    expect(recentRefFor({ type: "note", id: "n1" })).toEqual({ type: "note", id: "n1" });
+    expect(recentRefFor({ type: "task", id: "t1" })).toEqual({ type: "task", id: "t1" });
+    expect(recentRefFor({ type: "contact", id: "c1" })).toEqual({ type: "contact", id: "c1" });
+    expect(recentRefFor({ type: "event", id: "e1" })).toEqual({ type: "event", id: "e1" });
+  });
+
+  it("uses search_all's names: a project is a bucket, an email an email_thread", () => {
+    expect(recentRefFor({ type: "project", id: "p1" })).toEqual({ type: "bucket", id: "p1" });
+    expect(recentRefFor({ type: "email", id: "m1" })).toEqual({ type: "email_thread", id: "m1" });
+  });
+
+  it("records nothing that isn't an item", () => {
+    expect(recentRefFor({ type: "note" })).toBeNull();
+    expect(recentRefFor({ type: "email" })).toBeNull();
+    expect(recentRefFor({ type: "settings", id: "storage" })).toBeNull();
+    expect(recentRefFor({ to: "/tasks" })).toBeNull();
+    expect(recentRefFor({ type: "wat", id: "x" })).toBeNull();
+    expect(recentRefFor(null)).toBeNull();
   });
 });
