@@ -325,6 +325,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-28 · Global search is federated: each module answers `<module>__search` with one hit shape, `search_all` merges and ranks, and one set of `search__*` text primitives (lifted from Chat's CV-19) makes matching identical everywhere
 - 2026-10-16 · GitHub on tasks: a read-only GitHub App per workspace; PRs and issues as live chips and cards; auto-linking by task ID; status suggested by default, automatic as a workspace setting
 - 2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag
 - 2026-07-13 · DF-21 (Universal Inbox — spine lane) /s1 PLANNED — spec DoR-ready, 6 sub-blocks, no code yet.
