@@ -52,23 +52,18 @@ export function searchHighlightTerms(query: string): HighlightTerm[] {
   return out;
 }
 
-/** Where the terms match in `text` (UTF-16 offsets into the original), in
- * order, overlaps merged. A prefix term marks only the word-start it matched. */
-export function searchHighlightRanges(text: string, terms: HighlightTerm[]): HighlightRange[] {
-  if (terms.length === 0 || !text) return [];
-  const { folded, at } = fold(text);
-  const hits: HighlightRange[] = [];
-  for (const m of folded.matchAll(WORD)) {
-    const word = m[0];
-    const from = m.index;
-    let len = 0;
-    for (const term of terms) {
-      const ok = term.prefix ? word.startsWith(term.text) : word === term.text;
-      if (ok) len = Math.max(len, term.text.length);
-    }
-    if (len === 0) continue;
-    hits.push({ start: at[from]!, end: at[from + len - 1]! + 1 });
+/** How much of `word` the terms mark from its start (0: none). */
+function matchedLength(word: string, terms: HighlightTerm[]): number {
+  let len = 0;
+  for (const term of terms) {
+    const ok = term.prefix ? word.startsWith(term.text) : word === term.text;
+    if (ok) len = Math.max(len, term.text.length);
   }
+  return len;
+}
+
+/** Ranges in order, overlapping or touching ones joined. */
+function mergeRanges(hits: HighlightRange[]): HighlightRange[] {
   const merged: HighlightRange[] = [];
   for (const hit of hits) {
     const last = merged.at(-1);
@@ -76,4 +71,17 @@ export function searchHighlightRanges(text: string, terms: HighlightTerm[]): Hig
     else merged.push({ ...hit });
   }
   return merged;
+}
+
+/** Where the terms match in `text` (UTF-16 offsets into the original), in
+ * order, overlaps merged. A prefix term marks only the word-start it matched. */
+export function searchHighlightRanges(text: string, terms: HighlightTerm[]): HighlightRange[] {
+  if (terms.length === 0 || !text) return [];
+  const { folded, at } = fold(text);
+  const hits: HighlightRange[] = [];
+  for (const m of folded.matchAll(WORD)) {
+    const len = matchedLength(m[0], terms);
+    if (len > 0) hits.push({ start: at[m.index]!, end: at[m.index + len - 1]! + 1 });
+  }
+  return mergeRanges(hits);
 }
