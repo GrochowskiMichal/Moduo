@@ -68,26 +68,40 @@ export function useCalendarNarrowPanels(showPlan: (view: "tasks") => void): void
   const pendingRef = useRef<PanelPair | null>(null);
 
   // Crossing a line (or the first paint): fold, or give back the wide choice.
+  // Sent a tick later: on the first paint this page's effects run before the
+  // app chrome's, which is what listens for panel changes.
   useEffect(() => {
     const prev = bandRef.current;
     if (prev === band) return;
     bandRef.current = band;
     const current = readFeaturePanelState("calendar");
+    let next: PanelPair;
     if (band === "wide") {
-      if (prev === null) writeWide(current);
-      else {
-        const next = readWide() ?? current;
-        if (!same(next, current)) pendingRef.current = next;
-        apply(next, current);
+      if (prev === null) {
+        writeWide(current);
+        return;
       }
-      return;
+      next = readWide() ?? current;
+    } else {
+      // Leaving a wide window remembers it; a first paint narrow keeps the last one.
+      if (prev === "wide" || (prev === null && !readWide())) writeWide(current);
+      next = panelsOnEnter(band, readWide() ?? current);
     }
-    // Leaving a wide window remembers it; a first paint narrow keeps the last one.
-    if (prev === "wide" || (prev === null && !readWide())) writeWide(current);
-    const next = panelsOnEnter(band, readWide() ?? current);
     lastRef.current = next;
-    if (!same(next, current)) pendingRef.current = next;
-    apply(next, current);
+    if (same(next, current)) return;
+    pendingRef.current = next;
+    let sent = false;
+    const timer = window.setTimeout(() => {
+      sent = true;
+      apply(next, readFeaturePanelState("calendar"));
+    }, 0);
+    return () => {
+      if (sent) return;
+      // Not sent (a strict-mode remount, a quick resize): the next run decides again.
+      window.clearTimeout(timer);
+      bandRef.current = prev;
+      pendingRef.current = null;
+    };
   }, [band]);
 
   // A toggle inside a band: remember it when wide; one panel below 1360.

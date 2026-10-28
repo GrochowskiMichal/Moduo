@@ -69,7 +69,6 @@ export function ZonePicker({ at, onDone }: { at: Date; onDone: () => void }) {
     <div className="flex flex-col">
       <div className="p-2">
         <Input
-          autoFocus
           role="combobox"
           aria-expanded
           aria-controls={listId}
@@ -111,7 +110,9 @@ export function ZonePicker({ at, onDone }: { at: Date; onDone: () => void }) {
               )}
             >
               <span className="min-w-0 flex-1 truncate">{row.city}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">{row.label}</span>
+              {row.label === row.city ? null : (
+                <span className="shrink-0 text-xs text-muted-foreground">{row.label}</span>
+              )}
             </div>
           ))
         )}

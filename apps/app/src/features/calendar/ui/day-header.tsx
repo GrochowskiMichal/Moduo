@@ -86,8 +86,8 @@ export function DayHeader({
       {note ? (
         <div
           data-day-note
-          className="truncate text-2xs leading-none text-muted-foreground"
-          title={note}
+          // Wraps rather than clips in a narrow column (1024 px, AC14).
+          className="text-2xs leading-tight text-muted-foreground"
         >
           {note}
         </div>

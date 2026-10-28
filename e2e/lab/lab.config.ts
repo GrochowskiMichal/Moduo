@@ -9,6 +9,7 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
+import { atSmallestWindow, withSecondZone } from "./calendar-acts.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
 const PORT = Number(process.env.LAB_PORT ?? 4317);
@@ -297,12 +298,11 @@ export default {
           act: async ({ page }: { page: Page }) => scrollGridTo(page, 13),
         },
         // Monday's stack of all-day items and trips at the smallest window (1024 x 700).
-        allDayOverflow: {
-          seed: "dense",
-          act: async ({ page }: { page: Page }) =>
-            page.setViewportSize({ width: 1024, height: 700 }),
-        },
+        allDayOverflow: { seed: "dense", act: atSmallestWindow },
         long: { seed: "long" },
+        // CALR-13: one side panel (Plan) at the smallest window; a second zone (Z).
+        narrow: { act: atSmallestWindow },
+        twoZones: { act: withSecondZone },
         eventOpen: {
           act: async ({ page }: { page: Page }) => onGrid(page, "Design review with Ana").click(),
         },
@@ -746,9 +746,12 @@ export default {
       id: "cal-go-to-date",
       screen: "calendar",
       goal: "Look at the same day last week from the month in the sidebar",
-      target: { keys: 0, clicks: 1 },
+      // Below 1600 px the calendars panel starts folded (CALR-13): open it first.
+      target: { keys: 0, clicks: 2 },
       async pointer({ click, step, page }: J) {
         const before = await calRange(page);
+        const expand = page.getByRole("button", { name: "Expand left panel" });
+        if (await expand.isVisible()) await click(expand);
         await click(miniMonthDay(page));
         await step("that week", {
           expect: async () => (await calRange(page)) !== before,
