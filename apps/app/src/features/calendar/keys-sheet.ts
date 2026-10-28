@@ -43,6 +43,12 @@ const ROWS: RowSpec[] = [
   { group: "Anywhere in Calendar", ids: ["calendar.undo"], desc: "Undo the last change" },
   {
     group: "Anywhere in Calendar",
+    ids: ["calendar.zone"],
+    desc: "Show or hide a second time zone",
+  },
+  { group: "Anywhere in Calendar", ids: ["calendar.plan"], desc: "Open Plan when it's folded" },
+  {
+    group: "Anywhere in Calendar",
     ids: ["calendar.place-task"],
     desc: "Place the Plan task you picked: ⇥ next free time, arrows adjust, ↵ places, esc lets go",
   },

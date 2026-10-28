@@ -179,6 +179,9 @@ export const HOTKEYS = {
   "calendar.paste": { scope: "calendar", label: "Paste the event", keys: ["Mod+V"] },
   "calendar.duplicate": { scope: "calendar", label: "Duplicate the event", keys: ["Mod+D"] },
   "calendar.undo": { scope: "calendar", label: "Undo", keys: ["Mod+Z"] },
+  "calendar.zone": { scope: "calendar", label: "Show or hide a second time zone", keys: ["Z"] },
+  // While Plan is folded (narrow windows); the panel's own ⌥3 takes over once it shows.
+  "calendar.plan": { scope: "calendar", label: "Open Plan", keys: ["Alt+3"] },
   "calendar.delete": {
     scope: "calendar",
     label: "Delete the event",
