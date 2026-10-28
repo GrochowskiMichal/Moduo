@@ -1,5 +1,6 @@
 /** The runtime port's spine (implemented in runtime.web.spine.ts). */
 
+import type { SearchAllRow, SearchRecent } from "@contracts/search";
 import type { ContentAuthorKind, ReactionKey } from "@contracts/vocabularies";
 
 import type { NotificationItem } from "../features/spine/notifications";
@@ -88,6 +89,37 @@ export type SpineRuntime = {
    * deleted targets), unlike `searchEntities`.
    */
   getEntities(input: { workspaceId: string; refs: EntityRef[] }): Promise<EntityRecord[]>;
+  /**
+   * ⌘K's one search (GS-3): the server's `search_all`, every module's
+   * `<module>__search` merged and ranked, up to `limitPerType` rows per type
+   * (8 by default, 50 at most) with each type's total and one Top result.
+   * `context` is the item open now (a linked hit ranks up). Throws a `DbError`
+   * (code 57014 when the server gave up after 5 s) or a network error.
+   */
+  searchAll(input: {
+    workspaceId: string;
+    query: string;
+    types?: readonly string[];
+    limitPerType?: number;
+    context?: EntityRef | null;
+  }): Promise<SearchAllRow[]>;
+  /**
+   * Record your open of an item (GS-8): every `moduo:entity:open` of an item,
+   * for ⌘K's Recent and the personal ranking. Sends only a uuid id (a desktop
+   * mail thread's device id never leaves the device); the server records only
+   * an item you can see. Throws a `DbError` on a failed write; the caller
+   * lets it go, since recording never gets in the way of opening.
+   */
+  recordOpen(input: { workspaceId: string; type: string; id: string }): Promise<void>;
+  /**
+   * ⌘K's Recent (GS-8): your last opened items in this workspace, newest
+   * first, each one you can still open (8 by default). Throws on a failed read.
+   */
+  recents(input: { workspaceId: string; limit?: number }): Promise<SearchRecent[]>;
+  /** Remove one item from your Recent (Q13). Throws on a failed write. */
+  forgetRecent(input: { workspaceId: string; type: string; id: string }): Promise<void>;
+  /** Clear your Recent in this workspace (Q13). Throws on a failed write. */
+  clearRecents(input: { workspaceId: string }): Promise<void>;
   /**
    * Tombstone a registry entry (the delete half of the registry contract) — a
    * module's own delete op calls this; exposed for testing + pre-adoption use.

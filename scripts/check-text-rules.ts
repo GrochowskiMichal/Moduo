@@ -103,9 +103,11 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   // Shared: a form field's label; the command palette's kind of result; the
   // paywall's plan names and its section eyebrow.
   "src/components/ui/field.tsx": ["label"],
-  "src/components/app/global-command-palette.tsx": [
-    "TYPE_LABEL[record.type] ?? record.type",
-    // Result groups from palette-search's fixed GROUP_DEFS ("Tasks", "Notes").
+  "src/components/app/global-search-palette.tsx": [
+    "TYPE_LABEL[row.entity_type] ?? row.entity_type",
+    // Result groups from palette-search's fixed PALETTE_GROUPS ("Tasks", "Notes").
+    "group.heading",
+    // The action groups the palette names itself ("Navigate", "Workspace").
     "group.heading",
   ],
   "src/routes/pages/paywall-page.tsx": ["heading.eyebrow", "name"],

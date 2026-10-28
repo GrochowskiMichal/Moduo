@@ -23,6 +23,7 @@ import { calendarConnectorModule } from "./modules/calendar.ts";
 import { notesConnectorModule } from "./modules/notes.ts";
 import { emailConnectorModule } from "./modules/email.ts";
 import { chatConnectorModule } from "./modules/chat.ts";
+import { searchConnectorModule } from "./modules/search.ts";
 
 /** A verified, live API key — the connector's caller identity. */
 export type KeyContext = {
@@ -82,6 +83,11 @@ export type ConnectorModule = {
   /** Module id — matches module_activity.module and the key's scopes key. */
   module: string;
   tools: ToolDef[];
+  /**
+   * For a module with no key scope of its own (search, across modules): who
+   * may list and call its tools, and that rule in words for the refusal.
+   */
+  keyAccess?: { allows: (key: KeyContext) => boolean; needs: string };
 };
 
 export const connectorModules: ConnectorModule[] = [
@@ -92,7 +98,10 @@ export const connectorModules: ConnectorModule[] = [
   notesConnectorModule,
   emailConnectorModule,
   chatConnectorModule,
+  searchConnectorModule,
 ];
+
+const ownAccess = (module: string) => connectorModules.find((m) => m.module === module)?.keyAccess;
 
 /** Normalize a key's scope for a module (absent/unknown → none). */
 export function moduleScope(key: KeyContext, module: string): "none" | "view" | "edit" {
@@ -105,12 +114,16 @@ export function moduleScope(key: KeyContext, module: string): "none" | "view" | 
  * (MCP_TOOL_NEEDS: e.g. Calendar's task-block tools move the task itself).
  */
 export function toolAllowed(key: KeyContext, module: string, tool: ToolDef): boolean {
+  const own = ownAccess(module);
+  if (own) return own.allows(key);
   if (!keyScopeAllows(key.scopes, module, tool.access)) return false;
   return mcpToolNeeds(tool.name).every((needed) => keyScopeAllows(key.scopes, needed, "edit"));
 }
 
 /** What a tool needs, in words: "Calendar: Edit and Tasks: Edit". */
 export function toolRequirement(module: string, tool: ToolDef): string {
+  const own = ownAccess(module);
+  if (own) return own.needs;
   const label = (m: string) => (isMcpKeyModule(m) ? MCP_KEY_MODULE_LABELS[m] : m);
   const parts = [`${label(module)}: ${tool.access === "edit" ? "Edit" : "View"}`];
   for (const needed of mcpToolNeeds(tool.name)) parts.push(`${label(needed)}: Edit`);

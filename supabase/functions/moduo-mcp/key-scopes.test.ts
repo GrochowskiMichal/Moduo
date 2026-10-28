@@ -166,7 +166,8 @@ describe("which tools a key lists and may call", () => {
     // The Tasks module's tools (TV-D16: projects, sections, areas, statuses,
     // teams, templates and imports are Tasks' too).
     const tasksPrefix = /^(tasks|projects|sections|areas|statuses|teams|templates|imports)_/;
-    for (const t of viewTasks) {
+    // Plus `search` (GS-7), which spans every module the key can view.
+    for (const t of viewTasks.filter((t) => t.name !== "search")) {
       expect(tasksPrefix.test(t.name), t.name).toBe(true);
       expect(t.access, t.name).toBe("view");
     }

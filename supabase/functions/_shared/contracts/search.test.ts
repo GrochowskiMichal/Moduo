@@ -11,8 +11,12 @@ import {
   SEARCH_SNIPPET_END,
   SEARCH_SNIPPET_START,
   isSearchHit,
+  normalizeSearchAllRow,
   normalizeSearchHit,
+  normalizeSearchRecent,
+  parseSearchAllRow,
   parseSearchHit,
+  parseSearchRecent,
 } from "./search.ts";
 import {
   SEARCH_MATCHES,
@@ -33,6 +37,7 @@ const hit = {
   match: "body",
   rank: 0.42,
   updated_at: "2026-10-28T09:00:00.123456+00:00",
+  archived: false,
 };
 
 // GS-1 (specs/global-search.md, Assumption 2): one row shape every
@@ -95,6 +100,7 @@ describe("search hit row and match vocabulary", () => {
       icon: null,
       match: "body",
       rank: 1,
+      archived: false,
     });
     expect(normalizeSearchHit({ ...hit, rank: -2 })?.rank).toBe(0);
     expect(normalizeSearchHit({ ...hit, rank: "0.5" })?.rank).toBe(0.5);
@@ -127,5 +133,72 @@ describe("search hit row and match vocabulary", () => {
     expect(sql).toContain(`{${SEARCH_PREFIX_MIN_LETTERS},}`);
     expect(sql).toContain("pg_catalog.chr(57344)");
     expect(sql).toContain("pg_catalog.chr(57345)");
+  });
+});
+
+// GS-3 (specs/global-search.md, Assumption 2 / Q8): a hit says whether its
+// item is archived, so the palette and the MCP can tag it.
+describe("the archived flag", () => {
+  it("is a required boolean on a strict parse", () => {
+    expect(parseSearchHit({ ...hit, archived: true }).success).toBe(true);
+    const { archived: _a, ...noFlag } = hit;
+    expect(parseSearchHit(noFlag).success).toBe(false);
+    expect(parseSearchHit({ ...hit, archived: "true" }).success).toBe(false);
+    expect(parseSearchHit({ ...hit, archived: null }).success).toBe(false);
+  });
+
+  it("reads loosely: only true (or Postgres' 't') is archived", () => {
+    expect(normalizeSearchHit({ ...hit, archived: true })?.archived).toBe(true);
+    expect(normalizeSearchHit({ ...hit, archived: "t" })?.archived).toBe(true);
+    expect(normalizeSearchHit({ ...hit, archived: "yes" })?.archived).toBe(false);
+    const { archived: _a, ...noFlag } = hit;
+    expect(normalizeSearchHit(noFlag)?.archived).toBe(false);
+  });
+});
+
+// GS-3: search_all's row is a hit plus its merged score, how many of its type
+// matched (the "Show all N" count) and whether it is the one Top result.
+describe("search_all row", () => {
+  const row = { ...hit, score: 0.61, type_total: 12, top: true };
+
+  it("parses strictly", () => {
+    const parsed = parseSearchAllRow(row);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(row);
+    expect(parseSearchAllRow({ ...row, score: 1.2 }).success).toBe(false);
+    expect(parseSearchAllRow({ ...row, type_total: -1 }).success).toBe(false);
+    expect(parseSearchAllRow({ ...row, type_total: 1.5 }).success).toBe(false);
+    expect(parseSearchAllRow({ ...row, top: "yes" }).success).toBe(false);
+    expect(parseSearchAllRow(hit).success).toBe(false);
+  });
+
+  it("reads loosely: score clamped, a missing total counts the row itself, top only when true", () => {
+    expect(normalizeSearchAllRow({ ...row, score: 4 })?.score).toBe(1);
+    expect(normalizeSearchAllRow({ ...row, score: "0.25" })?.score).toBe(0.25);
+    expect(normalizeSearchAllRow({ ...row, type_total: null })?.type_total).toBe(1);
+    expect(normalizeSearchAllRow({ ...row, type_total: "7" })?.type_total).toBe(7);
+    expect(normalizeSearchAllRow({ ...row, top: "t" })?.top).toBe(true);
+    expect(normalizeSearchAllRow({ ...row, top: 1 })?.top).toBe(false);
+    expect(normalizeSearchAllRow({ ...row, entity_id: "" })).toBeNull();
+  });
+});
+
+// GS-8: a Recent row (search_recents_list) is a hit plus when you last opened it.
+describe("search recent row", () => {
+  const recent = { ...hit, match: "title", rank: 0, snippet: null, last_opened_at: "2026-10-28T10:00:00+00:00" };
+
+  it("parses strictly", () => {
+    const parsed = parseSearchRecent(recent);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data).toEqual(recent);
+    expect(parseSearchRecent(hit).success).toBe(false);
+    expect(parseSearchRecent({ ...recent, last_opened_at: null }).success).toBe(false);
+  });
+
+  it("reads loosely: the hit as normalizeSearchHit reads it, a missing open time as empty", () => {
+    expect(normalizeSearchRecent({ ...recent, rank: 9 })?.rank).toBe(1);
+    expect(normalizeSearchRecent({ ...recent, last_opened_at: null })?.last_opened_at).toBe("");
+    expect(normalizeSearchRecent({ ...recent, entity_id: null })).toBeNull();
+    expect(normalizeSearchRecent("nope")).toBeNull();
   });
 });

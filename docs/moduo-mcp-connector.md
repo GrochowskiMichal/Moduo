@@ -149,7 +149,7 @@ person, or the key's creator) can change links (`20261008122000`), so a key
 never does more than its creator could.
 
 **None means none, across modules.** Results that carry another module's data
-are filtered by the key's scopes: `links_search_entities` and `links_suggest`
+are filtered by the key's scopes: `search`, `links_search_entities` and `links_suggest`
 return only entity types the key can view (`MCP_ENTITY_TYPE_MODULES`), and
 only items its creator can open; `links_list` / `contacts_get` drop links into
 modules the key can't see; `calendar_day` leaves task blocks out without
@@ -362,6 +362,7 @@ under [`modules/`](../supabase/functions/moduo-mcp/modules/).
 | Contacts (`contacts.ts`) | `contacts_list`, `contacts_get`, `contacts_search` | `contacts_create`, `contacts_update`, `contacts_set_status`, `contacts_link`, `contacts_unlink`, `contacts_delete`, `contacts_import` |
 | Email (`email.ts`, tissue threads, metadata only) | `email_list`, `email_get`, `email_search` | `email_snooze`, `email_unsnooze`, `email_follow_up`, `email_clear_follow_up`, `email_link`, `email_remove` |
 | Links (`links.ts`) | `links_search_entities`, `links_list`, `comments_list` | `links_suggest` (Edit: suggestions exist to be accepted), `links_create`, `links_set_kind`, `links_delete`, `comments_add` |
+| Search (`search.ts`, GS-7) | `search`: listed for any key with View on a module it searches (no scope of its own) | — |
 
 `comments_list` (MOD-94) reads an item's comments, newest last; it needs View
 on the item's own module too and shows only what the key's person can open.
