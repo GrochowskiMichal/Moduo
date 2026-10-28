@@ -6408,6 +6408,83 @@ export type Database = {
         Args: { p_event_id: string | null; p_workspace_id: string | null }
         Returns: undefined
       }
+      calendar_op_event_occurrence_delete: {
+        Args: { p_original_start: string | null; p_series_id: string | null; p_workspace_id: string | null }
+        Returns: undefined
+      }
+      calendar_op_event_occurrence_restore: {
+        Args: { p_original_start: string | null; p_series_id: string | null; p_workspace_id: string | null }
+        Returns: {
+          all_day: boolean
+          attendees: Json
+          calendar_id: string
+          calendar_ref: string | null
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          end_time: string
+          external_event_id: string | null
+          id: string
+          location: string | null
+          owner_id: string
+          recurrence_rule: string | null
+          recurring: boolean
+          reminders: Json
+          source_account_id: string | null
+          start_time: string
+          status: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "calendar_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      calendar_op_event_occurrence_update: {
+        Args: {
+          p_original_start: string | null
+          p_patch: Json | null
+          p_series_id: string | null
+          p_workspace_id: string | null
+        }
+        Returns: {
+          all_day: boolean
+          attendees: Json
+          calendar_id: string
+          calendar_ref: string | null
+          color: string | null
+          created_at: string
+          deleted_at: string | null
+          description: string | null
+          end_time: string
+          external_event_id: string | null
+          id: string
+          location: string | null
+          owner_id: string
+          recurrence_rule: string | null
+          recurring: boolean
+          reminders: Json
+          source_account_id: string | null
+          start_time: string
+          status: string
+          tags: Json
+          title: string
+          updated_at: string
+          workspace_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "calendar_events"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       calendar_op_event_restore: {
         Args: { p_event_id: string | null; p_workspace_id: string | null }
         Returns: {

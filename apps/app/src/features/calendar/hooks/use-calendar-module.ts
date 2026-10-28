@@ -28,6 +28,7 @@ import {
   widenCalendarWindow,
 } from "../window";
 import { writableEvent } from "../writable";
+import { useOccurrenceWrites } from "./use-occurrence-writes";
 
 type Params = {
   userId: string | null;
@@ -521,7 +522,9 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         return;
       }
       const account = accounts.find((a) => a.id === snapshot.sourceAccountId);
-      setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId));
+      // A series takes its changed occurrences with it (CALR-11).
+      const overrides = events.filter((e) => e.seriesId === eventId);
+      setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId && e.seriesId !== eventId));
       if (writer === "google" && account) {
         await deleteFromGoogle(snapshot, account);
         return;
@@ -544,6 +547,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
               setEventsIn(scope, (prev) =>
                 prev.some((e) => e.id === restored.id) ? prev : [...prev, restored],
               );
+              // Its changed occurrences came back with it: read them.
+              if (overrides.length > 0) await loadRef.current({ quiet: true });
             })().catch((err) =>
               toast.error(err instanceof Error ? err.message : "Couldn't restore the event."),
             );
@@ -552,9 +557,10 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       } catch (err) {
         // Surgical rollback: re-insert only the removed row — restoring a whole
         // list snapshot would resurrect tmp-ids reconciled while the RPC flew.
-        setEventsIn(scope, (prev) =>
-          prev.some((e) => e.id === eventId) ? prev : [...prev, snapshot],
-        );
+        setEventsIn(scope, (prev) => [
+          ...prev,
+          ...[snapshot, ...overrides].filter((row) => !prev.some((e) => e.id === row.id)),
+        ]);
         toast.error(err instanceof Error ? err.message : "Couldn't delete the event.");
       }
     },
@@ -571,6 +577,29 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     ],
   );
 
+  // One occurrence of a repeat (CALR-11): This event / All events.
+  const canWrite = useCallback(
+    (event: CalendarEventModel | undefined): event is CalendarEventModel => {
+      if (!event || !guardEdit() || isTempId(event.id) || isBusyId(event.id)) return false;
+      if (writableEvent(event, accounts, userId)) return true;
+      toast.error(VIEW_ONLY_EVENT);
+      return false;
+    },
+    [guardEdit, accounts, userId],
+  );
+  const writeOccurrence = useOccurrenceWrites({
+    runtime,
+    workspaceId,
+    scope,
+    events,
+    accounts,
+    setEventsIn,
+    canWrite,
+    updateEvent,
+    deleteEvent,
+    reload,
+  });
+
   return {
     events: liveEvents,
     accounts,
@@ -585,6 +614,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     createEvent,
     updateEvent,
     deleteEvent,
+    writeOccurrence,
   };
 }
 
