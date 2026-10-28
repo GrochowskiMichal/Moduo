@@ -390,3 +390,59 @@ describe("notes_search uses notes__search", () => {
     ]);
   });
 });
+
+// NS-5 (AC6): the meta ops return public.notes_meta, the row without doc_state
+// and the bodies. The connector shapes that lean row as it shaped the full one.
+describe("meta results still map", () => {
+  const PARENT = "55555555-5555-4555-8555-555555555555";
+  const LEAN: Row = {
+    id: NOTE,
+    workspace_id: WS,
+    created_by: null,
+    parent_id: PARENT,
+    title: "  Q4 plan ",
+    icon: "📌",
+    is_pinned: false,
+    position: "a0",
+    is_archived: true,
+    published_at: null,
+    publish_token: null,
+    doc_version: 3,
+    share_mode: "inherit",
+    workspace_shared: false,
+    in_inbox: false,
+    full_width: false,
+    edited_by: null,
+    edited_at: null,
+    created_at: "2026-10-01T08:00:00+00:00",
+    updated_at: "2026-10-28T09:00:00+00:00",
+    deleted_at: null,
+  };
+  const FULL: Row = { ...LEAN, doc_state: "AQLx2b8B", body_md: "Body", body_text: "Body", search_tsv: "'q4':1A" };
+
+  function opDb(row: Row): ToolContext {
+    const rpc = async (fn: string) =>
+      fn === "notes_op_move" || fn === "notes_op_archive"
+        ? { data: row, error: null }
+        : { data: null, error: { message: `unexpected rpc ${fn}` } };
+    return { key: { id: "key-1", workspaceId: WS, name: "Bot", createdBy: null, scopes: {} } as any, db: { rpc } as any };
+  }
+
+  for (const [name, args] of [
+    ["notes_move", { note_id: NOTE, parent_id: PARENT }],
+    ["notes_archive", { note_id: NOTE }],
+  ] as const) {
+    it(`${name} returns the same note for the lean row as for the full row`, async () => {
+      const fromLean = await tool(name).handler(args as any, opDb(LEAN));
+      expect(fromLean).toEqual(await tool(name).handler(args as any, opDb(FULL)));
+      expect(fromLean).toEqual({
+        id: NOTE,
+        title: "Q4 plan",
+        parent_id: PARENT,
+        icon: "📌",
+        archived: true,
+        published: false,
+      });
+    });
+  }
+});

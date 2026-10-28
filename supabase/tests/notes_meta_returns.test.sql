@@ -78,6 +78,13 @@ BEGIN
       format('notes_op_%s: authenticated and service_role execute, anon and PUBLIC don''t', v_op));
   END LOOP;
 
+  -- The helper is internal: only the definer ops (and service_role) call it.
+  PERFORM test.ok(
+    NOT has_function_privilege('anon', 'public.notes__meta(public.notes)', 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', 'public.notes__meta(public.notes)', 'EXECUTE')
+      AND has_function_privilege('service_role', 'public.notes__meta(public.notes)', 'EXECUTE'),
+    'notes__meta is not callable by anon or authenticated');
+
   -- Each op, called as the app calls it, returns the lean row.
   v_calls := jsonb_build_object(
     'create', format('public.notes_op_create(%L, %L, %L, %L, %L, %L)', v_ws, v_new, v_p, 'Fresh', 'b', NULL),
@@ -95,14 +102,15 @@ BEGIN
     v_r := test.call_op(v_calls ->> v_op);
     PERFORM test.ok(NOT v_r ? '__error', format('notes_op_%s runs', v_op), v_r ->> '__error');
     PERFORM test.ok(
-      NOT (v_r ?| ARRAY['doc_state', 'body_text', 'body_md', 'search_tsv', 'description']),
+      NOT (v_r ?| ARRAY['doc_state', 'body_text', 'body_md', 'search_tsv']),
       format('notes_op_%s returns no doc_state or body column', v_op), v_r::text);
     PERFORM test.ok(test.keys(v_r) = v_expected,
       format('notes_op_%s returns every column the app reads, and no other', v_op),
       test.keys(v_r)::text);
     PERFORM test.ok(
       v_r ->> 'id' = CASE v_op WHEN 'create' THEN v_new::text
-                               WHEN 'duplicate' THEN v_r ->> 'id'
+                               WHEN 'duplicate' THEN (SELECT id::text FROM public.notes
+                                 WHERE workspace_id = v_ws AND title = 'Roadmap (copy)' AND id <> v_p)
                                ELSE v_n::text END
         AND v_r ->> 'workspace_id' = v_ws::text,
       format('notes_op_%s returns the note it wrote', v_op), v_r::text);
