@@ -23,6 +23,7 @@ import type {
   CalendarLiveChange,
 } from "../events";
 import { applyLiveChange } from "../live";
+import { type BusyBlockRow, busyBlockToEvent } from "../teammates";
 import {
   allTimeCalendarWindow,
   type CalendarWindow,
@@ -253,30 +254,8 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           setBusy(
             busyRows.error || !Array.isArray(busyRows.data)
               ? []
-              : busyRows.data.map(
-                  (
-                    row: { calendar_id: string; start_time: string; end_time: string },
-                    i: number,
-                  ) => ({
-                    // Two busy blocks can start at the same time; keep keys unique.
-                    id: `busy:${row.calendar_id}:${row.start_time}:${i}`,
-                    workspaceId,
-                    ownerId: null,
-                    sourceAccountId: "busy",
-                    externalEventId: null,
-                    calendarId: "busy",
-                    title: "Busy",
-                    description: "",
-                    startsAt: row.start_time,
-                    endsAt: row.end_time,
-                    allDay: false,
-                    rrule: null,
-                    status: "confirmed",
-                    color: null,
-                    createdAt: row.start_time,
-                    updatedAt: row.start_time,
-                    deletedAt: null,
-                  }),
+              : busyRows.data.map((row: BusyBlockRow, i: number) =>
+                  busyBlockToEvent(row, workspaceId, i),
                 ),
           );
         } catch {

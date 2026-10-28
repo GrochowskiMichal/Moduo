@@ -12,6 +12,7 @@ import type {
   CalendarModuleBundle,
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
+import type { SharedCalendar } from "./calendar-busy";
 
 export type CalendarRuntime = {
   // ── Wave-2 module surface (workspace-scoped, Supabase-first) ──────────
@@ -27,6 +28,19 @@ export type CalendarRuntime = {
    * start is the first occurrence, not the one you're looking at.
    */
   listModule(workspaceId: string, window?: CalendarWindow): Promise<CalendarModuleBundle>;
+  /**
+   * Preview as (CALR-16): the masked read and busy blocks run for `as`, cut to
+   * your own events, and `as`'s level on each of your calendars. A failed read
+   * is `failed`, never an empty week. Optional: web only.
+   */
+  preview?(q: { workspaceId: string; as: string; window: CalendarWindow }): Promise<{
+    rows: CalendarEventModel[];
+    busy: CalendarEventModel[];
+    levels: { calendarId: string; level: "view" | "freebusy" | "none" }[];
+    failed: boolean;
+  }>;
+  /** Teammates' calendars you can see, at their level (CALR-16); `[]` when the read fails. */
+  sharedWithMe?(workspaceId: string): Promise<SharedCalendar[]>;
   createEvent(input: {
     workspaceId: string;
     title: string;

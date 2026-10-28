@@ -84,6 +84,7 @@ import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
+import { useCalendarLens } from "./use-calendar-lens";
 import { useCalendarNarrowPanels } from "./use-calendar-narrow-panels";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
@@ -188,6 +189,14 @@ export function CalendarPageView({
     () => visibleRange(viewState.view, anchor, prefs),
     [viewState.view, anchor, prefs],
   );
+  const lens = useCalendarLens({
+    runtime,
+    userId,
+    workspaceId,
+    events: shownEvents,
+    range,
+    accountHues,
+  });
   // SCALE-1: the events read is windowed, so tell the hook what's on screen —
   // navigating past the loaded window widens it and refetches instead of
   // rendering a silently empty month.
@@ -213,8 +222,8 @@ export function CalendarPageView({
     [calendar.accounts, userId],
   );
   const eventChips = useMemo(
-    () => eventChipsInRange(shownEvents, range, isWritable, userId),
-    [shownEvents, range, isWritable, userId],
+    () => eventChipsInRange(lens.events, range, isWritable, userId),
+    [lens.events, range, isWritable, userId],
   );
   const faults = useCalendarFaults({
     onRetry: refreshCalendars,
@@ -402,7 +411,7 @@ export function CalendarPageView({
     days: range.days,
     chips: eventChips,
     eventsById,
-    canEdit: canEdit && calendar.canEdit,
+    canEdit: lens.edit(canEdit && calendar.canEdit),
     isWritable,
     prefs,
     workspaceId,
@@ -693,13 +702,16 @@ export function CalendarPageView({
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
               nowNext={
-                <CalendarNowNext
-                  events={shownEvents}
-                  onOpen={(item) => {
-                    setSelectedOccurrenceKey(item.occurrenceKey);
-                    openDetail({ type: "event", id: item.eventId });
-                  }}
-                />
+                <>
+                  {lens.menu}
+                  <CalendarNowNext
+                    events={shownEvents}
+                    onOpen={(item) => {
+                      setSelectedOccurrenceKey(item.occurrenceKey);
+                      openDetail({ type: "event", id: item.eventId });
+                    }}
+                  />
+                </>
               }
             />
             {faults.banner}
@@ -710,6 +722,7 @@ export function CalendarPageView({
               onMoveToToday={() => rollForward(strip)}
               onReview={openReview}
             />
+            {lens.top}
             <CalendarViews
               runtime={runtime}
               workspaceId={workspaceId}
@@ -718,10 +731,10 @@ export function CalendarPageView({
               onOpenDay={(d) => update({ view: "day", anchor: localDayKey(d) })}
               view={viewState.view}
               days={range.days}
-              blocksByDay={grouped}
+              blocksByDay={lens.tasks(grouped)}
               eventsByDay={eventChips.timed}
               allDayByDay={eventChips.allDay}
-              dueByDay={dueByDay}
+              dueByDay={lens.tasks(dueByDay)}
               onDueClick={(id) => openDetail({ type: "task", id })}
               onScheduleDue={canEdit ? onScheduleDue : undefined}
               fileCounts={attachmentCounts}
@@ -732,16 +745,16 @@ export function CalendarPageView({
                 void commands.load();
                 void calendar.reload();
               }}
-              canEdit={canEdit && calendar.canEdit}
+              canEdit={lens.edit(canEdit && calendar.canEdit)}
               onToggleDone={onToggleDone}
               onCreateEvent={onCreateEvent}
               createCalendars={createCalendars}
               onMoveEvent={onMoveEvent}
               onMoveTask={drag.onMoveTask}
-              onEventClick={onEventClick}
+              onEventClick={(c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r)}
               onTaskClick={onTaskClick}
               selectedOccurrenceKey={selectedOccurrenceKey}
-              onSelectOccurrence={setSelectedOccurrenceKey}
+              onSelectOccurrence={(k) => lens.select(k) || setSelectedOccurrenceKey(k)}
               accountHues={accountHues}
               workedTaskIds={workedTaskIds}
               onTriageLater={onTriageLater}
@@ -749,11 +762,16 @@ export function CalendarPageView({
               onTriageRemove={onTriageRemove}
               focusBlockId={focusBlockId}
               staleAccountIds={faults.syncStatus.staleAccountIds}
-              faulted={faults.hideEmptyHint}
+              faulted={lens.faulted(faults.hideEmptyHint)}
               loadingAllDayRows={faults.loadShape.allDayRows}
               overlay={faults.firstWeekOverlay}
               cursor={keys.cursor}
-              gridLayer={plan.layer}
+              gridLayer={
+                <>
+                  {plan.layer}
+                  {lens.layer}
+                </>
+              }
             />
           </div>
         }
@@ -767,7 +785,7 @@ export function CalendarPageView({
         prefs={prefs}
         members={viewerMembers}
         cursor={keys.cursor}
-        canEdit={canEdit && calendar.canEdit}
+        canEdit={lens.edit(canEdit && calendar.canEdit)}
         createEvent={onCreateEvent}
       />
       <DragOverlay dropAnimation={null}>

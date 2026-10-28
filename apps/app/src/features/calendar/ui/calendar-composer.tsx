@@ -24,10 +24,12 @@ import {
   parseComposer,
 } from "../composer/parse";
 import { type CalendarEventModel, eventChipsInRange } from "../events";
+import { freeForAll, verdictFor, verdictsEcho } from "../free-time";
 import type { GridCursor } from "../grid-keys";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
 import type { CalendarPrefs } from "../prefs";
 import { EventComposer } from "./event-composer";
+import { setTeammates, teammatesState, useTeammatesStore } from "./teammates-store";
 import type { NewEventDraft } from "./use-create-event";
 
 type Props = {
@@ -137,6 +139,10 @@ export function CalendarComposer({
   const boxRef = useRef<HTMLDivElement>(null);
 
   const busyOn = useMemo(() => busyReader(calendar.events, userId), [calendar.events, userId]);
+  // CALR-16: teammates named in the box show their lanes, and ⇥ finds a time
+  // every one of them is free; the clash that leads the echo stays your own.
+  const blocks = useTeammatesStore((s) => s.blocks);
+  const teammates = useTeammatesStore((s) => s.teammates);
   const accounts: ComposerAccount[] = useMemo(
     () =>
       calendar.accounts
@@ -181,6 +187,8 @@ export function CalendarComposer({
     () =>
       onCreateNew(() => {
         const k = latest.current;
+        const seed = teammatesState().composerSeed;
+        setTeammates({ composerSeed: null });
         if (!k.canEdit) return;
         const box = document.querySelector<HTMLInputElement>("[data-calendar-composer] input");
         if (box) {
@@ -196,9 +204,9 @@ export function CalendarComposer({
             : null,
           workStartMinute: k.prefs.workStartMinute,
           workEndMinute: k.prefs.workEndMinute,
-          busyOn: k.busyOn,
+          busyOn: freeForAll(k.busyOn, teammatesState().blocks, seed?.ids ?? []),
         });
-        setOpen({ base, text: "", hop: null });
+        setOpen({ base, text: seed?.text ?? "", hop: null });
         if (k.runtime && k.workspaceId) {
           void loadContacts(k.runtime, k.workspaceId).then(setContacts);
         }
@@ -208,7 +216,7 @@ export function CalendarComposer({
 
   const parsed = useMemo(() => {
     if (!open) return null;
-    const p = parseComposer(open.text, {
+    const ctx = {
       nowMs: Date.now(),
       base: open.base,
       workStartMinute: prefs.workStartMinute,
@@ -216,12 +224,27 @@ export function CalendarComposer({
       busyOn,
       calendars,
       people,
-    });
+    };
+    const first = parseComposer(open.text, ctx);
+    const ids = first.people.filter((x) => x.member).map((x) => x.id);
+    // A bare day's first free time is free for everyone named too.
+    const p =
+      ids.length > 0
+        ? parseComposer(open.text, { ...ctx, busyOn: freeForAll(busyOn, blocks, ids) })
+        : first;
     if (open.hop && open.hop.whenKey === p.whenKey) {
       return { ...p, startMs: open.hop.startMs, endMs: open.hop.endMs, firstFree: false };
     }
     return p;
-  }, [open, prefs.workStartMinute, prefs.workEndMinute, busyOn, calendars, people]);
+  }, [open, prefs.workStartMinute, prefs.workEndMinute, busyOn, calendars, people, blocks]);
+  const namedKey = parsed?.people
+    .filter((x) => x.member)
+    .map((x) => x.id)
+    .join(",");
+  useEffect(() => {
+    setTeammates({ named: namedKey ? namedKey.split(",") : [] });
+  }, [namedKey]);
+  useEffect(() => () => setTeammates({ named: [] }), []);
   const plan = useMemo(
     () => (parsed ? planComposer(parsed, { accounts }) : null),
     [parsed, accounts],
@@ -282,6 +305,8 @@ export function CalendarComposer({
 
   if (!open || !parsed || !plan) return null;
 
+  const named = parsed.people.filter((x) => x.member);
+  const namedIds = named.map((x) => x.id);
   const hop = (direction: 1 | -1) => {
     const next = hopFreeTime({
       startMs: parsed.startMs,
@@ -290,7 +315,7 @@ export function CalendarComposer({
       nowMs: Date.now(),
       workStartMinute: prefs.workStartMinute,
       workEndMinute: prefs.workEndMinute,
-      busyOn,
+      busyOn: freeForAll(busyOn, blocks, namedIds),
     });
     if (next) setOpen({ ...open, hop: { whenKey: parsed.whenKey, ...next } });
   };
@@ -329,6 +354,18 @@ export function CalendarComposer({
         plan={plan}
         calendarLabel={calendarLabel}
         clash={clashFor(parsed.startMs, parsed.endMs, busyOn)}
+        verdicts={verdictsEcho(
+          named.map((x) => ({
+            name: x.name,
+            verdict: verdictFor(
+              blocks,
+              x.id,
+              parsed.startMs,
+              parsed.endMs,
+              teammates.some((t) => t.userId === x.id),
+            ),
+          })),
+        )}
         position={position}
         onText={(text) => setOpen({ ...open, text })}
         onHop={hop}
