@@ -627,36 +627,108 @@ describe("calendar_day", () => {
     duration_minutes: 30,
     status: "todo",
   };
-  const shared = (tasks: string[]) => ({
+  // CALR-15: events come from the masked read (calendar_events_visible), which
+  // already answers for the key's person; the raw table is never read.
+  const shared = (tasks: string[], events: Row[] = [event]) => ({
+    calendar_events_visible: () => events,
     share_visible_ids: (args: Row) => (args.p_resource_type === "task" ? tasks : []),
   });
 
   it("leaves task blocks out, and says so, for a key without Tasks", async () => {
-    const { db, queries, rpcCalls } = fakeDb({ calendar_events: [event], tasks: [block] }, shared([TASK]));
+    const { db, queries, rpcCalls } = fakeDb({ tasks: [block] }, shared([TASK]));
     const result = (await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db))) as Row;
     expect((result.events as Row[]).map((e) => e.id)).toEqual(["event-1"]);
     expect(result.blocks).toEqual([]);
     expect(result.strip).toEqual([]);
     expect(result.note).toBe("Task blocks are left out: this API key has no access to Tasks.");
     expect(queries.some((q) => q.table === "tasks")).toBe(false);
-    expect(rpcCalls.map((c) => c.args.p_resource_type)).toEqual(["calendar"]);
+    expect(rpcCalls.filter((c) => c.fn === "share_visible_ids")).toEqual([]);
   });
 
   it("shows a Tasks key the blocks its creator can open, and no others", async () => {
-    const open = fakeDb({ calendar_events: [event], tasks: [block] }, shared([TASK]));
+    const open = fakeDb({ tasks: [block] }, shared([TASK]));
     const result = (await day.handler(
       { date: "2020-01-15" },
       ctx({ calendar: "view", tasks: "view" }, open.db),
     )) as Row;
     expect((result.blocks as Row[]).map((b) => b.task_id)).toEqual([TASK]);
     expect(result.note).toBeUndefined();
-    const hidden = fakeDb({ calendar_events: [event], tasks: [block] }, shared([]));
+    const hidden = fakeDb({ tasks: [block] }, shared([]));
     const none = (await day.handler(
       { date: "2020-01-15" },
       ctx({ calendar: "view", tasks: "view" }, hidden.db),
     )) as Row;
     expect(none.blocks).toEqual([]);
     expect(none.strip).toEqual([]);
+  });
+
+  it("reads the day's events through the masked read, never the raw table", async () => {
+    const { db, queries, rpcCalls } = fakeDb({ calendar_events: [event] }, shared([]));
+    await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db));
+    expect(queries.some((q) => q.table === "calendar_events")).toBe(false);
+    const read = rpcCalls.find((c) => c.fn === "calendar_events_visible");
+    expect(read?.args).toEqual({
+      p_workspace_id: WS,
+      p_from: "2020-01-15T00:00:00.000Z",
+      p_to: "2020-01-16T00:00:00.000Z",
+    });
+  });
+
+  it("hands a teammate's private event to the agent as the masked read gave it", async () => {
+    const busy = { ...event, id: "event-2", owner_id: "someone-else", title: "Busy", is_private: true, description: null };
+    const { db } = fakeDb({}, shared([], [event, busy]));
+    const result = (await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db))) as Row;
+    const byId = new Map((result.events as Row[]).map((e) => [e.id, e]));
+    expect(byId.get("event-2")?.title).toBe("Busy");
+    expect(byId.get("event-2")?.description).toBe("");
+    expect(byId.get("event-1")?.title).toBe("Standup");
+  });
+});
+
+describe("calendar_list_events", () => {
+  const list = tool(calendarConnectorModule, "calendar_list_events");
+  const at = (id: string, start: string, end: string, extra: Row = {}) => ({
+    id,
+    workspace_id: WS,
+    deleted_at: null,
+    owner_id: ME,
+    calendar_ref: null,
+    title: id,
+    start_time: start,
+    end_time: end,
+    source_account_id: null,
+    recurrence_rule: null,
+    ...extra,
+  });
+
+  it("reads through the masked read for the range, never the raw table", async () => {
+    const rows = [at("a", "2020-01-15T10:00:00.000Z", "2020-01-15T11:00:00.000Z")];
+    const { db, queries, rpcCalls } = fakeDb({ calendar_events: rows }, { calendar_events_visible: () => rows });
+    const result = (await list.handler(
+      { from: "2020-01-15T00:00:00.000Z", to: "2020-01-16T00:00:00.000Z" },
+      ctx({ calendar: "view" }, db),
+    )) as Row[];
+    expect(result.map((e) => e.id)).toEqual(["a"]);
+    expect(queries.some((q) => q.table === "calendar_events")).toBe(false);
+    expect(rpcCalls.find((c) => c.fn === "calendar_events_visible")?.args).toEqual({
+      p_workspace_id: WS,
+      p_from: "2020-01-15T00:00:00.000Z",
+      p_to: "2020-01-16T00:00:00.000Z",
+    });
+  });
+
+  it("keeps to the range and the limit", async () => {
+    const rows = [
+      at("before", "2019-06-01T10:00:00.000Z", "2019-06-01T11:00:00.000Z", { recurrence_rule: "FREQ=WEEKLY" }),
+      at("a", "2020-01-15T10:00:00.000Z", "2020-01-15T11:00:00.000Z"),
+      at("b", "2020-01-15T12:00:00.000Z", "2020-01-15T13:00:00.000Z"),
+    ];
+    const { db } = fakeDb({}, { calendar_events_visible: () => rows });
+    const result = (await list.handler(
+      { from: "2020-01-15T00:00:00.000Z", to: "2020-01-16T00:00:00.000Z", limit: 1 },
+      ctx({ calendar: "view" }, db),
+    )) as Row[];
+    expect(result.map((e) => e.id)).toEqual(["a"]);
   });
 });
 

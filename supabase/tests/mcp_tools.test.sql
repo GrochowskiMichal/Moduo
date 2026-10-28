@@ -131,3 +131,36 @@ BEGIN
     'and so does one its person can''t see', r);
 END;
 $$;
+
+-- CALR-15 (specs/calendar-rethink.md AC28): the connector lists events through
+-- calendar_events_visible, so a key reads a teammate's private event as "Busy"
+-- (its person can only see the time), and its own person's events whole.
+-- KC is E's Calendar key; O's calendar OC is shared with E at All details.
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
+  (test.id('KC'), test.id('W'), 'E calendar', 'mdo_kc', md5('db-test-kc'), '{"calendar": "view"}'::jsonb, test.id('E'));
+INSERT INTO public.calendars (id, workspace_id, owner_id, name, kind) VALUES
+  (test.id('OC'), test.id('W'), test.id('O'), 'O work', 'custom');
+DELETE FROM public.resource_grants WHERE resource_type = 'calendar' AND resource_id = test.id('OC');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'calendar', test.id('OC'), 'member', test.id('E'), 'view', test.id('O'));
+
+DO $$
+DECLARE
+  r text;
+BEGIN
+  PERFORM test.as_user('O', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Offsite planning', p_starts_at => '2030-03-04 10:00+00', p_ends_at => '2030-03-04 11:00+00',
+    p_location => 'The barn', p_calendar_id => %L, p_is_private => true)$q$, test.id('W'), test.id('OC')));
+  PERFORM test.as_user('E', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Dentist', p_starts_at => '2030-03-04 15:00+00', p_ends_at => '2030-03-04 16:00+00', p_is_private => true)$q$,
+    test.id('W')));
+  r := test.as_key('KC', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00') e
+    WHERE e.title = 'Busy' AND e.location IS NULL AND e.owner_id = %L$q$, test.id('W'), test.id('O')));
+  PERFORM test.ok(r = 'ok 1', 'calendar_events_visible: a key reads its person''s teammate''s private event as "Busy"', r);
+  r := test.as_key('KC', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00') e
+    WHERE e.title IN ('Offsite planning', 'Dentist')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 1', 'and its own person''s private event by its title, never the teammate''s', r);
+  r := test.as_key('K', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 0', 'a key without Calendar reads no events', r);
+END;
+$$;
