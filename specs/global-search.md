@@ -1,6 +1,6 @@
 # Spec: Global search (⌘K)
 
-> Status: **Draft: waiting on Maciej's answers (Open questions)** · Owner: mike (product: maciej) · Build: after closed alpha (2 Nov 2026)
+> Status: **Ready** · Owner: mike (product: maciej; answers given by Mike on Maciej's behalf, with his acceptance, 2026-10-28) · Build: now, all of GS-1 to GS-10, independent of the alpha and beta schedule
 > Related: [.design/connective-tissue/BRIEF.md](../.design/connective-tissue/BRIEF.md) §85, §202 · [.design/connective-tissue/DESIGN_BRIEF.md](../.design/connective-tissue/DESIGN_BRIEF.md) §33, §76, §122, §233 · [specs/connective-tissue.md](./connective-tissue.md) :13, :93, :116 (deferred "Cmd-K Search mode") · DF-10 ([decisions/spine.md](../docs/decisions/spine.md)) · CV-19 ([decisions/chat.md](../docs/decisions/chat.md)) · ROADMAP :129 ("Global cross-module search")
 
 ## Scope
@@ -16,7 +16,7 @@ The technical heart is a **shared search contract**:
 
 ## Product behavior & UX
 
-Recommended answers are written in. Each one waits for Maciej's ratification under *Open questions* (tagged `Q#`).
+Every `Q#` below refers to a ratified answer under *Product answers*.
 
 1. **Open.** ⌘K from anywhere, and the bottom-bar Search when no module claims it. This is unchanged.
 2. **Empty query.** You see *Recent* (the last 8 things you opened in this workspace, on any device; Q11–Q13), then the existing actions (Navigate, New note, …).
@@ -192,70 +192,74 @@ Order: GS-1 → GS-2 → GS-3. After GS-3, the rest can run in parallel. GS-4, G
 
 ## Definition-of-Ready gate
 
-- [x] **Scope, Product behavior, Edge cases, Acceptance criteria** are filled. They become unambiguous once the Open questions are answered.
+- [x] **Scope, Product behavior, Edge cases, Acceptance criteria** are filled and unambiguous.
 - [x] **Every acceptance criterion has at least one test**, with its plain-English note.
-- [ ] **Open questions is empty.** It is not: 35 product questions are waiting on Maciej. Every technical unknown is decided above.
+- [x] **Open questions is empty.** All 35 product questions are answered (every recommendation accepted), and every technical unknown is decided above.
 - [x] **The data model is named and Supabase-first.** New: the `pg_trgm` extension, the `search__*` primitives, the `<module>__search` functions, `search_all`, `registry__search`, `notes__visible_ids`, `search_recents`. Re-made: `notes.search_tsv`, plus a tasks tsv.
 - [x] **Module feature:** this is platform search, not a module. The contract becomes a module-contract line once GS-3 lands: "a module answers `<module>__search`". The MCP tool is listed (GS-7), and there is no dashboard widget (Q30).
 - [x] **Execution blocks** are decomposed and sequenced, each context-sized and self-contained.
 - [x] **Design constraints acknowledged:** tokens only, the palette built on the existing `command.tsx` shadcn primitive, DESIGN_RULES R1–R10 (the highlight uses a token, not raw colour).
 - [x] **Manual-test surfaces:** ⌘K on web and desktop, the Notes sidebar search, MCP `search` from Claude, offline (devtools offline).
 
-## Open questions
+## Product answers
 
-These are for Maciej: product only, each with a recommended answer. Answer like "Q3 b" or "all ok except Q9".
+Answered 2026-10-28 by Mike on Maciej's behalf, with his acceptance ("all rec"): every recommended answer below is the decision.
 
 **Results and layout**
-- [ ] **Q1.** One "Top result" row above the groups? *Rec: yes*, the single best match across all types.
-- [ ] **Q2.** Group order: Tasks, Projects, Notes, Contacts, Events, Messages, Conversations, Email? *Rec: yes, fixed.* Ranking changes the order inside a group, never the order of groups.
-- [ ] **Q3.** How many rows per group before "Show all N"? *Rec: 3* (a: 3 · b: 5 · c: no cap, one scrolling list).
-- [ ] **Q4.** Actions ("New note", "Settings") when they match: *Rec: below the results* (a: below · b: above · c: only with an empty query).
-- [ ] **Q5.** The context line per type: note parent path, task project, contact company, event date, message conversation. *Rec: yes, all five.*
-- [ ] **Q6.** Show a snippet only when the match is in the body, not when it's in the title? *Rec: yes.*
-- [ ] **Q7.** Trashed items: *Rec: hidden* (a: hidden · b: shown last with a "Trash" tag).
-- [ ] **Q8.** Archived items (archived tasks, notes, projects): *Rec: shown in their group with an "Archived" tag, ranked lower.*
+- [x] **Q1.** One "Top result" row above the groups? *Rec: yes*, the single best match across all types.
+- [x] **Q2.** Group order: Tasks, Projects, Notes, Contacts, Events, Messages, Conversations, Email? *Rec: yes, fixed.* Ranking changes the order inside a group, never the order of groups.
+- [x] **Q3.** How many rows per group before "Show all N"? *Rec: 3* (a: 3 · b: 5 · c: no cap, one scrolling list).
+- [x] **Q4.** Actions ("New note", "Settings") when they match: *Rec: below the results* (a: below · b: above · c: only with an empty query).
+- [x] **Q5.** The context line per type: note parent path, task project, contact company, event date, message conversation. *Rec: yes, all five.*
+- [x] **Q6.** Show a snippet only when the match is in the body, not when it's in the title? *Rec: yes.*
+- [x] **Q7.** Trashed items: *Rec: hidden* (a: hidden · b: shown last with a "Trash" tag).
+- [x] **Q8.** Archived items (archived tasks, notes, projects): *Rec: shown in their group with an "Archived" tag, ranked lower.*
 
 **Matching**
-- [ ] **Q9.** Forgive typos in titles ("meetng" → "Meeting"), only when exact matches are few? *Rec: yes, titles only.*
-- [ ] **Q9b.** Is it acceptable that "spotkania" doesn't find "spotkanie" (no Polish stemming), as long as "spotk" finds both? *Rec: yes, for now.*
-- [ ] **Q10.** Keep quotes for a phrase and `-word` to exclude, with nothing else (no `type:`, no `@person`)? *Rec: yes.* Chips do the filtering.
+- [x] **Q9.** Forgive typos in titles ("meetng" → "Meeting"), only when exact matches are few? *Rec: yes, titles only.*
+- [x] **Q9b.** Is it acceptable that "spotkania" doesn't find "spotkanie" (no Polish stemming), as long as "spotk" finds both? *Rec: yes, for now.*
+- [x] **Q10.** Keep quotes for a phrase and `-word` to exclude, with nothing else (no `type:`, no `@person`)? *Rec: yes.* Chips do the filtering.
 
 **Recent and personal**
-- [ ] **Q11.** With an empty ⌘K, show the last things you opened? *Rec: yes, 8 items.*
-- [ ] **Q12.** Should Recent follow you across devices, which means Moduo stores what you opened, privately, for you only? *Rec: yes.*
-- [ ] **Q13.** Can you clear your Recent, or remove one item from it? *Rec: yes, "Clear" on hover, one item at a time.*
-- [ ] **Q13b.** Should things you open often rank higher in results? *Rec: yes, gently, below text relevance.*
+- [x] **Q11.** With an empty ⌘K, show the last things you opened? *Rec: yes, 8 items.*
+- [x] **Q12.** Should Recent follow you across devices, which means Moduo stores what you opened, privately, for you only? *Rec: yes.*
+- [x] **Q13.** Can you clear your Recent, or remove one item from it? *Rec: yes, "Clear" on hover, one item at a time.*
+- [x] **Q13b.** Should things you open often rank higher in results? *Rec: yes, gently, below text relevance.*
 
 **Filtering and keys**
-- [ ] **Q14.** Type chips under the input (All · Tasks · Notes · Contacts · Events · Chat · Email)? *Rec: yes.*
-- [ ] **Q15.** Tab and Shift+Tab to move between chips? *Rec: yes.* ⌘1–⌘7 are not used, because they collide with navigation.
+- [x] **Q14.** Type chips under the input (All · Tasks · Notes · Contacts · Events · Chat · Email)? *Rec: yes.*
+- [x] **Q15.** Tab and Shift+Tab to move between chips? *Rec: yes.* ⌘1–⌘7 are not used, because they collide with navigation.
 
 **Opening**
-- [ ] **Q16.** Opening a note from a body match: jump to and highlight the match? *Rec: yes* (GS-10). If not, the note opens at the top.
-- [ ] **Q16b.** Opening a chat message: jump to that message in its conversation, as Chat's Search does today? *Rec: yes.*
-- [ ] **Q16c.** Does ⌘K remember your last query when you reopen it? *Rec: no*, it opens empty with Recent. Chat's Search keeps its own memory.
+- [x] **Q16.** Opening a note from a body match: jump to and highlight the match? *Rec: yes* (GS-10). If not, the note opens at the top.
+- [x] **Q16b.** Opening a chat message: jump to that message in its conversation, as Chat's Search does today? *Rec: yes.*
+- [x] **Q16c.** Does ⌘K remember your last query when you reopen it? *Rec: no*, it opens empty with Recent. Chat's Search keeps its own memory.
 
 **Email**
-- [ ] **Q17.** On web, where mail isn't available: show only threads already in Moduo (linked, snoozed, converted), with no hint about desktop? *Rec: yes.*
-- [ ] **Q17b.** On desktop: a mail group from your local mailboxes, newest first, 3 rows? *Rec: yes.*
+- [x] **Q17.** On web, where mail isn't available: show only threads already in Moduo (linked, snoozed, converted), with no hint about desktop? *Rec: yes.*
+- [x] **Q17b.** On desktop: a mail group from your local mailboxes, newest first, 3 rows? *Rec: yes.*
 
 **MCP (your own AI)**
-- [ ] **Q18.** One `search` tool for agents that sees exactly what the key may see? *Rec: yes.*
-- [ ] **Q19.** Does an agent's search count toward your Recent? *Rec: no.* Only your own opens count.
+- [x] **Q18.** One `search` tool for agents that sees exactly what the key may see? *Rec: yes.*
+- [x] **Q19.** Does an agent's search count toward your Recent? *Rec: no.* Only your own opens count.
 
 **States**
-- [ ] **Q20.** No results: offer "Search everything" when a chip is active, and nothing else? *Rec: yes.*
-- [ ] **Q21.** Offline: one quiet line plus what's on this device (actions, task IDs)? *Rec: yes.* There are no toasts.
-- [ ] **Q22.** A progress line only after 300 ms, never a spinner? *Rec: yes.*
+- [x] **Q20.** No results: offer "Search everything" when a chip is active, and nothing else? *Rec: yes.*
+- [x] **Q21.** Offline: one quiet line plus what's on this device (actions, task IDs)? *Rec: yes.* There are no toasts.
+- [x] **Q22.** A progress line only after 300 ms, never a spinner? *Rec: yes.*
 
 **Privacy**
-- [ ] **Q23.** Someone else's private event: not searchable at all, not even as "Busy"? *Rec: yes, not searchable.*
-- [ ] **Q24.** Public channels you never joined: searchable? *Rec: yes, as Chat's Search does today.*
+- [x] **Q23.** Someone else's private event: not searchable at all, not even as "Busy"? *Rec: yes, not searchable.*
+- [x] **Q24.** Public channels you never joined: searchable? *Rec: yes, as Chat's Search does today.*
 
 **Later or no**
-- [ ] **Q25.** Semantic search ("the note about the pricing call" with none of those words) would need an embedding model run inside Supabase. Not in this spec. *Rec: decide after open alpha, with usage data.*
-- [ ] **Q26.** Comments as results, opening the item at the comment? *Rec: not now.*
-- [ ] **Q27.** Attachment file names as results? *Rec: not now.*
-- [ ] **Q28.** Tags as results, opening the tag page? *Rec: not now*; the tag page doesn't exist yet.
-- [ ] **Q29.** Search across all your workspaces at once? *Rec: no*, the current workspace only.
-- [ ] **Q30.** A dashboard search widget? *Rec: no*, ⌘K is the one search.
+- [x] **Q25.** Semantic search ("the note about the pricing call" with none of those words) would need an embedding model run inside Supabase. Not in this spec. *Rec: decide after open alpha, with usage data.*
+- [x] **Q26.** Comments as results, opening the item at the comment? *Rec: not now.*
+- [x] **Q27.** Attachment file names as results? *Rec: not now.*
+- [x] **Q28.** Tags as results, opening the tag page? *Rec: not now*; the tag page doesn't exist yet.
+- [x] **Q29.** Search across all your workspaces at once? *Rec: no*, the current workspace only.
+- [x] **Q30.** A dashboard search widget? *Rec: no*, ⌘K is the one search.
+
+## Open questions
+
+- [x] (none)
