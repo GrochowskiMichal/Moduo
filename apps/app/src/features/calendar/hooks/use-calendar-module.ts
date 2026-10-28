@@ -303,6 +303,9 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   }, [load]);
   const reload = useCallback(() => loadRef.current(), []);
 
+  // Events deleted here this session (an undo of an add, ⌫): live echoes skip them.
+  const goneRef = useRef(new Set<string>());
+
   // Live events (CALR-7). Subscribed per scope as the signed-in person; a
   // workspace switch or unmount stops it. A change goes through `setEventsIn`,
   // so one that arrives late from the workspace you left is dropped. A resync
@@ -315,6 +318,15 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
     let lastResyncAt = Number.NEGATIVE_INFINITY;
     const stop = runtime.calendar.listenLive({ workspaceId: scope, selfId: userId }, (event) => {
       if (event.type === "change") {
+        // A late echo of an event just deleted here (its insert, a stamp) never
+        // brings it back: the delete's own update may not reach this channel.
+        const { change } = event;
+        if (
+          change.kind !== "delete" &&
+          !change.event.deletedAt &&
+          goneRef.current.has(change.event.id)
+        )
+          return;
         liveDuringReadRef.current?.changes.push(event.change);
         setEventsIn(scope, (prev) => applyLiveChange(prev, event.change, scope));
         return;
@@ -540,6 +552,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         // No Undo: it would come back as a new Google event (out of scope).
         if (!quiet) toast.success("Event deleted");
       } catch (err) {
+        goneRef.current.delete(snapshot.id);
         setEventsIn(scope, (prev) =>
           prev.some((e) => e.id === snapshot.id) ? prev : [...prev, snapshot],
         );
@@ -564,6 +577,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       // A series takes its changed occurrences with it (CALR-11).
       const overrides = events.filter((e) => e.seriesId === eventId);
       setEventsIn(scope, (prev) => prev.filter((e) => e.id !== eventId && e.seriesId !== eventId));
+      goneRef.current.add(eventId);
       if (writer === "google" && account) {
         await deleteFromGoogle(snapshot, account, opts.quiet);
         return;
@@ -579,6 +593,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
         recordUndo(
           "Event deleted",
           async () => {
+            goneRef.current.delete(eventId);
             const restored = await (runtime as ModuoRuntime).calendar.restoreEvent({
               workspaceId: workspaceId as string,
               eventId,
@@ -592,6 +607,7 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
           { toast: true, description: snapshot.title },
         );
       } catch (err) {
+        goneRef.current.delete(eventId);
         // Surgical rollback: re-insert only the removed row — restoring a whole
         // list snapshot would resurrect tmp-ids reconciled while the RPC flew.
         setEventsIn(scope, (prev) => [

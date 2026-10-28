@@ -637,14 +637,15 @@ export default {
       target: { keys: 3, clicks: 3 },
       // CALR-4: a Moduo event deletes at once; Undo (or ⌘Z) is the safety net.
       async keyboard({ press, step, page }: J) {
-        const chips = page.locator("[data-chip='event']");
-        const before = await chips.count();
         await press("j");
-        await step("picked", { expect: page.locator("[data-chip='event'] [data-selected='true']") });
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event deleted", { exact: true });
         await press("Backspace");
-        await step("deleted", { expect: async () => (await chips.count()) === before - 1 });
+        await step("deleted", { expect: toast });
         await press("Meta+z");
-        await step("restored", { expect: async () => (await chips.count()) === before });
+        await step("restored", { gone: toast });
       },
       async pointer({ click, step, page }: J) {
         await click(onGrid(page, "Board prep"));
@@ -663,14 +664,15 @@ export default {
       goal: "Pick an event by keys, duplicate it, then take the copy back",
       target: { keys: 3, clicks: 0 },
       async keyboard({ press, step, page }: J) {
-        const chips = page.locator("[data-chip='event']");
-        const before = await chips.count();
         await press("j");
-        await step("picked", { expect: page.locator("[data-chip='event'] [data-selected='true']") });
+        await step("picked", {
+          expect: page.locator("[data-chip='event'] [data-selected='true']"),
+        });
+        const toast = page.getByText("Event added", { exact: true });
         await press("Meta+d");
-        await step("duplicated", { expect: async () => (await chips.count()) === before + 1 });
+        await step("duplicated", { expect: toast });
         await press("Meta+z");
-        await step("taken back", { expect: async () => (await chips.count()) === before });
+        await step("taken back", { gone: toast });
       },
     },
     {
