@@ -9,7 +9,7 @@ import type { CalendarEventModel } from "../events";
 
 type Input = {
   eventsById: Map<string, CalendarEventModel>;
-  deleteEvent: (eventId: string) => Promise<void>;
+  deleteEvent: (eventId: string) => Promise<unknown>;
   /** Clear what pointed at it (the card, the panel, the selection). */
   onDeleted: (eventId: string) => void;
 };

@@ -7,11 +7,10 @@
 // opened last, each removable, and "Clear recent") sits above the actions.
 
 import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
-import { Eraser, MessageCircle, Paperclip, Search, X } from "lucide-react";
+import { Eraser, Paperclip, Search, X } from "lucide-react";
 import { type ComponentType, type KeyboardEvent, type ReactNode, useState } from "react";
 
 import { filesLabel } from "../../features/attachments/files";
-import { Snippet } from "../../features/chat/find/snippet";
 import { resolveEntityIcon } from "../../features/spine/icon-map";
 import {
   type PaletteChip,
@@ -47,15 +46,6 @@ export type PaletteAction = {
 
 export type PaletteActionGroup = { heading: string; actions: PaletteAction[] };
 
-/** Chat's half until GS-6: its own two calls, drawn in their places. */
-export type PaletteChat = {
-  messages: Array<{ id: string; snippet: string; meta: string; onSelect: () => void }>;
-  conversations: Array<{ id: string; name: string; archived: boolean; onSelect: () => void }>;
-  messagesFailed: boolean;
-  conversationsFailed: boolean;
-  onSeeAll: () => void;
-};
-
 /** ⌘K's Recent (GS-8): what you opened last in this workspace, newest first. */
 export type PaletteRecent = {
   rows: SearchRecent[];
@@ -82,6 +72,8 @@ const TYPE_LABEL: Record<string, string> = {
   email: "Email",
   email_thread: "Email",
   event: "Event",
+  chat_message: "Message",
+  chat_channel: "Conversation",
 };
 
 export type GlobalSearchPaletteProps = {
@@ -99,12 +91,13 @@ export type GlobalSearchPaletteProps = {
   /** A reply is taking longer than 300 ms: draw the thin progress line. */
   slow: boolean;
   notice: PaletteNotice;
-  /** The search finished and found nothing (no rows, no chat, no actions). */
+  /** The search finished and found nothing (no rows, no actions). */
   noResults: boolean;
   actionGroups: PaletteActionGroup[];
-  chat?: PaletteChat | null;
   /** Shown while the query isn't searched (GS-8). */
   recent?: PaletteRecent | null;
+  /** Chat's own search for the same words (filters, paging); null without Chat. */
+  onSeeAllInChat?: (() => void) | null;
   onOpenRow: (row: SearchHit) => void;
   onShowAll: (group: PaletteGroupKey) => void;
   onSearchEverything: () => void;
@@ -323,73 +316,6 @@ function TypeChips({
   );
 }
 
-function Unavailable() {
-  return (
-    <div className="px-2 py-1.5 text-sm text-muted-foreground" role="alert">
-      Search isn't available
-    </div>
-  );
-}
-
-/** Chat's Messages and Conversations (its own calls until GS-6), then "See all in Chat". */
-function ChatGroups({ chat }: { chat: PaletteChat }) {
-  const ConversationIcon = resolveEntityIcon("chat_channel");
-  return (
-    <>
-      {chat.messages.length > 0 || chat.messagesFailed ? (
-        <CommandGroup heading="Messages">
-          {chat.messagesFailed ? (
-            <Unavailable />
-          ) : (
-            chat.messages.map((m) => (
-              <CommandItem
-                key={`chat_message:${m.id}`}
-                value={`chat_message:${m.id}`}
-                onSelect={m.onSelect}
-              >
-                <MessageCircle />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <Snippet text={m.snippet} className="block truncate" />
-                  <span className="truncate text-xs text-muted-foreground">{m.meta}</span>
-                </span>
-              </CommandItem>
-            ))
-          )}
-        </CommandGroup>
-      ) : null}
-      {chat.conversationsFailed && !chat.messagesFailed ? (
-        <CommandGroup heading="Conversations">
-          <Unavailable />
-        </CommandGroup>
-      ) : null}
-      {chat.conversations.length > 0 ? (
-        <CommandGroup heading="Conversations">
-          {chat.conversations.map((c) => (
-            <CommandItem
-              key={`chat_channel:${c.id}`}
-              value={`entity:chat_channel:${c.id}`}
-              data-chat-conversation={c.id}
-              onSelect={c.onSelect}
-            >
-              <ConversationIcon />
-              <span className="min-w-0 flex-1 truncate">{c.name}</span>
-              {c.archived ? (
-                <span className="shrink-0 text-xs text-muted-foreground">Archived</span>
-              ) : null}
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      ) : null}
-      <CommandGroup>
-        <CommandItem value="action:see-all-in-chat" onSelect={chat.onSeeAll}>
-          <Search />
-          <span>See all in Chat</span>
-        </CommandItem>
-      </CommandGroup>
-    </>
-  );
-}
-
 function NoResults({
   query,
   narrowed,
@@ -465,8 +391,8 @@ export function GlobalSearchPalette({
   notice,
   noResults,
   actionGroups,
-  chat,
   recent,
+  onSeeAllInChat,
   onOpenRow,
   onShowAll,
   onSearchEverything,
@@ -478,7 +404,7 @@ export function GlobalSearchPalette({
   const results = searching ? view : { top: null, groups: [] };
 
   // cmdk keeps its highlight on whatever was first when the list last changed
-  // ("See all in Chat", an action) while the server's answer is on its way:
+  // (an action) while the server's answer is on its way:
   // when a new answer arrives, Enter opens its first row (the Top result, or
   // with a chip the first of its groups).
   const first = results.top ?? results.groups[0]?.rows[0] ?? null;
@@ -527,10 +453,7 @@ export function GlobalSearchPalette({
       </CommandGroup>
     ));
 
-  // Messages and Conversations sit between Events and Email in the fixed order.
-  const before = results.groups.filter((g) => g.key !== "email");
-  const email = results.groups.filter((g) => g.key === "email");
-  const showChat = chat && searching && (chip === "all" || chip === "chat");
+  const showSeeAllInChat = onSeeAllInChat && searching && (chip === "all" || chip === "chat");
   const showRecent = !searching && !!recent && recent.rows.length > 0;
 
   return (
@@ -561,9 +484,15 @@ export function GlobalSearchPalette({
         {results.top ? (
           <CommandGroup heading="Top result">{row(results.top, true)}</CommandGroup>
         ) : null}
-        {groups(before)}
-        {showChat ? <ChatGroups chat={chat} /> : null}
-        {groups(email)}
+        {groups(results.groups)}
+        {showSeeAllInChat ? (
+          <CommandGroup>
+            <CommandItem value="action:see-all-in-chat" onSelect={onSeeAllInChat}>
+              <Search />
+              <span>See all in Chat</span>
+            </CommandItem>
+          </CommandGroup>
+        ) : null}
         {noResults ? (
           <NoResults
             query={trimmed}

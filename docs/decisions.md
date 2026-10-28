@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · The event menus reuse the week's keys; Move goes only where Moduo can undo it whole (CALR-4b).
 - 2026-10-28 · The composer reads the line locally, routes outside guests to Google, and names teammates without inviting them (CALR-9).
 - 2026-10-28 · Narrow windows fold through the shell's panel events; the second zone is a device setting; working hours are a sheet over the synced prefs (CALR-13).
 - 2026-10-28 · Plan groups your week's tasks; a click selects a row and S places it; placing keys are a gesture, not registry keys (CALR-5).
@@ -330,6 +331,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
 - 2026-10-28 · GS-8, recents are written only through ops; `search_all`'s personal term is cut into the live body; opens are recorded at the entity-open listener
+- 2026-10-28 · GS-5, contacts, companies and events on the search contract: events are matched set-based with the calendar ceiling read once, people and companies per match with `can_access`, and an email's domain is a word
+- 2026-10-28 · GS-4, tasks are indexed by expression (not a stored column), so writers may run `search__unaccent`; `tasks_search` moves to the contract's word matching; projects are registered by a trigger
 - 2026-10-28 · GS-3, `search_all` is SECURITY INVOKER over module functions that resolve the actor; `SearchHit` gains `archived`; the registry adapter walks its matches best first
 - 2026-10-28 · GS-2, Notes on the search contract: rank bands instead of ts_rank, word similarity for typos, `notes__search` callable by signed-in people, `search__unaccent` stays server-only
 - 2026-10-28 · Global search is federated: each module answers `<module>__search` with one hit shape, `search_all` merges and ranks, and one set of `search__*` text primitives (lifted from Chat's CV-19) makes matching identical everywhere

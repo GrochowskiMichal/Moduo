@@ -266,6 +266,18 @@ export function useCalendarHotkeys(input: Input) {
     k.createEvent({ ...draft, calendarId: k.isWritable(source) ? draft.calendarId : "moduo" });
   };
 
+  // ⌘C and ⌘D on one occurrence; the event menus run these too (CALR-4b).
+  const copyChip = (chip: EventChip) => {
+    if (chip.eventId.startsWith("busy")) return;
+    copied.current = chip.eventId;
+    toast("Event copied", { description: chip.title || undefined });
+  };
+  const duplicateChip = (chip: EventChip) => {
+    const k = keysRef.current;
+    const source = k.eventsById.get(chip.eventId);
+    if (source && k.canEdit) create(source, duplicateStartMs(chip));
+  };
+
   useAppHotkeys({
     "calendar.today": (e) => (inCalendarOverlay(e) ? false : keysRef.current.goToday()),
     "calendar.day": (e) => (inCalendarOverlay(e) ? false : keysRef.current.setView("day")),
@@ -342,8 +354,7 @@ export function useCalendarHotkeys(input: Input) {
       if (!onTheGrid(e) || window.getSelection()?.toString()) return false;
       const chip = selectedChip();
       if (!chip || chip.eventId.startsWith("busy")) return false;
-      copied.current = chip.eventId;
-      toast("Event copied", { description: chip.title || undefined });
+      copyChip(chip);
     },
     "calendar.paste": (e) => {
       const k = keysRef.current;
@@ -361,9 +372,8 @@ export function useCalendarHotkeys(input: Input) {
       const k = keysRef.current;
       if (!onTheGrid(e) || !k.canEdit) return false;
       const chip = selectedChip();
-      const source = chip ? k.eventsById.get(chip.eventId) : undefined;
-      if (!chip || !source) return false;
-      create(source, duplicateStartMs(chip));
+      if (!chip || !k.eventsById.has(chip.eventId)) return false;
+      duplicateChip(chip);
     },
     "calendar.undo": (e) => (inCalendarOverlay(e) ? false : undoLast() ? undefined : false),
   });
@@ -372,5 +382,5 @@ export function useCalendarHotkeys(input: Input) {
     () => (cursor ? { ...cursor, busy: chipAtCursor(cursor, timed) !== null } : null),
     [cursor, timed],
   );
-  return { cursor: shown };
+  return { cursor: shown, copyChip, duplicateChip };
 }

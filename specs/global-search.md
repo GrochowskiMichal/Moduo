@@ -56,7 +56,7 @@ Every `Q#` below refers to a ratified answer under *Product answers*.
 - **A very long query or paste.** Only the first 256 characters and 32 words are used, silently.
 - **Notes you can see only through a parent's sharing.** These are found. A note that inherits from a parent you can't see is not.
 - **Someone else's private calendar event** never matches by its title, description or attendees. It isn't searchable at all (Q23).
-- **A conversation you left, or a DM you're not in**, is never matched. A public channel you never joined is matched (Q24).
+- **A private conversation or DM you left, or one you're not in**, is never matched. A public channel is matched whether you joined it, never joined it or left it (Q24), as Chat's own Search reads it. (Amended in GS-6.)
 - **A trashed item** is hidden by default (Q7). An archived item appears under its group with an "Archived" tag (Q8).
 - **A renamed project** is found by its new name at once. Today its registry label goes stale; GS-4 fixes that.
 - **The same item reached two ways** (a task is also a top result) appears once.
@@ -149,7 +149,7 @@ The agent decided these on the team's behalf. Each is the decision, a one-clause
 10. **Notes' index.** `notes.search_tsv` is re-made as a generated column over `search__unaccent(title)` (weight A) and `search__unaccent(left(body_text,150000))` (weight B), with its GIN index rebuilt. Rebuilding 129 rows in prod is instant. The cold-body table split (architecture review P10) stays later; this contract hides it when it comes.
 11. **Context lines** come from each module: the note's parent path (up to 2 ancestors, "… / Parent"), the task's project name, the contact's company, the event's start date, the message's conversation name. They are computed in SQL so the MCP gets the same text.
 12. **The registry keeps its job, links and mentions, and stops being the search index.** `searchEntities` stays for the @/ref pickers. The palette moves to `search_all`. Until a type adopts the contract, `search_all` covers it through a `registry__search` adapter: an unaccented word-start match on `entities.label` (indexed), a task's handle (with the workspace's earlier keys), typo-forgiven labels by Assumption 5's rule, and visibility via `perm_can_see_entity` before the limit. It walks the matches best first and stops for a type at its limit or after 500 candidates, so a common word-start doesn't cost a check per match. A key sees only the types its scopes cover. Its limit is per type. Every type therefore appears from GS-3 on; context lines for registry types come when each type adopts (GS-4, GS-5).
-13. **Projects get registered.** GS-4 adds `entities_op_upsert` to project create and rename. Today projects enter the registry only at link time, and their labels go stale (`20261017116000…:237`).
+13. **Projects get registered.** GS-4 adds `entities_op_upsert` to project create and rename. Today projects enter the registry only at link time, and their labels go stale (`20261017116000…:237`). (Amended in GS-4: a trigger on `buckets` makes the call on insert, rename, trash and restore, so the app's direct writes and duplicates count too; the system Inbox is never registered.)
 14. **Recents are `search_recents (user_id, workspace_id, entity_type, entity_id, last_opened_at, open_count)`.**
     - Owner-only: clients may only read their own rows; every write goes through `search_op_record_open`, `search_op_forget_open` or `search_op_clear_recents` (amended in GS-8).
     - Pruned to 50 rows per user per workspace.
