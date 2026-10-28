@@ -846,7 +846,7 @@ BEGIN
        AND coalesce(n.share_mode, 'custom') = 'inherit'
      ORDER BY n.id
   LOOP
-    PERFORM public.notes__copy_chain_access(OLD.workspace_id, v_child, OLD.created_by);
+    PERFORM public.notes__copy_chain_access(OLD.workspace_id, v_child, NULL);
   END LOOP;
   PERFORM set_config('notes.freezing', coalesce(v_freezing, ''), true);
   RETURN OLD;

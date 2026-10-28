@@ -4,7 +4,8 @@
 -- its parent is hard-deleted, by any path: account erasure, purge from the
 -- trash (including its parent-cycle branch) and a plain DELETE. It ends up
 -- top-level, set to custom sharing, and visible to exactly the people who
--- could see it before. The deleted row's creator gets nothing from it.
+-- could see it before, the deleted page's creator included (PQ1). The
+-- erased person ends with no grant: erasure removes theirs.
 --
 -- Cast: O owns W. X (the account being erased), B, T, D and U are members.
 -- B writes the sub-notes; T sees them only through a parent's grant (or a
@@ -205,9 +206,9 @@ BEGIN
     'direct delete: T keeps the level it had, through both orders of a two-level delete');
   PERFORM test.ok(NOT pg_temp.sees('U', 'BD') AND NOT pg_temp.sees('U', 'BE') AND NOT pg_temp.sees('U', 'BF'),
     'direct delete: U still sees none of them');
-  PERFORM test.ok(NOT pg_temp.granted('BD', 'D') AND NOT pg_temp.granted('BX', 'D')
-              AND NOT pg_temp.granted('BE', 'D') AND NOT pg_temp.granted('BF', 'D'),
-    'direct delete: the deleted pages'' creator got no grant from it');
+  PERFORM test.ok(pg_temp.sees('D', 'BD', 'full') AND pg_temp.sees('D', 'BX', 'full')
+              AND pg_temp.sees('D', 'BE', 'full') AND pg_temp.sees('D', 'BF', 'full'),
+    'direct delete: the deleted pages'' creator keeps the Full they had through them');
 END;
 $$;
 

@@ -111,7 +111,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 3. **Re-rooting keeps access everywhere (NS-3).**
    - `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)`. Prod has 0 violations, so it is added validated.
    - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, copies what the chain gives each inherit child of `OLD` (live or trashed) into `resource_grants` before the key's SET NULL fires; the SET NULL write itself makes the child `custom` (`notes__orphan_custom`). The trigger never writes the child's row: the same DELETE may remove it next (built in NS-3, see `docs/decisions/notes.md`).
-   - When the deleted row's creator is the one being erased, the helper skips granting that creator. A new parameter `p_skip_creator` does this.
+   - The helper gains `p_skip_creator` (a creator not to grant). The delete trigger passes none: the deleted row's creator keeps what they had (Mike, 2026-10-28, NS-3 review), and erasure's own step 7 removes every grant of the erased person.
    - Purge's cycle-break branch calls the same freeze.
    - Account erasure needs no change: its delete now fires the trigger.
    - *Rejected:* adding freeze calls to each delete path, the convention that missed erasure.

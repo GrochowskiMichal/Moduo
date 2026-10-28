@@ -14,8 +14,10 @@
 -- 2. notes__keep_access_on_reroot gains p_skip_creator (the old two-argument
 --    form is dropped; existing callers pass two and get the default).
 -- 3. BEFORE DELETE trigger notes_freeze_children: for each inherit child of
---    the deleted row, copy what the chain gave it, skipping the deleted row's
---    own creator (an erased person gets nothing back).
+--    the deleted row, copy what the chain gave it, the deleted row's creator
+--    included (PQ1: exactly the people who could see it before). Erasure
+--    removes every grant of the erased person after its delete (its step 7),
+--    so an erased creator keeps nothing.
 -- 4. BEFORE UPDATE OF parent_id trigger notes_orphan_custom: when the key's
 --    SET NULL re-roots an inherit child (its parent row is gone), the child
 --    becomes custom in the same write.
@@ -172,8 +174,9 @@ REVOKE ALL ON FUNCTION public.share_sync_note_flag() FROM PUBLIC, anon, authenti
 GRANT EXECUTE ON FUNCTION public.share_sync_note_flag() TO service_role;
 
 -- Every inherit child (live or in the trash, which may come back) keeps what
--- the deleted row's chain gave it. The deleted row's creator gets nothing
--- from it: on erasure that creator is the person being erased. A workspace
+-- the deleted row's chain gave it, its creator's `full` included. On erasure
+-- that creator is the person being erased, and erasure deletes their grants
+-- right after (account_erase_workspace_data, step 7). A workspace
 -- being deleted takes every note with it, so there is nothing to keep.
 CREATE OR REPLACE FUNCTION public.notes__freeze_children()
 RETURNS trigger
@@ -196,7 +199,7 @@ BEGIN
        AND coalesce(n.share_mode, 'custom') = 'inherit'
      ORDER BY n.id
   LOOP
-    PERFORM public.notes__copy_chain_access(OLD.workspace_id, v_child, OLD.created_by);
+    PERFORM public.notes__copy_chain_access(OLD.workspace_id, v_child, NULL);
   END LOOP;
   PERFORM set_config('notes.freezing', coalesce(v_freezing, ''), true);
   RETURN OLD;
