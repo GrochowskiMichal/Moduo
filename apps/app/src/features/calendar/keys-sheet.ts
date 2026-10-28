@@ -42,6 +42,12 @@ const ROWS: RowSpec[] = [
   { group: "Anywhere in Calendar", ids: ["calendar.join"], desc: "Join the meeting on now" },
   { group: "Anywhere in Calendar", ids: ["calendar.undo"], desc: "Undo the last change" },
   {
+    group: "Anywhere in Calendar",
+    ids: ["calendar.place-task"],
+    desc: "Place the Plan task you picked: ⇥ next free time, arrows adjust, ↵ places, esc lets go",
+  },
+  { group: "Anywhere in Calendar", ids: ["calendar.find-task"], desc: "Find a task in Plan" },
+  {
     group: "The grid",
     ids: [
       "calendar.cursor-up",

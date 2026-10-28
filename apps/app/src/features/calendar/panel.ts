@@ -1,91 +1,103 @@
-// Pure selectors for the right panel's Tasks view (DESIGN_BRIEF §5, AC11):
-// Queue (my personal queue, in order — TV-D4) · Due soon (overdue + next 7
-// days, open) · Backlog (open, unscheduled, not queued — capped + search). Scheduled rows
-// show their time and sort to the BOTTOM of their group rather than vanishing
-// (visibility beats purity — the row is how you find what's already placed).
+// Plan, the right panel's task view (CALR-5, AC24): your open tasks in four
+// groups. From earlier (due before today, oldest first, never red), Due this
+// week (today to the week's end, by date), Scheduled (placed today or later, by
+// time) and No date. A task due after this week waits for its week; Find a
+// task still reaches it (`later`, shown only while searching).
 
 import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
 
 import type { Task } from "../tasks/model";
-import { addDays, localDayKey } from "./lens";
+import { addDays, localDayKey, startOfLocalDay } from "./lens";
 
-export type PanelGroups = {
-  /** My queue's open tasks, in line-up order. */
-  queue: Task[];
-  dueSoon: Task[];
-  backlog: Task[];
+export type PlanGroups = {
+  earlier: Task[];
+  thisWeek: Task[];
+  scheduled: Task[];
+  noDate: Task[];
+  /** Due after this week: listed only while searching. */
+  later: Task[];
   /** True when a non-empty query filtered everything out. */
   emptyBySearch: boolean;
 };
 
-export const BACKLOG_CAP = 50;
+/** Plan shows six rows a group, then Show more. */
+export const PLAN_GROUP_ROWS = 6;
 
-function isOpen(t: Task): boolean {
-  return isOpenTask(t) && !t.deletedAt;
+/** Assigned to you, or unassigned and created by you. */
+export function isMyTask(t: Pick<Task, "assigneeId" | "creatorId">, me: string): boolean {
+  return t.assigneeId === me || (t.assigneeId == null && t.creatorId === me);
 }
 
 /** Local calendar-day key of a stored timestamptz (the CO-5 gotcha). */
-function dueDayKey(t: Task): string | null {
-  if (!t.dueDate) return null;
-  const d = new Date(t.dueDate);
+function dayKeyOf(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? null : localDayKey(d);
 }
 
-function matches(t: Task, query: string): boolean {
-  return t.title.toLowerCase().includes(query);
+const byDue = (a: Task, b: Task) => Date.parse(a.dueDate ?? "") - Date.parse(b.dueDate ?? "");
+const byScheduled = (a: Task, b: Task) =>
+  Date.parse(a.scheduledAt ?? "") - Date.parse(b.scheduledAt ?? "");
+
+type PlanGroupId = Exclude<keyof PlanGroups, "emptyBySearch">;
+
+/** Which group a task sits in, or null when Plan leaves it out. */
+function planGroupOf(
+  t: Task,
+  q: { me: string; query: string; todayKey: string; weekEndKey: string },
+): PlanGroupId | null {
+  if (t.deletedAt || t.parentId || !isMyTask(t, q.me)) return null;
+  const parked = isBacklogTask(t);
+  if (!parked && !isOpenTask(t)) return null;
+  if (q.query && !t.title.toLowerCase().includes(q.query)) return null;
+  // A parked (backlog-status) task is unplanned work: never a dated group.
+  if (parked) return "noDate";
+  const placed = dayKeyOf(t.scheduledAt);
+  if (placed && placed >= q.todayKey) return "scheduled";
+  const due = dayKeyOf(t.dueDate);
+  if (!due) return "noDate";
+  if (due < q.todayKey) return "earlier";
+  return due <= q.weekEndKey ? "thisWeek" : "later";
 }
 
-/** Scheduled rows sink to the bottom of their group (stable otherwise). */
-function scheduledLast(list: Task[]): Task[] {
-  const unscheduled = list.filter((t) => !t.scheduledAt);
-  const scheduled = list.filter((t) => Boolean(t.scheduledAt));
-  return [...unscheduled, ...scheduled];
-}
-
-export function groupPanelTasks(input: {
-  /** Live tasks (position-sorted; deleted already filtered by the hook). */
-  tasks: Task[];
-  /** My queue, already in line-up order. */
-  queuedTasks: Task[];
+export function groupPlanTasks(input: {
+  /** Live tasks, in position order (deleted already filtered by the hook). */
+  tasks: readonly Task[];
+  me: string;
   query?: string;
   now?: Date;
-  backlogCap?: number;
-}): PanelGroups {
-  const now = input.now ?? new Date();
-  const query = (input.query ?? "").trim().toLowerCase();
-  const cap = input.backlogCap ?? BACKLOG_CAP;
-
-  const horizonKey = localDayKey(addDays(now, 7));
-
-  const queue = input.queuedTasks.filter((t) => isOpen(t) && (!query || matches(t, query)));
-  const inQueue = new Set(queue.map((t) => t.id));
-  // Queued-but-filtered-out rows must not resurface in other groups.
-  for (const t of input.queuedTasks) inQueue.add(t.id);
-
-  const dueSoon: Task[] = [];
-  const backlog: Task[] = [];
-  for (const t of input.tasks) {
-    // Backlog-status tasks (TV-D9) belong in this panel's Backlog group, never
-    // in Due soon; scheduling one from here moves it to To do.
-    const parked = isBacklogTask(t) && !t.deletedAt;
-    if ((!isOpen(t) && !parked) || inQueue.has(t.id)) continue;
-    if (t.parentId) continue; // subtasks stay under their parent, not here
-    if (query && !matches(t, query)) continue;
-    const due = dueDayKey(t);
-    // OVERDUE open tasks count as due-soon too (graceful slippage: the
-    // most-urgent rows must never fall off the panel into a capped backlog).
-    if (!parked && due && due <= horizonKey) {
-      dueSoon.push(t);
-      continue;
-    }
-    if (!t.scheduledAt) backlog.push(t);
-  }
-
-  const grouped = {
-    queue: scheduledLast(queue),
-    dueSoon: scheduledLast(dueSoon),
-    backlog: backlog.slice(0, cap),
+  /** 0 = Sunday … 6 = Saturday (default Monday). */
+  weekStartsOn?: number;
+}): PlanGroups {
+  const today = startOfLocalDay(input.now ?? new Date());
+  const back = (today.getDay() - (input.weekStartsOn ?? 1) + 7) % 7;
+  const q = {
+    me: input.me,
+    query: (input.query ?? "").trim().toLowerCase(),
+    todayKey: localDayKey(today),
+    weekEndKey: localDayKey(addDays(today, 6 - back)),
   };
-  const total = grouped.queue.length + grouped.dueSoon.length + grouped.backlog.length;
-  return { ...grouped, emptyBySearch: query !== "" && total === 0 };
+  const groups: Record<PlanGroupId, Task[]> = {
+    earlier: [],
+    thisWeek: [],
+    scheduled: [],
+    noDate: [],
+    later: [],
+  };
+  for (const t of input.tasks) {
+    const id = planGroupOf(t, q);
+    if (id) groups[id].push(t);
+  }
+  groups.earlier.sort(byDue);
+  groups.thisWeek.sort(byDue);
+  groups.later.sort(byDue);
+  groups.scheduled.sort(byScheduled);
+  const total = Object.values(groups).reduce((n, list) => n + list.length, 0);
+  return { ...groups, emptyBySearch: q.query !== "" && total === 0 };
+}
+
+/** A group's rows before Show more, and how many it hides. */
+export function planRows<T>(list: readonly T[], expanded: boolean): { rows: T[]; more: number } {
+  if (expanded || list.length <= PLAN_GROUP_ROWS) return { rows: [...list], more: 0 };
+  return { rows: list.slice(0, PLAN_GROUP_ROWS), more: list.length - PLAN_GROUP_ROWS };
 }

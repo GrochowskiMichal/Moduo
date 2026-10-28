@@ -10,6 +10,7 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
 import { composeJourney, composerInput, composingState } from "./calendar-composer.ts";
+import { planJourneys } from "./journeys-plan.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
 const PORT = Number(process.env.LAB_PORT ?? 4317);
@@ -745,6 +746,7 @@ export default {
         await step("task on the grid", { expect: onGrid(page, title) });
       },
     },
+    ...planJourneys,
     {
       id: "cal-go-to-date",
       screen: "calendar",
