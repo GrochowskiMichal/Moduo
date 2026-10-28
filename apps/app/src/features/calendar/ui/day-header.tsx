@@ -41,7 +41,7 @@ export function DayHeader({
     <div
       data-day-header
       className={cn(
-        "flex min-w-0 flex-col gap-0.5 px-2 pb-2 pt-1.5",
+        "@container flex min-w-0 flex-col gap-0.5 px-2 pb-2 pt-1.5",
         today ? "text-foreground" : "text-subtle-foreground",
       )}
     >
@@ -118,9 +118,10 @@ function DueList({
         <button
           type="button"
           aria-label={`${due.length} due on ${dayLabel}`}
-          className="inline-flex h-(--ctrl-h-xs) min-w-0 items-center gap-1 rounded-md border border-dashed border-timeline-outline px-1.5 text-2xs tabular-nums whitespace-nowrap text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-state-active aria-expanded:text-foreground"
+          className="inline-flex h-(--ctrl-h-xs) min-w-0 items-center overflow-hidden rounded-md border border-dashed border-timeline-outline px-1.5 text-2xs tabular-nums @max-day-narrow:px-1 whitespace-nowrap text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-expanded:bg-state-active aria-expanded:text-foreground"
         >
-          {due.length} due
+          <span className="min-w-0 truncate">{due.length}</span>
+          <span className="whitespace-pre @max-day-narrow:hidden"> due</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-72 p-1.5">

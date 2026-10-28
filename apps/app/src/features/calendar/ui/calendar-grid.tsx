@@ -643,7 +643,15 @@ export function CalendarGrid({
         className="grid shrink-0 border-b border-border"
         style={{ gridTemplateColumns: columns }}
       >
-        <ZoneCorner at={days[0] ?? now} />
+        {/* The zone now when today is on show, else at noon of the first day
+            (midnight of a clock-change Sunday still reads summer time). */}
+        <ZoneCorner
+          at={
+            days.some((d) => localDayKey(d) === todayKey) || !days[0]
+              ? now
+              : new Date(days[0].getFullYear(), days[0].getMonth(), days[0].getDate(), 12)
+          }
+        />
         {days.map((day, i) => {
           const key = localDayKey(day);
           return (
