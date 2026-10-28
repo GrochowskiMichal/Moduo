@@ -3,7 +3,8 @@
  *
  * The daily trash purge: attachments trashed more than 30 days ago (and
  * abandoned or failed uploads, files of deleted workspaces, orphaned objects),
- * then tasks and buckets trashed more than 30 days ago, then a recount of every
+ * then tasks and buckets trashed more than 30 days ago, then notes trashed more
+ * than 30 days ago (and stale live-viewer rows), then a recount of every
  * storage pool. The work is in ../_shared/purge-deleted.ts.
  *
  * Called by pg_cron (migration 20261008210600_purge_deleted_schedule.sql) with
@@ -11,8 +12,8 @@
  * and compared here with the function secret PURGE_DELETED_SECRET. No user JWT:
  * deploy with --no-verify-jwt.
  *
- *   POST {}                 → 200 { dryRun: false, attachments, objects, orphanObjects, tasks, buckets, poolsRecounted }
- *   POST { "dry_run": true } → 200 { dryRun: true, preview: { attachments, orphan_objects, tasks, buckets } }
+ *   POST {}                 → 200 { dryRun: false, attachments, objects, orphanObjects, tasks, buckets, notes, noteViewers, notesFailed, poolsRecounted }
+ *   POST { "dry_run": true } → 200 { dryRun: true, preview: { attachments, orphan_objects, tasks, buckets, notes } }
  *   401 wrong secret · 503 secret not configured · 500 { error, step, partial }
  */
 
@@ -47,6 +48,9 @@ Deno.serve(async (req: Request) => {
   try {
     const result = await purgeDeleted(db, { dryRun });
     console.log(JSON.stringify({ purge: result }));
+    if (!result.dryRun && result.notesFailed > 0) {
+      console.error(JSON.stringify({ purge_notes_refused: result.notesFailed }));
+    }
     return json(result);
   } catch (err) {
     if (err instanceof PurgeError) {
