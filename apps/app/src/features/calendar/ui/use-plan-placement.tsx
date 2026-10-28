@@ -191,8 +191,27 @@ export function usePlanPlacement(input: Input) {
     };
     /** F: task block ⇄ focus time holding it. */
     const toggleKind = (p: Placement) => {
-      const task = ref.current.tasks.find((t) => t.id === p.taskId);
-      if (task) setPlacement(togglePlacementKind(p, task));
+      const k = ref.current;
+      const task = k.tasks.find((t) => t.id === p.taskId);
+      if (!task) return;
+      const next = togglePlacementKind(p, task);
+      // Longer focus time can run into the next meeting: then it moves to the
+      // first time from here that fits, as ⇥ would.
+      const endMs = next.startMs + next.durationMinutes * 60_000;
+      const busy = timedBusy(p.taskId);
+      if (!busy.some((b) => b.startMs < endMs && b.endMs > next.startMs)) {
+        setPlacement(next);
+        return;
+      }
+      const fits = findFreeSlot({
+        fromMs: next.startMs,
+        days: k.days,
+        workStartMinute: k.prefs.workStartMinute,
+        workEndMinute: k.prefs.workEndMinute,
+        durationMinutes: next.durationMinutes,
+        busy,
+      });
+      setPlacement(fits == null ? next : { ...next, startMs: fits });
     };
     /** True when the key was the gesture's. */
     const act = (e: KeyboardEvent, p: Placement): boolean => {

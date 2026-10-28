@@ -35,3 +35,23 @@ export function busyFromHostEvents(rows: readonly HostEventRow[], busyIds: Itera
   }
   return out.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
+
+/** The host-event columns booking availability reads; `kind` rides on top when the database has it. */
+export const HOST_EVENT_COLUMNS = "start_time, end_time, source_account_id, calendar_id";
+
+type Read = { data: unknown; error: { code?: string; message: string } | null };
+
+/**
+ * The host's events for the window, with their kind. A database before the
+ * kind column (42703, undefined column) is read again without it, every row
+ * then an ordinary event. Any other failed read throws: a link must never offer
+ * the host's busy time as free.
+ */
+export async function readHostEvents(
+  select: (columns: string) => PromiseLike<Read>,
+): Promise<HostEventRow[]> {
+  let res = await select(`${HOST_EVENT_COLUMNS}, kind`);
+  if (res.error?.code === "42703") res = await select(HOST_EVENT_COLUMNS);
+  if (res.error) throw new Error(`host events: ${res.error.message}`);
+  return (Array.isArray(res.data) ? res.data : []) as HostEventRow[];
+}

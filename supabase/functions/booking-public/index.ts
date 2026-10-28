@@ -35,7 +35,7 @@ import {
   bookingOrigin,
   CANONICAL_BOOKING_ORIGIN,
 } from "../_shared/app-origin.ts";
-import { busyFromHostEvents, type HostEventRow } from "../_shared/booking-busy.ts";
+import { busyFromHostEvents, readHostEvents } from "../_shared/booking-busy.ts";
 import { sessionBusyIntervals, TASKS_BUSY_ID } from "../_shared/booking-sessions.ts";
 import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, singleLine } from "../_shared/escape.ts";
@@ -209,7 +209,7 @@ async function busyIntervals(
   accessToken: string | null,
 ): Promise<Interval[]> {
   const ids = new Set(busyIds(link.busy_calendar_ids));
-  const hostEvents = (columns: string) =>
+  const rows = await readHostEvents((columns) =>
     db
       .from("calendar_events")
       .select(columns)
@@ -219,17 +219,9 @@ async function busyIntervals(
       .eq("owner_id", link.owner_user_id)
       .is("deleted_at", null)
       .lt("start_time", to.toISOString())
-      .gt("end_time", from.toISOString());
-  const columns = "start_time, end_time, source_account_id, calendar_id";
-  let events = await hostEvents(`${columns}, kind`);
-  // A database before the kind column: every row is then an ordinary event.
-  if (events.error) events = await hostEvents(columns);
-  // A read that still fails must not offer the host's busy time as free.
-  if (events.error) throw new Error(`host events: ${events.error.message}`);
-  const intervals: Interval[] = busyFromHostEvents(
-    (events.data ?? []) as unknown as HostEventRow[],
-    ids,
+      .gt("end_time", from.toISOString()),
   );
+  const intervals: Interval[] = busyFromHostEvents(rows, ids);
 
   // TV-D10 (default d): the host's work sessions from Tasks, when the link's
   // busy list has them. Times only; a guest never learns what the work is.
@@ -251,6 +243,8 @@ async function busyIntervals(
     .in("status", ["pending", "confirmed"])
     .lt("start_at", to.toISOString())
     .gt("end_at", from.toISOString());
+  // Booked times hide slots: a failed read must not offer them again.
+  if (bookings.error) throw new Error(`bookings: ${bookings.error.message}`);
   const staleBefore = Date.now() - 5 * 60_000;
   for (const row of bookings.data ?? []) {
     if (row.status === "pending" && Date.parse(String(row.updated_at)) < staleBefore) continue;
@@ -620,7 +614,12 @@ Deno.serve(async (req: Request) => {
     if (action === "book") return json({ error: "host_unavailable" }, 409);
     return json({ ...publicLink(link, host, video), slots: [] });
   }
-  const collective = await collectiveOpenSlots(db, link, now, horizonEnd);
+  // A busy read that failed answers "can't check times", never every slot free.
+  const collective = await collectiveOpenSlots(db, link, now, horizonEnd).catch((err: unknown) => {
+    console.error("[booking-public] availability read failed:", err);
+    return null;
+  });
+  if (collective === null) return json({ error: "unavailable" }, 503);
   if (collective === "paused") {
     if (action === "book") return json({ error: "paused" }, 409);
     return json({ ...publicLink(link, host, video), paused: true, slots: [] });

@@ -122,6 +122,12 @@ test("S then F places focus time holding the task; teammates see Focus time", as
   await page.screenshot({ path: test.info().outputPath("focus-band.png") });
 
   // The teammate sees all of the calendar, and still reads "Focus time".
+  // An earlier aborted run may have left the teammate's grant behind.
+  await rest(
+    "service",
+    `resource_grants?resource_type=eq.calendar&resource_id=eq.${focus.calendar_ref}&subject_id=eq.${mate.user.id}`,
+    { method: "DELETE" },
+  );
   const [grant] = await rest<Array<{ id: string }>>("service", "resource_grants?select=id", {
     method: "POST",
     headers: { Prefer: "return=representation" },
