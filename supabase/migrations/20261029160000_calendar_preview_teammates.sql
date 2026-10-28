@@ -31,16 +31,18 @@ RETURNS uuid LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   END
 $$;
 
--- The masked read for one viewer (the CALR-15 body; a new sensitive column
--- joins the mask list here).
+-- The masked read for one viewer: the CALR-15 body with the focus mask the
+-- focus-time migration (20261029100000) puts on it, so others' focus time
+-- reads "Focus time" whichever of the two applies first. A new sensitive
+-- column joins the mask list here.
 CREATE OR REPLACE FUNCTION public.calendar__events_visible_for(p_viewer uuid, p_workspace_id uuid, p_from timestamptz, p_to timestamptz)
 RETURNS SETOF public.calendar_events LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   WITH cals AS (SELECT c.id FROM public.calendars c WHERE c.workspace_id = p_workspace_id AND c.deleted_at IS NULL
                   AND public.can_access('calendar', c.id, 'view', p_viewer))
   SELECT (m.r).*
   FROM public.calendar_events e
-  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = p_viewer OR NOT e.is_private THEN e
-     ELSE jsonb_populate_record(e, jsonb_build_object('title','Busy','description',null,'location',null,'attendees','[]'::jsonb,
+  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = p_viewer OR (NOT e.is_private AND e.kind <> 'focus') THEN e
+     ELSE jsonb_populate_record(e, jsonb_build_object('title',CASE WHEN e.is_private THEN 'Busy' ELSE 'Focus time' END,'description',null,'location',null,'attendees','[]'::jsonb,
        'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
        'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null)) END AS r) m
   WHERE p_viewer IS NOT NULL AND e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
