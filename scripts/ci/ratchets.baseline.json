@@ -47,6 +47,7 @@
     "supabase/functions/_shared/contracts/vocabularies.test.ts": 34466,
     "supabase/functions/_shared/description-markdown.ts": 35789,
     "supabase/functions/booking-public/index.ts": 33731,
+    "supabase/functions/moduo-mcp/key-scopes.test.ts": 33346,
     "supabase/functions/moduo-mcp/modules/tasks.ts": 102309,
     "supabase/functions/moduo-mcp/tasks-v3.test.ts": 64176
   },

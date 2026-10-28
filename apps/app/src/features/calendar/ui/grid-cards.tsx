@@ -91,6 +91,7 @@ export function GridEventCard({
         past={chip.endMs < nowMs}
         continuation={continuationLabel(chip, formatTimeOfDay)}
         nowFraction={live ? (nowMinutes - span.topMinutes) / Math.max(span.heightMinutes, 1) : null}
+        locked={chip.locked}
       />
     </div>
   );

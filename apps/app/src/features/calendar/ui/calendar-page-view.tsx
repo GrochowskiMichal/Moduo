@@ -48,6 +48,7 @@ import {
   useTasksStatus,
 } from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
+import { useWorkspace } from "../../workspaces/workspace-context";
 import {
   accountSourceLabel,
   hiddenIdsForSet,
@@ -58,6 +59,7 @@ import {
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
+import { followedEventId } from "../event-view";
 import type { CalendarAccountModel } from "../events";
 import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock } from "../focus";
@@ -259,8 +261,8 @@ export function CalendarPageView({
     [calendar.accounts, userId],
   );
   const eventChips = useMemo(
-    () => eventChipsInRange(shownEvents, range, isWritable),
-    [shownEvents, range, isWritable],
+    () => eventChipsInRange(shownEvents, range, isWritable, userId),
+    [shownEvents, range, isWritable, userId],
   );
   const eventsById = useMemo(
     () => new Map(calendar.events.map((e) => [e.id, e])),
@@ -338,7 +340,27 @@ export function CalendarPageView({
   );
 
   // ── chip interaction state ─────────────────────────────────────────────────
-  const [selectedOccurrenceKey, setSelectedOccurrenceKey] = useState<string | null>(null);
+  const [selectedOccurrenceKey, setSelectedOccurrenceKeyState] = useState<string | null>(null);
+  // CALR-10: while Event or Notes is showing, it follows the selected event.
+  const setSelectedOccurrenceKey = useCallback(
+    (key: string | null) => {
+      setSelectedOccurrenceKeyState(key);
+      const id = followedEventId(key, panelVariant, readFeaturePanelState("calendar").right);
+      if (id)
+        setDetailTarget((cur) =>
+          cur?.type === "event" && cur.id === id ? cur : { type: "event", id },
+        );
+    },
+    [panelVariant],
+  );
+  const { members: workspaceMembers } = useWorkspace();
+  const viewerMembers = useMemo(
+    () =>
+      workspaceMembers
+        .filter((m) => m.isActive && !m.removedAt)
+        .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" })),
+    [workspaceMembers],
+  );
   const [eventPopover, setEventPopover] = useState<EventPopoverState | null>(null);
   const [taskPopover, setTaskPopover] = useState<TaskPopoverState | null>(null);
   const [deleteEventId, setDeleteEventId] = useState<string | null>(null);
@@ -355,10 +377,22 @@ export function CalendarPageView({
     setSelectedOccurrenceKey,
   });
 
-  const onEventClick = useCallback((chip: EventChip, rect: DOMRect) => {
-    setTaskPopover(null);
-    setEventPopover({ chip, rect });
-  }, []);
+  const onEventClick = useCallback(
+    (chip: EventChip, rect: DOMRect) => {
+      setTaskPopover(null);
+      // The Event panel already follows the selection; the card is for when it
+      // isn't showing (Notes follows the selection too, and keeps the card).
+      if (
+        panelVariant === "detail" &&
+        followedEventId(chip.occurrenceKey, panelVariant, readFeaturePanelState("calendar").right)
+      ) {
+        setEventPopover(null);
+        return;
+      }
+      setEventPopover({ chip, rect });
+    },
+    [panelVariant],
+  );
   const onTaskClick = useCallback((block: TaskBlock, rect: DOMRect) => {
     setEventPopover(null);
     setTaskPopover({ block, rect });
@@ -574,6 +608,7 @@ export function CalendarPageView({
             accounts={calendar.accounts}
             canEdit={calendar.canEdit}
             writable={isWritable(detailEvent)}
+            members={viewerMembers}
             onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
             onDeleteRequest={setDeleteEventId}
             onClose={() => setPanelVariant("tasks")}
@@ -630,6 +665,7 @@ export function CalendarPageView({
       rollForward,
       onTriageRemove,
       isWritable,
+      viewerMembers,
     ],
   );
 

@@ -278,6 +278,7 @@ export const tauriRuntime: ModuoRuntime = {
     listenLive: webRuntime.calendar.listenLive,
     updateGoogleEvent: webRuntime.calendar.updateGoogleEvent,
     removeGoogleEvent: webRuntime.calendar.removeGoogleEvent,
+    eventContext: webRuntime.calendar.eventContext,
 
     // CAL-6b: fetch raw provider events via the OAuth engine so the frontend
     // maps + mirrors them to Supabase (the desktop is the sync writer).

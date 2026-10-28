@@ -6,7 +6,7 @@
 // dim and lose the hairline; the selected one gets the ring. The meeting in
 // progress carries the now line across faintly, under its text (AC10).
 
-import { Repeat } from "lucide-react";
+import { Lock, Repeat } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,6 +33,8 @@ type Props = {
   continuation?: string | null;
   /** Where now sits inside a meeting in progress (0–1); null otherwise. */
   nowFraction?: number | null;
+  /** Your own private event (CALR-15): a lock. */
+  locked?: boolean;
 };
 
 export function EventChipView({
@@ -48,6 +50,7 @@ export function EventChipView({
   allDay = false,
   continuation = null,
   nowFraction = null,
+  locked = false,
 }: Props) {
   const live = nowFraction != null;
   const timeLabel = allDay ? "All day" : `${formatTimeOfDay(startMs)} – ${formatTimeOfDay(endMs)}`;
@@ -58,6 +61,7 @@ export function EventChipView({
       data-past={past || undefined}
       data-selected={selected || undefined}
       data-live={live || undefined}
+      data-private={locked || undefined}
       title={[title, timeLabel, continuation, readOnly ? "read-only" : null]
         .filter(Boolean)
         .join(" · ")}
@@ -73,6 +77,7 @@ export function EventChipView({
         <ChipOneLine
           title={title}
           time={continuation ?? (allDay ? null : formatTimeOfDay(startMs))}
+          locked={locked}
         />
       ) : (
         <ChipStacked
@@ -80,6 +85,7 @@ export function EventChipView({
           time={timeLabel}
           recurring={recurring}
           continuation={continuation}
+          locked={locked}
         />
       )}
       {live ? <span className="sr-only">, happening now</span> : null}
@@ -101,12 +107,21 @@ function NowTick({ fraction }: { fraction: number }) {
 
 /** "title  start" on one line; when both don't fit, the time wraps onto the
  *  clipped second row, so it goes before the title truncates. */
-function ChipOneLine({ title, time }: { title: string; time: string | null }) {
+function ChipOneLine({
+  title,
+  time,
+  locked,
+}: {
+  title: string;
+  time: string | null;
+  locked: boolean;
+}) {
   return (
     <div
       data-chip-line
       className="cal-chip-line relative flex flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs"
     >
+      {locked ? <PrivateLock /> : null}
       <span data-chip-title className="min-w-0 max-w-full truncate text-foreground">
         {title}
       </span>
@@ -128,11 +143,13 @@ function ChipStacked({
   time,
   recurring,
   continuation,
+  locked,
 }: {
   title: string;
   time: string;
   recurring: boolean;
   continuation: string | null;
+  locked: boolean;
 }) {
   return (
     <>
@@ -143,6 +160,7 @@ function ChipStacked({
         {recurring ? (
           <Repeat aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
         ) : null}
+        {locked ? <PrivateLock /> : null}
       </div>
       <span
         data-chip-time
@@ -154,5 +172,15 @@ function ChipStacked({
         <span className="relative truncate text-2xs text-muted-foreground">{continuation}</span>
       ) : null}
     </>
+  );
+}
+
+function PrivateLock() {
+  return (
+    <Lock
+      role="img"
+      aria-label="Private"
+      className="size-icon-xs shrink-0 self-center text-muted-foreground"
+    />
   );
 }

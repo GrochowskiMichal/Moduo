@@ -111,6 +111,21 @@ export type CalendarRuntime = {
   }): Promise<void>;
 
   /**
+   * What the Event view shows beyond the row (CALR-10): the calendar it is on
+   * (name, kind, owner), that calendar's sharing as `share_op_state` reports
+   * it, and the booking link it was booked through. Each part is null when it
+   * can't be read; this never throws for a missing piece.
+   */
+  eventContext(input: { eventId: string; calendarRef: string | null }): Promise<{
+    calendar: { name: string; kind: string; ownerId: string } | null;
+    share: {
+      workspaceLevel: string | null;
+      people: { userId: string; level: string }[];
+    } | null;
+    booking: { linkName: string | null; bookedAt: string } | null;
+  }>;
+
+  /**
    * Fetch a connected account's RAW provider events for a window. Desktop
    * uses the Tauri OAuth engine. Web fetches Google through the stored
    * refresh token and throws for providers it cannot read (so the sync
