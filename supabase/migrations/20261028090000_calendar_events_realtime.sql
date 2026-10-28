@@ -42,6 +42,16 @@ BEGIN
 END;
 $$;
 
+-- An app's OAuth token reaches nothing but the connector (MCPO-1,
+-- 20261022230000_app_token_lockout.sql): postgres-changes runs each
+-- subscriber's RLS, so a newly published table takes the same restrictive
+-- policy. It only takes rows away from app tokens; a person's own session and
+-- the service role are untouched.
+DROP POLICY IF EXISTS app_tokens_refused ON public.calendar_events;
+CREATE POLICY app_tokens_refused ON public.calendar_events AS RESTRICTIVE FOR ALL TO anon, authenticated
+  USING ((SELECT public.request_app_client_id()) IS NULL)
+  WITH CHECK ((SELECT public.request_app_client_id()) IS NULL);
+
 DROP TRIGGER IF EXISTS zz_stamp_updated_at ON public.calendar_events;
 CREATE TRIGGER zz_stamp_updated_at BEFORE INSERT OR UPDATE ON public.calendar_events
   FOR EACH ROW EXECUTE FUNCTION public.tasks_stamp_updated_at();
