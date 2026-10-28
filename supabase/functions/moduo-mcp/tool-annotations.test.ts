@@ -51,7 +51,7 @@ const REMOVES_NOTHING = ["tasks_queue_remove", "tasks_uncommit", "tasks_skip_tod
 
 describe("tool annotations", () => {
   it("every tool is annotated, every hint stated", () => {
-    expect(tools.length).toBe(111);
+    expect(tools.length).toBe(114);
     for (const tool of tools) {
       const a = toolAnnotations(tool);
       expect(typeof a.readOnlyHint, tool.name).toBe("boolean");

@@ -48,7 +48,11 @@ describe("the Today widget's now and next", () => {
     const open = rs.spyOn(window, "open").mockImplementation(() => null);
     render(<TodayNowNext data={{ now: legal, next: null }} onOpen={() => {}} />);
     fireEvent.click(screen.getByRole("button", { name: /Join/ }));
-    expect(open).toHaveBeenCalledWith("https://meet.google.com/abc-defg-hij", "_blank", "noopener,noreferrer");
+    expect(open).toHaveBeenCalledWith(
+      "https://meet.google.com/abc-defg-hij",
+      "_blank",
+      "noopener,noreferrer",
+    );
     open.mockRestore();
   });
 
@@ -77,7 +81,9 @@ describe("the Today widget's now and next", () => {
   });
 
   it("⇧⌘J joins from Home too", () => {
-    const def = (HOTKEYS as Record<string, { scope: string; keys: readonly unknown[] }>)["home.join"];
+    const def = (HOTKEYS as Record<string, { scope: string; keys: readonly unknown[] }>)[
+      "home.join"
+    ];
     expect(def?.scope).toBe("home");
     expect(def?.keys).toContain("Mod+Shift+J");
   });

@@ -14,7 +14,9 @@ import { nowAndNext, nowNextItems, todayNowNext } from "./now-next";
 const ME = "u-me";
 const at = (d: number, h: number, m = 0) => new Date(2026, 10, d, h, m).getTime();
 
-function event(over: Partial<CalendarEventModel> & { start: number; end: number }): CalendarEventModel {
+function event(
+  over: Partial<CalendarEventModel> & { start: number; end: number },
+): CalendarEventModel {
   const { start, end, ...rest } = over;
   return {
     id: "e1",
@@ -47,16 +49,36 @@ const legal = event({
   conferenceUrl: "https://meet.google.com/abc-defg-hij",
 });
 const oneOnOne = event({ id: "ana", title: "1:1 with Ana", start: at(4, 11, 30), end: at(4, 12) });
-const focus = event({ id: "focus", title: "Deep work", kind: "focus", start: at(4, 10, 30), end: at(4, 12, 30) });
-const hold = event({ id: "hold", title: "Held · Intro call", kind: "hold", start: at(4, 11, 20), end: at(4, 11, 50) });
+const focus = event({
+  id: "focus",
+  title: "Deep work",
+  kind: "focus",
+  start: at(4, 10, 30),
+  end: at(4, 12, 30),
+});
+const hold = event({
+  id: "hold",
+  title: "Held · Intro call",
+  kind: "hold",
+  start: at(4, 11, 20),
+  end: at(4, 11, 50),
+});
 const tomorrow = event({ id: "tmrw", title: "Board review", start: at(5, 9), end: at(5, 10) });
-const allDay = event({ id: "trip", title: "Lisbon trip", allDay: true, start: at(4, 0), end: at(5, 0) });
+const allDay = event({
+  id: "trip",
+  title: "Lisbon trip",
+  allDay: true,
+  start: at(4, 0),
+  end: at(5, 0),
+});
 
 describe("now-next items for today", () => {
   it("keeps today's timed meetings with their join links", () => {
     const items = nowNextItems([legal, oneOnOne, tomorrow, allDay], at(4, 10, 30));
     expect(items.map((i) => i.eventId).sort()).toEqual(["ana", "legal"]);
-    expect(items.find((i) => i.eventId === "legal")?.joinUrl).toBe("https://meet.google.com/abc-defg-hij");
+    expect(items.find((i) => i.eventId === "legal")?.joinUrl).toBe(
+      "https://meet.google.com/abc-defg-hij",
+    );
     expect(items.find((i) => i.eventId === "ana")?.joinUrl).toBeNull();
   });
 
@@ -99,9 +121,25 @@ describe("today's now and next", () => {
   });
 
   it("leaves a teammate's event out, and keeps yours on their calendar", () => {
-    const theirs = event({ id: "kai", ownerId: "u-kai", calendarRef: "cal-kai", title: "Kai: hiring sync", start: at(4, 10), end: at(4, 11) });
-    const mineOnTheirs = event({ id: "mine", ownerId: ME, calendarRef: "cal-kai", title: "Pairing with Kai", start: at(4, 13), end: at(4, 14) });
-    const out = todayNowNext([theirs, mineOnTheirs], at(4, 10, 30), ME, [{ calendarId: "cal-kai" }]);
+    const theirs = event({
+      id: "kai",
+      ownerId: "u-kai",
+      calendarRef: "cal-kai",
+      title: "Kai: hiring sync",
+      start: at(4, 10),
+      end: at(4, 11),
+    });
+    const mineOnTheirs = event({
+      id: "mine",
+      ownerId: ME,
+      calendarRef: "cal-kai",
+      title: "Pairing with Kai",
+      start: at(4, 13),
+      end: at(4, 14),
+    });
+    const out = todayNowNext([theirs, mineOnTheirs], at(4, 10, 30), ME, [
+      { calendarId: "cal-kai" },
+    ]);
     expect(out?.now).toBeNull();
     expect(out?.next?.eventId).toBe("mine");
   });
