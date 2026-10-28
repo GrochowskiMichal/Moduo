@@ -203,6 +203,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
 - 2026-10-28 · Narrow windows fold through the shell's panel events; the second zone is a device setting; working hours are a sheet over the synced prefs (CALR-13).
+- 2026-10-28 · Only picked Google calendars sync; a revoked token is `reauth`; Remove is soft with a one-day Undo (CALR-20).
 - 2026-10-28 · Month is a layout over the same day maps; Day view's prep reads one links call per meeting (CALR-12).
 - 2026-10-28 · One undo stack for Calendar; a Moduo event deletes without asking; the grid is one Tab stop with a 30-minute cursor (CALR-4).
 - 2026-10-28 · Sync faults are scoped to the account that failed; loading draws the last shape; offline and first week are states of their own (CALR-3).
@@ -326,6 +327,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Spine: links, activity, notifications, inbox → [decisions/spine.md](decisions/spine.md)
 
+- 2026-10-28 · Global search is federated: each module answers `<module>__search` with one hit shape, `search_all` merges and ranks, and one set of `search__*` text primitives (lifted from Chat's CV-19) makes matching identical everywhere
 - 2026-10-16 · GitHub on tasks: a read-only GitHub App per workspace; PRs and issues as live chips and cards; auto-linking by task ID; status suggested by default, automatic as a workspace setting
 - 2026-10-08 · One reference grammar: `@` mentions anything, `#` is tags, `/` is commands; `#tag` inside text is a link and never applies the tag
 - 2026-07-13 · DF-21 (Universal Inbox — spine lane) /s1 PLANNED — spec DoR-ready, 6 sub-blocks, no code yet.

@@ -25,6 +25,8 @@ INSERT INTO test.mx_unreached (fn) VALUES
   ('attachments_op_restore'),
   ('booking_hosts_set'),
   ('calendar_op_account_remove'),
+  ('calendar_op_account_restore'),
+  ('calendar_op_account_set'),
   ('calendar_op_account_upsert'),
   ('calendar_op_event_create'),
   ('calendar_op_event_delete'),

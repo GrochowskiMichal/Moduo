@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Check, Copy, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
@@ -85,17 +86,15 @@ export function IntegrationsSection() {
     if (!runtime || !workspaceId) return;
     try {
       const bundle = await runtime.calendar.listModule(workspaceId);
-      let accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
+      const accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
       try {
-        const added = await ensureGoogleCalendarAccounts({
-          runtime,
+        // Only picked calendars sync (CALR-20): the picker is in Calendar accounts.
+        const { awaiting } = await ensureGoogleCalendarAccounts({
           workspaceId,
           accounts,
+          peek: true,
         });
-        if (added) {
-          const again = await runtime.calendar.listModule(workspaceId);
-          accounts = again.accounts.filter((a) => a.provider !== "moduo");
-        }
+        if (awaiting[0]) toast(`Pick which calendars of ${awaiting[0]} to show in Calendar.`);
       } catch (err) {
         console.warn("[integrations] google link", err);
       }

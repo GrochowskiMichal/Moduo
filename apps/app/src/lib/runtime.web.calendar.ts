@@ -108,6 +108,9 @@ function calendarAccountRowToModel(raw: unknown): CalendarAccountModel {
     status: r.status ?? "ok",
     syncToken: r.sync_token ?? null,
     deletedAt: r.deleted_at ?? null,
+    readOnly: r.read_only ?? false,
+    busyDefault: r.busy_default ?? true,
+    lastError: r.last_error ?? null,
   };
 }
 
@@ -425,6 +428,8 @@ export const webCalendar: CalendarRuntime = {
     status,
     lastSyncAt,
     syncToken,
+    readOnly,
+    busyDefault,
   }) {
     const args: Record<string, unknown> = {
       p_workspace_id: workspaceId,
@@ -443,6 +448,9 @@ export const webCalendar: CalendarRuntime = {
     // null too, so omitting is equivalent AND keeps OAuth callers (who pass
     // `?? null` in the house style) working against a pre-migration database.
     if (syncToken != null) args.p_sync_token = syncToken;
+    // CALR-20's arguments, the same way: only when set (an older database lacks them).
+    if (readOnly !== undefined) args.p_read_only = readOnly;
+    if (busyDefault !== undefined) args.p_busy_default = busyDefault;
     const data = await runRpc(
       supabaseClient.rpc(
         "calendar_op_account_upsert",
@@ -458,6 +466,25 @@ export const webCalendar: CalendarRuntime = {
         p_account_id: accountId,
       }),
     );
+  },
+  async restoreAccount({ workspaceId, accountId }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_account_restore", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+      }),
+    );
+    return calendarAccountRowToModel(firstRow(data, "calendar_op_account_restore"));
+  },
+  async setAccountBusy({ workspaceId, accountId, busy }) {
+    const data = await runRpc(
+      supabaseClient.rpc("calendar_op_account_set", {
+        p_workspace_id: workspaceId,
+        p_account_id: accountId,
+        p_busy_default: busy,
+      }),
+    );
+    return calendarAccountRowToModel(firstRow(data, "calendar_op_account_set"));
   },
   async mirrorEvents({ workspaceId, accountId, events, deletedExternalIds }) {
     const data = jsonObject(

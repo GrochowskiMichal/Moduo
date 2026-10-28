@@ -14,6 +14,8 @@ export function writableEvent(
   if (event.sourceAccountId === null) return "moduo";
   if (!event.externalEventId || !userId) return null;
   const account = accounts.find((a) => a.id === event.sourceAccountId);
-  if (!account || account.deletedAt || account.provider !== "google") return null;
+  if (!account || account.deletedAt || account.provider !== "google" || account.readOnly) {
+    return null;
+  }
   return account.ownerId === userId ? "google" : null;
 }

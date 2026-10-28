@@ -92,8 +92,19 @@ export type CalendarRuntime = {
      * OAuth callers keep working against a pre-CAL-8 database.
      */
     syncToken?: string | null;
+    /** CALR-20: sent only when defined, like syncToken. */
+    readOnly?: boolean;
+    busyDefault?: boolean;
   }): Promise<CalendarAccountModel>;
   removeAccount(input: { workspaceId: string; accountId: string }): Promise<void>;
+  /** CALR-20: Remove's Undo; brings back the account and the events that Remove took. */
+  restoreAccount(input: { workspaceId: string; accountId: string }): Promise<CalendarAccountModel>;
+  /** CALR-20: Counts as busy for booking links. */
+  setAccountBusy(input: {
+    workspaceId: string;
+    accountId: string;
+    busy: boolean;
+  }): Promise<CalendarAccountModel>;
   /**
    * Live events (CALR-7): follow inserts, updates and deletes of the
    * workspace's calendar events as they happen, plus a `resync` whenever

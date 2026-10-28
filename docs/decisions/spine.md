@@ -2,6 +2,13 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-10-28 · Global search is federated: each module answers `<module>__search` with one hit shape, `search_all` merges and ranks, and one set of `search__*` text primitives (lifted from Chat's CV-19) makes matching identical everywhere** → [specs/global-search.md](../../specs/global-search.md)
+  - status: current
+  - Who: Mike (engineer mode), 2026-10-28. This entry is the technical layer. The 35 product answers were given by Mike on Maciej's behalf, with his acceptance, the same day ("all rec"). Every block, GS-1 to GS-10, is built now, independent of the alpha and beta schedule.
+  - Decision: there is no central search index. A module's search function resolves the actor itself (`perm_actor_id`, key scope), applies its own visibility rule **before** the limit (set-based where it can be, starting with `notes__visible_ids`), and returns `SearchHit` (`entity_type, entity_id, title, context, snippet, icon, match, rank, updated_at`). The text config is `simple` plus unaccent, words of 3+ letters match prefixes, and `pg_trgm` covers title-only typo fallback. The registry stays for links and mentions, and covers types not yet adopted through a `registry__search` adapter. Email bodies never leave the device. There are no embeddings and no in-app RAG; the MCP `search` tool is how a user's own AI retrieves.
+  - Why: visibility differs per module (inherited note sharing, private events, chat readability, email ownership, the key path), and CV19-2 requires one read rule, not a parallel one. A central copy would duplicate private content and every rule.
+  - Rejected: a central `search_index` table; `share_visible_ids` on each keystroke; limit-then-filter (today's MCP notes, contacts and registry tools); pgroonga; embeddings before there is usage data.
+
 - **2026-10-16 · GitHub on tasks: a read-only GitHub App per workspace; PRs and issues as live chips and cards; auto-linking by task ID; status suggested by default, automatic as a workspace setting** → [specs/github.md](../../specs/github.md)
   - status: current
   - Who: Maciej, 2026-10-16 (MOD-156, grilling G1–G51: "g39. c, all ok"). The technical layer (GitHub App, tables, `integration` actor, webhook pipeline) is the agent's choice, deferred to it: confirmed for building, revisitable.

@@ -1030,7 +1030,7 @@ export const SYNCABLE_PROVIDERS = ["google", "microsoft", "caldav", "ics"] as co
 export type SyncableProvider = (typeof SYNCABLE_PROVIDERS)[number];
 export const syncableProviderSchema = z.enum(SYNCABLE_PROVIDERS);
 
-export const CALENDAR_ACCOUNT_STATUSES = ["ok", "error"] as const;
+export const CALENDAR_ACCOUNT_STATUSES = ["ok", "error", "reauth"] as const;
 export type CalendarAccountStatus = (typeof CALENDAR_ACCOUNT_STATUSES)[number];
 export const calendarAccountStatusSchema = z.enum(CALENDAR_ACCOUNT_STATUSES);
 

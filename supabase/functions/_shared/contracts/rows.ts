@@ -694,6 +694,9 @@ export const calendarAccountRowSchema = z.object({
   last_sync_at: optStr,
   status: calendarAccountStatusSchema.optional(),
   sync_token: optStr,
+  read_only: z.boolean().optional(),
+  busy_default: z.boolean().optional(),
+  last_error: optStr,
   deleted_at: optStr,
 });
 
