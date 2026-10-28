@@ -4,7 +4,7 @@
 // draws the draft on the grid (composer/draft-store.ts), hops it with ⇥, and
 // adds it through the page's create path, so the add has its Undo (AC21).
 //
-// Busy time is your own timed events (yours or from your accounts), not a
+// Busy time is your own timed events (Moduo and your accounts'), not a
 // teammate's shared calendar and not task blocks. People are your teammates
 // (no email here yet: they're named, not invited) and your contacts with an
 // email, read once per workspace when the box first opens.
@@ -81,7 +81,8 @@ function dayStartOfKey(dayKey: string): number {
 
 /** Your timed busy time per day (expanded repeats), cached for one set of events. */
 function busyReader(events: CalendarEventModel[], userId: string | null) {
-  const mine = events.filter((e) => !e.allDay && (e.ownerId === userId || e.sourceAccountId));
+  // Yours (your Moduo events and your accounts' mirrors), never a teammate's shared week.
+  const mine = events.filter((e) => !e.allDay && e.ownerId === userId);
   const cache = new Map<number, ComposerBusy[]>();
   return (dayStartMs: number): ComposerBusy[] => {
     const hit = cache.get(dayStartMs);

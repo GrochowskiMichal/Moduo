@@ -31,7 +31,7 @@ function Mirror({ text, tokens }: { text: string; tokens: ComposerToken[] }) {
         className={cn(
           "rounded-sm ring-2",
           t.kind === "person"
-            ? "bg-primary/20 ring-primary/20"
+            ? "bg-state-selected ring-state-selected"
             : "bg-state-active-hover ring-state-active-hover",
         )}
       >
@@ -186,7 +186,9 @@ export function EventComposer({
             aria-hidden
             className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-pre text-foreground"
           >
-            <Mirror text={text} tokens={parse.tokens} />
+            <span className="whitespace-pre">
+              <Mirror text={text} tokens={parse.tokens} />
+            </span>
           </span>
           <input
             ref={inputRef}
@@ -198,6 +200,7 @@ export function EventComposer({
             onChange={(e) => onText(e.target.value)}
             onScroll={syncScroll}
             onKeyUp={syncScroll}
+            onSelect={syncScroll}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                 e.preventDefault();

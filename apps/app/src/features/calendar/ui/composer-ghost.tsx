@@ -16,7 +16,7 @@ export function ComposerGhost({ geom }: { geom: DayGeometry }) {
     <div
       aria-hidden
       data-composer-ghost
-      className="pointer-events-none absolute inset-x-0.5 overflow-hidden rounded-md border border-primary/50 bg-primary/15 px-1.5 py-0.5 transition-[top,height] duration-(--motion-base) ease-(--ease-out) motion-reduce:transition-none"
+      className="pointer-events-none absolute inset-x-0.5 overflow-hidden rounded-md bg-state-selected px-1.5 ring-1 ring-state-selected py-0.5 transition-[top,height] duration-(--motion-base) ease-(--ease-out) motion-reduce:transition-none"
       style={{
         top: gridY(top),
         height: `max(${gridY(Math.max(bottom - top, 15))}, 1.125rem)`,
