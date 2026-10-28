@@ -57,6 +57,7 @@ export function useCalendarConnectReturn({ runtime, workspaceId, calendar }: Inp
     void (async () => {
       try {
         const { awaiting } = await ensureGoogleCalendarAccounts({
+          runtime,
           workspaceId,
           accounts: accountsRef.current,
         });

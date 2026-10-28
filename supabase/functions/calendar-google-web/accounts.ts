@@ -58,12 +58,13 @@ export async function recordGoogleAccess(
   if (outcome.kind === "unavailable" || !email) return;
   const revoked = outcome.kind === "revoked";
   try {
-    await db.rpc("calendar_op__google_reauth", {
+    const res = (await db.rpc("calendar_op__google_reauth", {
       p_owner_id: userId,
       p_email: email.toLowerCase(),
       p_reauth: revoked,
       p_error: revoked ? outcome.reason : null,
-    });
+    })) as { error?: { message?: string } | null } | null;
+    if (res?.error) console.error("[calendar-google-web] reauth mark refused:", res.error.message ?? res.error);
   } catch (err) {
     console.error("[calendar-google-web] reauth mark failed:", err instanceof Error ? err.message : err);
   }

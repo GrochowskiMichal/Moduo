@@ -89,7 +89,11 @@ export function IntegrationsSection() {
       const accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
       try {
         // Only picked calendars sync (CALR-20): the picker is in Calendar accounts.
-        const { awaiting } = await ensureGoogleCalendarAccounts({ workspaceId, accounts });
+        const { awaiting } = await ensureGoogleCalendarAccounts({
+          workspaceId,
+          accounts,
+          peek: true,
+        });
         if (awaiting[0]) toast(`Pick which calendars of ${awaiting[0]} to show in Calendar.`);
       } catch (err) {
         console.warn("[integrations] google link", err);

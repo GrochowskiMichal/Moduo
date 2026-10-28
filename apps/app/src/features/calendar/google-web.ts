@@ -173,22 +173,62 @@ async function tombstonedGoogleIds(workspaceId: string): Promise<Set<string>> {
  * removed here doesn't come back unless this tab just connected it again.
  */
 export async function ensureGoogleCalendarAccounts(opts: {
-  /** Unused since only picked calendars sync (saveGooglePicks writes them). */
+  /** With it, a synced calendar whose Google access changed is updated (read-only or not). */
   runtime?: ModuoRuntime;
   workspaceId: string;
-  accounts: { provider: string; externalId: string; deletedAt: string | null }[];
+  accounts: {
+    provider: string;
+    externalId: string;
+    displayLabel?: string;
+    deletedAt: string | null;
+    readOnly?: boolean;
+  }[];
+  /** Leave the "just connected" mark for the Calendar page (Settings only peeks). */
+  peek?: boolean;
 }): Promise<{ awaiting: string[]; linked: LinkedGoogleCalendar[] }> {
   // Back from Google: the new token is only saved once the connect finishes.
   await finishConnectReturn();
   const linked = await loadLinkedGoogleCalendars();
   const revive = sessionStorage.getItem("moduo:google-connect") === "1";
-  if (revive) sessionStorage.removeItem("moduo:google-connect");
+  if (revive && !opts.peek) sessionStorage.removeItem("moduo:google-connect");
+  // A token belongs to the person, not the workspace: the picker opens only
+  // right after this tab connected, never on every visit (a login connected in
+  // another workspace shows in Calendar accounts, off, until you pick there).
+  // A failed read of removed calendars throws, so callers skip this pass.
   const removed = revive ? new Set<string>() : await tombstonedGoogleIds(opts.workspaceId);
-  const awaiting = loginsAwaitingPick(linked, opts.accounts).filter(
-    (email) =>
-      ![...removed].some((id) => id === `google:${email}` || id.startsWith(`google:${email}:`)),
-  );
+  const awaiting = revive
+    ? loginsAwaitingPick(linked, opts.accounts).filter(
+        (email) =>
+          ![...removed].some((id) => id === `google:${email}` || id.startsWith(`google:${email}:`)),
+      )
+    : [];
+  if (opts.runtime)
+    await refreshGoogleAccess(opts.runtime, opts.workspaceId, opts.accounts, linked);
   return { awaiting, linked };
+}
+
+/** Calendars synced before Google said which are read-only learn it here. */
+async function refreshGoogleAccess(
+  runtime: ModuoRuntime,
+  workspaceId: string,
+  accounts: Parameters<typeof ensureGoogleCalendarAccounts>[0]["accounts"],
+  linked: readonly LinkedGoogleCalendar[],
+): Promise<void> {
+  for (const cal of linked) {
+    const row = accounts.find(
+      (a) => !a.deletedAt && a.provider === "google" && a.externalId === cal.accountId,
+    );
+    if (!row || (row.readOnly ?? false) === cal.readOnly) continue;
+    await runtime.calendar
+      .upsertAccount({
+        workspaceId,
+        provider: "google",
+        externalId: cal.accountId,
+        displayLabel: row.displayLabel ?? "",
+        readOnly: cal.readOnly,
+      })
+      .catch(() => {});
+  }
 }
 
 /** Sync the picked calendars of a login; returns the new account ids to hide from the week. */

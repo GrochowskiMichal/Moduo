@@ -58,6 +58,8 @@ const UNDO_MS = 10_000;
 type Step = "accounts" | "tiles" | "consent" | "browser" | "pick" | "import";
 type Pending = {
   accounts: CalendarAccountModel[];
+  /** Every live row when Remove ran: a CalDAV secret stays while a sibling calendar uses it. */
+  all: CalendarAccountModel[];
   email: string | null;
   undo: () => Promise<void>;
 };
@@ -188,7 +190,7 @@ export function CalendarAccountsDialog({
       await cleanupCredentialsForRemoval({
         isDesktop,
         removed: account,
-        allAccounts: done.accounts,
+        allAccounts: done.all,
       }).catch(() => {});
     }
     if (done.email) await disconnectGoogleLogin(done.email).catch(() => {});
@@ -275,8 +277,18 @@ export function CalendarAccountsDialog({
 
   const onRemove = async (key: string) => {
     const login = logins.find((l) => l.key === key);
-    if (!login || login.accountIds.length === 0) return;
+    if (!login) return;
     await finishRemoval();
+    if (login.accountIds.length === 0) {
+      // Connected, but nothing of it is in Moduo: only the sign-in goes.
+      if (login.provider === "google") {
+        await disconnectGoogleLogin(login.login).catch((e) =>
+          toast.error(e instanceof Error ? e.message : "Couldn't remove the account."),
+        );
+        void refreshStatus();
+      }
+      return;
+    }
     const accounts = calendar.accounts.filter((a) => login.accountIds.includes(a.id));
     try {
       const { undo } = await removeCalendarLogin({
@@ -284,7 +296,13 @@ export function CalendarAccountsDialog({
         workspaceId,
         accountIds: login.accountIds,
       });
-      pending.current = { accounts, email: login.provider === "google" ? login.login : null, undo };
+      const all = calendar.accounts.filter((a) => !a.deletedAt);
+      pending.current = {
+        accounts,
+        all,
+        email: login.provider === "google" ? login.login : null,
+        undo,
+      };
       setRemovedLabel(login.login);
       timer.current = window.setTimeout(() => void finishRemoval(), UNDO_MS);
     } catch (e) {

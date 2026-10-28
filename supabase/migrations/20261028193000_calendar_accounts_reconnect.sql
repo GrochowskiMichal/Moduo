@@ -138,6 +138,8 @@ BEGIN
   SELECT * INTO a FROM public.calendar_accounts
     WHERE id = p_account_id AND workspace_id = p_workspace_id AND deleted_at IS NOT NULL
       AND owner_id = public.perm_actor_id()
+      -- Undo, not an archive: a day later its sign-in is gone and its events are stale.
+      AND deleted_at > now() - interval '1 day'
     FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'Calendar account not found in this workspace.';

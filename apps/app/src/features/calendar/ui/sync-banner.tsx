@@ -35,11 +35,12 @@ export function SyncBanner({
         <Button variant="outline" size="sm" onClick={() => onReconnect(reauth.login)}>
           Reconnect
         </Button>
-      ) : (
+      ) : null}
+      {!reauth || status.loadFailed || status.faults.some((f) => !f.reauth) ? (
         <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
           {retrying ? "Trying…" : "Try again"}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
