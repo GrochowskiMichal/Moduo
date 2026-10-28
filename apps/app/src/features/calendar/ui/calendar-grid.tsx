@@ -85,7 +85,7 @@ const RESIZE_EDGE_PX = 6;
 export type MoveEventDeltas = { startDeltaMs: number; endDeltaMs: number };
 export type MoveTaskResult = { startMs: number; durationMinutes: number };
 
-type Props = {
+export type CalendarGridProps = {
   view: CalendarView;
   days: Date[];
   blocksByDay: Map<string, TaskBlock[]>;
@@ -144,6 +144,8 @@ type Props = {
   loadingAllDayRows?: number;
   /** Laid low over the hours, not scrolling with them (the first-week card). */
   overlay?: ReactNode;
+  /** Day view's prep beside each meeting (CALR-12); absent in Week. */
+  prepFor?: (chip: EventChip) => ReactNode;
   /** The keyboard cursor (CALR-4); ⌘N and ↵ open a new event there. */
   cursor?: GridCursor | null;
 };
@@ -224,8 +226,9 @@ export function CalendarGrid({
   faulted = false,
   loadingAllDayRows = 0,
   overlay = null,
+  prepFor,
   cursor = null,
-}: Props) {
+}: CalendarGridProps) {
   const now = useNowTick(30_000);
   const scrollRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -795,6 +798,7 @@ export function CalendarGrid({
                 staleAccountIds={staleAccountIds}
                 waitingEventIds={waitingEventIds}
                 showLoadingChips={loading && !hasAnyChips && i < 2}
+                prepFor={prepFor}
                 emptyHint={
                   isToday
                     ? emptyWeekHint({
@@ -851,6 +855,7 @@ const DayColumn = memo(function DayColumn({
   waitingEventIds,
   showLoadingChips,
   emptyHint,
+  prepFor,
 }: {
   dayIdx: number;
   dayKey: string;
@@ -902,6 +907,7 @@ const DayColumn = memo(function DayColumn({
   waitingEventIds: ReadonlySet<string>;
   showLoadingChips: boolean;
   emptyHint: string | null;
+  prepFor?: (chip: EventChip) => ReactNode;
 }) {
   // Drop target for the panel's task rows (the universal drag contract):
   // the page's DndContext resolves which column the pointer is over; the
@@ -1032,6 +1038,8 @@ const DayColumn = memo(function DayColumn({
             onPointerDown={(e) => onEventChipPointerDown(e, chip, dayIdx, span)}
             stale={chip.sourceAccountId !== null && staleAccountIds.has(chip.sourceAccountId)}
             waiting={waitingEventIds.has(chip.eventId)}
+            // The prep needs the free width: a card sharing its slot goes without.
+            aside={prepFor && p.width > 0.5 ? prepFor(chip) : null}
           />
         );
       })}

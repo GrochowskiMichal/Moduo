@@ -84,7 +84,7 @@ describe("view state — the localStorage half", () => {
   });
 
   it("sanitizes corrupt values back to defaults", () => {
-    expect(sanitizeViewState({ view: "month", anchor: "07/01" }, NOW)).toEqual({
+    expect(sanitizeViewState({ view: "agenda", anchor: "07/01" }, NOW)).toEqual({
       view: "week",
       anchor: "2026-07-02",
     });

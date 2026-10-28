@@ -265,12 +265,29 @@ export default {
       title: "Calendar",
       path: "/calendar",
       ready: readyWhen("[role='toolbar'][aria-label='Calendar controls']"),
-      // Day and Week are the only views; there is no Month or Agenda to capture.
+      // Day, Week and Month (CALR-12); no Agenda yet.
       states: {
         default: {},
         empty: { seed: "empty" },
         day: {
           act: async ({ page }: { page: Page }) => page.getByRole("radio", { name: "Day" }).click(),
+        },
+        // Day view, tomorrow: the design review carries its people and Meet beside it.
+        dayPrep: {
+          act: async ({ page }: { page: Page }) => {
+            await page.getByRole("radio", { name: "Day" }).click();
+            await page.getByRole("button", { name: "Next period (→)" }).click();
+          },
+        },
+        month: {
+          act: async ({ page }: { page: Page }) =>
+            page.getByRole("radio", { name: "Month" }).click(),
+        },
+        // A crowded month: "N more" on the busy days, bars, due counts.
+        monthDense: {
+          seed: "dense",
+          act: async ({ page }: { page: Page }) =>
+            page.getByRole("radio", { name: "Month" }).click(),
         },
         // The dense person's week: 60 events, 300 tasks with due dates spread across it.
         dense: { seed: "dense" },

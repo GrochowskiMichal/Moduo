@@ -1,4 +1,4 @@
-// Calendar's keys (AC1, CALR-4 AC22): T today · D/W views · ⌘←/⌘→ period ·
+// Calendar's keys (AC1, CALR-4 AC22): T today · D/W/M views · ⌘←/⌘→ period ·
 // the grid cursor (arrows, a busy slot picks its event) · J/K · Space · ↵ ·
 // ⌥ moves and resizes · ⌫ · ⌘C/⌘V/⌘D · ⌘Z. Registry bindings in the
 // "calendar" scope (lib/hotkeys); handlers read the latest state through a
@@ -74,6 +74,11 @@ export function inCalendarOverlay(e: KeyboardEvent): boolean {
 }
 
 const GRID = "[data-calendar-grid]";
+
+/** Month has no time grid: the cursor, its moves and its slot keys stand down there. */
+function noTimeGrid(view: CalendarView): boolean {
+  return view === "month";
+}
 
 /** The grid itself, an event chip, or nothing focused: where the grid keys act. */
 function onTheGrid(e: KeyboardEvent): boolean {
@@ -191,8 +196,8 @@ export function useCalendarHotkeys(input: Input) {
   }, [selectedChip]);
 
   const moveCursor = (dir: CursorDir) => (e: KeyboardEvent) => {
-    if (!onTheGrid(e)) return false;
     const k = keysRef.current;
+    if (noTimeGrid(k.view) || !onTheGrid(e)) return false;
     if (!(e.target instanceof Element) || !e.target.closest(GRID)) {
       document.querySelector<HTMLElement>(GRID)?.focus();
     }
@@ -208,8 +213,8 @@ export function useCalendarHotkeys(input: Input) {
   };
 
   const jump = (dir: 1 | -1) => (e: KeyboardEvent) => {
-    if (!onTheGrid(e)) return false;
     const k = keysRef.current;
+    if (noTimeGrid(k.view) || !onTheGrid(e)) return false;
     const chip = adjacentChip(
       k.all,
       { selectedKey: k.selectedOccurrenceKey, cursor: k.cursor },
@@ -221,7 +226,7 @@ export function useCalendarHotkeys(input: Input) {
   };
 
   const change = (what: KeyedChange) => (e: KeyboardEvent) => {
-    if (!onTheGrid(e)) return false;
+    if (noTimeGrid(keysRef.current.view) || !onTheGrid(e)) return false;
     const target = editable();
     if (!target) return;
     const { chip } = target;
@@ -265,6 +270,7 @@ export function useCalendarHotkeys(input: Input) {
     "calendar.today": (e) => (inCalendarOverlay(e) ? false : keysRef.current.goToday()),
     "calendar.day": (e) => (inCalendarOverlay(e) ? false : keysRef.current.setView("day")),
     "calendar.week": (e) => (inCalendarOverlay(e) ? false : keysRef.current.setView("week")),
+    "calendar.month": (e) => (inCalendarOverlay(e) ? false : keysRef.current.setView("month")),
     "calendar.prev": (e) => (inCalendarOverlay(e) ? false : keysRef.current.step(-1)),
     "calendar.next": (e) => (inCalendarOverlay(e) ? false : keysRef.current.step(1)),
     "calendar.cursor-up": moveCursor("up"),
@@ -274,7 +280,7 @@ export function useCalendarHotkeys(input: Input) {
     "calendar.next-event": jump(1),
     "calendar.prev-event": jump(-1),
     "calendar.card": (e) => {
-      if (!onTheGridItself(e)) return false;
+      if (noTimeGrid(keysRef.current.view) || !onTheGridItself(e)) return false;
       const chip = selectedChip();
       if (!chip) return false;
       const k = keysRef.current;
@@ -297,7 +303,7 @@ export function useCalendarHotkeys(input: Input) {
       k.onEventClick(chip, el.getBoundingClientRect());
     },
     "calendar.open": (e) => {
-      if (!onTheGridItself(e)) return false;
+      if (noTimeGrid(keysRef.current.view) || !onTheGridItself(e)) return false;
       const k = keysRef.current;
       const chip = selectedChip();
       if (chip) {
@@ -336,7 +342,7 @@ export function useCalendarHotkeys(input: Input) {
     },
     "calendar.paste": (e) => {
       const k = keysRef.current;
-      if (!onTheGrid(e) || !copied.current || !k.canEdit) return false;
+      if (noTimeGrid(k.view) || !onTheGrid(e) || !copied.current || !k.canEdit) return false;
       const source = k.eventsById.get(copied.current);
       if (!source) {
         copied.current = null;

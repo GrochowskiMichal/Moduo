@@ -156,6 +156,7 @@ export const HOTKEYS = {
   "calendar.today": { scope: "calendar", label: "Today", keys: ["T", "Shift+T"] },
   "calendar.day": { scope: "calendar", label: "Day view", keys: ["D", "Shift+D"] },
   "calendar.week": { scope: "calendar", label: "Week view", keys: ["W", "Shift+W"] },
+  "calendar.month": { scope: "calendar", label: "Month view", keys: ["M", "Shift+M"] },
   // Period keys moved to ⌘← / ⌘→ (CALR-4): bare arrows belong to the grid cursor.
   "calendar.prev": { scope: "calendar", label: "Previous period", keys: ["Mod+ArrowLeft"] },
   "calendar.next": { scope: "calendar", label: "Next period", keys: ["Mod+ArrowRight"] },
