@@ -71,7 +71,8 @@ function normalizeStatus(raw: string | null): "confirmed" | "cancelled" {
 // recurring series often arrives with no start/end (just an originalStartTime),
 // so it maps to null and its tombstone never reaches the op — that one instance
 // keeps rendering. Acceptable at alpha; a per-occurrence exception tombstone is
-// a follow-up (needs the op to accept occurrence keys).
+// a follow-up. CALR-11 stores an instance's externalSeriesId and originalStart,
+// but the op still skips a row without times.
 
 /** Only send `location` when there is one, so the sync never clears it by accident. */
 function withLocation(value: string | null): { location?: string } {
@@ -159,6 +160,22 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     // CALR-8: privacy and guests, always sent (Google's event is the whole truth).
     isPrivate: raw.visibility === "private" || raw.visibility === "confidential",
     attendees: googleAttendees(raw.attendees),
+    // CALR-11: an instance of a repeat says which one, and which occurrence it replaces.
+    ...googleInstance(raw),
+  };
+}
+
+/** The repeat an instance belongs to; nothing for an event that is no instance. */
+function googleInstance(
+  raw: RawProviderEvent,
+): Pick<CalendarMirrorEventInput, "externalSeriesId" | "originalStart"> {
+  const externalSeriesId = str(raw.recurringEventId);
+  const original = (raw.originalStartTime ?? {}) as Record<string, unknown>;
+  const date = str(original.date);
+  const originalStart = date ? localMidnightIso(date) : instantIso(original.dateTime);
+  return {
+    ...(externalSeriesId ? { externalSeriesId } : {}),
+    ...(originalStart ? { originalStart } : {}),
   };
 }
 

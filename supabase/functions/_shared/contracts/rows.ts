@@ -675,6 +675,11 @@ export const calendarEventRowSchema = z.object({
   kind: optStr,
   focus_task_id: optStr,
   attendees: z.unknown().optional(),
+  // CALR-11: repeat exceptions (columns from CALR-6).
+  series_id: optStr,
+  original_start: optStr,
+  exdates: z.array(z.string()).nullable().optional(),
+  external_series_id: optStr,
 });
 
 export const calendarAccountRowSchema = z.object({

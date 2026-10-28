@@ -49,13 +49,7 @@ import {
 } from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import {
-  accountSourceLabel,
-  hiddenIdsForSet,
-  resolveAccountHues,
-  syncAgeLabel,
-  visibleEvents,
-} from "../accounts";
+import { accountSourceLabel, hiddenIdsForSet, syncAgeLabel } from "../accounts";
 import { cleanupCredentialsForRemoval } from "../caldav-connect";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { isElapsedBlock } from "../elapsed";
@@ -117,6 +111,7 @@ import { EventPopover } from "./event-popover";
 import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { CalendarNowNext } from "./now-next";
+import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
 import { TaskPopover } from "./task-popover";
 import { formatTimeOfDay } from "./time-format";
 import { useCalendarAccountActions } from "./use-calendar-account-actions";
@@ -125,7 +120,9 @@ import { useCalendarConnectReturn } from "./use-calendar-connect-return";
 import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
+import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
+import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { useScheduleDue } from "./use-schedule-due";
 
 type Props = {
@@ -180,25 +177,10 @@ export function CalendarPageView({
     modulePermission: canEdit ? "edit" : canRead ? "view" : "none",
   });
 
-  // Attribution: each account's bounded hue + the visibility filter (§3a).
-  const accountHues = useMemo(
-    () => resolveAccountHues(calendar.accounts, prefs.accountColors),
-    [calendar.accounts, prefs.accountColors],
-  );
-  const shownEvents = useMemo(
-    () => visibleEvents(calendar.events, prefs.hiddenAccountIds),
-    [calendar.events, prefs.hiddenAccountIds],
-  );
-  const toggleAccountVisibility = useCallback(
-    (accountId: string) => {
-      updatePrefs((prev) => {
-        const hidden = new Set(prev.hiddenAccountIds);
-        if (hidden.has(accountId)) hidden.delete(accountId);
-        else hidden.add(accountId);
-        return { hiddenAccountIds: [...hidden] };
-      });
-    },
-    [updatePrefs],
+  const { accountHues, shownEvents, toggleAccountVisibility, busyDayKeys } = useCalendarShown(
+    calendar,
+    { prefs, updatePrefs },
+    tasks,
   );
   // Google syncs on the web. Outlook, CalDAV, and ICS still sync from the desktop app.
   const { syncNow } = useCalendarSync({
@@ -270,22 +252,6 @@ export function CalendarPageView({
     () => new Map(calendar.events.map((e) => [e.id, e])),
     [calendar.events],
   );
-
-  // Mini-month density dots cover EVERY scheduled task + event day the
-  // bundles know — the dots inform navigation to days you can't see.
-  const busyDayKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const t of tasks) {
-      if (!t.scheduledAt || t.status === "archived") continue;
-      const d = new Date(t.scheduledAt);
-      if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
-    }
-    for (const e of shownEvents) {
-      const d = new Date(e.startsAt);
-      if (!Number.isNaN(d.getTime())) keys.add(localDayKey(d));
-    }
-    return keys;
-  }, [tasks, shownEvents]);
 
   const update = useCallback(
     (next: CalendarViewState) => {
@@ -369,6 +335,16 @@ export function CalendarPageView({
 
   const deleteEvent = deleteEventId ? (eventsById.get(deleteEventId) ?? null) : null;
 
+  // CALR-11: a change to one occurrence of a repeat asks This event / All events.
+  const occurrenceQuestion = useOccurrenceQuestion({
+    eventsById,
+    selectedOccurrenceKey,
+    updateEvent: calendar.updateEvent,
+    writeOccurrence: calendar.writeOccurrence,
+    confirmDelete: setDeleteEventId,
+  });
+  const { requestEventDelete, patchEvent, occurrenceStartOf } = occurrenceQuestion;
+
   // ── inbound `?event=` deep link (DF-2) ────────────────────────────────────
   useCalendarEventDeepLink({
     urlEventId,
@@ -449,9 +425,10 @@ export function CalendarPageView({
   );
 
   const onMoveEvent = useCallback(
-    (eventId: string, deltas: MoveEventDeltas) => {
+    (eventId: string, deltas: MoveEventDeltas, occurrence?: { startMs: number; endMs: number }) => {
       const event = eventsById.get(eventId);
       if (!event) return;
+      if (occurrence && occurrenceQuestion.askMove(eventId, deltas, occurrence)) return;
       // Occurrence deltas map onto the series anchor (v1 = series edits).
       const startsAt = new Date(
         new Date(event.startsAt).getTime() + deltas.startDeltaMs,
@@ -459,7 +436,7 @@ export function CalendarPageView({
       const endsAt = new Date(new Date(event.endsAt).getTime() + deltas.endDeltaMs).toISOString();
       void calendar.updateEvent(eventId, { startsAt, endsAt });
     },
-    [calendar, eventsById],
+    [calendar, eventsById, occurrenceQuestion],
   );
 
   // Task-block drag/resize writes the schedule — the same patch path the
@@ -501,10 +478,10 @@ export function CalendarPageView({
       const eventId = occKey.split(":")[0];
       const event = eventsById.get(eventId);
       if (event && isWritable(event) && calendar.canEdit) {
-        setDeleteEventId(eventId);
+        requestEventDelete(eventId, occurrenceStartOf(event, occKey));
       }
     },
-    [eventsById, calendar.canEdit, isWritable],
+    [eventsById, calendar.canEdit, isWritable, requestEventDelete, occurrenceStartOf],
   );
 
   useCalendarHotkeys({ setView, goToday, step, selectedOccurrenceKey, requestDelete });
@@ -620,8 +597,8 @@ export function CalendarPageView({
             canEdit={calendar.canEdit}
             writable={isWritable(detailEvent)}
             members={viewerMembers}
-            onPatch={(eventId, patch) => void calendar.updateEvent(eventId, patch)}
-            onDeleteRequest={setDeleteEventId}
+            onPatch={patchEvent}
+            onDeleteRequest={requestEventDelete}
             onClose={() => setPanelVariant("tasks")}
           />
         ) : detailTask ? (
@@ -826,7 +803,7 @@ export function CalendarPageView({
           }}
           onDelete={() => {
             setEventPopover(null);
-            setDeleteEventId(popoverEvent.id);
+            requestEventDelete(popoverEvent.id, eventPopover.chip.startMs);
           }}
           onClose={() => setEventPopover(null)}
         />
@@ -871,6 +848,8 @@ export function CalendarPageView({
           onClose={() => setTaskPopover(null)}
         />
       ) : null}
+
+      <OccurrenceScopeDialog {...occurrenceQuestion.dialog} />
 
       <CalendarDeleteDialog
         event={deleteEvent}
