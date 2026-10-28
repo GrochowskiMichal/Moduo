@@ -54,6 +54,8 @@ export type CalendarEventModel = {
   externalSeriesId?: string | null;
   /** Google's iCalUID: the same meeting through two logins shares it. */
   icalUid?: string | null;
+  /** Google's organizer.self: you organize it (null: unknown). */
+  isOrganizer?: boolean | null;
 };
 
 /** One person on an event, as calendar_op_event_create/update store them. */
@@ -175,6 +177,8 @@ export type CalendarMirrorEventInput = {
   originalStart?: string;
   /** Google's iCalUID. Absent keeps the stored one. */
   iCalUID?: string;
+  /** Google's organizer.self. Sent only when Google names an organizer; absent keeps the stored one. */
+  isOrganizer?: boolean;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */

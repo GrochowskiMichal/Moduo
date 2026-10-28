@@ -85,6 +85,7 @@ function seriesFieldsOf(r: {
   exdates?: string[] | null;
   external_series_id?: string | null;
   ical_uid?: string | null;
+  is_organizer?: boolean | null;
 }) {
   return {
     seriesId: r.series_id ?? null,
@@ -92,6 +93,7 @@ function seriesFieldsOf(r: {
     exdates: r.exdates ?? [],
     externalSeriesId: r.external_series_id ?? null,
     icalUid: r.ical_uid ?? null,
+    isOrganizer: r.is_organizer ?? null,
   };
 }
 

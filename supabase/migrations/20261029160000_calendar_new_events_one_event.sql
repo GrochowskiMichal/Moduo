@@ -10,10 +10,11 @@
 -- (Remove, then connect it again). Never across owners or workspaces. Re-runnable.
 --
 --   calendar_events.ical_uid     new column; a partial index for the revive's lookup
+--   calendar_events.is_organizer new column: Google's organizer.self (you organize it)
 --   calendar_op_mirror_events    ← 20261028170000_calendar_one_occurrence.sql, plus
---                                  the iCalUID key and the revive
+--                                  the iCalUID and isOrganizer keys and the revive
 --   calendar_events_visible      ← 20261029100000_calendar_focus_time.sql, plus
---                                  ical_uid in the mask list
+--                                  ical_uid and is_organizer in the mask list
 -- Test: supabase/tests/calendar_new_events_one_event.test.sql.
 
 SET LOCAL lock_timeout = '5s';
@@ -30,6 +31,8 @@ END;
 $$;
 
 ALTER TABLE public.calendar_events ADD COLUMN IF NOT EXISTS ical_uid text;
+-- NULL: the provider didn't say. The app's one-chip merge lets your organizer copy win.
+ALTER TABLE public.calendar_events ADD COLUMN IF NOT EXISTS is_organizer boolean;
 
 -- The revive's lookup: a tombstone by its key (the live key is calendar_events_external_key).
 CREATE INDEX IF NOT EXISTS calendar_events_external_key_dead_idx
@@ -131,6 +134,8 @@ BEGIN
                                 ELSE ce.original_start END,
           -- Key PRESENT = Google's iCalUID; ABSENT keeps it.
           ical_uid = CASE WHEN r ? 'iCalUID' THEN NULLIF(r->>'iCalUID', '') ELSE ce.ical_uid END,
+          -- Key PRESENT = whether you organize it (Google's organizer.self); ABSENT keeps it.
+          is_organizer = CASE WHEN r ? 'isOrganizer' THEN (r->>'isOrganizer')::boolean ELSE ce.is_organizer END,
           updated_at = now()
         WHERE ce.source_account_id = a.id AND ce.external_event_id = v_ext
           AND ce.deleted_at IS NULL
@@ -159,12 +164,13 @@ BEGIN
                  ELSE ce.external_series_id END,
             CASE WHEN r ? 'originalStart' THEN (r->>'originalStart')::timestamptz
                  ELSE ce.original_start END,
-            CASE WHEN r ? 'iCalUID' THEN NULLIF(r->>'iCalUID', '') ELSE ce.ical_uid END
+            CASE WHEN r ? 'iCalUID' THEN NULLIF(r->>'iCalUID', '') ELSE ce.ical_uid END,
+            CASE WHEN r ? 'isOrganizer' THEN (r->>'isOrganizer')::boolean ELSE ce.is_organizer END
           ) IS DISTINCT FROM ROW(
             ce.title, ce.description, ce.start_time, ce.end_time, ce.all_day,
             ce.recurrence_rule, ce.recurring, ce.status, ce.calendar_id,
             ce.location, ce.conference_url, ce.conference_provider,
-            ce.is_private, ce.attendees, ce.external_series_id, ce.original_start, ce.ical_uid
+            ce.is_private, ce.attendees, ce.external_series_id, ce.original_start, ce.ical_uid, ce.is_organizer
           )
         RETURNING ce.* INTO e;
         -- No row updated: either it's unchanged (count it, nothing to write) or new.
@@ -217,6 +223,7 @@ BEGIN
             external_series_id = NULLIF(r->>'externalSeriesId', ''),
             original_start = (r->>'originalStart')::timestamptz,
             ical_uid = NULLIF(r->>'iCalUID', ''),
+            is_organizer = (r->>'isOrganizer')::boolean,
             updated_at = now()
           WHERE ce.id = e.id
           RETURNING ce.* INTO e;
@@ -225,7 +232,7 @@ BEGIN
             (workspace_id, owner_id, source_account_id, external_event_id, calendar_id,
              title, description, location, start_time, end_time, all_day, recurring,
              recurrence_rule, status, conference_url, conference_provider,
-             is_private, attendees, external_series_id, original_start, ical_uid)
+             is_private, attendees, external_series_id, original_start, ical_uid, is_organizer)
           VALUES
             (p_workspace_id, a.owner_id, a.id, v_ext,
              coalesce(NULLIF(r->>'calendarId', ''), a.provider),
@@ -238,7 +245,7 @@ BEGIN
              v_new_link, public.calendar__meeting_provider(v_new_link),
              coalesce((r->>'isPrivate')::boolean, false), coalesce(v_attendees, '[]'::jsonb),
              NULLIF(r->>'externalSeriesId', ''), (r->>'originalStart')::timestamptz,
-             NULLIF(r->>'iCalUID', ''))
+             NULLIF(r->>'iCalUID', ''), (r->>'isOrganizer')::boolean)
           RETURNING * INTO e;
         END IF;
         PERFORM public.entities_op_upsert(p_workspace_id, 'event', e.id, e.title, 'calendar');
@@ -279,7 +286,7 @@ REVOKE ALL ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[
 GRANT EXECUTE ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[]) TO authenticated, service_role;
 
 -- Masked read (20261029100000_calendar_focus_time.sql, focus masking kept): new,
--- a teammate's masked row carries no iCalUID. It would tell them which private
+-- a teammate's masked row carries no iCalUID (nor whether its owner organizes it). It would tell them which private
 -- rows are the same meeting (who meets whom), so it joins the mask list.
 CREATE OR REPLACE FUNCTION public.calendar_events_visible(p_workspace_id uuid, p_from timestamptz, p_to timestamptz)
 RETURNS SETOF public.calendar_events LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $f$
@@ -298,7 +305,7 @@ BEGIN
   CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = v_user OR (NOT e.is_private AND e.kind <> 'focus') THEN e
      ELSE jsonb_populate_record(e, jsonb_build_object('title',CASE WHEN e.is_private THEN 'Busy' ELSE 'Focus time' END,'description',null,'location',null,'attendees','[]'::jsonb,
        'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
-       'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null,'ical_uid',null)) END AS r) m
+       'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null,'ical_uid',null,'is_organizer',null)) END AS r) m
   WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
     AND (e.owner_id = v_user OR e.calendar_ref IN (SELECT id FROM cals))
     AND (e.recurrence_rule IS NOT NULL OR (e.start_time <= p_to AND e.end_time >= p_from))

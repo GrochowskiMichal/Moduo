@@ -162,8 +162,23 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     attendees: googleAttendees(raw.attendees),
     // CALR-11: an instance of a repeat says which one, and which occurrence it replaces.
     ...googleInstance(raw),
-    // Sent only when Google gives one, so the stored iCalUID stays otherwise.
-    ...(str(raw.iCalUID) ? { iCalUID: str(raw.iCalUID) as string } : {}),
+    // CALR-20b: which meeting it is, and whether you organize it.
+    ...googleIdentity(raw),
+  };
+}
+
+/**
+ * Google's iCalUID and whether you organize the event (organizer.self), each
+ * sent only when Google gives it, so the stored value stays otherwise.
+ */
+function googleIdentity(
+  raw: RawProviderEvent,
+): Pick<CalendarMirrorEventInput, "iCalUID" | "isOrganizer"> {
+  const iCalUID = str(raw.iCalUID);
+  const organizer = raw.organizer && typeof raw.organizer === "object" ? raw.organizer : null;
+  return {
+    ...(iCalUID ? { iCalUID } : {}),
+    ...(organizer ? { isOrganizer: (organizer as Record<string, unknown>).self === true } : {}),
   };
 }
 

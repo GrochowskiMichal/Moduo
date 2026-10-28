@@ -5,8 +5,9 @@
 // The iCalUID arrives through the client's mirror call, so it is a hint, never
 // proof: only mirrored rows you own, from accounts you own, at the same start
 // and end and the same occurrence (instances of a repeat share one iCalUID)
-// ever merge, and only when exactly one of them is yours to edit. Otherwise
-// every copy shows: a row someone else wrote can never hide yours.
+// ever merge. The copy you organize (Google's organizer.self) wins; when none
+// or several are, the one copy you can edit wins; otherwise every copy shows.
+// A row someone else wrote can never hide yours.
 
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
 import { writableEvent } from "./writable";
@@ -43,6 +44,19 @@ function meetings(
   return [...groups.values()];
 }
 
+/** The copy of one meeting that shows: the one you organize, else the one you can edit; null keeps them all. */
+function winnerOf(
+  group: CalendarEventModel[],
+  accounts: readonly CalendarAccountModel[],
+  userId: string | null,
+): CalendarEventModel | null {
+  const organizer = group.filter((e) => e.isOrganizer === true);
+  if (organizer.length === 1) return organizer[0];
+  if (organizer.length > 1) return null;
+  const editable = group.filter((e) => writableEvent(e, accounts, userId) !== null);
+  return editable.length === 1 ? editable[0] : null;
+}
+
 /** The events with one copy per meeting; the same array when nothing merges. */
 export function oneChipPerMeeting(
   events: CalendarEventModel[],
@@ -51,10 +65,8 @@ export function oneChipPerMeeting(
 ): CalendarEventModel[] {
   const hidden = new Set<CalendarEventModel>();
   for (const group of meetings(events, accounts, userId)) {
-    if (group.length < 2) continue;
-    const editable = group.filter((e) => writableEvent(e, accounts, userId) !== null);
-    if (editable.length !== 1) continue;
-    for (const e of group) if (e !== editable[0]) hidden.add(e);
+    const keep = group.length < 2 ? null : winnerOf(group, accounts, userId);
+    if (keep) for (const e of group) if (e !== keep) hidden.add(e);
   }
   if (hidden.size === 0) return events;
   return events.filter((e) => !hidden.has(e));

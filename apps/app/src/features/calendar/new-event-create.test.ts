@@ -7,7 +7,12 @@
 import { describe, expect, it, rs } from "@rstest/core";
 
 import type { CalendarAccountModel } from "./events";
-import { createNewEvent, type NewEventDeps, type NewEventDraft } from "./new-event-create";
+import {
+  createNewEvent,
+  type NewEventDeps,
+  type NewEventDraft,
+  newGoogleEventId,
+} from "./new-event-create";
 
 const WORK: CalendarAccountModel = {
   id: "acc-work",
@@ -160,5 +165,66 @@ describe("Google refuses or is offline", () => {
     expect(out.saved).toBe("refused");
     expect(d.mirror).not.toHaveBeenCalled();
     expect(d.createNative).not.toHaveBeenCalled();
+  });
+});
+
+// The app names the Google event's id, so a create whose answer was lost (a
+// timeout after Google saved it) is found again instead of saved a second time.
+describe("a Google create whose answer was lost", () => {
+  type Saved = { saveToYourCalendar: () => Promise<{ saved: string }> };
+
+  it("sends an id of its own that Google takes", async () => {
+    const d = deps();
+    await createNewEvent(draft({ calendarId: "acc-work" }), d);
+    const pushed = d.pushGoogle.mock.calls[0]?.[0] as { eventId?: string };
+    expect(pushed.eventId).toMatch(/^[a-v0-9]{5,1024}$/);
+    expect(newGoogleEventId()).toMatch(/^[a-v0-9]{32}$/);
+    expect(newGoogleEventId()).not.toBe(newGoogleEventId());
+  });
+
+  it("Save to Your calendar instead keeps Google's event when Google has it after all", async () => {
+    const findOnGoogle = rs.fn(async (_account: string, _id: string) => GOOGLE_REPLY);
+    const d = deps({
+      pushGoogle: rs.fn(async () => Promise.reject(new Error("timeout"))),
+      findOnGoogle,
+      newGoogleId: () => "abc123def456",
+    });
+    await createNewEvent(draft({ calendarId: "acc-work" }), d);
+    const refusal = d.onRefused.mock.calls[0]?.[0] as unknown as Saved;
+    const out = await refusal.saveToYourCalendar();
+    expect(out.saved).toBe("google");
+    expect(findOnGoogle).toHaveBeenCalledWith(WORK.externalId, "abc123def456");
+    expect(d.createNative).not.toHaveBeenCalled();
+    expect(d.mirror).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves on Your calendar only once Google says it has no such event", async () => {
+    const d = deps({
+      pushGoogle: rs.fn(async () => Promise.reject(new Error("timeout"))),
+      findOnGoogle: rs.fn(async () => null),
+    });
+    await createNewEvent(draft({ calendarId: "acc-work" }), d);
+    const refusal = d.onRefused.mock.calls[0]?.[0] as unknown as Saved;
+    expect((await refusal.saveToYourCalendar()).saved).toBe("moduo");
+    expect(d.createNative).toHaveBeenCalledTimes(1);
+    expect(d.mirror).not.toHaveBeenCalled();
+  });
+
+  it("saves nothing when Google can't be asked, and asks again on the next press", async () => {
+    let reachable = false;
+    const d = deps({
+      pushGoogle: rs.fn(async () => Promise.reject(new Error("offline"))),
+      findOnGoogle: rs.fn(async () => {
+        if (!reachable) throw new Error("offline");
+        return null;
+      }),
+    });
+    await createNewEvent(draft({ calendarId: "acc-work" }), d);
+    const refusal = d.onRefused.mock.calls[0]?.[0] as unknown as Saved;
+    await expect(refusal.saveToYourCalendar()).rejects.toThrow("offline");
+    expect(d.createNative).not.toHaveBeenCalled();
+    reachable = true;
+    expect((await refusal.saveToYourCalendar()).saved).toBe("moduo");
+    expect(d.createNative).toHaveBeenCalledTimes(1);
   });
 });

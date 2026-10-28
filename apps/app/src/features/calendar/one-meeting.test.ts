@@ -148,6 +148,76 @@ describe("one chip per meeting", () => {
     expect(ids(oneChipPerMeeting([c, d], [...ACCOUNTS, SIDE], ME))).toEqual(["e-c", "e-d"]);
   });
 
+  it("your two own logins, organizer on one and guest on the other: the organizer's copy wins", () => {
+    const SIDE = account({ id: "acc-side" });
+    const guest = ev({
+      id: "e-guest-copy",
+      sourceAccountId: "acc-side",
+      externalEventId: "s8",
+      icalUid: "m8@google.com",
+      isOrganizer: false,
+    });
+    const organizer = ev({
+      id: "e-organizer",
+      sourceAccountId: "acc-work",
+      externalEventId: "w8",
+      icalUid: "m8@google.com",
+      isOrganizer: true,
+    });
+    const all = [...ACCOUNTS, SIDE];
+    expect(ids(oneChipPerMeeting([guest, organizer], all, ME))).toEqual(["e-organizer"]);
+    expect(ids(oneChipPerMeeting([organizer, guest], all, ME))).toEqual(["e-organizer"]);
+  });
+
+  it("shows both when neither or both of your copies are the organizer's", () => {
+    const SIDE = account({ id: "acc-side" });
+    const all = [...ACCOUNTS, SIDE];
+    const a = ev({ id: "e-a", sourceAccountId: "acc-work", externalEventId: "a9", icalUid: "m9" });
+    const b = ev({ id: "e-b", sourceAccountId: "acc-side", externalEventId: "b9", icalUid: "m9" });
+    expect(
+      ids(
+        oneChipPerMeeting(
+          [
+            { ...a, isOrganizer: true },
+            { ...b, isOrganizer: true },
+          ],
+          all,
+          ME,
+        ),
+      ),
+    ).toEqual(["e-a", "e-b"]);
+    expect(
+      ids(
+        oneChipPerMeeting(
+          [
+            { ...a, isOrganizer: false },
+            { ...b, isOrganizer: null },
+          ],
+          all,
+          ME,
+        ),
+      ),
+    ).toEqual(["e-a", "e-b"]);
+  });
+
+  it("an organizer flag on a teammate's row never makes it win", () => {
+    const kais = ev({
+      id: "e-kai",
+      ownerId: KAI,
+      sourceAccountId: "acc-kai",
+      externalEventId: "k10",
+      icalUid: "m10",
+      isOrganizer: true,
+    });
+    const mine = ev({
+      id: "e-mine",
+      sourceAccountId: "acc-guest",
+      externalEventId: "g10",
+      icalUid: "m10",
+    });
+    expect(ids(oneChipPerMeeting([kais, mine], ACCOUNTS, ME))).toEqual(["e-kai", "e-mine"]);
+  });
+
   it("never merges native events, whatever they carry", () => {
     const native = ev({ id: "e-n", icalUid: "m7@google.com" });
     const mine = ev({
@@ -210,6 +280,21 @@ describe("the mirror carries Google's iCalUID", () => {
       end: { dateTime: "2026-11-05T11:00:00Z" },
     });
     expect(mapped?.iCalUID).toBe("g1@google.com");
+  });
+
+  it("carries whether you organize it, only when Google names an organizer", () => {
+    const base = {
+      id: "g1",
+      summary: "Board",
+      start: { dateTime: "2026-11-05T10:00:00Z" },
+      end: { dateTime: "2026-11-05T11:00:00Z" },
+    };
+    expect(mapGoogleEvent({ ...base, organizer: { email: "me@x", self: true } })?.isOrganizer).toBe(
+      true,
+    );
+    expect(mapGoogleEvent({ ...base, organizer: { email: "them@x" } })?.isOrganizer).toBe(false);
+    const none = mapGoogleEvent(base);
+    expect(none && "isOrganizer" in none).toBe(false);
   });
 
   it("leaves the key out when Google sends none, so the stored one stays", () => {

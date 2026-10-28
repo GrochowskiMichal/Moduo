@@ -113,6 +113,30 @@ BEGIN
 END;
 $$;
 
+-- ── Whether you organize it (Google's organizer.self) ───────────────────────
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.as_user('O', pg_temp.mirror('W', test.id('B'),
+    '{"externalEventId": "o1", "iCalUID": "o1@google.com", "isOrganizer": true, "title": "Planning"}'));
+  PERFORM test.ok(r = 'ok 1' AND (pg_temp.live_for('o1')).is_organizer IS TRUE,
+    'the mirror stores that you organize an event', r);
+  r := test.as_user('O', pg_temp.mirror('W', test.id('B'),
+    '{"externalEventId": "o1", "iCalUID": "o1@google.com", "title": "Planning"}'));
+  PERFORM test.ok(r = 'ok 1' AND (pg_temp.live_for('o1')).is_organizer IS TRUE,
+    'an event sent without it keeps what is stored', r);
+  r := test.as_user('O', pg_temp.mirror('W', test.id('B'),
+    '{"externalEventId": "o1", "iCalUID": "o1@google.com", "isOrganizer": false, "title": "Planning"}'));
+  PERFORM test.ok(r = 'ok 1' AND (pg_temp.live_for('o1')).is_organizer IS FALSE,
+    'and a change is written', r);
+  r := test.as_user('O', pg_temp.mirror('W', test.id('B'),
+    '{"externalEventId": "o2", "title": "Lunch"}'));
+  PERFORM test.ok(r = 'ok 1' AND (pg_temp.live_for('o2')).is_organizer IS NULL,
+    'an event the provider says nothing about stays unknown', r);
+END;
+$$;
+
 -- ── A teammate never reads a private event's iCalUID ────────────────────────
 -- The iCalUID would tell a teammate which private rows are the same meeting:
 -- the masked read nulls it with the rest of the details.
@@ -130,7 +154,7 @@ BEGIN
   PERFORM test.ok(EXISTS (SELECT 1 FROM public.calendars WHERE account_id = test.id('A') AND deleted_at IS NULL),
     'fixture: Work has its calendar row, shared with K');
   r := test.as_user('O', pg_temp.mirror('W', test.id('A'),
-    '{"externalEventId": "p1", "iCalUID": "p1@google.com", "title": "Therapy", "isPrivate": true,
+    '{"externalEventId": "p1", "iCalUID": "p1@google.com", "isOrganizer": true, "title": "Therapy", "isPrivate": true,
       "startsAt": "2026-11-06T08:00:00Z", "endsAt": "2026-11-06T09:00:00Z"}'));
   PERFORM test.ok(r = 'ok 1', 'fixture: a private Google event with an iCalUID', r);
   PERFORM test.ok(test.value_as('O', v_sql) = 'p1@google.com', 'its owner reads its iCalUID');
@@ -139,6 +163,9 @@ BEGIN
   r := test.value_as('K', format($q$SELECT title FROM public.calendar_events_visible(%L,
     '2026-11-02 00:00+00', '2026-11-09 00:00+00') WHERE start_time = '2026-11-06 08:00+00'$q$, test.id('W')));
   PERFORM test.ok(r = 'Busy', 'fixture: the teammate''s row is the masked one', r);
+  r := test.value_as('K', format($q$SELECT coalesce(is_organizer::text, 'null') FROM public.calendar_events_visible(%L,
+    '2026-11-02 00:00+00', '2026-11-09 00:00+00') WHERE start_time = '2026-11-06 08:00+00'$q$, test.id('W')));
+  PERFORM test.ok(r = 'null', 'nor whether its owner organizes it', r);
 END;
 $$;
 
