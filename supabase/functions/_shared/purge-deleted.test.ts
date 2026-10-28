@@ -59,6 +59,9 @@ class FakeDb implements PurgeDb {
         this.staleViewers = 0;
         return Promise.resolve({ data: { notes, viewers, failed: 0 }, error: null });
       }
+      case "notes__compact_candidates":
+        // Compaction itself is notes-compact.test.ts's.
+        return Promise.resolve({ data: [], error: null });
       case "storage_usage__reconcile":
         return Promise.resolve({ data: 2, error: null });
       default:
@@ -116,6 +119,9 @@ describe("purgeDeleted", () => {
       notes: 0,
       noteViewers: 0,
       notesFailed: 0,
+      notesCompacted: 0,
+      notesCompactSkipped: 0,
+      notesCompactFailed: 0,
       poolsRecounted: 2,
     });
     expect([...db.files]).toEqual(["ws/kept/original.png"]);
@@ -127,6 +133,7 @@ describe("purgeDeleted", () => {
       "remove attachments 1",
       "rpc tasks__purge_expired",
       "rpc notes__purge_expired",
+      "rpc notes__compact_candidates",
       "rpc storage_usage__reconcile",
     ]);
   });
