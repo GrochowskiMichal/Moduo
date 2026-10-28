@@ -476,6 +476,7 @@ export function CalendarPageView({
     accounts: calendar.accounts,
     events: calendar.events,
     sessions,
+    tasks,
     days: range.days,
     view: viewState.view,
     hasSelection: selectedOccurrenceKey !== null,

@@ -10,9 +10,8 @@ import type { BrowserContext, Locator, Page } from "@playwright/test";
 
 import { signInPage } from "../tests/support/local-stack.ts";
 import { atSmallestWindow, withSecondZone } from "./calendar-acts.ts";
-import { bookingLinkState } from "./calendar-booking.ts";
 import { composeJourney, composerInput, composingState } from "./calendar-composer.ts";
-import { rightClickState } from "./calendar-menus.ts";
+import { bookingLinkState, rightClickState } from "./calendar-menus.ts";
 import { planJourneys } from "./journeys-plan.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 

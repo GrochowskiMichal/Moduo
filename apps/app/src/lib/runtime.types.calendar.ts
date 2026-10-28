@@ -198,7 +198,7 @@ export type CalendarRuntime = {
    * their answers, and its upcoming bookings. Null when there is no such link (a failed read throws);
    * hosts and bookings fail soft to empty.
    */
-  bookingLink(input: { linkId: string }): Promise<{
+  bookingLink(input: { linkId: string; workspaceId: string }): Promise<{
     link: BookingLinkRow;
     hosts: { userId: string; status: string }[];
     bookings: { id: string; name: string; email: string; startsAt: string; endsAt: string }[];

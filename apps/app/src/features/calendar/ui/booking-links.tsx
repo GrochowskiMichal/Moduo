@@ -30,7 +30,11 @@ import {
   type GuestReminderMinutes,
   type LinkDraft,
 } from "./booking-link-dialog";
-import { BOOKING_LINK_EDIT_EVENT, BOOKING_LINKS_CHANGED_EVENT } from "./use-booking-panel";
+import {
+  BOOKING_LINK_EDIT_EVENT,
+  BOOKING_LINKS_CHANGED_EVENT,
+  takePendingBookingEdit,
+} from "./use-booking-panel";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -484,15 +488,15 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
       });
   };
 
-  // The panel's Edit… opens this editor; its quick edits ask for a refresh.
+  // The panel's Edit… opens this editor (also when it unfolded the rail to get
+  // here, so the link waits until this mounts); its quick edits ask for a refresh.
   useEffect(() => {
-    const onEdit = (e: Event) => {
-      const link = links.find(
-        (row) => row.id === (e as CustomEvent<{ linkId: string }>).detail?.linkId,
-      );
-      if (link) openEditor(link);
+    const onEdit = () => {
+      const row = takePendingBookingEdit();
+      if (row) openEditor(row as LinkRow);
     };
-    const onChanged = () => void refresh();
+    onEdit();
+    const onChanged = () => void refresh().catch(() => {});
     window.addEventListener(BOOKING_LINK_EDIT_EVENT, onEdit);
     window.addEventListener(BOOKING_LINKS_CHANGED_EVENT, onChanged);
     return () => {

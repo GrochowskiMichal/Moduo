@@ -3,6 +3,9 @@
 
 import type { Page } from "@playwright/test";
 
+// The Booking link view's state, re-exported so the config keeps one import line.
+export { bookingLinkState } from "./calendar-booking.ts";
+
 export const rightClickState = {
   act: async ({ page }: { page: Page }) =>
     page

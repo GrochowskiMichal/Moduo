@@ -3,6 +3,7 @@
 // page's own answer, and dashes its open times on the week. Quick edits are
 // optimistic and roll back on failure.
 
+import { isClosedTask } from "@contracts/vocabularies";
 import { CalendarClock } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -12,7 +13,7 @@ import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import type { BookingLinkRow } from "../../../lib/runtime.types.calendar";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
-import type { TaskSession } from "../../tasks/model";
+import type { Task, TaskSession } from "../../tasks/model";
 import { useWorkspace } from "../../workspaces/workspace-context";
 import { openTimes } from "../booking/availability";
 import {
@@ -29,12 +30,32 @@ import type { CalendarAccountModel, CalendarEventModel } from "../events";
 import type { CalendarView } from "../lens";
 import { BookingLinkPanel, type BookingLinkPanelProps } from "./booking-link-panel";
 import { BookingOpenLayer } from "./booking-open-layer";
+import { useNowTick } from "./grid-units";
 
 export const BOOKING_LINKS_CHANGED_EVENT = "moduo:booking-links-changed";
 export const BOOKING_LINK_EDIT_EVENT = "moduo:booking-link-edit";
 
+// The editor lives in the rail, which is unmounted while the calendars panel
+// is folded: Edit… unfolds it and leaves the link here for the rail to take
+// when it mounts (or at once, through the event, when it is already showing).
+let pendingEdit: BookingLinkRow | null = null;
+
+/** The link Edit… asked the rail's editor to open, once. */
+export function takePendingBookingEdit(): BookingLinkRow | null {
+  const row = pendingEdit;
+  pendingEdit = null;
+  return row;
+}
+
+function requestBookingLinkEdit(row: BookingLinkRow) {
+  pendingEdit = row;
+  const state = readFeaturePanelState("calendar");
+  if (!state.left) dispatchLayoutPanelsSet({ feature: "calendar", left: true, right: state.right });
+  window.dispatchEvent(new Event(BOOKING_LINK_EDIT_EVENT));
+}
+
 type Read = NonNullable<Awaited<ReturnType<ModuoRuntime["calendar"]["bookingLink"]>>>;
-type Loaded = Omit<Read, "link"> & { link: BookingLink };
+type Loaded = Omit<Read, "link"> & { link: BookingLink; row: BookingLinkRow };
 type Patch = Parameters<BookingLinkPanelProps["onPatch"]>[0];
 
 type Input = {
@@ -44,6 +65,8 @@ type Input = {
   accounts: CalendarAccountModel[];
   events: CalendarEventModel[];
   sessions: TaskSession[];
+  /** Live tasks: work sessions on finished ones don't count, as on the guest page. */
+  tasks: readonly Pick<Task, "id" | "status" | "statusCategory">[];
   days: Date[];
   view: CalendarView;
   hasSelection: boolean;
@@ -74,7 +97,7 @@ function linkFromRow(row: BookingLinkRow): BookingLink {
   };
 }
 
-function useLinkData(runtime: ModuoRuntime | null, linkId: string | null) {
+function useLinkData(runtime: ModuoRuntime | null, workspaceId: string, linkId: string | null) {
   const [data, setData] = useState<Loaded | null>(null);
   useEffect(() => {
     setData(null);
@@ -82,9 +105,9 @@ function useLinkData(runtime: ModuoRuntime | null, linkId: string | null) {
     let live = true;
     const read = () =>
       void runtime.calendar
-        .bookingLink({ linkId })
+        .bookingLink({ linkId, workspaceId })
         .then((next) => {
-          if (live) setData(next && { ...next, link: linkFromRow(next.link) });
+          if (live) setData(next && { ...next, row: next.link, link: linkFromRow(next.link) });
         })
         .catch(() => toast.error("Couldn't read the booking link."));
     read();
@@ -93,7 +116,7 @@ function useLinkData(runtime: ModuoRuntime | null, linkId: string | null) {
       live = false;
       window.removeEventListener(BOOKING_LINKS_CHANGED_EVENT, read);
     };
-  }, [runtime, linkId]);
+  }, [runtime, workspaceId, linkId]);
   return [data, setData] as const;
 }
 
@@ -139,15 +162,21 @@ export function useBookingPanel(input: Input): {
   close: () => void;
   layer: ReactNode;
 } {
-  const { runtime, userId, accounts, events, sessions, days } = input;
+  const { runtime, workspaceId, userId, accounts, events, days } = input;
   const { members } = useWorkspace();
   const [linkId, setLinkId] = useState<string | null>(null);
-  const [seenKey, setSeenKey] = useState(input.closeKey);
-  if (seenKey !== input.closeKey) {
-    setSeenKey(input.closeKey);
+  // Opening an event or a task, or another workspace, closes the view.
+  const [seen, setSeen] = useState({ key: input.closeKey, workspaceId });
+  if (seen.key !== input.closeKey || seen.workspaceId !== workspaceId) {
+    setSeen({ key: input.closeKey, workspaceId });
     setLinkId(null);
   }
-  const [data, setData] = useLinkData(runtime, linkId);
+  const [data, setData] = useLinkData(runtime, workspaceId, linkId);
+  const sessions = useMemo(() => {
+    const open = new Set(input.tasks.filter((t) => !isClosedTask(t)).map((t) => t.id));
+    return input.sessions.filter((s) => open.has(s.taskId));
+  }, [input.tasks, input.sessions]);
+  const now = useNowTick(60_000);
   const link = data?.link ?? null;
   const guestSlots = useGuestSlots(link?.slug ?? null, link, events, sessions);
 
@@ -193,11 +222,11 @@ export function useBookingPanel(input: Input): {
       coHostBusy,
       hosts,
       guestSlots,
-      now: new Date(),
+      now,
       from,
       to: new Date(last.getFullYear(), last.getMonth(), last.getDate() + 1),
     });
-  }, [data, userId, events, sessions, hosts, coHostBusy, guestSlots, from, last]);
+  }, [data, userId, events, sessions, hosts, coHostBusy, guestSlots, from, last, now]);
 
   const patch = useCallback(
     (change: Patch) => {
@@ -208,7 +237,8 @@ export function useBookingPanel(input: Input): {
         .updateBookingLink({ linkId: data.link.id, patch: change })
         .then(() => window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT)))
         .catch((e: unknown) => {
-          setData(before);
+          // Only if the view still shows that link.
+          setData((current) => (current?.link.id === before.link.id ? before : current));
           toast.error(e instanceof Error ? e.message : "Couldn't save the link.");
         });
     },
@@ -237,11 +267,7 @@ export function useBookingPanel(input: Input): {
           }
           hasSelection={input.hasSelection}
           onPatch={patch}
-          onEdit={() =>
-            window.dispatchEvent(
-              new CustomEvent(BOOKING_LINK_EDIT_EVENT, { detail: { linkId: link.id } }),
-            )
-          }
+          onEdit={() => requestBookingLinkEdit(data.row)}
           onGuestView={() => {
             if (isTauriRuntime() && runtime) void runtime.window.openExternalUrl(url);
             else window.open(url, "_blank", "noopener");

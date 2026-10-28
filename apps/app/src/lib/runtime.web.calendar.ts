@@ -291,14 +291,20 @@ async function bookingLinkHosts(linkId: string) {
 async function bookingLinkBookings(slotId: string) {
   const { data, error } = await supabaseClient
     .from("slot_bookings")
-    .select("id, attendee_name, attendee_email, start_at, end_at")
+    .select("id, attendee_name, attendee_email, start_at, end_at, status, updated_at")
     .eq("slot_id", slotId)
     .in("status", ["pending", "confirmed"])
     .gte("end_at", new Date().toISOString())
     .order("start_at", { ascending: true })
     .limit(20);
   if (error) throw error;
-  return (data ?? []).map((row) => ({
+  // A pending booking older than five minutes is abandoned: booking-public
+  // neither counts it nor keeps it.
+  const staleBefore = Date.now() - 5 * 60_000;
+  const live = (data ?? []).filter(
+    (row) => row.status !== "pending" || Date.parse(row.updated_at) >= staleBefore,
+  );
+  return live.map((row) => ({
     id: row.id,
     name: row.attendee_name,
     email: row.attendee_email,
@@ -634,11 +640,12 @@ export const webCalendar: CalendarRuntime = {
       updatedAt: event.updatedAt,
     };
   },
-  async bookingLink({ linkId }) {
+  async bookingLink({ linkId, workspaceId }) {
     const { data: row, error } = await supabaseClient
       .from("exposed_slot_links")
       .select("*")
       .eq("id", linkId)
+      .eq("workspace_id", workspaceId)
       // A link deleted from the editor closes its view.
       .is("deleted_at", null)
       .maybeSingle();

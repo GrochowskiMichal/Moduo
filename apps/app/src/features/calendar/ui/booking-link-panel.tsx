@@ -5,6 +5,7 @@
 
 import { Copy } from "lucide-react";
 import { useEffect, useId, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -57,10 +58,11 @@ function isTyping(target: EventTarget | null): boolean {
 
 function useCopy(url: string, hasSelection: boolean) {
   const [copied, setCopied] = useState(false);
-  const copy = () => {
-    void navigator.clipboard.writeText(url);
-    setCopied(true);
-  };
+  const copy = () =>
+    void navigator.clipboard.writeText(url).then(
+      () => setCopied(true),
+      () => toast.error("Couldn't copy the link."),
+    );
   useEffect(() => {
     if (!copied) return;
     const t = window.setTimeout(() => setCopied(false), 1500);
@@ -70,9 +72,8 @@ function useCopy(url: string, hasSelection: boolean) {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || hasSelection || e.key.toLowerCase() !== "c") return;
       if (!(e.metaKey || e.ctrlKey) || isTyping(e.target)) return;
-      if (window.getSelection()?.toString()) return;
-      void navigator.clipboard.writeText(url);
-      setCopied(true);
+      if (e.repeat || window.getSelection()?.toString()) return;
+      copy();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
