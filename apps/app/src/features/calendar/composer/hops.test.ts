@@ -1,6 +1,8 @@
 // CALR-9 contract: ⇥ / ⇧⇥ hop the draft to the next / previous free time;
 // N opens at the next free time; a clash leads the echo (AC16, AC17).
 
+process.env.TZ = "Europe/Warsaw";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { clashFor, hopFreeTime, openingSlot } from "./hops";

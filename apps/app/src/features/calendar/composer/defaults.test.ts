@@ -1,5 +1,7 @@
 // CALR-9 contract: Meet only with guests; outside guests to Google (AC18).
 
+process.env.TZ = "Europe/Warsaw";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { type ComposerAccount, mainGoogleAccount, planComposer } from "./defaults";

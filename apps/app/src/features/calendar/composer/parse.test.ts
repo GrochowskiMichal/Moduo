@@ -1,5 +1,7 @@
 // CALR-9 contract: the composer reads what and when (AC16, AC17).
 
+process.env.TZ = "Europe/Warsaw";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { type ComposerBusy, type ComposerContext, parseComposer } from "./parse";
