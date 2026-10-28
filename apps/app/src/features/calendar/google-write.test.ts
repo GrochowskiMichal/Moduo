@@ -177,7 +177,7 @@ function googleRuntime() {
         updatedAt: "2026-10-28T09:00:00Z",
       }),
     ),
-    removeGoogleEvent: rs.fn(async () => {}),
+    removeGoogleEvent: rs.fn(async (_input: { event: CalendarEventModel }) => {}),
   };
   return { runtime: { calendar } as unknown as ModuoRuntime, calendar };
 }
