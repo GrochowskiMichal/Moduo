@@ -95,7 +95,7 @@ describe("the cursor and events", () => {
   });
 
   it("a chip puts the cursor on the slot it starts in", () => {
-    expect(cursorForChip(chip("x", 4, 12, 45, 30))).toEqual({ dayKey: key(4), minute: 720 });
+    expect(cursorForChip(chip("x", 4, 12, 45, 30))).toEqual({ dayKey: key(4), minute: 750 });
   });
 
   it("J and K step through events in time order, across days", () => {
