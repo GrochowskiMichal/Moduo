@@ -103,27 +103,34 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_ts_config
                   WHERE cfgname = 'search_headline' AND cfgnamespace = 'public'::regnamespace) THEN
     CREATE TEXT SEARCH CONFIGURATION public.search_headline (COPY = pg_catalog.simple);
-    ALTER TEXT SEARCH CONFIGURATION public.search_headline
-      ALTER MAPPING FOR word, hword, hword_part WITH extensions.unaccent, pg_catalog.simple;
   END IF;
 END;
 $$;
+
+-- Words with digits too ("żółw1"), so their snippets are marked as well (Chat's
+-- config leaves them out). Re-stating a mapping is idempotent.
+ALTER TEXT SEARCH CONFIGURATION public.search_headline
+  ALTER MAPPING FOR word, hword, hword_part, numword, numhword, hword_numpart
+  WITH extensions.unaccent, pg_catalog.simple;
 
 -- ── 5. search__snippet ───────────────────────────────────────────────────────
 -- One fragment of 8–24 words around the first match, matches between U+E000 and
 -- U+E001: plain text the client splits on and draws, never HTML. Only the first
 -- 20,000 characters are read (headline cost grows with the text), and callers
--- build snippets only for the rows they return (Assumption 9).
+-- build snippets only for the rows they return (Assumption 9). A match past that
+-- cut (a body indexes up to 150,000) gives NULL, not the text's unmarked opening.
 
 CREATE OR REPLACE FUNCTION public.search__snippet(p_text text, p_query tsquery)
   RETURNS text
   LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
   SET search_path = ''
 AS $$
-  SELECT pg_catalog.ts_headline('public.search_headline'::regconfig,
-    pg_catalog.left(p_text, 20000), p_query,
-    'StartSel=' || pg_catalog.chr(57344) || ', StopSel=' || pg_catalog.chr(57345)
-    || ', MaxWords=24, MinWords=8, ShortWord=2, MaxFragments=1, FragmentDelimiter=" … "')
+  SELECT CASE WHEN pg_catalog.strpos(h.snippet, pg_catalog.chr(57344)) > 0 THEN h.snippet END
+    FROM (SELECT pg_catalog.ts_headline('public.search_headline'::regconfig,
+            pg_catalog.left(p_text, 20000), p_query,
+            'StartSel=' || pg_catalog.chr(57344) || ', StopSel=' || pg_catalog.chr(57345)
+            || ', MaxWords=24, MinWords=8, ShortWord=2, MaxFragments=1, FragmentDelimiter=" … "')
+            AS snippet) h
 $$;
 
 COMMENT ON FUNCTION public.search__snippet(text, tsquery) IS

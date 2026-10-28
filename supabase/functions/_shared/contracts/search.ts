@@ -9,6 +9,8 @@
  *
  * - `entity_type` stays an open string (polymorphic types).
  * - `match` is closed: `SEARCH_MATCHES` in vocabularies.ts.
+ * - `entity_id` is a non-empty string, not uuid-strict, like rows.ts: the
+ *   desktop's local mail hits (GS-9) carry their own ids.
  * - `rank` is 0..1 within the module.
  * - `snippet` marks matches with U+E000 … U+E001; the client splits on them and
  *   draws text, never HTML.
@@ -20,9 +22,9 @@ import { parseOrError, type SafeParseResult } from "./errors.ts";
 import { normalizeSearchMatch, searchMatchSchema } from "./vocabularies.ts";
 
 /** Where a match starts in a snippet (U+E000). */
-export const SEARCH_SNIPPET_START = "";
+export const SEARCH_SNIPPET_START = "\uE000";
 /** Where a match ends in a snippet (U+E001). */
-export const SEARCH_SNIPPET_END = "";
+export const SEARCH_SNIPPET_END = "\uE001";
 
 /** The query is cut to this many characters, then to this many words. */
 export const SEARCH_QUERY_MAX_CHARS = 256;
