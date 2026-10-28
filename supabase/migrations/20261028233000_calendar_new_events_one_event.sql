@@ -12,6 +12,8 @@
 --   calendar_events.ical_uid     new column + partial lookup index
 --   calendar_op_mirror_events    ← 20261028170000_calendar_one_occurrence.sql, plus
 --                                  the iCalUID key and the revive
+--   calendar_events_visible      ← 20261028150000_calendar_private_masking.sql, plus
+--                                  ical_uid in the mask list
 -- Test: supabase/tests/calendar_new_events_one_event.test.sql.
 
 SET LOCAL lock_timeout = '5s';
@@ -256,7 +258,35 @@ BEGIN
   RETURN jsonb_build_object('upserted', v_upserted, 'removed', v_removed, 'skipped', v_skipped);
 END;
 $function$;
-$function$;
 
 REVOKE ALL ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[]) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.calendar_op_mirror_events(uuid, uuid, jsonb, text[]) TO authenticated, service_role;
+
+-- Masked read (20261028150000): new, a teammate's private row carries no
+-- iCalUID. It would tell them which private rows are the same meeting (who
+-- meets whom), so it joins the mask list with the other details.
+CREATE OR REPLACE FUNCTION public.calendar_events_visible(p_workspace_id uuid, p_from timestamptz, p_to timestamptz)
+RETURNS SETOF public.calendar_events LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public AS $f$
+DECLARE v_user uuid := public.perm_actor_id();
+BEGIN
+  IF v_user IS NULL OR p_workspace_id IS NULL OR public.calendar_module_permission(p_workspace_id) NOT IN ('view','edit','admin') THEN RETURN; END IF;
+  RETURN QUERY
+  -- Every calendar the actor can view, their own included: a teammate's event
+  -- on your calendar (they can edit it) is yours to see, as the table policy says.
+  WITH cals AS (SELECT c.id FROM public.calendars c WHERE c.workspace_id = p_workspace_id AND c.deleted_at IS NULL
+                  AND public.can_access('calendar', c.id, 'view', v_user))
+  -- The row is built once in a LATERAL (a bare (CASE … END).* would rebuild
+  -- it once per column). A new sensitive column joins the mask list here.
+  SELECT (m.r).*
+  FROM public.calendar_events e
+  CROSS JOIN LATERAL (SELECT CASE WHEN e.owner_id = v_user OR NOT e.is_private THEN e
+     ELSE jsonb_populate_record(e, jsonb_build_object('title','Busy','description',null,'location',null,'attendees','[]'::jsonb,
+       'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
+       'external_series_id',null,'focus_task_id',null,'offer_id',null,'color',null,'ical_uid',null)) END AS r) m
+  WHERE e.workspace_id = p_workspace_id AND e.deleted_at IS NULL
+    AND (e.owner_id = v_user OR e.calendar_ref IN (SELECT id FROM cals))
+    AND (e.recurrence_rule IS NOT NULL OR (e.start_time <= p_to AND e.end_time >= p_from))
+  ORDER BY e.start_time, e.id;
+END $f$;
+REVOKE ALL ON FUNCTION public.calendar_events_visible(uuid, timestamptz, timestamptz) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.calendar_events_visible(uuid, timestamptz, timestamptz) TO authenticated, service_role;

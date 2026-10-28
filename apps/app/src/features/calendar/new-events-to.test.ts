@@ -170,7 +170,10 @@ describe("the composer puts new events where the setting says", () => {
   });
 
   it("focus time stays on Your calendar", () => {
-    expect(plan("focus Write the spec tomorrow 9am").target).toEqual({ kind: "moduo", calendarId: null });
+    expect(plan("focus Write the spec tomorrow 9am").target).toEqual({
+      kind: "moduo",
+      calendarId: null,
+    });
   });
 
   it("#calendar still wins", () => {

@@ -40,12 +40,8 @@ export type NewEventPorts = {
   timeZone?: string;
 };
 
-/**
- * NewEventPorts as createNewEvent takes them: the callbacks are loose here so a
- * test can hand in spies and read their calls back; they are read as the ports.
- */
-export type NewEventDeps = Pick<NewEventPorts, "accounts" | "timeZone"> &
-  Record<"createNative" | "pushGoogle" | "mirror" | "onRefused", any>;
+/** What createNewEvent works with: the accounts, and the calls it makes. */
+export type NewEventDeps = NewEventPorts;
 
 export type NewEventOutcome =
   | { saved: "moduo" }
@@ -59,9 +55,8 @@ function nativeOf(draft: NewEventDraft): NativeEventDraft {
 
 export async function createNewEvent(
   draft: NewEventDraft,
-  ports: NewEventDeps,
+  deps: NewEventDeps,
 ): Promise<NewEventOutcome> {
-  const deps: NewEventPorts = ports;
   const target = deps.accounts.find((a) => a.id === draft.calendarId && a.provider === "google");
   if (!target) {
     await deps.createNative(nativeOf(draft));

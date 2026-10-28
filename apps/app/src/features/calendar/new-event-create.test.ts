@@ -47,17 +47,16 @@ function draft(over: Partial<NewEventDraft> = {}): NewEventDraft {
   };
 }
 
-function deps(over: Partial<NewEventDeps> = {}) {
+function deps(over: Partial<Record<keyof NewEventDeps, unknown>> = {}) {
   const d = {
     accounts: [WORK],
-    createNative: rs.fn(async () => undefined),
-    pushGoogle: rs.fn(async () => GOOGLE_REPLY as Record<string, unknown>),
-    mirror: rs.fn(async () => undefined),
-    onRefused: rs.fn(),
+    createNative: rs.fn(async (_draft: unknown) => undefined),
+    pushGoogle: rs.fn(async (_input: unknown) => GOOGLE_REPLY as Record<string, unknown>),
+    mirror: rs.fn(async (_accountId: string, _event: unknown) => undefined),
+    onRefused: rs.fn((_refusal: unknown) => undefined),
     timeZone: "Europe/Warsaw",
-    ...over,
   };
-  return d;
+  return { ...d, ...over } as typeof d;
 }
 
 describe("a new event on Your calendar", () => {
@@ -86,7 +85,10 @@ describe("a new event on a Google calendar", () => {
     expect(pushed.meet).toBe("add");
     expect(pushed.timeZone).toBe("Europe/Warsaw");
     expect(d.mirror).toHaveBeenCalledTimes(1);
-    const [accountId, event] = d.mirror.mock.calls[0] as unknown as [string, Record<string, unknown>];
+    const [accountId, event] = d.mirror.mock.calls[0] as unknown as [
+      string,
+      Record<string, unknown>,
+    ];
     expect(accountId).toBe("acc-work");
     expect(event.externalEventId).toBe("g1");
     expect(event.iCalUID).toBe("g1@google.com");
