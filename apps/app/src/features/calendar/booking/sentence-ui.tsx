@@ -3,7 +3,7 @@
  * the tray that opens under the sentence with the choices for one blank.
  */
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   type ComponentProps,
   type KeyboardEvent,
@@ -33,11 +33,13 @@ type BlankProps = {
   open?: boolean;
   disabled?: boolean;
   controls?: string;
+  /** A choice blank carries a caret (AC33); a blank that opens the details step doesn't. */
+  caret?: boolean;
   onToggle?: () => void;
   ref?: Ref<HTMLButtonElement>;
 };
 
-/** A choice blank in the sentence. Shows the picked value or a dashed placeholder. */
+/** A blank in the sentence. Shows the picked value or a dashed placeholder. */
 export function Blank({
   label,
   value,
@@ -45,6 +47,7 @@ export function Blank({
   open = false,
   disabled,
   controls,
+  caret = true,
   onToggle,
   ref,
 }: BlankProps) {
@@ -53,6 +56,7 @@ export function Blank({
       ref={ref}
       type="button"
       disabled={disabled}
+      aria-label={`${label}: ${value ?? placeholder}`}
       aria-expanded={open}
       aria-controls={open ? controls : undefined}
       onClick={onToggle}
@@ -65,8 +69,17 @@ export function Blank({
         "disabled:cursor-default disabled:opacity-50",
       )}
     >
-      <span className="sr-only">{label}: </span>
       {value ?? placeholder}
+      {caret ? (
+        <ChevronDown
+          aria-hidden="true"
+          data-caret=""
+          className={cn(
+            "ml-1 inline size-icon-lg align-middle text-muted-foreground transition-transform duration-[var(--motion-fade)]",
+            open && "rotate-180",
+          )}
+        />
+      ) : null}
     </button>
   );
 }

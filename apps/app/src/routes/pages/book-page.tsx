@@ -16,9 +16,13 @@ import { SELECTED_OPTION } from "@/components/ui/selection";
 import { Avatar, AvatarFallback, AvatarImage } from "../../components/ui/avatar";
 import { Button } from "../../components/ui/button";
 import { Eyebrow } from "../../components/ui/eyebrow";
-import { Input } from "../../components/ui/input";
 import { ModuoMark } from "../../components/ui/moduo-mark";
 import { Textarea } from "../../components/ui/textarea";
+import {
+  type BookingQuestion,
+  detailsFieldId,
+  DetailsStep,
+} from "../../features/calendar/booking/details-step";
 import {
   isEmailAddress,
   MAX_BOOKING_GUESTS,
@@ -36,10 +40,13 @@ import {
   type DayPart,
   daysBetween,
   dayShortOfKey,
+  type DetailsField,
   durationPhrase,
   firstName,
   groupByDay,
   groupByPart,
+  nextBookStep,
+  otherOpenTimes,
   quickPicks,
   timeLabel,
   weekdayShortOfKey,
@@ -73,7 +80,7 @@ type Phase =
       googleInvites: boolean;
     };
 
-type TrayKind = "video" | "day" | "time" | "zone";
+type TrayKind = "video" | "day" | "time" | "zone" | "details";
 
 const VIDEO_HINT: Record<VideoProvider, string> = {
   google_meet: "Joins in the browser",
@@ -197,8 +204,7 @@ export function BookPage() {
   const timeBlank = useRef<HTMLButtonElement>(null);
   const zoneBlank = useRef<HTMLButtonElement>(null);
   const videoBlank = useRef<HTMLButtonElement>(null);
-  const nameInput = useRef<HTMLInputElement>(null);
-  const emailInput = useRef<HTMLInputElement>(null);
+  const nameBlank = useRef<HTMLButtonElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
   const focusTrayOnOpen = useRef(false);
 
@@ -364,9 +370,11 @@ export function BookPage() {
     );
   }
 
-  const questions = (preview.questions ?? []).filter((question) => question.id && question.label);
+  const questions = (preview.questions ?? []).filter((question): question is BookingQuestion =>
+    Boolean(question.id && question.label),
+  );
   const unanswered = questions.find(
-    (question) => question.required === true && !(answers[question.id as string] ?? "").trim(),
+    (question) => question.required === true && !(answers[question.id] ?? "").trim(),
   );
   const nameOk = name.trim().length > 0;
   // Same check as the server, which uses this address as the email recipient.
@@ -385,7 +393,9 @@ export function BookPage() {
           ? timeBlank
           : tray === "video"
             ? videoBlank
-            : zoneBlank;
+            : tray === "details"
+              ? nameBlank
+              : zoneBlank;
     setTray(null);
     back.current?.focus();
   };
@@ -397,15 +407,22 @@ export function BookPage() {
     openTray("time", true);
   };
 
+  // The details step: open its tray and put the cursor in the field still missing.
+  const openDetails = (field: DetailsField = "name") => {
+    setTray("details");
+    requestAnimationFrame(() =>
+      document.getElementById(detailsFieldId(field, unanswered))?.focus({ preventScroll: true }),
+    );
+  };
+
   const pickSlot = (slot: string) => {
     setStart(slot);
     setDayKey(zoneKey(new Date(slot), zone));
     setFormError(null);
-    setTray(null);
-    requestAnimationFrame(() => {
-      if (!nameOk) nameInput.current?.focus();
-      else if (!emailOk) emailInput.current?.focus();
-    });
+    if (!nameOk) openDetails("name");
+    else if (!emailOk) openDetails("email");
+    else if (unanswered) openDetails("question");
+    else setTray(null);
   };
 
   const pickVideo = (next: VideoProvider) => {
@@ -422,23 +439,22 @@ export function BookPage() {
     zoneBlank.current?.focus();
   };
 
-  // What the book button does next: the first missing thing, or book.
-  const nextStep: { label: string; go: () => void } | null = !chosen
-    ? { label: `Pick ${platformPhrase}`, go: () => openTray("video", true) }
-    : !activeDay
-      ? { label: "Pick a day", go: () => openTray("day", true) }
-      : !start
-        ? { label: "Pick a time", go: () => openTray("time", true) }
-        : !nameOk
-          ? { label: "Add your name", go: () => nameInput.current?.focus() }
-          : !emailOk
-            ? { label: "Add your email", go: () => emailInput.current?.focus() }
-            : unanswered
-              ? {
-                  label: `Answer ${host}'s question`,
-                  go: () => document.getElementById(`book-q-${unanswered.id}`)?.focus(),
-                }
-              : null;
+  // What the book button does next (AC33): the first missing thing, or book.
+  const step = nextBookStep({
+    videoToPick: chosen ? null : platformPhrase,
+    dayKey: activeDay,
+    start,
+    timeZone: zone,
+    detailsOpen: tray === "details",
+    nameOk,
+    emailOk,
+    question: unanswered ? host : null,
+  });
+  const goToStep = () => {
+    if (step.kind === "details") openDetails(step.field);
+    else if (step.kind !== "book") openTray(step.kind, true);
+  };
+  const others = otherOpenTimes(slots, start);
 
   const bookErrorMessage = (code: unknown): string => {
     switch (code) {
@@ -491,7 +507,7 @@ export function BookPage() {
         origin: bookingPublicOrigin(window.location),
         answers: questions.map((question) => ({
           id: question.id,
-          value: answers[question.id as string] ?? "",
+          value: answers[question.id] ?? "",
         })),
       });
     } catch {
@@ -547,8 +563,8 @@ export function BookPage() {
         onSubmit={(event) => {
           event.preventDefault();
           setTouched(true);
-          if (nextStep) nextStep.go();
-          else void book();
+          if (step.kind === "book") void book();
+          else goToStep();
         }}
       >
         <p className={SENTENCE}>
@@ -599,7 +615,7 @@ export function BookPage() {
           .
         </p>
 
-        {tray ? (
+        {tray && tray !== "details" ? (
           <div ref={trayRef}>
             {tray === "video" ? (
               <Tray
@@ -736,41 +752,70 @@ export function BookPage() {
           </div>
         ) : null}
 
+        {start && others && tray !== "time" && tray !== "day" ? (
+          <p className="-mt-4 font-sans text-md text-muted-foreground">
+            Not {timeLabel(start, zone)}?{" "}
+            <button
+              type="button"
+              className="text-foreground underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => openTray("time", true)}
+            >
+              {others}
+            </button>
+          </p>
+        ) : null}
+
         <p className={SENTENCE}>
           I'm{" "}
-          <BlankInput
-            ref={nameInput}
-            id="book-name"
+          <Blank
+            ref={nameBlank}
             label="Your name"
+            value={name.trim() || null}
             placeholder="your name"
-            autoComplete="name"
-            enterKeyHint="next"
-            value={name}
-            aria-invalid={touched && !nameOk ? true : undefined}
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                emailInput.current?.focus();
-              }
-            }}
+            open={tray === "details"}
+            caret={false}
+            controls="book-tray"
+            onToggle={() => (tray === "details" ? closeTray() : openDetails("name"))}
           />
           , and you can reach me at{" "}
-          <BlankInput
-            ref={emailInput}
-            id="book-email"
-            type="email"
-            inputMode="email"
+          <Blank
             label="Your email"
-            placeholder="you@email.com"
-            autoComplete="email"
-            enterKeyHint="go"
-            value={email}
-            aria-invalid={touched && !emailOk ? true : undefined}
-            onChange={(event) => setEmail(event.target.value)}
+            value={email.trim() || null}
+            placeholder="your email"
+            open={tray === "details"}
+            caret={false}
+            controls="book-tray"
+            onToggle={() => (tray === "details" ? closeTray() : openDetails("email"))}
           />
           .
         </p>
+
+        {tray === "details" ? (
+          <Tray
+            id="book-tray"
+            label="Your details"
+            heading="Your details"
+            aside={
+              start
+                ? `Then it books ${dayShortOfKey(zoneKey(new Date(start), zone))} at ${timeLabel(start, zone)}`
+                : undefined
+            }
+            onClose={closeTray}
+          >
+            <DetailsStep
+              name={name}
+              email={email}
+              questions={questions}
+              answers={answers}
+              touched={touched}
+              nameOk={nameOk}
+              emailOk={emailOk}
+              onName={setName}
+              onEmail={setEmail}
+              onAnswer={(id, value) => setAnswers((current) => ({ ...current, [id]: value }))}
+            />
+          </Tray>
+        ) : null}
 
         {preview.guestsEnabled && guests.length > 0 ? (
           <p className={SENTENCE}>
@@ -814,40 +859,12 @@ export function BookPage() {
           </p>
         ) : null}
 
-        {questions.length > 0 ? (
-          <section className="flex max-w-xl flex-col gap-5">
-            <Eyebrow as="p">{host} also asks</Eyebrow>
-            {questions.map((question) => (
-              <div key={question.id} className="flex flex-col gap-2">
-                <label
-                  htmlFor={`book-q-${question.id}`}
-                  className="font-display text-md text-foreground"
-                >
-                  {question.label}
-                  {question.required ? null : (
-                    <span className="text-muted-foreground"> (optional)</span>
-                  )}
-                </label>
-                <Input
-                  id={`book-q-${question.id}`}
-                  value={answers[question.id as string] ?? ""}
-                  aria-invalid={
-                    touched &&
-                    question.required === true &&
-                    !(answers[question.id as string] ?? "").trim()
-                      ? true
-                      : undefined
-                  }
-                  onChange={(event) =>
-                    setAnswers((current) => ({
-                      ...current,
-                      [question.id as string]: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-            ))}
-          </section>
+        {questions.length > 0 && tray !== "details" ? (
+          <p className="-mt-4 font-sans text-md text-muted-foreground">
+            {host} asks: {questions[0]?.label}
+            {questions.length > 1 ? ` and ${questions.length - 1} more` : ""}
+            {questions.some((question) => question.required) ? null : " (optional)"}
+          </p>
         ) : null}
 
         {noteOpen ? (
@@ -903,11 +920,7 @@ export function BookPage() {
           )}
         >
           <Button type="submit" size="lg" className="w-full sm:w-fit" disabled={submitting}>
-            {submitting
-              ? "Booking…"
-              : nextStep
-                ? nextStep.label
-                : `Book ${start ? `${dayShortOfKey(zoneKey(new Date(start), zone))} at ${timeLabel(start, zone)}` : ""}`}
+            {submitting ? "Booking…" : step.label}
           </Button>
           <div
             className="flex min-w-0 flex-col gap-1 font-sans text-sm text-muted-foreground"

@@ -126,8 +126,6 @@ const SMALL_CAPS_DEBT: Record<string, string[]> = {
   "src/features/calendar/ui/calendar-rail.tsx": ["group.header"],
   // The sender's address heads the row menu.
   "src/features/email/ui/email-thread-list.tsx": ["thread.fromEmail || senderText(thread)"],
-  // "<Host> also asks": the host's name on the public booking page.
-  "src/routes/pages/book-page.tsx": ["host"],
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
