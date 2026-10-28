@@ -59,6 +59,8 @@ type ToolSpan = { name: string; access: "view" | "edit"; source: string };
 type ConnectorFile = {
   file: string;
   id: string | undefined;
+  /** False for a module with no key scope of its own (`keyAccess`). */
+  scoped: boolean;
   /** Everything before the first tool: shared helpers. */
   preamble: string;
   tools: ToolSpan[];
@@ -78,7 +80,15 @@ function connectorModuleSources(): ConnectorFile[] {
       if (!access) throw new Error(`${file}: tool ${m[1]} has no access level`);
       return { name: m[1], access, source: span };
     });
-    return { file, id, preamble: source.slice(0, starts[0]?.index ?? source.length), tools };
+    // A module with no key scope of its own (`keyAccess`: search, across modules).
+    const scoped = !/^\s*keyAccess:/m.test(source);
+    return {
+      file,
+      id,
+      scoped,
+      preamble: source.slice(0, starts[0]?.index ?? source.length),
+      tools,
+    };
   });
 }
 
@@ -217,7 +227,8 @@ describe("key-scope modules", () => {
     const modules = connectorModuleSources();
     expect(modules.length).toBeGreaterThan(0);
     for (const { file, id } of modules) expect(id, `no module id in ${file}`).toBeTruthy();
-    expect(modules.map(({ id }) => id).sort()).toEqual([...MODULE_IDS].sort());
+    const scoped = modules.filter((m) => m.scoped);
+    expect(scoped.map(({ id }) => id).sort()).toEqual([...MODULE_IDS].sort());
   });
 
   it("matches the CHECK the scopes column carries (workspace_api_key_scopes_valid)", () => {
@@ -253,7 +264,7 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
     // sitting behind the Links Edit guard while listed at View.
     const bodies = latestSqlFunctionBodies();
     expect(bodies.size).toBeGreaterThan(50);
-    for (const { file, id, preamble, tools } of connectorModuleSources()) {
+    for (const { file, id, scoped, preamble, tools } of connectorModuleSources()) {
       for (const tool of tools) {
         const lanes = new Set<string>();
         for (const m of tool.source.matchAll(RPC_CALL)) {
@@ -262,6 +273,17 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
           for (const lane of keyLanes(rpc, bodies)) lanes.add(lane);
         }
         expect(lanes.has("no-key"), `${tool.name} has an auth.uid()-only check`).toBe(false);
+        if (!scoped) {
+          // A module without a scope (search) holds no level anywhere: its RPCs
+          // may only narrow by each module's scope (View reads, the key-scope
+          // filter), never refuse for want of Edit.
+          const edits = [...lanes].filter(
+            (lane) => !lane.endsWith("@view") && lane !== "module_api",
+          );
+          expect(edits, `${file}: ${tool.name}`).toEqual([]);
+          expect(mcpToolNeeds(tool.name), tool.name).toEqual([]);
+          continue;
+        }
         if (lanes.has(id ?? "") && tool.access === "view") {
           throw new Error(`${tool.name} is listed at View but its RPC needs ${id} Edit`);
         }
