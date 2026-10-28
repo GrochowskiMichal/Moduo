@@ -93,6 +93,24 @@ export type CalendarRuntime = {
   }): Promise<{ upserted: number; removed: number }>;
 
   /**
+   * Save a change to a mirrored Google event on Google first (CALR-8), then
+   * mirror Google's answer. Resolves with the event as saved; throws Google's
+   * reason when it refuses, and nothing is stored.
+   */
+  updateGoogleEvent(input: {
+    workspaceId: string;
+    event: CalendarEventModel;
+    account: CalendarAccountModel;
+    patch: CalendarEventPatch;
+  }): Promise<CalendarEventModel>;
+  /** Delete a mirrored Google event on Google (guests are told), then tombstone the mirror (CALR-8). */
+  removeGoogleEvent(input: {
+    workspaceId: string;
+    event: CalendarEventModel;
+    account: CalendarAccountModel;
+  }): Promise<void>;
+
+  /**
    * Fetch a connected account's RAW provider events for a window. Desktop
    * uses the Tauri OAuth engine. Web fetches Google through the stored
    * refresh token and throws for providers it cannot read (so the sync

@@ -6,6 +6,8 @@ import { DbError } from "../../lib/runtime.db";
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { supabaseClient } from "../../lib/runtime.web.client";
 import { finishConnectReturn, rememberConnectStart } from "./connect-return";
+import type { CalendarMirrorEventInput } from "./events";
+import { mapGoogleEvent } from "./mirror";
 export type LinkedGoogleCalendar = {
   email: string;
   accountId: string;
@@ -13,9 +15,28 @@ export type LinkedGoogleCalendar = {
   googleCalendarId: string;
 };
 
+/**
+ * The reason a failed function call gives. A non-2xx answer (`FunctionsHttpError`)
+ * carries the Response in `context`: its JSON `error` is the function's own reason
+ * (Google's, for a refused write). Otherwise the error's message.
+ */
+export async function readFunctionError(error: unknown): Promise<string> {
+  const fallback = error instanceof Error && error.message ? error.message : "";
+  const context = (error as { context?: unknown } | null)?.context;
+  if (context instanceof Response) {
+    try {
+      const payload = (await context.clone().json()) as { error?: unknown };
+      if (typeof payload?.error === "string" && payload.error) return payload.error;
+    } catch {
+      // Not JSON: the message is all there is.
+    }
+  }
+  return fallback;
+}
+
 async function invoke(body: Record<string, unknown>): Promise<Record<string, unknown>> {
   const { data, error } = await supabaseClient.functions.invoke("calendar-google-web", { body });
-  if (error) throw new Error(error.message || "Google Calendar is unavailable.");
+  if (error) throw new Error((await readFunctionError(error)) || "Google Calendar is unavailable.");
   const payload = (data ?? {}) as Record<string, unknown>;
   if (typeof payload.error === "string" && payload.error.length > 0) {
     throw new Error(payload.error);
@@ -61,6 +82,29 @@ export async function pushGoogleWebEvent(input: {
   const event = payload.event;
   if (!event || typeof event !== "object") throw new Error("Google did not return the event.");
   return event as Record<string, unknown>;
+}
+
+/** Save a change to a Google event on Google (CALR-8). Returns Google's answer, mapped for the mirror. */
+export async function updateGoogleWebEvent(input: {
+  externalAccountId: string;
+  calendarId: string;
+  eventId: string;
+  patch: Record<string, unknown>;
+  timeZone: string;
+}): Promise<CalendarMirrorEventInput | null> {
+  const payload = await invoke({ action: "update", ...input });
+  const event = payload.event;
+  if (!event || typeof event !== "object") throw new Error("Google did not return the event.");
+  return mapGoogleEvent(event as Record<string, unknown>);
+}
+
+/** Delete a Google event on Google, telling its guests (CALR-8). */
+export async function removeGoogleWebEvent(input: {
+  externalAccountId: string;
+  calendarId: string;
+  eventId: string;
+}): Promise<void> {
+  await invoke({ action: "delete", ...input });
 }
 
 export async function startWebGoogleConnect(): Promise<void> {

@@ -20,6 +20,8 @@ type Props = {
   occEndMs: number;
   anchorRect: DOMRect;
   canEdit: boolean;
+  /** The event can change here (native, or a Google event you connected, CALR-8). Omitted = native only. */
+  writable?: boolean;
   /** "Personal — Google" attribution for mirrored events. */
   sourceLabel: string | null;
   onOpenDetail: () => void;
@@ -33,12 +35,14 @@ export function EventPopover({
   occEndMs,
   anchorRect,
   canEdit,
+  writable,
   sourceLabel,
   onOpenDetail,
   onDelete,
   onClose,
 }: Props) {
   const external = event.sourceAccountId !== null;
+  const canWrite = writable ?? !external;
   const meeting = meetingLinkOf(event);
   const timeLabel = event.allDay
     ? `${formatDayLabel(occStartMs)} · All day`
@@ -53,7 +57,7 @@ export function EventPopover({
       ) : null}
       <span className="text-xs text-muted-foreground">
         {external ? (sourceLabel ?? "External calendar") : "Moduo"}
-        {external ? " · read-only" : ""}
+        {external && !canWrite ? " · read-only" : ""}
       </span>
       <div className="mt-1 flex items-center gap-1.5">
         {meeting ? (
@@ -68,7 +72,7 @@ export function EventPopover({
           <ExternalLink aria-hidden />
           Open
         </Button>
-        {!external && canEdit ? (
+        {canWrite && canEdit ? (
           <Button
             size="sm"
             variant="ghost"

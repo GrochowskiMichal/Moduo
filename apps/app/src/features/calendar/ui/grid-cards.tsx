@@ -85,7 +85,7 @@ export function GridEventCard({
         endMs={chip.endMs}
         hue={hue}
         compact={shownMinutes(placed.coveredFromMs, span, geom) < COMPACT_BELOW_MINUTES}
-        readOnly={chip.external}
+        readOnly={chip.readOnly}
         recurring={chip.recurring}
         selected={selected}
         past={chip.endMs < nowMs}

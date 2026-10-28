@@ -231,8 +231,17 @@ export async function insertGoogleEvent(input: {
   start: { date?: string; dateTime?: string; timeZone?: string };
   end: { date?: string; dateTime?: string; timeZone?: string };
   recurrence?: string[];
+  location?: string;
+  attendees?: { email: string; displayName?: string }[];
+  visibility?: "private" | "default";
+  conferenceData?: Record<string, unknown>;
+  sendUpdates?: "all" | "none";
 }): Promise<Record<string, unknown>> {
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`;
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(input.calendarId)}/events`,
+  );
+  if (input.conferenceData) url.searchParams.set("conferenceDataVersion", "1");
+  if (input.sendUpdates) url.searchParams.set("sendUpdates", input.sendUpdates);
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -245,6 +254,10 @@ export async function insertGoogleEvent(input: {
       start: input.start,
       end: input.end,
       recurrence: input.recurrence,
+      location: input.location,
+      attendees: input.attendees,
+      visibility: input.visibility,
+      conferenceData: input.conferenceData,
     }),
   });
   const json = (await res.json()) as Record<string, unknown> & { error?: { message?: string } };
@@ -255,8 +268,160 @@ export async function insertGoogleEvent(input: {
 }
 
 /** Deletes the event and has Google tell its guests. True when the event is gone (404/410: already gone). */
-export async function deleteGoogleEvent(accessToken: string, eventId: string): Promise<boolean> {
-  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`;
-  const res = await fetch(url, { method: "DELETE", headers: { authorization: `Bearer ${accessToken}` } });
+export async function deleteGoogleEvent(
+  accessToken: string,
+  eventId: string,
+  calendarId = "primary",
+): Promise<boolean> {
+  const res = await fetch(eventUrl(calendarId, eventId, { sendUpdates: "all" }), {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${accessToken}` },
+  });
   return res.ok || res.status === 404 || res.status === 410;
+}
+
+// ── CALR-8: Google two-way ───────────────────────────────────────────────────
+
+/** Google said no (no writer access, a bad field, …). `message` is Google's reason. */
+export class GoogleRefusal extends Error {
+  status: number;
+  constructor(status: number, message?: string | null) {
+    super(message || "Google refused the change.");
+    this.name = "GoogleRefusal";
+    this.status = status;
+  }
+}
+
+async function refusal(res: Response): Promise<GoogleRefusal> {
+  let message: string | null = null;
+  try {
+    const json = (await res.json()) as { error?: { message?: unknown } };
+    message = typeof json?.error?.message === "string" ? json.error.message : null;
+  } catch {
+    message = null;
+  }
+  return new GoogleRefusal(res.status, message);
+}
+
+function eventUrl(calendarId: string, eventId: string, params: Record<string, string>): URL {
+  const url = new URL(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+  );
+  for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
+  return url;
+}
+
+/** The YYYY-MM-DD an instant falls on in `timeZone` (an all-day event's Google date). */
+export function ymdInZone(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+}
+
+/**
+ * The Google calendar id inside a mirrored event's calendar id
+ * (`google:<email>:<calendarId>`; the email has no colon), else "primary".
+ */
+export function googleCalendarTarget(calendarId: string | null | undefined): string {
+  if (!calendarId || !calendarId.startsWith("google:")) return "primary";
+  const rest = calendarId.slice("google:".length);
+  const colon = rest.indexOf(":");
+  const target = colon < 0 ? "" : rest.slice(colon + 1);
+  return target || "primary";
+}
+
+/** What the app changed on a Google event. Only present keys are sent. */
+export type GoogleEventPatch = {
+  title?: string;
+  description?: string;
+  location?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  allDay?: boolean;
+  attendees?: { email: string; name?: string }[];
+  isPrivate?: boolean;
+  meet?: "add" | "remove";
+};
+
+/** The Google events.patch body for a patch: only what changed. */
+export function googleEventBody(
+  patch: GoogleEventPatch,
+  options: { timeZone: string; requestId?: string },
+): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  if (patch.title !== undefined) body.summary = patch.title;
+  if (patch.description !== undefined) body.description = patch.description;
+  if (patch.location !== undefined) body.location = patch.location ?? "";
+  if (patch.startsAt !== undefined && patch.endsAt !== undefined) {
+    const { timeZone } = options;
+    const at = (iso: string) =>
+      patch.allDay ? { date: ymdInZone(iso, timeZone) } : { dateTime: iso, timeZone };
+    body.start = at(patch.startsAt);
+    body.end = at(patch.endsAt);
+  }
+  if (patch.attendees !== undefined) {
+    body.attendees = patch.attendees.map((person) =>
+      person.name ? { email: person.email, displayName: person.name } : { email: person.email },
+    );
+  }
+  if (patch.isPrivate !== undefined) body.visibility = patch.isPrivate ? "private" : "default";
+  if (patch.meet === "add") {
+    body.conferenceData = {
+      createRequest: {
+        requestId: options.requestId ?? crypto.randomUUID(),
+        conferenceSolutionKey: { type: "hangoutsMeet" },
+      },
+    };
+  } else if (patch.meet === "remove") {
+    body.conferenceData = null;
+  }
+  return body;
+}
+
+/** Guests hear about changes they'd notice; a privacy flip (or nothing) stays quiet. */
+export function googleSendUpdates(patch: Record<string, unknown>): "all" | "none" {
+  const keys = Object.keys(patch).filter((key) => patch[key] !== undefined);
+  return keys.every((key) => key === "isPrivate") ? "none" : "all";
+}
+
+/** events.patch on the event's own calendar. Returns Google's event; throws GoogleRefusal. */
+export async function patchGoogleEvent(input: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  body: Record<string, unknown>;
+  sendUpdates: "all" | "none";
+}): Promise<Record<string, unknown>> {
+  const url = eventUrl(input.calendarId, input.eventId, {
+    conferenceDataVersion: "1",
+    sendUpdates: input.sendUpdates,
+  });
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      authorization: `Bearer ${input.accessToken}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(input.body),
+  });
+  if (!res.ok) throw await refusal(res);
+  return (await res.json()) as Record<string, unknown>;
+}
+
+/** events.delete on the event's own calendar. Already gone (404/410) counts as deleted. */
+export async function removeGoogleEvent(input: {
+  accessToken: string;
+  calendarId: string;
+  eventId: string;
+  sendUpdates: "all" | "none";
+}): Promise<void> {
+  const res = await fetch(eventUrl(input.calendarId, input.eventId, { sendUpdates: input.sendUpdates }), {
+    method: "DELETE",
+    headers: { authorization: `Bearer ${input.accessToken}` },
+  });
+  if (res.ok || res.status === 404 || res.status === 410) return;
+  throw await refusal(res);
 }

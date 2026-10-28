@@ -508,7 +508,7 @@ export function CalendarGrid({
       if (e.button !== 0) return;
       e.stopPropagation();
       const p = propsRef.current;
-      if (!p.canEdit || chip.external) {
+      if (!p.canEdit || chip.readOnly) {
         // External chips resist edits (read-only tooltip on the chip); a
         // click still opens the popover/detail.
         const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -693,7 +693,7 @@ export function CalendarGrid({
                       compact
                       allDay
                       hue={eventHue(chip, accountHues)}
-                      readOnly={chip.external}
+                      readOnly={chip.readOnly}
                       recurring={chip.recurring}
                       selected={selectedOccurrenceKey === chip.occurrenceKey}
                       past={false}
@@ -1021,7 +1021,7 @@ const DayColumn = memo(function DayColumn({
             placed={p}
             geom={geom}
             hue={eventHue(chip, accountHues)}
-            draggable={canEdit && !chip.external}
+            draggable={canEdit && !chip.readOnly}
             selected={selectedKey === chip.occurrenceKey}
             nowMs={nowMs}
             nowMinutes={nowMinutes}

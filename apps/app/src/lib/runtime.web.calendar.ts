@@ -433,4 +433,50 @@ export const webCalendar: CalendarRuntime = {
     return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
   },
   listenLive: listenCalendarLive,
+  // CALR-8: Google first, then the mirror stores Google's answer.
+  async updateGoogleEvent({ workspaceId, event, account, patch }) {
+    const { updateGoogleWebEvent } = await import("../features/calendar/google-web");
+    // A move keeps the event's all-day-ness unless the patch changes it.
+    const sent =
+      patch.startsAt !== undefined && patch.allDay === undefined
+        ? { ...patch, allDay: event.allDay }
+        : patch;
+    const mapped = await updateGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: event.externalEventId ?? "",
+      patch: sent,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    });
+    if (!mapped) return event;
+    await webCalendar.mirrorEvents({ workspaceId, accountId: account.id, events: [mapped] });
+    return {
+      ...event,
+      title: mapped.title,
+      description: mapped.description ?? event.description,
+      startsAt: mapped.startsAt,
+      endsAt: mapped.endsAt,
+      allDay: mapped.allDay ?? event.allDay,
+      location: mapped.location ?? null,
+      conferenceUrl: mapped.conferenceUrl ?? null,
+      isPrivate: mapped.isPrivate ?? false,
+      attendees: mapped.attendees ?? [],
+      updatedAt: new Date().toISOString(),
+    };
+  },
+  async removeGoogleEvent({ workspaceId, event, account }) {
+    const { removeGoogleWebEvent } = await import("../features/calendar/google-web");
+    const externalEventId = event.externalEventId ?? "";
+    await removeGoogleWebEvent({
+      externalAccountId: account.externalId,
+      calendarId: event.calendarId,
+      eventId: externalEventId,
+    });
+    await webCalendar.mirrorEvents({
+      workspaceId,
+      accountId: account.id,
+      events: [],
+      deletedExternalIds: [externalEventId],
+    });
+  },
 };

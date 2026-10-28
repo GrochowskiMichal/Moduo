@@ -35,6 +35,8 @@ type Props = {
   event: CalendarEventModel;
   accounts: CalendarAccountModel[];
   canEdit: boolean;
+  /** The event can change here (native, or a Google event you connected, CALR-8). Omitted = native only. */
+  writable?: boolean;
   onPatch: (eventId: string, patch: CalendarEventPatch) => void;
   onDeleteRequest: (eventId: string) => void;
   onClose: () => void;
@@ -47,13 +49,14 @@ export function EventDetailPanel({
   event,
   accounts,
   canEdit,
+  writable,
   onPatch,
   onDeleteRequest,
   onClose,
 }: Props) {
   const external = event.sourceAccountId !== null;
   const meeting = meetingLinkOf(event);
-  const editable = canEdit && !external;
+  const editable = canEdit && (writable ?? !external);
   const account = useMemo(
     () => accounts.find((a) => a.id === event.sourceAccountId) ?? null,
     [accounts, event.sourceAccountId],
@@ -163,8 +166,8 @@ export function EventDetailPanel({
       {external ? (
         <span className="text-xs text-muted-foreground">
           {account ? `${account.displayLabel} — ${account.provider}` : "External calendar"}
-          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""} · managed in
-          its source calendar
+          {account?.lastSyncAt ? ` · synced ${timeAgo(account.lastSyncAt, now)}` : ""}
+          {editable ? "" : " · managed in its source calendar"}
         </span>
       ) : null}
 

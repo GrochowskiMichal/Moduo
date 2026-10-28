@@ -6,16 +6,29 @@
  *
  * POST { action: "status" }
  * POST { action: "events", externalAccountId, timeMin, timeMax }
- * POST { action: "push", externalAccountId, title, startsAt, endsAt, allDay, description, rrule, timeZone }
+ * POST { action: "push", externalAccountId, title, startsAt, endsAt, allDay, description, rrule, timeZone,
+ *        location?, attendees?, isPrivate?, meet?: "add" }
+ * POST { action: "update", externalAccountId, calendarId, eventId, patch, timeZone } → { event }
+ * POST { action: "delete", externalAccountId, calendarId, eventId } → { ok }
+ *
+ * Google refusing a write (no writer access, …) answers 409 { error: Google's reason }.
  */
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
 
 import {
+  googleCalendarTarget,
+  googleEventBody,
+  type GoogleEventPatch,
+  GoogleRefusal,
+  googleSendUpdates,
   googleUserEmail,
   insertGoogleEvent,
   listGoogleCalendars,
   listGoogleEvents,
+  patchGoogleEvent,
+  removeGoogleEvent,
+  ymdInZone,
 } from "../_shared/google-calendar.ts";
 import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { googleAccessForRow, googleClients } from "../_shared/google-token.ts";
@@ -47,13 +60,57 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-function ymdInZone(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
+/** Google refusing a write is the caller's to hear (409 with Google's reason); anything else is 502. */
+function writeFailure(err: unknown, fallback: string): Response {
+  if (err instanceof GoogleRefusal) return json({ error: err.message }, 409);
+  return json({ error: err instanceof Error ? err.message : fallback }, 502);
+}
+
+/** Guests as the app sends them ({email, name}) → Google's ({email, displayName?}). */
+function guestList(value: unknown): { email: string; name?: string }[] | null {
+  if (!Array.isArray(value)) return null;
+  const out: { email: string; name?: string }[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return null;
+    const person = item as Record<string, unknown>;
+    if (typeof person.email !== "string" || !person.email.trim()) return null;
+    out.push({
+      email: person.email.trim(),
+      name: typeof person.name === "string" ? person.name : undefined,
+    });
+  }
+  return out;
+}
+
+/** The app's patch, keeping only keys of the right type; null when one is wrong. */
+function readPatch(value: unknown): GoogleEventPatch | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const patch: GoogleEventPatch = {};
+  for (const key of ["title", "description", "startsAt", "endsAt"] as const) {
+    if (raw[key] === undefined) continue;
+    if (typeof raw[key] !== "string") return null;
+    patch[key] = raw[key] as string;
+  }
+  if (raw.location !== undefined) {
+    if (raw.location !== null && typeof raw.location !== "string") return null;
+    patch.location = raw.location as string | null;
+  }
+  for (const key of ["allDay", "isPrivate"] as const) {
+    if (raw[key] === undefined) continue;
+    if (typeof raw[key] !== "boolean") return null;
+    patch[key] = raw[key] as boolean;
+  }
+  if (raw.attendees !== undefined) {
+    const guests = guestList(raw.attendees);
+    if (!guests) return null;
+    patch.attendees = guests;
+  }
+  if (raw.meet !== undefined) {
+    if (raw.meet !== "add" && raw.meet !== "remove") return null;
+    patch.meet = raw.meet;
+  }
+  return patch;
 }
 
 async function accessForRow(
@@ -220,6 +277,13 @@ Deno.serve(async (req: Request) => {
     const timeZone =
       typeof body.timeZone === "string" && body.timeZone.length > 0 ? body.timeZone : "UTC";
     if (!title || !startsAt || !endsAt) return json({ error: "bad_event" }, 400);
+    const location = typeof body.location === "string" && body.location ? body.location : undefined;
+    const guests = body.attendees === undefined ? undefined : guestList(body.attendees);
+    if (guests === null) return json({ error: "bad_event" }, 400);
+    const extras = googleEventBody(
+      { attendees: guests, isPrivate: body.isPrivate === true ? true : undefined, meet: body.meet === "add" ? "add" : undefined },
+      { timeZone, requestId: crypto.randomUUID() },
+    );
     const targetCalendar = calendarId || "primary";
     let created: Record<string, unknown>;
     try {
@@ -233,13 +297,48 @@ Deno.serve(async (req: Request) => {
           : { dateTime: startsAt, timeZone },
         end: allDay ? { date: ymdInZone(endsAt, timeZone) } : { dateTime: endsAt, timeZone },
         recurrence: rrule ? [`RRULE:${rrule}`] : undefined,
+        location,
+        attendees: extras.attendees as { email: string; displayName?: string }[] | undefined,
+        visibility: extras.visibility as "private" | undefined,
+        conferenceData: extras.conferenceData as Record<string, unknown> | undefined,
+        sendUpdates: guests && guests.length > 0 ? "all" : undefined,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "google_event_failed";
-      return json({ error: message }, 502);
+      return writeFailure(err, "google_event_failed");
     }
     const writtenId = calendarId ? `google:${email}:${calendarId}` : `google:${email}:primary`;
     return json({ event: { ...created, calendarId: writtenId } });
+  }
+
+  if (action === "update" || action === "delete") {
+    const eventId = typeof body.eventId === "string" ? body.eventId : "";
+    if (!eventId) return json({ error: "bad_event" }, 400);
+    const target = googleCalendarTarget(typeof body.calendarId === "string" ? body.calendarId : null);
+    if (action === "delete") {
+      try {
+        await removeGoogleEvent({ accessToken, calendarId: target, eventId, sendUpdates: "all" });
+      } catch (err) {
+        return writeFailure(err, "google_delete_failed");
+      }
+      return json({ ok: true });
+    }
+    const patch = readPatch(body.patch);
+    if (!patch) return json({ error: "bad_patch" }, 400);
+    const timeZone =
+      typeof body.timeZone === "string" && body.timeZone.length > 0 ? body.timeZone : "UTC";
+    let saved: Record<string, unknown>;
+    try {
+      saved = await patchGoogleEvent({
+        accessToken,
+        calendarId: target,
+        eventId,
+        body: googleEventBody(patch, { timeZone, requestId: crypto.randomUUID() }),
+        sendUpdates: googleSendUpdates(patch),
+      });
+    } catch (err) {
+      return writeFailure(err, "google_update_failed");
+    }
+    return json({ event: { ...saved, calendarId: `google:${email}:${target}` } });
   }
 
   return json({ error: "unknown_action" }, 400);
