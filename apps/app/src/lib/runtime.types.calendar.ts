@@ -12,6 +12,10 @@ import type {
   CalendarModuleBundle,
 } from "../features/calendar/events";
 import type { CalendarWindow } from "../features/calendar/window";
+import type { Database } from "../types/supabase";
+
+/** A booking link as stored (`exposed_slot_links`); the calendar feature reads it into a BookingLink. */
+export type BookingLinkRow = Database["public"]["Tables"]["exposed_slot_links"]["Row"];
 
 export type CalendarRuntime = {
   // ── Wave-2 module surface (workspace-scoped, Supabase-first) ──────────
@@ -174,6 +178,22 @@ export type CalendarRuntime = {
     } | null;
     booking: { linkName: string | null; bookedAt: string } | null;
   }>;
+
+  /**
+   * A booking link as its panel shows it (CALR-17): the link, its co-hosts and
+   * their answers, and its upcoming bookings. Null when there is no such link (a failed read throws);
+   * hosts and bookings fail soft to empty.
+   */
+  bookingLink(input: { linkId: string }): Promise<{
+    link: BookingLinkRow;
+    hosts: { userId: string; status: string }[];
+    bookings: { id: string; name: string; email: string; startsAt: string; endsAt: string }[];
+  } | null>;
+  /** Write only the fields set on a booking link (CALR-17). */
+  updateBookingLink(input: {
+    linkId: string;
+    patch: { paused?: boolean; durationMinutes?: number; busyCalendarIds?: string[] };
+  }): Promise<void>;
 
   /**
    * Fetch a connected account's RAW provider events for a window. Desktop

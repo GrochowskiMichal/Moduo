@@ -272,6 +272,36 @@ function googleSeriesId(instance: CalendarEventModel): string {
   return instance.externalSeriesId;
 }
 
+// ── Booking link panel (CALR-17) ─────────────────────────────────────────────
+
+async function bookingLinkHosts(linkId: string) {
+  const { data, error } = await supabaseClient
+    .from("booking_link_hosts")
+    .select("user_id, status")
+    .eq("link_id", linkId);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({ userId: row.user_id, status: row.status }));
+}
+
+async function bookingLinkBookings(slotId: string) {
+  const { data, error } = await supabaseClient
+    .from("slot_bookings")
+    .select("id, attendee_name, attendee_email, start_at, end_at")
+    .eq("slot_id", slotId)
+    .in("status", ["pending", "confirmed"])
+    .gte("end_at", new Date().toISOString())
+    .order("start_at", { ascending: true })
+    .limit(20);
+  if (error) throw error;
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.attendee_name,
+    email: row.attendee_email,
+    startsAt: row.start_at,
+    endsAt: row.end_at,
+  }));
+}
+
 export const webCalendar: CalendarRuntime = {
   // ── Wave-2 module surface. Writes = calendar_op_* RPCs (guard + write +
   // entities upsert + attributed activity); reads = indexed SELECTs that
@@ -559,6 +589,38 @@ export const webCalendar: CalendarRuntime = {
       // carries the real one and replaces this.
       updatedAt: event.updatedAt,
     };
+  },
+  async bookingLink({ linkId }) {
+    const { data: row, error } = await supabaseClient
+      .from("exposed_slot_links")
+      .select("*")
+      .eq("id", linkId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!row) return null;
+    const [hosts, bookings] = await Promise.all([
+      bookingLinkHosts(linkId).catch(() => []),
+      bookingLinkBookings(row.slot_id).catch(() => []),
+    ]);
+    return { link: row, hosts, bookings };
+  },
+  async updateBookingLink({ linkId, patch }) {
+    const { paused, durationMinutes, busyCalendarIds } = patch;
+    const { error } = await supabaseClient
+      .from("exposed_slot_links")
+      .update({
+        ...(paused !== undefined ? { paused } : {}),
+        ...(durationMinutes !== undefined ? { duration_minutes: durationMinutes } : {}),
+        ...(busyCalendarIds
+          ? {
+              busy_calendar_ids: busyCalendarIds,
+              conflict_calendars: JSON.stringify(busyCalendarIds),
+            }
+          : {}),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", linkId);
+    if (error) throw error;
   },
   async eventContext({ eventId, calendarRef }) {
     const calendarOf = async () => {

@@ -30,12 +30,15 @@ import {
   type GuestReminderMinutes,
   type LinkDraft,
 } from "./booking-link-dialog";
+import { BOOKING_LINK_EDIT_EVENT, BOOKING_LINKS_CHANGED_EVENT } from "./use-booking-panel";
 
 type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string;
   userId: string;
   accounts: CalendarAccountModel[];
+  /** Opens a link's view in the right panel; without it the name opens the editor. */
+  onOpen?: (linkId: string) => void;
 };
 
 type LinkRow = {
@@ -164,7 +167,7 @@ function errorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) {
+export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }: Props) {
   const { members } = useWorkspace();
   const teammates = members
     .filter((m) => m.isActive && !m.removedAt && m.userId !== userId)
@@ -432,7 +435,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         if (hostError) throw hostError;
       }
       setDraft(null);
-      await refresh();
+      window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
     } catch (e) {
       setError(errorText(e, "Could not save the link."));
     } finally {
@@ -452,13 +455,51 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         .eq("id", draft.id);
       if (deleteError) throw deleteError;
       setDraft(null);
-      await refresh();
+      window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
     } catch (e) {
       setError(errorText(e, "Could not delete the link."));
     } finally {
       setBusy(false);
     }
   };
+
+  const openEditor = (link: LinkRow) => {
+    setError(null);
+    setDraft(draftFromRow(link));
+    void supabaseClient
+      .from("booking_link_hosts")
+      .select("user_id")
+      .eq("link_id", link.id)
+      .then(({ data }) => {
+        if (!data) return;
+        setDraft((current) =>
+          current?.id === link.id
+            ? {
+                ...current,
+                cohostIds: data.map((row) => row.user_id as string),
+                savedCohostIds: data.map((row) => row.user_id as string),
+              }
+            : current,
+        );
+      });
+  };
+
+  // The panel's Edit… opens this editor; its quick edits ask for a refresh.
+  useEffect(() => {
+    const onEdit = (e: Event) => {
+      const link = links.find(
+        (row) => row.id === (e as CustomEvent<{ linkId: string }>).detail?.linkId,
+      );
+      if (link) openEditor(link);
+    };
+    const onChanged = () => void refresh();
+    window.addEventListener(BOOKING_LINK_EDIT_EVENT, onEdit);
+    window.addEventListener(BOOKING_LINKS_CHANGED_EVENT, onChanged);
+    return () => {
+      window.removeEventListener(BOOKING_LINK_EDIT_EVENT, onEdit);
+      window.removeEventListener(BOOKING_LINKS_CHANGED_EVENT, onChanged);
+    };
+  });
 
   const copy = async (slug: string) => {
     await navigator.clipboard.writeText(publicUrl(slug));
@@ -511,27 +552,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
           <button
             type="button"
             className="min-w-0 flex-1 truncate text-left text-sm text-foreground"
-            onClick={() => {
-              setError(null);
-              const next = draftFromRow(link);
-              setDraft(next);
-              void supabaseClient
-                .from("booking_link_hosts")
-                .select("user_id")
-                .eq("link_id", link.id)
-                .then(({ data }) => {
-                  if (!data) return;
-                  setDraft((current) =>
-                    current?.id === link.id
-                      ? {
-                          ...current,
-                          cohostIds: data.map((row) => row.user_id as string),
-                          savedCohostIds: data.map((row) => row.user_id as string),
-                        }
-                      : current,
-                  );
-                });
-            }}
+            onClick={() => (onOpen ? onOpen(link.id) : openEditor(link))}
           >
             {link.name}
             {link.paused ? " · paused" : ""}
