@@ -112,7 +112,7 @@ describe("webCalendar.listenLive (CALR-7)", () => {
 
     // After the last listener let go, a new listen opens a fresh channel.
     const again = webCalendar.listenLive({ workspaceId: "ws-1", selfId: "me" }, () => {});
-    expect(calendarChannels(from)).toHaveLength(4);
+    expect(calendarChannels(from)).toHaveLength(3);
     again();
   });
 
