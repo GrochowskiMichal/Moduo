@@ -77,3 +77,60 @@ export function findNextGap(q: GapQuery): number | null {
 
   return workEnd - cursor >= durMs ? cursor : null;
 }
+
+/**
+ * The free stretches of a day that fit the block (CALR-5): after now, inside
+ * working hours, between the busy intervals, each start on the grid step. What
+ * placing a task washes on the grid and where a click may put it.
+ */
+export function freeSlots(q: GapQuery): BusyInterval[] {
+  const step = (q.stepMinutes ?? 15) * 60_000;
+  const durMs = Math.max(0, q.durationMinutes) * 60_000;
+  if (durMs <= 0) return [];
+  const workStart = wallClockInstant(q.dayStartMs, q.workStartMinute);
+  const workEnd = wallClockInstant(q.dayStartMs, q.workEndMinute);
+  const out: BusyInterval[] = [];
+  let cursor = snapUp(Math.max(q.nowMs, workStart), q.dayStartMs, step);
+  const intervals = q.busy
+    .filter((b) => b.endMs > cursor && b.startMs < workEnd)
+    .sort((a, b) => a.startMs - b.startMs);
+  for (const iv of intervals) {
+    const gapEnd = Math.min(iv.startMs, workEnd);
+    if (gapEnd - cursor >= durMs) out.push({ startMs: cursor, endMs: gapEnd });
+    cursor = Math.max(cursor, snapUp(iv.endMs, q.dayStartMs, step));
+  }
+  if (workEnd - cursor >= durMs) out.push({ startMs: cursor, endMs: workEnd });
+  return out;
+}
+
+export type RangeGapQuery = Omit<GapQuery, "nowMs" | "dayStartMs"> & {
+  /** Search from this instant (now, or a later day's start). */
+  fromMs: number;
+  /** The days to search, in order (local midnights or any instant on them). */
+  days: readonly Date[];
+};
+
+function eachDay(q: RangeGapQuery): GapQuery[] {
+  return q.days
+    .map((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+    .filter((d) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1).getTime() > q.fromMs)
+    .map((d) => ({ ...q, dayStartMs: d.getTime(), nowMs: Math.max(q.fromMs, d.getTime()) }));
+}
+
+/** S: the first free slot across the days that fits the estimate, or null. */
+export function findFreeSlot(q: RangeGapQuery): number | null {
+  for (const day of eachDay(q)) {
+    const gap = findNextGap(day);
+    if (gap != null) return gap;
+  }
+  return null;
+}
+
+/** ⇥: the start of the next free stretch after `currentMs` that fits, or null. */
+export function nextFreeSlot(q: RangeGapQuery & { currentMs: number }): number | null {
+  for (const day of eachDay(q)) {
+    const slot = freeSlots(day).find((s) => s.startMs > q.currentMs);
+    if (slot) return slot.startMs;
+  }
+  return null;
+}

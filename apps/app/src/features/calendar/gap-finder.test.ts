@@ -1,6 +1,12 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { type BusyInterval, findNextGap } from "./gap-finder";
+import {
+  type BusyInterval,
+  findFreeSlot,
+  findNextGap,
+  freeSlots,
+  nextFreeSlot,
+} from "./gap-finder";
 
 // A plain (non-DST) local day; working hours 08:00–18:00.
 const DAY = new Date(2026, 6, 2); // Thu Jul 2 2026
@@ -106,5 +112,72 @@ describe("gap-finder — DST day (Warsaw fall-back, real instants)", () => {
       busy: [],
     });
     expect(gap).toBe(nowMs);
+  });
+});
+
+describe("S finds room for the estimate (CALR-5, AC20)", () => {
+  // A Monday-to-Sunday week from Mon Jun 29 2026; working hours 08:00–18:00.
+  const week = Array.from({ length: 7 }, (_, i) => new Date(2026, 5, 29 + i));
+  const on = (d: number, h: number, m = 0) => new Date(2026, 6, d, h, m).getTime();
+  const base = { days: week, workStartMinute: WORK_START, workEndMinute: WORK_END };
+
+  it("lifts into the first free slot that fits the estimate, past a gap too short", () => {
+    // Thu Jul 2, 09:00: free 09:00–09:30 (too short for 60), busy 09:30–10:00.
+    const busyList = [{ startMs: on(2, 9, 30), endMs: on(2, 10) }];
+    const slot = findFreeSlot({ ...base, fromMs: on(2, 9), durationMinutes: 60, busy: busyList });
+    expect(slot).toBe(on(2, 10));
+  });
+
+  it("rolls to the next day's working start when today has no room", () => {
+    const busyList = [{ startMs: on(2, 8), endMs: on(2, 18) }];
+    const slot = findFreeSlot({ ...base, fromMs: on(2, 9), durationMinutes: 30, busy: busyList });
+    expect(slot).toBe(on(3, 8));
+  });
+
+  it("returns null when no day left in the range fits it", () => {
+    const slot = findFreeSlot({ ...base, fromMs: on(5, 17, 50), durationMinutes: 30, busy: [] });
+    expect(slot).toBeNull();
+  });
+
+  it("nothing else moves: the busy time is read, never changed", () => {
+    const busyList = [{ startMs: on(2, 9), endMs: on(2, 10) }];
+    const before = JSON.stringify(busyList);
+    findFreeSlot({ ...base, fromMs: on(2, 9), durationMinutes: 30, busy: busyList });
+    nextFreeSlot({
+      ...base,
+      fromMs: on(2, 9),
+      currentMs: on(2, 10),
+      durationMinutes: 30,
+      busy: busyList,
+    });
+    expect(JSON.stringify(busyList)).toBe(before);
+  });
+
+  it("⇥ hops to the start of the next free time after the current one", () => {
+    // Free 10–12, busy 12–13, free 13–18 on Thu.
+    const busyList = [
+      { startMs: on(2, 8), endMs: on(2, 10) },
+      { startMs: on(2, 12), endMs: on(2, 13) },
+    ];
+    const q = { ...base, fromMs: on(2, 9), durationMinutes: 60, busy: busyList };
+    expect(nextFreeSlot({ ...q, currentMs: on(2, 10) })).toBe(on(2, 13));
+    // From inside the afternoon's free time, the next is Friday's opening.
+    expect(nextFreeSlot({ ...q, currentMs: on(2, 14) })).toBe(on(3, 8));
+  });
+
+  it("free slots: only the gaps after now that fit the estimate", () => {
+    const slots = freeSlots({
+      nowMs: on(2, 9, 10),
+      dayStartMs: new Date(2026, 6, 2).getTime(),
+      workStartMinute: WORK_START,
+      workEndMinute: WORK_END,
+      durationMinutes: 60,
+      busy: [
+        { startMs: on(2, 10), endMs: on(2, 10, 30) },
+        { startMs: on(2, 11), endMs: on(2, 17) },
+      ],
+    });
+    // 09:15–10:00 (45 min) and 10:30–11:00 are too short; 17:00–18:00 fits.
+    expect(slots).toEqual([{ startMs: on(2, 17), endMs: on(2, 18) }]);
   });
 });
