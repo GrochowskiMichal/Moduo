@@ -12,9 +12,10 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { recordUndo } from "../commands/undo";
 import { moveTargets } from "../event-menu";
 import type { CalendarAccountModel, CalendarEventModel, CalendarMirrorEventInput } from "../events";
-import { pushGoogleWebEvent } from "../google-web";
+import { getGoogleWebEvent, pushGoogleWebEvent } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
 import { mapGoogleEvent } from "../mirror";
+import { newGoogleEventId } from "../new-event-create";
 
 type Calendar = Pick<CalendarModuleApi, "events" | "accounts" | "reload" | "deleteEvent">;
 
@@ -47,9 +48,11 @@ async function hasLinks(
 async function createOnGoogle(
   source: CalendarEventModel,
   target: CalendarAccountModel,
+  googleId: string,
 ): Promise<CalendarMirrorEventInput> {
   const raw = await pushGoogleWebEvent({
     externalAccountId: target.externalId,
+    eventId: googleId,
     title: source.title,
     startsAt: source.startsAt,
     endsAt: source.endsAt,
@@ -60,6 +63,43 @@ async function createOnGoogle(
   const answer = mapGoogleEvent(raw);
   if (!answer) throw new Error("Google did not return the event.");
   return answer;
+}
+
+/** Google's copy under our id, when a push failed after Google may have saved it:
+ *  null when Google has none, undefined when Google couldn't be asked. */
+async function savedOnGoogle(
+  target: CalendarAccountModel,
+  googleId: string,
+): Promise<CalendarMirrorEventInput | null | undefined> {
+  try {
+    const raw = await getGoogleWebEvent({
+      externalAccountId: target.externalId,
+      eventId: googleId,
+    });
+    return raw ? mapGoogleEvent(raw) : null;
+  } catch {
+    return undefined;
+  }
+}
+
+/** On Google first, under an id we made, so a push whose answer was lost is
+ *  looked up instead of doubled. Null (with the toast said) when nothing moved. */
+async function pushOrRecover(
+  source: CalendarEventModel,
+  target: CalendarAccountModel,
+  where: string,
+): Promise<CalendarMirrorEventInput | null> {
+  const googleId = newGoogleEventId();
+  try {
+    return await createOnGoogle(source, target, googleId);
+  } catch (err) {
+    const saved = await savedOnGoogle(target, googleId);
+    if (saved) return saved;
+    const why = `Couldn't move it to ${where}: ${reason(err, "Google refused.")}`;
+    // Google couldn't be asked, so a copy may exist there after all.
+    toast.error(saved === null ? why : `${why} If it shows up in Google, delete it there.`);
+    return null;
+  }
 }
 
 export function useEventMove(
@@ -134,13 +174,8 @@ export function useEventMove(
         }
 
         // 1. On Google first. A refusal here changes nothing.
-        let mapped: CalendarMirrorEventInput;
-        try {
-          mapped = await createOnGoogle(source, target);
-        } catch (err) {
-          toast.error(`Couldn't move it to ${where}: ${reason(err, "Google refused.")}`);
-          return;
-        }
+        const mapped = await pushOrRecover(source, target, where);
+        if (!mapped) return;
 
         // 2. The mirror keeps Google's answer; if it can't, Google's copy goes again.
         try {
