@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-28 · The Event view follows the selection and says who sees it from the calendar's sharing (CALR-10).
 - 2026-10-28 · Google events save to Google first, then the mirror stores Google's answer (CALR-8).
 - 2026-10-28 · Calendar events stream live through the runtime port (CALR-7).
 - 2026-10-27 · Meeting links live in `conference_url`, split out of `location` on every write (CALR-6).

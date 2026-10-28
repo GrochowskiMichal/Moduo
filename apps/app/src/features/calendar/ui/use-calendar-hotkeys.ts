@@ -15,6 +15,17 @@ type Input = {
   requestDelete: (occKey: string | null) => void;
 };
 
+/**
+ * A key pressed inside an open overlay (menus typeahead on plain character
+ * keys without preventDefault; dialogs own their focus) is never the page's.
+ */
+export function inCalendarOverlay(e: KeyboardEvent): boolean {
+  return (
+    e.target instanceof Element &&
+    !!e.target.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']")
+  );
+}
+
 export function useCalendarHotkeys(input: Input): void {
   const keysRef = useRef(input);
   useEffect(() => {
@@ -22,9 +33,7 @@ export function useCalendarHotkeys(input: Input): void {
   });
   // Never from a field. Don't steal keys from open overlays either (menus typeahead on
   // plain character keys without preventDefault; dialogs own their focus).
-  const inOverlay = (e: KeyboardEvent) =>
-    e.target instanceof Element &&
-    !!e.target.closest("[role='dialog'], [role='menu'], [role='listbox'], [role='combobox']");
+  const inOverlay = inCalendarOverlay;
   const calendarKey = (run: () => void) => (e: KeyboardEvent) => {
     if (inOverlay(e)) return false;
     run();
