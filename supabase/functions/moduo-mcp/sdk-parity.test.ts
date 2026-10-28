@@ -40,6 +40,13 @@
  * with View on a searchable module): its three call cases are new, and it
  * shows in the tool lists of every such key and the two protocol answers that
  * list tools; nothing else moved.
+ * CALR-21 (2026-10-28) added calendar_offer_times, calendar_release_offer and
+ * calendar_who_sees, gave calendar_create_event and calendar_update_event
+ * place, link, private, calendar_id and people, and moved calendar_list_events
+ * and calendar_day onto calendar_event_occurrences beside the masked read,
+ * page by page: the new tools' call cases are new, the two reads' call cases
+ * record the paged reads, and the changed tools show in the calendar tool
+ * lists; nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
