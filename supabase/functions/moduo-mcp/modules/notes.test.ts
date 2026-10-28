@@ -36,12 +36,17 @@ const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 
 /** notes + note_updates + the RPCs the write path calls.
  * `beforeApply` runs inside the next apply call, before its insert (to
- * stage a write that races the connector's). */
-function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
+ * stage a write that races the connector's). The connector reads a note's doc
+ * through notes_pull (NS-7), recorded apart in `pullCalls`; `pullMissing`
+ * answers it as a database before NS-7 would (PGRST202). */
+function fakeDb(note: Row, opts: { beforeApply?: () => void; pullMissing?: boolean } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const pullCalls: Row[] = [];
+  const fromTables: string[] = [];
   let nextId = 1;
   function from(table: string) {
+    fromTables.push(table);
     const filters: Array<(r: Row) => boolean> = [];
     let max = Number.POSITIVE_INFINITY;
     const query: any = {
@@ -59,6 +64,39 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
     return query;
   }
   async function rpc(fn: string, args: Row) {
+    if (fn === "notes_pull") {
+      pullCalls.push(args);
+      if (opts.pullMissing) {
+        return {
+          data: null,
+          error: { code: "PGRST202", message: "Could not find the function public.notes_pull" },
+        };
+      }
+      const n = tables.notes!.find(
+        (r) => r.id === args.p_note_id && r.workspace_id === args.p_workspace_id,
+      );
+      if (!n) return { data: null, error: { code: "P0002", message: "Note not found in this workspace." } };
+      const after = tables
+        .note_updates!.filter((u) => u.note_id === n.id && Number(u.id) > Number(args.p_after_id))
+        .sort((a, b) => Number(a.id) - Number(b.id));
+      const version = Number(n.doc_version ?? 0);
+      const out: Row = {
+        updates: after.slice(0, 1000).map((u) => ({
+          id: u.id,
+          client_id: u.client_id ?? "c",
+          client_seq: u.client_seq ?? 1,
+          update_b64: u.update_b64,
+          origin: u.origin,
+          actor_key_id: null,
+        })),
+        has_more: after.length > 1000,
+        doc_version: version,
+      };
+      if (args.p_known_version == null || Number(args.p_known_version) !== version) {
+        out.snapshot = n.doc_state ?? null;
+      }
+      return { data: out, error: null };
+    }
     rpcCalls.push({ fn, args });
     if (fn === "notes_op_apply_updates") {
       const stage = opts.beforeApply;
@@ -116,7 +154,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
       update_b64: Buffer.from(update).toString("base64"),
       origin: "user",
     });
-  return { ctx, tables, rpcCalls, pushRow };
+  return { ctx, tables, rpcCalls, pullCalls, fromTables, pushRow };
 }
 
 function tool(name: string) {
@@ -233,6 +271,34 @@ describe("crdt write", () => {
     expect(row.docStateB64).toBeTruthy();
     expect(row.bodyMd).toBe("Brief\n\nSome **bold** text");
     expect(clientMarkdown(tables, res.id)).toBe("Brief\n\nSome **bold** text");
+  });
+});
+
+describe("the connector's pull (NS-7)", () => {
+  it("reads a note's doc through notes_pull, never the log table", async () => {
+    const { ctx, tables, pullCalls, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(pullCalls.length).toBeGreaterThan(0);
+    expect(pullCalls[0]).toMatchObject({ p_workspace_id: WS, p_note_id: NOTE, p_after_id: 0 });
+    expect(fromTables).not.toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
+  });
+
+  it("builds on the logged updates notes_pull returns, not just the snapshot", async () => {
+    const { ctx, tables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+
+  it("falls back to the tables while notes_pull is missing", async () => {
+    const { ctx, tables, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"), {
+      pullMissing: true,
+    });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(fromTables).toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
   });
 });
 
