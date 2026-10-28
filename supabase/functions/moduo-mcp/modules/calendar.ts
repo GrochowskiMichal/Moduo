@@ -138,6 +138,30 @@ function shapePeople(attendees: unknown): Row[] {
   return attendees.map((a: Row) => ({ email: a.email ?? null, name: a.name ?? null, status: a.status ?? null }));
 }
 
+/** The fields only some events carry: one occurrence, focus time, a hold. */
+function shapeEventExtras(e: Row): Row {
+  return {
+    // One occurrence (CALR-11): an override names the occurrence it replaces,
+    // and a series the occurrences it skips (deleted or replaced).
+    ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
+    ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
+    // Focus time (CALR-14): the task it holds, which the masked read nulls for
+    // anyone but its owner (a teammate's arrives titled "Focus time").
+    ...(e.kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
+    // A hold (CALR-19) names the offer it is held for.
+    ...(e.kind === "hold" ? { offer_id: e.offer_id ?? null } : {}),
+  };
+}
+
+/** Where and with whom: place, meeting link and people. */
+function shapeEventWhere(e: Row): Row {
+  return {
+    place: e.location ?? null,
+    link: e.conference_url ? { url: e.conference_url, provider: e.conference_provider ?? null } : null,
+    people: shapePeople(e.attendees),
+  };
+}
+
 /**
  * Compact event shape for agents — the calendar_events legacy columns mapped.
  * `me` is the key's person, for `mine`. Google's iCalUID and organizer flag
@@ -158,21 +182,11 @@ function shapeEvent(e: Row, me: string): Row {
     description: e.description ?? "",
     kind: e.kind ?? "event",
     private: Boolean(e.is_private),
-    place: e.location ?? null,
-    link: e.conference_url ? { url: e.conference_url, provider: e.conference_provider ?? null } : null,
-    people: shapePeople(e.attendees),
+    ...shapeEventWhere(e),
     owner_id: e.owner_id ?? null,
     mine: e.owner_id === me,
     calendar_ref: e.calendar_ref ?? null,
-    // One occurrence (CALR-11): an override names the occurrence it replaces,
-    // and a series the occurrences it skips (deleted or replaced).
-    ...(e.series_id ? { series_id: e.series_id, original_start: e.original_start ?? null } : {}),
-    ...(Array.isArray(e.exdates) && e.exdates.length > 0 ? { exdates: e.exdates } : {}),
-    // Focus time (CALR-14): the task it holds, which the masked read nulls for
-    // anyone but its owner (a teammate's arrives titled "Focus time").
-    ...(e.kind === "focus" ? { focus_task_id: e.focus_task_id ?? null } : {}),
-    // A hold (CALR-19) names the offer it is held for.
-    ...(e.kind === "hold" ? { offer_id: e.offer_id ?? null } : {}),
+    ...shapeEventExtras(e),
   };
 }
 
