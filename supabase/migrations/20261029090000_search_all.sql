@@ -305,6 +305,19 @@ BEGIN
                 FROM unnest(v_types) AS x) s
        WHERE s.m IS NOT NULL
          AND public.module_api_key_scope(p_workspace_id, s.m, s.m) IN ('view', 'edit'));
+  ELSE
+    -- A person skips modules they can't reach at all: each row would fail
+    -- perm_can_see_entity anyway, after costing a check.
+    v_types := ARRAY(
+      SELECT s.t
+        FROM (SELECT x AS t,
+                     CASE x WHEN 'task' THEN 'tasks' WHEN 'bucket' THEN 'tasks'
+                            WHEN 'contact' THEN 'contacts' WHEN 'company' THEN 'contacts'
+                            WHEN 'event' THEN 'calendar' WHEN 'email_thread' THEN 'email'
+                            WHEN 'chat_channel' THEN 'chat' END AS m
+                FROM unnest(v_types) AS x) s
+       WHERE s.m IS NOT NULL
+         AND public.module_member_permission(p_workspace_id, v_actor, s.m) <> 'none');
   END IF;
   IF cardinality(v_types) = 0 THEN
     RETURN;
@@ -525,7 +538,9 @@ BEGIN
                                                   'email_thread'])) AS x) s
      WHERE t IN ('task', 'bucket', 'note', 'contact', 'company', 'event', 'email_thread'));
   v_registry := pg_catalog.array_remove(v_types, 'note');
-  IF v_ctx_type IS NOT NULL AND p_context_id IS NOT NULL THEN
+  -- A person's context only: a key has no item open, and its creator's
+  -- visibility isn't the key's scope.
+  IF v_ctx_type IS NOT NULL AND p_context_id IS NOT NULL AND public.module_api_key_id() IS NULL THEN
     v_ctx := coalesce(public.perm_can_see_entity(p_workspace_id, v_ctx_type, p_context_id), false);
   END IF;
 
@@ -541,13 +556,21 @@ BEGIN
         FROM public.registry__search(p_workspace_id, p_query, 50, v_registry) r
        WHERE cardinality(v_registry) > 0
     ),
-    one AS (
+    one_all AS MATERIALIZED (
       SELECT DISTINCT ON (h.entity_type, h.entity_id) h.*,
              CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END AS tier
         FROM hits h
        ORDER BY h.entity_type, h.entity_id,
                 CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END,
                 h.rank DESC
+    ),
+    -- Typo forgiveness holds across the merged list: once 3 exact hits exist
+    -- in any modules, every typo-forgiven row goes (each module decides on its
+    -- own count, so a typo task could otherwise sit above exact notes).
+    kept AS (
+      SELECT a.*
+        FROM one_all a
+       WHERE a.tier < 2 OR (SELECT count(*) FROM one_all b WHERE b.tier < 2) < 3
     ),
     linked AS MATERIALIZED (
       SELECT CASE WHEN l.source_type = v_ctx_type AND l.source_id = p_context_id THEN l.target_type ELSE l.source_type END AS t,
@@ -568,7 +591,7 @@ BEGIN
                + 0.10 * (CASE WHEN EXISTS (SELECT 1 FROM linked k WHERE k.t = o.entity_type AND k.id = o.entity_id)
                               THEN 1 ELSE 0 END)))::real AS sc,
              (count(*) OVER (PARTITION BY o.entity_type))::integer AS total
-        FROM one o
+        FROM kept o
     ),
     ordered AS (
       SELECT s.*,

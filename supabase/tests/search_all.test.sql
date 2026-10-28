@@ -307,3 +307,36 @@ SELECT test.ok(NOT EXISTS (
                                           'public.registry__search(uuid, text, integer, text[])'::regprocedure)
      AND EXISTS (SELECT 1 FROM unnest(p.proargnames) a WHERE a IN ('p_actor', 'p_user', 'p_user_id'))),
   'the actor is never a parameter');
+
+-- ── Validator follow-ups ─────────────────────────────────────────────────────
+
+-- Typo forgiveness holds across modules: 3 exact hits anywhere switch it off.
+DO $$
+DECLARE
+  v jsonb;
+BEGIN
+  INSERT INTO public.notes (id, workspace_id, created_by, title, body_text) VALUES
+    (test.id('HV1'), test.id('W'), test.id('O'), 'Field log 1', 'harvst notes'),
+    (test.id('HV2'), test.id('W'), test.id('O'), 'Field log 2', 'harvst again'),
+    (test.id('HV3'), test.id('W'), test.id('O'), 'Field log 3', 'one more harvst');
+  INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+  SELECT test.id('W'), 'note', test.id(n), 'workspace', NULL, 'view', test.id('O') FROM unnest(ARRAY['HV1', 'HV2', 'HV3']) n
+  ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO NOTHING;
+  v := test.all_as('A', 'harvst');
+  PERFORM test.ok(test.row_of(v, 'TH') IS NULL
+              AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(v) h WHERE h ->> 'match' = 'title_fuzzy'),
+    'with 3+ exact hits in one module, no other module''s typo-forgiven title shows', v::text);
+END;
+$$;
+
+-- A key's context is ignored (it has no item open; its creator's visibility
+-- isn't its scope): the score never tells it about a linked item.
+CREATE TEMP TABLE key_ctx (entity_id uuid, score real) ON COMMIT DROP;
+GRANT ALL ON key_ctx TO service_role;
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
+  (test.id('KC'), test.id('W'), 'O notes', 'mdo_kc', md5('db-test-kc'), '{"notes": "view"}'::jsonb, test.id('O'));
+SELECT test.as_key('KC', format($q$INSERT INTO pg_temp.key_ctx SELECT h.entity_id, h.score
+                                    FROM public.search_all(%L, 'lemon', NULL, NULL, 'task', %L) h$q$,
+                              test.id('W'), test.id('CP')));
+SELECT test.ok((SELECT array_agg(entity_id ORDER BY score DESC, entity_id) FROM key_ctx) = ARRAY[test.id('L2'), test.id('L1')],
+  'a key''s context boosts nothing');
