@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
+import { mergeMailRows } from "../../features/email/search-palette";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { taskIdForHandle } from "../../features/tasks/search";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -236,7 +238,18 @@ export function GlobalCommandPalette() {
     };
   }, [open, trimmed, chip, taskKey, tasksReachable, runtime, selectedWorkspaceId]);
 
-  const view = useMemo(() => buildPaletteView(rows, { chip, lead }), [rows, chip, lead]);
+  // Email (GS-9): on desktop this device's own mail joins the Email group,
+  // merged here in the client; no mail body reaches the server. On web only
+  // the pulled-in threads search_all returned.
+  const mail = usePaletteMail({
+    runtime,
+    workspaceId: selectedWorkspaceId,
+    open,
+    query: trimmed,
+    wanted: searchable && (chip === "all" || chip === "email"),
+  });
+  const merged = useMemo(() => mergeMailRows(rows, mail.rows), [rows, mail.rows]);
+  const view = useMemo(() => buildPaletteView(merged, { chip, lead }), [merged, chip, lead]);
   // Every task row says its ID, quieter, as the details header does
   // (MOD-144), read from the same copy (a task it doesn't hold shows none).
   const shownTaskIds = useMemo(() => {
@@ -473,7 +486,8 @@ export function GlobalCommandPalette() {
     notice === null &&
     view.top === null &&
     view.groups.length === 0 &&
-    actionCount === 0;
+    actionCount === 0 &&
+    !mail.searching;
 
   return (
     <GlobalSearchPalette
