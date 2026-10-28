@@ -110,8 +110,8 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
    - *Rejected:* rewriting `can_access`, the shared 6 kB gate other modules depend on, for an invariant DDL now guarantees.
 3. **Re-rooting keeps access everywhere (NS-3).**
    - `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)`. Prod has 0 violations, so it is added validated.
-   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, runs `notes__keep_access_on_reroot` for each live inherit child of `OLD` before the key's SET NULL fires.
-   - When the deleted row's creator is the one being erased, the helper skips granting that creator. A new parameter `p_skip_creator` does this.
+   - A `BEFORE DELETE` row trigger on `notes`, `notes__freeze_children`, copies what the chain gives each inherit child of `OLD` (live or trashed) into `resource_grants` before the key's SET NULL fires; the SET NULL write itself makes the child `custom` (`notes__orphan_custom`). The trigger never writes the child's row: the same DELETE may remove it next (built in NS-3, see `docs/decisions/notes.md`).
+   - The helper gains `p_skip_creator` (a creator not to grant). The delete trigger passes none: the deleted row's creator keeps what they had (Mike, 2026-10-28, NS-3 review), and erasure's own step 7 removes every grant of the erased person.
    - Purge's cycle-break branch calls the same freeze.
    - Account erasure needs no change: its delete now fires the trigger.
    - *Rejected:* adding freeze calls to each delete path, the convention that missed erasure.
@@ -190,7 +190,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 | --- | --- | --- | --- | --- |
 | NS-1 | **Close the open surface** | Migration `20261030100000`: grants, policy, prod-only helpers and indexes, the `notes_module_permission` grant (Assumption 1). `notes_grants.test.sql`; RLS matrix updated. **Tier 2.** | AC1, AC2 | — |
 | NS-2 | **One tree per workspace** | Migration `20261030110000`: composite keys on `notes`, `note_updates` and `note_favorites`; the import parent check (Assumption 2). `notes_same_workspace.test.sql`. **Tier 2.** | AC3 | — |
-| NS-3 | **Deleting a parent keeps access** | Migration `20261030120000`: the inherit-needs-parent CHECK, the `notes__freeze_children` trigger, `p_skip_creator`, the cycle-branch fix (Assumption 3). `notes_reroot_access.test.sql`. **Tier 2.** | AC4 | NS-2 |
+| NS-3 | **Deleting a parent keeps access** | Migration `20261030121000`: the inherit-needs-parent CHECK, the `notes__freeze_children` trigger, `p_skip_creator`, the cycle-branch fix (Assumption 3). `notes_reroot_access.test.sql`. **Tier 2.** | AC4 | NS-2 |
 | NS-4 | **Trash empties itself** | Migration `20261030130000`: `notes__purge_expired`, the restore-after-30-days refusal, the viewer sweep, the `purge__preview` count. The notes step in `_shared/purge-deleted.ts` (Assumption 4). **Tier 2.** | AC5 | NS-3 |
 | NS-5 | **Lean meta results** | Migration `20261030140000`: `notes_meta` type, the 10 ops re-declared with grants re-stated. App and MCP mapping tests (Assumption 5). **Tier 2.** | AC6 | NS-1 |
 | NS-6 | **One guard** | Migration `20261030150000`: `notes__require`, `notes__require_module`, every op moved onto them, the publish rule unified (Assumption 6). `notes_guard_matrix.test.sql`. **Tier 2.** | AC7 | NS-4, NS-5 |
