@@ -296,6 +296,12 @@ export default {
           },
         },
         loading: { delay: { match: "**/rest/v1/**", ms: 5000 }, capture: "early" },
+        // The app is up and only the week's events are on their way: the skeletons in the
+        // last known shape (the state above holds the whole app at its boot screen).
+        loadingEvents: {
+          delay: { match: "**/rest/v1/rpc/calendar_events_visible*", ms: 5000 },
+          capture: "early",
+        },
         error: { fail: { match: "**/rest/v1/rpc/calendar_events_visible*", status: 500 } },
         // One Google calendar didn't sync: the banner, "Not synced" in the rail, stale marks.
         syncError: { act: async ({ page }: { page: Page }) => staleGoogleWeek(page) },

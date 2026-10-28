@@ -224,7 +224,8 @@ export function CalendarRail({
           }
           return (
             <div key={group.key} className="mt-3 flex flex-col gap-1">
-              <Eyebrow as="div" className="px-1" tone="muted">
+              {/* Full eyebrow tone: the muted one fails contrast on the panel (4.4:1). */}
+              <Eyebrow as="div" className="px-1">
                 {group.header}
               </Eyebrow>
               {group.detail ? (

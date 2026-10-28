@@ -130,7 +130,7 @@ type Props = {
   staleAccountIds?: ReadonlySet<string>;
   /** Events whose change waits to sync: the cloud-off mark. */
   waitingEventIds?: ReadonlySet<string>;
-  /** Something failed (a sync, the read): never "Nothing scheduled". */
+  /** Something failed (a sync, the read) or the first-week card speaks: no empty hint. */
   faulted?: boolean;
   /** While loading, the all-day rows the lane last drew (its skeleton). */
   loadingAllDayRows?: number;

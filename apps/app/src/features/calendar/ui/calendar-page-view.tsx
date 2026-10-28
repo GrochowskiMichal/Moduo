@@ -805,7 +805,7 @@ export function CalendarPageView({
               onTriageRemove={onTriageRemove}
               focusBlockId={focusBlockId}
               staleAccountIds={faults.syncStatus.staleAccountIds}
-              faulted={faults.syncStatus.faulted}
+              faulted={faults.hideEmptyHint}
               loadingAllDayRows={faults.loadShape.allDayRows}
               overlay={faults.firstWeekOverlay}
             />

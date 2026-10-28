@@ -159,10 +159,14 @@ function ChipOneLine({
       data-chip-line
       className="cal-chip-line relative flex flex-wrap items-baseline gap-x-1.5 overflow-hidden text-xs"
     >
-      {locked ? <PrivateLock /> : null}
-      {marks}
-      <span data-chip-title className="min-w-0 max-w-full truncate text-foreground">
-        {title}
+      {/* The lock and marks ride with the title as one item, so they never
+          push it onto the clipped second row. */}
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1">
+        {locked ? <PrivateLock /> : null}
+        {marks}
+        <span data-chip-title className="min-w-0 truncate text-foreground">
+          {title}
+        </span>
       </span>
       {time ? (
         <span

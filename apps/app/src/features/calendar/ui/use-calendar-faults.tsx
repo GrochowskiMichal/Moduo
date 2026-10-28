@@ -84,5 +84,16 @@ export function useCalendarFaults(input: {
     />
   ) : null;
 
-  return { loading, syncStatus, loadShape, rememberPlanShape, banner, firstWeekOverlay };
+  // The empty hint never speaks over a fault, nor beside the first-week card.
+  const hideEmptyHint = syncStatus.faulted || firstWeek;
+
+  return {
+    loading,
+    hideEmptyHint,
+    syncStatus,
+    loadShape,
+    rememberPlanShape,
+    banner,
+    firstWeekOverlay,
+  };
 }
