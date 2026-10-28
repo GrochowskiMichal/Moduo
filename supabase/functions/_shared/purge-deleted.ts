@@ -15,7 +15,11 @@
  *                   tasks__purge_expired; a task waits for its file rows).
  *                   `deleted_at` is the server's (trash_stamp_deleted_at), never
  *                   the device's: any timestamp a job acts on must be server-stamped.
- *   4. pools        storage_usage recounted from the rows, so a missed delta
+ *   4. notes        notes trashed more than 30 days ago, in every workspace (SQL
+ *                   notes__purge_expired, NS-4: live sub-notes keep their access),
+ *                   and live-viewer rows older than 10 minutes. A workspace whose
+ *                   purge is refused is skipped and counted in notesFailed.
+ *   5. pools        storage_usage recounted from the rows, so a missed delta
  *                   never outlives a day.
  * A dry run only counts (SQL purge__preview) and changes nothing.
  *
@@ -56,6 +60,11 @@ export type PurgeCounts = {
   orphanObjects: number;
   tasks: number;
   buckets: number;
+  notes: number;
+  /** note_live_viewers rows older than 10 minutes. */
+  noteViewers: number;
+  /** Workspaces whose notes purge was refused this run (retried tomorrow). */
+  notesFailed: number;
   /** Pools whose recount changed them. */
   poolsRecounted: number;
 };
@@ -70,7 +79,7 @@ const REMOVE_CHUNK = 100;
 type Candidate = { id: string; object_path: string; preview_path: string | null };
 
 export class PurgeError extends Error {
-  readonly step: "preview" | "attachments" | "orphans" | "tasks" | "pools";
+  readonly step: "preview" | "attachments" | "orphans" | "tasks" | "notes" | "pools";
   readonly partial: PurgeCounts;
   constructor(step: PurgeError["step"], message: string, partial: PurgeCounts) {
     super(`${step}: ${message}`);
@@ -89,10 +98,13 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
     orphanObjects: 0,
     tasks: 0,
     buckets: 0,
+    notes: 0,
+    noteViewers: 0,
+    notesFailed: 0,
     poolsRecounted: 0,
   };
 
-  const call = async (step: PurgeError["step"], fn: string, args?: Record<string, unknown>) => {
+  const call: Call = async (step, fn, args) => {
     const { data, error } = await db.rpc(fn, args);
     if (error) throw new PurgeError(step, `${fn}: ${error.message}`, counts);
     return data;
@@ -142,6 +154,20 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
   }
 
   // 3. Tasks and buckets.
+  await purgeTasks(call, counts, batch, maxRounds);
+
+  // 4. Notes (and stale live viewers).
+  await purgeNotes(call, counts, batch, maxRounds);
+
+  // 5. Pools.
+  counts.poolsRecounted = Number(await call("pools", "storage_usage__reconcile"));
+
+  return { dryRun: false, ...counts };
+}
+
+type Call = (step: PurgeError["step"], fn: string, args?: Record<string, unknown>) => Promise<unknown>;
+
+async function purgeTasks(call: Call, counts: PurgeCounts, batch: number, maxRounds: number) {
   for (let round = 0; round < maxRounds; round++) {
     const result = ((await call("tasks", "tasks__purge_expired", { p_limit: batch })) ?? {}) as {
       tasks?: number;
@@ -153,11 +179,21 @@ export async function purgeDeleted(db: PurgeDb, options: PurgeOptions = {}): Pro
     counts.buckets += buckets;
     if (tasks < batch && buckets < batch) break;
   }
+}
 
-  // 4. Pools.
-  counts.poolsRecounted = Number(await call("pools", "storage_usage__reconcile"));
-
-  return { dryRun: false, ...counts };
+async function purgeNotes(call: Call, counts: PurgeCounts, batch: number, maxRounds: number) {
+  for (let round = 0; round < maxRounds; round++) {
+    const result = ((await call("notes", "notes__purge_expired", { p_limit: batch })) ?? {}) as {
+      notes?: number;
+      viewers?: number;
+      failed?: number;
+    };
+    const notes = Number(result.notes ?? 0);
+    counts.notes += notes;
+    counts.noteViewers += Number(result.viewers ?? 0);
+    counts.notesFailed += Number(result.failed ?? 0);
+    if (notes < batch) break;
+  }
 }
 
 /** Compare a presented secret with the configured one without an early exit
