@@ -19,11 +19,14 @@
 -- exposed_notes and the private helpers exist only on prod-built databases,
 -- hence the guards. Re-runnable.
 
-REVOKE ALL ON TABLE public.notes, public.note_updates, public.note_shares FROM PUBLIC, anon;
-REVOKE INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES
-  ON TABLE public.notes, public.note_updates, public.note_shares FROM authenticated;
-REVOKE SELECT ON TABLE public.note_shares FROM authenticated;
-GRANT SELECT ON TABLE public.notes, public.note_updates TO authenticated;
+-- REVOKE ALL, then GRANT back, so no verb is left behind (Postgres 17's
+-- MAINTAIN was, under a verb list).
+REVOKE ALL ON TABLE public.notes, public.note_updates, public.note_shares, public.note_favorites
+  FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON TABLE public.notes, public.note_updates, public.note_favorites TO authenticated;
+-- The log's id sequence: a client setval could rewind it and make every
+-- insert collide. The definer ops call nextval as the owner.
+REVOKE ALL ON SEQUENCE public.note_updates_id_seq FROM PUBLIC, anon, authenticated;
 
 DO $do$
 BEGIN

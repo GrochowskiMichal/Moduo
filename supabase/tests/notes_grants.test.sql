@@ -24,7 +24,7 @@ BEGIN
       AND (c.relname LIKE 'note\_%' OR c.relname IN ('notes', 'exposed_notes'))
     ORDER BY c.relname
   LOOP
-    FOREACH v_priv IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'] LOOP
+    FOREACH v_priv IN ARRAY ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER', 'MAINTAIN'] LOOP
       PERFORM test.ok(NOT has_table_privilege('anon', r.oid, v_priv),
         format('anon holds no %s on %s', v_priv, r.relname));
       PERFORM test.ok(
@@ -37,6 +37,17 @@ BEGIN
   END LOOP;
 END;
 $t$;
+
+-- Sequences too: a client setval on the log's id would make every insert collide.
+SELECT test.ok(count(*) = 0, 'no client role holds a privilege on a Notes sequence',
+  string_agg(format('%s:%s:%s', r.role, c.relname, v.priv), ', '))
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+CROSS JOIN (VALUES ('anon'), ('authenticated')) AS r(role)
+CROSS JOIN (VALUES ('USAGE'), ('SELECT'), ('UPDATE')) AS v(priv)
+WHERE n.nspname = 'public' AND c.relkind = 'S'
+  AND (c.relname LIKE 'note\_%' OR c.relname LIKE 'notes\_%' OR c.relname LIKE 'exposed\_notes%')
+  AND has_sequence_privilege(r.role, c.oid, v.priv);
+SELECT test.ok(to_regclass('public.note_updates_id_seq') IS NOT NULL, 'the log''s id sequence is the one checked');
 
 SELECT test.ok(count(*) = 0, 'anon executes no Notes function', string_agg(p.oid::regprocedure::text, ', '))
 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
