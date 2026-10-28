@@ -63,17 +63,17 @@ describe("compactFromLog", () => {
     60_000,
   );
 
-  it("skips a row Yjs can't decode, as clients do, and works without a snapshot", async () => {
+  it("refuses a log with a row Yjs can't decode (the fold would delete it), and works without a snapshot", async () => {
     const doc = await notesDoc();
     const { snapshotB64, log } = await agentOnlyNote(3);
     const withPoison = [log[0], "bm90IGEgeWpzIHVwZGF0ZQ==", ...log.slice(1)];
 
-    const merged: string = doc.compactFromLog({ snapshotB64, updatesB64: withPoison });
-    expect(doc.bodyFromLog({ snapshotB64: merged, updatesB64: [] }).bodyText).toBe(
-      doc.bodyFromLog({ snapshotB64, updatesB64: log }).bodyText,
-    );
+    expect(() => doc.compactFromLog({ snapshotB64, updatesB64: withPoison })).toThrow();
 
-    const fromLogOnly: string = doc.compactFromLog({ snapshotB64: null, updatesB64: [snapshotB64, ...log] });
+    const fromLogOnly: string = doc.compactFromLog({
+      snapshotB64: null,
+      updatesB64: [snapshotB64, ...log],
+    });
     expect(doc.bodyFromLog({ snapshotB64: fromLogOnly, updatesB64: [] }).bodyText).toBe(
       doc.bodyFromLog({ snapshotB64, updatesB64: log }).bodyText,
     );
@@ -235,6 +235,24 @@ describe("the nightly compaction step", () => {
       expect(db.notes.get(id)!.snapshot).toBeNull();
     }
     expect(db.log.at(-1)).toBe("rpc storage_usage__reconcile");
+  });
+
+  it("a note with a row Yjs can't decode keeps its log and counts as failed", async () => {
+    const { snapshotB64, log } = await agentOnlyNote(3);
+    const big = [...log, "bm90IGEgeWpzIHVwZGF0ZQ==", ...Array.from({ length: 200 }, () => log[2]!)];
+    const db = new CompactDb();
+    db.add({ id: "poison", snapshot: snapshotB64, version: 0, log: rows(big), bodyMd: "kept" });
+
+    const result = await purgeDeleted(db);
+
+    expect(result.dryRun).toBe(false);
+    if (!result.dryRun) {
+      expect(result.notesCompacted).toBe(0);
+      expect(result.notesCompactFailed).toBe(1);
+    }
+    expect(db.notes.get("poison")!.log).toHaveLength(204);
+    expect(db.notes.get("poison")!.snapshot).toBe(snapshotB64);
+    expect(db.log).not.toContain("rpc notes__compact poison");
   });
 
   it("a failed pick is counted, not thrown, and the recount still runs", async () => {

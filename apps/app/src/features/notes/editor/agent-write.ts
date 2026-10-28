@@ -132,14 +132,19 @@ export function applyAgentEdit(
 /** Rebuild a note's doc from what the server holds (snapshot + update log).
  * A row Yjs can't decode is skipped, as the app's pull does: one poison row
  * must not block every later write to the note. */
-function docFromLog(snapshotB64: string | null, updatesB64: string[]): Y.Doc {
+function docFromLog(snapshotB64: string | null, updatesB64: string[], strict = false): Y.Doc {
   const doc = new Y.Doc();
   doc.get(NOTES_DOC_ROOT, Y.XmlElement);
   for (const b64 of snapshotB64 ? [snapshotB64, ...updatesB64] : updatesB64) {
     try {
       Y.applyUpdate(doc, decodeBase64ToUint8(b64));
-    } catch {
-      // Skipped; clients skip it too, so nobody's doc holds it.
+    } catch (error) {
+      // Skipped for a read or a write on top. A client on another Yjs version
+      // may still read the row, so a fold (strict) must never drop it.
+      if (strict) {
+        doc.destroy();
+        throw error;
+      }
     }
   }
   return doc;
@@ -190,14 +195,15 @@ export function bodyFromLog(input: { snapshotB64: string | null; updatesB64: str
  * The server's fold (specs/notes-schema-hardening.md NS-10): snapshot plus log
  * merged into one snapshot, base64, encoded the way the client's own fold
  * encodes it (`Y.encodeStateAsUpdate` of the rebuilt doc). It only merges:
- * the bodies stay the client's to derive (NR-6). A row Yjs can't decode is
- * dropped, as every client already drops it.
+ * the bodies stay the client's to derive (NR-6). A row Yjs can't decode
+ * throws, so the note keeps its log: a client vetoes its own fold the same way
+ * (engine-v2's `compactVeto`), since the fold deletes the rows it merged.
  */
 export function compactFromLog(input: {
   snapshotB64: string | null;
   updatesB64: string[];
 }): string {
-  const doc = docFromLog(input.snapshotB64, input.updatesB64);
+  const doc = docFromLog(input.snapshotB64, input.updatesB64, true);
   try {
     return encodeUint8ToBase64(Y.encodeStateAsUpdate(doc));
   } finally {

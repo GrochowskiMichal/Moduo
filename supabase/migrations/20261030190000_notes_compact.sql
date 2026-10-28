@@ -18,8 +18,8 @@
 --      or body_md (the client stays the only markdown serialiser, NR-6), and
 --      leaves updated_at alone: the content did not change.
 -- All three are the service role's alone. With no actor, NS-8's statement-level
--- notes__updates_check lets the DELETE through as system work, and
--- notes__updates_live queues one notice for the note.
+-- notes__updates_check lets the DELETE through as system work; no live notice
+-- goes out (notes_updates_live is INSERT-only, and a viewed note is refused).
 
 DO $do$
 BEGIN
@@ -52,6 +52,9 @@ REVOKE ALL ON FUNCTION public.notes__compact_candidates(integer) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.notes__compact_candidates(integer) TO service_role;
 
 -- ── 2. The source ───────────────────────────────────────────────────────────
+-- At most 5,000 rows, oldest first, so one huge log can't exhaust the Edge
+-- Function: folding up to the last loaded id is safe (later rows stay in the
+-- log), and the next night takes the rest.
 CREATE OR REPLACE FUNCTION public.notes__compact_source(p_note uuid)
 RETURNS jsonb
 LANGUAGE sql STABLE SECURITY DEFINER
@@ -62,7 +65,8 @@ AS $$
     'doc_version', n.doc_version,
     'updates', coalesce((
       SELECT jsonb_agg(jsonb_build_object('id', u.id, 'update_b64', u.update_b64) ORDER BY u.id)
-      FROM public.note_updates u WHERE u.note_id = n.id
+      FROM (SELECT u.id, u.update_b64 FROM public.note_updates u
+            WHERE u.note_id = n.id ORDER BY u.id LIMIT 5000) u
     ), '[]'::jsonb))
   FROM public.notes n
   WHERE n.id = p_note
@@ -104,6 +108,9 @@ BEGIN
     RETURN jsonb_build_object('folded', 0, 'refused', true, 'doc_version', n.doc_version);
   END IF;
 
+  -- No gaps: every insert into an existing note's log (notes_op_apply_updates)
+  -- takes this row lock before its id, so a row pushed after the load always
+  -- has an id above p_upto_id. Keep it that way for any new writer.
   DELETE FROM public.note_updates WHERE note_id = p_note AND id <= p_upto_id;
   GET DIAGNOSTICS v_folded = ROW_COUNT;
 
