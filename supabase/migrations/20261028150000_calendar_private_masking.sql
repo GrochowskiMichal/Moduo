@@ -202,8 +202,10 @@ DECLARE v_user uuid := public.perm_actor_id();
 BEGIN
   IF v_user IS NULL OR p_workspace_id IS NULL OR public.calendar_module_permission(p_workspace_id) NOT IN ('view','edit','admin') THEN RETURN; END IF;
   RETURN QUERY
+  -- Every calendar the actor can view, their own included: a teammate's event
+  -- on your calendar (they can edit it) is yours to see, as the table policy says.
   WITH cals AS (SELECT c.id FROM public.calendars c WHERE c.workspace_id = p_workspace_id AND c.deleted_at IS NULL
-                  AND c.owner_id <> v_user AND public.can_access('calendar', c.id, 'view', v_user))
+                  AND public.can_access('calendar', c.id, 'view', v_user))
   SELECT (CASE WHEN e.owner_id = v_user OR NOT e.is_private THEN e
      ELSE jsonb_populate_record(e, jsonb_build_object('title','Busy','description',null,'location',null,'attendees','[]'::jsonb,
        'conference_url',null,'conference_provider',null,'tags','[]'::jsonb,'reminders','[]'::jsonb,'external_event_id',null,
