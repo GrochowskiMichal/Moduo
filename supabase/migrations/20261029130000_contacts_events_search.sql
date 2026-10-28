@@ -14,20 +14,21 @@
 --   3. events__search: set-based. The calendar ceiling is read once, the
 --      calendars the actor can view are listed once, and an event matches
 --      only when it is the actor's own or sits on one of those calendars and
---      is not private. Someone else's private event is never matched by its
+--      is neither private nor focus time. Someone else's private event is never matched by its
 --      title, description, location or attendees (Q23). The rule is
 --      can_access('event', …, 'view') written out; contacts_events_search.test.sql
 --      guards the copy with a parity check.
 --   4. search_all takes contact, company and event from these functions
---      instead of the registry adapter. Built on 20261029090000_search_all.sql.
+--      instead of the registry adapter, cut into its live body.
 --
 -- Context lines (Assumption 11): a person's company; a company's first
--- domain; an event's start date in the asker's time zone ("Tue 3 Nov 2026").
+-- domain; an event's start date in the asker's time zone ("Tue 3 Nov 2026"),
+-- an all-day event's in its owner's.
 --
 -- Every function resolves the actor from the request (perm_actor_id(), the
 -- key's module scope through <module>_module_permission), never an argument.
 -- Re-runnable: helpers and functions OR REPLACE, indexes IF NOT EXISTS,
--- grants re-stated by name.
+-- search_all cut once, grants re-stated by name.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -142,6 +143,8 @@ AS $$
            public.search__unaccent(public.events__search_body(p_description, p_location, p_attendees))), 'B')
 $$;
 
+-- The indexes hold the helpers' output: a later change to a helper's body
+-- needs a REINDEX of its indexes in the same migration.
 CREATE INDEX IF NOT EXISTS contacts_search_idx ON public.contacts
   USING gin (public.contacts__search_tsv(name, title, email, emails)) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS contacts_name_trgm_idx ON public.contacts
@@ -269,8 +272,11 @@ BEGIN
            c.id,
            c.name,
            nullif(pg_catalog.btrim(co.name), ''),
+           -- A whole typed address matches only the address kept whole.
            CASE WHEN h.kind = 'body'
-                THEN public.search__snippet(public.contacts__search_body(c.title, c.email, c.emails), v_q) END,
+                THEN coalesce(public.search__snippet(public.contacts__search_body(c.title, c.email, c.emails), v_q),
+                              public.search__snippet(pg_catalog.array_to_string(
+                                public.contacts__search_emails(c.email, c.emails), ', '), v_q)) END,
            'user'::text,
            h.kind,
            h.rank,
@@ -413,8 +419,9 @@ COMMENT ON FUNCTION public.companies__search(uuid, text, integer) IS
 -- can_access('event', id, 'view', actor), written out for the set:
 --   the actor's own event                      rank 4
 --   an event on a calendar the actor can view  the calendar's rank, unless
---   (owner of the calendar, or a direct share   the event is private
---   at view or more)
+--   (owner of the calendar, or a direct share   the event is private or focus
+--   at view or more)                            time (CALR-14: a focus block
+--                                               can carry a task's title)
 -- then least(rank, the calendar ceiling) ≥ view. The ceiling is the same for
 -- every event of the workspace, so it is read once; below view nothing
 -- matches. Visibility sits in the same WHERE as the text, so a private event
@@ -465,7 +472,8 @@ BEGIN
       FROM public.calendar_events e
      WHERE e.workspace_id = p_workspace_id
        AND e.deleted_at IS NULL
-       AND (e.owner_id = v_actor OR (e.calendar_ref = ANY (v_cals) AND NOT e.is_private))
+       AND (e.owner_id = v_actor
+            OR (e.calendar_ref = ANY (v_cals) AND NOT e.is_private AND e.kind <> 'focus'))
        AND public.events__search_tsv(e.title, e.description, e.location, e.attendees) OPERATOR(pg_catalog.@@) v_q
   ),
   ranked AS (
@@ -500,7 +508,8 @@ BEGIN
           FROM public.calendar_events e
          WHERE e.workspace_id = p_workspace_id
            AND e.deleted_at IS NULL
-           AND (e.owner_id = v_actor OR (e.calendar_ref = ANY (v_cals) AND NOT e.is_private))
+           AND (e.owner_id = v_actor
+            OR (e.calendar_ref = ANY (v_cals) AND NOT e.is_private AND e.kind <> 'focus'))
            AND v_fuzzy OPERATOR(extensions.<%) pg_catalog.lower(public.search__unaccent(e.title))
            AND (pg_catalog.numnode(v_not) = 0
                 OR NOT (public.events__search_tsv(e.title, e.description, e.location, e.attendees)
@@ -541,7 +550,8 @@ BEGIN
     SELECT 'event'::text,
            e.id,
            e.title,
-           pg_catalog.to_char(e.start_time AT TIME ZONE v_tz, 'Dy FMDD Mon YYYY'),
+           pg_catalog.to_char(e.start_time AT TIME ZONE
+             CASE WHEN e.all_day THEN coalesce(z.tz, 'UTC') ELSE v_tz END, 'Dy FMDD Mon YYYY'),
            CASE WHEN h.kind = 'body'
                 THEN public.search__snippet(public.events__search_body(e.description, e.location, e.attendees), v_q) END,
            'calendar'::text,
@@ -551,6 +561,12 @@ BEGIN
            false
       FROM unnest(v_ids, v_ranks, v_kinds) WITH ORDINALITY AS h(id, rank, kind, ord)
       JOIN public.calendar_events e ON e.id = h.id
+      -- An all-day event is stored at its owner's midnight: its day is read
+      -- in the owner's zone, or a teammate to the west sees the day before.
+      -- Stored zones are checked against the catalog when written
+      -- (user_op_set_time_region).
+      LEFT JOIN LATERAL (SELECT nullif(p.time_zone, '') AS tz FROM public.user_preferences p
+                          WHERE p.user_id = e.owner_id AND e.all_day) z ON true
      ORDER BY h.ord;
 END;
 $$;
@@ -559,55 +575,22 @@ COMMENT ON FUNCTION public.events__search(uuid, text, integer) IS
   'Search (GS-5): the events the caller can open that match the query, as SearchHit rows (at most 50), with the start date as context. Someone else''s private event never matches. The actor comes from the request, never an argument.';
 
 -- ── 4. search_all ────────────────────────────────────────────────────────────
--- As 20261029090000_search_all.sql, with contact, company and event answered
--- by their module functions; the registry adapter keeps the rest.
+-- contact, company and event come from their module functions instead of the
+-- registry adapter. Cut into the live body (as GS-8 does), never redefined
+-- from an older file, so it keeps whichever modules' sources the live
+-- search_all already has (GS-4, GS-6, GS-8 change it in parallel): the three
+-- arms go in before the registry arm, and the three types leave the
+-- registry's list right before a person's context is read.
 
-CREATE OR REPLACE FUNCTION public.search_all(p_workspace_id uuid, p_query text, p_types text[] DEFAULT NULL,
-                                             p_limit_per_type integer DEFAULT 8,
-                                             p_context_type text DEFAULT NULL, p_context_id uuid DEFAULT NULL)
-  RETURNS TABLE (entity_type text, entity_id uuid, title text, context text, snippet text,
-                 icon text, match text, rank real, updated_at timestamptz, archived boolean,
-                 score real, type_total integer, top boolean)
-  LANGUAGE plpgsql STABLE SECURITY INVOKER
-  SET search_path = ''
-  SET statement_timeout = '5s'
-AS $$
-#variable_conflict use_column
+DO $do$
 DECLARE
-  v_limit integer := least(greatest(coalesce(p_limit_per_type, 8), 1), 50);
-  v_types text[];
-  v_registry text[];
-  v_ctx_type text := CASE lower(btrim(coalesce(p_context_type, '')))
-                       WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread'
-                       ELSE nullif(lower(btrim(coalesce(p_context_type, ''))), '') END;
-  v_ctx boolean := false;
-BEGIN
-  IF p_workspace_id IS NULL OR pg_catalog.length(pg_catalog.btrim(coalesce(p_query, ''))) < 2 THEN
-    RETURN;
-  END IF;
-  -- The palette's types (chat joins with GS-6).
-  v_types := ARRAY(
-    SELECT DISTINCT t
-      FROM (SELECT CASE lower(btrim(x)) WHEN 'project' THEN 'bucket' WHEN 'email' THEN 'email_thread'
-                                        ELSE lower(btrim(x)) END AS t
-              FROM unnest(coalesce(p_types, ARRAY['task', 'bucket', 'note', 'contact', 'company', 'event',
-                                                  'email_thread'])) AS x) s
-     WHERE t IN ('task', 'bucket', 'note', 'contact', 'company', 'event', 'email_thread'));
-  v_registry := ARRAY(SELECT t FROM unnest(v_types) AS t
-                       WHERE t NOT IN ('note', 'contact', 'company', 'event'));
-  -- A person's context only: a key has no item open, and its creator's
-  -- visibility isn't the key's scope.
-  IF v_ctx_type IS NOT NULL AND p_context_id IS NOT NULL AND public.module_api_key_id() IS NULL THEN
-    v_ctx := coalesce(public.perm_can_see_entity(p_workspace_id, v_ctx_type, p_context_id), false);
-  END IF;
-
-  RETURN QUERY
-    WITH hits AS MATERIALIZED (
-      SELECT n.entity_type, n.entity_id, n.title, n.context, n.snippet, n.icon, n.match, n.rank,
-             n.updated_at, n.archived
-        FROM public.notes__search(p_workspace_id, p_query, 50) n
-       WHERE 'note' = ANY (v_types)
-      UNION ALL
+  v_fn regprocedure := 'public.search_all(uuid, text, text[], integer, text, uuid)'::regprocedure;
+  v_def text := pg_get_functiondef(v_fn);
+  v_arm_at text := $o$      UNION ALL
+      SELECT r.entity_type, r.entity_id, r.title, r.context, r.snippet, r.icon, r.match, r.rank,
+             r.updated_at, r.archived
+        FROM public.registry__search($o$;
+  v_arms text := $n$      UNION ALL
       SELECT c.entity_type, c.entity_id, c.title, c.context, c.snippet, c.icon, c.match, c.rank,
              c.updated_at, c.archived
         FROM public.contacts__search(p_workspace_id, p_query, 50) c
@@ -622,62 +605,24 @@ BEGIN
              e.updated_at, e.archived
         FROM public.events__search(p_workspace_id, p_query, 50) e
        WHERE 'event' = ANY (v_types)
-      UNION ALL
-      SELECT r.entity_type, r.entity_id, r.title, r.context, r.snippet, r.icon, r.match, r.rank,
-             r.updated_at, r.archived
-        FROM public.registry__search(p_workspace_id, p_query, 50, v_registry) r
-       WHERE cardinality(v_registry) > 0
-    ),
-    one_all AS MATERIALIZED (
-      SELECT DISTINCT ON (h.entity_type, h.entity_id) h.*,
-             CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END AS tier
-        FROM hits h
-       ORDER BY h.entity_type, h.entity_id,
-                CASE WHEN h.match = 'handle' AND h.rank >= 1 THEN 0 WHEN h.match = 'title_fuzzy' THEN 2 ELSE 1 END,
-                h.rank DESC
-    ),
-    -- Typo forgiveness holds across the merged list: once 3 exact hits exist
-    -- in any modules, every typo-forgiven row goes (each module decides on its
-    -- own count, so a typo task could otherwise sit above exact notes).
-    kept AS (
-      SELECT a.*
-        FROM one_all a
-       WHERE a.tier < 2 OR (SELECT count(*) FROM one_all b WHERE b.tier < 2) < 3
-    ),
-    linked AS MATERIALIZED (
-      SELECT CASE WHEN l.source_type = v_ctx_type AND l.source_id = p_context_id THEN l.target_type ELSE l.source_type END AS t,
-             CASE WHEN l.source_type = v_ctx_type AND l.source_id = p_context_id THEN l.target_id ELSE l.source_id END AS id
-        FROM public.entity_links l
-       WHERE v_ctx
-         AND l.workspace_id = p_workspace_id
-         AND l.deleted_at IS NULL
-         AND ((l.source_type = v_ctx_type AND l.source_id = p_context_id)
-              OR (l.target_type = v_ctx_type AND l.target_id = p_context_id))
-    ),
-    scored AS (
-      SELECT o.*,
-             least(1.0, greatest(0.0,
-               0.55 * o.rank
-               + 0.15 * pg_catalog.power(0.5, greatest(extract(epoch FROM (now() - o.updated_at)), 0) / (30 * 86400.0))
-               + 0.20 * 0
-               + 0.10 * (CASE WHEN EXISTS (SELECT 1 FROM linked k WHERE k.t = o.entity_type AND k.id = o.entity_id)
-                              THEN 1 ELSE 0 END)))::real AS sc,
-             (count(*) OVER (PARTITION BY o.entity_type))::integer AS total
-        FROM kept o
-    ),
-    ordered AS (
-      SELECT s.*,
-             row_number() OVER (ORDER BY s.tier, s.sc DESC, s.updated_at DESC, s.entity_id) AS pos,
-             row_number() OVER (PARTITION BY s.entity_type ORDER BY s.tier, s.sc DESC, s.updated_at DESC, s.entity_id) AS k
-        FROM scored s
-    )
-    SELECT o.entity_type, o.entity_id, o.title, o.context, o.snippet, o.icon, o.match, o.rank, o.updated_at,
-           o.archived, o.sc, o.total, o.pos = 1
-      FROM ordered o
-     WHERE o.k <= v_limit
-     ORDER BY o.pos;
+$n$;
+  v_ctx_at text := $o$  -- A person's context only: a key has no item open$o$;
+  v_drop text := $n$  -- contact, company and event answer through their own functions (GS-5).
+  v_registry := ARRAY(SELECT t FROM unnest(v_registry) AS t WHERE t NOT IN ('contact', 'company', 'event'));
+$n$;
+BEGIN
+  -- Already cut (a re-run).
+  IF position('public.contacts__search(' IN v_def) > 0 THEN
+    RETURN;
+  END IF;
+  IF position(v_arm_at IN v_def) = 0 OR position(v_ctx_at IN v_def) = 0 THEN
+    RAISE EXCEPTION 'search_all isn''t the body GS-5 expects; add its sources by hand.';
+  END IF;
+  v_def := replace(v_def, v_arm_at, v_arms || v_arm_at);
+  v_def := replace(v_def, v_ctx_at, v_drop || v_ctx_at);
+  EXECUTE v_def;
 END;
-$$;
+$do$;
 
 COMMENT ON FUNCTION public.search_all(uuid, text, text[], integer, text, uuid) IS
   'Search (GS-3, GS-5): ⌘K''s one search. Merges every module''s <module>__search (registry__search for types not yet on the contract), ranks, and returns up to limit_per_type rows per type with the type''s total and one Top result. SECURITY INVOKER: every hit comes from a module function that resolves the caller.';

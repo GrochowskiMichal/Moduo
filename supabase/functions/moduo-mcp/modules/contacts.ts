@@ -203,8 +203,10 @@ export const contactsConnectorModule: ConnectorModule = {
         };
         const snippet = (h: Row) =>
           typeof h.snippet === "string" ? h.snippet.replace(SEARCH_MARKS, "**").replace(/\u200B/g, "") : null;
-        const people = await hits("contacts__search");
-        const companies = await hits("companies__search");
+        const [people, companies] = await Promise.all([
+          hits("contacts__search"),
+          hits("companies__search"),
+        ]);
         const [personRows, companyRows] = await Promise.all([
           details("contacts", people.map((h) => h.entity_id)),
           details("companies", companies.map((h) => h.entity_id)),

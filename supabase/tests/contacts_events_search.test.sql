@@ -350,3 +350,85 @@ SELECT test.ok(test.found(test.hits_as('M', 'contacts__search', 'yak', 1)) = 'YV
 SELECT test.ok(test.found(test.hits_as('S', 'events__search', 'zebra', 1)) = 'ZV',
   '300 newer private events don''t push out the one S can see (limit 1)',
   test.hits_as('S', 'events__search', 'zebra', 1)::text);
+
+-- ── Review additions (validator, GS-5) ───────────────────────────────────────
+
+-- Every kind of event on the shared calendar: someone else's focus time never
+-- matches (CALR-14: it can carry a task's title), a hold does; the set still
+-- equals can_access for everyone.
+INSERT INTO public.calendar_events (id, workspace_id, owner_id, calendar_ref, title, start_time, end_time, kind) VALUES
+  (test.id('EF'), test.id('W'), test.id('O'), test.id('CAL'), 'Quince focus block', '2026-11-08 09:00+00', '2026-11-08 10:00+00', 'focus'),
+  (test.id('EH'), test.id('W'), test.id('O'), test.id('CAL'), 'Quince hold', '2026-11-08 11:00+00', '2026-11-08 12:00+00', 'hold');
+INSERT INTO test.names VALUES (test.id('EF'), 'EF'), (test.id('EH'), 'EH');
+
+SELECT test.ok(test.as_who('S', 'events__search', 'quince') = 'EH,EW',
+  'someone else''s focus time never matches; a hold on a shared calendar does',
+  test.as_who('S', 'events__search', 'quince'));
+SELECT test.ok(test.found((SELECT jsonb_agg(h) FROM jsonb_array_elements(test.hits_as('O', 'events__search', 'quince focus')) h
+                            WHERE h ->> 'match' <> 'title_fuzzy')) = 'EF',
+  'the owner finds their own focus time', test.as_who('O', 'events__search', 'quince focus'));
+
+DO $$
+DECLARE
+  p text;
+  v_found text;
+  v_want text;
+BEGIN
+  FOREACH p IN ARRAY ARRAY['O', 'S', 'M', 'N', 'X'] LOOP
+    v_found := test.as_who(p, 'events__search', 'quince');
+    SELECT coalesce(string_agg(n.name, ',' ORDER BY n.name), '') INTO v_want
+      FROM public.calendar_events e JOIN test.names n ON n.id = e.id
+     WHERE e.workspace_id = test.id('W') AND e.title ILIKE 'quince%'
+       AND public.can_access('event', e.id, 'view', test.id(p))
+       -- Until CALR-14 lands, can_access lets a viewer see others' focus time;
+       -- search is already stricter.
+       AND NOT (e.kind = 'focus' AND e.owner_id <> test.id(p));
+    PERFORM test.ok(v_found = v_want, 'with every kind, events__search equals can_access for ' || p,
+      v_found || ' vs ' || v_want);
+  END LOOP;
+END;
+$$;
+
+-- Accents both ways, for people and events.
+INSERT INTO public.contacts (id, workspace_id, owner_id, name) VALUES
+  (test.id('CA'), test.id('W'), test.id('O'), 'Łukasz Żółw');
+DELETE FROM public.resource_grants WHERE resource_type = 'contact' AND resource_id = test.id('CA');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by) VALUES
+  (test.id('W'), 'contact', test.id('CA'), 'workspace', NULL, 'view', test.id('O'));
+INSERT INTO public.calendar_events (id, workspace_id, owner_id, calendar_ref, title, start_time, end_time) VALUES
+  (test.id('EZ'), test.id('W'), test.id('O'), test.id('CAL'), 'Zolw spotkanie', '2026-11-08 13:00+00', '2026-11-08 14:00+00');
+INSERT INTO test.names VALUES (test.id('CA'), 'CA'), (test.id('EZ'), 'EZ');
+SELECT test.ok(test.as_who('M', 'contacts__search', 'zolw luk') = 'CA'
+           AND test.as_who('S', 'events__search', 'żółw') = 'EZ',
+  'accents are ignored both ways, words of 3+ letters match their starts');
+
+-- A whole typed address still marks the snippet.
+SELECT test.ok(test.hits_as('M', 'contacts__search', 'edith@quincefarm.example') -> 0 ->> 'snippet'
+                 LIKE '%' || chr(57344) || '%',
+  'a whole email address gives a marked snippet',
+  test.hits_as('M', 'contacts__search', 'edith@quincefarm.example')::text);
+
+-- An all-day event's day is its owner's, whatever the asker's zone.
+INSERT INTO public.user_preferences (user_id, time_zone) VALUES (test.id('O'), 'Europe/Warsaw')
+ON CONFLICT (user_id) DO UPDATE SET time_zone = EXCLUDED.time_zone;
+UPDATE public.user_preferences SET time_zone = 'America/Los_Angeles' WHERE user_id = test.id('S');
+INSERT INTO public.calendar_events (id, workspace_id, owner_id, calendar_ref, title, start_time, end_time, all_day) VALUES
+  (test.id('EA'), test.id('W'), test.id('O'), test.id('CAL'), 'Persimmon day', '2026-11-09 23:00+00', '2026-11-10 23:00+00', true);
+SELECT test.ok(test.hits_as('S', 'events__search', 'persimmon day') -> 0 ->> 'context' = 'Tue 10 Nov 2026',
+  'an all-day event reads its owner''s day, not the day before to the west',
+  test.hits_as('S', 'events__search', 'persimmon day')::text);
+
+-- Companies: visibility before the limit too.
+INSERT INTO public.companies (id, workspace_id, owner_id, name, updated_at)
+SELECT test.id('WP' || i), test.id('W'), test.id('O'), 'Walrus works ' || i, now() FROM generate_series(1, 300) i;
+INSERT INTO public.companies (id, workspace_id, owner_id, name, updated_at) VALUES
+  (test.id('WV'), test.id('W'), test.id('O'), 'Walrus works open', now() - interval '90 days');
+INSERT INTO public.contacts (id, workspace_id, owner_id, name, company_id) VALUES
+  (test.id('WC'), test.id('W'), test.id('O'), 'Vera Open', test.id('WV'));
+DELETE FROM public.resource_grants WHERE resource_type = 'contact' AND resource_id = test.id('WC');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by) VALUES
+  (test.id('W'), 'contact', test.id('WC'), 'workspace', NULL, 'view', test.id('O'));
+INSERT INTO test.names VALUES (test.id('WV'), 'WV');
+SELECT test.ok(test.found(test.hits_as('M', 'companies__search', 'walrus', 1)) = 'WV',
+  '300 newer companies M can''t see don''t push out the one M can (limit 1)',
+  test.hits_as('M', 'companies__search', 'walrus', 1)::text);
