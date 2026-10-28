@@ -2,7 +2,7 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
-- **2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows** → `supabase/migrations/20261030120000_notes_reroot_access.sql`
+- **2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows** → `supabase/migrations/20261030121000_notes_reroot_access.sql`
   - status: current
   - Who: Mike (engineer mode), built in NS-3 (MOD-653).
   - Decision: the spec's `BEFORE DELETE` freeze copies grants only (`notes__copy_chain_access`, the deleted row's creator included: Mike chose exactness over the skip, since erasure's step 7 already removes every grant of the erased person), with `share_sync_note_flag` held by the transaction-local `notes.freezing`. The flip to `custom` rides on the key's own SET NULL write (`notes_orphan_custom`, only when the old parent row is gone). Trashed inherit children are frozen too. `CHECK (share_mode = 'custom' OR parent_id IS NOT NULL)` makes any other un-parenting path freeze first or fail. Purge's cycle branch freezes before it un-parents.

@@ -1,5 +1,5 @@
 -- NS-3 · A DELETE that reaches a parent before its child (supabase/migrations/
--- 20261030120000_notes_reroot_access.sql). notes_freeze_children copies grants
+-- 20261030121000_notes_reroot_access.sql). notes_freeze_children copies grants
 -- onto the child without writing the child's row (share_sync_note_flag is held
 -- by notes.freezing), so the same statement can still delete the child; the
 -- child that survives gets workspace_shared from notes_orphan_custom.

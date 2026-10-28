@@ -1,5 +1,5 @@
 -- NS-3 · Deleting a parent keeps access (specs/notes-schema-hardening.md, AC4,
--- Assumption 3, PQ1; supabase/migrations/20261030120000_notes_reroot_access.sql).
+-- Assumption 3, PQ1; supabase/migrations/20261030121000_notes_reroot_access.sql).
 -- A sub-note that follows its parent's sharing ('inherit') is re-rooted when
 -- its parent is hard-deleted, by any path: account erasure, purge from the
 -- trash (including its parent-cycle branch) and a plain DELETE. It ends up

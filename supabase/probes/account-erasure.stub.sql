@@ -769,7 +769,7 @@ DECLARE
   v_type text := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_type ELSE NEW.resource_type END;
   v_id uuid := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_id ELSE NEW.resource_id END;
 BEGIN
-  -- NS-3 (20261030120000): held while notes__freeze_children copies grants.
+  -- NS-3 (20261030121000): held while notes__freeze_children copies grants.
   IF coalesce(current_setting('notes.freezing', true), '') = '1' THEN
     RETURN coalesce(NEW, OLD);
   END IF;
@@ -783,7 +783,7 @@ BEGIN
 END;
 $function$;
 
--- NS-3 (20261030120000): deleting a parent keeps its inherit children's access.
+-- NS-3 (20261030121000): deleting a parent keeps its inherit children's access.
 -- Bodies copied from that migration.
 CREATE FUNCTION public.notes__copy_chain_access(p_workspace_id uuid, p_note_id uuid, p_skip_creator uuid)
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
