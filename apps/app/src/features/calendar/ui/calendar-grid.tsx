@@ -49,8 +49,9 @@ import {
   WEEK_COLUMNS,
 } from "../grid-layout";
 import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
-import type { CalendarPrefs } from "../prefs";
+import { type CalendarPrefs, offHoursWash } from "../prefs";
 import { emptyWeekHint } from "../sync-status";
+import { dayZoneNote, useSecondZone } from "../zones";
 import { AllDayLane } from "./allday-lane";
 import { AllDayLaneSkeleton } from "./calendar-skeleton";
 import { DayHeader, ZoneCorner } from "./day-header";
@@ -67,6 +68,7 @@ import { gridY, useNowTick } from "./grid-units";
 import { NowLine } from "./now-line";
 import { TaskBlockChip } from "./task-block-chip";
 import { formatHourLabel, formatTimeOfDay } from "./time-format";
+import { SecondZoneHours, ZONE_GUTTER_W } from "./zone-gutter";
 
 const GUTTER_W = "3.25rem";
 /** An elapsed block needs at least this rendered height for the inline triage
@@ -658,7 +660,11 @@ export function CalendarGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  const columns = `${GUTTER_W} repeat(${days.length}, minmax(0, 1fr))`;
+  // CALR-13: Z widens the gutter for the second zone's hours.
+  const zone = useSecondZone();
+  const second = zone.shown ? zone.zone : null;
+  const refDay = days.find((d) => localDayKey(d) === todayKey) ?? days[0];
+  const columns = `${second ? ZONE_GUTTER_W : GUTTER_W} repeat(${days.length}, minmax(0, 1fr))`;
 
   return (
     <div className="relative flex h-full min-h-0 flex-col">
@@ -697,6 +703,7 @@ export function CalendarGrid({
               onOpenTask={(id) => onDueClick?.(id)}
               onSchedule={(id) => onScheduleDue?.(id, day)}
               canSchedule={Boolean(onScheduleDue)}
+              note={dayZoneNote(day, second)}
             />
           );
         })}
@@ -739,6 +746,7 @@ export function CalendarGrid({
         >
           {/* hour gutter */}
           <div className="relative" aria-hidden>
+            {second && refDay ? <SecondZoneHours zone={second} day={refDay} /> : null}
             {hourMarks.slice(1).map((mark, i) => (
               <span
                 key={`${mark.minuteOfDay}-${i}`}
@@ -932,8 +940,8 @@ const DayColumn = memo(function DayColumn({
   const blockById = useMemo(() => new Map(blocks.map((b) => [b.blockId, b])), [blocks]);
   const eventByKey = useMemo(() => new Map(events.map((c) => [c.occurrenceKey, c])), [events]);
   // Working hours are wall-clock minutes, like the grid.
-  const washTop = prefs.workStartMinute;
-  const washBottom = prefs.workEndMinute;
+  // A weekend day is all wash (CALR-13).
+  const { top: washTop, bottomFrom: washBottom } = offHoursWash(prefs, new Date(geom.dayStartMs));
   // Absolute "now" for elapsed detection + event past-styling: the live tick on
   // today, else the day-past flag collapses to +∞ (a fully-past day → EVERY open
   // block/event on it is elapsed/past, incl. midnight-spanners whose end sits in

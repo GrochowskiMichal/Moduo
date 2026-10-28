@@ -37,6 +37,12 @@ const ROWS: RowSpec[] = [
   { group: "Anywhere in Calendar", ids: ["calendar.join"], desc: "Join the meeting on now" },
   { group: "Anywhere in Calendar", ids: ["calendar.undo"], desc: "Undo the last change" },
   {
+    group: "Anywhere in Calendar",
+    ids: ["calendar.zone"],
+    desc: "Show or hide a second time zone",
+  },
+  { group: "Anywhere in Calendar", ids: ["calendar.plan"], desc: "Open Plan when it's folded" },
+  {
     group: "The grid",
     ids: [
       "calendar.cursor-up",

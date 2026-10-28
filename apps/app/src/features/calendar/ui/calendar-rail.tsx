@@ -27,6 +27,7 @@ import type { CalendarAccountModel } from "../events";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
 import { notSyncedLabel } from "../sync-status";
+import { CalendarsMenu } from "./working-hours-sheet";
 
 type Props = {
   /** Booking links, rendered under the calendar list. */
@@ -37,6 +38,8 @@ type Props = {
   /** Local day keys carrying blocks — rendered as subtle density dots. */
   busyDayKeys: Set<string>;
   prefs: CalendarPrefs;
+  /** Working hours… in the ⋯ beside "Calendars" (CALR-13); absent, no menu. */
+  onPrefs?: (patch: Partial<CalendarPrefs>) => void;
   /** Connected external accounts (mirrored) — the account map. */
   accounts: CalendarAccountModel[];
   /** Account id → bounded hue name. */
@@ -61,6 +64,7 @@ export function CalendarRail({
   onSelectDate,
   busyDayKeys,
   prefs,
+  onPrefs,
   accounts,
   accountHues,
   hiddenAccountIds,
@@ -203,9 +207,10 @@ export function CalendarRail({
       />
 
       <div className="flex flex-col gap-1">
-        <Eyebrow as="div" className="px-1">
-          Calendars
-        </Eyebrow>
+        <div className="flex items-center justify-between gap-1 pl-1">
+          <Eyebrow as="div">Calendars</Eyebrow>
+          {onPrefs ? <CalendarsMenu prefs={prefs} onChange={onPrefs} /> : null}
+        </div>
 
         {/* Native Moduo — always on. */}
         <div
