@@ -46,7 +46,9 @@ CREATE OR REPLACE FUNCTION public.search__unaccent(p_text text)
   RETURNS text
   LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
   SET search_path = ''
-  RETURN extensions.unaccent('extensions.unaccent'::regdictionary, p_text);
+AS $$
+  SELECT extensions.unaccent('extensions.unaccent'::regdictionary, p_text)
+$$;
 
 COMMENT ON FUNCTION public.search__unaccent(text) IS
   'Search (GS-1): unaccent as an IMMUTABLE function, for indexed text and queries alike.';
@@ -117,10 +119,12 @@ CREATE OR REPLACE FUNCTION public.search__snippet(p_text text, p_query tsquery)
   RETURNS text
   LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT
   SET search_path = ''
-  RETURN pg_catalog.ts_headline('public.search_headline'::regconfig,
+AS $$
+  SELECT pg_catalog.ts_headline('public.search_headline'::regconfig,
     pg_catalog.left(p_text, 20000), p_query,
     'StartSel=' || pg_catalog.chr(57344) || ', StopSel=' || pg_catalog.chr(57345)
-    || ', MaxWords=24, MinWords=8, ShortWord=2, MaxFragments=1, FragmentDelimiter=" … "');
+    || ', MaxWords=24, MinWords=8, ShortWord=2, MaxFragments=1, FragmentDelimiter=" … "')
+$$;
 
 COMMENT ON FUNCTION public.search__snippet(text, tsquery) IS
   'Search (GS-1): a short snippet of the text with matches between U+E000 and U+E001.';
