@@ -26,6 +26,10 @@ rs.mock("./runtime.web.client", () => {
         read.filters.push([col, value]);
         return chain;
       },
+      in: (col: string, values: unknown) => {
+        read.filters.push([col, values]);
+        return chain;
+      },
       order: () => chain,
       limit: () => chain,
       maybeSingle: () => Promise.resolve(h.tables[table] ?? { data: null, error: null }),
@@ -78,6 +82,11 @@ describe("webCalendar.eventContext (CALR-10)", () => {
     expect(h.reads.find((r) => r.table === "slot_bookings")?.filters).toContainEqual([
       "calendar_event_id",
       "ev-1",
+    ]);
+    // A cancelled booking isn't how the event came to be.
+    expect(h.reads.find((r) => r.table === "slot_bookings")?.filters).toContainEqual([
+      "status",
+      ["pending", "confirmed"],
     ]);
     expect(h.reads.find((r) => r.table === "exposed_slot_links")?.filters).toContainEqual([
       "slot_id",

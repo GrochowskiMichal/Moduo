@@ -514,6 +514,7 @@ export const webCalendar: CalendarRuntime = {
         .from("slot_bookings")
         .select("slot_id, created_at")
         .eq("calendar_event_id", eventId)
+        .in("status", ["pending", "confirmed"])
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

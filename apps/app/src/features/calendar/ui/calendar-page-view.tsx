@@ -380,8 +380,10 @@ export function CalendarPageView({
   const onEventClick = useCallback(
     (chip: EventChip, rect: DOMRect) => {
       setTaskPopover(null);
-      // The panel already follows the selection; the card is for when it isn't showing.
+      // The Event panel already follows the selection; the card is for when it
+      // isn't showing (Notes follows the selection too, and keeps the card).
       if (
+        panelVariant === "detail" &&
         followedEventId(chip.occurrenceKey, panelVariant, readFeaturePanelState("calendar").right)
       ) {
         setEventPopover(null);

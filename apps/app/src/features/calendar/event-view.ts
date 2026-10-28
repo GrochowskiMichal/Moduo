@@ -7,7 +7,7 @@
 // private events: `is_private` isn't enforced until CALR-15's masked view, so
 // "Private · teammates see Busy" would be a claim the data doesn't keep.
 
-import type { ConferenceProvider } from "@contracts/vocabularies";
+import { type ConferenceProvider, GRANT_LEVELS } from "@contracts/vocabularies";
 
 import type { PanelVariantId } from "./prefs";
 import type { EventWriter } from "./writable";
@@ -119,10 +119,9 @@ export function canAddMeet(
   return writer === "google" && !event.conferenceUrl?.trim();
 }
 
-const RANK: Record<string, number> = { freebusy: 1, view: 2, edit: 3 };
-
+/** freebusy 1, view 2, edit 3, full 4 (the contracts' order); anything else sees nothing. */
 function rankOf(level: string | null | undefined): number {
-  return level ? (RANK[level] ?? 0) : 0;
+  return level ? (GRANT_LEVELS as readonly string[]).indexOf(level) + 1 : 0;
 }
 
 function joinNames(names: string[]): string {

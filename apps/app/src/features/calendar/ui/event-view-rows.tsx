@@ -49,6 +49,7 @@ import type {
   CalendarEventModel,
   CalendarEventPatch,
 } from "../events";
+import { inCalendarOverlay } from "./use-calendar-hotkeys";
 
 export type ViewerMember = { userId: string; name: string };
 
@@ -246,7 +247,16 @@ export function EventCalendarRows({
     calendarName: context?.calendarName ?? null,
     syncedAgo,
   });
-  const line = context?.share ? whoSeesLine(context.share, members, currentUserId) : null;
+  // Only the calendar's owner gets the line: their grants are the whole truth,
+  // while on a teammate's calendar the owner holds no grant row and the list
+  // of who else it is shared with isn't yours to read. It also waits for the
+  // workspace's people, or an empty list would read as "Only you see it".
+  // (The calendar's owner when read, else the event's own.)
+  const owned = !!currentUserId && (context?.calendarOwnerId ?? event.ownerId) === currentUserId;
+  const line =
+    owned && context?.share && members.length > 0
+      ? whoSeesLine(context.share, members, currentUserId)
+      : null;
   const booked = context?.bookedThrough ?? null;
 
   return (
@@ -260,7 +270,7 @@ export function EventCalendarRows({
         <WhoSeesRow
           line={line}
           calendarRef={event.calendarRef ?? null}
-          canShare={members.length >= 2 && context?.calendarOwnerId === currentUserId}
+          canShare={members.length >= 2}
           currentUserId={currentUserId}
           members={members}
           onReload={onReload}
@@ -285,6 +295,43 @@ const CAL_LEVELS = [
   { id: "edit", label: "Can edit" },
 ] as const;
 
+/**
+ * "Add a Meet link" (V). One request per event: until Google answers, the
+ * event has no link yet, and a second add could swap the first for another.
+ */
+function MeetAddRow({
+  eventId,
+  hasPlace,
+  onAdd,
+}: {
+  eventId: string;
+  hasPlace: boolean;
+  onAdd: () => void;
+}) {
+  const [askedFor, setAskedFor] = useState<string | null>(null);
+  const offered = askedFor !== eventId;
+  const add = () => {
+    if (!offered) return;
+    setAskedFor(eventId);
+    onAdd();
+  };
+  useAppHotkeys({
+    "calendar.add-meet": (e) => {
+      if (!offered || e.repeat || inCalendarOverlay(e)) return false;
+      add();
+    },
+  });
+  if (!offered) return null;
+  return (
+    <AddRow
+      icon={Video}
+      label={hasPlace ? "Add a Meet link, for anyone joining remotely" : "Add a Meet link"}
+      hint="V"
+      onClick={add}
+    />
+  );
+}
+
 /** Where: the place on two lines with Map, the link on two lines with Copy, and the adds. */
 export function EventWhereRows({
   event,
@@ -300,14 +347,6 @@ export function EventWhereRows({
   const place = placeLines(event.location);
   const link = linkLines(event);
   const [placeDraft, setPlaceDraft] = useState<string | null>(null);
-
-  const addMeet = () => onPatch({ meet: "add" });
-  useAppHotkeys({
-    "calendar.add-meet": () => {
-      if (!canMeet) return false;
-      addMeet();
-    },
-  });
 
   const commitPlace = () => {
     const value = placeDraft?.trim() ?? "";
@@ -382,12 +421,7 @@ export function EventWhereRows({
         )
       ) : null}
       {canMeet ? (
-        <AddRow
-          icon={Video}
-          label={place ? "Add a Meet link, for anyone joining remotely" : "Add a Meet link"}
-          hint="V"
-          onClick={addMeet}
-        />
+        <MeetAddRow eventId={event.id} hasPlace={!!place} onAdd={() => onPatch({ meet: "add" })} />
       ) : null}
     </div>
   );
@@ -483,8 +517,8 @@ export function EventLinkedRows({
     enabled: open,
   });
   useAppHotkeys({
-    "calendar.link": () => {
-      if (!linking) return false;
+    "calendar.link": (e) => {
+      if (!linking || e.repeat || inCalendarOverlay(e)) return false;
       setOpen(true);
     },
   });

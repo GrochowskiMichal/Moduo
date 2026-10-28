@@ -397,7 +397,7 @@ function useEventContext(
   members: readonly ViewerMember[],
   load: NonNullable<Props["loadContext"]>,
 ): { value: EventContext | null; reload: () => void } {
-  const [state, setState] = useState<{ id: string; value: EventContext } | null>(null);
+  const [state, setState] = useState<{ key: string; value: EventContext } | null>(null);
   const [tick, setTick] = useState(0);
   const reload = useCallback(() => setTick((t) => t + 1), []);
   // The row's own fields don't change what is read; its id and calendar do.
@@ -411,7 +411,7 @@ function useEventContext(
     let active = true;
     load(eventRef.current, { userId, members })
       .then((value) => {
-        if (active) setState({ id: event.id, value });
+        if (active) setState({ key: `${eventId}:${calendarRef ?? ""}`, value });
       })
       .catch(() => {
         if (active) setState(null);
@@ -420,7 +420,7 @@ function useEventContext(
       active = false;
     };
   }, [eventId, calendarRef, userId, members, load, tick]);
-  return { value: state?.id === eventId ? state.value : null, reload };
+  return { value: state?.key === `${eventId}:${calendarRef ?? ""}` ? state.value : null, reload };
 }
 
 /** The Repeats row: the picker, and the series note while it repeats. */
