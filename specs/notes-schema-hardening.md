@@ -96,7 +96,7 @@ Almost nothing changes for a person. The behaviour that does change, each ratifi
 
 1. **Grants (NS-1).**
    - `REVOKE ALL … FROM anon` on `notes`, `note_updates`, `note_shares` and `exposed_notes`.
-   - From `authenticated`, revoke INSERT, UPDATE, DELETE, TRUNCATE, TRIGGER and REFERENCES on `notes`, `note_updates` and `note_shares`, and ALL on `exposed_notes`. Keep SELECT on `notes` and `note_updates` (the app reads them until NS-7).
+   - From `authenticated`, `REVOKE ALL` on `notes`, `note_updates`, `note_shares`, `note_favorites` and `exposed_notes`, then `GRANT SELECT` back on `notes`, `note_updates` (the app reads them until NS-7) and `note_favorites`. A verb list would leave Postgres 17's MAINTAIN behind. No client reads `note_shares`, so it keeps nothing. `note_updates_id_seq` loses every client grant (a `setval` could rewind it).
    - Drop the `exposed_notes` public-read policy. Revoke `notes_module_permission` from `authenticated`: no client calls it, and its SQL callers are definers.
    - `DROP FUNCTION IF EXISTS private.user_can_read_note(…)` and `private.user_can_edit_note(…)`. They are prod-only, with no caller.
    - `DROP INDEX IF EXISTS notes_workspace_pinned_idx, notes_workspace_share_scope_idx, idx_notes_workspace_id`. They are prod-only. `(workspace_id, deleted_at)` covers the prefix, and the pinned one rewrites on every `updated_at`.
