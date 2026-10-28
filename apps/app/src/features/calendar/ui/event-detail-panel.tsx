@@ -42,6 +42,7 @@ import {
 } from "./event-view-rows";
 import { RepeatPicker } from "./repeat-picker";
 import { inCalendarOverlay } from "./use-calendar-hotkeys";
+import { SecondZoneTime } from "./zone-gutter";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -284,6 +285,7 @@ export function EventDetailPanel({
           <span className="text-sm text-foreground">{new Date(event.endsAt).toLocaleString()}</span>
         )}
       </Field>
+      {event.allDay ? null : <SecondZoneTime startsAt={event.startsAt} endsAt={event.endsAt} />}
       <Field label="All day">
         <Switch
           checked={event.allDay}

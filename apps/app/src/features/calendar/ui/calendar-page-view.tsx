@@ -83,6 +83,7 @@ import { useCalendarEventDeepLink } from "./use-calendar-event-deep-link";
 import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
+import { useCalendarNarrowPanels } from "./use-calendar-narrow-panels";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
@@ -394,6 +395,7 @@ export function CalendarPageView({
   // ── drag-to-schedule (the universal drag contract, AC6)
   const drag = useCalendarTaskDrag({ tasks, sessions, canEdit, commands });
 
+  useCalendarNarrowPanels(setPanelVariant);
   const keys = useCalendarHotkeys({
     view: viewState.view,
     days: range.days,
@@ -641,6 +643,7 @@ export function CalendarPageView({
             onSelectDate={goToDate}
             busyDayKeys={busyDayKeys}
             prefs={prefs}
+            onPrefs={updatePrefs}
             accounts={calendar.accounts}
             accountHues={accountHues}
             hiddenAccountIds={prefs.hiddenAccountIds}
