@@ -62,12 +62,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   {
     rule: "supabase-error-swallowed",
     file: "apps/app/src/lib/runtime.web.notes.ts",
-    snippet: "if (error || !data) return null;",
-    why: "Deliberate: Legacy web read nothing reaches; the redb import goes through the Tauri runtime.",
-  },
-  {
-    rule: "supabase-error-swallowed",
-    file: "apps/app/src/lib/runtime.web.notes.ts",
     snippet:
       'if (error) { const undeployed = error.code === "42883" || error.code === "PGRST202"; if (!undeployed) { console.warn("[n',
     why: "Deliberate: Opportunistic repair sweep: logs a warning and becomes a no-op.",

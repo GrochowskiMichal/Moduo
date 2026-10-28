@@ -16,7 +16,7 @@ import type { NotificationItem } from "../features/spine/notifications";
 import { shapeRecentLinks } from "../features/spine/recent";
 import type { RawLinkSuggestion } from "../features/spine/suggest";
 import type { EntityRecord } from "./entity-links";
-import { DbError, runQuery, runRpc, untypedDb } from "./runtime.db";
+import { DbError, runQuery, runRpc } from "./runtime.db";
 import type { CommentReactionMark, SpineComment, SpineRuntime } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
 import { createReferencePreviews } from "./runtime.web.previews";
@@ -241,9 +241,7 @@ export const webSpine: SpineRuntime = {
   async searchAll({ workspaceId, query, types, limitPerType, context }) {
     const q = query.trim();
     if (!q) return [];
-    // Untyped until the generated types are regenerated from prod after the
-    // migration ships (20261029090000_search_all.sql).
-    const { data, error } = await untypedDb(supabaseClient).rpc("search_all", {
+    const { data, error } = await supabaseClient.rpc("search_all", {
       p_workspace_id: workspaceId,
       p_query: q,
       p_types: types ? [...types] : null,
@@ -272,12 +270,11 @@ export const webSpine: SpineRuntime = {
     });
   },
 
-  // Recents (GS-8). Untyped until the generated types are regenerated from
-  // prod after 20261029150000_search_recents.sql ships.
+  // Recents (GS-8).
   async recordOpen({ workspaceId, type, id }) {
     // Only a uuid: a desktop mail thread's device id never leaves the device (EM-3).
     if (!UUID.test(id)) return;
-    const { error } = await untypedDb(supabaseClient).rpc("search_op_record_open", {
+    const { error } = await supabaseClient.rpc("search_op_record_open", {
       p_workspace_id: workspaceId,
       p_entity_type: type,
       p_entity_id: id,
@@ -287,7 +284,7 @@ export const webSpine: SpineRuntime = {
   },
 
   async recents({ workspaceId, limit }) {
-    const { data, error } = await untypedDb(supabaseClient).rpc("search_recents_list", {
+    const { data, error } = await supabaseClient.rpc("search_recents_list", {
       p_workspace_id: workspaceId,
       p_limit: limit ?? 8,
     });
@@ -302,7 +299,7 @@ export const webSpine: SpineRuntime = {
   },
 
   async forgetRecent({ workspaceId, type, id }) {
-    const { error } = await untypedDb(supabaseClient).rpc("search_op_forget_open", {
+    const { error } = await supabaseClient.rpc("search_op_forget_open", {
       p_workspace_id: workspaceId,
       p_entity_type: type,
       p_entity_id: id,
@@ -311,7 +308,7 @@ export const webSpine: SpineRuntime = {
   },
 
   async clearRecents({ workspaceId }) {
-    const { error } = await untypedDb(supabaseClient).rpc("search_op_clear_recents", {
+    const { error } = await supabaseClient.rpc("search_op_clear_recents", {
       p_workspace_id: workspaceId,
     });
     if (error) throw new DbError(error);

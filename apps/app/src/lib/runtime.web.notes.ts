@@ -25,7 +25,7 @@ import {
   type Truncation,
 } from "./paged-select";
 import { publicConfig } from "./public-config";
-import { DbError, jsonObject, runQuery, runRpc, untypedDb } from "./runtime.db";
+import { DbError, jsonObject, runQuery, runRpc } from "./runtime.db";
 import type { NotesRuntime, NotesV2Runtime } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
 import { joinNoteLive } from "./runtime.web.notes-live";
@@ -57,7 +57,7 @@ async function listMetaViaRpc(workspaceId: string) {
     page: async (offset, limit) => {
       // The server stops at the cap: past it there is nothing to ask for.
       if (offset >= READ_CAPS.notes) return { data: [], error: null };
-      const { data, error } = await untypedDb(supabaseClient)
+      const { data, error } = await supabaseClient
         .rpc("notes_list_meta", { p_workspace_id: workspaceId, p_trash_since: trashSince })
         .range(offset, offset + limit - 1);
       return { data: (data ?? null) as unknown[] | null, error };
@@ -96,7 +96,7 @@ async function pullDocViaRpc({ workspaceId, noteId, sinceUpdateId, knownDocVersi
   let snapshotB64: string | null = null;
   const updates: NoteUpdateRow[] = [];
   for (let first = true; ; first = false) {
-    const { data, error } = await untypedDb(supabaseClient).rpc("notes_pull", {
+    const { data, error } = await supabaseClient.rpc("notes_pull", {
       p_workspace_id: workspaceId,
       p_note_id: noteId,
       p_after_id: after,
@@ -130,82 +130,6 @@ function readPullPage(data: unknown) {
   };
 }
 
-/** Before NS-7's migration: the two table reads through RLS. */
-async function pullDocFromTables({
-  workspaceId,
-  noteId,
-  sinceUpdateId,
-  knownDocVersion,
-}: PullArgs): Promise<NoteDocPull> {
-  // Log FIRST, snapshot SECOND. A concurrent compaction between the two
-  // reads then only ever makes the snapshot NEWER than the log we hold —
-  // applying both stays lossless (Yjs is idempotent). The reverse order
-  // could pair a stale snapshot with a log missing its folded tail.
-  // Paged to the end (NR-3): one select stops at PostgREST's 1,000-row
-  // ceiling, so a long log silently lost its tail. A failed page fails
-  // the pull rather than returning a partial log the cursor would skip.
-  // NR-6 adds who wrote each row; until that migration is applied the
-  // select 42703s, so retry once with the original columns.
-  const readLog = (cols: string) =>
-    readAfterCursor({
-      after: sinceUpdateId ?? 0,
-      idOf: (row: { id: number | string }) => Number(row.id),
-      page: async (after, limit) =>
-        supabaseClient
-          .from("note_updates")
-          .select<string, { id: number | string }>(cols)
-          .eq("note_id", noteId)
-          .gt("id", after)
-          .order("id", { ascending: true })
-          .limit(limit),
-    });
-  let updRes = await readLog("id, client_id, client_seq, update_b64, origin, actor_key_id");
-  if (updRes.error && (updRes.error as { code?: string }).code === "42703") {
-    updRes = await readLog("id, client_id, client_seq, update_b64");
-  }
-  if (updRes.error) throw new DbError(updRes.error);
-  const updates = mapKnownRows(updRes.rows, mapNoteUpdateRow);
-
-  // Every snapshot change (compaction, seed) bumps doc_version, so an
-  // unchanged version means the snapshot adds nothing to what we hold.
-  if (knownDocVersion != null) {
-    const ver = await supabaseClient
-      .from("notes")
-      .select("doc_version")
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .single();
-    if (!ver.error && ver.data?.doc_version === knownDocVersion) {
-      return { snapshotB64: null, docVersion: knownDocVersion, updates };
-    }
-  }
-
-  const noteRes = await supabaseClient
-    .from("notes")
-    .select("doc_state, doc_version")
-    .eq("id", noteId)
-    .eq("workspace_id", workspaceId)
-    .single();
-  if (noteRes.error) {
-    if (noteRes.error.code !== "42703") throw new DbError(noteRes.error);
-    // Pre-migration there is no doc_version column — degrade to the
-    // legacy snapshot-only shape rather than breaking the open note.
-    const legacy = await supabaseClient
-      .from("notes")
-      .select("doc_state")
-      .eq("id", noteId)
-      .eq("workspace_id", workspaceId)
-      .single();
-    if (legacy.error) throw new DbError(legacy.error);
-    return { snapshotB64: legacy.data?.doc_state ?? null, docVersion: 0, updates: [] };
-  }
-  return {
-    snapshotB64: noteRes.data?.doc_state ?? null,
-    docVersion: noteRes.data?.doc_version ?? 0,
-    updates,
-  };
-}
-
 export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
   // LEGACY read-only surface (see runtime.types.ts) — the dashboard preview
   // widget on web; the redb import reads through the tauri implementation.
@@ -221,15 +145,13 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
       );
       return data ?? [];
     },
-    async getDocState(_workspaceId, noteId) {
-      const { data, error } = await supabaseClient
-        .from("notes")
-        .select("doc_state")
-        .eq("id", noteId)
-        .single();
-      if (error || !data) return null;
+    async getDocState(workspaceId, noteId) {
+      // The snapshot through notes_pull (NS-7): content lives in note_bodies
+      // since NS-11, and notes_pull checks access once.
+      const pulled = await pullDocViaRpc({ workspaceId, noteId }).catch(() => null);
+      if (!pulled) return null;
       return {
-        snapshotB64: data.doc_state ?? "",
+        snapshotB64: pulled.snapshotB64 ?? "",
         lastCompactedUpdateId: 0,
         updates: [],
       };
@@ -281,7 +203,9 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
     },
 
     async pullDoc(args) {
-      return (await pullDocViaRpc(args)) ?? pullDocFromTables(args);
+      const pulled = await pullDocViaRpc(args);
+      if (!pulled) throw new Error("notes_pull is not deployed on this database");
+      return pulled;
     },
 
     async create({ workspaceId, id, parentId, title, position, icon }) {
@@ -317,10 +241,9 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
         p_position: position ?? "",
       };
       // p_follow_parent goes only when asked, so a plain move works on a
-      // database without it. Not in prod's types until 20261020141000 ships:
-      // untyped until then, then `bun run db:types` and drop untypedDb.
+      // database without it.
       const follow = Boolean(followParent && parentId);
-      const { data, error } = await untypedDb(supabaseClient).rpc(
+      const { data, error } = await supabaseClient.rpc(
         "notes_op_move",
         follow ? { ...args, p_follow_parent: true } : args,
       );
@@ -666,9 +589,7 @@ export const webNotes: { notes: NotesRuntime; notesV2: NotesV2Runtime } = {
     async search({ workspaceId, query, limit }) {
       const q = query.trim();
       if (!q) return [];
-      // Untyped until the generated types are regenerated from prod after the
-      // migration ships (20261028230000_notes_search.sql).
-      const { data, error } = await untypedDb(supabaseClient).rpc("notes__search", {
+      const { data, error } = await supabaseClient.rpc("notes__search", {
         p_workspace_id: workspaceId,
         p_query: q,
         p_limit: limit ?? 30,
