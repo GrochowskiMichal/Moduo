@@ -584,6 +584,28 @@ describe("content author kinds (chat messages and comments)", () => {
   });
 });
 
+describe("note share modes (NS-9)", () => {
+  it("mirror the notes_share_mode_chk CHECK; parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.NOTE_SHARE_MODES]).toEqual(["inherit", "custom"]);
+    const sql = readFileSync(
+      new URL("../../../migrations/20261006210000_perm_sharing.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain(
+      `CHECK (share_mode IN (${v.NOTE_SHARE_MODES.map((m) => `'${m}'`).join(",")}))`,
+    );
+    expect(v.parseNoteShareMode("inherit").success).toBe(true);
+    expect(v.parseNoteShareMode("selected").success).toBe(false);
+    // A missing or unknown mode reads as custom: the note's own grants, never its parent's.
+    expect(v.normalizeNoteShareMode("inherit")).toBe("inherit");
+    expect(v.normalizeNoteShareMode(undefined)).toBe("custom");
+    expect(v.normalizeNoteShareMode("selected")).toBe("custom");
+    expect(v.isNoteShareMode("custom")).toBe(true);
+    expect(v.isNoteShareMode("private")).toBe(false);
+  });
+});
+
 describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", () => {
   it("default to Moduo's six, in order", async () => {
     const v = await import("./vocabularies.ts");
