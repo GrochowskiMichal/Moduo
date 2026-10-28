@@ -56,6 +56,9 @@ function shapeContact(c: Row): Row {
   };
 }
 
+/** The snippet's highlight marks (U+E000 / U+E001, the search contract's). */
+const SEARCH_MARKS = /[\uE000\uE001]/g;
+
 function shapeCompany(c: Row): Row {
   return { id: c.id, name: c.name, domains: c.domains, website: c.website };
 }
@@ -164,59 +167,59 @@ export const contactsConnectorModule: ConnectorModule = {
     },
     {
       name: "contacts_search",
-      description: "Search people and companies by name or email.",
+      description:
+        "Search people and companies by words in their name, job title, email or domain (word-starts, any order, accents ignored; quotes for a phrase, -word to exclude). Returns the ones you can open, best first: a person with their company, and a snippet with the match in **bold** when it is not in the name.",
       access: "view",
       hints: "read",
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Name / email substring to match." },
-          limit: { type: "number", description: "Max results (default 20, max 50)." },
+          query: { type: "string", description: "The search query (websearch syntax)." },
+          limit: { type: "number", description: "Max results of each kind (default 20, max 50)." },
         },
         required: ["query"],
       },
+      // The server's contacts__search and companies__search, the same rows ⌘K
+      // gets (GS-5): the key's scope and its person's access are applied there,
+      // before the limit, so nothing is filtered here. The details are read
+      // only for the ids they returned.
       handler: async (args, ctx) => {
-        const q = str(args, "query");
-        const limit = clampLimit(args, 20, 50);
-        const like = `%${q}%`;
-        // Two single-column ilike queries (merged) rather than a `.or()` — the
-        // .or grammar is delimited by , ( ) . so a query like "acme.com" would
-        // malform it; a plain .ilike value has no such grammar.
-        const peopleQ = (col: "name" | "email") =>
-          rows(
-            ctx.db
-              .from("contacts")
-              .select("*")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .ilike(col, like)
-              .order("name")
-              .limit(limit),
+        const params = {
+          p_workspace_id: ctx.key.workspaceId,
+          p_query: str(args, "query"),
+          p_limit: clampLimit(args, 20, 50),
+        };
+        const hits = async (fn: string): Promise<Row[]> => {
+          const { data, error } = await ctx.db.rpc(fn, params);
+          if (error) throw new Error(error.message);
+          return (data ?? []) as Row[];
+        };
+        const details = async (table: "contacts" | "companies", ids: string[]) => {
+          if (ids.length === 0) return new Map<string, Row>();
+          const found = await rows(
+            ctx.db.from(table).select("*").eq("workspace_id", ctx.key.workspaceId).in("id", ids),
           );
-        const [byName, byEmail, companies] = await Promise.all([
-          peopleQ("name"),
-          peopleQ("email"),
-          rows(
-            ctx.db
-              .from("companies")
-              .select("*")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .ilike("name", like)
-              .order("name")
-              .limit(limit),
-          ),
+          return new Map(found.map((r) => [r.id as string, r]));
+        };
+        const snippet = (h: Row) =>
+          typeof h.snippet === "string" ? h.snippet.replace(SEARCH_MARKS, "**").replace(/\u200B/g, "") : null;
+        const people = await hits("contacts__search");
+        const companies = await hits("companies__search");
+        const [personRows, companyRows] = await Promise.all([
+          details("contacts", people.map((h) => h.entity_id)),
+          details("companies", companies.map((h) => h.entity_id)),
         ]);
-        const peopleById = new Map<string, Row>();
-        for (const c of [...byName, ...byEmail]) if (!peopleById.has(c.id)) peopleById.set(c.id, c);
-        const visible = await visibleIds(ctx, "contact");
-        const people = [...peopleById.values()].filter((p) => visible.has(p.id)).slice(0, limit);
-        const companyIds = new Set(people.map((p) => p.company_id).filter(Boolean));
         return {
-          contacts: people.map(shapeContact),
-          companies: companies
-            .filter((c) => c.owner_id === ctx.key.createdBy || companyIds.has(c.id))
-            .map(shapeCompany),
+          contacts: people.map((h) => ({
+            ...shapeContact(personRows.get(h.entity_id) ?? { id: h.entity_id, name: h.title }),
+            company: h.context ?? null,
+            match: h.match,
+            snippet: snippet(h),
+          })),
+          companies: companies.map((h) => ({
+            ...shapeCompany(companyRows.get(h.entity_id) ?? { id: h.entity_id, name: h.title }),
+            match: h.match,
+          })),
         };
       },
     },
