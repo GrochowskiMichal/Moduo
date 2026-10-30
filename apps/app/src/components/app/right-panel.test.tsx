@@ -34,7 +34,6 @@ afterEach(cleanup);
 const CALENDAR_VIEWS = {
   tasks: () => <p>Tasks body</p>,
   detail: () => <p>Detail body</p>,
-  notes: () => <p>Notes body</p>,
 };
 
 function renderPanel(props: Partial<React.ComponentProps<typeof RightPanel>> = {}) {
@@ -94,21 +93,20 @@ describe("the title row names the view and switches it", () => {
     const items = within(menu).getAllByRole("menuitemradio");
     expect(items.map((i) => i.textContent)).toEqual([
       expect.stringMatching(/^Detail(⌥|Alt )1$/),
-      expect.stringMatching(/^Notes(⌥|Alt )2$/),
-      expect.stringMatching(/^Plan(⌥|Alt )3$/),
+      expect.stringMatching(/^Plan(⌥|Alt )2$/),
     ]);
-    expect(items[2].getAttribute("aria-checked")).toBe("true");
-    // One hairline, between Notes (about this) and Plan (alongside).
+    expect(items[1].getAttribute("aria-checked")).toBe("true");
+    // One hairline, between Detail (about this) and Plan (alongside).
     const separators = within(menu).getAllByRole("separator");
     expect(separators).toHaveLength(1);
-    expect(separators[0].previousElementSibling).toBe(items[1]);
+    expect(separators[0].previousElementSibling).toBe(items[0]);
   });
 
   it("picking a view from the menu asks the page to switch", () => {
     const { onChange } = renderPanel();
     const menu = openMenu("Panel view: Plan");
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Notes/ }));
-    expect(onChange).toHaveBeenCalledWith("notes");
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Detail/ }));
+    expect(onChange).toHaveBeenCalledWith("detail");
   });
 
   it("a module with one view shows a plain title, not a menu", () => {
@@ -143,24 +141,26 @@ describe("the title row names the view and switches it", () => {
         .getByRole("menuitemradio", { name: /Detail/ })
         .getAttribute("aria-checked"),
     ).toBe("true");
-    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Notes/ }));
-    expect(onChange).toHaveBeenCalledWith("notes");
+    fireEvent.click(within(menu).getByRole("menuitemradio", { name: /Plan/ }));
+    expect(onChange).toHaveBeenCalledWith("tasks");
   });
 });
 
 describe("⌥1–9", () => {
   it("picks the view at that position in the menu", () => {
-    const { onChange } = renderPanel();
-    altDigit(1);
-    expect(onChange).toHaveBeenLastCalledWith("detail");
+    const { onChange } = renderPanel({ activeId: "detail" });
     altDigit(2);
-    expect(onChange).toHaveBeenLastCalledWith("notes");
+    expect(onChange).toHaveBeenLastCalledWith("tasks");
+    cleanup();
+    const { onChange: fromPlan } = renderPanel();
+    altDigit(1);
+    expect(fromPlan).toHaveBeenLastCalledWith("detail");
   });
 
   it("does nothing past the last view, for the open view, or while typing", () => {
     const { onChange } = renderPanel();
-    altDigit(4);
-    altDigit(3); // Tasks is already open
+    altDigit(3);
+    altDigit(2); // Plan is already open
     const input = document.createElement("input");
     document.body.appendChild(input);
     altDigit(1, input);
@@ -305,9 +305,9 @@ describe("the body's crossfade", () => {
     const bodyOf = (text: string) => screen.getByText(text).parentElement as HTMLElement;
     expect(bodyOf("Tasks body").className).not.toMatch(/motion-view/);
     rerender(
-      <RightPanel module="calendar" views={CALENDAR_VIEWS} activeId="notes" onChange={() => {}} />,
+      <RightPanel module="calendar" views={CALENDAR_VIEWS} activeId="detail" onChange={() => {}} />,
     );
-    expect(bodyOf("Notes body").className).toMatch(/motion-view/);
+    expect(bodyOf("Detail body").className).toMatch(/motion-view/);
   });
 });
 
@@ -347,7 +347,7 @@ describe("the title row's actions slot (MOD-118 follow-up)", () => {
     expect(screen.getByText("Tasks body").parentElement?.contains(slot)).toBe(false);
     rerender(
       <TooltipProvider>
-        <RightPanel module="calendar" views={views} activeId="notes" onChange={() => {}} />
+        <RightPanel module="calendar" views={views} activeId="detail" onChange={() => {}} />
       </TooltipProvider>,
     );
     expect(screen.queryByRole("button", { name: "Pin" })).toBeNull();

@@ -13,12 +13,10 @@ import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell
 import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import { toggleFocusPause } from "../../focus/timer";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
-import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import {
   useTaskById,
   useTaskCommands,
@@ -85,7 +83,7 @@ import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarLens } from "./use-calendar-lens";
-import { useCalendarNarrowPanels } from "./use-calendar-narrow-panels";
+import { useCalendarPlanKey } from "./use-calendar-plan-key";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
@@ -395,7 +393,7 @@ export function CalendarPageView({
   // ── drag-to-schedule (the universal drag contract, AC6)
   const drag = useCalendarTaskDrag({ tasks, sessions, canEdit: lens.edit(canEdit), commands });
 
-  useCalendarNarrowPanels(setPanelVariant);
+  useCalendarPlanKey(setPanelVariant);
   const keys = useCalendarHotkeys({
     view: viewState.view,
     days: range.days,
@@ -547,8 +545,8 @@ export function CalendarPageView({
   );
   useCaptureSource(captureSource);
 
-  // The registered views (features/calendar/panel-views.ts), unchanged from the
-  // old tabs: the menu lists Detail and Notes, then Tasks below the hairline.
+  // The registered views (features/calendar/panel-views.ts): Detail, then Plan
+  // below the hairline. Linked notes show inside Detail, as a task's do.
   const panelViews = useMemo(
     () => ({
       tasks: () => (
@@ -610,29 +608,6 @@ export function CalendarPageView({
             <span className="text-sm text-muted-foreground">Select something on the calendar.</span>
           </div>
         ),
-      // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
-      // plus New-linked-note. Focus follows the same detail selection.
-      notes: () => (
-        <LinkedNotesPanel
-          runtime={runtime}
-          workspaceId={workspaceId}
-          focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
-          focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
-          focusIcon={
-            detailTarget?.type === "event"
-              ? "calendar"
-              : detailTarget?.type === "task"
-                ? "check-square"
-                : null
-          }
-          canEdit={calendar.canEdit}
-          onOpenNote={(id) =>
-            window.dispatchEvent(
-              new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
-            )
-          }
-        />
-      ),
     }),
     [
       calendar,

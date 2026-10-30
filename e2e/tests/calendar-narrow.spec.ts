@@ -3,10 +3,10 @@ import { expect, type Locator, type Page, test } from "@playwright/test";
 import { DEV, devWorkspace, type Session, signIn, signInPage } from "./support/local-stack";
 
 /**
- * AC14 (CALR-13) — narrow windows, Calendar only: below 1600 px the calendars
- * panel folds, below 1360 px one side panel shows at a time, and at 1024 × 700
- * and 1280 × 800 no toolbar or day-header text overlaps or clips. Widening the
- * window gives back both panels.
+ * AC14 (CALR-13) — narrow windows: Calendar keeps its side panels as you left
+ * them, as every module does (it no longer folds them), and at 1024 × 700 and
+ * 1280 × 800 no toolbar or day-header text overlaps or clips. ⌥3 still opens
+ * Plan when the right panel is closed.
  *   scripts/agent/e2e.sh tests/calendar-narrow.spec.ts
  */
 
@@ -33,7 +33,6 @@ async function openCalendar(page: Page, width: number, height: number) {
     const map = JSON.parse(window.localStorage.getItem(key) ?? "{}");
     map.calendar = { left: true, right: true };
     window.localStorage.setItem(key, JSON.stringify(map));
-    window.localStorage.removeItem("moduo:calendar:wide-panels");
   });
   await page.goto("/calendar");
   await expect(page.getByRole("toolbar", { name: "Calendar controls" })).toBeVisible({
@@ -87,10 +86,10 @@ for (const [width, height] of [
   [1024, 700],
   [1280, 800],
 ] as const) {
-  test(`${width} × ${height}: one side panel, nothing overlaps`, async ({ page }) => {
+  test(`${width} × ${height}: both panels stay, nothing overlaps`, async ({ page }) => {
     await openCalendar(page, width, height);
+    await expect(side(page, "left")).toBeVisible();
     await expect(side(page, "right")).toBeVisible();
-    await expect(side(page, "left")).toHaveCount(0);
 
     const toolbar = page.getByRole("toolbar", { name: "Calendar controls" });
     await expectNoOverlapOrClip(toolbar);
@@ -101,15 +100,11 @@ for (const [width, height] of [
     const main = (await page.locator("main").first().boundingBox())!;
     expect(toolbarBox.x + toolbarBox.width).toBeLessThanOrEqual(main.x + main.width + 0.5);
     expect(overlaps(toolbarBox, (await side(page, "right").boundingBox())!)).toBe(false);
-
-    // Opening the calendars panel folds Plan: still one side panel.
-    await page.getByRole("button", { name: "Expand left panel" }).click();
-    await expect(side(page, "left")).toBeVisible();
-    await expect(side(page, "right")).toHaveCount(0);
+    expect(overlaps(toolbarBox, (await side(page, "left").boundingBox())!)).toBe(false);
   });
 }
 
-test("⌥3 opens Plan where it folded", async ({ page }) => {
+test("⌥3 opens Plan when the right panel is closed", async ({ page }) => {
   await openCalendar(page, 1024, 700);
   await page.getByRole("button", { name: "Collapse right panel" }).click();
   await expect(side(page, "right")).toHaveCount(0);
@@ -117,13 +112,5 @@ test("⌥3 opens Plan where it folded", async ({ page }) => {
   await page.keyboard.press("Alt+3");
   await expect(side(page, "right")).toBeVisible();
   await expect(side(page, "right")).toContainText(/Tasks|Plan/);
-});
-
-test("1440 folds only the calendars panel; a wide window gives both back", async ({ page }) => {
-  await openCalendar(page, 1440, 900);
-  await expect(side(page, "right")).toBeVisible();
-  await expect(side(page, "left")).toHaveCount(0);
-  await page.setViewportSize({ width: 1700, height: 900 });
   await expect(side(page, "left")).toBeVisible();
-  await expect(side(page, "right")).toBeVisible();
 });

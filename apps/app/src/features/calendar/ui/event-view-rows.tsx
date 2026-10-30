@@ -1,7 +1,7 @@
 // The Event view's rows (CALR-10, AC25): the calendar with who sees it and the
 // booking, Where (place with Map, link with Copy, Add a place, Add a Meet link
-// on V), people with their replies, and linked notes, tasks and the rest as
-// two-line rows with Link a person, note or task (L).
+// on V), people with their replies, and Linked: reference cards as a task's,
+// with + (or L) to link a person, note or task.
 
 import {
   Calendar,
@@ -20,6 +20,7 @@ import { type ReactNode, useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
+import { CollectionHeader } from "../../../components/ui/collection-header";
 import { GroupHeader } from "../../../components/ui/group-header";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
@@ -33,8 +34,8 @@ import { cn } from "../../../lib/utils";
 import { ShareMenu } from "../../sharing/share-menu";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
 import { useMentionSearch } from "../../spine/hooks/use-mention-search";
-import { resolveEntityIcon } from "../../spine/icon-map";
-import type { HubRow, HubSection } from "../../spine/rollup";
+import { Reference } from "../../spine/references/ui/reference";
+import type { HubSection } from "../../spine/rollup";
 import { MentionPicker } from "../../spine/ui/mention-picker";
 import {
   type EventContext,
@@ -476,22 +477,11 @@ export function EventPeopleRows({ attendees }: { attendees: readonly CalendarAtt
   );
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  note: "Note",
-  task: "Task",
-  contact: "Person",
-  company: "Company",
-  event: "Event",
-  project: "Project",
-};
-
 const LINKABLE = ["contact", "note", "task"];
+/** Linked shows this many cards, then "Show n more" (as a task's). */
+const LINKED_VISIBLE = 5;
 
-function openEntity(ref: EntityRef) {
-  window.dispatchEvent(new CustomEvent(ENTITY_OPEN_EVENT, { detail: ref }));
-}
-
-/** Notes, tasks and anything else linked, as two-line rows, then Link (L). */
+/** Linked: one header with + (and L), then a reference card per item, as a task's Linked. */
 export function EventLinkedRows({
   runtime,
   workspaceId,
@@ -515,9 +505,7 @@ export function EventLinkedRows({
   onRetry: () => void;
 }) {
   const rows = sections.flatMap((s) => s.rows);
-  const notes = rows.filter((r) => r.other.type === "note");
-  const tasks = rows.filter((r) => r.other.type === "task");
-  const rest = rows.filter((r) => r.other.type !== "note" && r.other.type !== "task");
+  const [all, setAll] = useState(false);
   const [open, setOpen] = useState(false);
   const openPicker = useCallback(() => setOpen(true), []);
   const linking = canEdit && !!runtime;
@@ -539,72 +527,67 @@ export function EventLinkedRows({
   });
   useEventLinkRequest(eventId ?? "", linking && !!eventId, openPicker);
 
-  const row = (r: HubRow) => (
-    <TwoLineRow
-      key={r.link.id}
-      icon={resolveEntityIcon(r.other.type, r.icon)}
-      first={r.title}
-      second={r.snippet ?? TYPE_LABELS[r.other.type] ?? null}
-      onOpen={() => openEntity(r.other)}
-      trailing={
-        canEdit ? (
-          <IconButton
-            icon={X}
-            label="Unlink"
-            tooltip="Unlink (keeps the item)"
-            size="sm"
-            className="shrink-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-            onClick={() => onUnlink(r.link.id)}
-          />
-        ) : null
-      }
-    />
-  );
-
+  const shown = all ? rows : rows.slice(0, LINKED_VISIBLE);
+  // The same Linked as a task's: one header with +, then a card per item.
   return (
-    <div className="flex flex-col gap-0.5">
+    <div>
+      <CollectionHeader
+        label="Linked"
+        count={rows.length}
+        action={
+          linking ? (
+            <MentionPicker
+              open={open}
+              onOpenChange={setOpen}
+              trigger={<IconButton icon={Plus} label="Link a person, note or task" />}
+              candidates={search.candidates}
+              query={search.query}
+              onQueryChange={search.setQuery}
+              loading={search.loading}
+              placeholder="Link a person, note or task…"
+              emptyLabel="Nothing to link."
+              onSelect={(candidate) => {
+                setOpen(false);
+                if (candidate.kind === "entity")
+                  onLink(candidate.ref, candidate.label, candidate.icon);
+              }}
+            />
+          ) : null
+        }
+      />
       {status === "error" ? (
-        <p className="px-2 text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Linked items didn’t load.{" "}
           <Button variant="ghost" size="sm" onClick={onRetry} className="-my-1 px-1.5 text-xs">
             Retry
           </Button>
         </p>
       ) : null}
-      {notes.length > 0 ? (
-        <>
-          <GroupHeader label="Notes" count={notes.length} />
-          {notes.map(row)}
-        </>
-      ) : null}
-      {tasks.length > 0 ? (
-        <>
-          <GroupHeader label="Tasks" count={tasks.length} />
-          {tasks.map(row)}
-        </>
-      ) : null}
-      {rest.length > 0 ? (
-        <>
-          <GroupHeader label="Linked" count={rest.length} />
-          {rest.map(row)}
-        </>
-      ) : null}
-      {linking ? (
-        <MentionPicker
-          open={open}
-          onOpenChange={setOpen}
-          trigger={<AddRow icon={Plus} label="Link a person, note or task" hint="L" />}
-          candidates={search.candidates}
-          query={search.query}
-          onQueryChange={search.setQuery}
-          loading={search.loading}
-          placeholder="Link a person, note or task…"
-          emptyLabel="Nothing to link."
-          onSelect={(candidate) => {
-            setOpen(false);
-            if (candidate.kind === "entity") onLink(candidate.ref, candidate.label, candidate.icon);
-          }}
-        />
+      <div className="flex flex-col gap-1.5">
+        {shown.map((r) => (
+          <div key={r.link.id} className="group relative">
+            <Reference type={r.other.type} id={r.other.id} display="card" fallbackLabel={r.title} />
+            {canEdit ? (
+              <IconButton
+                icon={X}
+                label="Unlink"
+                tooltip="Unlink (keeps the item)"
+                onClick={() => onUnlink(r.link.id)}
+                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+              />
+            ) : null}
+          </div>
+        ))}
+      </div>
+      {!all && rows.length > LINKED_VISIBLE ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAll(true)}
+          className="-ms-2 mt-1 text-xs font-normal text-muted-foreground"
+        >
+          Show {rows.length - LINKED_VISIBLE} more
+        </Button>
       ) : null}
     </div>
   );
