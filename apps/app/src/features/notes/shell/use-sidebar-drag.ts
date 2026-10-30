@@ -17,6 +17,7 @@ import type { SidebarSections } from "../sections";
 import {
   type DropIntent,
   type DropTarget,
+  effectiveDropTarget,
   resolveDropIntent,
   type SidebarSection,
   zoneFromPointer,
@@ -76,15 +77,16 @@ export function useSidebarDrag(input: {
       return null;
     }
     const { notes, sections, favoritePositions } = inputRef.current;
+    const target = effectiveDropTarget(hit.target, sections);
     const intent = resolveDropIntent({
       notes,
       layout: sections,
       favoritePositions,
       dragId: state.noteId,
-      target: hit.target,
+      target,
       pos: POS,
     });
-    return intent ? { hit, intent } : null;
+    return intent ? { target, key: target === hit.target ? hit.key : null, intent } : null;
   };
 
   // The pointer is tracked from the moment the drag starts (listener attached
@@ -126,9 +128,9 @@ export function useSidebarDrag(input: {
       const current = dragRef.current;
       if (!current) return;
       const res = resolve(current, e.clientX, e.clientY);
-      const t = res?.hit.target;
+      const t = res?.target;
       const nextHover: RowHover =
-        t?.kind === "row" && res?.hit.key ? { key: res.hit.key, zone: t.zone } : null;
+        t?.kind === "row" && res?.key ? { key: res.key, zone: t.zone } : null;
       setHover((prev) =>
         prev?.key === nextHover?.key && prev?.zone === nextHover?.zone ? prev : nextHover,
       );

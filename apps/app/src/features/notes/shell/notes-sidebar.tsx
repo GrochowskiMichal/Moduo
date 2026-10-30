@@ -343,11 +343,16 @@ export function NotesSidebar(props: NotesSidebarProps) {
                   onTreeKeyDown={onTreeKeyDown}
                   dropSection="inbox"
                   dropActive={drag.headerHover === "inbox"}
+                  // Newest first, so a drop has no slot: the whole Inbox
+                  // lights, and the order is named while a drag is on.
+                  dropWhole
+                  dragging={drag.dragging}
+                  dragHint="Newest first"
                   count={inboxCount}
                   countLabel={`${inboxCount} in Inbox`}
                   onAdd={canEdit ? props.onNewCapture : undefined}
                   addLabel="New note (⌘N)"
-                  hint="New notes and captures land here until you file them into Pages."
+                  hint="New notes and captures land here, newest first, until you file them into Pages."
                   empty={inboxCount === 0}
                 >
                   {inboxCount === 0 ? (
@@ -426,6 +431,9 @@ function Section({
   label,
   dropSection,
   dropActive = false,
+  dropWhole = false,
+  dragging = false,
+  dragHint,
   count,
   countLabel,
   onAdd,
@@ -444,6 +452,12 @@ function Section({
   empty?: boolean;
   dropSection?: "inbox" | "pages";
   dropActive?: boolean;
+  /** A drop lights the whole section, not just its header. */
+  dropWhole?: boolean;
+  /** A drag is on somewhere in the sidebar. */
+  dragging?: boolean;
+  /** Shown in the header while a drag is on (how the section orders). */
+  dragHint?: string;
   count?: number;
   countLabel?: string;
   onAdd?: () => void;
@@ -451,16 +465,17 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <div>
+    <div className={cn(dropWhole && "rounded-md", dropWhole && dropActive && DROP_TARGET)}>
       <NavSectionHeader
         label={label}
         count={count}
         countLabel={countLabel}
         onAdd={onAdd}
         addLabel={addLabel}
+        indicator={dragging && dragHint ? <span className="text-xs">{dragHint}</span> : undefined}
         title={hint}
         data-drop-header={dropSection}
-        className={cn(dropActive && DROP_TARGET)}
+        className={cn(!dropWhole && dropActive && DROP_TARGET)}
       />
       {empty ? (
         children
