@@ -134,6 +134,8 @@ export function useCalendarSync(opts: {
           // everyone every ≤15 min as the owning machine flips it back). Only a
           // real sync failure on a machine that HAS the creds flips status.
           if (isLocalCredentialAbsence(err)) continue;
+          // An 'error' upsert only updates the caller's live row: the op
+          // never creates one, so a stale list can't clone or revive accounts.
           await runtime.calendar
             .upsertAccount({
               workspaceId,
