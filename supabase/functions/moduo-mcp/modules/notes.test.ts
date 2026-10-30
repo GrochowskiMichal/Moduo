@@ -21,7 +21,7 @@ import { notesDocCodeHash, notesDocSourceHash } from "../../_shared/notes-doc/so
 
 rs.mock("../share.ts", () => ({
   assertReach: async () => {},
-  visibleIds: async () => new Set<string>(),
+  visibleIds: async () => new Set<string>(["44444444-4444-4444-8444-444444444444"]),
 }));
 
 import type { ToolContext } from "../registry.ts";
@@ -325,6 +325,32 @@ describe("content reads (NS-11)", () => {
     expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("doc_state"))).toBe(true);
     expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
     expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
+  });
+});
+
+describe("notes_get reads text as written", () => {
+  it("re-reads a body saved with old escapes from the doc", async () => {
+    const note = materializedNote("Keys\n\nsbp_fc7797 and C:\\Users\\mike");
+    note.body_md = "Keys\n\nsbp\\_fc7797 and C:\\\\Users\\\\mike";
+    const { ctx } = fakeDb(note);
+    const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+    expect(got.markdown).toBe("Keys\n\nsbp_fc7797 and C:\\Users\\mike");
+  });
+
+  it("returns a body with nothing to fix as stored, without reading the doc", async () => {
+    for (const body of ["Keys\n\nsbp_fc7797", "2\\*3\\*4 in C:\\Users", "\\_lead and trail_"]) {
+      const { ctx, pullCalls } = fakeDb({ ...materializedNote("x"), body_md: body });
+      const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+      expect(got.markdown).toBe(body);
+      expect(pullCalls).toEqual([]);
+    }
+  });
+
+  it("keeps the stored body when the note has no doc to read", async () => {
+    const note = { ...materializedNote("x"), doc_state: null, body_md: "a\\_b" };
+    const { ctx } = fakeDb(note);
+    const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+    expect(got.markdown).toBe("a\\_b");
   });
 });
 

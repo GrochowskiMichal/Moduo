@@ -235,12 +235,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   {
     rule: "lexical-update-in-command",
     file: "apps/app/src/features/notes/editor/plugins/markdown-clipboard-plugin.tsx",
-    snippet: "editor.update(() => { $convertFromMarkdownString(text, NOTES_TRANSFORMERS); })",
-    why: "Risk: Paste handler; returns true whatever the queued update does.",
-  },
-  {
-    rule: "lexical-update-in-command",
-    file: "apps/app/src/features/notes/editor/plugins/markdown-clipboard-plugin.tsx",
     snippet:
       "editor.update(() => { const selection = $getSelection(); if (!$isRangeSelection(selection)) return; $insertGeneratedNode",
     why: "Risk: Paste handler; returns true whatever the queued update does.",
