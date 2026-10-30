@@ -254,3 +254,60 @@ describe("booking link editor · More options", () => {
     expect(row("Guest form").textContent).toContain("1 question");
   });
 });
+
+describe("after Create link", () => {
+  const ready = (created: Parameters<typeof BookingLinkDialog>[0]["created"], onEdit = noop) =>
+    render(
+      <BookingLinkDialog
+        draft={null}
+        created={created}
+        onEditCreated={onEdit}
+        accounts={[]}
+        googleOn
+        zoom={{ configured: false, connected: false }}
+        busy={false}
+        error={null}
+        onOpenChange={noop}
+        onChange={noop}
+        onConnect={noop}
+        onConnectZoom={noop}
+        onDisconnectZoom={noop}
+        onSave={noop}
+        onDelete={noop}
+      />,
+    );
+
+  it("shows the new link ready to share, with Copy and a way back to the editor", () => {
+    let edited = false;
+    ready(
+      {
+        name: "Intro call",
+        url: "https://moduo.app/book/intro-x1y2",
+        summary: "30 min · Google Meet",
+        blocker: null,
+      },
+      () => {
+        edited = true;
+      },
+    );
+    screen.getByRole("dialog", { name: "Intro call is ready to share" });
+    screen.getByText("moduo.app/book/intro-x1y2");
+    const copy = screen.getByRole("button", { name: "Copy link" }) as HTMLButtonElement;
+    expect(copy.disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Edit link" }));
+    expect(edited).toBe(true);
+  });
+
+  it("says what stops guests booking and holds Copy back until then", () => {
+    ready({
+      name: "Intro call",
+      url: "https://moduo.app/book/intro-x1y2",
+      summary: "30 min · Zoom",
+      blocker: "Connect Zoom before guests can book.",
+    });
+    screen.getByText("Connect Zoom before guests can book.");
+    expect((screen.getByRole("button", { name: "Copy link" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+  });
+});
