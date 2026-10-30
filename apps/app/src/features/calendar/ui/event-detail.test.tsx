@@ -5,7 +5,7 @@
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 
-// The feed reads the workspace's people; these tests mount no workspace.
+// The Activity lines read the workspace's people; these tests mount no workspace.
 rs.mock("../../spine/hooks/use-comment-people", () => ({
   useCommentPeople: () => ({
     currentUserId: "me",
@@ -124,7 +124,6 @@ const RECORDS: Record<string, EntityRecord> = {
 
 const runtime = {
   spine: {
-    listComments: async () => [],
     listLinks: async ({ entityId }: { entityId: string }) => LINKS[entityId] ?? [],
     getEntities: async ({ refs }: { refs: { id: string }[] }) =>
       refs.map((r) => RECORDS[r.id]).filter(Boolean),
@@ -232,6 +231,16 @@ describe("event view follows the selection", () => {
     expect(screen.getByText("Declined")).toBeTruthy();
     expect(screen.getByText("Crit agenda")).toBeTruthy();
     expect(screen.getByText("Only you see it")).toBeTruthy();
+  });
+
+  it("shows the event's history under Activity, with no comments", async () => {
+    render(panel(A, true));
+    await settle();
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
+    expect(screen.getByText(/created/i)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /comment/i })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Comments" })).toBeNull();
+    expect(screen.queryByText(/no comments yet/i)).toBeNull();
   });
 
   it("offers Add a place and Link when you can edit, and no Meet link a Moduo event can't make", async () => {

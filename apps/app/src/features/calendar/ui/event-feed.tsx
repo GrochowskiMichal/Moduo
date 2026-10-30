@@ -1,18 +1,18 @@
-// The event panel's Activity: the same feed as a task's (All · Comments, the
-// trail and comments, the pinned comment box), with an event's trail in its
-// own words. The trail is read again whenever the event changes.
+// The event panel's Activity: the event's history in a task feed's lines
+// (merged runs, folds), in an event's own words. No comments: an event's talk
+// happens in the meeting, its chat or a linked task. The trail is read again
+// whenever the event changes.
 
 import { useEffect, useState } from "react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { spineActorName } from "../../spine/activity";
 import type { ActivityEntry } from "../../tasks/model";
-import { EntityFeed, type FeedWords } from "../../tasks/ui/task-feed";
-import { calendarActivityLine } from "../activity";
+import { ChangeFeed, type FeedWords } from "../../tasks/ui/task-feed";
+import { calendarActivityLine, isEventTrailEntry } from "../activity";
 import type { CalendarEventModel } from "../events";
 
 const NO_ACTIVITY: ActivityEntry[] = [];
-const NO_TEAMS: never[] = [];
 const EVENT_WORDS: FeedWords = { line: calendarActivityLine, actor: spineActorName };
 
 export function EventFeed({
@@ -20,13 +20,11 @@ export function EventFeed({
   workspaceId,
   currentUserId,
   event,
-  composerSlot,
 }: {
   runtime: ModuoRuntime | null;
   workspaceId: string;
   currentUserId: string | null;
-  event: Pick<CalendarEventModel, "id" | "title" | "createdAt" | "updatedAt">;
-  composerSlot: HTMLElement | null;
+  event: Pick<CalendarEventModel, "id" | "createdAt" | "updatedAt">;
 }) {
   const [activity, setActivity] = useState<ActivityEntry[]>(NO_ACTIVITY);
   useEffect(() => {
@@ -37,7 +35,7 @@ export function EventFeed({
     runtime.tasks
       .listActivity({ workspaceId, entityType: "event", entityId: event.id, limit: 100 })
       .then((rows) => {
-        if (!cancelled) setActivity(rows);
+        if (!cancelled) setActivity(rows.filter(isEventTrailEntry));
       })
       .catch(() => {
         if (!cancelled) setActivity(NO_ACTIVITY);
@@ -48,20 +46,13 @@ export function EventFeed({
   }, [runtime, workspaceId, event.id, event.updatedAt]);
 
   return (
-    <EntityFeed
-      entity={{ type: "event", id: event.id, label: event.title || "Event", icon: "calendar" }}
+    <ChangeFeed
+      id={event.id}
       createOp="calendar.event_create"
       created={{ at: event.createdAt, actorId: null }}
       activity={activity}
       words={EVENT_WORDS}
-      runtime={runtime}
-      workspaceId={workspaceId}
       currentUserId={currentUserId}
-      teams={NO_TEAMS}
-      canComment={!!runtime && !!workspaceId}
-      composerSlot={composerSlot}
-      commentLabel="Comment on this event"
-      reloadKey={event.updatedAt}
     />
   );
 }

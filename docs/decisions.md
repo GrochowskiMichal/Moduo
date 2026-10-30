@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-30 · An event has a history, not comments.
 - 2026-10-30 · Calendar's side panels follow the app's rules; the event panel's links are a task's Linked; no Notes view.
 - 2026-10-30 · A click or drag on the grid opens the composer; Preview as is the glasses toggle alone; the web's new-item key is ⌥N.
 - 2026-10-30 · A booking link's video needs its login before it saves; Their choice needs both; the rail edits links in place, never in the right panel.

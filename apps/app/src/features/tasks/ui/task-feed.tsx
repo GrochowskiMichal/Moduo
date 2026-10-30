@@ -20,8 +20,9 @@
 // whenever the store sees one of this task's comments change (an edit, a
 // reaction, a delete elsewhere).
 //
-// `EntityFeed` is the feed itself, for any item with a trail and a thread (an
-// event's panel uses it too); `TaskFeed` feeds it a task's trail and words.
+// `EntityFeed` is the feed itself, for any item with a trail and a thread;
+// `TaskFeed` feeds it a task's trail and words. `ChangeFeed` is the trail
+// alone, for an item without comments (an event).
 
 import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -78,6 +79,7 @@ import {
 
 const NO_ACTIVITY: ActivityEntry[] = [];
 const NO_TEAMS: Team[] = [];
+const NO_COMMENTS: SpineComment[] = [];
 
 type Props = {
   task: Task;
@@ -288,34 +290,6 @@ export function EntityFeed({
 
   const render = (row: FeedRow) => {
     switch (row.kind) {
-      case "line":
-        return (
-          <TrailLine key={row.id} item={row.item} currentUserId={currentUserId} words={words} />
-        );
-      case "merged":
-        return (
-          <MergedLine
-            key={row.id}
-            entries={row.entries}
-            at={row.at}
-            currentUserId={currentUserId}
-            words={words}
-            expanded={opened.has(row.id)}
-            onExpand={() => open(row.id)}
-          />
-        );
-      case "fold":
-        return (
-          <Button
-            key={row.id}
-            variant="ghost"
-            size="sm"
-            onClick={() => open(row.id)}
-            className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
-          >
-            {foldLabel(row.count)}
-          </Button>
-        );
       case "comment":
         return (
           <CommentItem
@@ -329,6 +303,8 @@ export function EntityFeed({
             teams={teams}
           />
         );
+      default:
+        return trailRow(row, { currentUserId, words, opened, open });
     }
   };
 
@@ -386,6 +362,100 @@ export function EntityFeed({
       {composerSlot && composer ? createPortal(composer, composerSlot) : null}
     </section>
   );
+}
+
+/**
+ * The trail alone, under "Activity": for an item that has a history but no
+ * talk (an event: its talk happens in the meeting, its chat or a linked
+ * task). Same lines, merging and folds as the feed's All.
+ */
+export function ChangeFeed({
+  id,
+  createOp,
+  created,
+  activity,
+  words,
+  currentUserId,
+}: {
+  id: string;
+  createOp: string;
+  created: { at: string; actorId: string | null };
+  activity: ActivityEntry[];
+  words: FeedWords;
+  currentUserId: string | null;
+}) {
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const createdAt = created.at;
+  const createdBy = created.actorId;
+  const feed = useMemo(
+    () =>
+      buildFeed({
+        id,
+        createOp,
+        created: { at: createdAt, actorId: createdBy },
+        activity,
+        comments: NO_COMMENTS,
+      }),
+    [id, createOp, createdAt, createdBy, activity],
+  );
+  const open = (rowId: string) => setOpened((prev) => new Set(prev).add(rowId));
+  return (
+    <section aria-label="Activity" className="flex flex-col gap-2.5">
+      <h3 className="flex min-h-(--ctrl-h-sm) items-center font-sans text-sm font-medium text-foreground">
+        Activity
+      </h3>
+      {shapeFeed(feed, "all", opened).map((row) =>
+        trailRow(row, { currentUserId, words, opened, open }),
+      )}
+    </section>
+  );
+}
+
+/** A trail row (a line, a merged run or a fold); comments are the feed's own. */
+function trailRow(
+  row: FeedRow,
+  {
+    currentUserId,
+    words,
+    opened,
+    open,
+  }: {
+    currentUserId: string | null;
+    words: FeedWords;
+    opened: ReadonlySet<string>;
+    open: (id: string) => void;
+  },
+) {
+  switch (row.kind) {
+    case "line":
+      return <TrailLine key={row.id} item={row.item} currentUserId={currentUserId} words={words} />;
+    case "merged":
+      return (
+        <MergedLine
+          key={row.id}
+          entries={row.entries}
+          at={row.at}
+          currentUserId={currentUserId}
+          words={words}
+          expanded={opened.has(row.id)}
+          onExpand={() => open(row.id)}
+        />
+      );
+    case "fold":
+      return (
+        <Button
+          key={row.id}
+          variant="ghost"
+          size="sm"
+          onClick={() => open(row.id)}
+          className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
+        >
+          {foldLabel(row.count)}
+        </Button>
+      );
+    case "comment":
+      return null;
+  }
 }
 
 // ── trail lines ───────────────────────────────────────────────────────────────

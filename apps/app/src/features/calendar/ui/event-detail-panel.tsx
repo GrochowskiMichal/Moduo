@@ -166,8 +166,6 @@ export function EventDetailPanel({
     [runtime, workspaceId, hubReload],
   );
 
-  const [composerSlot, setComposerSlot] = useState<HTMLDivElement | null>(null);
-
   const commitTitle = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed || trimmed === event.title) {
@@ -198,182 +196,177 @@ export function EventDetailPanel({
   const now = new Date();
 
   return (
-    <section aria-label="Event" className="flex h-full min-h-0 flex-col">
-      <div className="pane-scroll scrollbar-thin flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-        <div className="flex items-center justify-between gap-2">
-          <Eyebrow>Event</Eyebrow>
-          <div className="flex items-center gap-0.5">
-            {menu}
-            <IconButton icon={X} label="Close details" onClick={onClose} />
-          </div>
+    <div className="pane-scroll scrollbar-thin flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+      <div className="flex items-center justify-between gap-2">
+        <Eyebrow>Event</Eyebrow>
+        <div className="flex items-center gap-0.5">
+          {menu}
+          <IconButton icon={X} label="Close details" onClick={onClose} />
         </div>
+      </div>
 
+      {editable ? (
+        <Input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          aria-label="Event title"
+          className={detailTitleVariants()}
+        />
+      ) : (
+        <DetailTitle>{event.title}</DetailTitle>
+      )}
+
+      {meeting ? (
+        <div className="flex flex-col gap-1">
+          <Button asChild size="sm" className="w-fit gap-1.5">
+            <a href={meeting.url} target="_blank" rel="noreferrer">
+              <Video aria-hidden />
+              {meeting.label}
+            </a>
+          </Button>
+        </div>
+      ) : null}
+
+      <Field label="Starts">
         {editable ? (
-          <Input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
-            aria-label="Event title"
-            className={detailTitleVariants()}
+          <DateField
+            withTime
+            variant="outline"
+            value={new Date(event.startsAt)}
+            onChange={(d) => commitTime("startsAt", d, event.startsAt)}
+            formatValue={(d) => dateTimeText(d.toISOString())}
+            aria-label="Starts at"
           />
         ) : (
-          <DetailTitle>{event.title}</DetailTitle>
+          <span className="text-sm text-foreground">{dateTimeText(event.startsAt)}</span>
         )}
-
-        {meeting ? (
-          <div className="flex flex-col gap-1">
-            <Button asChild size="sm" className="w-fit gap-1.5">
-              <a href={meeting.url} target="_blank" rel="noreferrer">
-                <Video aria-hidden />
-                {meeting.label}
-              </a>
-            </Button>
-          </div>
-        ) : null}
-
-        <Field label="Starts">
-          {editable ? (
-            <DateField
-              withTime
-              variant="outline"
-              value={new Date(event.startsAt)}
-              onChange={(d) => commitTime("startsAt", d, event.startsAt)}
-              formatValue={(d) => dateTimeText(d.toISOString())}
-              aria-label="Starts at"
-            />
-          ) : (
-            <span className="text-sm text-foreground">{dateTimeText(event.startsAt)}</span>
-          )}
-        </Field>
-        <Field label="Ends">
-          {editable ? (
-            <DateField
-              withTime
-              variant="outline"
-              value={new Date(event.endsAt)}
-              onChange={(d) => commitTime("endsAt", d, event.endsAt)}
-              formatValue={(d) => dateTimeText(d.toISOString())}
-              aria-label="Ends at"
-            />
-          ) : (
-            <span className="text-sm text-foreground">{dateTimeText(event.endsAt)}</span>
-          )}
-        </Field>
-        {event.allDay ? null : <SecondZoneTime startsAt={event.startsAt} endsAt={event.endsAt} />}
-        <Field label="All day">
+      </Field>
+      <Field label="Ends">
+        {editable ? (
+          <DateField
+            withTime
+            variant="outline"
+            value={new Date(event.endsAt)}
+            onChange={(d) => commitTime("endsAt", d, event.endsAt)}
+            formatValue={(d) => dateTimeText(d.toISOString())}
+            aria-label="Ends at"
+          />
+        ) : (
+          <span className="text-sm text-foreground">{dateTimeText(event.endsAt)}</span>
+        )}
+      </Field>
+      {event.allDay ? null : <SecondZoneTime startsAt={event.startsAt} endsAt={event.endsAt} />}
+      <Field label="All day">
+        <Switch
+          checked={event.allDay}
+          disabled={!editable}
+          onCheckedChange={(v) => onPatch(event.id, { allDay: v })}
+          aria-label="All day"
+        />
+      </Field>
+      {privateOffered ? (
+        <Field label="Private">
           <Switch
-            checked={event.allDay}
-            disabled={!editable}
-            onCheckedChange={(v) => onPatch(event.id, { allDay: v })}
-            aria-label="All day"
+            checked={!!event.isPrivate}
+            onCheckedChange={(v) => onPatch(event.id, { isPrivate: v })}
+            aria-label="Private"
           />
         </Field>
-        {privateOffered ? (
-          <Field label="Private">
-            <Switch
-              checked={!!event.isPrivate}
-              onCheckedChange={(v) => onPatch(event.id, { isPrivate: v })}
-              aria-label="Private"
-            />
-          </Field>
-        ) : null}
+      ) : null}
 
-        <RepeatsField
-          rrule={event.rrule}
-          // A Google event's repeats change in Google for now (CALR-11).
-          editable={editable && !external}
-          onChange={(rrule) => onPatch(event.id, { rrule })}
-        />
+      <RepeatsField
+        rrule={event.rrule}
+        // A Google event's repeats change in Google for now (CALR-11).
+        editable={editable && !external}
+        onChange={(rrule) => onPatch(event.id, { rrule })}
+      />
 
-        <EventCalendarRows
-          event={event}
-          account={account}
-          external={external}
-          editable={editable}
-          context={context.value}
-          currentUserId={currentUserId}
-          members={members}
-          syncedAgo={account?.lastSyncAt ? timeAgo(account.lastSyncAt, now) : null}
-          onReload={context.reload}
-        />
+      <EventCalendarRows
+        event={event}
+        account={account}
+        external={external}
+        editable={editable}
+        context={context.value}
+        currentUserId={currentUserId}
+        members={members}
+        syncedAgo={account?.lastSyncAt ? timeAgo(account.lastSyncAt, now) : null}
+        onReload={context.reload}
+      />
 
-        <EventWhereRows
-          event={event}
-          editable={editable}
-          canMeet={canAddMeet(writer, event)}
-          onPatch={(patch) => onPatch(event.id, patch)}
-        />
+      <EventWhereRows
+        event={event}
+        editable={editable}
+        canMeet={canAddMeet(writer, event)}
+        onPatch={(patch) => onPatch(event.id, patch)}
+      />
 
-        <EventPeopleRows attendees={event.attendees ?? []} />
+      <EventPeopleRows attendees={event.attendees ?? []} />
 
-        <EventLinkedRows
-          eventId={event.id}
-          runtime={runtime}
-          workspaceId={workspaceId}
-          status={hub.status}
-          sections={hub.sections}
-          canEdit={canEdit}
-          onLink={linkEntity}
-          onUnlink={unlink}
-          onRetry={hubReload}
-        />
+      <EventLinkedRows
+        eventId={event.id}
+        runtime={runtime}
+        workspaceId={workspaceId}
+        status={hub.status}
+        sections={hub.sections}
+        canEdit={canEdit}
+        onLink={linkEntity}
+        onUnlink={unlink}
+        onRetry={hubReload}
+      />
 
-        <Field label="Description">
-          {editable ? (
-            <EntityTextEditor
-              key={event.id}
-              value={event.description}
-              editable
-              runtime={runtime}
-              workspaceId={workspaceId}
-              source={{ type: "event", id: event.id }}
-              sourceLabel={event.title}
-              sourceIcon="event"
-              currentUserId={currentUserId}
-              ariaLabel="Description"
-              placeholder="Description…  @ or / to link"
-              onCommit={(html) => {
-                if (html !== event.description) onPatch(event.id, { description: html });
-              }}
-            />
-          ) : event.description ? (
-            <EntityRichText html={event.description} className="text-sm text-foreground" />
-          ) : (
-            <span className="text-sm text-foreground">—</span>
-          )}
-        </Field>
-
-        <Separator />
-
-        <EventFeed
-          runtime={runtime}
-          workspaceId={workspaceId}
-          currentUserId={currentUserId}
-          event={event}
-          composerSlot={composerSlot}
-        />
-
+      <Field label="Description">
         {editable ? (
-          <>
-            <Separator />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="justify-start gap-1.5 text-destructive hover:bg-destructive/10"
-              onClick={() => onDeleteRequest(event.id)}
-            >
-              <Trash2 aria-hidden />
-              Delete event
-            </Button>
-          </>
-        ) : null}
-      </div>
-      {/* The feed's comment box, pinned under the scrolling body as a task's is. */}
-      <div ref={setComposerSlot} className="shrink-0 px-1 pt-1 empty:hidden" />
-    </section>
+          <EntityTextEditor
+            key={event.id}
+            value={event.description}
+            editable
+            runtime={runtime}
+            workspaceId={workspaceId}
+            source={{ type: "event", id: event.id }}
+            sourceLabel={event.title}
+            sourceIcon="event"
+            currentUserId={currentUserId}
+            ariaLabel="Description"
+            placeholder="Description…  @ or / to link"
+            onCommit={(html) => {
+              if (html !== event.description) onPatch(event.id, { description: html });
+            }}
+          />
+        ) : event.description ? (
+          <EntityRichText html={event.description} className="text-sm text-foreground" />
+        ) : (
+          <span className="text-sm text-foreground">—</span>
+        )}
+      </Field>
+
+      <Separator />
+
+      <EventFeed
+        runtime={runtime}
+        workspaceId={workspaceId}
+        currentUserId={currentUserId}
+        event={event}
+      />
+
+      {editable ? (
+        <>
+          <Separator />
+          <Button
+            variant="ghost"
+            size="sm"
+            className="justify-start gap-1.5 text-destructive hover:bg-destructive/10"
+            onClick={() => onDeleteRequest(event.id)}
+          >
+            <Trash2 aria-hidden />
+            Delete event
+          </Button>
+        </>
+      ) : null}
+    </div>
   );
 }
 

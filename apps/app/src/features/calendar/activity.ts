@@ -53,6 +53,11 @@ function changedLine(payload: Record<string, unknown>): string {
   return `changed the ${words.slice(0, 2).join(", ")} and ${words.length - 2} more`;
 }
 
+/** What an event's history shows: its own changes, not comment traffic (events have no comments). */
+export function isEventTrailEntry(entry: Pick<Entry, "op">): boolean {
+  return !entry.op.startsWith("comments.");
+}
+
 export function calendarActivityLine(entry: Entry): string {
   const p = entry.payload ?? {};
   switch (entry.op) {
