@@ -261,7 +261,7 @@ const MonthDay = memo(function MonthDay({
           aria-label={`Open ${label}`}
           onClick={() => onOpenDay(cell.day)}
           className={cn(
-            "inline-grid h-7 min-w-7 shrink-0 place-items-center rounded-full px-1.5 font-display text-sm font-semibold tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "inline-grid h-7 min-w-7 shrink-0 place-items-center rounded-md px-1.5 font-display text-sm font-semibold tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             cell.today
               ? "bg-primary text-primary-foreground hover:bg-primary-hover"
               : cn(
