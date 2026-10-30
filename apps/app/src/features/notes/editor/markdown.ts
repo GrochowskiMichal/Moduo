@@ -175,6 +175,16 @@ function $tableCell(markdown: string): TableCellNode {
   return cell;
 }
 
+/** A cell's pipes escaped as `\|`, so they stay in the cell. The exporter
+ * already escaped every literal backslash before punctuation, so a pipe after
+ * an even run of backslashes is bare (escape it) and after an odd run it is
+ * escaped already. */
+function escapeCellPipes(markdown: string): string {
+  return markdown.replace(/(\\*)\|/g, (match, slashes: string) =>
+    slashes.length % 2 === 0 ? `${slashes}\\|` : match,
+  );
+}
+
 /** GFM tables ⇄ table blocks. @lexical/markdown ships none, so a table used
  * to export as nothing and import as literal pipes. The first row is always
  * the header (GFM requires one), so markdown → note → markdown is stable. */
@@ -188,7 +198,7 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
       const cells = row
         .getChildren()
         .filter($isTableCellNode)
-        .map((cell) => $notesMarkdown(cell).trim().replace(/\|/g, "\\|").replace(/\n+/g, "<br>"));
+        .map((cell) => escapeCellPipes($notesMarkdown(cell).trim()).replace(/\n+/g, "<br>"));
       lines.push(`| ${cells.join(" | ")} |`);
       if (lines.length === 1) lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
     }
