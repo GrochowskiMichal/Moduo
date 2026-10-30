@@ -15,9 +15,8 @@ import {
 } from "./event-view";
 
 describe("followedEventId", () => {
-  it("follows the selected event while Event or Notes is showing", () => {
+  it("follows the selected event while Detail is showing", () => {
     expect(followedEventId("ev-1:1761645600000", "detail", true)).toBe("ev-1");
-    expect(followedEventId("ev-2:1761645600000", "notes", true)).toBe("ev-2");
   });
 
   it("leaves the panel alone otherwise", () => {

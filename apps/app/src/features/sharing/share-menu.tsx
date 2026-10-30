@@ -191,8 +191,10 @@ export function ShareMenu({
   };
 
   return (
+    // It opens once the sharing has loaded (mount reads it), so it never
+    // shows a loading line and then jumps to the real switches.
     <Popover
-      open={open}
+      open={open && state !== null}
       onOpenChange={(next) => {
         setOpen(next);
         onOpenChange?.(next);
@@ -226,8 +228,6 @@ export function ShareMenu({
             This note follows its parent's sharing. Changing it here gives it its own sharing.
           </p>
         ) : null}
-        {state === null ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-
         {duo ? (
           <>
             <div className="flex items-center justify-between gap-2">

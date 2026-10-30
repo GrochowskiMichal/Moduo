@@ -274,9 +274,6 @@ function LinkEditor({
                 Guests only ever see when you're free, never what's on your calendar.
               </p>
             )}
-            <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
-              Cancel
-            </Button>
             <Button
               type="button"
               disabled={

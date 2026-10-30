@@ -37,7 +37,7 @@ export function followedEventId(
   rightOpen: boolean,
 ): string | null {
   if (!occurrenceKey || !rightOpen) return null;
-  if (variant !== "detail" && variant !== "notes") return null;
+  if (variant !== "detail") return null;
   return occurrenceKey.split(":")[0] || null;
 }
 

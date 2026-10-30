@@ -200,9 +200,10 @@ describe("event view follows the selection", () => {
     expect(priya.textContent).toContain("Accepted");
     expect(twoLine("Kai Ito", "kai@hale.co").textContent).toContain("Maybe");
 
-    // Notes and tasks as two-line rows.
-    twoLine("Q4 numbers", "Note");
-    twoLine("Send the deck", "Task");
+    // Notes and tasks as Linked cards, as a task's Linked.
+    expect(screen.getByText("Linked")).toBeTruthy();
+    expect(screen.getByText("Q4 numbers")).toBeTruthy();
+    expect(screen.getByText("Send the deck")).toBeTruthy();
   });
 
   it("selecting another event updates the view", async () => {
@@ -217,7 +218,7 @@ describe("event view follows the selection", () => {
     expect(screen.queryByText(/Booked through/)).toBeNull();
     twoLine("Nora Lind", "nora@hale.co");
     expect(screen.getByText("Declined")).toBeTruthy();
-    twoLine("Crit agenda", "Note");
+    expect(screen.getByText("Crit agenda")).toBeTruthy();
     expect(screen.getByText("Only you see it")).toBeTruthy();
   });
 
