@@ -127,13 +127,14 @@ export const calendarStates = {
   // Share your calendar: who can open it and at what level.
   share: act(async (page) => {
     const panel = await leftPanel(page);
-    await panel.getByRole("button", { name: "Share", exact: true }).first().click();
+    await panel.getByRole("button", { name: "Share Moduo" }).click();
     await page.getByText("Who can open this").waitFor();
   }),
   // Your week as Ana sees it: Busy only, the banner naming her level.
-  // From the calendars panel, which names your calendars to the banner.
+  // From the rail's ⋯, which names your calendars to the banner.
   previewAs: act(async (page) => {
-    await (await leftPanel(page)).getByRole("button", { name: "Preview as…" }).click();
+    await (await leftPanel(page)).getByRole("button", { name: "Calendar options" }).click();
+    await page.getByRole("menuitem", { name: "See your week as" }).click();
     await page.getByRole("menuitem", { name: "Ana Ruiz" }).click();
     await page.getByRole("button", { name: "Change what Ana sees" }).waitFor();
   }),
@@ -161,8 +162,8 @@ export const calendarStates = {
   connectConsent: act(async (page) => {
     await page.route(/^https:\/\/accounts\.google\.com\//, (route) => route.abort());
     await noGoogle(page);
-    await leftPanel(page);
-    await page.getByRole("button", { name: "Connect a calendar…" }).click();
+    await (await leftPanel(page)).getByRole("button", { name: "Add a calendar" }).click();
+    await page.getByRole("menuitem", { name: "Connect a calendar…" }).click();
     await page
       .getByRole("dialog")
       .getByRole("button", { name: /^Google/ })

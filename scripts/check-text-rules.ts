@@ -73,9 +73,8 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   // Tasks: no small caps any more (Focus since TV-F7; the Timeline's month
   // names are sentence case since TV-TL1).
   // Calendar: Plan's groups ("From earlier", "Due this week", …), a weekday on
-  // the booking page; colour names ("blue" → "Blue") in the account colour menu.
+  // the booking page.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
-  "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
   "src/features/calendar/booking/sentence-ui.tsx": ["parts.weekday"],
   // Spine: module names and relation kinds.
   "src/features/spine/ui/entity-hub.tsx": [
@@ -122,10 +121,9 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
  * here: a test fails on either.
  */
 const SMALL_CAPS_DEBT: Record<string, string[]> = {
-  // A CalDAV / ICS account's own name heads its group (Settings and the
-  // calendar rail: the username or server, accounts.ts).
+  // A CalDAV / ICS account's own name heads its group in Settings (the
+  // username or server, accounts.ts).
   "src/features/settings/sections/integrations-section.tsx": ["header"],
-  "src/features/calendar/ui/calendar-rail.tsx": ["group.header"],
   // The sender's address heads the row menu.
   "src/features/email/ui/email-thread-list.tsx": ["thread.fromEmail || senderText(thread)"],
 };

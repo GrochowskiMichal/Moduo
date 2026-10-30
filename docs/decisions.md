@@ -202,6 +202,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-30 · One Calendars section in the rail; the swatch shows and hides; a calendar's color can be a custom hex; saved views save what's shown.
 - 2026-10-28 · The connector reads one item per occurrence through the masked read; who sees what is one definer read; Home's Today widget shares the toolbar's now and next (CALR-21).
 - 2026-10-28 · An offer is its own token, its holds are ordinary busy rows, and one trigger releases them (CALR-19).
 - 2026-10-28 · New events go to is a synced per-workspace pref; Google-first is the only Google create; the mirror revives a tombstone before it inserts; the iCalUID only merges your own copies (CALR-20b).

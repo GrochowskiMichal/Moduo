@@ -27,12 +27,11 @@ import {
 } from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { accountSourceLabel, hiddenIdsForSet, syncAgeLabel } from "../accounts";
+import { accountSourceLabel, syncAgeLabel } from "../accounts";
 import { isElapsedBlock } from "../elapsed";
 import { followedEventId } from "../event-view";
 import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock } from "../focus";
-import type { BusyInterval } from "../gap-finder";
 import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
 import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
 import { useCalendarSync } from "../hooks/use-calendar-sync";
@@ -71,7 +70,6 @@ import { CalendarStrip } from "./calendar-strip";
 import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
 import { CalendarViews } from "./calendar-views";
-import { CalendarsPanel } from "./calendars-panel";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
 import type { QuickCreateDraft } from "./event-quick-create";
@@ -97,7 +95,7 @@ import { useEventMenu } from "./use-event-menu";
 import { useEventMove } from "./use-event-move";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { usePlanPlacement } from "./use-plan-placement";
-import { useScheduleDue } from "./use-schedule-due";
+import { useBusyOn, useScheduleDue } from "./use-schedule-due";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -444,33 +442,18 @@ export function CalendarPageView({
     moveEvent,
   });
 
-  // CALR-2: Schedule (S) in a day header's due list. An overdue task goes to
-  // today, which may be off screen: read that day's events and blocks then.
-  const busyOn = useCallback(
-    (day: Date): BusyInterval[] => {
-      const key = localDayKey(day);
-      const shown = range.days.some((d) => localDayKey(d) === key);
-      const one = shown ? null : visibleRange("day", day, prefs);
-      const events = one
-        ? (eventChipsInRange(lens.events, one, isWritable, userId).timed.get(key) ?? [])
-        : (eventChips.timed.get(key) ?? []);
-      const own = one
-        ? taskBlocks(tasks, one, { list: sessions, me: userId })
-        : (grouped.get(key) ?? []);
-      return [...events, ...own].map((x) => ({ startMs: x.startMs, endMs: x.endMs }));
-    },
-    [
-      range.days,
-      prefs,
-      lens.events,
-      isWritable,
-      userId,
-      eventChips.timed,
-      tasks,
-      sessions,
-      grouped,
-    ],
-  );
+  // CALR-2: Schedule (S) in a day header's due list.
+  const busyOn = useBusyOn({
+    range,
+    prefs,
+    events: lens.events,
+    isWritable,
+    userId,
+    timed: eventChips.timed,
+    tasks,
+    sessions,
+    blocksByDay: grouped,
+  });
   const onScheduleDue = useScheduleDue({ tasks, prefs, commands, busyOn });
 
   // CALR-5: Plan's S lifts a task onto the grid; / finds a task.
@@ -702,6 +685,8 @@ export function CalendarPageView({
         notice={truncationNotice(calendar.truncated)}
         left={
           <CalendarRail
+            workspaceId={workspaceId}
+            userId={userId}
             anchor={anchor}
             onSelectDate={goToDate}
             busyDayKeys={busyDayKeys}
@@ -711,19 +696,12 @@ export function CalendarPageView({
             accountHues={accountHues}
             hiddenAccountIds={prefs.hiddenAccountIds}
             onToggleAccountVisibility={toggleAccountVisibility}
+            onSetHidden={(hiddenIds) => updatePrefs(() => ({ hiddenAccountIds: hiddenIds }))}
             onRecolorAccount={setAccountColor}
             onRemoveAccount={removeAccount}
             onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
             footer={
               <>
-                <CalendarsPanel
-                  workspaceId={workspaceId}
-                  userId={userId}
-                  onShowAccounts={(visibleIds, knownIds) => {
-                    const known = [...calendar.accounts.map((account) => account.id), ...knownIds];
-                    updatePrefs(() => ({ hiddenAccountIds: hiddenIdsForSet(visibleIds, known) }));
-                  }}
-                />
                 <BookingLinks
                   runtime={runtime}
                   workspaceId={workspaceId}

@@ -144,6 +144,38 @@ body {
   background-color: var(--label);
 }
 
+/* The calendar color picker's hue slider (features/calendar/ui/calendar-color-picker.tsx). */
+.hue-slider {
+  appearance: none;
+  width: 100%;
+  height: calc(var(--spacing) * 2.5);
+  margin: 0;
+  border-radius: var(--radius-full);
+  background: var(--hue-spectrum);
+}
+
+.hue-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: calc(var(--spacing) * 4);
+  height: calc(var(--spacing) * 4);
+  border: 2px solid var(--background);
+  border-radius: var(--radius-full);
+  background: var(--foreground);
+}
+
+.hue-slider::-moz-range-thumb {
+  width: calc(var(--spacing) * 3.5);
+  height: calc(var(--spacing) * 3.5);
+  border: 2px solid var(--background);
+  border-radius: var(--radius-full);
+  background: var(--foreground);
+}
+
+.hue-slider:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
 /* The tint sits on an opaque base, so a card that cascades over another hides
    what's under it instead of showing both through each other. */
 .cal-chip {

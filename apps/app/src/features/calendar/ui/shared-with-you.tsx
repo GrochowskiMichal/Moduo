@@ -1,7 +1,6 @@
-// Shared with you and Preview as… in the calendars panel (CALR-16, AC29, AC30):
-// each teammate who shares with you, at their level, off until you turn them
-// on (remembered per user and workspace); and a menu to see your week as one
-// of your teammates sees it.
+// Teammates who share with you, off until you turn them on in the rail
+// (remembered per user and workspace; CALR-16, AC29, AC30), and Preview as…:
+// a menu to see your week as one of your teammates sees it.
 
 import { useEffect } from "react";
 
@@ -12,9 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { Switch } from "../../../components/ui/switch";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { toggleTeammate } from "../teammates";
 import { setTeammates, useTeammatesStore } from "./teammates-store";
 
 const shownKey = (userId: string, workspaceId: string) =>
@@ -38,35 +35,6 @@ export function saveShownTeammates(userId: string, workspaceId: string, shown: s
   } catch {
     /* storage disabled: the choice lasts this session */
   }
-}
-
-export function SharedWithYou({ userId, workspaceId }: { userId: string; workspaceId: string }) {
-  const teammates = useTeammatesStore((s) => s.teammates);
-  const shown = useTeammatesStore((s) => s.shown);
-  const { selectedWorkspace } = useWorkspace();
-  if (teammates.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1 border-t border-border pt-3">
-      <p className="px-1 text-xs text-muted-foreground">
-        Shared with you · {selectedWorkspace?.name ?? "this workspace"} · view only
-      </p>
-      {teammates.map((t) => (
-        <label key={t.userId} className="flex items-center gap-2 px-1 text-sm">
-          <span className="min-w-0 flex-1 truncate text-foreground">{t.name}</span>
-          <span className="text-xs text-muted-foreground">
-            {t.level === "view" ? "All details" : "Busy only"}
-          </span>
-          <Switch
-            checked={shown.includes(t.userId)}
-            onCheckedChange={() =>
-              saveShownTeammates(userId, workspaceId, toggleTeammate(shown, t.userId))
-            }
-            aria-label={`Show ${t.name} beside your week`}
-          />
-        </label>
-      ))}
-    </div>
-  );
 }
 
 /** "Preview as…": your week as one of the workspace's active members sees it. */

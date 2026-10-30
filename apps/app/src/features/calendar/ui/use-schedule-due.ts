@@ -9,8 +9,18 @@ import { toast } from "sonner";
 import type { Task } from "../../tasks/model";
 import type { useTaskCommands } from "../../tasks/tasks-context";
 import { placeTask } from "../commands/undo";
+import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { type BusyInterval, findNextGap } from "../gap-finder";
-import { DEFAULT_BLOCK_MINUTES, startOfLocalDay } from "../lens";
+import {
+  DEFAULT_BLOCK_MINUTES,
+  localDayKey,
+  type RangePrefs,
+  startOfLocalDay,
+  type TaskBlock,
+  taskBlocks,
+  type VisibleRange,
+  visibleRange,
+} from "../lens";
 import type { CalendarPrefs } from "../prefs";
 import { formatDayLabel, formatTimeOfDay } from "./time-format";
 
@@ -73,5 +83,38 @@ export function useScheduleDue({ tasks, prefs, commands, busyOn }: Input) {
       );
     },
     [tasks, prefs, commands, busyOn],
+  );
+}
+
+/**
+ * Events and your blocks on any day, for Schedule: an overdue task goes to
+ * today, which may be off screen, so a day outside the view is read then.
+ */
+export function useBusyOn(q: {
+  range: VisibleRange;
+  prefs: RangePrefs;
+  events: CalendarEventModel[];
+  isWritable: (event: CalendarEventModel) => boolean;
+  userId: string;
+  timed: ReadonlyMap<string, readonly EventChip[]>;
+  tasks: Parameters<typeof taskBlocks>[0];
+  sessions: NonNullable<Parameters<typeof taskBlocks>[2]>["list"];
+  blocksByDay: ReadonlyMap<string, readonly TaskBlock[]>;
+}) {
+  const { range, prefs, events, isWritable, userId, timed, tasks, sessions, blocksByDay } = q;
+  return useCallback(
+    (day: Date): BusyInterval[] => {
+      const key = localDayKey(day);
+      const shown = range.days.some((d) => localDayKey(d) === key);
+      const one = shown ? null : visibleRange("day", day, prefs);
+      const chips = one
+        ? (eventChipsInRange(events, one, isWritable, userId).timed.get(key) ?? [])
+        : (timed.get(key) ?? []);
+      const own = one
+        ? taskBlocks(tasks, one, { list: sessions, me: userId })
+        : (blocksByDay.get(key) ?? []);
+      return [...chips, ...own].map((x) => ({ startMs: x.startMs, endMs: x.endMs }));
+    },
+    [range.days, prefs, events, isWritable, userId, timed, tasks, sessions, blocksByDay],
   );
 }

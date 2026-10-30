@@ -952,6 +952,11 @@
 [data-label="violet"] { --label: var(--violet-base);  --label-surface: oklch(0.66 0.20 295 / 0.18); }
 [data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
 [data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
+/* A calendar's custom color: the element sets --label to its hex inline
+   (features/calendar/hue.ts), and the tint follows from it. */
+[data-label="custom"] { --label-surface: color-mix(in oklab, var(--label) 18%, transparent); }
+/* The custom-color hue slider's track: the full hue circle. */
+:root { --hue-spectrum: linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%)); }
 
 /* The avatar strength of a hue (DS-6, calls 43 + 95): a person's two initials
    and a team's two letters sit on the hue mixed about half into the card, with
