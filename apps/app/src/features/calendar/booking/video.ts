@@ -31,3 +31,22 @@ export function pickVideo(options: VideoProvider[], requested: unknown): VideoPr
   const match = options.find((option) => option === requested);
   return match ?? options[0] ?? null;
 }
+
+/**
+ * Why a link with this setting can't make its video calls yet, or null when it
+ * can. "Their choice" needs both logins: with one, guests would have no choice.
+ */
+export function videoBlocker(
+  setting: VideoSetting,
+  connected: Record<VideoProvider, boolean>,
+): string | null {
+  const google = connected.google_meet;
+  const zoom = connected.zoom;
+  if (setting === "google_meet") return google ? null : "Connect Google to use Google Meet.";
+  if (setting === "zoom") return zoom ? null : "Connect Zoom to use Zoom.";
+  if (google && zoom) return null;
+  if (!google && !zoom) return "Connect Google and Zoom so guests can choose.";
+  return google
+    ? "Connect Zoom too, so guests can choose."
+    : "Connect Google too, so guests can choose.";
+}

@@ -15,7 +15,7 @@ import { Input, NumberInput } from "@/components/ui/input";
 import type { GuestQuestion } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import type { WeeklyHours } from "../booking/slots";
-import type { VideoSetting } from "../booking/video";
+import { videoBlocker, type VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
 import { BookingLinkMore, type GuestReminderMinutes } from "./booking-link-more";
 import { OptionChip } from "./booking-link-parts";
@@ -277,7 +277,14 @@ function LinkEditor({
             <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" disabled={busy} onClick={onSave}>
+            <Button
+              type="button"
+              disabled={
+                busy ||
+                videoBlocker(draft.video, { google_meet: googleOn, zoom: zoom.connected }) !== null
+              }
+              onClick={onSave}
+            >
               {busy ? "Saving…" : draft.id ? "Save link" : "Create link"}
             </Button>
           </>

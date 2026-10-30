@@ -3,8 +3,9 @@
 // Zoom, or the guest's choice of the two; Moduo video stays visible, disabled.
 
 import { normalizeGuestReminderMinutes } from "@contracts/vocabularies";
-import { Check, Copy, Link, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
@@ -17,7 +18,7 @@ import { defaultBusyIds } from "../account-picks";
 import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
-import { VIDEO_LABEL, videoSetting } from "../booking/video";
+import { VIDEO_LABEL, videoBlocker, videoSetting } from "../booking/video";
 import {
   CONNECT_FINISHED_EVENT,
   finishConnectReturn,
@@ -32,6 +33,7 @@ import {
   type LinkDraft,
 } from "./booking-link-dialog";
 import type { CreatedLink } from "./booking-link-ready";
+import { BookingLinkRow } from "./booking-link-row";
 import {
   BOOKING_LINK_EDIT_EVENT,
   BOOKING_LINKS_CHANGED_EVENT,
@@ -43,8 +45,6 @@ type Props = {
   workspaceId: string;
   userId: string;
   accounts: CalendarAccountModel[];
-  /** Opens a link's view in the right panel; without it the name opens the editor. */
-  onOpen?: (linkId: string) => void;
 };
 
 type LinkRow = {
@@ -83,11 +83,8 @@ export async function zoomRequest(body: Record<string, unknown>): Promise<Record
   return (data ?? {}) as Record<string, unknown>;
 }
 
-function linkReady(row: LinkRow, googleOn: boolean, zoomOn: boolean): boolean {
-  const setting = videoSetting(row.video_provider);
-  if (setting === "zoom") return zoomOn;
-  if (setting === "guest_choice") return googleOn || zoomOn;
-  return googleOn;
+function connectedVideo(googleOn: boolean, zoomOn: boolean) {
+  return { google_meet: googleOn, zoom: zoomOn };
 }
 
 type Draft = LinkDraft;
@@ -167,11 +164,7 @@ function publicUrl(slug: string): string {
 /** What still stops guests booking a link, or null when nothing does. */
 function bookingBlocker(draft: Draft, googleOn: boolean, zoomOn: boolean): string | null {
   if (draft.paused) return "This link is paused.";
-  if (draft.video === "zoom") return zoomOn ? null : "Connect Zoom before guests can book.";
-  if (draft.video === "guest_choice") {
-    return googleOn || zoomOn ? null : "Connect Google or Zoom before guests can book.";
-  }
-  return googleOn ? null : "Connect Google before guests can book.";
+  return videoBlocker(draft.video, connectedVideo(googleOn, zoomOn));
 }
 
 /** A just-created link as the ready step shows it. */
@@ -198,7 +191,7 @@ function errorText(error: unknown, fallback: string): string {
   return fallback;
 }
 
-export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }: Props) {
+export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) {
   const { members } = useWorkspace();
   const teammates = members
     .filter((m) => m.isActive && !m.removedAt && m.userId !== userId)
@@ -374,8 +367,9 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
       setError("Give the link a name.");
       return;
     }
-    if (draft.video === "zoom" && !zoom.connected) {
-      setError("Connect Zoom first, or pick another video option.");
+    const videoProblem = videoBlocker(draft.video, connectedVideo(googleOn, zoom.connected));
+    if (videoProblem) {
+      setError(videoProblem);
       return;
     }
     setBusy(true);
@@ -482,24 +476,41 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
     }
   };
 
+  // Soft delete: the slug stops working, cancel links for booked meetings keep working.
+  const deleteLink = async (id: string) => {
+    const { error: deleteError } = await supabaseClient
+      .from("exposed_slot_links")
+      .update({ deleted_at: new Date().toISOString(), paused: true })
+      .eq("id", id);
+    if (deleteError) throw deleteError;
+    window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
+  };
+
   const remove = async () => {
     if (!draft?.id) return;
     setBusy(true);
     setError(null);
     try {
-      // Soft delete: the slug stops working, cancel links for booked meetings keep working.
-      const { error: deleteError } = await supabaseClient
-        .from("exposed_slot_links")
-        .update({ deleted_at: new Date().toISOString(), paused: true })
-        .eq("id", draft.id);
-      if (deleteError) throw deleteError;
+      await deleteLink(draft.id);
       setDraft(null);
-      window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
     } catch (e) {
       setError(errorText(e, "Could not delete the link."));
     } finally {
       setBusy(false);
     }
+  };
+
+  /** Pause or publish from the rail; a failure says so and leaves the link as it was. */
+  const setPaused = async (link: LinkRow, paused: boolean) => {
+    const { error: pauseError } = await supabaseClient
+      .from("exposed_slot_links")
+      .update({ paused })
+      .eq("id", link.id);
+    if (pauseError) {
+      toast.error(paused ? "Couldn't pause the link." : "Couldn't publish the link.");
+      return;
+    }
+    window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
   };
 
   const openEditor = (link: LinkRow) => {
@@ -596,37 +607,24 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
           </Button>
         </div>
       ))}
-      {links.map((link) => {
-        const ready = linkReady(link, googleOn, zoom.connected) && !link.paused;
-        return (
-          <div
-            key={link.id}
-            className="group/booking-row flex min-h-(--row-h-sm) items-center gap-2 rounded-md px-1 hover:bg-state-hover"
-          >
-            <Link aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
-            <button
-              type="button"
-              className="min-w-0 flex-1 truncate text-left text-sm text-foreground"
-              onClick={() => (onOpen ? onOpen(link.id) : openEditor(link))}
-            >
-              {link.name}
-            </button>
-            {link.paused ? (
-              <span className="shrink-0 text-xs text-muted-foreground">Paused</span>
-            ) : null}
-            {copied === link.slug ? (
-              <output className="shrink-0 text-xs text-muted-foreground">Copied</output>
-            ) : null}
-            <IconButton
-              icon={copied === link.slug ? Check : Copy}
-              label={`Copy link to ${link.name}`}
-              disabled={!ready}
-              className="opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/booking-row:opacity-100 group-focus-within/booking-row:opacity-100"
-              onClick={() => void copy(link.slug)}
-            />
-          </div>
-        );
-      })}
+      {links.map((link) => (
+        <BookingLinkRow
+          key={link.id}
+          name={link.name}
+          paused={link.paused}
+          blocker={videoBlocker(
+            videoSetting(link.video_provider),
+            connectedVideo(googleOn, zoom.connected),
+          )}
+          copied={copied === link.slug}
+          onCopy={() => void copy(link.slug)}
+          onEdit={() => openEditor(link)}
+          onTogglePause={() => void setPaused(link, !link.paused)}
+          onDelete={() =>
+            void deleteLink(link.id).catch(() => toast.error("Couldn't delete the link."))
+          }
+        />
+      ))}
 
       <BookingLinkDialog
         draft={draft}

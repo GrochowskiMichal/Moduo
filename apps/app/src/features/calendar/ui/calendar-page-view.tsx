@@ -707,7 +707,6 @@ export function CalendarPageView({
                   workspaceId={workspaceId}
                   userId={userId}
                   accounts={calendar.accounts}
-                  onOpen={booking.open}
                 />
               </>
             }

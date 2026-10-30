@@ -311,3 +311,41 @@ describe("after Create link", () => {
     );
   });
 });
+
+describe("a link's video needs its login", () => {
+  const editor = (googleOn: boolean, zoom = { configured: true, connected: false }) =>
+    render(
+      <BookingLinkDialog
+        draft={draft({ id: null, slug: null })}
+        accounts={[]}
+        googleOn={googleOn}
+        zoom={zoom}
+        busy={false}
+        error={null}
+        onOpenChange={noop}
+        onChange={noop}
+        onConnect={noop}
+        onConnectZoom={noop}
+        onDisconnectZoom={noop}
+        onSave={noop}
+        onDelete={noop}
+      />,
+    );
+
+  it("holds Create link back and offers Connect Google while Google isn't connected", () => {
+    editor(false);
+    screen.getByText("Connect Google to use Google Meet.");
+    screen.getByRole("button", { name: "Connect Google" });
+    expect(
+      (screen.getByRole("button", { name: "Create link" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("lets Create link go once the login is there, and offers no Moduo video", () => {
+    editor(true);
+    expect(
+      (screen.getByRole("button", { name: "Create link" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(screen.queryByText("Moduo video")).toBeNull();
+  });
+});
