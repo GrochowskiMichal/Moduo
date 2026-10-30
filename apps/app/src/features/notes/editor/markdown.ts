@@ -41,10 +41,11 @@ import {
   TableNode,
   TableRowNode,
 } from "@lexical/table";
-import { $createParagraphNode, $isTextNode } from "lexical";
+import { $createParagraphNode, $isTextNode, type ElementNode } from "lexical";
 
 import { $createEntityRefNode, EntityRefNode } from "../../spine/editor/entity-ref-schema";
 import { referenceKind, referenceNoun } from "../../spine/references/kinds";
+import { $withEscapeCache, STORED_TEXT_EXPORT } from "./markdown-escape";
 import { $createEmbedNode, $isEmbedNode, EmbedNode } from "./schema/embed-node";
 import { $createPageRowNode, $isPageRowNode, PageRowNode } from "./schema/page-row-node";
 import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "./schema/task-line-node";
@@ -174,6 +175,16 @@ function $tableCell(markdown: string): TableCellNode {
   return cell;
 }
 
+/** A cell's pipes escaped as `\|`, so they stay in the cell. The exporter
+ * already escaped every literal backslash before punctuation, so a pipe after
+ * an even run of backslashes is bare (escape it) and after an odd run it is
+ * escaped already. */
+function escapeCellPipes(markdown: string): string {
+  return markdown.replace(/(\\*)\|/g, (match, slashes: string) =>
+    slashes.length % 2 === 0 ? `${slashes}\\|` : match,
+  );
+}
+
 /** GFM tables ⇄ table blocks. @lexical/markdown ships none, so a table used
  * to export as nothing and import as literal pipes. The first row is always
  * the header (GFM requires one), so markdown → note → markdown is stable. */
@@ -187,12 +198,7 @@ export const TABLE_TRANSFORMER: ElementTransformer = {
       const cells = row
         .getChildren()
         .filter($isTableCellNode)
-        .map((cell) =>
-          $convertToMarkdownString(NOTES_TRANSFORMERS, cell)
-            .trim()
-            .replace(/\|/g, "\\|")
-            .replace(/\n+/g, "<br>"),
-        );
+        .map((cell) => escapeCellPipes($notesMarkdown(cell).trim()).replace(/\n+/g, "<br>"));
       lines.push(`| ${cells.join(" | ")} |`);
       if (lines.length === 1) lines.push(`| ${cells.map(() => "---").join(" | ")} |`);
     }
@@ -266,7 +272,9 @@ export const ENTITY_REF_TRANSFORMER: TextMatchTransformer = {
 
 /** The full Notes transformer set. Order matters on import: the moduo
  * element transformers must beat the generic ones, and the entity-ref
- * text-match must beat LINK (or moduo:// URIs become plain links). */
+ * text-match must beat LINK (or moduo:// URIs become plain links). Plain
+ * text exports through `STORED_TEXT_EXPORT`: escaped only where it would
+ * otherwise read as syntax (export-only; it never matches on import). */
 export const NOTES_TRANSFORMERS: Transformer[] = [
   TABLE_TRANSFORMER,
   PAGE_ROW_TRANSFORMER,
@@ -282,11 +290,46 @@ export const NOTES_TRANSFORMERS: Transformer[] = [
   ...TEXT_FORMAT_TRANSFORMERS,
   ENTITY_REF_TRANSFORMER,
   ...TEXT_MATCH_TRANSFORMERS,
+  STORED_TEXT_EXPORT,
 ];
 
+/** A note (or one block of it) as stored markdown. Every export goes
+ * through here, so each block's escapes are worked out once. */
+export function $notesMarkdown(node?: ElementNode): string {
+  return $withEscapeCache(() => $convertToMarkdownString(NOTES_TRANSFORMERS, node));
+}
+
 /** Paste heuristic: convert only when the plain text carries markdown BLOCK
- * syntax — a URL or plain prose must never round-trip through the parser. */
+ * syntax — a URL or plain prose must never round-trip through the parser,
+ * and code or config never does: its `#` lines are comments. */
 export function looksLikeMarkdown(text: string): boolean {
   if (!text.includes("\n") && !/^#{1,3} /.test(text)) return false;
+  if (looksLikeCode(text.split(/\r?\n/))) return false;
   return /^(#{1,3} |[-*+] |\d+\. |> |```|- \[[ x]\] )/m.test(text);
+}
+
+/** A shebang, an env file, or a `# ` line sitting directly on a line of
+ * prose or code, the way a comment sits on its code (a heading stands apart,
+ * or sits on a list, quote or table). Lines inside a fence don't count. */
+function looksLikeCode(lines: string[]): boolean {
+  if (lines[0]?.startsWith("#!") || looksLikeEnvFile(lines)) return true;
+  const plain = (i: number) => {
+    const line = lines[i] ?? "";
+    return line.trim() !== "" && !/^\s*([-*+] |\d+[.)] |>|```|~~~|\||#{1,6} )/.test(line);
+  };
+  let fenced = false;
+  return lines.some((line, i) => {
+    if (/^\s*(```|~~~)/.test(line)) fenced = !fenced;
+    return !fenced && /^#{1,6} /.test(line) && (plain(i - 1) || plain(i + 1));
+  });
+}
+
+/** Only `# comments` and `NAME=value` lines: an env file, whose comments
+ * would otherwise become headings. */
+function looksLikeEnvFile(lines: string[]): boolean {
+  const filled = lines.filter((line) => line.trim() !== "");
+  return (
+    filled.some((line) => !line.startsWith("#")) &&
+    filled.every((line) => /^(#|\s*(export\s+)?[A-Za-z_][A-Za-z0-9_]*=)/.test(line))
+  );
 }

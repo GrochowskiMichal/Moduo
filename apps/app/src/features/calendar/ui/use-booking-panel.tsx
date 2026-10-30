@@ -194,7 +194,7 @@ export function useBookingPanel(input: Input): {
     () =>
       (data?.hosts ?? []).map((h) => ({
         ...h,
-        name: members.find((m) => m.userId === h.userId)?.displayName || "Teammate",
+        name: members.find((m) => m.userId === h.userId)?.displayName || "Member",
       })),
     [data, members],
   );

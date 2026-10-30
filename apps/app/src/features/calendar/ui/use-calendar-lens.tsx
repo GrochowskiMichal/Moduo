@@ -21,8 +21,7 @@ import {
   teammateHues,
   teammatesSharing,
 } from "../teammates";
-import { PreviewBanner } from "./preview-banner";
-import { PreviewAsMenu, readShownTeammates, saveShownTeammates } from "./shared-with-you";
+import { readShownTeammates, saveShownTeammates } from "./shared-with-you";
 import { TeammateLanes } from "./teammate-lanes";
 import { setTeammates, useTeammatesStore } from "./teammates-store";
 
@@ -104,7 +103,7 @@ export function useCalendarLens(q: {
     () =>
       members
         .filter((m) => m.isActive && !m.removedAt)
-        .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" })),
+        .map((m) => ({ userId: m.userId, name: m.displayName || "Member" })),
     [members],
   );
   const [shared, setShared] = useState<{ ws: string; list: SharedCalendar[] } | null>(null);
@@ -145,22 +144,11 @@ export function useCalendarLens(q: {
 
   const preview = usePreviewRead(runtime, workspaceId, range, as);
   const items = useMemo(() => (preview ? previewLens(preview) : []), [preview]);
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const previewing = as !== null;
-  const selected = previewing
-    ? (items.find((i) => selectedKey?.startsWith(`${i.event.id}:`)) ?? null)
-    : null;
 
-  const legend = legendLine(teammates.filter((t) => owners.includes(t.userId)));
-  const top: ReactNode = previewing ? (
-    <PreviewBanner
-      name={names[as] ?? "Teammate"}
-      levels={preview?.levels ?? []}
-      failed={preview?.failed ?? false}
-      loading={!preview}
-      selected={selected}
-    />
-  ) : legend ? (
+  // While previewing, the rail's glasses stay pressed (press again or Esc to leave).
+  const legend = previewing ? "" : legendLine(teammates.filter((t) => owners.includes(t.userId)));
+  const top: ReactNode = legend ? (
     <div className="flex items-center gap-2 border-b border-border px-3 py-1 text-xs text-muted-foreground">
       <span className="min-w-0 flex-1 truncate">{legend}</span>
       <Button
@@ -184,12 +172,6 @@ export function useCalendarLens(q: {
     tasks: <T,>(byDay: T): T => (previewing ? (EMPTY as T) : byDay),
     /** A failed preview isn't an empty week. */
     faulted: (base: boolean) => base || Boolean(preview?.failed),
-    /** While previewing a selection only explains the block; true = handled. */
-    select: (key: string | null) => {
-      if (!previewing) return false;
-      setSelectedKey(key);
-      return true;
-    },
     top,
     layer:
       previewing || owners.length === 0 ? null : (
@@ -201,6 +183,5 @@ export function useCalendarLens(q: {
           names={names}
         />
       ),
-    menu: previewing ? null : <PreviewAsMenu userId={userId} />,
   };
 }

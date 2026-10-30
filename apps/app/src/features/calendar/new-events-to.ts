@@ -66,23 +66,3 @@ export function withNewEventsTo(
   const { [workspaceId]: _old, ...rest } = prefs.newEventsTo;
   return { newEventsTo: accountId ? { ...rest, [workspaceId]: accountId } : rest };
 }
-
-/** The grid's quick-create calendars, starting on where new events go now. */
-export function quickCreateCalendars(
-  accounts: readonly CalendarAccountModel[],
-  prefs: Pick<CalendarPrefs, "newEventsTo">,
-  workspaceId: string,
-): { id: string; label: string; isDefault?: boolean }[] {
-  const to = resolveNewEventsTo(chosenNewEventsTo(prefs, workspaceId), accounts).accountId;
-  return [
-    { id: "moduo", label: "Moduo" },
-    ...accounts
-      // Only calendars Google lets you write now: the others would refuse the create.
-      .filter(canTakeEvents)
-      .map((account) => ({
-        id: account.id,
-        label: account.displayLabel || "Google",
-        isDefault: account.id === to,
-      })),
-  ];
-}

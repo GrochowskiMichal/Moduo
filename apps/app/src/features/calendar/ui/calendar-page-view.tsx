@@ -13,12 +13,10 @@ import { FeaturePanelsShell } from "../../../components/app/feature-panels-shell
 import { RightPanel } from "../../../components/app/right-panel";
 import { truncationNotice } from "../../../components/app/truncation-notice";
 import { type CaptureSource, useCaptureSource } from "../../../lib/capture-source";
-import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { stopFocusWithUndo } from "../../focus/stop-with-undo";
 import { toggleFocusPause } from "../../focus/timer";
 import { dispatchLayoutPanelsSet, readFeaturePanelState } from "../../layout/panel-events";
-import { LinkedNotesPanel } from "../../notes/ui/linked-notes-panel";
 import {
   useTaskById,
   useTaskCommands,
@@ -27,7 +25,7 @@ import {
 } from "../../tasks/tasks-context";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import { useWorkspace } from "../../workspaces/workspace-context";
-import { accountSourceLabel, hiddenIdsForSet, syncAgeLabel } from "../accounts";
+import { accountSourceLabel, syncAgeLabel } from "../accounts";
 import { isElapsedBlock } from "../elapsed";
 import { followedEventId } from "../event-view";
 import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
@@ -48,7 +46,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
-import { quickCreateCalendars } from "../new-events-to";
+import type { QuickCreateDraft } from "../new-event-create";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -70,10 +68,8 @@ import { CalendarStrip } from "./calendar-strip";
 import { CalendarTasksPanel } from "./calendar-tasks-panel";
 import { CalendarToolbar } from "./calendar-toolbar";
 import { CalendarViews } from "./calendar-views";
-import { CalendarsPanel } from "./calendars-panel";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
-import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { CalendarNowNext } from "./now-next";
 import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
@@ -87,7 +83,7 @@ import { useCalendarFaults } from "./use-calendar-faults";
 import { useCalendarFocus } from "./use-calendar-focus";
 import { useCalendarHotkeys } from "./use-calendar-hotkeys";
 import { useCalendarLens } from "./use-calendar-lens";
-import { useCalendarNarrowPanels } from "./use-calendar-narrow-panels";
+import { useCalendarPlanKey } from "./use-calendar-plan-key";
 import { useCalendarShown } from "./use-calendar-shown";
 import { useCalendarTaskDrag } from "./use-calendar-task-drag";
 import { useCreateEvent } from "./use-create-event";
@@ -96,7 +92,7 @@ import { useEventMenu } from "./use-event-menu";
 import { useEventMove } from "./use-event-move";
 import { useOccurrenceQuestion } from "./use-occurrence-question";
 import { usePlanPlacement } from "./use-plan-placement";
-import { useScheduleDue } from "./use-schedule-due";
+import { useBusyOn, useScheduleDue } from "./use-schedule-due";
 
 type Props = {
   runtime: ModuoRuntime | null;
@@ -320,7 +316,7 @@ export function CalendarPageView({
     () =>
       workspaceMembers
         .filter((m) => m.isActive && !m.removedAt)
-        .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" })),
+        .map((m) => ({ userId: m.userId, name: m.displayName || "Member" })),
     [workspaceMembers],
   );
   const [eventPopover, setEventPopover] = useState<EventPopoverState | null>(null);
@@ -377,11 +373,6 @@ export function CalendarPageView({
     setTaskPopover({ block, rect });
   }, []);
 
-  const createCalendars = useMemo(
-    () => quickCreateCalendars(calendar.accounts, prefs, workspaceId),
-    [calendar.accounts, prefs, workspaceId],
-  );
-
   const onCreateEvent = useCreateEvent(calendar, runtime, workspaceId);
 
   const onMoveEvent = useCallback(
@@ -402,7 +393,7 @@ export function CalendarPageView({
   // ── drag-to-schedule (the universal drag contract, AC6)
   const drag = useCalendarTaskDrag({ tasks, sessions, canEdit: lens.edit(canEdit), commands });
 
-  useCalendarNarrowPanels(setPanelVariant);
+  useCalendarPlanKey(setPanelVariant);
   const keys = useCalendarHotkeys({
     view: viewState.view,
     days: range.days,
@@ -414,14 +405,14 @@ export function CalendarPageView({
     workspaceId,
     panelVariant,
     selectedOccurrenceKey,
-    select: (k) => lens.select(k) || setSelectedOccurrenceKey(k),
+    select: (k) => lens.previewing || setSelectedOccurrenceKey(k),
     setView,
     goToday,
     step,
     occurrence: occurrenceQuestion,
     onMoveEvent,
     createEvent: onCreateEvent,
-    onEventClick: (c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r),
+    onEventClick: (c, r) => lens.previewing || onEventClick(c, r),
     openDetail,
   });
 
@@ -444,13 +435,18 @@ export function CalendarPageView({
   });
 
   // CALR-2: Schedule (S) in a day header's due list.
-  const onScheduleDue = useScheduleDue({
-    tasks,
+  const busyOn = useBusyOn({
+    range,
     prefs,
-    commands,
-    eventsByDay: eventChips.timed,
+    events: lens.events,
+    isWritable,
+    userId,
+    timed: eventChips.timed,
+    tasks,
+    sessions,
     blocksByDay: grouped,
   });
+  const onScheduleDue = useScheduleDue({ tasks, prefs, commands, busyOn });
 
   // CALR-5: Plan's S lifts a task onto the grid; / finds a task.
   const plan = usePlanPlacement({
@@ -549,8 +545,8 @@ export function CalendarPageView({
   );
   useCaptureSource(captureSource);
 
-  // The registered views (features/calendar/panel-views.ts), unchanged from the
-  // old tabs: the menu lists Detail and Notes, then Tasks below the hairline.
+  // The registered views (features/calendar/panel-views.ts): Detail, then Plan
+  // below the hairline. Linked notes show inside Detail, as a task's do.
   const panelViews = useMemo(
     () => ({
       tasks: () => (
@@ -612,29 +608,6 @@ export function CalendarPageView({
             <span className="text-sm text-muted-foreground">Select something on the calendar.</span>
           </div>
         ),
-      // "Notes" rail (NO-7b, AC8): the notes linked to the selected event/task,
-      // plus New-linked-note. Focus follows the same detail selection.
-      notes: () => (
-        <LinkedNotesPanel
-          runtime={runtime}
-          workspaceId={workspaceId}
-          focus={detailTarget ? { type: detailTarget.type, id: detailTarget.id } : null}
-          focusLabel={detailEvent?.title ?? detailTask?.title ?? undefined}
-          focusIcon={
-            detailTarget?.type === "event"
-              ? "calendar"
-              : detailTarget?.type === "task"
-                ? "check-square"
-                : null
-          }
-          canEdit={calendar.canEdit}
-          onOpenNote={(id) =>
-            window.dispatchEvent(
-              new CustomEvent(ENTITY_OPEN_EVENT, { detail: { type: "note", id } }),
-            )
-          }
-        />
-      ),
     }),
     [
       calendar,
@@ -681,6 +654,8 @@ export function CalendarPageView({
         notice={truncationNotice(calendar.truncated)}
         left={
           <CalendarRail
+            workspaceId={workspaceId}
+            userId={userId}
             anchor={anchor}
             onSelectDate={goToDate}
             busyDayKeys={busyDayKeys}
@@ -690,25 +665,17 @@ export function CalendarPageView({
             accountHues={accountHues}
             hiddenAccountIds={prefs.hiddenAccountIds}
             onToggleAccountVisibility={toggleAccountVisibility}
+            onSetHidden={(hiddenIds) => updatePrefs(() => ({ hiddenAccountIds: hiddenIds }))}
             onRecolorAccount={setAccountColor}
             onRemoveAccount={removeAccount}
             onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
             footer={
               <>
-                <CalendarsPanel
-                  workspaceId={workspaceId}
-                  userId={userId}
-                  onShowAccounts={(visibleIds, knownIds) => {
-                    const known = [...calendar.accounts.map((account) => account.id), ...knownIds];
-                    updatePrefs(() => ({ hiddenAccountIds: hiddenIdsForSet(visibleIds, known) }));
-                  }}
-                />
                 <BookingLinks
                   runtime={runtime}
                   workspaceId={workspaceId}
                   userId={userId}
                   accounts={calendar.accounts}
-                  onOpen={booking.open}
                 />
               </>
             }
@@ -737,16 +704,13 @@ export function CalendarPageView({
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
               nowNext={
-                <>
-                  {lens.menu}
-                  <CalendarNowNext
-                    events={lens.events}
-                    onOpen={(item) => {
-                      setSelectedOccurrenceKey(item.occurrenceKey);
-                      openDetail({ type: "event", id: item.eventId });
-                    }}
-                  />
-                </>
+                <CalendarNowNext
+                  events={lens.events}
+                  onOpen={(item) => {
+                    setSelectedOccurrenceKey(item.occurrenceKey);
+                    openDetail({ type: "event", id: item.eventId });
+                  }}
+                />
               }
             />
             {faults.banner}
@@ -782,14 +746,12 @@ export function CalendarPageView({
               }}
               canEdit={lens.edit(canEdit && calendar.canEdit)}
               onToggleDone={onToggleDone}
-              onCreateEvent={onCreateEvent}
-              createCalendars={createCalendars}
               onMoveEvent={onMoveEvent}
               onMoveTask={drag.onMoveTask}
-              onEventClick={(c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r)}
+              onEventClick={(c, r) => lens.previewing || onEventClick(c, r)}
               onTaskClick={onTaskClick}
               selectedOccurrenceKey={selectedOccurrenceKey}
-              onSelectOccurrence={(k) => lens.select(k) || setSelectedOccurrenceKey(k)}
+              onSelectOccurrence={(k) => lens.previewing || setSelectedOccurrenceKey(k)}
               accountHues={accountHues}
               workedTaskIds={workedTaskIds}
               onTriageLater={onTriageLater}

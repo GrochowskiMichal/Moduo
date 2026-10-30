@@ -10,6 +10,7 @@ import type { Task } from "../../tasks/model";
 import { dayPrep } from "../day-prep";
 import type { CalendarEventModel, EventChip } from "../events";
 import { localDayKey } from "../lens";
+import { openComposerAt } from "./calendar-composer";
 import { CalendarGrid, type CalendarGridProps } from "./calendar-grid";
 import { CalendarMonth } from "./calendar-month";
 import { DayPrepAside } from "./day-prep";
@@ -97,6 +98,16 @@ export function CalendarViews({
         onDueClick={grid.onDueClick}
         onScheduleDue={grid.onScheduleDue}
         staleAccountIds={grid.staleAccountIds}
+        onCreateOn={
+          grid.canEdit
+            ? (day) =>
+                openComposerAt({
+                  dayStartMs: new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime(),
+                  startMinute: null,
+                  lengthMinutes: null,
+                })
+            : undefined
+        }
       />
     );
   }

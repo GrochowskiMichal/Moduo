@@ -13,7 +13,17 @@ import type { CalendarItemKind } from "@contracts/vocabularies";
 import type { CalendarAccountModel, CalendarMirrorEventInput } from "./events";
 import type { pushGoogleWebEvent } from "./google-web";
 import { mapGoogleEvent } from "./mirror";
-import type { QuickCreateDraft } from "./ui/event-quick-create";
+
+/** A new event's basics. */
+export type QuickCreateDraft = {
+  title: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+  rrule: string | null;
+  /** "moduo" or a connected account id. */
+  calendarId: string;
+};
 
 /**
  * What a new event can carry. The composer (CALR-9) adds a place, people, a

@@ -31,8 +31,8 @@ import {
   stepCursor,
 } from "../grid-keys";
 import { type CalendarView, localDayKey } from "../lens";
+import type { QuickCreateDraft } from "../new-event-create";
 import type { CalendarPrefs, PanelVariantId } from "../prefs";
-import type { QuickCreateDraft } from "./event-quick-create";
 
 type Input = {
   view: CalendarView;

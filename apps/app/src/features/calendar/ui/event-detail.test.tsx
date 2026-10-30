@@ -3,7 +3,18 @@
 // came through, people with replies, and its notes and tasks as two-line rows,
 // with Link a person, note or task.
 
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+
+// The Activity lines read the workspace's people; these tests mount no workspace.
+rs.mock("../../spine/hooks/use-comment-people", () => ({
+  useCommentPeople: () => ({
+    currentUserId: "me",
+    mentionable: [],
+    names: [],
+    nameOf: () => null,
+    personOf: () => null,
+  }),
+}));
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
@@ -200,9 +211,10 @@ describe("event view follows the selection", () => {
     expect(priya.textContent).toContain("Accepted");
     expect(twoLine("Kai Ito", "kai@hale.co").textContent).toContain("Maybe");
 
-    // Notes and tasks as two-line rows.
-    twoLine("Q4 numbers", "Note");
-    twoLine("Send the deck", "Task");
+    // Notes and tasks as Linked cards, as a task's Linked.
+    expect(screen.getByText("Linked")).toBeTruthy();
+    expect(screen.getByText("Q4 numbers")).toBeTruthy();
+    expect(screen.getByText("Send the deck")).toBeTruthy();
   });
 
   it("selecting another event updates the view", async () => {
@@ -217,8 +229,18 @@ describe("event view follows the selection", () => {
     expect(screen.queryByText(/Booked through/)).toBeNull();
     twoLine("Nora Lind", "nora@hale.co");
     expect(screen.getByText("Declined")).toBeTruthy();
-    twoLine("Crit agenda", "Note");
+    expect(screen.getByText("Crit agenda")).toBeTruthy();
     expect(screen.getByText("Only you see it")).toBeTruthy();
+  });
+
+  it("shows the event's history under Activity, with no comments", async () => {
+    render(panel(A, true));
+    await settle();
+    expect(screen.getByRole("heading", { name: "Activity" })).toBeTruthy();
+    expect(screen.getByText(/created/i)).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /comment/i })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "Comments" })).toBeNull();
+    expect(screen.queryByText(/no comments yet/i)).toBeNull();
   });
 
   it("offers Add a place and Link when you can edit, and no Meet link a Moduo event can't make", async () => {

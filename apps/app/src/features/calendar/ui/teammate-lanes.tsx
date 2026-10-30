@@ -99,7 +99,7 @@ export function TeammateLanes({ days, blocks, owners, hues, names }: Props) {
                   <LaneBlock
                     key={`${b.eventId ?? b.calendarId}:${b.startMs}`}
                     block={b}
-                    name={names[lane.ownerId] ?? "Teammate"}
+                    name={names[lane.ownerId] ?? "Member"}
                     hue={hues[lane.ownerId] ?? "gray"}
                     geom={geom}
                   />

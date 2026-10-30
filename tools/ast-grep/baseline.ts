@@ -62,12 +62,6 @@ export const BASELINE: readonly BaselineEntry[] = [
   {
     rule: "supabase-error-swallowed",
     file: "apps/app/src/lib/runtime.web.notes.ts",
-    snippet: "if (error || !data) return null;",
-    why: "Deliberate: Legacy web read nothing reaches; the redb import goes through the Tauri runtime.",
-  },
-  {
-    rule: "supabase-error-swallowed",
-    file: "apps/app/src/lib/runtime.web.notes.ts",
     snippet:
       'if (error) { const undeployed = error.code === "42883" || error.code === "PGRST202"; if (!undeployed) { console.warn("[n',
     why: "Deliberate: Opportunistic repair sweep: logs a warning and becomes a no-op.",
@@ -237,12 +231,6 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet:
       "editor.update(() => { const selection = $getSelection(); if (!$isRangeSelection(selection)) return; if ($caretIn($isCode",
     why: "Risk: Paste handler; nothing reads the queued update's result, it only runs a beat later.",
-  },
-  {
-    rule: "lexical-update-in-command",
-    file: "apps/app/src/features/notes/editor/plugins/markdown-clipboard-plugin.tsx",
-    snippet: "editor.update(() => { $convertFromMarkdownString(text, NOTES_TRANSFORMERS); })",
-    why: "Risk: Paste handler; returns true whatever the queued update does.",
   },
   {
     rule: "lexical-update-in-command",

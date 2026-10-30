@@ -206,7 +206,9 @@ export class NotesSyncEngineV2 {
   private readonly drafts = new Set<string>();
   /** Promoted drafts whose create hasn't landed yet: their edits are queued
    * durably (so nothing typed is lost if the page closes) but not pushed until
-   * `releasePush`, so a push can never reach the server before its create. */
+   * `releasePush`, so a push can never reach the server before its create.
+   * Nor are they pulled: the server has no such note yet (it would answer
+   * "not found"), and nobody else can have written to it. */
   private readonly held = new Set<string>();
   /** Notes an editor has open: never evicted, however many rows get warmed. */
   private readonly onScreen = new Map<string, number>();
@@ -411,6 +413,8 @@ export class NotesSyncEngineV2 {
    * Always safe: Yjs application is idempotent and order-independent. */
   private async pull(s: NoteSession): Promise<number> {
     if (!this.runtime || s.destroyed || !ownerLive(this.owner)) return 0;
+    // Not on the server yet: the local doc is the whole note until its create lands.
+    if (this.drafts.has(s.noteId) || this.held.has(s.noteId)) return 0;
     try {
       const res = await this.runtime.notesV2.pullDoc({
         workspaceId: this.workspaceId,

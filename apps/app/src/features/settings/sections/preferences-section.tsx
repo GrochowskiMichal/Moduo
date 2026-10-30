@@ -99,7 +99,7 @@ const NOTIFICATION_ROWS: ReadonlyArray<{
   {
     type: "completed",
     title: "Completed by someone else",
-    description: "When a teammate completes a task you created.",
+    description: "When a workspace member completes a task you created.",
   },
   {
     type: "dueFollowUp",
@@ -524,7 +524,7 @@ function RemindersGroup() {
 }
 
 /**
- * "Show your agent work to teammates" (TV-D16, spec §12): an agent's session
+ * "Show your agent work to workspace members" (TV-D16, spec §12): an agent's session
  * line on a task is yours until you turn this on; then anyone who can see the
  * task sees it (never its hand-back summary). Off by default; it follows you
  * across workspaces and devices.
@@ -572,14 +572,14 @@ function AgentWorkGroup() {
       description="What your AI agents (connected through your API keys) are doing shows as one line on the task."
     >
       <PrefRow
-        title="Show your agent work to teammates"
+        title="Show your agent work to workspace members"
         description="Off: only you see your agents' session lines. On: anyone who can see the task sees them too. Hand-back summaries stay yours until you post them."
       >
         <Switch
           checked={on === true}
           disabled={on === null || busy}
           onCheckedChange={(v) => void toggle(v)}
-          aria-label="Show your agent work to teammates"
+          aria-label="Show your agent work to workspace members"
         />
       </PrefRow>
     </PrefGroup>

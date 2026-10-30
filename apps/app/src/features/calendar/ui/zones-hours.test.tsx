@@ -7,6 +7,17 @@
 process.env.TZ = "Europe/Warsaw";
 
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
+
+// The Activity lines read the workspace's people; these tests mount no workspace.
+rs.mock("../../spine/hooks/use-comment-people", () => ({
+  useCommentPeople: () => ({
+    currentUserId: "me",
+    mentionable: [],
+    names: [],
+    nameOf: () => null,
+    personOf: () => null,
+  }),
+}));
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
@@ -191,15 +202,23 @@ describe("the Working hours sheet", () => {
 
   it("sets the start and end of the working day", () => {
     const onChange = sheet();
-    fireEvent.change(screen.getByLabelText("Working day starts"), { target: { value: "09:30" } });
+    const starts = screen.getByLabelText("Working day starts") as HTMLInputElement;
+    // A text field on the person's clock, not the browser's native time input.
+    expect(starts.type).toBe("text");
+    fireEvent.change(starts, { target: { value: "09:30" } });
+    fireEvent.blur(starts);
     expect(onChange).toHaveBeenLastCalledWith({ workStartMinute: 570 });
-    fireEvent.change(screen.getByLabelText("Working day ends"), { target: { value: "17:00" } });
+    const ends = screen.getByLabelText("Working day ends");
+    fireEvent.change(ends, { target: { value: "5pm" } });
+    fireEvent.keyDown(ends, { key: "Enter" });
     expect(onChange).toHaveBeenLastCalledWith({ workEndMinute: 1020 });
   });
 
   it("refuses an end before the start", () => {
     const onChange = sheet();
-    fireEvent.change(screen.getByLabelText("Working day ends"), { target: { value: "07:00" } });
+    const ends = screen.getByLabelText("Working day ends");
+    fireEvent.change(ends, { target: { value: "07:00" } });
+    fireEvent.blur(ends);
     expect(onChange).not.toHaveBeenCalled();
   });
 

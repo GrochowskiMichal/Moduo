@@ -3,7 +3,7 @@ import { CalendarDays, Clock, X } from "lucide-react";
 import * as React from "react";
 
 import { formatDay, formatDayTime } from "@/lib/time-format";
-import { getResolvedTimeRegion } from "@/lib/time-region";
+import { getResolvedTimeRegion, useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 
 import { Button } from "./button";
@@ -89,13 +89,22 @@ function looksFinished(text: string): boolean {
   );
 }
 
-/** "15:00" → "3:00 PM": the one time grammar (tasks-v3 call 41). */
-function formatTimeText(hhmm: string): string {
+/**
+ * "15:00" → "3:00 PM" on a 12-hour clock, "15:00" on a 24-hour one: the one
+ * time grammar (tasks-v3 call 41), on the clock from Settings → Time & region.
+ */
+function formatTimeText(hhmm: string, hour12 = getResolvedTimeRegion().hour12): string {
   const [h, m] = hhmm.split(":").map(Number);
   if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
+  if (!hour12) return `${pad2(h)}:${pad2(m)}`;
   const suffix = h < 12 ? "AM" : "PM";
   const hour = h % 12 === 0 ? 12 : h % 12;
   return `${hour}:${pad2(m)} ${suffix}`;
+}
+
+/** A sample time on the person's clock, for an empty field: "3:00 PM" / "15:00". */
+function timePlaceholder(hour12 = getResolvedTimeRegion().hour12): string {
+  return formatTimeText("15:00", hour12);
 }
 
 type TimeInputProps = Omit<
@@ -119,7 +128,7 @@ type TimeInputProps = Omit<
 /**
  * TimeInput — the token time field that replaces the native
  * `<input type="time">` (DS-6, the §5.1 fix list): an `Input` that shows
- * "3:00 PM", takes "15:00", "3pm" or "1530", commits on Enter or blur, reverts
+ * "3:00 PM" (or "15:00" on a 24-hour clock), takes "15:00", "3pm" or "1530", commits on Enter or blur, reverts
  * text that isn't a time, and moves by `step` minutes on ↑ / ↓. While you type
  * the text stays as typed; it reads back as "3:00 PM" once committed.
  */
@@ -132,13 +141,16 @@ function TimeInput({
   className,
   onBlur,
   onKeyDown,
-  placeholder = "3:00 PM",
+  placeholder,
   ...props
 }: TimeInputProps) {
+  // Redraw when the 12/24-hour clock changes in Settings → Time & region (the
+  // value rides into `format`, so the compiler can't keep the old text).
+  const { hour12 } = useTimeRegion();
   // "" is "no time": an empty field stays empty, and clearing never saves.
   const field = useDraftField<string>({
     value,
-    format: (hhmm) => (hhmm ? formatTimeText(hhmm) : ""),
+    format: (hhmm) => (hhmm ? formatTimeText(hhmm, hour12) : ""),
     parse: (text) => (text.trim() === "" ? value : (parseTimeText(text) ?? undefined)),
     onValueChange,
   });
@@ -161,7 +173,7 @@ function TimeInput({
       spellCheck={false}
       size={size}
       value={field.draft}
-      placeholder={placeholder}
+      placeholder={placeholder ?? timePlaceholder(hour12)}
       onChange={(e) => {
         const text = e.target.value;
         if (!field.isTyping()) typedFrom.current = value;

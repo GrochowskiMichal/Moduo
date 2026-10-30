@@ -4,6 +4,17 @@
 // view's Private switch and P key, and its visibility line.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+
+// The Activity lines read the workspace's people; these tests mount no workspace.
+rs.mock("../../spine/hooks/use-comment-people", () => ({
+  useCommentPeople: () => ({
+    currentUserId: "me",
+    mentionable: [],
+    names: [],
+    nameOf: () => null,
+    personOf: () => null,
+  }),
+}));
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
@@ -19,7 +30,7 @@ afterEach(cleanup);
 const WS = "ws-1";
 const ME = "u-me";
 const KAI = "u-kai";
-const PRIVATE_LINE = "Private · teammates see “Busy”";
+const PRIVATE_LINE = "Private · workspace members see “Busy”";
 
 function event(over: Partial<CalendarEventModel> = {}): CalendarEventModel {
   return {

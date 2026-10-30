@@ -7,8 +7,8 @@
  *   - beside a nested row   → move among that parent's children
  *   - beside a Pages root   → move among Pages roots, or file an Inbox note
  *                             into Pages at that spot
- *   - beside an Inbox root  → file into the Inbox (it orders by capture time,
- *                             so a drop there never reorders)
+ *   - beside an Inbox root  → the whole Inbox is the target (it orders by
+ *                             capture time, so there is no slot between rows)
  *   - onto a section header → file / un-file (Pages: to the end)
  *   - in Favorites          → add or reorder the viewer's favorite
  * A drop into the dragged note's own subtree, or onto where it already sits,
@@ -51,6 +51,16 @@ export function zoneFromPointer(
   return "into";
 }
 
+/** What a drop really aims at. Beside an Inbox root there is no slot (the
+ * Inbox sorts newest first), so the target is the Inbox itself: it lights
+ * whole instead of drawing a line the note would never land on. */
+export function effectiveDropTarget(target: DropTarget, layout: Layout): DropTarget {
+  if (target.kind !== "row" || target.section !== "inbox" || target.zone === "into") return target;
+  return layout.inbox.some((n) => n.note.id === target.id)
+    ? { kind: "section", section: "inbox" }
+    : target;
+}
+
 export function resolveDropIntent(input: {
   notes: Note[];
   layout: Layout;
@@ -60,7 +70,8 @@ export function resolveDropIntent(input: {
   target: DropTarget;
   pos: PositionMath;
 }): DropIntent | null {
-  const { notes, layout, favoritePositions, dragId, target, pos } = input;
+  const { notes, layout, favoritePositions, dragId, pos } = input;
+  const target = effectiveDropTarget(input.target, layout);
   const byId = new Map(notes.map((n) => [n.id, n]));
   const drag = byId.get(dragId);
   if (!drag || drag.deletedAt) return null;
@@ -95,17 +106,11 @@ export function resolveDropIntent(input: {
     return drop ? { kind: "move", noteId: dragId, ...drop } : null;
   }
 
-  // Beside a nested row: a sibling move under that row's parent.
-  const overIsRoot =
-    inboxRoots.some((n) => n.id === over.id) || pageRoots.some((n) => n.id === over.id);
-  if (!overIsRoot) {
+  // Beside a nested row: a sibling move under that row's parent. (Beside an
+  // Inbox root never gets here: effectiveDropTarget made it the section.)
+  if (!pageRoots.some((n) => n.id === over.id)) {
     const drop = resolveDrop(notes, dragId, target.id, target.zone, pos);
     return drop ? { kind: "move", noteId: dragId, ...drop } : null;
-  }
-
-  // Beside an Inbox root: file it (Inbox orders by capture time).
-  if (target.section === "inbox") {
-    return isInboxRoot ? null : { kind: "file", noteId: dragId, inInbox: true };
   }
 
   // Beside a Pages root: a slot among Pages roots only.

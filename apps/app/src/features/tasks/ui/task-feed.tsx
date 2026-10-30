@@ -19,6 +19,10 @@
 // Comments go through the spine's ops (`comments_op_*`); the thread re-reads
 // whenever the store sees one of this task's comments change (an edit, a
 // reaction, a delete elsewhere).
+//
+// `EntityFeed` is the feed itself, for any item with a trail and a thread;
+// `TaskFeed` feeds it a task's trail and words. `ChangeFeed` is the trail
+// alone, for an item without comments (an event).
 
 import { Ellipsis, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -55,7 +59,7 @@ import {
 } from "../../spine/ui/comments-panel";
 import { activityActorName, activityLine } from "../activity";
 import {
-  buildTaskFeed,
+  buildFeed,
   type FeedFilter,
   type FeedItem,
   type FeedRow,
@@ -75,6 +79,7 @@ import {
 
 const NO_ACTIVITY: ActivityEntry[] = [];
 const NO_TEAMS: Team[] = [];
+const NO_COMMENTS: SpineComment[] = [];
 
 type Props = {
   task: Task;
@@ -112,6 +117,14 @@ function writeFilter(userId: string | null, filter: FeedFilter) {
   }
 }
 
+/** How a feed says its trail: the line after the name, and the name. */
+export type FeedWords = {
+  line: (entry: ActivityEntry) => string;
+  actor: (entry: ActivityEntry, currentUserId: string | null) => string;
+};
+
+const TASK_WORDS: FeedWords = { line: activityLine, actor: activityActorName };
+
 export function TaskFeed({
   task,
   runtime,
@@ -124,29 +137,11 @@ export function TaskFeed({
   const currentUserId = useTasksUserId();
   const allTeams = useTasksSelector((d) => d.bundle.teams ?? NO_TEAMS);
   const [activity, setActivity] = useState<ActivityEntry[]>(NO_ACTIVITY);
-  const [filter, setFilterState] = useState<FeedFilter>(() => readFilter(currentUserId));
-  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
-  const people = useCommentPeople();
   // TV-D13: `@Design` in a comment tells Design's members once.
   const teams = useMemo<ComposerTeam[]>(
     () => allTeams.map((t) => ({ id: t.id, name: t.name, mark: t.mark, color: t.color })),
     [allTeams],
   );
-  const thread = useCommentThread({
-    runtime,
-    workspaceId,
-    entityType: "task",
-    entityId: task.id,
-    entityLabel: task.title,
-    entityIcon: "task",
-    currentUserId,
-  });
-  const reloadThread = thread.reload;
-
-  const setFilter = (next: FeedFilter) => {
-    setFilterState(next);
-    writeFilter(currentUserId, next);
-  };
 
   // ActivityStamp re-reads the trail after an op.
   useEffect(() => {
@@ -164,28 +159,114 @@ export function TaskFeed({
   }, [task.id, activityStamp, loadActivity]);
 
   // Something changed on the task, or one of its comments changed anywhere
-  // (an edit, a reaction, a delete; the store hears them live): read the
-  // thread again. Not on mount: the thread reads itself then.
+  // (an edit, a reaction, a delete; the store hears them live).
   const commentStamp = useTasksSelector((_, snap) => snap.commentStamps?.get(task.id) ?? "");
-  const seen = useRef({ activityStamp, commentStamp });
-  useEffect(() => {
-    const last = seen.current;
-    if (last.activityStamp === activityStamp && last.commentStamp === commentStamp) return;
-    seen.current = { activityStamp, commentStamp };
-    reloadThread();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the stamps are the trigger
-  }, [activityStamp, commentStamp]);
 
+  return (
+    <EntityFeed
+      entity={{ type: "task", id: task.id, label: task.title, icon: "task" }}
+      createOp="tasks.create"
+      created={{
+        at: task.createdAt,
+        actorId: task.creatorUnknown || !task.creatorId ? null : task.creatorId,
+      }}
+      activity={activity}
+      words={TASK_WORDS}
+      runtime={runtime}
+      workspaceId={workspaceId}
+      currentUserId={currentUserId}
+      teams={teams}
+      canComment={!!runtime && !!workspaceId && !task.id.startsWith("tmp-")}
+      canRemoveAny={canRemoveAny}
+      composerSlot={composerSlot}
+      commentLabel="Comment on this task"
+      reloadKey={`${activityStamp}|${commentStamp}`}
+    />
+  );
+}
+
+type EntityFeedProps = {
+  entity: { type: string; id: string; label: string; icon: string };
+  /** The op that records its creation, and the row's own creation when the trail lacks it. */
+  createOp: string;
+  created: { at: string; actorId: string | null };
+  activity: ActivityEntry[];
+  words: FeedWords;
+  runtime: ModuoRuntime | null;
+  workspaceId: string | null;
+  currentUserId: string | null;
+  teams: ComposerTeam[];
+  canComment: boolean;
+  canRemoveAny?: boolean;
+  composerSlot?: HTMLElement | null;
+  commentLabel: string;
+  /** Changes when the thread should be read again (not on mount: it reads itself then). */
+  reloadKey: string;
+};
+
+/** The feed: "Activity" with All · Comments, the trail and comments, then the composer. */
+export function EntityFeed({
+  entity,
+  createOp,
+  created,
+  activity,
+  words,
+  runtime,
+  workspaceId,
+  currentUserId,
+  teams,
+  canComment,
+  canRemoveAny = false,
+  composerSlot,
+  commentLabel,
+  reloadKey,
+}: EntityFeedProps) {
+  const [filter, setFilterState] = useState<FeedFilter>(() => readFilter(currentUserId));
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const people = useCommentPeople();
+  const thread = useCommentThread({
+    runtime,
+    workspaceId,
+    entityType: entity.type,
+    entityId: entity.id,
+    entityLabel: entity.label,
+    entityIcon: entity.icon,
+    currentUserId,
+  });
+  const reloadThread = thread.reload;
+
+  const setFilter = (next: FeedFilter) => {
+    setFilterState(next);
+    writeFilter(currentUserId, next);
+  };
+
+  const seen = useRef(reloadKey);
+  useEffect(() => {
+    if (seen.current === reloadKey) return;
+    seen.current = reloadKey;
+    reloadThread();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the key is the trigger
+  }, [reloadKey]);
+
+  const createdAt = created.at;
+  const createdBy = created.actorId;
   const feed = useMemo(
-    () => buildTaskFeed({ task, activity, comments: thread.comments }),
-    [task, activity, thread.comments],
+    () =>
+      buildFeed({
+        id: entity.id,
+        createOp,
+        created: { at: createdAt, actorId: createdBy },
+        activity,
+        comments: thread.comments,
+      }),
+    [entity.id, createOp, createdAt, createdBy, activity, thread.comments],
   );
   const rows = shapeFeed(feed, filter, opened);
   const selfName = currentUserId ? people.nameOf(currentUserId) : null;
-  const canComment = !!runtime && !!workspaceId && !task.id.startsWith("tmp-");
   // `@` in a comment names things too (RF-1): the registry, under its RLS,
-  // never this task itself. Stored as references, never titles.
-  const taskId = task.id;
+  // never this item itself. Stored as references, never titles.
+  const selfType = entity.type;
+  const selfId = entity.id;
   const referenceSearch = useMemo(
     () =>
       runtime && workspaceId
@@ -197,43 +278,18 @@ export function TaskFeed({
                 limit: 7,
               });
               return records
-                .filter((r) => !(r.type === "task" && r.id === taskId))
+                .filter((r) => !(r.type === selfType && r.id === selfId))
                 .map((r) => ({ ref: { type: r.type, id: r.id }, label: r.label, icon: r.icon }));
             },
           }
         : undefined,
-    [runtime, workspaceId, taskId],
+    [runtime, workspaceId, selfType, selfId],
   );
 
   const open = (id: string) => setOpened((prev) => new Set(prev).add(id));
 
   const render = (row: FeedRow) => {
     switch (row.kind) {
-      case "line":
-        return <TrailLine key={row.id} item={row.item} currentUserId={currentUserId} />;
-      case "merged":
-        return (
-          <MergedLine
-            key={row.id}
-            entries={row.entries}
-            at={row.at}
-            currentUserId={currentUserId}
-            expanded={opened.has(row.id)}
-            onExpand={() => open(row.id)}
-          />
-        );
-      case "fold":
-        return (
-          <Button
-            key={row.id}
-            variant="ghost"
-            size="sm"
-            onClick={() => open(row.id)}
-            className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
-          >
-            {foldLabel(row.count)}
-          </Button>
-        );
       case "comment":
         return (
           <CommentItem
@@ -247,13 +303,15 @@ export function TaskFeed({
             teams={teams}
           />
         );
+      default:
+        return trailRow(row, { currentUserId, words, opened, open });
     }
   };
 
   const composer = canComment ? (
     <CommentComposer
       people={people.mentionable}
-      aria-label="Comment on this task"
+      aria-label={commentLabel}
       placeholder="Leave a comment…  @ to mention · / for dates"
       references={referenceSearch}
       teams={teams}
@@ -306,9 +364,111 @@ export function TaskFeed({
   );
 }
 
+/**
+ * The trail alone, under "Activity": for an item that has a history but no
+ * talk (an event: its talk happens in the meeting, its chat or a linked
+ * task). Same lines, merging and folds as the feed's All.
+ */
+export function ChangeFeed({
+  id,
+  createOp,
+  created,
+  activity,
+  words,
+  currentUserId,
+}: {
+  id: string;
+  createOp: string;
+  created: { at: string; actorId: string | null };
+  activity: ActivityEntry[];
+  words: FeedWords;
+  currentUserId: string | null;
+}) {
+  const [opened, setOpened] = useState<ReadonlySet<string>>(() => new Set());
+  const createdAt = created.at;
+  const createdBy = created.actorId;
+  const feed = useMemo(
+    () =>
+      buildFeed({
+        id,
+        createOp,
+        created: { at: createdAt, actorId: createdBy },
+        activity,
+        comments: NO_COMMENTS,
+      }),
+    [id, createOp, createdAt, createdBy, activity],
+  );
+  const open = (rowId: string) => setOpened((prev) => new Set(prev).add(rowId));
+  return (
+    <section aria-label="Activity" className="flex flex-col gap-2.5">
+      <h3 className="flex min-h-(--ctrl-h-sm) items-center font-sans text-sm font-medium text-foreground">
+        Activity
+      </h3>
+      {shapeFeed(feed, "all", opened).map((row) =>
+        trailRow(row, { currentUserId, words, opened, open }),
+      )}
+    </section>
+  );
+}
+
+/** A trail row (a line, a merged run or a fold); comments are the feed's own. */
+function trailRow(
+  row: FeedRow,
+  {
+    currentUserId,
+    words,
+    opened,
+    open,
+  }: {
+    currentUserId: string | null;
+    words: FeedWords;
+    opened: ReadonlySet<string>;
+    open: (id: string) => void;
+  },
+) {
+  switch (row.kind) {
+    case "line":
+      return <TrailLine key={row.id} item={row.item} currentUserId={currentUserId} words={words} />;
+    case "merged":
+      return (
+        <MergedLine
+          key={row.id}
+          entries={row.entries}
+          at={row.at}
+          currentUserId={currentUserId}
+          words={words}
+          expanded={opened.has(row.id)}
+          onExpand={() => open(row.id)}
+        />
+      );
+    case "fold":
+      return (
+        <Button
+          key={row.id}
+          variant="ghost"
+          size="sm"
+          onClick={() => open(row.id)}
+          className="-ms-2 self-start font-sans text-xs font-normal text-muted-foreground"
+        >
+          {foldLabel(row.count)}
+        </Button>
+      );
+    case "comment":
+      return null;
+  }
+}
+
 // ── trail lines ───────────────────────────────────────────────────────────────
 
-function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: string | null }) {
+function TrailLine({
+  item,
+  currentUserId,
+  words,
+}: {
+  item: FeedItem;
+  currentUserId: string | null;
+  words: FeedWords;
+}) {
   const people = useCommentPeople();
   if (item.kind === "created") {
     const who = item.actorId ? people.personOf(item.actorId) : null;
@@ -339,10 +499,8 @@ function TrailLine({ item, currentUserId }: { item: FeedItem; currentUserId: str
         time={feedTime(item.at)}
         title={formatTimestamp(item.at)}
       >
-        <b className="font-medium text-foreground">
-          {activityActorName(item.entry, currentUserId)}
-        </b>{" "}
-        {activityLine(item.entry)}
+        <b className="font-medium text-foreground">{words.actor(item.entry, currentUserId)}</b>{" "}
+        {words.line(item.entry)}
       </FeedEvent>
     );
   }
@@ -354,12 +512,14 @@ function MergedLine({
   entries,
   at,
   currentUserId,
+  words,
   expanded,
   onExpand,
 }: {
   entries: ActivityEntry[];
   at: string;
   currentUserId: string | null;
+  words: FeedWords;
   expanded: boolean;
   onExpand: () => void;
 }) {
@@ -373,6 +533,7 @@ function MergedLine({
             key={entry.id}
             item={{ kind: "activity", id: entry.id, at: entry.createdAt, entry }}
             currentUserId={currentUserId}
+            words={words}
           />
         ))}
       </>
@@ -387,7 +548,7 @@ function MergedLine({
       time={feedTime(at)}
       title={formatTimestamp(at)}
     >
-      <b className="font-medium text-foreground">{activityActorName(first, currentUserId)}</b>{" "}
+      <b className="font-medium text-foreground">{words.actor(first, currentUserId)}</b>{" "}
       <button
         type="button"
         onClick={onExpand}

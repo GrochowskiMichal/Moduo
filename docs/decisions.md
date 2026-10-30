@@ -202,6 +202,11 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-10-30 · An event has a history, not comments.
+- 2026-10-30 · Calendar's side panels follow the app's rules; the event panel's links are a task's Linked; no Notes view.
+- 2026-10-30 · A click or drag on the grid opens the composer; Preview as is the glasses toggle alone; the web's new-item key is ⌥N.
+- 2026-10-30 · A booking link's video needs its login before it saves; Their choice needs both; the rail edits links in place, never in the right panel.
+- 2026-10-30 · One Calendars section in the rail; the swatch shows and hides; a calendar's color can be a custom hex; saved views save what's shown.
 - 2026-10-28 · The connector reads one item per occurrence through the masked read; who sees what is one definer read; Home's Today widget shares the toolbar's now and next (CALR-21).
 - 2026-10-28 · An offer is its own token, its holds are ordinary busy rows, and one trigger releases them (CALR-19).
 - 2026-10-28 · New events go to is a synced per-workspace pref; Google-first is the only Google create; the mirror revives a tombstone before it inserts; the iCalUID only merges your own copies (CALR-20b).
@@ -249,6 +254,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Notes, Lexical, Yjs, Notion import → [decisions/notes.md](decisions/notes.md)
 
+- 2026-10-30 · Note text comes back as it went in: copy, stored markdown, paste; the Inbox lights whole on a drop
 - 2026-10-28 · NS-11: a note's content lives in `note_bodies`; v1.4.0 reads it through computed fields of the old column names
 - 2026-10-28 · NS-10: the nightly purge folds the log of notes nobody opens, by rebuilding the doc, under the client fold's CAS
 - 2026-10-28 · NS-9: legacy sharing objects and the pin are dropped; actor columns get keys; `position` is `COLLATE "C"`

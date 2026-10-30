@@ -92,9 +92,10 @@ export function writeViewState(
 
 // ── right-panel variant (localStorage, per user+workspace — §10) ────────────
 
-export type PanelVariantId = "tasks" | "detail" | "notes";
+export type PanelVariantId = "tasks" | "detail";
 
-const PANEL_VARIANT_IDS: readonly PanelVariantId[] = ["tasks", "detail", "notes"];
+// A remembered "notes" (the old linked-notes view) reads as Plan.
+const PANEL_VARIANT_IDS: readonly PanelVariantId[] = ["tasks", "detail"];
 
 function panelVariantKey(userId: string, workspaceId: string): string {
   return `moduo:calendar:panel-variant:${userId}:${workspaceId}`;

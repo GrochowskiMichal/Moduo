@@ -11,4 +11,6 @@ Compiled on 2026-10-27 (HV-14c, specs/harness-v3.md AC30): every entry became an
 
 ## Open entries
 
-None. A new trap goes here (the trap, why, what to do instead) only until it has a better home; one that bites twice becomes a hook, a lint rule or a test.
+- **`calendar_op_account_upsert` creates an account when the caller has no live row** (except for `p_status => 'error'`, since `20261030230000`). The sync loop's `"ok"` upsert after `mirrorEvents`, and `refreshGoogleAccess` (no status), run on a list that can be stale, so an account removed in between comes back. Rare (a millisecond window), not fixed: an update-only flag for sync callers is the fix when it bites.
+
+A new trap goes here (the trap, why, what to do instead) only until it has a better home; one that bites twice becomes a hook, a lint rule or a test.

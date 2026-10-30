@@ -1,4 +1,4 @@
-// Booking links and focus time (CALR-14, AC23): under Busy calendars, "Focus
+// Booking links and focus time (CALR-14, AC23): under Check for conflicts, "Focus
 // time" is a calendar of its own, off by default, so guests can book over it
 // unless the link ticks it.
 
@@ -62,9 +62,11 @@ function open(d: LinkDraft, onChange: (next: LinkDraft) => void = noop) {
       onDelete={noop}
     />,
   );
+  // The busy calendars live under "Check for conflicts", which opens in place.
+  fireEvent.click(screen.getByRole("button", { name: /^Check for conflicts/ }));
 }
 
-describe("booking link editor · Focus time under Busy calendars (AC23)", () => {
+describe("booking link editor · Focus time under Check for conflicts (AC23)", () => {
   it("is off for a link that doesn't list it", () => {
     open(draft());
     const box = screen.getByRole("checkbox", { name: "Focus time" });

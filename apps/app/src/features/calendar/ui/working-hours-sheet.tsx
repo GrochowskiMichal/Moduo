@@ -9,6 +9,7 @@ import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
+import { TimeInput } from "../../../components/ui/date-field";
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,6 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { IconButton } from "../../../components/ui/icon-button";
-import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { Switch } from "../../../components/ui/switch";
@@ -67,7 +67,7 @@ export function WorkingHoursSheet({ open, onOpenChange, prefs, onChange }: Sheet
   const { weekStart } = useSavedTimeRegion();
   const [saving, setSaving] = useState(false);
   const returnFocus = useReturnFocus(open);
-  // An end at midnight reads as 24:00 on the input's 00:00.
+  // An end at midnight reads as 24:00 on the field's 00:00 (12:00 AM).
   const end = prefs.workEndMinute >= 24 * 60 ? 0 : prefs.workEndMinute;
 
   const setStart = (value: string) => {
@@ -102,24 +102,26 @@ export function WorkingHoursSheet({ open, onOpenChange, prefs, onChange }: Sheet
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cal-work-start">Starts</Label>
-              <Input
+              <TimeInput
                 id="cal-work-start"
-                type="time"
-                step={900}
+                size="md"
+                step={15}
+                className="w-full"
                 aria-label="Working day starts"
                 value={toClock(prefs.workStartMinute)}
-                onChange={(e) => setStart(e.target.value)}
+                onValueChange={setStart}
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="cal-work-end">Ends</Label>
-              <Input
+              <TimeInput
                 id="cal-work-end"
-                type="time"
-                step={900}
+                size="md"
+                step={15}
+                className="w-full"
                 aria-label="Working day ends"
                 value={toClock(end)}
-                onChange={(e) => setEnd(e.target.value)}
+                onValueChange={setEnd}
               />
             </div>
           </div>

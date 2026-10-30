@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 import { focusChipTitle } from "../focus-item";
+import { hueAttrs } from "../hue";
 import { formatTimeOfDay } from "./time-format";
 
 /** Chips with less visible height than this render the one-line layout. */
@@ -111,7 +112,7 @@ export function EventChipView({
   return (
     <div
       data-chip="event"
-      data-label={hue}
+      {...hueAttrs(hue)}
       data-kind={focus ? "focus" : held ? "hold" : undefined}
       {...onlyTrue({
         "data-past": past,

@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import { Kbd } from "../../../components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { formatWeekdayDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import type { DueChip } from "../lens";
 
 type Props = {
@@ -61,7 +63,7 @@ export function DayHeader({
           className={cn(
             "shrink-0 font-display font-semibold leading-none tracking-tight tabular-nums",
             today
-              ? "inline-grid h-7 min-w-7 place-items-center rounded-full bg-primary px-1.5 text-lg text-primary-foreground"
+              ? "inline-grid h-7 min-w-7 place-items-center rounded-md bg-primary px-1.5 text-lg text-primary-foreground"
               : cn(
                   "text-xl",
                   past
@@ -109,11 +111,9 @@ export function DueList({
   onSchedule: ((taskId: string) => void) | null;
 }) {
   const [open, setOpen] = useState(false);
-  const dayLabel = day.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  // "Thu, Jul 2" / "Thu, 2 Jul": the date order from Time & region, redrawn when it changes.
+  useTimeRegion();
+  const dayLabel = formatWeekdayDate(day);
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (!onSchedule || e.key.toLowerCase() !== "s" || e.metaKey || e.ctrlKey || e.altKey) return;
     const row =

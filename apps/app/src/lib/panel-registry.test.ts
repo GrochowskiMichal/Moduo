@@ -22,7 +22,7 @@ describe("the registered views", () => {
     const ids = (m: PanelModule) => PANEL_VIEWS[m].map((v) => v.id).sort();
     // TV-F8: In flight; TV-TL2: the Timeline's No date (both alongside).
     expect(ids("tasks")).toEqual(["details", "inflight", "nodate", "project"]);
-    expect(ids("calendar")).toEqual(["detail", "notes", "tasks"]);
+    expect(ids("calendar")).toEqual(["detail", "tasks"]);
     expect(ids("email")).toEqual(["contact", "detail", "reader", "task"]);
     expect(ids("notes")).toEqual(["comments", "detail", "outline"]);
     expect(ids("contacts")).toEqual(["notes"]);
@@ -80,7 +80,7 @@ describe("menu order", () => {
   });
 
   it("lists Calendar's Tasks below its about-this views", () => {
-    expect(panelViewsFor("calendar").map((v) => v.id)).toEqual(["detail", "notes", "tasks"]);
+    expect(panelViewsFor("calendar").map((v) => v.id)).toEqual(["detail", "tasks"]);
   });
 
   it("leaves out the views a page can't render", () => {

@@ -249,9 +249,6 @@ export function EventComposer({
         <span className="inline-flex items-center gap-1">
           <Kbd>at</Kbd> Place
         </span>
-        <span className="ml-auto inline-flex items-center gap-1">
-          <Kbd>esc</Kbd>
-        </span>
       </div>
     </div>
   );

@@ -4,10 +4,10 @@
 
 import type { CalendarItemKind, ConferenceProvider } from "@contracts/vocabularies";
 
-import { type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { Truncation } from "../../lib/paged-select";
 import { formatTime } from "../../lib/time-format";
 import { showsLock } from "./event-view";
+import { type CalendarHue, normalizeHue } from "./hue";
 import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
@@ -220,8 +220,8 @@ export type EventChip = {
 export function eventHue(
   chip: Pick<EventChip, "sourceAccountId" | "color">,
   accountHues: Record<string, string>,
-): LabelColor {
-  return normalizeLabelColor(chip.sourceAccountId ? accountHues[chip.sourceAccountId] : chip.color);
+): CalendarHue {
+  return normalizeHue(chip.sourceAccountId ? accountHues[chip.sourceAccountId] : chip.color);
 }
 
 /** "→ Thu 7:10" on the first day of an overnight event, "from Wed 22:40" on

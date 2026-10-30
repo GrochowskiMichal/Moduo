@@ -222,16 +222,14 @@ describe("pullDoc on notes_pull", () => {
     expect(tableReads()).toEqual([]);
   });
 
-  it("falls back to the table reads while notes_pull is missing", async () => {
+  // 1.5.0 shipped notes_pull, so the table-read fallback is gone (its columns
+  // moved to note_bodies in NS-11): a missing function now fails loudly.
+  it("fails loudly when notes_pull is missing, with no table reads", async () => {
     recorded.answers.notes_pull = missing("notes_pull");
-    recorded.answers.note_updates = { data: [update(5)], error: null };
-    recorded.answers.notes = { data: { doc_state: "U05BUA==", doc_version: 2 }, error: null };
-    const res = await webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE });
-    expect(tableReads()).toContain("note_updates");
-    expect(tableReads()).toContain("notes");
-    expect(res.snapshotB64).toBe("U05BUA==");
-    expect(res.docVersion).toBe(2);
-    expect(res.updates.map((u) => u.id)).toEqual([5]);
+    await expect(webRuntime.notesV2.pullDoc({ workspaceId: WS, noteId: NOTE })).rejects.toThrow(
+      "notes_pull is not deployed",
+    );
+    expect(tableReads()).toEqual([]);
   });
 });
 

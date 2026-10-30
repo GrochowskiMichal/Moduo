@@ -96,7 +96,7 @@ function eventTimes(
     return { startsAt: start.toISOString(), endsAt: end.toISOString(), allDay: false };
   }
   if (parsed.dueDate) {
-    // All-day convention mirrors event-quick-create: local-midnight → next
+    // All-day convention, as the calendar keeps it: local-midnight → next
     // local-midnight so the chip lands on the right day regardless of TZ.
     const d = new Date(parsed.dueDate);
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());

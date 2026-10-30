@@ -639,7 +639,7 @@ export function MentionMenuPlugin({
       ) : candidates.length === 0 ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">
           {trigger === "mention" && peopleOnly
-            ? "No teammate by that name. @ mentions people in this workspace."
+            ? "No workspace member by that name. @ mentions people in this workspace."
             : "No matches."}
         </p>
       ) : (

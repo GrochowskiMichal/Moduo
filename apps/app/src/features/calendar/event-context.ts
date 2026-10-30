@@ -20,7 +20,7 @@ export function calendarLabel(
   // Every member's built-in calendar is called "Moduo"; say whose it is.
   if (calendar.kind !== "moduo") return calendar.name;
   if (calendar.ownerId === viewer.userId) return "Your calendar";
-  const owner = viewer.members.find((m) => m.userId === calendar.ownerId)?.name ?? "Teammate";
+  const owner = viewer.members.find((m) => m.userId === calendar.ownerId)?.name ?? "Member";
   return `${owner}'s calendar`;
 }
 

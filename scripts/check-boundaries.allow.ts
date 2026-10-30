@@ -13,7 +13,7 @@ export const ALLOW_RUNTIME: readonly string[] = [
   "src/features/calendar/google-web.ts",
   "src/features/calendar/hooks/use-calendar-module.ts",
   "src/features/calendar/ui/booking-links.tsx",
-  "src/features/calendar/ui/calendars-panel.tsx",
+  "src/features/calendar/ui/use-rail-calendars.ts", // the old calendars-panel.tsx reads, moved (2026-10-30)
   "src/features/chat/emoji/store.ts",
   "src/features/chat/realtime.ts",
   "src/features/chat/shell/use-chat-rights.ts",

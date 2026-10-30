@@ -10,6 +10,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { toast } from "sonner";
 
 import { Button } from "../../../components/ui/button";
+import { DateField } from "../../../components/ui/date-field";
 import { DetailTitle, detailTitleVariants } from "../../../components/ui/detail-title";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Field } from "../../../components/ui/field";
@@ -20,19 +21,19 @@ import { Switch } from "../../../components/ui/switch";
 import type { EntityRef } from "../../../lib/entity-links";
 import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { formatTime, formatWeekdayDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import { timeAgo } from "../../contacts/rollup";
-import { spineActivityLine, spineActorName } from "../../spine/activity";
 import { EntityTextEditor } from "../../spine/editor/lazy-entity-text-editor";
 import { useEntityHub } from "../../spine/hooks/use-entity-hub";
 import { createLinkWithToast } from "../../spine/ui/drop-link-toast";
 import { EntityRichText } from "../../spine/ui/entity-rich-text";
-import { toLocalInputValue } from "../../tasks/helpers";
-import type { ActivityEntry } from "../../tasks/model";
 import { loadEventContext } from "../event-context";
 import { canAddMeet, canMakePrivate, type EventContext } from "../event-view";
 import type { CalendarAccountModel, CalendarEventModel, CalendarEventPatch } from "../events";
 import { meetingLinkOf } from "../meeting-link";
 import type { EventWriter } from "../writable";
+import { EventFeed } from "./event-feed";
 import {
   EventCalendarRows,
   EventLinkedRows,
@@ -67,6 +68,13 @@ type Props = {
   menu?: ReactNode;
 };
 
+/** "Thu, Jul 2, 3:00 PM" / "Thu, 2 Jul, 15:00": Time & region's date order and clock. */
+function dateTimeText(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${formatWeekdayDate(d)}, ${formatTime(d)}`;
+}
+
 export function EventDetailPanel({
   runtime,
   workspaceId,
@@ -82,6 +90,8 @@ export function EventDetailPanel({
   onClose,
   menu = null,
 }: Props) {
+  // The read-only Starts / Ends redraw when Time & region changes.
+  useTimeRegion();
   const external = event.sourceAccountId !== null;
   const meeting = meetingLinkOf(event);
   const editable = canEdit && (writable ?? !external);
@@ -100,16 +110,10 @@ export function EventDetailPanel({
   const [title, setTitle] = useState(event.title);
   // Notes are a Lexical editor (DF-23 — `@mention` / `/ref` inline, stored as
   // HTML); it seeds itself and commits on blur, so no local draft state here.
-  // Times are draft state committed on blur/Enter — datetime-local fires
-  // change per keyboard segment edit; committing per keystroke would write
-  // garbage intermediates ("year 0002") to the whole series.
-  const [startDraft, setStartDraft] = useState(() => toLocalInputValue(event.startsAt));
-  const [endDraft, setEndDraft] = useState(() => toLocalInputValue(event.endsAt));
+  // Times are DateFields: each saves once, when its picker closes.
   useEffect(() => {
     setTitle(event.title);
-    setStartDraft(toLocalInputValue(event.startsAt));
-    setEndDraft(toLocalInputValue(event.endsAt));
-  }, [event.id, event.title, event.startsAt, event.endsAt]);
+  }, [event.id, event.title]);
 
   const focus = useMemo(() => ({ type: "event", id: event.id }) as const, [event.id]);
   const hub = useEntityHub(runtime, workspaceId, focus);
@@ -162,30 +166,6 @@ export function EventDetailPanel({
     [runtime, workspaceId, hubReload],
   );
 
-  const [activity, setActivity] = useState<ActivityEntry[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!runtime) return;
-      try {
-        // Entity-scoped, module OMITTED — event activity logs under
-        // module='calendar' (the CO-2 listActivity lesson).
-        const rows = await runtime.tasks.listActivity({
-          workspaceId,
-          entityType: "event",
-          entityId: event.id,
-          limit: 20,
-        });
-        if (!cancelled) setActivity(rows);
-      } catch {
-        if (!cancelled) setActivity([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [runtime, workspaceId, event.id, event.updatedAt]);
-
   const commitTitle = useCallback(() => {
     const trimmed = title.trim();
     if (!trimmed || trimmed === event.title) {
@@ -196,15 +176,9 @@ export function EventDetailPanel({
   }, [title, event.id, event.title, onPatch]);
 
   const commitTime = useCallback(
-    (key: "startsAt" | "endsAt", value: string, current: string) => {
-      const parsed = value ? new Date(value) : null;
-      if (!parsed || Number.isNaN(parsed.getTime())) {
-        // Revert an incomplete draft rather than writing garbage.
-        if (key === "startsAt") setStartDraft(toLocalInputValue(current));
-        else setEndDraft(toLocalInputValue(current));
-        return;
-      }
-      const iso = parsed.toISOString();
+    (key: "startsAt" | "endsAt", value: Date | null, current: string) => {
+      if (!value || Number.isNaN(value.getTime())) return;
+      const iso = value.toISOString();
       if (iso !== current) onPatch(event.id, { [key]: iso });
     },
     [event.id, onPatch],
@@ -259,36 +233,30 @@ export function EventDetailPanel({
 
       <Field label="Starts">
         {editable ? (
-          <Input
-            type="datetime-local"
-            value={startDraft}
-            onChange={(e) => setStartDraft(e.target.value)}
-            onBlur={() => commitTime("startsAt", startDraft, event.startsAt)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
+          <DateField
+            withTime
+            variant="outline"
+            value={new Date(event.startsAt)}
+            onChange={(d) => commitTime("startsAt", d, event.startsAt)}
+            formatValue={(d) => dateTimeText(d.toISOString())}
             aria-label="Starts at"
           />
         ) : (
-          <span className="text-sm text-foreground">
-            {new Date(event.startsAt).toLocaleString()}
-          </span>
+          <span className="text-sm text-foreground">{dateTimeText(event.startsAt)}</span>
         )}
       </Field>
       <Field label="Ends">
         {editable ? (
-          <Input
-            type="datetime-local"
-            value={endDraft}
-            onChange={(e) => setEndDraft(e.target.value)}
-            onBlur={() => commitTime("endsAt", endDraft, event.endsAt)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
+          <DateField
+            withTime
+            variant="outline"
+            value={new Date(event.endsAt)}
+            onChange={(d) => commitTime("endsAt", d, event.endsAt)}
+            formatValue={(d) => dateTimeText(d.toISOString())}
             aria-label="Ends at"
           />
         ) : (
-          <span className="text-sm text-foreground">{new Date(event.endsAt).toLocaleString()}</span>
+          <span className="text-sm text-foreground">{dateTimeText(event.endsAt)}</span>
         )}
       </Field>
       {event.allDay ? null : <SecondZoneTime startsAt={event.startsAt} endsAt={event.endsAt} />}
@@ -377,24 +345,12 @@ export function EventDetailPanel({
 
       <Separator />
 
-      <div className="flex flex-col gap-1.5">
-        <Eyebrow>Activity</Eyebrow>
-        {activity.length === 0 ? (
-          <span className="text-xs text-muted-foreground">No activity yet.</span>
-        ) : (
-          activity.map((entry) => (
-            <div key={entry.id} className="flex items-baseline justify-between gap-2">
-              <span className="min-w-0 truncate text-xs text-muted-foreground">
-                <span className="text-foreground">{spineActorName(entry, currentUserId)}</span>{" "}
-                {spineActivityLine(entry)}
-              </span>
-              <span className="shrink-0 text-2xs text-subtle-foreground">
-                {timeAgo(entry.createdAt, now)}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+      <EventFeed
+        runtime={runtime}
+        workspaceId={workspaceId}
+        currentUserId={currentUserId}
+        event={event}
+      />
 
       {editable ? (
         <>
