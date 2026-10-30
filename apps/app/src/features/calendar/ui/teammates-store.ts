@@ -17,12 +17,16 @@ export type TeammatesState = {
   named: string[];
   /** Preview as: the member, or null. */
   previewAs: string | null;
-  /** Your calendars, for the banner's names; main = Your calendar. */
-  myCalendars: { id: string; name: string; main: boolean }[];
-  /** "Change what … sees": the calendar whose share menu to open. */
-  shareOpen: string | null;
-  /** "Find a time with …": the composer's opening text and the teammates it names. */
-  composerSeed: { text: string; ids: string[] } | null;
+  /**
+   * What the composer opens with: "Find a time with …" text and the members it
+   * names, or a slot a click or drag on the grid picked (a day, its start
+   * minute or null for the day's first free time, and a length).
+   */
+  composerSeed: {
+    text: string;
+    ids: string[];
+    slot?: { dayStartMs: number; startMinute: number | null; lengthMinutes: number | null };
+  } | null;
 };
 
 let state: TeammatesState = {
@@ -31,8 +35,6 @@ let state: TeammatesState = {
   shown: [],
   named: [],
   previewAs: null,
-  myCalendars: [],
-  shareOpen: null,
   composerSeed: null,
 };
 const listeners = new Set<() => void>();

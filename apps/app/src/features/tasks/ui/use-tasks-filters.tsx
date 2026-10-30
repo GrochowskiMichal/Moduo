@@ -209,7 +209,7 @@ const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
   // Who or what a task waits on (TV-U8): any entry, or one kind.
   waiting: [
     { value: WAITING_ANY, label: "Anything", keywords: ["waiting"] },
-    { value: "person", label: "A teammate", keywords: ["person", "people"] },
+    { value: "person", label: "A workspace member", keywords: ["person", "people"] },
     { value: "email", label: "An email reply", keywords: ["client", "reply"] },
     { value: "agent", label: "An agent" },
     { value: "text", label: "Something else", keywords: ["client"] },

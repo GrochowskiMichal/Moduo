@@ -523,14 +523,14 @@ describe("A row's details, pinned to its end (MOD-138, MOD-125)", () => {
     expect(agent.dataset.tone).toBe("loud");
     expect(agent.className).toContain("text-foreground");
     expect(agent.querySelector("span[aria-hidden]")?.className).toContain("rounded-full");
-    expect(agent.textContent).toBe("A teammate's Claude · needs you");
+    expect(agent.textContent).toBe("A workspace member's Claude · needs you");
     // Under 16rem the state goes, under 12rem the agent too: still read aloud.
     const words = agent.lastElementChild as HTMLElement;
     expect(words.className).toContain("@max-[12rem]/title:sr-only");
     expect((words.lastElementChild as HTMLElement).className).toContain("@max-3xs/title:sr-only");
     fireEvent.pointerMove(agent, { pointerType: "mouse" });
     expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "A teammate's Claude · needs you",
+      "A workspace member's Claude · needs you",
     );
   });
 

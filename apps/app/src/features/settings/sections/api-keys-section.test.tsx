@@ -363,7 +363,7 @@ describe("a key's row", () => {
     ]);
     renderSection();
     await screen.findByText("Annas");
-    expect(within(keyRow("Annas")).getByText("Acts as a teammate")).toBeTruthy();
+    expect(within(keyRow("Annas")).getByText("Acts as a workspace member")).toBeTruthy();
     expect(within(keyRow("Annas")).getByText("Edit: Tasks · View: Notes")).toBeTruthy();
     expect(within(keyRow("Annas")).queryByText(/former member/)).toBeNull();
   });

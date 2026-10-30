@@ -154,13 +154,13 @@ describe("who sees your focus time", () => {
 
   it("teammates see “Focus time”, not the task", () => {
     expect(whoSeesLine(share, members, "u1", { isFocus: true })).toBe(
-      "Teammates see “Focus time”, not the task",
+      "Workspace members see “Focus time”, not the task",
     );
   });
 
   it("private still wins", () => {
     expect(whoSeesLine(share, members, "u1", { isFocus: true, isPrivate: true })).toBe(
-      "Private · teammates see “Busy”",
+      "Private · workspace members see “Busy”",
     );
   });
 

@@ -31,6 +31,8 @@ import {
 import { cn } from "@/lib/utils";
 
 import { Button } from "../../../components/ui/button";
+import { useComposerDraft } from "../composer/draft-store";
+import { composerDayOf } from "../composer/parse";
 import { isElapsedBlock } from "../elapsed";
 import { type EventChip, eventHue } from "../events";
 import type { GridCursor } from "../grid-keys";
@@ -44,7 +46,6 @@ import {
   layoutDayChips,
   minutesIntoDay,
   openingScrollMinute,
-  wallMinuteOf,
   WEEK_COLUMNS,
 } from "../grid-layout";
 import { type CalendarView, type DueChip, localDayKey, type TaskBlock } from "../lens";
@@ -52,15 +53,11 @@ import { type CalendarPrefs, offHoursWash } from "../prefs";
 import { emptyWeekHint } from "../sync-status";
 import { dayZoneNote, useSecondZone } from "../zones";
 import { AllDayLane } from "./allday-lane";
+import { openComposerAt } from "./calendar-composer";
 import { AllDayLaneSkeleton } from "./calendar-skeleton";
 import { ComposerGhost } from "./composer-ghost";
 import { DayHeader, ZoneCorner } from "./day-header";
 import { COMPACT_BELOW_MINUTES } from "./event-chip";
-import {
-  EventQuickCreate,
-  type QuickCreateCalendar,
-  type QuickCreateDraft,
-} from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { type GestureTarget, GridEventCard, OverflowList, shownMinutes } from "./grid-cards";
 import { GridCursorMark } from "./grid-cursor";
@@ -107,9 +104,6 @@ export type CalendarGridProps = {
   onRetry: () => void;
   canEdit: boolean;
   onToggleDone: (taskId: string) => void;
-  onCreateEvent: (draft: QuickCreateDraft) => void;
-  /** Moduo plus each connected calendar the new event can land on. */
-  createCalendars: QuickCreateCalendar[];
   /** Occurrence-level drag/resize result — the page maps it onto the series. */
   onMoveEvent: (
     eventId: string,
@@ -163,8 +157,6 @@ function snapMin(minutes: number, fine: boolean): number {
   return Math.round(minutes / step) * step;
 }
 
-type PendingCreate = { dayIdx: number; startMin: number; endMin: number };
-
 type DragVisual = {
   dayIdx: number;
   startMin: number;
@@ -211,8 +203,6 @@ export function CalendarGrid({
   onRetry,
   canEdit,
   onToggleDone,
-  onCreateEvent,
-  createCalendars,
   onMoveEvent,
   onMoveTask,
   onEventClick,
@@ -259,8 +249,8 @@ export function CalendarGrid({
     [days, allDayByDay],
   );
 
-  const [pending, setPending] = useState<PendingCreate | null>(null);
   const [dragVisual, setDragVisual] = useState<DragVisual | null>(null);
+  const drafting = useComposerDraft() !== null;
 
   // ── the pointer gesture engine (draw / move / resize) ─────────────────────
   const gestureRef = useRef<Gesture | null>(null);
@@ -269,7 +259,6 @@ export function CalendarGrid({
   geomsRef.current = geoms;
   const propsRef = useRef({
     canEdit,
-    onCreateEvent,
     onMoveEvent,
     onMoveTask,
     onEventClick,
@@ -278,7 +267,6 @@ export function CalendarGrid({
   });
   propsRef.current = {
     canEdit,
-    onCreateEvent,
     onMoveEvent,
     onMoveTask,
     onEventClick,
@@ -408,7 +396,14 @@ export function CalendarGrid({
       const total = geomsRef.current[g.dayIdx].totalMinutes;
       endMin = Math.min(endMin, total);
       startMin = Math.min(startMin, endMin - 15);
-      setPending({ dayIdx: g.dayIdx, startMin, endMin });
+      // The composer opens on the drawn span (it draws its own ghost there).
+      const startMs = instantAtWallMinute(startMin, geomsRef.current[g.dayIdx]);
+      const dayStartMs = composerDayOf(startMs);
+      openComposerAt({
+        dayStartMs,
+        startMinute: Math.round((startMs - dayStartMs) / 60_000),
+        lengthMinutes: endMin - startMin,
+      });
     } else if (g.moved) {
       const v = dragVisualRef.current;
       if (v) {
@@ -481,7 +476,6 @@ export function CalendarGrid({
       columnRectsRef.current = measureColumns();
       const anchor = snapMin(pointToMinutes(e.clientY, dayIdx), e.altKey);
       beginGesture({ kind: "draw", dayIdx, anchorMin: anchor, moved: false });
-      setPending(null);
     },
     [beginGesture, measureColumns, pointToMinutes],
   );
@@ -587,25 +581,6 @@ export function CalendarGrid({
     } else {
       p.onTaskClick(target.block, rect);
     }
-  }, []);
-
-  const commitCreate = useCallback((draft: QuickCreateDraft) => {
-    setPending(null);
-    propsRef.current.onCreateEvent(draft);
-  }, []);
-  const cancelCreate = useCallback(() => setPending(null), []);
-  /** The popover's time edits move the ghost — the chip is the consent gesture. */
-  const adjustPendingTimes = useCallback((startMs: number, endMs: number) => {
-    setPending((p) => {
-      if (!p) return p;
-      const geom = geomsRef.current[p.dayIdx];
-      if (!geom) return p;
-      const startMin = wallMinuteOf(startMs, geom);
-      const endMin = wallMinuteOf(endMs, geom);
-      if (endMin <= startMin) return p;
-      if (startMin === p.startMin && endMin === p.endMin) return p;
-      return { ...p, startMin, endMin };
-    });
   }, []);
 
   useEffect(() => () => endGesture(), [endGesture]);
@@ -769,11 +744,6 @@ export function CalendarGrid({
                     ? colSelected
                     : null
                 }
-                pending={pending?.dayIdx === i ? pending : null}
-                createCalendars={createCalendars}
-                onCommitCreate={commitCreate}
-                onCancelCreate={cancelCreate}
-                onAdjustPendingTimes={adjustPendingTimes}
                 dragVisual={dragVisual?.dayIdx === i ? dragVisual : null}
                 staleAccountIds={staleAccountIds}
                 waitingEventIds={waitingEventIds}
@@ -785,7 +755,7 @@ export function CalendarGrid({
                         loading,
                         failed: Boolean(error) || faulted,
                         hasAnyChips,
-                        drafting: pending !== null,
+                        drafting,
                       })
                     : null
                 }
@@ -826,11 +796,6 @@ const DayColumn = memo(function DayColumn({
   onEventChipPointerDown,
   onTaskChipPointerDown,
   selectedKey,
-  pending,
-  createCalendars,
-  onCommitCreate,
-  onCancelCreate,
-  onAdjustPendingTimes,
   dragVisual,
   staleAccountIds,
   waitingEventIds,
@@ -878,11 +843,6 @@ const DayColumn = memo(function DayColumn({
     span: { topMinutes: number; heightMinutes: number },
   ) => void;
   selectedKey: string | null;
-  pending: PendingCreate | null;
-  createCalendars: QuickCreateCalendar[];
-  onCommitCreate: (draft: QuickCreateDraft) => void;
-  onCancelCreate: () => void;
-  onAdjustPendingTimes: (startMs: number, endMs: number) => void;
   dragVisual: DragVisual | null;
   staleAccountIds: ReadonlySet<string>;
   waitingEventIds: ReadonlySet<string>;
@@ -1065,27 +1025,6 @@ const DayColumn = memo(function DayColumn({
       ) : null}
 
       <ComposerGhost geom={geom} />
-
-      {/* the materialized ghost: inline title + quick-create popover */}
-      {pending ? (
-        <div
-          className="absolute inset-x-0.5"
-          style={{
-            top: y(pending.startMin),
-            height: `max(${y(pending.endMin - pending.startMin)}, 1.375rem)`,
-            zIndex: GRID_LAYER.pending,
-          }}
-        >
-          <EventQuickCreate
-            startMs={instantAtWallMinute(pending.startMin, geom)}
-            endMs={instantAtWallMinute(pending.endMin, geom)}
-            calendars={createCalendars}
-            onCommit={onCommitCreate}
-            onCancel={onCancelCreate}
-            onTimesChange={onAdjustPendingTimes}
-          />
-        </div>
-      ) : null}
 
       {/* loading shimmer */}
       {showLoadingChips ? (

@@ -84,7 +84,7 @@ export function agentWho(
 ): string {
   if (viewerId && s.userId === viewerId) return s.agent;
   const owner = ownerName(s.userId)?.trim();
-  return `${owner || "A teammate"}'s ${s.agent}`;
+  return `${owner || "A workspace member"}'s ${s.agent}`;
 }
 
 /** A link's words: its label, else its host. */

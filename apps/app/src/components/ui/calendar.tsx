@@ -37,9 +37,9 @@ function Calendar({
         button_next:
           "pointer-events-auto inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground disabled:opacity-40",
         month_grid: "w-full border-collapse",
-        weekdays: "flex",
+        weekdays: "flex gap-0.5",
         weekday: "w-8 text-2xs font-normal text-muted-foreground",
-        week: "mt-1 flex w-full",
+        week: "mt-1 flex w-full gap-0.5",
         day: "relative p-0 text-center",
         day_button:
           "inline-flex size-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",

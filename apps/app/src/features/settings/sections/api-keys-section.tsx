@@ -444,8 +444,8 @@ export function ApiKeysSection() {
         actor: null,
         known: false,
         isMine: false,
-        name: "a teammate",
-        line: "Acts as a teammate",
+        name: "a workspace member",
+        line: "Acts as a workspace member",
       };
     }
     if (!member) {
@@ -457,7 +457,7 @@ export function ApiKeysSection() {
         line: "Acts as a former member, so it has no access",
       };
     }
-    const name = member.displayName?.trim() || "a teammate";
+    const name = member.displayName?.trim() || "a workspace member";
     return {
       actor: { role: member.role, perms: member.perms },
       known: true,

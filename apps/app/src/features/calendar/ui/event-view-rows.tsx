@@ -28,6 +28,7 @@ import type { EntityRef } from "../../../lib/entity-links";
 import { ENTITY_OPEN_EVENT } from "../../../lib/entity-open";
 import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { formatDate } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { ShareMenu } from "../../sharing/share-menu";
 import type { HubStatus } from "../../spine/hooks/use-entity-hub";
@@ -130,10 +131,9 @@ function AddRow({
   );
 }
 
+/** "Oct 16" / "16 Oct" (the year when it isn't this one): Time & region's date order. */
 function fmtBooked(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return formatDate(iso);
 }
 
 /** The calendar's name and its quiet facts ("· Google, view only, synced 2m ago"). */

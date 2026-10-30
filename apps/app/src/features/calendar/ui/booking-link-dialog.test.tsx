@@ -1,6 +1,8 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, beforeEach, describe, expect, it } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
+
+import { applyTimeRegion, EMPTY_TIME_REGION, resetTimeRegionForTests } from "@/lib/time-region";
 
 import { normalizeWeeklyHours } from "../booking/slots";
 import {
@@ -188,6 +190,31 @@ describe("booking link editor · Length chips", () => {
 });
 
 describe("booking link editor · When", () => {
+  // A 24-hour clock with Monday first, whatever the machine's; cases that need
+  // another set it.
+  beforeEach(() => applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h23", weekStart: 1 }, null));
+  afterEach(() => resetTimeRegionForTests());
+
+  it("the summary and the fields read on the person's clock", () => {
+    edit(draft());
+    expect(screen.getByText(/^Weekdays, 09:00–17:00/)).toBeTruthy();
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("09:00");
+    cleanup();
+    applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h12", weekStart: 1 }, null);
+    edit(draft());
+    expect(screen.getByText(/^Weekdays, 9:00 AM–5:00 PM/)).toBeTruthy();
+    expect((screen.getByLabelText("From") as HTMLInputElement).value).toBe("9:00 AM");
+  });
+
+  it("the day toggles start on the week start from Time & region", () => {
+    applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h23", weekStart: 0 }, null);
+    edit(draft());
+    const days = screen.getByRole("group", { name: "Days" });
+    const names = [...days.querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
+    expect(names[0]).toBe("Sunday");
+    expect(names[6]).toBe("Saturday");
+  });
+
   it("shows one range and a summary while every open day shares its hours", () => {
     const seen = edit(draft());
     screen.getByLabelText("From");
@@ -201,7 +228,9 @@ describe("booking link editor · When", () => {
 
   it("changing the range changes every open day, and only those", () => {
     const seen = edit(draft());
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "10:00" } });
+    const from = screen.getByLabelText("From");
+    fireEvent.change(from, { target: { value: "10:00" } });
+    fireEvent.blur(from);
     const hours = seen.at(-1)!.weeklyHours;
     for (const day of ["mon", "tue", "wed", "thu", "fri"] as const) {
       expect(hours[day]).toEqual([{ start: "10:00", end: "17:00" }]);
@@ -224,7 +253,9 @@ describe("booking link editor · When", () => {
     });
     const seen = edit(draft({ weeklyHours }));
     expect((screen.getByLabelText("Tuesday start") as HTMLInputElement).value).toBe("12:00");
-    fireEvent.change(screen.getByLabelText("Tuesday end"), { target: { value: "19:00" } });
+    const tuesdayEnd = screen.getByLabelText("Tuesday end");
+    fireEvent.change(tuesdayEnd, { target: { value: "19:00" } });
+    fireEvent.blur(tuesdayEnd);
     expect(seen.at(-1)!.weeklyHours.tue).toEqual([{ start: "12:00", end: "19:00" }]);
     expect(seen.at(-1)!.weeklyHours.mon).toEqual([{ start: "09:00", end: "17:00" }]);
   });

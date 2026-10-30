@@ -116,7 +116,8 @@ export function useTasksRoot(baseRuntime: ModuoRuntime | null, params: Params) {
   // the hook still works where no workspace provider is mounted (tests).
   const members = useContext(WorkspaceContext)?.members;
   const memberName = useCallback(
-    (id: string) => members?.find((m) => m.userId === id)?.displayName?.trim() || "a teammate",
+    (id: string) =>
+      members?.find((m) => m.userId === id)?.displayName?.trim() || "a workspace member",
     [members],
   );
 
