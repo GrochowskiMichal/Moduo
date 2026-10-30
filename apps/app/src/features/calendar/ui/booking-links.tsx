@@ -17,7 +17,7 @@ import { defaultBusyIds } from "../account-picks";
 import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
-import { videoSetting } from "../booking/video";
+import { VIDEO_LABEL, videoSetting } from "../booking/video";
 import {
   CONNECT_FINISHED_EVENT,
   finishConnectReturn,
@@ -31,6 +31,7 @@ import {
   type GuestReminderMinutes,
   type LinkDraft,
 } from "./booking-link-dialog";
+import type { CreatedLink } from "./booking-link-ready";
 import {
   BOOKING_LINK_EDIT_EVENT,
   BOOKING_LINKS_CHANGED_EVENT,
@@ -163,6 +164,31 @@ function publicUrl(slug: string): string {
   return bookingPublicUrl(slug, window.location);
 }
 
+/** What still stops guests booking a link, or null when nothing does. */
+function bookingBlocker(draft: Draft, googleOn: boolean, zoomOn: boolean): string | null {
+  if (draft.paused) return "This link is paused.";
+  if (draft.video === "zoom") return zoomOn ? null : "Connect Zoom before guests can book.";
+  if (draft.video === "guest_choice") {
+    return googleOn || zoomOn ? null : "Connect Google or Zoom before guests can book.";
+  }
+  return googleOn ? null : "Connect Google before guests can book.";
+}
+
+/** A just-created link as the ready step shows it. */
+function createdLink(
+  draft: Draft & { slug: string },
+  googleOn: boolean,
+  zoomOn: boolean,
+): CreatedLink {
+  const place = draft.video === "guest_choice" ? "Their choice of video" : VIDEO_LABEL[draft.video];
+  return {
+    name: draft.name.trim(),
+    url: publicUrl(draft.slug),
+    summary: `${draft.durationMinutes} min · ${place}`,
+    blocker: bookingBlocker(draft, googleOn, zoomOn),
+  };
+}
+
 function errorText(error: unknown, fallback: string): string {
   if (error instanceof Error && error.message) return error.message;
   if (error && typeof error === "object" && "message" in error) {
@@ -182,6 +208,8 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
   const [googleOn, setGoogleOn] = useState(false);
   const [zoom, setZoom] = useState<ZoomState>({ configured: false, connected: false });
   const [draft, setDraft] = useState<Draft | null>(null);
+  // A link just created: the dialog shows it ready to share (with the draft, for Edit link).
+  const [created, setCreated] = useState<{ link: CreatedLink; draft: Draft } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -352,6 +380,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
     }
     setBusy(true);
     setError(null);
+    let createdSlug: string | null = null;
     try {
       const user = await supabaseClient.auth.getUser();
       const profile = await supabaseClient
@@ -422,6 +451,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
         }
         if (insertError || !inserted) throw insertError ?? new Error("Could not save the link.");
         draft.id = inserted.id;
+        createdSlug = fresh.slug;
       }
       // Send the co-host list whenever it changed — including to empty, which
       // turns a collective link back into a solo one. Unchanged lists are not
@@ -438,6 +468,10 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
           p_user_ids: draft.cohostIds,
         });
         if (hostError) throw hostError;
+      }
+      if (createdSlug) {
+        const saved = { ...draft, slug: createdSlug };
+        setCreated({ link: createdLink(saved, googleOn, zoom.connected), draft: saved });
       }
       setDraft(null);
       window.dispatchEvent(new Event(BOOKING_LINKS_CHANGED_EVENT));
@@ -601,8 +635,16 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
         zoom={zoom}
         busy={busy}
         error={error}
+        created={created?.link ?? null}
+        onEditCreated={() => {
+          if (!created) return;
+          setDraft(created.draft);
+          setCreated(null);
+        }}
         onOpenChange={(open) => {
-          if (!open) setDraft(null);
+          if (open) return;
+          setDraft(null);
+          setCreated(null);
         }}
         onChange={setDraft}
         onConnect={() => void connectGoogle()}

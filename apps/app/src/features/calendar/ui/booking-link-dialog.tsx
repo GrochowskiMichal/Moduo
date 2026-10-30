@@ -19,6 +19,7 @@ import type { VideoSetting } from "../booking/video";
 import type { CalendarAccountModel } from "../events";
 import { BookingLinkMore, type GuestReminderMinutes } from "./booking-link-more";
 import { OptionChip } from "./booking-link-parts";
+import { BookingLinkReady, type CreatedLink } from "./booking-link-ready";
 import { BookingLinkWhen } from "./booking-link-when";
 import { BookingLinkWhere } from "./booking-link-where";
 
@@ -78,6 +79,9 @@ type Props = {
   onSave: () => void;
   onDelete: () => void;
   teammates?: { userId: string; name: string }[];
+  /** A link just created: the dialog shows its ready-to-share step instead of the editor. */
+  created?: CreatedLink | null;
+  onEditCreated?: () => void;
 };
 
 /** The link's address without the scheme ("moduo.app/book/intro-x1y2"). */
@@ -85,11 +89,23 @@ function linkAddress(slug: string): string {
   return bookingPublicUrl(slug, window.location).replace(/^https?:\/\//, "");
 }
 
-export function BookingLinkDialog({ draft, onOpenChange, ...rest }: Props) {
+export function BookingLinkDialog({
+  draft,
+  onOpenChange,
+  created = null,
+  onEditCreated,
+  ...rest
+}: Props) {
   return (
-    <Dialog open={draft != null} onOpenChange={onOpenChange}>
+    <Dialog open={draft != null || created != null} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[85vh] w-[min(40rem,calc(100vw-2rem))] max-w-none flex-col gap-0 overflow-hidden p-0">
-        {draft ? (
+        {created ? (
+          <BookingLinkReady
+            link={created}
+            onEdit={() => onEditCreated?.()}
+            onDone={() => onOpenChange(false)}
+          />
+        ) : draft ? (
           // Keyed on the link, so the open row, the per-day mode and the
           // delete confirmation start fresh for each link opened.
           <LinkEditor
