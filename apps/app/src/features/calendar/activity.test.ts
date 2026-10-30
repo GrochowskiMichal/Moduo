@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { calendarActivityLine } from "./activity";
+import { calendarActivityLine, isEventTrailEntry } from "./activity";
 
 describe("an event's trail in words", () => {
   it("says creation, changes, deletes and occurrences plainly", () => {
@@ -26,5 +26,11 @@ describe("an event's trail in words", () => {
 
   it("never shows an op's code", () => {
     expect(calendarActivityLine({ op: "calendar.something_new" })).toBe("made changes");
+  });
+
+  it("leaves comment traffic out of an event's history", () => {
+    expect(isEventTrailEntry({ op: "calendar.event_update" })).toBe(true);
+    expect(isEventTrailEntry({ op: "comments.add" })).toBe(false);
+    expect(isEventTrailEntry({ op: "comments.delete" })).toBe(false);
   });
 });

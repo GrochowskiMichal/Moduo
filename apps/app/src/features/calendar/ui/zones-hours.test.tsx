@@ -8,7 +8,7 @@ process.env.TZ = "Europe/Warsaw";
 
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 
-// The feed reads the workspace's people; these tests mount no workspace.
+// The Activity lines read the workspace's people; these tests mount no workspace.
 rs.mock("../../spine/hooks/use-comment-people", () => ({
   useCommentPeople: () => ({
     currentUserId: "me",
@@ -103,7 +103,7 @@ describe("the zone corner", () => {
 });
 
 const runtime = {
-  spine: { listLinks: async () => [], getEntities: async () => [], listComments: async () => [] },
+  spine: { listLinks: async () => [], getEntities: async () => [] },
   tasks: { listActivity: async () => [] },
 } as unknown as ModuoRuntime;
 
