@@ -4,6 +4,17 @@
 // view's Private switch and P key, and its visibility line.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+
+// The feed reads the workspace's people; these tests mount no workspace.
+rs.mock("../../spine/hooks/use-comment-people", () => ({
+  useCommentPeople: () => ({
+    currentUserId: "me",
+    mentionable: [],
+    names: [],
+    nameOf: () => null,
+    personOf: () => null,
+  }),
+}));
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
@@ -119,7 +130,7 @@ describe("the chip", () => {
 });
 
 const runtime = {
-  spine: { listLinks: async () => [], getEntities: async () => [] },
+  spine: { listLinks: async () => [], getEntities: async () => [], listComments: async () => [] },
   tasks: { listActivity: async () => [] },
 } as unknown as ModuoRuntime;
 

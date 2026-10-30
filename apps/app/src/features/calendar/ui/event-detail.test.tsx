@@ -3,7 +3,18 @@
 // came through, people with replies, and its notes and tasks as two-line rows,
 // with Link a person, note or task.
 
-import { afterEach, describe, expect, it } from "@rstest/core";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+
+// The feed reads the workspace's people; these tests mount no workspace.
+rs.mock("../../spine/hooks/use-comment-people", () => ({
+  useCommentPeople: () => ({
+    currentUserId: "me",
+    mentionable: [],
+    names: [],
+    nameOf: () => null,
+    personOf: () => null,
+  }),
+}));
 import { act, cleanup, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
@@ -113,6 +124,7 @@ const RECORDS: Record<string, EntityRecord> = {
 
 const runtime = {
   spine: {
+    listComments: async () => [],
     listLinks: async ({ entityId }: { entityId: string }) => LINKS[entityId] ?? [],
     getEntities: async ({ refs }: { refs: { id: string }[] }) =>
       refs.map((r) => RECORDS[r.id]).filter(Boolean),
