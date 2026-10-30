@@ -32,6 +32,7 @@ import { isElapsedBlock } from "../elapsed";
 import { followedEventId } from "../event-view";
 import { type CalendarEventModel, type EventChip, eventChipsInRange } from "../events";
 import { canFocusBlock } from "../focus";
+import type { BusyInterval } from "../gap-finder";
 import { type CalendarModuleApi, useCalendarModule } from "../hooks/use-calendar-module";
 import { useCalendarPrefs } from "../hooks/use-calendar-prefs";
 import { useCalendarSync } from "../hooks/use-calendar-sync";
@@ -443,14 +444,34 @@ export function CalendarPageView({
     moveEvent,
   });
 
-  // CALR-2: Schedule (S) in a day header's due list.
-  const onScheduleDue = useScheduleDue({
-    tasks,
-    prefs,
-    commands,
-    eventsByDay: eventChips.timed,
-    blocksByDay: grouped,
-  });
+  // CALR-2: Schedule (S) in a day header's due list. An overdue task goes to
+  // today, which may be off screen: read that day's events and blocks then.
+  const busyOn = useCallback(
+    (day: Date): BusyInterval[] => {
+      const key = localDayKey(day);
+      const shown = range.days.some((d) => localDayKey(d) === key);
+      const one = shown ? null : visibleRange("day", day, prefs);
+      const events = one
+        ? (eventChipsInRange(lens.events, one, isWritable, userId).timed.get(key) ?? [])
+        : (eventChips.timed.get(key) ?? []);
+      const own = one
+        ? taskBlocks(tasks, one, { list: sessions, me: userId })
+        : (grouped.get(key) ?? []);
+      return [...events, ...own].map((x) => ({ startMs: x.startMs, endMs: x.endMs }));
+    },
+    [
+      range.days,
+      prefs,
+      lens.events,
+      isWritable,
+      userId,
+      eventChips.timed,
+      tasks,
+      sessions,
+      grouped,
+    ],
+  );
+  const onScheduleDue = useScheduleDue({ tasks, prefs, commands, busyOn });
 
   // CALR-5: Plan's S lifts a task onto the grid; / finds a task.
   const plan = usePlanPlacement({
