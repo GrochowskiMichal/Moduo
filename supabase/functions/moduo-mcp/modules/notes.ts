@@ -35,7 +35,8 @@ type AgentEdit = { kind: "append" | "replace"; markdown: string };
 
 // deno-lint-ignore no-explicit-any
 let notesDocModule: Promise<any> | null = null;
-/** The headless notes-doc writer, loaded once, on the first notes write. */
+/** The headless notes-doc writer, loaded once, on the first notes write (or
+ * the first read of a body saved with old escapes). */
 function notesDoc() {
   notesDocModule ??= import("../../_shared/notes-doc/notes-doc.bundle.js");
   return notesDocModule;
@@ -269,6 +270,25 @@ async function readNoteDoc(ctx: ToolContext, noteId: string) {
   return { log, snapshotB64, bodyMd: String(body.body_md ?? "") };
 }
 
+/** A body saved before stored markdown escaped only what changes meaning
+ * still reads `sbp\_x` (an underscore escaped between two letters or digits,
+ * which the export no longer writes); until its note is edited again, read
+ * it from the doc, through the same bundle the writes use. Any other body
+ * goes out as stored, and so does one whose doc can't be read. */
+const OLD_ESCAPES = /[\p{L}\p{N}]\\_[\p{L}\p{N}]/u;
+
+async function currentMarkdown(ctx: ToolContext, noteId: string, stored: string): Promise<string> {
+  if (!OLD_ESCAPES.test(stored)) return stored;
+  try {
+    const { log, snapshotB64 } = await readNoteDoc(ctx, noteId);
+    if (!snapshotB64 && log.updates.length === 0) return stored;
+    const lib = await notesDoc();
+    return String(lib.bodyFromLog({ snapshotB64, updatesB64: log.updates }).bodyMd);
+  } catch {
+    return stored;
+  }
+}
+
 type AgentPlan =
   /** The note has a body but no doc: seed it first, then plan again. */
   | { kind: "seed"; args: Row }
@@ -397,7 +417,7 @@ export const notesConnectorModule: ConnectorModule = {
         const body = await getNoteBody(ctx, n.id, "body_md");
         return {
           ...shapeNote(n),
-          markdown: body?.body_md ?? "",
+          markdown: await currentMarkdown(ctx, n.id, String(body?.body_md ?? "")),
           // Only expose a token an agent could act on when actually published.
           publish_token: n.published_at != null ? (n.publish_token ?? null) : null,
         };

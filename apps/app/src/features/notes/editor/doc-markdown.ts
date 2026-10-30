@@ -15,14 +15,13 @@
  */
 
 import { createHeadlessEditor } from "@lexical/headless";
-import { $convertToMarkdownString } from "@lexical/markdown";
 import { $dfs } from "@lexical/utils";
 import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } from "@lexical/yjs";
 import { $getRoot, type LexicalEditor } from "lexical";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
 
-import { NOTES_TRANSFORMERS } from "./markdown";
+import { $notesMarkdown } from "./markdown";
 import { NOTE_EDITOR_NODES } from "./schema/nodes";
 import { $isTaskLineNode } from "./schema/task-line-node";
 
@@ -88,7 +87,7 @@ export function readNoteDoc<T>(doc: Y.Doc, read: () => T): T {
 
 /** Markdown for the current editor state (call inside a read or update). */
 export function $noteMarkdown(): string {
-  return $convertToMarkdownString(NOTES_TRANSFORMERS);
+  return $notesMarkdown();
 }
 
 /** The plain-text projection (call inside a read or update): what search
