@@ -1,8 +1,10 @@
 // TV-P0 (tasks-v3 AC1.12) — a date picker saves once: typing a time or
 // clicking a day only moves the draft; closing the picker writes it, once.
-import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
+
+import { applyTimeRegion, EMPTY_TIME_REGION, resetTimeRegionForTests } from "@/lib/time-region";
 
 import { DateField, formatTimeText, parseTimeText, TimeInput } from "./date-field";
 import { NumberInput } from "./input";
@@ -17,7 +19,12 @@ beforeAll(() => {
   Element.prototype.hasPointerCapture ??= () => false;
   Element.prototype.releasePointerCapture ??= () => {};
 });
-afterEach(cleanup);
+// These read on a 12-hour clock whatever the machine's; the 24-hour cases set it.
+beforeEach(() => applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h12" }, null));
+afterEach(() => {
+  cleanup();
+  resetTimeRegionForTests();
+});
 
 function setup(props: { withTime?: boolean; value?: Date | null }) {
   const calls: Array<Date | null> = [];
@@ -159,6 +166,16 @@ describe("parseTimeText / formatTimeText", () => {
     expect(formatTimeText("00:05")).toBe("12:05 AM");
     expect(formatTimeText("12:30")).toBe("12:30 PM");
   });
+
+  it("writes a 24-hour time when Time & region says so", () => {
+    applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h23" }, null);
+    expect(formatTimeText("15:00")).toBe("15:00");
+    expect(formatTimeText("09:05")).toBe("09:05");
+    expect(formatTimeText("00:00")).toBe("00:00");
+    // Typing still takes either clock.
+    expect(parseTimeText("3pm")).toBe("15:00");
+    expect(parseTimeText("15:00")).toBe("15:00");
+  });
 });
 
 /** A controlled owner, as every real caller is. */
@@ -192,6 +209,16 @@ describe("TimeInput", () => {
     fireEvent.change(field, { target: { value: "banana" } });
     fireEvent.blur(field);
     expect(onValueChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the person's clock and redraws when it changes in Settings", () => {
+    render(<OwnedTime initial="15:30" onSave={() => {}} />);
+    const field = screen.getByRole("textbox", { name: "Time" }) as HTMLInputElement;
+    expect(field.value).toBe("3:30 PM");
+    expect(field.placeholder).toBe("3:00 PM");
+    act(() => applyTimeRegion({ ...EMPTY_TIME_REGION, hourCycle: "h23" }, null));
+    expect(field.value).toBe("15:30");
+    expect(field.placeholder).toBe("15:00");
   });
 
   it("steps by 15 minutes on the arrow keys, wrapping at midnight", () => {

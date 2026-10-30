@@ -160,7 +160,7 @@ describe("whose it is", () => {
     const posing = session({ agent: "Sam" });
     expect(agentWho(posing, "alex", names)).toBe("Sam");
     expect(agentWho(posing, "sam", names)).toBe("Alex's Sam");
-    expect(agentWho(session({ userId: "gone" }), "sam", names)).toBe("A teammate's Claude");
+    expect(agentWho(session({ userId: "gone" }), "sam", names)).toBe("A workspace member's Claude");
     expect(agentLineText(posing, NOW, agentWho(posing, "sam", names))).toMatch(
       /^Alex's Sam · Writing tests/,
     );

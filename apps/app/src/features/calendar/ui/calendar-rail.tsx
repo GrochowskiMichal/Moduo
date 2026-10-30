@@ -14,9 +14,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Eyebrow } from "../../../components/ui/eyebrow";
@@ -35,7 +32,7 @@ import { notSyncedLabel } from "../sync-status";
 import { laneOwners, teammateHues } from "../teammates";
 import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
 import { CalendarColorPicker } from "./calendar-color-picker";
-import { saveShownTeammates, usePreviewBridge } from "./shared-with-you";
+import { saveShownTeammates } from "./shared-with-you";
 import { setTeammates, useTeammatesStore } from "./teammates-store";
 import { type RailCalendarRow, useRailCalendars, visibleIdOf } from "./use-rail-calendars";
 import { WorkingHoursSheet } from "./working-hours-sheet";
@@ -77,7 +74,7 @@ const BUSY_DAY_CLASSES =
 const ROW =
   "group/rail-row relative flex min-h-(--row-h-sm) items-center gap-2 rounded-md px-1 hover:bg-state-hover";
 const ACTIONS =
-  "flex shrink-0 items-center opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/rail-row:opacity-100 group-focus-within/rail-row:opacity-100 has-[[data-state=open]]:opacity-100";
+  "flex shrink-0 items-center opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/rail-row:opacity-100 group-focus-within/rail-row:opacity-100 has-[[data-state=open]]:opacity-100 has-[[aria-pressed=true]]:opacity-100";
 const SUBHEAD = "flex h-6 items-center gap-1.5 px-1 text-xs";
 
 const CAL_LEVELS = [
@@ -158,7 +155,7 @@ export function CalendarRail({
   const { members } = useWorkspace();
   const people = members
     .filter((m) => m.isActive && !m.removedAt)
-    .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" }));
+    .map((m) => ({ userId: m.userId, name: m.displayName || "Member" }));
   const others = people.filter((p) => p.userId !== userId);
   const { rows, views, createCalendar, saveView } = useRailCalendars(workspaceId);
   const mine = rows.filter((r) => r.owner_id === userId);
@@ -169,7 +166,6 @@ export function CalendarRail({
   // Sharing: one share menu open at a time, anchored to its row. Preview as's
   // "Change what … sees" opens it from the banner.
   const [shareId, setShareId] = useState<string | null>(null);
-  usePreviewBridge(rows, userId, setShareId);
   const canShare = others.length > 0;
 
   const railGroups = useMemo(() => groupRailAccounts(accounts), [accounts]);
@@ -207,6 +203,7 @@ export function CalendarRail({
   // Teammates who share with you, and the hue their lane takes.
   const teammates = useTeammatesStore((s) => s.teammates);
   const shownTeammates = useTeammatesStore((s) => s.shown);
+  const previewAs = useTeammatesStore((s) => s.previewAs);
   const laneHues = teammateHues(
     laneOwners(
       shownTeammates.filter((id) => teammates.some((t) => t.userId === id)),
@@ -341,24 +338,6 @@ export function CalendarRail({
               <DropdownMenuItem onSelect={() => (pending.current = () => setNaming("view"))}>
                 Save what's shown as a view…
               </DropdownMenuItem>
-              {others.length > 0 ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>See your week as</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent>
-                      {others.map((p) => (
-                        <DropdownMenuItem
-                          key={p.userId}
-                          onSelect={() => setTeammates({ previewAs: p.userId })}
-                        >
-                          {p.name}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuSubContent>
-                  </DropdownMenuSub>
-                </>
-              ) : null}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -460,7 +439,7 @@ export function CalendarRail({
         {teammates.length > 0 ? (
           <div className="mt-2 flex flex-col gap-0.5">
             <div className={SUBHEAD}>
-              <span className="font-medium text-muted-foreground">Teammates</span>
+              <span className="font-medium text-muted-foreground">Workspace members</span>
             </div>
             {teammates.map((t) => {
               const shown = shownTeammates.includes(t.userId);
@@ -490,8 +469,11 @@ export function CalendarRail({
                   <div className={ACTIONS}>
                     <IconButton
                       icon={Glasses}
-                      label={`See your week as ${t.name}`}
-                      onClick={() => setTeammates({ previewAs: t.userId })}
+                      label={`See your calendar as ${t.name}`}
+                      aria-pressed={previewAs === t.userId}
+                      onClick={() =>
+                        setTeammates({ previewAs: previewAs === t.userId ? null : t.userId })
+                      }
                     />
                   </div>
                 </div>

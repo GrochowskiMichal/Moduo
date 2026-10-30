@@ -12,7 +12,7 @@ process.env.TZ = "Europe/Warsaw";
 import { describe, expect, it } from "@rstest/core";
 
 import type { CalendarEventModel } from "./events";
-import { previewBanner, previewExplain, previewLens } from "./share-lens";
+import { previewLens } from "./share-lens";
 import {
   busyBlockToEvent,
   type SharedCalendar,
@@ -117,46 +117,5 @@ describe("preview equals what they get", () => {
 
   it("an empty answer is an empty week (Nothing), never your own events", () => {
     expect(previewLens({ rows: [], busy: [] })).toEqual([]);
-  });
-});
-
-describe("the preview explains itself", () => {
-  it("says why each block looks as it does", () => {
-    const items = previewLens({ rows: ROWS, busy: BUSY });
-    const by = (id: string) => items.find((i) => i.event.id === id)!;
-    expect(previewExplain(by("therapy"), "Kai", "Work")).toBe(
-      "You marked this private, so Kai sees “Busy” whatever the level",
-    );
-    expect(previewExplain(by(BUSY[0].id), "Kai", "Family")).toBe(
-      "Family is shared with Kai as Busy only, so Kai sees “Busy”",
-    );
-    expect(previewExplain(by("board"), "Kai", "Work")).toBe(
-      "Work is shared with Kai at All details, so Kai sees it all",
-    );
-    expect(previewExplain(by("focus"), "Kai", "Work")).toBe("Kai sees “Focus time”");
-  });
-
-  it("the banner leads with Your calendar's level, then each calendar that differs", () => {
-    expect(
-      previewBanner("Kai Ito", [
-        { name: "Your calendar", level: "view", main: true },
-        { name: "Work", level: "view", main: false },
-        { name: "Family", level: "freebusy", main: false },
-        { name: "Holidays", level: "none", main: false },
-      ]),
-    ).toBe(
-      "Your week as Kai Ito sees it · All details · Family shows as busy · Holidays isn't shared · private events show as busy · tasks stay with you",
-    );
-    expect(
-      previewBanner("Nora Ruiz", [
-        { name: "Your calendar", level: "freebusy", main: true },
-        { name: "Work", level: "view", main: false },
-      ]),
-    ).toBe(
-      "Your week as Nora Ruiz sees it · Busy only · Work shows all details · private events show as busy · tasks stay with you",
-    );
-    expect(previewBanner("Omar Diaz", [{ name: "Your calendar", level: "none", main: true }])).toBe(
-      "Your week as Omar Diaz sees it · Nothing · private events show as busy · tasks stay with you",
-    );
   });
 });

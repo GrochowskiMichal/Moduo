@@ -1,5 +1,6 @@
 // The composer's host (CALR-9): N, ⌘N, the + button and ↵ on an empty slot
-// open it at the grid cursor, else at the next free time. It reads the text
+// open it at the grid cursor, else at the next free time; a click or drag on
+// the grid, or a click on a month day, opens it there (`openComposerAt`). It reads the text
 // (composer/parse.ts), decides where the event goes (composer/defaults.ts),
 // draws the draft on the grid (composer/draft-store.ts), hops it with ⇥, and
 // adds it through the page's create path, so the add has its Undo (AC21).
@@ -11,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { onCreateNew } from "../../../components/app/create-events";
+import { dispatchCreateNew, onCreateNew } from "../../../components/app/create-events";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { type ComposerAccount, planComposer } from "../composer/defaults";
 import { setComposerDraft } from "../composer/draft-store";
@@ -51,6 +52,20 @@ type Open = {
   /** A ⇥ hop, kept while the day and time words stay as they were. */
   hop: { whenKey: string; startMs: number; endMs: number } | null;
 };
+
+/**
+ * Open the composer at a slot: a grid click (its start, 30 minutes), a drag
+ * (its start and length) or a month day (`startMinute` null: the day's first
+ * free time).
+ */
+export function openComposerAt(slot: {
+  dayStartMs: number;
+  startMinute: number | null;
+  lengthMinutes: number | null;
+}): void {
+  setTeammates({ composerSeed: { text: "", ids: [], slot } });
+  dispatchCreateNew();
+}
 
 const BOX_WIDTH = 480;
 const EDGE = 8;
@@ -136,6 +151,8 @@ export function CalendarComposer({
   const [open, setOpen] = useState<Open | null>(null);
   const [contacts, setContacts] = useState<ComposerPerson[]>([]);
   const [position, setPosition] = useState({ left: EDGE, top: 96 });
+  // See-through (still focusable) until placed by its draft: no flash at the corner.
+  const [placed, setPlaced] = useState(false);
   const opener = useRef<HTMLElement | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -197,22 +214,29 @@ export function CalendarComposer({
         setTeammates({ composerSeed: null });
         if (!k.canEdit) return;
         const box = document.querySelector<HTMLInputElement>("[data-calendar-composer] input");
-        if (box) {
+        if (box && !seed?.slot) {
           box.focus();
           return;
         }
-        opener.current =
-          document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        const base = openingSlot({
-          nowMs: Date.now(),
-          cursor: k.cursor
-            ? { dayStartMs: dayStartOfKey(k.cursor.dayKey), minute: k.cursor.minute }
-            : null,
-          workStartMinute: k.prefs.workStartMinute,
-          workEndMinute: k.prefs.workEndMinute,
-          busyOn: freeForAll(k.busyOn, teammatesState().blocks, seed?.ids ?? []),
-        });
-        setOpen({ base, text: seed?.text ?? "", hop: null });
+        if (!box) {
+          opener.current =
+            document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          setPlaced(false);
+        }
+        const slot = seed?.slot;
+        const base = slot
+          ? slot
+          : openingSlot({
+              nowMs: Date.now(),
+              cursor: k.cursor
+                ? { dayStartMs: dayStartOfKey(k.cursor.dayKey), minute: k.cursor.minute }
+                : null,
+              workStartMinute: k.prefs.workStartMinute,
+              workEndMinute: k.prefs.workEndMinute,
+              busyOn: freeForAll(k.busyOn, teammatesState().blocks, seed?.ids ?? []),
+            });
+        // A new slot moves an open box and keeps what was typed.
+        setOpen((was) => ({ base, text: was?.text ?? seed?.text ?? "", hop: null }));
         if (k.runtime && k.workspaceId) {
           void loadContacts(k.runtime, k.workspaceId).then(setContacts);
         }
@@ -271,6 +295,7 @@ export function CalendarComposer({
         .querySelector("[data-composer-ghost]")
         ?.scrollIntoView({ block: "nearest", inline: "nearest" });
       setPosition(placeBox(boxRef.current?.firstElementChild as HTMLElement | null));
+      setPlaced(true);
     });
     return () => cancelAnimationFrame(frame);
   }, [draftStart, draftEnd, draftTitle]);
@@ -353,7 +378,7 @@ export function CalendarComposer({
       : "Your calendar";
 
   return (
-    <div ref={boxRef}>
+    <div ref={boxRef} className={placed ? undefined : "pointer-events-none opacity-0"}>
       <EventComposer
         text={open.text}
         parse={parsed}

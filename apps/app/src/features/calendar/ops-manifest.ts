@@ -32,7 +32,7 @@ export const calendarModuleManifest: ModuleManifest = {
         p_location: "optional place",
         p_attendees: "optional people: [{ email, name? }]",
         p_conference_url: "optional meeting link (https://…); its provider is worked out",
-        p_is_private: "optional boolean — teammates see only Busy",
+        p_is_private: "optional boolean — workspace members see only Busy",
       },
     },
     {
@@ -148,7 +148,7 @@ export const calendarModuleManifest: ModuleManifest = {
     {
       name: "calendar.who_sees",
       summary:
-        "Who sees what of your calendars, or of one of your events: each teammate sees it all, as Busy, as Focus time, or not at all.",
+        "Who sees what of your calendars, or of one of your events: each workspace member sees it all, as Busy, as Focus time, or not at all.",
     },
   ],
 };

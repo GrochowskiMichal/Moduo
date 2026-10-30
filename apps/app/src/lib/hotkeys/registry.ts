@@ -62,8 +62,10 @@ export const HOTKEYS = {
   // you mid-typing, and neither is a text-editing key.
   palette: { scope: "global", label: "Command palette", keys: ["Mod+K"], inInputs: true },
   capture: { scope: "global", label: "Quick capture", keys: ["Mod+Shift+K"], inInputs: true },
-  "new-item": { scope: "global", label: "New item", keys: ["Mod+N"] },
-  "new-note": { scope: "global", label: "New note", keys: ["Mod+Shift+N"] },
+  // A browser keeps ⌘N and ⌘⇧N (new window, private window) and never hands
+  // them to the page: ⌥N and ⌥⇧N are the web's keys, and work on desktop too.
+  "new-item": { scope: "global", label: "New item", keys: ["Mod+N", "Alt+N"] },
+  "new-note": { scope: "global", label: "New note", keys: ["Mod+Shift+N", "Alt+Shift+N"] },
   settings: { scope: "global", label: "Settings", keys: ["Mod+,"] },
   "workspace-switcher": { scope: "global", label: "Workspace switcher", keys: ["Mod+Shift+W"] },
   notifications: { scope: "global", label: "Notifications", keys: ["Mod+/"] },

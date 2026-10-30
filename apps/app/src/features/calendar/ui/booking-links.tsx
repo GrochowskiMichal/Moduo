@@ -195,7 +195,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
   const { members } = useWorkspace();
   const teammates = members
     .filter((m) => m.isActive && !m.removedAt && m.userId !== userId)
-    .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" }));
+    .map((m) => ({ userId: m.userId, name: m.displayName || "Member" }));
   const [links, setLinks] = useState<LinkRow[]>([]);
   const [pendingHost, setPendingHost] = useState<{ linkId: string; name: string }[]>([]);
   const [googleOn, setGoogleOn] = useState(false);

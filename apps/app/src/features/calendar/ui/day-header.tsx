@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import { Kbd } from "../../../components/ui/kbd";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
+import { formatWeekdayDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import type { DueChip } from "../lens";
 
 type Props = {
@@ -109,11 +111,9 @@ export function DueList({
   onSchedule: ((taskId: string) => void) | null;
 }) {
   const [open, setOpen] = useState(false);
-  const dayLabel = day.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  // "Thu, Jul 2" / "Thu, 2 Jul": the date order from Time & region, redrawn when it changes.
+  useTimeRegion();
+  const dayLabel = formatWeekdayDate(day);
   const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (!onSchedule || e.key.toLowerCase() !== "s" || e.metaKey || e.ctrlKey || e.altKey) return;
     const row =

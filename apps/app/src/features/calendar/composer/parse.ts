@@ -19,8 +19,11 @@ export type ComposerToken = { start: number; end: number; kind: ComposerTokenKin
 
 export type ComposerContext = {
   nowMs: number;
-  /** Where the box opened: a day (local midnight) and the start minute, or null for the whole day. */
-  base: { dayStartMs: number; startMinute: number | null };
+  /**
+   * Where the box opened: a day (local midnight) and the start minute, or null
+   * for the whole day; and a length when a drag on the grid drew one.
+   */
+  base: { dayStartMs: number; startMinute: number | null; lengthMinutes?: number | null };
   workStartMinute: number;
   workEndMinute: number;
   /** Your busy time on a day (events, task blocks), by the day's local midnight. */
@@ -371,7 +374,8 @@ export function parseComposer(text: string, ctx: ComposerContext): ComposerParse
   const place = readPlace(r, people, ctx.people);
   const meal = MEAL.test(r.lower);
 
-  const length = duration ?? lengthOf(time, kind, r.lower);
+  const drawn = time.start === null ? (ctx.base.lengthMinutes ?? null) : null;
+  const length = duration ?? drawn ?? lengthOf(time, kind, r.lower);
   const dayStartMs = named?.dayStartMs ?? ctx.base.dayStartMs;
   const { startMs, firstFree } = resolveStart(ctx, dayStartMs, time.start, window, length);
   const whenKey = r.tokens

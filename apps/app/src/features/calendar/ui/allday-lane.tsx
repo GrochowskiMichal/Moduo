@@ -9,6 +9,8 @@ import { useMemo, useState } from "react";
 
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { useAppHotkeys } from "../../../lib/hotkeys";
+import { formatWeekdayDate } from "../../../lib/time-format";
+import { useTimeRegion } from "../../../lib/time-region";
 import { ALL_DAY_MAX_ROWS, layoutAllDayLane } from "../allday-lane";
 import { type EventChip, eventHue } from "../events";
 import { localDayKey } from "../lens";
@@ -177,11 +179,9 @@ function DayAllDayList({
   onPick: (chip: EventChip, rect: DOMRect) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const label = day.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  // The date order from Time & region, redrawn when it changes.
+  useTimeRegion();
+  const label = formatWeekdayDate(day);
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>

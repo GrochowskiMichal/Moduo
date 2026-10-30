@@ -39,6 +39,8 @@ export type ShortcutEntry = {
   mac: string;
   /** Non-mac key combo for display (e.g. "Ctrl K"). */
   other: string;
+  /** What to show in a browser when it keeps the desktop key for itself (⌘N). */
+  web?: { mac: string; other: string };
 };
 
 export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
@@ -63,6 +65,7 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     label: "New item",
     mac: "⌘N",
     other: "Ctrl N",
+    web: { mac: "⌥N", other: "Alt N" },
   },
   {
     // Global capture (Wave-3 Notes AC1): a fresh note from anywhere.
@@ -70,6 +73,7 @@ export const SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
     label: "New note",
     mac: "⌘⇧N",
     other: "Ctrl Shift N",
+    web: { mac: "⌥⇧N", other: "Alt Shift N" },
   },
   {
     id: "settings",
@@ -122,8 +126,18 @@ export function shortcutEvent(id: ShortcutId): string {
   return `${SHORTCUT_EVENT_PREFIX}${id}`;
 }
 
-export function formatShortcut(entry: ShortcutEntry, isMac = isMacPlatform()): string {
-  return isMac ? entry.mac : entry.other;
+/** The desktop app's own window: no browser takes keys before the page. */
+function inDesktopShell(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export function formatShortcut(
+  entry: ShortcutEntry,
+  isMac = isMacPlatform(),
+  web = !inDesktopShell(),
+): string {
+  const keys = web && entry.web ? entry.web : entry;
+  return isMac ? keys.mac : keys.other;
 }
 
 /**

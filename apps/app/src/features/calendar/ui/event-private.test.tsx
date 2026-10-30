@@ -19,7 +19,7 @@ afterEach(cleanup);
 const WS = "ws-1";
 const ME = "u-me";
 const KAI = "u-kai";
-const PRIVATE_LINE = "Private · teammates see “Busy”";
+const PRIVATE_LINE = "Private · workspace members see “Busy”";
 
 function event(over: Partial<CalendarEventModel> = {}): CalendarEventModel {
   return {

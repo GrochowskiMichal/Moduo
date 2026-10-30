@@ -48,7 +48,7 @@ import {
   taskBlocks,
   visibleRange,
 } from "../lens";
-import { quickCreateCalendars } from "../new-events-to";
+import type { QuickCreateDraft } from "../new-event-create";
 import {
   type CalendarViewState,
   type PanelVariantId,
@@ -72,7 +72,6 @@ import { CalendarToolbar } from "./calendar-toolbar";
 import { CalendarViews } from "./calendar-views";
 import { EventDetailPanel } from "./event-detail-panel";
 import { EventPopover } from "./event-popover";
-import type { QuickCreateDraft } from "./event-quick-create";
 import { FocusReadout } from "./focus-readout";
 import { CalendarNowNext } from "./now-next";
 import { OccurrenceScopeDialog } from "./occurrence-scope-dialog";
@@ -319,7 +318,7 @@ export function CalendarPageView({
     () =>
       workspaceMembers
         .filter((m) => m.isActive && !m.removedAt)
-        .map((m) => ({ userId: m.userId, name: m.displayName || "Teammate" })),
+        .map((m) => ({ userId: m.userId, name: m.displayName || "Member" })),
     [workspaceMembers],
   );
   const [eventPopover, setEventPopover] = useState<EventPopoverState | null>(null);
@@ -376,11 +375,6 @@ export function CalendarPageView({
     setTaskPopover({ block, rect });
   }, []);
 
-  const createCalendars = useMemo(
-    () => quickCreateCalendars(calendar.accounts, prefs, workspaceId),
-    [calendar.accounts, prefs, workspaceId],
-  );
-
   const onCreateEvent = useCreateEvent(calendar, runtime, workspaceId);
 
   const onMoveEvent = useCallback(
@@ -413,14 +407,14 @@ export function CalendarPageView({
     workspaceId,
     panelVariant,
     selectedOccurrenceKey,
-    select: (k) => lens.select(k) || setSelectedOccurrenceKey(k),
+    select: (k) => lens.previewing || setSelectedOccurrenceKey(k),
     setView,
     goToday,
     step,
     occurrence: occurrenceQuestion,
     onMoveEvent,
     createEvent: onCreateEvent,
-    onEventClick: (c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r),
+    onEventClick: (c, r) => lens.previewing || onEventClick(c, r),
     openDetail,
   });
 
@@ -735,16 +729,13 @@ export function CalendarPageView({
               onRefresh={calendar.accounts.length > 0 ? refreshCalendars : undefined}
               refreshing={refreshing}
               nowNext={
-                <>
-                  {lens.menu}
-                  <CalendarNowNext
-                    events={lens.events}
-                    onOpen={(item) => {
-                      setSelectedOccurrenceKey(item.occurrenceKey);
-                      openDetail({ type: "event", id: item.eventId });
-                    }}
-                  />
-                </>
+                <CalendarNowNext
+                  events={lens.events}
+                  onOpen={(item) => {
+                    setSelectedOccurrenceKey(item.occurrenceKey);
+                    openDetail({ type: "event", id: item.eventId });
+                  }}
+                />
               }
             />
             {faults.banner}
@@ -780,14 +771,12 @@ export function CalendarPageView({
               }}
               canEdit={lens.edit(canEdit && calendar.canEdit)}
               onToggleDone={onToggleDone}
-              onCreateEvent={onCreateEvent}
-              createCalendars={createCalendars}
               onMoveEvent={onMoveEvent}
               onMoveTask={drag.onMoveTask}
-              onEventClick={(c, r) => lens.select(c.occurrenceKey) || onEventClick(c, r)}
+              onEventClick={(c, r) => lens.previewing || onEventClick(c, r)}
               onTaskClick={onTaskClick}
               selectedOccurrenceKey={selectedOccurrenceKey}
-              onSelectOccurrence={(k) => lens.select(k) || setSelectedOccurrenceKey(k)}
+              onSelectOccurrence={(k) => lens.previewing || setSelectedOccurrenceKey(k)}
               accountHues={accountHues}
               workedTaskIds={workedTaskIds}
               onTriageLater={onTriageLater}

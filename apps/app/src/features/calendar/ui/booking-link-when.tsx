@@ -1,19 +1,24 @@
 import { useState } from "react";
 
+import { formatTimeText, TimeInput } from "@/components/ui/date-field";
 import { Eyebrow } from "@/components/ui/eyebrow";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { formatTime } from "@/lib/time-format";
+import { getResolvedTimeRegion, type ResolvedTimeRegion, useTimeRegion } from "@/lib/time-region";
 
-import type { TimeWindow, Weekday, WeeklyHours } from "../booking/slots";
+import { type TimeWindow, type Weekday, WEEKDAYS, type WeeklyHours } from "../booking/slots";
 import { OptionChip } from "./booking-link-parts";
 
 // "When" in the booking link editor: seven day toggles and one start → end
 // range while every open day keeps the same hours, or the per-day editor once
 // they differ ("Different hours per day"). The data is always per day.
 
-/** Monday first, as the editor shows them. */
+/** Monday first: the order the data is read in (which days, which hours). */
 const WEEK: Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+/** The week as the editor shows it, from the week start in Settings → Time & region. */
+function weekFrom(weekStartsOn: number): Weekday[] {
+  return WEEKDAYS.map((_, i) => WEEKDAYS[(weekStartsOn + i) % 7]);
+}
 
 const DAY_LABEL: Record<Weekday, string> = {
   sun: "Sunday",
@@ -65,25 +70,30 @@ export function sharedHours(weekly: WeeklyHours): { window: TimeWindow | null } 
   return { window };
 }
 
-function clock(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  return formatTime(new Date(2000, 0, 1, h, m));
-}
-
-function daysText(open: Weekday[]): string {
-  const key = open.join(",");
+function daysText(open: Weekday[], weekStartsOn: number): string {
+  const key = WEEK.filter((day) => open.includes(day)).join(",");
   if (key === "mon,tue,wed,thu,fri") return "Weekdays";
   if (key === "sat,sun") return "Weekends";
   if (open.length === 7) return "Every day";
   if (open.length === 0) return "No days";
-  return open.map((day) => DAY_SHORT[day]).join(", ");
+  return weekFrom(weekStartsOn)
+    .filter((day) => open.includes(day))
+    .map((day) => DAY_SHORT[day])
+    .join(", ");
 }
 
-/** "Weekdays, 9:00 AM–5:00 PM", or the open days alone when their hours differ. */
-export function whenSummary(weekly: WeeklyHours): string {
+/**
+ * "Weekdays, 9:00 AM–5:00 PM" (or "09:00–17:00" on a 24-hour clock), or the
+ * open days alone when their hours differ. Host-facing: the person's clock
+ * and week start, never the guest's.
+ */
+export function whenSummary(
+  weekly: WeeklyHours,
+  region: Pick<ResolvedTimeRegion, "hour12" | "weekStartsOn"> = getResolvedTimeRegion(),
+): string {
   const open = WEEK.filter((day) => weekly[day].length > 0);
-  const days = daysText(open);
+  const days = daysText(open, region.weekStartsOn);
+  const clock = (hhmm: string) => formatTimeText(hhmm, region.hour12);
   const shared = sharedHours(weekly);
   if (!shared) return `${days}, different hours per day`;
   if (!shared.window) return days;
@@ -100,6 +110,10 @@ type Props = {
 };
 
 export function BookingLinkWhen({ weeklyHours, hostTimeZone, onChange }: Props) {
+  // The clock and week start from Settings → Time & region; redraws when they change.
+  const { weekStartsOn, hour12 } = useTimeRegion();
+  const week = weekFrom(weekStartsOn);
+  const summary = whenSummary(weeklyHours, { weekStartsOn, hour12 });
   const shared = sharedHours(weeklyHours);
   // A link whose days already differ opens in the per-day editor.
   const [perDay, setPerDay] = useState(() => shared === null);
@@ -125,7 +139,7 @@ export function BookingLinkWhen({ weeklyHours, hostTimeZone, onChange }: Props) 
       <Eyebrow as="h2">When</Eyebrow>
       {perDay ? (
         <div className="flex flex-col gap-2">
-          {WEEK.map((day) => {
+          {week.map((day) => {
             const window = weeklyHours[day][0];
             return (
               <div key={day} className="grid grid-cols-[3rem_auto_1fr] items-center gap-3">
@@ -139,31 +153,25 @@ export function BookingLinkWhen({ weeklyHours, hostTimeZone, onChange }: Props) 
                 />
                 {window ? (
                   <div className="flex items-center gap-2">
-                    <Input
-                      type="time"
-                      className="w-[7.25rem]"
+                    <TimeInput
+                      size="md"
+                      className="w-28"
                       value={window.start}
                       aria-label={`${DAY_LABEL[day]} start`}
-                      onChange={(e) =>
-                        onChange({
-                          ...weeklyHours,
-                          [day]: [{ start: e.target.value, end: window.end }],
-                        })
+                      onValueChange={(start) =>
+                        onChange({ ...weeklyHours, [day]: [{ start, end: window.end }] })
                       }
                     />
                     <span aria-hidden className="text-sm text-muted-foreground">
                       →
                     </span>
-                    <Input
-                      type="time"
-                      className="w-[7.25rem]"
+                    <TimeInput
+                      size="md"
+                      className="w-28"
                       value={window.end}
                       aria-label={`${DAY_LABEL[day]} end`}
-                      onChange={(e) =>
-                        onChange({
-                          ...weeklyHours,
-                          [day]: [{ start: window.start, end: e.target.value }],
-                        })
+                      onValueChange={(end) =>
+                        onChange({ ...weeklyHours, [day]: [{ start: window.start, end }] })
                       }
                     />
                   </div>
@@ -184,7 +192,7 @@ export function BookingLinkWhen({ weeklyHours, hostTimeZone, onChange }: Props) 
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center gap-3">
             <fieldset aria-label="Days" className="min-w-0 flex gap-1">
-              {WEEK.map((day) => {
+              {week.map((day) => {
                 const on = weeklyHours[day].length > 0;
                 return (
                   <OptionChip
@@ -200,27 +208,27 @@ export function BookingLinkWhen({ weeklyHours, hostTimeZone, onChange }: Props) 
               })}
             </fieldset>
             <div className="flex items-center gap-2">
-              <Input
-                type="time"
-                className="w-[7.25rem]"
+              <TimeInput
+                size="md"
+                className="w-28"
                 value={range.start}
                 aria-label="From"
-                onChange={(e) => setRange({ start: e.target.value, end: range.end })}
+                onValueChange={(start) => setRange({ start, end: range.end })}
               />
               <span aria-hidden className="text-sm text-muted-foreground">
                 →
               </span>
-              <Input
-                type="time"
-                className="w-[7.25rem]"
+              <TimeInput
+                size="md"
+                className="w-28"
                 value={range.end}
                 aria-label="Until"
-                onChange={(e) => setRange({ start: range.start, end: e.target.value })}
+                onValueChange={(end) => setRange({ start: range.start, end })}
               />
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            {whenSummary(weeklyHours)} ({hostTimeZone}) ·{" "}
+            {summary} ({hostTimeZone}) ·{" "}
             <button type="button" className={QUIET_LINK} onClick={() => setPerDay(true)}>
               Different hours per day
             </button>

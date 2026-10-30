@@ -13,7 +13,7 @@ type ClaimNames = { names: string[]; first: Assignee | null };
 
 function namesOf(byId: (id: string) => Assignee | null, ids: readonly string[]): ClaimNames {
   return {
-    names: ids.map((id) => byId(id)?.name || "a teammate"),
+    names: ids.map((id) => byId(id)?.name || "a workspace member"),
     first: ids.length > 0 ? byId(ids[0]) : null,
   };
 }

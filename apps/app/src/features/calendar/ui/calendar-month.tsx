@@ -6,13 +6,21 @@
 // `month-layout.ts`; this file measures how many lines a cell fits and draws.
 // Inline styles are runtime grid placement only (columns, rows, spans).
 
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type PointerEvent as ReactPointerEvent,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { cn } from "@/lib/utils";
 
 import { type EventChip, eventHue } from "../events";
 import { hueAttrs } from "../hue";
-import type { DueChip, TaskBlock } from "../lens";
+import { type DueChip, localDayKey, type TaskBlock } from "../lens";
 import { layoutMonth, type MonthCell, type MonthLine, monthOf } from "../month-layout";
 import { DueList } from "./day-header";
 import { EventChipView } from "./event-chip";
@@ -37,6 +45,11 @@ type Props = {
   onScheduleDue?: (taskId: string, day: Date) => void;
   /** Accounts that didn't sync: their items carry the sync mark (CALR-3). */
   staleAccountIds?: ReadonlySet<string>;
+  /**
+   * A click on a day's empty space (or a drag across days, from the earlier
+   * one) opens the composer there; absent for a view-only reader.
+   */
+  onCreateOn?: (day: Date) => void;
 };
 
 /** Lines a cell fits before it is measured (and in tests, which lay nothing out). */
@@ -46,6 +59,39 @@ const NOOP = () => {};
 
 function dayLabel(day: Date): string {
   return day.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** The day under a pointer, unless it's on something of its own (a date, a line, a menu). */
+function emptyDayAt(target: EventTarget | null): string | null {
+  if (!(target instanceof Element)) return null;
+  if (target.closest("button, a, input, [role='menu'], [role='dialog']")) return null;
+  return target.closest("[data-month-cell]")?.getAttribute("data-month-cell") ?? null;
+}
+
+/**
+ * Click a day's empty space, or drag across days, to open the composer on
+ * that day (the earlier one for a drag) at its first free time.
+ */
+function useCreateGesture(days: readonly Date[], onCreateOn?: (day: Date) => void) {
+  const from = useRef<string | null>(null);
+  if (!onCreateOn) return { onPointerDown: undefined, onPointerUp: undefined };
+  return {
+    onPointerDown: (e: ReactPointerEvent) => {
+      from.current = e.button === 0 ? emptyDayAt(e.target) : null;
+    },
+    onPointerUp: (e: ReactPointerEvent) => {
+      const start = from.current;
+      from.current = null;
+      if (!start) return;
+      const end =
+        (e.target instanceof Element
+          ? e.target.closest("[data-month-cell]")?.getAttribute("data-month-cell")
+          : null) ?? start;
+      const key = end < start ? end : start;
+      const day = days.find((d) => localDayKey(d) === key);
+      if (day) onCreateOn(day);
+    },
+  };
 }
 
 /** How many lines fit under a cell's date row, from the grid's height and one line's. */
@@ -90,8 +136,10 @@ export function CalendarMonth({
   onDueClick = NOOP,
   onScheduleDue,
   staleAccountIds = NONE,
+  onCreateOn,
 }: Props) {
   const { ref, capacity } = useCellCapacity();
+  const create = useCreateGesture(days, onCreateOn);
   const weeks = useMemo(
     () =>
       layoutMonth({
@@ -140,6 +188,8 @@ export function CalendarMonth({
           year: "numeric",
         })}
         className="relative grid min-h-0 flex-1 grid-rows-6"
+        onPointerDown={create.onPointerDown}
+        onPointerUp={create.onPointerUp}
       >
         {/* one line's height, for measuring how many fit */}
         <div
