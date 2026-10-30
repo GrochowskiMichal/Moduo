@@ -105,6 +105,25 @@ describe("engine drafts — lazy create (NR-2, AC3)", () => {
     expect(call.bodyText).toContain("second");
   });
 
+  it("a promoted draft is never pulled before its create lands (the live join's catch-up pull)", async () => {
+    const { runtime, pullDoc } = fakeRuntime();
+    engine = new NotesSyncEngineV2(runtime, "ws1");
+    const session = engine.openDraft("d6");
+    await session.booted;
+    type(session.doc, "first");
+    await engine.promoteDraft("d6");
+    // The editor follows the note live as soon as it stops being a draft, and
+    // joining asks for a catch-up pull; the server has no such note yet.
+    await engine.pullNote("d6");
+    await engine.wake();
+    await settle();
+    expect(pullDoc).not.toHaveBeenCalled();
+
+    engine.releasePush("d6");
+    await engine.pullNote("d6");
+    expect(pullDoc).toHaveBeenCalledTimes(1);
+  });
+
   it("promote and release are idempotent; a second promote queues nothing new", async () => {
     const { runtime, pushUpdates } = fakeRuntime();
     engine = new NotesSyncEngineV2(runtime, "ws1");
