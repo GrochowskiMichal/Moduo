@@ -11,6 +11,7 @@ import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from "r
 import { cn } from "@/lib/utils";
 
 import { type EventChip, eventHue } from "../events";
+import { hueAttrs } from "../hue";
 import type { DueChip, TaskBlock } from "../lens";
 import { layoutMonth, type MonthCell, type MonthLine, monthOf } from "../month-layout";
 import { DueList } from "./day-header";
@@ -356,7 +357,7 @@ function MonthLineButton({
       {line.kind === "event" ? (
         <span
           aria-hidden
-          data-label={hue}
+          {...hueAttrs(hue)}
           className={cn("cal-swatch size-1.5 shrink-0 rounded-full", line.past && "opacity-50")}
         />
       ) : (

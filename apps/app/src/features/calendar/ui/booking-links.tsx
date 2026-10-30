@@ -3,11 +3,12 @@
 // Zoom, or the guest's choice of the two; Moduo video stays visible, disabled.
 
 import { normalizeGuestReminderMinutes } from "@contracts/vocabularies";
-import { Copy, Plus } from "lucide-react";
+import { Check, Copy, Link, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
+import { IconButton } from "../../../components/ui/icon-button";
 import { isTauriRuntime } from "../../../lib/runtime";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { supabaseClient } from "../../../lib/runtime.web.client";
@@ -512,10 +513,20 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
   };
 
   return (
-    <div className="flex flex-col gap-1 border-t border-border pt-3">
-      <Eyebrow as="div" className="px-1">
-        Booking links
-      </Eyebrow>
+    <section aria-label="Booking links" className="flex flex-col gap-0.5">
+      <div className="flex items-center gap-0.5 pl-1">
+        <Eyebrow as="h2" className="flex-1">
+          Booking links
+        </Eyebrow>
+        <IconButton
+          icon={Plus}
+          label="New booking link"
+          onClick={() => {
+            setError(null);
+            setDraft(emptyDraft(accounts));
+          }}
+        />
+      </div>
       {pendingHost.map((ask) => (
         <div key={ask.linkId} className="flex items-center gap-1 px-1">
           <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
@@ -551,41 +562,37 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
           </Button>
         </div>
       ))}
-      {links.map((link) => (
-        <div key={link.id} className="flex items-center gap-1 px-1">
-          <button
-            type="button"
-            className="min-w-0 flex-1 truncate text-left text-sm text-foreground"
-            onClick={() => (onOpen ? onOpen(link.id) : openEditor(link))}
+      {links.map((link) => {
+        const ready = linkReady(link, googleOn, zoom.connected) && !link.paused;
+        return (
+          <div
+            key={link.id}
+            className="group/booking-row flex min-h-(--row-h-sm) items-center gap-2 rounded-md px-1 hover:bg-state-hover"
           >
-            {link.name}
-            {link.paused ? " · paused" : ""}
-          </button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={!linkReady(link, googleOn, zoom.connected) || link.paused}
-            onClick={() => void copy(link.slug)}
-          >
-            <Copy aria-hidden />
-            {copied === link.slug ? "Copied" : "Copy"}
-          </Button>
-        </div>
-      ))}
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="justify-start text-muted-foreground"
-        onClick={() => {
-          setError(null);
-          setDraft(emptyDraft(accounts));
-        }}
-      >
-        <Plus aria-hidden />
-        New booking link
-      </Button>
+            <Link aria-hidden className="size-icon-xs shrink-0 text-muted-foreground" />
+            <button
+              type="button"
+              className="min-w-0 flex-1 truncate text-left text-sm text-foreground"
+              onClick={() => (onOpen ? onOpen(link.id) : openEditor(link))}
+            >
+              {link.name}
+            </button>
+            {link.paused ? (
+              <span className="shrink-0 text-xs text-muted-foreground">Paused</span>
+            ) : null}
+            {copied === link.slug ? (
+              <output className="shrink-0 text-xs text-muted-foreground">Copied</output>
+            ) : null}
+            <IconButton
+              icon={copied === link.slug ? Check : Copy}
+              label={`Copy link to ${link.name}`}
+              disabled={!ready}
+              className="opacity-0 transition-opacity duration-(--motion-fade) ease-(--ease-out) group-hover/booking-row:opacity-100 group-focus-within/booking-row:opacity-100"
+              onClick={() => void copy(link.slug)}
+            />
+          </div>
+        );
+      })}
 
       <BookingLinkDialog
         draft={draft}
@@ -605,6 +612,6 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts, onOpen }:
         onDelete={() => void remove()}
         teammates={teammates}
       />
-    </div>
+    </section>
   );
 }

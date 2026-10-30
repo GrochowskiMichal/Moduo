@@ -464,9 +464,10 @@ export const calendarJourneys = [
     id: "cal-preview-teammate",
     screen: "calendar",
     goal: "See your week as a teammate sees it, then leave the preview",
-    target: { keys: 1, clicks: 2 },
+    target: { keys: 1, clicks: 3 },
     async pointer({ click, press, step, page }: J) {
-      await click(page.getByRole("button", { name: "Preview as…" }).first());
+      await click(page.getByRole("button", { name: "Calendar options" }).first());
+      await click(page.getByRole("menuitem", { name: "See your week as" }));
       await step("people", { expect: page.getByRole("menuitem", { name: "Ana Ruiz" }) });
       await click(page.getByRole("menuitem", { name: "Ana Ruiz" }));
       const banner = page.getByText(/Your week as Ana Ruiz sees it/);

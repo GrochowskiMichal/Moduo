@@ -8,6 +8,7 @@
 import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
 import { parseGoogleExternalId } from "./google-account";
+import { type CalendarHue, isHexColor, normalizeHue } from "./hue";
 import { parseSyncDescriptor } from "./sync";
 
 /** Human provider name for attribution ("Personal — Google"). */
@@ -42,16 +43,22 @@ export function accountSourceLabel(account: CalendarAccountModel): string {
 export function resolveAccountHues(
   accounts: Pick<CalendarAccountModel, "id" | "color">[],
   overrides: Record<string, string> = {},
-): Record<string, LabelColor> {
-  const out: Record<string, LabelColor> = {};
+): Record<string, CalendarHue> {
+  const out: Record<string, CalendarHue> = {};
   // Colored hues only (gray is the fallback), spread by usage.
   const colored = LABEL_COLORS.filter((c) => c !== "gray");
   const counts = new Map<LabelColor, number>(colored.map((c) => [c, 0]));
   const isName = (v: string | null | undefined): v is LabelColor =>
     !!v && (LABEL_COLORS as readonly string[]).includes(v);
 
-  // First pass: honor explicit overrides / stored names and count them.
+  // First pass: honor explicit overrides / stored names and count them. A
+  // custom color is taken as is and leaves the named hues to the rest.
   for (const a of accounts) {
+    const custom = normalizeHue(overrides[a.id]);
+    if (isHexColor(custom)) {
+      out[a.id] = custom;
+      continue;
+    }
     const explicit = isName(overrides[a.id])
       ? (overrides[a.id] as LabelColor)
       : isName(a.color)
