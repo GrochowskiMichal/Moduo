@@ -30,14 +30,16 @@ CREATE FUNCTION pg_temp.live(p_owner text, p_external text) RETURNS bigint LANGU
 $$;
 
 DO $$
+DECLARE
+  r text;
 BEGIN
-  PERFORM test.as_user('K', pg_temp.upsert('google:robin@example.com:family', 'error'));
-  PERFORM test.ok(pg_temp.live('K', 'google:robin@example.com:family') = 0,
-    'a failed sync of a teammate''s calendar creates no account for the caller');
+  r := test.as_user('K', pg_temp.upsert('google:robin@example.com:family', 'error'));
+  PERFORM test.ok(r = 'ok 1' AND pg_temp.live('K', 'google:robin@example.com:family') = 0,
+    'a failed sync of a teammate''s calendar answers without error and creates no account', r);
 
-  PERFORM test.as_user('O', pg_temp.upsert('google:robin@example.com:work', 'error'));
-  PERFORM test.ok(pg_temp.live('O', 'google:robin@example.com:work') = 0,
-    'a failed sync of a removed calendar does not bring it back');
+  r := test.as_user('O', pg_temp.upsert('google:robin@example.com:work', 'error'));
+  PERFORM test.ok(r = 'ok 1' AND pg_temp.live('O', 'google:robin@example.com:work') = 0,
+    'a failed sync of a removed calendar answers without error and does not bring it back', r);
 
   PERFORM test.as_user('O', pg_temp.upsert('google:robin@example.com:family', 'error'));
   PERFORM test.ok(
