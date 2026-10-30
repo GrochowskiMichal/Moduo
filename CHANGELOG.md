@@ -5,6 +5,32 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.6.0 · 2026-10-30
+
+### New
+
+- Calendar's left panel lists all your calendars in one place: click a calendar's color to show or hide it, and give it any color you like.
+
+### Improved
+
+- Booking links make sure Google Meet or Zoom is connected before you share them, and you can copy, pause, edit or delete a link from Calendar's left panel.
+- Click or drag anywhere on Calendar's week, day or month view to start a new event, right where you drew it.
+- An event's panel shows everything linked to it as cards, as a task's does, and a history of its changes.
+- Calendar's side panels stay open or closed as you left them, like on every other page.
+- See your calendar as a workspace member sees it with the glasses on their row in Calendar; press them again to go back.
+
+### Fixed
+
+- Calendar's times and dates follow your clock, week start and date order from Settings, Time and region.
+- Calendar's today marker follows your corner radius setting.
+- In the browser, ⌥N starts a new item and ⌥⇧N a new note, since browsers keep ⌘N for a new window.
+- Text you copy out of Notes comes back exactly as you wrote it, and pasted code, keys and numbered lines keep their shape.
+- Scheduling an overdue task from a day's due list finds free time today instead of saying there's none left.
+
+### Security
+
+- Security and reliability improvements.
+
 ## 1.5.0 · 2026-10-28
 
 ### New
