@@ -19,6 +19,7 @@ import { busyIdsFromJson, questionsFromJson, slugFor } from "../booking/model";
 import { bookingPublicUrl } from "../booking/public-origin";
 import { DEFAULT_WEEKLY_HOURS, normalizeWeeklyHours } from "../booking/slots";
 import { VIDEO_LABEL, videoBlocker, videoSetting } from "../booking/video";
+import { connectErrorText } from "../connect-error";
 import {
   CONNECT_FINISHED_EVENT,
   finishConnectReturn,
@@ -354,7 +355,7 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         await startWebGoogleConnect();
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not connect Google.");
+      setError(connectErrorText("google", e instanceof Error ? e.message : String(e)));
     } finally {
       setBusy(false);
     }

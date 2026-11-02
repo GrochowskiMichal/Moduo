@@ -10,6 +10,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
+import { connectErrorText } from "../../calendar/connect-error";
 import type { CalendarAccountModel } from "../../calendar/events";
 import {
   disconnectGoogleLogin,
@@ -167,7 +168,7 @@ export function IntegrationsSection() {
       });
       await loadAccounts();
     } catch (e) {
-      setCalError(e instanceof Error ? e.message : String(e));
+      setCalError(connectErrorText(provider, e instanceof Error ? e.message : String(e)));
     } finally {
       setCalBusy(null);
     }
