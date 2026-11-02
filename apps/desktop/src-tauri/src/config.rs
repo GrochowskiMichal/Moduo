@@ -36,6 +36,32 @@ fn pick_setting(runtime: Option<String>, built: Option<&str>) -> Option<String> 
         .or_else(|| built.and_then(clean))
 }
 
+/// Google's client ID and secret come as a pair: from the launch environment when
+/// it names a client, else both baked values, never one of each.
+fn google_calendar_client() -> (Option<String>, Option<String>) {
+    pick_pair(
+        (
+            runtime_setting("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
+            runtime_setting("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+        ),
+        (
+            oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
+            oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+        ),
+    )
+}
+
+fn pick_pair(
+    runtime: (Option<String>, Option<String>),
+    built: (Option<String>, Option<String>),
+) -> (Option<String>, Option<String>) {
+    if runtime.0.is_some() {
+        runtime
+    } else {
+        built
+    }
+}
+
 /// A setting read only from the environment at launch.
 fn runtime_setting(name: &str) -> Option<String> {
     pick_setting(std::env::var(name).ok(), None)
@@ -62,13 +88,14 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let (calendar_google_client_id, calendar_google_client_secret) = google_calendar_client();
         Self {
             keychain_service: std::env::var("MODUO_KEYCHAIN_SERVICE")
                 .ok()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| default_keychain_service().to_string()),
-            calendar_google_client_id: oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
-            calendar_google_client_secret: oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+            calendar_google_client_id,
+            calendar_google_client_secret,
             email_google_client_id: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
             email_google_client_secret: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
             calendar_microsoft_client_id: oauth_client!("MODUO_CALENDAR_MICROSOFT_CLIENT_ID"),
@@ -107,5 +134,13 @@ mod tests {
         assert_eq!(pick_setting(Some("  ".into()), Some("built")), Some("built".into()));
         assert_eq!(pick_setting(Some(String::new()), Some("")), None);
         assert_eq!(pick_setting(None, None), None);
+    }
+
+    #[test]
+    fn a_google_client_id_and_secret_never_mix_sources() {
+        let some = |v: &str| Some(v.to_string());
+        let built = (some("built-id"), some("built-secret"));
+        assert_eq!(pick_pair((some("dev-id"), None), built.clone()), (some("dev-id"), None));
+        assert_eq!(pick_pair((None, some("dev-secret")), built.clone()), built);
     }
 }

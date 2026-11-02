@@ -168,7 +168,9 @@ export function IntegrationsSection() {
       });
       await loadAccounts();
     } catch (e) {
-      setCalError(connectErrorText(provider, e instanceof Error ? e.message : String(e)));
+      const raw = e instanceof Error ? e.message : String(e);
+      console.warn("[integrations] calendar connect", provider, raw);
+      setCalError(connectErrorText(provider, raw));
     } finally {
       setCalBusy(null);
     }

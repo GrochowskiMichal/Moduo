@@ -41,6 +41,13 @@ import {
   takePendingBookingEdit,
 } from "./use-booking-panel";
 
+/** A failed Google sign-in in words; the raw code goes to the console. */
+function signInFailure(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  console.warn("[booking-links] google sign-in", raw);
+  return connectErrorText("google", raw);
+}
+
 type Props = {
   runtime: ModuoRuntime | null;
   workspaceId: string;
@@ -335,7 +342,9 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         if (!accountId) {
           const result = await invoke<{ accountId: string; email: string; displayName: string }>(
             "calendar_google_oauth_start",
-          );
+          ).catch((e: unknown) => {
+            throw new Error(signInFailure(e));
+          });
           accountId = result.accountId;
           if (runtime) {
             await runtime.calendar.upsertAccount({
@@ -352,10 +361,12 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         await invoke("calendar_google_publish_booking_token", { accountId });
         await refresh();
       } else {
-        await startWebGoogleConnect();
+        await startWebGoogleConnect().catch((e: unknown) => {
+          throw new Error(signInFailure(e));
+        });
       }
     } catch (e) {
-      setError(connectErrorText("google", e instanceof Error ? e.message : String(e)));
+      setError(e instanceof Error ? e.message : "Could not connect Google.");
     } finally {
       setBusy(false);
     }
