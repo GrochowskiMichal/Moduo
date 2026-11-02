@@ -1,6 +1,6 @@
 ---
 paths: ["supabase/tests/**", "supabase/probes/**", "e2e/**"]
-incident: "SQL tests and probes passed while proving nothing (service role with a NULL auth.uid(), RLS refusals read as success) or flaked on the shared stack's other rows (HV-14a compiled these gotchas)"
+incident: "SQL tests and probes passed while proving nothing (service role with a NULL auth.uid(), RLS refusals read as success) or flaked on the shared stack's other rows (HV-14a compiled these gotchas); four contract tests were wrong, not the code, in NS-7, NS-11 and GS-5 (2026-10-28)"
 expires: 2027-01-31
 ---
 
@@ -19,3 +19,6 @@ Harness traps (one `now()` per transaction, the `test` schema under other roles,
 - `storage.objects` refuses a direct DELETE in SQL ("use the Storage API"): a "nobody deletes" check expects that error.
 - Realtime: `SUBSCRIBED` fires before `postgres_changes` is live; wait for the `system` message "Subscribed to PostgreSQL" before writing.
 - Create users through the Auth admin API, not `INSERT INTO auth.users`; if SQL is unavoidable set every GoTrue token column to `''` (one NULL makes `/auth/v1/admin/users` answer 500). A password user made by the admin API needs its password set with `extensions.crypt()`, as `supabase/seed.sql` does.
+- A contract check that errors is a broken test, not a red contract: run a new contract file once against the old code and confirm each check fails on its assertion, not on an exception. Build an expected value outside the member's role (as the member, a service-only function like `notes__meta` refuses), and cast both sides of a row comparison to `text`.
+- `pg_get_functiondef` prints a call to a keyword-named function quoted (`"left"(`): match a stored body with a regex that allows the quotes. Compare against the function's own answer (`notes__search` for that caller) rather than a hand count that misses a legitimate extra row, such as a duplicate the caller also sees.
+- A typo fixture for fuzzy matching must be closer to its target than to every other fixture word and still under the threshold (GS-5's `wnda` missed; `wandq` holds).
