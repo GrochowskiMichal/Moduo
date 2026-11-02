@@ -62,8 +62,11 @@ name: Desktop Release (shared)
 #   Repo level (callers use `secrets: inherit`, which the environment secrets also need):
 #     CLOUDFLARE_ACCOUNT_ID,
 #     RUNNER_STATUS_TOKEN (Administration: read on this repo; unset → always GitHub-hosted)
-# (The Rust shell reads MODUO_* settings such as the Google OAuth clients at run time, not at
-# build time, so passing them to `tauri build` did nothing; they are not passed any more.)
+#   desktop-signing environment, read by build-mac and build-windows and baked into the app
+#   (apps/desktop/src-tauri/src/config.rs `oauth_client!`): MODUO_CALENDAR_GOOGLE_CLIENT_ID,
+#   MODUO_CALENDAR_GOOGLE_CLIENT_SECRET (Google's desktop client, not confidential by design),
+#   MODUO_CALENDAR_MICROSOFT_CLIENT_ID. Unset → that Connect says it isn't set up in this build.
+#   Only installed-app clients go here: never a server app's secret (Zoom, Meet).
 #
 # Version: the built branch's VERSION file (scripts/release/version.mjs). Production ships it as is,
 # staging as <VERSION>-rc.<run number>. The updater only installs a higher version, so the
@@ -486,6 +489,17 @@ jobs:
       # build script and recompiles the crate.
       - name: Build per-arch macOS apps, then the universal .dmg (signed, with updater bundles)
         run: |
+          # A build without a Calendar sign-in client ships a Connect that can't work: say so on
+          # staging, stop production.
+          for name in MODUO_CALENDAR_GOOGLE_CLIENT_ID MODUO_CALENDAR_GOOGLE_CLIENT_SECRET MODUO_CALENDAR_MICROSOFT_CLIENT_ID; do
+            if [ -z "${!name}" ]; then
+              if [ "${{ inputs.channel }}" = "production" ]; then
+                echo "::error::$name is not set in the desktop-signing environment: Calendar Connect would fail in this build."
+                exit 1
+              fi
+              echo "::warning::$name is not set in the desktop-signing environment: Calendar Connect will fail in this build."
+            fi
+          done
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
@@ -508,6 +522,10 @@ jobs:
           PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
           PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
           PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
+          # Calendar sign-in clients, baked into the app (see the header).
+          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
+          MODUO_CALENDAR_MICROSOFT_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_MICROSOFT_CLIENT_ID }}
 
       # Stable filenames so download URLs don't change between versions. The macOS updater
       # installs the .app.tar.gz, not the .dmg: Moduo_aarch64 and Moduo_x64 for the manifest's
@@ -749,6 +767,17 @@ jobs:
       # loses them (D:aModuoModuo/...).
       - name: Build Windows NSIS installer
         run: |
+          # A build without a Calendar sign-in client ships a Connect that can't work: say so on
+          # staging, stop production.
+          for name in MODUO_CALENDAR_GOOGLE_CLIENT_ID MODUO_CALENDAR_GOOGLE_CLIENT_SECRET MODUO_CALENDAR_MICROSOFT_CLIENT_ID; do
+            if [ -z "${!name}" ]; then
+              if [ "${{ inputs.channel }}" = "production" ]; then
+                echo "::error::$name is not set in the desktop-signing environment: Calendar Connect would fail in this build."
+                exit 1
+              fi
+              echo "::warning::$name is not set in the desktop-signing environment: Calendar Connect will fail in this build."
+            fi
+          done
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
@@ -763,6 +792,10 @@ jobs:
           PUBLIC_WEB_ORIGIN: ${{ inputs.web_origin }}
           PUBLIC_STAGING_PORTAL: ${{ inputs.staging_portal && 'true' || '' }}
           PUBLIC_DESKTOP_CHANNEL: ${{ inputs.desktop_channel }}
+          # Calendar sign-in clients, baked into the app (see the header).
+          MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
+          MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
+          MODUO_CALENDAR_MICROSOFT_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_MICROSOFT_CLIENT_ID }}
 
       # Git Bash's /tmp is not the path the upload action sees on Windows.
       - name: Stage artifacts

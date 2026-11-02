@@ -108,6 +108,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-11-02 · The Calendar sign-in clients are baked into desktop release builds.
 - 2026-10-20 · The desktop shell is trimmed: 33 dead commands gone, `opt-level = "s"`, the window starts hidden, macOS 14 is the floor, and IMAP/SMTP stay on native-tls for now.
 - 2026-10-19 · Release builds use `lto = true`, `codegen-units = 1` and `strip = true`.
 - 2026-10-19 · Download links follow the update server's current version, not the frozen GitHub bridge.
