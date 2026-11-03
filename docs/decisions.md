@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-03 · MR-0: local mail vocabularies live in `@contracts/mail` (`mail.ts`), exported to `mail-local.json`, mirrored by Rust `src/mail/contracts.rs`.
 - 2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed. *(partly superseded)*
 - 2026-07-29 · Import scope collapsed to "Notion notes + email history depth"
 - 2026-07-29 · Email history depth is an engine change, not a setting.

@@ -2,6 +2,9 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+- **2026-11-03 · MR-0: local mail vocabularies live in `@contracts/mail` (`mail.ts`), exported to `mail-local.json`, mirrored by Rust `src/mail/contracts.rs`.** A separate `mail.ts` (not `vocabularies.ts`) because these never reach Postgres and so need no CHECK; the cloud `email_settings_items.kind` stays in `vocabularies.ts` (MR-7). `bun scripts/mail/export-contracts.ts` regenerates the JSON (`--check` for staleness); a TS test pins JSON = export and a Rust test pins enums = JSON. The engine port is `lib/runtime.types.mail-engine.ts` (re-exported from `runtime.types.email.ts`, which keeps the legacy `EmailRuntime` until MR-16). The fixture's TS generator is the single source: `scripts/mail/write-fixture.ts` writes JSONL for the Rust perf tests (`target/mail-fixture/messages.jsonl` or `MODUO_MAIL_FIXTURE_PATH`) and Maildir trees for the Dovecot + Mailpit harness (`scripts/mail/test-server.sh`, ports 31143/31025, data in gitignored `.mail-it/`). Perf skeletons are `#[ignore]`d `todo!()`s and `tests/mail_it.rs` skeletons are no-ops unless `MODUO_MAIL_IT=1`, so `cargo test` stays green while they remain failing contracts.
+  - status: current
+
 - **2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed.** Supabase is the only gate (sign-ups off + dashboard invites). OTP sign-in sends `shouldCreateUser: false`. The invite email's link target is the Supabase **Site URL** (Authentication → URL Configuration), which must be the deployed app origin, not localhost. Delete `PUBLIC_STAGING_ALLOWLIST` from Vercel.
   - status: current · by: product 2026-10-10 "TX-4: invite-only is a before-"
 

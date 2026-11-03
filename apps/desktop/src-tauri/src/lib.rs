@@ -23,6 +23,8 @@ pub mod email_sync;
 pub mod identity_acl;
 pub mod install_id;
 pub mod keychain;
+/// The rebuilt mail engine (specs/mail-rebuild.md).
+pub mod mail;
 pub mod migration_legacy;
 pub mod navigation;
 pub mod store_redb;

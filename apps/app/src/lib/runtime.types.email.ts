@@ -263,3 +263,6 @@ export type EmailRuntime = {
     targetIcon?: string | null;
   }): Promise<unknown>;
 };
+
+export type * from "./runtime.types.mail-engine";
+export { mailViewKey } from "./runtime.types.mail-engine";
