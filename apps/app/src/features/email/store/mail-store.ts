@@ -4,11 +4,12 @@
 // rows; this holds the app-wide facts (counts, accounts, failed ops, the undo
 // stack, announcements) and a version that bumps when threads change.
 
+import type { MailOpKind } from "@contracts/mail";
+
 import type {
   MailAccount,
   MailCounts,
   MailEngine,
-  MailOpKind,
   MailOpRecord,
   MailThreadRow,
 } from "@/lib/runtime.types.mail-engine";

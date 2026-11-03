@@ -126,28 +126,30 @@ export function createMailController(deps: MailControllerDeps): MailController {
     }
   }
 
+  async function returnDue(due: MailThreadRow[], first: boolean) {
+    await unsnooze(due.map((r) => r.threadId));
+    const away = first
+      ? due.filter((r) => (r.snoozedUntilMs ?? 0) <= launchMs).map((r) => r.threadId)
+      : [];
+    if (away.length > 0) {
+      store.setState({ awayReturned: away });
+      deps.notify?.(
+        away.length === 1 ? "1 email came back" : `${away.length} emails came back`,
+        "while you were away",
+      );
+    }
+    for (const r of due) {
+      if (!away.includes(r.threadId)) deps.notify?.("Snoozed email back", r.subject);
+    }
+  }
+
   async function runSweep() {
     const t = now();
     const snoozed = await readAll(engine, SNOOZED);
     const due = snoozed.filter((r) => r.snoozedUntilMs !== null && r.snoozedUntilMs <= t);
     const first = !announced;
     announced = true;
-    if (due.length > 0) {
-      await unsnooze(due.map((r) => r.threadId));
-      const away = first
-        ? due.filter((r) => (r.snoozedUntilMs ?? 0) <= launchMs).map((r) => r.threadId)
-        : [];
-      if (away.length > 0) {
-        store.setState({ awayReturned: away });
-        deps.notify?.(
-          away.length === 1 ? "1 email came back" : `${away.length} emails came back`,
-          "while you were away",
-        );
-      }
-      for (const r of due) {
-        if (!away.includes(r.threadId)) deps.notify?.("Snoozed email back", r.subject);
-      }
-    }
+    if (due.length > 0) await returnDue(due, first);
     const dismissed = new Set(store.getState().dismissedFollowups);
     const followups = (await readAll(engine, FOLLOWUPS)).filter((r) => !dismissed.has(r.threadId));
     const before = new Set(store.getState().followupsDue.map((r) => r.threadId));
