@@ -5,8 +5,9 @@
 // its hover actions. ＋ adds a calendar; ⋯ holds working hours, saving what's
 // shown as a view, and seeing your week as a teammate. Saved views are chips.
 
-import { Check, Eye, Glasses, MoreHorizontal, Plus, UserPlus } from "lucide-react";
+import { Check, Eye, Glasses, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 
 import { Calendar } from "../../../components/ui/calendar";
 import {
@@ -20,6 +21,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "../../../components/ui/popover";
+import { undoToast } from "../../../lib/undo-toast";
 import { cn } from "../../../lib/utils";
 import { ShareMenu } from "../../sharing/share-menu";
 import { useWorkspace } from "../../workspaces/workspace-context";
@@ -62,6 +64,8 @@ type Props = {
   onRemoveAccount: (accountId: string) => void;
   /** Repair a CalDAV account's password (password-only flow). */
   onReconnectAccount?: (account: CalendarAccountModel) => void;
+  /** A calendar of yours was deleted or brought back: its events change too. */
+  onCalendarsChanged?: () => void;
 };
 
 // Subtle density dot under days that carry events/blocks (§3a).
@@ -145,6 +149,7 @@ export function CalendarRail({
   onRecolorAccount,
   onRemoveAccount,
   onReconnectAccount,
+  onCalendarsChanged,
   footer,
 }: Props) {
   const [month, setMonth] = useState<Date>(anchor);
@@ -157,7 +162,8 @@ export function CalendarRail({
     .filter((m) => m.isActive && !m.removedAt)
     .map((m) => ({ userId: m.userId, name: m.displayName || "Member" }));
   const others = people.filter((p) => p.userId !== userId);
-  const { rows, views, createCalendar, saveView } = useRailCalendars(workspaceId);
+  const { rows, views, createCalendar, renameCalendar, removeCalendar, restoreCalendar, saveView } =
+    useRailCalendars(workspaceId);
   const mine = rows.filter((r) => r.owner_id === userId);
   const moduoRow = mine.find((r) => r.kind === "moduo");
   const customRows = mine.filter((r) => r.kind === "custom");
@@ -230,29 +236,58 @@ export function CalendarRail({
       />
     ) : null;
 
+  // Delete is at once, with Undo (the op keeps a deleted calendar a day).
+  // Teammates' and booked events on it move to their owner's Moduo calendar.
+  const deleteCalendar = async (row: RailCalendarRow) => {
+    try {
+      await removeCalendar(row.id);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't delete the calendar.");
+      return;
+    }
+    onCalendarsChanged?.();
+    // A hidden calendar that's gone would keep every view chip from matching.
+    const wasHidden = hidden.has(row.id);
+    if (wasHidden) onSetHidden(hiddenAccountIds.filter((id) => id !== row.id));
+    undoToast(`Deleted ${row.name}`, {
+      description: "Your events on it went with it.",
+      onUndo: () =>
+        void restoreCalendar(row.id)
+          .then(() => {
+            if (wasHidden) onSetHidden([...hiddenAccountIds]);
+            onCalendarsChanged?.();
+          })
+          .catch((e) =>
+            toast.error(e instanceof Error ? e.message : "Couldn't bring the calendar back."),
+          ),
+    });
+  };
+
+  const rename = (row: RailCalendarRow) => async (next: string) => {
+    try {
+      return await renameCalendar(row.id, next);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Couldn't rename the calendar.");
+      return false;
+    }
+  };
+
   const nativeRow = (row: RailCalendarRow, name: string, hue: string) => {
     const id = visibleIdOf(row);
-    const shown = !hidden.has(id);
+    const custom = row.kind === "custom";
     return (
-      <div key={row.id} className={ROW}>
-        <Swatch
-          hue={hue}
-          shown={shown}
-          label={`Show ${name} on the calendar`}
-          onToggle={() => onToggleAccountVisibility(id)}
-        />
-        <RowName name={name} shown={shown} />
-        <div className={ACTIONS}>
-          {canShare ? (
-            <IconButton
-              icon={UserPlus}
-              label={`Share ${name}`}
-              onClick={() => setShareId(row.id)}
-            />
-          ) : null}
-        </div>
-        {shareMenuFor(row, name)}
-      </div>
+      <NativeRow
+        key={row.id}
+        name={name}
+        hue={hue}
+        shown={!hidden.has(id)}
+        onToggle={() => onToggleAccountVisibility(id)}
+        onRename={custom ? rename(row) : undefined}
+        onDelete={custom ? () => void deleteCalendar(row) : undefined}
+        share={
+          canShare ? { open: () => setShareId(row.id), menu: shareMenuFor(row, name) } : undefined
+        }
+      />
     );
   };
 
@@ -300,7 +335,10 @@ export function CalendarRail({
         weekStartsOn={prefs.weekStartsOn as 0 | 1 | 2 | 3 | 4 | 5 | 6}
         modifiers={modifiers}
         modifiersClassNames={modifiersClassNames}
-        className="self-center p-0"
+        // It follows the week shown: the toolbar moves through months, so no arrows here.
+        hideNavigation
+        className="w-full p-0"
+        classNames={MINI_MONTH}
       />
 
       <section aria-label="Calendars" className="flex flex-col gap-0.5">
@@ -495,6 +533,109 @@ export function CalendarRail({
   );
 }
 
+/**
+ * The mini month's grid fits the rail: seven equal columns, each day at most the
+ * primitive's size-8 and square, so a narrow rail shrinks the days instead of
+ * clipping the first and last columns.
+ */
+const MINI_MONTH = {
+  weekdays: "grid grid-cols-7 gap-0.5",
+  weekday: "min-w-0 text-2xs font-normal text-muted-foreground",
+  week: "mt-1 grid w-full grid-cols-7 gap-0.5",
+  day: "relative min-w-0 p-0 text-center",
+  day_button:
+    "mx-auto inline-flex aspect-square w-full max-w-8 items-center justify-center rounded-md text-sm font-normal text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+};
+
+/**
+ * A calendar of yours (your Moduo calendar, or one you made): swatch, name and
+ * the same ⋯ as a connected calendar: show, share, and for one you made rename
+ * and delete. No color: a Moduo event carries its own.
+ */
+function NativeRow({
+  name,
+  hue,
+  shown,
+  onToggle,
+  onRename,
+  onDelete,
+  share,
+}: {
+  name: string;
+  hue: string;
+  shown: boolean;
+  onToggle: () => void;
+  onRename?: (name: string) => Promise<boolean>;
+  onDelete?: () => void;
+  share?: { open: () => void; menu: ReactNode };
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const pending = useRef<(() => void) | null>(null);
+  // Back on ⋯ once a rename ends (the field unmounts, which would drop focus on the page).
+  const optionsRef = useRef<HTMLButtonElement>(null);
+  const wasRenaming = useRef(false);
+  useEffect(() => {
+    if (wasRenaming.current && !renaming) optionsRef.current?.focus();
+    wasRenaming.current = renaming;
+  }, [renaming]);
+  if (renaming && onRename) {
+    return (
+      <NameField
+        label={`Rename ${name}`}
+        initial={name}
+        onDone={() => setRenaming(false)}
+        onSave={onRename}
+      />
+    );
+  }
+  return (
+    <div className={ROW}>
+      <Swatch hue={hue} shown={shown} label={`Show ${name} on the calendar`} onToggle={onToggle} />
+      <RowName name={name} shown={shown} />
+      <div className={ACTIONS}>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <IconButton ref={optionsRef} icon={MoreHorizontal} label={`${name} options`} />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            onCloseAutoFocus={(e) => {
+              const run = pending.current;
+              if (!run) return;
+              pending.current = null;
+              e.preventDefault();
+              run();
+            }}
+          >
+            <DropdownMenuItem onSelect={onToggle}>
+              {shown ? "Hide from calendar" : "Show on calendar"}
+            </DropdownMenuItem>
+            {onRename ? (
+              <DropdownMenuItem onSelect={() => (pending.current = () => setRenaming(true))}>
+                Rename…
+              </DropdownMenuItem>
+            ) : null}
+            {share ? (
+              <DropdownMenuItem onSelect={() => (pending.current = share.open)}>
+                Share…
+              </DropdownMenuItem>
+            ) : null}
+            {onDelete ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem variant="destructive" onSelect={onDelete}>
+                  Delete calendar
+                </DropdownMenuItem>
+              </>
+            ) : null}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      {share?.menu}
+    </div>
+  );
+}
+
 /** A connected calendar: swatch, name, sync trouble, and ⋯ (show, color, share, remove). */
 function AccountRow({
   account,
@@ -604,10 +745,13 @@ function AccountRow({
 /** A one-line name field that appears from a menu item: Enter saves, Esc or an empty blur cancels. */
 function NameField({
   label,
+  initial,
   onSave,
   onDone,
 }: {
   label: string;
+  /** The name to start from (a rename), selected so typing replaces it. */
+  initial?: string;
   onSave: (name: string) => Promise<boolean>;
   onDone: () => void;
 }) {
@@ -615,7 +759,10 @@ function NameField({
   // A frame later: the menu that asked for the field is still closing (and
   // holding the rest of the page out of focus) when it mounts.
   useEffect(() => {
-    const id = requestAnimationFrame(() => ref.current?.focus());
+    const id = requestAnimationFrame(() => {
+      ref.current?.focus();
+      ref.current?.select();
+    });
     return () => cancelAnimationFrame(id);
   }, []);
   return (
@@ -635,6 +782,7 @@ function NameField({
         size="sm"
         aria-label={label}
         placeholder={label}
+        defaultValue={initial}
         className="min-w-0 flex-1"
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -643,7 +791,9 @@ function NameField({
           }
         }}
         onBlur={(e) => {
-          if (!e.currentTarget.value.trim()) onDone();
+          // Clicking away from an empty or unchanged field leaves it; a changed one waits for Enter.
+          const value = e.currentTarget.value.trim();
+          if (!value || value === initial) onDone();
         }}
       />
     </form>

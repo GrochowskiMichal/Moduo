@@ -63,7 +63,7 @@ export function DayHeader({
           className={cn(
             "shrink-0 font-display font-semibold leading-none tracking-tight tabular-nums",
             today
-              ? "inline-grid h-7 min-w-7 place-items-center rounded-md bg-primary px-1.5 text-lg text-primary-foreground"
+              ? "inline-grid h-7 min-w-7 place-items-center rounded-md px-1.5 text-lg text-foreground ring-1 ring-ring"
               : cn(
                   "text-xl",
                   past

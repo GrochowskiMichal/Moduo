@@ -313,8 +313,9 @@ const MonthDay = memo(function MonthDay({
           onClick={() => onOpenDay(cell.day)}
           className={cn(
             "inline-grid h-7 min-w-7 shrink-0 place-items-center rounded-md px-1.5 font-display text-sm font-semibold tabular-nums transition-colors duration-(--motion-fade) ease-(--ease-out) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            // Today is a ring, as in the rail's mini month: a fill means "selected" there.
             cell.today
-              ? "bg-primary text-primary-foreground hover:bg-primary-hover"
+              ? "text-foreground ring-1 ring-ring hover:bg-state-hover"
               : cn(
                   "hover:bg-state-hover hover:text-foreground",
                   !cell.inMonth || cell.past ? "text-subtle-foreground" : "text-foreground",

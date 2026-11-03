@@ -43,6 +43,21 @@ function visibleIdsFrom(items: unknown): string[] {
 }
 
 const ROW_COLUMNS = "id, name, kind, color, account_id, owner_id";
+
+// The rename and delete ops aren't in the generated Database types until their
+// migration reaches prod (the local types also carry every other session's
+// unshipped migrations).
+function untypedRpc(fn: string, args: Record<string, unknown>) {
+  const client = supabaseClient as unknown as {
+    rpc(f: string, a: Record<string, unknown>): PromiseLike<{ error: { message?: string } | null }>;
+  };
+  return client.rpc(fn, args);
+}
+
+/** The server's own reason (a role that can't delete, …), else the fallback. */
+function reason(error: { message?: string } | null, fallback: string): string {
+  return error?.message?.trim() || fallback;
+}
 const VIEW_COLUMNS = "id, name, calendar_set_items(calendar_id, calendars(account_id))";
 
 export function useRailCalendars(workspaceId: string) {
@@ -99,6 +114,52 @@ export function useRailCalendars(workspaceId: string) {
     [workspaceId, loadRows],
   );
 
+  const reloadRows = useCallback(async () => {
+    const { data } = await loadRows();
+    if (data) setRows(data as RailCalendarRow[]);
+  }, [loadRows]);
+
+  /** Rename a calendar you made; throws the server's reason when it wasn't renamed. */
+  const renameCalendar = useCallback(
+    async (calendarId: string, name: string): Promise<boolean> => {
+      const { error } = await untypedRpc("calendar_op_calendar_rename", {
+        p_workspace_id: workspaceId,
+        p_calendar_id: calendarId,
+        p_name: name,
+      });
+      if (error) throw new Error(reason(error, "Couldn't rename the calendar."));
+      await reloadRows();
+      return true;
+    },
+    [workspaceId, reloadRows],
+  );
+
+  /** Delete a calendar you made, with its events; throws when it wasn't deleted. */
+  const removeCalendar = useCallback(
+    async (calendarId: string): Promise<void> => {
+      const { error } = await untypedRpc("calendar_op_calendar_remove", {
+        p_workspace_id: workspaceId,
+        p_calendar_id: calendarId,
+      });
+      if (error) throw new Error(reason(error, "Couldn't delete the calendar."));
+      await reloadRows();
+    },
+    [workspaceId, reloadRows],
+  );
+
+  /** Undo a delete: the calendar and the events that went with it come back. */
+  const restoreCalendar = useCallback(
+    async (calendarId: string): Promise<void> => {
+      const { error } = await untypedRpc("calendar_op_calendar_restore", {
+        p_workspace_id: workspaceId,
+        p_calendar_id: calendarId,
+      });
+      if (error) throw new Error(reason(error, "Couldn't bring the calendar back."));
+      await reloadRows();
+    },
+    [workspaceId, reloadRows],
+  );
+
   /** Save the calendars shown now as a view; resolves false when it wasn't saved. */
   const saveView = useCallback(
     async (name: string, calendarIds: string[]): Promise<boolean> => {
@@ -116,5 +177,5 @@ export function useRailCalendars(workspaceId: string) {
     [workspaceId, loadViews],
   );
 
-  return { rows, views, createCalendar, saveView };
+  return { rows, views, createCalendar, renameCalendar, removeCalendar, restoreCalendar, saveView };
 }
