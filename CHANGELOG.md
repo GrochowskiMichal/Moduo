@@ -5,6 +5,17 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.7.0 · 2026-11-03
+
+### New
+
+- Connect Outlook Calendar from the web app too: your Outlook events now show in Moduo on the web, view only, as on desktop.
+- Add Soundspace to Home: mix rain, fire, birds, noise or binaural beats, and drag each sound around your head to set where it plays and how near it feels.
+
+### Fixed
+
+- Connecting Google Calendar and Outlook works in the desktop app again, including Google for booking links.
+
 ## 1.6.0 · 2026-10-30
 
 ### New
