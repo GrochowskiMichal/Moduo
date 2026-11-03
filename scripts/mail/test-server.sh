@@ -53,16 +53,26 @@ userdb {
 namespace inbox {
   inbox = yes
   separator = /
-  mailbox Sent { special_use = \\Sent
-    auto = subscribe }
-  mailbox Drafts { special_use = \\Drafts
-    auto = subscribe }
-  mailbox Archive { special_use = \\Archive
-    auto = subscribe }
-  mailbox Trash { special_use = \\Trash
-    auto = subscribe }
-  mailbox Junk { special_use = \\Junk
-    auto = subscribe }
+  mailbox Sent {
+    special_use = \\Sent
+    auto = subscribe
+  }
+  mailbox Drafts {
+    special_use = \\Drafts
+    auto = subscribe
+  }
+  mailbox Archive {
+    special_use = \\Archive
+    auto = subscribe
+  }
+  mailbox Trash {
+    special_use = \\Trash
+    auto = subscribe
+  }
+  mailbox Junk {
+    special_use = \\Junk
+    auto = subscribe
+  }
 }
 mail_plugins = \$mail_plugins
 protocol imap {

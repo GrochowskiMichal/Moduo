@@ -13,3 +13,4 @@ pub mod ops;
 pub mod perf;
 pub mod session;
 pub mod store;
+pub mod sync;

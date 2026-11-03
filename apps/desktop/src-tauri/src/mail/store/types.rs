@@ -4,7 +4,7 @@
 use crate::mail::contracts::{BodyState, MailboxRole, TabKind};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Address {
     pub name: String,
     pub email: String,

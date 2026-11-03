@@ -443,6 +443,7 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            app.manage(commands::mail_events::MailEvents::default());
             // A tray that fails to build (no menu bar on this desktop) never stops the app;
             // closing the window then quits as before (see `keep_in_menu_bar`).
             match build_tray(app.handle()) {
@@ -466,6 +467,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::auth_set_cloud_session,
+            commands::mail_events::mail_subscribe,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
             #[cfg(feature = "lite")]

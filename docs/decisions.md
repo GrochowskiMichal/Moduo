@@ -160,6 +160,9 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-04 · MR-3: the sync engine is `src/mail/sync/`, its algorithms generic over a `MailServer` trait (async-imap `ImapServer<T>` for real, an in-memory fake with real UID/MODSEQ semantics for unit tests).
+- 2026-11-04 · MR-4: bodies, attachments and MIME live in `src/mail/{mime,bodies,invite}`; mail-parser 0.11 parses, every IMAP fetch goes through one `RawSource` (`ImapSource` over a pooled session: EXAMINE once per mailbox, `BODY.PEEK` only, so downloads never mark mail read).
+- 2026-11-04 · MR-5: the triage outbox is `src/mail/ops/` over the store's `ops` table; each row stores a pre-op snapshot (`undo_json`: flags, memberships, thread state) and planned server steps (`args_json.steps`, each with the `uidvalidity` it was planned against).
 - 2026-11-04 · MR-8: the mail front end is one external store (`features/email/store/mail-store.ts`, `useMailStore(selector)`), triage commands (`features/email/commands/triage.ts`) and an app-wide `MailEngineProvider` in the chrome driving `features/email/engine/controller.ts`.
 - 2026-11-03 · MR-7: mail settings items are one owner-only table `email_settings_items`, read through RLS and written only through `email_op_settings_upsert(p_id, p_kind, p_value, p_position)` / `email_op_settings_delete(p_id)`.
 - 2026-11-03 · MR-2: auth, sessions and the account actor live in `src/mail/{auth,session,actor,accounts}.rs`, behind traits.

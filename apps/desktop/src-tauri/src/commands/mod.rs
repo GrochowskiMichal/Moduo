@@ -4,6 +4,7 @@ pub mod calendar;
 pub mod email;
 pub mod integrations;
 pub mod local_store;
+pub mod mail_events;
 pub mod migration;
 pub mod notes;
 pub mod oauth_flow;
