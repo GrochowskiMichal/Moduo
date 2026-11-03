@@ -12,8 +12,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
+import { mailViewKey } from "@/lib/runtime.types";
 import type { MailCounts, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
-import { mailViewKey } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
 import type { ZeroAge } from "../commands/bulk";

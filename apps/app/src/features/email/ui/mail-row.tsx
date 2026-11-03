@@ -55,6 +55,63 @@ function initials(row: MailThreadRow): string {
   return base.slice(0, 1).toUpperCase();
 }
 
+function RowFlags({ row }: { row: MailThreadRow }) {
+  return (
+    <>
+      {row.priority ? (
+        <Star className="size-3.5 shrink-0 text-primary" aria-label="Priority person" />
+      ) : null}
+      {row.pinned ? <Pin className="size-3.5 shrink-0 text-primary" aria-label="Pinned" /> : null}
+      {row.hasAttachments ? (
+        <Paperclip className="size-3.5 shrink-0 text-muted-foreground" aria-label="Attachment" />
+      ) : null}
+      {row.hasInvite ? (
+        <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" aria-label="Invite" />
+      ) : null}
+      {row.muted ? (
+        <BellOff className="size-3.5 shrink-0 text-muted-foreground" aria-label="Muted" />
+      ) : null}
+      {row.snoozedUntilMs !== null ? (
+        <Clock3 className="size-3.5 shrink-0 text-muted-foreground" aria-label="Snoozed" />
+      ) : null}
+    </>
+  );
+}
+
+function RowActions({ threadId, actions }: { threadId: string; actions: MailRowActions }) {
+  return (
+    <span className="flex shrink-0 items-center gap-0.5" data-row-actions>
+      <IconButton
+        icon={Check}
+        label="Done"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions.done(threadId);
+        }}
+      />
+      <IconButton
+        icon={Clock3}
+        label="Snooze"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions.snooze(threadId);
+        }}
+      />
+      <IconButton
+        icon={MoreHorizontal}
+        label="More"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          actions.more(threadId, e.currentTarget);
+        }}
+      />
+    </span>
+  );
+}
+
 type Props = {
   row: MailThreadRow;
   cursor: boolean;
@@ -125,57 +182,9 @@ export const MailRow = memo(function MailRow({
               </span>
             ) : null}
           </span>
-          {row.priority ? (
-            <Star className="size-3.5 shrink-0 text-primary" aria-label="Priority person" />
-          ) : null}
-          {row.pinned ? (
-            <Pin className="size-3.5 shrink-0 text-primary" aria-label="Pinned" />
-          ) : null}
-          {row.hasAttachments ? (
-            <Paperclip
-              className="size-3.5 shrink-0 text-muted-foreground"
-              aria-label="Attachment"
-            />
-          ) : null}
-          {row.hasInvite ? (
-            <CalendarDays className="size-3.5 shrink-0 text-muted-foreground" aria-label="Invite" />
-          ) : null}
-          {row.muted ? (
-            <BellOff className="size-3.5 shrink-0 text-muted-foreground" aria-label="Muted" />
-          ) : null}
-          {row.snoozedUntilMs !== null ? (
-            <Clock3 className="size-3.5 shrink-0 text-muted-foreground" aria-label="Snoozed" />
-          ) : null}
+          <RowFlags row={row} />
           {showActions ? (
-            <span className="flex shrink-0 items-center gap-0.5" data-row-actions>
-              <IconButton
-                icon={Check}
-                label="Done"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  actions.done(row.threadId);
-                }}
-              />
-              <IconButton
-                icon={Clock3}
-                label="Snooze"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  actions.snooze(row.threadId);
-                }}
-              />
-              <IconButton
-                icon={MoreHorizontal}
-                label="More"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  actions.more(row.threadId, e.currentTarget);
-                }}
-              />
-            </span>
+            <RowActions threadId={row.threadId} actions={actions} />
           ) : (
             <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
               {formatRowTime(row.lastDateMs, nowMs)}

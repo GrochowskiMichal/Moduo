@@ -8,13 +8,13 @@ import { memo, useState } from "react";
 import type { LabelColor } from "@/components/tag-colors";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { mailViewKey } from "@/lib/runtime.types";
 import type {
   MailAccount,
   MailCounts,
   MailMailbox,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
-import { mailViewKey } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
 export const UNIFIED_FOLDERS = [
