@@ -203,6 +203,7 @@ pub(super) async fn ensure_fresh_access(
         &client_id,
         client_secret.as_deref(),
         &refresh,
+        None,
     )
     .await
     {

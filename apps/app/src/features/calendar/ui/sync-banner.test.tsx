@@ -1,5 +1,7 @@
-// AC2's banner: it says what the status says and offers Try again; with
-// nothing wrong it isn't there.
+// AC2's banner speaks only when the person can do something: Try again when the
+// calendar didn't load, Reconnect for a revoked login. An account that merely
+// failed to sync gets no banner (it retries in the background; its rail row says
+// when it last synced).
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -29,18 +31,24 @@ const failed = calendarSyncStatus({
   degraded: false,
 });
 
+const unloaded = calendarSyncStatus({ accounts: [], degraded: true });
+
 describe("the sync banner", () => {
-  it("names the account and offers Try again", () => {
+  it("says nothing about an account that only failed to sync", () => {
+    const { container } = render(<SyncBanner status={failed} onRetry={() => {}} />);
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("offers Try again when the calendar didn't load", () => {
     const onRetry = rs.fn();
-    render(<SyncBanner status={failed} onRetry={onRetry} />);
-    const banner = screen.getByRole("status");
-    expect(banner.textContent).toContain("robin.hale@gmail.com");
+    render(<SyncBanner status={unloaded} onRetry={onRetry} />);
+    expect(screen.getByRole("status").textContent).toContain("didn't load");
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it("says when it is trying again", () => {
-    render(<SyncBanner status={failed} onRetry={() => {}} retrying />);
+    render(<SyncBanner status={unloaded} onRetry={() => {}} retrying />);
     const button = screen.getByRole("button", { name: /Trying/ });
     expect((button as HTMLButtonElement).disabled).toBe(true);
   });
@@ -84,9 +92,10 @@ describe("the banner for a revoked Google connection (AC37)", () => {
     expect(onRetry).not.toHaveBeenCalled();
   });
 
-  it("a plain failure still offers Try again only", () => {
-    render(<SyncBanner status={failed} onRetry={() => {}} onReconnect={() => {}} />);
-    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Reconnect" })).toBeNull();
+  it("a plain failure has no banner, so nothing to press", () => {
+    const { container } = render(
+      <SyncBanner status={failed} onRetry={() => {}} onReconnect={() => {}} />,
+    );
+    expect(container.innerHTML).toBe("");
   });
 });

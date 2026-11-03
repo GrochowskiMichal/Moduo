@@ -257,7 +257,9 @@ describe("useCalendarModule — Google events", () => {
     const second = googleRuntime();
     second.calendar.removeGoogleEvent.mockRejectedValueOnce(new Error("Forbidden"));
     const { result: again } = renderHook(() => useCalendarModule(second.runtime, params));
-    await waitFor(() => expect(again.current.loading).toBe(false));
+    // A second visit starts from this session's last read (module-cache.ts), which
+    // no longer has the row; its quiet refresh brings it back.
+    await waitFor(() => expect(again.current.events.some((e) => e.id === "g-row")).toBe(true));
     await act(async () => {
       await again.current.deleteEvent("g-row");
     });
