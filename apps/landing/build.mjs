@@ -56,6 +56,13 @@ fs.copyFileSync(path.join(root, "404.html"), path.join(outDir, "404.html"));
 const assets = path.join(root, "assets");
 if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });
 
+// /.well-known: files other services read at the root, such as
+// microsoft-identity-association.json, which verifies moduo.app as the
+// publisher of the Moduo app registration in Microsoft Entra (Outlook Calendar).
+const wellKnown = path.join(root, ".well-known");
+if (fs.existsSync(wellKnown))
+  fs.cpSync(wellKnown, path.join(outDir, ".well-known"), { recursive: true });
+
 // The pages link the app's favicons at the root; the landing Worker serves its own copies.
 const appPublic = path.join(root, "..", "app", "public");
 for (const icon of FAVICONS) fs.copyFileSync(path.join(appPublic, icon), path.join(outDir, icon));
