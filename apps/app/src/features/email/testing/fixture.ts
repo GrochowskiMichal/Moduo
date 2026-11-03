@@ -182,6 +182,103 @@ function pickRole(rng: () => number): MailMailboxRole {
   return "inbox";
 }
 
+type Bulk = (typeof BULK)[number];
+type ThreadPlan = {
+  threadId: string;
+  threadSeq: number;
+  bulk: Bulk | null;
+  len: number;
+  role: MailMailboxRole;
+  person: string;
+  personEmail: string;
+  subject: string;
+};
+
+// RNG call order is load-bearing: the fixture must stay byte-identical.
+function planThread(rng: () => number, account: FixtureAccount, seq: number): ThreadPlan {
+  const bulk = rng() < 0.35 ? pick(rng, BULK) : null;
+  const len = bulk ? 1 : 1 + Math.floor(rng() * 4);
+  const role = pickRole(rng);
+  const person = `${pick(rng, FIRST)} ${pick(rng, LAST)}`;
+  const personEmail = `${person.split(" ")[0]!.toLowerCase()}@${pick(rng, DOMAINS)}`;
+  const subject = bulk ? `${bulk.name}: ${pick(rng, TOPICS)}` : pick(rng, TOPICS);
+  return {
+    threadId: `${account.id}:t${seq}`,
+    threadSeq: seq + 1,
+    bulk,
+    len,
+    role,
+    person,
+    personEmail,
+    subject,
+  };
+}
+
+function messageFlags(rng: () => number, role: MailMailboxRole): number {
+  const unread = role === "inbox" && rng() < 0.3;
+  let flags = unread ? 0 : MAIL_FLAG_BITS.seen;
+  if (rng() < 0.03) flags |= MAIL_FLAG_BITS.flagged;
+  if (role === "drafts") flags |= MAIL_FLAG_BITS.draft;
+  return flags;
+}
+
+function attachments(rng: () => number, i: number): string[] {
+  if (rng() >= 0.12) return [];
+  return [
+    `${pick(rng, ["report", "invoice", "photo", "deck"])}-${i}.${pick(rng, ["pdf", "png", "key", "xlsx"])}`,
+  ];
+}
+
+function sender(t: ThreadPlan, account: FixtureAccount, fromMe: boolean) {
+  if (t.bulk) return { fromName: t.bulk.name, fromEmail: t.bulk.email };
+  return fromMe
+    ? { fromName: account.displayName, fromEmail: account.address }
+    : { fromName: t.person, fromEmail: t.personEmail };
+}
+
+function bulkHeaders(bulk: Bulk | null) {
+  const news = bulk?.kind === "news";
+  return {
+    listUnsubscribe: news ? `<https://${bulk!.email.split("@")[1]}/unsub>` : null,
+    precedence: news ? "bulk" : null,
+    autoSubmitted: bulk?.kind === "auto" ? "auto-generated" : null,
+  };
+}
+
+function makeMessage(
+  rng: () => number,
+  t: ThreadPlan,
+  account: FixtureAccount,
+  at: { i: number; k: number; base: number; prevId: string | null },
+): FixtureMessage {
+  const { i, k } = at;
+  const id = `m${i}`;
+  const fromMe = !t.bulk && t.role !== "sent" ? k % 2 === 1 : t.role === "sent";
+  const body = words(rng, 20 + Math.floor(rng() * 60));
+  const flags = messageFlags(rng, t.role);
+  const attachmentNames = attachments(rng, i);
+  const dateMs = at.base - (t.len - 1 - k) * 3_600_000 - Math.floor(rng() * 600_000);
+  const hasInvite = !t.bulk && rng() < 0.01;
+  return {
+    id,
+    accountId: account.id,
+    mailboxRole: t.role,
+    threadId: t.threadId,
+    messageId: `<${id}.${t.threadSeq}@fixture.moduo.test>`,
+    inReplyTo: at.prevId,
+    ...sender(t, account, fromMe),
+    to: [fromMe ? t.personEmail : account.address],
+    subject: k === 0 ? t.subject : `Re: ${t.subject}`,
+    snippet: body.slice(0, 120),
+    bodyText: body,
+    dateMs,
+    flags,
+    ...bulkHeaders(t.bulk),
+    attachmentNames,
+    hasInvite,
+  };
+}
+
 /**
  * Generates the reference mailbox. Threads average ~2.5 messages; dates span
  * about 3 years back from `FIXTURE_NOW_MS`, newest first in id order.
@@ -198,54 +295,14 @@ export function generateFixture(
   let i = 0;
   while (i < total) {
     const account = accounts[threadSeq % accounts.length] as FixtureAccount;
-    const threadId = `${account.id}:t${threadSeq++}`;
-    const bulk = rng() < 0.35 ? pick(rng, BULK) : null;
-    const len = bulk ? 1 : 1 + Math.floor(rng() * 4);
-    const role = pickRole(rng);
-    const person = `${pick(rng, FIRST)} ${pick(rng, LAST)}`;
-    const personEmail = `${person.split(" ")[0]!.toLowerCase()}@${pick(rng, DOMAINS)}`;
-    const subject = bulk ? `${bulk.name}: ${pick(rng, TOPICS)}` : pick(rng, TOPICS);
+    const t = planThread(rng, account, threadSeq++);
     // Index-driven date so newer ids are newer mail, with jitter.
     const base = FIXTURE_NOW_MS - Math.floor((i / total) * span);
     let prevId: string | null = null;
-    for (let k = 0; k < len && i < total; k++, i++) {
-      const id = `m${i}`;
-      const messageId = `<${id}.${threadSeq}@fixture.moduo.test>`;
-      const fromMe = !bulk && role !== "sent" ? k % 2 === 1 : role === "sent";
-      const body = words(rng, 20 + Math.floor(rng() * 60));
-      const unread = role === "inbox" && rng() < 0.3;
-      let flags = unread ? 0 : MAIL_FLAG_BITS.seen;
-      if (rng() < 0.03) flags |= MAIL_FLAG_BITS.flagged;
-      if (role === "drafts") flags |= MAIL_FLAG_BITS.draft;
-      const attach =
-        rng() < 0.12
-          ? [
-              `${pick(rng, ["report", "invoice", "photo", "deck"])}-${i}.${pick(rng, ["pdf", "png", "key", "xlsx"])}`,
-            ]
-          : [];
-      messages.push({
-        id,
-        accountId: account.id,
-        mailboxRole: role,
-        threadId,
-        messageId,
-        inReplyTo: prevId,
-        fromName: bulk ? bulk.name : fromMe ? account.displayName : person,
-        fromEmail: bulk ? bulk.email : fromMe ? account.address : personEmail,
-        to: [fromMe ? personEmail : account.address],
-        subject: k === 0 ? subject : `Re: ${subject}`,
-        snippet: body.slice(0, 120),
-        bodyText: body,
-        dateMs: base - (len - 1 - k) * 3_600_000 - Math.floor(rng() * 600_000),
-        flags,
-        listUnsubscribe:
-          bulk?.kind === "news" ? `<https://${bulk.email.split("@")[1]}/unsub>` : null,
-        precedence: bulk?.kind === "news" ? "bulk" : null,
-        autoSubmitted: bulk?.kind === "auto" ? "auto-generated" : null,
-        attachmentNames: attach,
-        hasInvite: !bulk && rng() < 0.01,
-      });
-      prevId = messageId;
+    for (let k = 0; k < t.len && i < total; k++, i++) {
+      const m = makeMessage(rng, t, account, { i, k, base, prevId });
+      messages.push(m);
+      prevId = m.messageId;
     }
   }
   return { accounts, messages };

@@ -5,6 +5,7 @@
 
 import { MAIL_FLAG_BITS, type MailMailboxRole, type MailOpKind } from "@contracts/mail";
 
+import { mailViewKey } from "@/lib/runtime.types";
 import type {
   MailAccount,
   MailCounts,
@@ -19,7 +20,6 @@ import type {
   MailThreadRow,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
-import { mailViewKey } from "@/lib/runtime.types.mail-engine";
 
 import { classifyTab } from "./classify";
 import { type Fixture, FIXTURE_NOW_MS, type FixtureMessage, generateFixture } from "./fixture";
@@ -77,6 +77,15 @@ export type FakeMailEngine = MailEngine & {
   /** Simulates new mail arriving for `accountId`. */
   deliver(message: FixtureMessage): void;
 };
+
+/** Keyset order: newest first, ties by threadId ascending. */
+function isAfterCursor(
+  row: { lastDateMs: number; threadId: string },
+  after: { lastDateMs: number; threadId: string },
+): boolean {
+  if (row.lastDateMs !== after.lastDateMs) return row.lastDateMs < after.lastDateMs;
+  return row.threadId > after.threadId;
+}
 
 export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngine {
   const fixture = opts.fixture ?? generateFixture();
@@ -287,12 +296,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       const rows: MailThreadRow[] = [];
       const after = input.after;
       for (const t of all()) {
-        if (
-          after &&
-          (t.row.lastDateMs > after.lastDateMs ||
-            (t.row.lastDateMs === after.lastDateMs && t.row.threadId <= after.threadId))
-        )
-          continue;
+        if (after && !isAfterCursor(t.row, after)) continue;
         if (!inView(t, input.view)) continue;
         if (input.tab && t.row.tab !== input.tab.kind) continue;
         rows.push({ ...t.row, senders: [...t.row.senders] });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { mailViewKey } from "@/lib/runtime.types.mail-engine";
+import { mailViewKey } from "@/lib/runtime.types";
 
 import { createFakeMailEngine } from "./fake-engine";
 import { FIXTURE_NOW_MS, generateFixture } from "./fixture";
