@@ -14,6 +14,16 @@ const ROW_COLS: &str = "thread_id, account_id, subject, snippet, senders_json, l
 
 pub const MAX_PAGE: u32 = 500;
 
+/// Decodes a JSON column, surfacing corrupt data as a row error instead of an empty value.
+pub(super) fn json_col<T: serde::de::DeserializeOwned>(
+    idx: usize,
+    raw: &str,
+) -> rusqlite::Result<T> {
+    serde_json::from_str(raw).map_err(|e| {
+        rusqlite::Error::FromSqlConversionFailure(idx, rusqlite::types::Type::Text, Box::new(e))
+    })
+}
+
 fn thread_row(r: &Row) -> rusqlite::Result<ThreadRow> {
     let senders: String = r.get(4)?;
     let tab: String = r.get(11)?;
@@ -22,7 +32,7 @@ fn thread_row(r: &Row) -> rusqlite::Result<ThreadRow> {
         account_id: r.get(1)?,
         subject: r.get(2)?,
         snippet: r.get(3)?,
-        senders: serde_json::from_str(&senders).unwrap_or_default(),
+        senders: json_col(4, &senders)?,
         last_date_ms: r.get(5)?,
         message_count: r.get(6)?,
         unread: r.get::<_, i64>(7)? > 0,
@@ -197,8 +207,8 @@ impl Store {
                         name: r.get(3)?,
                         email: r.get(4)?,
                     },
-                    to: serde_json::from_str(&to).unwrap_or_default(),
-                    cc: serde_json::from_str(&cc).unwrap_or_default(),
+                    to: json_col(5, &to)?,
+                    cc: json_col(6, &cc)?,
                     date_ms: r.get(7)?,
                     subject: r.get(8)?,
                     snippet: r.get(9)?,

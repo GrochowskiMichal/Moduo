@@ -549,15 +549,14 @@ fn reindex(tx: &Transaction, id: i64, body: Option<&str>) -> StoreResult<()> {
         [id],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
-    let addr_text = |j: &str| -> String {
-        serde_json::from_str::<Vec<super::Address>>(j)
-            .unwrap_or_default()
+    let addr_text = |idx: usize, j: &str| -> rusqlite::Result<String> {
+        Ok(super::query::json_col::<Vec<super::Address>>(idx, j)?
             .into_iter()
             .map(|a| format!("{} {}", a.name, a.email))
             .collect::<Vec<_>>()
-            .join(" ")
+            .join(" "))
     };
-    let to_t = format!("{} {}", addr_text(&to), addr_text(&cc));
+    let to_t = format!("{} {}", addr_text(2, &to)?, addr_text(3, &cc)?);
     let att: String = {
         let mut s = tx.prepare_cached("SELECT filename FROM attachments WHERE message_id = ?1")?;
         let names: Vec<String> = s.query_map([id], |r| r.get(0))?.collect::<Result<_, _>>()?;

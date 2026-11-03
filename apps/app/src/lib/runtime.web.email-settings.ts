@@ -3,7 +3,8 @@
 
 import { normalizeEmailSettingsKind } from "@contracts/vocabularies";
 
-import { runQuery, runRpc, untypedDb } from "./runtime.db";
+import { readPaged } from "./paged-select";
+import { DbError, runRpc, untypedDb } from "./runtime.db";
 import type { EmailRuntime, EmailSettingsItem } from "./runtime.types.email";
 import { supabaseClient } from "./runtime.web.client";
 
@@ -46,11 +47,23 @@ export const webEmailSettings: Pick<
   "listSettings" | "upsertSetting" | "deleteSetting"
 > = {
   async listSettings(input) {
-    let q = db().from("email_settings_items").select(COLUMNS).order("updated_at").limit(5000);
-    if (input?.since) q = q.gt("updated_at", input.since);
-    else q = q.is("deleted_at", null);
-    const rows = (await runQuery(q)) as unknown[] | null;
-    return (rows ?? []).map(emailSettingsRowToItem).filter((x): x is EmailSettingsItem => !!x);
+    const read = await readPaged<unknown, { message: string; code?: string }>({
+      scope: "mail settings",
+      cap: 5000,
+      keyOf: (r) => (r as Row).id,
+      page: async (offset, limit) => {
+        let q = db().from("email_settings_items").select(COLUMNS);
+        q = input?.since ? q.gt("updated_at", input.since) : q.is("deleted_at", null);
+        const res = await q
+          .order("updated_at")
+          .order("id")
+          .range(offset, offset + limit - 1);
+        return { data: (res.data as unknown[] | null) ?? null, error: res.error };
+      },
+    });
+    if (read.error) throw new DbError(read.error);
+    const rows = read.rows;
+    return rows.map(emailSettingsRowToItem).filter((x): x is EmailSettingsItem => !!x);
   },
   async upsertSetting({ id, kind, value, position }) {
     const data = await runRpc(
