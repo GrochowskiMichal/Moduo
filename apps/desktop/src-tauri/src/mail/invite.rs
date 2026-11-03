@@ -1,6 +1,6 @@
 //! Calendar invite parsing (MR-4, AC18 parse; decision 20). Reads the
 //! `text/calendar` parts [`crate::mail::mime::parse`] collects into the event
-//! card's fields. RSVP (the iTIP REPLY) is MR-6's. A missing organizer or a
+//! card's fields. RSVP builds an iTIP REPLY ([`itip_reply`], MR-6). A missing organizer or a
 //! malformed ICS gives a card with "Add to calendar" only (`can_rsvp = false`).
 
 use serde::Serialize;
@@ -200,6 +200,132 @@ pub fn parse_invite(ics: &str) -> Option<Invite> {
     Some(inv)
 }
 
+/// The attendee's answer (RFC 5546 §3.2.3 PARTSTAT).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Rsvp {
+    Accept,
+    Maybe,
+    Decline,
+}
+
+impl Rsvp {
+    pub fn partstat(self) -> &'static str {
+        match self {
+            Rsvp::Accept => "ACCEPTED",
+            Rsvp::Maybe => "TENTATIVE",
+            Rsvp::Decline => "DECLINED",
+        }
+    }
+    /// The subject prefix Outlook, Gmail and Apple Calendar all use.
+    pub fn subject_prefix(self) -> &'static str {
+        match self {
+            Rsvp::Accept => "Accepted",
+            Rsvp::Maybe => "Tentative",
+            Rsvp::Decline => "Declined",
+        }
+    }
+}
+
+fn escape(v: &str) -> String {
+    v.replace('\\', "\\\\")
+        .replace(';', "\\;")
+        .replace(',', "\\,")
+        .replace('\n', "\\n")
+}
+
+/// RFC 5545 §3.1: lines longer than 75 octets fold with CRLF + space, never
+/// inside a UTF-8 sequence.
+fn fold(line: &str, out: &mut String) {
+    let mut n = 0;
+    for c in line.chars() {
+        let w = c.len_utf8();
+        if n + w > 75 {
+            out.push_str("\r\n ");
+            n = 1;
+        }
+        out.push(c);
+        n += w;
+    }
+    out.push_str("\r\n");
+}
+
+fn quote_param(v: &str) -> String {
+    let clean: String = v.chars().filter(|c| *c != '"' && !c.is_control()).collect();
+    if clean.contains([':', ';', ',']) {
+        format!("\"{clean}\"")
+    } else {
+        clean
+    }
+}
+
+/// Builds the iTIP `METHOD:REPLY` (RFC 5546 §3.2.3) for `me` answering `inv`.
+/// It carries only the replying attendee, the event's UID, SEQUENCE and
+/// DTSTART, and the organizer, which is what every major calendar matches on.
+/// `dtstamp` is UTC `YYYYMMDDTHHMMSSZ`.
+pub fn itip_reply(
+    inv: &Invite,
+    me_email: &str,
+    me_name: Option<&str>,
+    answer: Rsvp,
+    dtstamp: &str,
+) -> Result<String, String> {
+    if !inv.can_rsvp {
+        return Err("invite_not_rsvpable".into());
+    }
+    let (Some(org), Some(uid), Some(start)) = (&inv.organizer, &inv.uid, &inv.dtstart) else {
+        return Err("invite_not_rsvpable".into());
+    };
+    let date_prop = |name: &str, v: &str| {
+        if inv.all_day {
+            format!("{name};VALUE=DATE:{v}")
+        } else if let Some(tz) = &inv.tzid {
+            format!("{name};TZID={}:{v}", quote_param(tz))
+        } else {
+            format!("{name}:{v}")
+        }
+    };
+    let mut lines = vec![
+        "BEGIN:VCALENDAR".to_string(),
+        "PRODID:-//Moduo//Mail//EN".into(),
+        "VERSION:2.0".into(),
+        "METHOD:REPLY".into(),
+        "BEGIN:VEVENT".into(),
+        format!("UID:{uid}"),
+        format!("SEQUENCE:{}", inv.sequence),
+        format!("DTSTAMP:{dtstamp}"),
+        date_prop("DTSTART", start),
+    ];
+    if let Some(end) = &inv.dtend {
+        lines.push(date_prop("DTEND", end));
+    }
+    if !inv.summary.is_empty() {
+        lines.push(format!("SUMMARY:{}", escape(&inv.summary)));
+    }
+    let org_cn = org
+        .name
+        .as_deref()
+        .map(|n| format!(";CN={}", quote_param(n)))
+        .unwrap_or_default();
+    lines.push(format!("ORGANIZER{org_cn}:mailto:{}", org.email));
+    let me_cn = me_name
+        .filter(|n| !n.trim().is_empty())
+        .map(|n| format!(";CN={}", quote_param(n)))
+        .unwrap_or_default();
+    lines.push(format!(
+        "ATTENDEE{me_cn};PARTSTAT={}:mailto:{}",
+        answer.partstat(),
+        me_email.trim()
+    ));
+    lines.push("END:VEVENT".into());
+    lines.push("END:VCALENDAR".into());
+    let mut out = String::new();
+    for l in &lines {
+        fold(l, &mut out);
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +371,41 @@ mod tests {
         )
         .unwrap();
         assert!(broken.all_day && !broken.can_rsvp && broken.attendees.is_empty());
+    }
+
+    #[test]
+    fn itip_reply_partstat() {
+        let i = parse_invite(REQ).unwrap();
+        for (a, ps) in [
+            (Rsvp::Accept, "ACCEPTED"),
+            (Rsvp::Maybe, "TENTATIVE"),
+            (Rsvp::Decline, "DECLINED"),
+        ] {
+            let r = itip_reply(&i, "me@x.test", Some("Me, Myself"), a, "20261104T120000Z").unwrap();
+            assert!(r.contains("METHOD:REPLY\r\n"));
+            assert!(r.contains("UID:abc@x\r\n"));
+            assert!(r.contains("SEQUENCE:2\r\n"));
+            assert!(r.contains("DTSTART;TZID=Europe/Warsaw:20261110T100000\r\n"));
+            assert!(r.contains("ORGANIZER;CN=\"Anna: PM\":mailto:anna@x.test"));
+            assert!(r.contains(&format!(
+                "ATTENDEE;CN=\"Me, Myself\";PARTSTAT={ps}:mailto:me@x.test"
+            )));
+            assert!(r.contains("SUMMARY:Design review\\, round 2"));
+            // Only the replying attendee, never the others.
+            assert!(!r.contains("bob@x.test"));
+            assert!(r.lines().all(|l| l.trim_end_matches('\r').len() <= 75));
+            // The reply parses back as a REPLY with our PARTSTAT.
+            let back = parse_invite(&r).unwrap();
+            assert_eq!(back.method.as_deref(), Some("REPLY"));
+            assert_eq!(back.attendees[0].partstat.as_deref(), Some(ps));
+        }
+        let mut no = i.clone();
+        no.can_rsvp = false;
+        assert!(itip_reply(&no, "me@x.test", None, Rsvp::Accept, "x").is_err());
+
+        let long = REQ.replace("Design review\\, round 2", &"Very long title ".repeat(10));
+        let r = itip_reply(&parse_invite(&long).unwrap(), "me@x.test", None, Rsvp::Accept, "20261104T120000Z").unwrap();
+        assert!(r.lines().all(|l| l.trim_end_matches('\r').len() <= 75));
+        assert!(parse_invite(&r).unwrap().summary.starts_with("Very long title Very"));
     }
 }
