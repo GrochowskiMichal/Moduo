@@ -669,6 +669,7 @@ export function CalendarPageView({
             onRecolorAccount={setAccountColor}
             onRemoveAccount={removeAccount}
             onReconnectAccount={IS_DESKTOP ? setReconnectTarget : undefined}
+            onCalendarsChanged={() => void calendar.reload()}
             footer={
               <>
                 <BookingLinks
