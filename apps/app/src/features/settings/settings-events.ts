@@ -11,6 +11,7 @@ export const SETTINGS_SECTION_IDS = [
   "timeregion",
   "focus",
   "chat",
+  "mail",
   "advanced",
   "about",
 ] as const;
@@ -22,7 +23,7 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export const SETTINGS_GROUPS = [
   {
     label: "Personal",
-    ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus", "chat"],
+    ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus", "chat", "mail"],
   },
   { label: "Workspace", ids: ["workspace", "access", "storage", "integrations", "apikeys"] },
   { label: "App", ids: ["advanced", "about"] },

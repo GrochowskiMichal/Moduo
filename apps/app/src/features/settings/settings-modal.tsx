@@ -6,6 +6,7 @@ import {
   Info,
   KeyRound,
   type LucideIcon,
+  Mail,
   MessageSquare,
   Palette,
   Plug,
@@ -71,6 +72,7 @@ const FocusSection = lazySection(() =>
 const IntegrationsSection = lazySection(() =>
   import("./sections/integrations-section").then((m) => m.IntegrationsSection),
 );
+const MailSection = lazySection(() => import("./mail/mail-section").then((m) => m.MailSection));
 const PreferencesSection = lazySection(() =>
   import("./sections/preferences-section").then((m) => m.PreferencesSection),
 );
@@ -109,6 +111,7 @@ const SECTIONS: SectionEntry[] = [
   { id: "timeregion", label: "Time & region", icon: Globe, Component: TimeRegionSection },
   { id: "focus", label: "Focus", icon: Timer, Component: FocusSection },
   { id: "chat", label: "Chat", icon: MessageSquare, Component: ChatSection },
+  { id: "mail", label: "Mail", icon: Mail, Component: MailSection },
   {
     id: "advanced",
     label: "Advanced",

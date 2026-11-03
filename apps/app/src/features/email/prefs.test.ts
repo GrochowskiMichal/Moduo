@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 
+import { DEFAULT_MAIL_BEHAVIOR } from "./engine/behavior";
 import { sanitizeEmailPrefs } from "./prefs";
 
 describe("sanitizeEmailPrefs", () => {
@@ -27,7 +28,7 @@ describe("sanitizeEmailPrefs", () => {
   });
 
   it("returns empty prefs for garbage input", () => {
-    expect(sanitizeEmailPrefs(null)).toEqual({ senderOverrides: {}, imageAllowedSenders: [] });
-    expect(sanitizeEmailPrefs("x")).toEqual({ senderOverrides: {}, imageAllowedSenders: [] });
+    expect(sanitizeEmailPrefs(null)).toEqual({ senderOverrides: {}, imageAllowedSenders: [], behavior: DEFAULT_MAIL_BEHAVIOR });
+    expect(sanitizeEmailPrefs("x")).toEqual({ senderOverrides: {}, imageAllowedSenders: [], behavior: DEFAULT_MAIL_BEHAVIOR });
   });
 });
