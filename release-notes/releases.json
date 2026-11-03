@@ -1,6 +1,64 @@
 {
   "releases": [
     {
+      "version": "1.6.0",
+      "date": "2026-10-30",
+      "highlights": [
+        "Click or drag anywhere on Calendar's week, day or month view to start a new event, right where you drew it.",
+        "Text you copy out of Notes comes back exactly as you wrote it, and pasted code, keys and numbered lines keep their shape."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Calendar's left panel lists all your calendars in one place: click a calendar's color to show or hide it, and give it any color you like."
+        },
+        {
+          "type": "improved",
+          "text": "Booking links make sure Google Meet or Zoom is connected before you share them, and you can copy, pause, edit or delete a link from Calendar's left panel."
+        },
+        {
+          "type": "improved",
+          "text": "Click or drag anywhere on Calendar's week, day or month view to start a new event, right where you drew it."
+        },
+        {
+          "type": "improved",
+          "text": "An event's panel shows everything linked to it as cards, as a task's does, and a history of its changes."
+        },
+        {
+          "type": "improved",
+          "text": "Calendar's side panels stay open or closed as you left them, like on every other page."
+        },
+        {
+          "type": "improved",
+          "text": "See your calendar as a workspace member sees it with the glasses on their row in Calendar; press them again to go back."
+        },
+        {
+          "type": "fixed",
+          "text": "Calendar's times and dates follow your clock, week start and date order from Settings, Time and region."
+        },
+        {
+          "type": "fixed",
+          "text": "Calendar's today marker follows your corner radius setting."
+        },
+        {
+          "type": "fixed",
+          "text": "In the browser, ⌥N starts a new item and ⌥⇧N a new note, since browsers keep ⌘N for a new window."
+        },
+        {
+          "type": "fixed",
+          "text": "Text you copy out of Notes comes back exactly as you wrote it, and pasted code, keys and numbered lines keep their shape."
+        },
+        {
+          "type": "fixed",
+          "text": "Scheduling an overdue task from a day's due list finds free time today instead of saying there's none left."
+        },
+        {
+          "type": "security",
+          "text": "Security and reliability improvements."
+        }
+      ]
+    },
+    {
       "version": "1.5.0",
       "date": "2026-10-28",
       "highlights": [
