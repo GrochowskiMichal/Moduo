@@ -5,3 +5,7 @@ pub mod contracts;
 pub mod fixture;
 pub mod perf;
 pub mod store;
+pub mod accounts;
+pub mod actor;
+pub mod auth;
+pub mod session;
