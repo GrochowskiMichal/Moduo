@@ -17,10 +17,12 @@ import type {
   MailOpInput,
   MailOpRecord,
   MailThread,
+  MailSearchQuery,
   MailThreadRow,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
 
+import { isMailQueryEmpty } from "../search/query";
 import { classifyTab } from "./classify";
 import { type Fixture, FIXTURE_NOW_MS, type FixtureMessage, generateFixture } from "./fixture";
 
@@ -405,18 +407,14 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       restore(op);
     },
     async search({ query, limit, accountId }) {
-      const q = query.trim().toLowerCase();
       const out: MailThreadRow[] = [];
-      if (!q) return out;
+      if (isMailQueryEmpty(query)) return out;
       for (const t of all()) {
         if (accountId && t.row.accountId !== accountId) continue;
-        const hit = t.messages.some(
-          (m) =>
-            m.subject.toLowerCase().includes(q) ||
-            m.fromEmail.includes(q) ||
-            m.bodyText.includes(q),
-        );
-        if (hit) out.push({ ...t.row });
+        if (query.isPinned && !t.row.pinned) continue;
+        if (query.inRole && t.role !== query.inRole) continue;
+        if (query.inMailboxId) continue;
+        if (t.messages.some((m) => fakeSearchHit(m, query))) out.push({ ...t.row });
         if (out.length >= limit) break;
       }
       return out;
@@ -453,4 +451,23 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
     },
   };
   return engine;
+}
+
+/** The fake's stand-in for the store's FTS + column filters (MR-13). */
+function fakeSearchHit(m: FixtureMessage, q: MailSearchQuery): boolean {
+  const has = (hay: string, needles: readonly string[]) =>
+    needles.every((n) => hay.toLowerCase().includes(n.toLowerCase()));
+  const from = `${m.fromName} ${m.fromEmail}`;
+  const to = m.to.join(" ");
+  const all = [m.subject, from, to, m.bodyText, m.attachmentNames.join(" ")].join(" ");
+  return (
+    has(all, q.words) &&
+    has(from, q.from) &&
+    has(to, q.to) &&
+    has(m.subject, q.subject) &&
+    (!q.hasAttachment || m.attachmentNames.length > 0) &&
+    (!q.isUnread || (m.flags & 1) === 0) &&
+    (q.beforeMs === null || m.dateMs < q.beforeMs) &&
+    (q.afterMs === null || m.dateMs >= q.afterMs)
+  );
 }

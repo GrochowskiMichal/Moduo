@@ -154,7 +154,27 @@ export type MailOpRecord = {
   createdAtMs: number;
 };
 
-export type MailSearchInput = { query: string; limit: number; accountId?: string | null };
+/** The ⌘K query as `features/email/search/query.ts` parses it (decision 17);
+ * the Rust store's `SearchQuery` deserializes this shape. */
+export type MailSearchQuery = {
+  words: string[];
+  from: string[];
+  to: string[];
+  subject: string[];
+  hasAttachment: boolean;
+  isUnread: boolean;
+  isPinned: boolean;
+  inRole: MailMailboxRole | null;
+  inMailboxId: string | null;
+  beforeMs: number | null;
+  afterMs: number | null;
+};
+
+export type MailSearchInput = {
+  query: MailSearchQuery;
+  limit: number;
+  accountId?: string | null;
+};
 
 /** Engine → UI change sets (decision 10, `MAIL_EVENT_KINDS`). */
 export type MailEvent =

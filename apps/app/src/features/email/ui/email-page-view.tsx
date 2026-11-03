@@ -47,6 +47,7 @@ import { useEmailCompose } from "../hooks/use-email-compose";
 import { TRIAGE_UNDO_MS, useEmailModule } from "../hooks/use-email-module";
 import { useEmailPrefs } from "../hooks/use-email-prefs";
 import { useEmailSearch } from "../hooks/use-email-search";
+import { openMailSearch } from "../search/open";
 import { useEmailSnoozeRestore } from "../hooks/use-email-snooze-restore";
 import type { EmailFolderInfo, EmailThread, SavedAccount } from "../model/email-types";
 import { buildRefUpsertArgs } from "../refs";
@@ -496,10 +497,8 @@ function EmailPageBody({ urlThreadId = null, onConsumeThreadDeepLink }: EmailPag
     "email.convert": withCurrent((thread) => void runConvert(thread)),
     "email.reply": withCurrent(() => void startReply("reply")),
     "email.legend": () => setShortcutsOpen(true),
-    "email.search": () => {
-      searchInputRef.current?.focus();
-      searchInputRef.current?.select();
-    },
+    // `/` opens ⌘K on the Email chip (MR-13, AC32).
+    "email.search": () => openMailSearch(),
   });
 
   const onConnected = useCallback(() => {

@@ -33,6 +33,8 @@ import { useMailStore } from "../store/use-mail-store";
 import { FailedActionsBar } from "./failed-actions-bar";
 import { FollowupNudges } from "./followup-nudge";
 import { MailLegendDialog } from "./mail-legend-dialog";
+import { useSavedSearches } from "../hooks/use-saved-searches";
+import { openMailSearch } from "../search/open";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
 import { mailListState, MailListStateView, MailStatusLine } from "./mail-states";
@@ -88,6 +90,7 @@ export function MailShell({
   const bulk = useMemo(() => createBulkCommands(store, now, commands), [store, now, commands]);
 
   const [view, setView] = useState<MailView>(initialView);
+  const savedSearches = useSavedSearches();
   const tabs = useMemo(() => mailTabs(customTabs), [customTabs]);
   const [tab, setTab] = useState<MailTab>({ kind: "personal" });
   const tabbed = view.kind === "unified" && view.role === "inbox";
@@ -223,7 +226,8 @@ export function MailShell({
     "email.reply-all": intent("email.reply-all"),
     "email.forward": intent("email.forward"),
     "email.compose": intent("email.compose"),
-    "email.search": intent("email.search"),
+    // `/` opens ⌘K on the Email chip: Mail has no search bar (MR-13, AC32).
+    "email.search": () => openMailSearch(),
   };
   useAppHotkeys(handlers);
 
@@ -266,6 +270,8 @@ export function MailShell({
             setSel(EMPTY_SELECTION);
           }}
           onConnect={() => onConnect?.()}
+          savedSearches={savedSearches}
+          onOpenSearch={openMailSearch}
         />
       </aside>
       <section

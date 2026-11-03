@@ -17,6 +17,8 @@ import type {
 } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
+import type { SavedSearch } from "../search/palette";
+
 export const UNIFIED_FOLDERS = [
   { role: "inbox", label: "Inbox" },
   { role: "sent", label: "Sent" },
@@ -43,6 +45,9 @@ type Props = {
   onSelect: (view: MailView) => void;
   onConnect: () => void;
   onCancelBackfill?: (accountId: string) => void;
+  /** Saved searches pinned to the rail (MR-13); each opens ⌘K on its query. */
+  savedSearches?: readonly SavedSearch[];
+  onOpenSearch?: (query: string) => void;
 };
 
 const RailItem = memo(function RailItem({
@@ -86,6 +91,8 @@ export function MailRail({
   onSelect,
   onConnect,
   onCancelBackfill,
+  savedSearches = [],
+  onOpenSearch,
 }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const key = mailViewKey(current);
@@ -128,6 +135,18 @@ export function MailRail({
           />
         ))}
       </div>
+      {savedSearches.length > 0 ? (
+        <div className="flex flex-col gap-0.5" aria-label="Saved searches" role="group">
+          {savedSearches.map((s) => (
+            <RailItem
+              key={s.id}
+              label={s.name}
+              active={false}
+              onClick={() => onOpenSearch?.(s.query)}
+            />
+          ))}
+        </div>
+      ) : null}
       <div className="flex flex-col gap-0.5">
         {accounts.map((a) => {
           const expanded = open[a.id] ?? false;
