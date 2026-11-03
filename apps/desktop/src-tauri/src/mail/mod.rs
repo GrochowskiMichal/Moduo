@@ -3,6 +3,7 @@
 
 pub mod contracts;
 pub mod fixture;
+pub mod ops;
 pub mod perf;
 pub mod store;
 pub mod accounts;
