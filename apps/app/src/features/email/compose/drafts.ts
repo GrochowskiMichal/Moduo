@@ -6,7 +6,10 @@ import type { MailDraftRow } from "@/lib/runtime.types.mail-compose";
 
 import type { ComposeOpenSpec } from "./session";
 
-export function draftToOpenSpec(row: MailDraftRow, opts: { fromInbox?: boolean } = {}): ComposeOpenSpec {
+export function draftToOpenSpec(
+  row: MailDraftRow,
+  opts: { fromInbox?: boolean } = {},
+): ComposeOpenSpec {
   const d = row.doc;
   return {
     kind: d.inReplyTo ? "reply" : "new",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import { createFakeCompose } from "../testing/fake-compose";
 import { draftForThread, draftToOpenSpec } from "./drafts";
-import { createComposeSession, type ComposeOpenSpec } from "./session";
+import { type ComposeOpenSpec, createComposeSession } from "./session";
 
 const spec = (p: Partial<ComposeOpenSpec> = {}): ComposeOpenSpec => ({
   kind: "reply",
@@ -111,7 +111,10 @@ describe("compose drafts and send (AC21, AC22)", () => {
     const { session } = setup();
     await session.open(spec({ to: "" }));
     expect(await session.send()).toEqual({ ok: false, reason: "Add a recipient." });
-    await session.update({ to: "a@x.com", attachments: [{ filename: "big", contentType: "x", path: "/p", size: 30 * 1024 * 1024 }] });
+    await session.update({
+      to: "a@x.com",
+      attachments: [{ filename: "big", contentType: "x", path: "/p", size: 30 * 1024 * 1024 }],
+    });
     const r = await session.send(25 * 1024 * 1024);
     expect(r.ok).toBe(false);
   });

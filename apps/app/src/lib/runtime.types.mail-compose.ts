@@ -8,7 +8,12 @@
  * `mail::send` types (`DraftDoc`, `DraftRow`, `SendHandle`, `OutboxItem`).
  */
 
-export type MailOutAttachment = { filename: string; contentType: string; path: string; size?: number };
+export type MailOutAttachment = {
+  filename: string;
+  contentType: string;
+  path: string;
+  size?: number;
+};
 
 export type MailDraftDoc = {
   messageId: string;
@@ -72,7 +77,10 @@ export type MailComposeEngine = {
   undoSend(outboxId: string): Promise<{ draftId: string | null }>;
   listOutbox(accountId?: string | null): Promise<MailOutboxItem[]>;
   /** Recipient autocomplete source: correspondents with how often you mailed them. */
-  correspondents(input: { prefix: string; limit: number }): Promise<{ name: string; email: string; count: number }[]>;
+  correspondents(input: {
+    prefix: string;
+    limit: number;
+  }): Promise<{ name: string; email: string; count: number }[]>;
   /** The provider's send size limit in bytes (Rust `size_limit`). */
   sizeLimit(accountId: string): Promise<number>;
 };

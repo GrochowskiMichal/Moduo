@@ -20,11 +20,13 @@ export type FakeComposeEngine = MailComposeEngine & {
   sent: MailDraftRow[];
 };
 
-export function createFakeCompose(opts: {
-  now?: () => number;
-  correspondents?: { name: string; email: string; count: number }[];
-  sizeLimit?: number;
-} = {}): FakeComposeEngine {
+export function createFakeCompose(
+  opts: {
+    now?: () => number;
+    correspondents?: { name: string; email: string; count: number }[];
+    sizeLimit?: number;
+  } = {},
+): FakeComposeEngine {
   const now = opts.now ?? (() => Date.now());
   const drafts = new Map<string, MailDraftRow>();
   const outbox = new Map<string, MailOutboxItem>();

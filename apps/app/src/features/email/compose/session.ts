@@ -4,7 +4,11 @@
 // Send queues it with the undo window; Undo cancels and reopens it, Edit does
 // the same, and Done-on-send marks the thread Done when replying from the inbox.
 
-import type { MailComposeEngine, MailDraftDoc, MailSendHandle } from "@/lib/runtime.types.mail-compose";
+import type {
+  MailComposeEngine,
+  MailDraftDoc,
+  MailSendHandle,
+} from "@/lib/runtime.types.mail-compose";
 
 import { htmlToPlainText, splitAddresses } from "../compose";
 import { checkSendSize } from "./size-limit";
@@ -51,9 +55,7 @@ export type ComposeDeps = {
   showSent?: (handle: MailSendHandle, actions: { undo: () => void; edit: () => void }) => void;
 };
 
-export type SendResult =
-  | { ok: true; handle: MailSendHandle }
-  | { ok: false; reason: string };
+export type SendResult = { ok: true; handle: MailSendHandle } | { ok: false; reason: string };
 
 let seq = 0;
 
@@ -146,7 +148,10 @@ export function createComposeSession(deps: ComposeDeps) {
     async send(sizeLimit?: number): Promise<SendResult> {
       const s = active;
       if (!s) return { ok: false, reason: "Nothing to send." };
-      if (splitAddresses(s.to).length + splitAddresses(s.cc).length + splitAddresses(s.bcc).length === 0)
+      if (
+        splitAddresses(s.to).length + splitAddresses(s.cc).length + splitAddresses(s.bcc).length ===
+        0
+      )
         return { ok: false, reason: "Add a recipient." };
       if (sizeLimit) {
         const size = checkSendSize(s.attachments, new Blob([s.bodyHtml]).size, sizeLimit);
@@ -159,8 +164,10 @@ export function createComposeSession(deps: ComposeDeps) {
       const handle = await deps.port.queueSend({ draftId: s.draftId, undoSeconds });
       active = null;
       emit();
-      if (s.threadId && s.followUp && deps.setFollowUp) await deps.setFollowUp(s.threadId, s.followUp);
-      if (s.threadId && s.fromInbox && doneOnSend && s.kind !== "new") await deps.markDone(s.threadId);
+      if (s.threadId && s.followUp && deps.setFollowUp)
+        await deps.setFollowUp(s.threadId, s.followUp);
+      if (s.threadId && s.fromInbox && doneOnSend && s.kind !== "new")
+        await deps.markDone(s.threadId);
       const reopen = async () => {
         const { draftId } = await deps.port.undoSend(handle.outboxId);
         if (!draftId) return;

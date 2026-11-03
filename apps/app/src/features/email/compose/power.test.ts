@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { pickAlias, swapSignature, type MailAlias } from "./aliases";
+import { type MailAlias, pickAlias, swapSignature } from "./aliases";
 import { rankRecipients } from "./autocomplete";
 import { followUpDueMs } from "./follow-up";
 import { instantIntro } from "./intro";
@@ -28,7 +28,7 @@ describe("compose power features (AC23)", () => {
     expect(pickAlias(aliases, "acc")?.id).toBe("1");
     expect(pickAlias(aliases, "acc", ["SALES@x.com"])?.id).toBe("2");
     const first = swapSignature("<p>Hi</p><blockquote>old</blockquote>", aliases[0]);
-    expect(first).toContain("<p>Hi</p><div data-moduo-signature=\"\"><p>Me</p>");
+    expect(first).toContain('<p>Hi</p><div data-moduo-signature=""><p>Me</p>');
     expect(first.indexOf("Me</p>")).toBeLessThan(first.indexOf("<blockquote"));
     const second = swapSignature(first, aliases[1]);
     expect(second).toContain("Sales team");
@@ -50,17 +50,32 @@ describe("compose power features (AC23)", () => {
     });
     expect(out.map((c) => c.email)).toEqual(["andy@y.com", "anna@x.com", "jo@z.com"]);
     expect(out[1]).toMatchObject({ name: "Anna Lee", isContact: true, count: 2 });
-    expect(rankRecipients({ query: "an", contacts: [], correspondents: [{ name: "Andy", email: "andy@y.com", count: 1 }], exclude: ["andy@y.com"] })).toEqual([]);
+    expect(
+      rankRecipients({
+        query: "an",
+        contacts: [],
+        correspondents: [{ name: "Andy", email: "andy@y.com", count: 1 }],
+        exclude: ["andy@y.com"],
+      }),
+    ).toEqual([]);
   });
 
   it("snippet placeholders: ;; trigger, fill from recipient and me, unknown kept", () => {
     expect(findSnippetTrigger("Hello ;;thx", 11)).toEqual({ start: 6, query: "thx" });
     expect(findSnippetTrigger("a;;b", 4)).toBeNull();
-    const ctx = { recipient: { name: "Anna Lee", email: "anna@x.com" }, me: { name: "Mike G", email: "m@x.com" } };
+    const ctx = {
+      recipient: { name: "Anna Lee", email: "anna@x.com" },
+      me: { name: "Mike G", email: "m@x.com" },
+    };
     expect(fillPlaceholders("Hi {first name} {Last Name}, {my name} {unknown}", ctx)).toBe(
       "Hi Anna Lee, Mike G {unknown}",
     );
-    const r = insertSnippet("Hey ;;th ok", 8, { id: "s", name: "thanks", body: "Thanks {first name}!" }, ctx);
+    const r = insertSnippet(
+      "Hey ;;th ok",
+      8,
+      { id: "s", name: "thanks", body: "Thanks {first name}!" },
+      ctx,
+    );
     expect(r).toEqual({ text: "Hey Thanks Anna! ok", caret: 16 });
   });
 
@@ -74,7 +89,12 @@ describe("compose power features (AC23)", () => {
 
   it("instant intro: moves the introducer to Bcc with a note", () => {
     const out = instantIntro(
-      { to: "Anna Lee <anna@x.com>, bob@y.com", cc: "anna@x.com", bcc: "", bodyHtml: "<p>body</p>" },
+      {
+        to: "Anna Lee <anna@x.com>, bob@y.com",
+        cc: "anna@x.com",
+        bcc: "",
+        bodyHtml: "<p>body</p>",
+      },
       "Anna Lee <anna@x.com>",
     );
     expect(out.to).toBe("bob@y.com");

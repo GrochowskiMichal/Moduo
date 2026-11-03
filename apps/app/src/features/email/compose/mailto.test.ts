@@ -5,7 +5,9 @@ import { interceptMailto, parseMailto } from "./mailto";
 describe("mailto (AC24)", () => {
   it("parses RFC 6068 with subject, cc and body", () => {
     expect(
-      parseMailto("mailto:a@x.com,b@y.com?cc=c@z.com&subject=Hello%20there&body=Line%201%0D%0ALine+2&from=evil@x.com"),
+      parseMailto(
+        "mailto:a@x.com,b@y.com?cc=c@z.com&subject=Hello%20there&body=Line%201%0D%0ALine+2&from=evil@x.com",
+      ),
     ).toEqual({
       to: ["a@x.com", "b@y.com"],
       cc: ["c@z.com"],

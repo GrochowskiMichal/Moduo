@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-04 · MR-11: compose is `features/email/compose/` over a separate `MailComposeEngine` port (`lib/runtime.types.mail-compose.ts`, `runtime.email.compose`, Tauri `mail_save_draft`/`mail_list_drafts`/`mail_get_draft`/`mail_discard_draft`/`mail_queue_send`/`mail_undo_send`/`mail_list_outbox`/`mail_correspondents`/`mail_size_limit`), kept apart from `MailEngine` so sibling blocks' engine edits don't collide.
 - 2026-11-04 · MR-12: sender intelligence glue is `src/mail/rules.rs` over MR-3's classifier, and the views are prop-driven components in `features/email/{views,panels}` plus `suggest-contact.ts`.
 - 2026-11-04 · MR-14: spine gestures on the engine are `features/email/commands/spine.ts` over one injected `MailSpinePort` (upsertRef, task/note/event create+delete, isLinked, createLink/deleteLink, resolveContactId, markDone).
 - 2026-11-04 · MR-9: the rebuilt shell is `features/email/ui/mail-shell.tsx` (rail, split tabs, list, reader slot) on the MR-8 store; its keys are registry entries (`lib/hotkeys/registry.ts`, new `email.*` ids) and `features/email/keys.ts` derives the `?` legend and ⌘K mail actions from them, so neither can drift.

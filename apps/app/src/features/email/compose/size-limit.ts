@@ -1,7 +1,8 @@
 // The provider size limit, enforced before Send (E45, AC23). MIME base64 grows
 // attachments by 4/3, so the check is on the encoded size, as the server sees it.
 
-export type SizeCheck = { ok: true; bytes: number } | { ok: false; bytes: number; limit: number; message: string };
+export type SizeCheck =
+  { ok: true; bytes: number } | { ok: false; bytes: number; limit: number; message: string };
 
 export function encodedSize(bytes: number): number {
   return Math.ceil(bytes / 3) * 4;
