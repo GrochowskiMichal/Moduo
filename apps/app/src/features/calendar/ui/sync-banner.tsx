@@ -1,7 +1,7 @@
-// The calendar's scoped sync banner (CALR-3, AC2), between the toolbar and the
-// week: which account didn't sync, what is stale since when, what is current,
-// and Try again. Nothing when everything synced. A login Google stopped
-// accepting offers Reconnect instead (CALR-20, AC37).
+// The calendar's sync banner (CALR-3, AC2), between the toolbar and the week.
+// It speaks only when the person must act: a login Google stopped accepting
+// offers Reconnect (CALR-20, AC37), a calendar that didn't load offers Try
+// again. A sync that merely failed retries in the background (sync-status.ts).
 
 import { AlertTriangle } from "lucide-react";
 
@@ -36,7 +36,7 @@ export function SyncBanner({
           Reconnect
         </Button>
       ) : null}
-      {!reauth || status.loadFailed || status.faults.some((f) => !f.reauth) ? (
+      {status.loadFailed ? (
         <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
           {retrying ? "Trying…" : "Try again"}
         </Button>

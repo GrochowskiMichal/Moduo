@@ -60,9 +60,34 @@ function reason(error: { message?: string } | null, fallback: string): string {
 }
 const VIEW_COLUMNS = "id, name, calendar_set_items(calendar_id, calendars(account_id))";
 
+/**
+ * The last rows and views read per workspace this session: the rail draws them at
+ * once when Calendar mounts again, and the read below refreshes them (the module
+ * data does the same, module-cache.ts).
+ */
+const lastRead = new Map<string, { rows: RailCalendarRow[]; views: SavedView[] }>();
+
 export function useRailCalendars(workspaceId: string) {
-  const [rows, setRows] = useState<RailCalendarRow[]>([]);
-  const [views, setViews] = useState<SavedView[]>([]);
+  const [rows, setRowsState] = useState<RailCalendarRow[]>(
+    () => lastRead.get(workspaceId)?.rows ?? [],
+  );
+  const [views, setViewsState] = useState<SavedView[]>(
+    () => lastRead.get(workspaceId)?.views ?? [],
+  );
+  const setRows = useCallback(
+    (next: RailCalendarRow[]) => {
+      lastRead.set(workspaceId, { rows: next, views: lastRead.get(workspaceId)?.views ?? [] });
+      setRowsState(next);
+    },
+    [workspaceId],
+  );
+  const setViews = useCallback(
+    (next: SavedView[]) => {
+      lastRead.set(workspaceId, { rows: lastRead.get(workspaceId)?.rows ?? [], views: next });
+      setViewsState(next);
+    },
+    [workspaceId],
+  );
 
   const loadRows = useCallback(
     () =>
@@ -96,7 +121,7 @@ export function useRailCalendars(workspaceId: string) {
     return () => {
       cancelled = true;
     };
-  }, [loadRows, loadViews]);
+  }, [loadRows, loadViews, setRows, setViews]);
 
   /** A new Moduo calendar of yours; resolves false when it wasn't made. */
   const createCalendar = useCallback(
@@ -111,13 +136,13 @@ export function useRailCalendars(workspaceId: string) {
       if (data) setRows(data as RailCalendarRow[]);
       return true;
     },
-    [workspaceId, loadRows],
+    [workspaceId, loadRows, setRows],
   );
 
   const reloadRows = useCallback(async () => {
     const { data } = await loadRows();
     if (data) setRows(data as RailCalendarRow[]);
-  }, [loadRows]);
+  }, [loadRows, setRows]);
 
   /** Rename a calendar you made; throws the server's reason when it wasn't renamed. */
   const renameCalendar = useCallback(
@@ -174,7 +199,7 @@ export function useRailCalendars(workspaceId: string) {
       if (data) setViews(toViews(data));
       return true;
     },
-    [workspaceId, loadViews],
+    [workspaceId, loadViews, setViews],
   );
 
   return { rows, views, createCalendar, renameCalendar, removeCalendar, restoreCalendar, saveView };

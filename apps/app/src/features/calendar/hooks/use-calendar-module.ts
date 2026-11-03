@@ -23,6 +23,7 @@ import type {
   CalendarLiveChange,
 } from "../events";
 import { applyLiveChange } from "../live";
+import { readCalendarSnapshot, snapshotKey, writeCalendarSnapshot } from "../module-cache";
 import { type BusyBlockRow, busyBlockToEvent } from "../teammates";
 import {
   allTimeCalendarWindow,
@@ -120,23 +121,31 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   // for a frame, and its still-saving creates are left behind. Writes that
   // settle later go through `setEventsIn`, which drops them once the list has
   // moved on.
+  //
+  // A scope this session already read starts from that read (module-cache.ts):
+  // coming back to Calendar draws the week at once and the read below refreshes
+  // it quietly, instead of a skeleton and a full reload on every visit.
+  const cacheKey = snapshotKey(userId, scope);
+  const [seed] = useState(() => readCalendarSnapshot(cacheKey));
   const [list, setList] = useState<{ scope: string | null; events: CalendarEventModel[] }>(() => ({
     scope,
-    events: [],
+    events: seed?.events ?? [],
   }));
-  const [busy, setBusy] = useState<CalendarEventModel[]>([]);
-  const [accounts, setAccounts] = useState<CalendarAccountModel[]>([]);
-  const [degraded, setDegraded] = useState(false);
-  const [truncated, setTruncated] = useState<Truncation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<CalendarEventModel[]>(() => seed?.busy ?? []);
+  const [accounts, setAccounts] = useState<CalendarAccountModel[]>(() => seed?.accounts ?? []);
+  const [degraded, setDegraded] = useState(() => seed?.degraded ?? false);
+  const [truncated, setTruncated] = useState<Truncation[]>(() => seed?.truncated ?? []);
+  const [loading, setLoading] = useState(() => !seed);
   if (list.scope !== scope) {
-    setList({ scope, events: [] });
-    setAccounts([]);
-    setDegraded(false);
-    setTruncated([]);
+    const next = readCalendarSnapshot(snapshotKey(userId, scope));
+    setList({ scope, events: next?.events ?? [] });
+    setBusy(next?.busy ?? []);
+    setAccounts(next?.accounts ?? []);
+    setDegraded(next?.degraded ?? false);
+    setTruncated(next?.truncated ?? []);
     // Effects that wait for `loading` (the `?event=` deep link, the Google
     // calendar linker) must not read the emptied list as this scope's.
-    setLoading(scope !== null);
+    setLoading(scope !== null && !next);
   }
   const events = list.events;
 
@@ -171,12 +180,17 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
   // render, not in an effect: an effect would let one read fire against the
   // previous workspace's (possibly all-time) window first, then immediately
   // refetch — two round-trips on every mount and every switch.
+  // A cached read brings its window back too, so the months it covered don't refetch as new.
   const [windowState, setWindowState] = useState<{
     workspaceId: string | null;
     window: CalendarWindow;
-  }>(() => ({ workspaceId, window: defaultCalendarWindow() }));
+  }>(() => ({ workspaceId, window: seed?.window ?? defaultCalendarWindow() }));
   if (windowState.workspaceId !== workspaceId) {
-    setWindowState({ workspaceId, window: defaultCalendarWindow() });
+    setWindowState({
+      workspaceId,
+      window:
+        readCalendarSnapshot(snapshotKey(userId, workspaceId))?.window ?? defaultCalendarWindow(),
+    });
   }
   const fetchWindow = windowState.window;
   const setFetchWindow = useCallback(
@@ -235,7 +249,14 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       }
       const req = ++reqRef.current;
       liveDuringReadRef.current = { req, changes: [] };
-      if (!options?.quiet) setLoading(true);
+      // A week this session already read for this window stays on screen while it refreshes.
+      const cached = readCalendarSnapshot(snapshotKey(userId, scope))?.window ?? null;
+      const covered = windowCovers(
+        cached,
+        new Date(fetchWindow.fromIso),
+        new Date(fetchWindow.toIso),
+      );
+      if (!options?.quiet && !covered) setLoading(true);
       const bundle = await runtime.calendar.listModule(workspaceId, fetchWindow);
       if (reqRef.current !== req) return;
       const missed =
@@ -290,6 +311,20 @@ export function useCalendarModule(runtime: ModuoRuntime | null, params: Params) 
       reqRef.current++;
     };
   }, [load]);
+
+  // Keep the session cache current with every settled read and live change.
+  // Unsaved creates (temp ids) stay out: a return must not show a ghost.
+  useEffect(() => {
+    if (loading || list.scope !== scope) return;
+    writeCalendarSnapshot(snapshotKey(userId, scope), {
+      events: list.events.filter((e) => !isTempId(e.id)),
+      busy,
+      accounts,
+      window: fetchWindow,
+      truncated,
+      degraded,
+    });
+  }, [loading, list, scope, userId, busy, accounts, fetchWindow, truncated, degraded]);
 
   // `reload` always runs the CURRENT `load`. Callers hold it across awaits (a
   // sync finishing, an account removal, a push to Google), and by the time it
