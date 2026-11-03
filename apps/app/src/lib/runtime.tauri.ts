@@ -236,6 +236,9 @@ export const tauriRuntime: ModuoRuntime = {
     },
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
+    listSettings: webRuntime.email.listSettings,
+    upsertSetting: webRuntime.email.upsertSetting,
+    deleteSetting: webRuntime.email.deleteSetting,
     upsertAccountRef: webRuntime.email.upsertAccountRef,
     removeAccountRef: webRuntime.email.removeAccountRef,
     upsertRef: webRuntime.email.upsertRef,

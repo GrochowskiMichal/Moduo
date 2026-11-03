@@ -12,6 +12,7 @@ import { collectTruncations, READ_CAPS } from "./paged-select";
 import { runRpc, untypedDb } from "./runtime.db";
 import type { EmailAccountRef, EmailRuntime, EmailThreadRef } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
+import { webEmailSettings } from "./runtime.web.email-settings";
 import { desktopOnly, firstRow, selectCapped, type SelectOpts } from "./runtime.web.shared";
 
 // ── Email module (EM-3) row → model mappers ───────────────────────────────────
@@ -58,6 +59,7 @@ function emailRefRowToModel(raw: unknown): EmailThreadRef {
 }
 
 export const webEmail: EmailRuntime = {
+  ...webEmailSettings,
   async listAccounts() {
     return [];
   },

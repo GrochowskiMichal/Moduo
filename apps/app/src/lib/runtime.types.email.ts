@@ -1,6 +1,20 @@
 /** The runtime port's email (implemented in runtime.web.email.ts). */
 
+import type { EmailSettingsKind } from "@contracts/vocabularies";
+
 import type { Truncation } from "./paged-select";
+
+/** One mail settings item that follows the user (MR-7): a rule, custom tab,
+ *  Priority person, blocked sender, Screener decision, sender override,
+ *  snippet, alias or saved search. `value` is the kind's own JSON object. */
+export type EmailSettingsItem = {
+  id: string;
+  kind: EmailSettingsKind;
+  position: number;
+  value: Record<string, unknown>;
+  updatedAt: string;
+  deletedAt: string | null;
+};
 
 // ── Email compose + attachments (EM-7, desktop engine) ───────────────────────
 /** A received message's attachment metadata (bytes fetched on demand, EM-7). */
@@ -93,6 +107,18 @@ export type EmailModuleBundle = {
 };
 
 export type EmailRuntime = {
+  // ── MR-7 mail settings items (Supabase, both platforms) ────────────────
+  /** Your live items, or with `since` every row changed after it (tombstones too). */
+  listSettings(input?: { since?: string | null }): Promise<EmailSettingsItem[]>;
+  /** Create or replace one item by its client-minted id (last write wins per row). */
+  upsertSetting(input: {
+    id: string;
+    kind: EmailSettingsKind;
+    value: Record<string, unknown>;
+    position?: number | null;
+  }): Promise<EmailSettingsItem>;
+  /** Tombstone one of your items; false when it wasn't yours or already gone. */
+  deleteSetting(input: { id: string }): Promise<boolean>;
   listAccounts(): Promise<any[]>;
   connectAndSave(input: any): Promise<any>;
   disconnect(accountId: string): Promise<void>;
