@@ -162,6 +162,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 - 2026-11-03 · MR-7: mail settings items are one owner-only table `email_settings_items`, read through RLS and written only through `email_op_settings_upsert(p_id, p_kind, p_value, p_position)` / `email_op_settings_delete(p_id)`.
 - 2026-11-03 · MR-2: auth, sessions and the account actor live in `src/mail/{auth,session,actor,accounts}.rs`, behind traits.
+- 2026-11-04 · MR-1: the mail store is `src/mail/store/` (rusqlite 0.36 bundled, WAL, FTS5 contentless-delete), one writer plus one read-only connection on `<app data>/mail/<user_id>/mail.db`.
 - 2026-11-03 · MR-0: local mail vocabularies live in `@contracts/mail` (`mail.ts`), exported to `mail-local.json`, mirrored by Rust `src/mail/contracts.rs`.
 - 2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed. *(partly superseded)*
 - 2026-07-29 · Import scope collapsed to "Notion notes + email history depth"
