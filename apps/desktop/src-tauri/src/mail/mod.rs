@@ -13,6 +13,7 @@ pub mod mailto;
 pub mod mime;
 pub mod ops;
 pub mod perf;
+pub mod rules;
 pub mod send;
 pub mod session;
 pub mod store;
