@@ -31,6 +31,10 @@ fastrand = "2"
 async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 lettre = "0.11"
 mailparse = "0.18"
+# MR-4: the new engine's MIME parser (Stalwart), tolerant of malformed mail.
+mail-parser = "0.11"
+# MR-4: collecting async-imap FETCH streams.
+futures-util = "0.3"
 native-tls = "0.2"
 # Per-read/per-write socket timeouts for the async IMAP stream (the old std
 # TcpStream set_read_timeout semantics).
@@ -61,8 +65,6 @@ webbrowser = "1"
 keyring = "4"
 
 [dev-dependencies]
-# Stream collection in the live IMAP harness (tests/imap_live.rs).
-futures-util = "0.3"
 
 # Release builds trade build time for a smaller, faster binary (Tauri's size guide). Unwinding stays
 # on (no panic = "abort"): a panicking tokio task must not take the whole app down. Nothing reads

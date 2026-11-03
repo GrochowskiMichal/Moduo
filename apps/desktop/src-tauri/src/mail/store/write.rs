@@ -543,7 +543,7 @@ fn ingest_one(tx: &Transaction, m: &MessageInput, touched: &mut Touched) -> Stor
 /// Rewrites one message's FTS entry. A contentless table needs every column,
 /// so header columns come from `messages`; the body is the given text, or empty
 /// at header time.
-fn reindex(tx: &Transaction, id: i64, body: Option<&str>) -> StoreResult<()> {
+pub(crate) fn reindex(tx: &Transaction, id: i64, body: Option<&str>) -> StoreResult<()> {
     let (subject, from, to, cc): (String, String, String, String) = tx.query_row(
         "SELECT subject, from_name || ' ' || from_email, to_json, cc_json FROM messages WHERE id = ?1",
         [id],
