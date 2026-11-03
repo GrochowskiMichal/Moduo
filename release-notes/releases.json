@@ -1,6 +1,24 @@
 {
   "releases": [
     {
+      "version": "1.7.1",
+      "date": "2026-11-03",
+      "highlights": [
+        "Calendars you made in Moduo now have the same ⋯ menu as connected ones, including Rename and Delete. Today is outlined in every view, as in the mini calendar.",
+        "Calendar stays in sync on its own in the desktop app, without warnings about blips it fixes by itself. It also opens instantly when you come back to it from another module."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Calendars you made in Moduo now have the same ⋯ menu as connected ones, including Rename and Delete. Today is outlined in every view, as in the mini calendar."
+        },
+        {
+          "type": "fixed",
+          "text": "Calendar stays in sync on its own in the desktop app, without warnings about blips it fixes by itself. It also opens instantly when you come back to it from another module."
+        }
+      ]
+    },
+    {
       "version": "1.7.0",
       "date": "2026-11-03",
       "highlights": [
