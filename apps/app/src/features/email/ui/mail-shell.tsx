@@ -31,6 +31,7 @@ import { useThreadWindow } from "../shell/use-thread-window";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
 import { FailedActionsBar } from "./failed-actions-bar";
+import { FollowupNudges } from "./followup-nudge";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
@@ -80,6 +81,7 @@ export function MailShell({
   const counts = useMailStore((s) => s.counts, store);
   const accounts = useMailStore((s) => s.accounts, store);
   const failedOps = useMailStore((s) => s.failedOps, store);
+  const followupsDue = useMailStore((s) => s.followupsDue, store);
   const version = useMailStore((s) => s.threadsVersion, store);
 
   const commands = useMemo(() => createMailCommands(store, now), [store, now]);
@@ -287,6 +289,15 @@ export function MailShell({
             onRetry={(opIds) => void Promise.all(opIds.map((id) => commands.retry(id)))}
             onDiscard={(opIds) => void Promise.all(opIds.map((id) => commands.discard(id)))}
           />
+          {tabbed ? (
+            <FollowupNudges
+              rows={followupsDue}
+              selfAddresses={accounts.map((a) => a.address)}
+              nowMs={now()}
+              onOpen={(id) => setSel({ ...EMPTY_SELECTION, cursor: id })}
+              onDismiss={(id) => commands.dismissFollowup(id)}
+            />
+          ) : null}
         </div>
         {sel.picked.length > 0 ? (
           <div role="status" className="mx-2 mb-1 px-1 text-xs text-muted-foreground">

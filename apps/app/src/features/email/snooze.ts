@@ -8,7 +8,7 @@ import { formatDate, formatTime } from "../../lib/time-format";
 
 /** A resolved snooze choice: a stable id, a human label, and the target instant. */
 export type SnoozePreset = {
-  id: "later_today" | "tomorrow" | "this_weekend" | "next_week";
+  id: "later_today" | "tomorrow" | "this_weekend" | "next_week" | "someday";
   label: string;
   /** Local instant the thread returns to the inbox. */
   at: Date;
@@ -18,6 +18,8 @@ export type SnoozePreset = {
 export const SNOOZE_MORNING_HOUR = 9;
 /** How far "Later today" pushes a thread. */
 export const SNOOZE_LATER_TODAY_HOURS = 3;
+/** "Someday" (MR-14): out of sight for three months, back on a morning. */
+export const SNOOZE_SOMEDAY_DAYS = 90;
 
 function atLocalHour(base: Date, dayOffset: number, hour: number): Date {
   const d = new Date(base);
@@ -58,6 +60,11 @@ export function snoozePresets(now: Date): SnoozePreset[] {
       at: atLocalHour(now, satOffset, SNOOZE_MORNING_HOUR),
     },
     { id: "next_week", label: "Next week", at: atLocalHour(now, monOffset, SNOOZE_MORNING_HOUR) },
+    {
+      id: "someday",
+      label: "Someday",
+      at: atLocalHour(now, SNOOZE_SOMEDAY_DAYS, SNOOZE_MORNING_HOUR),
+    },
   ];
 }
 
