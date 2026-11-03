@@ -40,6 +40,8 @@ rand = "0.10"
 # 4.x cannot open a 2.x database file. Desktop stores (mail, identity) stay on 2.x.
 redb = "2.6"
 roxmltree = "0.21"
+# The rebuilt mail store (specs/mail-rebuild.md decision 2): bundled SQLite with FTS5.
+rusqlite = { version = "0.36", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
