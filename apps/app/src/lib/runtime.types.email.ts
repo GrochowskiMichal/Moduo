@@ -111,6 +111,8 @@ export type EmailRuntime = {
   engine?: import("./runtime.types.mail-engine").MailEngine;
   /** The rebuilt engine's drafts, send outbox and autocomplete (MR-11); desktop only. */
   compose?: import("./runtime.types.mail-compose").MailComposeEngine;
+  /** Device-local storage, disk cap, Clear buttons and default mail app (MR-15); desktop only. */
+  settings?: import("./runtime.types.mail-settings").MailSettingsEngine;
   // ── MR-7 mail settings items (Supabase, both platforms) ────────────────
   /** Your live items, or with `since` every row changed after it (tombstones too). */
   listSettings(input?: { since?: string | null }): Promise<EmailSettingsItem[]>;
@@ -296,4 +298,5 @@ export type EmailRuntime = {
 
 export type * from "./runtime.types.mail-engine";
 export type * from "./runtime.types.mail-compose";
+export type * from "./runtime.types.mail-settings";
 export { mailViewKey } from "./runtime.types.mail-engine";
