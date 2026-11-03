@@ -6,8 +6,8 @@ import { Mail } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { EmptyState } from "../../../components/ui/empty-state";
-import { Skeleton } from "../../../components/ui/skeleton";
 import { Eyebrow } from "../../../components/ui/eyebrow";
+import { Skeleton } from "../../../components/ui/skeleton";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
 import type { useEmailModule } from "../hooks/use-email-module";
 import { formatSnoozeUntil } from "../snooze";

@@ -1,11 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import {
-  emptyMailQuery,
-  isMailQueryEmpty,
-  mailQuerySuggestions,
-  parseMailQuery,
-} from "./query";
+import { emptyMailQuery, isMailQueryEmpty, mailQuerySuggestions, parseMailQuery } from "./query";
 
 const MAILBOXES = [
   { id: "mb-1", name: "Receipts", role: "custom" as const },

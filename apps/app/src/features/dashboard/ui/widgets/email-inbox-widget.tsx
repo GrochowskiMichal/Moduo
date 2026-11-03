@@ -8,12 +8,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import { useMailStore } from "@/features/email/store/use-mail-store";
 import { formatEmailDate } from "@/features/email/utils/email-format";
-import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 import {
   type EmailInboxThreadRow,
   type EmailInboxView,
   shapeEmailInbox,
 } from "@/features/email/widget";
+import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
 import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";

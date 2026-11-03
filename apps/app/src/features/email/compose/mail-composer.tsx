@@ -55,12 +55,14 @@ export function MailComposer(props: MailComposerProps) {
   return <ComposerBody key={active.key} {...props} state={active} />;
 }
 
-function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
-  const { session, state } = props;
+/** Derived lookups for the composer: the sending alias, snippet and recipient hits. */
+function composerLookups(
+  props: MailComposerProps & { state: ComposeState },
+  text: string,
+  toQuery: string,
+) {
+  const { state } = props;
   const alias = (props.aliases ?? []).find((a) => a.address === state.fromAddr) ?? null;
-  const [text, setText] = useState(() => htmlToPlainText(swapSignature(state.bodyHtml, null)));
-  const [toQuery, setToQuery] = useState("");
-  const [error, setError] = useState<string | null>(state.lastError);
   const trigger = findSnippetTrigger(text, text.length);
   const snippetHits = trigger ? matchSnippets(props.snippets ?? [], trigger.query).slice(0, 5) : [];
   const recipients = rankRecipients({
@@ -71,6 +73,15 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
     limit: 5,
   });
   const firstTo = state.to.split(",")[0]?.trim() ?? "";
+  return { alias, snippetHits, recipients, firstTo };
+}
+
+function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
+  const { session, state } = props;
+  const [text, setText] = useState(() => htmlToPlainText(swapSignature(state.bodyHtml, null)));
+  const [toQuery, setToQuery] = useState("");
+  const [error, setError] = useState<string | null>(state.lastError);
+  const { alias, snippetHits, recipients, firstTo } = composerLookups(props, text, toQuery);
 
   const setBody = (next: string) => {
     setText(next);

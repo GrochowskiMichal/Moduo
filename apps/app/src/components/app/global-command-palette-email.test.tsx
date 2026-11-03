@@ -15,7 +15,7 @@ const h = rs.hoisted(() => ({
       listModule: async () => ({ refs: [] }),
       listSettings: async () => [],
       upsertSetting: async (input: Record<string, unknown>) => ({ ...input }),
-      searchServer: async () => ({ status: "ok", envelopes: [] }),
+      searchServer: async (_input: Record<string, unknown>) => ({ status: "ok", envelopes: [] }),
       upserts: [] as Array<Record<string, unknown>>,
       servers: [] as Array<Record<string, unknown>>,
     },

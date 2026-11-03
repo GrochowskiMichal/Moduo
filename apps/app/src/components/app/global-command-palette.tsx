@@ -1,10 +1,10 @@
 import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  BookmarkPlus,
   Calendar as CalendarIcon,
   CheckSquare,
   Contact as ContactIcon,
-  BookmarkPlus,
   FilePlus2,
   FileText,
   House,

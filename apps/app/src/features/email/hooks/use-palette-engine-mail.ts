@@ -148,7 +148,12 @@ export function usePaletteEngineMail(opts: {
                 ...c,
                 saved: [
                   ...c.saved,
-                  { id, name: String(value.name), query: String(value.query), position: saved.length },
+                  {
+                    id,
+                    name: String(value.name),
+                    query: String(value.query),
+                    position: saved.length,
+                  },
                 ],
               }
             : c,

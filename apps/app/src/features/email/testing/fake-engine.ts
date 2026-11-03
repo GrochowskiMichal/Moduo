@@ -16,8 +16,8 @@ import type {
   MailMailbox,
   MailOpInput,
   MailOpRecord,
-  MailThread,
   MailSearchQuery,
+  MailThread,
   MailThreadRow,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
@@ -410,10 +410,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       const out: MailThreadRow[] = [];
       if (isMailQueryEmpty(query)) return out;
       for (const t of all()) {
-        if (accountId && t.row.accountId !== accountId) continue;
-        if (query.isPinned && !t.row.pinned) continue;
-        if (query.inRole && t.role !== query.inRole) continue;
-        if (query.inMailboxId) continue;
+        if (!fakeThreadInScope(t, query, accountId)) continue;
         if (t.messages.some((m) => fakeSearchHit(m, query))) out.push({ ...t.row });
         if (out.length >= limit) break;
       }
@@ -451,6 +448,14 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
     },
   };
   return engine;
+}
+
+/** Thread-level filters (account, pinned, folder) before the message match. */
+function fakeThreadInScope(t: ThreadState, q: MailSearchQuery, accountId?: string | null): boolean {
+  if (accountId && t.row.accountId !== accountId) return false;
+  if (q.isPinned && !t.row.pinned) return false;
+  if (q.inRole && t.role !== q.inRole) return false;
+  return !q.inMailboxId;
 }
 
 /** The fake's stand-in for the store's FTS + column filters (MR-13). */

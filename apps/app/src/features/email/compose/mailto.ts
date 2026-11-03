@@ -26,6 +26,19 @@ function addresses(raw: string): string[] {
     .filter((a) => a.length > 0);
 }
 
+function applyMailtoPair(out: MailtoPrefill, pair: string): void {
+  const eq = pair.indexOf("=");
+  if (eq < 0) return;
+  const key = decode(pair.slice(0, eq)).toLowerCase();
+  const value = pair.slice(eq + 1);
+  if (key === "to") out.to.push(...addresses(value));
+  else if (key === "cc") out.cc.push(...addresses(value));
+  else if (key === "bcc") out.bcc.push(...addresses(value));
+  else if (key === "subject") out.subject = decode(value);
+  else if (key === "body") out.body = decode(value).replace(/\r\n/g, "\n");
+  else if (key === "in-reply-to") out.inReplyTo = decode(value);
+}
+
 export function parseMailto(uri: string): MailtoPrefill | null {
   if (!/^mailto:/i.test(uri.trim())) return null;
   const rest = uri.trim().slice(7);
@@ -39,18 +52,7 @@ export function parseMailto(uri: string): MailtoPrefill | null {
     inReplyTo: null,
   };
   if (q >= 0) {
-    for (const pair of rest.slice(q + 1).split("&")) {
-      const eq = pair.indexOf("=");
-      if (eq < 0) continue;
-      const key = decode(pair.slice(0, eq)).toLowerCase();
-      const value = pair.slice(eq + 1);
-      if (key === "to") out.to.push(...addresses(value));
-      else if (key === "cc") out.cc.push(...addresses(value));
-      else if (key === "bcc") out.bcc.push(...addresses(value));
-      else if (key === "subject") out.subject = decode(value);
-      else if (key === "body") out.body = decode(value).replace(/\r\n/g, "\n");
-      else if (key === "in-reply-to") out.inReplyTo = decode(value);
-    }
+    for (const pair of rest.slice(q + 1).split("&")) applyMailtoPair(out, pair);
   }
   return out;
 }

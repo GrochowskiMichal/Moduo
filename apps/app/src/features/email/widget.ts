@@ -108,10 +108,10 @@ export function shapeEmailInbox(
           local: true,
         }))
     : bundle.refs
-    .filter((r) => r.isSnoozed && r.snoozeUntil != null && parseMs(r.snoozeUntil) <= endToday)
-    .sort((a, b) => parseMs(a.snoozeUntil) - parseMs(b.snoozeUntil))
-    .slice(0, limit)
-    .map((r) => threadRow(r, r.snoozeUntil));
+        .filter((r) => r.isSnoozed && r.snoozeUntil != null && parseMs(r.snoozeUntil) <= endToday)
+        .sort((a, b) => parseMs(a.snoozeUntil) - parseMs(b.snoozeUntil))
+        .slice(0, limit)
+        .map((r) => threadRow(r, r.snoozeUntil));
 
   // Follow-ups still awaiting a reply — most-urgent deadline first.
   const awaitingFollowUp = bundle.refs

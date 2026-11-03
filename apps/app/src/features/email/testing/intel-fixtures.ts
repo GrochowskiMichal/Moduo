@@ -24,7 +24,12 @@ export function row(
 }
 
 export function msg(
-  p: Partial<MailMessage> & { id: string; threadId: string; from: string; to?: string[] },
+  p: Partial<Omit<MailMessage, "from" | "to">> & {
+    id: string;
+    threadId: string;
+    from: string;
+    to?: string[];
+  },
 ): MailMessage & { threadId: string } {
   const { from, to, ...rest } = p;
   return {

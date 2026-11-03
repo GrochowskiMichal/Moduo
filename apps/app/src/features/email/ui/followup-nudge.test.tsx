@@ -5,7 +5,7 @@ import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
 import { createMailCommands } from "../commands/triage";
 import { createMailStore } from "../store/mail-store";
-import { FollowupNudges, followupNudgeLabel } from "./followup-nudge";
+import { followupNudgeLabel, FollowupNudges } from "./followup-nudge";
 
 afterEach(cleanup);
 

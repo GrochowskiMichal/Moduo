@@ -94,7 +94,10 @@ export function readSavedSearches(items: readonly EmailSettingsItem[]): SavedSea
     if (item.kind !== "saved_search" || item.deletedAt) continue;
     const query = typeof item.value.query === "string" ? item.value.query.trim() : "";
     if (!query) continue;
-    const name = typeof item.value.name === "string" && item.value.name.trim() ? item.value.name.trim() : query;
+    const name =
+      typeof item.value.name === "string" && item.value.name.trim()
+        ? item.value.name.trim()
+        : query;
     out.push({ id: item.id, name, query, position: item.position });
   }
   return out.sort((a, b) => a.position - b.position);

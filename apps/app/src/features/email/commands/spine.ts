@@ -62,7 +62,8 @@ export type SpinePlan = {
 
 export type SpineResult = { plan: SpinePlan; undo: () => Promise<void> };
 
-export type MailDropTarget = { kind: "task"; taskId: string; label?: string } | { kind: "day"; date: string };
+export type MailDropTarget =
+  { kind: "task"; taskId: string; label?: string } | { kind: "day"; date: string };
 
 function emptyPlan(): SpinePlan {
   return {
@@ -191,7 +192,8 @@ export function createMailSpineCommands(port: MailSpinePort) {
     },
     /** Drag a thread onto a task (link) or a calendar day (a task due that day). */
     drop(thread: MailThreadRow, target: MailDropTarget) {
-      if (target.kind === "day") return run((plan) => convertInto(plan, thread, { dueDate: target.date }));
+      if (target.kind === "day")
+        return run((plan) => convertInto(plan, thread, { dueDate: target.date }));
       return run(async (plan) => {
         const threadRef = await ref(plan, thread);
         await linkOnce(plan, {

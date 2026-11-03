@@ -17,6 +17,16 @@ export function rowSender(row: MailThreadRow): { name: string; email: string } |
   return row.senders[row.senders.length - 1] ?? null;
 }
 
+function addToGroup(g: SenderGroup, row: MailThreadRow, name: string): void {
+  if (row.lastDateMs >= g.lastDateMs) {
+    g.lastDateMs = row.lastDateMs;
+    if (name) g.name = name;
+  }
+  if (row.unread) g.unread += 1;
+  if (!g.threadIds.includes(row.threadId)) g.threadIds.push(row.threadId);
+  if (!g.accountIds.includes(row.accountId)) g.accountIds.push(row.accountId);
+}
+
 /** Groups newsletter rows by sender, newest sender first. */
 export function groupBySender(rows: readonly MailThreadRow[]): SenderGroup[] {
   const by = new Map<string, SenderGroup>();
@@ -33,13 +43,7 @@ export function groupBySender(rows: readonly MailThreadRow[]): SenderGroup[] {
       threadIds: [],
       accountIds: [],
     };
-    if (row.lastDateMs >= g.lastDateMs) {
-      g.lastDateMs = row.lastDateMs;
-      if (s.name) g.name = s.name;
-    }
-    if (row.unread) g.unread += 1;
-    if (!g.threadIds.includes(row.threadId)) g.threadIds.push(row.threadId);
-    if (!g.accountIds.includes(row.accountId)) g.accountIds.push(row.accountId);
+    addToGroup(g, row, s.name);
     by.set(key, g);
   }
   return [...by.values()].sort(

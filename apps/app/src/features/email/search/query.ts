@@ -87,10 +87,25 @@ function dayStart(value: string): number | null {
 
 function resolveIn(value: string, ctx: MailQueryContext): Partial<MailSearchQuery> | null {
   const lower = value.toLowerCase();
-  const named = ctx.mailboxes?.find((mb) => mb.role === "custom" && mb.name.toLowerCase() === lower);
+  const named = ctx.mailboxes?.find(
+    (mb) => mb.role === "custom" && mb.name.toLowerCase() === lower,
+  );
   if (named) return { inMailboxId: named.id };
   const role = ROLE_ALIASES[lower];
   return role ? { inRole: role } : null;
+}
+
+/** `has:` / `is:` flags; false when the value is not one we know. */
+function applyFlag(q: MailSearchQuery, op: string, lower: string): boolean {
+  if (op === "has") {
+    if (lower !== "attachment" && lower !== "attachments") return false;
+    q.hasAttachment = true;
+    return true;
+  }
+  if (lower === "unread") q.isUnread = true;
+  else if (lower === "pinned") q.isPinned = true;
+  else return false;
+  return true;
 }
 
 /** One `op:value` token applied to `q`; false when it stays a word. */
@@ -112,14 +127,8 @@ function applyOperator(q: MailSearchQuery, token: string, ctx: MailQueryContext)
       q.subject.push(value);
       return true;
     case "has":
-      if (lower !== "attachment" && lower !== "attachments") return false;
-      q.hasAttachment = true;
-      return true;
     case "is":
-      if (lower === "unread") q.isUnread = true;
-      else if (lower === "pinned") q.isPinned = true;
-      else return false;
-      return true;
+      return applyFlag(q, op, lower);
     case "in": {
       const hit = resolveIn(value, ctx);
       if (!hit) return false;
@@ -161,7 +170,9 @@ function valueSuggestions(op: string, partial: string, ctx: MailQueryContext): s
     case "in": {
       const names = [
         ...Object.keys(ROLE_ALIASES),
-        ...(ctx.mailboxes ?? []).filter((m) => m.role === "custom").map((m) => m.name.toLowerCase()),
+        ...(ctx.mailboxes ?? [])
+          .filter((m) => m.role === "custom")
+          .map((m) => m.name.toLowerCase()),
       ];
       return [...new Set(names)].filter(starts);
     }

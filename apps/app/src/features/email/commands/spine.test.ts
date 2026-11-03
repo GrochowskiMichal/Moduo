@@ -24,7 +24,9 @@ const thread: MailThreadRow = {
 
 type Link = { id: string; a: SpineEntity; b: SpineEntity; kind: string };
 
-function fakePort(opts: { refExists?: boolean; contact?: boolean; preLinked?: boolean; failNote?: boolean } = {}) {
+function fakePort(
+  opts: { refExists?: boolean; contact?: boolean; preLinked?: boolean; failNote?: boolean } = {},
+) {
   let n = 0;
   const id = (p: string) => `${p}${++n}`;
   const state = {
@@ -79,7 +81,9 @@ function fakePort(opts: { refExists?: boolean; contact?: boolean; preLinked?: bo
       state.events.delete(eid);
     },
     async isLinked(a, b) {
-      return state.links.some((l) => (same(l.a, a) && same(l.b, b)) || (same(l.a, b) && same(l.b, a)));
+      return state.links.some(
+        (l) => (same(l.a, a) && same(l.b, b)) || (same(l.a, b) && same(l.b, a)),
+      );
     },
     async createLink(input) {
       const lid = id("link");

@@ -16,7 +16,9 @@ import type { MailMailbox, MailOpInput, MailTab, MailView } from "@/lib/runtime.
 
 import { createBulkCommands, type ZeroAge } from "../commands/bulk";
 import { createMailCommands } from "../commands/triage";
+import { useSavedSearches } from "../hooks/use-saved-searches";
 import { mailKeyHint, type MailKeyId } from "../keys";
+import { openMailSearch } from "../search/open";
 import {
   advanceAfterRemoval,
   EMPTY_SELECTION,
@@ -33,8 +35,6 @@ import { useMailStore } from "../store/use-mail-store";
 import { FailedActionsBar } from "./failed-actions-bar";
 import { FollowupNudges } from "./followup-nudge";
 import { MailLegendDialog } from "./mail-legend-dialog";
-import { useSavedSearches } from "../hooks/use-saved-searches";
-import { openMailSearch } from "../search/open";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
 import { mailListState, MailListStateView, MailStatusLine } from "./mail-states";
@@ -63,6 +63,46 @@ export type MailShellProps = {
   onIntent?: (intent: MailKeyId, threadIds: string[]) => void;
   initialView?: MailView;
 };
+
+/** The folder name the empty state names. */
+function viewFolderName(view: MailView, mailboxes: Record<string, MailMailbox[]>): string {
+  if (view.kind === "unified") {
+    return UNIFIED_FOLDERS.find((f) => f.role === view.role)?.label ?? "this folder";
+  }
+  if (view.kind === "mailbox") {
+    return (
+      Object.values(mailboxes)
+        .flat()
+        .find((b) => b.id === view.mailboxId)?.name ?? "this folder"
+    );
+  }
+  return "this view";
+}
+
+/** Each account's mailboxes, refetched when the engine's threads change. */
+function useAccountMailboxes(
+  engine: ReturnType<MailStore["getState"]>["engine"],
+  accounts: readonly { id: string }[],
+  version: unknown,
+): Record<string, MailMailbox[]> {
+  const [mailboxes, setMailboxes] = useState<Record<string, MailMailbox[]>>({});
+  useEffect(() => {
+    if (!engine) return;
+    let gone = false;
+    void Promise.all(
+      accounts.map(async (a) => [a.id, await engine.listMailboxes(a.id)] as const),
+    ).then(
+      (pairs) => {
+        if (!gone) setMailboxes(Object.fromEntries(pairs));
+      },
+      () => {},
+    );
+    return () => {
+      gone = true;
+    };
+  }, [engine, accounts, version]);
+  return mailboxes;
+}
 
 export function MailShell({
   store = mailStore,
@@ -102,29 +142,13 @@ export function MailShell({
   const [legend, setLegend] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [cleared, setCleared] = useState(0);
-  const [mailboxes, setMailboxes] = useState<Record<string, MailMailbox[]>>({});
+  const mailboxes = useAccountMailboxes(engine, accounts, version);
 
   // Latest list and selection for stable callbacks.
   const live = useRef({ ids, sel });
   useEffect(() => {
     live.current = { ids, sel };
   });
-
-  useEffect(() => {
-    if (!engine) return;
-    let gone = false;
-    void Promise.all(
-      accounts.map(async (a) => [a.id, await engine.listMailboxes(a.id)] as const),
-    ).then(
-      (pairs) => {
-        if (!gone) setMailboxes(Object.fromEntries(pairs));
-      },
-      () => {},
-    );
-    return () => {
-      gone = true;
-    };
-  }, [engine, accounts, version]);
 
   const hues = useMemo(() => {
     const out: Record<string, LabelColor> = {};
@@ -231,14 +255,7 @@ export function MailShell({
   };
   useAppHotkeys(handlers);
 
-  const folderName =
-    view.kind === "unified"
-      ? (UNIFIED_FOLDERS.find((f) => f.role === view.role)?.label ?? "this folder")
-      : view.kind === "mailbox"
-        ? (Object.values(mailboxes)
-            .flat()
-            .find((b) => b.id === view.mailboxId)?.name ?? "this folder")
-        : "this view";
+  const folderName = viewFolderName(view, mailboxes);
   const state = mailListState({
     accounts,
     loading: win.loading,
