@@ -1,4 +1,4 @@
-// The second half of connecting Google or Zoom. The provider redirects to the
+// The second half of connecting Google, Zoom or Outlook. The provider redirects to the
 // connect function, which only checks its signed state and sends the browser
 // back here with the code; this page then posts code + state with the signed-in
 // session, and the function saves the tokens only when this user is the one who
@@ -11,7 +11,7 @@
 
 import { supabaseClient } from "../../lib/runtime.web.client";
 
-export type ConnectProvider = "google" | "zoom";
+export type ConnectProvider = "google" | "zoom" | "microsoft";
 
 export type ConnectReturn = {
   provider: ConnectProvider;
@@ -38,9 +38,14 @@ export const CONNECT_FINISHED_EVENT = "moduo:connect-finished";
 const FUNCTIONS: Record<ConnectProvider, string> = {
   google: "booking-google-connect",
   zoom: "booking-zoom-connect",
+  microsoft: "calendar-microsoft-web",
 };
 
-const LABELS: Record<ConnectProvider, string> = { google: "Google", zoom: "Zoom" };
+const LABELS: Record<ConnectProvider, string> = {
+  google: "Google",
+  zoom: "Zoom",
+  microsoft: "Outlook",
+};
 
 const PARAMS = ["connect", "connect_code", "connect_state"];
 
@@ -50,7 +55,7 @@ const STARTED_KEY = "moduo:connect-state";
 export function parseConnectReturn(search: string): ConnectReturn | null {
   const params = new URLSearchParams(search);
   const provider = params.get("connect");
-  if (provider !== "google" && provider !== "zoom") return null;
+  if (provider !== "google" && provider !== "zoom" && provider !== "microsoft") return null;
   const code = params.get("connect_code") ?? "";
   const state = params.get("connect_state") ?? "";
   for (const key of PARAMS) params.delete(key);
@@ -91,6 +96,40 @@ function takeStartedState(): string | null {
     return state;
   } catch {
     return null;
+  }
+}
+
+const CONNECTED_KEY = "moduo:connected:";
+
+/** Outlook only: the page adds the login just connected as its calendar account. */
+function markConnected(provider: ConnectProvider, data: unknown): void {
+  if (provider !== "microsoft") return;
+  const email = (data as { email?: unknown } | null)?.email;
+  if (typeof email !== "string" || !email) return;
+  try {
+    sessionStorage.setItem(`${CONNECTED_KEY}${provider}`, email);
+  } catch {
+    // No storage: nothing is added on its own; connecting again adds it.
+  }
+}
+
+/**
+ * The login this tab just finished connecting to `provider` (on its own or
+ * confirmed), until `clearJustConnected`; null when nothing waits.
+ */
+export function justConnected(provider: ConnectProvider): string | null {
+  try {
+    return sessionStorage.getItem(`${CONNECTED_KEY}${provider}`) || null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearJustConnected(provider: ConnectProvider): void {
+  try {
+    sessionStorage.removeItem(`${CONNECTED_KEY}${provider}`);
+  } catch {
+    // Nothing stored.
   }
 }
 
@@ -144,10 +183,13 @@ function failed(provider: ConnectProvider, error: string | null): ConnectOutcome
 
 async function post(back: ConnectReturn): Promise<ConnectOutcome> {
   try {
-    const { error } = await supabaseClient.functions.invoke(FUNCTIONS[back.provider], {
+    const { data, error } = await supabaseClient.functions.invoke(FUNCTIONS[back.provider], {
       body: { action: "finish", code: back.code, state: back.state },
     });
-    if (!error) return { provider: back.provider, status: "connected" };
+    if (!error) {
+      markConnected(back.provider, data);
+      return { provider: back.provider, status: "connected" };
+    }
     return failed(back.provider, await errorCode(error));
   } catch {
     return failed(back.provider, null);

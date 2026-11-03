@@ -291,6 +291,10 @@ export const tauriRuntime: ModuoRuntime = {
     // CALR-19: offers are Supabase-direct too.
     createOffer: webRuntime.calendar.createOffer,
     releaseOffer: webRuntime.calendar.releaseOffer,
+    // Outlook connected on the web: desktop sync falls back to it (no keychain token).
+    startOutlookConnect: webRuntime.calendar.startOutlookConnect,
+    outlookEvents: webRuntime.calendar.outlookEvents,
+    disconnectOutlook: webRuntime.calendar.disconnectOutlook,
     firstOpenBookingLink: webRuntime.calendar.firstOpenBookingLink,
 
     // CAL-6b: fetch raw provider events via the OAuth engine so the frontend

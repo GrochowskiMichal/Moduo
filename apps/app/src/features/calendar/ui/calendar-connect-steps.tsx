@@ -38,7 +38,9 @@ export function ConnectTiles({
           <span className="text-sm text-foreground">{tile.name}</span>
           <span className="text-xs text-muted-foreground">
             {tile.detail}
-            {appOnly && tile.id !== "google" ? " · In the Moduo app" : ""}
+            {appOnly && tile.id !== "google" && tile.id !== "microsoft"
+              ? " · In the Moduo app"
+              : ""}
           </span>
         </button>
       ))}

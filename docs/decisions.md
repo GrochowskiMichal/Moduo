@@ -203,6 +203,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-11-03 · Outlook Calendar connects on the web too, view only, through one function.
 - 2026-10-30 · An event has a history, not comments.
 - 2026-10-30 · Calendar's side panels follow the app's rules; the event panel's links are a task's Linked; no Notes view.
 - 2026-10-30 · A click or drag on the grid opens the composer; Preview as is the glasses toggle alone; the web's new-item key is ⌥N.
