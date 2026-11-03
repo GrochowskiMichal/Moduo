@@ -5,6 +5,16 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.7.1 · 2026-11-03
+
+### Improved
+
+- Calendars you made in Moduo now have the same ⋯ menu as connected ones, including Rename and Delete. Today is outlined in every view, as in the mini calendar.
+
+### Fixed
+
+- Calendar stays in sync on its own in the desktop app, without warnings about blips it fixes by itself. It also opens instantly when you come back to it from another module.
+
 ## 1.7.0 · 2026-11-03
 
 ### New
