@@ -471,13 +471,19 @@ pub(super) enum Resolve {
 }
 
 /// Concrete UIDs for a step against the mailbox as it is now.
-pub(super) fn resolve(tx: &Transaction, account: &str, s: &Step) -> StoreResult<Resolve> {
+/// Resolves every target of a step to its UID, in target order (one UID per
+/// target), or says why the step must wait or fail.
+pub(super) fn resolve_aligned(
+    tx: &Transaction,
+    account: &str,
+    s: &Step,
+) -> StoreResult<Result<(MailboxInfo, Vec<i64>), Resolve>> {
     let mb = match mailbox(tx, &s.mailbox_id) {
         Ok(m) => m,
-        Err(_) => return Ok(Resolve::Fail(format!("folder {} no longer exists", s.path))),
+        Err(_) => return Ok(Err(Resolve::Fail(format!("folder {} no longer exists", s.path)))),
     };
     let rebuilt = s.uidvalidity.is_some() && mb.uidvalidity != s.uidvalidity;
-    let mut uids = Vec::new();
+    let mut uids = Vec::with_capacity(s.targets.len());
     for t in &s.targets {
         if let (Some(uid), false) = (t.uid, rebuilt) {
             uids.push(uid);
@@ -496,19 +502,27 @@ pub(super) fn resolve(tx: &Transaction, account: &str, s: &Step) -> StoreResult<
         match (found, t.uid) {
             (Some(u), _) => uids.push(u),
             (None, None) => {
-                return Ok(Resolve::Wait(format!(
+                return Ok(Err(Resolve::Wait(format!(
                     "waiting for the server copy in {}",
                     s.path
-                )))
+                ))))
             }
             (None, Some(_)) => {
-                return Ok(Resolve::Fail(format!(
+                return Ok(Err(Resolve::Fail(format!(
                     "{} was rebuilt on the server and the message is no longer there",
                     s.path
-                )))
+                ))))
             }
         }
     }
+    Ok(Ok((mb, uids)))
+}
+
+pub(super) fn resolve(tx: &Transaction, account: &str, s: &Step) -> StoreResult<Resolve> {
+    let (mb, mut uids) = match resolve_aligned(tx, account, s)? {
+        Ok(v) => v,
+        Err(r) => return Ok(r),
+    };
     uids.sort_unstable();
     uids.dedup();
     Ok(Resolve::Ok(ResolvedStep {

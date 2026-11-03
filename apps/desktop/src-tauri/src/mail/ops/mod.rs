@@ -454,14 +454,12 @@ impl Store {
                 if st.targets.iter().all(|t| t.uid.is_some()) {
                     continue;
                 }
-                if let Resolve::Ok(r) = resolve(&tx, &op.account_id, st)? {
-                    if r.uids.len() == st.targets.len() {
-                        for (t, u) in st.targets.iter_mut().zip(r.uids.iter()) {
-                            t.uid = Some(*u);
-                        }
-                        st.uidvalidity = r.uidvalidity;
-                        learned = true;
+                if let Ok((mb, uids)) = resolve_aligned(&tx, &op.account_id, st)? {
+                    for (t, u) in st.targets.iter_mut().zip(uids) {
+                        t.uid = Some(u);
                     }
+                    st.uidvalidity = mb.uidvalidity;
+                    learned = true;
                 }
             }
             if learned {
@@ -490,19 +488,20 @@ impl Store {
             let mut changed = false;
             let mut fail = None;
             for s in op.args.steps.iter_mut().filter(|s| s.mailbox_id == mailbox_id) {
-                match resolve(&tx, &op.account_id, s)? {
-                    Resolve::Ok(r) => {
-                        if r.uidvalidity != s.uidvalidity {
-                            s.uidvalidity = r.uidvalidity;
-                            let mut it = r.uids.iter();
-                            for t in s.targets.iter_mut() {
-                                t.uid = it.next().copied().or(t.uid);
+                match resolve_aligned(&tx, &op.account_id, s)? {
+                    Ok((mb, uids)) => {
+                        if mb.uidvalidity != s.uidvalidity {
+                            s.uidvalidity = mb.uidvalidity;
+                            // One UID per target, in target order: no target
+                            // keeps a UID from the old validity.
+                            for (t, u) in s.targets.iter_mut().zip(uids) {
+                                t.uid = Some(u);
                             }
                             changed = true;
                         }
                     }
-                    Resolve::Wait(_) => {}
-                    Resolve::Fail(why) => fail = Some(why),
+                    Err(Resolve::Fail(why)) => fail = Some(why),
+                    Err(_) => {}
                 }
             }
             if let Some(why) = fail {
