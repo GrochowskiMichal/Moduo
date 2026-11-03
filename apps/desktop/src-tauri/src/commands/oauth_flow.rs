@@ -231,11 +231,13 @@ pub(crate) async fn run_oauth_authorization_code_flow(
 /// Exchange a refresh token for a fresh access token. Google's refresh response
 /// omits `refresh_token` — the caller preserves the stored one. A `400
 /// invalid_grant` maps to [`OAuthRefreshError::InvalidGrant`] (terminal → reauth).
+/// `scope` is for Microsoft, whose refresh grant names the scopes again.
 pub(crate) async fn refresh_access_token(
     token_endpoint: &str,
     client_id: &str,
     client_secret: Option<&str>,
     refresh_token: &str,
+    scope: Option<&str>,
 ) -> Result<OAuthTokenResponse, OAuthRefreshError> {
     let client = reqwest::Client::new();
     let mut form_params: Vec<(&str, &str)> = vec![
@@ -245,6 +247,9 @@ pub(crate) async fn refresh_access_token(
     ];
     if let Some(secret) = client_secret {
         form_params.push(("client_secret", secret));
+    }
+    if let Some(scope) = scope {
+        form_params.push(("scope", scope));
     }
     let resp = client
         .post(token_endpoint)

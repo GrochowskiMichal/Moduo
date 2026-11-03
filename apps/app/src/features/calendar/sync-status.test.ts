@@ -1,17 +1,18 @@
-// AC2: when one account fails to sync, the banner names it, says what is stale
-// since when and what is current, and offers Try again; that account's events
-// keep showing with a sync mark; the week never reads "Nothing scheduled".
-// This file pins the pure half: which accounts are stale, the banner's words,
-// the rail's "Not synced · 9:12" and the empty-week hint's guard.
+// AC2, quiet by default: a sync that fails retries in the background and says
+// nothing for its first QUIET_STALE_MS. Past that, the account's events carry the
+// sync mark and its rail row a muted "Last synced …", never a banner. A banner
+// speaks only when the person must act: a login Google stopped accepting, or a
+// calendar read that failed outright. The week never reads "Nothing scheduled"
+// while anything is stale. This file pins the pure half.
 
 import { describe, expect, it } from "@rstest/core";
 
 import type { CalendarAccountModel } from "./events";
 import {
-  accountStateLabel,
+  accountSyncNote,
   calendarSyncStatus,
   emptyWeekHint,
-  notSyncedLabel,
+  QUIET_STALE_MS,
   syncBannerText,
   syncSinceLabel,
 } from "./sync-status";
@@ -60,64 +61,64 @@ const ana = account({
   displayLabel: "Ana",
 });
 
-describe("a failed account is scoped and its events stay", () => {
-  it("marks only the failing account's calendars as stale", () => {
-    const status = calendarSyncStatus({ accounts: [personal, work, ana], degraded: false });
-    expect([...status.staleAccountIds]).toEqual(["work"]);
-    expect(status.faulted).toBe(true);
-    expect(status.loadFailed).toBe(false);
-    expect(status.faults).toHaveLength(1);
-    expect(status.faults[0].login).toBe("robin.hale@gmail.com");
-    expect(status.faults[0].calendars).toEqual(["Work"]);
-    expect(status.faults[0].staleSinceMs).toBe(nineTwelve.getTime());
+describe("a failing account is quiet until it has been stale for hours", () => {
+  it("a failure this morning says nothing: no mark, no banner, no rail note", () => {
+    const status = calendarSyncStatus({ accounts: [personal, work, ana], degraded: false, now });
+    expect(status.staleAccountIds.size).toBe(0);
+    expect(status.faulted).toBe(false);
+    expect(syncBannerText(status, now)).toBeNull();
+    expect(accountSyncNote(work, now)).toBeNull();
+    expect(status.current).toEqual(["Your calendar", "Personal", "Work", "Ana"]);
   });
 
-  it("says what is current: your own calendar first, then the accounts that synced", () => {
-    const status = calendarSyncStatus({ accounts: [personal, work, ana], degraded: false });
+  it("just under the quiet hours it is still quiet; at them it is stale", () => {
+    const at = nineTwelve.getTime();
+    expect(
+      calendarSyncStatus({ accounts: [work], degraded: false, now: at + QUIET_STALE_MS - 1 })
+        .faulted,
+    ).toBe(false);
+    expect(
+      calendarSyncStatus({ accounts: [work], degraded: false, now: at + QUIET_STALE_MS }).faulted,
+    ).toBe(true);
+  });
+
+  it("past the quiet hours its events carry the mark and its row says when it last synced, never a banner", () => {
+    const status = calendarSyncStatus({ accounts: [personal, family, ana], degraded: false, now });
+    expect([...status.staleAccountIds]).toEqual(["family"]);
+    expect(status.faulted).toBe(true);
+    expect(status.faults[0].login).toBe("robin.hale@gmail.com");
+    expect(status.faults[0].staleSinceMs).toBe(sundayEvening.getTime());
+    expect(syncBannerText(status, now)).toBeNull();
+    expect(accountSyncNote(family, now)).toEqual({
+      text: `Last synced ${syncSinceLabel(sundayEvening.getTime(), now)}`,
+      tone: "muted",
+    });
     expect(status.current).toEqual(["Your calendar", "Personal", "Ana"]);
   });
 
-  it("the banner names the account, what is stale since when, and what is current", () => {
-    const status = calendarSyncStatus({ accounts: [personal, work, ana], degraded: false });
-    const text = syncBannerText(status, now);
-    expect(text).not.toBeNull();
-    expect(text).toContain("robin.hale@gmail.com");
-    expect(text).toContain("Google Calendar");
-    expect(text).toContain(`Work shows as of ${formatTimeOfDay(nineTwelve.getTime())}`);
-    expect(text).toContain("Your calendar, Personal and Ana are current");
-  });
-
-  it("two stale calendars of one login read as one fault, as of the older sync", () => {
-    const status = calendarSyncStatus({ accounts: [personal, work, family], degraded: false });
-    expect(status.faults).toHaveLength(1);
-    expect(status.faults[0].calendars).toEqual(["Work", "Family"]);
-    expect(status.faults[0].staleSinceMs).toBe(sundayEvening.getTime());
-    const text = syncBannerText(status, now)!;
-    expect(text).toContain("Work and Family show as of");
-    expect(text).toContain(syncSinceLabel(sundayEvening.getTime(), now));
-  });
-
-  it("a calendar that never synced says so instead of a time", () => {
+  it("a calendar that never synced says so quietly", () => {
     const fresh = account({ ...work, lastSyncAt: null });
-    const text = syncBannerText(calendarSyncStatus({ accounts: [fresh], degraded: false }), now)!;
-    expect(text).toContain("Work hasn't synced yet");
-    expect(text).toContain("Your calendar is current");
+    const status = calendarSyncStatus({ accounts: [fresh], degraded: false, now });
+    expect(status.staleAccountIds.has("work")).toBe(true);
+    expect(syncBannerText(status, now)).toBeNull();
+    expect(accountSyncNote(fresh, now)).toEqual({ text: "Not synced yet", tone: "muted" });
   });
 
-  it("everything synced: no banner, nothing stale", () => {
-    const status = calendarSyncStatus({ accounts: [personal, ana], degraded: false });
+  it("everything synced: nothing stale, nothing said", () => {
+    const status = calendarSyncStatus({ accounts: [personal, ana], degraded: false, now });
     expect(status.faulted).toBe(false);
     expect(status.staleAccountIds.size).toBe(0);
     expect(syncBannerText(status, now)).toBeNull();
+    expect(accountSyncNote(personal, now)).toBeNull();
   });
 
   it("a removed account is never a fault", () => {
-    const gone = account({ ...work, deletedAt: new Date(now).toISOString() });
-    expect(calendarSyncStatus({ accounts: [gone], degraded: false }).faulted).toBe(false);
+    const gone = account({ ...family, deletedAt: new Date(now).toISOString() });
+    expect(calendarSyncStatus({ accounts: [gone], degraded: false, now }).faulted).toBe(false);
   });
 
   it("a read that failed is a fault of its own, said plainly", () => {
-    const status = calendarSyncStatus({ accounts: [], degraded: true });
+    const status = calendarSyncStatus({ accounts: [], degraded: true, now });
     expect(status.loadFailed).toBe(true);
     expect(status.faulted).toBe(true);
     const text = syncBannerText(status, now)!;
@@ -132,11 +133,6 @@ describe("since labels", () => {
     const earlier = syncSinceLabel(sundayEvening.getTime(), now);
     expect(earlier).toContain(formatTimeOfDay(sundayEvening.getTime()));
     expect(earlier).toMatch(/Sunday/);
-  });
-
-  it("the account group says Not synced · 9:12", () => {
-    expect(notSyncedLabel(work, now)).toBe(`Not synced · ${formatTimeOfDay(nineTwelve.getTime())}`);
-    expect(notSyncedLabel({ lastSyncAt: null }, now)).toBe("Not synced");
   });
 });
 
@@ -166,7 +162,7 @@ describe("a revoked Google connection asks to reconnect (AC37)", () => {
   });
 
   it("a reauth account is stale like a failed one: its events keep the sync mark", () => {
-    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false });
+    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false, now });
     expect([...status.staleAccountIds]).toEqual(["family"]);
     expect(status.faulted).toBe(true);
     expect(status.faults).toHaveLength(1);
@@ -176,19 +172,27 @@ describe("a revoked Google connection asks to reconnect (AC37)", () => {
   });
 
   it("a plain sync failure is not a reauth", () => {
-    const status = calendarSyncStatus({ accounts: [personal, work], degraded: false });
+    const status = calendarSyncStatus({ accounts: [personal, family], degraded: false, now });
     expect(status.faults[0].reauth).toBe(false);
   });
 
+  it("a reauth asks at once: it never waits out the quiet hours", () => {
+    const justNow = { ...familyReauth, lastSyncAt: new Date(now - 60_000).toISOString() };
+    const status = calendarSyncStatus({ accounts: [justNow], degraded: false, now });
+    expect(status.faults[0].reauth).toBe(true);
+    expect(syncBannerText(status, now)).toContain("Google stopped accepting");
+  });
+
   it("one calendar needing reconnecting makes its whole login a reauth fault", () => {
-    const status = calendarSyncStatus({ accounts: [work, familyReauth], degraded: false });
+    const workOld = { ...work, lastSyncAt: sundayEvening.toISOString() };
+    const status = calendarSyncStatus({ accounts: [workOld, familyReauth], degraded: false, now });
     expect(status.faults).toHaveLength(1);
     expect(status.faults[0].reauth).toBe(true);
     expect(status.faults[0].accountIds).toEqual(["work", "family"]);
   });
 
   it("the banner names the address, what shows as of when, and the booking-link risk", () => {
-    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false });
+    const status = calendarSyncStatus({ accounts: [personal, familyReauth], degraded: false, now });
     expect(syncBannerText(status, now)).toBe(
       `Google stopped accepting Moduo's access to robin.hale@gmail.com. Family shows as of ${syncSinceLabel(sundayEvening.getTime(), now)}, and booking links can't see it until you reconnect.`,
     );
@@ -196,26 +200,29 @@ describe("a revoked Google connection asks to reconnect (AC37)", () => {
 
   it("two calendars of the revoked login: they show, and booking links can't see them", () => {
     const workReauth = { ...work, status: "reauth" };
-    const status = calendarSyncStatus({ accounts: [workReauth, familyReauth], degraded: false });
+    const status = calendarSyncStatus({
+      accounts: [workReauth, familyReauth],
+      degraded: false,
+      now,
+    });
     const text = syncBannerText(status, now) ?? "";
     expect(text).toContain("Work and Family show as of");
     expect(text).toContain("booking links can't see them until you reconnect.");
   });
 
-  it("a reauth next to another account's sync failure says both", () => {
-    const anaFailed = { ...ana, status: "error" };
+  it("a reauth next to another account's stale sync speaks only of the reauth", () => {
+    const anaStale = { ...ana, status: "error", lastSyncAt: sundayEvening.toISOString() };
     const status = calendarSyncStatus({
-      accounts: [personal, familyReauth, anaFailed],
+      accounts: [personal, familyReauth, anaStale],
       degraded: false,
+      now,
     });
     const text = syncBannerText(status, now) ?? "";
     expect(text).toContain("Google stopped accepting Moduo's access to robin.hale@gmail.com.");
-    expect(text).toContain("ana@halefounders.co");
+    expect(text).not.toContain("ana@halefounders.co");
   });
 
-  it("the account group says Reconnect", () => {
-    expect(accountStateLabel(familyReauth, now)).toBe("Reconnect");
-    expect(accountStateLabel(work, now)).toBe(notSyncedLabel(work, now));
-    expect(accountStateLabel(personal, now)).toBeNull();
+  it("the account's row says Reconnect, as a warning", () => {
+    expect(accountSyncNote(familyReauth, now)).toEqual({ text: "Reconnect", tone: "warning" });
   });
 });

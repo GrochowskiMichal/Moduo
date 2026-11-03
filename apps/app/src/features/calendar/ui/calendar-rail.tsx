@@ -30,7 +30,7 @@ import type { CalendarAccountModel } from "../events";
 import { hueAttrs } from "../hue";
 import { parseDayKey } from "../lens";
 import type { CalendarPrefs } from "../prefs";
-import { notSyncedLabel } from "../sync-status";
+import { accountSyncNote } from "../sync-status";
 import { laneOwners, teammateHues } from "../teammates";
 import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
 import { CalendarColorPicker } from "./calendar-color-picker";
@@ -662,6 +662,8 @@ function AccountRow({
 }) {
   const [colorOpen, setColorOpen] = useState(false);
   const pending = useRef<(() => void) | null>(null);
+  // Quiet while background syncs may still fix it (sync-status.ts).
+  const note = accountSyncNote(account);
   return (
     <Popover open={colorOpen} onOpenChange={setColorOpen}>
       <PopoverAnchor asChild>
@@ -677,7 +679,7 @@ function AccountRow({
             shown={shown}
             title={`${name} — ${providerLabel(account.provider)}`}
           />
-          {account.status === "error" ? (
+          {note ? (
             onReconnect ? (
               <button
                 type="button"
@@ -687,7 +689,14 @@ function AccountRow({
                 Reconnect
               </button>
             ) : (
-              <span className="shrink-0 text-2xs text-warning">{notSyncedLabel(account)}</span>
+              <span
+                className={cn(
+                  "shrink-0 text-2xs",
+                  note.tone === "warning" ? "text-warning" : "text-subtle-foreground",
+                )}
+              >
+                {note.text}
+              </span>
             )
           ) : null}
           <div className={ACTIONS}>
