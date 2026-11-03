@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-04 · MR-16 (partial): the cutover is `src/mail/migrate.rs` (`run(redb, store)`), and the legacy deletion is tracked by a shrink-only ratchet, not done.
 - 2026-11-04 · MR-11: compose is `features/email/compose/` over a separate `MailComposeEngine` port (`lib/runtime.types.mail-compose.ts`, `runtime.email.compose`, Tauri `mail_save_draft`/`mail_list_drafts`/`mail_get_draft`/`mail_discard_draft`/`mail_queue_send`/`mail_undo_send`/`mail_list_outbox`/`mail_correspondents`/`mail_size_limit`), kept apart from `MailEngine` so sibling blocks' engine edits don't collide.
 - 2026-11-04 · MR-12: sender intelligence glue is `src/mail/rules.rs` over MR-3's classifier, and the views are prop-driven components in `features/email/{views,panels}` plus `suggest-contact.ts`.
 - 2026-11-04 · MR-14: spine gestures on the engine are `features/email/commands/spine.ts` over one injected `MailSpinePort` (upsertRef, task/note/event create+delete, isLinked, createLink/deleteLink, resolveContactId, markDone).

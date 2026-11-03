@@ -133,15 +133,15 @@ Moduo's differentiation is **not** any single module; it is the layer that lets 
 
 A full multi-account Spark replacement on a cloud-first web app would mean building/operating a server-side mail relay (IMAP/SMTP sync, OAuth app verification, token vault, security review). **At alpha we do not.** Instead:
 
-- The **full client lives on desktop**, on the existing Rust engine (`apps/desktop/src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
+- The **full client lives on desktop**, on the rebuilt Rust engine (`apps/desktop/src-tauri/src/mail/`, specs/mail-rebuild.md) → one SQLite file per signed-in user (`<app data>/mail/<user_id>/mail.db`, WAL + FTS5, bodies and attachments as files beside it). Mail never leaves the Mac. The legacy engine (`commands/email*` → redb) is retired at cutover: `mail::migrate` carries accounts over and drops its redb tables. Moduo-side mail settings that follow the user live in `email_settings_items` (Supabase).
 - **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) is synced to Supabase so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop.
 - The full **web** email client is a post-alpha decision, made once it's proven to matter to customers (not just to us).
 
 ```
   Desktop only                                  All clients (web + desktop)
   ┌──────────────────────────┐                  ┌───────────────────────────┐
-  │ Rust IMAP/SMTP engine     │  metadata only   │ Supabase: email_refs       │
-  │  → redb (full bodies,     │ ───────────────▶ │  (id, thread, from, subj,  │
+  │ Rust mail engine (SQLite) │  metadata only   │ Supabase: email_refs       │
+  │  (full bodies, FTS,       │ ───────────────▶ │  (id, thread, from, subj,  │
   │     folders, flags, send) │                  │   date, account)           │
   └──────────────────────────┘                  │  ↕ entity_links            │
         full client UX                           │  → task / contact / note   │
