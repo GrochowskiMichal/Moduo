@@ -108,6 +108,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Desktop app, Tauri, releases → [decisions/desktop-release.md](decisions/desktop-release.md)
 
+- 2026-11-02 · The Calendar sign-in clients are baked into desktop release builds.
 - 2026-10-20 · The desktop shell is trimmed: 33 dead commands gone, `opt-level = "s"`, the window starts hidden, macOS 14 is the floor, and IMAP/SMTP stay on native-tls for now.
 - 2026-10-19 · Release builds use `lto = true`, `codegen-units = 1` and `strip = true`.
 - 2026-10-19 · Download links follow the update server's current version, not the frozen GitHub bridge.
@@ -202,6 +203,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Calendar and booking links → [decisions/calendar.md](decisions/calendar.md)
 
+- 2026-11-03 · Outlook Calendar connects on the web too, view only, through one function.
 - 2026-10-30 · An event has a history, not comments.
 - 2026-10-30 · Calendar's side panels follow the app's rules; the event panel's links are a task's Linked; no Notes view.
 - 2026-10-30 · A click or drag on the grid opens the composer; Preview as is the glasses toggle alone; the web's new-item key is ⌥N.

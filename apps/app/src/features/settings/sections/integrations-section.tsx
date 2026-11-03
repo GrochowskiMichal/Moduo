@@ -10,12 +10,14 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
+import { connectErrorText } from "../../calendar/connect-error";
 import type { CalendarAccountModel } from "../../calendar/events";
 import {
   disconnectGoogleLogin,
   ensureGoogleCalendarAccounts,
   startWebGoogleConnect,
 } from "../../calendar/google-web";
+import { disconnectOutlookLogin, startWebOutlookConnect } from "../../calendar/outlook-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import { NewEventsToSetting } from "../../calendar/ui/new-events-to-setting";
 import {
@@ -37,7 +39,7 @@ import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
 import { SettingsSectionShell } from "./section-shell";
 
-/** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
+/** CalDAV and ICS still use the desktop keychain. Google and Outlook work on the web too. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 type OAuthResult = {
@@ -138,28 +140,36 @@ export function IntegrationsSection() {
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
     if (!runtime || !workspaceId) return;
-    if (!IS_DESKTOP && provider === "google") {
+    if (!IS_DESKTOP) {
       setCalBusy(provider);
       setCalError(null);
       try {
-        await startWebGoogleConnect();
+        // Both come back on the Calendar page, which adds what was connected.
+        await (provider === "google" ? startWebGoogleConnect() : startWebOutlookConnect());
       } catch (e) {
         setCalError(e instanceof Error ? e.message : String(e));
         setCalBusy(null);
       }
       return;
     }
-    if (!IS_DESKTOP) return;
     setCalBusy(provider);
     setCalError(null);
     try {
       const result = await invoke<OAuthResult>(command);
       // Register the account in Supabase so web + desktop both see it. The
-      // provider event sync (fetch → mirror) runs from the desktop engine.
+      // provider event sync (fetch → mirror) runs from the desktop engine. A
+      // login already added on the web (its id lowercased) keeps that one row,
+      // or every event would show twice; it syncs through the web sign-in.
+      const sameLogin = calAccounts.find(
+        (a) =>
+          a.provider === provider &&
+          !a.deletedAt &&
+          a.externalId.toLowerCase() === result.accountId.toLowerCase(),
+      );
       await runtime.calendar.upsertAccount({
         workspaceId,
         provider,
-        externalId: result.accountId,
+        externalId: sameLogin?.externalId ?? result.accountId,
         displayLabel: result.email || result.displayName,
         color: null,
         status: "ok",
@@ -167,7 +177,9 @@ export function IntegrationsSection() {
       });
       await loadAccounts();
     } catch (e) {
-      setCalError(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      console.warn("[integrations] calendar connect", provider, raw);
+      setCalError(connectErrorText(provider, raw));
     } finally {
       setCalBusy(null);
     }
@@ -203,6 +215,10 @@ export function IntegrationsSection() {
         ? rows[0].externalId.slice("google:".length).split(":")[0]
         : "";
       if (email) await disconnectGoogleLogin(email);
+      // A web sign-in of this Outlook login goes too (none from a desktop-only connect).
+      if (rows[0].provider === "microsoft") {
+        await disconnectOutlookLogin(rows[0].externalId.replace(/^outlook:/, ""));
+      }
       for (const row of rows) {
         await cleanupCredentialsForRemoval({
           isDesktop: IS_DESKTOP,
@@ -340,7 +356,7 @@ export function IntegrationsSection() {
         <h3 className="font-display text-base text-foreground">Calendar</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Google Calendar is a two-way copy — events you add on a linked Google calendar are created
-          in Google too. Outlook and CalDAV still connect from the desktop app.
+          in Google too. Outlook is view only; CalDAV still connects from the desktop app.
         </p>
         {workspaceId && userId ? (
           <div className="mt-4">
@@ -353,7 +369,6 @@ export function IntegrationsSection() {
             const connected = calAccounts.filter((a) => a.provider === key);
             const logins = groupRailAccounts(connected);
             const loginCount = connectedLoginCount(connected);
-            const canConnect = IS_DESKTOP || key === "google";
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -366,27 +381,19 @@ export function IntegrationsSection() {
                       <span className="text-xs text-muted-foreground">
                         {loginCount > 0
                           ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
-                          : canConnect
-                            ? "Not connected"
-                            : "Connect from the desktop app"}
+                          : "Not connected"}
                       </span>
                     </div>
                   </div>
-                  {canConnect ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleConnect(key, command)}
-                      disabled={calBusy === key}
-                    >
-                      {calBusy === key ? "Connecting…" : "Connect account"}
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" size="sm" disabled>
-                      Desktop only
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleConnect(key, command)}
+                    disabled={calBusy === key}
+                  >
+                    {calBusy === key ? "Connecting…" : "Connect account"}
+                  </Button>
                 </div>
 
                 {logins.length > 0 ? (

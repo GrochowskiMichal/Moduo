@@ -1,6 +1,7 @@
-// Back from connecting Google or Zoom (say when it didn't take, ask first when
-// this tab didn't start it: see connect-return.ts), and open the calendar
-// picker for a signed-in Google login with nothing picked yet (CALR-20).
+// Back from connecting Google, Zoom or Outlook (say when it didn't take, ask
+// first when this tab didn't start it: see connect-return.ts), open the calendar
+// picker for a signed-in Google login with nothing picked yet (CALR-20), and add
+// an Outlook login just connected.
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { CONNECT_FINISHED_EVENT, connectDoneMessage, takeConnectNotice } from "../connect-return";
 import { ensureGoogleCalendarAccounts } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
+import { ensureOutlookCalendarAccounts } from "../outlook-web";
 import { dispatchOpenCalendarAccounts } from "./calendar-accounts-events";
 
 type Input = {
@@ -45,6 +47,7 @@ export function useCalendarConnectReturn({ runtime, workspaceId, calendar }: Inp
   const accountKey = calendar.accounts
     .map((account) => `${account.externalId}:${account.deletedAt ?? ""}`)
     .join("|");
+  const reload = calendar.reload;
   const accountsRef = useRef(calendar.accounts);
   useEffect(() => {
     accountsRef.current = calendar.accounts;
@@ -65,9 +68,19 @@ export function useCalendarConnectReturn({ runtime, workspaceId, calendar }: Inp
       } catch (err) {
         console.warn("[calendar] google link", err);
       }
+      try {
+        const added = await ensureOutlookCalendarAccounts({
+          runtime,
+          workspaceId,
+          accounts: accountsRef.current,
+        });
+        if (!cancelled && added) void reload();
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Couldn't add the Outlook calendar.");
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [runtime, workspaceId, calendar.loading, calendar.reload, accountKey, connectTick]);
+  }, [runtime, workspaceId, calendar.loading, reload, accountKey, connectTick]);
 }

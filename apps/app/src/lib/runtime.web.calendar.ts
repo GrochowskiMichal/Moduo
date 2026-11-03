@@ -23,6 +23,7 @@ import { collectTruncations, READ_CAPS } from "./paged-select";
 import { jsonObject, type RpcArgs, runRpc } from "./runtime.db";
 import type { CalendarRuntime } from "./runtime.types";
 import { webCalendarOffers } from "./runtime.web.calendar.offers";
+import { webCalendarOutlook } from "./runtime.web.calendar.outlook";
 import { supabaseClient } from "./runtime.web.client";
 import { firstRow, selectCapped } from "./runtime.web.shared";
 
@@ -584,11 +585,14 @@ export const webCalendar: CalendarRuntime = {
       removed: Number(data?.removed ?? 0),
     };
   },
-  // Outlook, CalDAV, and ICS still sync from the desktop keychain. Google
-  // uses the refresh token stored at connect, so the web app can mirror it.
+  // CalDAV and ICS still sync from the desktop keychain. Google and Outlook
+  // use the refresh token stored at connect, so the web app can mirror them.
   // Throwing (rather than returning []) keeps the sync loop from tombstoning
   // a provider this runtime cannot read.
   async fetchExternalEvents({ provider, externalAccountId, timeMin, timeMax }) {
+    if (provider === "microsoft") {
+      return webCalendarOutlook.outlookEvents!({ externalAccountId, timeMin, timeMax });
+    }
     if (provider !== "google") throw new Error("web_provider_sync_skipped");
     const { fetchGoogleWebEvents } = await import("../features/calendar/google-web");
     return fetchGoogleWebEvents({ externalAccountId, timeMin, timeMax });
@@ -817,4 +821,5 @@ export const webCalendar: CalendarRuntime = {
   },
 
   ...webCalendarOffers,
+  ...webCalendarOutlook,
 };

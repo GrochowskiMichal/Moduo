@@ -55,6 +55,8 @@ export const WIDGET_TYPES = [
   // TV-H1: Tasks' Team (with Chat's "now" line, CH70) and Upcoming widgets.
   "team",
   "upcoming",
+  // An ambient mix placed around your head, generated live (features/soundspace).
+  "soundspace",
 ] as const;
 
 export type WidgetType = (typeof WIDGET_TYPES)[number];

@@ -31,6 +31,7 @@ import {
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings, isSettingsSectionId } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
+import { SoundspaceNowPlayingChip } from "../../features/soundspace/ui/now-playing-chip";
 import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
@@ -610,6 +611,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 renders nothing). */}
             <FocusRunFollower />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
+            {/* A playing Soundspace (Home widget), pausable from any module. */}
+            <SoundspaceNowPlayingChip />
             <FocusSessionChip />
             <HelpMenu
               onWhatsInTasks={
