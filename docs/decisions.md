@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-04 · MR-10 (partial): the reader's policy layer is `features/email/reader/sanitize.ts` over the reviewed `utils/email-html.ts`, plus `src/mail/{unsubscribe,avatar}.rs`.
 - 2026-11-04 · MR-3: the sync engine is `src/mail/sync/`, its algorithms generic over a `MailServer` trait (async-imap `ImapServer<T>` for real, an in-memory fake with real UID/MODSEQ semantics for unit tests).
 - 2026-11-04 · MR-4: bodies, attachments and MIME live in `src/mail/{mime,bodies,invite}`; mail-parser 0.11 parses, every IMAP fetch goes through one `RawSource` (`ImapSource` over a pooled session: EXAMINE once per mailbox, `BODY.PEEK` only, so downloads never mark mail read).
 - 2026-11-04 · MR-5: the triage outbox is `src/mail/ops/` over the store's `ops` table; each row stores a pre-op snapshot (`undo_json`: flags, memberships, thread state) and planned server steps (`args_json.steps`, each with the `uidvalidity` it was planned against).
