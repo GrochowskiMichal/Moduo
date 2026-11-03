@@ -10,6 +10,7 @@ pub mod contracts;
 pub mod fixture;
 pub mod invite;
 pub mod mailto;
+pub mod migrate;
 pub mod mime;
 pub mod ops;
 pub mod perf;

@@ -8,6 +8,9 @@ use std::{
 
 use anyhow::Context;
 use redb::{Database, ReadableTable, TableDefinition};
+
+mod legacy_mail;
+pub use legacy_mail::LEGACY_EMAIL_TABLES;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::domain::{
