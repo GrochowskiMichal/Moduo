@@ -37,6 +37,7 @@ import {
 } from "../google-web";
 import type { CalendarModuleApi } from "../hooks/use-calendar-module";
 import { newEventsCalendars, resolveNewEventsTo, withNewEventsTo } from "../new-events-to";
+import { disconnectOutlookLogin, startWebOutlookConnect } from "../outlook-web";
 import type { CalendarPrefs } from "../prefs";
 import { connectOrigin, zoomRequest } from "./booking-links";
 import {
@@ -63,6 +64,8 @@ type Pending = {
   /** Every live row when Remove ran: a CalDAV secret stays while a sibling calendar uses it. */
   all: CalendarAccountModel[];
   email: string | null;
+  /** The Microsoft login whose web sign-in goes with it. */
+  outlook: string | null;
   undo: () => Promise<void>;
 };
 
@@ -198,6 +201,7 @@ export function CalendarAccountsDialog({
       }).catch(() => {});
     }
     if (done.email) await disconnectGoogleLogin(done.email).catch(() => {});
+    if (done.outlook) await disconnectOutlookLogin(done.outlook).catch(() => {});
   }, [isDesktop]);
 
   const reconnect = useCallback(
@@ -305,6 +309,10 @@ export function CalendarAccountsDialog({
         accounts,
         all,
         email: login.provider === "google" ? login.login : null,
+        outlook:
+          login.provider === "microsoft"
+            ? (accounts[0]?.externalId.replace(/^outlook:/, "") ?? null)
+            : null,
         undo,
       };
       setRemovedLabel(login.login);
@@ -351,13 +359,19 @@ export function CalendarAccountsDialog({
 
   const onTile = (provider: ConnectProvider) => {
     if (provider === "google") return setStep("consent");
-    if (!isDesktop) {
-      toast(`Connect ${provider === "ics" ? "a calendar link" : "it"} in the Moduo app.`);
-      return;
-    }
     if (provider === "microsoft") {
+      if (!isDesktop) {
+        void startWebOutlookConnect().catch((e) =>
+          toast.error(e instanceof Error ? e.message : "Couldn't connect Outlook."),
+        );
+        return;
+      }
       setOpen(false);
       dispatchOpenSettings({ section: "integrations" });
+      return;
+    }
+    if (!isDesktop) {
+      toast(`Connect ${provider === "ics" ? "a calendar link" : "it"} in the Moduo app.`);
       return;
     }
     setOpen(false);

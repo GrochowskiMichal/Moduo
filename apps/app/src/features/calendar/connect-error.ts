@@ -13,10 +13,9 @@ const CODE = /^[a-z0-9_]+(?::|$)/;
 
 export function connectErrorText(provider: ConnectProvider, raw: string): string {
   const name = NAMES[provider];
+  // Both connect on the web too, and a login connected there syncs here.
   if (/^missing_[a-z]+_client_id\b/.test(raw)) {
-    return provider === "google"
-      ? `Connecting ${name} isn't set up in this version of the app. Connect it at app.moduo.app instead; it shows here too.`
-      : `Connecting ${name} isn't set up in this version of the app yet.`;
+    return `Connecting ${name} isn't set up in this version of the app. Connect it at app.moduo.app instead; it shows here too.`;
   }
   if (CODE.test(raw)) return `Couldn't connect ${name}. Try again.`;
   return raw;

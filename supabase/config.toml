@@ -440,6 +440,10 @@ import_map = "./functions/deno.json"
 verify_jwt = false
 import_map = "./functions/deno.json"
 
+[functions.calendar-microsoft-web]
+verify_jwt = false
+import_map = "./functions/deno.json"
+
 [functions.create-checkout-session]
 verify_jwt = false
 import_map = "./functions/deno.json"

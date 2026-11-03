@@ -233,9 +233,29 @@ export type CalendarRuntime = {
   firstOpenBookingLink?(input: { workspaceId: string; userId: string }): Promise<string | null>;
 
   /**
+   * Outlook Calendar through calendar-microsoft-web (view only; web and desktop
+   * share it). A refusal throws an Error whose message is the function's code
+   * (`outlook_reauth`, `outlook_not_connected`, …).
+   */
+  /** The Microsoft consent URL for a connect that returns to `origin`. */
+  startOutlookConnect?(origin: string): Promise<string>;
+  /**
+   * Every calendar of one `outlook:<email>` login in the window, never a partial
+   * list. No web token for the login, or no Microsoft client on the server,
+   * throws `web_provider_sync_skipped` (the sync loop leaves the account alone).
+   */
+  outlookEvents?(input: {
+    externalAccountId: string;
+    timeMin: string;
+    timeMax: string;
+  }): Promise<Record<string, unknown>[]>;
+  /** Drop the stored web sign-in of a Microsoft login. */
+  disconnectOutlook?(email: string): Promise<void>;
+
+  /**
    * Fetch a connected account's RAW provider events for a window. Desktop
-   * uses the Tauri OAuth engine. Web fetches Google through the stored
-   * refresh token and throws for providers it cannot read (so the sync
+   * uses the Tauri OAuth engine. Web fetches Google and Outlook through the
+   * stored refresh token and throws for providers it cannot read (so the sync
    * loop does not treat "unsupported" as "this calendar is empty").
    * `externalAccountId` is the provider account id.
    */

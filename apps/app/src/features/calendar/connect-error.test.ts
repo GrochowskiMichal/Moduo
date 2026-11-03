@@ -15,7 +15,9 @@ describe("a failed Connect in words", () => {
       "microsoft",
       "missing_microsoft_client_id:set MODUO_CALENDAR_MICROSOFT_CLIENT_ID",
     );
-    expect(outlook).toBe("Connecting Outlook isn't set up in this version of the app yet.");
+    expect(outlook).toBe(
+      "Connecting Outlook isn't set up in this version of the app. Connect it at app.moduo.app instead; it shows here too.",
+    );
   });
 
   it("turns any other code into a plain retry line", () => {

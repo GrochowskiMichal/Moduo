@@ -1,7 +1,7 @@
 // Calendar sync — the sync WRITER loop. Fetches each connected account's raw
 // provider events, maps them, and pushes them through the mirror op. Desktop
-// reads the OS keychain. Web reads Google through the stored refresh token and
-// skips Outlook, CalDAV, and ICS (those credentials stay on the desktop).
+// reads the OS keychain. Web reads Google and Outlook through the stored refresh
+// token and skips CalDAV and ICS (those credentials stay on the desktop).
 // Runs on the calendar page: mount + tab-wake + every 15 min + manual refresh.
 
 import { useCallback, useEffect, useRef } from "react";
@@ -31,6 +31,14 @@ function isLocalCredentialAbsence(err: unknown): boolean {
   );
 }
 
+function isMissingOutlookKeychain(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return (
+    msg.includes("outlook_calendar_missing_tokens") ||
+    msg.includes("outlook_calendar_missing_access_token")
+  );
+}
+
 function isMissingGoogleKeychain(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err ?? "");
   return (
@@ -45,7 +53,7 @@ export function useCalendarSync(opts: {
   accounts: CalendarAccountModel[];
   /** The currently-mirrored events — used to diff provider-side deletions. */
   events: CalendarEventModel[];
-  /** Web syncs Google only. Other providers throw and are left untouched. */
+  /** Web syncs Google and Outlook. Other providers throw and are left untouched. */
   enabled: boolean;
   /** Reload the module bundle after a sync actually changed rows. */
   onSynced: () => void;
@@ -81,6 +89,16 @@ export function useCalendarSync(opts: {
             // shared account as broken.
             if (provider === "google" && isMissingGoogleKeychain(err)) {
               raw = await fetchGoogleWebEvents({
+                externalAccountId: acc.externalId,
+                timeMin,
+                timeMax,
+              });
+            } else if (
+              provider === "microsoft" &&
+              isMissingOutlookKeychain(err) &&
+              runtime.calendar.outlookEvents
+            ) {
+              raw = await runtime.calendar.outlookEvents({
                 externalAccountId: acc.externalId,
                 timeMin,
                 timeMax,

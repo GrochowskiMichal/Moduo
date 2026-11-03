@@ -1,5 +1,6 @@
 /**
- * Account-linking OAuth for booking-google-connect and booking-zoom-connect.
+ * Account-linking OAuth for booking-google-connect, booking-zoom-connect and
+ * calendar-microsoft-web.
  *
  * The provider's callback is a browser redirect with no Moduo session, so it
  * can't know who consented, and it doesn't decide whose account the tokens are
@@ -16,7 +17,7 @@
 
 import { allowListedOrigin, APP_ORIGINS, CANONICAL_APP_ORIGIN } from "./app-origin.ts";
 
-export type ConnectProvider = "google" | "zoom";
+export type ConnectProvider = "google" | "zoom" | "microsoft";
 
 export type ConnectState = { uid: string; origin: string; exp: number };
 
