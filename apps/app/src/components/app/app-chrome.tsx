@@ -16,7 +16,9 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
+import { MailEngineProvider } from "../../features/email/engine/mail-engine-provider";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { useMailBadge } from "../../features/email/store/use-mail-store";
 import { FocusRunFollower } from "../../features/focus/focus-run-follower";
 import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
@@ -187,6 +189,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   // Email unread badge (AC3): the Email page broadcasts its count on change.
   const [emailUnread, setEmailUnread] = useState(0);
+  const mailBadge = useMailBadge();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -587,7 +590,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                   onClick={() => void navigate({ to: tab.href })}
                   badgeCount={
                     tab.module === "email"
-                      ? emailUnread
+                      ? mailBadge.live
+                        ? mailBadge.count
+                        : emailUnread
                       : tab.module === "chat"
                         ? chatBadge.count
                         : 0
@@ -601,6 +606,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <div className="@container flex flex-row items-center justify-end gap-1">
             {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
             <EmailDueWebSweep />
+            {/* MR-8 — the desktop mail engine, app-wide (renders nothing). */}
+            <MailEngineProvider />
             <UpdateOnLaunch />
             {/* "Updated to X · See what's new" once, and the What's new dialog (REL-4). */}
             <WhatsNewOnLaunch />

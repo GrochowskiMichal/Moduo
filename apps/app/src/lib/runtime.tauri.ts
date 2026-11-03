@@ -15,6 +15,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { parseSyncDescriptor } from "../features/calendar/sync";
+import { createTauriMailEngine } from "./runtime.tauri.mail-engine";
 import type {
   IntegrationStatusItem,
   ModuoRuntime,
@@ -159,6 +160,8 @@ export const tauriRuntime: ModuoRuntime = {
   },
 
   email: {
+    // The rebuilt engine (MR-8); `MailEngineProvider` gates it until MR-3/MR-5 land.
+    engine: createTauriMailEngine(),
     listAccounts() {
       return invoke<any[]>("email_accounts_list");
     },

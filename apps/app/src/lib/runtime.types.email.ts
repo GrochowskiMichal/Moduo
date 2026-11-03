@@ -107,6 +107,8 @@ export type EmailModuleBundle = {
 };
 
 export type EmailRuntime = {
+  /** The rebuilt local mail engine (MR-8); desktop only, absent on the web. */
+  engine?: import("./runtime.types.mail-engine").MailEngine;
   // ── MR-7 mail settings items (Supabase, both platforms) ────────────────
   /** Your live items, or with `since` every row changed after it (tombstones too). */
   listSettings(input?: { since?: string | null }): Promise<EmailSettingsItem[]>;
