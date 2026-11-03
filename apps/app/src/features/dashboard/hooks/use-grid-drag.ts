@@ -119,10 +119,22 @@ function samePlacement(a: WidgetInstance[], b: WidgetInstance[]): boolean {
   return true;
 }
 
-/** A press that lands on a real control (remove/resize button, input…) must not start a drag. */
-function isInteractiveTarget(el: EventTarget | null): boolean {
+/**
+ * A press that lands on a real control (remove/resize button, input, a slider's
+ * thumb or track…) must not start a drag or a long-press. Neither may a press
+ * from a widget's popover: it's portaled out of the widget, but React still
+ * bubbles it to the widget's onPointerDown.
+ */
+function isInteractiveTarget(event: Pick<React.PointerEvent, "target" | "currentTarget">): boolean {
+  const el = event.target;
   if (!(el instanceof Element)) return false;
-  return Boolean(el.closest("button, a, input, textarea, select, [role='button'], [data-no-drag]"));
+  const host = event.currentTarget;
+  if (host instanceof Element && !host.contains(el)) return true;
+  return Boolean(
+    el.closest(
+      "button, a, input, textarea, select, [role='button'], [role='slider'], [data-slot='slider'], [data-no-drag]",
+    ),
+  );
 }
 
 export function useGridDrag({
@@ -218,7 +230,7 @@ export function useGridDrag({
     (widgetId: string, event: React.PointerEvent) => {
       if (event.button !== 0) return; // primary button only
       if (gestureRef.current) return; // one gesture at a time
-      if (isInteractiveTarget(event.target)) return; // a control press, not a drag
+      if (isInteractiveTarget(event)) return; // a control press, not a drag
       const grid = gridRef.current;
       if (!grid) return;
       const widget = widgetsRef.current.find((w) => w.id === widgetId);
