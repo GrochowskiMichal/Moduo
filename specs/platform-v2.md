@@ -126,7 +126,7 @@ Decided on the owner's behalf. Durable ones are in `docs/decisions/workflow.md`,
   - Static files never pass through the Worker.
   - Config values are Worker environment variables per environment (staging, production).
   - *Rejected:* fetching `/config.json` at boot, which adds a blocking request.
-- **App config:** a new `src/lib/public-config.ts` replaces the 15 direct `import.meta.env.PUBLIC_*` reads in 9 files. It falls back to build-time defines, which desktop keeps for now.
+- **App config:** a new `apps/app/src/lib/public-config.ts` replaces the 15 direct `import.meta.env.PUBLIC_*` reads in 9 files. It falls back to build-time defines, which desktop keeps for now.
 - **Old chunks:** each deploy uploads the merged hashed files of the current build plus the previous 3, taken from R2 `builds/<build>/static/`, which CI writes on every deploy. A chunk-load handler reloads once.
   - *Rejected:* waiting for native skew protection, which Cloudflare doesn't offer for static assets.
 - **Deploys** run from GitHub Actions with `wrangler versions upload` (previews) and `wrangler deploy` (staging and prod), not from Workers Builds, so there's one CI system.

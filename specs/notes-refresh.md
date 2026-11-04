@@ -215,31 +215,31 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 
 | Test (file · name) | Proves | Plain-English: what it checks |
 | --- | --- | --- |
-| `src/features/notes/experience.test.ts` · "experience pref" | AC1 | The switch reads and writes the synced preference, defaults to classic, and flushes the open note before swapping. |
-| `src/features/notes/sections.test.ts` · "stable sections" | AC2, AC18 | Stored Inbox ignores children, favorites follow each user's own order, archived and trashed notes leave every section, and the footer counts are right. |
-| `src/features/notes/sync/meta-outbox.test.ts` · "file + favorite replay" | AC2, AC3 | Filing and favoriting queue offline and replay in order without duplicates. |
-| `src/features/notes/draft-note.test.ts` · "lazy create" | AC3 | An untouched draft is dropped on navigation, the first character creates exactly once, and a double ⌘N keeps only the draft you typed into. |
-| `src/features/notes/shell/tree-keyboard.test.ts` · "tree keys" | AC4 | The arrow keys, Enter and Backspace do what a file tree does, for collapsed, expanded and leaf rows. |
-| `src/features/notes/shell/drop-intent.test.ts` · "drop intent" | AC4 | The pointer position picks before, inside or after; Inbox → Pages files the note; a drop into a descendant is refused. |
-| `src/features/notes/shell/breadcrumb.test.ts` · "crumbs" | AC5 | The breadcrumb walks a note's ancestors and shows "Inbox" for Inbox notes. |
-| `src/features/notes/shell/notes-sidebar.test.tsx` · "tree roles" | AC4 | The rendered sidebar exposes tree, treeitem, aria-expanded and aria-level. |
-| `src/features/notes/shell/notes-sidebar.stories.tsx` | AC2, AC4 | Visual states: default, empty Inbox, favorites, view-only, search, footer sub-views. |
+| `apps/app/src/features/notes/experience.test.ts` · "experience pref" | AC1 | The switch reads and writes the synced preference, defaults to classic, and flushes the open note before swapping. |
+| `apps/app/src/features/notes/sections.test.ts` · "stable sections" | AC2, AC18 | Stored Inbox ignores children, favorites follow each user's own order, archived and trashed notes leave every section, and the footer counts are right. |
+| `apps/app/src/features/notes/sync/meta-outbox.test.ts` · "file + favorite replay" | AC2, AC3 | Filing and favoriting queue offline and replay in order without duplicates. |
+| `apps/app/src/features/notes/draft-note.test.ts` · "lazy create" | AC3 | An untouched draft is dropped on navigation, the first character creates exactly once, and a double ⌘N keeps only the draft you typed into. |
+| `apps/app/src/features/notes/shell/tree-keyboard.test.ts` · "tree keys" | AC4 | The arrow keys, Enter and Backspace do what a file tree does, for collapsed, expanded and leaf rows. |
+| `apps/app/src/features/notes/shell/drop-intent.test.ts` · "drop intent" | AC4 | The pointer position picks before, inside or after; Inbox → Pages files the note; a drop into a descendant is refused. |
+| `apps/app/src/features/notes/shell/breadcrumb.test.ts` · "crumbs" | AC5 | The breadcrumb walks a note's ancestors and shows "Inbox" for Inbox notes. |
+| `apps/app/src/features/notes/shell/notes-sidebar.test.tsx` · "tree roles" | AC4 | The rendered sidebar exposes tree, treeitem, aria-expanded and aria-level. |
+| `apps/app/src/features/notes/shell/notes-sidebar.stories.tsx` | AC2, AC4 | Visual states: default, empty Inbox, favorites, view-only, search, footer sub-views. |
 | `e2e/notes/shell.spec.ts` (env-gated) | AC1–AC5 | Switch on → ⌘N → type → the note sits in Inbox → drag into Pages → reload → still there; an untouched ⌘N leaves nothing. |
-| `src/features/notes/note-meta.test.ts` · "meta line" | AC6, AC11 | Shapes the chips, "Edited … by …" and the agent-edit marker from links plus activity. |
-| `src/features/notes/editor/markdown.test.ts` · "single dialect" | AC9 | Markdown → editor → markdown is byte-stable for every listed construct; the old `doc-text` walker is gone. |
-| `src/features/notes/editor/block-move.test.ts` · "move under merge" | AC7 | Moving a block while a peer edits inside it keeps the text, in a two-doc merge. |
-| `src/features/notes/editor/note-link.test.ts` · "[[ picker" | AC8 | `[[` matches notes, falls back to create, and inserts a chip plus a link. |
-| `src/features/notes/editor/task-line-structure.test.ts` · "one meta node" | AC10 | The node transform keeps exactly one meta node at the end of a task line through edits, paste and remote updates. |
-| `src/features/notes/tasks/task-line.test.ts` (extended) | AC10 | Inline due, schedule and assignee patches map to the right task ops. |
+| `apps/app/src/features/notes/note-meta.test.ts` · "meta line" | AC6, AC11 | Shapes the chips, "Edited … by …" and the agent-edit marker from links plus activity. |
+| `apps/app/src/features/notes/editor/markdown.test.ts` · "single dialect" | AC9 | Markdown → editor → markdown is byte-stable for every listed construct; the old `doc-text` walker is gone. |
+| `apps/app/src/features/notes/editor/block-move.test.ts` · "move under merge" | AC7 | Moving a block while a peer edits inside it keeps the text, in a two-doc merge. |
+| `apps/app/src/features/notes/editor/note-link.test.ts` · "[[ picker" | AC8 | `[[` matches notes, falls back to create, and inserts a chip plus a link. |
+| `apps/app/src/features/notes/editor/task-line-structure.test.ts` · "one meta node" | AC10 | The node transform keeps exactly one meta node at the end of a task line through edits, paste and remote updates. |
+| `apps/app/src/features/notes/tasks/task-line.test.ts` (extended) | AC10 | Inline due, schedule and assignee patches map to the right task ops. |
 | `supabase/functions/moduo-mcp/modules/notes.test.ts` · "crdt write" (Deno) | AC11 | Append and update produce Yjs updates that a client doc materializes into the same markdown. |
-| `src/features/notes/sync/agent-undo.test.ts` · "undo agent only" | AC11 | Undoing an agent-origin update keeps the human edits made after it. |
+| `apps/app/src/features/notes/sync/agent-undo.test.ts` · "undo agent only" | AC11 | Undoing an agent-origin update keeps the human edits made after it. |
 | `supabase/tests/notes_realtime.test.sql` + `scripts/local/notes-realtime-probe.ts` (local Realtime) | AC12 | A member without access is refused and never appears; a viewer hears saves until the share is taken away (while still connected); nobody can send on a live topic or forge a viewer list. |
-| `src/features/notes/comments/anchors.test.ts` · "anchor lifecycle" | AC13 | Mark ids map to threads, a deleted anchor's thread becomes detached, and resolve unmarks. |
-| `src/features/notes/editor/image-node.test.ts` + `export.test.ts` (extended) | AC14 | An image node round-trips through markdown as `moduo://attachment/<id>`, and the zip bundles its file. |
+| `apps/app/src/features/notes/comments/anchors.test.ts` · "anchor lifecycle" | AC13 | Mark ids map to threads, a deleted anchor's thread becomes detached, and resolve unmarks. |
+| `apps/app/src/features/notes/editor/image-node.test.ts` + `export.test.ts` (extended) | AC14 | An image node round-trips through markdown as `moduo://attachment/<id>`, and the zip bundles its file. |
 | `src/components/app/palette/search-providers.test.ts` · "merge + rank" | AC15 | Title hits rank first, then body hits, then entities; an empty query gives recents; offline body search is labelled. |
-| `src/features/notes/import.test.ts` (extended) | AC16 | A trashed id re-imports, an oversize archive is refused, and progress phases are reported. |
+| `apps/app/src/features/notes/import.test.ts` (extended) | AC16 | A trashed id re-imports, an oversize archive is refused, and progress phases are reported. |
 | `e2e/notes/smoke.spec.ts` (env-gated) | AC17 | The default UI is New Notes, and capture, nest, task line, comment and publish work end to end. |
-| `src/features/notes/ops-manifest.test.ts` (extended) | AC18 | The manifest still registers and the MCP tool list is unchanged. |
+| `apps/app/src/features/notes/ops-manifest.test.ts` (extended) | AC18 | The manifest still registers and the MCP tool list is unchanged. |
 
 ## Assumptions & technical decisions
 
@@ -295,7 +295,7 @@ The lead pillars are a drastic UI/UX improvement plus writing feel and speed, so
 **Shell (NR-2)**
 
 14. **confident** · **The switch** is a synced user preference `notesExperience: 'classic' | 'next'` in the `preferences` sync domain.
-    - The route component picks `NotesClassicPage` (today's file, renamed) or the new `NotesShell` in `src/features/notes/shell/`.
+    - The route component picks `NotesClassicPage` (today's file, renamed) or the new `NotesShell` in `apps/app/src/features/notes/shell/`.
     - Both share the runtime, the engine and the data.
     - The classic code is frozen: bug fixes only, no features.
 15. **confident** · **DnD** uses dnd-kit with `PointerSensor` plus `KeyboardSensor` (Tasks' pattern). It keeps the `entityDrag` payload so cross-module drops still link. The sharing confirm moves to the `AlertDialog` primitive.
@@ -394,7 +394,7 @@ The core (NR-1–NR-7, NR-12) never cuts.
   - `NoteMeta` gains `inInbox` and `fullWidth`.
   - `notesV2.listFavorites`, `setFavorite`, `fileNote`.
   - Meta-outbox op kinds `file` and `favorite`, which replay FIFO and are idempotent.
-- **Pure:** `src/features/notes/sections.ts` `buildSidebarSections({ notes, favorites })` → `{ favorites, inbox, pages: TreeNode[], footer: { published, archived, trashed } }`. `tree.ts` keeps tree building and loses section derivation once classic is deleted; until then classic keeps its own derivation.
+- **Pure:** `apps/app/src/features/notes/sections.ts` `buildSidebarSections({ notes, favorites })` → `{ favorites, inbox, pages: TreeNode[], footer: { published, archived, trashed } }`. `tree.ts` keeps tree building and loses section derivation once classic is deleted; until then classic keeps its own derivation.
 - **Oracle:**
   - `sections.test.ts` and `meta-outbox.test.ts` (file + favorite);
   - a runtime row-mapping test;
@@ -402,7 +402,7 @@ The core (NR-1–NR-7, NR-12) never cuts.
 
 ### NR-2 detail (Definition-of-Ready)
 
-- **Files:** `src/features/notes/shell/` holds:
+- **Files:** `apps/app/src/features/notes/shell/` holds:
   - `notes-shell.tsx` (composition only, no logic over ~150 lines per file);
   - `notes-sidebar.tsx`, `sidebar-tree.tsx`, `sidebar-footer-views.tsx`;
   - `notes-top-bar.tsx`, `note-breadcrumb.tsx`, `note-view.tsx`;

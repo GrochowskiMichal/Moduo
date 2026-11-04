@@ -156,15 +156,15 @@ Why now: Maciej and Mike build Moduo with agents that open PRs all day. The agen
 | `supabase/functions/github-webhook/handler.test.ts` · "uninstall greys, keeps links" | AC15 | installation.deleted marks the connection and items not synced; links stay |
 | `supabase/tests/github.test.sql` · "visibility follows workspace and linked task" | AC16 | A non-member can't read an item; a guest sees it only through a task they can see |
 | `supabase/tests/github.test.sql` · "automatic move once, never backwards" | AC12 | The status op as the integration actor moves forward once per event and logs GitHub (app) |
-| `src/features/spine/references/github.test.ts` · "chip and card facts from an item" | AC7, AC8 | State → glyph and token, title shortening, card lines, issue variant |
-| `src/features/spine/references/ui/github-reference.test.tsx` · "hover shows the card, click opens GitHub" | AC7 | Hover card appears; click calls the external open |
-| `src/features/spine/references/ui/github-reference.test.tsx` · "not synced and unconnected chips" | AC5, AC15 | Greyed chip with "Not synced"; plain `owner/repo#n` with no state |
-| `src/features/spine/editor/github-paste.test.ts` · "own line → card, inside a sentence → chip" | AC5 | The paste rule in descriptions, comments and notes |
-| `src/features/spine/editor/mention-menu-plugin.test.tsx` · "/ GitHub PR or issue searches connected repos" | AC6, AC18 | Entry shows only when connected; picking inserts the chip |
-| `src/features/tasks/ui/task-github-group.test.tsx` · "Pull requests group" | AC9 | Shown only with items, folded after 3, newest first, not duplicated in Linked |
-| `src/features/tasks/ui/task-row.test.tsx` · "PR glyph and count" | AC10 | Most relevant state wins; count when several |
-| `src/features/tasks/ui/github-suggestion.test.tsx` · "Start and Mark done suggestions" | AC11 | Right line per event; one click applies as the person; × dismisses for that event |
-| `src/features/settings/sections/github-card.test.tsx` · "admin connects, member reads" | AC1, AC18 | Admin sees Connect/Disconnect and the automatic setting; a member sees the read-only line |
+| `apps/app/src/features/spine/references/github.test.ts` · "chip and card facts from an item" | AC7, AC8 | State → glyph and token, title shortening, card lines, issue variant |
+| `apps/app/src/features/spine/references/ui/github-reference.test.tsx` · "hover shows the card, click opens GitHub" | AC7 | Hover card appears; click calls the external open |
+| `apps/app/src/features/spine/references/ui/github-reference.test.tsx` · "not synced and unconnected chips" | AC5, AC15 | Greyed chip with "Not synced"; plain `owner/repo#n` with no state |
+| `apps/app/src/features/spine/editor/github-paste.test.ts` · "own line → card, inside a sentence → chip" | AC5 | The paste rule in descriptions, comments and notes |
+| `apps/app/src/features/spine/editor/mention-menu-plugin.test.tsx` · "/ GitHub PR or issue searches connected repos" | AC6, AC18 | Entry shows only when connected; picking inserts the chip |
+| `apps/app/src/features/tasks/ui/task-github-group.test.tsx` · "Pull requests group" | AC9 | Shown only with items, folded after 3, newest first, not duplicated in Linked |
+| `apps/app/src/features/tasks/ui/task-row.test.tsx` · "PR glyph and count" | AC10 | Most relevant state wins; count when several |
+| `apps/app/src/features/tasks/ui/github-suggestion.test.tsx` · "Start and Mark done suggestions" | AC11 | Right line per event; one click applies as the person; × dismisses for that event |
+| `apps/app/src/features/settings/sections/github-card.test.tsx` · "admin connects, member reads" | AC1, AC18 | Admin sees Connect/Disconnect and the automatic setting; a member sees the read-only line |
 | `supabase/functions/moduo-mcp/github.test.ts` · "tasks_get lists PRs; link by URL" | AC17 | Linked items appear with state; linking needs Tasks + Links at Edit |
 | Playwright `tests/github.spec.ts` · "webhook to chip, live" | AC2, AC14 | A signed fake webhook against the local stack links a task and its chip updates without reload |
 
@@ -185,7 +185,7 @@ Each is the agent's choice, deferred to it by Maciej during grilling: confirmed 
   - There is no `ws.admin` key; the admin check uses `ws.manage_members`.
   - `ACTIVITY_ACTOR_TYPES` has no parse / normalize / is helpers yet, and `vocabularies.test.ts` pins the lists.
   - `links_op_create`'s newest body is `20261017112000_chat_v2_mention_rows.sql`, and it refuses unknown origins. GH-2's automatic links need their own definer path.
-  - "Connected by" for a former member needs a SECURITY DEFINER read (and a `READ_RPCS` line in `src/lib/min-build.ts`).
+  - "Connected by" for a former member needs a SECURITY DEFINER read (and a `READ_RPCS` line in `apps/app/src/lib/min-build.ts`).
 - **Secrets** (app private key converted to PKCS#8, webhook secret, client secret `GITHUB_APP_CLIENT_SECRET`) are Edge Function secrets set by Maciej, never in the repo. App ID and client ID are public config.
 - **Tables** (one migration in GH-1, workspace-scoped, service-role writes, member reads via RLS):
   - `github_installations` (workspace, installation id, account login and type, status active/suspended/removed, connected_by, auto_move boolean default false);

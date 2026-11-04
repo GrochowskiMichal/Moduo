@@ -61,7 +61,7 @@ Also shipped along the way: the **MCP connector** now exposes **6 modules (~60 t
 ## 4. Architecture at a glance
 
 - **Stack:** Tauri 2 + React 19 + Rspack/Rsbuild + TanStack Router + Tailwind v4 · Lexical (rich text) · Yjs (Notes collab) · Storybook 10 · Rstest/Playwright · Bun.
-- **Two runtimes, one seam.** Everything data goes through `getRuntime()` → a `ModuoRuntime` interface. The web runtime is the **only** implementation with real logic: `apps/app/src/lib/runtime.web.ts` composes one file per module (`runtime.web.<module>.ts`) over a single Supabase client (`runtime.web.client.ts`); only `lib/runtime*` files call `.rpc()`/`.from()` (2026-10-20 split; see docs/architecture.md). `src/lib/runtime.tauri.ts` is a desktop composite that delegates almost everything back to the web runtime and only uses Tauri `invoke()` for genuinely-native surfaces.
+- **Two runtimes, one seam.** Everything data goes through `getRuntime()` → a `ModuoRuntime` interface. The web runtime is the **only** implementation with real logic: `apps/app/src/lib/runtime.web.ts` composes one file per module (`runtime.web.<module>.ts`) over a single Supabase client (`runtime.web.client.ts`); only `lib/runtime*` files call `.rpc()`/`.from()` (2026-10-20 split; see docs/architecture.md). `apps/app/src/lib/runtime.tauri.ts` is a desktop composite that delegates almost everything back to the web runtime and only uses Tauri `invoke()` for genuinely-native surfaces.
 - **Cloud-first.** **Supabase is the source of truth for every new model.** redb (desktop) is **paused** — kept only for the future offline/"lite" tier and legacy modules not yet migrated. *Never make redb load-bearing for a new feature.*
 - **Writes = intent ops.** State-changing mutations go through `SECURITY DEFINER` Postgres RPCs named `<module>_op_<name>` (permission-check + activity-log + invariant-keeping, all in one transaction). **No raw client table writes for state changes.** Reads are RLS-filtered `.from()` selects.
 - **The module contract (4 pillars).** A module isn't "done" until it has: (1) intent ops, (2) spine wiring, (3) MCP tools (a manifest the connector exposes), (4) a dashboard widget. This is why new modules get AI access + activity + notifications nearly for free. See [`docs/moduo-module-contract.md`](../moduo-module-contract.md).
@@ -75,14 +75,14 @@ Pillars: **Ops** (intent-op RPCs) · **Spine** (registry + links + activity) · 
 
 | Module | Status | Ops / Spine / MCP / Widget | Where it lives |
 |---|---|---|---|
-| **Tasks** — the reference implementation (Plan/Board/List/Timeline + Focus/Execute mode + schedule loop) | **Shipped** | ✅ / ✅ / ✅ (15) / ✅ | `src/features/tasks/`, `src/routes/pages/tasks-page.tsx` |
-| **Spine** — registry, typed links, EntityHub, drag, @mention, comments, notifications, suggestions | **Shipped** | ✅ / *is the substrate* / ✅ (7) / ✅ | `src/features/spine/`, `src/lib/entity-links.ts`, `module-registry.ts` |
-| **Contacts** — folk-lite CRM, hubs, roll-up, CSV import | **Shipped** | ✅ / ✅ / ✅ (10) / ✅ | `src/features/contacts/`, `contacts-page.tsx` |
-| **Calendar** — task-lens time-blocking, the loop, external mirror | **Shipped** | ✅ / ✅ / ✅ (9) / ✅ | `src/features/calendar/`, Rust `src-tauri/src/commands/{calendar,caldav}.rs` |
-| **Notes** — cloud-synced Lexical + Yjs, task-lines, multiplayer, publish | **Shipped** | ✅ / ✅ / ✅ (10) / ✅ | `src/features/notes/`, `notes-page.tsx`, `published-note-page.tsx` |
-| **Email** — desktop IMAP/SMTP, lazy tissue refs, convert→task | **Shipped** | ✅ / ✅ (refs) / ✅ (9) / ✅ | `src/features/email/`, Rust `src-tauri/src/commands/email*` |
-| **Dashboard / Home** — widget grid + registry (the widget host) | **Shipped** | grid ops / consumes spine / ✅ / *is the host* | `src/features/dashboard/`, `home-page.tsx` |
-| **Settings** — account, billing, workspace, appearance, preferences, advanced, API keys | **Shipped** — the DF-19 overhaul landed 2026-07-11/12 (DF-19a…i: grouped Personal/Workspace/App nav, Preferences + Advanced filled for real, API keys their own section, workspace mgmt inlined, delete-account edge fn, notification toggles) | raw RLS writes + `user_preferences` / — / — / — | `src/features/settings/` |
+| **Tasks** — the reference implementation (Plan/Board/List/Timeline + Focus/Execute mode + schedule loop) | **Shipped** | ✅ / ✅ / ✅ (15) / ✅ | `apps/app/src/features/tasks/`, `apps/app/src/routes/pages/tasks-page.tsx` |
+| **Spine** — registry, typed links, EntityHub, drag, @mention, comments, notifications, suggestions | **Shipped** | ✅ / *is the substrate* / ✅ (7) / ✅ | `apps/app/src/features/spine/`, `apps/app/src/lib/entity-links.ts`, `module-registry.ts` |
+| **Contacts** — folk-lite CRM, hubs, roll-up, CSV import | **Shipped** | ✅ / ✅ / ✅ (10) / ✅ | `apps/app/src/features/contacts/`, `contacts-page.tsx` |
+| **Calendar** — task-lens time-blocking, the loop, external mirror | **Shipped** | ✅ / ✅ / ✅ (9) / ✅ | `apps/app/src/features/calendar/`, Rust `apps/desktop/src-tauri/src/commands/{calendar,caldav}.rs` |
+| **Notes** — cloud-synced Lexical + Yjs, task-lines, multiplayer, publish | **Shipped** | ✅ / ✅ / ✅ (10) / ✅ | `apps/app/src/features/notes/`, `notes-page.tsx`, `published-note-page.tsx` |
+| **Email** — desktop IMAP/SMTP, lazy tissue refs, convert→task | **Shipped** | ✅ / ✅ (refs) / ✅ (9) / ✅ | `apps/app/src/features/email/`, Rust `apps/desktop/src-tauri/src/commands/email*` |
+| **Dashboard / Home** — widget grid + registry (the widget host) | **Shipped** | grid ops / consumes spine / ✅ / *is the host* | `apps/app/src/features/dashboard/`, `home-page.tsx` |
+| **Settings** — account, billing, workspace, appearance, preferences, advanced, API keys | **Shipped** — the DF-19 overhaul landed 2026-07-11/12 (DF-19a…i: grouped Personal/Workspace/App nav, Preferences + Advanced filled for real, API keys their own section, workspace mgmt inlined, delete-account edge fn, notification toggles) | raw RLS writes + `user_preferences` / — / — / — | `apps/app/src/features/settings/` |
 | **Time-tracking** — time→invoice | **Paused (stub)** | ❌ | native Rust command + a desktop-only widget shell; revives with Finance post-alpha |
 | **Finance** — CSV-first money-flow + invoicing | **Planned — post-alpha, out of v1** | — | design brief only: [`.design/finance/BRIEF.md`](../../.design/finance/BRIEF.md) |
 
@@ -92,11 +92,11 @@ Pillars: **Ops** (intent-op RPCs) · **Spine** (registry + links + activity) · 
 
 ## 6. Frontend & design system
 
-- **Shell:** `src/components/app/app-chrome.tsx` (left module nav, top panel, notification center, command palette) + `feature-panels-shell.tsx` (the shared 3-pane list/main/right-panel that Tasks/Calendar/Contacts/Notes compose). `src/routes/layouts/app-gate.tsx` resolves auth+workspace before any page mounts.
-- **Tokens are the single source of truth:** `src/styles/tokens.css` (OKLCH). Customization axes: `data-theme` (light/dark/system) · `data-shade` (6) · `data-accent` (8, AA-verified, default mono/white — hues are opt-in) · `data-density` (comfortable/compact/dense) · `data-font` (default Geist). **Density is the size axis** (the text-size picker was retired). Cross-device sync via `src/lib/prefs-sync.ts`.
+- **Shell:** `apps/app/src/components/app/app-chrome.tsx` (left module nav, top panel, notification center, command palette) + `feature-panels-shell.tsx` (the shared 3-pane list/main/right-panel that Tasks/Calendar/Contacts/Notes compose). `apps/app/src/routes/layouts/app-gate.tsx` resolves auth+workspace before any page mounts.
+- **Tokens are the single source of truth:** `apps/app/src/styles/tokens.css` (OKLCH). Customization axes: `data-theme` (light/dark/system) · `data-shade` (6) · `data-accent` (8, AA-verified, default mono/white — hues are opt-in) · `data-density` (comfortable/compact/dense) · `data-font` (default Geist). **Density is the size axis** (the text-size picker was retired). Cross-device sync via `apps/app/src/lib/prefs-sync.ts`.
 - **Hard rules** (enforced by `lint:css`/`lint:tw` + the `moduo-design-quality` skill): no raw hex, no arbitrary Tailwind values for color/spacing/radius/font, no inline-style color overrides, primitives wrap shadcn. Full rules: [`DESIGN_RULES.md`](../../docs/DESIGN_RULES.md) (R1–R10).
-- **Primitives:** **39** components in `src/components/ui/` — mostly shadcn wrappers, plus ~12 bespoke Moduo primitives (`eyebrow`, `detail-title`, `complete-toggle`, `property-row`, `segmented-control`, `empty-state`, `icon-button`, `tag-input`, `date-field`, `kbd`, `field`, `moduo-mark`). **69 Storybook stories**, 37 of them on the primitives. *(Counts as of 2026-08-14.)*
-- **Route convergence:** the app converged from **23 exploratory routes to ~7 core features** — Home, Notes, Tasks, Calendar, Email, Contacts, Settings. 14 page files in `src/routes/pages/`. **Don't add top-level routes without an explicit ask** (a new route needs 5 separate wirings — see gotchas).
+- **Primitives:** **39** components in `apps/app/src/components/ui/` — mostly shadcn wrappers, plus ~12 bespoke Moduo primitives (`eyebrow`, `detail-title`, `complete-toggle`, `property-row`, `segmented-control`, `empty-state`, `icon-button`, `tag-input`, `date-field`, `kbd`, `field`, `moduo-mark`). **69 Storybook stories**, 37 of them on the primitives. *(Counts as of 2026-08-14.)*
+- **Route convergence:** the app converged from **23 exploratory routes to ~7 core features** — Home, Notes, Tasks, Calendar, Email, Contacts, Settings. 14 page files in `apps/app/src/routes/pages/`. **Don't add top-level routes without an explicit ask** (a new route needs 5 separate wirings — see gotchas).
 - **Dependency health:** a `npx madge --circular` sweep (2026-07-11) found **zero circular dependencies** across 599 modules — the import graph is clean, not tangled. (The 82 warnings are unresolved `@/` path-aliases, not cycles; pass `--ts-config tsconfig.json` to silence them.)
 - **In-flight / half-migrated:** the `src/tw/` React-Native compat shim is **gone from the app's own pages** (DF-17 rebuilt onboarding + paywall onto shadcn/tokens; remaining users are the legacy plan/brainstorm/templates trees); fonts are **not installed yet** — `--font-*` fall back to system fonts (the one real code-level TODO, `tokens.css:21`).
 
@@ -139,7 +139,7 @@ Central `entities` registry (PK `(workspace_id, entity_type, entity_id)`), `enti
 
 A local AST graph (built with Graphify, no LLM, nothing left the machine) of the repo — 762 files → **5,282 symbols / 14,136 edges / 271 communities** — corroborates this section and the [refactor memo](./backend-refactor-memo.md):
 
-- **Largest backend area:** `src-tauri/src/commands` (567 symbols), dominated by the email engine (`model.rs` / `storage.rs` / `sync.rs` / `parsing.rs` / `realtime.rs` all rank as hubs) — email is the load-bearing native code.
+- **Largest backend area:** `apps/desktop/src-tauri/src/commands` (567 symbols), dominated by the email engine (`model.rs` / `storage.rs` / `sync.rs` / `parsing.rs` / `realtime.rs` all rank as hubs) — email is the load-bearing native code.
 - **The seam is real:** `runtime.web.ts` (degree 100) is the single Supabase boundary; `ModuoRuntime` / `runtime.types.ts` (140) the interface.
 - **`AppState` is the one god-object** (degree 215) — it constructs the dead `graph_helix` (12 nodes) + `embeddings` (9) engines at boot; start proposal C there.
 - **The dead debt is isolated:** graph + embeddings + vestigial `sync` ≈ 36 symbols, absent from every coupling hotspot → pruning is low-risk.
@@ -170,7 +170,7 @@ Full list: [`docs/gotchas.md`](../gotchas.md). The sharp edges:
 - **`bun run verify` never touches Postgres.** A green PR with a new `.sql` only means it parsed. RLS/RPCs/FKs are unproven until applied + exercised by an authenticated round-trip.
 - **The Supabase JS client is UNTYPED.** `.from("typo")` and `.rpc("unmigrated_fn")` typecheck fine; column renames are silent. The live round-trip is the only real check.
 - **supabase-js reports REST failures via the `error` field — it does NOT throw.** Destructuring just `{ data }` silently coerces a 500/expired-JWT-401/RLS error to "no rows" (this bit the billing gate — would have paywalled a paying user). If absent-vs-failed matters, check `error`.
-- **A "new" table may already exist in prod** from the pre-migrations era — grep `src/types/supabase.ts` before `CREATE TABLE IF NOT EXISTS` (it silently no-ops against the wrong shape).
+- **A "new" table may already exist in prod** from the pre-migrations era — grep `apps/app/src/types/supabase.ts` before `CREATE TABLE IF NOT EXISTS` (it silently no-ops against the wrong shape).
 - **A new module's `_module_permission` MUST include the `module_api_key_id()` branch** or every agent WRITE through its ops is dead on arrival (service_role → `auth.uid()` is NULL → "no edit access"). Shipped broken in three modules before it was caught. Copy `tasks_module_permission`.
 - **Spine dedupe needs `COLLATE "C"`** so `entity_links.pair_key` (SQL) matches `deriveLinkKey` (TS) — keep them in lockstep.
 - **Never import a bare `{ runtime }`** — always `getRuntime()` (the bare export was an always-null const).
@@ -186,7 +186,7 @@ Full list: [`docs/gotchas.md`](../gotchas.md). The sharp edges:
 
 ## 10. What's left — the future backlog
 
-**The authoritative backlog is [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) + [`docs/ROADMAP.md`](../ROADMAP.md).** This project tracks future work in the ledger/roadmap, **not** in code comments (a full `TODO/FIXME` sweep of `src/` + `src-tauri/` returns exactly one benign marker) — so grepping for TODOs understates the backlog by design. Summary:
+**The authoritative backlog is [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) + [`docs/ROADMAP.md`](../ROADMAP.md).** This project tracks future work in the ledger/roadmap, **not** in code comments (a full `TODO/FIXME` sweep of `apps/app/src/` + `apps/desktop/src-tauri/` returns exactly one benign marker) — so grepping for TODOs understates the backlog by design. Summary:
 
 ### The DF wave is done — 23 of 24
 Everything the 2026-07-11 version of this file listed as "ready now" or "blocked on a sibling" — **except DF-15** — has shipped: DF-2, DF-7, DF-8, DF-9, DF-10, DF-11, DF-12, DF-16, DF-17, DF-19 (a…i, the full Settings overhaul), DF-20, DF-21 (Universal Inbox), DF-22 (cross-pane drag), DF-23, DF-24 between 2026-07-10 and 07-27, then **DF-18** (eyebrow / detail-title / toolbar standardization) on 2026-08-14. Spec + per-block ✅ markers: [`docs/reviews/whole-app-critique-2026-07-plan.md`](../reviews/whole-app-critique-2026-07-plan.md).

@@ -319,12 +319,12 @@
       <div class="card">
         <h3 style="margin-bottom:12px">Backend surface, by size <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · SYMBOLS PER AREA</span></h3>
         <div class="subsys">
-          <div class="row"><div class="nm">Rust command layer <span>src-tauri/src/commands — email engine, calendar/CalDAV, integrations</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:100%"></div></div><div class="v">567</div></div></div>
-          <div class="row"><div class="nm">Data-layer seam <span>src/lib — <code>runtime.web.ts</code> is the only file that talks to Supabase</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:36%"></div></div><div class="v">202</div></div></div>
-          <div class="row"><div class="nm">redb store <span>src-tauri/src/store_redb — paused, lite-version only</span></div><div class="bar"><div class="track"><div class="fill" style="width:21%"></div></div><div class="v">117</div></div></div>
+          <div class="row"><div class="nm">Rust command layer <span>apps/desktop/src-tauri/src/commands — email engine, calendar/CalDAV, integrations</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:100%"></div></div><div class="v">567</div></div></div>
+          <div class="row"><div class="nm">Data-layer seam <span>apps/app/src/lib — <code>runtime.web.ts</code> is the only file that talks to Supabase</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:36%"></div></div><div class="v">202</div></div></div>
+          <div class="row"><div class="nm">redb store <span>apps/desktop/src-tauri/src/store_redb — paused, lite-version only</span></div><div class="bar"><div class="track"><div class="fill" style="width:21%"></div></div><div class="v">117</div></div></div>
           <div class="row"><div class="nm">MCP connector <span>supabase/functions/moduo-mcp — the ~60 agent tools</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:18%"></div></div><div class="v">103</div></div></div>
-          <div class="row"><div class="nm">Rust domain <span>src-tauri/src/domain</span></div><div class="bar"><div class="track"><div class="fill" style="width:7%"></div></div><div class="v">38</div></div></div>
-          <div class="row"><div class="nm">Sync worker <span>src-tauri/src/sync — near-vestigial</span></div><div class="bar"><div class="track"><div class="fill" style="width:3%"></div></div><div class="v">15</div></div></div>
+          <div class="row"><div class="nm">Rust domain <span>apps/desktop/src-tauri/src/domain</span></div><div class="bar"><div class="track"><div class="fill" style="width:7%"></div></div><div class="v">38</div></div></div>
+          <div class="row"><div class="nm">Sync worker <span>apps/desktop/src-tauri/src/sync — near-vestigial</span></div><div class="bar"><div class="track"><div class="fill" style="width:3%"></div></div><div class="v">15</div></div></div>
           <div class="row"><div class="nm">Graph + embeddings <span>graph_helix + embeddings — dead, no caller</span></div><div class="bar"><div class="track"><div class="fill" style="width:4%"></div></div><div class="v">21</div></div></div>
         </div>
       </div>
@@ -332,12 +332,12 @@
       <div class="card">
         <h3 style="margin-bottom:12px">Most-connected files <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · BY DEGREE</span></h3>
         <div class="subsys">
-          <div class="row"><div class="nm">AppState <span>src-tauri/src/lib.rs — the one true god-object; wires the dead engines at boot</span></div><div class="deg">215</div></div>
-          <div class="row"><div class="nm">ModuoRuntime <span>src/lib/runtime.types.ts — the seam interface</span></div><div class="deg">140</div></div>
-          <div class="row"><div class="nm">RedbStore <span>src-tauri/src/store_redb — paused, still heavily wired</span></div><div class="deg">139</div></div>
-          <div class="row"><div class="nm">runtime.web.ts <span>src/lib — the single Supabase boundary</span></div><div class="deg">100</div></div>
-          <div class="row"><div class="nm">entity-links.ts <span>src/lib — the spine keystone (TS side)</span></div><div class="deg">78</div></div>
-          <div class="row"><div class="nm">email model / caldav / auth <span>src-tauri/src/commands — the native email + calendar core</span></div><div class="deg">45–42</div></div>
+          <div class="row"><div class="nm">AppState <span>apps/desktop/src-tauri/src/lib.rs — the one true god-object; wires the dead engines at boot</span></div><div class="deg">215</div></div>
+          <div class="row"><div class="nm">ModuoRuntime <span>apps/app/src/lib/runtime.types.ts — the seam interface</span></div><div class="deg">140</div></div>
+          <div class="row"><div class="nm">RedbStore <span>apps/desktop/src-tauri/src/store_redb — paused, still heavily wired</span></div><div class="deg">139</div></div>
+          <div class="row"><div class="nm">runtime.web.ts <span>apps/app/src/lib — the single Supabase boundary</span></div><div class="deg">100</div></div>
+          <div class="row"><div class="nm">entity-links.ts <span>apps/app/src/lib — the spine keystone (TS side)</span></div><div class="deg">78</div></div>
+          <div class="row"><div class="nm">email model / caldav / auth <span>apps/desktop/src-tauri/src/commands — the native email + calendar core</span></div><div class="deg">45–42</div></div>
         </div>
       </div>
     </div>
@@ -345,7 +345,7 @@
     <div class="rec" style="margin-top:16px">
       <ul class="confirm">
         <li><b>Proposal C is safe.</b> The dead subsystems — <code>graph_helix</code> (12) + <code>embeddings</code> (9) + vestigial <code>sync</code> (15) ≈ 36 nodes — are tiny and appear in <b>none</b> of the coupling hotspots. Pruning them is isolated, low-risk work.</li>
-        <li><b>The core is coherent, not tangled.</b> <code>runtime.web.ts</code> really is the single Supabase boundary; the spine, the MCP connector, and the command layer are densely but sensibly connected — and <code>madge</code> finds <b>0 circular dependencies</b> in <code>src/</code>.</li>
+        <li><b>The core is coherent, not tangled.</b> <code>runtime.web.ts</code> really is the single Supabase boundary; the spine, the MCP connector, and the command layer are densely but sensibly connected — and <code>madge</code> finds <b>0 circular dependencies</b> in <code>apps/app/src/</code>.</li>
         <li><b>Start the prune at <code>AppState</code>.</b> At 215 connections it's the natural first cut — it's the constructor that instantiates the dead graph + embeddings engines on every desktop boot.</li>
       </ul>
     </div>
