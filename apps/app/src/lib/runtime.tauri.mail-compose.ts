@@ -18,5 +18,7 @@ export function createTauriMailCompose(call: Invoke = invoke): MailComposeEngine
     listOutbox: (accountId) => call("mail_list_outbox", { accountId: accountId ?? null }),
     correspondents: (input) => call("mail_correspondents", { input }),
     sizeLimit: (accountId) => call("mail_size_limit", { accountId }),
+    stageAttachment: (bytes) => call("mail_stage_attachment_bytes", { bytes: Array.from(bytes) }),
+    pickAttachments: () => call("mail_pick_attachments"),
   };
 }

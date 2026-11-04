@@ -245,19 +245,17 @@ fn failure_back_to_drafts() {
     none.bcc.clear();
     let nid = st.save_draft_at(None, "a", None, none, T0).unwrap();
     assert!(st.queue_send_at(&nid, 5, T0).unwrap_err().to_string().contains("missing_recipients"));
-    let big = std::env::temp_dir().join(format!("moduo-send-big-{}", std::process::id()));
-    std::fs::write(&big, vec![7u8; 21 * 1024 * 1024]).unwrap();
     let icloud = store("big", "icloud");
+    let big = staging::stage_bytes(icloud.root(), &vec![7u8; 21 * 1024 * 1024]).unwrap();
     let mut d = doc();
     d.attachments.push(OutAttachment {
         filename: "big.bin".into(),
         content_type: "application/octet-stream".into(),
-        path: big.to_string_lossy().into(),
+        id: big,
     });
     let bid = icloud.save_draft_at(None, "a", None, d, T0).unwrap();
     let e = icloud.queue_send_at(&bid, 5, T0).unwrap_err().to_string();
     assert!(e.contains(&format!("too_large:{}", 20 * 1024 * 1024)), "{e}");
-    let _ = std::fs::remove_file(&big);
 }
 
 #[test]
@@ -316,4 +314,20 @@ fn rsvp_sends_itip_reply() {
     assert!(m.contains("Subject: Accepted: Sync"));
     assert!(m.contains("text/calendar; method=REPLY"));
     assert!(m.contains("In-Reply-To: <inv@y>"));
+}
+
+#[test]
+fn mime_never_reads_a_path_outside_staging() {
+    let st = store("hostile", "icloud");
+    std::fs::write(st.root().join("secret"), b"s").unwrap();
+    for bad in ["/etc/passwd", "../secret", "../../../etc/hosts"] {
+        let mut d = doc();
+        d.attachments.push(OutAttachment {
+            filename: "x".into(),
+            content_type: "text/plain".into(),
+            id: bad.into(),
+        });
+        let e = mime::build(&d, true, st.root()).unwrap_err();
+        assert!(e.starts_with("attachment_unreadable:x:invalid_attachment"), "{e}");
+    }
 }

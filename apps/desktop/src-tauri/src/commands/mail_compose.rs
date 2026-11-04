@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::mail::host::MailHost;
-use crate::mail::send::{DraftDoc, DraftRow, OutboxItem, SendHandle};
+use crate::mail::send::{staging, DraftDoc, DraftRow, OutboxItem, SendHandle};
 use crate::mail::store::{StorageStats, Store, StoreResult};
 use crate::mail::sync::events::MailEvent;
 
@@ -50,9 +50,10 @@ pub struct SaveDraftIn {
     pub doc: DraftDoc,
 }
 
-/// Bounds on what the webview may store; attachments must be absolute paths
-/// to files compose saved (never relative, never a directory).
-pub fn check_draft(i: &SaveDraftIn) -> Result<(), String> {
+/// Bounds on what the webview may store; attachments are opaque staging ids
+/// that must resolve to a regular file inside the user's staging dir
+/// (`store_root/staging`), never a path the webview chose.
+pub fn check_draft(i: &SaveDraftIn, store_root: &std::path::Path) -> Result<(), String> {
     check_opt(&i.draft_id)?;
     check_id(&i.account_id)?;
     check_opt(&i.thread_id)?;
@@ -64,12 +65,65 @@ pub fn check_draft(i: &SaveDraftIn) -> Result<(), String> {
         return Err("too_many_attachments".into());
     }
     for a in &d.attachments {
-        let p = std::path::Path::new(&a.path);
-        if !p.is_absolute() || a.path.contains('\0') {
-            return Err("invalid_attachment_path".into());
-        }
+        staging::resolve(store_root, &a.id).map_err(|_| "invalid_attachment".to_string())?;
     }
     Ok(())
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct StagedAttachment {
+    pub id: String,
+    pub filename: String,
+    pub size: u64,
+}
+
+/// Stages dropped or pasted bytes (Finder drop, clipboard image); returns the
+/// opaque id a draft references.
+#[tauri::command]
+pub fn mail_stage_attachment_bytes(
+    bytes: Vec<u8>,
+    host: State<'_, MailHost>,
+) -> Result<String, String> {
+    staging::stage_bytes(host.store()?.root(), &bytes)
+}
+
+/// Opens the native file picker in Rust and stages each chosen file. The
+/// paths come from the OS dialog, never from the webview.
+#[tauri::command]
+pub async fn mail_pick_attachments(
+    app: tauri::AppHandle,
+    host: State<'_, MailHost>,
+) -> Result<Vec<StagedAttachment>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let root = host.store()?.root().to_path_buf();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    app.dialog().file().pick_files(move |files| {
+        let _ = tx.send(files);
+    });
+    let Some(files) = rx.await.map_err(s)? else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::new();
+    for f in files {
+        let path = f.into_path().map_err(s)?;
+        let id = staging::stage_file(&root, &path)?;
+        let size = std::fs::metadata(staging::resolve(&root, &id)?)
+            .map_err(s)?
+            .len();
+        let filename = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "attachment".into());
+        out.push(StagedAttachment { id, filename, size });
+    }
+    Ok(out)
+}
+
+/// Drops a staged file the composer no longer references.
+#[tauri::command]
+pub fn mail_unstage_attachment(id: String, host: State<'_, MailHost>) -> Result<(), String> {
+    staging::remove(host.store()?.root(), &id)
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -164,9 +218,9 @@ fn draft_changed(host: &MailHost, draft_id: &str) {
 
 #[tauri::command]
 pub fn mail_save_draft(input: SaveDraftIn, host: State<'_, MailHost>) -> Result<DraftIdOut, String> {
-    check_draft(&input)?;
-    let id = host
-        .store()?
+    let store = host.store()?;
+    check_draft(&input, store.root())?;
+    let id = store
         .save_draft(
             input.draft_id.as_deref(),
             &input.account_id,
@@ -480,19 +534,36 @@ mod tests {
         let v = json!({"draftId": null, "accountId": "a", "threadId": null, "doc": {
             "messageId": "", "fromName": null, "fromAddr": "me@x.test", "to": ["b@x.test"], "cc": [], "bcc": [],
             "subject": "Hi", "text": "t", "html": null, "inReplyTo": null, "references": [],
-            "attachments": [{"filename": "a.pdf", "contentType": "application/pdf", "path": "/tmp/a.pdf", "size": 3}],
+            "attachments": [{"filename": "a.pdf", "contentType": "application/pdf", "id": "ID", "size": 3}],
             "calendarReply": null, "lastError": null}});
-        let i: SaveDraftIn = serde_json::from_value(v.clone()).unwrap();
-        assert!(check_draft(&i).is_ok());
         let (_d, s) = store("save");
+        let root = s.root().to_path_buf();
+        let staged = staging::stage_bytes(&root, b"pdf").unwrap();
+        let v: serde_json::Value =
+            serde_json::from_str(&v.to_string().replace("\"ID\"", &format!("\"{staged}\"")))
+                .unwrap();
+        let i: SaveDraftIn = serde_json::from_value(v).unwrap();
+        assert!(check_draft(&i, &root).is_ok());
         let id = s.save_draft(None, &i.account_id, None, i.doc.clone()).unwrap();
         assert_eq!(s.draft(&id).unwrap().unwrap().doc.subject, "Hi");
         let mut rel = i;
-        rel.doc.attachments[0].path = "../etc/passwd".into();
-        assert_eq!(check_draft(&rel), Err("invalid_attachment_path".into()));
+        // Hostile references: outside staging, traversal, a symlink in staging.
+        std::fs::write(root.join("secret"), b"s").unwrap();
+        let link = uuid::Uuid::new_v4().to_string();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink("/etc/passwd", staging::staging_dir(&root).join(&link))
+            .unwrap();
+        for bad in ["/etc/passwd", "../etc/passwd", "../secret", "/tmp/a.pdf", link.as_str()] {
+            rel.doc.attachments[0].id = bad.into();
+            assert_eq!(
+                check_draft(&rel, &root),
+                Err("invalid_attachment".into()),
+                "{bad}"
+            );
+        }
         rel.doc.attachments.clear();
         rel.account_id = String::new();
-        assert!(check_draft(&rel).is_err());
+        assert!(check_draft(&rel, &root).is_err());
         assert_eq!(account_filter(None).unwrap(), "");
         assert!(account_filter(Some("x".repeat(600))).is_err());
     }

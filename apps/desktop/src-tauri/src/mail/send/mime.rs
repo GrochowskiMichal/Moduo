@@ -54,7 +54,8 @@ pub fn envelope_recipients(d: &DraftDoc) -> Result<Vec<String>, String> {
 }
 
 /// `for_send = false` builds the draft copy: recipients optional.
-pub fn build(d: &DraftDoc, for_send: bool) -> Result<Vec<u8>, String> {
+/// Attachments are read from the user store's staging dir (`store_root`).
+pub fn build(d: &DraftDoc, for_send: bool, store_root: &std::path::Path) -> Result<Vec<u8>, String> {
     let has_rcpt = d.to.iter().chain(&d.cc).chain(&d.bcc).any(|a| !a.trim().is_empty());
     if for_send && !has_rcpt {
         return Err("missing_recipients".into());
@@ -127,7 +128,7 @@ pub fn build(d: &DraftDoc, for_send: bool) -> Result<Vec<u8>, String> {
             MultiPart::mixed().multipart(body)
         };
         for a in &d.attachments {
-            let bytes = std::fs::read(&a.path).map_err(|e| format!("attachment_unreadable:{}:{e}", a.filename))?;
+            let bytes = super::staging::read(store_root, &a.id).map_err(|e| format!("attachment_unreadable:{}:{e}", a.filename))?;
             let ct = ContentType::parse(&a.content_type)
                 .or_else(|_| ContentType::parse("application/octet-stream"))
                 .map_err(|e| e.to_string())?;

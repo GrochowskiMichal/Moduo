@@ -100,6 +100,12 @@ export function createFakeCompose(
     async sizeLimit() {
       return opts.sizeLimit ?? 25 * 1024 * 1024;
     },
+    async stageAttachment() {
+      return crypto.randomUUID();
+    },
+    async pickAttachments() {
+      return [];
+    },
     drain() {
       if (!engine.online) return;
       for (const item of [...outbox.values()]) {

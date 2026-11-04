@@ -113,7 +113,7 @@ describe("compose drafts and send (AC21, AC22)", () => {
     expect(await session.send()).toEqual({ ok: false, reason: "Add a recipient." });
     await session.update({
       to: "a@x.com",
-      attachments: [{ filename: "big", contentType: "x", path: "/p", size: 30 * 1024 * 1024 }],
+      attachments: [{ filename: "big", contentType: "x", id: "a", size: 30 * 1024 * 1024 }],
     });
     const r = await session.send(25 * 1024 * 1024);
     expect(r.ok).toBe(false);

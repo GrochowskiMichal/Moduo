@@ -11,7 +11,8 @@
 export type MailOutAttachment = {
   filename: string;
   contentType: string;
-  path: string;
+  /** Opaque staging id from `stageAttachment`/`pickAttachments`; never a file path. */
+  id: string;
   size?: number;
 };
 
@@ -83,4 +84,8 @@ export type MailComposeEngine = {
   }): Promise<{ name: string; email: string; count: number }[]>;
   /** The provider's send size limit in bytes (Rust `size_limit`). */
   sizeLimit(accountId: string): Promise<number>;
+  /** Copies dropped/pasted bytes into the engine's staging dir; returns the opaque id. */
+  stageAttachment(bytes: Uint8Array): Promise<string>;
+  /** Opens the native file picker (in the engine) and stages the chosen files. */
+  pickAttachments(): Promise<{ id: string; filename: string; size: number }[]>;
 };

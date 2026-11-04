@@ -38,8 +38,10 @@ export type MailComposerProps = {
   sizeLimit?: number;
   /** The sender of the message replied to, for instant intro. */
   introducer?: string | null;
-  /** Saves a dropped/pasted file and returns its path (engine attachment store). */
+  /** Stages a dropped/pasted file in the engine and returns its opaque id. */
   stageFile?: (file: File) => Promise<string>;
+  /** Opens the native file picker (engine side) and stages the chosen files. */
+  pickFiles?: () => Promise<{ id: string; filename: string; size: number }[]>;
   now?: () => number;
 };
 
@@ -117,11 +119,19 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
       files.map(async (f) => ({
         filename: f.name || "pasted-image.png",
         contentType: f.type || "application/octet-stream",
-        path: await props.stageFile!(f),
+        id: await props.stageFile!(f),
         size: f.size,
       })),
     );
     void session.update({ attachments: [...state.attachments, ...staged] });
+  };
+
+  const pick = async () => {
+    if (!props.pickFiles) return;
+    const picked = await props.pickFiles();
+    if (picked.length === 0) return;
+    const added = picked.map((p) => ({ ...p, contentType: "application/octet-stream" }));
+    void session.update({ attachments: [...state.attachments, ...added] });
   };
 
   const send = async () => {
@@ -252,7 +262,7 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
       {state.attachments.length > 0 && (
         <ul aria-label="Attachments" className="flex flex-wrap gap-2 text-sm text-muted-foreground">
           {state.attachments.map((a) => (
-            <li key={a.path} className="flex items-center gap-1">
+            <li key={a.id} className="flex items-center gap-1">
               <Paperclip className="size-icon-sm" />
               {a.filename}
             </li>
@@ -287,6 +297,9 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
         <span className="flex-1" />
         {props.introducer && state.kind !== "new" && (
           <IconButton label="Move introducer to Bcc" icon={UserMinus} onClick={intro} />
+        )}
+        {props.pickFiles && (
+          <IconButton label="Attach files" icon={Paperclip} onClick={() => void pick()} />
         )}
         <IconButton
           label="Discard draft"

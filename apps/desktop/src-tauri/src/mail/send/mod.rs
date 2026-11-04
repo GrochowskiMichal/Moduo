@@ -24,6 +24,7 @@
 pub mod graph;
 pub mod mime;
 pub mod smtp;
+pub mod staging;
 
 #[cfg(test)]
 mod tests;
@@ -51,8 +52,8 @@ const MB: usize = 1024 * 1024;
 pub struct OutAttachment {
     pub filename: String,
     pub content_type: String,
-    /// The file compose saved (drag, paste or forward); read when the MIME is built.
-    pub path: String,
+    /// The opaque staging id ([`staging`]); resolved and read when the MIME is built.
+    pub id: String,
 }
 
 /// A draft's content, as compose edits it.
@@ -414,7 +415,7 @@ impl Store {
             let Some((mailbox_id, path)) = self.role_path(&row.account_id, MailboxRole::Drafts)? else {
                 continue; // No Drafts folder: local only.
             };
-            let bytes = match mime::build(&row.doc, false) {
+            let bytes = match mime::build(&row.doc, false, self.root()) {
                 Ok(b) => b,
                 Err(e) => {
                     rep.errors.push((row.id.clone(), e));
@@ -468,7 +469,7 @@ impl Store {
         }
         let provider = self.provider_of(&row.account_id)?;
         mime::envelope_recipients(&row.doc).map_err(err)?;
-        let bytes = mime::build(&row.doc, true).map_err(err)?;
+        let bytes = mime::build(&row.doc, true, self.root()).map_err(err)?;
         let limit = size_limit(provider, self.sends_via_graph(&row.account_id)?);
         if bytes.len() > limit {
             return Err(err(format!("too_large:{limit}")));

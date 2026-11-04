@@ -441,6 +441,12 @@ export function MailPage({
             aliases={aliases}
             snippets={snippets}
             contacts={contacts}
+            stageFile={
+              port
+                ? async (f) => port.stageAttachment(new Uint8Array(await f.arrayBuffer()))
+                : undefined
+            }
+            pickFiles={port ? () => port.pickAttachments() : undefined}
           />
         </div>
       ) : null}

@@ -90,6 +90,27 @@ describe("MailComposer (AC20)", () => {
     });
     expect(ui.getByRole("alert").textContent).toBe("Add a recipient.");
   });
+
+  it("attaches picked files by opaque staging id, never a path", async () => {
+    const { port, session } = setup();
+    const ui = render(
+      <TooltipProvider>
+        <MailComposer
+          session={session}
+          pickFiles={async () => [{ id: "stg-1", filename: "a.pdf", size: 3 }]}
+        />
+      </TooltipProvider>,
+    );
+    await act(() => session.open(spec()).then(() => {}));
+    await act(async () => {
+      fireEvent.click(ui.getByRole("button", { name: "Attach files" }));
+      await new Promise((r) => setTimeout(r, 0));
+      await session.flush();
+    });
+    const att = (await port.listDrafts())[0].doc.attachments[0];
+    expect(att.id).toBe("stg-1");
+    expect("path" in att).toBe(false);
+  });
 });
 
 import { outboxLabel, OutboxView } from "./outbox-view";
