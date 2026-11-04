@@ -44,18 +44,68 @@ type Props = {
   onConnected?: (account: SavedAccount) => void;
 };
 
+/** The form's starting values: the reconnect target's, or a blank Gmail form. */
+function initialForm(r: SavedAccount | undefined) {
+  return {
+    provider: (r?.provider as ConnectProvider | undefined) ?? "gmail",
+    email: r?.email ?? "",
+    imapHost: r?.imapHost ?? "",
+    smtpHost: r?.smtpHost ?? "",
+    imapPort: String(r?.imapPort ?? 993),
+    smtpPort: String(r?.smtpPort ?? 587),
+  };
+}
+
+/** The provider chips, a segmented row. */
+function ProviderTabs({
+  provider,
+  onPick,
+}: {
+  provider: ConnectProvider;
+  onPick: (id: ConnectProvider) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Email provider"
+      className="inline-flex w-fit items-center gap-1 rounded-md bg-muted p-1"
+    >
+      {PROVIDER_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={provider === tab.id}
+          onClick={() => {
+            setProvider(tab.id);
+            setError(null);
+          }}
+          className={
+            "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
+            (provider === tab.id
+              ? "bg-control-raised text-foreground shadow-control-raised"
+              : "text-muted-foreground hover:text-foreground")
+          }
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnected }: Props) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
-  const reconnectProvider = isReconnect?.provider as ConnectProvider | undefined;
-  const [provider, setProvider] = useState<ConnectProvider>(reconnectProvider ?? "gmail");
-  const [email, setEmail] = useState(isReconnect?.email ?? "");
+  const [init] = useState(() => initialForm(isReconnect));
+  const [provider, setProvider] = useState<ConnectProvider>(init.provider);
+  const [email, setEmail] = useState(init.email);
   const [password, setPassword] = useState("");
-  const [imapHost, setImapHost] = useState(isReconnect?.imapHost ?? "");
-  const [smtpHost, setSmtpHost] = useState(isReconnect?.smtpHost ?? "");
-  const [imapPort, setImapPort] = useState(String(isReconnect?.imapPort ?? 993));
-  const [smtpPort, setSmtpPort] = useState(String(isReconnect?.smtpPort ?? 587));
+  const [imapHost, setImapHost] = useState(init.imapHost);
+  const [smtpHost, setSmtpHost] = useState(init.smtpHost);
+  const [imapPort, setImapPort] = useState(init.imapPort);
+  const [smtpPort, setSmtpPort] = useState(init.smtpPort);
   const [historyDepth, setHistoryDepth] = useState<EmailHistoryDepth>(DEFAULT_HISTORY_DEPTH);
   const [busy, setBusy] = useState<null | "oauth" | "password">(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,13 +113,14 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   // Re-seed from the reconnect target whenever it changes / the dialog re-opens.
   useEffect(() => {
     if (!open) return;
-    setProvider(reconnectProvider ?? "gmail");
-    setEmail(isReconnect?.email ?? "");
+    const seed = initialForm(isReconnect);
+    setProvider(seed.provider);
+    setEmail(seed.email);
     setPassword("");
-    setImapHost(isReconnect?.imapHost ?? "");
-    setSmtpHost(isReconnect?.smtpHost ?? "");
-    setImapPort(String(isReconnect?.imapPort ?? 993));
-    setSmtpPort(String(isReconnect?.smtpPort ?? 587));
+    setImapHost(seed.imapHost);
+    setSmtpHost(seed.smtpHost);
+    setImapPort(seed.imapPort);
+    setSmtpPort(seed.smtpPort);
     // Re-seed the depth too, or connecting a second mailbox silently inherits the
     // previous one's pick instead of AC6's 12-month default.
     setHistoryDepth(asHistoryDepth(isReconnect?.historyDepth));
@@ -137,6 +188,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   };
 
   const title = isReconnect ? "Reconnect email account" : "Connect an email account";
+  const submitLabel = isReconnect ? "Reconnect" : "Connect";
   const description = isReconnect
     ? `Re-enter the credential for ${isReconnect.email}.`
     : "Connect Gmail, Google Workspace, Microsoft, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain.";
@@ -155,32 +207,13 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
         <div className="flex flex-col gap-4">
           {/* Provider chips — segmented row. Locked in reconnect mode. */}
           {!providerLocked ? (
-            <div
-              role="tablist"
-              aria-label="Email provider"
-              className="inline-flex w-fit items-center gap-1 rounded-md bg-muted p-1"
-            >
-              {PROVIDER_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={provider === tab.id}
-                  onClick={() => {
-                    setProvider(tab.id);
-                    setError(null);
-                  }}
-                  className={
-                    "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
-                    (provider === tab.id
-                      ? "bg-control-raised text-foreground shadow-control-raised"
-                      : "text-muted-foreground hover:text-foreground")
-                  }
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <ProviderTabs
+              provider={provider}
+              onPick={(id) => {
+                setProvider(id);
+                setError(null);
+              }}
+            />
           ) : null}
 
           {/* Gmail OAuth path (also shown in reconnect for a gmail account). */}
@@ -356,7 +389,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
             onClick={() => void handlePasswordConnect()}
             disabled={!passwordValid || busy !== null}
           >
-            {busy === "password" ? "Connecting…" : isReconnect ? "Reconnect" : "Connect"}
+            {busy === "password" ? "Connecting…" : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
