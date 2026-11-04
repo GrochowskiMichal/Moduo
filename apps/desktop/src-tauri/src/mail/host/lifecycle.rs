@@ -113,19 +113,18 @@ pub fn classify_config(items: &[SettingsItem]) -> ClassifyConfig {
     cfg
 }
 
-/// The items last pushed, from kv (empty when none or unreadable).
-pub fn stored_classify_items(store: &Store) -> Vec<SettingsItem> {
-    store
-        .kv_get(CLASSIFY_ITEMS_KEY)
-        .ok()
-        .flatten()
-        .and_then(|j| serde_json::from_str::<Vec<serde_json::Value>>(&j).ok())
-        .map(|rows| {
-            rows.into_iter()
-                .filter_map(|r| serde_json::from_value(r).ok())
-                .collect()
-        })
-        .unwrap_or_default()
+/// The items last pushed, from kv (empty when none). A corrupt blob is an
+/// error, never an empty list; malformed single rows are skipped.
+pub fn stored_classify_items(store: &Store) -> StoreResult<Vec<SettingsItem>> {
+    let Some(j) = store.kv_get(CLASSIFY_ITEMS_KEY)? else {
+        return Ok(Vec::new());
+    };
+    let rows: Vec<serde_json::Value> = serde_json::from_str(&j)
+        .map_err(|e| StoreError::Invalid(format!("classify items: {e}")))?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| serde_json::from_value(r).ok())
+        .collect())
 }
 
 fn delete_kv_prefix(store: &Store, prefix: &str) -> StoreResult<()> {
@@ -290,7 +289,7 @@ mod tests {
     #[test]
     fn classify_items_load_from_kv() {
         let (st, dir) = store("classify");
-        assert!(stored_classify_items(&st).is_empty());
+        assert!(stored_classify_items(&st).unwrap().is_empty());
         st.kv_set(
             CLASSIFY_ITEMS_KEY,
             r#"[{"id":"1","kind":"blocked_sender","position":0,"value":{"address":"Spam@X.io"}},
@@ -298,11 +297,13 @@ mod tests {
                 {"bogus":true}]"#,
         )
         .unwrap();
-        let items = stored_classify_items(&st);
+        let items = stored_classify_items(&st).unwrap();
         assert_eq!(items.len(), 2);
         let cfg = classify_config(&items);
         assert_eq!(cfg.blocked, vec!["spam@x.io".to_string()]);
         assert!(cfg.priority_people.contains("boss@x.io"));
+        st.kv_set(CLASSIFY_ITEMS_KEY, "not json").unwrap();
+        assert!(stored_classify_items(&st).is_err());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

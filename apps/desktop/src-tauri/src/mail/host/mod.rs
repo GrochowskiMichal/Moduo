@@ -246,9 +246,15 @@ impl MailHost {
         }
         store.recover_in_flight_ops().map_err(|e| e.to_string())?;
         store.recover_in_flight_sends().map_err(|e| e.to_string())?;
-        let classify = Arc::new(RwLock::new(lifecycle::classify_config(
-            &lifecycle::stored_classify_items(&store),
-        )));
+        let items = match lifecycle::stored_classify_items(&store) {
+            Ok(items) => items,
+            Err(e) => {
+                // Defaults until the app pushes the settings again; the stored blob stays.
+                eprintln!("[mail] classify items unreadable, using defaults: {e}");
+                Vec::new()
+            }
+        };
+        let classify = Arc::new(RwLock::new(lifecycle::classify_config(&items)));
         *self.running.lock().unwrap_or_else(|p| p.into_inner()) = Some(Running {
             user_id: user_id.to_string(),
             store: store.clone(),

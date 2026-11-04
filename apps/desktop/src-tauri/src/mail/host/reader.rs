@@ -278,9 +278,18 @@ impl Store {
             .into_iter()
             .take(VIEW_CAP)
             .map(|(id, account_id, created, thread_id, json)| {
-                let doc: DraftDoc = json
-                    .and_then(|j| serde_json::from_str(&j).ok())
-                    .unwrap_or_default();
+                let doc: DraftDoc = match json.as_deref().map(serde_json::from_str) {
+                    None => DraftDoc::default(),
+                    Some(Ok(doc)) => doc,
+                    Some(Err(e)) => {
+                        // Keep the pending send visible; the stored draft stays untouched.
+                        eprintln!("[mail] outbox {id}: unreadable draft: {e}");
+                        DraftDoc {
+                            subject: "(unreadable draft)".into(),
+                            ..DraftDoc::default()
+                        }
+                    }
+                };
                 let mut snippet: String = doc.text.chars().take(140).collect();
                 snippet = snippet.split_whitespace().collect::<Vec<_>>().join(" ");
                 ThreadRow {
