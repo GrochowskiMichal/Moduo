@@ -73,4 +73,25 @@ describe("triage commands (AC11)", () => {
     commands.dismissFollowup("t1");
     expect(store.getState().dismissedFollowups).toEqual(["t1"]);
   });
+
+  it("dismissing a follow-up clears it on the engine too", async () => {
+    const { commands, engine } = setup();
+    const calls: [string, number | null][] = [];
+    engine.setFollowUp = async (id, due) => void calls.push([id, due]);
+    await commands.dismissFollowup("t1");
+    expect(calls).toEqual([["t1", null]]);
+  });
+
+  it("history backfill, cancel and New senders release go to the engine", async () => {
+    const { commands, engine } = setup();
+    const log: string[] = [];
+    engine.backfill = async (a) => void log.push(`backfill:${a}`);
+    engine.cancelBackfill = async (a) => void log.push(`cancel:${a}`);
+    engine.releaseNewSenders = async (ids) => void log.push(`release:${ids.join(",")}`);
+    await commands.backfill("a1");
+    await commands.cancelBackfill("a1");
+    await commands.releaseNewSenders(["t1", "t2"]);
+    await commands.releaseNewSenders([]);
+    expect(log).toEqual(["backfill:a1", "cancel:a1", "release:t1,t2"]);
+  });
 });

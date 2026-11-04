@@ -340,6 +340,11 @@ export function MailShell({
           onOpenSubscriptions={onOpenSubscriptions}
           subscriptionsActive={subscriptionsActive}
           onConnect={() => onConnect?.()}
+          onCancelBackfill={
+            engine?.cancelBackfill
+              ? (id) => void commands.cancelBackfill(id).catch(() => {})
+              : undefined
+          }
           savedSearches={savedSearches}
           onOpenSearch={openMailSearch}
         />
@@ -371,7 +376,7 @@ export function MailShell({
               selfAddresses={accounts.map((a) => a.address)}
               nowMs={now()}
               onOpen={(id) => setSel({ ...EMPTY_SELECTION, cursor: id })}
-              onDismiss={(id) => commands.dismissFollowup(id)}
+              onDismiss={(id) => void commands.dismissFollowup(id).catch(() => {})}
             />
           ) : null}
         </div>

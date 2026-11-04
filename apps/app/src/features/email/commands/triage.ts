@@ -54,13 +54,28 @@ export function createMailCommands(store: MailStore = mailStore, now: () => numb
       await refreshFailed();
     },
     /** Dismiss a due follow-up nudge from the inbox top (X19). */
-    dismissFollowup(threadId: string) {
+    async dismissFollowup(threadId: string) {
       store.setState((s) => ({
         dismissedFollowups: s.dismissedFollowups.includes(threadId)
           ? s.dismissedFollowups
           : [...s.dismissedFollowups, threadId],
         followupsDue: s.followupsDue.filter((r) => r.threadId !== threadId),
       }));
+      // Clear the reminder itself so the followups view drops it on every device.
+      await store.getState().engine?.setFollowUp?.(threadId, null);
+    },
+    /** Rail "load more history": walk below the synced floor (AC6). */
+    async backfill(accountId: string) {
+      await engineOrThrow().backfill?.(accountId);
+    },
+    /** Rail "Syncing history · Cancel" (AC6). */
+    async cancelBackfill(accountId: string) {
+      await engineOrThrow().cancelBackfill?.(accountId);
+    },
+    /** Allow or Block decided in New senders: the threads leave that view. */
+    async releaseNewSenders(threadIds: readonly string[]) {
+      if (threadIds.length === 0) return;
+      await engineOrThrow().releaseNewSenders?.([...threadIds]);
     },
     /** The launch announcement was seen. */
     clearAwayAnnouncement() {

@@ -202,9 +202,11 @@ export function MailRail({
                     label="History sync"
                     className="flex-1"
                   />
-                  <Button size="sm" variant="ghost" onClick={() => onCancelBackfill?.(a.id)}>
-                    Cancel
-                  </Button>
+                  {onCancelBackfill ? (
+                    <Button size="sm" variant="ghost" onClick={() => onCancelBackfill(a.id)}>
+                      Cancel
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
               {expanded
