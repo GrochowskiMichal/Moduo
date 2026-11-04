@@ -15,6 +15,7 @@ use crate::mail::host::ondemand::WorkerCmd;
 use crate::mail::host::reader::{invite_view, InviteView, MessageRef};
 use crate::mail::host::MailHost;
 use crate::mail::invite::{parse_invite, Rsvp};
+use crate::mail::safe_http;
 use crate::mail::send::DraftDoc;
 use crate::mail::store::{now_ms, Store};
 use crate::mail::sync::events::MailEvent;
@@ -216,10 +217,96 @@ pub fn mail_unsubscribe_plan(
 ) -> Result<Vec<UnsubscribeMethod>, String> {
     let store = host.store()?;
     let m = message(&store, &thread_id, &message_id)?;
-    Ok(unsubscribe::plan(
-        m.list_unsubscribe.as_deref(),
-        m.list_unsubscribe_post.as_deref(),
+    vetted_plan(&store, &m)
+}
+
+/// The header's plan with any mailto that isn't to the sender's (or list's)
+/// own domain removed, and a mailto's subject and body fixed to
+/// "unsubscribe". The confirm shows this exact recipient.
+fn vetted_plan(store: &Store, m: &MessageRef) -> Result<Vec<UnsubscribeMethod>, String> {
+    let sender: String = store
+        .r()
+        .query_row(
+            "SELECT from_email FROM messages WHERE id = ?1",
+            [m.row_id],
+            |r| r.get(0),
+        )
+        .map_err(s)?;
+    Ok(vet_plan(
+        unsubscribe::plan(
+            m.list_unsubscribe.as_deref(),
+            m.list_unsubscribe_post.as_deref(),
+        ),
+        &sender,
+        None,
     ))
+}
+
+/// `list_id` is the message's List-Id when known (the store keeps none yet).
+fn vet_plan(
+    plan: Vec<UnsubscribeMethod>,
+    sender: &str,
+    list_id: Option<&str>,
+) -> Vec<UnsubscribeMethod> {
+    plan.into_iter()
+        .filter_map(|m| match m {
+            UnsubscribeMethod::Mailto { to, .. } => {
+                unsubscribe::mailto_allowed(&to, sender, list_id).then(|| {
+                    UnsubscribeMethod::Mailto {
+                        to,
+                        subject: Some(unsubscribe::MAILTO_TEXT.into()),
+                        body: Some(unsubscribe::MAILTO_TEXT.into()),
+                    }
+                })
+            }
+            other => Some(other),
+        })
+        .collect()
+}
+
+/// Reader settings the webview mirrors into kv; the engine reads them here
+/// instead of trusting a per-call flag.
+pub const READER_PREFS_KEY: &str = "reader_prefs_v1";
+
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ReaderPrefs {
+    /// Fetch sender logos from the sender's domain. Off until mirrored.
+    pub sender_logos: bool,
+    pub undo_send_seconds: i64,
+}
+
+impl Default for ReaderPrefs {
+    fn default() -> Self {
+        Self {
+            sender_logos: false,
+            undo_send_seconds: 10,
+        }
+    }
+}
+
+impl ReaderPrefs {
+    fn sanitized(mut self) -> Self {
+        self.undo_send_seconds = self.undo_send_seconds.clamp(5, 30);
+        self
+    }
+
+    pub fn load(store: &Store) -> Self {
+        store
+            .kv_get(READER_PREFS_KEY)
+            .ok()
+            .flatten()
+            .and_then(|j| serde_json::from_str::<ReaderPrefs>(&j).ok())
+            .unwrap_or_default()
+            .sanitized()
+    }
+}
+
+#[tauri::command]
+pub fn mail_set_reader_prefs(prefs: ReaderPrefs, host: State<'_, MailHost>) -> Result<(), String> {
+    let store = host.store()?;
+    let j = serde_json::to_string(&prefs.sanitized()).map_err(s)?;
+    store.kv_set(READER_PREFS_KEY, &j).map_err(s)
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -245,17 +332,13 @@ pub async fn mail_unsubscribe(
 ) -> Result<UnsubscribeOutcome, String> {
     let store = host.store()?;
     let m = message(&store, &thread_id, &message_id)?;
-    let plan = unsubscribe::plan(m.list_unsubscribe.as_deref(), m.list_unsubscribe_post.as_deref());
+    let plan = vetted_plan(&store, &m)?;
     let mut error = None;
     let mut fell_back = false;
     for method in plan {
         match method {
             UnsubscribeMethod::OneClick { url } => {
-                let client = reqwest::Client::builder()
-                    .redirect(reqwest::redirect::Policy::limited(3))
-                    .timeout(std::time::Duration::from_secs(15))
-                    .build()
-                    .map_err(s)?;
+                let client = safe_http::client()?;
                 match unsubscribe::post_one_click(&client, &url).await {
                     Ok(()) => {
                         return Ok(UnsubscribeOutcome {
@@ -272,7 +355,7 @@ pub async fn mail_unsubscribe(
                     }
                 }
             }
-            UnsubscribeMethod::Mailto { to, subject, body } => {
+            UnsubscribeMethod::Mailto { to, .. } => {
                 if !allow_mailto {
                     fell_back = true;
                     continue;
@@ -286,15 +369,17 @@ pub async fn mail_unsubscribe(
                 let doc = DraftDoc {
                     from_addr: me,
                     to: vec![to],
-                    subject: subject.unwrap_or_else(|| "unsubscribe".into()),
-                    text: body.unwrap_or_else(|| "unsubscribe".into()),
+                    subject: unsubscribe::MAILTO_TEXT.into(),
+                    text: unsubscribe::MAILTO_TEXT.into(),
                     ..DraftDoc::default()
                 };
                 let now = now_ms();
                 let id = store
                     .save_draft_at(None, &m.account_id, None, doc, now)
                     .map_err(s)?;
-                store.queue_send_at(&id, 0, now).map_err(s)?;
+                // The normal undo window, so a mistaken send can be taken back.
+                let undo_s = ReaderPrefs::load(&store).undo_send_seconds;
+                store.queue_send_at(&id, undo_s, now).map_err(s)?;
                 return Ok(UnsubscribeOutcome {
                     method: "mailto",
                     done: true,
@@ -340,12 +425,11 @@ async fn domain_logo(store: &Store, domain: &str, urls: &[String]) -> Option<Str
     if let Ok(Some(hit)) = store.avatar_cached(domain, now, CACHE_DAYS * 86_400_000) {
         return hit.map(|(k, d)| logo_data_url(&k, &d));
     }
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .ok()?;
+    let client = safe_http::client().ok()?;
     for u in urls {
+        if safe_http::check_url(u).is_err() {
+            continue;
+        }
         let Ok(res) = client.get(u).send().await else { continue };
         if !res.status().is_success() {
             continue;
@@ -378,7 +462,6 @@ pub async fn mail_avatar(
     email: String,
     name: Option<String>,
     contact_photo: Option<String>,
-    fetch_enabled: bool,
     host: State<'_, MailHost>,
 ) -> Result<AvatarOut, String> {
     if email.len() > 320 || name.as_ref().is_some_and(|n| n.len() > 512) {
@@ -386,6 +469,8 @@ pub async fn mail_avatar(
     }
     let photo = contact_photo.filter(|u| u.starts_with("https://") && u.len() <= 2048);
     let store = host.store()?;
+    // The setting comes from the mirrored prefs, never from the caller.
+    let fetch_enabled = ReaderPrefs::load(&store).sender_logos;
     for src in avatar::resolve(&email, name.as_deref(), photo.as_deref(), fetch_enabled) {
         match src {
             AvatarSource::Contact { url } => return Ok(AvatarOut::Contact { url }),
@@ -494,6 +579,58 @@ mod tests {
         assert!(check_id("t-1").is_ok());
         assert!(check_ids(&[]).is_err());
         assert!(check_ids(&vec!["a".to_string(); 501]).is_err());
+    }
+
+    #[test]
+    fn mailto_is_vetted_and_fixed_text() {
+        let plan = vec![
+            UnsubscribeMethod::OneClick {
+                url: "https://shop.com/u".into(),
+            },
+            UnsubscribeMethod::Mailto {
+                to: "unsub@shop.com".into(),
+                subject: Some("Buy now".into()),
+                body: Some("anything".into()),
+            },
+        ];
+        let v = vet_plan(plan.clone(), "news@shop.com", None);
+        assert_eq!(
+            v[1],
+            UnsubscribeMethod::Mailto {
+                to: "unsub@shop.com".into(),
+                subject: Some("unsubscribe".into()),
+                body: Some("unsubscribe".into()),
+            }
+        );
+        let v = vet_plan(plan, "news@other.com", None);
+        assert_eq!(v.len(), 1, "a mailto to a foreign domain is dropped");
+    }
+
+    #[test]
+    fn reader_prefs_default_off_and_round_trip() {
+        let d = std::env::temp_dir().join(format!(
+            "moduo-reader-prefs-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let store = Store::open(&d).unwrap();
+        let p = ReaderPrefs::load(&store);
+        assert!(
+            !p.sender_logos,
+            "no logo fetching until the setting is mirrored"
+        );
+        assert_eq!(p.undo_send_seconds, 10);
+        store
+            .kv_set(
+                READER_PREFS_KEY,
+                r#"{"senderLogos":true,"undoSendSeconds":0}"#,
+            )
+            .unwrap();
+        let p = ReaderPrefs::load(&store);
+        assert!(p.sender_logos);
+        assert_eq!(p.undo_send_seconds, 5, "0 never disables the undo window");
+        store.kv_set(READER_PREFS_KEY, "garbage").unwrap();
+        assert!(!ReaderPrefs::load(&store).sender_logos);
     }
 
     #[test]

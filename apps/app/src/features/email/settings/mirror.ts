@@ -11,6 +11,8 @@ import type { EmailSettingsKind } from "@contracts/vocabularies";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailRuntime, EmailSettingsItem } from "@/lib/runtime.types.email";
 
+import { pushReaderPrefs } from "../engine/behavior";
+
 export type EmailSettingsPort = Pick<
   EmailRuntime,
   "listSettings" | "upsertSetting" | "deleteSetting"
@@ -182,6 +184,7 @@ export function startEmailSettingsMirror(
   const setClassify = runtime.email.setClassifyItems?.bind(runtime.email);
   const unpush = setClassify ? pushClassifyItems(mirror, setClassify) : () => {};
   void mirror.refresh();
+  pushReaderPrefs(runtime.email.engine);
   if (typeof window === "undefined") return { mirror, stop: unpush };
   const onFocus = () => void mirror.refresh();
   window.addEventListener("focus", onFocus);

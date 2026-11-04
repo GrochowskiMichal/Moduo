@@ -12,6 +12,7 @@ import { runEngineUnsubscribe, unsubscribeMessage } from "./engine-reader";
 
 export function UnsubscribeBar({ engine, thread }: { engine: MailEngine; thread: MailThread }) {
   const [asking, setAsking] = useState<((ok: boolean) => void) | null>(null);
+  const [recipient, setRecipient] = useState("");
   const [busy, setBusy] = useState(false);
   const m = unsubscribeMessage(thread.messages);
   if (!m || !engine.unsubscribe) return null;
@@ -20,7 +21,11 @@ export function UnsubscribeBar({ engine, thread }: { engine: MailEngine; thread:
     setBusy(true);
     try {
       const notice = await runEngineUnsubscribe(engine, thread.row.threadId, m.id, {
-        confirmMailto: () => new Promise<boolean>((resolve) => setAsking(() => resolve)),
+        confirmMailto: (to) =>
+          new Promise<boolean>((resolve) => {
+            setRecipient(to);
+            setAsking(() => resolve);
+          }),
         openUrl: (url) => window.open(url, "_blank", "noopener"),
       });
       toast.success(notice);
@@ -40,7 +45,10 @@ export function UnsubscribeBar({ engine, thread }: { engine: MailEngine; thread:
     <div className="flex items-center gap-2 px-4 pb-2 text-xs text-muted-foreground">
       {asking ? (
         <>
-          <span>Send an unsubscribe email for you?</span>
+          <span>
+            Send an email saying “unsubscribe” to{" "}
+            <span className="font-medium text-foreground">{recipient}</span>?
+          </span>
           <Button size="sm" variant="outline" onClick={() => answer(true)}>
             Send
           </Button>

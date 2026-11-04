@@ -79,16 +79,19 @@ export async function runEngineUnsubscribe(
   engine: MailEngine,
   threadId: string,
   messageId: string,
-  deps: { confirmMailto: () => Promise<boolean>; openUrl: (url: string) => void },
+  deps: { confirmMailto: (to: string) => Promise<boolean>; openUrl: (url: string) => void },
 ): Promise<string> {
   if (!engine.unsubscribe) throw new Error("Unsubscribe isn't available here.");
   const plan = (await engine.unsubscribePlan?.(threadId, messageId)) ?? [];
   const oneClick = plan.some((m) => m.kind === "oneClick");
-  const hasMailto = plan.some((m) => m.kind === "mailto");
-  // Ask before a mailto, and only once it is the method that would run.
-  const allowMailto = hasMailto && !oneClick && (await deps.confirmMailto());
+  const mailto = plan.find((m) => m.kind === "mailto");
+  const hasMailto = mailto !== undefined;
+  // Ask before a mailto, naming its exact recipient, and only once it is the
+  // method that would run. The engine has already vetted the address.
+  const ask = () => deps.confirmMailto(mailto?.kind === "mailto" ? mailto.to : "");
+  const allowMailto = hasMailto && !oneClick && (await ask());
   let out = await engine.unsubscribe(threadId, messageId, { allowMailto });
-  if (out.method === "web" && hasMailto && !allowMailto && oneClick && (await deps.confirmMailto()))
+  if (out.method === "web" && hasMailto && !allowMailto && oneClick && (await ask()))
     out = await engine.unsubscribe(threadId, messageId, { allowMailto: true });
   if (out.method === "web" && out.url) deps.openUrl(out.url);
   return unsubscribeNotice(out);

@@ -46,7 +46,8 @@ describe("tauri mail engine", () => {
     await engine.rsvp!("t1", "m1", "decline");
     await engine.unsubscribePlan!("t1", "m1");
     await engine.unsubscribe!("t1", "m1", { allowMailto: true });
-    await engine.avatar!({ email: "a@b.io", name: null, contactPhoto: null, fetchEnabled: true });
+    await engine.avatar!({ email: "a@b.io", name: null, contactPhoto: null });
+    await engine.setReaderPrefs!({ senderLogos: false, undoSendSeconds: 10 });
     await engine.setVisible!(["t1"]);
     await engine.openFolder!("a-inbox");
     await engine.backfill!("a");
@@ -60,7 +61,8 @@ describe("tauri mail engine", () => {
       ["mail_rsvp", { threadId: "t1", messageId: "m1", answer: "decline" }],
       ["mail_unsubscribe_plan", { threadId: "t1", messageId: "m1" }],
       ["mail_unsubscribe", { threadId: "t1", messageId: "m1", allowMailto: true }],
-      ["mail_avatar", { email: "a@b.io", name: null, contactPhoto: null, fetchEnabled: true }],
+      ["mail_avatar", { email: "a@b.io", name: null, contactPhoto: null }],
+      ["mail_set_reader_prefs", { prefs: { senderLogos: false, undoSendSeconds: 10 } }],
       ["mail_set_visible", { threadIds: ["t1"] }],
       ["mail_open_folder", { mailboxId: "a-inbox" }],
       ["mail_backfill", { accountId: "a" }],

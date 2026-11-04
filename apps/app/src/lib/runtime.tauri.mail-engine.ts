@@ -51,6 +51,7 @@ export function createTauriMailEngine(
     unsubscribe: (threadId, messageId, { allowMailto }) =>
       call("mail_unsubscribe", { threadId, messageId, allowMailto }),
     avatar: (input) => call("mail_avatar", { ...input }),
+    setReaderPrefs: (prefs) => call("mail_set_reader_prefs", { prefs }),
     setVisible: (threadIds) => call("mail_set_visible", { threadIds }),
     openFolder: (mailboxId) => call("mail_open_folder", { mailboxId }),
     backfill: (accountId) => call("mail_backfill", { accountId }),

@@ -174,8 +174,10 @@ export type MailAvatarInput = {
   email: string;
   name: string | null;
   contactPhoto: string | null;
-  fetchEnabled: boolean;
 };
+
+/** Mirrored into the engine's kv; the engine reads them, never a per-call flag. */
+export type MailReaderPrefs = { senderLogos: boolean; undoSendSeconds: number };
 
 export type MailAvatar =
   | { kind: "contact"; url: string }
@@ -260,6 +262,8 @@ export type MailEngine = {
   ): Promise<MailUnsubscribeOutcome>;
   /** Contact photo → own-domain logo → initials (AC31). */
   avatar?(input: MailAvatarInput): Promise<MailAvatar>;
+  /** Sender logos on/off and the undo-send window, for the engine to read. */
+  setReaderPrefs?(prefs: MailReaderPrefs): Promise<void>;
   /** Rows on screen: their bodies prefetch first after opened ones (decision 8). */
   setVisible?(threadIds: string[]): Promise<void>;
   /** Rounds a folder now (opening it in the rail). */

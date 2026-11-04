@@ -124,9 +124,13 @@ pub const ONE_CLICK_BODY: &str = "List-Unsubscribe=One-Click";
 /// Sends the one-click POST. A non-2xx answer is an error so the caller falls
 /// back to the next method.
 pub async fn post_one_click(client: &reqwest::Client, url: &str) -> Result<(), String> {
-    if !is_https(url) {
-        return Err("one-click unsubscribe needs an https URL".into());
-    }
+    crate::mail::safe_http::check_url(url)?;
+    post_form(client, url).await
+}
+
+/// The POST itself. A 3xx is a failure: the client follows no redirects
+/// (`safe_http`), so a redirect never turns into a second request.
+async fn post_form(client: &reqwest::Client, url: &str) -> Result<(), String> {
     let res = client
         .post(url)
         .header(reqwest::header::CONTENT_TYPE, "application/x-www-form-urlencoded")
@@ -139,6 +143,61 @@ pub async fn post_one_click(client: &reqwest::Client, url: &str) -> Result<(), S
     } else {
         Err(format!("unsubscribe server answered {}", res.status()))
     }
+}
+
+/// The fixed text of every unsubscribe email; the header's own subject and
+/// body are never used (a sender could put anything there).
+pub const MAILTO_TEXT: &str = "unsubscribe";
+
+fn domain_of(addr: &str) -> Option<String> {
+    let d = addr.rsplit_once('@')?.1.trim().trim_end_matches('.');
+    (!d.is_empty()).then(|| d.to_ascii_lowercase())
+}
+
+/// The domain inside a `List-Id: Name <list.example.com>` header.
+fn list_id_domain(list_id: &str) -> Option<String> {
+    let inner = match (list_id.rfind('<'), list_id.rfind('>')) {
+        (Some(a), Some(b)) if b > a => &list_id[a + 1..b],
+        _ => list_id,
+    };
+    let d = inner.trim().trim_end_matches('.').to_ascii_lowercase();
+    (!d.is_empty() && d.contains('.')).then_some(d)
+}
+
+/// The last two labels: a coarse organizational domain (`news.shop.com` and
+/// `bounce.shop.com` both give `shop.com`).
+fn base_domain(d: &str) -> String {
+    let labels: Vec<&str> = d.split('.').collect();
+    let n = labels.len();
+    // `shop.co.uk`: a short second-level label under a ccTLD takes three labels.
+    let keep = if n >= 3 && labels[n - 1].len() == 2 && labels[n - 2].len() <= 3 {
+        3
+    } else {
+        2
+    };
+    labels[n.saturating_sub(keep)..].join(".")
+}
+
+fn related(a: &str, b: &str) -> bool {
+    a == b
+        || a.ends_with(&format!(".{b}"))
+        || b.ends_with(&format!(".{a}"))
+        || base_domain(a) == base_domain(b)
+}
+
+/// A mailto unsubscribe goes only to the sender's own domain or the list's
+/// (List-Id), so a message can't use it to send mail to a third party.
+pub fn mailto_allowed(to: &str, sender: &str, list_id: Option<&str>) -> bool {
+    if to.contains(',') || to.contains(';') {
+        return false;
+    }
+    let Some(rd) = domain_of(to) else {
+        return false;
+    };
+    domain_of(sender).is_some_and(|sd| related(&rd, &sd))
+        || list_id
+            .and_then(list_id_domain)
+            .is_some_and(|ld| related(&rd, &ld))
 }
 
 #[cfg(test)]
@@ -200,5 +259,59 @@ mod tests {
     async fn one_click_refuses_http() {
         let c = reqwest::Client::new();
         assert!(post_one_click(&c, "http://x.test/u").await.is_err());
+        assert!(post_one_click(&c, "https://127.0.0.1/u").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn one_click_does_not_follow_a_redirect() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = l.local_addr().unwrap().port();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let h = hits.clone();
+        tokio::spawn(async move {
+            while let Ok((mut s, _)) = l.accept().await {
+                h.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf).await;
+                let _ = s
+                    .write_all(
+                        format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: http://127.0.0.1:{port}/b\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes(),
+                    )
+                    .await;
+            }
+        });
+        let c = crate::mail::safe_http::base_builder().build().unwrap();
+        let r = post_form(&c, &format!("http://127.0.0.1:{port}/a")).await;
+        assert!(r.unwrap_err().contains("307"));
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn mailto_recipient_must_match_sender_or_list() {
+        assert!(mailto_allowed(
+            "unsub@news.shop.com",
+            "hello@shop.com",
+            None
+        ));
+        assert!(mailto_allowed("u@shop.com", "a@mail.shop.com", None));
+        assert!(mailto_allowed(
+            "leave@lists.org.test",
+            "a@x.test",
+            Some("Team <team.lists.org.test>")
+        ));
+        assert!(!mailto_allowed("victim@other.com", "hello@shop.com", None));
+        assert!(!mailto_allowed(
+            "victim@other.com",
+            "hello@shop.com",
+            Some("<list.shop.com>")
+        ));
+        assert!(!mailto_allowed(
+            "a@shop.com,victim@other.com",
+            "hello@shop.com",
+            None
+        ));
+        assert!(!mailto_allowed("x@evil.co.uk", "a@shop.co.uk", None));
+        assert!(!mailto_allowed("nodomain", "hello@shop.com", None));
     }
 }

@@ -5,6 +5,9 @@
 
 import { MAIL_BLOCK_DESTINATIONS, type MailBlockDestination } from "@contracts/mail";
 
+import { getRuntime } from "@/lib/runtime";
+import type { MailEngine, MailReaderPrefs } from "@/lib/runtime.types.mail-engine";
+
 export const MAIL_BADGE_MODES = ["personal", "all", "off"] as const;
 export type MailBadgeMode = (typeof MAIL_BADGE_MODES)[number];
 export const MAIL_REMOTE_IMAGES = ["block", "contacts", "always"] as const;
@@ -112,6 +115,21 @@ export function writeMailBehavior(behavior: MailBehavior): void {
   } catch {
     /* storage disabled: the setting lasts this session only */
   }
+  pushReaderPrefs(getRuntime()?.email.engine, behavior);
+}
+
+/** The settings the Rust engine reads itself (sender logos, the undo window
+ *  for an unsubscribe email) instead of trusting a per-call flag. */
+export function readerPrefs(behavior: MailBehavior): MailReaderPrefs {
+  const b = sanitizeMailBehavior(behavior);
+  return { senderLogos: b.senderLogos, undoSendSeconds: b.undoSendSeconds };
+}
+
+export function pushReaderPrefs(
+  engine: MailEngine | null | undefined,
+  behavior: MailBehavior = readMailBehavior(),
+): void {
+  void engine?.setReaderPrefs?.(readerPrefs(behavior)).catch(() => {});
 }
 
 export type MailEngineMode = "on" | "off" | "fixture";

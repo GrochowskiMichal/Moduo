@@ -184,4 +184,23 @@ mod tests {
         assert!(!accept_logo("text/html", 1000));
         assert!(!accept_logo("image/png", MAX_LOGO_BYTES + 1));
     }
+
+    #[test]
+    fn logo_urls_to_private_hosts_are_refused() {
+        // The fetch runs every URL through the SSRF guard first.
+        for email in [
+            "a@127.0.0.1",
+            "a@[10.0.0.1]",
+            "a@localhost",
+            "a@169.254.169.254",
+        ] {
+            for s in resolve(email, None, None, true) {
+                if let AvatarSource::Domain { urls, .. } = s {
+                    for u in urls {
+                        assert!(crate::mail::safe_http::check_url(&u).is_err(), "{u}");
+                    }
+                }
+            }
+        }
+    }
 }

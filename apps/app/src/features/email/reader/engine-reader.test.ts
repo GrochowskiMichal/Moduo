@@ -85,4 +85,23 @@ describe("engine reader adapters", () => {
     expect(r.notice).toContain("unsubscribe email was sent");
     expect(unsubscribeNotice(out("web", true))).toContain("didn't work");
   });
+
+  it("names the exact mailto recipient in the confirm", async () => {
+    const seen: string[] = [];
+    const engine = {
+      unsubscribePlan: async () => [{ kind: "mailto", to: "leave@news.shop.com" }],
+      unsubscribe: async () => ({
+        method: "mailto",
+        done: true,
+        url: null,
+        fellBack: false,
+        error: null,
+      }),
+    } as unknown as MailEngine;
+    await runEngineUnsubscribe(engine, "t", "m", {
+      confirmMailto: async (to) => (seen.push(to), true),
+      openUrl: () => {},
+    });
+    expect(seen).toEqual(["leave@news.shop.com"]);
+  });
 });

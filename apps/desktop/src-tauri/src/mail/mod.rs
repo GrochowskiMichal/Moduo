@@ -16,6 +16,7 @@ pub mod mime;
 pub mod ops;
 pub mod perf;
 pub mod rules;
+pub mod safe_http;
 pub mod send;
 pub mod session;
 pub mod store;
