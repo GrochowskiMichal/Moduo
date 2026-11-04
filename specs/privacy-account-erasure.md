@@ -126,8 +126,8 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 | same · "confirm runs the same deletion" | AC13 | Confirm calls the same `deleteAccount` flow with the resolved user. |
 | same · "blocked, then transfer" | AC14 | A sole owner of shared workspaces gets 409 with workspaces and member emails. A full transfer map transfers first and then deletes; a partial map is refused. |
 | same · "refusals" | AC15 | No secret gives 503 when unset and 401 when wrong; an unknown email gives 404 "No account with that email"; a non-member as new owner gives 400. |
-| `src/features/settings/delete-account.test.ts` · "Danger zone copy" | AC10 | The exported Danger zone sentence equals the approved wording. |
-| `src/routes/pages/auth-page.test.tsx` · "deleted notice" | AC11 | With the `deleted` flag in the URL the sign-in page shows the line; without it, it doesn't. |
+| `apps/app/src/features/settings/delete-account.test.ts` · "Danger zone copy" | AC10 | The exported Danger zone sentence equals the approved wording. |
+| `apps/app/src/routes/pages/auth-page.test.tsx` · "deleted notice" | AC11 | With the `deleted` flag in the URL the sign-in page shows the line; without it, it doesn't. |
 | Production preview (manual, read-only) | AC1–AC7 | After the migration is applied, the preview for a real account returns sensible counts and changes nothing. |
 | Manual pass · `docs/testing/<branch>.md` | AC1–AC17 | A throwaway account with shared and private items in a teammate's workspace is deleted. The teammate's view is checked before and after, along with the policy page and both Stripe customers. |
 
@@ -135,7 +135,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 
 - **The database side runs as SQL functions, not as PostgREST calls from the Edge Function.** `account_erase_workspace_data(p_user uuid, p_preview boolean DEFAULT true) RETURNS jsonb` does all of it in one transaction, which makes it atomic and fast. It sits next to the access functions it needs, and its preview mode gives the admin command a free dry run. It is SECURITY DEFINER, with EXECUTE only for `service_role`. *Rejected:* dozens of round trips from TypeScript with no atomicity.
 - **Preview is the default** (`p_preview` defaults to true). Deleting needs an explicit `false`, so a mistaken call can't delete.
-- **"Private" is computed with the real access function.** An item is private when no other current member `M` of the workspace has `can_access(type, id, 'view', M)`. That is the same function RLS and every op use (`20261006210000_perm_sharing.sql:105`, branches for note, bucket, task, calendar, contact_group, contact, company and event). Chat uses `chat_members`. *Rejected:* `share_member_removed`'s "no workspace grant" test and `noteIsPrivate` (`src/features/sharing/rules.ts`). Both ignore member grants and inheritance, and they already disagree with each other.
+- **"Private" is computed with the real access function.** An item is private when no other current member `M` of the workspace has `can_access(type, id, 'view', M)`. That is the same function RLS and every op use (`20261006210000_perm_sharing.sql:105`, branches for note, bucket, task, calendar, contact_group, contact, company and event). Chat uses `chat_members`. *Rejected:* `share_member_removed`'s "no workspace grant" test and `noteIsPrivate` (`apps/app/src/features/sharing/rules.ts`). Both ignore member grants and inheritance, and they already disagree with each other.
 - **The new-owner rule is a helper, `account_erasure_new_owner(type, id, user)`.**
   - It returns the workspace owner if `can_access(…, 'view', owner)`.
   - Otherwise it returns the member with the highest effective level, probing `full`, `edit`, `view`, then `freebusy` through `can_access`. Ties go to the earliest `resource_grants.created_at` for that member, then the earliest `workspace_members.joined_at`.
@@ -148,7 +148,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
   4. Remove `note_shares` and the legacy `exposed_notes`. Re-root children written by someone else.
   5. Delete the rows themselves: notes; then tasks before buckets (`tasks.bucket_id` is RESTRICT), and bucket ids out of `task_time_blocks`; then events before calendar accounts (`source_account_id` is SET NULL); then sets, calendars and accounts; then email refs before email accounts.
 
-  This follows the dependency map of 2026-10-07 (FK rules taken from migrations and `src/types/supabase.ts`). The existing `*_op_*` deletes can't be reused: they need `auth.uid()` and only soft-delete.
+  This follows the dependency map of 2026-10-07 (FK rules taken from migrations and `apps/app/src/types/supabase.ts`). The existing `*_op_*` deletes can't be reused: they need `auth.uid()` and only soft-delete.
 - **Runs as the service role.** `perm_enforce_write` passes when `perm_actor_id()` is NULL (`20261006230000_perm_sharing_write_hotfix.sql:41-48`). The function also sets `share.bypass` locally, as `share_member_removed` does.
 - **`share_member_removed` gets two changes in the same migration.**
   - It skips the hand-over when the departing user's profile row no longer exists. That is the account-deletion cascade, which already happened. This closes the dashboard-delete leak.
@@ -196,7 +196,7 @@ A founder runs one command in Terminal, with the admin secret from their passwor
 | 1 | **PRIV-2a · Erase what's left in other workspaces (SQL)** | Migration with `account_erase_workspace_data` + `account_erasure_new_owner` + the `share_member_removed` changes + grants; local probe for AC1–AC6, AC9, AC12; applied to prod with OK; read-only prod preview. No caller yet, so applying it is safe on its own. | AC1–AC6, AC9, AC12 (SQL side) | PRIV-1 ✓ |
 | 2 | **PRIV-2b · Wire it in, wipe the Stripe copy, in-app copy** | Migration with `account_scrub_stripe_mirror`; two new steps in `account-erasure.ts` + tests; Danger zone sentence; `/auth` deleted notice + tests; `delete-account` redeployed with OK; AC17 one-off: designer deletes the two customers in the Stripe dashboard, then the mirror is wiped with OK. | AC7, AC8, AC10, AC11, AC17 | 1 |
 | 3 | **PRIV-2c · Admin command for privacy@** | Migration with `admin_account_lookup` + `admin_transfer_workspace_owner`; `admin-delete-account` + `_shared/account-admin.ts` + tests (passes `posthog: postHogEraserFromEnv(…)` to `deleteAccount`; needs the PRIV-3 PostHog secrets); runbook `docs/privacy-requests.md`; designer creates `ACCOUNT_ADMIN_SECRET`; deployed with OK; one preview run on a real account. | AC12–AC15 | 1, 2 |
-| 4 | **PRIV-2d · Privacy policy wording** | `apps/landing/privacy.html` updated with the appendix wording on the landing branch flow (Mike redeploys Vercel), plus the "Last updated" date. | AC16 | — |
+| 4 | **PRIV-2d · Privacy policy wording** | `apps/landing/privacy.html` updated with the appendix wording (staging gets it from the `develop` push via `landing-deploy.yml`; moduo.app gets it with the next `/ship` release tag), plus the "Last updated" date. | AC16 | — |
 
 ## Out of scope
 

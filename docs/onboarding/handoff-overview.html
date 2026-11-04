@@ -245,10 +245,6 @@
         <p>Account, billing, workspace, appearance. Full feature pass scheduled (DF-19, needs an <code>/s1</code>).</p>
         <div class="pillars"><span class="dot on"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">CRUD</span></div></div>
 
-      <div class="card mod"><div class="mod-top"><h3>Mindmap</h3><span class="pill idle">Hidden · rethink</span></div>
-        <p>XYFlow mind-mapping. Built but off-nav (redb-local, not spine-wired). Awaits an <code>/s1</code> rethink.</p>
-        <div class="pillars"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">off-spine</span></div></div>
-
       <div class="card mod"><div class="mod-top"><h3>Time-tracking</h3><span class="pill idle">Paused</span></div>
         <p>Native active-window → redb. Stub. Revives minimally with Finance (time → invoice).</p>
         <div class="pillars"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="lbl">stub</span></div></div>
@@ -273,7 +269,7 @@
       <p class="sec-note">Eight feature waves, newest first. Everything numbered is shipped; the DF wave is the current pre-alpha polish pass.</p></div>
     <div class="tl">
       <div class="tl-row"><div class="tl-h"><span class="w">Dogfood fixes</span><span class="code">DF · in progress</span></div>
-        <p>Whole-app cohesion pass from a 2026-07 critique: deep-links everywhere, one undo grammar, trial/billing fix, email daily-use pack, notification generation, Universal Inbox, global capture, cross-pane drag, a full Settings overhaul, one eyebrow/title/toolbar spec each, Mindmap hidden. 23 of 24 done — only DF-15 remains, and it needs a look-approval rather than engineering.</p></div>
+        <p>Whole-app cohesion pass from a 2026-07 critique: deep-links everywhere, one undo grammar, trial/billing fix, email daily-use pack, notification generation, Universal Inbox, global capture, cross-pane drag, a full Settings overhaul, one eyebrow/title/toolbar spec each. 23 of 24 done — only DF-15 remains, and it needs a look-approval rather than engineering.</p></div>
       <div class="tl-row"><div class="tl-h"><span class="w">Dashboard / Home</span><span class="code">DB-1…8</span></div>
         <p>Rebuilt <code>/</code> as a bounded 8×4 widget grid with drag, multi-page, persistence + a 16-widget registry and gallery.</p></div>
       <div class="tl-row"><div class="tl-h"><span class="w">Email</span><span class="code">EM-1…11</span></div>
@@ -323,12 +319,12 @@
       <div class="card">
         <h3 style="margin-bottom:12px">Backend surface, by size <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · SYMBOLS PER AREA</span></h3>
         <div class="subsys">
-          <div class="row"><div class="nm">Rust command layer <span>src-tauri/src/commands — email engine, calendar/CalDAV, integrations</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:100%"></div></div><div class="v">567</div></div></div>
-          <div class="row"><div class="nm">Data-layer seam <span>src/lib — <code>runtime.web.ts</code> is the only file that talks to Supabase</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:36%"></div></div><div class="v">202</div></div></div>
-          <div class="row"><div class="nm">redb store <span>src-tauri/src/store_redb — paused, lite-version only</span></div><div class="bar"><div class="track"><div class="fill" style="width:21%"></div></div><div class="v">117</div></div></div>
+          <div class="row"><div class="nm">Rust command layer <span>apps/desktop/src-tauri/src/commands — email engine, calendar/CalDAV, integrations</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:100%"></div></div><div class="v">567</div></div></div>
+          <div class="row"><div class="nm">Data-layer seam <span>apps/app/src/lib — <code>runtime.web.ts</code> is the only file that talks to Supabase</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:36%"></div></div><div class="v">202</div></div></div>
+          <div class="row"><div class="nm">redb store <span>apps/desktop/src-tauri/src/store_redb — paused, lite-version only</span></div><div class="bar"><div class="track"><div class="fill" style="width:21%"></div></div><div class="v">117</div></div></div>
           <div class="row"><div class="nm">MCP connector <span>supabase/functions/moduo-mcp — the ~60 agent tools</span></div><div class="bar"><div class="track"><div class="fill hi" style="width:18%"></div></div><div class="v">103</div></div></div>
-          <div class="row"><div class="nm">Rust domain <span>src-tauri/src/domain</span></div><div class="bar"><div class="track"><div class="fill" style="width:7%"></div></div><div class="v">38</div></div></div>
-          <div class="row"><div class="nm">Sync worker <span>src-tauri/src/sync — near-vestigial</span></div><div class="bar"><div class="track"><div class="fill" style="width:3%"></div></div><div class="v">15</div></div></div>
+          <div class="row"><div class="nm">Rust domain <span>apps/desktop/src-tauri/src/domain</span></div><div class="bar"><div class="track"><div class="fill" style="width:7%"></div></div><div class="v">38</div></div></div>
+          <div class="row"><div class="nm">Sync worker <span>apps/desktop/src-tauri/src/sync — near-vestigial</span></div><div class="bar"><div class="track"><div class="fill" style="width:3%"></div></div><div class="v">15</div></div></div>
           <div class="row"><div class="nm">Graph + embeddings <span>graph_helix + embeddings — dead, no caller</span></div><div class="bar"><div class="track"><div class="fill" style="width:4%"></div></div><div class="v">21</div></div></div>
         </div>
       </div>
@@ -336,12 +332,12 @@
       <div class="card">
         <h3 style="margin-bottom:12px">Most-connected files <span style="font-family:var(--mono);font-size:.62rem;color:var(--faint);letter-spacing:.08em"> · BY DEGREE</span></h3>
         <div class="subsys">
-          <div class="row"><div class="nm">AppState <span>src-tauri/src/lib.rs — the one true god-object; wires the dead engines at boot</span></div><div class="deg">215</div></div>
-          <div class="row"><div class="nm">ModuoRuntime <span>src/lib/runtime.types.ts — the seam interface</span></div><div class="deg">140</div></div>
-          <div class="row"><div class="nm">RedbStore <span>src-tauri/src/store_redb — paused, still heavily wired</span></div><div class="deg">139</div></div>
-          <div class="row"><div class="nm">runtime.web.ts <span>src/lib — the single Supabase boundary</span></div><div class="deg">100</div></div>
-          <div class="row"><div class="nm">entity-links.ts <span>src/lib — the spine keystone (TS side)</span></div><div class="deg">78</div></div>
-          <div class="row"><div class="nm">email model / caldav / auth <span>src-tauri/src/commands — the native email + calendar core</span></div><div class="deg">45–42</div></div>
+          <div class="row"><div class="nm">AppState <span>apps/desktop/src-tauri/src/lib.rs — the one true god-object; wires the dead engines at boot</span></div><div class="deg">215</div></div>
+          <div class="row"><div class="nm">ModuoRuntime <span>apps/app/src/lib/runtime.types.ts — the seam interface</span></div><div class="deg">140</div></div>
+          <div class="row"><div class="nm">RedbStore <span>apps/desktop/src-tauri/src/store_redb — paused, still heavily wired</span></div><div class="deg">139</div></div>
+          <div class="row"><div class="nm">runtime.web.ts <span>apps/app/src/lib — the single Supabase boundary</span></div><div class="deg">100</div></div>
+          <div class="row"><div class="nm">entity-links.ts <span>apps/app/src/lib — the spine keystone (TS side)</span></div><div class="deg">78</div></div>
+          <div class="row"><div class="nm">email model / caldav / auth <span>apps/desktop/src-tauri/src/commands — the native email + calendar core</span></div><div class="deg">45–42</div></div>
         </div>
       </div>
     </div>
@@ -349,7 +345,7 @@
     <div class="rec" style="margin-top:16px">
       <ul class="confirm">
         <li><b>Proposal C is safe.</b> The dead subsystems — <code>graph_helix</code> (12) + <code>embeddings</code> (9) + vestigial <code>sync</code> (15) ≈ 36 nodes — are tiny and appear in <b>none</b> of the coupling hotspots. Pruning them is isolated, low-risk work.</li>
-        <li><b>The core is coherent, not tangled.</b> <code>runtime.web.ts</code> really is the single Supabase boundary; the spine, the MCP connector, and the command layer are densely but sensibly connected — and <code>madge</code> finds <b>0 circular dependencies</b> in <code>src/</code>.</li>
+        <li><b>The core is coherent, not tangled.</b> <code>runtime.web.ts</code> really is the single Supabase boundary; the spine, the MCP connector, and the command layer are densely but sensibly connected — and <code>madge</code> finds <b>0 circular dependencies</b> in <code>apps/app/src/</code>.</li>
         <li><b>Start the prune at <code>AppState</code>.</b> At 215 connections it's the natural first cut — it's the constructor that instantiates the dead graph + embeddings engines on every desktop boot.</li>
       </ul>
     </div>
@@ -381,7 +377,7 @@
         <div class="chips"><span class="chip">DF-15 home — needs your look-approval</span></div></div>
       <div class="card bucket"><h3>Wave D — dogfood &amp; alpha <span class="cnt">in progress</span></h3><p>Added 2026-07-29. Get the real data in; make it sendable.</p>
         <div class="chips"><span class="chip">OPS-1/2 schema ✅</span><span class="chip">IM-1, IM-2a/b/c-a ✅</span><span class="chip">NOTE-FIX-1, SCALE-1 ✅</span><span class="chip">IM-2c-b backfill progress</span><span class="chip">🔴 /s1 ALPHA — app is undistributable today</span></div></div>
-      <div class="card bucket"><h3>Pre-alpha gates</h3><p>After Wave D. The mindmap rethink left alpha 2026-07-29, so MCP-1 no longer waits on it.</p>
+      <div class="card bucket"><h3>Pre-alpha gates</h3><p>After Wave D.</p>
         <div class="chips"><span class="chip">MCP-1 connector hardening — deps met</span><span class="chip">DESKTOP-1 macOS updater</span></div></div>
       <div class="card bucket"><h3>Post-alpha / open</h3><p>Out of v1, or need-you decisions.</p>
         <div class="chips"><span class="chip">Finance (Wave 4)</span><span class="chip">Email post-v1</span><span class="chip">Booking links</span><span class="chip">⚠ Pricing / cost model</span><span class="chip">⚠ Assistive scheduling</span></div></div>

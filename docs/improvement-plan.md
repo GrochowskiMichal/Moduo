@@ -131,7 +131,7 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > *ambient mirror*: muted-foreground, factual ("Rescheduled 3×"), never
 > red/warning (spec design principles 4–5). (d) Mutations go through
 > `api.patchTask` (optimistic; do not add new write paths). (e) Detail panel is
-> a feature component (`src/features/tasks/ui/`) — no Storybook story required,
+> a feature component (`apps/app/src/features/tasks/ui/`) — no Storybook story required,
 > but any new shadcn primitive goes through the CLI per CLAUDE.md rule 4.
 - [x] Right rail = task-detail-on-select: editable description, all properties,
       created/updated, drift info.
@@ -148,7 +148,7 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > with Maciej: header **Filter** control + click-chip-to-filter (OR/union);
 > chips **always shown, quiet** on rows/cards; **inline create + auto color**
 > (recolorable). New shared `TagPicker` + `TagChip`/`TagChipList` +
-> `tag-colors.ts` in `src/components/` (cross-module); label palette in
+> `tag-colors.ts` in `apps/app/src/components/` (cross-module); label palette in
 > tokens.css §13b (`data-label`) + `.tag-chip`/`.tag-dot` in global.css.
 > Migration `20260612120000_buckets_add_group.sql` **applied to hosted** (Maciej's
 > go-ahead) and **live-verified on web** (section + tags + filter, DB-confirmed;
@@ -158,7 +158,7 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
       presentational only, capture untouched, two levels max. *(`group` on
       Bucket — TS/Rust/SQL; `bucketSections` helper; rail renders ungrouped
       flat then collapsible sections; assign via bucket "…" → Section.)*
-- [x] Tags v1: **shared workspace-level** TagPicker in `src/components/`
+- [x] Tags v1: **shared workspace-level** TagPicker in `apps/app/src/components/`
       (cross-module contract — Mail/Notes adopt the same component later);
       label-color token palette; chips + filter in Tasks. *(TagPicker:
       search/toggle/create/recolor/delete; detail-panel Tags field; quiet chips
@@ -234,8 +234,8 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 - [x] Define the module contract (ops naming, actor field, activity table,
       registration shape) — see Cross-module AI-readiness above.
       *(`docs/moduo-module-contract.md`; registration = typed manifests:
-      `src/lib/module-manifest.ts` + `module-registry.ts` +
-      `src/features/tasks/ops-manifest.ts`.)*
+      `apps/app/src/lib/module-manifest.ts` + `module-registry.ts` +
+      `apps/app/src/features/tasks/ops-manifest.ts`.)*
 - [x] Implement for Tasks: commit/reschedule/triage/recurrence invariants move
       from the React hook into backend RPCs. *(8 `tasks_op_*` RPCs: commit/
       uncommit/skip-today/set-status/reschedule/unschedule/skip-occurrence/
@@ -283,10 +283,10 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > dark-theme-only (`:not([data-theme="light"])` guard), chroma hand-tuned
 > live against the Tasks shell. Settings picker between Theme and Accent;
 > Storybook Shade toolbar. Audit: anchor surfaces were already token-clean
-> except the root error boundary (zinc→tokens) and the mindmap dot/glow
+> except the root error boundary (zinc→tokens) and the dot/glow
 > hex fallbacks in global.css (→ tokens; stylelint now 0 warnings).
-> Legacy bypass inventory (dashboard widgets, email, onboarding/paywall,
-> mindmap) catalogued in the build log for Session 11. Live-verified on web.
+> Legacy bypass inventory (dashboard widgets, email, onboarding/paywall)
+> catalogued in the build log for Session 11. Live-verified on web.
 
 - [x] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
       Settings picker, same cascade mechanism as `data-accent`.

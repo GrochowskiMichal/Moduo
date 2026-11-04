@@ -40,7 +40,7 @@ None. This is a build-time optimization. The user-visible effect is faster rende
 | Manual: `bun run dev:web` → load localhost:8081 | AC2, AC5, AC7 | dev server boots, app renders, no compiler errors in terminal |
 | Manual: `rsbuild build` (web) | AC3 | production web build succeeds |
 | Manual: `bun run build:desktop:web` | AC4 | desktop frontend build targets dist/ with real Tauri APIs |
-| Manual: `cargo check` in src-tauri/ | AC6 | Rust side compiles cleanly |
+| Manual: `cargo check` in apps/desktop/src-tauri/ | AC6 | Rust side compiles cleanly |
 | Manual: sign in → load tasks → open settings | AC7 | core flows work under compiler-optimized rendering |
 
 ## Assumptions & technical decisions

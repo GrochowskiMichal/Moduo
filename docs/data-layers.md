@@ -64,11 +64,10 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | **Calendar** | **Supabase** (`calendar_accounts`, `calendars`, calendar sets, booking links) + Google and Zoom integrations | Supabase (events from Google) | Yes | ✅ prod |
 | **Email** | Desktop Rust IMAP/SMTP engine with a redb device cache and OS-keychain secrets; cloud `email_refs` link threads into the spine | the mail server; Supabase for links | Links only | 🟡 desktop-only client |
 | **Time tracking** | **Supabase** (`task_time_entries`, totals and reports); legacy `tt_*` desktop commands remain | Supabase | Yes | ✅ prod (on tasks) |
-| **Mindmap** | `runtime.localStore` (localStorage on web, redb KV on desktop) | local | No | 🟡 exploratory, not synced |
 | Dashboard widgets | read the other modules through one shared data context | n/a | — | ✅ prod |
 | **Finance** | — | — | — | ⚫ not built |
 
-**Takeaway (2026-10-20):** every shipped module except the desktop email client and Mindmap is cloud-first on Supabase. Email stays a desktop engine by design (§ Email below); Mindmap is the one local-only island left.
+**Takeaway (2026-10-20):** every shipped module except the desktop email client is cloud-first on Supabase. Email stays a desktop engine by design (§ Email below).
 
 ---
 

@@ -43,13 +43,13 @@
   For each test: the test name/file + a one-line PLAIN-ENGLISH note of what it checks,
   so the user can sanity-check coverage without reading test code. Map each back to an AC.
   Pick the cheapest layer that proves the AC (see docs on the test layers):
-    unit (Vitest, src/**/*.test.ts) · component/visual (Storybook + Playwright) ·
+    unit (Vitest, apps/app/src/**/*.test.ts) · component/visual (Storybook + Playwright) ·
     e2e smoke (Playwright tests/) · billing e2e (manual/scheduled, never the default gate).
 -->
 
 | Test (file · name) | Proves | Plain-English: what it checks |
 | --- | --- | --- |
-| `src/features/<x>/<y>.test.ts` · "…" | AC1 | … |
+| `apps/app/src/features/<x>/<y>.test.ts` · "…" | AC1 | … |
 
 ## Assumptions & technical decisions
 

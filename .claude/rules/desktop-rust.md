@@ -10,7 +10,7 @@ The traps are commented at their code; the email engine also follows `.claude/ru
 
 - **`bun run verify` covers no Rust.** A block that touches Rust must also pass, from `apps/desktop/src-tauri/`: `cargo check`, `cargo check --features lite` (the redb↔Supabase sync worker only compiles under `lite`) and `cargo test --lib`.
 - **redb is paused.** It persists only the not-yet-migrated desktop modules. Never make it load-bearing for a new feature; new data goes to Supabase.
-- **Commands are the boundary.** Keep `src/commands` as the Tauri command surface and split large modules by behavior. Validate every command's input; the webview is not trusted.
+- **Commands are the boundary.** Keep `apps/desktop/src-tauri/src/commands` as the Tauri command surface and split large modules by behavior. Validate every command's input; the webview is not trusted.
 - **Quit and dialogs:** macOS ⌘Q skips `RunEvent::ExitRequested`; don't call `app.exit()`/`app.restart()` inside the `.run()` handler; don't `blocking_show()` a dialog on the main thread; `window.confirm()` is async in the webview. The ast-grep pack flags the last two (`rust-dialog-blocking-show`, `webview-native-dialog`).
 - **The installer bundles the UI.** A web deploy never reaches desktop users; a release tag rebuilds the desktop app when something its bundle is built from changed.
 - **The crate isn't `cargo fmt`-clean** and CI runs no fmt check: hand-apply rustfmt's output to your own hunks instead of formatting whole files.

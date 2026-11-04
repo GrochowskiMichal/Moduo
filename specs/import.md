@@ -73,22 +73,22 @@ States: **choosing** (picker, default 12 months) → **initial sync** (recent ma
 
 | Test (file · name) | Proves | Plain-English: what it checks |
 | --- | --- | --- |
-| `src/features/notes/import.test.ts` · "unwraps a nested Notion Part-N zip" | AC1 | A zip whose only entry is another zip yields the inner zip's markdown, not zero notes. |
-| `src/features/notes/import.test.ts` · "accepts multi-part exports" | AC1 | `Part-1` + `Part-2` dropped together produce one merged tree. |
-| `src/features/notes/import.test.ts` · "strips the export wrapper folder" | AC2 | `Export-<uuid>/Private & Shared/Page.md` imports as a root page, not a child of two phantom notes. |
-| `src/features/notes/import.test.ts` · "preserves hierarchy to 9 levels" | AC2 | A deeply nested fixture keeps every parent→child edge. |
-| `src/features/notes/import.test.ts` · "assigns deterministic sibling positions" | AC2 | Imported siblings get ordered lexorank positions, not all `""`. |
-| `src/features/notes/import.test.ts` · "classifies skipped entries by kind" | AC3 | CSV/image/unknown entries are counted per kind and never emitted as notes. |
-| `src/features/notes/import.test.ts` · "is idempotent across two runs" | AC4 | Importing the same plan twice yields the same note count. |
+| `apps/app/src/features/notes/import.test.ts` · "unwraps a nested Notion Part-N zip" | AC1 | A zip whose only entry is another zip yields the inner zip's markdown, not zero notes. |
+| `apps/app/src/features/notes/import.test.ts` · "accepts multi-part exports" | AC1 | `Part-1` + `Part-2` dropped together produce one merged tree. |
+| `apps/app/src/features/notes/import.test.ts` · "strips the export wrapper folder" | AC2 | `Export-<uuid>/Private & Shared/Page.md` imports as a root page, not a child of two phantom notes. |
+| `apps/app/src/features/notes/import.test.ts` · "preserves hierarchy to 9 levels" | AC2 | A deeply nested fixture keeps every parent→child edge. |
+| `apps/app/src/features/notes/import.test.ts` · "assigns deterministic sibling positions" | AC2 | Imported siblings get ordered lexorank positions, not all `""`. |
+| `apps/app/src/features/notes/import.test.ts` · "classifies skipped entries by kind" | AC3 | CSV/image/unknown entries are counted per kind and never emitted as notes. |
+| `apps/app/src/features/notes/import.test.ts` · "is idempotent across two runs" | AC4 | Importing the same plan twice yields the same note count. |
 | `e2e` / manual · "import the real 350-page export" | AC5 | The designer's actual export imports fully with visible progress. |
-| `src-tauri` unit · `sync::tests::depth_window_from_choice` | AC6, AC7 | A depth choice maps to the right `SINCE` date and UID floor. |
-| `src-tauri` unit · `sync::tests::backfill_resumes_from_floor` | AC9 | A cursor with a recorded floor resumes backwards instead of restarting. |
-| `src-tauri` unit · `sync::tests::full_reset_preserves_in_window_history` | AC10 | A `uid_validity` change does not prune rows inside the configured depth. |
-| `src-tauri` unit · `sync::tests::lowering_depth_never_deletes` | AC8 | Reducing depth stops fetching but removes nothing. |
-| `src-tauri` unit · `storage::tests::envelope_order_key_stable_without_date` | AC10 | A date-less message refetched twice does not orphan a second index row. |
-| `src-tauri` unit · `storage::tests::list_envelopes_uses_prefix_scan` | AC11 | Listing one folder does not deserialize the whole envelope table. |
-| `src-tauri` unit · `storage::tests::accounts_v1_old_shape_still_loads` | AC8 | An account blob written before the depth field still deserializes (does not wipe accounts). |
-| `src/features/email/…` unit · "per-account sync error isolation" | AC12 | One account in `error` leaves the others syncing. |
+| `apps/desktop/src-tauri` unit · `sync::tests::depth_window_from_choice` | AC6, AC7 | A depth choice maps to the right `SINCE` date and UID floor. |
+| `apps/desktop/src-tauri` unit · `sync::tests::backfill_resumes_from_floor` | AC9 | A cursor with a recorded floor resumes backwards instead of restarting. |
+| `apps/desktop/src-tauri` unit · `sync::tests::full_reset_preserves_in_window_history` | AC10 | A `uid_validity` change does not prune rows inside the configured depth. |
+| `apps/desktop/src-tauri` unit · `sync::tests::lowering_depth_never_deletes` | AC8 | Reducing depth stops fetching but removes nothing. |
+| `apps/desktop/src-tauri` unit · `storage::tests::envelope_order_key_stable_without_date` | AC10 | A date-less message refetched twice does not orphan a second index row. |
+| `apps/desktop/src-tauri` unit · `storage::tests::list_envelopes_uses_prefix_scan` | AC11 | Listing one folder does not deserialize the whole envelope table. |
+| `apps/desktop/src-tauri` unit · `storage::tests::accounts_v1_old_shape_still_loads` | AC8 | An account blob written before the depth field still deserializes (does not wipe accounts). |
+| `apps/app/src/features/email/…` unit · "per-account sync error isolation" | AC12 | One account in `error` leaves the others syncing. |
 | Manual (desktop) · `docs/testing/<branch>.md` | AC6–AC12 | Real Gmail + IMAP round-trip: pick 12 months, watch backfill, quit mid-run, resume, cancel, change depth. |
 
 ## Assumptions & technical decisions
@@ -104,7 +104,7 @@ States: **choosing** (picker, default 12 months) → **initial sync** (recent ma
 9. **SCALE-1 is a hard dependency of IM-1.** The 1000-row PostgREST cap silently breaks both dedupe and position computation at exactly the scale an importer creates.
 10. **NOTE-FIX-1 is a hard dependency of IM-1.** Importing 350 pages that render blank on the next launch is worse than not importing them.
 11. **No task importer, no calendar importer, no Spark importer** — see Scope. Recorded so `/s2` does not gold-plate.
-12. **AMENDMENT (2026-07-30, IM-2c-a): AC9's progress transport is a cursor-backed status read, not Tauri events.** The spec asked for "Tauri progress events + cancel". Building IM-2c-a found the app has **zero** event emission anywhere in `src-tauri` and **zero** `listen()` on the frontend — it is entirely invoke/poll, so events are new infrastructure rather than a wiring job. More importantly they are the *wrong* transport here: the backfill is a resumable walk that survives quit/restart, and an event stream tells a freshly-launched app nothing. Its state already persists on the sync cursor (`oldest_synced_uid`, `history_floor_ms`, `backfill_complete`, `backfill_last_error` — all added by IM-2b), so a narrow status command reads the truth at any moment. ⚠️ **Do not reuse `email_get_mailbox_status`** for it: that command full-table scans and deserializes every envelope, which at a 12-month depth is the exact AC11 pattern IM-2a removed — polling it would be a live regression. Also: `Progress` already exists (IM-1 shipped it), so the block table's "introduces the app's first Progress primitive" is stale; and **cancel is ~90% delivered by AC8** — lowering the depth stops the walk (the smaller `SINCE` set leaves nothing below the frontier) and deletes nothing, so AC9's cancel shrinks to a labelled affordance for what the picker already does.
+12. **AMENDMENT (2026-07-30, IM-2c-a): AC9's progress transport is a cursor-backed status read, not Tauri events.** The spec asked for "Tauri progress events + cancel". Building IM-2c-a found the app has **zero** event emission anywhere in `apps/desktop/src-tauri` and **zero** `listen()` on the frontend — it is entirely invoke/poll, so events are new infrastructure rather than a wiring job. More importantly they are the *wrong* transport here: the backfill is a resumable walk that survives quit/restart, and an event stream tells a freshly-launched app nothing. Its state already persists on the sync cursor (`oldest_synced_uid`, `history_floor_ms`, `backfill_complete`, `backfill_last_error` — all added by IM-2b), so a narrow status command reads the truth at any moment. ⚠️ **Do not reuse `email_get_mailbox_status`** for it: that command full-table scans and deserializes every envelope, which at a 12-month depth is the exact AC11 pattern IM-2a removed — polling it would be a live regression. Also: `Progress` already exists (IM-1 shipped it), so the block table's "introduces the app's first Progress primitive" is stale; and **cancel is ~90% delivered by AC8** — lowering the depth stops the walk (the smaller `SINCE` set leaves nothing below the frontier) and deletes nothing, so AC9's cancel shrinks to a labelled affordance for what the picker already does.
 
 Durable decisions get a line in [`docs/decisions.md`](../docs/decisions.md).
 
