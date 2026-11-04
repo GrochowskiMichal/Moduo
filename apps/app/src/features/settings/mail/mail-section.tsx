@@ -8,7 +8,10 @@ import { toast } from "sonner";
 
 import { asHistoryDepth } from "@/features/email/history-depth";
 import { useEmailPrefs } from "@/features/email/hooks/use-email-prefs";
-import { type EmailSettingsMirror, startEmailSettingsMirror } from "@/features/email/settings/mirror";
+import {
+  type EmailSettingsMirror,
+  startEmailSettingsMirror,
+} from "@/features/email/settings/mirror";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import type { MailStorageStats } from "@/lib/runtime.types.mail-settings";
@@ -94,7 +97,10 @@ export function MailSection() {
       .catch(fail(what));
 
   return (
-    <SettingsSectionShell title="Mail" description="Accounts, rules, snippets and how mail behaves.">
+    <SettingsSectionShell
+      title="Mail"
+      description="Accounts, rules, snippets and how mail behaves."
+    >
       <MailSettingsView
         behavior={prefs.behavior}
         onBehavior={setBehavior}
@@ -115,21 +121,34 @@ export function MailSection() {
         }}
         accounts={accounts}
         accountActions={{
-          reconnect: (id) => after(email?.syncNow({ accountId: id }) ?? Promise.resolve(), "reconnect"),
-          disconnect: (id) => after(email?.disconnect(id) ?? Promise.resolve(), "disconnect", "Disconnected"),
+          reconnect: (id) =>
+            after(email?.syncNow({ accountId: id }) ?? Promise.resolve(), "reconnect"),
+          disconnect: (id) =>
+            after(email?.disconnect(id) ?? Promise.resolve(), "disconnect", "Disconnected"),
           setDepth: (id, depth) =>
-            after(email?.setHistoryDepth({ accountId: id, depth }) ?? Promise.resolve(), "change the depth"),
+            after(
+              email?.setHistoryDepth({ accountId: id, depth }) ?? Promise.resolve(),
+              "change the depth",
+            ),
         }}
         storage={
           engine
             ? {
                 stats,
                 actions: {
-                  setCap: (id, gb) => after(engine.setDiskCap({ accountId: id, bytes: gbToBytes(gb) }), "set the cap"),
+                  setCap: (id, gb) =>
+                    after(
+                      engine.setDiskCap({ accountId: id, bytes: gbToBytes(gb) }),
+                      "set the cap",
+                    ),
                   clearAttachments: (id) =>
                     after(engine.clearAttachments(id), "clear attachments", "Attachments cleared"),
                   clearDownloaded: (id) =>
-                    after(engine.clearDownloaded(id), "clear downloaded mail", "Downloaded mail cleared"),
+                    after(
+                      engine.clearDownloaded(id),
+                      "clear downloaded mail",
+                      "Downloaded mail cleared",
+                    ),
                 },
               }
             : null

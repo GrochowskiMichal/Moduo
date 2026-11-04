@@ -33,9 +33,7 @@ export type ItemActions = {
 };
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <IconButton icon={X} label={label} onClick={onClick} />
-  );
+  return <IconButton icon={X} label={label} onClick={onClick} />;
 }
 
 /** Priority people and blocked senders: a list of addresses with an add field. */
@@ -64,7 +62,10 @@ function AddressList({
     <PrefGroup label={label} description={description}>
       {list.map((i) => (
         <PrefRow key={i.id} title={String(i.value.address ?? "")}>
-          <RemoveButton label={`Remove ${String(i.value.address)}`} onClick={() => actions.remove(i.id)} />
+          <RemoveButton
+            label={`Remove ${String(i.value.address)}`}
+            onClick={() => actions.remove(i.id)}
+          />
         </PrefRow>
       ))}
       <form
@@ -111,7 +112,12 @@ function RulesGroup({ items, actions }: { items: EmailSettingsItem[]; actions: I
       {list.map((r, at) => (
         <PrefRow key={r.id} title={describeRule(r.value)}>
           <div className="flex items-center gap-1">
-            <IconButton icon={ArrowUp} label="Move rule up" disabled={at === 0} onClick={() => move(r.id, -1)} />
+            <IconButton
+              icon={ArrowUp}
+              label="Move rule up"
+              disabled={at === 0}
+              onClick={() => move(r.id, -1)}
+            />
             <IconButton
               icon={ArrowDown}
               label="Move rule down"
@@ -135,13 +141,35 @@ function RulesGroup({ items, actions }: { items: EmailSettingsItem[]; actions: I
           setArg("");
         }}
       >
-        <ChoiceSelect label="Rule condition" className="w-40" value={field} choices={CONDITIONS} onChange={setField} />
+        <ChoiceSelect
+          label="Rule condition"
+          className="w-40"
+          value={field}
+          choices={CONDITIONS}
+          onChange={setField}
+        />
         {needsValue ? (
-          <Input aria-label="Condition value" className="w-40" value={value} onChange={(e) => setValue(e.target.value)} />
+          <Input
+            aria-label="Condition value"
+            className="w-40"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
         ) : null}
-        <ChoiceSelect label="Rule action" className="w-36" value={action} choices={ACTIONS} onChange={setAction} />
+        <ChoiceSelect
+          label="Rule action"
+          className="w-36"
+          value={action}
+          choices={ACTIONS}
+          onChange={setAction}
+        />
         {needsArg ? (
-          <Input aria-label="Action target" className="w-32" value={arg} onChange={(e) => setArg(e.target.value)} />
+          <Input
+            aria-label="Action target"
+            className="w-32"
+            value={arg}
+            onChange={(e) => setArg(e.target.value)}
+          />
         ) : null}
         <Button type="submit" size="sm" variant="outline" disabled={!ready}>
           Add rule
@@ -163,13 +191,23 @@ function TabsGroup({ items, actions }: { items: EmailSettingsItem[]; actions: It
   const [name, setName] = useState("");
   const [match, setMatch] = useState("");
   return (
-    <PrefGroup label="Custom tabs" description="Mail from these senders or domains gets its own tab.">
+    <PrefGroup
+      label="Custom tabs"
+      description="Mail from these senders or domains gets its own tab."
+    >
       {list.map((t) => {
         const senders = Array.isArray(t.value.senders) ? t.value.senders : [];
         const domains = Array.isArray(t.value.domains) ? t.value.domains : [];
         return (
-          <PrefRow key={t.id} title={String(t.value.name ?? "")} description={[...senders, ...domains].join(", ")}>
-            <RemoveButton label={`Delete tab ${String(t.value.name)}`} onClick={() => actions.remove(t.id)} />
+          <PrefRow
+            key={t.id}
+            title={String(t.value.name ?? "")}
+            description={[...senders, ...domains].join(", ")}
+          >
+            <RemoveButton
+              label={`Delete tab ${String(t.value.name)}`}
+              onClick={() => actions.remove(t.id)}
+            />
           </PrefRow>
         );
       })}
@@ -188,7 +226,13 @@ function TabsGroup({ items, actions }: { items: EmailSettingsItem[]; actions: It
           setMatch("");
         }}
       >
-        <Input aria-label="Tab name" placeholder="Tab name" className="w-36" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input
+          aria-label="Tab name"
+          placeholder="Tab name"
+          className="w-36"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
         <Input
           aria-label="Tab senders or domains"
           placeholder="anna@x.com, example.com"
@@ -208,10 +252,20 @@ function SnippetsGroup({ items, actions }: { items: EmailSettingsItem[]; actions
   const [name, setName] = useState("");
   const [body, setBody] = useState("");
   return (
-    <PrefGroup label="Snippets" description="Type ;; and a name in compose. {first name}, {name} and {email} fill in.">
+    <PrefGroup
+      label="Snippets"
+      description="Type ;; and a name in compose. {first name}, {name} and {email} fill in."
+    >
       {list.map((s) => (
-        <PrefRow key={s.id} title={String(s.value.name ?? "")} description={String(s.value.body ?? "")}>
-          <RemoveButton label={`Delete snippet ${String(s.value.name)}`} onClick={() => actions.remove(s.id)} />
+        <PrefRow
+          key={s.id}
+          title={String(s.value.name ?? "")}
+          description={String(s.value.body ?? "")}
+        >
+          <RemoveButton
+            label={`Delete snippet ${String(s.value.name)}`}
+            onClick={() => actions.remove(s.id)}
+          />
         </PrefRow>
       ))}
       <form
@@ -224,8 +278,17 @@ function SnippetsGroup({ items, actions }: { items: EmailSettingsItem[]; actions
           setBody("");
         }}
       >
-        <Input aria-label="Snippet name" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Textarea aria-label="Snippet text" value={body} onChange={(e) => setBody(e.target.value)} />
+        <Input
+          aria-label="Snippet name"
+          placeholder="Name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Textarea
+          aria-label="Snippet text"
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+        />
         <div className="flex justify-end">
           <Button type="submit" size="sm" variant="outline" disabled={!name.trim() || !body.trim()}>
             Add snippet
@@ -253,11 +316,15 @@ function AliasesGroup({
     for (const other of list) {
       if (other.value.accountId !== alias.value.accountId) continue;
       const want = other.id === alias.id;
-      if (other.value.isDefault !== want) actions.update(other, { ...other.value, isDefault: want });
+      if (other.value.isDefault !== want)
+        actions.update(other, { ...other.value, isDefault: want });
     }
   };
   return (
-    <PrefGroup label="Aliases and signatures" description="Send-as addresses, one default per account, each with its signature.">
+    <PrefGroup
+      label="Aliases and signatures"
+      description="Send-as addresses, one default per account, each with its signature."
+    >
       {list.map((a) => (
         <div key={a.id} className="flex flex-col gap-2 border-b border-border py-4 last:border-b-0">
           <div className="flex items-center justify-between gap-4">
@@ -269,9 +336,14 @@ function AliasesGroup({
               <Switch
                 aria-label={`Default alias ${String(a.value.address)}`}
                 checked={a.value.isDefault === true}
-                onCheckedChange={(v) => (v ? makeDefault(a) : actions.update(a, { ...a.value, isDefault: false }))}
+                onCheckedChange={(v) =>
+                  v ? makeDefault(a) : actions.update(a, { ...a.value, isDefault: false })
+                }
               />
-              <RemoveButton label={`Delete alias ${String(a.value.address)}`} onClick={() => actions.remove(a.id)} />
+              <RemoveButton
+                label={`Delete alias ${String(a.value.address)}`}
+                onClick={() => actions.remove(a.id)}
+              />
             </div>
           </div>
           <Textarea
@@ -293,7 +365,13 @@ function AliasesGroup({
             const addr = normalizeAddress(address);
             if (!addr || !accountId) return;
             const first = !list.some((x) => x.value.accountId === accountId);
-            actions.add("alias", { accountId, address: addr, name: name.trim(), isDefault: first, signatureHtml: "" });
+            actions.add("alias", {
+              accountId,
+              address: addr,
+              name: name.trim(),
+              isDefault: first,
+              signatureHtml: "",
+            });
             setAddress("");
             setName("");
           }}
@@ -305,8 +383,19 @@ function AliasesGroup({
             choices={accounts.map((a) => ({ value: a.id, label: a.address }))}
             onChange={setAccountId}
           />
-          <Input aria-label="Alias address" placeholder="me@example.com" value={address} onChange={(e) => setAddress(e.target.value)} />
-          <Input aria-label="Alias name" placeholder="Name" className="w-32" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            aria-label="Alias address"
+            placeholder="me@example.com"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+          />
+          <Input
+            aria-label="Alias name"
+            placeholder="Name"
+            className="w-32"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
           <Button type="submit" size="sm" variant="outline" disabled={!normalizeAddress(address)}>
             Add alias
           </Button>

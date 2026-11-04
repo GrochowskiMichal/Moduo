@@ -8,23 +8,61 @@ import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import { MailSettingsView, type MailSettingsViewProps } from "./mail-settings-view";
 
 const GB = 1024 ** 3;
-const row = (id: string, kind: EmailSettingsItem["kind"], value: Record<string, unknown>, position = 0) =>
-  ({ id, kind, position, value, updatedAt: "2026-11-01T00:00:00Z", deletedAt: null }) as EmailSettingsItem;
+const row = (
+  id: string,
+  kind: EmailSettingsItem["kind"],
+  value: Record<string, unknown>,
+  position = 0,
+) =>
+  ({
+    id,
+    kind,
+    position,
+    value,
+    updatedAt: "2026-11-01T00:00:00Z",
+    deletedAt: null,
+  }) as EmailSettingsItem;
 
 function setup(over: Partial<MailSettingsViewProps> = {}) {
   const props: MailSettingsViewProps = {
     behavior: DEFAULT_MAIL_BEHAVIOR,
     onBehavior: rstest.fn(),
     items: [
-      row("r1", "rule", { conditions: [{ field: "from", value: "a@x.com" }], actions: [{ action: "skip_inbox" }] }, 0),
-      row("r2", "rule", { conditions: [{ field: "domain", value: "y.com" }], actions: [{ action: "mark_read" }] }, 1),
+      row(
+        "r1",
+        "rule",
+        { conditions: [{ field: "from", value: "a@x.com" }], actions: [{ action: "skip_inbox" }] },
+        0,
+      ),
+      row(
+        "r2",
+        "rule",
+        { conditions: [{ field: "domain", value: "y.com" }], actions: [{ action: "mark_read" }] },
+        1,
+      ),
       row("p1", "priority_person", { address: "boss@x.com" }),
     ],
     itemActions: { add: rstest.fn(), update: rstest.fn(), remove: rstest.fn() },
-    accounts: [{ id: "a1", address: "me@x.com", status: "Up to date", needsReconnect: false, depth: "twelveMonths" }],
+    accounts: [
+      {
+        id: "a1",
+        address: "me@x.com",
+        status: "Up to date",
+        needsReconnect: false,
+        depth: "twelveMonths",
+      },
+    ],
     accountActions: { reconnect: rstest.fn(), disconnect: rstest.fn(), setDepth: rstest.fn() },
     storage: {
-      stats: [{ accountId: "a1", diskCapBytes: 2 * GB, mailBytes: 1.5 * GB, attachmentBytes: 0.25 * GB, messageCount: 9 }],
+      stats: [
+        {
+          accountId: "a1",
+          diskCapBytes: 2 * GB,
+          mailBytes: 1.5 * GB,
+          attachmentBytes: 0.25 * GB,
+          messageCount: 9,
+        },
+      ],
       actions: { setCap: rstest.fn(), clearAttachments: rstest.fn(), clearDownloaded: rstest.fn() },
     },
     defaultApp: { isDefault: false, make: rstest.fn() },
@@ -59,7 +97,14 @@ describe("MailSettingsView (AC36)", () => {
     ]) {
       expect(screen.getAllByLabelText(name).length).toBeGreaterThan(0);
     }
-    for (const label of ["Aliases and signatures", "Snippets", "Rules", "Custom tabs", "Priority people", "Blocked senders"]) {
+    for (const label of [
+      "Aliases and signatures",
+      "Snippets",
+      "Rules",
+      "Custom tabs",
+      "Priority people",
+      "Blocked senders",
+    ]) {
       expect(screen.getByText(label)).toBeTruthy();
     }
     expect(screen.getByText("Make default")).toBeTruthy();
@@ -106,7 +151,9 @@ describe("MailSettingsView (AC36)", () => {
     const p = setup();
     fireEvent.click(screen.getAllByLabelText("Move rule down")[0]!);
     expect(p.itemActions.update).toHaveBeenCalledTimes(2);
-    expect((p.itemActions.update as ReturnType<typeof rstest.fn>).mock.calls.map((c) => [c[0].id, c[2]])).toEqual([
+    expect(
+      (p.itemActions.update as ReturnType<typeof rstest.fn>).mock.calls.map((c) => [c[0].id, c[2]]),
+    ).toEqual([
       ["r2", 0],
       ["r1", 1],
     ]);
@@ -115,9 +162,14 @@ describe("MailSettingsView (AC36)", () => {
   it("adds a snippet and makes the default mail app", () => {
     const p = setup();
     fireEvent.change(screen.getByLabelText("Snippet name"), { target: { value: "thanks" } });
-    fireEvent.change(screen.getByLabelText("Snippet text"), { target: { value: "Thanks {first name}!" } });
+    fireEvent.change(screen.getByLabelText("Snippet text"), {
+      target: { value: "Thanks {first name}!" },
+    });
     fireEvent.click(screen.getByText("Add snippet"));
-    expect(p.itemActions.add).toHaveBeenCalledWith("snippet", { name: "thanks", body: "Thanks {first name}!" });
+    expect(p.itemActions.add).toHaveBeenCalledWith("snippet", {
+      name: "thanks",
+      body: "Thanks {first name}!",
+    });
     fireEvent.click(screen.getByText("Make default"));
     expect(p.defaultApp!.make).toHaveBeenCalled();
   });

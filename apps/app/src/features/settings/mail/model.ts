@@ -24,7 +24,9 @@ export function formatGb(bytes: number): string {
 }
 
 /** "mail X GB · attachments Y GB" (S7 / I70): never one combined number. */
-export function storageLine(stats: Pick<MailStorageStats, "mailBytes" | "attachmentBytes">): string {
+export function storageLine(
+  stats: Pick<MailStorageStats, "mailBytes" | "attachmentBytes">,
+): string {
   return `mail ${formatGb(stats.mailBytes)} · attachments ${formatGb(stats.attachmentBytes)}`;
 }
 
@@ -41,7 +43,10 @@ export function gbToBytes(gb: number): number {
 }
 
 /** Live items of one kind in list order. */
-export function itemsOfKind(items: EmailSettingsItem[], kind: EmailSettingsKind): EmailSettingsItem[] {
+export function itemsOfKind(
+  items: EmailSettingsItem[],
+  kind: EmailSettingsKind,
+): EmailSettingsItem[] {
   return items
     .filter((i) => i.kind === kind && i.deletedAt === null)
     .sort((a, b) => a.position - b.position || a.updatedAt.localeCompare(b.updatedAt));

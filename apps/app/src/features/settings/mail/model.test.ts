@@ -8,7 +8,14 @@ import { capChoiceGb, describeRule, moveItem, normalizeAddress, storageLine } fr
 
 const GB = 1024 ** 3;
 const item = (id: string, position: number): EmailSettingsItem =>
-  ({ id, kind: "rule", position, value: {}, updatedAt: "2026-11-01T00:00:00Z", deletedAt: null }) as EmailSettingsItem;
+  ({
+    id,
+    kind: "rule",
+    position,
+    value: {},
+    updatedAt: "2026-11-01T00:00:00Z",
+    deletedAt: null,
+  }) as EmailSettingsItem;
 
 describe("Settings → Mail model (AC36)", () => {
   it("shows mail and attachments separately", () => {
@@ -35,7 +42,10 @@ describe("Settings → Mail model (AC36)", () => {
     expect(normalizeAddress(" Anna@X.com ")).toBe("anna@x.com");
     expect(normalizeAddress("nope")).toBeNull();
     expect(
-      describeRule({ conditions: [{ field: "from", value: "a@x.com" }], actions: [{ action: "move_to_folder", arg: "Receipts" }] }),
+      describeRule({
+        conditions: [{ field: "from", value: "a@x.com" }],
+        actions: [{ action: "move_to_folder", arg: "Receipts" }],
+      }),
     ).toBe("From a@x.com → move to Receipts");
   });
 
@@ -53,7 +63,12 @@ describe("Settings → Mail model (AC36)", () => {
       screener: false,
       blockDestination: "trash",
     });
-    const behavior = { ...DEFAULT_MAIL_BEHAVIOR, density: "compact", previewLines: 2, undoSendSeconds: 30 };
+    const behavior = {
+      ...DEFAULT_MAIL_BEHAVIOR,
+      density: "compact",
+      previewLines: 2,
+      undoSendSeconds: 30,
+    };
     expect(sanitizeEmailPrefs({ behavior }).behavior).toEqual(behavior);
     expect(sanitizeMailBehavior({ undoSendSeconds: 7, badge: "x" })).toEqual(DEFAULT_MAIL_BEHAVIOR);
   });

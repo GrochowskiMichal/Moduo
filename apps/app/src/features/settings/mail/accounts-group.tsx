@@ -87,7 +87,10 @@ export function AccountsGroup({
   actions: AccountActions;
 }) {
   return (
-    <PrefGroup label="Accounts" description="History depth is this Mac's; each device keeps its own.">
+    <PrefGroup
+      label="Accounts"
+      description="History depth is this Mac's; each device keeps its own."
+    >
       {accounts.length === 0 ? (
         <PrefRow title="No mail accounts" description="Connect one from Email.">
           <span />

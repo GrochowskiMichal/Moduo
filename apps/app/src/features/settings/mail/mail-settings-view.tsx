@@ -91,7 +91,12 @@ export function MailSettingsView(p: MailSettingsViewProps) {
                 : "mailto: links on this Mac open a Moduo message."
             }
           >
-            <Button size="sm" variant="outline" disabled={p.defaultApp.isDefault} onClick={p.defaultApp.make}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={p.defaultApp.isDefault}
+              onClick={p.defaultApp.make}
+            >
               {p.defaultApp.isDefault ? "Moduo is the default" : "Make default"}
             </Button>
           </PrefRow>

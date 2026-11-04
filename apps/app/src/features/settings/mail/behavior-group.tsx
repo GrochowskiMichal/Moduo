@@ -35,13 +35,29 @@ const UNDO = MAIL_UNDO_SEND_SECONDS.map((s) => ({ value: String(s), label: `${s}
 type Toggle = { key: keyof MailBehavior; title: string; description?: string };
 
 const TOGGLES: Toggle[] = [
-  { key: "notifyPersonal", title: "Notify for Personal mail", description: "Off: new mail only updates the badge." },
+  {
+    key: "notifyPersonal",
+    title: "Notify for Personal mail",
+    description: "Off: new mail only updates the badge.",
+  },
   { key: "notifyPriority", title: "Always notify for Priority people" },
-  { key: "trackerBlocking", title: "Block trackers", description: "Removes tracking pixels before anything loads." },
+  {
+    key: "trackerBlocking",
+    title: "Block trackers",
+    description: "Removes tracking pixels before anything loads.",
+  },
   { key: "spellCheck", title: "Spell check" },
-  { key: "doneOnSend", title: "Done on send", description: "Replying from the inbox marks the thread Done." },
+  {
+    key: "doneOnSend",
+    title: "Done on send",
+    description: "Replying from the inbox marks the thread Done.",
+  },
   { key: "shortcutHints", title: "Shortcut hints" },
-  { key: "senderLogos", title: "Sender logos", description: "Fetched from the sender's own domain, never a third party." },
+  {
+    key: "senderLogos",
+    title: "Sender logos",
+    description: "Fetched from the sender's own domain, never a third party.",
+  },
 ];
 
 export function BehaviorGroup({

@@ -28,7 +28,15 @@ describe("sanitizeEmailPrefs", () => {
   });
 
   it("returns empty prefs for garbage input", () => {
-    expect(sanitizeEmailPrefs(null)).toEqual({ senderOverrides: {}, imageAllowedSenders: [], behavior: DEFAULT_MAIL_BEHAVIOR });
-    expect(sanitizeEmailPrefs("x")).toEqual({ senderOverrides: {}, imageAllowedSenders: [], behavior: DEFAULT_MAIL_BEHAVIOR });
+    expect(sanitizeEmailPrefs(null)).toEqual({
+      senderOverrides: {},
+      imageAllowedSenders: [],
+      behavior: DEFAULT_MAIL_BEHAVIOR,
+    });
+    expect(sanitizeEmailPrefs("x")).toEqual({
+      senderOverrides: {},
+      imageAllowedSenders: [],
+      behavior: DEFAULT_MAIL_BEHAVIOR,
+    });
   });
 });

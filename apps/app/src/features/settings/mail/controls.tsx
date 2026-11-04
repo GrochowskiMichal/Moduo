@@ -1,6 +1,12 @@
 // Small shared controls for Settings → Mail (MR-15).
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export type Choice = { value: string; label: string };
 
