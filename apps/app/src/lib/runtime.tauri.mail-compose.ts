@@ -2,7 +2,6 @@
 // Command names are the contract the Rust command layer registers.
 
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 
 import type { MailComposeEngine } from "./runtime.types.mail-compose";
 
@@ -14,7 +13,11 @@ export const MAILTO_EVENT = "mail://mailto";
 
 export function createTauriMailCompose(
   call: Invoke = invoke,
-  on: Listen = (event, cb) => listen(event, cb),
+  on: Listen = async (event, cb) => {
+    // Dynamic: only `@tauri-apps/api/core` has a web stub.
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen(event, cb);
+  },
 ): MailComposeEngine {
   return {
     saveDraft: (input) => call("mail_save_draft", { input }),

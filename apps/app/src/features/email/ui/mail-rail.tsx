@@ -194,30 +194,11 @@ export function MailRail({
                 ) : null}
                 {unread ? <span className="text-xs tabular-nums">{unread}</span> : null}
               </button>
-              {a.syncState === "backfilling" && a.backfillProgress !== null ? (
-                <div className="flex items-center gap-2 pl-7 pr-2 text-xs text-muted-foreground">
-                  <span className="shrink-0">
-                    Syncing history · {Math.round(a.backfillProgress * 100)}%
-                  </span>
-                  <Progress
-                    value={a.backfillProgress * 100}
-                    max={100}
-                    label="History sync"
-                    className="flex-1"
-                  />
-                  {onCancelBackfill ? (
-                    <Button size="sm" variant="ghost" onClick={() => onCancelBackfill(a.id)}>
-                      Cancel
-                    </Button>
-                  ) : null}
-                </div>
-              ) : onLoadHistory && a.syncState !== "backfilling" ? (
-                <div className="flex pl-5 pr-2">
-                  <Button size="sm" variant="ghost" onClick={() => onLoadHistory(a.id)}>
-                    Load more history
-                  </Button>
-                </div>
-              ) : null}
+              <AccountHistoryRow
+                account={a}
+                onCancelBackfill={onCancelBackfill}
+                onLoadHistory={onLoadHistory}
+              />
               {expanded
                 ? boxes.map((b) => {
                     const v: MailView = { kind: "mailbox", mailboxId: b.id };
@@ -244,5 +225,42 @@ export function MailRail({
         </Button>
       </div>
     </nav>
+  );
+}
+
+function AccountHistoryRow({
+  account: a,
+  onCancelBackfill,
+  onLoadHistory,
+}: {
+  account: Props["accounts"][number];
+  onCancelBackfill?: (accountId: string) => void;
+  onLoadHistory?: (accountId: string) => void;
+}) {
+  if (a.syncState === "backfilling" && a.backfillProgress !== null) {
+    return (
+      <div className="flex items-center gap-2 pl-7 pr-2 text-xs text-muted-foreground">
+        <span className="shrink-0">Syncing history · {Math.round(a.backfillProgress * 100)}%</span>
+        <Progress
+          value={a.backfillProgress * 100}
+          max={100}
+          label="History sync"
+          className="flex-1"
+        />
+        {onCancelBackfill ? (
+          <Button size="sm" variant="ghost" onClick={() => onCancelBackfill(a.id)}>
+            Cancel
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  if (!onLoadHistory || a.syncState === "backfilling") return null;
+  return (
+    <div className="flex pl-5 pr-2">
+      <Button size="sm" variant="ghost" onClick={() => onLoadHistory(a.id)}>
+        Load more history
+      </Button>
+    </div>
   );
 }

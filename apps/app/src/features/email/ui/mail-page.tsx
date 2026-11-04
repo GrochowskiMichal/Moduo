@@ -231,6 +231,43 @@ function InviteSlot({
   );
 }
 
+/** The compose port (prop wins over the runtime) and its session. */
+function useComposeSession(
+  compose: MailPageProps["compose"],
+  store: NonNullable<MailPageProps["store"]>,
+  commands: ReturnType<typeof createMailCommands>,
+  engine: ReturnType<typeof mailStore.getState>["engine"],
+) {
+  const port = compose === undefined ? (getRuntime()?.email?.compose ?? null) : compose;
+  const session = useMemo(
+    () =>
+      port
+        ? createComposeSession({
+            port,
+            settings: () => {
+              const b = store.getState().behavior;
+              return { undoSeconds: b.undoSendSeconds, doneOnSend: b.doneOnSend };
+            },
+            markDone: (threadId) => commands.apply({ kind: "done", threadIds: [threadId] }),
+            setFollowUp: engine?.setFollowUp
+              ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
+              : undefined,
+            // The undo-send toast (X22): Undo cancels and reopens, Edit reopens to change it.
+            showSent: (_handle, actions) => {
+              const seconds = store.getState().behavior.undoSendSeconds;
+              toast("Sending…", {
+                duration: seconds * 1000,
+                action: { label: "Undo", onClick: actions.undo },
+                cancel: { label: "Edit", onClick: actions.edit },
+              });
+            },
+          })
+        : null,
+    [port, store, commands, engine],
+  );
+  return { port, session };
+}
+
 export function MailPage({
   store = mailStore,
   compose,
@@ -266,33 +303,7 @@ export function MailPage({
     if (initialThreadId) onConsumeThreadDeepLink?.();
   }, [initialThreadId, onConsumeThreadDeepLink]);
 
-  const port = compose === undefined ? (getRuntime()?.email?.compose ?? null) : compose;
-  const session = useMemo(
-    () =>
-      port
-        ? createComposeSession({
-            port,
-            settings: () => {
-              const b = store.getState().behavior;
-              return { undoSeconds: b.undoSendSeconds, doneOnSend: b.doneOnSend };
-            },
-            markDone: (threadId) => commands.apply({ kind: "done", threadIds: [threadId] }),
-            setFollowUp: engine?.setFollowUp
-              ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
-              : undefined,
-            // The undo-send toast (X22): Undo cancels and reopens, Edit reopens to change it.
-            showSent: (_handle, actions) => {
-              const seconds = store.getState().behavior.undoSendSeconds;
-              toast("Sending…", {
-                duration: seconds * 1000,
-                action: { label: "Undo", onClick: actions.undo },
-                cancel: { label: "Edit", onClick: actions.edit },
-              });
-            },
-          })
-        : null,
-    [port, store, commands, engine],
-  );
+  const { port, session } = useComposeSession(compose, store, commands, engine);
 
   /** A thread's row: the loaded window first, else the engine. */
   const rowOf = async (threadId: string): Promise<MailThreadRow | null> =>
