@@ -283,10 +283,10 @@ analogous UI rule: workspace-level, shared component, module-agnostic.)
 > dark-theme-only (`:not([data-theme="light"])` guard), chroma hand-tuned
 > live against the Tasks shell. Settings picker between Theme and Accent;
 > Storybook Shade toolbar. Audit: anchor surfaces were already token-clean
-> except the root error boundary (zinc→tokens) and the mindmap dot/glow
+> except the root error boundary (zinc→tokens) and the dot/glow
 > hex fallbacks in global.css (→ tokens; stylelint now 0 warnings).
-> Legacy bypass inventory (dashboard widgets, email, onboarding/paywall,
-> mindmap) catalogued in the build log for Session 11. Live-verified on web.
+> Legacy bypass inventory (dashboard widgets, email, onboarding/paywall)
+> catalogued in the build log for Session 11. Live-verified on web.
 
 - [x] `data-shade` axis: curated tinted-dark presets (warm/cool/slate/…),
       Settings picker, same cascade mechanism as `data-accent`.

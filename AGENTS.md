@@ -81,7 +81,7 @@ The tier comes from code, not judgment: `scripts/ci/tier.ts`; details are in `/s
 
 ## Stack
 
-Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, XYFlow for the mindmap, Storybook 10 for components (with its MCP server), Rstest + Playwright for tests, `bun check` for types, `bun fmt` for formatting, `bun lint` for JS lint (a pinned canary build).
+Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, Storybook 10 for components (with its MCP server), Rstest + Playwright for tests, `bun check` for types, `bun fmt` for formatting, `bun lint` for JS lint (a pinned canary build).
 
 ## Build / dev
 

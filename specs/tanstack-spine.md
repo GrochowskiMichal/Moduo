@@ -164,8 +164,7 @@ files). TS-4 and TS-5 can run in parallel after TS-3c.
 
 Replacing Yjs or Lexical · Electric, PowerSync or Zero (each needs infrastructure we do not run) · Legend State (see the
 audit addendum §B/§D) · TanStack Query or Store as app-facing APIs · Table, Charts, Form, Start · Broadcast-based
-Realtime (a later switch inside the adapter) · any new route or IA change · the Mindmap (its own later move to
-Supabase, where Loro's movable tree is the candidate).
+Realtime (a later switch inside the adapter) · any new route or IA change.
 
 ## Definition-of-Ready gate
 

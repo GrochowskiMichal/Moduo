@@ -438,7 +438,7 @@ The core (NR-1–NR-7, NR-12) never cuts.
 - **Version history** (operator call: later), **live cursors** (avatars only), **callouts, toggles, code highlighting** (not picked).
 - **Switching editor engine** (Lexical stays), **changing the CRDT storage model**, **tabs**.
 - **Body search for modules other than Notes**.
-- **Mindmap module work**, and making the `EntityTextEditor`/email Lexical surfaces adopt Notes' new UX.
+- Making the `EntityTextEditor`/email Lexical surfaces adopt Notes' new UX.
 - **Per-note sharing redesign:** PERM-2b..8's model stays. The share menu is only restyled into the top bar.
 
 ---
