@@ -48,6 +48,9 @@ type Props = {
   /** Saved searches pinned to the rail (MR-13); each opens ⌘K on its query. */
   savedSearches?: readonly SavedSearch[];
   onOpenSearch?: (query: string) => void;
+  /** Opens the Subscriptions view (X6, AC29) the page renders in the reader slot. */
+  onOpenSubscriptions?: () => void;
+  subscriptionsActive?: boolean;
 };
 
 const RailItem = memo(function RailItem({
@@ -93,6 +96,8 @@ export function MailRail({
   onCancelBackfill,
   savedSearches = [],
   onOpenSearch,
+  onOpenSubscriptions,
+  subscriptionsActive = false,
 }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const key = mailViewKey(current);
@@ -134,6 +139,13 @@ export function MailRail({
             onClick={() => onSelect(r.view)}
           />
         ))}
+        {onOpenSubscriptions ? (
+          <RailItem
+            label="Subscriptions"
+            active={subscriptionsActive}
+            onClick={onOpenSubscriptions}
+          />
+        ) : null}
       </div>
       {savedSearches.length > 0 ? (
         <div className="flex flex-col gap-0.5" aria-label="Saved searches" role="group">

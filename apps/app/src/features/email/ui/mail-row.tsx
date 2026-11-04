@@ -20,6 +20,8 @@ import { SELECTED_ROW } from "@/components/ui/selection";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
+import { MAIL_THREAD_MIME } from "./mail-page-wiring";
+
 export type MailDensity = "comfortable" | "compact";
 
 export type MailRowActions = {
@@ -145,6 +147,11 @@ export const MailRow = memo(function MailRow({
       data-thread-id={row.threadId}
       data-picked={picked ? "true" : undefined}
       tabIndex={-1}
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData(MAIL_THREAD_MIME, row.threadId);
+        e.dataTransfer.effectAllowed = "link";
+      }}
       onClick={(e) =>
         e.metaKey || e.shiftKey ? actions.togglePick(row.threadId) : actions.open(row.threadId)
       }

@@ -2,10 +2,14 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback } from "react";
 
 import { mailEngineMode } from "../../features/email/engine/behavior";
+import { useMailPageWiring } from "../../features/email/hooks/use-mail-page-wiring";
 import { useMailStore } from "../../features/email/store/use-mail-store";
 import { EmailWebPage } from "../../features/email/ui/email-web-view";
 import { MailPage } from "../../features/email/ui/mail-page";
 import type { EmailSearch } from "../../features/email/url-search";
+import { TasksProvider } from "../../features/tasks/tasks-context";
+import { useAuth } from "../../providers/auth-provider";
+import { useWorkspace } from "../../providers/workspace-provider";
 
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -39,7 +43,32 @@ export function EmailPage() {
   }, [navigate]);
 
   if (onEngine) {
-    return <MailPage initialThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
+    return (
+      <EngineMailPage initialThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />
+    );
   }
   return <EmailWebPage urlThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
+}
+
+type DeepLink = { initialThreadId: string | null; onConsumeThreadDeepLink: () => void };
+
+/** The engine page under the Tasks root its spine gestures and Today panel read. */
+function EngineMailPage(props: DeepLink) {
+  const { runtime, userId } = useAuth();
+  const { selectedWorkspaceId, modulePermissions } = useWorkspace();
+  return (
+    <TasksProvider
+      runtime={runtime}
+      userId={userId}
+      workspaceId={selectedWorkspaceId}
+      modulePermission={modulePermissions.tasks}
+    >
+      <WiredMailPage {...props} />
+    </TasksProvider>
+  );
+}
+
+function WiredMailPage(props: DeepLink) {
+  const wiring = useMailPageWiring();
+  return <MailPage {...props} {...wiring} />;
 }

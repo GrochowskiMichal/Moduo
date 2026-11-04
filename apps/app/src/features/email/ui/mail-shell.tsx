@@ -12,7 +12,13 @@ import {
   isMacPlatform,
   useAppHotkeys,
 } from "@/lib/hotkeys/use-app-hotkeys";
-import type { MailMailbox, MailOpInput, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
+import type {
+  MailMailbox,
+  MailOpInput,
+  MailTab,
+  MailThreadRow,
+  MailView,
+} from "@/lib/runtime.types.mail-engine";
 
 import { createBulkCommands, type ZeroAge } from "../commands/bulk";
 import { createMailCommands } from "../commands/triage";
@@ -46,6 +52,16 @@ const REMOVES = new Set<MailOpInput["kind"]>(["done", "delete", "snooze", "spam"
 
 const selEngine = (s: { engine: unknown }) => s.engine;
 
+/** What the page drives from outside the shell: pickers that finish an action
+ * (snooze, move) go through `act` so they auto-advance like Done (AC14). */
+export type MailShellApi = {
+  act(kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]): Promise<void>;
+  /** The loaded row for a thread, when it is in the current window. */
+  row(threadId: string): MailThreadRow | null;
+  /** Selects and opens a thread. */
+  open(threadId: string): void;
+};
+
 export type MailShellProps = {
   store?: MailStore;
   now?: () => number;
@@ -64,6 +80,15 @@ export type MailShellProps = {
   initialView?: MailView;
   /** Opens with this thread selected (the `?thread=` deep link). */
   initialThreadId?: string | null;
+  /** Filled with the shell's imperative API (see `MailShellApi`). */
+  apiRef?: { current: MailShellApi | null };
+  /** Shows Subscriptions in the rail; the page renders it in the reader slot. */
+  onOpenSubscriptions?: () => void;
+  subscriptionsActive?: boolean;
+  /** Called when a rail folder is picked (the page leaves Subscriptions). */
+  onViewChange?: (view: MailView) => void;
+  /** The open thread changed (the page's Today panel acts on it). */
+  onCursorChange?: (threadId: string | null) => void;
 };
 
 /** The folder name the empty state names. */
@@ -121,6 +146,11 @@ export function MailShell({
   onIntent,
   initialView = { kind: "unified", role: "inbox" },
   initialThreadId = null,
+  apiRef,
+  onOpenSubscriptions,
+  subscriptionsActive = false,
+  onViewChange,
+  onCursorChange,
 }: MailShellProps) {
   const engine = useMailStore(selEngine, store) as ReturnType<MailStore["getState"]>["engine"];
   const counts = useMailStore((s) => s.counts, store);
@@ -183,6 +213,19 @@ export function MailShell({
     },
     [bulk],
   );
+
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = {
+      act,
+      row: (id) => win.rows.find((r) => r.threadId === id) ?? null,
+      open: (id) => setSel({ ...EMPTY_SELECTION, cursor: id }),
+    };
+  });
+
+  useEffect(() => {
+    onCursorChange?.(sel.cursor);
+  }, [sel.cursor, onCursorChange]);
 
   const teach = useCallback(
     (id: MailKeyId) => {
@@ -290,7 +333,10 @@ export function MailShell({
           onSelect={(v) => {
             setView(v);
             setSel(EMPTY_SELECTION);
+            onViewChange?.(v);
           }}
+          onOpenSubscriptions={onOpenSubscriptions}
+          subscriptionsActive={subscriptionsActive}
           onConnect={() => onConnect?.()}
           savedSearches={savedSearches}
           onOpenSearch={openMailSearch}

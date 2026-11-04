@@ -2,7 +2,7 @@
 // the engine. The newest message and every unread one start open; older ones
 // fold to a one-line header. Re-reads when the engine's threads change.
 
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
 import type { MailEngine, MailThread } from "@/lib/runtime.types.mail-engine";
 
@@ -14,6 +14,8 @@ export type MailReaderProps = {
   threadId: string | null;
   version: number;
   behavior: Pick<MailBehavior, "remoteImages" | "trackerBlocking">;
+  /** Page content above the stack (the invite card, the contact's mail). */
+  renderAbove?: (thread: MailThread) => ReactNode;
 };
 
 function useThread(engine: MailEngine | null, threadId: string | null, version: number) {
@@ -42,7 +44,7 @@ export function MailReader(props: MailReaderProps) {
   return <ThreadStack key={props.threadId ?? ""} {...props} />;
 }
 
-function ThreadStack({ engine, threadId, version, behavior }: MailReaderProps) {
+function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailReaderProps) {
   const { thread, loading } = useThread(engine, threadId, version);
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
@@ -67,6 +69,7 @@ function ThreadStack({ engine, threadId, version, behavior }: MailReaderProps) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-reader-thread={threadId}>
       <h2 className="px-4 pt-4 pb-2 text-lg font-semibold text-foreground">{thread.row.subject}</h2>
+      {renderAbove?.(thread)}
       {thread.messages.map((m, i) => {
         const expanded = open[m.id] ?? (i === last || m.unread);
         return (
