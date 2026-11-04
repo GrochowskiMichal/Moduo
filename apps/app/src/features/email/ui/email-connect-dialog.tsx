@@ -76,10 +76,7 @@ function ProviderTabs({
           type="button"
           role="tab"
           aria-selected={provider === tab.id}
-          onClick={() => {
-            setProvider(tab.id);
-            setError(null);
-          }}
+          onClick={() => onPick(tab.id)}
           className={
             "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
             (provider === tab.id
