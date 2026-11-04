@@ -420,8 +420,11 @@ async fn sync_round_inside_undo_window_keeps_thread_hidden() {
     let mut srv = f.session();
     let plans = a.first_round(&mut srv).await.unwrap();
     let t = inbox_rows(&s)[0].thread_id.clone();
-    s.enqueue_op(&crate::mail::ops::OpRequest::new(crate::mail::contracts::OpKind::Done, vec![t.clone()]))
-        .unwrap();
+    s.enqueue_op(&crate::mail::ops::OpRequest::new(
+        crate::mail::contracts::OpKind::Done,
+        vec![t.clone()],
+    ))
+    .unwrap();
     assert!(inbox_rows(&s).iter().all(|r| r.thread_id != t));
     // The server still has it in INBOX (the op hasn't flushed); a new message
     // arrives too, so the round ingests and re-touches the inbox.
@@ -429,6 +432,91 @@ async fn sync_round_inside_undo_window_keeps_thread_hidden() {
     f.set_flags("INBOX", 2, FLAG_SEEN);
     a.round(&mut srv, &plans, &inbox(&plans)).await.unwrap();
     let rows = inbox_rows(&s);
-    assert!(rows.iter().all(|r| r.thread_id != t), "no resurrection inside the window");
+    assert!(
+        rows.iter().all(|r| r.thread_id != t),
+        "no resurrection inside the window"
+    );
     assert_eq!(rows.len(), 2);
+}
+
+fn message_rows(s: &Store) -> Vec<(String, String)> {
+    let c = s.r();
+    let mut st = c
+        .prepare("SELECT ext_id, from_email FROM messages ORDER BY ext_id")
+        .unwrap();
+    st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[tokio::test]
+async fn forged_duplicate_message_id_does_not_merge() {
+    use super::testing::raw;
+    let f = server(true);
+    // The genuine message sits in Archive; an attacker mails a forgery that
+    // reuses its Message-ID with a different sender, date and size.
+    f.append_raw(
+        "Archive",
+        raw(
+            "victim@bank.test",
+            &[],
+            "Bank <bank@bank.test>",
+            "Statement",
+            1_000,
+        ),
+        1_000,
+        &[],
+    );
+    f.append_raw(
+        "INBOX",
+        raw(
+            "victim@bank.test",
+            &[],
+            "Evil <evil@attacker.test>",
+            "Statement!!",
+            5_000,
+        ),
+        5_000,
+        &[],
+    );
+    let (s, a) = sync("forged-mid");
+    let mut srv = f.session();
+    a.first_round(&mut srv).await.unwrap();
+    let rows = message_rows(&s);
+    assert_eq!(rows.len(), 2, "forgery must be its own message: {rows:?}");
+    assert!(rows.iter().any(|r| r.1 == "bank@bank.test"));
+    assert!(rows.iter().any(|r| r.1 == "evil@attacker.test"));
+    assert!(rows.iter().all(|r| !r.0.contains("victim@bank.test")));
+}
+
+#[tokio::test]
+async fn same_message_in_two_folders_dedupes() {
+    use super::testing::raw;
+    let f = server(true);
+    let m = raw("copy@x.test", &[], "Ann <ann@x.test>", "Hi", 1_000);
+    f.append_raw("INBOX", m.clone(), 1_000, &[]);
+    f.append_raw("Archive", m, 1_000, &[]);
+    let (s, a) = sync("dedupe-copy");
+    let mut srv = f.session();
+    a.first_round(&mut srv).await.unwrap();
+    assert_eq!(message_rows(&s).len(), 1, "an exact copy is one message");
+}
+
+#[tokio::test]
+async fn messages_without_message_id_never_merge() {
+    let f = server(true);
+    let m =
+        b"From: Ann <ann@x.test>\r\nSubject: Hi\r\nDate: Thu, 01 Jan 1970 00:00:01 +0000\r\n\r\n"
+            .to_vec();
+    f.append_raw("INBOX", m.clone(), 1_000, &[]);
+    f.append_raw("INBOX", m, 1_000, &[]);
+    let (s, a) = sync("no-mid");
+    let mut srv = f.session();
+    a.first_round(&mut srv).await.unwrap();
+    assert_eq!(
+        message_rows(&s).len(),
+        2,
+        "no Message-ID: identity is the UID"
+    );
 }

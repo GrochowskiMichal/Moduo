@@ -184,30 +184,48 @@ fn view_keys(plan: &MailboxPlan, extra: &[MailboxPlan]) -> Vec<String> {
     v.into_iter().collect()
 }
 
-fn ext_id_for(h: &FetchedHeader, p: &ParsedHeader) -> String {
+/// Where a fetched header came from: the store identity of a non-Gmail
+/// message is its (account, mailbox, UIDVALIDITY, UID).
+#[derive(Clone, Copy)]
+pub(crate) struct Origin<'a> {
+    pub mailbox_id: &'a str,
+    pub uidvalidity: u32,
+}
+
+fn hex12(parts: &str) -> String {
+    Sha256::digest(parts.as_bytes())
+        .iter()
+        .take(12)
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// Store identity of a message. Gmail: X-GM-MSGID (server-assigned). Else
+/// the Message-ID is sender-controlled, so it never identifies a message on
+/// its own: a copy in another folder merges only when Message-ID, From, Date
+/// and size all match; otherwise the identity is the mailbox UID.
+fn ext_id_for(account_id: &str, o: Origin<'_>, h: &FetchedHeader, p: &ParsedHeader) -> String {
     if let Some(g) = h.gm_msgid {
         return format!("gm:{g}");
     }
-    if let Some(m) = &p.message_id {
-        return format!("mid:{m}");
+    if let (Some(m), Some(d)) = (&p.message_id, p.date_ms) {
+        if !p.from.email.is_empty() {
+            return format!(
+                "fp:{}",
+                hex12(&format!(
+                    "{m}\0{}\0{d}\0{}",
+                    p.from.email.to_ascii_lowercase(),
+                    h.size
+                ))
+            );
+        }
     }
-    // No Message-ID: a stable hash of what identifies the message.
-    let d = Sha256::digest(
-        format!(
-            "{:?}\0{}\0{}\0{}",
-            p.date_ms.or(h.internal_date_ms),
-            p.from.email,
-            p.subject,
-            h.size
-        )
-        .as_bytes(),
-    );
     format!(
-        "h:{}",
-        d.iter()
-            .take(12)
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>()
+        "u:{}",
+        hex12(&format!(
+            "{account_id}\0{}\0{}\0{}",
+            o.mailbox_id, o.uidvalidity, h.uid
+        ))
     )
 }
 
@@ -215,6 +233,7 @@ fn ext_id_for(h: &FetchedHeader, p: &ParsedHeader) -> String {
 /// mailboxes. Returns the touched thread ids.
 fn ingest_chunk(
     ctx: &SyncCtx<'_>,
+    origin: Origin<'_>,
     fetched: Vec<FetchedHeader>,
     targets: &dyn Fn(&FetchedHeader) -> Vec<String>,
     new_floor: u32,
@@ -231,7 +250,7 @@ fn ingest_chunk(
     let mut threader = Threader::new(ctx.store, ctx.account_id);
     let mut batch = Vec::with_capacity(parsed.len());
     for (h, p) in &parsed {
-        let ext_id = ext_id_for(h, p);
+        let ext_id = ext_id_for(ctx.account_id, origin, h, p);
         let date_ms = p.date_ms.or(h.internal_date_ms).unwrap_or(0);
         let thread_id = threader.assign(&ext_id, p, date_ms)?;
         let mut cfg_hit = classify(p, ctx.classify);
@@ -293,6 +312,7 @@ fn ingest_chunk(
 async fn fetch_and_ingest<S: MailServer>(
     srv: &mut S,
     ctx: &SyncCtx<'_>,
+    origin: Origin<'_>,
     uids: &[u32],
     targets: &(dyn Fn(&FetchedHeader) -> Vec<String> + Sync),
     new_floor: u32,
@@ -303,7 +323,7 @@ async fn fetch_and_ingest<S: MailServer>(
             return Err(SyncError::Cancelled);
         }
         let fetched = srv.fetch_headers(chunk).await?;
-        ingest_chunk(ctx, fetched, targets, new_floor, report)?;
+        ingest_chunk(ctx, origin, fetched, targets, new_floor, report)?;
     }
     Ok(())
 }
@@ -387,6 +407,10 @@ pub async fn sync_mailbox<S: MailServer>(
 ) -> SyncResult<RoundReport> {
     let mut report = RoundReport::default();
     let sel = srv.select(&plan.path).await?;
+    let origin = Origin {
+        mailbox_id: &plan.id,
+        uidvalidity: sel.uidvalidity,
+    };
     let mut cursor = ctx.store.mailbox_cursor(&plan.id)?.unwrap_or_default();
     if cursor
         .uidvalidity
@@ -448,7 +472,16 @@ pub async fn sync_mailbox<S: MailServer>(
     // Newest first, so the top of the list fills before older mail.
     let mut ordered = now;
     ordered.reverse();
-    fetch_and_ingest(srv, ctx, &ordered, &gm_targets, new_mark, &mut report).await?;
+    fetch_and_ingest(
+        srv,
+        ctx,
+        origin,
+        &ordered,
+        &gm_targets,
+        new_mark,
+        &mut report,
+    )
+    .await?;
 
     // Flags.
     let synced_lo = new_floor.unwrap_or(1).max(1);
@@ -465,7 +498,17 @@ pub async fn sync_mailbox<S: MailServer>(
     } else {
         vec![]
     };
-    apply_flag_updates(srv, ctx, plan, labels, &changed, &local, &mut report).await?;
+    apply_flag_updates(
+        srv,
+        ctx,
+        origin,
+        plan,
+        labels,
+        &changed,
+        &local,
+        &mut report,
+    )
+    .await?;
 
     // The ops outbox (MR-5): ops planned against the old UIDVALIDITY get the
     // new UIDs by Message-ID (or fail with a reason), and every unsent op's
@@ -519,6 +562,7 @@ async fn diff_flags<S: MailServer>(
 async fn apply_flag_updates<S: MailServer>(
     srv: &mut S,
     ctx: &SyncCtx<'_>,
+    origin: Origin<'_>,
     plan: &MailboxPlan,
     labels: Option<&LabelMap>,
     updates: &[FlagUpdate],
@@ -559,7 +603,7 @@ async fn apply_flag_updates<S: MailServer>(
         }
         if !regain.is_empty() {
             let t = |h: &FetchedHeader| l.targets(&h.gm_labels);
-            fetch_and_ingest(srv, ctx, &regain, &t, u32::MAX, report).await?;
+            fetch_and_ingest(srv, ctx, origin, &regain, &t, u32::MAX, report).await?;
         }
     }
     Ok(())
@@ -638,6 +682,10 @@ pub async fn backfill<S: MailServer>(
 ) -> SyncResult<RoundReport> {
     let mut report = RoundReport::default();
     let sel = srv.select(&plan.path).await?;
+    let origin = Origin {
+        mailbox_id: &plan.id,
+        uidvalidity: sel.uidvalidity,
+    };
     let cursor = ctx.store.mailbox_cursor(&plan.id)?.unwrap_or_default();
     if cursor.uidvalidity != Some(sel.uidvalidity as i64) {
         // Validity moved under us: the next round resets and starts over.
@@ -685,7 +733,7 @@ pub async fn backfill<S: MailServer>(
             return Err(SyncError::Cancelled);
         }
         let mut sub = RoundReport::default();
-        match fetch_and_ingest(srv, ctx, chunk, &targets, u32::MAX, &mut sub).await {
+        match fetch_and_ingest(srv, ctx, origin, chunk, &targets, u32::MAX, &mut sub).await {
             Ok(()) | Err(SyncError::Cancelled) => {}
             Err(e) => return Err(e),
         }
