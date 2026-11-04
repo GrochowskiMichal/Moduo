@@ -184,6 +184,17 @@ pub fn mail_list_mailboxes(
 
 #[tauri::command]
 pub fn mail_list_threads(input: ListIn, host: State<'_, MailHost>) -> Result<ListPage, String> {
+    // Follow-ups, New senders and Outbox are small: one unpaged window.
+    let extra = match input.view {
+        ViewIn::Followups => Some(host.store()?.followup_rows(now_ms())),
+        ViewIn::NewSenders => Some(host.store()?.new_sender_rows()),
+        ViewIn::Outbox => Some(host.store()?.outbox_rows()),
+        _ => None,
+    };
+    if let Some(rows) = extra {
+        let rows = if input.after.is_some() { vec![] } else { rows.map_err(s)? };
+        return Ok(ListPage { rows, next: None });
+    }
     match to_list_input(input)? {
         Some(i) => host.store()?.list_threads(&i).map_err(s),
         None => Ok(ListPage {
@@ -204,7 +215,20 @@ pub fn mail_get_thread(
     host: State<'_, MailHost>,
 ) -> Result<Option<ThreadDetail>, String> {
     check_id(&thread_id)?;
-    host.store()?.get_thread(&thread_id).map_err(s)
+    let store = host.store()?;
+    let detail = store.get_thread(&thread_id).map_err(s)?;
+    // Opening a thread downloads what it lacks; the reader re-reads on the event.
+    if let Some(d) = &detail {
+        if store.thread_needs_bodies(&thread_id).unwrap_or(false) {
+            host.ondemand.load_thread_bg(
+                store.clone(),
+                host.events.clone(),
+                d.row.account_id.clone(),
+                thread_id.clone(),
+            );
+        }
+    }
+    Ok(detail)
 }
 
 fn changed(host: &MailHost, thread_ids: Vec<String>) {

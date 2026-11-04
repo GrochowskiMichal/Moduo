@@ -31,6 +31,7 @@ import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
 import { ContactMailPanel } from "../panels/contact-mail";
 import { TodayPanel, type TodayTask } from "../panels/today-panel";
+import { engineInviteLoader, engineRsvp } from "../reader/engine-reader";
 import { InviteCard, type MailInvite, type MailPartstat } from "../reader/invite-card";
 import { MailReader } from "../reader/mail-reader";
 import { type MailStore, mailStore } from "../store/mail-store";
@@ -213,6 +214,9 @@ export function MailPage({
               return { undoSeconds: b.undoSendSeconds, doneOnSend: b.doneOnSend };
             },
             markDone: (threadId) => commands.apply({ kind: "done", threadIds: [threadId] }),
+            setFollowUp: engine?.setFollowUp
+              ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
+              : undefined,
             // The undo-send toast (X22): Undo cancels and reopens, Edit reopens to change it.
             showSent: (_handle, actions) => {
               const seconds = store.getState().behavior.undoSendSeconds;
@@ -224,7 +228,7 @@ export function MailPage({
             },
           })
         : null,
-    [port, store, commands],
+    [port, store, commands, engine],
   );
 
   /** A thread's row: the loaded window first, else the engine. */
@@ -324,17 +328,20 @@ export function MailPage({
     const suggest = sender
       ? suggestions.find((x) => x.email === sender.email.toLowerCase())
       : undefined;
+    // The engine's invite reader unless the host passed its own.
+    const invites = loadInvite ?? engineInviteLoader(engine, thread.row.threadId);
+    const rsvp = onRsvp ?? engineRsvp(engine, thread.row.threadId);
     return (
       <>
-        {loadInvite
+        {invites
           ? thread.messages
               .filter((m) => m.hasInvite)
               .map((m) => (
                 <InviteSlot
                   key={m.id}
                   messageId={m.id}
-                  loadInvite={loadInvite}
-                  onRsvp={onRsvp}
+                  loadInvite={invites}
+                  onRsvp={rsvp}
                   onAddToCalendar={(inv) =>
                     createEvent(thread.row.threadId, { startMs: inv.startMs, endMs: inv.endMs })
                   }

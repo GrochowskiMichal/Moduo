@@ -334,6 +334,8 @@ export function MailShell({
             setView(v);
             setSel(EMPTY_SELECTION);
             onViewChange?.(v);
+            // Opening a folder rounds it now instead of on the next sweep.
+            if (v.kind === "mailbox") void engine?.openFolder?.(v.mailboxId).catch(() => {});
           }}
           onOpenSubscriptions={onOpenSubscriptions}
           subscriptionsActive={subscriptionsActive}

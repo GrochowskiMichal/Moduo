@@ -7,6 +7,7 @@ pub mod mail_accounts;
 pub mod mail_compose;
 pub mod mail_engine;
 pub mod mail_events;
+pub mod mail_reader;
 pub mod migration;
 pub mod notes;
 pub mod oauth_flow;

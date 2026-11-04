@@ -38,6 +38,25 @@ export function createTauriMailEngine(
     listThreads: (input) => call("mail_list_threads", { input }),
     counts: () => call("mail_counts"),
     getThread: (threadId) => call("mail_get_thread", { threadId }),
+    getRawMessage: (messageId, threadId) =>
+      threadId
+        ? call("mail_get_raw_message", { threadId, messageId })
+        : Promise.reject(new Error("Show original needs the conversation")),
+    attachmentFile: (threadId, attachmentId) =>
+      call("mail_attachment_file", { threadId, attachmentId }),
+    getInvite: (threadId, messageId) => call("mail_get_invite", { threadId, messageId }),
+    rsvp: (threadId, messageId, answer) => call("mail_rsvp", { threadId, messageId, answer }),
+    unsubscribePlan: (threadId, messageId) =>
+      call("mail_unsubscribe_plan", { threadId, messageId }),
+    unsubscribe: (threadId, messageId, { allowMailto }) =>
+      call("mail_unsubscribe", { threadId, messageId, allowMailto }),
+    avatar: (input) => call("mail_avatar", { ...input }),
+    setVisible: (threadIds) => call("mail_set_visible", { threadIds }),
+    openFolder: (mailboxId) => call("mail_open_folder", { mailboxId }),
+    backfill: (accountId) => call("mail_backfill", { accountId }),
+    cancelBackfill: (accountId) => call("mail_cancel_backfill", { accountId }),
+    setFollowUp: (threadId, dueMs) => call("mail_set_follow_up", { input: { threadId, dueMs } }),
+    releaseNewSenders: (threadIds) => call("mail_release_new_senders", { threadIds }),
     applyOp: (input) => call("mail_apply_op", { input }),
     undoOp: (opId) => call("mail_undo_op", { opId }),
     listFailedOps: () => call("mail_list_failed_ops"),

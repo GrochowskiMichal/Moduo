@@ -263,6 +263,10 @@ fn ingest_chunk(
         {
             report.effects.push((thread_id.clone(), cfg_hit.clone()));
         }
+        if cfg_hit.screened {
+            // Held in New senders until Allow or Block releases it.
+            ctx.store.set_screened(std::slice::from_ref(&thread_id), true)?;
+        }
         if cfg_hit.blocked.is_some() {
             cfg_hit.tab = TabRef::of(TabKind::Personal);
         }

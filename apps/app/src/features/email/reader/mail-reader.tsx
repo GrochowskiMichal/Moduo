@@ -7,7 +7,9 @@ import { type ReactNode, useEffect, useState } from "react";
 import type { MailEngine, MailThread } from "@/lib/runtime.types.mail-engine";
 
 import type { MailBehavior } from "../engine/behavior";
+import { useAttachmentFiles } from "./engine-reader";
 import { MessageCard } from "./message-card";
+import { UnsubscribeBar } from "./unsubscribe-bar";
 
 export type MailReaderProps = {
   engine: MailEngine | null;
@@ -47,6 +49,7 @@ export function MailReader(props: MailReaderProps) {
 function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailReaderProps) {
   const { thread, loading } = useThread(engine, threadId, version);
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const files = useAttachmentFiles(engine, threadId, thread?.messages ?? []);
 
   if (!threadId) {
     return (
@@ -64,11 +67,12 @@ function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailR
   }
   const last = thread.messages.length - 1;
   const loadOriginal = engine?.getRawMessage
-    ? (id: string) => engine.getRawMessage!(id)
+    ? (id: string) => engine.getRawMessage!(id, threadId)
     : undefined;
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-reader-thread={threadId}>
       <h2 className="px-4 pt-4 pb-2 text-lg font-semibold text-foreground">{thread.row.subject}</h2>
+      {engine ? <UnsubscribeBar engine={engine} thread={thread} /> : null}
       {renderAbove?.(thread)}
       {thread.messages.map((m, i) => {
         const expanded = open[m.id] ?? (i === last || m.unread);
@@ -87,6 +91,9 @@ function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailR
             }}
             trackerBlocking={behavior.trackerBlocking}
             loadOriginal={loadOriginal}
+            fileUrl={files.available ? files.fileUrl : undefined}
+            previewUrl={files.available ? files.previewUrl : undefined}
+            onAttachment={files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined}
           />
         );
       })}

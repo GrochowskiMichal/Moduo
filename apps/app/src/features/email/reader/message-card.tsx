@@ -32,6 +32,9 @@ export type MessageCardProps = {
   /** Fetches the raw RFC 822 source; absent hides "Show original". */
   loadOriginal?: (messageId: string) => Promise<string>;
   fileUrl?: (a: MailAttachment) => string | null;
+  previewUrl?: (a: MailAttachment) => string | null;
+  /** Fetches the attachment's file (preview and open). */
+  onAttachment?: (a: MailAttachment) => void;
   invite?: ReactNode;
 };
 
@@ -125,6 +128,8 @@ export function MessageCard({
   trackerBlocking = true,
   loadOriginal,
   fileUrl,
+  previewUrl,
+  onAttachment,
   invite,
 }: MessageCardProps) {
   const [original, setOriginal] = useState<string | null>(null);
@@ -175,6 +180,8 @@ export function MessageCard({
             threadId={threadId}
             messageId={message.id}
             fileUrl={fileUrl}
+            previewUrl={previewUrl}
+            onPreview={onAttachment}
           />
           {loadOriginal ? (
             <div className="flex flex-col gap-2">

@@ -9,6 +9,8 @@
 //! and send outbox. Sign-out stops the workers.
 
 pub mod imap_adapters;
+pub mod ondemand;
+pub mod reader;
 pub mod lifecycle;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -178,6 +180,8 @@ pub struct MailHost {
     pub events: EventBus,
     foreground: Arc<AtomicBool>,
     running: Mutex<Option<Running>>,
+    /// Running accounts' actors, sync and worker queues for the reader commands.
+    pub ondemand: Arc<ondemand::OnDemand>,
 }
 
 impl MailHost {
@@ -186,6 +190,7 @@ impl MailHost {
             events,
             foreground: Arc::new(AtomicBool::new(true)),
             running: Mutex::new(None),
+            ondemand: Arc::default(),
         }
     }
 
@@ -280,6 +285,7 @@ impl MailHost {
             classify: r.classify.clone(),
             stop: stop.clone(),
             foreground: self.foreground.clone(),
+            ondemand: self.ondemand.clone(),
         };
         let task = tauri::async_runtime::spawn(w.run());
         r.workers
@@ -326,6 +332,7 @@ impl MailHost {
 
     /// Stops every worker (sign-out, quit).
     pub fn stop(&self) {
+        self.ondemand.clear();
         if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).take() {
             for (_, w) in r.workers {
                 w.halt();
@@ -344,6 +351,7 @@ struct Worker {
     classify: Arc<RwLock<ClassifyConfig>>,
     stop: Arc<AtomicBool>,
     foreground: Arc<AtomicBool>,
+    ondemand: Arc<ondemand::OnDemand>,
 }
 
 impl Worker {
@@ -397,6 +405,8 @@ impl Worker {
             self.classify.clone(),
             self.since_ms(),
         ));
+        self.ondemand
+            .register(&self.account_id, actor.clone(), sync.clone());
         while !self.stop.load(Ordering::SeqCst) {
             match self.session_life(&actor, &sync).await {
                 Err(CheckoutError::Auth(AuthError::Reconnect)) => {
@@ -458,12 +468,19 @@ impl Worker {
             if let Err(e) = self.outbox_tick(actor, srv).await {
                 break Err(CheckoutError::Connect(e));
             }
+            if let Err(e) = self
+                .ondemand
+                .worker_tick(&self.account_id, srv, &plans, &self.store, &self.events)
+                .await
+            {
+                break Err(CheckoutError::Connect(e));
+            }
             let tick = if self.foreground.load(Ordering::SeqCst) {
                 TICK_FOREGROUND
             } else {
                 TICK_BACKGROUND
             };
-            tokio::time::sleep(tick).await;
+            self.ondemand.wait(&self.account_id, tick).await;
         };
         idle.abort();
         if result.is_ok() {

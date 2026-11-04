@@ -134,6 +134,54 @@ export type MailMessage = {
 
 export type MailThread = { row: MailThreadRow; messages: MailMessage[] };
 
+export type MailAttachmentFile = {
+  path: string;
+  /** `file://` URL for Finder's DownloadURL drag. */
+  fileUrl: string;
+  /** Inline `data:` URL for the preview (images and PDFs up to 8 MB). */
+  dataUrl: string | null;
+};
+
+export type MailRsvp = "accept" | "maybe" | "decline";
+
+export type MailInviteInfo = {
+  uid: string;
+  method: "REQUEST" | "CANCEL" | "REPLY";
+  summary: string;
+  startMs: number;
+  endMs: number;
+  location: string | null;
+  organizer: { name: string; email: string } | null;
+  myStatus: "ACCEPTED" | "TENTATIVE" | "DECLINED" | null;
+  canRsvp: boolean;
+};
+
+export type MailUnsubscribeMethod =
+  | { kind: "oneClick"; url: string }
+  | { kind: "mailto"; to: string; subject: string | null; body: string | null }
+  | { kind: "web"; url: string };
+
+export type MailUnsubscribeOutcome = {
+  method: "one_click" | "mailto" | "web";
+  /** False for `web`: the app opens `url`. */
+  done: boolean;
+  url: string | null;
+  fellBack: boolean;
+  error: string | null;
+};
+
+export type MailAvatarInput = {
+  email: string;
+  name: string | null;
+  contactPhoto: string | null;
+  fetchEnabled: boolean;
+};
+
+export type MailAvatar =
+  | { kind: "contact"; url: string }
+  | { kind: "logo"; dataUrl: string }
+  | { kind: "initials"; initials: string };
+
 export type MailOpInput = {
   kind: MailOpKind;
   threadIds: string[];
@@ -193,8 +241,36 @@ export type MailEngine = {
   listThreads(input: MailListInput): Promise<MailListPage>;
   counts(): Promise<MailCounts>;
   getThread(threadId: string): Promise<MailThread | null>;
-  /** The raw RFC 822 source for "Show original" (AC16); absent hides the button. */
-  getRawMessage?(messageId: string): Promise<string>;
+  /** The raw RFC 822 source for "Show original" (AC16); absent hides the button.
+   * The desktop engine needs the thread (message ids are unique per thread). */
+  getRawMessage?(messageId: string, threadId?: string): Promise<string>;
+  /** Downloads (or reuses) an attachment's local file (AC17). */
+  attachmentFile?(threadId: string, attachmentId: string): Promise<MailAttachmentFile>;
+  /** The message's calendar invite, or null (AC18). */
+  getInvite?(threadId: string, messageId: string): Promise<MailInviteInfo | null>;
+  /** Queues the iTIP REPLY to the organizer. */
+  rsvp?(threadId: string, messageId: string, answer: MailRsvp): Promise<void>;
+  /** The newsletter's unsubscribe methods in the order they'd be tried (AC19). */
+  unsubscribePlan?(threadId: string, messageId: string): Promise<MailUnsubscribeMethod[]>;
+  /** One-click, then mailto (only when allowed, after a confirm), then the web page. */
+  unsubscribe?(
+    threadId: string,
+    messageId: string,
+    opts: { allowMailto: boolean },
+  ): Promise<MailUnsubscribeOutcome>;
+  /** Contact photo → own-domain logo → initials (AC31). */
+  avatar?(input: MailAvatarInput): Promise<MailAvatar>;
+  /** Rows on screen: their bodies prefetch first after opened ones (decision 8). */
+  setVisible?(threadIds: string[]): Promise<void>;
+  /** Rounds a folder now (opening it in the rail). */
+  openFolder?(mailboxId: string): Promise<void>;
+  /** Walks history below the synced floor; progress arrives as sync_status. */
+  backfill?(accountId: string): Promise<void>;
+  cancelBackfill?(accountId: string): Promise<void>;
+  /** Arms (dueMs) or clears (null) "Remind me if no reply"; feeds the followups view. */
+  setFollowUp?(threadId: string, dueMs: number | null): Promise<void>;
+  /** Allow or Block decided: these threads leave New senders. */
+  releaseNewSenders?(threadIds: string[]): Promise<void>;
   /** Applies locally in the same call and returns the undoable op ids (decision 12). */
   applyOp(input: MailOpInput): Promise<{ opIds: string[] }>;
   /** Inside the window: cancels; after it: enqueues the compensating op. */

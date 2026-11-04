@@ -30,4 +30,51 @@ describe("tauri mail engine", () => {
     expect(b).toHaveLength(2);
     expect(calls[0]).toEqual(["mail_apply_op", { input: { kind: "done", threadIds: ["t1"] } }]);
   });
+
+  it("maps the reader and on-demand calls to their commands", async () => {
+    const calls: [string, unknown][] = [];
+    const engine = createTauriMailEngine(
+      async <T>(cmd: string, args?: Record<string, unknown>) => {
+        calls.push([cmd, args]);
+        return null as T;
+      },
+      () => "channel",
+    );
+    await engine.getRawMessage!("m1", "t1");
+    await engine.attachmentFile!("t1", "7");
+    await engine.getInvite!("t1", "m1");
+    await engine.rsvp!("t1", "m1", "decline");
+    await engine.unsubscribePlan!("t1", "m1");
+    await engine.unsubscribe!("t1", "m1", { allowMailto: true });
+    await engine.avatar!({ email: "a@b.io", name: null, contactPhoto: null, fetchEnabled: true });
+    await engine.setVisible!(["t1"]);
+    await engine.openFolder!("a-inbox");
+    await engine.backfill!("a");
+    await engine.cancelBackfill!("a");
+    await engine.setFollowUp!("t1", 9);
+    await engine.releaseNewSenders!(["t1"]);
+    expect(calls).toEqual([
+      ["mail_get_raw_message", { threadId: "t1", messageId: "m1" }],
+      ["mail_attachment_file", { threadId: "t1", attachmentId: "7" }],
+      ["mail_get_invite", { threadId: "t1", messageId: "m1" }],
+      ["mail_rsvp", { threadId: "t1", messageId: "m1", answer: "decline" }],
+      ["mail_unsubscribe_plan", { threadId: "t1", messageId: "m1" }],
+      ["mail_unsubscribe", { threadId: "t1", messageId: "m1", allowMailto: true }],
+      ["mail_avatar", { email: "a@b.io", name: null, contactPhoto: null, fetchEnabled: true }],
+      ["mail_set_visible", { threadIds: ["t1"] }],
+      ["mail_open_folder", { mailboxId: "a-inbox" }],
+      ["mail_backfill", { accountId: "a" }],
+      ["mail_cancel_backfill", { accountId: "a" }],
+      ["mail_set_follow_up", { input: { threadId: "t1", dueMs: 9 } }],
+      ["mail_release_new_senders", { threadIds: ["t1"] }],
+    ]);
+  });
+
+  it("refuses Show original without the thread", async () => {
+    const engine = createTauriMailEngine(
+      async <T>() => "" as T,
+      () => "c",
+    );
+    await expect(engine.getRawMessage!("m1")).rejects.toThrow();
+  });
 });

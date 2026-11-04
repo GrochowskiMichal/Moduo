@@ -47,6 +47,8 @@ export type AttachmentStripProps = {
   messageId: string;
   /** The attachment's local file URL once cached (Finder drags need it). */
   fileUrl?: (a: MailAttachment) => string | null;
+  /** An inline URL the preview can show (the engine's `data:` URL); falls back to `fileUrl`. */
+  previewUrl?: (a: MailAttachment) => string | null;
   onPreview?: (a: MailAttachment) => void;
   onOpen?: (a: MailAttachment) => void;
 };
@@ -56,6 +58,7 @@ export function AttachmentStrip({
   threadId,
   messageId,
   fileUrl,
+  previewUrl: inlineUrl,
   onPreview,
   onOpen,
 }: AttachmentStripProps) {
@@ -79,7 +82,7 @@ export function AttachmentStrip({
     e.dataTransfer.effectAllowed = "copyLink";
   };
 
-  const previewUrl = preview ? (fileUrl?.(preview) ?? null) : null;
+  const previewUrl = preview ? (inlineUrl?.(preview) ?? fileUrl?.(preview) ?? null) : null;
   return (
     <>
       <ul aria-label="Attachments" className="flex flex-wrap gap-2">

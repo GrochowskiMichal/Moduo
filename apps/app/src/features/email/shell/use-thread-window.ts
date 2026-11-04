@@ -22,6 +22,9 @@ export function pinnedFirst(rows: readonly MailThreadRow[]): MailThreadRow[] {
   return [...pinned, ...rows.filter((r) => !r.pinned)];
 }
 
+/** Rows at the top of a window whose bodies are raised to Visible priority. */
+export const VISIBLE_PREFETCH = 30;
+
 export function useThreadWindow(
   engine: MailEngine | null,
   view: MailView,
@@ -52,6 +55,10 @@ export function useThreadWindow(
     setRows(pinnedFirst(out));
     setHasMore(more);
     setLoading(false);
+    // The top of the window is what's on screen: its bodies prefetch next (decision 8).
+    void engine
+      .setVisible?.(out.slice(0, VISIBLE_PREFETCH).map((r) => r.threadId))
+      ?.catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, key]);
 

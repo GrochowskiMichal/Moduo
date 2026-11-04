@@ -348,7 +348,7 @@ impl Store {
 }
 
 /// The list row a thread shows outside a view: its Inbox row if it has one.
-fn best_row(conn: &Connection, thread_id: &str) -> StoreResult<Option<ThreadRow>> {
+pub(crate) fn best_row(conn: &Connection, thread_id: &str) -> StoreResult<Option<ThreadRow>> {
     let sql = format!(
         "SELECT {ROW_COLS} FROM thread_views WHERE thread_id = ?1
          ORDER BY (role = 'inbox') DESC, mailbox_id LIMIT 1"
