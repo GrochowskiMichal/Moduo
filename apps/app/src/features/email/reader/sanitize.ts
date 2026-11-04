@@ -6,6 +6,7 @@
 // fires a known pixel while tracker blocking is on (X7).
 
 import { buildEmailReaderDoc } from "../utils/email-html";
+import { rewriteCssUrls } from "./css-urls";
 
 /** Settings → Mail → Remote images (S4). */
 export type ImagesPolicy = "block" | "contacts" | "always";
@@ -58,7 +59,10 @@ function hostOf(src: string): string | null {
   try {
     const url = new URL(src.startsWith("//") ? `https:${src}` : src);
     if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-    return url.hostname.toLowerCase();
+    // URL already lowercases, percent-decodes and punycodes (IDN → xn--);
+    // a trailing dot names the same host, so strip it before matching.
+    const host = url.hostname.toLowerCase().replace(/\.+$/, "");
+    return host || null;
   } catch {
     return null;
   }
@@ -90,18 +94,27 @@ function isPixel(img: Element): boolean {
   return tinyAttr || tinyStyle || hidden;
 }
 
-// CSS url(...) in a style attribute or <style> block; quoted or bare.
-const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/gi;
+/** A style URL is loadable with confidence: http(s) with a host, data: or cid:. */
+function isConfidentUrl(url: string): boolean {
+  const u = url.trim();
+  if (/^(?:data|cid):/i.test(u)) return true;
+  return hostOf(u) !== null;
+}
 
-function stripCssUrls(css: string): { css: string; hits: number } {
+function stripCssUrls(
+  css: string,
+  blockTrackers: boolean,
+  dropUnconfident: boolean,
+): { css: string; hits: number; changed: boolean } {
   let hits = 0;
-  const out = css.replace(CSS_URL, (m, a?: string, b?: string, c?: string) => {
-    const url = a ?? b ?? c ?? "";
-    if (!isTrackerHost(url)) return m;
-    hits += 1;
-    return "none";
+  const { css: out, dropped } = rewriteCssUrls(css, (url) => {
+    if (blockTrackers && url !== null && isTrackerHost(url)) {
+      hits += 1;
+      return true;
+    }
+    return dropUnconfident && (url === null || !isConfidentUrl(url));
   });
-  return { css: out, hits };
+  return { css: out, hits, changed: dropped > 0 };
 }
 
 /** Drops srcset candidates on a tracker host; returns the kept set and hits. */
@@ -128,14 +141,21 @@ function stripSrcset(srcset: string): { kept: string; hits: number } {
  * picture source, poster, background attribute, inline style and <style>
  * url()) plus 1x1/hidden pixels; returns the cleaned HTML and the count.
  */
-export function stripTrackers(rawHtml: string): { html: string; trackers: number } {
+export function stripTrackers(
+  rawHtml: string,
+  opts: { trackers?: boolean; dropUnconfident?: boolean } = {},
+): { html: string; trackers: number } {
+  const blockTrackers = opts.trackers ?? true;
+  const dropUnconfident = opts.dropUnconfident ?? false;
+  const isTracker = (raw: string) => blockTrackers && isTrackerHost(raw);
+  let changed = false;
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   let trackers = 0;
 
   doc.querySelectorAll("img, source").forEach((el) => {
     const srcset = el.getAttribute("srcset");
     if (srcset !== null) {
-      const { kept, hits } = stripSrcset(srcset);
+      const { kept, hits } = blockTrackers ? stripSrcset(srcset) : { kept: srcset, hits: 0 };
       trackers += hits;
       if (hits > 0) {
         if (kept) el.setAttribute("srcset", kept);
@@ -143,12 +163,12 @@ export function stripTrackers(rawHtml: string): { html: string; trackers: number
       }
     }
     const src = el.getAttribute("src");
-    if (src !== null && isTrackerHost(src)) {
+    if (src !== null && isTracker(src)) {
       trackers += 1;
       el.remove();
       return;
     }
-    if (el.tagName === "IMG" && isPixel(el)) {
+    if (blockTrackers && el.tagName === "IMG" && isPixel(el)) {
       trackers += 1;
       el.remove();
       return;
@@ -158,7 +178,7 @@ export function stripTrackers(rawHtml: string): { html: string; trackers: number
   });
 
   doc.querySelectorAll("[src]").forEach((el) => {
-    if (isTrackerHost(el.getAttribute("src") ?? "")) {
+    if (isTracker(el.getAttribute("src") ?? "")) {
       trackers += 1;
       el.removeAttribute("src");
     }
@@ -166,7 +186,7 @@ export function stripTrackers(rawHtml: string): { html: string; trackers: number
 
   for (const attr of ["poster", "background"]) {
     doc.querySelectorAll(`[${attr}]`).forEach((el) => {
-      if (isTrackerHost(el.getAttribute(attr) ?? "")) {
+      if (isTracker(el.getAttribute(attr) ?? "")) {
         trackers += 1;
         el.removeAttribute(attr);
       }
@@ -174,22 +194,32 @@ export function stripTrackers(rawHtml: string): { html: string; trackers: number
   }
 
   doc.querySelectorAll("[style]").forEach((el) => {
-    const { css, hits } = stripCssUrls(el.getAttribute("style") ?? "");
-    if (hits > 0) {
-      trackers += hits;
+    const {
+      css,
+      hits,
+      changed: c,
+    } = stripCssUrls(el.getAttribute("style") ?? "", blockTrackers, dropUnconfident);
+    trackers += hits;
+    if (c) {
+      changed = true;
       el.setAttribute("style", css);
     }
   });
 
   doc.querySelectorAll("style").forEach((el) => {
-    const { css, hits } = stripCssUrls(el.textContent ?? "");
-    if (hits > 0) {
-      trackers += hits;
+    const {
+      css,
+      hits,
+      changed: c,
+    } = stripCssUrls(el.textContent ?? "", blockTrackers, dropUnconfident);
+    trackers += hits;
+    if (c) {
+      changed = true;
       el.textContent = css;
     }
   });
 
-  if (trackers === 0) return { html: rawHtml, trackers };
+  if (trackers === 0 && !changed) return { html: rawHtml, trackers };
   return {
     html: `<!doctype html><head>${doc.head.innerHTML}</head><body>${doc.body.innerHTML}</body>`,
     trackers,
@@ -231,10 +261,13 @@ export function buildReaderDoc(
   images: ReaderImagesInput,
   trackerBlocking = true,
 ): ReaderDoc {
-  const { html, trackers } = trackerBlocking
-    ? stripTrackers(rawHtml)
-    : { html: rawHtml, trackers: 0 };
   const imagesLoaded = shouldLoadImages(images);
+  // With images on, a style URL we can't parse with confidence is dropped
+  // too: the shield can't vouch for what it couldn't read.
+  const { html, trackers } =
+    trackerBlocking || imagesLoaded
+      ? stripTrackers(rawHtml, { trackers: trackerBlocking, dropUnconfident: imagesLoaded })
+      : { html: rawHtml, trackers: 0 };
   const nonce = messageNonce(messageId);
   const { srcDoc, remoteCount } = buildEmailReaderDoc(html, {
     blockRemote: !imagesLoaded,

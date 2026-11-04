@@ -8,8 +8,12 @@ fn sync_mail_host(app: &AppHandle, state: &AppState, user_id: Option<&str>) {
     let Some(host) = app.try_state::<MailHost>() else {
         return;
     };
-    let Some(user_id) = user_id else {
+    // Stop a host running for anyone else FIRST, so an early return below
+    // (no app data dir) leaves no other user's engine syncing.
+    if must_stop(host.running_user().as_deref(), user_id) {
         host.stop();
+    }
+    let Some(user_id) = user_id else {
         return;
     };
     let Ok(data_dir) = app.path().app_data_dir() else {
@@ -29,6 +33,11 @@ fn sync_mail_host(app: &AppHandle, state: &AppState, user_id: Option<&str>) {
     }
 }
 
+/// Whether the host running for `running` must stop before serving `wanted`.
+fn must_stop(running: Option<&str>, wanted: Option<&str>) -> bool {
+    matches!(running, Some(r) if wanted != Some(r))
+}
+
 /// Mirrors the webview's Supabase session into AppState so invoke-backed
 /// modules (notes, email, calendar, time-tracking, graph) attribute work to
 /// the cloud user. The webview owns the session lifecycle (supabase-js);
@@ -43,4 +52,18 @@ pub async fn auth_set_cloud_session(
     *state.session.lock().map_err(|e| e.to_string())? = session;
     sync_mail_host(&app, &state, user_id.as_deref());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::must_stop;
+
+    #[test]
+    fn stops_a_host_running_for_another_user_or_on_sign_out() {
+        assert!(must_stop(Some("a"), Some("b")));
+        assert!(must_stop(Some("a"), None));
+        assert!(!must_stop(Some("a"), Some("a")));
+        assert!(!must_stop(None, Some("b")));
+        assert!(!must_stop(None, None));
+    }
 }

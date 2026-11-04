@@ -180,6 +180,15 @@ impl MailHost {
             .ok_or_else(|| "mail_not_started".to_string())
     }
 
+    /// The user the engine is running for, if any.
+    pub fn running_user(&self) -> Option<String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|r| r.user_id.clone())
+    }
+
     pub fn set_foreground(&self, fg: bool) {
         self.foreground.store(fg, Ordering::SeqCst);
     }

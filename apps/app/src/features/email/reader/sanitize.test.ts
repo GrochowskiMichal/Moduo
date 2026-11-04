@@ -127,3 +127,75 @@ describe("tracker hosts on every remote vector", () => {
     expect(buildReaderDoc("v-blocked", html, base).trackers).toBe(5);
   });
 });
+
+describe("CSS is tokenized, not regex-matched", () => {
+  const loaded = { ...base, loadedForMessage: true };
+  const gone = (html: string, id: string, keep: string[] = []) => {
+    const doc = buildReaderDoc(id, html, loaded);
+    expect(doc.srcDoc).not.toMatch(/list-manage|\\6c ist|l\\69st/i);
+    for (const k of keep) expect(doc.srcDoc).toContain(k);
+    return doc;
+  };
+
+  it("decodes escapes inside url() and the function name", () => {
+    gone(`<div style="background:url(https://acme.\\6c ist-manage.com/o.gif)">a</div>`, "c-1", [
+      "a",
+    ]);
+    gone(`<div style="background:\\75 rl('https://acme.l\\69st-manage.com/o.gif')">b</div>`, "c-2");
+    gone(
+      `<style>p{background:url("https://acme.l\\69st-manage.com/o.gif")}</style><p>c</p>`,
+      "c-3",
+    );
+  });
+
+  it("checks image-set strings, @import and @font-face src", () => {
+    gone(
+      `<style>p{background:image-set("https://acme.list-manage.com/o.gif" 1x, url(https://cdn.acme.io/k.png) 2x)}</style>`,
+      "c-4",
+      ["cdn.acme.io/k.png"],
+    );
+    gone(`<style>@import "https://acme.list-manage.com/a.css";</style>`, "c-5");
+    gone(`<style>@import url(https://acme.list-manage.com/a.css);</style>`, "c-6");
+    gone(
+      `<style>@font-face{font-family:x;src:url("https://acme.list-manage.com/f.woff") format("woff")}</style>`,
+      "c-7",
+    );
+    expect(
+      stripTrackers(`<style>@import "https://acme.list-manage.com/a.css";</style>`).trackers,
+    ).toBe(1);
+  });
+
+  it("ignores url( text inside comments and strings that are not URLs", () => {
+    const html = `<style>/* url(https://acme.list-manage.com/x) */ p::after{content:"url(x)"}</style>`;
+    expect(stripTrackers(html).trackers).toBe(0);
+  });
+
+  it("drops style URLs it cannot parse with confidence once images load", () => {
+    const doc = buildReaderDoc(
+      "c-8",
+      `<div style="background:url(https://cdn.acme.io/a b.png)">x</div><style>p{background:url("https://cdn.acme.io/ok.png")} q{background:url(javascript:alert(1))}</style>`,
+      loaded,
+    );
+    expect(doc.srcDoc).not.toContain("a b.png");
+    expect(doc.srcDoc).not.toContain("javascript:");
+    expect(doc.srcDoc).toContain("cdn.acme.io/ok.png");
+  });
+});
+
+describe("hostnames are normalised before tracker matching", () => {
+  it("strips trailing dots and matches the punycode form on every vector", () => {
+    const html = `<img src="https://acme.list-manage.com./o.gif">
+      <img srcset="https://acme.list-manage.com.. 1x">
+      <video poster="https://ACME.LIST-MANAGE.COM./p"></video>
+      <div style="background:url(https://acme.list-manage.com./b)"></div>
+      <style>p{background:url("https://acme.list-manage.com./s")}</style>`;
+    expect(stripTrackers(html).trackers).toBe(5);
+  });
+
+  it("matches an IDN tracker host in either form", () => {
+    const html = `<img src="https://x.mailtrack.io./o.gif"><img src="https://xn--bcher-kva.example/a.png">`;
+    const out = stripTrackers(html);
+    expect(out.trackers).toBe(1);
+    expect(out.html).toContain("xn--bcher-kva.example");
+  });
+});
