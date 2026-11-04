@@ -45,6 +45,8 @@ type Props = {
   onSelect: (view: MailView) => void;
   onConnect: () => void;
   onCancelBackfill?: (accountId: string) => void;
+  /** "Load more history": walk below the synced floor (AC6). */
+  onLoadHistory?: (accountId: string) => void;
   /** Saved searches pinned to the rail (MR-13); each opens ⌘K on its query. */
   savedSearches?: readonly SavedSearch[];
   onOpenSearch?: (query: string) => void;
@@ -94,6 +96,7 @@ export function MailRail({
   onSelect,
   onConnect,
   onCancelBackfill,
+  onLoadHistory,
   savedSearches = [],
   onOpenSearch,
   onOpenSubscriptions,
@@ -207,6 +210,12 @@ export function MailRail({
                       Cancel
                     </Button>
                   ) : null}
+                </div>
+              ) : onLoadHistory && a.syncState !== "backfilling" ? (
+                <div className="flex pl-5 pr-2">
+                  <Button size="sm" variant="ghost" onClick={() => onLoadHistory(a.id)}>
+                    Load more history
+                  </Button>
                 </div>
               ) : null}
               {expanded

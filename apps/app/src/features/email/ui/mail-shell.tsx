@@ -7,6 +7,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import { LABEL_COLORS, type LabelColor } from "@/components/tag-colors";
 import { Kbd } from "@/components/ui/kbd";
+import { getRuntime } from "@/lib/runtime";
 import {
   type AppHotkeyHandlers,
   isMacPlatform,
@@ -45,6 +46,7 @@ import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
 import { mailListState, MailListStateView, MailStatusLine } from "./mail-states";
 import { cycleTab, MailTabs, mailTabs } from "./mail-tabs";
+import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
 import { MailThreadList } from "./thread-list";
 
 /** Ops that take a thread out of the current list (auto-advance after them). */
@@ -345,6 +347,9 @@ export function MailShell({
               ? (id) => void commands.cancelBackfill(id).catch(() => {})
               : undefined
           }
+          onLoadHistory={
+            engine?.backfill ? (id) => void commands.backfill(id).catch(() => {}) : undefined
+          }
           savedSearches={savedSearches}
           onOpenSearch={openMailSearch}
         />
@@ -370,6 +375,21 @@ export function MailShell({
             onRetry={(opIds) => void Promise.all(opIds.map((id) => commands.retry(id)))}
             onDiscard={(opIds) => void Promise.all(opIds.map((id) => commands.discard(id)))}
           />
+          {view.kind === "new_senders" ? (
+            <NewSendersPanel
+              rows={win.rows}
+              onDecide={(sender, decision) =>
+                decideNewSender(sender, decision, {
+                  commands,
+                  save: async (kind, value) => {
+                    const email = getRuntime()?.email;
+                    if (!email) throw new Error("Settings aren't available");
+                    return email.upsertSetting({ id: crypto.randomUUID(), kind, value });
+                  },
+                })
+              }
+            />
+          ) : null}
           {tabbed ? (
             <FollowupNudges
               rows={followupsDue}
