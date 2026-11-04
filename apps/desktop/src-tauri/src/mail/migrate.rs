@@ -18,6 +18,7 @@ use super::accounts::{default_endpoints, Endpoint2, MailAccount};
 use super::contracts::Provider;
 use super::store::{AccountInput, Store, StoreResult};
 use crate::store_redb::RedbStore;
+use redb::TableHandle;
 
 pub const DONE_KEY: &str = "legacy_migration_v1";
 const LEGACY_NAMESPACE: &str = "email";
@@ -72,19 +73,21 @@ pub fn parse_legacy(row: &Value) -> Result<LegacyAccount, String> {
     let provider =
         provider_of(raw_provider).ok_or_else(|| format!("{id}: unknown provider {raw_provider}"))?;
     let defaults = default_endpoints(provider);
-    let endpoint = |host: &str, port: &str, default: Option<&Endpoint2>| -> Option<Endpoint2> {
+    let endpoint = |host: &str, port: &str, fallback: u16, default: Option<&Endpoint2>| {
         match (str_field(row, host), default) {
             (Some(h), d) => Some(Endpoint2 {
                 host: h.trim().to_string(),
-                port: port_field(row, port).or(d.map(|d| d.port)).unwrap_or(993),
+                port: port_field(row, port)
+                    .or(d.map(|d| d.port))
+                    .unwrap_or(fallback),
             }),
             (None, Some(d)) => Some(d.clone()),
             (None, None) => None,
         }
     };
-    let imap = endpoint("imapHost", "imapPort", defaults.as_ref().map(|d| &d.0))
+    let imap = endpoint("imapHost", "imapPort", 993, defaults.as_ref().map(|d| &d.0))
         .ok_or_else(|| format!("{id}: missing IMAP host"))?;
-    let smtp = endpoint("smtpHost", "smtpPort", defaults.as_ref().map(|d| &d.1))
+    let smtp = endpoint("smtpHost", "smtpPort", 465, defaults.as_ref().map(|d| &d.1))
         .ok_or_else(|| format!("{id}: missing SMTP host"))?;
     Ok(LegacyAccount {
         account: MailAccount {
@@ -105,8 +108,16 @@ pub fn read_legacy(redb: &RedbStore) -> anyhow::Result<(Vec<LegacyAccount>, Vec<
         Some(Value::Array(a)) => a,
         _ => vec![],
     };
-    // A file from before the v2 table existed has none: not an error.
-    rows.extend(redb.list_email_accounts_v2().unwrap_or_default());
+    // A file from before the v2 table existed has none: not an error. Any other
+    // read failure aborts the cutover, because the tables are dropped next and a
+    // swallowed error would lose those accounts for good.
+    let v2_exists = redb
+        .table_names()?
+        .iter()
+        .any(|t| t == crate::store_redb::LEGACY_EMAIL_TABLES[0].name());
+    if v2_exists {
+        rows.extend(redb.list_email_accounts_v2()?);
+    }
     let mut out: Vec<LegacyAccount> = vec![];
     let mut skipped = vec![];
     for row in &rows {
@@ -173,7 +184,6 @@ mod tests {
     use super::*;
     use crate::mail::auth::keychain_account;
     use crate::store_redb::LEGACY_EMAIL_TABLES;
-    use redb::TableHandle;
     use serde_json::json;
 
     fn fixtures(tag: &str) -> (RedbStore, Store, std::path::PathBuf) {
