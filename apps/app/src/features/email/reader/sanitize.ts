@@ -70,17 +70,17 @@ function isTinyDimension(v: string | null): boolean {
   return Number.isFinite(n) && n <= 1;
 }
 
-function isTracker(img: Element): boolean {
-  const src = img.getAttribute("src") ?? "";
-  const host = hostOf(src.trim());
+function isTrackerHost(raw: string): boolean {
+  const host = hostOf(raw.trim());
   if (!host) return false;
-  if (
-    TRACKER_HOSTS.some((t) =>
-      t.endsWith(".") ? host.startsWith(t) : host === t || host.endsWith(`.${t}`),
-    )
-  ) {
-    return true;
-  }
+  return TRACKER_HOSTS.some((t) =>
+    t.endsWith(".") ? host.startsWith(t) : host === t || host.endsWith(`.${t}`),
+  );
+}
+
+function isPixel(img: Element): boolean {
+  const src = img.getAttribute("src") ?? "";
+  if (!hostOf(src.trim())) return false;
   const style = (img.getAttribute("style") ?? "").replace(/\s+/g, "").toLowerCase();
   const tinyStyle =
     /(?:^|;)width:[01](?:px)?(?:;|$)/.test(style) && /(?:^|;)height:[01](?:px)?(?:;|$)/.test(style);
@@ -90,16 +90,105 @@ function isTracker(img: Element): boolean {
   return tinyAttr || tinyStyle || hidden;
 }
 
-/** Removes tracking images; returns the cleaned HTML and how many went. */
+// CSS url(...) in a style attribute or <style> block; quoted or bare.
+const CSS_URL = /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)\s]*))\s*\)/gi;
+
+function stripCssUrls(css: string): { css: string; hits: number } {
+  let hits = 0;
+  const out = css.replace(CSS_URL, (m, a?: string, b?: string, c?: string) => {
+    const url = a ?? b ?? c ?? "";
+    if (!isTrackerHost(url)) return m;
+    hits += 1;
+    return "none";
+  });
+  return { css: out, hits };
+}
+
+/** Drops srcset candidates on a tracker host; returns the kept set and hits. */
+function stripSrcset(srcset: string): { kept: string; hits: number } {
+  let hits = 0;
+  const kept = srcset
+    .split(",")
+    .map((c) => c.trim())
+    .filter((c) => {
+      if (!c) return false;
+      const url = c.split(/\s+/)[0] ?? "";
+      if (isTrackerHost(url)) {
+        hits += 1;
+        return false;
+      }
+      return true;
+    })
+    .join(", ");
+  return { kept, hits };
+}
+
+/**
+ * Removes known-tracker references on every remote vector (img src/srcset,
+ * picture source, poster, background attribute, inline style and <style>
+ * url()) plus 1x1/hidden pixels; returns the cleaned HTML and the count.
+ */
 export function stripTrackers(rawHtml: string): { html: string; trackers: number } {
   const doc = new DOMParser().parseFromString(rawHtml, "text/html");
   let trackers = 0;
-  doc.querySelectorAll("img").forEach((img) => {
-    if (isTracker(img)) {
+
+  doc.querySelectorAll("img, source").forEach((el) => {
+    const srcset = el.getAttribute("srcset");
+    if (srcset !== null) {
+      const { kept, hits } = stripSrcset(srcset);
+      trackers += hits;
+      if (hits > 0) {
+        if (kept) el.setAttribute("srcset", kept);
+        else el.removeAttribute("srcset");
+      }
+    }
+    const src = el.getAttribute("src");
+    if (src !== null && isTrackerHost(src)) {
       trackers += 1;
-      img.remove();
+      el.remove();
+      return;
+    }
+    if (el.tagName === "IMG" && isPixel(el)) {
+      trackers += 1;
+      el.remove();
+      return;
+    }
+    // A <source> or srcset-only <img> left with nothing to load goes too.
+    if (srcset !== null && !el.hasAttribute("srcset") && !el.hasAttribute("src")) el.remove();
+  });
+
+  doc.querySelectorAll("[src]").forEach((el) => {
+    if (isTrackerHost(el.getAttribute("src") ?? "")) {
+      trackers += 1;
+      el.removeAttribute("src");
     }
   });
+
+  for (const attr of ["poster", "background"]) {
+    doc.querySelectorAll(`[${attr}]`).forEach((el) => {
+      if (isTrackerHost(el.getAttribute(attr) ?? "")) {
+        trackers += 1;
+        el.removeAttribute(attr);
+      }
+    });
+  }
+
+  doc.querySelectorAll("[style]").forEach((el) => {
+    const { css, hits } = stripCssUrls(el.getAttribute("style") ?? "");
+    if (hits > 0) {
+      trackers += hits;
+      el.setAttribute("style", css);
+    }
+  });
+
+  doc.querySelectorAll("style").forEach((el) => {
+    const { css, hits } = stripCssUrls(el.textContent ?? "");
+    if (hits > 0) {
+      trackers += hits;
+      el.textContent = css;
+    }
+  });
+
   if (trackers === 0) return { html: rawHtml, trackers };
   return {
     html: `<!doctype html><head>${doc.head.innerHTML}</head><body>${doc.body.innerHTML}</body>`,
