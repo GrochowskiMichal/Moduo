@@ -70,3 +70,49 @@ export function interceptMailto(
   open(prefill);
   return true;
 }
+
+/** Drains pending `mailto:` deep links (AC24) and opens compose for each valid one. */
+export async function drainMailto(
+  take: () => Promise<string[]>,
+  open: (prefill: MailtoPrefill) => Promise<unknown> | void,
+): Promise<number> {
+  let opened = 0;
+  for (const uri of await take()) {
+    const prefill = parseMailto(uri);
+    if (!prefill) continue;
+    await open(prefill);
+    opened++;
+  }
+  return opened;
+}
+
+const escapeHtml = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Fills a new-message compose spec from a mailto prefill; the body is escaped text. */
+export function applyMailtoPrefill<
+  T extends {
+    to: string;
+    cc: string;
+    bcc: string;
+    subject: string;
+    bodyHtml: string;
+    inReplyTo: string | null;
+  },
+>(spec: T, p: MailtoPrefill): T {
+  const body = p.body
+    ? p.body
+        .split("\n")
+        .map((line) => `<p>${line ? escapeHtml(line) : "<br>"}</p>`)
+        .join("")
+    : spec.bodyHtml;
+  return {
+    ...spec,
+    to: p.to.join(", "),
+    cc: p.cc.join(", "),
+    bcc: p.bcc.join(", "),
+    subject: p.subject || spec.subject,
+    bodyHtml: body,
+    inReplyTo: p.inReplyTo ?? spec.inReplyTo,
+  };
+}

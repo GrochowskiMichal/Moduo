@@ -7,6 +7,7 @@ pub mod auth;
 pub mod avatar;
 pub mod bodies;
 pub mod contracts;
+pub mod deeplink;
 pub mod fixture;
 pub mod host;
 pub mod invite;

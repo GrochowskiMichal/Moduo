@@ -2,12 +2,20 @@
 // Command names are the contract the Rust command layer registers.
 
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import type { MailComposeEngine } from "./runtime.types.mail-compose";
 
 type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+type Listen = (event: string, cb: () => void) => Promise<() => void>;
 
-export function createTauriMailCompose(call: Invoke = invoke): MailComposeEngine {
+/** The Rust `mail::deeplink::MAILTO_EVENT`. */
+export const MAILTO_EVENT = "mail://mailto";
+
+export function createTauriMailCompose(
+  call: Invoke = invoke,
+  on: Listen = (event, cb) => listen(event, cb),
+): MailComposeEngine {
   return {
     saveDraft: (input) => call("mail_save_draft", { input }),
     listDrafts: (accountId) => call("mail_list_drafts", { accountId: accountId ?? null }),
@@ -20,5 +28,15 @@ export function createTauriMailCompose(call: Invoke = invoke): MailComposeEngine
     sizeLimit: (accountId) => call("mail_size_limit", { accountId }),
     stageAttachment: (bytes) => call("mail_stage_attachment_bytes", { bytes: Array.from(bytes) }),
     pickAttachments: () => call("mail_pick_attachments"),
+    takeMailto: () => call("mail_take_mailto"),
+    onMailto: (cb) => {
+      let off: (() => void) | null = null;
+      let gone = false;
+      void on(MAILTO_EVENT, cb).then((u) => (gone ? u() : (off = u)));
+      return () => {
+        gone = true;
+        off?.();
+      };
+    },
   };
 }

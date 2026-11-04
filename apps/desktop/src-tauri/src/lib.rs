@@ -395,6 +395,7 @@ pub fn run() {
         // time; the plugin can't schedule on desktop.
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .manage(mail::deeplink::MailtoInbox::default())
         .menu(build_app_menu)
         // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
         // Quit — so we can confirm before terminating. See `build_app_menu`.
@@ -488,6 +489,7 @@ pub fn run() {
             commands::mail_compose::mail_clear_downloaded,
             commands::mail_compose::mail_is_default_app,
             commands::mail_compose::mail_make_default_app,
+            mail::deeplink::mail_take_mailto,
             commands::mail_engine::mail_list_accounts,
             commands::mail_engine::mail_list_mailboxes,
             commands::mail_engine::mail_list_threads,
@@ -599,6 +601,12 @@ pub fn run() {
                 // The Dock icon brings a hidden window back (TV-D12).
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => show_main_window(app),
+                // A `mailto:` link opened while Moduo is the default mail app (AC24).
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Opened { urls } => mail::deeplink::route(
+                    app,
+                    urls.into_iter().map(|u| u.to_string()).collect(),
+                ),
                 _ => {}
             }
             // `app` is only read on macOS (Reopen); keep other targets warning-free.

@@ -45,6 +45,40 @@ describe("/email on the engine (MR-16 cutover)", () => {
     expect(consumed).toBe(1);
   });
 
+  it("opens compose filled from a pending mailto deep link, then on each nudge (AC24)", async () => {
+    const engine = createFakeMailEngine({
+      fixture: generateFixture({ messages: 50 }),
+      now: () => FIXTURE_NOW_MS,
+    });
+    const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+    const queue = ["mailto:anna@x.test?subject=Cold%20launch&cc=c@x.test"];
+    let nudge: (() => void) | null = null;
+    const compose = {
+      ...createFakeCompose(),
+      takeMailto: async () => queue.splice(0),
+      onMailto: (cb: () => void) => {
+        nudge = cb;
+        return () => (nudge = null);
+      },
+    };
+    render(
+      <TooltipProvider>
+        <HotkeyScope scope="email">
+          <MailPage store={store} compose={compose} now={() => FIXTURE_NOW_MS} />
+        </HotkeyScope>
+      </TooltipProvider>,
+    );
+    await tick();
+    await tick();
+    expect(screen.getByDisplayValue("Cold launch")).toBeTruthy();
+    expect(screen.getByDisplayValue("anna@x.test")).toBeTruthy();
+    queue.push("mailto:bob@x.test?subject=Warm%20link");
+    await act(async () => (nudge as unknown as () => void)());
+    await tick();
+    await tick();
+    expect(screen.getByDisplayValue("Warm link")).toBeTruthy();
+  });
+
   async function mountPage(spine: MailSpineCommands | null = null) {
     const engine = createFakeMailEngine({
       fixture: generateFixture({ messages: 300 }),

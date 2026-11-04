@@ -88,4 +88,8 @@ export type MailComposeEngine = {
   stageAttachment(bytes: Uint8Array): Promise<string>;
   /** Opens the native file picker (in the engine) and stages the chosen files. */
   pickAttachments(): Promise<{ id: string; filename: string; size: number }[]>;
+  /** Drains `mailto:` URLs macOS handed the app (AC24 deep link), oldest first. */
+  takeMailto?(): Promise<string[]>;
+  /** Fires when a new `mailto:` deep link is waiting; returns the unsubscribe. */
+  onMailto?(cb: () => void): () => void;
 };

@@ -26,6 +26,7 @@ import type {
 import { createMailCommands } from "../commands/triage";
 import type { MailAlias } from "../compose/aliases";
 import { MailComposer } from "../compose/mail-composer";
+import { applyMailtoPrefill, drainMailto, type MailtoPrefill } from "../compose/mailto";
 import { type ComposeKind, type ComposeOpenSpec, createComposeSession } from "../compose/session";
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
@@ -236,15 +237,36 @@ export function MailPage({
     shell.current?.row(threadId) ??
     (engine ? ((await engine.getThread(threadId))?.row ?? null) : null);
 
-  const openCompose = async (kind: ComposeKind, threadId: string | null, to?: string) => {
+  const openCompose = async (
+    kind: ComposeKind,
+    threadId: string | null,
+    to?: string,
+    prefill?: MailtoPrefill,
+  ) => {
     if (!session) return;
     const thread = threadId && engine ? await engine.getThread(threadId) : null;
     const accountId = thread?.row.accountId ?? accounts[0]?.id;
     const account = accounts.find((a) => a.id === accountId);
     if (!account) return;
     const spec = composeSpec(kind, thread, account);
-    await session.open(to ? { ...spec, to } : spec);
+    await session.open(prefill ? applyMailtoPrefill(spec, prefill) : to ? { ...spec, to } : spec);
   };
+  const openComposeRef = useRef(openCompose);
+  openComposeRef.current = openCompose;
+
+  // `mailto:` deep links from macOS (AC24): drain what is pending now (a cold
+  // launch delivers it before this mounts), then on every nudge from Rust.
+  const canCompose = !!session && accounts.length > 0;
+  useEffect(() => {
+    const take = port?.takeMailto?.bind(port);
+    if (!canCompose || !take) return;
+    const drain = () =>
+      void drainMailto(take, (p) => openComposeRef.current("new", null, undefined, p)).catch(
+        () => {},
+      );
+    drain();
+    return port?.onMailto?.(drain);
+  }, [port, canCompose]);
 
   const gesture = (
     label: string,
