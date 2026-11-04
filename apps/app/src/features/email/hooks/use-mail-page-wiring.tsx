@@ -9,12 +9,14 @@ import { toast } from "sonner";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
 
+import { useCalendarModule } from "../../calendar/hooks/use-calendar-module";
 import { useMentionSearch } from "../../spine/hooks/use-mention-search";
 import { MentionPicker } from "../../spine/ui/mention-picker";
 import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksSelector } from "../../tasks/tasks-context";
 import { createMailSpineCommands } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
+import { todayEvents as eventsToday } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
 import { type EmailSettingsMirror, startEmailSettingsMirror } from "../settings/mirror";
 import { mailStore } from "../store/mail-store";
@@ -66,7 +68,13 @@ function LinkPicker({ open, onOpenChange, onPick }: MailLinkPickerArgs) {
 
 export function useMailPageWiring(): Partial<MailPageProps> {
   const { runtime, userId } = useAuth();
-  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+  const { selectedWorkspaceId: workspaceId, modulePermissions } = useWorkspace();
+  // Today panel events: the Calendar module's own data hook (its cache, live feed).
+  const calendar = useCalendarModule(runtime, {
+    userId,
+    workspaceId,
+    modulePermission: modulePermissions.calendar,
+  });
   const inbox = useTasksSelector((d) => d.inbox);
   const liveTasks = useTasksSelector((d) => d.liveTasks);
   const tissue = useEmailTissue(runtime, workspaceId);
@@ -113,6 +121,12 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     [liveTasks, today],
   );
 
+  const todayEvents = useMemo(
+    // Noon of `today` (local), so the list re-cuts when the day rolls over.
+    () => eventsToday(calendar.events, new Date(`${today}T12:00:00`).getTime()),
+    [calendar.events, today],
+  );
+
   const spine = useMemo(() => {
     if (!runtime || !workspaceId) return null;
     const refKeys = new Set(tissue.tissueRefs.map((r) => r.threadKey));
@@ -151,6 +165,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
   return {
     spine,
     todayTasks,
+    todayEvents,
     renderLinkPicker: (args) => <LinkPicker {...args} />,
     aliases: aliasesFromItems(items),
     snippets: snippetsFromItems(items),

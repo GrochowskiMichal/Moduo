@@ -11,11 +11,14 @@ import { cn } from "@/lib/utils";
 
 import type { MailDropTarget } from "../commands/spine";
 import { MAIL_THREAD_MIME } from "../ui/mail-page-wiring";
+import type { TodayEvent } from "./today-events";
 
 export type TodayTask = { id: string; title: string };
 
 export type TodayPanelProps = {
   tasks: readonly TodayTask[];
+  /** Today's calendar events (the Calendar module's, recurring ones expanded). */
+  events?: readonly TodayEvent[];
   /** Today's local date, `YYYY-MM-DD`. */
   date: string;
   onDropThread: (threadId: string, target: MailDropTarget) => void;
@@ -71,7 +74,31 @@ function TaskTarget({
   );
 }
 
-export function TodayPanel({ tasks, date, onDropThread, onCreateEvent }: TodayPanelProps) {
+const timeOf = (ms: number) =>
+  new Date(ms).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+function EventList({ events }: { events: readonly TodayEvent[] }) {
+  return (
+    <ul aria-label="Today's events" className="flex flex-col gap-0.5">
+      {events.map((e) => (
+        <li key={e.id} className="flex items-baseline gap-2 px-2 py-1 text-sm">
+          <span className="w-14 shrink-0 text-xs text-muted-foreground tabular-nums">
+            {e.allDay ? "All day" : timeOf(e.startMs)}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-foreground">{e.title}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+export function TodayPanel({
+  tasks,
+  events = [],
+  date,
+  onDropThread,
+  onCreateEvent,
+}: TodayPanelProps) {
   const day = useDropZone((id) => onDropThread(id, { kind: "day", date }));
   return (
     <aside aria-label="Today" className="flex flex-col gap-2 p-3">
@@ -82,6 +109,7 @@ export function TodayPanel({ tasks, date, onDropThread, onCreateEvent }: TodayPa
       >
         <Eyebrow as="div">Today</Eyebrow>
       </div>
+      {events.length > 0 ? <EventList events={events} /> : null}
       {tasks.length > 0 ? (
         <ul className="flex flex-col gap-0.5">
           {tasks.map((t) => (

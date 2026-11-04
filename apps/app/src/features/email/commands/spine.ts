@@ -166,6 +166,16 @@ export function createMailSpineCommands(port: MailSpinePort) {
     convert(thread: MailThreadRow, opts: { alsoDone?: boolean } = {}) {
       return run((plan) => convertInto(plan, thread, opts));
     },
+    /**
+     * "Also mark done" from the convert toast: Done on the thread, chained onto
+     * the convert's plan so its one Undo reverts the Done and the task together.
+     * False when Done isn't wired or already ran for this convert.
+     */
+    async alsoDone(result: SpineResult, thread: MailThreadRow): Promise<boolean> {
+      if (!port.markDone || result.plan.undoDone) return false;
+      result.plan.undoDone = await port.markDone(thread.threadId);
+      return true;
+    },
     /** `l`: link the thread to a task, contact, note or project. */
     link(thread: MailThreadRow, target: SpineEntity) {
       return run(async (plan) => {

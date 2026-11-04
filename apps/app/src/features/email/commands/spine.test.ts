@@ -176,4 +176,18 @@ describe("mail spine commands (AC33)", () => {
     expect(state.events.size).toBe(0);
     expect(state.links).toEqual([]);
   });
+
+  it("also mark done: chains Done onto a convert, and its Undo reverts both", async () => {
+    const { port, state } = fakePort();
+    const cmds = createMailSpineCommands(port);
+    const res = await cmds.convert(thread);
+    expect(state.done).toEqual([]);
+    expect(await cmds.alsoDone(res, thread)).toBe(true);
+    expect(state.done).toEqual(["t1"]);
+    expect(await cmds.alsoDone(res, thread)).toBe(false);
+    expect(state.done).toEqual(["t1"]);
+    await res.undo();
+    expect(state.done).toEqual([]);
+    expect(state.tasks.size).toBe(0);
+  });
 });

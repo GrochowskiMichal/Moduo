@@ -3,13 +3,14 @@
 // the app-chrome `MailEngineProvider` fills. Search is ⌘K (MR-13) and the
 // settings live in Settings → Mail (MR-15).
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getRuntime } from "@/lib/runtime";
 import type { MailComposeEngine } from "@/lib/runtime.types.mail-compose";
 import type {
   MailAccount,
+  MailEngine,
   MailMailbox,
   MailMessage,
   MailThread,
@@ -31,6 +32,8 @@ import { type ComposeKind, type ComposeOpenSpec, createComposeSession } from "..
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
 import { ContactMailPanel } from "../panels/contact-mail";
+import { useMailWithPerson } from "../panels/mail-with-person";
+import type { TodayEvent } from "../panels/today-events";
 import { TodayPanel, type TodayTask } from "../panels/today-panel";
 import { engineInviteLoader, engineRsvp } from "../reader/engine-reader";
 import { InviteCard, type MailInvite, type MailPartstat } from "../reader/invite-card";
@@ -109,6 +112,8 @@ export type MailPageProps = {
   spine?: MailSpineCommands | null;
   /** Today's open tasks, the Today panel's drop targets. */
   todayTasks?: readonly TodayTask[];
+  /** Today's calendar events, shown in the Today panel beside the tasks. */
+  todayEvents?: readonly TodayEvent[];
   /** The `l` target picker (the spine's registry search). */
   renderLinkPicker?: (args: MailLinkPickerArgs) => ReactNode;
   aliases?: MailAlias[];
@@ -125,6 +130,32 @@ export type MailPageProps = {
 const errText = (e: unknown, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;
 
+/**
+ * `t` convert with the undo toast plus "Also mark done": Done chains onto the
+ * convert's plan, and the follow-up toast's one Undo reverts both (AC33).
+ */
+async function runConvert(spine: MailSpineCommands, row: MailThreadRow) {
+  let res: SpineResult;
+  try {
+    res = await spine.convert(row);
+  } catch (e) {
+    toast.error(errText(e, "That didn't go through. Nothing was changed."));
+    return;
+  }
+  undoToast("Task created", {
+    onUndo: () => void res.undo(),
+    link: {
+      label: "Also mark done",
+      onClick: () =>
+        void spine.alsoDone(res, row).then(
+          (ok) =>
+            ok && undoToast("Task created and marked done", { onUndo: () => void res.undo() }),
+          (e) => toast.error(errText(e, "Couldn't mark it done.")),
+        ),
+    },
+  });
+}
+
 /** Runs a spine gesture with the one undo grammar (DF-5). */
 async function runGesture(label: string, run: () => Promise<SpineResult>) {
   try {
@@ -133,6 +164,30 @@ async function runGesture(label: string, run: () => Promise<SpineResult>) {
   } catch (e) {
     toast.error(errText(e, "That didn't go through. Nothing was changed."));
   }
+}
+
+/**
+ * The Contact panel over the engine: "All mail with this person" searches all
+ * synced mail for the address; the open thread shows until it answers.
+ */
+function PersonMail({
+  engine,
+  version,
+  thread,
+  ...rest
+}: { engine: MailEngine | null; version: number; thread: MailThread } & Omit<
+  ComponentProps<typeof ContactMailPanel>,
+  "rows" | "messages"
+>) {
+  const fallback = useMemo(
+    () => ({
+      rows: [thread.row],
+      messages: thread.messages.map((m) => ({ ...m, threadId: thread.row.threadId })),
+    }),
+    [thread],
+  );
+  const found = useMailWithPerson(engine, rest.email, version, fallback);
+  return <ContactMailPanel {...rest} rows={found.rows} messages={found.messages} />;
 }
 
 function InviteSlot({
@@ -176,6 +231,7 @@ export function MailPage({
   onConsumeThreadDeepLink,
   spine = null,
   todayTasks = [],
+  todayEvents = [],
   renderLinkPicker,
   aliases,
   snippets,
@@ -295,8 +351,8 @@ export function MailPage({
     }
     if (intent === "email.snooze") setSnoozeIds(threadIds);
     else if (intent === "email.move") void openMove(threadIds);
-    else if (intent === "email.convert")
-      gesture("Task created", threadIds, (row) => spine!.convert(row));
+    else if (intent === "email.convert" && spine && threadIds[0])
+      void rowOf(threadIds[0]).then((row) => (row ? runConvert(spine, row) : undefined));
     else if (intent === "email.note") gesture("Note created", threadIds, (row) => spine!.note(row));
     else if (intent === "email.link" && spine && threadIds[0])
       void rowOf(threadIds[0]).then((row) => setLinkFor(row));
@@ -375,11 +431,12 @@ export function MailPage({
             <summary className="cursor-default px-4 text-xs text-muted-foreground">
               Mail with {sender.name || sender.email}
             </summary>
-            <ContactMailPanel
+            <PersonMail
+              engine={engine}
+              version={version}
+              thread={thread}
               email={sender.email}
               name={sender.name}
-              rows={[thread.row]}
-              messages={thread.messages.map((m) => ({ ...m, threadId: thread.row.threadId }))}
               nowMs={now()}
               suggestAdd={Boolean(suggest && onAddContact)}
               onOpenThread={(id) => shell.current?.open(id)}
@@ -448,6 +505,7 @@ export function MailPage({
           <div className="w-60 shrink-0 border-l border-hairline">
             <TodayPanel
               tasks={todayTasks}
+              events={todayEvents}
               date={localDate(now())}
               onDropThread={onDropThread}
               onCreateEvent={current ? () => createEvent(current) : undefined}
