@@ -489,16 +489,39 @@ pub(super) fn resolve_aligned(
             uids.push(uid);
             continue;
         }
-        let found: Option<i64> = tx
+        // The exact local message first; a Message-ID is only a fallback and
+        // must name exactly one message, or the step fails rather than guess.
+        let exact: Option<i64> = tx
             .query_row(
                 "SELECT mm.uid FROM message_mailboxes mm JOIN messages m ON m.id = mm.message_id
-                 WHERE mm.mailbox_id = ?1 AND mm.uid > 0 AND m.account_id = ?2
-                   AND (m.id = ?3 OR (?4 IS NOT NULL AND m.message_id = ?4))
+                 WHERE mm.mailbox_id = ?1 AND mm.uid > 0 AND m.account_id = ?2 AND m.id = ?3
                  ORDER BY mm.uid DESC LIMIT 1",
-                params![s.mailbox_id, account, t.msg, t.rfc],
+                params![s.mailbox_id, account, t.msg],
                 |r| r.get(0),
             )
             .optional()?;
+        let found = match (exact, &t.rfc) {
+            (Some(u), _) => Some(u),
+            (None, None) => None,
+            (None, Some(rfc)) => {
+                let hits: Vec<i64> = tx
+                    .prepare_cached(
+                        "SELECT DISTINCT mm.uid FROM message_mailboxes mm
+                         JOIN messages m ON m.id = mm.message_id
+                         WHERE mm.mailbox_id = ?1 AND mm.uid > 0 AND m.account_id = ?2
+                           AND m.message_id = ?3 LIMIT 2",
+                    )?
+                    .query_map(params![s.mailbox_id, account, rfc], |r| r.get(0))?
+                    .collect::<Result<_, _>>()?;
+                if hits.len() > 1 {
+                    return Ok(Err(Resolve::Fail(format!(
+                        "more than one message in {} has the same Message-ID",
+                        s.path
+                    ))));
+                }
+                hits.first().copied()
+            }
+        };
         match (found, t.uid) {
             (Some(u), _) => uids.push(u),
             (None, None) => {

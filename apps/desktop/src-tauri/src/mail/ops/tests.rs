@@ -339,6 +339,64 @@ fn uid_validity_change_without_the_message_fails_with_reason() {
     assert!(f[0].error.contains("rebuilt"), "{}", f[0].error);
 }
 
+fn with_rfc(mut m: MessageInput, rfc: &str) -> MessageInput {
+    m.message_id = Some(rfc.into());
+    m
+}
+
+#[test]
+fn retarget_prefers_exact_message_over_message_id_twin() {
+    let (_d, s) = seeded("retarget-exact");
+    let h = done(&s, "t1");
+    s.reset_mailbox("a1-inbox", 2).unwrap();
+    s.ingest(&[
+        msg("a1", "m1", "inbox", 70, "t1", 100, 0),
+        msg("a1", "m2", "inbox", 71, "t1", 200, FLAG_SEEN),
+        // A different message reusing m1's Message-ID at a higher UID.
+        with_rfc(msg("a1", "twin", "inbox", 90, "t9", 400, 0), "<m1@x>"),
+    ])
+    .unwrap();
+    assert!(s.retarget_ops("a1-inbox").unwrap().is_empty());
+    let mut srv = FakeServer::default();
+    let r = s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert_eq!(r.done, h.op_ids);
+    assert_eq!(srv.calls[0].1.uids, vec![70, 71], "never the twin's UID");
+}
+
+#[test]
+fn retarget_refuses_ambiguous_message_id() {
+    let (_d, s) = seeded("retarget-ambiguous");
+    let h = done(&s, "t1");
+    s.reset_mailbox("a1-inbox", 2).unwrap();
+    s.ingest(&[
+        with_rfc(msg("a1", "x1", "inbox", 80, "t8", 100, 0), "<m1@x>"),
+        with_rfc(msg("a1", "x2", "inbox", 81, "t8", 110, 0), "<m1@x>"),
+        msg("a1", "m2", "inbox", 71, "t1", 200, FLAG_SEEN),
+        msg("a1", "m3", "inbox", 72, "t2", 300, 0),
+    ])
+    .unwrap();
+    assert_eq!(s.retarget_ops("a1-inbox").unwrap(), h.op_ids);
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert!(srv.calls.is_empty(), "never applied to a guessed message");
+    let f = s.failed_ops().unwrap();
+    assert!(f[0].error.contains("more than one"), "{}", f[0].error);
+}
+
+#[test]
+fn retarget_fails_when_any_target_is_missing() {
+    let (_d, s) = seeded("retarget-partial");
+    let h = done(&s, "t1");
+    s.reset_mailbox("a1-inbox", 2).unwrap();
+    // m1 came back, m2 did not: no stale UID may be kept for m2.
+    s.ingest(&[msg("a1", "m1", "inbox", 70, "t1", 100, 0)]).unwrap();
+    assert_eq!(s.retarget_ops("a1-inbox").unwrap(), h.op_ids);
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert!(srv.calls.is_empty());
+    assert_eq!(s.failed_ops().unwrap().len(), 1);
+}
+
 #[test]
 fn bulk_done_across_accounts_is_one_undo() {
     let (_d, s) = seeded("bulk");

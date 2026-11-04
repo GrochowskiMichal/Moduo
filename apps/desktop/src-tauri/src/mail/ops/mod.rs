@@ -491,16 +491,39 @@ impl Store {
                 match resolve_aligned(&tx, &op.account_id, s)? {
                     Ok((mb, uids)) => {
                         if mb.uidvalidity != s.uidvalidity {
+                            // resolve_aligned yields one UID per target, each
+                            // resolved on its own, in target order.
+                            if uids.len() != s.targets.len() {
+                                fail = Some(format!(
+                                    "{} could not be matched after a rebuild",
+                                    s.path
+                                ));
+                                break;
+                            }
                             s.uidvalidity = mb.uidvalidity;
-                            // One UID per target, in target order: no target
-                            // keeps a UID from the old validity.
                             for (t, u) in s.targets.iter_mut().zip(uids) {
                                 t.uid = Some(u);
                             }
                             changed = true;
                         }
                     }
-                    Err(Resolve::Fail(why)) => fail = Some(why),
+                    Err(Resolve::Fail(why)) => {
+                        fail = Some(why);
+                        break;
+                    }
+                    // After a rebuild a target that cannot be found yet must
+                    // not keep a stale UID or wait on one: fail the op.
+                    Err(Resolve::Wait(_))
+                        if s.uidvalidity.is_some()
+                            && mailbox(&tx, &s.mailbox_id).map(|m| m.uidvalidity).ok().flatten()
+                                != s.uidvalidity =>
+                    {
+                        fail = Some(format!(
+                            "{} was rebuilt on the server and the message is no longer there",
+                            s.path
+                        ));
+                        break;
+                    }
                     Err(_) => {}
                 }
             }
