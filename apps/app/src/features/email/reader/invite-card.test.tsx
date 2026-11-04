@@ -30,7 +30,7 @@ describe("invite card (AC18)", () => {
     expect(onRsvp).toHaveBeenCalledWith("DECLINED");
   });
 
-  it("marks the current answer and offers Add to calendar", () => {
+  it("marks the current answer and offers Add to Moduo calendar", () => {
     const onAdd = rs.fn();
     render(
       <InviteCard
@@ -42,7 +42,7 @@ describe("invite card (AC18)", () => {
     expect(screen.getByRole("button", { name: "Accept" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Add to calendar" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to Moduo calendar" }));
     expect(onAdd).toHaveBeenCalledWith(invite.uid);
   });
 

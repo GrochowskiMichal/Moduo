@@ -7,12 +7,12 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 
 import { LABEL_COLORS, type LabelColor } from "@/components/tag-colors";
 import { Kbd } from "@/components/ui/kbd";
-import { getRuntime } from "@/lib/runtime";
 import {
   type AppHotkeyHandlers,
   isMacPlatform,
   useAppHotkeys,
 } from "@/lib/hotkeys/use-app-hotkeys";
+import { getRuntime } from "@/lib/runtime";
 import type {
   MailMailbox,
   MailOpInput,
@@ -75,6 +75,8 @@ export type MailShellProps = {
   screenerOn?: boolean;
   customTabs?: readonly { id: string; label: string }[];
   renderReader?: (threadId: string | null) => ReactNode;
+  /** Actions beside "N selected" (multi-select), e.g. Labels. */
+  renderSelectionActions?: (threadIds: string[]) => ReactNode;
   onConnect?: () => void;
   onReconnect?: (accountId: string) => void;
   /** Keys handed to sibling surfaces (snooze picker, move, compose, spine). */
@@ -143,6 +145,7 @@ export function MailShell({
   screenerOn = false,
   customTabs = [],
   renderReader,
+  renderSelectionActions,
   onConnect,
   onReconnect,
   onIntent,
@@ -401,8 +404,9 @@ export function MailShell({
           ) : null}
         </div>
         {sel.picked.length > 0 ? (
-          <div role="status" className="mx-2 mb-1 px-1 text-xs text-muted-foreground">
-            {sel.picked.length} selected
+          <div className="mx-2 mb-1 flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <span role="status">{sel.picked.length} selected</span>
+            {renderSelectionActions?.([...sel.picked])}
           </div>
         ) : null}
         {state.kind === "rows" ? (

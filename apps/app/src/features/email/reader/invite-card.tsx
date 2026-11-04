@@ -75,7 +75,7 @@ export function InviteCard({ invite, onRsvp, onAddToCalendar }: InviteCardProps)
             : null}
           {onAddToCalendar ? (
             <Button size="sm" variant="ghost" onClick={() => onAddToCalendar(invite.uid)}>
-              Add to calendar
+              Add to Moduo calendar
             </Button>
           ) : null}
         </div>

@@ -12,9 +12,11 @@ import type {
   MailInviteInfo,
   MailMessage,
   MailRsvp,
+  MailThreadRow,
   MailUnsubscribeOutcome,
 } from "@/lib/runtime.types.mail-engine";
 
+import type { MailSpineCommands } from "../commands/spine";
 import type { MailInvite, MailPartstat } from "./invite-card";
 
 const RSVP: Record<MailPartstat, MailRsvp> = {
@@ -50,6 +52,22 @@ export function engineRsvp(engine: MailEngine | null, threadId: string) {
   const rsvp = engine?.rsvp?.bind(engine);
   if (!rsvp) return undefined;
   return (messageId: string, status: MailPartstat) => rsvp(threadId, messageId, RSVP[status]);
+}
+
+/**
+ * "Add to Moduo calendar" (AC18): the Calendar module's create op with the
+ * invite's own title, time and place, linked to the thread through the spine.
+ */
+export function addInviteToCalendar(
+  spine: Pick<MailSpineCommands, "createEvent">,
+  row: MailThreadRow,
+  invite: MailInvite,
+) {
+  return spine.createEvent(
+    row,
+    { startMs: invite.startMs, endMs: invite.endMs },
+    { title: invite.summary, location: invite.location },
+  );
 }
 
 /** The message that carries the newest List-Unsubscribe header. */
@@ -95,6 +113,23 @@ export async function runEngineUnsubscribe(
     out = await engine.unsubscribe(threadId, messageId, { allowMailto: true });
   if (out.method === "web" && out.url) deps.openUrl(out.url);
   return unsubscribeNotice(out);
+}
+
+/**
+ * Subscriptions' Unsubscribe (AC29): the sender's newest thread through the
+ * same vetted engine plan as the reader (one-click, confirmed mailto, web).
+ */
+export async function unsubscribeSender(
+  engine: MailEngine,
+  threadIds: readonly string[],
+  deps: { confirmMailto: (to: string) => Promise<boolean>; openUrl: (url: string) => void },
+): Promise<string> {
+  for (const id of threadIds) {
+    const thread = await engine.getThread(id);
+    const m = thread ? unsubscribeMessage(thread.messages) : null;
+    if (m) return runEngineUnsubscribe(engine, id, m.id, deps);
+  }
+  throw new Error("This sender doesn't offer a way to unsubscribe.");
 }
 
 /** Attachments up to this size are fetched as soon as their message opens,

@@ -35,17 +35,19 @@ import { ContactMailPanel } from "../panels/contact-mail";
 import { useMailWithPerson } from "../panels/mail-with-person";
 import type { TodayEvent } from "../panels/today-events";
 import { TodayPanel, type TodayTask } from "../panels/today-panel";
-import { engineInviteLoader, engineRsvp } from "../reader/engine-reader";
+import { addInviteToCalendar, engineInviteLoader, engineRsvp } from "../reader/engine-reader";
 import { InviteCard, type MailInvite, type MailPartstat } from "../reader/invite-card";
 import { MailReader } from "../reader/mail-reader";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
 import { suggestContacts } from "../suggest-contact";
 import { SubscriptionsView } from "../views/subscriptions";
+import { useSubscriptionUnsubscribe } from "../views/use-subscription-unsubscribe";
 import { EmailConnectDialog } from "./email-connect-dialog";
 import { EmailSnoozePicker } from "./email-snooze-picker";
+import { useMailLabels } from "./mail-labels";
 import { MailMoveDialog } from "./mail-move-dialog";
-import { localDate, nextEventSlot, unsubscribeTarget } from "./mail-page-wiring";
+import { localDate, nextEventSlot } from "./mail-page-wiring";
 import { MailShell, type MailShellApi } from "./mail-shell";
 
 const COMPOSE_INTENTS: Partial<Record<MailKeyId, ComposeKind>> = {
@@ -166,6 +168,11 @@ async function runGesture(label: string, run: () => Promise<SpineResult>) {
   }
 }
 
+/** "Add to Moduo calendar" from an invite card, with the undo toast (AC18). */
+function addInviteGesture(spine: MailSpineCommands | null, row: MailThreadRow, inv: MailInvite) {
+  if (spine) void runGesture("Added to Moduo calendar", () => addInviteToCalendar(spine, row, inv));
+}
+
 /**
  * The Contact panel over the engine: "All mail with this person" searches all
  * synced mail for the address; the open thread shows until it answers.
@@ -253,7 +260,6 @@ export function MailPage({
   const [linkFor, setLinkFor] = useState<MailThreadRow | null>(null);
   const [current, setCurrent] = useState<string | null>(initialThreadId);
   const [subs, setSubs] = useState<MailThreadRow[] | null>(null);
-  const [unsubscribed, setUnsubscribed] = useState<ReadonlySet<string>>(new Set());
   const [dismissedAdd, setDismissedAdd] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
@@ -376,20 +382,13 @@ export function MailPage({
     setSubs(page.rows);
   };
 
-  const unsubscribe = async (email: string, threadIds: string[]) => {
-    const thread = engine && threadIds[0] ? await engine.getThread(threadIds[0]) : null;
-    const header =
-      [...(thread?.messages ?? [])].reverse().find((m) => m.listUnsubscribe)?.listUnsubscribe ??
-      null;
-    const target = unsubscribeTarget(header);
-    if (!target) {
-      toast.error("This sender doesn't offer a way to unsubscribe.");
-      return;
-    }
-    if (target.kind === "web") window.open(target.url, "_blank", "noopener");
-    else await openCompose("new", null, target.address);
-    setUnsubscribed((s) => new Set([...s, email]));
-  };
+  const subsUnsub = useSubscriptionUnsubscribe(engine);
+  const labels = useMailLabels({
+    engine,
+    accounts,
+    rowOf,
+    act: (kind, ids, args) => void shell.current?.act(kind, ids, args),
+  });
 
   const contactSet = useMemo(() => new Set(contacts.map((c) => c.email.toLowerCase())), [contacts]);
   const own = useMemo(() => new Set(accounts.map((a) => a.address.toLowerCase())), [accounts]);
@@ -420,9 +419,7 @@ export function MailPage({
                   messageId={m.id}
                   loadInvite={invites}
                   onRsvp={rsvp}
-                  onAddToCalendar={(inv) =>
-                    createEvent(thread.row.threadId, { startMs: inv.startMs, endMs: inv.endMs })
-                  }
+                  onAddToCalendar={(inv) => addInviteGesture(spine, thread.row, inv)}
                 />
               ))
           : null}
@@ -471,15 +468,17 @@ export function MailPage({
           subscriptionsActive={subs !== null}
           onViewChange={() => setSubs(null)}
           onCursorChange={setCurrent}
+          renderSelectionActions={labels.selectionActions}
           renderReader={(threadId) => {
             if (subs) {
               return (
                 <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
+                  {subsUnsub.confirm}
                   <SubscriptionsView
                     rows={subs}
                     nowMs={now()}
-                    unsubscribed={unsubscribed}
-                    onUnsubscribe={(g) => void unsubscribe(g.email, g.threadIds)}
+                    unsubscribed={subsUnsub.unsubscribed}
+                    onUnsubscribe={(g) => void subsUnsub.unsubscribe(g.email, g.threadIds)}
                     onDoneAll={(g) => {
                       void shell.current?.act("done", g.threadIds);
                       setSubs(
@@ -497,6 +496,7 @@ export function MailPage({
                 version={version}
                 behavior={behavior}
                 renderAbove={renderAbove}
+                renderMenu={labels.readerMenu}
               />
             );
           }}
@@ -553,6 +553,7 @@ export function MailPage({
           }}
         />
       ) : null}
+      {labels.dialog}
       {renderLinkPicker && linkFor
         ? renderLinkPicker({
             open: true,

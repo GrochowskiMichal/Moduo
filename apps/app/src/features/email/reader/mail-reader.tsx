@@ -18,6 +18,8 @@ export type MailReaderProps = {
   behavior: Pick<MailBehavior, "remoteImages" | "trackerBlocking">;
   /** Page content above the stack (the invite card, the contact's mail). */
   renderAbove?: (thread: MailThread) => ReactNode;
+  /** Items for the header's ⋯ menu (Labels on Gmail); absent hides it. */
+  renderMenu?: (thread: MailThread) => ReactNode;
 };
 
 function useThread(engine: MailEngine | null, threadId: string | null, version: number) {
@@ -46,7 +48,14 @@ export function MailReader(props: MailReaderProps) {
   return <ThreadStack key={props.threadId ?? ""} {...props} />;
 }
 
-function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailReaderProps) {
+function ThreadStack({
+  engine,
+  threadId,
+  version,
+  behavior,
+  renderAbove,
+  renderMenu,
+}: MailReaderProps) {
   const { thread, loading } = useThread(engine, threadId, version);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const files = useAttachmentFiles(engine, threadId, thread?.messages ?? []);
@@ -71,7 +80,12 @@ function ThreadStack({ engine, threadId, version, behavior, renderAbove }: MailR
     : undefined;
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-reader-thread={threadId}>
-      <h2 className="px-4 pt-4 pb-2 text-lg font-semibold text-foreground">{thread.row.subject}</h2>
+      <div className="flex items-start gap-2 px-4 pt-4 pb-2">
+        <h2 className="min-w-0 flex-1 text-lg font-semibold text-foreground">
+          {thread.row.subject}
+        </h2>
+        {renderMenu?.(thread) ?? null}
+      </div>
       {engine ? <UnsubscribeBar engine={engine} thread={thread} /> : null}
       {renderAbove?.(thread)}
       {thread.messages.map((m, i) => {

@@ -214,17 +214,25 @@ export function createMailSpineCommands(port: MailSpinePort) {
       });
     },
     /** "Create event from this email": the event references the thread. */
-    createEvent(thread: MailThreadRow, at: { startMs: number; endMs: number }) {
+    /** A linked event; an invite passes its own title and location (AC18). */
+    createEvent(
+      thread: MailThreadRow,
+      at: { startMs: number; endMs: number },
+      from?: { title: string; location: string | null },
+    ) {
       return run(async (plan) => {
         const threadRef = await ref(plan, thread);
-        const title = cleanTaskTitle(thread.subject);
+        const title = from?.title.trim() || cleanTaskTitle(thread.subject);
+        const where = from?.location ? `Location: ${from.location}\n\n` : "";
         const event = await port.createEvent({
           title,
-          description: buildConvertDescription({
-            snippet: thread.snippet,
-            subject: thread.subject,
-            refId: threadRef.id,
-          }),
+          description:
+            where +
+            buildConvertDescription({
+              snippet: thread.snippet,
+              subject: thread.subject,
+              refId: threadRef.id,
+            }),
           startMs: at.startMs,
           endMs: Math.max(at.endMs, at.startMs),
         });
