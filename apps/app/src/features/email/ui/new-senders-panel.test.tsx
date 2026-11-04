@@ -30,7 +30,11 @@ const row = (threadId: string, email: string, name = "Ann"): MailThreadRow => ({
 
 describe("New senders Allow / Block (AC27, AC28)", () => {
   it("groups threads by sender address, case-insensitively", () => {
-    const g = groupNewSenders([row("t1", "Ann@X.com"), row("t2", "ann@x.com"), row("t3", "b@y.com", "Bo")]);
+    const g = groupNewSenders([
+      row("t1", "Ann@X.com"),
+      row("t2", "ann@x.com"),
+      row("t3", "b@y.com", "Bo"),
+    ]);
     expect(g.map((s) => [s.address, s.threadIds])).toEqual([
       ["ann@x.com", ["t1", "t2"]],
       ["b@y.com", ["t3"]],
@@ -39,15 +43,18 @@ describe("New senders Allow / Block (AC27, AC28)", () => {
 
   it("Block writes a blocked sender and Allow a screener decision, then releases on the real engine path", async () => {
     const invoked: [string, unknown][] = [];
-    const engine = createTauriMailEngine(async <T,>(cmd: string, args?: Record<string, unknown>) => {
-      invoked.push([cmd, args]);
-      return undefined as T;
-    });
+    const engine = createTauriMailEngine(
+      async <T,>(cmd: string, args?: Record<string, unknown>) => {
+        invoked.push([cmd, args]);
+        return undefined as T;
+      },
+    );
     const store = createMailStore();
     store.setState({ engine });
     const commands = createMailCommands(store);
     const saved: unknown[] = [];
-    const save = async (kind: string, value: Record<string, unknown>) => void saved.push([kind, value]);
+    const save = async (kind: string, value: Record<string, unknown>) =>
+      void saved.push([kind, value]);
     render(
       <NewSendersPanel
         rows={[row("t1", "ann@x.com"), row("t2", "b@y.com", "Bo")]}

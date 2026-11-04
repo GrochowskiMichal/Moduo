@@ -110,9 +110,11 @@ export function applyMailtoPrefill<
     ...spec,
     to: p.to.join(", "),
     cc: p.cc.join(", "),
-    bcc: p.bcc.join(", "),
+    // Security: an external link never sets Bcc or In-Reply-To (no hidden
+    // recipients, no threading into someone's conversation).
+    bcc: spec.bcc,
     subject: p.subject || spec.subject,
     bodyHtml: body,
-    inReplyTo: p.inReplyTo ?? spec.inReplyTo,
+    inReplyTo: spec.inReplyTo,
   };
 }

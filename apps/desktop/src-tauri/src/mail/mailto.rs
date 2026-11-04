@@ -1,7 +1,8 @@
 //! `mailto:` URI parsing (RFC 6068; AC24 engine, MR-6). The deep link and the
 //! in-app link handler both turn a URI into these fields, and compose opens
-//! prefilled with them. Only the safe hfields are honored (to, cc, bcc,
-//! subject, body, in-reply-to); anything else (From, Sender, arbitrary headers)
+//! prefilled with them. Only the safe hfields are honored (to, cc, subject,
+//! body); bcc and in-reply-to are dropped so a link cannot add hidden
+//! recipients. Anything else (From, Sender, arbitrary headers)
 //! is dropped, as RFC 6068 §7 recommends.
 
 use serde::Serialize;
@@ -64,13 +65,12 @@ pub fn parse_mailto(uri: &str) -> Option<MailtoFields> {
         match decode(k).to_ascii_lowercase().as_str() {
             "to" => addresses(v, &mut f.to),
             "cc" => addresses(v, &mut f.cc),
-            "bcc" => addresses(v, &mut f.bcc),
+            // Security: an external link must not add hidden recipients or
+            // thread itself into a conversation, so `bcc` and `in-reply-to`
+            // are ignored (the fields stay empty).
             "subject" => f.subject = Some(v_dec()).filter(|s| !s.is_empty()),
             // RFC 6068 §2: line breaks in body are %0D%0A; normalize to \n.
-            "body" => {
-                f.body = Some(v_dec().replace("\r\n", "\n")).filter(|s| !s.is_empty())
-            }
-            "in-reply-to" => f.in_reply_to = Some(v_dec().trim().to_string()).filter(|s| !s.is_empty()),
+            "body" => f.body = Some(v_dec().replace("\r\n", "\n")).filter(|s| !s.is_empty()),
             _ => {}
         }
     }
@@ -87,9 +87,13 @@ mod tests {
             "mailto:anna@x.test,%22Bob%22%20%3Cbob@y.test%3E?subject=Hi%20there%20%E2%9C%93&cc=c@z.test&bcc=d@z.test&body=Line%201%0D%0ALine+2&to=e@z.test",
         )
         .unwrap();
-        assert_eq!(f.to, vec!["anna@x.test", "\"Bob\" <bob@y.test>", "e@z.test"]);
+        assert_eq!(
+            f.to,
+            vec!["anna@x.test", "\"Bob\" <bob@y.test>", "e@z.test"]
+        );
         assert_eq!(f.cc, vec!["c@z.test"]);
-        assert_eq!(f.bcc, vec!["d@z.test"]);
+        assert!(f.bcc.is_empty(), "external bcc is ignored");
+        assert!(f.in_reply_to.is_none());
         assert_eq!(f.subject.as_deref(), Some("Hi there \u{2713}"));
         assert_eq!(f.body.as_deref(), Some("Line 1\nLine+2"));
     }
@@ -97,10 +101,11 @@ mod tests {
     #[test]
     fn mailto_edge_cases() {
         // Uppercase scheme and keys, no address, unsafe headers dropped.
-        let f = parse_mailto("MAILTO:?To=a@x.test&From=evil@x.test&X-Mailer=x&In-Reply-To=%3C1@x%3E")
-            .unwrap();
+        let f =
+            parse_mailto("MAILTO:?To=a@x.test&From=evil@x.test&X-Mailer=x&In-Reply-To=%3C1@x%3E")
+                .unwrap();
         assert_eq!(f.to, vec!["a@x.test"]);
-        assert_eq!(f.in_reply_to.as_deref(), Some("<1@x>"));
+        assert!(f.in_reply_to.is_none(), "external in-reply-to is ignored");
         assert!(f.subject.is_none() && f.body.is_none());
         // Bare address, duplicate, a bad escape left alone, a fragment cut.
         let g = parse_mailto("mailto:a@x.test?to=A@x.test&subject=100%&body=x#frag").unwrap();

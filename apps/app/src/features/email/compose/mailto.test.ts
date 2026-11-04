@@ -56,6 +56,26 @@ describe("mailto deep link (AC24)", () => {
     expect(opened).toEqual(["a@x.test|Hi there|<p>L1</p><p>&lt;b&gt;</p>"]);
   });
 
+  it("never lets an external link set Bcc or In-Reply-To", async () => {
+    let spec = {
+      to: "",
+      cc: "",
+      bcc: "",
+      subject: "",
+      bodyHtml: "",
+      inReplyTo: null as string | null,
+    };
+    await drainMailto(
+      async () => ["mailto:a@x.test?cc=c@x.test&bcc=spy@evil.test&in-reply-to=%3Cm@x%3E"],
+      (p) => {
+        spec = applyMailtoPrefill(spec, p);
+      },
+    );
+    expect(spec.cc).toBe("c@x.test");
+    expect(spec.bcc).toBe("");
+    expect(spec.inReplyTo).toBeNull();
+  });
+
   it("the desktop port drains through mail_take_mailto and listens on the Rust event", async () => {
     const calls: string[] = [];
     let fire: (() => void) | null = null;

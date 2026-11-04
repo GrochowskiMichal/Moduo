@@ -30,7 +30,10 @@ export async function decideNewSender(
   decision: SenderDecision,
   deps: {
     commands: Pick<MailCommands, "releaseNewSenders">;
-    save: (kind: "blocked_sender" | "screener_decision", value: Record<string, unknown>) => Promise<unknown>;
+    save: (
+      kind: "blocked_sender" | "screener_decision",
+      value: Record<string, unknown>,
+    ) => Promise<unknown>;
   },
 ): Promise<void> {
   if (decision === "block") await deps.save("blocked_sender", { address: sender.address });
