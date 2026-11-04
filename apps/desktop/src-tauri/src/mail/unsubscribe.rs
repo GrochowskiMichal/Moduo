@@ -31,14 +31,25 @@ fn uris(header: &str) -> Vec<String> {
     out
 }
 
+fn hex_val(c: u8) -> Option<u8> {
+    match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        b'A'..=b'F' => Some(c - b'A' + 10),
+        _ => None,
+    }
+}
+
 fn pct_decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
     while i < b.len() {
+        // Byte-level hex: never slice the &str (a multibyte char after '%'
+        // would panic), and `i + 2 < len` accepts a trailing %XX.
         if b[i] == b'%' && i + 2 < b.len() {
-            if let Ok(v) = u8::from_str_radix(&s[i + 1..i + 3], 16) {
-                out.push(v);
+            if let (Some(h), Some(l)) = (hex_val(b[i + 1]), hex_val(b[i + 2])) {
+                out.push(h << 4 | l);
                 i += 3;
                 continue;
             }
@@ -170,6 +181,19 @@ mod tests {
         assert!(plan(None, None).is_empty());
         assert!(plan(Some("garbage"), None).is_empty());
         assert!(plan(Some("<javascript:alert(1)>"), None).is_empty());
+    }
+
+    #[test]
+    fn pct_decode_multibyte_and_trailing() {
+        assert_eq!(pct_decode("a%20b%21"), "a b!");
+        assert_eq!(pct_decode("%41"), "A");
+        assert_eq!(pct_decode("x%4"), "x%4");
+        assert_eq!(pct_decode("x%"), "x%");
+        assert_eq!(pct_decode("%\u{e9}a"), "%\u{e9}a");
+        assert_eq!(pct_decode("%a\u{e9}"), "%a\u{e9}");
+        assert_eq!(pct_decode("%C3%A9 \u{1f600}"), "\u{e9} \u{1f600}");
+        assert_eq!(pct_decode("%zz"), "%zz");
+        assert_eq!(pct_decode("%+1"), "%+1");
     }
 
     #[tokio::test]
