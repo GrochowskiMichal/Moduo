@@ -12,17 +12,20 @@
 -- deleteUser removes every row.
 -- Ids are client-minted. A sender override's id is md5(user || ':sender_override:'
 -- || lower(address))::uuid, so the backfill below and every device agree.
+-- Ids are scoped per person: the key is (user_id, id), so a deterministic id
+-- one person mints can never collide with, block or reveal another's row.
 -- Re-runnable on the local stack.
 
 CREATE TABLE IF NOT EXISTS public.email_settings_items (
-  id uuid PRIMARY KEY,
+  id uuid NOT NULL,
   user_id uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   kind text NOT NULL,
   position double precision NOT NULL DEFAULT 0,
   value jsonb NOT NULL DEFAULT '{}'::jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  deleted_at timestamptz
+  deleted_at timestamptz,
+  PRIMARY KEY (user_id, id)
 );
 
 ALTER TABLE public.email_settings_items DROP CONSTRAINT IF EXISTS email_settings_items_kind_check;
@@ -45,9 +48,11 @@ REVOKE ALL ON public.email_settings_items FROM PUBLIC, anon, authenticated;
 GRANT SELECT ON public.email_settings_items TO authenticated;
 GRANT ALL ON public.email_settings_items TO service_role;
 
--- Upsert one item. Refuses a signed-out caller, an id another person owns
--- (answered as not found), and a kind change on an existing id. Brings a
--- deleted row back. Caps live rows at 2000 per person.
+-- Upsert one of the caller's items (looked up by (caller, id), so another
+-- person's rows are never seen). Refuses a signed-out caller and a kind change
+-- on an existing id. Brings a deleted row back. Caps every row a person owns,
+-- tombstones included, at 2000, and refuses a restore while 2000 are live;
+-- a per-person advisory lock serializes the count against concurrent writes.
 CREATE OR REPLACE FUNCTION public.email_op_settings_upsert(
   p_id uuid,
   p_kind text,
@@ -66,25 +71,28 @@ BEGIN
   IF p_id IS NULL THEN
     RAISE EXCEPTION 'A settings item needs an id' USING ERRCODE = '22023';
   END IF;
-  SELECT * INTO v_existing FROM public.email_settings_items WHERE id = p_id FOR UPDATE;
+  PERFORM pg_advisory_xact_lock(hashtext(v_uid::text));
+  SELECT * INTO v_existing FROM public.email_settings_items
+   WHERE user_id = v_uid AND id = p_id FOR UPDATE;
   IF v_existing.id IS NOT NULL THEN
-    IF v_existing.user_id <> v_uid THEN
-      RAISE EXCEPTION 'Settings item not found' USING ERRCODE = 'P0002';
-    END IF;
     IF v_existing.kind <> p_kind THEN
       RAISE EXCEPTION 'A settings item keeps its kind' USING ERRCODE = '22023';
+    END IF;
+    IF v_existing.deleted_at IS NOT NULL AND (SELECT count(*) FROM public.email_settings_items
+         WHERE user_id = v_uid AND deleted_at IS NULL) >= 2000 THEN
+      RAISE EXCEPTION 'Too many mail settings items' USING ERRCODE = '54000';
     END IF;
     UPDATE public.email_settings_items
        SET value = coalesce(p_value, '{}'::jsonb),
            position = coalesce(p_position, v_existing.position),
            updated_at = clock_timestamp(),
            deleted_at = NULL
-     WHERE id = p_id
+     WHERE user_id = v_uid AND id = p_id
     RETURNING * INTO v_row;
     RETURN v_row;
   END IF;
   IF (SELECT count(*) FROM public.email_settings_items
-       WHERE user_id = v_uid AND deleted_at IS NULL) >= 2000 THEN
+       WHERE user_id = v_uid) >= 2000 THEN
     RAISE EXCEPTION 'Too many mail settings items' USING ERRCODE = '54000';
   END IF;
   INSERT INTO public.email_settings_items (id, user_id, kind, position, value)
@@ -139,7 +147,7 @@ BEGIN
    WHERE jsonb_typeof(o.value) = 'string'
      AND btrim(o.key) <> ''
      AND EXISTS (SELECT 1 FROM public.profiles pr WHERE pr.id = p.user_id)
-  ON CONFLICT (id) DO NOTHING;
+  ON CONFLICT (user_id, id) DO NOTHING;
   GET DIAGNOSTICS v_n = ROW_COUNT;
   RETURN v_n;
 END;
