@@ -114,12 +114,33 @@ export function writeMailBehavior(behavior: MailBehavior): void {
   }
 }
 
-/** Until the Rust `mail_*` commands land (MR-3/MR-5) the desktop engine is
- *  opt-in per device: `localStorage["moduo:mail:engine"] = "1"`. */
-export function mailEngineEnabled(): boolean {
+export type MailEngineMode = "on" | "off" | "fixture";
+
+/** Which engine Mail runs on (MR-16 cutover). The rebuilt engine is the
+ *  default; `localStorage["moduo:mail:engine"]` = "0" turns it off on this
+ *  device, and "fixture" runs the in-memory fixture engine (lab journeys and
+ *  demos; never real mail). */
+export function mailEngineMode(): MailEngineMode {
   try {
-    return window.localStorage.getItem("moduo:mail:engine") === "1";
+    const v = window.localStorage.getItem("moduo:mail:engine");
+    if (v === "0") return "off";
+    if (v === "fixture") return "fixture";
+    return "on";
   } catch {
-    return false;
+    return "on";
+  }
+}
+
+export function mailEngineEnabled(): boolean {
+  return mailEngineMode() === "on";
+}
+
+/** The fixture size for "fixture" mode (`moduo:mail:fixture-messages`, default 100k). */
+export function mailFixtureMessages(): number {
+  try {
+    const n = Number(window.localStorage.getItem("moduo:mail:fixture-messages"));
+    return Number.isFinite(n) && n > 0 ? Math.min(n, 200_000) : 100_000;
+  } catch {
+    return 100_000;
   }
 }

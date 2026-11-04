@@ -23,6 +23,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { asHistoryDepth, DEFAULT_HISTORY_DEPTH, type EmailHistoryDepth } from "../history-depth";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
+import { ConnectError } from "./connect-error";
 import { EmailHistoryDepthSelect } from "./email-history-depth-select";
 
 /** The three connectable providers in EM-2 (Outlook deferred). */
@@ -331,11 +332,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
             </>
           ) : null}
 
-          {error ? (
-            <p className="text-xs text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
+          {error ? <ConnectError error={error} /> : null}
         </div>
 
         <DialogFooter>

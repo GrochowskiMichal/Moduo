@@ -191,6 +191,8 @@ export type MailEngine = {
   listThreads(input: MailListInput): Promise<MailListPage>;
   counts(): Promise<MailCounts>;
   getThread(threadId: string): Promise<MailThread | null>;
+  /** The raw RFC 822 source for "Show original" (AC16); absent hides the button. */
+  getRawMessage?(messageId: string): Promise<string>;
   /** Applies locally in the same call and returns the undoable op ids (decision 12). */
   applyOp(input: MailOpInput): Promise<{ opIds: string[] }>;
   /** Inside the window: cancels; after it: enqueues the compensating op. */

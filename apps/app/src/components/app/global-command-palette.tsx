@@ -21,6 +21,7 @@ import { mailEngineEnabled } from "../../features/email/engine/behavior";
 import { usePaletteEngineMail } from "../../features/email/hooks/use-palette-engine-mail";
 import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
 import { mergeMailRows } from "../../features/email/search-palette";
+import { useMailStore } from "../../features/email/store/use-mail-store";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { taskIdForHandle } from "../../features/tasks/search";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -256,7 +257,8 @@ export function GlobalCommandPalette() {
   // the pulled-in threads search_all returned.
   // MR-13: with the rebuilt engine on, the engine answers (operators, FTS5).
   const mailWanted = chip === "all" || chip === "email";
-  const engine = runtime && mailEngineEnabled() ? (runtime.email.engine ?? null) : null;
+  const storeEngine = useMailStore((s) => s.engine);
+  const engine = storeEngine ?? (mailEngineEnabled() ? (runtime?.email?.engine ?? null) : null);
   const engineMail = usePaletteEngineMail({
     runtime,
     engine,

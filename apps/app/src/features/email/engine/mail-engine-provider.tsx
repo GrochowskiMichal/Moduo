@@ -3,14 +3,14 @@
 // on the web there is no engine and it renders nothing and does nothing.
 // `/email` only renders from the store.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { showAppBadgeSource } from "@/lib/notices/app-badge";
 import { getRuntime } from "@/lib/runtime";
 import type { MailEngine } from "@/lib/runtime.types.mail-engine";
 
 import { type MailStore, mailStore } from "../store/mail-store";
-import { mailEngineEnabled, readMailBehavior } from "./behavior";
+import { mailEngineMode, mailFixtureMessages, readMailBehavior } from "./behavior";
 import { createMailController, type MailControllerDeps } from "./controller";
 
 async function notifyDesktop(title: string, body: string): Promise<void> {
@@ -24,6 +24,31 @@ async function notifyDesktop(title: string, body: string): Promise<void> {
   }
 }
 
+/** "fixture" mode: the in-memory reference mailbox, loaded on demand so the
+ *  generator stays out of the main bundle (lab journeys, MR-16). */
+function useFixtureEngine(wanted: boolean): MailEngine | null {
+  const [engine, setEngine] = useState<MailEngine | null>(null);
+  useEffect(() => {
+    if (!wanted || engine) return;
+    let gone = false;
+    void Promise.all([import("../testing/fake-engine"), import("../testing/fixture")]).then(
+      ([fake, fx]) => {
+        if (gone) return;
+        setEngine(
+          fake.createFakeMailEngine({
+            fixture: fx.generateFixture({ messages: mailFixtureMessages() }),
+            now: () => Date.now(),
+          }),
+        );
+      },
+    );
+    return () => {
+      gone = true;
+    };
+  }, [wanted, engine]);
+  return wanted ? engine : null;
+}
+
 export type MailEngineProviderProps = {
   /** Tests and stories pass the fixture engine; the app reads the runtime's. */
   engine?: MailEngine | null;
@@ -32,12 +57,16 @@ export type MailEngineProviderProps = {
 };
 
 export function MailEngineProvider({ engine, store = mailStore, deps }: MailEngineProviderProps) {
+  const mode = engine === undefined ? mailEngineMode() : null;
+  const fixture = useFixtureEngine(mode === "fixture");
   const resolved =
-    engine === undefined
-      ? mailEngineEnabled()
-        ? (getRuntime()?.email.engine ?? null)
-        : null
-      : engine;
+    engine !== undefined
+      ? engine
+      : mode === "on"
+        ? (getRuntime()?.email?.engine ?? null)
+        : mode === "fixture"
+          ? fixture
+          : null;
   const depsRef = useRef(deps);
   useEffect(() => {
     depsRef.current = deps;

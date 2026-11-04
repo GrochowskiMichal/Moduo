@@ -350,6 +350,23 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
           })),
       };
     },
+    async getRawMessage(messageId) {
+      for (const t of threads.values()) {
+        const m = t.messages.find((x) => x.id === messageId);
+        if (!m) continue;
+        return [
+          `Message-ID: ${m.messageId}`,
+          `From: ${m.fromName} <${m.fromEmail}>`,
+          `To: ${m.to.join(", ")}`,
+          `Subject: ${m.subject}`,
+          `Date: ${new Date(m.dateMs).toUTCString()}`,
+          "Content-Type: text/plain; charset=utf-8",
+          "",
+          m.bodyText,
+        ].join("\r\n");
+      }
+      throw new Error("message not found");
+    },
     async applyOp(input) {
       const opId = `op${++opSeq}`;
       const before = new Map<string, { row: MailThreadRow; role: MailMailboxRole }>();

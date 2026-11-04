@@ -62,6 +62,8 @@ export type MailShellProps = {
   /** Keys handed to sibling surfaces (snooze picker, move, compose, spine). */
   onIntent?: (intent: MailKeyId, threadIds: string[]) => void;
   initialView?: MailView;
+  /** Opens with this thread selected (the `?thread=` deep link). */
+  initialThreadId?: string | null;
 };
 
 /** The folder name the empty state names. */
@@ -118,6 +120,7 @@ export function MailShell({
   onReconnect,
   onIntent,
   initialView = { kind: "unified", role: "inbox" },
+  initialThreadId = null,
 }: MailShellProps) {
   const engine = useMailStore(selEngine, store) as ReturnType<MailStore["getState"]>["engine"];
   const counts = useMailStore((s) => s.counts, store);
@@ -137,7 +140,9 @@ export function MailShell({
   const win = useThreadWindow(engine, view, tabbed ? tab : null, version);
   const ids = useMemo(() => win.rows.map((r) => r.threadId), [win.rows]);
 
-  const [sel, setSel] = useState<MailSelection>(EMPTY_SELECTION);
+  const [sel, setSel] = useState<MailSelection>(() =>
+    initialThreadId ? { ...EMPTY_SELECTION, cursor: initialThreadId } : EMPTY_SELECTION,
+  );
   const [hovered, setHovered] = useState<string | null>(null);
   const [legend, setLegend] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
