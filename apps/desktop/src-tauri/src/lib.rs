@@ -497,6 +497,13 @@ pub fn run() {
             commands::mail_engine::mail_discard_op,
             commands::mail_engine::mail_search,
             commands::mail_engine::mail_set_foreground,
+            commands::mail_accounts::mail_connect_password,
+            commands::mail_accounts::mail_connect_oauth,
+            commands::mail_accounts::mail_disconnect,
+            commands::mail_accounts::mail_set_history_depth,
+            commands::mail_accounts::mail_sync_now,
+            commands::mail_accounts::mail_set_classify_items,
+            commands::mail_accounts::mail_search_server,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
             #[cfg(feature = "lite")]

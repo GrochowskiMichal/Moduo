@@ -26,11 +26,12 @@ import type { MailboxProvider, SavedAccount } from "../model/email-types";
 import { ConnectError } from "./connect-error";
 import { EmailHistoryDepthSelect } from "./email-history-depth-select";
 
-/** The three connectable providers in EM-2 (Outlook deferred). */
-type ConnectProvider = Exclude<MailboxProvider, "outlook">;
+/** Every connectable provider (AC37); Gmail covers Google Workspace too. */
+type ConnectProvider = MailboxProvider;
 
 const PROVIDER_TABS: { id: ConnectProvider; label: string }[] = [
   { id: "gmail", label: "Gmail" },
+  { id: "outlook", label: "Microsoft" },
   { id: "icloud", label: "iCloud" },
   { id: "custom", label: "Custom IMAP" },
 ];
@@ -89,10 +90,11 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
     setBusy("oauth");
     setError(null);
     try {
-      const account = (await runtime.email.startGoogleOAuth({
-        workspaceId,
-        historyDepth,
-      })) as SavedAccount;
+      const account = (await runtime.email.startGoogleOAuth(
+        provider === "outlook"
+          ? { workspaceId, historyDepth, provider: "outlook", email: email.trim() }
+          : { workspaceId, historyDepth },
+      )) as SavedAccount;
       succeed(account);
     } catch (e) {
       setError(errText(e));
@@ -137,9 +139,10 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   const title = isReconnect ? "Reconnect email account" : "Connect an email account";
   const description = isReconnect
     ? `Re-enter the credential for ${isReconnect.email}.`
-    : "Connect Gmail, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain.";
+    : "Connect Gmail, Google Workspace, Microsoft, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain.";
 
   const showGoogle = provider === "gmail";
+  const isMicrosoft = provider === "outlook";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -237,7 +240,19 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-1.5">
+          {isMicrosoft ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleGoogleOAuth()}
+              disabled={busy !== null || email.trim().length === 0}
+              className="w-full"
+            >
+              {busy === "oauth" ? "Opening browser…" : "Sign in with Microsoft"}
+            </Button>
+          ) : null}
+
+          <div className={isMicrosoft ? "hidden" : "flex flex-col gap-1.5"}>
             <Label htmlFor="email-connect-password">
               {provider === "custom" ? "Password" : "App password"}
             </Label>
@@ -335,7 +350,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
           {error ? <ConnectError error={error} /> : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className={isMicrosoft ? "hidden" : undefined}>
           <Button
             type="button"
             onClick={() => void handlePasswordConnect()}

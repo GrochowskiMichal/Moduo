@@ -85,6 +85,8 @@ export type MailAccount = {
   /** 0–1 while backfilling, else null. */
   backfillProgress: number | null;
   lastError: string | null;
+  /** This device's history depth (`threeMonths` … `everything`). */
+  historyDepth?: string;
 };
 
 export type MailMailbox = {

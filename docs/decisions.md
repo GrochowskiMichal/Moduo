@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-04 · [gaps] Account lifecycle runs on the engine: `commands/mail_accounts.rs` (`mail_connect_password`, `mail_connect_oauth`, `mail_disconnect`, `mail_set_history_depth`, `mail_sync_now`, `mail_search_server`, `mail_set_classify_items`) over `mail/host/lifecycle.rs`.
 - 2026-11-04 · MR-16: the legacy mail engine and UI are deleted; the redb mail tables exist only for the cutover to read and drop.
 - 2026-11-04 · MR-15: Settings → Mail is a "mail" section in the Personal settings group (`features/settings/mail/`): a prop-driven `MailSettingsView` plus a `MailSection` connector.
 - 2026-11-04 · MR-11: compose is `features/email/compose/` over a separate `MailComposeEngine` port (`lib/runtime.types.mail-compose.ts`, `runtime.email.compose`, Tauri `mail_save_draft`/`mail_list_drafts`/`mail_get_draft`/`mail_discard_draft`/`mail_queue_send`/`mail_undo_send`/`mail_list_outbox`/`mail_correspondents`/`mail_size_limit`), kept apart from `MailEngine` so sibling blocks' engine edits don't collide.

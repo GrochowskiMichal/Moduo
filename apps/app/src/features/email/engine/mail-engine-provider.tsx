@@ -9,6 +9,8 @@ import { showAppBadgeSource } from "@/lib/notices/app-badge";
 import { getRuntime } from "@/lib/runtime";
 import type { MailEngine } from "@/lib/runtime.types.mail-engine";
 
+import { useAuth } from "../../../providers/auth-provider";
+import { startEmailSettingsMirror } from "../settings/mirror";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { mailEngineMode, mailFixtureMessages, readMailBehavior } from "./behavior";
 import { createMailController, type MailControllerDeps } from "./controller";
@@ -87,5 +89,14 @@ export function MailEngineProvider({ engine, store = mailStore, deps }: MailEngi
     });
     return () => controller.stop();
   }, [resolved, store]);
+  // The engine classifies new mail by your rules, tabs, Priority people and
+  // blocks: the settings mirror pushes them to it (only the real engine).
+  const { userId } = useAuth();
+  const real = engine === undefined && mode === "on" && resolved !== null;
+  useEffect(() => {
+    if (!real || !userId) return;
+    const started = startEmailSettingsMirror(userId);
+    return () => started?.stop();
+  }, [real, userId]);
   return null;
 }

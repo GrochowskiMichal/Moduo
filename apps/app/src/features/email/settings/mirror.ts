@@ -132,6 +132,40 @@ export function createEmailSettingsMirror(opts: {
   };
 }
 
+/** The kinds the engine's classifier reads (src/mail/rules.rs). */
+const CLASSIFY_KINDS: ReadonlySet<string> = new Set([
+  "rule",
+  "custom_tab",
+  "priority_person",
+  "blocked_sender",
+  "screener_decision",
+  "sender_override",
+]);
+
+type ClassifyPush = (
+  items: Pick<EmailSettingsItem, "id" | "kind" | "position" | "value">[],
+) => Promise<void>;
+
+/** Sends the classifier's items to the engine now and after every change
+ *  (same list twice is skipped); returns the unsubscribe. */
+export function pushClassifyItems(mirror: EmailSettingsMirror, push: ClassifyPush): () => void {
+  let last: string | null = null;
+  const send = () => {
+    const items = mirror
+      .items()
+      .filter((i) => CLASSIFY_KINDS.has(i.kind))
+      .map(({ id, kind, position, value }) => ({ id, kind, position, value }));
+    const key = JSON.stringify(items);
+    if (key === last) return;
+    last = key;
+    void push(items).catch(() => {
+      last = null;
+    });
+  };
+  send();
+  return mirror.subscribe(send);
+}
+
 /** Builds the mirror on the runtime and refreshes it now and whenever the window regains focus. */
 export function startEmailSettingsMirror(
   userId: string,
@@ -145,9 +179,17 @@ export function startEmailSettingsMirror(
     storage = null;
   }
   const mirror = createEmailSettingsMirror({ port: runtime.email, storage, userId });
+  const setClassify = runtime.email.setClassifyItems?.bind(runtime.email);
+  const unpush = setClassify ? pushClassifyItems(mirror, setClassify) : () => {};
   void mirror.refresh();
-  if (typeof window === "undefined") return { mirror, stop: () => {} };
+  if (typeof window === "undefined") return { mirror, stop: unpush };
   const onFocus = () => void mirror.refresh();
   window.addEventListener("focus", onFocus);
-  return { mirror, stop: () => window.removeEventListener("focus", onFocus) };
+  return {
+    mirror,
+    stop: () => {
+      unpush();
+      window.removeEventListener("focus", onFocus);
+    },
+  };
 }

@@ -6,7 +6,7 @@ import { describe, expect, it } from "@rstest/core";
 
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 
-import { createEmailSettingsMirror, type EmailSettingsPort } from "./mirror";
+import { createEmailSettingsMirror, type EmailSettingsPort, pushClassifyItems } from "./mirror";
 
 function item(
   id: string,
@@ -152,5 +152,23 @@ describe("email settings mirror", () => {
     };
     await expect(mirror.refresh()).resolves.toBe(false);
     expect(mirror.items().map((i) => i.id)).toEqual(["a"]);
+  });
+
+  it("pushes the classifier's kinds to the engine now and on every change", async () => {
+    const server = [
+      item("r", "2026-11-04T00:00:01Z", { kind: "rule" }),
+      item("s", "2026-11-04T00:00:02Z", { kind: "snippet" }),
+    ];
+    const { port } = fakePort(server);
+    const mirror = createEmailSettingsMirror({ port, storage: null, userId: "u" });
+    const pushed: string[][] = [];
+    const stop = pushClassifyItems(mirror, async (items) => {
+      pushed.push(items.map((i) => i.id));
+    });
+    await mirror.refresh();
+    await mirror.upsert({ id: "b", kind: "blocked_sender", value: { address: "x@y.io" } });
+    stop();
+    await mirror.upsert({ id: "p", kind: "priority_person", value: { address: "p@y.io" } });
+    expect(pushed).toEqual([[], ["r"], ["r", "b"]]);
   });
 });

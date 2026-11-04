@@ -15,6 +15,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { parseSyncDescriptor } from "../features/calendar/sync";
+import { createTauriMailAccounts } from "./runtime.tauri.mail-accounts";
 import { createTauriMailCompose } from "./runtime.tauri.mail-compose";
 import { createTauriMailEngine } from "./runtime.tauri.mail-engine";
 import { createTauriMailSettings } from "./runtime.tauri.mail-settings";
@@ -166,27 +167,8 @@ export const tauriRuntime: ModuoRuntime = {
     engine: createTauriMailEngine(),
     compose: createTauriMailCompose(),
     settings: createTauriMailSettings(),
-    listAccounts() {
-      return invoke<any[]>("email_accounts_list");
-    },
-    connectAndSave(input) {
-      return invoke<any>("email_account_connect_and_save", { input });
-    },
-    disconnect(accountId) {
-      return invoke<void>("email_account_disconnect", { accountId });
-    },
-    setHistoryDepth(input) {
-      return invoke<any>("email_account_set_history_depth", input);
-    },
-    syncNow(input) {
-      return invoke<any>("email_sync_now", { input });
-    },
-    startGoogleOAuth(input) {
-      return invoke<any>("email_gmail_oauth_start", { input });
-    },
-    searchServer(input) {
-      return invoke<any>("email_search_server", { input });
-    },
+    // Account lifecycle on the rebuilt engine (connect, purge, depth, sync, server search).
+    ...createTauriMailAccounts(),
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
     listSettings: webRuntime.email.listSettings,

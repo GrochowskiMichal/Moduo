@@ -9,6 +9,7 @@
 //! and send outbox. Sign-out stops the workers.
 
 pub mod imap_adapters;
+pub mod lifecycle;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -50,6 +51,8 @@ pub struct AccountRow {
     pub sync_state: String,
     pub backfill_progress: Option<f64>,
     pub last_error: Option<String>,
+    /// The webview's depth name (`threeMonths` … `everything`).
+    pub history_depth: String,
 }
 
 /// Every account in the store, oldest first.
@@ -57,7 +60,8 @@ pub fn list_accounts(store: &Store) -> Result<Vec<AccountRow>, String> {
     let c = store.r();
     let mut s = c
         .prepare_cached(
-            "SELECT id, address, display_name, provider, hue, sync_state, backfill_progress, last_error
+            "SELECT id, address, display_name, provider, hue, sync_state, backfill_progress, last_error,
+                    history_depth_days
              FROM accounts ORDER BY created_at_ms, id",
         )
         .map_err(|e| e.to_string())?;
@@ -72,6 +76,7 @@ pub fn list_accounts(store: &Store) -> Result<Vec<AccountRow>, String> {
                 sync_state: r.get(5)?,
                 backfill_progress: r.get(6)?,
                 last_error: r.get(7)?,
+                history_depth: lifecycle::depth_name(r.get(8)?).to_string(),
             })
         })
         .map_err(|e| e.to_string())?
@@ -142,17 +147,30 @@ impl Connector for ImapConnector {
 }
 
 type Reconnect = Box<dyn Fn(&str) + Send + Sync>;
-type Actor = AccountActor<KeychainStore<Reconnect>, AnyRefresher, ImapConnector>;
+pub(crate) type Actor = AccountActor<KeychainStore<Reconnect>, AnyRefresher, ImapConnector>;
 
 fn now_s() -> i64 {
     now_ms() / 1000
 }
 
+struct WorkerHandle {
+    stop: Arc<AtomicBool>,
+    task: tauri::async_runtime::JoinHandle<()>,
+}
+
+impl WorkerHandle {
+    fn halt(self) {
+        self.stop.store(true, Ordering::SeqCst);
+        self.task.abort();
+    }
+}
+
 struct Running {
     user_id: String,
     store: Arc<Store>,
-    stop: Arc<AtomicBool>,
-    tasks: Vec<tauri::async_runtime::JoinHandle<()>>,
+    cfg: HostConfig,
+    classify: Arc<RwLock<ClassifyConfig>>,
+    workers: std::collections::HashMap<String, WorkerHandle>,
 }
 
 /// The managed engine host.
@@ -223,45 +241,94 @@ impl MailHost {
         }
         store.recover_in_flight_ops().map_err(|e| e.to_string())?;
         store.recover_in_flight_sends().map_err(|e| e.to_string())?;
-        let stop = Arc::new(AtomicBool::new(false));
-        let mut tasks = Vec::new();
-        for a in list_accounts(&store)? {
-            let Some(endpoints) = store
-                .kv_get(&migrate::endpoints_key(&a.id))
-                .ok()
-                .flatten()
-                .and_then(|j| serde_json::from_str::<AccountEndpoints>(&j).ok())
-            else {
-                eprintln!("[mail] {}: no endpoints; skipped", a.id);
-                continue;
-            };
-            let w = Worker {
-                account_id: a.id.clone(),
-                user_id: user_id.to_string(),
-                endpoints,
-                store: store.clone(),
-                events: self.events.clone(),
-                cfg: cfg.clone(),
-                stop: stop.clone(),
-                foreground: self.foreground.clone(),
-            };
-            tasks.push(tauri::async_runtime::spawn(w.run()));
-        }
+        let classify = Arc::new(RwLock::new(lifecycle::classify_config(
+            &lifecycle::stored_classify_items(&store),
+        )));
         *self.running.lock().unwrap_or_else(|p| p.into_inner()) = Some(Running {
             user_id: user_id.to_string(),
-            store,
-            stop,
-            tasks,
+            store: store.clone(),
+            cfg: cfg.clone(),
+            classify,
+            workers: Default::default(),
         });
+        for a in list_accounts(&store)? {
+            self.spawn_worker(&a.id)?;
+        }
         Ok(())
+    }
+
+    /// (Re)starts one account's worker: a new account, a reconnect, a new
+    /// depth or Sync now. A parked (Reconnect) worker re-reads its secret.
+    pub fn spawn_worker(&self, account_id: &str) -> Result<(), String> {
+        let mut guard = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        let r = guard.as_mut().ok_or("mail_not_started")?;
+        if let Some(old) = r.workers.remove(account_id) {
+            old.halt();
+        }
+        let Some(endpoints) = lifecycle::endpoints(&r.store, account_id) else {
+            eprintln!("[mail] {account_id}: no endpoints; skipped");
+            return Ok(());
+        };
+        let stop = Arc::new(AtomicBool::new(false));
+        let w = Worker {
+            account_id: account_id.to_string(),
+            user_id: r.user_id.clone(),
+            endpoints,
+            store: r.store.clone(),
+            events: self.events.clone(),
+            cfg: r.cfg.clone(),
+            classify: r.classify.clone(),
+            stop: stop.clone(),
+            foreground: self.foreground.clone(),
+        };
+        let task = tauri::async_runtime::spawn(w.run());
+        r.workers
+            .insert(account_id.to_string(), WorkerHandle { stop, task });
+        Ok(())
+    }
+
+    /// Stops one account's worker (disconnect).
+    pub fn stop_worker(&self, account_id: &str) {
+        if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
+            if let Some(w) = r.workers.remove(account_id) {
+                w.halt();
+            }
+        }
+    }
+
+    /// Every account with a worker slot (Sync now with no account).
+    pub fn account_ids(&self) -> Vec<String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|r| r.workers.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The running user and host config (connect needs both for the keychain).
+    pub fn session(&self) -> Result<(String, HostConfig), String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|r| (r.user_id.clone(), r.cfg.clone()))
+            .ok_or_else(|| "mail_not_started".to_string())
+    }
+
+    /// Replaces the shared classify config (rules, tabs, Priority, blocks).
+    /// Workers read it at every ingest, so the change applies to new mail.
+    pub fn set_classify(&self, cfg: ClassifyConfig) {
+        if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+            *r.classify.write().unwrap_or_else(|p| p.into_inner()) = cfg;
+        }
     }
 
     /// Stops every worker (sign-out, quit).
     pub fn stop(&self) {
         if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).take() {
-            r.stop.store(true, Ordering::SeqCst);
-            for t in r.tasks {
-                t.abort();
+            for (_, w) in r.workers {
+                w.halt();
             }
         }
     }
@@ -274,6 +341,7 @@ struct Worker {
     store: Arc<Store>,
     events: EventBus,
     cfg: HostConfig,
+    classify: Arc<RwLock<ClassifyConfig>>,
     stop: Arc<AtomicBool>,
     foreground: Arc<AtomicBool>,
 }
@@ -326,7 +394,7 @@ impl Worker {
             &self.account_id,
             self.store.clone(),
             self.events.clone(),
-            Arc::new(RwLock::new(ClassifyConfig::default())),
+            self.classify.clone(),
             self.since_ms(),
         ));
         while !self.stop.load(Ordering::SeqCst) {

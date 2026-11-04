@@ -127,15 +127,32 @@ export type EmailRuntime = {
   deleteSetting(input: { id: string }): Promise<boolean>;
   listAccounts(): Promise<any[]>;
   connectAndSave(input: any): Promise<any>;
-  disconnect(accountId: string): Promise<void>;
+  /** AC38: purges the account's local data and keychain secret. With unsent
+   *  Outbox mail it answers `needs_confirm` until called with `confirmed`. */
+  disconnect(
+    accountId: string,
+    opts?: { confirmed?: boolean },
+  ): Promise<{ status: "purged" } | { status: "needs_confirm"; unsent: number } | void>;
   syncNow(input: { accountId?: string | null; folder?: string | null }): Promise<any>;
   /** Change how far back this device syncs an account (IM-2c, AC8). Raising
    *  it backfills the gap in the background; lowering it stops fetching and
    *  deletes nothing. Per-device — the mail store is local. */
   setHistoryDepth(input: { accountId: string; depth: string }): Promise<any>;
-  /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
-   *  stores tokens in the OS keychain, registers the account. */
-  startGoogleOAuth(input: { workspaceId?: string | null; historyDepth?: string }): Promise<any>;
+  /** "Sign in with Google" (personal or Workspace) or, with `provider:
+   *  "outlook"` and the address, "Sign in with Microsoft" (desktop-only): runs
+   *  the PKCE flow, stores tokens in the OS keychain, registers the account and
+   *  starts syncing it. Also the Reconnect path for an OAuth account. */
+  startGoogleOAuth(input: {
+    workspaceId?: string | null;
+    historyDepth?: string;
+    provider?: "gmail" | "outlook";
+    email?: string;
+  }): Promise<any>;
+  /** Pushes the mirrored rules, tabs, Priority people and blocked senders to
+   *  the engine's classifier (desktop only). */
+  setClassifyItems?(
+    items: Pick<EmailSettingsItem, "id" | "kind" | "position" | "value">[],
+  ): Promise<void>;
   /** Per-account server escalation for the ⌘K "Search older mail" row (MR-13):
    *  Gmail X-GM-RAW / IMAP SEARCH with an honest status. */
   searchServer(input: { accountId: string; query: string; limit?: number }): Promise<{

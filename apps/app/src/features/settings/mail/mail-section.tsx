@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import { disconnectMailAccount, unsentCopy } from "@/features/email/disconnect";
 import { asHistoryDepth } from "@/features/email/history-depth";
 import { useEmailPrefs } from "@/features/email/hooks/use-email-prefs";
 import {
@@ -123,8 +124,21 @@ export function MailSection() {
         accountActions={{
           reconnect: (id) =>
             after(email?.syncNow({ accountId: id }) ?? Promise.resolve(), "reconnect"),
-          disconnect: (id) =>
-            after(email?.disconnect(id) ?? Promise.resolve(), "disconnect", "Disconnected"),
+          disconnect: (id) => {
+            if (!email) return;
+            void disconnectMailAccount(
+              email,
+              id,
+              (unsent, proceed) =>
+                toast(unsentCopy(unsent), {
+                  action: { label: "Disconnect anyway", onClick: proceed },
+                }),
+              () => {
+                toast.success("Disconnected");
+                void reload().catch(() => {});
+              },
+            ).catch(fail("disconnect"));
+          },
           setDepth: (id, depth) =>
             after(
               email?.setHistoryDepth({ accountId: id, depth }) ?? Promise.resolve(),

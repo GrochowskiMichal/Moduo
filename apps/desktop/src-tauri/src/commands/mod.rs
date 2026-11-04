@@ -3,6 +3,7 @@ pub mod caldav;
 pub mod calendar;
 pub mod integrations;
 pub mod local_store;
+pub mod mail_accounts;
 pub mod mail_compose;
 pub mod mail_engine;
 pub mod mail_events;
