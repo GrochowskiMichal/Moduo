@@ -19,7 +19,6 @@ pub mod auth;
 pub mod commands;
 pub mod config;
 pub mod domain;
-pub mod email_sync;
 pub mod identity_acl;
 pub mod install_id;
 pub mod keychain;

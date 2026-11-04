@@ -414,51 +414,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [currentFeature, currentPanels.left, currentPanels.right]);
 
   useEffect(() => {
-    if (!runtime || typeof document === "undefined") return;
-    if (!isEmailRoute) return;
-    const publishActivity = async () => {
-      // Email workspace publishes account/folder-specific foreground state.
-      // Outside of /email we avoid background email signals to prevent secret access.
-      if (document.visibilityState !== "hidden") return;
-      const mode = "appBackground";
-      try {
-        await runtime.email.setActivityState({
-          mode,
-          activeAccountId: null,
-          activeFolder: null,
-        });
-      } catch {
-        // best-effort signal only
-      }
-    };
-
-    void publishActivity();
-    const onVisibilityChange = () => {
-      void publishActivity();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [isEmailRoute, runtime]);
-
-  useEffect(() => {
-    if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
-    if (!isEmailRoute) return;
-    // Desktop-only: `email.syncNow` is a Tauri command that rejects on web — don't
-    // arm the interval there (it would throw an unhandled rejection every tick).
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const timer = window.setInterval(
-      () => {
-        if (document.visibilityState === "hidden") return;
-        void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
-      },
-      5 * 60 * 1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [isEmailRoute, runtime]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     let active = true;
     const readAvatar = async () => {

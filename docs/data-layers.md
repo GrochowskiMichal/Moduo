@@ -30,7 +30,7 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | --- | --- |
 | `apps/app/src/lib/runtime.types.ts` | The abstraction boundary: `ModuoRuntime` and the shared types (`RuntimeCapabilities`, …). Each module's port and its own types live in `runtime.types.<module>.ts`, re-exported from here, so callers import from `runtime.types` only. |
 | `apps/app/src/lib/runtime.web.ts` | Web runtime: the composition root that assembles `webRuntime` from one file per module (`runtime.web.<module>.ts`, each typed by its port). The Supabase client is `runtime.web.client.ts` (light: importing it doesn't load every module); helpers several modules share are in `runtime.web.shared.ts`. Cloud-only, no offline. |
-| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for nearly every module (auth, workspaces, tasks, notes, chat, contacts, calendar, dashboard, …), and Tauri `invoke` only for the desktop engines: the email IMAP/SMTP engine, the device key-value store (`localStore`), the legacy time-tracking commands (`tt_*`), integrations, and the one-off import of old redb notes. |
+| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for nearly every module (auth, workspaces, tasks, notes, chat, contacts, calendar, dashboard, …), and Tauri `invoke` only for the desktop engines: the mail engine (`mail_*` commands over SQLite), the device key-value store (`localStore`), the legacy time-tracking commands (`tt_*`), integrations, and the one-off import of old redb notes. |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.
 - **Footgun (see memory):** never import a bare `{ runtime }`; always resolve via `getRuntime()`. Grep `./runtime` when auditing lib exports.
@@ -62,7 +62,7 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | **Chat** | **Supabase** (Chat v2: `chat_messages`, conversations, reactions, files) + a device copy in IndexedDB (`moduo-chat`) | Supabase | Yes (Realtime) | ✅ prod |
 | **Contacts** (people, companies) | **Supabase** (`contacts`, `companies`, spine links) | Supabase | Yes | ✅ prod |
 | **Calendar** | **Supabase** (`calendar_accounts`, `calendars`, calendar sets, booking links) + Google and Zoom integrations | Supabase (events from Google) | Yes | ✅ prod |
-| **Email** | Desktop Rust IMAP/SMTP engine with a redb device cache and OS-keychain secrets; cloud `email_refs` link threads into the spine | the mail server; Supabase for links | Links only | 🟡 desktop-only client |
+| **Email** | Desktop Rust mail engine (`src-tauri/src/mail/`) with a per-user SQLite store and OS-keychain secrets; cloud `email_refs` link threads into the spine | the mail server; Supabase for links | Links only | 🟡 desktop-only client |
 | **Time tracking** | **Supabase** (`task_time_entries`, totals and reports); legacy `tt_*` desktop commands remain | Supabase | Yes | ✅ prod (on tasks) |
 | **Mindmap** | `runtime.localStore` (localStorage on web, redb KV on desktop) | local | No | 🟡 exploratory, not synced |
 | Dashboard widgets | read the other modules through one shared data context | n/a | — | ✅ prod |
@@ -133,8 +133,9 @@ Moduo's differentiation is **not** any single module; it is the layer that lets 
 
 A full multi-account Spark replacement on a cloud-first web app would mean building/operating a server-side mail relay (IMAP/SMTP sync, OAuth app verification, token vault, security review). **At alpha we do not.** Instead:
 
-- The **full client lives on desktop**, on the rebuilt Rust engine (`apps/desktop/src-tauri/src/mail/`, specs/mail-rebuild.md) → one SQLite file per signed-in user (`<app data>/mail/<user_id>/mail.db`, WAL + FTS5, bodies and attachments as files beside it). Mail never leaves the Mac. The legacy engine (`commands/email*` → redb) is retired at cutover: `mail::migrate` carries accounts over and drops its redb tables. Moduo-side mail settings that follow the user live in `email_settings_items` (Supabase).
-- **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) is synced to Supabase so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop.
+- The **full client lives on desktop**, on the rebuilt Rust engine (`apps/desktop/src-tauri/src/mail/`, specs/mail-rebuild.md) → one SQLite file per signed-in user (`<app data>/mail/<user_id>/mail.db`, WAL + FTS5, bodies and attachments as files beside it). Mail never leaves the Mac. The legacy engine (`commands/email*`, `email_sync`, redb mail tables) was deleted in MR-16; on the first launch after upgrade `mail::migrate` carries its accounts over (same ids, so the keychain entries are reused) and drops the old redb tables, which a fresh install never creates. Moduo-side mail settings that follow the user live in `email_settings_items` (Supabase).
+- **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) reaches Supabase (`email_refs`) only when you act on a thread (convert, link, snooze, follow up, tag), so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop. Plain reading writes nothing.
+- **The web `/email` page is the tissue view** (`EmailWebPage`: snoozed, follow-ups and recently linked threads, read-only, with `?thread=` deep links); MCP reads the same `email_refs`.
 - The full **web** email client is a post-alpha decision, made once it's proven to matter to customers (not just to us).
 
 ```

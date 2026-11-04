@@ -19,7 +19,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { mailEngineEnabled } from "../../features/email/engine/behavior";
 import { usePaletteEngineMail } from "../../features/email/hooks/use-palette-engine-mail";
-import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
 import { mergeMailRows } from "../../features/email/search-palette";
 import { useMailStore } from "../../features/email/store/use-mail-store";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
@@ -46,6 +45,8 @@ import {
   type PaletteNotice,
   type PaletteRecent,
 } from "./global-search-palette";
+
+const NO_LOCAL_MAIL = { rows: null, searching: false } as const;
 
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
 
@@ -267,14 +268,8 @@ export function GlobalCommandPalette() {
     query,
     wanted: mailWanted,
   });
-  const legacyMail = usePaletteMail({
-    runtime,
-    workspaceId: selectedWorkspaceId,
-    open,
-    query: trimmed,
-    wanted: engine === null && searchable && mailWanted,
-  });
-  const mail = engineMail ?? legacyMail;
+  // Without the engine (web) the pulled-in threads search_all returned are all.
+  const mail = engineMail ?? NO_LOCAL_MAIL;
   const merged = useMemo(() => mergeMailRows(rows, mail.rows), [rows, mail.rows]);
   const view = useMemo(() => buildPaletteView(merged, { chip, lead }), [merged, chip, lead]);
   // Every task row says its ID, quieter, as the details header does

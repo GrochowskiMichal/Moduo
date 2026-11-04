@@ -1,6 +1,6 @@
 # Spec: Email module (Spark replacement, desktop-first hybrid)
 
-> **Superseded for the desktop engine and screens by [specs/mail-rebuild.md](./mail-rebuild.md)** (2026-11). The spine contract here (`email_refs`, `email_op_*`, MCP tools) still holds.
+> **Superseded for the desktop engine and screens by [specs/mail-rebuild.md](./mail-rebuild.md)** (2026-11). The legacy engine and page this spec built (`commands/email*`, `email_sync`, redb mail tables, `email-page-view`) were deleted in MR-16; read the rest as history. The spine contract here (`email_refs`, `email_op_*`, MCP tools) and the web tissue view (AC15) still hold.
 
 > Status: **Shipped** — EM-1…EM-11 all landed 2026-07-04 → 2026-07-07 (Wave 5 complete). Planned 2026-07-04. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record**; this spec is the design/AC reference. Test checklists: [`docs/testing/email-em1-em3.md`](../docs/testing/email-em1-em3.md) … [`email-em11.md`](../docs/testing/email-em11.md). · Owner: maciej · Related briefs: [.design/email/BRIEF.md](../.design/email/BRIEF.md), [.design/email/DESIGN_BRIEF.md](../.design/email/DESIGN_BRIEF.md) · Architecture: [docs/data-layers.md §6](../docs/data-layers.md)
 >

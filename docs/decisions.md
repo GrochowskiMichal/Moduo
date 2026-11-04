@@ -160,7 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
-- 2026-11-04 · MR-16 (partial): the cutover is `src/mail/migrate.rs` (`run(redb, store)`), and the legacy deletion is tracked by a shrink-only ratchet, not done.
+- 2026-11-04 · MR-16: the legacy mail engine and UI are deleted; the redb mail tables exist only for the cutover to read and drop.
 - 2026-11-04 · MR-15: Settings → Mail is a "mail" section in the Personal settings group (`features/settings/mail/`): a prop-driven `MailSettingsView` plus a `MailSection` connector.
 - 2026-11-04 · MR-11: compose is `features/email/compose/` over a separate `MailComposeEngine` port (`lib/runtime.types.mail-compose.ts`, `runtime.email.compose`, Tauri `mail_save_draft`/`mail_list_drafts`/`mail_get_draft`/`mail_discard_draft`/`mail_queue_send`/`mail_undo_send`/`mail_list_outbox`/`mail_correspondents`/`mail_size_limit`), kept apart from `MailEngine` so sibling blocks' engine edits don't collide.
 - 2026-11-04 · MR-12: sender intelligence glue is `src/mail/rules.rs` over MR-3's classifier, and the views are prop-driven components in `features/email/{views,panels}` plus `suggest-contact.ts`.
@@ -197,6 +197,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-29 · IM-2a: the email store reads by key prefix and writes per chunk — and the order index stays timestamp-keyed on purpose.
 - 2026-07-30 · IM-2b: email history depth is a per-device FLOOR, and the depth state machine keys off the UID generation.
 - 2026-07-30 · IM-2c-a: the depth picker ships without progress/cancel, and AC9's transport is amended from Tauri events to a cursor-backed status read.
+
+1 superseded or dropped entry is left out; they stay in the area file.
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 

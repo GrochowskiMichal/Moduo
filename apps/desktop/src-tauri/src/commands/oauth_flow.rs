@@ -1,12 +1,11 @@
 //! Shared Google/Microsoft OAuth 2.0 PKCE machinery.
 //!
 //! Extracted from `calendar.rs` (EM-2) so both the calendar sync and the Gmail
-//! email connect share ONE loopback-redirect PKCE flow. The email module adds two
-//! things the calendar path never had: **token refresh** (`refresh_access_token`,
-//! calendar previously only ever read the first access token) and the **XOAUTH2**
-//! SASL string for IMAP/SMTP.
+//! email connect share ONE loopback-redirect PKCE flow, plus **token refresh**
+//! (`refresh_access_token`). The mail engine's XOAUTH2 string lives in
+//! `crate::mail::session`.
 //!
-//! The pure helpers (`should_refresh`, `xoauth2_sasl`) are unit-tested; the flow
+//! The pure helper `should_refresh` is unit-tested; the flow
 //! itself is exercised by the manual OAuth smoke (headless-incompatible — it opens
 //! a browser).
 
@@ -283,17 +282,9 @@ pub(crate) fn should_refresh(expires_at: i64, now: i64, skew_secs: i64) -> bool 
     now.saturating_add(skew_secs) >= expires_at
 }
 
-/// The SASL `XOAUTH2` initial-response string for IMAP/SMTP. async-imap and
-/// lettre both base64-encode this themselves, so we return the RAW SASL string
-/// (`user=<addr>\x01auth=Bearer <token>\x01\x01`).
-pub(crate) fn xoauth2_sasl(user: &str, access_token: &str) -> String {
-    format!("user={user}\x01auth=Bearer {access_token}\x01\x01")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 
     #[test]
     fn should_refresh_within_skew_window() {
@@ -305,16 +296,5 @@ mod tests {
         // Inside the 120s skew of expiry → refresh proactively.
         assert!(should_refresh(1_120, 1_000, 120));
         assert!(!should_refresh(1_121, 1_000, 120));
-    }
-
-    #[test]
-    fn xoauth2_sasl_is_rfc_shaped_and_base64_round_trips() {
-        let sasl = xoauth2_sasl("me@gmail.com", "ya29.TOKEN");
-        assert_eq!(sasl, "user=me@gmail.com\x01auth=Bearer ya29.TOKEN\x01\x01");
-        // The control bytes are the SASL separators, and the string base64-decodes
-        // back to itself (what the server sees after the transport encodes it).
-        let encoded = BASE64_STANDARD.encode(&sasl);
-        let decoded = BASE64_STANDARD.decode(encoded).unwrap();
-        assert_eq!(String::from_utf8(decoded).unwrap(), sasl);
     }
 }

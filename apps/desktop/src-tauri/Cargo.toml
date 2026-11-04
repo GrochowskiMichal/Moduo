@@ -26,11 +26,10 @@ base64 = "0.23"
 ed25519-dalek = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
-# Async IMAP on tokio. The sync email engine drives it through the facade in
-# src/commands/email/connection.rs. Replaced the unmaintained `imap` 2.x crate.
+# Async IMAP on tokio, driven natively by the mail engine's account actors
+# (src/mail/session.rs). Replaced the unmaintained `imap` 2.x crate.
 async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 lettre = "0.11"
-mailparse = "0.18"
 # MR-4: the new engine's MIME parser (Stalwart), tolerant of malformed mail.
 mail-parser = "0.11"
 # MR-4: collecting async-imap FETCH streams.

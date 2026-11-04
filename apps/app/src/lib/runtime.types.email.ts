@@ -128,105 +128,16 @@ export type EmailRuntime = {
   listAccounts(): Promise<any[]>;
   connectAndSave(input: any): Promise<any>;
   disconnect(accountId: string): Promise<void>;
-  listEnvelopes(input: {
-    accountId?: string | null;
-    folder: string;
-    limit?: number;
-    forceSync?: boolean;
-  }): Promise<any>;
-  getMessageBody(input: { accountId: string; folder: string; uid: number }): Promise<any>;
-  prefetchBodies(input: {
-    accountId: string;
-    folder: string;
-    uids: number[];
-    limit?: number;
-  }): Promise<any>;
   syncNow(input: { accountId?: string | null; folder?: string | null }): Promise<any>;
-  setActivityState(input: {
-    mode: "mailForeground" | "appForegroundNonMail" | "appBackground";
-    activeAccountId?: string | null;
-    activeFolder?: string | null;
-  }): Promise<void>;
-  applyFlag(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    flag: "seen" | "starred";
-    value: boolean;
-  }): Promise<any>;
-  getMailboxStatus(input?: { accountId?: string | null }): Promise<any[]>;
   /** Change how far back this device syncs an account (IM-2c, AC8). Raising
    *  it backfills the gap in the background; lowering it stops fetching and
    *  deletes nothing. Per-device — the mail store is local. */
   setHistoryDepth(input: { accountId: string; depth: string }): Promise<any>;
-  sendSaved(input: {
-    accountId: string;
-    to: string;
-    subject: string;
-    body: string;
-  }): Promise<boolean>;
   /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
    *  stores tokens in the OS keychain, registers the account. */
   startGoogleOAuth(input: { workspaceId?: string | null; historyDepth?: string }): Promise<any>;
-  /** All messages of a thread (EM-4), oldest→newest, across folders. */
-  getThread(input: { accountId: string; threadId: string }): Promise<any>;
-  /** LIST the account's server folders, delimiter-aware (EM-5). */
-  listFolders(input: { accountId: string }): Promise<any[]>;
-  /** Archive / move / delete a message via the op outbox (EM-5). Optimistic —
-   *  the row leaves the current folder locally, the IMAP step queues + retries. */
-  applyMessageOp(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    op: "archive" | "move" | "delete";
-    destFolder?: string | null;
-  }): Promise<any>;
-  /** Snooze a thread — move its inbox messages to Moduo/Snoozed (create-if-
-   *  missing, delimiter-aware). `local_hide` = the server refused the folder;
-   *  the caller keeps the thread hidden locally instead (EM-6). */
-  snoozeThread(input: {
-    accountId: string;
-    threadId: string;
-    uids: number[];
-  }): Promise<{ strategy: "server_move" | "local_hide"; mailbox: string | null }>;
-  /** Restore a snoozed thread — move its messages from Moduo/Snoozed back to the
-   *  inbox. Idempotent (0 when nothing matches / the folder is absent). */
-  snoozeRestore(input: { accountId: string; threadId: string }): Promise<{ restored: number }>;
-  /** Send a message (reply/forward/new) — HTML+plain multipart, cc/bcc, reply
-   *  headers, attachments from disk paths; copy to Sent (Gmail skips). EM-7. */
-  sendMessage(input: EmailSendInput): Promise<{ messageId: string; savedToSent: boolean }>;
-  /** A received message's attachment metadata (no bytes; EM-7/AC4). */
-  listAttachments(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-  }): Promise<EmailAttachmentMeta[]>;
-  /** Decode one attachment + write it to disk via a native Save dialog. */
-  saveAttachment(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    attachmentId: string;
-    defaultFilename: string;
-  }): Promise<{ saved: boolean; path: string | null }>;
-  /** Native multi-file open dialog → paths for composing. */
-  pickAttachments(): Promise<EmailPickedAttachment[]>;
-  /** Small inline `cid:` images (<2MB) for substituting into the reader HTML. */
-  getInlineImages(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-  }): Promise<EmailInlineImage[]>;
-  /** Local body-text search (EM-9): scan the 8KB body-text sidecar → matching
-   *  envelopes. The instant sender/subject match is done client-side over the
-   *  in-memory envelopes; this covers deep-body hits the preview misses. */
-  searchBodies(input: {
-    accountId?: string | null;
-    folder?: string | null;
-    query: string;
-  }): Promise<any[]>;
-  /** Per-account server escalation (EM-9): Gmail X-GM-RAW / IMAP SEARCH with an
-   *  honest status. Hits are upserted so a result's body fetches normally. */
+  /** Per-account server escalation for the ⌘K "Search older mail" row (MR-13):
+   *  Gmail X-GM-RAW / IMAP SEARCH with an honest status. */
   searchServer(input: { accountId: string; query: string; limit?: number }): Promise<{
     status: "ok" | "timeout" | "unsupported" | "error";
     message?: string | null;

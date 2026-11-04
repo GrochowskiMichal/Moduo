@@ -199,6 +199,7 @@ mod tests {
     }
 
     fn seed(redb: &RedbStore) {
+        redb.create_legacy_email_tables().unwrap();
         redb.kv_set(
             "email",
             "accounts_v1",
@@ -277,6 +278,15 @@ mod tests {
         );
         // Idempotent.
         assert!(run(&redb, &store).unwrap().already_done);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn fresh_redb_has_no_legacy_mail_tables() {
+        let (redb, _store, dir) = fixtures("fresh");
+        let names = redb.table_names().unwrap();
+        assert!(!names.iter().any(|t| t.starts_with("email_")), "{names:?}");
+        assert!(read_legacy(&redb).unwrap().0.is_empty());
         let _ = std::fs::remove_dir_all(dir);
     }
 

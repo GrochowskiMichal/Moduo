@@ -299,12 +299,12 @@ All agent steps, each needing Maciej's OK in the session, in this order. Until s
 
 ## Mail rebuild · OAuth console setup (desktop engine)
 
-The desktop engine (`apps/desktop/src-tauri/src/mail/auth/`) signs in with PKCE on a loopback redirect, so both apps are "desktop/public" clients with no secret in the binary.
+The desktop engine (`apps/desktop/src-tauri/src/mail/auth/`) signs in with PKCE on a loopback redirect, so both apps are "desktop/public" clients: nothing in the binary is a real secret (Google's desktop client secret is not confidential by Google's own rules). These are the only OAuth apps mail uses; the legacy engine and its commands were deleted in MR-16.
 
 ### Google (Gmail and Workspace)
 
 1. Google Cloud console → the Moduo project → **APIs & Services → OAuth consent screen**: External, add the scopes `https://mail.google.com/`, `openid`, `email`. `mail.google.com` is a restricted scope: until the app passes Google's verification and security assessment, only listed **test users** (max 100) can sign in, and their refresh tokens expire after 7 days.
-2. **Credentials → Create OAuth client ID → Desktop app.** Copy the client id into the desktop build env (the same variable the legacy engine read; see `mail/auth/google.rs`).
+2. **Credentials → Create OAuth client ID → Desktop app.** Put the client id in `MODUO_EMAIL_GOOGLE_CLIENT_ID` and its secret in `MODUO_EMAIL_GOOGLE_CLIENT_SECRET` (read at runtime or baked in at build time, `src-tauri/src/config.rs`; handed to the engine in `commands/auth.rs`). The loopback redirect `http://127.0.0.1:<random port>/oauth/callback` needs no registration for a Desktop app client.
 3. Workspace accounts: a Workspace admin may need to allow the app under **Security → API controls → App access control** (an `admin_consent_required:google_workspace` error means this).
 
 ### Microsoft (Outlook.com and Microsoft 365)
@@ -317,4 +317,4 @@ The desktop engine (`apps/desktop/src-tauri/src/mail/auth/`) signs in with PKCE 
 
 ### Upgrade cutover
 
-The first launch of the new engine runs `mail::migrate::run`: legacy accounts (`email:accounts_v1` and `email_accounts_v2` in redb) are copied into SQLite with their ids unchanged, so the keychain entries `email_<user>_<account id>` are reused and nobody signs in again; then the redb mail tables are deleted and mail re-downloads. A row with an unknown provider is skipped and reported, never fatal.
+The first launch of the new engine runs `mail::migrate::run`: legacy accounts (`email:accounts_v1` and `email_accounts_v2` in redb) are copied into SQLite with their ids unchanged, so the keychain entries `email_<user>_<account id>` are reused and nobody signs in again; then the redb mail tables are deleted and mail re-downloads. A row with an unknown provider is skipped and reported, never fatal; a row that won't decode stops the cutover before anything is dropped (it retries next launch). A fresh install has no redb mail tables at all: they are defined only in `store_redb/legacy_mail.rs`, outside `ALL_TABLES`.

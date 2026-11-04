@@ -69,72 +69,17 @@ export const webEmail: EmailRuntime = {
   async disconnect() {
     throw new Error(desktopOnly().message);
   },
-  async listEnvelopes() {
-    throw new Error(desktopOnly().message);
-  },
-  async getMessageBody() {
-    throw new Error(desktopOnly().message);
-  },
-  async prefetchBodies() {
-    throw new Error(desktopOnly().message);
-  },
   async syncNow() {
     throw new Error(desktopOnly().message);
   },
-  async setActivityState() {
-    /* no-op on web */
-  },
-  async applyFlag() {
-    throw new Error(desktopOnly().message);
-  },
-  async getMailboxStatus() {
-    return [];
-  },
   async setHistoryDepth() {
-    throw new Error(desktopOnly().message);
-  },
-  async sendSaved() {
     throw new Error(desktopOnly().message);
   },
   async startGoogleOAuth() {
     throw new Error(desktopOnly().message);
   },
-  async getThread() {
-    throw new Error(desktopOnly().message);
-  },
-  async listFolders() {
-    return [];
-  },
-  async applyMessageOp() {
-    throw new Error(desktopOnly().message);
-  },
-  async snoozeThread() {
-    throw new Error(desktopOnly().message);
-  },
-  async snoozeRestore() {
-    throw new Error(desktopOnly().message);
-  },
-  async sendMessage() {
-    throw new Error(desktopOnly().message);
-  },
-  async listAttachments() {
-    return [];
-  },
-  async saveAttachment() {
-    throw new Error(desktopOnly().message);
-  },
-  async pickAttachments() {
-    return [];
-  },
-  async getInlineImages() {
-    return [];
-  },
-  // Local search rides the desktop engine cache — web has no envelopes to scan.
-  async searchBodies() {
-    return [];
-  },
   async searchServer() {
-    return { status: "unsupported", message: null, envelopes: [] };
+    return { status: "unsupported" as const, message: null, envelopes: [] };
   },
 
   // ── EM-3 cloud tissue surface (Supabase-first; works on web + desktop) ──

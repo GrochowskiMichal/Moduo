@@ -4,12 +4,9 @@ import path from "node:path";
 import { describe, expect, it } from "@rstest/core";
 
 // AC39 "no legacy email engine paths" (specs/mail-rebuild.md decision 24, MR-16).
-// LEGACY lists every path of the old mail engine and UI. PENDING_REMOVAL is a
-// ratchet: the paths still in the tree because the new engine is not yet hosted
-// by Tauri commands (no `mail_*` command is registered, and the Email route still
-// renders the legacy page). It may only shrink: a listed path that is gone fails
-// until it is struck from the list, and a legacy path not listed fails outright.
-// At cutover PENDING_REMOVAL is empty.
+// LEGACY lists every path of the old mail engine and UI. PENDING_REMOVAL was the
+// ratchet that let them stay until the cutover; MR-16 deleted them, so it is
+// empty and any legacy path that comes back fails outright.
 const root = path.resolve(import.meta.dirname, "../..");
 const tauri = "apps/desktop/src-tauri";
 const ui = "apps/app/src/features/email";
@@ -29,7 +26,7 @@ const LEGACY = [
   `${ui}/ui/email-sync-banner.tsx`,
 ] as const;
 
-const PENDING_REMOVAL: readonly string[] = [...LEGACY];
+const PENDING_REMOVAL: readonly string[] = [];
 
 const exists = (rel: string) => fs.existsSync(path.join(root, rel));
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), "utf8");

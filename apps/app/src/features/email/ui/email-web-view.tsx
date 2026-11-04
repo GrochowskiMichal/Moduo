@@ -9,9 +9,12 @@ import { EmptyState } from "../../../components/ui/empty-state";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Skeleton } from "../../../components/ui/skeleton";
 import type { EmailThreadRef } from "../../../lib/runtime.types";
-import type { useEmailModule } from "../hooks/use-email-module";
+import { useAuth } from "../../../providers/auth-provider";
+import { useWorkspace } from "../../../providers/workspace-provider";
+import { type EmailTissue, useEmailTissue } from "../hooks/use-email-tissue";
 import { formatSnoozeUntil } from "../snooze";
 import { formatEmailDate } from "../utils/email-format";
+import { useEmailThreadDeepLink } from "./use-email-thread-deep-link";
 
 /** One tissue email card for the web read-only view (AC15). Carries the ref +
  * thread ids so a `?thread=` deep link can scroll to it (DF-2). */
@@ -68,9 +71,7 @@ function WebTissueSection({ label, children }: { label: string; children: ReactN
 }
 
 type Props = {
-  email: Pick<ReturnType<typeof useEmailModule>, "snoozed" | "followUps" | "tissueRefs"> & {
-    loading?: boolean;
-  };
+  email: Pick<EmailTissue, "snoozed" | "followUps" | "tissueRefs"> & { loading?: boolean };
   highlightedRefId: string | null;
 };
 
@@ -150,4 +151,19 @@ export function EmailWebView({ email, highlightedRefId }: Props) {
       ) : null}
     </div>
   );
+}
+
+/** The web /email page: loads the tissue and applies a `?thread=` deep link. */
+export function EmailWebPage({
+  urlThreadId = null,
+  onConsumeThreadDeepLink,
+}: {
+  urlThreadId?: string | null;
+  onConsumeThreadDeepLink?: () => void;
+}) {
+  const { runtime } = useAuth();
+  const { selectedWorkspaceId: workspaceId } = useWorkspace();
+  const email = useEmailTissue(runtime, workspaceId);
+  const highlightedRefId = useEmailThreadDeepLink({ urlThreadId, onConsumeThreadDeepLink, email });
+  return <EmailWebView email={email} highlightedRefId={highlightedRefId} />;
 }

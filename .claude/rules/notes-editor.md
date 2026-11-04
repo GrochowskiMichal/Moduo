@@ -1,5 +1,5 @@
 ---
-paths: ["apps/app/src/features/notes/editor/**", "apps/app/src/features/notes/ui/**", "apps/app/src/features/spine/editor/**", "apps/app/src/features/spine/references/**", "apps/app/src/features/chat/markup-v2/**", "apps/app/src/features/chat/composer/**", "apps/app/src/features/tasks/capture/**", "apps/app/src/features/email/ui/email-compose-editor.tsx", "supabase/functions/_shared/description-markdown.ts"]
+paths: ["apps/app/src/features/notes/editor/**", "apps/app/src/features/notes/ui/**", "apps/app/src/features/spine/editor/**", "apps/app/src/features/spine/references/**", "apps/app/src/features/chat/markup-v2/**", "apps/app/src/features/chat/composer/**", "apps/app/src/features/tasks/capture/**", "supabase/functions/_shared/description-markdown.ts"]
 incident: "A nested editor.update in a command handler bit twice (TV-U14 mention picks, NR-8 orphan comment marks), and HistoryPlugin undid teammates' text in collaborative notes (NR-3)"
 expires: 2027-01-31
 ---

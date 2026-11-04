@@ -3,15 +3,15 @@
   "title": "Desktop: an undecodable store reads as empty, the next save deletes everything",
   "mechanism": "decode-as-empty-then-overwrite",
   "sites": [
-    "apps/desktop/src-tauri/src/commands/email/storage.rs",
+    "apps/desktop/src-tauri/src/store_redb/legacy_mail.rs",
     "apps/desktop/src-tauri/src/store_redb/mod.rs"
   ],
   "tests": [
     {
       "lang": "rust",
-      "file": "apps/desktop/src-tauri/src/commands/email/storage.rs",
-      "name": "unreadable_account_list_is_an_error_not_empty",
-      "run": "cd apps/desktop/src-tauri && cargo test --lib unreadable_account_list_is_an_error_not_empty"
+      "file": "apps/desktop/src-tauri/src/store_redb/legacy_mail.rs",
+      "name": "unreadable_legacy_account_is_an_error_not_empty",
+      "run": "cd apps/desktop/src-tauri && cargo test --lib unreadable_legacy_account_is_an_error_not_empty"
     },
     {
       "lang": "rust",

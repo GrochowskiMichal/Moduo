@@ -3,14 +3,14 @@ import { useCallback } from "react";
 
 import { mailEngineMode } from "../../features/email/engine/behavior";
 import { useMailStore } from "../../features/email/store/use-mail-store";
-import { EmailPageView } from "../../features/email/ui/email-page-view";
+import { EmailWebPage } from "../../features/email/ui/email-web-view";
 import { MailPage } from "../../features/email/ui/mail-page";
 import type { EmailSearch } from "../../features/email/url-search";
 
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 /** Mail runs on the rebuilt engine (MR-16) on desktop, or on the fixture
- *  engine anywhere it's switched on; the web keeps its tissue view. */
+ *  engine anywhere it's switched on; the web shows its tissue view. */
 export function useMailOnEngine(): boolean {
   const hasEngine = useMailStore((s) => s.engine !== null);
   const mode = mailEngineMode();
@@ -41,5 +41,5 @@ export function EmailPage() {
   if (onEngine) {
     return <MailPage initialThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
   }
-  return <EmailPageView urlThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
+  return <EmailWebPage urlThreadId={urlThreadId} onConsumeThreadDeepLink={clearThreadParam} />;
 }

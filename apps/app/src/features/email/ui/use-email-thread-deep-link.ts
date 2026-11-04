@@ -1,18 +1,16 @@
-// The inbound `?thread=` deep link (DF-2): a widget row / linked chip /
-// notification opens a specific thread — via the URL (?thread=) or a one-shot
-// in-app event. Both feed one pending target, applied once the inbox/tissue has
-// loaded: desktop selects + scrolls the row; web scrolls its tissue card. The id
-// may be a raw threadId or an `email_thread` ref id (what spine links + the
-// widget carry).
+// The inbound `?thread=` deep link (DF-2) on the web tissue view: a widget row /
+// linked chip / notification opens a specific thread — via the URL (?thread=) or
+// a one-shot in-app event. Both feed one pending target, applied once the tissue
+// has loaded, which scrolls to and highlights its card. The id may be a raw
+// threadId or an `email_thread` ref id (what spine links + the widget carry).
+// The desktop engine page handles its own deep link (`MailPage`).
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { takeEntityOpenIntent } from "../../../lib/entity-open";
-import type { useEmailModule } from "../hooks/use-email-module";
+import type { EmailTissue } from "../hooks/use-email-tissue";
 import { EMAIL_OPEN_THREAD_EVENT, resolveEmailThreadTarget } from "../url-search";
-import type { PanelVariantId } from "./email-page-types";
-import type { EmailScope, EmailView } from "./email-rail";
 
 /** Poll briefly for a deep-link target row/card (it renders after a scope reset
  * or the inbox load settles over a few frames), then scroll it into view.
@@ -40,27 +38,14 @@ type Input = {
   urlThreadId: string | null;
   /** Called once the deep link is applied (or found stale) so the page can clear the URL param. */
   onConsumeThreadDeepLink?: () => void;
-  isDesktop: boolean;
-  email: Pick<ReturnType<typeof useEmailModule>, "loading" | "threads" | "tissueRefs">;
-  /** Land a thread where it renders: the inbox, no account scope or search filter. */
-  clearSearch: () => void;
-  setView: (view: EmailView) => void;
-  setSelectedAccountId: (scope: EmailScope) => void;
-  setSelectedThreadId: (id: string | null) => void;
-  setPanelVariant: (variant: PanelVariantId) => void;
+  email: Pick<EmailTissue, "loading" | "tissueRefs">;
 };
 
 /** Returns the web tissue card to highlight for a beat after a deep link. */
 export function useEmailThreadDeepLink({
   urlThreadId,
   onConsumeThreadDeepLink,
-  isDesktop,
   email,
-  clearSearch,
-  setView,
-  setSelectedAccountId,
-  setSelectedThreadId,
-  setPanelVariant,
 }: Input): string | null {
   const [pendingThreadTarget, setPendingThreadTarget] = useState<string | null>(null);
   const [highlightedRefId, setHighlightedRefId] = useState<string | null>(null);
@@ -90,40 +75,12 @@ export function useEmailThreadDeepLink({
     return () => window.removeEventListener(EMAIL_OPEN_THREAD_EVENT, onOpenThread);
   }, []);
 
-  // Apply once the inbox/tissue has loaded (so a not-yet-synced id isn't judged
-  // stale prematurely).
+  // Apply once the tissue has loaded (so a not-yet-loaded id isn't judged stale).
   useEffect(() => {
     if (!pendingThreadTarget || email.loading) return;
     const id = pendingThreadTarget;
     setPendingThreadTarget(null);
-    const target = resolveEmailThreadTarget(id, {
-      threads: email.threads,
-      refs: email.tissueRefs,
-    });
-
-    if (isDesktop) {
-      const inInbox =
-        target.kind === "thread" && email.threads.some((t) => t.threadId === target.threadId);
-      if (!inInbox) {
-        toast("Couldn't find that email", {
-          description: "It may have been archived or isn't in this inbox.",
-        });
-        return;
-      }
-      // Land the row where it actually renders: the inbox view with no account
-      // scope or search filter (sub-views / search results don't carry
-      // `data-thread-id`, and a single-account scope would drop the selection
-      // via the auto-clear effect above). Then select + scroll it into view.
-      setView("inbox");
-      clearSearch();
-      setSelectedAccountId(null);
-      setSelectedThreadId(target.threadId);
-      setPanelVariant("reader");
-      revealBySelector(`[data-thread-id="${CSS.escape(target.threadId)}"]`);
-      return;
-    }
-
-    // Web: route to the thread's tissue card (its read-only web representation).
+    const target = resolveEmailThreadTarget(id, { threads: [], refs: email.tissueRefs });
     const refId = target.kind === "thread" ? target.refId : null;
     if (!refId) {
       toast("Couldn't find that email here", {
@@ -139,10 +96,9 @@ export function useEmailThreadDeepLink({
         });
       }
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- a loaded inbox or a new target is the cue; the setters and clearSearch are the page's
-  }, [pendingThreadTarget, email.loading, email.threads, email.tissueRefs]);
+  }, [pendingThreadTarget, email.loading, email.tissueRefs]);
 
-  // Clear the web card highlight after a beat.
+  // Clear the card highlight after a beat.
   useEffect(() => {
     if (!highlightedRefId) return;
     const t = window.setTimeout(() => setHighlightedRefId(null), 2000);
