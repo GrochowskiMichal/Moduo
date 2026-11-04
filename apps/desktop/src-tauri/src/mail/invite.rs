@@ -86,7 +86,40 @@ fn unescape(v: &str) -> String {
         .replace("\\\\", "\\")
 }
 
+/// Drops every control character (CR, LF, NUL, ...). The bool says one was found.
+fn strip_controls(v: &str) -> (String, bool) {
+    let clean: String = v.chars().filter(|c| !c.is_control()).collect();
+    let hit = clean.len() != v.len();
+    (clean, hit)
+}
+
+/// A plain RFC 5322 addr-spec (`local@domain`, dot-atom both sides): no
+/// whitespace, quotes, brackets or separators that could break out of a
+/// `mailto:` value in the REPLY.
+fn is_addr_spec(s: &str) -> bool {
+    let Some((local, domain)) = s.split_once('@') else {
+        return false;
+    };
+    let atext = |c: char| c.is_ascii_alphanumeric() || "!#$%&'*+-/=?^_`{|}~".contains(c);
+    let dot_atom = |p: &str, ok: &dyn Fn(char) -> bool| {
+        !p.is_empty() && p.split('.').all(|seg| !seg.is_empty() && seg.chars().all(ok))
+    };
+    local.len() <= 64
+        && domain.len() <= 253
+        && dot_atom(local, &atext)
+        && dot_atom(domain, &|c: char| c.is_ascii_alphanumeric() || c == '-')
+}
+
+/// DATE / DATE-TIME value characters only (`20261110T100000Z`).
+fn is_date_value(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 16 && s.chars().all(|c| c.is_ascii_digit() || c == 'T' || c == 'Z')
+}
+
 fn person(params: &[(String, String)], value: &str) -> Option<Attendee> {
+    let (value, hit) = strip_controls(value);
+    if hit {
+        return None;
+    }
     let v = value.trim();
     let email = v
         .strip_prefix("mailto:")
@@ -94,10 +127,15 @@ fn person(params: &[(String, String)], value: &str) -> Option<Attendee> {
         .unwrap_or(v)
         .trim()
         .to_string();
-    if !email.contains('@') {
+    if !is_addr_spec(&email) {
         return None;
     }
-    let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
+    let get = |k: &str| {
+        params
+            .iter()
+            .find(|(n, _)| n == k)
+            .map(|(_, v)| strip_controls(v).0)
+    };
     Some(Attendee {
         email,
         name: get("CN"),
@@ -128,6 +166,8 @@ pub fn parse_invite(ics: &str) -> Option<Invite> {
         cancelled: false,
     };
     let mut nested = 0u32;
+    // A control character or malformed value in a field the REPLY echoes.
+    let mut hostile = false;
     for line in &lines {
         let Some((name, params, value)) = split_line(line) else {
             continue;
@@ -163,7 +203,11 @@ pub fn parse_invite(ics: &str) -> Option<Invite> {
         }
         let param = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
         match name.as_str() {
-            "UID" => inv.uid = Some(value.trim().to_string()),
+            "UID" => {
+                let (v, hit) = strip_controls(value.trim());
+                hostile |= hit || v.is_empty();
+                inv.uid = Some(v);
+            }
             "SEQUENCE" => inv.sequence = value.trim().parse().unwrap_or(0),
             "SUMMARY" => inv.summary = unescape(&value),
             "LOCATION" => inv.location = Some(unescape(&value)).filter(|s| !s.is_empty()),
@@ -171,12 +215,25 @@ pub fn parse_invite(ics: &str) -> Option<Invite> {
             "DTSTART" => {
                 inv.all_day = param("VALUE").is_some_and(|v| v.eq_ignore_ascii_case("DATE"))
                     || value.trim().len() == 8;
-                inv.tzid = param("TZID");
-                inv.dtstart = Some(value.trim().to_string());
+                inv.tzid = param("TZID").map(|t| {
+                    let (t, hit) = strip_controls(&t);
+                    hostile |= hit || t.contains(['"', ';', ':', ',']);
+                    t
+                });
+                let (v, hit) = strip_controls(value.trim());
+                hostile |= hit || !is_date_value(&v);
+                inv.dtstart = Some(v);
             }
-            "DTEND" => inv.dtend = Some(value.trim().to_string()),
+            "DTEND" => {
+                let (v, hit) = strip_controls(value.trim());
+                hostile |= hit || !is_date_value(&v);
+                inv.dtend = Some(v);
+            }
             "STATUS" if value.trim().eq_ignore_ascii_case("CANCELLED") => inv.cancelled = true,
-            "ORGANIZER" => inv.organizer = person(&params, &value),
+            "ORGANIZER" => {
+                inv.organizer = person(&params, &value);
+                hostile |= inv.organizer.is_none();
+            }
             "ATTENDEE" => {
                 if let Some(a) = person(&params, &value) {
                     inv.attendees.push(a);
@@ -195,7 +252,8 @@ pub fn parse_invite(ics: &str) -> Option<Invite> {
         && inv.organizer.is_some()
         && inv.uid.is_some()
         && inv.dtstart.is_some()
-        && !inv.cancelled;
+        && !inv.cancelled
+        && !hostile;
     inv.method = method;
     Some(inv)
 }
@@ -227,7 +285,14 @@ impl Rsvp {
     }
 }
 
+/// RFC 5545 §3.3.11 TEXT escaping; other control characters are dropped.
 fn escape(v: &str) -> String {
+    let v: String = v
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .chars()
+        .filter(|c| *c == '\n' || !c.is_control())
+        .collect();
     v.replace('\\', "\\\\")
         .replace(';', "\\;")
         .replace(',', "\\,")
@@ -276,6 +341,13 @@ pub fn itip_reply(
     let (Some(org), Some(uid), Some(start)) = (&inv.organizer, &inv.uid, &inv.dtstart) else {
         return Err("invite_not_rsvpable".into());
     };
+    // Defense in depth: an Invite built elsewhere still can't inject lines.
+    let me_email = me_email.trim();
+    let dates_ok = is_date_value(start) && inv.dtend.as_deref().is_none_or(is_date_value);
+    let tz_ok = inv.tzid.as_deref().is_none_or(|t| !strip_controls(t).1);
+    if !is_addr_spec(&org.email) || !is_addr_spec(me_email) || !dates_ok || !tz_ok || strip_controls(uid).1 {
+        return Err("invite_not_rsvpable".into());
+    }
     let date_prop = |name: &str, v: &str| {
         if inv.all_day {
             format!("{name};VALUE=DATE:{v}")
@@ -291,7 +363,7 @@ pub fn itip_reply(
         "VERSION:2.0".into(),
         "METHOD:REPLY".into(),
         "BEGIN:VEVENT".into(),
-        format!("UID:{uid}"),
+        format!("UID:{}", escape(uid)),
         format!("SEQUENCE:{}", inv.sequence),
         format!("DTSTAMP:{dtstamp}"),
         date_prop("DTSTART", start),
@@ -315,7 +387,7 @@ pub fn itip_reply(
     lines.push(format!(
         "ATTENDEE{me_cn};PARTSTAT={}:mailto:{}",
         answer.partstat(),
-        me_email.trim()
+        me_email
     ));
     lines.push("END:VEVENT".into());
     lines.push("END:VCALENDAR".into());
@@ -371,6 +443,45 @@ mod tests {
         )
         .unwrap();
         assert!(broken.all_day && !broken.can_rsvp && broken.attendees.is_empty());
+    }
+
+    #[test]
+    fn hostile_invites_get_no_rsvp() {
+        let cases = [
+            REQ.replace("UID:abc@x", "UID:abc@x\rATTENDEE:mailto:evil@x.test"),
+            REQ.replace("UID:abc@x", "UID:abc\u{0}@x"),
+            REQ.replace(":20261110T100000\r\n", ":20261110T100000\rMETHOD:CANCEL\r\n"),
+            REQ.replace(":20261110T110000", ":2026;X=1"),
+            REQ.replace("TZID=Europe/Warsaw:20261110T100000", "TZID=\"Eu\rX:Y\":20261110T100000"),
+            REQ.replace("mailto:anna@x.test", "mailto:anna@x.test\rBCC:x"),
+            REQ.replace("mailto:anna@x.test", "mailto:anna@x.test>,evil@y.test"),
+            REQ.replace("mailto:anna@x.test", "mailto:an na@x.test"),
+            REQ.replace("mailto:anna@x.test", "mailto:\"a\"@x.test"),
+            REQ.replace("mailto:anna@x.test", "mailto:@x.test"),
+        ];
+        for c in &cases {
+            let i = parse_invite(c).unwrap();
+            assert!(!i.can_rsvp, "should not rsvp: {c:?}");
+            assert!(itip_reply(&i, "me@x.test", None, Rsvp::Accept, "20261104T120000Z").is_err());
+        }
+        // A hand-built Invite with a CRLF in a field is refused at reply time too.
+        let mut i = parse_invite(REQ).unwrap();
+        i.uid = Some("a\r\nX:y".into());
+        assert!(itip_reply(&i, "me@x.test", None, Rsvp::Accept, "20261104T120000Z").is_err());
+        let i = parse_invite(REQ).unwrap();
+        assert!(itip_reply(&i, "me@x.test\r\nX:y", None, Rsvp::Accept, "z").is_err());
+    }
+
+    #[test]
+    fn reply_escapes_text_and_strips_controls() {
+        let mut i = parse_invite(REQ).unwrap();
+        i.summary = "a;b,c\\d\r\nEND:VEVENT\u{7}".into();
+        let r = itip_reply(&i, "me@x.test", Some("Me\r\nX"), Rsvp::Accept, "20261104T120000Z").unwrap();
+        assert!(r.contains("SUMMARY:a\\;b\\,c\\\\d\\nEND:VEVENT\r\n"));
+        assert!(r.contains("ATTENDEE;CN=MeX;"));
+        assert!(!r.split("\r\n").any(|l| l.contains('\r') || l.contains('\n')));
+        assert_eq!(r.matches("END:VEVENT").count(), 2); // one escaped in SUMMARY text
+        assert_eq!(r.lines().filter(|l| l.starts_with("END:VEVENT")).count(), 1);
     }
 
     #[test]
