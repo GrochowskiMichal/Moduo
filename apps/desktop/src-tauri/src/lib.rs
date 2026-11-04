@@ -19,10 +19,11 @@ pub mod auth;
 pub mod commands;
 pub mod config;
 pub mod domain;
-pub mod email_sync;
 pub mod identity_acl;
 pub mod install_id;
 pub mod keychain;
+/// The rebuilt mail engine (specs/mail-rebuild.md).
+pub mod mail;
 pub mod migration_legacy;
 pub mod navigation;
 pub mod store_redb;
@@ -394,6 +395,7 @@ pub fn run() {
         // time; the plugin can't schedule on desktop.
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .manage(mail::deeplink::MailtoInbox::default())
         .menu(build_app_menu)
         // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
         // Quit — so we can confirm before terminating. See `build_app_menu`.
@@ -441,6 +443,11 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            let mail_events = commands::mail_events::MailEvents::default();
+            // The rebuilt engine (MR-16a): it starts per user on sign-in
+            // (`auth_set_cloud_session`), after the one-time legacy cutover.
+            app.manage(mail::host::MailHost::new(mail_events.0.clone()));
+            app.manage(mail_events);
             // A tray that fails to build (no menu bar on this desktop) never stops the app;
             // closing the window then quits as before (see `keep_in_menu_bar`).
             match build_tray(app.handle()) {
@@ -450,7 +457,6 @@ pub fn run() {
                     .store(true, Ordering::SeqCst),
                 Err(err) => eprintln!("[tray] not available: {err}"),
             }
-            commands::email::bootstrap_idle_workers(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(WINDOW_SHOW_FALLBACK).await;
@@ -464,6 +470,59 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::auth_set_cloud_session,
+            commands::mail_events::mail_subscribe,
+            commands::mail_compose::mail_save_draft,
+            commands::mail_compose::mail_stage_attachment_bytes,
+            commands::mail_compose::mail_pick_attachments,
+            commands::mail_compose::mail_unstage_attachment,
+            commands::mail_compose::mail_get_draft,
+            commands::mail_compose::mail_list_drafts,
+            commands::mail_compose::mail_discard_draft,
+            commands::mail_compose::mail_queue_send,
+            commands::mail_compose::mail_undo_send,
+            commands::mail_compose::mail_list_outbox,
+            commands::mail_compose::mail_size_limit,
+            commands::mail_compose::mail_correspondents,
+            commands::mail_compose::mail_storage_stats,
+            commands::mail_compose::mail_set_disk_cap,
+            commands::mail_compose::mail_clear_attachments,
+            commands::mail_compose::mail_clear_downloaded,
+            commands::mail_compose::mail_is_default_app,
+            commands::mail_compose::mail_make_default_app,
+            mail::deeplink::mail_take_mailto,
+            commands::mail_engine::mail_list_accounts,
+            commands::mail_engine::mail_list_mailboxes,
+            commands::mail_engine::mail_list_threads,
+            commands::mail_engine::mail_counts,
+            commands::mail_engine::mail_get_thread,
+            commands::mail_engine::mail_apply_op,
+            commands::mail_engine::mail_undo_op,
+            commands::mail_engine::mail_list_failed_ops,
+            commands::mail_engine::mail_retry_op,
+            commands::mail_engine::mail_discard_op,
+            commands::mail_engine::mail_search,
+            commands::mail_engine::mail_set_foreground,
+            commands::mail_reader::mail_get_raw_message,
+            commands::mail_reader::mail_attachment_file,
+            commands::mail_reader::mail_get_invite,
+            commands::mail_reader::mail_rsvp,
+            commands::mail_reader::mail_unsubscribe_plan,
+            commands::mail_reader::mail_unsubscribe,
+            commands::mail_reader::mail_avatar,
+            commands::mail_reader::mail_set_reader_prefs,
+            commands::mail_reader::mail_set_visible,
+            commands::mail_reader::mail_open_folder,
+            commands::mail_reader::mail_backfill,
+            commands::mail_reader::mail_cancel_backfill,
+            commands::mail_reader::mail_set_follow_up,
+            commands::mail_reader::mail_release_new_senders,
+            commands::mail_accounts::mail_connect_password,
+            commands::mail_accounts::mail_connect_oauth,
+            commands::mail_accounts::mail_disconnect,
+            commands::mail_accounts::mail_set_history_depth,
+            commands::mail_accounts::mail_sync_now,
+            commands::mail_accounts::mail_set_classify_items,
+            commands::mail_accounts::mail_search_server,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
             #[cfg(feature = "lite")]
@@ -490,31 +549,6 @@ pub fn run() {
             commands::local_store::local_store_get,
             commands::local_store::local_store_set,
             commands::local_store::local_store_remove,
-            commands::email::account_commands::email_accounts_list,
-            commands::email::account_commands::email_account_connect_and_save,
-            commands::email::account_commands::email_account_disconnect,
-            commands::email::account_commands::email_account_set_history_depth,
-            commands::email::oauth::email_gmail_oauth_start,
-            commands::email::email_list_envelopes,
-            commands::email::email_get_thread,
-            commands::email::email_get_message_body,
-            commands::email::email_prefetch_bodies,
-            commands::email::email_sync_now,
-            commands::email::email_set_activity_state,
-            commands::email::email_apply_flag,
-            commands::email::email_list_folders,
-            commands::email::email_apply_message_op,
-            commands::email::email_get_mailbox_status,
-            commands::email::snooze::email_snooze_thread,
-            commands::email::snooze::email_snooze_restore,
-            commands::email::send_commands::email_send_saved,
-            commands::email::send_commands::email_send_message,
-            commands::email::attachments::email_list_attachments,
-            commands::email::attachments::email_save_attachment,
-            commands::email::attachments::email_pick_attachments,
-            commands::email::attachments::email_get_inline_images,
-            commands::email::search::email_search_bodies,
-            commands::email::search::email_search_server,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_google_publish_booking_token,
             commands::calendar::calendar_outlook_oauth_start,
@@ -559,10 +593,20 @@ pub fn run() {
             // once an exit is actually happening — including for exits we can't intercept
             // (dock right-click → Quit, system logout), which go straight to `Exit`.
             match event {
-                tauri::RunEvent::Exit => commands::email::stop_all_idle_workers(),
+                tauri::RunEvent::Exit => {
+                    if let Some(host) = app.try_state::<mail::host::MailHost>() {
+                        host.stop();
+                    }
+                }
                 // The Dock icon brings a hidden window back (TV-D12).
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => show_main_window(app),
+                // A `mailto:` link opened while Moduo is the default mail app (AC24).
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Opened { urls } => mail::deeplink::route(
+                    app,
+                    urls.into_iter().map(|u| u.to_string()).collect(),
+                ),
                 _ => {}
             }
             // `app` is only read on macOS (Reopen); keep other targets warning-free.

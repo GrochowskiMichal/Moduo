@@ -6,12 +6,12 @@
 **Fix commit:** [`9a4590545`](https://github.com/GrochowskiMichal/Moduo/commit/9a45905456d59aab9ea8535b25c284bcd2c901ff) (PR #509). An account list that won't decode returns an error instead of an empty list; `wipe_all` and `ensure_schema` share one `ALL_TABLES` list.
 
 **Sites fixed:**
-- `apps/desktop/src-tauri/src/commands/email/storage.rs`
+- `apps/desktop/src-tauri/src/commands/email/storage.rs` (deleted in MR-16; the same guard now lives in `store_redb/legacy_mail.rs`, read once by the mail cutover before it drops the tables)
 - `apps/desktop/src-tauri/src/store_redb/mod.rs`
 
 **Regression test** (fails with the fix reverted):
-- `apps/desktop/src-tauri/src/commands/email/storage.rs` · "unreadable_account_list_is_an_error_not_empty"  
-  `cd apps/desktop/src-tauri && cargo test --lib unreadable_account_list_is_an_error_not_empty`
+- `apps/desktop/src-tauri/src/store_redb/legacy_mail.rs` · "unreadable_legacy_account_is_an_error_not_empty"  
+  `cd apps/desktop/src-tauri && cargo test --lib unreadable_legacy_account_is_an_error_not_empty`
 - `apps/desktop/src-tauri/src/store_redb/mod.rs` · "wipe_all_clears_the_cloud_sync_tables"  
   `cd apps/desktop/src-tauri && cargo test --lib wipe_all_clears_the_cloud_sync_tables`
 

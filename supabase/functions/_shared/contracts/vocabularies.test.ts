@@ -859,3 +859,17 @@ describe("calendar event vocabularies (CALR-6: conference providers and item kin
     expect(v.normalizeCalendarItemKind(null)).toBe("event");
   });
 });
+
+describe("email settings kinds (MR-7)", () => {
+  it("parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const kind of v.EMAIL_SETTINGS_KINDS) {
+      expect(v.isEmailSettingsKind(kind)).toBe(true);
+      expect(v.normalizeEmailSettingsKind(kind)).toBe(kind);
+      expect(v.parseEmailSettingsKind(kind).success).toBe(true);
+    }
+    expect(v.isEmailSettingsKind("bogus")).toBe(false);
+    expect(v.normalizeEmailSettingsKind("bogus")).toBeNull();
+    expect(v.parseEmailSettingsKind("bogus").success).toBe(false);
+  });
+});

@@ -25,6 +25,7 @@ export type * from "./runtime.types.auth";
 export type * from "./runtime.types.calendar";
 export type * from "./runtime.types.contacts";
 export type * from "./runtime.types.email";
+export { mailViewKey } from "./runtime.types.mail-engine";
 export type * from "./runtime.types.habits";
 export type * from "./runtime.types.notes";
 export type * from "./runtime.types.preferences";

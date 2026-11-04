@@ -41,6 +41,16 @@ describe("snoozePresets", () => {
     expect(p.at.getHours()).toBe(9);
   });
 
+  it("someday is a morning 90 days out, last in the menu (MR-14)", () => {
+    const list = snoozePresets(wed);
+    const p = list[list.length - 1]!;
+    expect(p.id).toBe("someday");
+    expect(p.at.getHours()).toBe(9);
+    const days = Math.round((p.at.getTime() - wed.getTime()) / 86_400_000);
+    expect(days).toBeGreaterThanOrEqual(89);
+    expect(days).toBeLessThanOrEqual(90);
+  });
+
   it("next_week jumps to NEXT Monday when today is already Monday", () => {
     const p = snoozePresets(mon).find((x) => x.id === "next_week")!;
     expect(p.at.getDay()).toBe(1);

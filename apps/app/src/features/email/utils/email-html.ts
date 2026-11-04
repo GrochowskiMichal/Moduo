@@ -20,6 +20,10 @@ export type EmailSrcDocOptions = {
   blockRemote?: boolean;
   /** Inject the nonce-pinned height reporter (needs sandbox="allow-scripts"). */
   autoHeight?: boolean;
+  /** A caller-held CSP nonce (MR-10: stable per message, so loading images
+   * re-renders the same document identity instead of remounting the frame).
+   * Must be unguessable by the email's author; never derive it from headers. */
+  nonce?: string;
 };
 
 /** Attributes that can trigger a remote fetch when they hold an http(s) URL. */
@@ -233,7 +237,7 @@ export function buildEmailReaderDoc(
   if (autoHeight) {
     // Never add 'unsafe-inline' here: with sandbox="allow-scripts", this nonce and the
     // DOM strip are the only layers keeping email HTML from running.
-    const nonce = scriptNonce();
+    const nonce = options.nonce ?? scriptNonce();
     csp.push(`script-src 'nonce-${nonce}'`);
     heightScript = `<script nonce="${nonce}">${heightReporterJs()}</` + `script>`;
   }
