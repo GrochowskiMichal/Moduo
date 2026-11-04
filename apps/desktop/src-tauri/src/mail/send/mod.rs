@@ -250,6 +250,12 @@ impl Store {
         Ok(self.kv_get(&graph_key(account_id))?.as_deref() == Some("1"))
     }
 
+    /// The account's send size limit in bytes (Graph's when it sends via Graph).
+    pub fn send_size_limit(&self, account_id: &str) -> StoreResult<usize> {
+        let provider = self.provider_of(account_id)?;
+        Ok(size_limit(provider, self.sends_via_graph(account_id)?))
+    }
+
     /// Saves a draft (creating it when `id` is None). Every keystroke may call this.
     pub fn save_draft_at(
         &self,

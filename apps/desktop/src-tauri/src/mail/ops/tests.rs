@@ -505,3 +505,104 @@ fn backoff_caps_at_five_minutes() {
     assert_eq!(backoff_ms(2), 4_000);
     assert_eq!(backoff_ms(50), MAX_BACKOFF_MS);
 }
+
+fn gmail(tag: &str) -> (std::path::PathBuf, Store) {
+    let d = dir(tag);
+    let s = Store::open(&d).unwrap();
+    s.upsert_account(&AccountInput {
+        id: "g".into(),
+        address: "me@gmail.com".into(),
+        display_name: "Me".into(),
+        provider: "gmail".into(),
+        hue: 1,
+    })
+    .unwrap();
+    for (id, path, role) in [
+        ("inbox", "INBOX", MailboxRole::Inbox),
+        ("all", "[Gmail]/All Mail", MailboxRole::All),
+        ("work", "Work", MailboxRole::Custom),
+    ] {
+        let mid = format!("g-{id}");
+        s.upsert_mailbox(&MailboxInput {
+            id: mid.clone(),
+            account_id: "g".into(),
+            path: path.into(),
+            name: id.into(),
+            role,
+            delimiter: Some("/".into()),
+            live: true,
+        })
+        .unwrap();
+        s.set_mailbox_cursor(
+            &mid,
+            &MailboxCursor {
+                uidvalidity: Some(1),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+    s.ingest(&[
+        msg("g", "m1", "inbox", 10, "t1", 100, 0),
+        msg("g", "m1", "all", 100, "t1", 100, 0),
+    ])
+    .unwrap();
+    (d, s)
+}
+
+fn label_req(kind: OpKind) -> OpRequest {
+    let mut r = OpRequest::new(kind, vec!["t1".into()]);
+    r.to_mailbox_id = Some("g-work".into());
+    r
+}
+
+#[test]
+fn gmail_label_add_copies_from_all_mail_once() {
+    let (_d, s) = gmail("label-add");
+    s.enqueue_op_at(&label_req(OpKind::LabelAdd), T0).unwrap();
+    assert_eq!(ids(&s, ViewRef::Mailbox("g-work".into())), vec!["t1"]);
+    assert_eq!(ids(&s, ViewRef::Mailbox("g-inbox".into())), vec!["t1"], "a label keeps the inbox");
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert_eq!(srv.calls.len(), 1);
+    let step = &srv.calls[0].1;
+    assert_eq!(step.mailbox_path, "[Gmail]/All Mail");
+    assert_eq!(step.uids, vec![100]);
+    assert!(matches!(&step.action, StepAction::CopyTo { path, .. } if path == "Work"));
+}
+
+#[test]
+fn gmail_label_remove_moves_to_all_mail_and_undo_copies_back() {
+    let (_d, s) = gmail("label-rm");
+    s.ingest(&[msg("g", "m1", "work", 7, "t1", 100, 0)]).unwrap();
+    let h = s.enqueue_op_at(&label_req(OpKind::LabelRemove), T0).unwrap();
+    assert!(ids(&s, ViewRef::Mailbox("g-work".into())).is_empty());
+    assert_eq!(ids(&s, ViewRef::Mailbox("g-inbox".into())), vec!["t1"]);
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    let step = &srv.calls[0].1;
+    assert_eq!((step.mailbox_path.as_str(), step.uids.clone()), ("Work", vec![7]));
+    assert!(matches!(&step.action, StepAction::MoveTo { path, .. } if path == "[Gmail]/All Mail"));
+    let UndoOutcome::Compensated(c) = s.undo_action_at(&h.action_id, T0 + 20_000).unwrap() else {
+        panic!("expected a compensating op");
+    };
+    assert_eq!(s.op(&c.op_ids[0]).unwrap().unwrap().kind, OpKind::LabelAdd);
+    s.run_due_ops(&mut srv, T0 + 30_000).unwrap();
+    let back = &srv.calls.last().unwrap().1;
+    assert_eq!(back.mailbox_path, "[Gmail]/All Mail");
+    // Never expunge from All Mail (that deletes on Gmail): re-adding is a COPY.
+    assert!(matches!(&back.action, StepAction::CopyTo { path, .. } if path == "Work"), "{back:?}");
+}
+
+#[test]
+fn labels_need_gmail_and_a_label_folder() {
+    let (_d, s) = seeded("label-imap");
+    let mut r = OpRequest::new(OpKind::LabelAdd, vec!["t1".into()]);
+    r.to_mailbox_id = Some("a1-archive".into());
+    assert!(s.enqueue_op_at(&r, T0).is_err());
+    let (_d2, g) = gmail("label-none");
+    assert!(g.enqueue_op_at(&OpRequest::new(OpKind::LabelAdd, vec!["t1".into()]), T0).is_err());
+    let mut bad = label_req(OpKind::LabelAdd);
+    bad.to_mailbox_id = Some("g-inbox".into());
+    assert!(g.enqueue_op_at(&bad, T0).is_err(), "a system folder is not a label");
+}

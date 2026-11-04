@@ -223,8 +223,10 @@ impl<T: Stream> SendTransport for ImapSend<'_, T> {
     }
 
     fn graph_send(&mut self, _account_id: &str, _mime: &[u8]) -> Result<(), SendError> {
-        // Graph sendMail lands with the Microsoft send fallback; until then the
-        // message returns to Drafts with a reason instead of retrying for a day.
+        // IMAP has no Graph leg: the host wraps this transport in
+        // `send::graph::GraphFallback`, which sends Microsoft accounts through
+        // Graph `sendMail` (decision 14). Unwrapped, the message returns to
+        // Drafts with a reason instead of retrying for a day.
         Err(SendError::Permanent("graph_send_unavailable".into()))
     }
 

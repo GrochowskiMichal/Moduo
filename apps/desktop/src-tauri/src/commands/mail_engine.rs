@@ -133,7 +133,12 @@ pub fn to_op_request(i: OpIn) -> Result<OpRequest, String> {
             }
             req.snooze_until_ms = Some(until);
         }
-        OpKind::LabelAdd | OpKind::LabelRemove => return Err("labels_not_supported".into()),
+        OpKind::LabelAdd | OpKind::LabelRemove => {
+            // Gmail labels are folders: the label's mailbox id (MR gaps).
+            let label = args.mailbox_id.ok_or("label_requires_mailbox")?;
+            check_id(&label)?;
+            req.to_mailbox_id = Some(label);
+        }
         _ => {
             if let Some(m) = args.mailbox_id {
                 check_id(&m)?;
@@ -329,6 +334,9 @@ mod tests {
         );
         assert!(op(json!({"kind": "done", "threadIds": []})).is_err());
         assert!(op(json!({"kind": "bogus", "threadIds": ["t"]})).is_err());
+        let l = op(json!({"kind": "label_add", "threadIds": ["t"], "args": {"mailboxId": "g-work"}})).unwrap();
+        assert_eq!(l.to_mailbox_id.as_deref(), Some("g-work"));
+        assert!(op(json!({"kind": "label_remove", "threadIds": ["t"]})).is_err());
         assert!(op(json!({"kind": "done", "threadIds": ["x".repeat(600)]})).is_err());
     }
 

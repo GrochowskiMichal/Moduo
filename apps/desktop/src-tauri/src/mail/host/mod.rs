@@ -19,10 +19,11 @@ use serde::Serialize;
 use super::accounts::MailAccount as AccountEndpoints;
 use super::actor::{AccountActor, CheckoutError, Connector};
 use super::auth::{
-    google, microsoft, AuthError, HttpRefresher, KeychainStore, LoginMethod, RefreshError, RefreshedToken, TokenRefresher,
+    google, microsoft, AuthError, Credential, CredentialStore, HttpRefresher, KeychainStore, LoginMethod, RefreshError, RefreshedToken, TokenRefresher,
 };
 use super::contracts::{Provider, SyncState};
 use super::migrate;
+use super::send::graph::{self, GraphFallback, GraphLeg};
 use super::send::smtp::{send_raw, SmtpAuth};
 use super::session::{self, Endpoint};
 use super::store::{now_ms, Store};
@@ -403,6 +404,38 @@ impl Worker {
         result
     }
 
+    /// Decision 14: a Microsoft account sends through Graph `sendMail` when the
+    /// tenant has SMTP AUTH off. The `Mail.Send` token comes from the account's
+    /// refresh token, requested per send (the store only calls this after a
+    /// `5.7.139` or once the account is known to need Graph).
+    fn graph_leg(&self, actor: &Arc<Actor>) -> Option<GraphLeg<'static>> {
+        if self.endpoints.provider != Provider::Outlook {
+            return None;
+        }
+        let client_id = self.cfg.microsoft_client_id.clone()?;
+        let refresh_token = match actor.store().load(&self.account_id) {
+            Ok(Some(Credential::Oauth { refresh_token, .. })) => refresh_token?,
+            _ => return None,
+        };
+        let refresher = HttpRefresher {
+            token_endpoint: microsoft::TOKEN_ENDPOINT.into(),
+            client_id,
+            client_secret: None,
+            scope: Some(graph::send_scope()),
+        };
+        let client = reqwest::Client::new();
+        let handle = tokio::runtime::Handle::current();
+        Some(Box::new(move |mime: &[u8]| {
+            handle.block_on(async {
+                let token = refresher
+                    .refresh(&refresh_token)
+                    .await
+                    .map_err(graph::token_error)?;
+                graph::send_mime(&client, &token.access_token, mime).await
+            })
+        }))
+    }
+
     async fn outbox_tick(&self, actor: &Arc<Actor>, srv: &mut ImapServer) -> Result<(), String> {
         let now = now_ms();
         let report = self
@@ -433,15 +466,19 @@ impl Worker {
         let login = actor.login().await.map_err(|e| format!("{e:?}"))?;
         let smtp = self.endpoints.smtp.clone();
         let user = self.endpoints.email.clone();
-        let mut send = ImapSend {
-            srv: &mut *srv,
-            smtp: Box::new(move |from: &str, rcpts: &[String], mime: &[u8]| {
-                let auth = match &login {
-                    LoginMethod::Password { password, .. } => SmtpAuth::Password(password),
-                    LoginMethod::Xoauth2 { access_token, .. } => SmtpAuth::OAuth(access_token),
-                };
-                send_raw(&smtp.host, smtp.port, &user, auth, from, rcpts, mime)
-            }),
+        let graph_leg = self.graph_leg(actor);
+        let mut send = GraphFallback {
+            leg: graph_leg,
+            inner: ImapSend {
+                srv: &mut *srv,
+                smtp: Box::new(move |from: &str, rcpts: &[String], mime: &[u8]| {
+                    let auth = match &login {
+                        LoginMethod::Password { password, .. } => SmtpAuth::Password(password),
+                        LoginMethod::Xoauth2 { access_token, .. } => SmtpAuth::OAuth(access_token),
+                    };
+                    send_raw(&smtp.host, smtp.port, &user, auth, from, rcpts, mime)
+                }),
+            },
         };
         self.store
             .sync_drafts(&mut send, now)

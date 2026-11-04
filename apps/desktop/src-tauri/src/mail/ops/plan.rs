@@ -409,7 +409,29 @@ pub(super) fn plan(
                 vec![],
             ))
         }
-        LabelAdd | LabelRemove => Err(sql_err("labels are not ops-outbox actions yet")),
+        LabelAdd | LabelRemove => {
+            // Gmail only: a label is a folder, All Mail holds every message.
+            let provider: String = tx.query_row(
+                "SELECT provider FROM accounts WHERE id = ?1",
+                [account],
+                |r| r.get(0),
+            )?;
+            if !matches!(provider.as_str(), "gmail" | "google_workspace") {
+                return Err(sql_err("labels_gmail_only"));
+            }
+            let label = pick(&req.to_mailbox_id)?.ok_or_else(|| sql_err("label needs a folder"))?;
+            if label.role != MailboxRole::Custom.as_str() {
+                return Err(sql_err("not_a_label"));
+            }
+            let all = need_role(tx, account, MailboxRole::All)?;
+            if req.kind == LabelAdd {
+                // One COPY from All Mail adds the label (never one per folder).
+                plan_move(tx, snap, Some(&[&all]), &label, true)
+            } else {
+                // Moving out of the label into All Mail drops just that label.
+                plan_move(tx, snap, Some(&[&label]), &all, false)
+            }
+        }
     }
 }
 
@@ -431,7 +453,14 @@ pub(super) fn inverse_steps(tx: &Transaction, steps: &[Step]) -> StoreResult<Vec
             }
             StepAction::MoveTo { mailbox_id, .. } | StepAction::CopyTo { mailbox_id, .. } => {
                 let dest = mailbox(tx, mailbox_id)?;
-                let back = if matches!(s.action, StepAction::MoveTo { .. }) {
+                // Expunging from Gmail's All Mail deletes the message: going
+                // back out of it is a COPY (the label or folder is re-added).
+                let back = if dest.role == MailboxRole::All.as_str() {
+                    StepAction::CopyTo {
+                        mailbox_id: s.mailbox_id.clone(),
+                        path: s.path.clone(),
+                    }
+                } else if matches!(s.action, StepAction::MoveTo { .. }) {
                     StepAction::MoveTo {
                         mailbox_id: s.mailbox_id.clone(),
                         path: s.path.clone(),
