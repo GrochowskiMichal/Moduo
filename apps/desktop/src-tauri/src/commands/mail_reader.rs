@@ -292,13 +292,19 @@ impl ReaderPrefs {
     }
 
     pub fn load(store: &Store) -> Self {
-        store
-            .kv_get(READER_PREFS_KEY)
-            .ok()
-            .flatten()
-            .and_then(|j| serde_json::from_str::<ReaderPrefs>(&j).ok())
-            .unwrap_or_default()
-            .sanitized()
+        // The prefs are always written whole (never read-modify-write), so a
+        // corrupt value falls back to the privacy-safe defaults (logos off)
+        // without risking a partial overwrite; the failure is logged.
+        let Some(j) = store.kv_get(READER_PREFS_KEY).ok().flatten() else {
+            return Self::default();
+        };
+        match serde_json::from_str::<ReaderPrefs>(&j) {
+            Ok(p) => p.sanitized(),
+            Err(e) => {
+                eprintln!("mail reader prefs unreadable, using defaults: {e}");
+                Self::default()
+            }
+        }
     }
 }
 
