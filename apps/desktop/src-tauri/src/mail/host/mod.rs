@@ -1,0 +1,454 @@
+//! Hosting the engine in the desktop app (MR-16a).
+//!
+//! [`MailHost`] is managed Tauri state. When a user signs in it opens that
+//! user's SQLite store, runs the one-time legacy cutover ([`super::migrate`]:
+//! accounts and keychain entries carry over, the redb mail tables are dropped),
+//! and starts one worker per account. Each worker owns an [`AccountActor`]
+//! (refresh before every login, session pool, Reconnect parking) and runs the
+//! first round, the IDLE loop, the STATUS sweep, the ops outbox and the drafts
+//! and send outbox. Sign-out stops the workers.
+
+pub mod imap_adapters;
+
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::Duration;
+
+use serde::Serialize;
+
+use super::accounts::MailAccount as AccountEndpoints;
+use super::actor::{AccountActor, CheckoutError, Connector};
+use super::auth::{
+    google, microsoft, AuthError, HttpRefresher, KeychainStore, LoginMethod, RefreshError, RefreshedToken, TokenRefresher,
+};
+use super::contracts::{Provider, SyncState};
+use super::migrate;
+use super::send::smtp::{send_raw, SmtpAuth};
+use super::session::{self, Endpoint};
+use super::store::{now_ms, Store};
+use super::sync::classify::ClassifyConfig;
+use super::sync::events::{EventBus, MailEvent};
+use super::sync::imap::ImapServer;
+use super::sync::live::{AccountSync, Schedule};
+use crate::store_redb::RedbStore;
+use imap_adapters::{ImapOps, ImapSend};
+
+/// How often the outbox and STATUS sweep tick while the window is in front.
+pub const TICK_FOREGROUND: Duration = Duration::from_secs(5);
+pub const TICK_BACKGROUND: Duration = Duration::from_secs(30);
+
+/// One account row as `MailAccount` in runtime.types.mail-engine.ts.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountRow {
+    pub id: String,
+    pub address: String,
+    pub display_name: String,
+    pub provider: String,
+    pub hue: i64,
+    pub sync_state: String,
+    pub backfill_progress: Option<f64>,
+    pub last_error: Option<String>,
+}
+
+/// Every account in the store, oldest first.
+pub fn list_accounts(store: &Store) -> Result<Vec<AccountRow>, String> {
+    let c = store.r();
+    let mut s = c
+        .prepare_cached(
+            "SELECT id, address, display_name, provider, hue, sync_state, backfill_progress, last_error
+             FROM accounts ORDER BY created_at_ms, id",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = s
+        .query_map([], |r| {
+            Ok(AccountRow {
+                id: r.get(0)?,
+                address: r.get(1)?,
+                display_name: r.get(2)?,
+                provider: r.get(3)?,
+                hue: r.get(4)?,
+                sync_state: r.get(5)?,
+                backfill_progress: r.get(6)?,
+                last_error: r.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+/// What the host needs from the app's config.
+#[derive(Clone, Debug, Default)]
+pub struct HostConfig {
+    pub keychain_service: String,
+    pub google_client_id: Option<String>,
+    pub google_client_secret: Option<String>,
+    pub microsoft_client_id: Option<String>,
+}
+
+/// The provider's refresh grant, or none (password accounts never refresh).
+pub enum AnyRefresher {
+    Http(HttpRefresher),
+    None,
+}
+
+impl TokenRefresher for AnyRefresher {
+    async fn refresh(&self, refresh_token: &str) -> Result<RefreshedToken, RefreshError> {
+        match self {
+            AnyRefresher::Http(h) => h.refresh(refresh_token).await,
+            AnyRefresher::None => Err(RefreshError::Transient("no_oauth_client".into())),
+        }
+    }
+}
+
+pub fn refresher_for(provider: Provider, cfg: &HostConfig) -> AnyRefresher {
+    match provider {
+        Provider::Gmail | Provider::GoogleWorkspace => match &cfg.google_client_id {
+            Some(id) => AnyRefresher::Http(HttpRefresher {
+                token_endpoint: google::TOKEN_ENDPOINT.into(),
+                client_id: id.clone(),
+                client_secret: cfg.google_client_secret.clone(),
+                scope: None,
+            }),
+            None => AnyRefresher::None,
+        },
+        Provider::Outlook => match &cfg.microsoft_client_id {
+            Some(id) => AnyRefresher::Http(HttpRefresher {
+                token_endpoint: microsoft::TOKEN_ENDPOINT.into(),
+                client_id: id.clone(),
+                client_secret: None,
+                scope: Some(microsoft::refresh_scope()),
+            }),
+            None => AnyRefresher::None,
+        },
+        _ => AnyRefresher::None,
+    }
+}
+
+/// Opens TLS IMAP sessions to one endpoint.
+pub struct ImapConnector {
+    pub endpoint: Endpoint,
+}
+
+impl Connector for ImapConnector {
+    type Session = ImapServer;
+    async fn connect(&self, login: &LoginMethod) -> Result<ImapServer, String> {
+        let (session, caps) = session::open(&self.endpoint, login).await?;
+        Ok(ImapServer { session, caps })
+    }
+}
+
+type Reconnect = Box<dyn Fn(&str) + Send + Sync>;
+type Actor = AccountActor<KeychainStore<Reconnect>, AnyRefresher, ImapConnector>;
+
+fn now_s() -> i64 {
+    now_ms() / 1000
+}
+
+struct Running {
+    user_id: String,
+    store: Arc<Store>,
+    stop: Arc<AtomicBool>,
+    tasks: Vec<tauri::async_runtime::JoinHandle<()>>,
+}
+
+/// The managed engine host.
+pub struct MailHost {
+    pub events: EventBus,
+    foreground: Arc<AtomicBool>,
+    running: Mutex<Option<Running>>,
+}
+
+impl MailHost {
+    pub fn new(events: EventBus) -> Self {
+        Self {
+            events,
+            foreground: Arc::new(AtomicBool::new(true)),
+            running: Mutex::new(None),
+        }
+    }
+
+    /// The signed-in user's store, or `mail_not_started`.
+    pub fn store(&self) -> Result<Arc<Store>, String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|r| r.store.clone())
+            .ok_or_else(|| "mail_not_started".to_string())
+    }
+
+    pub fn set_foreground(&self, fg: bool) {
+        self.foreground.store(fg, Ordering::SeqCst);
+    }
+
+    /// Opens the user's store, runs the legacy cutover once, then starts a
+    /// worker per account. Idempotent for the same user.
+    pub fn start(
+        &self,
+        app_data: &std::path::Path,
+        user_id: &str,
+        redb: &RedbStore,
+        cfg: &HostConfig,
+    ) -> Result<(), String> {
+        {
+            let guard = self.running.lock().unwrap_or_else(|p| p.into_inner());
+            if guard.as_ref().is_some_and(|r| r.user_id == user_id) {
+                return Ok(());
+            }
+        }
+        self.stop();
+        let dir = Store::user_dir(app_data, user_id).map_err(|e| e.to_string())?;
+        let store = Arc::new(Store::open(&dir).map_err(|e| e.to_string())?);
+        // The cutover must finish before any worker reads accounts.
+        match migrate::run(redb, &store) {
+            Ok(r) if !r.already_done => eprintln!(
+                "[mail] legacy cutover: {} accounts, {} tables dropped, skipped {:?}",
+                r.accounts, r.tables_dropped, r.skipped
+            ),
+            Ok(_) => {}
+            Err(e) => eprintln!("[mail] legacy cutover failed (retried next start): {e}"),
+        }
+        store.recover_in_flight_ops().map_err(|e| e.to_string())?;
+        store.recover_in_flight_sends().map_err(|e| e.to_string())?;
+        let stop = Arc::new(AtomicBool::new(false));
+        let mut tasks = Vec::new();
+        for a in list_accounts(&store)? {
+            let Some(endpoints) = store
+                .kv_get(&migrate::endpoints_key(&a.id))
+                .ok()
+                .flatten()
+                .and_then(|j| serde_json::from_str::<AccountEndpoints>(&j).ok())
+            else {
+                eprintln!("[mail] {}: no endpoints; skipped", a.id);
+                continue;
+            };
+            let w = Worker {
+                account_id: a.id.clone(),
+                user_id: user_id.to_string(),
+                endpoints,
+                store: store.clone(),
+                events: self.events.clone(),
+                cfg: cfg.clone(),
+                stop: stop.clone(),
+                foreground: self.foreground.clone(),
+            };
+            tasks.push(tauri::async_runtime::spawn(w.run()));
+        }
+        *self.running.lock().unwrap_or_else(|p| p.into_inner()) = Some(Running {
+            user_id: user_id.to_string(),
+            store,
+            stop,
+            tasks,
+        });
+        Ok(())
+    }
+
+    /// Stops every worker (sign-out, quit).
+    pub fn stop(&self) {
+        if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            r.stop.store(true, Ordering::SeqCst);
+            for t in r.tasks {
+                t.abort();
+            }
+        }
+    }
+}
+
+struct Worker {
+    account_id: String,
+    user_id: String,
+    endpoints: AccountEndpoints,
+    store: Arc<Store>,
+    events: EventBus,
+    cfg: HostConfig,
+    stop: Arc<AtomicBool>,
+    foreground: Arc<AtomicBool>,
+}
+
+impl Worker {
+    fn actor(&self) -> Actor {
+        let s = self.store.clone();
+        let events = self.events.clone();
+        let on_reconnect: Reconnect = Box::new(move |id: &str| {
+            let _ = s.set_account_sync(id, SyncState::Reconnect.as_str(), None, Some("reconnect"));
+            events.emit(MailEvent::SyncStatus {
+                account_id: id.to_string(),
+                state: SyncState::Reconnect,
+                progress: None,
+            });
+        });
+        AccountActor::new(
+            &self.account_id,
+            &self.endpoints.email,
+            KeychainStore {
+                service: self.cfg.keychain_service.clone(),
+                user_id: self.user_id.clone(),
+                on_reconnect,
+            },
+            refresher_for(self.endpoints.provider, &self.cfg),
+            ImapConnector {
+                endpoint: Endpoint::from(&self.endpoints.imap),
+            },
+            now_s,
+        )
+    }
+
+    fn since_ms(&self) -> Option<i64> {
+        let days: Option<i64> = self
+            .store
+            .r()
+            .query_row(
+                "SELECT history_depth_days FROM accounts WHERE id = ?1",
+                [&self.account_id],
+                |r| r.get(0),
+            )
+            .ok()
+            .flatten();
+        days.map(|d| now_ms() - d * 86_400_000)
+    }
+
+    async fn run(self) {
+        let actor = Arc::new(self.actor());
+        let sync = Arc::new(AccountSync::new(
+            &self.account_id,
+            self.store.clone(),
+            self.events.clone(),
+            Arc::new(RwLock::new(ClassifyConfig::default())),
+            self.since_ms(),
+        ));
+        while !self.stop.load(Ordering::SeqCst) {
+            match self.session_life(&actor, &sync).await {
+                Err(CheckoutError::Auth(AuthError::Reconnect)) => {
+                    // Parked until the user reconnects (a new start re-reads it).
+                    return;
+                }
+                Err(e) => {
+                    let why = format!("{e:?}");
+                    let _ = self.store.set_account_sync(
+                        &self.account_id,
+                        SyncState::Offline.as_str(),
+                        None,
+                        Some(&why),
+                    );
+                    self.events.emit(MailEvent::SyncStatus {
+                        account_id: self.account_id.clone(),
+                        state: SyncState::Offline,
+                        progress: None,
+                    });
+                }
+                Ok(()) => {}
+            }
+            tokio::time::sleep(actor.next_backoff()).await;
+        }
+        actor.shutdown();
+    }
+
+    /// One connected stretch: first round, then IDLE beside a periodic tick
+    /// (STATUS sweep, ops, drafts, sends). Returns on the first error.
+    async fn session_life(
+        &self,
+        actor: &Arc<Actor>,
+        sync: &Arc<AccountSync>,
+    ) -> Result<(), CheckoutError> {
+        let mut lease = actor.checkout().await?;
+        let srv = lease.session.as_mut().expect("leased session");
+        let plans = sync
+            .first_round(srv)
+            .await
+            .map_err(|e| CheckoutError::Connect(e.to_string()))?;
+        let idle_srv = actor.open_dedicated().await?;
+        let (s2, p2, stop2) = (sync.clone(), plans.clone(), self.stop.clone());
+        let idle = tauri::async_runtime::spawn(async move {
+            let _ = s2.idle_loop(idle_srv, &p2, &stop2).await;
+        });
+        let gmail = srv.caps.gmail_ext;
+        let idle_id = AccountSync::idle_target(&plans, gmail).map(|p| p.id.clone());
+        let mut sched = Schedule::default();
+        let result = loop {
+            if self.stop.load(Ordering::SeqCst) {
+                break Ok(());
+            }
+            if let Err(e) = sync
+                .sweep(srv, &plans, &mut sched, idle_id.as_deref(), now_ms())
+                .await
+            {
+                break Err(CheckoutError::Connect(e.to_string()));
+            }
+            if let Err(e) = self.outbox_tick(actor, srv).await {
+                break Err(CheckoutError::Connect(e));
+            }
+            let tick = if self.foreground.load(Ordering::SeqCst) {
+                TICK_FOREGROUND
+            } else {
+                TICK_BACKGROUND
+            };
+            tokio::time::sleep(tick).await;
+        };
+        idle.abort();
+        if result.is_ok() {
+            actor.checkin(lease);
+        }
+        result
+    }
+
+    async fn outbox_tick(&self, actor: &Arc<Actor>, srv: &mut ImapServer) -> Result<(), String> {
+        let now = now_ms();
+        let report = self
+            .store
+            .run_due_ops(&mut ImapOps { srv: &mut *srv }, now)
+            .map_err(|e| e.to_string())?;
+        for id in &report.failed {
+            if let Ok(Some(op)) = self.store.op(id) {
+                self.events.emit(MailEvent::OpFailed {
+                    op: serde_json::json!({
+                        "opId": op.id,
+                        "kind": op.kind,
+                        "threadIds": [],
+                        "state": op.state,
+                        "attempts": op.attempts,
+                        "lastError": op.last_error,
+                        "createdAtMs": now,
+                    }),
+                });
+            }
+        }
+        if !report.done.is_empty() || !report.failed.is_empty() {
+            if let Ok(counts) = self.store.counts() {
+                self.events.emit(MailEvent::Counts { counts });
+            }
+        }
+        // SMTP needs fresh login material on every send (AC10).
+        let login = actor.login().await.map_err(|e| format!("{e:?}"))?;
+        let smtp = self.endpoints.smtp.clone();
+        let user = self.endpoints.email.clone();
+        let mut send = ImapSend {
+            srv: &mut *srv,
+            smtp: Box::new(move |from: &str, rcpts: &[String], mime: &[u8]| {
+                let auth = match &login {
+                    LoginMethod::Password { password, .. } => SmtpAuth::Password(password),
+                    LoginMethod::Xoauth2 { access_token, .. } => SmtpAuth::OAuth(access_token),
+                };
+                send_raw(&smtp.host, smtp.port, &user, auth, from, rcpts, mime)
+            }),
+        };
+        self.store
+            .sync_drafts(&mut send, now)
+            .map_err(|e| e.to_string())?;
+        let sends = self
+            .store
+            .run_due_sends(&mut send, now)
+            .map_err(|e| e.to_string())?;
+        for d in sends
+            .sent
+            .iter()
+            .filter_map(|(_, d)| d.clone())
+            .chain(sends.failed.iter().filter_map(|(d, _)| d.clone()))
+        {
+            self.events.emit(MailEvent::DraftChanged { draft_id: d });
+        }
+        Ok(())
+    }
+}

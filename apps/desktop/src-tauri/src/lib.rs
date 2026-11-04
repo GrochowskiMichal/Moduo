@@ -443,7 +443,11 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
-            app.manage(commands::mail_events::MailEvents::default());
+            let mail_events = commands::mail_events::MailEvents::default();
+            // The rebuilt engine (MR-16a): it starts per user on sign-in
+            // (`auth_set_cloud_session`), after the one-time legacy cutover.
+            app.manage(mail::host::MailHost::new(mail_events.0.clone()));
+            app.manage(mail_events);
             // A tray that fails to build (no menu bar on this desktop) never stops the app;
             // closing the window then quits as before (see `keep_in_menu_bar`).
             match build_tray(app.handle()) {
@@ -453,7 +457,6 @@ pub fn run() {
                     .store(true, Ordering::SeqCst),
                 Err(err) => eprintln!("[tray] not available: {err}"),
             }
-            commands::email::bootstrap_idle_workers(app.handle());
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(WINDOW_SHOW_FALLBACK).await;
@@ -468,6 +471,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::auth::auth_set_cloud_session,
             commands::mail_events::mail_subscribe,
+            commands::mail_engine::mail_list_accounts,
+            commands::mail_engine::mail_list_mailboxes,
+            commands::mail_engine::mail_list_threads,
+            commands::mail_engine::mail_counts,
+            commands::mail_engine::mail_get_thread,
+            commands::mail_engine::mail_apply_op,
+            commands::mail_engine::mail_undo_op,
+            commands::mail_engine::mail_list_failed_ops,
+            commands::mail_engine::mail_retry_op,
+            commands::mail_engine::mail_discard_op,
+            commands::mail_engine::mail_search,
+            commands::mail_engine::mail_set_foreground,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
             #[cfg(feature = "lite")]
@@ -494,31 +509,6 @@ pub fn run() {
             commands::local_store::local_store_get,
             commands::local_store::local_store_set,
             commands::local_store::local_store_remove,
-            commands::email::account_commands::email_accounts_list,
-            commands::email::account_commands::email_account_connect_and_save,
-            commands::email::account_commands::email_account_disconnect,
-            commands::email::account_commands::email_account_set_history_depth,
-            commands::email::oauth::email_gmail_oauth_start,
-            commands::email::email_list_envelopes,
-            commands::email::email_get_thread,
-            commands::email::email_get_message_body,
-            commands::email::email_prefetch_bodies,
-            commands::email::email_sync_now,
-            commands::email::email_set_activity_state,
-            commands::email::email_apply_flag,
-            commands::email::email_list_folders,
-            commands::email::email_apply_message_op,
-            commands::email::email_get_mailbox_status,
-            commands::email::snooze::email_snooze_thread,
-            commands::email::snooze::email_snooze_restore,
-            commands::email::send_commands::email_send_saved,
-            commands::email::send_commands::email_send_message,
-            commands::email::attachments::email_list_attachments,
-            commands::email::attachments::email_save_attachment,
-            commands::email::attachments::email_pick_attachments,
-            commands::email::attachments::email_get_inline_images,
-            commands::email::search::email_search_bodies,
-            commands::email::search::email_search_server,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_google_publish_booking_token,
             commands::calendar::calendar_outlook_oauth_start,
@@ -563,7 +553,11 @@ pub fn run() {
             // once an exit is actually happening — including for exits we can't intercept
             // (dock right-click → Quit, system logout), which go straight to `Exit`.
             match event {
-                tauri::RunEvent::Exit => commands::email::stop_all_idle_workers(),
+                tauri::RunEvent::Exit => {
+                    if let Some(host) = app.try_state::<mail::host::MailHost>() {
+                        host.stop();
+                    }
+                }
                 // The Dock icon brings a hidden window back (TV-D12).
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => show_main_window(app),

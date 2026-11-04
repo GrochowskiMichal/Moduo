@@ -15,7 +15,9 @@ UI_PORT="${MODUO_MAIL_IT_UI_PORT:-31080}"
 PASSWORD="moduo-test"
 DOVECOT=moduo-mail-it-dovecot
 SINK=moduo-mail-it-smtp
-DOVECOT_IMAGE="dovecot/dovecot:2.3.21"
+# Built locally from Alpine's Dovecot 2.3 package so it runs natively on arm64
+# (dovecot/dovecot:2.3.21 is amd64-only and crashes under Rosetta).
+DOVECOT_IMAGE="moduo-mail-it-dovecot:2.3-alpine3.20"
 SINK_IMAGE="axllent/mailpit:v1.21"
 
 cmd="${1:-}"
@@ -42,6 +44,10 @@ mail_uid = 1000
 mail_gid = 1000
 first_valid_uid = 1000
 protocols = imap
+listen = *
+log_path = /dev/stderr
+# Test data only: skip fsync, which is slow on a Docker Desktop bind mount.
+mail_fsync = never
 passdb {
   driver = passwd-file
   args = scheme=PLAIN username_format=%u /etc/dovecot/users
@@ -79,12 +85,20 @@ protocol imap {
   imap_capability = +CONDSTORE
 }
 CONF
+    if ! docker image inspect "$DOVECOT_IMAGE" >/dev/null 2>&1; then
+      printf 'FROM alpine:3.20\nRUN apk add --no-cache dovecot\nCMD ["dovecot", "-F"]\n' |
+        docker build -q -t "$DOVECOT_IMAGE" - >/dev/null
+    fi
     docker rm -f "$DOVECOT" "$SINK" >/dev/null 2>&1 || true
     docker run -d --name "$DOVECOT" -p "127.0.0.1:$IMAP_PORT:143" \
-      -v "$DATA/maildir:/srv/mail" \
-      -v "$DATA/conf/local.conf:/etc/dovecot/conf.d/zz-moduo.conf:ro" \
+      -v "$DATA/conf/local.conf:/etc/dovecot/dovecot.conf:ro" \
       -v "$DATA/conf/users:/etc/dovecot/users:ro" \
       "$DOVECOT_IMAGE" >/dev/null
+    # Copied in, not bind-mounted: Maildir locking on a Docker Desktop bind
+    # mount makes every APPEND take ~0.3 s.
+    docker exec "$DOVECOT" mkdir -p /srv/mail
+    docker cp -q "$DATA/maildir/." "$DOVECOT:/srv/mail/"
+    docker exec "$DOVECOT" chown -R 1000:1000 /srv/mail
     docker run -d --name "$SINK" -p "127.0.0.1:$SMTP_PORT:1025" -p "127.0.0.1:$UI_PORT:8025" \
       "$SINK_IMAGE" >/dev/null
     echo "IMAP 127.0.0.1:$IMAP_PORT  SMTP 127.0.0.1:$SMTP_PORT  sink UI http://127.0.0.1:$UI_PORT"

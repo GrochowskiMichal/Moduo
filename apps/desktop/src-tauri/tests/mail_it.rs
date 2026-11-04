@@ -33,22 +33,237 @@ fn server() -> TestServer {
     }
 }
 
-macro_rules! it_skeleton {
-    ($($name:ident => $block:literal),+ $(,)?) => {$(
-        #[test]
-        fn $name() {
-            if !enabled() { return; }
-            let _s = server();
-            todo!(concat!($block, ": implement ", stringify!($name)));
-        }
-    )+};
-}
+/// MR-5/MR-6 through the hosted adapters (MR-16a): the ops outbox, drafts and
+/// the send outbox over a real IMAP session and the SMTP sink.
+mod host_it {
+    use super::{enabled, server};
+    use moduo_desktop_lib::mail::contracts::{MailboxRole, OpKind};
+    use moduo_desktop_lib::mail::host::imap_adapters::{ImapOps, ImapSend, SmtpLeg};
+    use moduo_desktop_lib::mail::ops::OpRequest;
+    use moduo_desktop_lib::mail::send::{DraftDoc, SendError};
+    use moduo_desktop_lib::mail::session::Capabilities;
+    use moduo_desktop_lib::mail::store::{AccountInput, ListInput, Store, ViewRef};
+    use moduo_desktop_lib::mail::sync::classify::ClassifyConfig;
+    use moduo_desktop_lib::mail::sync::engine::{mailbox_id, MailboxPlan};
+    use moduo_desktop_lib::mail::sync::events::EventBus;
+    use moduo_desktop_lib::mail::sync::imap::ImapServer;
+    use moduo_desktop_lib::mail::sync::live::AccountSync;
+    use std::sync::{Arc, RwLock};
+    use tokio::net::TcpStream;
 
-it_skeleton! {
-    uidvalidity_reset_requeues_ops => "MR-3/MR-5",
-    draft_append_replace => "MR-6",
-    server_draft_appears => "MR-6",
-    smtp_send_and_sent_copy => "MR-6",
+    type Srv = ImapServer<TcpStream>;
+
+    fn now_ms() -> i64 {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as i64
+    }
+
+    async fn connect() -> Srv {
+        let s = server();
+        let tcp = TcpStream::connect((s.imap_host.as_str(), s.imap_port)).await.expect("dovecot up?");
+        let mut client = async_imap::Client::new(tcp);
+        client.read_response().await.unwrap();
+        let mut session = client.login(&s.user, &s.password).await.map_err(|(e, _)| e).unwrap();
+        let caps = session.capabilities().await.unwrap();
+        let atoms: Vec<String> = caps
+            .iter()
+            .map(|c| match c {
+                async_imap::types::Capability::Imap4rev1 => "IMAP4REV1".to_string(),
+                async_imap::types::Capability::Auth(a) => format!("AUTH={a}"),
+                async_imap::types::Capability::Atom(a) => a.to_string(),
+            })
+            .collect();
+        ImapServer { session, caps: Capabilities::from_atoms(atoms.iter().map(String::as_str)) }
+    }
+
+    fn rt() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_multi_thread().enable_all().build().unwrap()
+    }
+
+    fn tag(t: &str) -> String {
+        format!("{t}-{}-{}", std::process::id(), now_ms())
+    }
+
+    /// A fresh store whose folders came from a first round against Dovecot.
+    async fn account(t: &str, srv: &mut Srv) -> (Arc<Store>, AccountSync, Vec<MailboxPlan>) {
+        let d = std::env::temp_dir().join(format!("moduo-mail-it-host-{}", tag(t)));
+        let s = Arc::new(Store::open(&d).unwrap());
+        s.upsert_account(&AccountInput { id: "a1".into(), address: server().user, display_name: "".into(), provider: "imap".into(), hue: 0 }).unwrap();
+        let a = AccountSync::new("a1", s.clone(), EventBus::new(), Arc::new(RwLock::new(ClassifyConfig::default())), None);
+        let plans = a.first_round(srv).await.unwrap();
+        (s, a, plans)
+    }
+
+    fn msg(id: &str, n: usize) -> Vec<u8> {
+        format!(
+            "Message-ID: <{id}.{n}@it.test>\r\nFrom: Ann <ann@it.test>\r\nTo: me@it.test\r\nSubject: {id} {n}\r\nDate: Tue, 3 Nov 2026 10:00:{:02} +0000\r\n\r\nbody {n}\r\n",
+            n % 60
+        )
+        .into_bytes()
+    }
+
+    async fn search(srv: &mut Srv, path: &str, q: &str) -> Vec<u32> {
+        srv.session.select(path).await.unwrap();
+        let mut v: Vec<u32> = srv.session.uid_search(q).await.unwrap().into_iter().collect();
+        v.sort_unstable();
+        v
+    }
+
+    fn role_path(plans: &[MailboxPlan], role: MailboxRole) -> String {
+        plans.iter().find(|p| p.role == role).expect("role folder").path.clone()
+    }
+
+    fn no_smtp<'a>() -> SmtpLeg<'a> {
+        Box::new(|_, _, _| Err(SendError::Permanent("no smtp in this test".into())))
+    }
+
+    fn draft(t: &str, text: &str) -> DraftDoc {
+        DraftDoc {
+            from_addr: server().user,
+            to: vec!["bob@it.test".into()],
+            subject: t.into(),
+            text: text.into(),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn uidvalidity_reset_requeues_ops() {
+        if !enabled() { return; }
+        rt().block_on(async {
+            let mut srv = connect().await;
+            let t = tag("uidv");
+            let path = format!("it-{t}");
+            srv.session.create(&path).await.unwrap();
+            for i in 0..3 {
+                srv.session.append(&path, None, None, msg(&t, i)).await.unwrap();
+            }
+            let (s, a, _) = account("uidv", &mut srv).await;
+            let plans = a.first_round(&mut srv).await.unwrap();
+            let plan = plans.iter().find(|p| p.path == path).unwrap().clone();
+            let rows = s
+                .list_threads(&ListInput { view: ViewRef::Mailbox(mailbox_id("a1", &path)), tab: None, after: None, limit: 50 })
+                .unwrap()
+                .rows;
+            let target = rows.iter().find(|r| r.subject == format!("{t} 1")).expect("thread").thread_id.clone();
+            let h = s.enqueue_op_at(&OpRequest::new(OpKind::MarkRead, vec![target]), now_ms() - 60_000).unwrap();
+
+            // Another client rebuilds the folder: same messages, new UIDVALIDITY, other UIDs.
+            tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+            let mut other = connect().await;
+            other.session.delete(&path).await.unwrap();
+            other.session.create(&path).await.unwrap();
+            other.session.append(&path, None, None, msg(&t, 9)).await.unwrap();
+            for i in 0..3 {
+                other.session.append(&path, None, None, msg(&t, i)).await.unwrap();
+            }
+
+            // The executor refuses the stale UIDs instead of flagging whatever holds them.
+            let r = s.run_due_ops(&mut ImapOps { srv: &mut srv }, now_ms()).unwrap();
+            assert_eq!(r.retrying, h.op_ids, "stale validity waits for a sync round");
+            assert!(search(&mut srv, &path, "SEEN").await.is_empty(), "nothing flagged by a stale UID");
+
+            // The round resets the folder and re-targets the op by Message-ID.
+            a.round(&mut srv, &plans, &plan).await.unwrap();
+            let r = s.run_due_ops(&mut ImapOps { srv: &mut srv }, now_ms() + 3_600_000).unwrap();
+            assert_eq!(r.done, h.op_ids);
+            let seen = search(&mut srv, &path, "SEEN").await;
+            let want = search(&mut srv, &path, &format!("HEADER Message-ID \"<{t}.1@it.test>\"")).await;
+            assert_eq!(seen, want, "exactly the re-targeted message is read");
+            assert_eq!(seen.len(), 1);
+            let _ = srv.session.delete(&path).await;
+        });
+    }
+
+    #[test]
+    fn draft_append_replace() {
+        if !enabled() { return; }
+        rt().block_on(async {
+            let mut srv = connect().await;
+            let (s, _a, plans) = account("draft", &mut srv).await;
+            let drafts = role_path(&plans, MailboxRole::Drafts);
+            let t = tag("draft");
+            let early = now_ms() - 60_000;
+            let id = s.save_draft_at(None, "a1", None, draft(&t, "first"), early).unwrap();
+            let rep = s.sync_drafts(&mut ImapSend { srv: &mut srv, smtp: no_smtp() }, now_ms()).unwrap();
+            assert_eq!(rep.uploaded, vec![id.clone()], "{:?}", rep.errors);
+            let first = s.draft(&id).unwrap().unwrap().server_uid.expect("uid of the uploaded copy");
+
+            s.save_draft_at(Some(&id), "a1", None, draft(&t, "second"), early + 1).unwrap();
+            let rep = s.sync_drafts(&mut ImapSend { srv: &mut srv, smtp: no_smtp() }, now_ms()).unwrap();
+            assert_eq!(rep.uploaded, vec![id.clone()], "{:?}", rep.errors);
+            let second = s.draft(&id).unwrap().unwrap().server_uid.unwrap();
+            assert_ne!(first, second);
+            let on_server = search(&mut srv, &drafts, &format!("SUBJECT \"{t}\"")).await;
+            assert_eq!(on_server, vec![second as u32], "the old copy is replaced, not kept");
+
+            // Discarding deletes the server copy on the next pass.
+            s.discard_draft(&id).unwrap();
+            s.sync_drafts(&mut ImapSend { srv: &mut srv, smtp: no_smtp() }, now_ms()).unwrap();
+            assert!(search(&mut srv, &drafts, &format!("SUBJECT \"{t}\"")).await.is_empty());
+        });
+    }
+
+    #[test]
+    fn server_draft_appears() {
+        if !enabled() { return; }
+        rt().block_on(async {
+            let mut srv = connect().await;
+            let (s, a, plans) = account("srvdraft", &mut srv).await;
+            let drafts = plans.iter().find(|p| p.role == MailboxRole::Drafts).unwrap().clone();
+            let t = tag("srvdraft");
+            let mut other = connect().await;
+            other.session.append(&drafts.path, Some("(\\Draft)"), None, msg(&t, 0)).await.unwrap();
+            a.round(&mut srv, &plans, &drafts).await.unwrap();
+            let rows = s
+                .list_threads(&ListInput { view: ViewRef::Unified(MailboxRole::Drafts), tab: None, after: None, limit: 500 })
+                .unwrap()
+                .rows;
+            assert!(rows.iter().any(|r| r.subject == format!("{t} 0")), "a draft from another client shows in Drafts");
+        });
+    }
+
+    #[test]
+    fn smtp_send_and_sent_copy() {
+        if !enabled() { return; }
+        rt().block_on(async {
+            let mut srv = connect().await;
+            let (s, _a, plans) = account("send", &mut srv).await;
+            let sent = role_path(&plans, MailboxRole::Sent);
+            let t = tag("send");
+            let id = s.save_draft_at(None, "a1", None, draft(&t, "hello"), now_ms() - 60_000).unwrap();
+            s.queue_send_at(&id, 5, now_ms() - 60_000).unwrap();
+            let port = server().smtp_port;
+            // The sink speaks plain SMTP; production's leg is TLS-only `send_raw`.
+            let smtp: SmtpLeg = Box::new(move |from, rcpts, mime| {
+                use lettre::address::Envelope;
+                use lettre::Transport;
+                let env = Envelope::new(
+                    Some(from.parse().unwrap()),
+                    rcpts.iter().map(|r| r.parse().unwrap()).collect(),
+                )
+                .unwrap();
+                lettre::SmtpTransport::builder_dangerous("127.0.0.1")
+                    .port(port)
+                    .build()
+                    .send_raw(&env, mime)
+                    .map(|_| ())
+                    .map_err(|e| SendError::Transient(e.to_string()))
+            });
+            let rep = s.run_due_sends(&mut ImapSend { srv: &mut srv, smtp }, now_ms()).unwrap();
+            assert_eq!(rep.sent.len(), 1, "{:?}", rep.failed);
+            assert!(s.draft(&id).unwrap().is_none(), "a sent draft leaves Drafts");
+            let copy = search(&mut srv, &sent, &format!("SUBJECT \"{t}\"")).await;
+            assert_eq!(copy.len(), 1, "a generic IMAP server gets the Sent copy");
+            let ui = std::env::var("MODUO_MAIL_IT_UI_PORT").unwrap_or_else(|_| "31080".into());
+            let body = reqwest::get(format!("http://127.0.0.1:{ui}/api/v1/search?query=subject:{t}"))
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            assert!(body.contains(&t), "the sink received it: {body}");
+        });
+    }
 }
 
 /// MR-3: the sync engine against Dovecot. Each test works in its own fresh

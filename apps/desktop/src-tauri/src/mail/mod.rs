@@ -8,6 +8,7 @@ pub mod avatar;
 pub mod bodies;
 pub mod contracts;
 pub mod fixture;
+pub mod host;
 pub mod invite;
 pub mod mailto;
 pub mod migrate;
