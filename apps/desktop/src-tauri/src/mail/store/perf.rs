@@ -192,6 +192,7 @@ fn check(name: &str, took: Duration, budget: Duration) {
 #[test]
 #[ignore = "perf: needs the 100k fixture"]
 fn mail_perf_list_page() {
+    let _g = crate::mail::perf::perf_guard();
     let l = loaded();
     let views = [
         ViewRef::Unified(MailboxRole::Inbox),
@@ -278,6 +279,7 @@ fn mail_perf_list_page() {
 #[test]
 #[ignore = "perf: needs the 100k fixture"]
 fn mail_perf_counts() {
+    let _g = crate::mail::perf::perf_guard();
     let l = loaded();
     let c = l.store.counts().unwrap();
     assert!(c.badge > 0);
@@ -293,6 +295,7 @@ fn mail_perf_counts() {
 #[test]
 #[ignore = "perf: needs the 100k fixture"]
 fn mail_perf_thread_open() {
+    let _g = crate::mail::perf::perf_guard();
     let l = loaded();
     let n = l.thread_ids.len();
     let took = median(
@@ -308,6 +311,7 @@ fn mail_perf_thread_open() {
 #[test]
 #[ignore = "perf: needs the 100k fixture"]
 fn mail_perf_fts() {
+    let _g = crate::mail::perf::perf_guard();
     let l = loaded();
     let queries = [
         SearchQuery {
