@@ -4,7 +4,7 @@
 //! in its body implements it (specs/mail-rebuild.md, Tests table).
 //!
 //! ```sh
-//! scripts/mail/test-server.sh up && MODUO_MAIL_IT=1 cargo test --test mail_it -- --nocapture
+//! scripts/mail/test-server.sh up && MODUO_MAIL_IT=1 cargo test --test mail_it -- --test-threads=1 --nocapture
 //! ```
 
 fn enabled() -> bool {
@@ -432,10 +432,13 @@ mod sync_it {
             let _: Vec<_> = futures_util::TryStreamExt::try_collect(other.session.uid_store("2", "+FLAGS (\\Flagged \\Seen)").await.unwrap()).await.unwrap();
             let r = a.round(&mut srv, &only, &only[0]).await.unwrap();
             assert_eq!(r.flag_updates, 1);
-            let rows = s
-                .list_threads(&ListInput { view: ViewRef::Mailbox(mailbox_id("a1", &path)), tab: None, after: None, limit: 500 })
-                .unwrap()
-                .rows;
+            // Page through the whole folder: UID 2 is the oldest, past one page.
+            let (mut rows, mut after) = (vec![], None);
+            loop {
+                let page = s.list_threads(&ListInput { view: ViewRef::Mailbox(mailbox_id("a1", &path)), tab: None, after, limit: 500 }).unwrap();
+                rows.extend(page.rows);
+                match page.next { Some(n) => after = Some(n), None => break }
+            }
             let row = rows.iter().find(|r| r.subject == "flags 1").expect("uid 2");
             assert!(!row.unread, "the other client's \\Seen arrived");
         });

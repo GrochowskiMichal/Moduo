@@ -715,7 +715,16 @@ pub async fn backfill<S: MailServer>(
     let mut done = server.len() - below.len();
     status(done as f64 / total as f64);
     for chunk in below.chunks(BACKFILL_CHUNK) {
-        if ctx.cancel.load(Ordering::SeqCst) {
+        let mut sub = RoundReport::default();
+        let cancelled = ctx.cancel.load(Ordering::SeqCst)
+            || match fetch_and_ingest(srv, ctx, origin, chunk, &targets, u32::MAX, &mut sub).await {
+                Ok(()) => false,
+                // A cancel inside the chunk keeps the floor where it was, so
+                // the resume refetches the part of this chunk not yet seen.
+                Err(SyncError::Cancelled) => true,
+                Err(e) => return Err(e),
+            };
+        if cancelled {
             save_cursor(
                 ctx.store,
                 &plan.id,
@@ -731,11 +740,6 @@ pub async fn backfill<S: MailServer>(
                 progress: None,
             });
             return Err(SyncError::Cancelled);
-        }
-        let mut sub = RoundReport::default();
-        match fetch_and_ingest(srv, ctx, origin, chunk, &targets, u32::MAX, &mut sub).await {
-            Ok(()) | Err(SyncError::Cancelled) => {}
-            Err(e) => return Err(e),
         }
         if !sub.thread_ids.is_empty() {
             ctx.store.reapply_pending_ops()?;

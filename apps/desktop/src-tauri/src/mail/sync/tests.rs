@@ -193,6 +193,37 @@ async fn backfill_progress_and_cancel() {
     assert_eq!(f.fetched().len(), n - after_cancel);
 }
 
+/// A cancel that lands inside a backfill chunk (between its header fetches)
+/// must not advance the floor past the unfetched part of that chunk.
+#[tokio::test]
+async fn backfill_cancel_mid_chunk_loses_nothing() {
+    let f = server(true);
+    let n = FIRST_BATCH + 2 * super::engine::BACKFILL_CHUNK;
+    for i in 0..n as i64 {
+        f.append("INBOX", &format!("m{i}"), 1_000 + i);
+    }
+    let (s, a) = sync("backfill-mid");
+    let mut srv = f.session();
+    let plans = a.first_round(&mut srv).await.unwrap();
+    let per_chunk = super::engine::BACKFILL_CHUNK / super::engine::FETCH_CHUNK;
+    let mut c = CancelAfter {
+        inner: f.session(),
+        n: per_chunk + 1,
+        cancel: a.cancel_backfill.clone(),
+    };
+    let r = a.backfill_all(&mut c, &plans).await;
+    assert!(
+        matches!(r, Err(super::engine::SyncError::Cancelled)),
+        "{r:?}"
+    );
+    a.backfill_all(&mut srv, &plans).await.unwrap();
+    assert_eq!(
+        inbox_rows(&s).len(),
+        n,
+        "resume after a mid-chunk cancel lands every message"
+    );
+}
+
 async fn deep_history(condstore: bool, tag: &str) {
     let f = server(condstore);
     for i in 0..1200 {
