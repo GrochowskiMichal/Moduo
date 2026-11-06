@@ -1,0 +1,203 @@
+
+<div class="pg" id="pg">
+  <header class="pg-bar" data-chrome>
+    <div class="pg-name">Mail, rethought <span>v2 · on the rebuilt module</span></div>
+    <nav class="pg-tabs" role="tablist" aria-label="Artifact views">
+      <button class="pg-tab" role="tab" id="t-proto" aria-selected="true" aria-controls="v-proto" data-tab="proto">Prototype</button>
+      <button class="pg-tab" role="tab" id="t-why" aria-selected="false" aria-controls="v-why" data-tab="why">Why</button>
+      <button class="pg-tab" role="tab" id="t-score" aria-selected="false" aria-controls="v-score" data-tab="score">Score</button>
+    </nav>
+    <div class="pg-tools" id="proto-tools">
+      <label for="state-pick">State</label>
+      <select class="pg-select" id="state-pick"></select>
+      <button class="btn sm secondary" id="keys-btn" type="button">Keys <span class="kbd">?</span></button>
+    </div>
+  </header>
+  <main class="pg-main">
+    <section id="v-proto" role="tabpanel" aria-labelledby="t-proto">
+      <div class="proto-wrap"><div class="proto-stage"><div class="app" id="app" data-density="comfortable"></div></div></div>
+    </section>
+    <section id="v-why" role="tabpanel" aria-labelledby="t-why" hidden><div class="doc-page" id="why"></div></section>
+    <section id="v-score" role="tabpanel" aria-labelledby="t-score" hidden><div class="doc-page" id="score"></div></section>
+  </main>
+  <footer class="pg-foot" data-chrome>
+    <strong>Next:</strong> turn this into a spec for the build pipeline, or run another round of blind critics. The buttons are in the chat.
+  </footer>
+</div>
+
+<script>
+"use strict";
+const CRITIC = new URLSearchParams(location.search).has("critic");
+document.documentElement.lang = "en";
+if (CRITIC) {
+  document.body.classList.add("critic");
+  for (const el of document.querySelectorAll("[data-chrome]")) el.hidden = true;
+  document.querySelector(".proto-wrap").style.overflow = "visible";
+}
+
+/* ── icons (24 grid, stroke) ─────────────────────────────────────────────────────────── */
+const ICONS = {
+  logo: '<path d="M4 18V8l5 6 5-6v10"/><path d="M16 18V6l4 4"/>',
+  home: '<path d="M3 11 12 3l9 8"/><path d="M5 10v10h14V10"/>',
+  notes: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/>',
+  tasks: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 5-5"/>',
+  calendar: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+  contacts: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4a3.5 3.5 0 0 1 0 7M21.5 20a6.5 6.5 0 0 0-4.5-6.2"/>',
+  chat: '<path d="M20 12a8 8 0 0 1-11.7 7.1L4 20l1.1-3.7A8 8 0 1 1 20 12z"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5"/><path d="M12 17h.01"/>',
+  bellOff: '<path d="M6 16V11a6 6 0 0 1 9.5-4.9M18 11v5l1.5 2H8"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M4 4l16 16"/>',
+  filter: '<path d="M4 6h16M7 12h10M10 18h4"/>',
+  bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>',
+  inbox: '<path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v6H3v-6z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  wait: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 4 6 4 9s-4 4-4 9M16 3c0 5-4 6-4 9s4 4 4 9"/>',
+  check: '<path d="m5 12 5 5 9-10"/>',
+  task: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="m8.5 12 2.5 2.5 5-5"/>',
+  send: '<path d="m4 4 16 8-16 8 3-8z"/><path d="M7 12h13"/>',
+  draft: '<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 14h4"/>',
+  archive: '<rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v11h14V9M10 13h4"/>',
+  pin: '<path d="M12 17v4"/><path d="M8 3h8l-1 7 3 3H6l3-3z"/>',
+  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.3-4.3"/>',
+  pen: '<path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"/><path d="m17 3 4 4-9 9H8v-4z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.5-4L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14.5 4l1.5-2"/><path d="M20 20v-5h-5"/>',
+  chevD: '<path d="m6 9 6 6 6-6"/>', chevR: '<path d="m9 6 6 6-6 6"/>', chevL: '<path d="m15 6-6 6 6 6"/>', chevU: '<path d="m6 15 6-6 6 6"/>',
+  x: '<path d="M6 6l12 12M18 6 6 18"/>',
+  more: '<circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/>',
+  reply: '<path d="M9 14 4 9l5-5"/><path d="M4 9h9a7 7 0 0 1 7 7v4"/>',
+  replyAll: '<path d="M7 14 2 9l5-5"/><path d="M12 14 7 9l5-5"/><path d="M7 9h7a7 7 0 0 1 7 7v4"/>',
+  forward: '<path d="m15 14 5-5-5-5"/><path d="M20 9h-9a7 7 0 0 0-7 7v4"/>',
+  clip: '<path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.3 3.3 0 0 1 4.7 4.7L9.5 17a1.7 1.7 0 0 1-2.4-2.4L15 6.7"/>',
+  userPlus: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M19 8v6M16 11h6"/>',
+  user: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  alert: '<path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/>',
+  offline: '<path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 13a10 10 0 0 1 4.7-2.7M16 10.5a10 10 0 0 1 3 2.5"/><path d="M2 9a15 15 0 0 1 5-3M12 20h.01"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.5"/><path d="m21 16-5-5-9 9"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>',
+  bold: '<path d="M7 4h6a4 4 0 0 1 0 8H7zM7 12h7a4 4 0 0 1 0 8H7z"/>',
+  italic: '<path d="M10 4h8M6 20h8M14 4l-4 16"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/>',
+  undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  panelL: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/>',
+  panelR: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5"/><path d="M4 19h16"/>',
+  eye: '<path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  mailOpen: '<path d="M3 9.5 12 4l9 5.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m3 10 9 6 9-6"/>',
+  move: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v6M9.5 13.5 12 11l2.5 2.5"/>',
+  sparkOff: '<path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  arrowL: '<path d="M19 12H5M11 18l-6-6 6-6"/>',
+  dnd: '<circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/>',
+  key: '<circle cx="8" cy="14" r="4"/><path d="m11 11 9-9M17 5l3 3M14 8l2 2"/>',
+  cmd: '<path d="M9 9V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
+  sync: '<path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/>',
+  dash: '<path d="M5 12h14"/>',
+  star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/>',
+};
+const I = (n, s) => `<svg class="i${s ? " " + s : ""}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ""}</svg>`;
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const initials = (name) => name.split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+
+__DATA__
+
+/* ── time ──────────────────────────────────────────────────────────────────────────────── */
+const DAY = 864e5;
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const hm = (d) => `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function fmtTime(iso) {
+  const d = new Date(iso); const diff = NOW - d;
+  if (sameDay(d, NOW)) return hm(d);
+  if (diff > 0 && diff < 6 * DAY) return DOW[d.getDay()];
+  if (d.getFullYear() === NOW.getFullYear()) return `${d.getDate()} ${MON[d.getMonth()]}`;
+  return `${d.getDate()} ${MON[d.getMonth()]} ${d.getFullYear()}`;
+}
+function fmtFull(iso) { const d = new Date(iso); return `${DOW[d.getDay()]} ${d.getDate()} ${MON[d.getMonth()]}, ${hm(d)}`; }
+function fmtUntil(iso) {
+  const d = new Date(iso);
+  if (sameDay(d, NOW)) return `today ${hm(d)}`;
+  if (sameDay(d, new Date(NOW.getTime() + DAY))) return `tomorrow ${hm(d)}`;
+  const diff = d - NOW;
+  if (diff > 0 && diff < 6 * DAY) return `${DOW[d.getDay()]} ${hm(d)}`;
+  return `${d.getDate()} ${MON[d.getMonth()]}, ${hm(d)}`;
+}
+function fmtDay(iso) { const d = new Date(iso); if (sameDay(d, NOW)) return "today"; const diff = NOW - d; if (diff > 0 && diff < 6 * DAY) return DOW[d.getDay()]; return `${d.getDate()} ${MON[d.getMonth()]}`; }
+const at = (days, h, m = 0) => { const d = new Date(NOW); d.setDate(d.getDate() + days); d.setHours(h, m, 0, 0); return d.toISOString().slice(0, 19); };
+
+/* ── the working copy of the data ─────────────────────────────────────────────────────── */
+let DB = null;
+function resetData() {
+  const threads = THREADS.map((t) => ({ ...t, state: "open", place: "inbox", read: !t.unread, links: (t.links || []).map((l) => ({ ...l })), att: t.att || [], task: null }));
+  for (const t of threads) { const l = t.links.find((x) => x.kind === "task"); if (l) { t.task = { title: l.title, due: l.title.includes("pilot") ? at(2, 9) : null }; } }
+  for (const s of SNOOZED) threads.push({ ...s, to: ["you"], state: "snoozed", place: "inbox", read: true, links: [], att: s.att || [], task: null, snoozeUntil: s.until });
+  for (const f of FOLLOWUPS) threads.push({ ...f, from: "you", counterpart: f.to, to: [f.to], state: "waiting", place: "inbox", read: true, links: [], att: f.att || [], task: null, waitBy: f.by, waitDue: f.due, back: f.due, kind: "people" });
+  for (const x of SENT) threads.push({ ...x, from: "you", counterpart: x.to, to: [x.to], state: "open", place: "sent", read: true, links: [], att: x.att || [], task: null, kind: "people" });
+  for (const d of DRAFTS) threads.push({ ...d, from: "you", counterpart: d.to, to: [d.to], state: "open", place: "drafts", read: true, links: [], att: [], task: null, kind: "people", msgs: 1 });
+  for (const o of OUTBOX) threads.push({ ...o, from: "you", counterpart: o.to, to: [o.to], state: "open", place: "outbox", read: true, links: [], att: [], task: null, kind: "people" });
+  DB = { threads, contacts: Object.fromEntries(Object.entries(PEOPLE).map(([k, p]) => [k, { ...p }])), pending: 0, undo: null };
+}
+const T = (id) => DB.threads.find((t) => t.id === id);
+const P = (k) => DB.contacts[k] || PEOPLE[k];
+const who = (t) => t.counterpart ? P(t.counterpart) : P(t.from);
+const KINDS = { people: "Personal", investors: "Investors", updates: "Notifications", reading: "Newsletters" };
+const TABS = ["people", "investors", "updates", "reading"];
+const FOLDERS = [
+  { id: "inbox", label: "Inbox", icon: "inbox", key: "g i" }, { id: "sent", label: "Sent", icon: "send", key: "g t" },
+  { id: "drafts", label: "Drafts", icon: "draft", key: "g d" }, { id: "archive", label: "Archive", icon: "archive", key: "g a" },
+  { id: "trash", label: "Trash", icon: "trash" }, { id: "spam", label: "Spam", icon: "alert" }, { id: "outbox", label: "Outbox", icon: "send" },
+];
+const RAILVIEWS = [
+  { id: "snoozed", label: "Snoozed", icon: "clock", key: "g s" }, { id: "followups", label: "Follow-ups", icon: "wait", key: "g f" },
+  { id: "newsenders", label: "New senders", icon: "userPlus" }, { id: "subscriptions", label: "Subscriptions", icon: "mailOpen" },
+  { id: "attachments", label: "Attachments", icon: "clip" },
+];
+const PLACES = [...FOLDERS, ...RAILVIEWS, { id: "folder", label: "Folder", icon: "folder" }];
+const SPECIAL = ["subscriptions", "attachments"];
+function inPlace(t, place) {
+  if (t.screened && place !== "newsenders") return false;
+  if (place === "inbox") return t.place === "inbox" && t.state === "open";
+  if (place === "followups") return t.state === "waiting";
+  if (place === "snoozed") return t.state === "snoozed";
+  if (place === "archive") return t.state === "done";
+  if (place === "trash") return t.state === "deleted";
+  if (place === "newsenders") return !!t.screened && t.state === "open";
+  if (place === "folder") return t.place === "folder" && t.folder === V.folderName;
+  if (place === "outbox") return t.place === "outbox" && V.outbox > 0;
+  return t.place === place;
+}
+function scoped(list) { return V.scope ? list.filter((t) => t.acc === V.scope) : list; }
+function visibleThreads() {
+  let list = scoped(DB.threads.filter((t) => inPlace(t, V.place)));
+  if (V.place === "inbox" && !V.scopeAll) list = list.filter((t) => t.kind === V.tab);
+  const byTime = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || Date.parse(b.when) - Date.parse(a.when);
+  if (V.place === "followups") return list.sort((a, b) => (b.waitDue ? 1 : 0) - (a.waitDue ? 1 : 0) || Date.parse(a.waitBy) - Date.parse(b.waitBy));
+  if (V.place === "snoozed") return list.sort((a, b) => Date.parse(a.snoozeUntil) - Date.parse(b.snoozeUntil));
+  return list.sort(byTime);
+}
+/* groups: Pinned first; Newsletters one group per sender */
+function groups(list) {
+  if (V.place === "inbox" && V.tab === "reading") {
+    const by = {}; for (const t of list) (by[t.from] ||= []).push(t);
+    return Object.entries(by).map(([k, rows]) => ({ id: "s:" + k, label: P(k).name, rows: (V.nlOpen || []).includes(k) || rows.length === 1 ? rows : rows.slice(0, 1), more: rows.length > 1 && !(V.nlOpen || []).includes(k) ? rows.length - 1 : 0, sender: k, n: rows.length }));
+  }
+  const back = list.filter((t) => t.back === "away" && t.state === "open"); list = list.filter((t) => !back.includes(t));
+  const pinned = list.filter((t) => t.pinned); const rest = list.filter((t) => !t.pinned);
+  const out = [];
+  if (back.length) out.push({ id: "back", label: "Came back while you were away", rows: back });
+  if (pinned.length) out.push({ id: "pinned", label: "Pinned", rows: pinned });
+  if (rest.length) out.push({ id: "rest", label: pinned.length || back.length ? "Everything else" : null, rows: rest });
+  return out;
+}
+const flatRows = () => groups(visibleThreads()).flatMap((g) => g.rows);
+const unreadIn = (pred) => DB.threads.filter((t) => inPlace(t, "inbox") && !t.read && pred(t)).length;
+const dueFollowups = () => scoped(DB.threads.filter((t) => t.state === "waiting" && t.waitDue && !t.nudgeGone));
+
+/* ── view state ───────────────────────────────────────────────────────────────────────── */
+let V = {};
+const BASE = { tab: "people", nlOpen: [], hint: null, failed: 0, backfill: null, screener: true, outbox: 0, place: "inbox", scope: null, sel: "t1", checked: [], panel: "today", overlay: null, compose: null, toast: null, q: "", net: "ok", accounts: {}, loading: false, error: null, firstRun: false, dense: false, long: false, expanded: null, quoted: [], images: {}, html: {}, folders: null, leftOpen: true, ccbcc: false, waitRegardless: false, webMode: false, syncing: false };
+</script>
