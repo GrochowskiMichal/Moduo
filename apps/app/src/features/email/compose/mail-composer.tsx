@@ -26,7 +26,13 @@ import { FOLLOW_UP_CHOICES, type FollowUpChoice, followUpDueMs } from "./follow-
 import { instantIntro } from "./intro";
 import { blockShortcut } from "./markdown";
 import type { ComposeSession, ComposeState } from "./session";
-import { findSnippetTrigger, insertSnippet, type MailSnippet, matchSnippets } from "./snippets";
+import {
+  findSnippetTrigger,
+  insertSnippet,
+  type MailSnippet,
+  matchSnippets,
+  snippetRecipient,
+} from "./snippets";
 
 export type MailComposerProps = {
   session: ComposeSession;
@@ -74,16 +80,23 @@ function composerLookups(
     exclude: state.to.split(",").map((s) => s.trim()),
     limit: 5,
   });
-  const firstTo = state.to.split(",")[0]?.trim() ?? "";
-  return { alias, snippetHits, recipients, firstTo };
+  // `{first name}` reads the recipient's display name (spec §9), never only the address.
+  const recipient = snippetRecipient(state.to, [
+    ...(props.contacts ?? []),
+    ...(props.correspondents ?? []),
+  ]);
+  return { alias, snippetHits, recipients, recipient };
 }
 
 function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
   const { session, state } = props;
   const [text, setText] = useState(() => htmlToPlainText(swapSignature(state.bodyHtml, null)));
   const [toQuery, setToQuery] = useState("");
-  const [error, setError] = useState<string | null>(state.lastError);
-  const { alias, snippetHits, recipients, firstTo } = composerLookups(props, text, toQuery);
+  // A send that failed comes back with its reason (AC11).
+  const [error, setError] = useState<string | null>(
+    state.lastError ? `Not sent: ${state.lastError}` : null,
+  );
+  const { alias, snippetHits, recipients, recipient } = composerLookups(props, text, toQuery);
 
   const setBody = (next: string) => {
     setText(next);
@@ -98,7 +111,7 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
 
   const pickSnippet = (s: MailSnippet) => {
     const out = insertSnippet(text, text.length, s, {
-      recipient: firstTo ? { name: "", email: firstTo } : null,
+      recipient,
       me: { name: state.fromName ?? "", email: state.fromAddr },
     });
     if (out) setBody(out.text);
@@ -109,6 +122,8 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean);
+    // The suggestion replaces what was typed to find it.
+    if (toQuery && list.at(-1) === toQuery) list.pop();
     void session.update({ to: [...list, email].join(", ") });
     setToQuery("");
   };
@@ -197,7 +212,9 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
             value={state.fromAddr}
             onChange={(e) => {
               const next = props.aliases!.find((a) => a.address === e.target.value) ?? null;
+              // Another account's alias sends from that account (spec §9).
               void session.update({
+                accountId: next?.accountId || state.accountId,
                 fromAddr: e.target.value,
                 fromName: next?.name ?? state.fromName,
                 bodyHtml: swapSignature(plainToHtml(text), next),

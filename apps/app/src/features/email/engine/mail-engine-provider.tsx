@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { showAppBadgeSource } from "@/lib/notices/app-badge";
 import { getRuntime } from "@/lib/runtime";
+import type { MailComposeEngine } from "@/lib/runtime.types.mail-compose";
 import type { MailEngine } from "@/lib/runtime.types.mail-engine";
 
 import { useAuth } from "../../../providers/auth-provider";
@@ -31,30 +32,53 @@ async function notifyDesktop(title: string, body: string): Promise<void> {
   }
 }
 
-/** "fixture" mode: the in-memory reference mailbox, loaded on demand so the
- *  generator stays out of the main bundle (lab journeys, MR-16). */
-function useFixtureEngine(wanted: boolean): MailEngine | null {
-  const [engine, setEngine] = useState<MailEngine | null>(null);
+type FixturePorts = {
+  engine: MailEngine;
+  compose: MailComposeEngine & { uploadDrafts(): void };
+};
+
+/** How often the fixture "uploads" local drafts, standing in for the engine's 2 s debounce. */
+const FIXTURE_UPLOAD_MS = 2000;
+
+/** "fixture" mode: the in-memory reference mailbox and a compose port beside it,
+ *  loaded on demand so the generator stays out of the main bundle (lab journeys,
+ *  MR-16). The compose fake's draft uploads come back as the fixture engine's
+ *  `draft_changed`, as the real engine emits them (specs/mail-v3.md MV-3). */
+function useFixturePorts(wanted: boolean): FixturePorts | null {
+  const [ports, setPorts] = useState<FixturePorts | null>(null);
   useEffect(() => {
-    if (!wanted || engine) return;
+    if (!wanted || ports) return;
     let gone = false;
-    void Promise.all([import("../testing/fake-engine"), import("../testing/fixture")]).then(
-      ([fake, fx]) => {
-        if (gone) return;
-        setEngine(
-          fake.createFakeMailEngine({
-            fixture: fx.generateFixture({ messages: mailFixtureMessages() }),
-            now: () => Date.now(),
-            scenario: mailFixtureScenario().filter(fake.isMailFixtureScenario),
-          }),
-        );
-      },
-    );
+    void Promise.all([
+      import("../testing/fake-engine"),
+      import("../testing/fixture"),
+      import("../testing/fake-compose"),
+    ]).then(([fake, fx, fc]) => {
+      if (gone) return;
+      const scenario = mailFixtureScenario();
+      const engine = fake.createFakeMailEngine({
+        fixture: fx.generateFixture({ messages: mailFixtureMessages() }),
+        now: () => Date.now(),
+        scenario: scenario.filter(fake.isMailFixtureScenario),
+      });
+      const compose = fc.createFakeCompose({
+        now: () => Date.now(),
+        scenario: scenario.filter(fc.isFakeComposeScenario),
+        onDraftChanged: (draftId, serverUid) =>
+          engine.emitEvent({ kind: "draft_changed", draftId, serverUid }),
+      });
+      setPorts({ engine, compose });
+    });
     return () => {
       gone = true;
     };
-  }, [wanted, engine]);
-  return wanted ? engine : null;
+  }, [wanted, ports]);
+  useEffect(() => {
+    if (!wanted || !ports) return;
+    const timer = setInterval(() => ports.compose.uploadDrafts(), FIXTURE_UPLOAD_MS);
+    return () => clearInterval(timer);
+  }, [wanted, ports]);
+  return wanted ? ports : null;
 }
 
 export type MailEngineProviderProps = {
@@ -66,14 +90,14 @@ export type MailEngineProviderProps = {
 
 export function MailEngineProvider({ engine, store = mailStore, deps }: MailEngineProviderProps) {
   const mode = engine === undefined ? mailEngineMode() : null;
-  const fixture = useFixtureEngine(mode === "fixture");
+  const fixture = useFixturePorts(mode === "fixture");
   const resolved =
     engine !== undefined
       ? engine
       : mode === "on"
         ? (getRuntime()?.email?.engine ?? null)
         : mode === "fixture"
-          ? fixture
+          ? (fixture?.engine ?? null)
           : null;
   const depsRef = useRef(deps);
   useEffect(() => {
@@ -95,6 +119,13 @@ export function MailEngineProvider({ engine, store = mailStore, deps }: MailEngi
     });
     return () => controller.stop();
   }, [resolved, store]);
+  // The fixture's compose port, for the page to read beside the fixture engine.
+  const fixtureCompose = fixture?.compose ?? null;
+  useEffect(() => {
+    if (!fixtureCompose) return;
+    store.setState({ compose: fixtureCompose });
+    return () => store.setState({ compose: null });
+  }, [fixtureCompose, store]);
   // The engine classifies new mail by your rules, tabs, Priority people and
   // blocks: the settings mirror pushes them to it (only the real engine).
   const { userId } = useAuth();

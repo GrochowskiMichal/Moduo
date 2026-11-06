@@ -38,19 +38,13 @@ function useFixtureStore(
 
 function Shell(props: {
   patch?: (a: MailAccount[]) => Partial<ReturnType<MailStore["getState"]>>;
-  offline?: boolean;
   density?: "comfortable" | "compact";
 }) {
   const store = useFixtureStore(props.patch);
   if (!store) return null;
   return (
     <div className="h-screen">
-      <MailShell
-        store={store}
-        now={() => FIXTURE_NOW_MS}
-        offline={props.offline}
-        density={props.density}
-      />
+      <MailShell store={store} now={() => FIXTURE_NOW_MS} density={props.density} />
     </div>
   );
 }
@@ -71,7 +65,11 @@ const failed: MailOpRecord = {
 
 export const Inbox: Story = { render: () => <Shell /> };
 export const Compact: Story = { render: () => <Shell density="compact" /> };
-export const Offline: Story = { render: () => <Shell offline /> };
+export const Offline: Story = {
+  render: () => (
+    <Shell patch={(a) => ({ accounts: a.map((x) => ({ ...x, syncState: "offline" })) })} />
+  ),
+};
 export const Reconnect: Story = {
   render: () => (
     <Shell

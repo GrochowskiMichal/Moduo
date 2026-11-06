@@ -1,11 +1,17 @@
 // Every list state renders deliberately (AC40): no accounts, first sync,
-// offline, reconnect, empty folder and the inbox-zero moment (B12).
+// empty folder and the inbox-zero moment (B12). The offline and account lines
+// above the list live in `system-lines.tsx`.
 
-import { CircleCheck, CloudOff, Inbox, Loader2, Mail, RefreshCw } from "lucide-react";
+import { CircleCheck, CloudOff, Inbox, Loader2, Mail } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import type { MailAccount } from "@/lib/runtime.types.mail-engine";
+
+import type { MailboxProvider } from "../model/email-types";
+
+/** The provider a first-run card picks; the connect dialog opens on it. */
+export type MailConnectProvider = MailboxProvider;
 
 export type MailListState =
   | { kind: "no_accounts" }
@@ -36,7 +42,7 @@ export function MailListStateView({
   onConnect,
 }: {
   state: Exclude<MailListState, { kind: "rows" }>;
-  onConnect?: (provider: "gmail" | "icloud" | "outlook") => void;
+  onConnect?: (provider: MailConnectProvider) => void;
 }) {
   switch (state.kind) {
     case "no_accounts":
@@ -83,48 +89,6 @@ export function MailListStateView({
     case "empty_folder":
       return <EmptyState icon={Inbox} size="inline" title={`Nothing in ${state.name}`} />;
   }
-}
-
-/** The line above the list: offline, or an account that needs signing in again. */
-export function MailStatusLine({
-  offline,
-  accounts,
-  onReconnect,
-}: {
-  offline: boolean;
-  accounts: readonly MailAccount[];
-  onReconnect?: (accountId: string) => void;
-}) {
-  const broken = accounts.find((a) => a.syncState === "reconnect" || a.syncState === "error");
-  if (offline)
-    return (
-      <div
-        role="status"
-        className="mx-2 mb-2 flex items-center gap-2 px-1 text-xs text-muted-foreground"
-      >
-        <CloudOff className="size-3.5" aria-hidden />
-        Offline, changes will sync
-      </div>
-    );
-  if (!broken) return null;
-  return (
-    <div
-      role="status"
-      className="mx-2 mb-2 flex items-center gap-2 px-1 text-xs text-muted-foreground"
-    >
-      <RefreshCw className="size-3.5 text-destructive" aria-hidden />
-      <span className="min-w-0 flex-1 truncate">
-        {broken.syncState === "reconnect"
-          ? `${broken.address} needs you to sign in again`
-          : `${broken.address} couldn't sync${broken.lastError ? `: ${broken.lastError}` : ""}`}
-      </span>
-      {broken.syncState === "reconnect" ? (
-        <Button size="sm" variant="ghost" onClick={() => onReconnect?.(broken.id)}>
-          Reconnect
-        </Button>
-      ) : null}
-    </div>
-  );
 }
 
 /** The reader's "Available when you're back online" (AC40). */

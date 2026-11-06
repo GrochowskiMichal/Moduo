@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, rs } from "@rstest/core";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
@@ -10,6 +10,22 @@ import { createFakeCompose } from "../testing/fake-compose";
 import { createFakeMailEngine } from "../testing/fake-engine";
 import { FIXTURE_NOW_MS, generateFixture } from "../testing/fixture";
 import { MailPage } from "./mail-page";
+
+// The real dialog reads auth and workspace providers; this one shows what it was opened with.
+rs.mock("./email-connect-dialog", () => ({
+  EmailConnectDialog: (p: {
+    isReconnect?: { id: string; email: string };
+    initialProvider?: string;
+  }) => (
+    <div
+      role="dialog"
+      aria-label="Connect"
+      data-reconnect={p.isReconnect?.email ?? ""}
+      data-reconnect-id={p.isReconnect?.id ?? ""}
+      data-provider={p.initialProvider ?? ""}
+    />
+  ),
+}));
 
 afterEach(cleanup);
 
@@ -154,5 +170,161 @@ describe("/email on the engine (MR-16 cutover)", () => {
     await tick();
     expect(calls).toEqual([`convert ${rowIds()[0]}`, `note ${rowIds()[0]}`]);
     screen.getByRole("complementary", { name: "Today" });
+  });
+
+  describe("wiring the page (specs/mail-v3.md MV-3)", () => {
+    async function mountWired(
+      scenario: Parameters<typeof createFakeMailEngine>[0] extends infer O
+        ? O extends { scenario?: infer S }
+          ? S
+          : never
+        : never,
+      extra: Partial<Parameters<typeof MailPage>[0]> = {},
+      init: Partial<ReturnType<ReturnType<typeof createMailStore>["getState"]>> = {},
+    ) {
+      const engine = createFakeMailEngine({
+        fixture: generateFixture({ messages: 200 }),
+        now: () => FIXTURE_NOW_MS,
+        scenario,
+      });
+      const store = createMailStore({
+        engine,
+        accounts: await engine.listAccounts(),
+        counts: await engine.counts(),
+        ...init,
+      });
+      engine.subscribe((e) => {
+        if (e.kind === "counts") store.setState({ counts: e.counts });
+        if (e.kind === "sync_status")
+          store.setState((s) => ({
+            accounts: s.accounts.map((a) =>
+              a.id === e.accountId ? { ...a, syncState: e.state } : a,
+            ),
+          }));
+      });
+      const ui = render(
+        <TooltipProvider>
+          <HotkeyScope scope="email">
+            <MailPage store={store} now={() => FIXTURE_NOW_MS} {...extra} />
+          </HotkeyScope>
+        </TooltipProvider>,
+      );
+      await tick();
+      await tick();
+      return { ui, engine, store };
+    }
+
+    it("passes outbox count, custom tabs, offline and reconnect account", async () => {
+      const synced: string[] = [];
+      const compose = createFakeCompose({ now: () => FIXTURE_NOW_MS, scenario: ["outbox"] });
+      const { engine, store } = await mountWired(["outbox", "reconnect", "error"], {
+        compose,
+        customTabs: [{ id: "tab-inv", label: "Investors" }],
+        syncAccount: (id) => void synced.push(id),
+      });
+      const accounts = store.getState().accounts;
+      const [first, second, third] = accounts;
+
+      // AC1: the Outbox shows with its count and opens the queued messages.
+      const outbox = screen.getByRole("button", { name: /^Outbox\s*1$/ });
+      fireEvent.click(outbox);
+      await tick();
+      await tick();
+      const list = screen.getByRole("list", { name: "Outbox" });
+      expect(list.textContent).toContain("Pilot terms, signed");
+
+      // AC2: the custom tab sits in the strip (on Inbox).
+      fireEvent.click(screen.getByRole("button", { name: /^Inbox/ }));
+      await tick();
+      screen.getByRole("tab", { name: /Investors/ });
+
+      // AC5: Reconnect opens the dialog in reconnect mode for that account.
+      screen.getByText(`${second!.displayName} needs you to sign in again`);
+      fireEvent.click(screen.getByRole("button", { name: "Reconnect" }));
+      const dialog = screen.getByRole("dialog", { name: "Connect" });
+      expect(dialog.getAttribute("data-reconnect")).toBe(second!.address);
+      expect(dialog.getAttribute("data-reconnect-id")).toBe(second!.id);
+
+      // AC5: Retry now runs Sync now for the account that couldn't sync.
+      screen.getByText(`${third!.displayName} couldn't sync`);
+      fireEvent.click(screen.getByRole("button", { name: "Retry now" }));
+      expect(synced).toEqual([third!.id]);
+
+      // AC3: offline arrives without a reload: per account, then all of them.
+      act(() => engine.setAccountState(first!.id, { syncState: "offline" }));
+      screen.getByText(`${first!.displayName} is offline`);
+      expect(screen.queryByText("Offline, changes will sync")).toBeNull();
+      act(() => {
+        for (const a of accounts) engine.setAccountState(a.id, { syncState: "offline" });
+      });
+      screen.getByText("Offline, changes will sync");
+      screen.getByText("1 message waits in Outbox.");
+    });
+
+    it("shows the away line and Dismiss clears it (AC4)", async () => {
+      const { store } = await mountWired([], {}, { awayReturned: ["t-a", "t-b"] });
+      screen.getByText("2 emails came back while you were away");
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(store.getState().awayReturned).toEqual([]);
+      expect(screen.queryByText(/came back while you were away/)).toBeNull();
+    });
+
+    it("the first-run card opens the connect dialog on the chosen provider", async () => {
+      await mountWired(["noAccount"]);
+      fireEvent.click(screen.getByRole("button", { name: "iCloud" }));
+      expect(screen.getByRole("dialog", { name: "Connect" }).getAttribute("data-provider")).toBe(
+        "icloud",
+      );
+    });
+
+    it("hands the composer correspondents, and a snippet's first name from them", async () => {
+      const compose = createFakeCompose({
+        now: () => FIXTURE_NOW_MS,
+        correspondents: [{ name: "Ana Lima", email: "ana@acme.test", count: 3 }],
+      });
+      await mountWired([], {
+        compose,
+        snippets: [{ id: "s1", name: "thx", body: "Thanks {first name}!" }],
+      });
+      press("c");
+      await tick();
+      await tick();
+      fireEvent.change(screen.getByLabelText("To"), { target: { value: "an" } });
+      fireEvent.click(
+        within(screen.getByRole("listbox", { name: "Suggestions" })).getByRole("button", {
+          name: /Ana Lima/,
+        }),
+      );
+      await tick();
+      fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hi ;;th" } });
+      fireEvent.click(screen.getByRole("button", { name: "thx" }));
+      await tick();
+      expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe(
+        "Hi Thanks Ana!",
+      );
+    });
+
+    it("failed send shows Not sent and Fix and send", async () => {
+      const compose = createFakeCompose({ now: () => FIXTURE_NOW_MS, scenario: ["sendFailed"] });
+      await mountWired([], { compose });
+      fireEvent.click(screen.getByRole("button", { name: /^Drafts/ }));
+      await tick();
+      await tick();
+      const failed = screen.getByRole("list", { name: "Not sent" });
+      expect(failed.textContent).toContain("Deck for Thursday");
+      expect(failed.textContent).toContain(
+        "Not sent: The server refused the address dana@northzone.tst",
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Fix and send" }));
+      await tick();
+      // AC11: the composer reopens that draft, its reason shown.
+      const composer = screen.getByRole("region", { name: "New message" });
+      expect((screen.getByLabelText("Subject") as HTMLInputElement).value).toBe(
+        "Deck for Thursday",
+      );
+      expect(composer.textContent).toContain(
+        "Not sent: The server refused the address dana@northzone.tst",
+      );
+    });
   });
 });

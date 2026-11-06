@@ -41,13 +41,15 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** When set, repair this account's credential — provider + email are locked. */
   isReconnect?: SavedAccount;
+  /** The provider the first-run card picked; the dialog opens on it. */
+  initialProvider?: ConnectProvider;
   onConnected?: (account: SavedAccount) => void;
 };
 
-/** The form's starting values: the reconnect target's, or a blank Gmail form. */
-function initialForm(r: SavedAccount | undefined) {
+/** The form's starting values: the reconnect target's, or a blank form on the picked provider. */
+function initialForm(r: SavedAccount | undefined, picked?: ConnectProvider) {
   return {
-    provider: (r?.provider as ConnectProvider | undefined) ?? "gmail",
+    provider: (r?.provider as ConnectProvider | undefined) ?? picked ?? "gmail",
     email: r?.email ?? "",
     imapHost: r?.imapHost ?? "",
     smtpHost: r?.smtpHost ?? "",
@@ -91,11 +93,17 @@ function ProviderTabs({
   );
 }
 
-export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnected }: Props) {
+export function EmailConnectDialog({
+  open,
+  onOpenChange,
+  isReconnect,
+  initialProvider,
+  onConnected,
+}: Props) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
-  const [init] = useState(() => initialForm(isReconnect));
+  const [init] = useState(() => initialForm(isReconnect, initialProvider));
   const [provider, setProvider] = useState<ConnectProvider>(init.provider);
   const [email, setEmail] = useState(init.email);
   const [password, setPassword] = useState("");
@@ -110,7 +118,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   // Re-seed from the reconnect target whenever it changes / the dialog re-opens.
   useEffect(() => {
     if (!open) return;
-    const seed = initialForm(isReconnect);
+    const seed = initialForm(isReconnect, initialProvider);
     setProvider(seed.provider);
     setEmail(seed.email);
     setPassword("");
@@ -123,8 +131,7 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
     setHistoryDepth(asHistoryDepth(isReconnect?.historyDepth));
     setBusy(null);
     setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isReconnect]);
+  }, [open, isReconnect, initialProvider]);
 
   const providerLocked = Boolean(isReconnect);
 

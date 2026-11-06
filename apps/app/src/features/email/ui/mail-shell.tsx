@@ -44,15 +44,41 @@ import { FollowupNudges } from "./followup-nudge";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
-import { mailListState, MailListStateView, MailStatusLine } from "./mail-states";
-import { cycleTab, MailTabs, mailTabs } from "./mail-tabs";
+import { type MailConnectProvider, mailListState, MailListStateView } from "./mail-states";
+import { cycleTab, liveTab, MailTabs, mailTabs } from "./mail-tabs";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
+import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
 
 /** Ops that take a thread out of the current list (auto-advance after them). */
 const REMOVES = new Set<MailOpInput["kind"]>(["done", "delete", "snooze", "spam", "move"]);
 
 const selEngine = (s: { engine: unknown }) => s.engine;
+const selOutbox = (s: ReturnType<MailStore["getState"]>) => s.counts?.outbox ?? 0;
+
+/** The list pane's body: a place the page renders (the Outbox), the rows, or the list state. */
+function MailListBody({
+  place,
+  view,
+  state,
+  onConnect,
+  children,
+}: {
+  place?: (view: MailView) => ReactNode | null;
+  view: MailView;
+  state: ReturnType<typeof mailListState>;
+  onConnect: (provider?: MailConnectProvider) => void;
+  children: ReactNode;
+}) {
+  const own = place?.(view);
+  if (own != null) return own;
+  if (state.kind === "rows") return children;
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+      <MailListStateView state={state} onConnect={onConnect} />
+    </div>
+  );
+}
 
 /** What the page drives from outside the shell: pickers that finish an action
  * (snooze, move) go through `act` so they auto-advance like Done (AC14). */
@@ -67,7 +93,6 @@ export type MailShellApi = {
 export type MailShellProps = {
   store?: MailStore;
   now?: () => number;
-  offline?: boolean;
   density?: MailDensity;
   previewLines?: 1 | 2;
   /** Shortcut hints after a click (X21, on by default). */
@@ -77,8 +102,16 @@ export type MailShellProps = {
   renderReader?: (threadId: string | null) => ReactNode;
   /** Actions beside "N selected" (multi-select), e.g. Labels. */
   renderSelectionActions?: (threadIds: string[]) => ReactNode;
-  onConnect?: () => void;
+  /** Connect an account; the first-run card names the provider it picked. */
+  onConnect?: (provider?: MailConnectProvider) => void;
+  /** Reconnect: the connect dialog in reconnect mode for that account (AC5). */
   onReconnect?: (accountId: string) => void;
+  /** Retry now: Sync now for that account (AC5). */
+  onRetryAccount?: (accountId: string) => void;
+  /** A place the page renders itself instead of the thread list (the Outbox); null = the list. */
+  renderPlace?: (view: MailView) => ReactNode | null;
+  /** Above the list for a place (failed sends at the top of Drafts). */
+  renderListTop?: (view: MailView) => ReactNode;
   /** Keys handed to sibling surfaces (snooze picker, move, compose, spine). */
   onIntent?: (intent: MailKeyId, threadIds: string[]) => void;
   initialView?: MailView;
@@ -138,7 +171,6 @@ function useAccountMailboxes(
 export function MailShell({
   store = mailStore,
   now = Date.now,
-  offline = false,
   density = "comfortable",
   previewLines = 2,
   showHints = true,
@@ -148,6 +180,9 @@ export function MailShell({
   renderSelectionActions,
   onConnect,
   onReconnect,
+  onRetryAccount,
+  renderPlace,
+  renderListTop,
   onIntent,
   initialView = { kind: "unified", role: "inbox" },
   initialThreadId = null,
@@ -162,6 +197,8 @@ export function MailShell({
   const accounts = useMailStore((s) => s.accounts, store);
   const failedOps = useMailStore((s) => s.failedOps, store);
   const followupsDue = useMailStore((s) => s.followupsDue, store);
+  const awayReturned = useMailStore((s) => s.awayReturned, store);
+  const outboxCount = useMailStore(selOutbox, store);
   const version = useMailStore((s) => s.threadsVersion, store);
 
   const commands = useMemo(() => createMailCommands(store, now), [store, now]);
@@ -170,7 +207,9 @@ export function MailShell({
   const [view, setView] = useState<MailView>(initialView);
   const savedSearches = useSavedSearches();
   const tabs = useMemo(() => mailTabs(customTabs), [customTabs]);
-  const [tab, setTab] = useState<MailTab>({ kind: "personal" });
+  const [picked, setTab] = useState<MailTab>({ kind: "personal" });
+  // A custom tab deleted while selected falls back to Personal (spec edge cases).
+  const tab = liveTab(tabs, picked);
   const tabbed = view.kind === "unified" && view.role === "inbox";
   const win = useThreadWindow(engine, view, tabbed ? tab : null, version);
   const ids = useMemo(() => win.rows.map((r) => r.threadId), [win.rows]);
@@ -333,7 +372,7 @@ export function MailShell({
           accounts={accounts}
           mailboxes={mailboxes}
           hues={hues}
-          outboxCount={0}
+          outboxCount={outboxCount}
           screenerOn={screenerOn}
           onSelect={(v) => {
             setView(v);
@@ -372,12 +411,20 @@ export function MailShell({
           />
         ) : null}
         <div className="pt-2">
-          <MailStatusLine offline={offline} accounts={accounts} onReconnect={onReconnect} />
+          <MailSystemLines
+            accounts={accounts}
+            outboxCount={outboxCount}
+            awayCount={awayReturned.length}
+            onReconnect={onReconnect}
+            onRetry={onRetryAccount}
+            onDismissAway={() => commands.clearAwayAnnouncement()}
+          />
           <FailedActionsBar
             failed={failedOps}
             onRetry={(opIds) => void Promise.all(opIds.map((id) => commands.retry(id)))}
             onDiscard={(opIds) => void Promise.all(opIds.map((id) => commands.discard(id)))}
           />
+          {renderListTop?.(view)}
           {view.kind === "new_senders" ? (
             <NewSendersPanel
               rows={win.rows}
@@ -409,7 +456,12 @@ export function MailShell({
             {renderSelectionActions?.([...sel.picked])}
           </div>
         ) : null}
-        {state.kind === "rows" ? (
+        <MailListBody
+          place={renderPlace}
+          view={view}
+          state={state}
+          onConnect={(p) => onConnect?.(p)}
+        >
           <MailThreadList
             rows={win.rows}
             cursor={sel.cursor}
@@ -423,11 +475,7 @@ export function MailShell({
             actions={rowActions}
             onNearEnd={win.loadMore}
           />
-        ) : (
-          <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-            <MailListStateView state={state} onConnect={() => onConnect?.()} />
-          </div>
-        )}
+        </MailListBody>
         {hint ? (
           <div
             role="status"

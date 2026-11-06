@@ -24,7 +24,12 @@ export type FakeComposeEngine = MailComposeEngine & {
 };
 
 /** Compose lab states: a failed send back in Drafts, a queued send. */
-export type FakeComposeScenario = "sendFailed" | "outbox";
+export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox"] as const;
+export type FakeComposeScenario = (typeof FAKE_COMPOSE_SCENARIOS)[number];
+
+export function isFakeComposeScenario(v: string): v is FakeComposeScenario {
+  return (FAKE_COMPOSE_SCENARIOS as readonly string[]).includes(v);
+}
 
 export function createFakeCompose(
   opts: {

@@ -7,7 +7,7 @@ import { type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useSta
 import { toast } from "sonner";
 
 import { getRuntime } from "@/lib/runtime";
-import type { MailComposeEngine } from "@/lib/runtime.types.mail-compose";
+import type { MailComposeEngine, MailDraftRow } from "@/lib/runtime.types.mail-compose";
 import type {
   MailAccount,
   MailEngine,
@@ -43,12 +43,14 @@ import { useMailStore } from "../store/use-mail-store";
 import { suggestContacts } from "../suggest-contact";
 import { SubscriptionsView } from "../views/subscriptions";
 import { useSubscriptionUnsubscribe } from "../views/use-subscription-unsubscribe";
-import { EmailConnectDialog } from "./email-connect-dialog";
+import { ConnectSlot, type MailConnectRequest } from "./connect-slot";
 import { EmailSnoozePicker } from "./email-snooze-picker";
 import { useMailLabels } from "./mail-labels";
 import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
+import { FailedSends, OutboxPlace } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
+import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
 
 const COMPOSE_INTENTS: Partial<Record<MailKeyId, ComposeKind>> = {
   "email.compose": "new",
@@ -120,6 +122,10 @@ export type MailPageProps = {
   renderLinkPicker?: (args: MailLinkPickerArgs) => ReactNode;
   aliases?: MailAlias[];
   snippets?: MailSnippet[];
+  /** Custom inbox tabs from Settings, in position order, at most three (AC2). */
+  customTabs?: readonly { id: string; label: string }[];
+  /** Sync now for one account (Retry now, AC5); defaults to the runtime's. */
+  syncAccount?: (accountId: string) => Promise<unknown> | void;
   /** Contacts for autocomplete and "Add as contact" (lower-case addresses). */
   contacts?: { name: string; email: string }[];
   onAddContact?: (email: string, name: string) => void;
@@ -128,6 +134,10 @@ export type MailPageProps = {
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
   now?: () => number;
 };
+
+/** Changes whenever the Outbox or Drafts places may need a re-read. */
+const selPlaceKey = (s: ReturnType<MailStore["getState"]>) =>
+  `${s.threadsVersion}:${s.counts?.outbox ?? 0}`;
 
 const errText = (e: unknown, fallback: string) =>
   e instanceof Error && e.message ? e.message : fallback;
@@ -238,7 +248,9 @@ function useComposeSession(
   commands: ReturnType<typeof createMailCommands>,
   engine: ReturnType<typeof mailStore.getState>["engine"],
 ) {
-  const port = compose === undefined ? (getRuntime()?.email?.compose ?? null) : compose;
+  // The prop wins, then the provider's (the fixture's), then the runtime's (desktop).
+  const provided = useMailStore((s) => s.compose, store);
+  const port = compose === undefined ? (provided ?? getRuntime()?.email?.compose ?? null) : compose;
   const session = useMemo(
     () =>
       port
@@ -279,6 +291,8 @@ export function MailPage({
   renderLinkPicker,
   aliases,
   snippets,
+  customTabs,
+  syncAccount,
   contacts = [],
   onAddContact,
   loadInvite,
@@ -291,7 +305,7 @@ export function MailPage({
   const version = useMailStore((s) => s.threadsVersion, store);
   const commands = useMemo(() => createMailCommands(store), [store]);
   const shell = useRef<MailShellApi | null>(null);
-  const [connectOpen, setConnectOpen] = useState(false);
+  const [connect, setConnect] = useState<MailConnectRequest | null>(null);
   const [snoozeIds, setSnoozeIds] = useState<string[]>([]);
   const [move, setMove] = useState<{ ids: string[]; boxes: MailMailbox[] } | null>(null);
   const [linkFor, setLinkFor] = useState<MailThreadRow | null>(null);
@@ -304,6 +318,21 @@ export function MailPage({
   }, [initialThreadId, onConsumeThreadDeepLink]);
 
   const { port, session } = useComposeSession(compose, store, commands, engine);
+  const extras = useComposeExtras({ port, session, engine, accounts });
+  const placeKey = useMailStore(selPlaceKey, store);
+
+  /** Reopens a saved draft in the composer (Fix and send, Outbox Edit; AC11). */
+  const openDraft = (draft: MailDraftRow) => void session?.open(draftOpenSpec(draft));
+  const editOutbox = async (outboxId: string) => {
+    if (!port) return;
+    const { draftId } = await port.undoSend(outboxId);
+    const draft = draftId ? await port.getDraft(draftId) : null;
+    if (draft) openDraft(draft);
+  };
+  const retryAccount = (accountId: string) =>
+    void Promise.resolve(
+      (syncAccount ?? ((id: string) => getRuntime()?.email?.syncNow({ accountId: id })))(accountId),
+    ).catch((e) => toast.error(errText(e, "Couldn't sync that account.")));
 
   /** A thread's row: the loaded window first, else the engine. */
   const rowOf = async (threadId: string): Promise<MailThreadRow | null> =>
@@ -472,8 +501,25 @@ export function MailPage({
           screenerOn={behavior.screener}
           initialThreadId={initialThreadId}
           apiRef={shell}
-          onConnect={() => setConnectOpen(true)}
-          onReconnect={() => setConnectOpen(true)}
+          customTabs={customTabs}
+          onConnect={(provider) => setConnect({ reconnect: null, provider })}
+          onReconnect={(id) => setConnect({ reconnect: accounts.find((a) => a.id === id) ?? null })}
+          onRetryAccount={retryAccount}
+          renderPlace={(view) =>
+            view.kind === "outbox" && port ? (
+              <OutboxPlace
+                port={port}
+                refreshKey={placeKey}
+                nowMs={now()}
+                onEdit={(id) => void editOutbox(id)}
+              />
+            ) : null
+          }
+          renderListTop={(view) =>
+            view.kind === "unified" && view.role === "drafts" && port ? (
+              <FailedSends port={port} refreshKey={placeKey} onFix={openDraft} />
+            ) : null
+          }
           onIntent={onIntent}
           onOpenSubscriptions={engine ? () => void openSubscriptions() : undefined}
           subscriptionsActive={subs !== null}
@@ -532,6 +578,10 @@ export function MailPage({
             aliases={aliases}
             snippets={snippets}
             contacts={contacts}
+            correspondents={extras.correspondents}
+            sizeLimit={extras.sizeLimit}
+            introducer={extras.introducer}
+            now={now}
             stageFile={
               port
                 ? async (f) => port.stageAttachment(new Uint8Array(await f.arrayBuffer()))
@@ -576,7 +626,7 @@ export function MailPage({
             },
           })
         : null}
-      {connectOpen ? <EmailConnectDialog open onOpenChange={setConnectOpen} /> : null}
+      <ConnectSlot request={connect} onClose={() => setConnect(null)} />
     </div>
   );
 }

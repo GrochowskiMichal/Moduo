@@ -124,7 +124,8 @@ export function MailRail({
             />
           );
         })}
-        {outboxCount > 0 ? (
+        {/* Shown while it holds a message; it stays while you're on it (spec edge cases). */}
+        {outboxCount > 0 || key === "outbox" ? (
           <RailItem
             label="Outbox"
             count={outboxCount}

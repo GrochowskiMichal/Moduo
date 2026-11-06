@@ -6,6 +6,7 @@
 
 import type { MailOpKind } from "@contracts/mail";
 
+import type { MailComposeEngine } from "@/lib/runtime.types.mail-compose";
 import type {
   MailAccount,
   MailCounts,
@@ -25,6 +26,9 @@ export type MailUndoEntry = {
 
 export type MailStoreState = {
   engine: MailEngine | null;
+  /** The compose port when the provider supplies one (the fixture's); the page
+   *  otherwise reads the runtime's. */
+  compose: MailComposeEngine | null;
   behavior: MailBehavior;
   counts: MailCounts | null;
   /** What the nav and Dock show (follows `behavior.badge`). */
@@ -53,6 +57,7 @@ export const UNDO_STACK_MAX = 20;
 export function initialMailState(): MailStoreState {
   return {
     engine: null,
+    compose: null,
     behavior: DEFAULT_MAIL_BEHAVIOR,
     counts: null,
     badge: 0,

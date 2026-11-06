@@ -31,12 +31,19 @@ export function mailTabs(custom: readonly { id: string; label: string }[] = []):
   ];
 }
 
+const sameTab = (a: MailTab, b: MailTab) =>
+  a.kind === b.kind && (a.customTabId ?? null) === (b.customTabId ?? null);
+
+const PERSONAL: MailTab = { kind: "personal" };
+
+/** The picked tab while it still exists, else Personal (a deleted custom tab). */
+export function liveTab(tabs: readonly MailTabDef[], picked: MailTab): MailTab {
+  return tabs.some((t) => sameTab(t.tab, picked)) ? picked : PERSONAL;
+}
+
 /** `[` / `]`: the tab `delta` steps away, wrapping. */
 export function cycleTab(tabs: readonly MailTabDef[], current: MailTab, delta: number): MailTab {
-  const i = tabs.findIndex(
-    (t) =>
-      t.tab.kind === current.kind && (t.tab.customTabId ?? null) === (current.customTabId ?? null),
-  );
+  const i = tabs.findIndex((t) => sameTab(t.tab, current));
   const n = tabs.length;
   return tabs[((((i < 0 ? 0 : i) + delta) % n) + n) % n]!.tab;
 }

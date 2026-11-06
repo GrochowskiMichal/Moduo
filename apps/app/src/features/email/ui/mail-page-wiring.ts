@@ -3,6 +3,8 @@
 // unsubscribe helpers the Today panel and Subscriptions view use. Pure apart
 // from the injected runtime, so it is tested without a page.
 
+import { MAIL_MAX_CUSTOM_TABS } from "@contracts/mail";
+
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
@@ -33,6 +35,18 @@ export function snippetsFromItems(items: readonly EmailSettingsItem[]): MailSnip
   return items
     .filter((i) => i.kind === "snippet" && str(i.value.name))
     .map((i) => ({ id: i.id, name: str(i.value.name), body: str(i.value.body) }));
+}
+
+/** Custom inbox tabs from the settings mirror: `custom_tab` items in their position
+ *  order, at most three (specs/mail-v3.md §2, AC2). */
+export function customTabsFromItems(
+  items: readonly EmailSettingsItem[],
+): { id: string; label: string }[] {
+  return items
+    .filter((i) => i.kind === "custom_tab" && str(i.value.name).trim())
+    .sort((a, b) => a.position - b.position)
+    .slice(0, MAIL_MAX_CUSTOM_TABS)
+    .map((i) => ({ id: i.id, label: str(i.value.name).trim() }));
 }
 
 /** Local `YYYY-MM-DD` for a day drop. */

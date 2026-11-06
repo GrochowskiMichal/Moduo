@@ -111,6 +111,51 @@ describe("MailComposer (AC20)", () => {
     expect(att.id).toBe("stg-1");
     expect("path" in att).toBe(false);
   });
+
+  it("choosing another account's alias moves the draft to that account (spec §9)", async () => {
+    const { port, session } = setup();
+    const aliases = [
+      {
+        id: "a1",
+        accountId: "acc",
+        address: "me@x.com",
+        name: "Me",
+        isDefault: true,
+        signatureHtml: "",
+      },
+      {
+        id: "a2",
+        accountId: "acc-2",
+        address: "me@work.com",
+        name: "Me",
+        isDefault: true,
+        signatureHtml: "",
+      },
+    ];
+    const ui = render(
+      <TooltipProvider>
+        <MailComposer session={session} aliases={aliases} />
+      </TooltipProvider>,
+    );
+    await act(() => session.open(spec()).then(() => {}));
+    await act(async () => {
+      fireEvent.change(ui.getByLabelText("From"), { target: { value: "me@work.com" } });
+      await session.flush();
+    });
+    expect(session.active?.accountId).toBe("acc-2");
+    expect((await port.listDrafts())[0].accountId).toBe("acc-2");
+  });
+
+  it("a failed send reopens with Not sent and its reason (AC11)", async () => {
+    const { session } = setup();
+    const ui = render(
+      <TooltipProvider>
+        <MailComposer session={session} />
+      </TooltipProvider>,
+    );
+    await act(() => session.open(spec({ draftId: "d1", lastError: "Refused" })).then(() => {}));
+    expect(ui.getByRole("alert").textContent).toBe("Not sent: Refused");
+  });
 });
 
 import { outboxLabel, OutboxView } from "./outbox-view";
@@ -122,7 +167,7 @@ describe("OutboxView (AC22)", () => {
     draftId: "d",
     subject: "Hi",
     to: ["x@y.com"],
-    state: "queued",
+    state: "pending",
     attempts: 0,
     lastError: null,
     notBeforeMs: 5000,
@@ -130,6 +175,7 @@ describe("OutboxView (AC22)", () => {
   it("labels the window and offline wait, and Edit reopens", () => {
     expect(outboxLabel(item, 1000)).toBe("Sends in 4 s");
     expect(outboxLabel(item, 9000)).toBe("Waiting for connection");
+    expect(outboxLabel({ ...item, state: "in_flight" }, 9000)).toBe("Sending…");
     const edited: string[] = [];
     const ui = render(<OutboxView items={[item]} nowMs={1000} onEdit={(id) => edited.push(id)} />);
     fireEvent.click(ui.getByText("Edit"));

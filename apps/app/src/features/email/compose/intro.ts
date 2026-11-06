@@ -29,3 +29,34 @@ export function instantIntro(fields: IntroFields, introducer: string): IntroFiel
     bodyHtml: `<p>Thanks ${first} (moving you to Bcc).</p>${fields.bodyHtml}`,
   };
 }
+
+type Person = { name: string; email: string };
+
+/**
+ * Who introduced you in the message you're replying to: its sender, when they
+ * put someone in Cc who wasn't on the thread before. With two new people it
+ * still names the sender; a message you sent yourself is never an intro.
+ * Returns "Name <address>", the form `instantIntro` reads.
+ */
+export function detectIntroducer(
+  messages: readonly { from: Person; to: readonly Person[]; cc: readonly Person[] }[],
+  selfAddresses: readonly string[],
+): string | null {
+  const last = messages.at(-1);
+  if (!last) return null;
+  const self = new Set(selfAddresses.map((a) => a.toLowerCase()));
+  const sender = last.from.email.toLowerCase();
+  if (!sender || self.has(sender)) return null;
+  const before = new Set(
+    messages
+      .slice(0, -1)
+      .flatMap((m) => [m.from, ...m.to, ...m.cc])
+      .map((p) => p.email.toLowerCase()),
+  );
+  const added = last.cc.some((p) => {
+    const e = p.email.toLowerCase();
+    return e !== sender && !self.has(e) && !before.has(e);
+  });
+  if (!added) return null;
+  return last.from.name ? `${last.from.name} <${last.from.email}>` : last.from.email;
+}

@@ -1,6 +1,6 @@
 // What the route hands MailPage on top of the engine (MR-14/MR-11 wiring): the
 // spine gestures over the runtime, today's tasks, the `l` link picker, the
-// composer's aliases/snippets/contacts and "Add as contact". Needs a
+// composer's aliases/snippets/contacts, the custom tabs and "Add as contact". Needs a
 // <TasksProvider> above it (the Tasks inbox and today's tasks).
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
@@ -24,6 +24,7 @@ import type { MailLinkPickerArgs, MailPageProps } from "../ui/mail-page";
 import {
   aliasesFromItems,
   createRuntimeSpinePort,
+  customTabsFromItems,
   localDate,
   snippetsFromItems,
   type SpineRuntime,
@@ -157,6 +158,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     );
   }, [runtime, workspaceId, tissue.tissueRefs, contacts, inbox, liveTasks]);
 
+  const customTabs = useMemo(() => customTabsFromItems(items), [items]);
+
   const composeContacts = useMemo(
     () => contacts.flatMap((c) => c.emails.map((email) => ({ name: c.name, email }))),
     [contacts],
@@ -169,6 +172,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     renderLinkPicker: (args) => <LinkPicker {...args} />,
     aliases: aliasesFromItems(items),
     snippets: snippetsFromItems(items),
+    customTabs,
     contacts: composeContacts,
     onAddContact: (email, name) => {
       if (!runtime || !workspaceId) return;

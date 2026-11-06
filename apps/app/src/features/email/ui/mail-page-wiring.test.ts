@@ -7,6 +7,7 @@ import { createMailSpineCommands } from "../commands/spine";
 import {
   aliasesFromItems,
   createRuntimeSpinePort,
+  customTabsFromItems,
   localDate,
   nextEventSlot,
   snippetsFromItems,
@@ -141,5 +142,27 @@ describe("mail page wiring", () => {
     const res = await spine.note(row);
     await res.undo();
     expect(log).toEqual(["ref", "note", "link note->email_thread", "-link", "-note"]);
+  });
+});
+
+describe("customTabsFromItems (specs/mail-v3.md AC2)", () => {
+  it("takes custom_tab items in position order, at most three, named", () => {
+    const tab = (id: string, name: string, position: number) => ({
+      ...item("custom_tab", { name, senders: [], domains: [] }, id),
+      position,
+    });
+    const items = [
+      tab("t4", "Later", 4),
+      tab("t2", "Hiring", 2),
+      item("snippet", { name: "thx", body: "Thanks" }),
+      tab("t1", "Investors", 1),
+      tab("t3", "Press", 3),
+      tab("t0", "  ", 0),
+    ];
+    expect(customTabsFromItems(items)).toEqual([
+      { id: "t1", label: "Investors" },
+      { id: "t2", label: "Hiring" },
+      { id: "t3", label: "Press" },
+    ]);
   });
 });
