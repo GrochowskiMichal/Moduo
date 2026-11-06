@@ -29,12 +29,6 @@ export const BASELINE: readonly BaselineEntry[] = [
     why: "Risk: Story harness: real clicks on draggable rows are swallowed in Storybook.",
   },
   {
-    rule: "rust-decode-to-default",
-    file: "apps/desktop/src-tauri/src/commands/email/model.rs",
-    snippet: "serde_json::from_value(raw).unwrap_or_default()",
-    why: "Deliberate: Deliberate serde field fallback: an unknown history depth from a newer build reads as the default, never fails the account list.",
-  },
-  {
     rule: "supabase-error-swallowed",
     file: "apps/app/src/lib/notices/chat-counts.ts",
     snippet: "if (error || !Array.isArray(data)) return null;",
@@ -317,11 +311,5 @@ export const BASELINE: readonly BaselineEntry[] = [
     file: "apps/app/src/components/app/time-region-prompt.tsx",
     snippet: "duration: 30_000",
     why: "Deliberate: A question, not an undo toast; it stays up long enough to answer.",
-  },
-  {
-    rule: "webview-native-dialog-tsx",
-    file: "apps/app/src/features/email/ui/email-compose-editor.tsx",
-    snippet: 'window.prompt("Link URL")',
-    why: "Candidate bug: On the desktop this returns a Promise, so the link toolbar can't read the URL (added with the rule, HV-14c).",
   },
 ];

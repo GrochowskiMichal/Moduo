@@ -35,10 +35,16 @@ type UndoToastOptions = {
    * toast without undoing (a deferred commit then commits).
    */
   link?: { label: string; onClick: () => void };
+  /**
+   * Only for a window another clock owns (Mail's undo send, whose end the
+   * engine reports): the toast stays exactly that long. Everything else keeps
+   * UNDO_TOAST_MS.
+   */
+  durationMs?: number;
 };
 
 /** Neutral toast + 8s Undo — returns the toast id. */
-export function undoToast(label: string, opts: UndoToastOptions): string | number {
+export function undoToast(label: ReactNode, opts: UndoToastOptions): string | number {
   // With `onCommit`, the toast settles exactly once: Undo, or closing → commit.
   let settled = false;
   const settle = (run: () => void) => () => {
@@ -52,7 +58,7 @@ export function undoToast(label: string, opts: UndoToastOptions): string | numbe
   // the time the closure reads it.
   const extra = opts.danger ?? opts.link;
   const toastId: string | number = toast(label, {
-    duration: UNDO_TOAST_MS,
+    duration: opts.durationMs ?? UNDO_TOAST_MS,
     description: extra ? (
       <span className="flex flex-col items-start gap-1">
         {opts.description ? <span>{opts.description}</span> : null}

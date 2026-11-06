@@ -12,6 +12,7 @@ import { signInPage } from "../tests/support/local-stack.ts";
 import { calendarStates, onGrid } from "./calendar-states.ts";
 import { homeNowNextState } from "./home-states.ts";
 import { calendarJourneys } from "./journeys-calendar.ts";
+import { mailJourneys, mailStates } from "./mail-lab.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
 const PORT = Number(process.env.LAB_PORT ?? 4317);
@@ -180,7 +181,7 @@ export default {
       title: "Email",
       path: "/email",
       ready: readyWhen("nav[aria-label='Workspace navigation']"),
-      states: { default: {} },
+      states: mailStates,
     },
     {
       id: "tasks",
@@ -348,6 +349,7 @@ export default {
       },
     },
     ...calendarJourneys,
+    ...mailJourneys,
   ],
   overlays: [
     {

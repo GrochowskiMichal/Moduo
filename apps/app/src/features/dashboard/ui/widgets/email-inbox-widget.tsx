@@ -4,14 +4,16 @@
 // body only mounts where `hasEmail`); `degraded` covers the pre-connect state.
 
 import { Clock3, CornerUpLeft, Mail } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { useMailStore } from "@/features/email/store/use-mail-store";
 import { formatEmailDate } from "@/features/email/utils/email-format";
 import {
   type EmailInboxThreadRow,
   type EmailInboxView,
   shapeEmailInbox,
 } from "@/features/email/widget";
+import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
 import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
@@ -35,7 +37,9 @@ function ThreadRow({ row, icon }: { row: EmailInboxThreadRow; icon: typeof Clock
       title={row.fromName}
       secondary={row.subject}
       trailing={row.when ? formatEmailDate(row.when) : undefined}
-      onClick={() => openEntity("email_thread", row.refId)}
+      onClick={() =>
+        row.local ? openModuleRoute("/email") : openEntity("email_thread", row.refId)
+      }
     />
   );
 }
@@ -46,7 +50,9 @@ function Body({ view }: { view: EmailInboxView }) {
       <div className="flex flex-col gap-0.5 p-1.5">
         {view.accounts.length > 0 ? (
           <>
-            <WidgetSectionLabel count={view.totalUnread}>Unread</WidgetSectionLabel>
+            <WidgetSectionLabel count={view.personalUnread ?? view.totalUnread}>
+              {view.personalUnread !== null ? "Personal unread" : "Unread"}
+            </WidgetSectionLabel>
             <WidgetList className="p-0">
               {view.accounts.map((account) => (
                 <WidgetRow
@@ -91,13 +97,39 @@ function Body({ view }: { view: EmailInboxView }) {
   );
 }
 
+/** The desktop engine's counts and snoozed threads (AC41); null on web. */
+function useLocalMail() {
+  const engine = useMailStore((s) => s.engine);
+  const counts = useMailStore((s) => s.counts);
+  const version = useMailStore((s) => s.threadsVersion);
+  const [snoozed, setSnoozed] = useState<MailThreadRow[]>([]);
+  useEffect(() => {
+    if (!engine) return;
+    let live = true;
+    engine
+      .listThreads({ view: { kind: "snoozed" }, limit: 50 })
+      .then((page) => live && setSnoozed(page.rows))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [engine, version]);
+  return useMemo(() => (engine ? { counts, snoozed } : null), [engine, counts, snoozed]);
+}
+
 export function EmailInboxWidget({ size }: WidgetComponentProps) {
   const email = useDashboardSource("email");
   const density = useDensity();
+  const local = useLocalMail();
 
   const view = useMemo(
-    () => shapeEmailInbox(email.data, { now: new Date(), limit: widgetRowBudget(size, density) }),
-    [email.data, size, density],
+    () =>
+      shapeEmailInbox(email.data, {
+        now: new Date(),
+        limit: widgetRowBudget(size, density),
+        local,
+      }),
+    [email.data, size, density, local],
   );
 
   if (email.loading && view.accounts.length === 0) return <WidgetLoading />;

@@ -16,7 +16,9 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
+import { MailEngineProvider } from "../../features/email/engine/mail-engine-provider";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { useMailBadge } from "../../features/email/store/use-mail-store";
 import { FocusRunFollower } from "../../features/focus/focus-run-follower";
 import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
@@ -187,6 +189,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   // Email unread badge (AC3): the Email page broadcasts its count on change.
   const [emailUnread, setEmailUnread] = useState(0);
+  const mailBadge = useMailBadge();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -411,51 +414,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   }, [currentFeature, currentPanels.left, currentPanels.right]);
 
   useEffect(() => {
-    if (!runtime || typeof document === "undefined") return;
-    if (!isEmailRoute) return;
-    const publishActivity = async () => {
-      // Email workspace publishes account/folder-specific foreground state.
-      // Outside of /email we avoid background email signals to prevent secret access.
-      if (document.visibilityState !== "hidden") return;
-      const mode = "appBackground";
-      try {
-        await runtime.email.setActivityState({
-          mode,
-          activeAccountId: null,
-          activeFolder: null,
-        });
-      } catch {
-        // best-effort signal only
-      }
-    };
-
-    void publishActivity();
-    const onVisibilityChange = () => {
-      void publishActivity();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [isEmailRoute, runtime]);
-
-  useEffect(() => {
-    if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
-    if (!isEmailRoute) return;
-    // Desktop-only: `email.syncNow` is a Tauri command that rejects on web — don't
-    // arm the interval there (it would throw an unhandled rejection every tick).
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const timer = window.setInterval(
-      () => {
-        if (document.visibilityState === "hidden") return;
-        void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
-      },
-      5 * 60 * 1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [isEmailRoute, runtime]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     let active = true;
     const readAvatar = async () => {
@@ -587,7 +545,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                   onClick={() => void navigate({ to: tab.href })}
                   badgeCount={
                     tab.module === "email"
-                      ? emailUnread
+                      ? mailBadge.live
+                        ? mailBadge.count
+                        : emailUnread
                       : tab.module === "chat"
                         ? chatBadge.count
                         : 0
@@ -601,6 +561,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <div className="@container flex flex-row items-center justify-end gap-1">
             {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
             <EmailDueWebSweep />
+            {/* MR-8 — the desktop mail engine, app-wide (renders nothing). */}
+            <MailEngineProvider />
             <UpdateOnLaunch />
             {/* "Updated to X · See what's new" once, and the What's new dialog (REL-4). */}
             <WhatsNewOnLaunch />

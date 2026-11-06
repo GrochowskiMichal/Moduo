@@ -123,3 +123,6 @@ storybook-static/
 .lab/
 # A/B rig results, transcripts and diffs (scripts/harness-ab/)
 .harness-ab/
+
+# Mail integration harness data (scripts/mail/test-server.sh)
+.mail-it/

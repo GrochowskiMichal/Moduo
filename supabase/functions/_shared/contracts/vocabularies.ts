@@ -1817,3 +1817,35 @@ export function normalizeSearchMatch(input: unknown): SearchMatch {
   const key = input.trim().toLowerCase();
   return isSearchMatch(key) ? key : "body";
 }
+
+// ---------------------------------------------------------------------------
+// Mail settings that follow the user (MR-7, specs/mail-rebuild.md decision 16):
+// one owner-scoped row per rule, custom tab, Priority person, blocked sender,
+// Screener decision, sender override, snippet, alias (with its signature) or
+// saved search. Postgres: `email_settings_items.kind` CHECK and
+// `email_op_settings_upsert`.
+// ---------------------------------------------------------------------------
+
+export const EMAIL_SETTINGS_KINDS = [
+  "rule",
+  "custom_tab",
+  "priority_person",
+  "blocked_sender",
+  "screener_decision",
+  "sender_override",
+  "snippet",
+  "alias",
+  "saved_search",
+] as const;
+export type EmailSettingsKind = (typeof EMAIL_SETTINGS_KINDS)[number];
+export const emailSettingsKindSchema = z.enum(EMAIL_SETTINGS_KINDS);
+export function isEmailSettingsKind(value: unknown): value is EmailSettingsKind {
+  return typeof value === "string" && (EMAIL_SETTINGS_KINDS as readonly string[]).includes(value);
+}
+export function parseEmailSettingsKind(input: unknown): SafeParseResult<EmailSettingsKind> {
+  return parseOrError(emailSettingsKindSchema, input);
+}
+/** Lax read: an unknown kind (a newer build's) reads as null so the caller skips the row. */
+export function normalizeEmailSettingsKind(input: unknown): EmailSettingsKind | null {
+  return isEmailSettingsKind(input) ? input : null;
+}

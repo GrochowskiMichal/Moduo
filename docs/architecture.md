@@ -66,7 +66,7 @@ Keep route files and page adapters small. When a workspace crosses a few hundred
 
 ### Email Feature Module Map
 
-`features/email/` keeps its pure rules at the top level (`threads.ts`, `classify.ts`, `compose.ts`, `convert.ts`, `snooze.ts`, `followup.ts`, `search.ts`, `undo-send.ts`, `history-depth.ts`, each with its test), the module hook and its helpers in `hooks/` (`use-email-module.ts` orchestrates runtime calls and optimistic triage), shared types in `model/email-types.ts`, and the screen in `ui/` (`email-page-view.tsx` composes the rail, thread list, reader, compose and the detail panel; `email-html.ts` builds the sandboxed message iframe, `email-format.ts` formats dates).
+`features/email/` keeps its pure rules at the top level (`classify.ts`, `compose.ts`, `convert.ts`, `snooze.ts`, `followup.ts`, `search.ts`, `refs.ts`, `history-depth.ts`, each with its test). The desktop page runs on the rebuilt engine: `engine/` (the `MailEngine` provider and controller), `store/` (the mail store), `ui/mail-page.tsx` composing `mail-shell.tsx` (rail, tabs, `thread-list.tsx`), `reader/`, `compose/`, `search/`, `commands/` (triage, bulk and spine gestures) and `views/`; `utils/email-html.ts` builds the sandboxed message iframe. The web page is `ui/email-web-view.tsx` (`EmailWebPage`) over `hooks/use-email-tissue.ts`, the `email_refs` tissue only.
 
 ## Router
 
@@ -80,31 +80,9 @@ Keep `apps/desktop/src-tauri/src/commands` as the Tauri command boundary. Large 
 
 Reference: https://v2.tauri.app/start/project-structure/
 
-### Email Command Module Map
+### Mail engine module map
 
-The email command boundary now keeps Tauri command registration stable while delegating implementation to focused modules:
-
-- `account_commands.rs`: account list/connect/disconnect Tauri handlers.
-- `account_config.rs`: provider normalization, account IDs, credential lookup, mailbox selection, and connection validation.
-- `body_fetch.rs`: message body cache miss fetches.
-- `connection.rs`: blocking IMAP connection setup.
-- `constants.rs`: email command constants.
-- `attachments.rs`: received-attachment metadata, save to disk, compose file picker (EM-7).
-- `flags.rs`: optimistic flag updates and flag outbox flushing.
-- `model.rs`: command DTOs and persisted email data shapes.
-- `oauth.rs`: Gmail sign-in and the XOAUTH2 token lifecycle (EM-2).
-- `ops.rs`: the triage op outbox: archive, move, delete (EM-5).
-- `parsing.rs`: MIME/header/date parsing helpers.
-- `realtime.rs`: IDLE worker supervision and sync de-duplication.
-- `search.rs`: hybrid local and server search (EM-9).
-- `secrets.rs`: account secrets in the OS keychain, never in redb or the cloud.
-- `send_commands.rs`: email send Tauri handler and account send-status updates.
-- `smtp.rs`: SMTP send path.
-- `snooze.rs`: the snooze engine, a server-side `Moduo/Snoozed` mailbox (EM-6).
-- `storage.rs`: Redb/KV email persistence helpers.
-- `sync.rs`: folder/envelope synchronization.
-
-Keep adding command submodules by behavior, then re-export only where Tauri registration requires a stable path.
+The desktop mail engine is `apps/desktop/src-tauri/src/mail/` (specs/mail-rebuild.md), hosted by the `mail_*` commands in `commands/mail_engine.rs` and `commands/mail_events.rs`. By behavior: `store/` (the per-user SQLite store, FTS5), `sync/` (UID-diff sync, threading, headers), `actor.rs` + `session.rs` (per-account actor and IMAP sessions), `auth/` (password, Google, Microsoft XOAUTH2, keychain), `accounts.rs`, `ops/` (triage ops with undo), `send/` (drafts, outbox, SMTP/Graph), `bodies/` + `mime/` (bodies and attachments on disk), `rules.rs` (sender intelligence), `host/` (the engine host and IMAP adapters) and `migrate.rs` (the one-time cutover from the deleted legacy engine's redb tables). The legacy `commands/email/` tree is gone; `scripts/ci/legacy-email.test.ts` keeps it out.
 
 ## TypeScript Boundaries
 

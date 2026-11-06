@@ -20,6 +20,7 @@ import {
 import { disconnectOutlookLogin, startWebOutlookConnect } from "../../calendar/outlook-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
 import { NewEventsToSetting } from "../../calendar/ui/new-events-to-setting";
+import { disconnectMailAccount, unsentCopy } from "../../email/disconnect";
 import {
   asHistoryDepth,
   describeDepthChange,
@@ -281,8 +282,13 @@ export function IntegrationsSection() {
     setEmailBusy(account.id);
     setEmailError(null);
     try {
-      await runtime.email.disconnect(account.id);
-      await loadEmailAccounts();
+      await disconnectMailAccount(
+        runtime.email,
+        account.id,
+        (unsent, proceed) =>
+          toast(unsentCopy(unsent), { action: { label: "Disconnect anyway", onClick: proceed } }),
+        () => void loadEmailAccounts(),
+      );
     } catch (e) {
       setEmailError(e instanceof Error ? e.message : String(e));
     } finally {

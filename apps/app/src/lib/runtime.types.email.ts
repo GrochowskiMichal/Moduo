@@ -1,6 +1,20 @@
 /** The runtime port's email (implemented in runtime.web.email.ts). */
 
+import type { EmailSettingsKind } from "@contracts/vocabularies";
+
 import type { Truncation } from "./paged-select";
+
+/** One mail settings item that follows the user (MR-7): a rule, custom tab,
+ *  Priority person, blocked sender, Screener decision, sender override,
+ *  snippet, alias or saved search. `value` is the kind's own JSON object. */
+export type EmailSettingsItem = {
+  id: string;
+  kind: EmailSettingsKind;
+  position: number;
+  value: Record<string, unknown>;
+  updatedAt: string;
+  deletedAt: string | null;
+};
 
 // ── Email compose + attachments (EM-7, desktop engine) ───────────────────────
 /** A received message's attachment metadata (bytes fetched on demand, EM-7). */
@@ -93,108 +107,54 @@ export type EmailModuleBundle = {
 };
 
 export type EmailRuntime = {
+  /** The rebuilt local mail engine (MR-8); desktop only, absent on the web. */
+  engine?: import("./runtime.types.mail-engine").MailEngine;
+  /** The rebuilt engine's drafts, send outbox and autocomplete (MR-11); desktop only. */
+  compose?: import("./runtime.types.mail-compose").MailComposeEngine;
+  /** Device-local storage, disk cap, Clear buttons and default mail app (MR-15); desktop only. */
+  settings?: import("./runtime.types.mail-settings").MailSettingsEngine;
+  // ── MR-7 mail settings items (Supabase, both platforms) ────────────────
+  /** Your live items, or with `since` every row changed after it (tombstones too). */
+  listSettings(input?: { since?: string | null }): Promise<EmailSettingsItem[]>;
+  /** Create or replace one item by its client-minted id (last write wins per row). */
+  upsertSetting(input: {
+    id: string;
+    kind: EmailSettingsKind;
+    value: Record<string, unknown>;
+    position?: number | null;
+  }): Promise<EmailSettingsItem>;
+  /** Tombstone one of your items; false when it wasn't yours or already gone. */
+  deleteSetting(input: { id: string }): Promise<boolean>;
   listAccounts(): Promise<any[]>;
   connectAndSave(input: any): Promise<any>;
-  disconnect(accountId: string): Promise<void>;
-  listEnvelopes(input: {
-    accountId?: string | null;
-    folder: string;
-    limit?: number;
-    forceSync?: boolean;
-  }): Promise<any>;
-  getMessageBody(input: { accountId: string; folder: string; uid: number }): Promise<any>;
-  prefetchBodies(input: {
-    accountId: string;
-    folder: string;
-    uids: number[];
-    limit?: number;
-  }): Promise<any>;
+  /** AC38: purges the account's local data and keychain secret. With unsent
+   *  Outbox mail it answers `needs_confirm` until called with `confirmed`. */
+  disconnect(
+    accountId: string,
+    opts?: { confirmed?: boolean },
+  ): Promise<{ status: "purged" } | { status: "needs_confirm"; unsent: number } | void>;
   syncNow(input: { accountId?: string | null; folder?: string | null }): Promise<any>;
-  setActivityState(input: {
-    mode: "mailForeground" | "appForegroundNonMail" | "appBackground";
-    activeAccountId?: string | null;
-    activeFolder?: string | null;
-  }): Promise<void>;
-  applyFlag(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    flag: "seen" | "starred";
-    value: boolean;
-  }): Promise<any>;
-  getMailboxStatus(input?: { accountId?: string | null }): Promise<any[]>;
   /** Change how far back this device syncs an account (IM-2c, AC8). Raising
    *  it backfills the gap in the background; lowering it stops fetching and
    *  deletes nothing. Per-device — the mail store is local. */
   setHistoryDepth(input: { accountId: string; depth: string }): Promise<any>;
-  sendSaved(input: {
-    accountId: string;
-    to: string;
-    subject: string;
-    body: string;
-  }): Promise<boolean>;
-  /** Gmail "Sign in with Google" (EM-2, desktop-only): runs the PKCE flow,
-   *  stores tokens in the OS keychain, registers the account. */
-  startGoogleOAuth(input: { workspaceId?: string | null; historyDepth?: string }): Promise<any>;
-  /** All messages of a thread (EM-4), oldest→newest, across folders. */
-  getThread(input: { accountId: string; threadId: string }): Promise<any>;
-  /** LIST the account's server folders, delimiter-aware (EM-5). */
-  listFolders(input: { accountId: string }): Promise<any[]>;
-  /** Archive / move / delete a message via the op outbox (EM-5). Optimistic —
-   *  the row leaves the current folder locally, the IMAP step queues + retries. */
-  applyMessageOp(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    op: "archive" | "move" | "delete";
-    destFolder?: string | null;
+  /** "Sign in with Google" (personal or Workspace) or, with `provider:
+   *  "outlook"` and the address, "Sign in with Microsoft" (desktop-only): runs
+   *  the PKCE flow, stores tokens in the OS keychain, registers the account and
+   *  starts syncing it. Also the Reconnect path for an OAuth account. */
+  startGoogleOAuth(input: {
+    workspaceId?: string | null;
+    historyDepth?: string;
+    provider?: "gmail" | "outlook";
+    email?: string;
   }): Promise<any>;
-  /** Snooze a thread — move its inbox messages to Moduo/Snoozed (create-if-
-   *  missing, delimiter-aware). `local_hide` = the server refused the folder;
-   *  the caller keeps the thread hidden locally instead (EM-6). */
-  snoozeThread(input: {
-    accountId: string;
-    threadId: string;
-    uids: number[];
-  }): Promise<{ strategy: "server_move" | "local_hide"; mailbox: string | null }>;
-  /** Restore a snoozed thread — move its messages from Moduo/Snoozed back to the
-   *  inbox. Idempotent (0 when nothing matches / the folder is absent). */
-  snoozeRestore(input: { accountId: string; threadId: string }): Promise<{ restored: number }>;
-  /** Send a message (reply/forward/new) — HTML+plain multipart, cc/bcc, reply
-   *  headers, attachments from disk paths; copy to Sent (Gmail skips). EM-7. */
-  sendMessage(input: EmailSendInput): Promise<{ messageId: string; savedToSent: boolean }>;
-  /** A received message's attachment metadata (no bytes; EM-7/AC4). */
-  listAttachments(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-  }): Promise<EmailAttachmentMeta[]>;
-  /** Decode one attachment + write it to disk via a native Save dialog. */
-  saveAttachment(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-    attachmentId: string;
-    defaultFilename: string;
-  }): Promise<{ saved: boolean; path: string | null }>;
-  /** Native multi-file open dialog → paths for composing. */
-  pickAttachments(): Promise<EmailPickedAttachment[]>;
-  /** Small inline `cid:` images (<2MB) for substituting into the reader HTML. */
-  getInlineImages(input: {
-    accountId: string;
-    folder: string;
-    uid: number;
-  }): Promise<EmailInlineImage[]>;
-  /** Local body-text search (EM-9): scan the 8KB body-text sidecar → matching
-   *  envelopes. The instant sender/subject match is done client-side over the
-   *  in-memory envelopes; this covers deep-body hits the preview misses. */
-  searchBodies(input: {
-    accountId?: string | null;
-    folder?: string | null;
-    query: string;
-  }): Promise<any[]>;
-  /** Per-account server escalation (EM-9): Gmail X-GM-RAW / IMAP SEARCH with an
-   *  honest status. Hits are upserted so a result's body fetches normally. */
+  /** Pushes the mirrored rules, tabs, Priority people and blocked senders to
+   *  the engine's classifier (desktop only). */
+  setClassifyItems?(
+    items: Pick<EmailSettingsItem, "id" | "kind" | "position" | "value">[],
+  ): Promise<void>;
+  /** Per-account server escalation for the ⌘K "Search older mail" row (MR-13):
+   *  Gmail X-GM-RAW / IMAP SEARCH with an honest status. */
   searchServer(input: { accountId: string; query: string; limit?: number }): Promise<{
     status: "ok" | "timeout" | "unsupported" | "error";
     message?: string | null;
@@ -263,3 +223,8 @@ export type EmailRuntime = {
     targetIcon?: string | null;
   }): Promise<unknown>;
 };
+
+export type * from "./runtime.types.mail-engine";
+export type * from "./runtime.types.mail-compose";
+export type * from "./runtime.types.mail-settings";
+export { mailViewKey } from "./runtime.types.mail-engine";

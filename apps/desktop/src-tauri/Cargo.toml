@@ -26,11 +26,14 @@ base64 = "0.23"
 ed25519-dalek = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
-# Async IMAP on tokio. The sync email engine drives it through the facade in
-# src/commands/email/connection.rs. Replaced the unmaintained `imap` 2.x crate.
+# Async IMAP on tokio, driven natively by the mail engine's account actors
+# (src/mail/session.rs). Replaced the unmaintained `imap` 2.x crate.
 async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 lettre = "0.11"
-mailparse = "0.18"
+# MR-4: the new engine's MIME parser (Stalwart), tolerant of malformed mail.
+mail-parser = "0.11"
+# MR-4: collecting async-imap FETCH streams.
+futures-util = "0.3"
 native-tls = "0.2"
 # Per-read/per-write socket timeouts for the async IMAP stream (the old std
 # TcpStream set_read_timeout semantics).
@@ -40,6 +43,8 @@ rand = "0.10"
 # 4.x cannot open a 2.x database file. Desktop stores (mail, identity) stay on 2.x.
 redb = "2.6"
 roxmltree = "0.21"
+# The rebuilt mail store (specs/mail-rebuild.md decision 2): bundled SQLite with FTS5.
+rusqlite = { version = "0.36", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -59,8 +64,6 @@ webbrowser = "1"
 keyring = "4"
 
 [dev-dependencies]
-# Stream collection in the live IMAP harness (tests/imap_live.rs).
-futures-util = "0.3"
 
 # Release builds trade build time for a smaller, faster binary (Tauri's size guide). Unwinding stays
 # on (no panic = "abort"): a panicking tokio task must not take the whole app down. Nothing reads

@@ -51,6 +51,7 @@ import {
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
+  EMAIL_SETTINGS_KINDS,
   FOCUS_RUN_PHASES,
   FOCUS_RUN_STATUSES,
   FOCUS_TIMER_MODES,
@@ -172,6 +173,12 @@ describe("cross-runtime drift guards", () => {
     expect(kinds).toContain(`CHECK (kind IN (${inList(EMAIL_KINDS)}))`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
+  });
+
+  it("email_settings_items.kind CHECK lists the canonical settings kinds (MR-7)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261104010000_email_settings_items.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (kind IN (${inList(EMAIL_SETTINGS_KINDS)}))`);
   });
 
   it("email_suppressions CHECK lists the canonical suppression reasons", () => {

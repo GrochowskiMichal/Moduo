@@ -1,6 +1,7 @@
 import type { SearchAllRow, SearchHit, SearchRecent } from "@contracts/search";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  BookmarkPlus,
   Calendar as CalendarIcon,
   CheckSquare,
   Contact as ContactIcon,
@@ -9,14 +10,17 @@ import {
   House,
   Inbox,
   MessagesSquare,
+  Search as SearchIcon,
   Settings as SettingsIcon,
   Upload,
   UserPlus,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { usePaletteMail } from "../../features/email/hooks/use-palette-mail";
+import { mailEngineEnabled } from "../../features/email/engine/behavior";
+import { usePaletteEngineMail } from "../../features/email/hooks/use-palette-engine-mail";
 import { mergeMailRows } from "../../features/email/search-palette";
+import { useMailStore } from "../../features/email/store/use-mail-store";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { taskIdForHandle } from "../../features/tasks/search";
 import { ENTITY_OPEN_EVENT } from "../../lib/entity-open";
@@ -42,6 +46,8 @@ import {
   type PaletteRecent,
 } from "./global-search-palette";
 
+const NO_LOCAL_MAIL = { rows: null, searching: false } as const;
+
 const PALETTE_OPEN_EVENT = "moduo:palette:open";
 
 // Debounce matches the @mention/`/ref` pickers (useMentionSearch) — one search
@@ -56,9 +62,13 @@ const LIMIT_CHIP = 50;
 // Recent with an empty query (Q11).
 const RECENT_LIMIT = 8;
 
-export function dispatchOpenPalette() {
+export type OpenPaletteOptions = { chip?: PaletteChipKey; query?: string };
+
+/** Open ⌘K, optionally on a chip with a query in the input (`/` in Mail opens
+ * it on Email; a saved search opens its query, MR-13). */
+export function dispatchOpenPalette(opts: OpenPaletteOptions = {}) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(PALETTE_OPEN_EVENT));
+  window.dispatchEvent(new CustomEvent(PALETTE_OPEN_EVENT, { detail: opts }));
 }
 
 /** Why a failed search failed: the server gave up after 5 s (57014), or the
@@ -95,7 +105,12 @@ export function GlobalCommandPalette() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const onOpen = () => setOpen(true);
+    const onOpen = (event: Event) => {
+      const detail = (event as CustomEvent<OpenPaletteOptions | null>).detail;
+      if (detail?.chip) setChip(detail.chip);
+      if (detail?.query !== undefined) setQuery(detail.query);
+      setOpen(true);
+    };
     window.addEventListener(PALETTE_OPEN_EVENT, onOpen);
     return () => window.removeEventListener(PALETTE_OPEN_EVENT, onOpen);
   }, []);
@@ -241,13 +256,20 @@ export function GlobalCommandPalette() {
   // Email (GS-9): on desktop this device's own mail joins the Email group,
   // merged here in the client; no mail body reaches the server. On web only
   // the pulled-in threads search_all returned.
-  const mail = usePaletteMail({
+  // MR-13: with the rebuilt engine on, the engine answers (operators, FTS5).
+  const mailWanted = chip === "all" || chip === "email";
+  const storeEngine = useMailStore((s) => s.engine);
+  const engine = storeEngine ?? (mailEngineEnabled() ? (runtime?.email?.engine ?? null) : null);
+  const engineMail = usePaletteEngineMail({
     runtime,
+    engine,
     workspaceId: selectedWorkspaceId,
     open,
-    query: trimmed,
-    wanted: searchable && (chip === "all" || chip === "email"),
+    query,
+    wanted: mailWanted,
   });
+  // Without the engine (web) the pulled-in threads search_all returned are all.
+  const mail = engineMail ?? NO_LOCAL_MAIL;
   const merged = useMemo(() => mergeMailRows(rows, mail.rows), [rows, mail.rows]);
   const view = useMemo(() => buildPaletteView(merged, { chip, lead }), [merged, chip, lead]);
   // Every task row says its ID, quieter, as the details header does
@@ -477,6 +499,48 @@ export function GlobalCommandPalette() {
     { heading: "Contacts", actions: filterActions(contactsActions) },
     { heading: "Workspace", actions: filterActions(settingsActions) },
   ];
+  // Mail (MR-13): operator suggestions, the server escalation per account and
+  // "Save search", on the Email chip or once something is typed.
+  if (engineMail && (chip === "email" || (mailWanted && trimmed.length > 0))) {
+    const mailActions: PaletteAction[] = [
+      ...engineMail.suggestions.map((sug) => ({
+        id: `mail-suggest:${sug.text}`,
+        label: sug.label,
+        icon: SearchIcon,
+        run: () => setQuery(sug.text),
+      })),
+      ...(trimmed
+        ? engineMail.accounts.map((account) => {
+            const esc = engineMail.escalation;
+            const state =
+              esc?.accountId === account.id
+                ? esc.status === "searching"
+                  ? " (searching…)"
+                  : esc.status === "failed"
+                    ? " (couldn't reach the server)"
+                    : ""
+                : "";
+            return {
+              id: `mail-older:${account.id}`,
+              label: `Search older mail on ${account.address}${state}`,
+              icon: SearchIcon,
+              run: () => engineMail.escalate(account.id),
+            };
+          })
+        : []),
+      ...(engineMail.canSave
+        ? [
+            {
+              id: "mail-save-search",
+              label: "Save this search to Mail",
+              icon: BookmarkPlus,
+              run: engineMail.save,
+            },
+          ]
+        : []),
+    ];
+    if (mailActions.length > 0) actionGroups.unshift({ heading: "Mail", actions: mailActions });
+  }
   const actionCount = actionGroups.reduce((n, g) => n + g.actions.length, 0);
 
   // Chat's own search (filters, paging) for the same words.

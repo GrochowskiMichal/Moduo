@@ -39,9 +39,6 @@
     "apps/app/src/routes/pages/book-page.tsx": 33438,
     "apps/app/src/routes/pages/contacts-page.tsx": 33011,
     "apps/desktop/src-tauri/src/commands/caldav.rs": 33474,
-    "apps/desktop/src-tauri/src/commands/email/connection.rs": 45846,
-    "apps/desktop/src-tauri/src/commands/email/storage.rs": 33382,
-    "apps/desktop/src-tauri/src/commands/email/sync.rs": 48147,
     "apps/desktop/src-tauri/src/store_redb/mod.rs": 46031,
     "supabase/functions/_shared/account-erasure.test.ts": 40575,
     "supabase/functions/_shared/contracts/vocabularies.test.ts": 34466,
@@ -306,29 +303,11 @@
     "apps/app/src/features/dashboard/ui/widgets/pomodoro-widget.tsx": {
       "PomodoroWidget": 27
     },
-    "apps/app/src/features/email/hooks/use-email-module.ts": {
-      "useEmailModule>useCallback(cb)": 21
-    },
-    "apps/app/src/features/email/hooks/use-email-snooze-restore.ts": {
-      "processDue": 28
-    },
     "apps/app/src/features/email/threads.ts": {
       "shapeInboxThreads": 16
     },
     "apps/app/src/features/email/ui/email-connect-dialog.tsx": {
       "EmailConnectDialog": 25
-    },
-    "apps/app/src/features/email/ui/email-destination-list.tsx": {
-      "RefCard": 22
-    },
-    "apps/app/src/features/email/ui/email-page-view.tsx": {
-      "EmailPageBody": 23
-    },
-    "apps/app/src/features/email/ui/email-reader.tsx": {
-      "MessageCard": 39
-    },
-    "apps/app/src/features/email/ui/use-email-convert.ts": {
-      "useEmailConvert>useCallback(cb)#3": 16
     },
     "apps/app/src/features/focus/engine-core.ts": {
       "resolveAway": 19

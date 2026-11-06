@@ -245,13 +245,6 @@ export const REVERTS: Mutant[] = [
     find: "  const { occurrenceOn, ...change } = withDueOn(patch);",
     replace: "  const { occurrenceOn, ...change } = patch;",
   },
-  {
-    id: "R5",
-    concern: "#509-5 desktop: an undecodable email account list reads empty (Rust)",
-    file: "apps/desktop/src-tauri/src/commands/email/storage.rs",
-    find: '            .map_err(|e| format!("email_accounts_unreadable: {e}")),',
-    replace: "            .or_else(|_| Ok(vec![])),",
-  },
 ];
 
 // R3 undoes both halves of the sign-out fix: the sign-out wipe goes too.

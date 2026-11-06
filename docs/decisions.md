@@ -160,6 +160,26 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-06 · MV (built): Mail v3's screens sit on engine reads, not page-side guesses ([specs/mail-v3.md](../../specs/mail-v3.md), PR GrochowskiMichal/Moduo#797).
+- 2026-11-06 · MV (plan): Mail v3 lands as one refactor on `t/mike/mail-v3`, on a local store v2 with no Supabase migration and no contracts change ([specs/mail-v3.md](../../specs/mail-v3.md)).
+- 2026-11-04 · [gaps] Account lifecycle runs on the engine: `commands/mail_accounts.rs` (`mail_connect_password`, `mail_connect_oauth`, `mail_disconnect`, `mail_set_history_depth`, `mail_sync_now`, `mail_search_server`, `mail_set_classify_items`) over `mail/host/lifecycle.rs`.
+- 2026-11-04 · MR-16: the legacy mail engine and UI are deleted; the redb mail tables exist only for the cutover to read and drop.
+- 2026-11-04 · MR-15: Settings → Mail is a "mail" section in the Personal settings group (`features/settings/mail/`): a prop-driven `MailSettingsView` plus a `MailSection` connector.
+- 2026-11-04 · MR-11: compose is `features/email/compose/` over a separate `MailComposeEngine` port (`lib/runtime.types.mail-compose.ts`, `runtime.email.compose`, Tauri `mail_save_draft`/`mail_list_drafts`/`mail_get_draft`/`mail_discard_draft`/`mail_queue_send`/`mail_undo_send`/`mail_list_outbox`/`mail_correspondents`/`mail_size_limit`), kept apart from `MailEngine` so sibling blocks' engine edits don't collide.
+- 2026-11-04 · MR-12: sender intelligence glue is `src/mail/rules.rs` over MR-3's classifier, and the views are prop-driven components in `features/email/{views,panels}` plus `suggest-contact.ts`.
+- 2026-11-04 · MR-14: spine gestures on the engine are `features/email/commands/spine.ts` over one injected `MailSpinePort` (upsertRef, task/note/event create+delete, isLinked, createLink/deleteLink, resolveContactId, markDone).
+- 2026-11-04 · MR-13: ⌘K mail search parses in TS and the engine takes the structured query.
+- 2026-11-04 · MR-9: the rebuilt shell is `features/email/ui/mail-shell.tsx` (rail, split tabs, list, reader slot) on the MR-8 store; its keys are registry entries (`lib/hotkeys/registry.ts`, new `email.*` ids) and `features/email/keys.ts` derives the `?` legend and ⌘K mail actions from them, so neither can drift.
+- 2026-11-04 · MR-6: send and drafts are `src/mail/send/` over the store's `drafts` and `outbox` tables (no schema change), generic over a `SendTransport` trait (lettre SMTP on a blocking thread, Graph `sendMail`, IMAP APPEND/delete).
+- 2026-11-04 · MR-10 (partial): the reader's policy layer is `features/email/reader/sanitize.ts` over the reviewed `utils/email-html.ts`, plus `src/mail/{unsubscribe,avatar}.rs`.
+- 2026-11-04 · MR-3: the sync engine is `src/mail/sync/`, its algorithms generic over a `MailServer` trait (async-imap `ImapServer<T>` for real, an in-memory fake with real UID/MODSEQ semantics for unit tests).
+- 2026-11-04 · MR-4: bodies, attachments and MIME live in `src/mail/{mime,bodies,invite}`; mail-parser 0.11 parses, every IMAP fetch goes through one `RawSource` (`ImapSource` over a pooled session: EXAMINE once per mailbox, `BODY.PEEK` only, so downloads never mark mail read).
+- 2026-11-04 · MR-5: the triage outbox is `src/mail/ops/` over the store's `ops` table; each row stores a pre-op snapshot (`undo_json`: flags, memberships, thread state) and planned server steps (`args_json.steps`, each with the `uidvalidity` it was planned against).
+- 2026-11-04 · MR-8: the mail front end is one external store (`features/email/store/mail-store.ts`, `useMailStore(selector)`), triage commands (`features/email/commands/triage.ts`) and an app-wide `MailEngineProvider` in the chrome driving `features/email/engine/controller.ts`.
+- 2026-11-03 · MR-7: mail settings items are one owner-only table `email_settings_items`, read through RLS and written only through `email_op_settings_upsert(p_id, p_kind, p_value, p_position)` / `email_op_settings_delete(p_id)`.
+- 2026-11-03 · MR-2: auth, sessions and the account actor live in `src/mail/{auth,session,actor,accounts}.rs`, behind traits.
+- 2026-11-04 · MR-1: the mail store is `src/mail/store/` (rusqlite 0.36 bundled, WAL, FTS5 contentless-delete), one writer plus one read-only connection on `<app data>/mail/<user_id>/mail.db`.
+- 2026-11-03 · MR-0: local mail vocabularies live in `@contracts/mail` (`mail.ts`), exported to `mail-local.json`, mirrored by Rust `src/mail/contracts.rs`.
 - 2026-10-06 · The `PUBLIC_STAGING_ALLOWLIST` build-time email gate is removed. *(partly superseded)*
 - 2026-07-29 · Import scope collapsed to "Notion notes + email history depth"
 - 2026-07-29 · Email history depth is an engine change, not a setting.
@@ -180,6 +200,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-29 · IM-2a: the email store reads by key prefix and writes per chunk — and the order index stays timestamp-keyed on purpose.
 - 2026-07-30 · IM-2b: email history depth is a per-device FLOOR, and the depth state machine keys off the UID generation.
 - 2026-07-30 · IM-2c-a: the depth picker ships without progress/cancel, and AC9's transport is amended from Tauri events to a cursor-backed status read.
+
+1 superseded or dropped entry is left out; they stay in the area file.
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 

@@ -1,5 +1,7 @@
 # Email — Design Brief (build spec)
 
+> **Current design: [Mail, rethought v3.1](./v3/README.md)** (sources in `.design/email/v3/`, built by [specs/mail-v3.md](../../specs/mail-v3.md)). Where this brief and v3 disagree, v3 and the spec win.
+
 > **Status:** DoR-ready 2026-07-04 (planning interview with Maciej; execution contract in [specs/email.md](../../specs/email.md)).
 > **Pairs with:** [BRIEF.md](./BRIEF.md) (product intent — still authoritative for JTBD/ceiling/spine wiring) · [docs/data-layers.md §6](../../docs/data-layers.md) (desktop-first hybrid) · siblings: `.design/calendar/DESIGN_BRIEF.md` (rail/attribution patterns), `.design/notes/DESIGN_BRIEF.md` (right-panel + task-line patterns this module reuses).
 

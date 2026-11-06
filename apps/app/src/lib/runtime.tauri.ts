@@ -15,6 +15,10 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import { parseSyncDescriptor } from "../features/calendar/sync";
+import { createTauriMailAccounts } from "./runtime.tauri.mail-accounts";
+import { createTauriMailCompose } from "./runtime.tauri.mail-compose";
+import { createTauriMailEngine } from "./runtime.tauri.mail-engine";
+import { createTauriMailSettings } from "./runtime.tauri.mail-settings";
 import type {
   IntegrationStatusItem,
   ModuoRuntime,
@@ -159,83 +163,17 @@ export const tauriRuntime: ModuoRuntime = {
   },
 
   email: {
-    listAccounts() {
-      return invoke<any[]>("email_accounts_list");
-    },
-    connectAndSave(input) {
-      return invoke<any>("email_account_connect_and_save", { input });
-    },
-    disconnect(accountId) {
-      return invoke<void>("email_account_disconnect", { accountId });
-    },
-    setHistoryDepth(input) {
-      return invoke<any>("email_account_set_history_depth", input);
-    },
-    listEnvelopes(input) {
-      return invoke<any>("email_list_envelopes", { input });
-    },
-    getMessageBody(input) {
-      return invoke<any>("email_get_message_body", { input });
-    },
-    prefetchBodies(input) {
-      return invoke<any>("email_prefetch_bodies", { input });
-    },
-    syncNow(input) {
-      return invoke<any>("email_sync_now", { input });
-    },
-    setActivityState(input) {
-      return invoke<void>("email_set_activity_state", { input });
-    },
-    applyFlag(input) {
-      return invoke<any>("email_apply_flag", { input });
-    },
-    getMailboxStatus(input) {
-      return invoke<any[]>("email_get_mailbox_status", { input: input ?? {} });
-    },
-    sendSaved(input) {
-      return invoke<boolean>("email_send_saved", input);
-    },
-    startGoogleOAuth(input) {
-      return invoke<any>("email_gmail_oauth_start", { input });
-    },
-    getThread(input) {
-      return invoke<any>("email_get_thread", { input });
-    },
-    listFolders(input) {
-      return invoke<any[]>("email_list_folders", { input });
-    },
-    applyMessageOp(input) {
-      return invoke<any>("email_apply_message_op", { input });
-    },
-    snoozeThread(input) {
-      return invoke<any>("email_snooze_thread", { input });
-    },
-    snoozeRestore(input) {
-      return invoke<any>("email_snooze_restore", { input });
-    },
-    sendMessage(input) {
-      return invoke<any>("email_send_message", { input });
-    },
-    listAttachments(input) {
-      return invoke<any[]>("email_list_attachments", { input });
-    },
-    saveAttachment(input) {
-      return invoke<any>("email_save_attachment", { input });
-    },
-    pickAttachments() {
-      return invoke<any[]>("email_pick_attachments", {});
-    },
-    getInlineImages(input) {
-      return invoke<any[]>("email_get_inline_images", { input });
-    },
-    searchBodies(input) {
-      return invoke<any[]>("email_search_bodies", { input });
-    },
-    searchServer(input) {
-      return invoke<any>("email_search_server", { input });
-    },
+    // The rebuilt engine (MR-8); `MailEngineProvider` gates it until MR-3/MR-5 land.
+    engine: createTauriMailEngine(),
+    compose: createTauriMailCompose(),
+    settings: createTauriMailSettings(),
+    // Account lifecycle on the rebuilt engine (connect, purge, depth, sync, server search).
+    ...createTauriMailAccounts(),
     // EM-3 cloud tissue methods are Supabase-direct — identical on both platforms.
     listModule: webRuntime.email.listModule,
+    listSettings: webRuntime.email.listSettings,
+    upsertSetting: webRuntime.email.upsertSetting,
+    deleteSetting: webRuntime.email.deleteSetting,
     upsertAccountRef: webRuntime.email.upsertAccountRef,
     removeAccountRef: webRuntime.email.removeAccountRef,
     upsertRef: webRuntime.email.upsertRef,

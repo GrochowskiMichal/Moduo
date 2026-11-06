@@ -8,6 +8,7 @@
 import { z } from "zod";
 
 import { EMAIL_SECTIONS, type EmailSection } from "./classify";
+import { DEFAULT_MAIL_BEHAVIOR, type MailBehavior, sanitizeMailBehavior } from "./engine/behavior";
 
 function readStored<T>(key: string, sanitize: (raw: unknown) => T, fallback: () => T): T {
   if (typeof window === "undefined") return fallback();
@@ -36,11 +37,14 @@ export type EmailPrefs = {
   /** Lowercased sender addresses whose remote images always load (DF-6 —
    * remote content is blocked by default in the reader). */
   imageAllowedSenders: string[];
+  /** Settings → Mail behavior toggles that follow you (MR-15, decision 16). */
+  behavior: MailBehavior;
 };
 
 export const DEFAULT_EMAIL_PREFS: EmailPrefs = {
   senderOverrides: {},
   imageAllowedSenders: [],
+  behavior: DEFAULT_MAIL_BEHAVIOR,
 };
 
 const SECTION_SET = new Set<string>(EMAIL_SECTIONS);
@@ -48,6 +52,7 @@ const SECTION_SET = new Set<string>(EMAIL_SECTIONS);
 const emailPrefsSchema = z.object({
   senderOverrides: z.record(z.string(), z.unknown()).optional(),
   imageAllowedSenders: z.array(z.unknown()).optional(),
+  behavior: z.unknown().optional(),
 });
 
 // Drops unknown fields, and the `email` domain syncs as one LWW object: an older build
@@ -56,7 +61,7 @@ const emailPrefsSchema = z.object({
 export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
   const parsed = emailPrefsSchema.safeParse(raw);
   if (!parsed.success) {
-    return { senderOverrides: {}, imageAllowedSenders: [] };
+    return { senderOverrides: {}, imageAllowedSenders: [], behavior: sanitizeMailBehavior(null) };
   }
   const senderOverrides: Record<string, EmailSection> = {};
   for (const [addr, section] of Object.entries(parsed.data.senderOverrides ?? {})) {
@@ -75,7 +80,11 @@ export function sanitizeEmailPrefs(raw: unknown): EmailPrefs {
       imageAllowedSenders.push(key);
     }
   }
-  return { senderOverrides, imageAllowedSenders };
+  return {
+    senderOverrides,
+    imageAllowedSenders,
+    behavior: sanitizeMailBehavior(parsed.data.behavior),
+  };
 }
 
 function prefsKey(userId: string): string {
@@ -87,6 +96,7 @@ export function readEmailPrefs(userId: string): EmailPrefs {
     ...DEFAULT_EMAIL_PREFS,
     senderOverrides: {},
     imageAllowedSenders: [],
+    behavior: sanitizeMailBehavior(null),
   }));
 }
 
