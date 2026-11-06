@@ -10,7 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 
 import { type ItemActions, ItemsGroups } from "./items-groups";
-import { resetRuleAppliesForTests, type RuleApplyPort } from "./rule-apply";
+import { resetRuleAppliesForTests, type RuleApplyPort, startRuleApply } from "./rule-apply";
 
 afterEach(() => {
   cleanup();
@@ -151,5 +151,20 @@ describe("Settings → Mail rules and tabs (AC7, AC35)", () => {
     screen.getByText("Up to 3 custom tabs");
     fireEvent.submit(screen.getByRole("button", { name: "Add tab" }).closest("form")!);
     expect(tabsAdd).not.toHaveBeenCalled();
+  });
+
+  it("an apply with nothing to undo offers no Undo", async () => {
+    const port = {
+      count: rstest.fn(async () => 3),
+      apply: rstest.fn(async () => ({ count: 3, opIds: [] as string[] })),
+      undo: rstest.fn(async () => {}),
+    };
+    await act(async () => {
+      await startRuleApply(port, "r-new", 3);
+    });
+    mount([RULE], port);
+    const row = document.querySelector<HTMLElement>('[data-rule-row="r-new"]')!;
+    expect(within(row).getByRole("status").textContent).toBe("Applied to 3");
+    expect(within(row).queryByRole("button", { name: "Undo" })).toBeNull();
   });
 });

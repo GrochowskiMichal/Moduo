@@ -17,7 +17,9 @@ use crate::mail::store::{
 };
 use crate::mail::sync::events::MailEvent;
 
-const MAX_IDS: usize = 5_000;
+/// A payload cap only: the engine queues any bulk op in chunks under one action
+/// (`Store::enqueue_in_action`), so ⌘A over a big view is one undo.
+const MAX_IDS: usize = 200_000;
 const MAX_ID_LEN: usize = 512;
 
 fn s<E: std::fmt::Display>(e: E) -> String {
@@ -405,6 +407,9 @@ mod tests {
         assert_eq!(l.to_mailbox_id.as_deref(), Some("g-work"));
         assert!(op(json!({"kind": "label_remove", "threadIds": ["t"]})).is_err());
         assert!(op(json!({"kind": "done", "threadIds": ["x".repeat(600)]})).is_err());
+        // ⌘A over 12,000 threads is one op (the store chunks it under one action).
+        let many: Vec<String> = (0..12_000).map(|i| format!("t{i}")).collect();
+        assert_eq!(op(json!({"kind": "done", "threadIds": many})).unwrap().thread_ids.len(), 12_000);
     }
 
     #[test]

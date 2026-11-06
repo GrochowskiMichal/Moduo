@@ -94,6 +94,35 @@ describe("recipient token inputs (specs/mail-v3.md §9, AC30)", () => {
     expect(value.cc).toBe("Ana Lima <ana@acme.test>");
   });
 
+  it("a complete typed address stays what you typed, not a suggestion", async () => {
+    let value = { to: "", cc: "", bcc: "" };
+    const people = [
+      { name: "Ana Lima", email: "ana@acme.com", count: 12 },
+      { name: "Ann Lima", email: "ann@acme.com", count: 12 },
+      { name: "Ann Co", email: "ann@acme.co", count: 2 },
+    ];
+    render(<Harness suggest={async () => people} onValue={(v) => (value = v)} />);
+    const to = screen.getByLabelText("To");
+    // "ana@acme.co" prefixes Ana Lima's ".com": Enter keeps the typed address.
+    fireEvent.change(to, { target: { value: "ana@acme.co" } });
+    await settle();
+    screen.getByRole("listbox", { name: "To suggestions" });
+    fireEvent.keyDown(to, { key: "Enter" });
+    expect(value.to).toBe("ana@acme.co");
+
+    // A suggestion with exactly that address is taken, name and all, even below the first.
+    fireEvent.change(to, { target: { value: "ann@acme.co" } });
+    await settle();
+    fireEvent.keyDown(to, { key: "Enter" });
+    expect(value.to).toBe("ana@acme.co, Ann Co <ann@acme.co>");
+
+    // A partial address still takes the highlighted suggestion.
+    fireEvent.change(to, { target: { value: "ana" } });
+    await settle();
+    fireEvent.keyDown(to, { key: "Enter" });
+    expect(value.to).toBe("ana@acme.co, Ann Co <ann@acme.co>, Ana Lima <ana@acme.com>");
+  });
+
   it("reply all keeps Cc: a filled Cc shows without the reveal", () => {
     render(
       <Harness

@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { getHotkeyManager } from "@tanstack/hotkeys";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
+import { toast } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
@@ -213,5 +214,31 @@ describe("mail shell keys (AC21)", () => {
     press("]");
     await tick();
     expect(ui.container.querySelector('[data-slot="mail-bulk-reader"]')).toBeNull();
+  });
+
+  it("a bulk op the engine rejects keeps the selection and says why", async () => {
+    const { engine, cursor } = await mount();
+    const all = await engine.listThreads({
+      view: { kind: "unified", role: "inbox" },
+      tab: { kind: "personal" },
+      limit: 100_000,
+    });
+    press("j");
+    const before = cursor();
+    press("a", mod());
+    await tick();
+    await tick();
+    const region = `${all.rows.length} selected`;
+    screen.getByRole("region", { name: region });
+    const error = rs.spyOn(toast, "error");
+    rs.spyOn(engine, "applyOp").mockRejectedValueOnce(new Error("invalid_thread_ids"));
+    press("e");
+    await tick();
+    await tick();
+    expect(error).toHaveBeenCalledTimes(1);
+    // Nothing moved: the picks and the cursor are back where they were.
+    screen.getByRole("region", { name: region });
+    expect(cursor()).toBe(before);
+    error.mockRestore();
   });
 });

@@ -24,6 +24,8 @@ export type SuggestPeople = (query: string) => Promise<Correspondent[]>;
 /** How long typing settles before the engine is asked (spec §9). */
 export const SUGGEST_DEBOUNCE_MS = 120;
 const SUGGEST_LIMIT = 5;
+/** A whole address: something@domain.tld, no spaces or brackets. */
+const COMPLETE_ADDRESS = /^[^\s@<>,"]+@[^\s@<>,"]+\.[^\s@<>,".]{2,}$/;
 
 /** Ranked suggestions for `query`, read from the engine after the debounce. */
 function useSuggestions(
@@ -137,6 +139,15 @@ export function RecipientField(props: FieldProps) {
 
   const move = (step: number) => setActive((a) => (a + step + hits.length) % hits.length);
   const take = () => {
+    // A complete address you typed is the one you meant: a suggestion wins only
+    // when it is that same address (and brings its name).
+    const typed = addressEmail(draft);
+    if (COMPLETE_ADDRESS.test(typed)) {
+      const same = hits.find((h) => h.email.toLowerCase() === typed);
+      if (same) pick(same);
+      else commit(draft);
+      return;
+    }
     const hit = hits[active];
     if (hit) pick(hit);
     else commit(draft);

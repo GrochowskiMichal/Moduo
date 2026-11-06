@@ -5,6 +5,8 @@ use crate::mail::store::{
     ViewRef,
 };
 
+mod bulk;
+
 const T0: i64 = 1_000_000_000;
 
 #[derive(Default)]
@@ -881,4 +883,22 @@ fn snooze_again_or_done_clears_the_return_mark() {
         .unwrap();
     assert_eq!(return_reason(&s, "t2"), None);
     assert!(!kv_has(&s, "returned:t2"));
+}
+
+#[test]
+fn your_own_sent_copy_on_a_snoozed_thread_is_not_a_reply() {
+    let (_d, s) = seeded("own-reply");
+    let mut req = OpRequest::new(OpKind::Snooze, vec!["t1".into()]);
+    req.snooze_until_ms = Some(T0 + 3_600_000);
+    s.enqueue_op_at(&req, T0).unwrap();
+    let mut mine = msg("a1", "own1", "inbox", 60, "t1", T0 + 1, 0);
+    mine.from = Address {
+        name: "Me".into(),
+        email: "Me@A1.test".into(),
+    };
+    s.ingest(&[mine]).unwrap();
+    assert!(!kv_has(&s, "snooze_reply:t1"), "your own message isn't a reply");
+    s.ingest(&[msg("a1", "their1", "inbox", 61, "t1", T0 + 2, 0)])
+        .unwrap();
+    assert!(kv_has(&s, "snooze_reply:t1"));
 }

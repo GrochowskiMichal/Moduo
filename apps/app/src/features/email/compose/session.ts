@@ -140,6 +140,26 @@ export function createComposeSession(deps: ComposeDeps) {
     return saving;
   }
 
+  // Another account's alias (AC29): the draft belongs to the account it was
+  // saved under (its upload, size check and send read that account), so the old
+  // draft is discarded (the engine deletes its server Drafts copy) and the next
+  // save makes a new one under the new account.
+  function moveAccount(state: ComposeState) {
+    const key = state.key;
+    const known = state.draftId;
+    state.draftId = null;
+    const pending = saving.then(async () => {
+      // A save queued before the switch may have answered since: its id is the old draft.
+      const old = ids.get(key) ?? known;
+      ids.delete(key);
+      if (active?.key === key) active.draftId = null;
+      if (old) await deps.port.discardDraft(old);
+    });
+    saving = pending.catch((error) => {
+      console.warn("[mail] discarding the old account's draft failed:", error);
+    });
+  }
+
   async function close(opts: { keepDraft: boolean }) {
     const prev = active;
     if (!prev) return;
@@ -211,6 +231,7 @@ export function createComposeSession(deps: ComposeDeps) {
     /** Every change saves the draft locally (AC21). */
     update(patch: Partial<ComposeState>): Promise<void> {
       if (!active) return Promise.resolve();
+      if (patch.accountId && patch.accountId !== active.accountId) moveAccount(active);
       Object.assign(active, patch);
       active = { ...active };
       emit();

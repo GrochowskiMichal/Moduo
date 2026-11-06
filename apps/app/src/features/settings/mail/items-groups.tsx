@@ -129,7 +129,7 @@ function RuleRow({
         {applied ? (
           <output className="flex items-center gap-1 text-xs text-muted-foreground">
             {ruleApplyLine(applied)}
-            {applied.status === "applied" && ruleApply ? (
+            {applied.status === "applied" && applied.opIds.length > 0 && ruleApply ? (
               <>
                 <span aria-hidden>·</span>
                 <button

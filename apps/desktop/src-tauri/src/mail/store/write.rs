@@ -6,7 +6,7 @@ use super::{
     now_ms, AccountInput, BodyInput, ClassifyReason, MailboxCursor, MailboxInput, MessageInput,
     Store, StoreResult, TabRef,
 };
-use crate::mail::contracts::{TabKind, FLAG_DELETED, FLAG_SEEN};
+use crate::mail::contracts::{MailboxRole, TabKind, FLAG_DELETED, FLAG_SEEN};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::BTreeSet;
 
@@ -545,13 +545,23 @@ fn ingest_one(tx: &Transaction, m: &MessageInput, touched: &mut Touched) -> Stor
     let fresh = prev_thread.is_none();
     if fresh {
         // A newer message on a snoozed thread: a later unsnooze reads "reply" (decision 7).
+        // Your own message (an account's address, or a copy in a Sent folder) isn't one.
         tx.prepare_cached(
             "INSERT OR IGNORE INTO kv (key, value)
              SELECT 'snooze_reply:' || t.id, '1' FROM threads t
              WHERE t.id = ?1 AND t.snoozed_until_ms IS NOT NULL
-               AND ?2 > COALESCE((SELECT MAX(date_ms) FROM messages WHERE thread_id = ?1 AND id != ?3), 0)",
+               AND ?2 > COALESCE((SELECT MAX(date_ms) FROM messages WHERE thread_id = ?1 AND id != ?3), 0)
+               AND NOT EXISTS (SELECT 1 FROM accounts WHERE lower(address) = lower(?4))
+               AND NOT EXISTS (SELECT 1 FROM mailboxes WHERE id = ?5 AND role = ?6)",
         )?
-        .execute(params![m.thread_id, m.date_ms, id])?;
+        .execute(params![
+            m.thread_id,
+            m.date_ms,
+            id,
+            m.from.email.trim(),
+            m.mailbox_id,
+            MailboxRole::Sent.as_str()
+        ])?;
     }
     if let Some(p) = prev_thread {
         if p != m.thread_id {

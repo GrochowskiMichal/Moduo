@@ -273,6 +273,15 @@ impl Store {
         let id = id
             .map(str::to_string)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        // Saved under another account (an alias switch): the draft moves. Its
+        // server copy is the old account's, so that one is scheduled for deletion
+        // and the draft uploads afresh to the new account's Drafts.
+        if let Some(prev) = self.draft(&id)?.filter(|p| p.account_id != account_id) {
+            if prev.queued {
+                return Err(err("draft_is_sending"));
+            }
+            self.drop_draft(&prev)?;
+        }
         if doc.message_id.trim().is_empty() {
             let prev: Option<String> = self
                 .w()

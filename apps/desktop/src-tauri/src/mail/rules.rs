@@ -315,7 +315,8 @@ fn rule_hits(store: &Store, rule: &Rule) -> StoreResult<Vec<(String, ParsedHeade
 /// "Also apply to the N already on this Mac" (`mail_apply_rule_existing`, AC7).
 /// The dry run counts the matching threads. The apply queues the rule's ops in
 /// chunks of [`APPLY_CHUNK`] threads under one action id (one `z` undoes it all)
-/// and returns once every chunk is queued; a Put-in-tab rule re-tabs them too.
+/// and returns once every chunk is queued; a Put-in-tab rule re-tabs them too,
+/// inside the same action (a tab-only rule's action is just the re-tab).
 pub fn apply_rule_existing(
     store: &Store,
     cfg: &ClassifyConfig,
@@ -350,6 +351,14 @@ pub fn apply_rule_existing(
         block_folder: cfg.block_folder.clone(),
         ..ClassifyConfig::default()
     };
+    let action = uuid::Uuid::new_v4().to_string();
+    // All or nothing: a failed chunk drops what this action already did (the
+    // re-tab included).
+    let rollback = |e: StoreError| {
+        let _ = store.undo_action_at(&action, now);
+        Err(e)
+    };
+    let mut acted = false;
     if let Some((_, arg)) = rule
         .actions
         .iter()
@@ -360,31 +369,29 @@ pub fn apply_rule_existing(
             stage: ClassifyStage::Rules,
             rule_id: Some(rule.id.clone()),
         };
+        // Part of the action: its undo puts each message's previous tab back.
         for chunk in threads.chunks(APPLY_CHUNK) {
-            store.retab_threads(chunk, &tab, &reason)?;
+            if let Err(e) = store.retab_in_action(chunk, &tab, &reason, &action, now) {
+                return rollback(e);
+            }
+            acted = true;
         }
     }
     let folders = StoreFolders(store);
     let reqs = apply_to_existing(&hits, &one, &folders);
-    let action = uuid::Uuid::new_v4().to_string();
-    let mut queued = false;
     for req in reqs {
         for chunk in req.thread_ids.chunks(APPLY_CHUNK) {
             let mut r = OpRequest::new(req.kind, chunk.to_vec());
             r.to_mailbox_id = req.to_mailbox_id.clone();
             if let Err(e) = store.enqueue_in_action(&r, &action, now) {
-                // All or nothing: drop the chunks already queued.
-                if queued {
-                    let _ = store.undo_action_at(&action, now);
-                }
-                return Err(e);
+                return rollback(e);
             }
-            queued = true;
+            acted = true;
         }
     }
     Ok(ApplyRuleResult {
         count,
-        op_ids: if queued { vec![action] } else { vec![] },
+        op_ids: if acted { vec![action] } else { vec![] },
     })
 }
 
@@ -541,6 +548,15 @@ mod tests {
                 .map(Result::unwrap)
                 .collect()
         };
+        let tab_of = |t: &str| -> String {
+            st.r()
+                .query_row(
+                    "SELECT tab FROM thread_views WHERE thread_id = ?1 LIMIT 1",
+                    [t],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
         // Dry run: counts the 1,200 (not the one in Trash), touches nothing.
         let dry = apply_rule_existing(&st, &cfg, "r-bills", true, 10_000).unwrap();
         assert_eq!(
@@ -567,20 +583,31 @@ mod tests {
             "one bulk id"
         );
         assert_eq!(inbox_count(), 1, "only the friend stays");
-        let tab: String = st
-            .r()
-            .query_row(
-                "SELECT tab FROM thread_views WHERE thread_id = 't7'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        assert_eq!(tab, "notifications");
-        // One z undoes every chunk.
+        assert_eq!(tab_of("t7"), "notifications");
+        // One z undoes every chunk, the re-tab included.
         st.undo_action_at(&done.op_ids[0], 11_000).unwrap();
         assert!(ops().is_empty());
         assert_eq!(inbox_count(), 1_201);
+        assert_eq!(tab_of("t7"), "personal", "undo puts the tab back");
         assert!(apply_rule_existing(&st, &cfg, "nope", true, 0).is_err());
+
+        // A tab-only rule queues no server op, yet its re-tab is one undoable action.
+        apply_settings_items(
+            &mut cfg,
+            &[item(
+                "r-tab",
+                "rule",
+                0.0,
+                json!({"conditions":[{"field":"from","value":"friend@y.test"}],"actions":[{"action":"put_in_tab","arg":"custom:team"}]}),
+            )],
+        );
+        let tabbed = apply_rule_existing(&st, &cfg, "r-tab", false, 12_000).unwrap();
+        assert_eq!(tabbed.count, 1);
+        assert_eq!(tabbed.op_ids.len(), 1, "something to undo");
+        assert!(ops().is_empty(), "nothing for the server");
+        assert_eq!(tab_of("t5000"), "custom:team");
+        st.undo_action_at(&tabbed.op_ids[0], 13_000).unwrap();
+        assert_eq!(tab_of("t5000"), "personal");
     }
 
     #[test]

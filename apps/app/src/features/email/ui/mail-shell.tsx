@@ -12,6 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toast } from "sonner";
 
 import { LABEL_COLORS, type LabelColor } from "@/components/tag-colors";
 import { isMacPlatform, useChordPending } from "@/lib/hotkeys/use-app-hotkeys";
@@ -61,6 +62,7 @@ import {
 import { cycleTab, liveTab, type MailTabDef, MailTabs, mailTabs, sameTab } from "./mail-tabs";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
 import { useRailViewCounts } from "./rail-counts";
+import { humaniseError } from "./system-copy";
 import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
 import { useFailedAccounts } from "./use-failed-accounts";
@@ -440,16 +442,26 @@ export function MailShell({
   const act = useCallback(
     async (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => {
       if (threadIds.length === 0) return;
+      const before = live.current.sel;
+      const clears = REMOVES.has(kind) && (kind === "done" || kind === "delete");
       if (REMOVES.has(kind)) {
         const { ids: list, sel: s } = live.current;
         setSel(
           advanceAfterRemoval(list, { ...s, cursor: s.cursor ?? threadIds[0] ?? null }, threadIds),
         );
-        if (kind === "done" || kind === "delete") setCleared((n) => n + threadIds.length);
+        if (clears) setCleared((n) => n + threadIds.length);
       } else {
         setSel((s) => ({ ...s, picked: [] }));
       }
-      await bulk.apply(kind, threadIds, args);
+      try {
+        await bulk.apply(kind, threadIds, args);
+      } catch (error) {
+        // The engine refused: nothing moved, so the list and the picks go back.
+        setSel(before);
+        if (clears) setCleared((n) => Math.max(0, n - threadIds.length));
+        const reason = humaniseError(error instanceof Error ? error.message : String(error));
+        toast.error(reason ? `That didn't apply: ${reason}.` : "That didn't apply.");
+      }
     },
     [bulk],
   );

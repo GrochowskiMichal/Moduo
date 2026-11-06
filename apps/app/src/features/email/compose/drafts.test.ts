@@ -106,6 +106,24 @@ describe("compose drafts and send (AC21, AC22)", () => {
     expect(draftToOpenSpec(drafts[0]).lastError).toBe("550 mailbox unavailable");
   });
 
+  it("switching to another account's alias moves the draft to that account (AC29)", async () => {
+    const { port, session } = setup();
+    await session.open(spec());
+    await session.update({ bodyHtml: "<p>Hi</p>" });
+    const oldId = session.active!.draftId!;
+    await session.update({ accountId: "acc-2", fromAddr: "me@acc2.com" });
+    await session.flush();
+    const newId = session.active!.draftId!;
+    expect(newId).not.toBe(oldId);
+    expect((await port.getDraft(newId))?.accountId).toBe("acc-2");
+    expect(await port.getDraft(oldId)).toBeNull();
+    expect(await port.listDrafts("acc")).toHaveLength(0);
+    // Later saves keep updating the new draft, not a third one.
+    await session.update({ bodyHtml: "<p>Hi again</p>" });
+    expect(await port.listDrafts("acc-2")).toHaveLength(1);
+    expect(session.active!.draftId).toBe(newId);
+  });
+
   it("refuses to send without recipients or over the size limit", async () => {
     const { session } = setup();
     await session.open(spec({ to: "" }));

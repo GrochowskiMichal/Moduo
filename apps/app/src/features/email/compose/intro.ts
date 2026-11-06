@@ -3,7 +3,7 @@
 // the convention Superhuman made common.
 
 import { addressEmail, splitAddresses } from "../compose";
-import { joinEntries, splitEntries } from "./address-list";
+import { joinEntries, personEntry, splitEntries } from "./address-list";
 
 export type IntroFields = { to: string; cc: string; bcc: string; bodyHtml: string };
 
@@ -84,5 +84,6 @@ export function detectIntroducer(
     return e !== sender && !self.has(e) && !before.has(e);
   });
   if (!added) return null;
-  return last.from.name ? `${last.from.name} <${last.from.email}>` : last.from.email;
+  // personEntry drops a comma in the name ("Shah, Priya"), which would split the entry.
+  return personEntry(last.from);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
+import { splitEntries } from "./address-list";
 import {
   detectIntroducer,
   instantIntro,
@@ -29,6 +30,21 @@ describe("detectIntroducer (specs/mail-v3.md §9 Instant intro)", () => {
     };
     expect(detectIntroducer([msg], [me])).toBe("Priya <priya@a.test>");
     expect(detectIntroducer([{ ...msg, from: p("Mike", me) }], [me])).toBeNull();
+  });
+
+  it("a name with a comma stays one recipient entry", () => {
+    const msg = {
+      from: p("Shah, Priya", "priya@a.test"),
+      to: [p("", me)],
+      cc: [p("Ana", "ana@b.test")],
+    };
+    const introducer = detectIntroducer([msg], [me])!;
+    expect(splitEntries(introducer)).toEqual(["Shah Priya <priya@a.test>"]);
+    const undone = undoInstantIntro(
+      { to: "Ana <ana@b.test>", cc: "", bcc: "priya@a.test", bodyHtml: "" },
+      introducer,
+    );
+    expect(splitEntries(undone.to)).toEqual(["Shah Priya <priya@a.test>", "Ana <ana@b.test>"]);
   });
 
   it("someone already on the thread is not new", () => {
