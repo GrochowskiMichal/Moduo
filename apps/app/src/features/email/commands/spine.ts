@@ -19,6 +19,9 @@ export type SpineLinkInput = {
 };
 
 /** The ops a gesture runs. The app adapter maps these onto `getRuntime()`. */
+/** The entity kinds a thread links to, for the row flags (specs/mail-v3.md decision 7). */
+export type MailLinkedKind = "task" | "note" | "event" | "contact";
+
 export type MailSpinePort = {
   /** Pull the thread into the tissue; `created` when this call made the ref. */
   upsertRef(thread: MailThreadRow): Promise<{ id: string; created: boolean }>;
@@ -47,6 +50,9 @@ export type MailSpinePort = {
   resolveContactId(address: string | null): string | null;
   /** "Also mark done": a Done op; returns its undo. */
   markDone?(threadId: string): Promise<(() => Promise<void>) | null>;
+  /** One batched read per visible window: which kinds each thread links to. Threads
+   *  with no links are absent from the answer. */
+  linkedKindsFor?(threadIds: string[]): Promise<Record<string, MailLinkedKind[]>>;
 };
 
 /** What a gesture made, so Undo removes exactly that. */

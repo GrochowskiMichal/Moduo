@@ -11,6 +11,7 @@
 import type {
   MailBlockDestination,
   MailBodyState,
+  MailClassifyStage,
   MailMailboxRole,
   MailOpKind,
   MailOpState,
@@ -64,7 +65,16 @@ export type MailThreadRow = {
   priority: boolean;
   muted: boolean;
   snoozedUntilMs: number | null;
+  /** "Remind me if no reply" due time (specs/mail-v3.md decision 7), else null. */
+  followUpAtMs?: number | null;
+  /** Why it came back to the Inbox: a snooze ran out, or a reply woke it. */
+  returnReason?: MailReturnReason | null;
+  /** Set while the thread's send waits in the Outbox (engine `outbox.state`). */
+  outboxState?: MailOutboxState | null;
 };
+
+export type MailReturnReason = "snooze" | "reply";
+export type MailOutboxState = "pending" | "in_flight";
 
 export type MailListPage = { rows: MailThreadRow[]; next: MailCursor | null };
 
@@ -87,6 +97,10 @@ export type MailAccount = {
   lastError: string | null;
   /** This device's history depth (`threeMonths` … `everything`). */
   historyDepth?: string;
+  /** When this account last finished a sync round on this Mac (store v2), else null. */
+  lastSyncedMs?: number | null;
+  /** True when new mail is pushed (IDLE / Gmail push); false when polled every minute. */
+  push?: boolean;
 };
 
 export type MailMailbox = {
@@ -100,7 +114,12 @@ export type MailMailbox = {
 };
 
 /** Unread counts per view key (see `mailViewKey`) plus the badge number. */
-export type MailCounts = { byViewKey: Record<string, number>; badge: number };
+export type MailCounts = {
+  byViewKey: Record<string, number>;
+  badge: number;
+  /** Sends waiting in the Outbox (pending or in flight); the rail shows Outbox only above 0. */
+  outbox?: number;
+};
 
 export type MailAttachment = {
   id: string;
@@ -132,7 +151,31 @@ export type MailMessage = {
   hasInvite: boolean;
 };
 
-export type MailThread = { row: MailThreadRow; messages: MailMessage[] };
+export type MailThread = {
+  row: MailThreadRow;
+  messages: MailMessage[];
+  /** "Always" load images from this sender, on this Mac (engine kv `images_allow:<address>`). */
+  imagesAllowed?: boolean;
+};
+
+/** Why a thread sits in its tab (`mail_explain`, specs/mail-v3.md decision 3). `stage`
+ *  is null only when the thread predates stored reasons and has no headers to re-run. */
+export type MailExplain = {
+  stage: MailClassifyStage | null;
+  ruleId: string | null;
+  customTabId: string | null;
+  /** The sender address the decision was about. */
+  address: string;
+  tab: MailTabKind;
+};
+
+/** A rule run over mail already on this Mac (`mail_apply_rule_existing`). */
+export type MailApplyRuleResult = {
+  /** Threads the rule matches (the dry run) or acted on (the apply). */
+  count: number;
+  /** The one undoable bulk op's ids; empty on a dry run. */
+  opIds: string[];
+};
 
 export type MailAttachmentFile = {
   path: string;
@@ -204,7 +247,12 @@ export type MailOpRecord = {
   attempts: number;
   lastError: string | null;
   createdAtMs: number;
+  /** The first thread's subject, for "Done · Workshop materials" in the failed line. */
+  subject?: string | null;
 };
+
+/** `applyOp`'s answer: the undoable op ids and when the undo window closes (engine clock). */
+export type MailApplyOpResult = { opIds: string[]; undoUntilMs?: number };
 
 /** The ⌘K query as `features/email/search/query.ts` parses it (decision 17);
  * the Rust store's `SearchQuery` deserializes this shape. */
@@ -235,7 +283,7 @@ export type MailEvent =
   | { kind: "sync_status"; accountId: string; state: MailSyncState; progress: number | null }
   | { kind: "op_failed"; op: MailOpRecord }
   | { kind: "new_mail"; accountId: string; threadIds: string[] }
-  | { kind: "draft_changed"; draftId: string };
+  | { kind: "draft_changed"; draftId: string; serverUid?: number | null };
 
 export type MailEngine = {
   listAccounts(): Promise<MailAccount[]>;
@@ -276,7 +324,13 @@ export type MailEngine = {
   /** Allow or Block decided: these threads leave New senders. */
   releaseNewSenders?(threadIds: string[]): Promise<void>;
   /** Applies locally in the same call and returns the undoable op ids (decision 12). */
-  applyOp(input: MailOpInput): Promise<{ opIds: string[] }>;
+  applyOp(input: MailOpInput): Promise<MailApplyOpResult>;
+  /** Why this thread is in its tab: the stored classifier stage, or a re-run on its headers. */
+  explainThread?(threadId: string): Promise<MailExplain>;
+  /** Counts (dryRun) or applies a rule to the threads already on this Mac, as one bulk op. */
+  applyRuleExisting?(input: { ruleId: string; dryRun: boolean }): Promise<MailApplyRuleResult>;
+  /** Remembers (or forgets) "Always load images" for a sender, on this Mac only. */
+  setImageAllow?(address: string, allow: boolean): Promise<void>;
   /** Inside the window: cancels; after it: enqueues the compensating op. */
   undoOp(opId: string): Promise<void>;
   listFailedOps(): Promise<MailOpRecord[]>;
