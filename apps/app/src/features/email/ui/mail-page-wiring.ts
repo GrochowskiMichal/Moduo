@@ -223,11 +223,7 @@ const same = (a: SpineEntity, type: string, id: string) => a.type === type && a.
 const sessionRefs = new Map<string, string>();
 const refKey = (workspaceId: string, threadKey: string) => `${workspaceId}:${threadKey}`;
 
-const LINK_KINDS = new Set<MailThreadLink["relationKind"]>([
-  "spawned-from",
-  "references",
-  "related",
-]);
+const LINK_KINDS = new Set<MailThreadLink["relationKind"]>(["spawned-from", "references"]);
 
 /** The thread ref's links, each with its other end labelled from the registry. */
 async function readThreadLinks(
