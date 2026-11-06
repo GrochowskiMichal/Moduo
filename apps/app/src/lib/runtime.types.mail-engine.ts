@@ -119,6 +119,8 @@ export type MailCounts = {
   badge: number;
   /** Sends waiting in the Outbox (pending or in flight); the rail shows Outbox only above 0. */
   outbox?: number;
+  /** Triage ops saved on this device and not yet on the server (the offline line, spec §4). */
+  pendingOps?: number;
 };
 
 export type MailAttachment = {

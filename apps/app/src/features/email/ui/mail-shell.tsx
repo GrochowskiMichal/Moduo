@@ -6,7 +6,6 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { LABEL_COLORS, type LabelColor } from "@/components/tag-colors";
-import { Kbd } from "@/components/ui/kbd";
 import {
   type AppHotkeyHandlers,
   isMacPlatform,
@@ -43,18 +42,24 @@ import { useListGroups } from "../shell/use-list-groups";
 import { useThreadWindow } from "../shell/use-thread-window";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
-import { FailedActionsBar } from "./failed-actions-bar";
-import { FollowupNudges } from "./followup-nudge";
+import { MailHintLine, restHint, useMailHint } from "./hint-line";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
 import { rowPlace } from "./mail-row-model";
-import { type MailConnectProvider, mailListState, MailListStateView } from "./mail-states";
-import { cycleTab, liveTab, MailTabs, mailTabs } from "./mail-tabs";
+import {
+  type MailConnectProvider,
+  MailFirstSync,
+  mailListState,
+  MailListStateView,
+  type MailTabUnread,
+} from "./mail-states";
+import { cycleTab, liveTab, type MailTabDef, MailTabs, mailTabs, sameTab } from "./mail-tabs";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
 import { useRailViewCounts } from "./rail-counts";
 import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
+import { useFailedAccounts } from "./use-failed-accounts";
 
 /** Ops that take a thread out of the current list (auto-advance after them). */
 const REMOVES = new Set<MailOpInput["kind"]>([
@@ -68,6 +73,7 @@ const REMOVES = new Set<MailOpInput["kind"]>([
 
 const selEngine = (s: { engine: unknown }) => s.engine;
 const selOutbox = (s: ReturnType<MailStore["getState"]>) => s.counts?.outbox ?? 0;
+const selPending = (s: ReturnType<MailStore["getState"]>) => s.counts?.pendingOps ?? 0;
 
 const INBOX: MailView = { kind: "unified", role: "inbox" };
 
@@ -82,26 +88,49 @@ function scopedInboxView(
   return box ? { kind: "mailbox", mailboxId: box.id } : undefined;
 }
 
+/** The other tabs with unread mail, offered from a clear tab (spec §4). */
+function otherTabsWithUnread(
+  tabs: readonly MailTabDef[],
+  current: MailTab,
+  counts: ReturnType<MailStore["getState"]>["counts"],
+  countView: MailView,
+): MailTabUnread[] {
+  return tabs
+    .filter((t) => !sameTab(t.tab, current))
+    .map((t) => ({ ...t, unread: counts?.byViewKey[mailViewKey(countView, t.tab)] ?? 0 }))
+    .filter((t) => t.unread > 0);
+}
+
 /** The list pane's body: a place the page renders (the Outbox), the rows, or the list state. */
 function MailListBody({
   place,
   view,
   state,
   onConnect,
+  onTab,
+  onBackToInbox,
   children,
 }: {
   place?: (view: MailView) => ReactNode | null;
   view: MailView;
   state: ReturnType<typeof mailListState>;
   onConnect: (provider?: MailConnectProvider) => void;
+  onTab: (tab: MailTab) => void;
+  onBackToInbox: () => void;
   children: ReactNode;
 }) {
   const own = place?.(view);
   if (own != null) return own;
   if (state.kind === "rows") return children;
+  if (state.kind === "first_sync") return <MailFirstSync />;
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center p-4">
-      <MailListStateView state={state} onConnect={onConnect} />
+      <MailListStateView
+        state={state}
+        onConnect={onConnect}
+        onTab={onTab}
+        onBackToInbox={onBackToInbox}
+      />
     </div>
   );
 }
@@ -125,7 +154,10 @@ export type MailShellProps = {
   showHints?: boolean;
   screenerOn?: boolean;
   customTabs?: readonly { id: string; label: string }[];
-  renderReader?: (threadId: string | null) => ReactNode;
+  /** The reader slot; `listEmpty` asks it to stay blank (spec §4). */
+  renderReader?: (threadId: string | null, ctx: { listEmpty: boolean }) => ReactNode;
+  /** Runs before the undo key undoes triage: true when it undid something (a send). */
+  onUndoFirst?: () => boolean;
   /** Actions beside "N selected" (multi-select), e.g. Labels. */
   renderSelectionActions?: (threadIds: string[]) => ReactNode;
   /** Connect an account; the first-run card names the provider it picked. */
@@ -241,6 +273,7 @@ export function MailShell({
   screenerOn = false,
   customTabs = [],
   renderReader,
+  onUndoFirst,
   renderSelectionActions,
   onConnect,
   onReconnect,
@@ -269,6 +302,7 @@ export function MailShell({
   const followupsDue = useMailStore((s) => s.followupsDue, store);
   const awayReturned = useMailStore((s) => s.awayReturned, store);
   const outboxCount = useMailStore(selOutbox, store);
+  const pendingOps = useMailStore(selPending, store);
   const version = useMailStore((s) => s.threadsVersion, store);
 
   const commands = useMemo(() => createMailCommands(store, now), [store, now]);
@@ -311,8 +345,9 @@ export function MailShell({
   );
   const [hovered, setHovered] = useState<string | null>(null);
   const [legend, setLegend] = useState(false);
-  const [hint, setHint] = useState<string | null>(null);
+  const hint = useMailHint(isMacPlatform());
   const [cleared, setCleared] = useState(0);
+  const failedAccount = useFailedAccounts(engine, failedOps, win.rows);
 
   // An account removed while scoped: the scope clears and the list returns to Inbox.
   useEffect(() => {
@@ -335,12 +370,6 @@ export function MailShell({
     return out;
   }, [accounts]);
 
-  useEffect(() => {
-    if (!hint) return;
-    const t = setTimeout(() => setHint(null), 1500);
-    return () => clearTimeout(t);
-  }, [hint]);
-
   const act = useCallback(
     async (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => {
       if (threadIds.length === 0) return;
@@ -361,7 +390,10 @@ export function MailShell({
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
-      act,
+      act: (kind, threadIds, args) => {
+        if (threadIds.length > 0) hint.result(kind, args);
+        return act(kind, threadIds, args);
+      },
       row: (id) => win.rows.find((r) => r.threadId === id) ?? null,
       open: (id) => setSel({ ...EMPTY_SELECTION, cursor: id }),
     };
@@ -371,14 +403,19 @@ export function MailShell({
     onCursorChange?.(sel.cursor);
   }, [sel.cursor, onCursorChange]);
 
+  const { teach: teachKey, result: showResult } = hint;
   const teach = useCallback(
     (id: MailKeyId) => {
-      if (!showHints) return;
       const k = mailKeyHint(id, isMacPlatform());
-      if (k) setHint(k);
+      if (k) teachKey(k);
     },
-    [showHints],
+    [teachKey],
   );
+  /** A key's op: acts, then the hint line says what it did. */
+  const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => {
+    if (threadIds.length > 0) showResult(kind);
+    void act(kind, threadIds);
+  };
 
   const rowActions: MailRowActions = useMemo(
     () => ({
@@ -407,7 +444,7 @@ export function MailShell({
   ) => {
     const t = cur();
     const first = win.rows.find((r) => r.threadId === t[0]);
-    void act(first?.[flag] ? off : on, t);
+    actKey(first?.[flag] ? off : on, t);
   };
   const intent = (id: MailKeyId) => () => {
     const t = cur();
@@ -428,11 +465,14 @@ export function MailShell({
       if (sel.picked.length === 0) return false;
       setSel((s) => ({ ...s, picked: [] }));
     },
-    "email.archive": () => void act("done", cur()),
-    "email.delete": () => void act("delete", cur()),
+    "email.archive": () => actKey("done", cur()),
+    "email.delete": () => actKey("delete", cur()),
     "email.pin": () => toggleKind("pin", "unpin", "pinned"),
     "email.unread": () => toggleKind("mark_unread", "mark_read", "unread"),
-    "email.undo": () => void commands.undo(),
+    "email.undo": () => {
+      if (onUndoFirst?.()) return;
+      void commands.undo();
+    },
     "email.tab-prev": () => (tabbed ? setTab((t) => cycleTab(tabs, t, -1)) : false),
     "email.tab-next": () => (tabbed ? setTab((t) => cycleTab(tabs, t, 1)) : false),
     "email.legend": () => setLegend(true),
@@ -451,14 +491,23 @@ export function MailShell({
   useAppHotkeys(handlers);
 
   const folderName = viewFolderName(view, mailboxes);
+  const countView = scopedInbox ?? view;
   const state = mailListState({
     accounts,
     loading: win.loading,
     rowCount: win.rows.length,
+    view,
     isInbox: tabbed,
     folderName,
+    tabLabel: tabs.find((t) => sameTab(t.tab, tab))?.label,
     clearedToday: cleared,
+    others: otherTabsWithUnread(tabbed ? tabs : [], tab, counts, countView),
   });
+  const goInbox = () => {
+    setView(INBOX);
+    setSel(EMPTY_SELECTION);
+    onViewChange?.(INBOX);
+  };
 
   const zero = (age: ZeroAge) => {
     void bulk.getMeToZero(view, listTab, age).then((e) => {
@@ -528,6 +577,7 @@ export function MailShell({
             countView={scopedInbox}
             onSelect={setTab}
             onZero={zero}
+            onCustomTabs={onOpenSettings}
           />
         ) : null}
         <PlaceHeading
@@ -536,20 +586,26 @@ export function MailShell({
           hidden={tabbed}
           accountCount={accounts.length}
         />
+        <MailSystemLines
+          accounts={accounts}
+          outboxCount={outboxCount}
+          pendingOps={pendingOps}
+          awayCount={awayReturned.length}
+          failed={failedOps}
+          failedAccount={failedAccount}
+          followups={followupsDue}
+          nudgeAllowed={tabbed && tab.kind === "personal"}
+          selfAddresses={accounts.map((a) => a.address)}
+          nowMs={now()}
+          onReconnect={onReconnect}
+          onRetry={onRetryAccount}
+          onDismissAway={() => commands.clearAwayAnnouncement()}
+          onRetryOps={(opIds) => void Promise.all(opIds.map((id) => commands.retry(id)))}
+          onUndoOps={(opIds) => void Promise.all(opIds.map((id) => commands.discard(id)))}
+          onOpenThread={(id) => setSel({ ...EMPTY_SELECTION, cursor: id })}
+          onDismissFollowup={(id) => void commands.dismissFollowup(id).catch(() => {})}
+        />
         <div className="pt-2">
-          <MailSystemLines
-            accounts={accounts}
-            outboxCount={outboxCount}
-            awayCount={awayReturned.length}
-            onReconnect={onReconnect}
-            onRetry={onRetryAccount}
-            onDismissAway={() => commands.clearAwayAnnouncement()}
-          />
-          <FailedActionsBar
-            failed={failedOps}
-            onRetry={(opIds) => void Promise.all(opIds.map((id) => commands.retry(id)))}
-            onDiscard={(opIds) => void Promise.all(opIds.map((id) => commands.discard(id)))}
-          />
           {renderListTop?.(view)}
           {view.kind === "new_senders" ? (
             <NewSendersPanel
@@ -566,15 +622,6 @@ export function MailShell({
               }
             />
           ) : null}
-          {tabbed ? (
-            <FollowupNudges
-              rows={followupsDue}
-              selfAddresses={accounts.map((a) => a.address)}
-              nowMs={now()}
-              onOpen={(id) => setSel({ ...EMPTY_SELECTION, cursor: id })}
-              onDismiss={(id) => void commands.dismissFollowup(id).catch(() => {})}
-            />
-          ) : null}
         </div>
         {sel.picked.length > 0 ? (
           <div className="mx-2 mb-1 flex items-center gap-2 px-1 text-xs text-muted-foreground">
@@ -587,6 +634,8 @@ export function MailShell({
           view={view}
           state={state}
           onConnect={(p) => onConnect?.(p)}
+          onTab={setTab}
+          onBackToInbox={goInbox}
         >
           <MailThreadList
             items={items}
@@ -608,17 +657,14 @@ export function MailShell({
             onNearEnd={win.loadMore}
           />
         </MailListBody>
-        {hint ? (
-          <div
-            role="status"
-            className="m-2 flex items-center gap-2 self-center text-xs text-muted-foreground"
-          >
-            Next time press <Kbd>{hint}</Kbd>
-          </div>
-        ) : null}
+        <MailHintLine
+          enabled={showHints}
+          rest={restHint(view, state.kind === "rows")}
+          hint={hint.hint}
+        />
       </section>
       <section aria-label="Reader" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {renderReader?.(sel.cursor) ?? null}
+        {renderReader?.(sel.cursor, { listEmpty: state.kind !== "rows" }) ?? null}
       </section>
       <MailLegendDialog open={legend} onOpenChange={setLegend} />
     </div>

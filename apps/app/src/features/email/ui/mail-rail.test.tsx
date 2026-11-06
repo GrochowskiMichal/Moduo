@@ -345,7 +345,7 @@ describe("account scope through the thread window and tab counts (AC12)", () => 
     expect([...rowAccounts()]).toEqual([second.id]);
     const counts = await engine.counts();
     const scopedUnread = counts.byViewKey[`mailbox:${second.id}:inbox|personal`] ?? 0;
-    expect(personalTab()).toBe(scopedUnread ? `Personal${scopedUnread}` : "Personal");
+    expect(personalTab()).toBe(scopedUnread ? `Personal${scopedUnread} unread` : "Personal");
     expect(personalTab()).not.toBe(globalCount);
 
     // Again unscopes.

@@ -329,6 +329,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       byViewKey,
       badge: byViewKey[mailViewKey({ kind: "unified", role: "inbox" }, { kind: "personal" })] ?? 0,
       outbox: outbox.size,
+      pendingOps: pending.size,
     };
   }
 

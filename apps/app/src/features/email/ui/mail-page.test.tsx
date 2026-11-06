@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { Toaster } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
 
 import type { MailSpineCommands } from "../commands/spine";
+import { followUpDueMs } from "../compose/follow-up";
 import { createMailStore } from "../store/mail-store";
 import { createFakeCompose } from "../testing/fake-compose";
 import { createFakeMailEngine } from "../testing/fake-engine";
@@ -320,6 +322,57 @@ describe("/email on the engine (MR-16 cutover)", () => {
       expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe(
         "Hi Thanks Ana!",
       );
+    });
+
+    it("undo send toast copy and edit", async () => {
+      const engine = createFakeMailEngine({
+        fixture: generateFixture({ messages: 200 }),
+        now: () => FIXTURE_NOW_MS,
+      });
+      const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+      const compose = createFakeCompose({ now: () => FIXTURE_NOW_MS });
+      render(<Toaster />);
+      const ui = render(
+        <TooltipProvider>
+          <HotkeyScope scope="email">
+            <MailPage store={store} compose={compose} now={() => FIXTURE_NOW_MS} />
+          </HotkeyScope>
+        </TooltipProvider>,
+      );
+      await tick();
+      await tick();
+      press("j");
+      const open = ui.container.querySelector<HTMLElement>(
+        '[aria-selected="true"][data-thread-id]',
+      )!.dataset.threadId!;
+      const last = (await engine.getThread(open))!.messages.at(-1)!;
+      const firstName = last.from.name.split(" ")[0];
+      press("r");
+      await tick();
+      await tick();
+      const reply = screen.getByRole("region", { name: "Reply" });
+      // " · reminds you {Thu}" when the reply set a follow-up.
+      fireEvent.change(within(reply).getByLabelText("Follow-up"), { target: { value: "3d" } });
+      await tick();
+      fireEvent.click(within(reply).getByRole("button", { name: "Send" }));
+      await tick();
+      await tick();
+      const day = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
+        new Date(followUpDueMs("3d", FIXTURE_NOW_MS)),
+      );
+      // The countdown runs to the engine's send time: 10 s (the default window) from now.
+      await screen.findByText(
+        `Reply to ${firstName} sends in 10 s · thread marked Done · reminds you ${day}`,
+      );
+      expect(screen.queryByRole("region", { name: "Reply" })).toBeNull();
+      expect((await compose.listOutbox()).length).toBe(1);
+
+      // Edit pulls it back from the Outbox and reopens it.
+      fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+      await tick();
+      await tick();
+      screen.getByRole("region", { name: "Reply" });
+      expect((await compose.listOutbox()).length).toBe(0);
     });
 
     it("failed send shows Not sent and Fix and send", async () => {

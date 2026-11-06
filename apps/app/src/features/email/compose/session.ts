@@ -52,7 +52,20 @@ export type ComposeDeps = {
   /** Records the follow-up reminder on the thread. */
   setFollowUp?: (threadId: string, dueMs: number) => Promise<unknown> | void;
   /** Shows the undo-send toast; the callbacks are its Undo and Edit buttons. */
-  showSent?: (handle: MailSendHandle, actions: { undo: () => void; edit: () => void }) => void;
+  showSent?: (
+    handle: MailSendHandle,
+    actions: { undo: () => void; edit: () => void },
+    info: SentInfo,
+  ) => void;
+};
+
+/** What the send did besides queueing, for the undo-send toast's copy (spec §5). */
+export type SentInfo = {
+  kind: ComposeKind;
+  to: string;
+  threadId: string | null;
+  markedDone: boolean;
+  followUpMs: number | null;
 };
 
 export type SendResult = { ok: true; handle: MailSendHandle } | { ok: false; reason: string };
@@ -166,8 +179,8 @@ export function createComposeSession(deps: ComposeDeps) {
       emit();
       if (s.threadId && s.followUp && deps.setFollowUp)
         await deps.setFollowUp(s.threadId, s.followUp);
-      if (s.threadId && s.fromInbox && doneOnSend && s.kind !== "new")
-        await deps.markDone(s.threadId);
+      const markedDone = Boolean(s.threadId && s.fromInbox && doneOnSend && s.kind !== "new");
+      if (markedDone && s.threadId) await deps.markDone(s.threadId);
       const reopen = async () => {
         const { draftId } = await deps.port.undoSend(handle.outboxId);
         if (!draftId) return;
@@ -175,7 +188,17 @@ export function createComposeSession(deps: ComposeDeps) {
         active = { ...s, key: `compose-${++seq}`, draftId };
         emit();
       };
-      deps.showSent?.(handle, { undo: () => void reopen(), edit: () => void reopen() });
+      deps.showSent?.(
+        handle,
+        { undo: () => void reopen(), edit: () => void reopen() },
+        {
+          kind: s.kind,
+          to: s.to,
+          threadId: s.threadId,
+          markedDone,
+          followUpMs: s.threadId ? s.followUp : null,
+        },
+      );
       return { ok: true, handle };
     },
   };

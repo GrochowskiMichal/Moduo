@@ -28,7 +28,12 @@ import { createMailCommands } from "../commands/triage";
 import type { MailAlias } from "../compose/aliases";
 import { MailComposer } from "../compose/mail-composer";
 import { applyMailtoPrefill, drainMailto, type MailtoPrefill } from "../compose/mailto";
-import { type ComposeKind, type ComposeOpenSpec, createComposeSession } from "../compose/session";
+import {
+  type ComposeDeps,
+  type ComposeKind,
+  type ComposeOpenSpec,
+  createComposeSession,
+} from "../compose/session";
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
 import { ContactMailPanel } from "../panels/contact-mail";
@@ -50,6 +55,7 @@ import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
 import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
+import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
 
 const COMPOSE_INTENTS: Partial<Record<MailKeyId, ComposeKind>> = {
@@ -241,12 +247,25 @@ function InviteSlot({
   );
 }
 
+/** A known display name for an address (contacts, correspondents, the open thread). */
+function knownName(
+  email: string,
+  lists: readonly (readonly { name: string; email: string }[] | undefined)[],
+): string | null {
+  for (const list of lists) {
+    const hit = list?.find((p) => p.name && p.email.toLowerCase() === email);
+    if (hit) return hit.name;
+  }
+  return null;
+}
+
 /** The compose port (prop wins over the runtime) and its session. */
 function useComposeSession(
   compose: MailPageProps["compose"],
   store: NonNullable<MailPageProps["store"]>,
   commands: ReturnType<typeof createMailCommands>,
   engine: ReturnType<typeof mailStore.getState>["engine"],
+  sent: { current: ComposeDeps["showSent"] },
 ) {
   // The prop wins, then the provider's (the fixture's), then the runtime's (desktop).
   const provided = useMailStore((s) => s.compose, store);
@@ -264,18 +283,11 @@ function useComposeSession(
             setFollowUp: engine?.setFollowUp
               ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
               : undefined,
-            // The undo-send toast (X22): Undo cancels and reopens, Edit reopens to change it.
-            showSent: (_handle, actions) => {
-              const seconds = store.getState().behavior.undoSendSeconds;
-              toast("Sending…", {
-                duration: seconds * 1000,
-                action: { label: "Undo", onClick: actions.undo },
-                cancel: { label: "Edit", onClick: actions.edit },
-              });
-            },
+            // The undo-send toast (spec §5): the page fills it (it knows names and the clock).
+            showSent: (handle, actions, info) => sent.current?.(handle, actions, info),
           })
         : null,
-    [port, store, commands, engine],
+    [port, store, commands, engine, sent],
   );
   return { port, session };
 }
@@ -318,8 +330,16 @@ export function MailPage({
     if (initialThreadId) onConsumeThreadDeepLink?.();
   }, [initialThreadId, onConsumeThreadDeepLink]);
 
-  const { port, session } = useComposeSession(compose, store, commands, engine);
+  const names = useRef<(email: string) => string | null>(() => null);
+  const undoSend = useUndoSendToast({ now, nameFor: (email) => names.current(email) });
+  const { port, session } = useComposeSession(compose, store, commands, engine, undoSend.sent);
   const extras = useComposeExtras({ port, session, engine, accounts });
+  names.current = (email) =>
+    knownName(email, [
+      contacts,
+      extras.correspondents,
+      current ? shell.current?.row(current)?.senders : undefined,
+    ]);
   const placeKey = useMailStore(selPlaceKey, store);
   const notSent = useNotSentThreadIds(port, placeKey);
 
@@ -504,6 +524,7 @@ export function MailPage({
           screenerOn={behavior.screener}
           initialThreadId={initialThreadId}
           apiRef={shell}
+          onUndoFirst={undoSend.undoFirst}
           customTabs={customTabs}
           linkedKindsFor={spine?.linkedKindsFor}
           notSentThreadIds={notSent}
@@ -544,7 +565,7 @@ export function MailPage({
           }}
           onCursorChange={setCurrent}
           renderSelectionActions={labels.selectionActions}
-          renderReader={(threadId) => {
+          renderReader={(threadId, { listEmpty } = { listEmpty: false }) => {
             if (files && engine) {
               return (
                 <AttachmentsPlace
@@ -576,6 +597,8 @@ export function MailPage({
                 </div>
               );
             }
+            // An empty list leaves the reader blank (spec §4).
+            if (!threadId && listEmpty) return null;
             return (
               <MailReader
                 engine={engine}
