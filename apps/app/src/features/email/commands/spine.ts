@@ -6,6 +6,8 @@
 // share one teardown that removes only those artifacts (never a ref, link or
 // contact link that existed before).
 
+import type { RelationKind } from "@contracts/vocabularies";
+
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
 import { buildConvertDescription, cleanTaskTitle } from "../convert";
@@ -15,7 +17,8 @@ export type SpineEntity = { type: string; id: string; label?: string | null };
 export type SpineLinkInput = {
   source: SpineEntity;
   target: SpineEntity;
-  relationKind: "spawned-from" | "references" | "related";
+  /** Closed vocabulary: `links_op_create` refuses anything outside it. */
+  relationKind: RelationKind;
 };
 
 /** The ops a gesture runs. The app adapter maps these onto `getRuntime()`. */
@@ -233,7 +236,7 @@ export function createMailSpineCommands(port: MailSpinePort) {
     link(thread: MailThreadRow, target: SpineEntity) {
       return run(async (plan) => {
         const threadRef = await ref(plan, thread);
-        await linkOnce(plan, { source: threadRef, target, relationKind: "related" });
+        await linkOnce(plan, { source: threadRef, target, relationKind: "references" });
       });
     },
     /** `n`: a private note linked to the thread. */
