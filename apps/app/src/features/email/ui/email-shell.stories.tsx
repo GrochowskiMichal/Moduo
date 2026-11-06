@@ -7,9 +7,9 @@ import type { MailAccount, MailOpRecord } from "@/lib/runtime.types.mail-engine"
 import { createMailStore, type MailStore } from "../store/mail-store";
 import { createFakeMailEngine } from "../testing/fake-engine";
 import { FIXTURE_NOW_MS, generateFixture } from "../testing/fixture";
-import { FailedActionsBar } from "./failed-actions-bar";
 import { MailShell } from "./mail-shell";
-import { MailBodyUnavailable, MailListStateView } from "./mail-states";
+import { MailBodyUnavailable, MailFirstSync, MailListStateView } from "./mail-states";
+import { MailSystemLines } from "./system-lines";
 
 function useFixtureStore(
   patch: (accounts: MailAccount[]) => Partial<ReturnType<MailStore["getState"]>> = () => ({}),
@@ -38,19 +38,13 @@ function useFixtureStore(
 
 function Shell(props: {
   patch?: (a: MailAccount[]) => Partial<ReturnType<MailStore["getState"]>>;
-  offline?: boolean;
   density?: "comfortable" | "compact";
 }) {
   const store = useFixtureStore(props.patch);
   if (!store) return null;
   return (
     <div className="h-screen">
-      <MailShell
-        store={store}
-        now={() => FIXTURE_NOW_MS}
-        offline={props.offline}
-        density={props.density}
-      />
+      <MailShell store={store} now={() => FIXTURE_NOW_MS} density={props.density} />
     </div>
   );
 }
@@ -67,11 +61,16 @@ const failed: MailOpRecord = {
   attempts: 8,
   lastError: "Mailbox is read-only",
   createdAtMs: FIXTURE_NOW_MS,
+  subject: "Workshop materials",
 };
 
 export const Inbox: Story = { render: () => <Shell /> };
 export const Compact: Story = { render: () => <Shell density="compact" /> };
-export const Offline: Story = { render: () => <Shell offline /> };
+export const Offline: Story = {
+  render: () => (
+    <Shell patch={(a) => ({ accounts: a.map((x) => ({ ...x, syncState: "offline" })) })} />
+  ),
+};
 export const Reconnect: Story = {
   render: () => (
     <Shell
@@ -99,15 +98,26 @@ export const NoAccounts: Story = {
   render: () => <MailListStateView state={{ kind: "no_accounts" }} />,
 };
 export const FirstSync: Story = {
-  render: () => <MailListStateView state={{ kind: "first_sync" }} />,
+  render: () => <MailFirstSync />,
 };
 export const EmptyFolder: Story = {
-  render: () => <MailListStateView state={{ kind: "empty_folder", name: "Spam" }} />,
+  render: () => (
+    <MailListStateView state={{ kind: "empty_place", place: "snoozed", name: "Snoozed" }} />
+  ),
 };
-export const InboxZero: Story = {
-  render: () => <MailListStateView state={{ kind: "inbox_zero", clearedToday: 34 }} />,
+export const TabClear: Story = {
+  render: () => (
+    <MailListStateView
+      state={{
+        kind: "tab_clear",
+        tabLabel: "Personal",
+        clearedToday: 34,
+        others: [{ tab: { kind: "notifications" }, label: "Notifications", unread: 4 }],
+      }}
+    />
+  ),
 };
 export const BodyUnavailableOffline: Story = { render: () => <MailBodyUnavailable /> };
-export const FailedBarAlone: Story = {
-  render: () => <FailedActionsBar failed={[failed]} onRetry={() => {}} onDiscard={() => {}} />,
+export const FailedLineAlone: Story = {
+  render: () => <MailSystemLines accounts={[]} outboxCount={0} awayCount={0} failed={[failed]} />,
 };

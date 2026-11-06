@@ -36,6 +36,8 @@ type ChipOwnProps = {
   onRemove?: () => void;
   /** The ×'s accessible name (default "Remove"). */
   removeLabel?: string;
+  /** The × shows only while the chip is hovered or focused (a reader's link chips). */
+  removeOnHover?: boolean;
 };
 
 function chipClasses({
@@ -81,7 +83,15 @@ function ChipIcon({ icon }: { icon: ChipOwnProps["icon"] }) {
   );
 }
 
-function ChipRemove({ label, onRemove }: { label: string; onRemove: () => void }) {
+function ChipRemove({
+  label,
+  onRemove,
+  onHover = false,
+}: {
+  label: string;
+  onRemove: () => void;
+  onHover?: boolean;
+}) {
   return (
     <button
       type="button"
@@ -92,8 +102,11 @@ function ChipRemove({ label, onRemove }: { label: string; onRemove: () => void }
       }}
       className={cn(
         "hit-min -me-0.5 flex shrink-0 items-center rounded-sm text-muted-foreground outline-none",
-        "transition-colors duration-(--motion-fade) ease-(--ease-out)",
+        onHover ? "transition" : "transition-colors",
+        "duration-(--motion-fade) ease-(--ease-out)",
         "hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50",
+        onHover &&
+          "opacity-0 group-hover/chip:opacity-100 group-focus-within/chip:opacity-100 focus-visible:opacity-100",
       )}
     >
       <X aria-hidden className="size-icon-sm" />
@@ -111,6 +124,7 @@ function Chip({
   icon,
   onRemove,
   removeLabel = "Remove",
+  removeOnHover = false,
   className,
   children,
   ...props
@@ -119,12 +133,14 @@ function Chip({
     <span
       data-slot="chip"
       data-active={active ? "" : undefined}
-      className={cn(chipClasses({ size, shape, active }), className)}
+      className={cn(chipClasses({ size, shape, active }), removeOnHover && "group/chip", className)}
       {...props}
     >
       <ChipIcon icon={icon} />
       <span className="min-w-0 truncate">{children}</span>
-      {onRemove ? <ChipRemove label={removeLabel} onRemove={onRemove} /> : null}
+      {onRemove ? (
+        <ChipRemove label={removeLabel} onRemove={onRemove} onHover={removeOnHover} />
+      ) : null}
     </span>
   );
 }

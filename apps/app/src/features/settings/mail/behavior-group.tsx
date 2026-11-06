@@ -6,13 +6,13 @@ import {
   MAIL_UNDO_SEND_SECONDS,
   type MailBadgeMode,
   type MailBehavior,
-  type MailDensity,
   type MailRemoteImages,
   type MailUndoSendSeconds,
 } from "@/features/email/engine/behavior";
 
 import { PrefGroup, PrefRow } from "../sections/preferences-section";
 import { ChoiceSelect } from "./controls";
+import { DENSITY_CHOICES, densityChoice, densityPatch } from "./density";
 
 const BADGE = [
   { value: "personal", label: "Unread Personal" },
@@ -23,12 +23,6 @@ const IMAGES = [
   { value: "block", label: "Block" },
   { value: "contacts", label: "Contacts only" },
   { value: "always", label: "Always" },
-] as const;
-const DENSITY = [
-  { value: "comfortable:2", label: "Comfortable, 2-line preview" },
-  { value: "comfortable:1", label: "Comfortable, 1-line preview" },
-  { value: "compact:1", label: "Compact, 1-line preview" },
-  { value: "compact:2", label: "Compact, 2-line preview" },
 ] as const;
 const UNDO = MAIL_UNDO_SEND_SECONDS.map((s) => ({ value: String(s), label: `${s} seconds` }));
 
@@ -97,12 +91,9 @@ export function BehaviorGroup({
         <ChoiceSelect
           label="Density"
           className="w-56"
-          value={`${behavior.density}:${behavior.previewLines}`}
-          choices={DENSITY}
-          onChange={(v) => {
-            const [density, lines] = v.split(":");
-            onChange({ density: density as MailDensity, previewLines: lines === "2" ? 2 : 1 });
-          }}
+          value={densityChoice(behavior)}
+          choices={DENSITY_CHOICES}
+          onChange={(v) => onChange(densityPatch(v))}
         />
       </PrefRow>
       {TOGGLES.map((t) => (

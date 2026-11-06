@@ -3,10 +3,10 @@
 //! reader never sees a message without its row or a row without its message.
 
 use super::{
-    now_ms, AccountInput, BodyInput, MailboxCursor, MailboxInput, MessageInput, Store, StoreResult,
-    TabRef,
+    now_ms, AccountInput, BodyInput, ClassifyReason, MailboxCursor, MailboxInput, MessageInput,
+    Store, StoreResult, TabRef,
 };
-use crate::mail::contracts::{TabKind, FLAG_DELETED, FLAG_SEEN};
+use crate::mail::contracts::{MailboxRole, TabKind, FLAG_DELETED, FLAG_SEEN};
 use rusqlite::{params, OptionalExtension, Transaction};
 use std::collections::BTreeSet;
 
@@ -34,6 +34,15 @@ impl Store {
         self.w().execute(
             "UPDATE accounts SET sync_state = ?2, backfill_progress = ?3, last_error = ?4 WHERE id = ?1",
             params![account_id, state, progress, last_error],
+        )?;
+        Ok(())
+    }
+
+    /// A finished sync round (store v2): when, and whether new mail is pushed (IDLE).
+    pub fn stamp_synced(&self, account_id: &str, now: i64, push: Option<bool>) -> StoreResult<()> {
+        self.w().execute(
+            "UPDATE accounts SET last_synced_ms = ?2, push = COALESCE(?3, push) WHERE id = ?1",
+            params![account_id, now, push],
         )?;
         Ok(())
     }
@@ -191,6 +200,28 @@ impl Store {
                     params![t, flag],
                 )?;
             }
+            refresh_thread(&tx, t)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Puts every message of these threads in `tab` with the reason that did it
+    /// (a rule applied to existing mail), and refreshes their rows.
+    pub fn retab_threads(
+        &self,
+        thread_ids: &[String],
+        tab: &TabRef,
+        reason: &ClassifyReason,
+    ) -> StoreResult<()> {
+        let mut conn = self.w();
+        let tx = conn.transaction()?;
+        for t in thread_ids {
+            tx.execute(
+                "UPDATE messages SET tab = ?2, classify_stage = ?3, classify_rule_id = ?4
+                 WHERE thread_id = ?1",
+                params![t, tab.encode(), reason.stage.as_str(), reason.rule_id],
+            )?;
             refresh_thread(&tx, t)?;
         }
         tx.commit()?;
@@ -467,10 +498,12 @@ fn ingest_one(tx: &Transaction, m: &MessageInput, touched: &mut Touched) -> Stor
         "INSERT INTO messages (account_id, ext_id, message_id, in_reply_to, refs, thread_id,
            from_name, from_email, to_json, cc_json, subject, snippet, date_ms, flags, size,
            list_unsubscribe, list_unsubscribe_post, precedence, auto_submitted,
-           has_attachments, has_invite, tab, priority)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23)
+           has_attachments, has_invite, tab, priority, classify_stage, classify_rule_id)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25)
          ON CONFLICT(account_id, ext_id) DO UPDATE SET flags = excluded.flags,
            thread_id = excluded.thread_id, tab = COALESCE(excluded.tab, messages.tab),
+           classify_rule_id = CASE WHEN excluded.classify_stage IS NULL THEN messages.classify_rule_id ELSE excluded.classify_rule_id END,
+           classify_stage = COALESCE(excluded.classify_stage, messages.classify_stage),
            priority = excluded.priority, snippet = CASE WHEN excluded.snippet = '' THEN messages.snippet ELSE excluded.snippet END
          RETURNING id",
     )?;
@@ -503,11 +536,33 @@ fn ingest_one(tx: &Transaction, m: &MessageInput, touched: &mut Touched) -> Stor
             has_att,
             m.has_invite,
             tab,
-            m.priority
+            m.priority,
+            m.classify.as_ref().map(|c| c.stage.as_str()),
+            m.classify.as_ref().and_then(|c| c.rule_id.clone())
         ],
         |r| r.get(0),
     )?;
     let fresh = prev_thread.is_none();
+    if fresh {
+        // A newer message on a snoozed thread: a later unsnooze reads "reply" (decision 7).
+        // Your own message (an account's address, or a copy in a Sent folder) isn't one.
+        tx.prepare_cached(
+            "INSERT OR IGNORE INTO kv (key, value)
+             SELECT 'snooze_reply:' || t.id, '1' FROM threads t
+             WHERE t.id = ?1 AND t.snoozed_until_ms IS NOT NULL
+               AND ?2 > COALESCE((SELECT MAX(date_ms) FROM messages WHERE thread_id = ?1 AND id != ?3), 0)
+               AND NOT EXISTS (SELECT 1 FROM accounts WHERE lower(address) = lower(?4))
+               AND NOT EXISTS (SELECT 1 FROM mailboxes WHERE id = ?5 AND role = ?6)",
+        )?
+        .execute(params![
+            m.thread_id,
+            m.date_ms,
+            id,
+            m.from.email.trim(),
+            m.mailbox_id,
+            MailboxRole::Sent.as_str()
+        ])?;
+    }
     if let Some(p) = prev_thread {
         if p != m.thread_id {
             touched.insert(p);

@@ -18,19 +18,43 @@ export type FakeComposeEngine = MailComposeEngine & {
   /** A draft made on another device or client appears (AC21). */
   serverDraft(row: MailDraftRow): void;
   sent: MailDraftRow[];
+  /** The 2 s debounce elapsed: every local draft reaches the server (online only) and
+   *  `draft_changed` fires with its server uid (AC10). */
+  uploadDrafts(): void;
 };
+
+/** Compose lab states: a failed send back in Drafts, a queued send, and files over the
+ *  provider's limit waiting in the attach picker. */
+export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox", "tooBig"] as const;
+export type FakeComposeScenario = (typeof FAKE_COMPOSE_SCENARIOS)[number];
+
+export function isFakeComposeScenario(v: string): v is FakeComposeScenario {
+  return (FAKE_COMPOSE_SCENARIOS as readonly string[]).includes(v);
+}
+
+const MB = 1024 * 1024;
+/** The prototype's `tooBig` files: 31.4 MB together, over Gmail's 25 MB once encoded. */
+const TOO_BIG = [
+  { id: "att-shot-list", filename: "shot-list.pdf", size: Math.round(0.4 * MB) },
+  { id: "att-moodboard", filename: "moodboard.pdf", size: Math.round(6.2 * MB) },
+  { id: "att-raw", filename: "test-shoot-raw.zip", size: Math.round(24.8 * MB) },
+];
 
 export function createFakeCompose(
   opts: {
     now?: () => number;
     correspondents?: { name: string; email: string; count: number }[];
     sizeLimit?: number;
+    /** The engine's `draft_changed` (the fixture mail engine re-emits it). */
+    onDraftChanged?: (draftId: string, serverUid: number | null) => void;
+    scenario?: FakeComposeScenario[];
   } = {},
 ): FakeComposeEngine {
   const now = opts.now ?? (() => Date.now());
   const drafts = new Map<string, MailDraftRow>();
   const outbox = new Map<string, MailOutboxItem>();
   let n = 0;
+  let uid = 100;
   const engine: FakeComposeEngine = {
     online: true,
     failNext: null,
@@ -42,9 +66,15 @@ export function createFakeCompose(
         id,
         accountId: input.accountId,
         threadId: input.threadId,
-        doc: { ...input.doc, messageId: prev?.doc.messageId || `<${id}@moduo.local>` },
+        // A save after a failed send clears its reason (specs/mail-v3.md edge cases).
+        doc: {
+          ...input.doc,
+          messageId: prev?.doc.messageId || `<${id}@moduo.local>`,
+          lastError: null,
+        },
         updatedAtMs: now(),
-        serverUid: prev?.serverUid ?? null,
+        // The edited copy is local until the next upload replaces the server's.
+        serverUid: null,
         queued: prev?.queued ?? false,
       });
       return { draftId: id };
@@ -73,7 +103,7 @@ export function createFakeCompose(
         draftId,
         subject: d.doc.subject,
         to: d.doc.to,
-        state: "queued",
+        state: "pending",
         attempts: 0,
         lastError: null,
         notBeforeMs: sendAtMs,
@@ -82,7 +112,7 @@ export function createFakeCompose(
     },
     async undoSend(outboxId) {
       const item = outbox.get(outboxId);
-      if (!item || item.state !== "queued" || now() >= item.notBeforeMs) return { draftId: null };
+      if (!item || item.state !== "pending" || now() >= item.notBeforeMs) return { draftId: null };
       outbox.delete(outboxId);
       const d = item.draftId ? drafts.get(item.draftId) : null;
       if (d) d.queued = false;
@@ -104,7 +134,7 @@ export function createFakeCompose(
       return crypto.randomUUID();
     },
     async pickAttachments() {
-      return [];
+      return opts.scenario?.includes("tooBig") ? TOO_BIG.map((f) => ({ ...f })) : [];
     },
     drain() {
       if (!engine.online) return;
@@ -126,6 +156,80 @@ export function createFakeCompose(
     serverDraft(row) {
       drafts.set(row.id, row);
     },
+    uploadDrafts() {
+      if (!engine.online) return;
+      for (const d of drafts.values()) {
+        if (d.queued || d.serverUid !== null) continue;
+        d.serverUid = ++uid;
+        opts.onDraftChanged?.(d.id, d.serverUid);
+      }
+    },
   };
+  applyComposeScenario(new Set(opts.scenario ?? []), drafts, outbox, now);
   return engine;
+}
+
+function applyComposeScenario(
+  scenario: Set<FakeComposeScenario>,
+  drafts: Map<string, MailDraftRow>,
+  outbox: Map<string, MailOutboxItem>,
+  now: () => number,
+) {
+  const base = {
+    fromName: "Mike",
+    fromAddr: "mike@gmail.test",
+    cc: [],
+    bcc: [],
+    html: null,
+    inReplyTo: null,
+    references: [],
+    attachments: [],
+  };
+  if (scenario.has("sendFailed")) {
+    drafts.set("draft-failed", {
+      id: "draft-failed",
+      accountId: "acc-gmail",
+      threadId: null,
+      updatedAtMs: now() - 300_000,
+      serverUid: 41,
+      queued: false,
+      doc: {
+        ...base,
+        messageId: "<draft-failed@moduo.local>",
+        to: ["dana@northzone.tst"],
+        subject: "Deck for Thursday",
+        text: "Hi Dana, the deck is attached.",
+        lastError: "The server refused the address dana@northzone.tst",
+      },
+    });
+  }
+  if (scenario.has("outbox")) {
+    drafts.set("draft-outbox", {
+      id: "draft-outbox",
+      accountId: "acc-gmail",
+      threadId: null,
+      updatedAtMs: now(),
+      serverUid: null,
+      queued: true,
+      doc: {
+        ...base,
+        messageId: "<draft-outbox@moduo.local>",
+        to: ["ana@acme.test"],
+        subject: "Pilot terms, signed",
+        text: "Signed copy attached.",
+        lastError: null,
+      },
+    });
+    outbox.set("out-scenario", {
+      id: "out-scenario",
+      accountId: "acc-gmail",
+      draftId: "draft-outbox",
+      subject: "Pilot terms, signed",
+      to: ["ana@acme.test"],
+      state: "pending",
+      attempts: 1,
+      lastError: null,
+      notBeforeMs: now(),
+    });
+  }
 }

@@ -162,3 +162,18 @@ export function mailFixtureMessages(): number {
     return 100_000;
   }
 }
+
+/** The lab state "fixture" mode starts in (`moduo:mail:fixture-scenario`, comma-separated
+ *  names from `MAIL_FIXTURE_SCENARIOS` and the compose fake's; unknown names are ignored
+ *  by the fakes). */
+export function mailFixtureScenario(): string[] {
+  try {
+    const raw = window.localStorage.getItem("moduo:mail:fixture-scenario") ?? "";
+    return raw
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}

@@ -102,6 +102,40 @@ describe("mail thread list (AC14)", () => {
   });
 });
 
+describe("list groups in the shell (specs/mail-v3.md §3, AC14)", () => {
+  it("Came back first in Personal, then Everything else", async () => {
+    const { ui, store, rowIds } = await mount();
+    const back = rowIds().slice(3, 5);
+    act(() => store.setState({ awayReturned: back }));
+    await tick();
+    const headers = [...ui.container.querySelectorAll("[data-group-header]")].map(
+      (h) => h.textContent,
+    );
+    expect(headers[0]).toBe("Came back while you were away");
+    expect(headers).toContain("Everything else");
+    expect(rowIds().slice(0, 2)).toEqual(back);
+  });
+
+  it("Newsletters: one row per sender; Done all marks the sender's threads done", async () => {
+    const { ui, store } = await mount();
+    act(() => {
+      ui.getByRole("tab", { name: /Newsletters/ }).click();
+    });
+    await tick();
+    await tick();
+    const group = ui.container.querySelector<HTMLElement>("[data-sender-group]");
+    expect(group).not.toBeNull();
+    const name = group!.querySelector("button[aria-expanded]")!.textContent!;
+    expect(name).toMatch(/ · \d+$/);
+    const count = Number(name.split(" · ").at(-1));
+    act(() => {
+      group!.querySelector<HTMLButtonElement>("button[aria-label^='Done all']")!.click();
+    });
+    await tick();
+    expect(store.getState().undoStack[0]!.threadIds).toHaveLength(count);
+  });
+});
+
 describe("selection model", () => {
   it("advances below the removed rows, else above", () => {
     const ids = ["a", "b", "c", "d"];

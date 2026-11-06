@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::headers::ParsedHeader;
 use crate::mail::contracts::{BlockDestination, ClassifyStage, RuleAction, RuleCondition, TabKind};
-use crate::mail::store::TabRef;
+use crate::mail::store::{ClassifyReason, TabRef};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Rule {
@@ -68,6 +68,8 @@ pub struct Outcome {
     pub tab: TabRef,
     /// Which stage decided the tab.
     pub stage: ClassifyStage,
+    /// The rule that decided it (stage `rules`, or a rule's Block action).
+    pub rule_id: Option<String>,
     pub priority: bool,
     pub mark_read: bool,
     pub skip_inbox: bool,
@@ -144,11 +146,27 @@ fn tab_from_arg(arg: Option<&str>) -> TabRef {
     TabRef::decode(arg.unwrap_or("personal"))
 }
 
+impl Outcome {
+    /// What the store keeps for "Why is this in X?" (store v2).
+    pub fn reason(&self) -> ClassifyReason {
+        ClassifyReason {
+            stage: self.stage,
+            rule_id: self.rule_id.clone(),
+        }
+    }
+}
+
+/// Every condition of the rule matches this header (AND); a rule with none never matches.
+pub fn rule_matches(rule: &Rule, h: &ParsedHeader) -> bool {
+    !rule.conditions.is_empty() && rule.conditions.iter().all(|(c, v)| condition(*c, v, h))
+}
+
 pub fn classify(h: &ParsedHeader, cfg: &ClassifyConfig) -> Outcome {
     let sender = h.from.email.as_str();
     let mut out = Outcome {
         tab: TabRef::of(TabKind::Personal),
         stage: ClassifyStage::HeaderHeuristics,
+        rule_id: None,
         priority: cfg.priority_people.contains(sender),
         mark_read: false,
         skip_inbox: false,
@@ -168,9 +186,10 @@ pub fn classify(h: &ParsedHeader, cfg: &ClassifyConfig) -> Outcome {
 
     // 2. Rules: first match wins per exclusive action; additive ones accumulate.
     let mut tab: Option<(TabRef, ClassifyStage)> = None;
+    let mut tab_rule: Option<String> = None;
     let mut exclusive_taken: HashSet<RuleAction> = HashSet::new();
     for rule in &cfg.rules {
-        if rule.conditions.is_empty() || !rule.conditions.iter().all(|(c, v)| condition(*c, v, h)) {
+        if !rule_matches(rule, h) {
             continue;
         }
         let mut fresh: Vec<RuleAction> = vec![];
@@ -184,12 +203,14 @@ pub fn classify(h: &ParsedHeader, cfg: &ClassifyConfig) -> Outcome {
             match a {
                 RuleAction::MoveToFolder => out.move_to = arg.clone(),
                 RuleAction::PutInTab => {
-                    tab = Some((tab_from_arg(arg.as_deref()), ClassifyStage::Rules))
+                    tab = Some((tab_from_arg(arg.as_deref()), ClassifyStage::Rules));
+                    tab_rule = Some(rule.id.clone());
                 }
                 RuleAction::SkipInbox => out.skip_inbox = true,
                 RuleAction::Block => {
                     out.blocked = Some((cfg.block_destination, cfg.block_folder.clone()));
                     out.stage = ClassifyStage::Block;
+                    out.rule_id = Some(rule.id.clone());
                 }
                 RuleAction::MarkRead => out.mark_read = true,
                 RuleAction::AddLabel => {
@@ -261,6 +282,11 @@ pub fn classify(h: &ParsedHeader, cfg: &ClassifyConfig) -> Outcome {
     });
     out.tab = t;
     out.stage = stage;
+    out.rule_id = if stage == ClassifyStage::Rules {
+        tab_rule
+    } else {
+        None
+    };
 
     // Screener: first-time non-contact senders wait in New senders. A known
     // contact is never screened, even from a new address of theirs only if
@@ -445,6 +471,96 @@ mod tests {
         cfg.priority_people.insert("boss@x.test".into());
         assert!(classify(&h("boss@x.test"), &cfg).priority);
         assert!(!classify(&h("peer@x.test"), &cfg).priority);
+    }
+
+    #[tokio::test]
+    async fn stage_and_rule_id_are_persisted() {
+        use crate::mail::sync::events::EventBus;
+        use crate::mail::sync::live::AccountSync;
+        use crate::mail::sync::testing::{raw, store, Fake};
+        use std::sync::{Arc, RwLock};
+        let f = Fake::new(true, false);
+        f.add_folder("INBOX", &[]);
+        f.append_raw(
+            "INBOX",
+            raw("m1", &[], "Ann <ann@x.test>", "Invoice 1", 1_000),
+            1_000,
+            &[],
+        );
+        f.append_raw(
+            "INBOX",
+            raw("m2", &[], "Bob <bob@shop.test>", "Hi", 2_000),
+            2_000,
+            &[],
+        );
+        f.append_raw(
+            "INBOX",
+            raw("m3", &[], "Cat <cat@y.test>", "Hello", 3_000),
+            3_000,
+            &[],
+        );
+        let cfg = ClassifyConfig {
+            rules: vec![rule(
+                "r-inv",
+                (RuleCondition::SubjectContains, "invoice"),
+                &[(RuleAction::PutInTab, Some("notifications"))],
+            )],
+            custom_tabs: vec![CustomTab {
+                id: "shops".into(),
+                senders: vec![],
+                domains: vec!["shop.test".into()],
+            }],
+            ..Default::default()
+        };
+        let s = Arc::new(store("stage"));
+        let a = AccountSync::new(
+            "a1",
+            s.clone(),
+            EventBus::new(),
+            Arc::new(RwLock::new(cfg)),
+            None,
+        );
+        a.first_round(&mut f.session()).await.unwrap();
+        let stored = |from: &str| -> (Option<String>, Option<String>, String) {
+            s.r()
+                .query_row(
+                    "SELECT classify_stage, classify_rule_id, tab FROM messages WHERE from_email = ?1",
+                    [from],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap()
+        };
+        assert_eq!(
+            stored("ann@x.test"),
+            (
+                Some("rules".into()),
+                Some("r-inv".into()),
+                "notifications".into()
+            )
+        );
+        assert_eq!(
+            stored("bob@shop.test"),
+            (Some("custom_tabs".into()), None, "custom:shops".into())
+        );
+        assert_eq!(
+            stored("cat@y.test"),
+            (Some("header_heuristics".into()), None, "personal".into())
+        );
+        // A block rule names itself; the block list names no rule.
+        let mut cfg = ClassifyConfig::default();
+        cfg.rules.push(rule(
+            "r-block",
+            (RuleCondition::From, "x@y.test"),
+            &[(RuleAction::Block, None)],
+        ));
+        let o = classify(&h("x@y.test"), &cfg);
+        assert_eq!(
+            (o.stage, o.rule_id.as_deref()),
+            (ClassifyStage::Block, Some("r-block"))
+        );
+        cfg.rules.clear();
+        cfg.blocked.push("x@y.test".into());
+        assert_eq!(classify(&h("x@y.test"), &cfg).reason().rule_id, None);
     }
 
     #[test]

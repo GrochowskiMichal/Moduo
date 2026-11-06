@@ -3,12 +3,23 @@
 // Allow records a screener decision; both release their threads from the view.
 
 import { Button } from "@/components/ui/button";
+import { getRuntime } from "@/lib/runtime";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
 import type { MailCommands } from "../commands/triage";
 
 export type NewSender = { address: string; name: string; threadIds: string[] };
 export type SenderDecision = "allow" | "block";
+
+/** Saves a screener decision or a blocked sender as a synced settings item. */
+export async function saveSenderSetting(
+  kind: "blocked_sender" | "screener_decision",
+  value: Record<string, unknown>,
+): Promise<unknown> {
+  const email = getRuntime()?.email;
+  if (!email) throw new Error("Settings aren't available");
+  return email.upsertSetting({ id: crypto.randomUUID(), kind, value });
+}
 
 /** One entry per sender address (lowercased), in first-seen order. */
 export function groupNewSenders(rows: readonly MailThreadRow[]): NewSender[] {

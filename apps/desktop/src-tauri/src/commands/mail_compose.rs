@@ -213,6 +213,7 @@ pub fn correspondents(store: &Store, prefix: &str, limit: u32) -> StoreResult<Ve
 fn draft_changed(host: &MailHost, draft_id: &str) {
     host.events.emit(MailEvent::DraftChanged {
         draft_id: draft_id.to_string(),
+        server_uid: None,
     });
 }
 
@@ -479,6 +480,7 @@ mod tests {
             email: e.into(),
         };
         MessageInput {
+            classify: None,
             account_id: "a".into(),
             ext_id: ext.into(),
             mailbox_id: format!("a-{mb}"),

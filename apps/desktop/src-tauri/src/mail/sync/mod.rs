@@ -5,6 +5,7 @@
 //! event channel to the UI.
 
 pub mod classify;
+pub mod effects;
 pub mod engine;
 pub mod events;
 pub mod gmail;

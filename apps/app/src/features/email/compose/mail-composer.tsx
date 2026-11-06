@@ -1,11 +1,13 @@
-// The rebuilt composer (AC20–AC23): rendered inline under the thread for
-// r/a/f, or in the reader pane for `c`. It edits the one active compose of the
-// session; every change saves the draft. ⌘Enter sends, Esc closes and keeps the
-// draft. `;;` opens snippets, the To field autocompletes, Finder drags and
-// pasted images attach, Markdown line shortcuts apply, and the footer holds the
-// follow-up reminder and the instant-intro button.
+// The composer (specs/mail-v3.md §9, decision 17): a reply renders inline under
+// its conversation, a New message fills the reader column; this component is
+// the same in both, the page decides where it goes. It edits the one active
+// compose of the session; every change saves the draft. ⌘Enter sends, Esc
+// closes and keeps the draft. From switches alias, account and signature
+// together; To, Cc and Bcc are token inputs; `;;` opens snippets; attachments
+// are checked live against the provider's limit; the footer shows where the
+// draft is saved. Markdown line shortcuts, pasted images and drags attach.
 
-import { Paperclip, Send, UserMinus, X } from "lucide-react";
+import { Forward, PenLine, Reply, X } from "lucide-react";
 import {
   type ClipboardEvent,
   type DragEvent,
@@ -14,36 +16,51 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 import { htmlToPlainText, plainToHtml } from "../compose";
+import { entryLabel, splitEntries } from "./address-list";
 import { type MailAlias, swapSignature } from "./aliases";
-import { rankRecipients } from "./autocomplete";
-import { FOLLOW_UP_CHOICES, type FollowUpChoice, followUpDueMs } from "./follow-up";
-import { instantIntro } from "./intro";
+import { ComposerFooter } from "./composer-footer";
+import { AttachmentTiles, IntroBanner, SizeAlert } from "./composer-parts";
+import { type FromAccount, FromLine } from "./from-line";
+import { instantIntro, undoInstantIntro } from "./intro";
 import { blockShortcut } from "./markdown";
-import type { ComposeSession, ComposeState } from "./session";
-import { findSnippetTrigger, insertSnippet, type MailSnippet, matchSnippets } from "./snippets";
+import { type Person, RecipientRows, type SuggestPeople } from "./recipient-field";
+import { composePlacement, type ComposeSession, type ComposeState } from "./session";
+import { checkSendSize, type SendLimit } from "./size-limit";
+import { SnippetArea, type SnippetPopupState, useSnippetPopup } from "./snippet-area";
+import { type MailSnippet, snippetRecipient } from "./snippets";
 
 export type MailComposerProps = {
   session: ComposeSession;
   aliases?: MailAlias[];
+  /** Accounts as the From line and the draft status name them. */
+  accounts?: readonly FromAccount[];
   snippets?: MailSnippet[];
-  contacts?: { name: string; email: string }[];
-  correspondents?: { name: string; email: string; count: number }[];
+  contacts?: Person[];
+  /** The engine's correspondents for a typed query (the field debounces it). */
+  suggestPeople?: SuggestPeople;
   spellCheck?: boolean;
-  sizeLimit?: number;
+  /** The account's send limit and provider (`sizeLimit(accountId)`). */
+  sizeLimit?: SendLimit | null;
   /** The sender of the message replied to, for instant intro. */
   introducer?: string | null;
+  /** The compose's account is offline: the draft waits on this Mac. */
+  offline?: boolean;
+  /** "Aliases and signatures…": opens Settings → Mail. */
+  onOpenSettings?: () => void;
   /** Stages a dropped/pasted file in the engine and returns its opaque id. */
   stageFile?: (file: File) => Promise<string>;
   /** Opens the native file picker (engine side) and stages the chosen files. */
   pickFiles?: () => Promise<{ id: string; filename: string; size: number }[]>;
   now?: () => number;
 };
+
+type BodyProps = MailComposerProps & { state: ComposeState };
 
 function useActive(session: ComposeSession): ComposeState | null {
   return useSyncExternalStore(session.subscribe, () => session.active);
@@ -57,62 +74,96 @@ export function MailComposer(props: MailComposerProps) {
   return <ComposerBody key={active.key} {...props} state={active} />;
 }
 
-/** Derived lookups for the composer: the sending alias, snippet and recipient hits. */
-function composerLookups(
-  props: MailComposerProps & { state: ComposeState },
-  text: string,
-  toQuery: string,
-) {
-  const { state } = props;
-  const alias = (props.aliases ?? []).find((a) => a.address === state.fromAddr) ?? null;
-  const trigger = findSnippetTrigger(text, text.length);
-  const snippetHits = trigger ? matchSnippets(props.snippets ?? [], trigger.query).slice(0, 5) : [];
-  const recipients = rankRecipients({
-    query: toQuery,
-    contacts: props.contacts ?? [],
-    correspondents: props.correspondents ?? [],
-    exclude: state.to.split(",").map((s) => s.trim()),
-    limit: 5,
-  });
-  const firstTo = state.to.split(",")[0]?.trim() ?? "";
-  return { alias, snippetHits, recipients, firstTo };
+/** "Reply to Ana", "Reply all", "Forward" or "New message". */
+export function composerTitle(state: Pick<ComposeState, "kind" | "to">): string {
+  if (state.kind === "reply") {
+    const first = splitEntries(state.to)[0];
+    const name = first ? entryLabel(first).split(/[\s@]/)[0] : "";
+    return name ? `Reply to ${name}` : "Reply";
+  }
+  if (state.kind === "reply-all") return "Reply all";
+  if (state.kind === "forward") return "Forward";
+  return "New message";
 }
 
-function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
+function ComposerHeader(props: { kind: ComposeState["kind"]; title: string; onClose: () => void }) {
+  const Icon = props.kind === "forward" ? Forward : props.kind === "new" ? PenLine : Reply;
+  return (
+    <header className="flex h-(--ctrl-h) items-center gap-2 border-b border-hairline px-3 text-sm font-medium text-foreground">
+      <Icon aria-hidden className="size-icon-sm shrink-0 text-muted-foreground" />
+      <span className="min-w-0 flex-1 truncate">{props.title}</span>
+      <IconButton
+        label="Close, keep the draft"
+        tooltip="Close · Esc"
+        icon={X}
+        onClick={props.onClose}
+      />
+    </header>
+  );
+}
+
+function SubjectRow(props: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex min-h-(--ctrl-h-sm) items-center gap-2 border-b border-hairline px-3 text-sm">
+      <span className="w-12 shrink-0 text-xs text-muted-foreground">Subject</span>
+      <Input
+        variant="bare"
+        size="sm"
+        aria-label="Subject"
+        placeholder="Subject"
+        className="flex-1"
+        value={props.value}
+        onChange={(e) => props.onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function placeholderFor(state: ComposeState, inline: boolean): string {
+  if (state.kind === "forward") return "Add a note to the forwarded message…";
+  return inline ? "Write your reply…" : "Write your message…";
+}
+
+/** The message field, its snippet popup and the alias's signature under it. */
+function MessageField(props: {
+  state: ComposeState;
+  inline: boolean;
+  text: string;
+  spellCheck: boolean;
+  snippets: SnippetPopupState;
+  signatureHtml: string;
+  onChange: (value: string) => void;
+  onPaste: (e: ClipboardEvent) => void;
+}) {
+  const { inline } = props;
+  return (
+    <>
+      <SnippetArea popup={props.snippets}>
+        <Textarea
+          aria-label="Message"
+          autoFocus={inline || !!props.state.to}
+          variant="bare"
+          className={cn("px-3 py-2", inline ? "min-h-32" : "min-h-0 flex-1")}
+          placeholder={placeholderFor(props.state, inline)}
+          spellCheck={props.spellCheck}
+          value={props.text}
+          onChange={(e) => props.onChange(e.target.value)}
+          onKeyDown={props.snippets.onKeyDown}
+          onPaste={props.onPaste}
+        />
+      </SnippetArea>
+      {props.signatureHtml.trim() ? (
+        <p className="px-3 pb-2 text-sm whitespace-pre-line text-muted-foreground">
+          {htmlToPlainText(props.signatureHtml)}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+/** Attaching: dropped and pasted files are staged in the engine; picked files already are. */
+function useAttach(props: BodyProps) {
   const { session, state } = props;
-  const [text, setText] = useState(() => htmlToPlainText(swapSignature(state.bodyHtml, null)));
-  const [toQuery, setToQuery] = useState("");
-  const [error, setError] = useState<string | null>(state.lastError);
-  const { alias, snippetHits, recipients, firstTo } = composerLookups(props, text, toQuery);
-
-  const setBody = (next: string) => {
-    setText(next);
-    void session.update({ bodyHtml: swapSignature(plainToHtml(next), alias) });
-  };
-
-  const onBodyChange = (value: string) => {
-    const line = value.slice(value.lastIndexOf("\n") + 1);
-    const block = blockShortcut(line);
-    setBody(block ? value.slice(0, value.length - line.length) + BULLETS[block] : value);
-  };
-
-  const pickSnippet = (s: MailSnippet) => {
-    const out = insertSnippet(text, text.length, s, {
-      recipient: firstTo ? { name: "", email: firstTo } : null,
-      me: { name: state.fromName ?? "", email: state.fromAddr },
-    });
-    if (out) setBody(out.text);
-  };
-
-  const addRecipient = (email: string) => {
-    const list = state.to
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    void session.update({ to: [...list, email].join(", ") });
-    setToQuery("");
-  };
-
   const attach = async (files: File[]) => {
     if (!props.stageFile || files.length === 0) return;
     const staged = await Promise.all(
@@ -125,7 +176,6 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
     );
     void session.update({ attachments: [...state.attachments, ...staged] });
   };
-
   const pick = async () => {
     if (!props.pickFiles) return;
     const picked = await props.pickFiles();
@@ -133,13 +183,76 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
     const added = picked.map((p) => ({ ...p, contentType: "application/octet-stream" }));
     void session.update({ attachments: [...state.attachments, ...added] });
   };
+  const remove = (id: string) =>
+    void session.update({ attachments: state.attachments.filter((a) => a.id !== id) });
+  const onDrop = (e: DragEvent) => {
+    if (e.dataTransfer.files.length === 0) return;
+    e.preventDefault();
+    void attach([...e.dataTransfer.files]);
+  };
+  const onPaste = (e: ClipboardEvent) => {
+    const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
+    if (images.length === 0) return;
+    e.preventDefault();
+    void attach(images);
+  };
+  return { pick: props.pickFiles ? () => void pick() : undefined, remove, onDrop, onPaste };
+}
 
+/** The body text and everything that rewrites it: typing, Markdown lines, snippets, the intro. */
+function useBody(props: BodyProps, alias: MailAlias | null) {
+  const { session, state } = props;
+  const [text, setText] = useState(() => htmlToPlainText(swapSignature(state.bodyHtml, null)));
+  const [moved, setMoved] = useState(false);
+  const setBody = (next: string) => {
+    setText(next);
+    void session.update({ bodyHtml: swapSignature(plainToHtml(next), alias) });
+  };
+  const onChange = (value: string) => {
+    const line = value.slice(value.lastIndexOf("\n") + 1);
+    const block = blockShortcut(line);
+    setBody(block ? value.slice(0, value.length - line.length) + BULLETS[block] : value);
+  };
+  const snippets = useSnippetPopup({
+    text,
+    snippets: props.snippets ?? [],
+    ctx: {
+      recipient: snippetRecipient(state.to, props.contacts ?? []),
+      me: { name: state.fromName ?? "", email: state.fromAddr },
+    },
+    onInsert: setBody,
+  });
+  // Move the introducer to Bcc, or undo it back to To (AC33).
+  const intro = (move: boolean) => {
+    if (!props.introducer) return;
+    const fields = { ...state, bodyHtml: plainToHtml(text) };
+    const out = (move ? instantIntro : undoInstantIntro)(fields, props.introducer);
+    setText(htmlToPlainText(out.bodyHtml));
+    setMoved(move);
+    void session.update({
+      to: out.to,
+      cc: out.cc,
+      bcc: out.bcc,
+      bodyHtml: swapSignature(out.bodyHtml, alias),
+    });
+  };
+  return { text, onChange, snippets, moved, intro };
+}
+
+function useSend(props: BodyProps, blocked: string | null) {
+  const { session, state } = props;
+  // A send that failed comes back with its reason (AC11).
+  const [error, setError] = useState<string | null>(
+    state.lastError ? `Not sent: ${state.lastError}` : null,
+  );
   const send = async () => {
+    if (blocked) return;
     const res = await session.send(props.sizeLimit);
     if (!res.ok) setError(res.reason);
   };
-
   const onKeyDown = (e: KeyboardEvent) => {
+    // Keys from a menu's portal (From, Remind) bubble here through React: they're the menu's.
+    if (e.defaultPrevented || !e.currentTarget.contains(e.target as Node)) return;
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       void send();
@@ -148,165 +261,148 @@ function ComposerBody(props: MailComposerProps & { state: ComposeState }) {
       void session.close({ keepDraft: true });
     }
   };
+  return { error, send: () => void send(), onKeyDown };
+}
 
-  const onDrop = (e: DragEvent) => {
-    if (e.dataTransfer.files.length === 0) return;
-    e.preventDefault();
-    void attach([...e.dataTransfer.files]);
-  };
+/** The over-limit check, live against the account's limit (AC32). */
+function overLimit(props: BodyProps) {
+  if (!props.sizeLimit) return null;
+  const { state } = props;
+  const size = checkSendSize(state.attachments, new Blob([state.bodyHtml]).size, props.sizeLimit);
+  return size.ok ? null : size;
+}
 
-  const onPaste = (e: ClipboardEvent) => {
-    const images = [...e.clipboardData.files].filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) return;
-    e.preventDefault();
-    void attach(images);
-  };
-
-  const onFollowUp = (choice: string) => {
-    const now = props.now?.() ?? Date.now();
-    void session.update({ followUp: choice ? followUpDueMs(choice as FollowUpChoice, now) : null });
-  };
-
-  const intro = () => {
-    if (!props.introducer) return;
-    const out = instantIntro({ ...state, bodyHtml: plainToHtml(text) }, props.introducer);
-    setText(htmlToPlainText(out.bodyHtml));
+/** From, the recipients, the intro banner and (outside a reply) the subject. */
+function ComposerFields(props: BodyProps & { inline: boolean; body: ReturnType<typeof useBody> }) {
+  const { session, state, inline, body } = props;
+  const showIntro = !!props.introducer && (state.kind === "reply" || state.kind === "reply-all");
+  // Another account's alias sends from that account, with its signature (AC29).
+  const pickAlias = (next: MailAlias) =>
     void session.update({
-      to: out.to,
-      cc: out.cc,
-      bcc: out.bcc,
-      bodyHtml: swapSignature(out.bodyHtml, alias),
+      accountId: next.accountId || state.accountId,
+      fromAddr: next.address,
+      fromName: next.name || state.fromName,
+      bodyHtml: swapSignature(plainToHtml(body.text), next),
     });
-  };
+  return (
+    <>
+      <FromLine
+        aliases={props.aliases ?? []}
+        accounts={props.accounts ?? []}
+        fromAddr={state.fromAddr}
+        onPick={pickAlias}
+        onOpenSettings={props.onOpenSettings}
+      />
+      <RecipientRows
+        to={state.to}
+        cc={state.cc}
+        bcc={state.bcc}
+        onChange={(patch) => void session.update(patch)}
+        suggest={props.suggestPeople}
+        contacts={props.contacts}
+        autoFocus={!inline && !state.to}
+      />
+      {showIntro ? (
+        <IntroBanner
+          introducer={props.introducer!}
+          moved={body.moved}
+          onMove={() => body.intro(true)}
+          onUndo={() => body.intro(false)}
+        />
+      ) : null}
+      {inline ? null : (
+        <SubjectRow
+          value={state.subject}
+          onChange={(subject) => void session.update({ subject })}
+        />
+      )}
+    </>
+  );
+}
 
+/** Attachments, the size and send alerts, and the footer. */
+function ComposerTail(
+  props: BodyProps & {
+    inline: boolean;
+    over: ReturnType<typeof overLimit>;
+    files: ReturnType<typeof useAttach>;
+    sending: ReturnType<typeof useSend>;
+  },
+) {
+  const { session, state, over, files, sending } = props;
+  const account = props.accounts?.find((a) => a.id === state.accountId);
+  return (
+    <>
+      <AttachmentTiles
+        attachments={state.attachments}
+        largest={over?.largest ?? null}
+        onRemove={files.remove}
+      />
+      {over ? <SizeAlert id={`${state.key}-limit`} message={over.message} /> : null}
+      {sending.error ? (
+        <p role="alert" className="px-3 pt-2 text-sm text-destructive">
+          {sending.error}
+        </p>
+      ) : null}
+      <ComposerFooter
+        blocked={over?.message ?? null}
+        onSend={sending.send}
+        threaded={props.inline && state.kind !== "new"}
+        followUp={state.followUp}
+        onFollowUp={(followUp) => void session.update({ followUp })}
+        markDone={state.doneOnSend ?? session.defaultDoneOnSend(state)}
+        onMarkDone={(doneOnSend) => void session.update({ doneOnSend })}
+        saved={state.saved}
+        offline={props.offline ?? false}
+        accountLabel={account?.label ?? state.fromAddr}
+        onAttach={files.pick}
+        onDiscard={() => void session.close({ keepDraft: false })}
+        now={props.now ?? Date.now}
+      />
+    </>
+  );
+}
+
+function ComposerBody(props: BodyProps) {
+  const { session, state } = props;
+  const alias = (props.aliases ?? []).find((a) => a.address === state.fromAddr) ?? null;
+  const files = useAttach(props);
+  const body = useBody(props, alias);
+  const over = overLimit(props);
+  const sending = useSend(props, over?.message ?? null);
+  const inline = composePlacement(state) === "inline";
+  const title = composerTitle(state);
   return (
     <section
-      aria-label={state.placement === "inline" ? "Reply" : "New message"}
-      data-placement={state.placement}
-      className="flex flex-col gap-2 rounded-lg border border-hairline bg-card p-3"
-      onKeyDown={onKeyDown}
-      onDrop={onDrop}
+      aria-label={title}
+      data-placement={inline ? "inline" : "column"}
+      className={cn(
+        "flex flex-col bg-card",
+        inline
+          ? "mx-4 mt-4 mb-6 overflow-hidden rounded-lg border border-hairline"
+          : "min-h-0 flex-1",
+      )}
+      onKeyDown={sending.onKeyDown}
+      onDrop={files.onDrop}
       onDragOver={(e) => e.preventDefault()}
     >
-      {(props.aliases?.length ?? 0) > 1 && (
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          From
-          <select
-            aria-label="From"
-            className="bg-transparent text-foreground"
-            value={state.fromAddr}
-            onChange={(e) => {
-              const next = props.aliases!.find((a) => a.address === e.target.value) ?? null;
-              void session.update({
-                fromAddr: e.target.value,
-                fromName: next?.name ?? state.fromName,
-                bodyHtml: swapSignature(plainToHtml(text), next),
-              });
-            }}
-          >
-            {props.aliases!.map((a) => (
-              <option key={a.id} value={a.address}>
-                {a.name ? `${a.name} <${a.address}>` : a.address}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <Input
-        aria-label="To"
-        placeholder="To"
-        value={state.to}
-        onChange={(e) => {
-          void session.update({ to: e.target.value });
-          setToQuery(e.target.value.split(",").pop()?.trim() ?? "");
-        }}
+      <ComposerHeader
+        kind={state.kind}
+        title={title}
+        onClose={() => void session.close({ keepDraft: true })}
       />
-      {recipients.length > 0 && (
-        <ul role="listbox" aria-label="Suggestions" className="flex flex-col text-sm">
-          {recipients.map((r) => (
-            <li key={r.email}>
-              <Button variant="ghost" size="sm" onClick={() => addRecipient(r.email)}>
-                {r.name ? `${r.name} <${r.email}>` : r.email}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {(state.kind === "new" || state.kind === "forward") && (
-        <Input
-          aria-label="Subject"
-          placeholder="Subject"
-          value={state.subject}
-          onChange={(e) => void session.update({ subject: e.target.value })}
-        />
-      )}
-      <Textarea
-        aria-label="Message"
-        autoFocus
+      <ComposerFields {...props} inline={inline} body={body} />
+      <MessageField
+        state={state}
+        inline={inline}
+        text={body.text}
         spellCheck={props.spellCheck ?? true}
-        value={text}
-        onChange={(e) => onBodyChange(e.target.value)}
-        onPaste={onPaste}
+        snippets={body.snippets}
+        signatureHtml={alias?.signatureHtml ?? ""}
+        onChange={body.onChange}
+        onPaste={files.onPaste}
       />
-      {snippetHits.length > 0 && (
-        <ul role="listbox" aria-label="Snippets" className="flex flex-col text-sm">
-          {snippetHits.map((s) => (
-            <li key={s.id}>
-              <Button variant="ghost" size="sm" onClick={() => pickSnippet(s)}>
-                {s.name}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {state.attachments.length > 0 && (
-        <ul aria-label="Attachments" className="flex flex-wrap gap-2 text-sm text-muted-foreground">
-          {state.attachments.map((a) => (
-            <li key={a.id} className="flex items-center gap-1">
-              <Paperclip className="size-icon-sm" />
-              {a.filename}
-            </li>
-          ))}
-        </ul>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
-      <footer className="flex items-center gap-2">
-        <Button onClick={() => void send()}>
-          <Send />
-          Send
-        </Button>
-        <label className="flex items-center gap-1 text-sm text-muted-foreground">
-          Remind me if no reply in
-          <select
-            aria-label="Follow-up"
-            className="bg-transparent text-foreground"
-            onChange={(e) => onFollowUp(e.target.value)}
-          >
-            <option value="">Never</option>
-            {FOLLOW_UP_CHOICES.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <span className="flex-1" />
-        {props.introducer && state.kind !== "new" && (
-          <IconButton label="Move introducer to Bcc" icon={UserMinus} onClick={intro} />
-        )}
-        {props.pickFiles && (
-          <IconButton label="Attach files" icon={Paperclip} onClick={() => void pick()} />
-        )}
-        <IconButton
-          label="Discard draft"
-          icon={X}
-          onClick={() => void session.close({ keepDraft: false })}
-        />
-      </footer>
+      <ComposerTail {...props} inline={inline} over={over} files={files} sending={sending} />
     </section>
   );
 }

@@ -149,7 +149,7 @@ The numbered answers this section relies on are in *Product answers* at the end.
 
 ### Web
 
-Unchanged read-only tissue view (Snoozed, Follow-ups, Recently linked), plus a proper loading state (J72). Email still appears in ⌘K on web as pulled-in threads only (GS-9).
+Read-only tissue view with a proper loading state (J72). **Corrected by [mail-v3.md](./mail-v3.md) §13:** snoozes and follow-ups live in the desktop engine, so the web page shows only the conversations linked to a task, note or event, under an honest "Mail lives on your Mac" banner. Email still appears in ⌘K on web as pulled-in threads only (GS-9).
 
 ## Edge cases
 

@@ -47,8 +47,13 @@ function setup(over: Partial<MailSettingsViewProps> = {}) {
       {
         id: "a1",
         address: "me@x.com",
+        label: "me@x.com",
+        hue: "blue",
+        state: "idle",
         status: "Up to date",
         needsReconnect: false,
+        push: true,
+        lastSyncedMs: null,
         depth: "twelveMonths",
       },
     ],

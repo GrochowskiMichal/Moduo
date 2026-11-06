@@ -24,6 +24,9 @@ const LEGACY = [
   `${ui}/ui/email-reader.tsx`,
   `${ui}/ui/email-compose.tsx`,
   `${ui}/ui/email-sync-banner.tsx`,
+  // The EM-9 envelope search; search runs through ⌘K on the engine (specs/mail-v3.md AC37).
+  `${ui}/search.ts`,
+  `${ui}/search.test.ts`,
 ] as const;
 
 const PENDING_REMOVAL: readonly string[] = [];

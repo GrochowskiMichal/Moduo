@@ -70,6 +70,7 @@ pub(crate) fn load_into(store: &Store, rows: &[FixtureMessage]) {
             .iter()
             .enumerate()
             .map(|(i, m)| MessageInput {
+                classify: None,
                 account_id: m.account_id.clone(),
                 ext_id: m.id.clone(),
                 mailbox_id: format!("{}:{}", m.account_id, m.mailbox_role),

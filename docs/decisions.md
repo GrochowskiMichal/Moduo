@@ -160,6 +160,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
+- 2026-11-06 · MV (built): Mail v3's screens sit on engine reads, not page-side guesses ([specs/mail-v3.md](../../specs/mail-v3.md), PR GrochowskiMichal/Moduo#797).
 - 2026-11-06 · MV (plan): Mail v3 lands as one refactor on `t/mike/mail-v3`, on a local store v2 with no Supabase migration and no contracts change ([specs/mail-v3.md](../../specs/mail-v3.md)).
 - 2026-11-04 · [gaps] Account lifecycle runs on the engine: `commands/mail_accounts.rs` (`mail_connect_password`, `mail_connect_oauth`, `mail_disconnect`, `mail_set_history_depth`, `mail_sync_now`, `mail_search_server`, `mail_set_classify_items`) over `mail/host/lifecycle.rs`.
 - 2026-11-04 · MR-16: the legacy mail engine and UI are deleted; the redb mail tables exist only for the cutover to read and drop.

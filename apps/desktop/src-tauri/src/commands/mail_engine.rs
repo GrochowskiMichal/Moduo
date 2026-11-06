@@ -7,15 +7,19 @@ use serde_json::{json, Value};
 use tauri::State;
 
 use crate::mail::contracts::{MailboxRole, OpKind, TabKind};
+use crate::mail::host::reader::Explain;
 use crate::mail::host::{list_accounts, AccountRow, MailHost};
 use crate::mail::ops::{OpRequest, UndoOutcome};
+use crate::mail::rules::{apply_rule_existing, ApplyRuleResult};
 use crate::mail::store::{
     now_ms, Counts, ListCursor, ListInput, ListPage, MailboxRow, SearchQuery, TabRef, ThreadDetail,
     ThreadRow, ViewRef,
 };
 use crate::mail::sync::events::MailEvent;
 
-const MAX_IDS: usize = 5_000;
+/// A payload cap only: the engine queues any bulk op in chunks under one action
+/// (`Store::enqueue_in_action`), so ⌘A over a big view is one undo.
+const MAX_IDS: usize = 200_000;
 const MAX_ID_LEN: usize = 512;
 
 fn s<E: std::fmt::Display>(e: E) -> String {
@@ -248,7 +252,7 @@ pub fn mail_apply_op(input: OpIn, host: State<'_, MailHost>) -> Result<Value, St
     let ids = req.thread_ids.clone();
     let h = host.store()?.enqueue_op(&req).map_err(s)?;
     changed(&host, ids);
-    Ok(json!({ "opIds": [h.action_id] }))
+    Ok(json!({ "opIds": [h.action_id], "undoUntilMs": h.undo_until_ms }))
 }
 
 #[tauri::command]
@@ -265,28 +269,69 @@ pub fn mail_undo_op(op_id: String, host: State<'_, MailHost>) -> Result<(), Stri
 pub fn mail_list_failed_ops(host: State<'_, MailHost>) -> Result<Vec<Value>, String> {
     let store = host.store()?;
     let ops = store.failed_ops().map_err(s)?;
-    Ok(ops
-        .into_iter()
-        .map(|o| {
-            let created: i64 = store
-                .r()
-                .query_row(
-                    "SELECT created_at_ms FROM ops WHERE id = ?1",
-                    [&o.id],
-                    |r| r.get(0),
-                )
-                .unwrap_or(0);
-            json!({
-                "opId": o.id,
-                "kind": o.kind,
-                "threadIds": o.thread_ids,
-                "state": "failed",
-                "attempts": o.attempts,
-                "lastError": o.error,
-                "createdAtMs": created,
-            })
-        })
-        .collect())
+    let mut out = Vec::with_capacity(ops.len());
+    for o in ops {
+        // Each record carries its threads and the first thread's subject (AC9).
+        if let Some(rec) = store.op_record(&o.id).map_err(s)? {
+            out.push(serde_json::to_value(rec).map_err(s)?);
+        }
+    }
+    Ok(out)
+}
+
+/// "Why is this in {Tab}?" (decision 3): the stored classifier reason, or a re-run.
+#[tauri::command]
+pub fn mail_explain(thread_id: String, host: State<'_, MailHost>) -> Result<Explain, String> {
+    check_id(&thread_id)?;
+    let cfg = host.classify_config()?;
+    host.store()?
+        .explain_thread(&thread_id, &cfg)
+        .map_err(s)?
+        .ok_or_else(|| "thread_not_found".to_string())
+}
+
+/// A sender address for the device-local image allow list.
+pub fn check_address(address: &str) -> Result<(), String> {
+    let a = address.trim();
+    if a.is_empty() || a.len() > 320 || a.chars().any(|c| c.is_control() || c.is_whitespace()) {
+        return Err("invalid_address".into());
+    }
+    Ok(())
+}
+
+/// "Always load images" from a sender, on this Mac only (decision 11).
+#[tauri::command]
+pub fn mail_set_image_allow(
+    address: String,
+    allow: bool,
+    host: State<'_, MailHost>,
+) -> Result<(), String> {
+    check_address(&address)?;
+    host.store()?.set_image_allow(&address, allow).map_err(s)
+}
+
+/// "Also apply to the N already on this Mac" (decision 5): the dry run counts;
+/// the apply queues one undoable bulk action in chunks and resolves when every
+/// chunk is queued. It runs off the main thread.
+#[tauri::command]
+pub async fn mail_apply_rule_existing(
+    rule_id: String,
+    dry_run: bool,
+    host: State<'_, MailHost>,
+) -> Result<ApplyRuleResult, String> {
+    check_id(&rule_id)?;
+    let store = host.store()?;
+    let cfg = host.classify_config()?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        apply_rule_existing(&store, &cfg, &rule_id, dry_run, now_ms())
+    })
+    .await
+    .map_err(s)?
+    .map_err(s)?;
+    if !dry_run && result.count > 0 {
+        changed(&host, vec![]);
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -362,6 +407,17 @@ mod tests {
         assert_eq!(l.to_mailbox_id.as_deref(), Some("g-work"));
         assert!(op(json!({"kind": "label_remove", "threadIds": ["t"]})).is_err());
         assert!(op(json!({"kind": "done", "threadIds": ["x".repeat(600)]})).is_err());
+        // ⌘A over 12,000 threads is one op (the store chunks it under one action).
+        let many: Vec<String> = (0..12_000).map(|i| format!("t{i}")).collect();
+        assert_eq!(op(json!({"kind": "done", "threadIds": many})).unwrap().thread_ids.len(), 12_000);
+    }
+
+    #[test]
+    fn image_allow_addresses_are_validated() {
+        assert!(check_address("ana@acme.test").is_ok());
+        assert!(check_address("").is_err());
+        assert!(check_address("a b@x.test").is_err());
+        assert!(check_address(&"x".repeat(400)).is_err());
     }
 
     #[test]

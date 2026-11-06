@@ -21,7 +21,7 @@ use super::engine::{
 use super::events::{EventBus, MailEvent};
 use super::server::{Idle, MailServer, StatusInfo};
 use crate::mail::contracts::{MailboxRole, SyncState};
-use crate::mail::store::Store;
+use crate::mail::store::{now_ms, Store};
 
 pub const IDLE_TIMEOUT: Duration = Duration::from_secs(25 * 60);
 pub const POLL_FALLBACK: Duration = Duration::from_secs(60);
@@ -174,6 +174,9 @@ impl AccountSync {
             )
             .await?;
         }
+        // Store v2: when this account last finished a round, and whether it pushes.
+        self.store
+            .stamp_synced(&self.account_id, now_ms(), Some(srv.caps().idle))?;
         self.status(SyncState::Idle, None, None);
         Ok(plans)
     }
@@ -204,7 +207,10 @@ impl AccountSync {
         } else {
             vec![]
         };
-        sync_mailbox(srv, &ctx, plan, labels.as_ref(), &label_plans).await
+        let report = sync_mailbox(srv, &ctx, plan, labels.as_ref(), &label_plans).await?;
+        self.store
+            .stamp_synced(&self.account_id, now_ms(), Some(srv.caps().idle))?;
+        Ok(report)
     }
 
     /// Opening a folder in the UI: a label view syncs its All Mail source.
@@ -343,6 +349,42 @@ impl AccountSync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mail::host::list_accounts;
+    use crate::mail::sync::testing::{store, Fake};
+
+    #[tokio::test]
+    async fn last_synced_and_push_are_reported() {
+        for idle in [true, false] {
+            let s = Arc::new(store(&format!("synced-{idle}")));
+            let before = list_accounts(&s).unwrap();
+            assert_eq!((before[0].last_synced_ms, before[0].push), (None, false));
+            let mut f = Fake::new(true, false);
+            f.caps.idle = idle;
+            f.add_folder("INBOX", &[]);
+            f.append("INBOX", "m1", 1_000);
+            let a = AccountSync::new(
+                "a1",
+                s.clone(),
+                EventBus::new(),
+                Arc::new(RwLock::new(ClassifyConfig::default())),
+                None,
+            );
+            let t0 = now_ms();
+            let mut srv = f.session();
+            let plans = a.first_round(&mut srv).await.unwrap();
+            let row = &list_accounts(&s).unwrap()[0];
+            assert!(row.last_synced_ms.is_some_and(|t| t >= t0));
+            assert_eq!(row.push, idle, "push follows IDLE");
+            let first = row.last_synced_ms.unwrap();
+            // Each later round stamps it again.
+            tokio::time::sleep(Duration::from_millis(3)).await;
+            a.round(&mut srv, &plans, &plans[0]).await.unwrap();
+            assert!(list_accounts(&s).unwrap()[0].last_synced_ms.unwrap() > first);
+            let v = serde_json::to_value(&list_accounts(&s).unwrap()[0]).unwrap();
+            assert!(v["lastSyncedMs"].is_i64());
+            assert_eq!(v["push"], idle);
+        }
+    }
 
     fn plan(id: &str, role: MailboxRole) -> MailboxPlan {
         MailboxPlan {

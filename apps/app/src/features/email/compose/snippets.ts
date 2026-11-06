@@ -1,7 +1,8 @@
 // `;;` snippets with placeholders (E41, AC23). Typing `;;` then a name opens the
 // snippet picker; picking one replaces the trigger with the snippet's body, its
 // `{first name}`-style placeholders filled from the first recipient and you.
-// Unknown placeholders stay as typed, so nothing is silently dropped.
+// Unknown placeholders stay as typed, so nothing is silently dropped; a known
+// one with no value (no recipient yet) becomes "" and its gap closes.
 
 export type MailSnippet = { id: string; name: string; body: string };
 
@@ -33,9 +34,34 @@ export function matchSnippets(snippets: MailSnippet[], query: string): MailSnipp
 }
 
 function splitName(name: string, email: string): { first: string; last: string; full: string } {
+  // The display name first; the address's local part only when there is no name.
   const full = name.trim() || email.split("@")[0] || "";
   const parts = full.split(/\s+/).filter(Boolean);
   return { first: parts[0] ?? "", last: parts.length > 1 ? parts[parts.length - 1] : "", full };
+}
+
+/** Placeholders a snippet may use; a known one with no value fills with "". */
+const KNOWN = new Set([
+  "first name",
+  "last name",
+  "name",
+  "email",
+  "my name",
+  "my first name",
+  "my email",
+]);
+
+const EMPTIED = "\uE000";
+
+/** Closes the gap emptied placeholders leave: "Thanks {first name} for" → "Thanks for",
+ *  "Hi {first name}, thanks" → "Hi, thanks". */
+function closeGaps(text: string): string {
+  return text.replace(/[ \t]*(?:\uE000[ \t]*)+/g, (m: string, at: number, all: string) => {
+    const next = all[at + m.length] ?? "";
+    const prev = at > 0 ? all[at - 1]! : "";
+    if (next === "" || prev === "" || /[,.;:!?)\n]/.test(next) || prev === "\n") return "";
+    return /[ \t]/.test(m) ? " " : "";
+  });
 }
 
 export function fillPlaceholders(body: string, ctx: SnippetContext): string {
@@ -50,10 +76,40 @@ export function fillPlaceholders(body: string, ctx: SnippetContext): string {
     "my first name": me?.first,
     "my email": ctx.me?.email,
   };
-  return body.replace(/\{([^{}]+)\}/g, (whole, key: string) => {
-    const v = values[key.trim().toLowerCase()];
-    return v ? v : whole;
+  const filled = body.replace(/\{([^{}]+)\}/g, (whole, key: string) => {
+    const k = key.trim().toLowerCase();
+    const v = values[k];
+    if (v) return v;
+    return KNOWN.has(k) ? EMPTIED : whole;
   });
+  return filled.includes(EMPTIED) ? closeGaps(filled) : filled;
+}
+
+/**
+ * The person a snippet's `{first name}` is about: the first To entry, named by
+ * its own "Name <addr>" form, else a known contact or correspondent, else unnamed.
+ */
+export function snippetRecipient(
+  to: string,
+  known: readonly { name: string; email: string }[] = [],
+): { name: string; email: string } | null {
+  const raw = to.split(",")[0]?.trim() ?? "";
+  if (!raw) return null;
+  const angle = raw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>/);
+  const email = (angle ? angle[2]! : raw).trim();
+  const own = angle?.[1]?.trim() ?? "";
+  const hit = known.find((k) => k.name && k.email.toLowerCase() === email.toLowerCase());
+  return { name: own || hit?.name || "", email };
+}
+
+/** The popup's line when no snippet has that key (specs/mail-v3.md §9). */
+export function snippetMissLine(key: string): string {
+  return `No snippet called ;;${key}. Make one in Settings → Mail → Snippets.`;
+}
+
+/** A snippet's one-line preview with its placeholders filled. */
+export function snippetPreview(snippet: MailSnippet, ctx: SnippetContext): string {
+  return fillPlaceholders(snippet.body, ctx).replace(/\s+/g, " ").trim();
 }
 
 /** Replaces the trigger with the filled snippet; returns the new text and caret. */

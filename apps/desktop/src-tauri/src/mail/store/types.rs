@@ -1,7 +1,7 @@
 //! Store inputs and outputs. Output rows serialize camelCase to match
 //! `apps/app/src/lib/runtime.types.mail-engine.ts`.
 
-use crate::mail::contracts::{BodyState, MailboxRole, TabKind};
+use crate::mail::contracts::{BodyState, ClassifyStage, MailboxRole, TabKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +81,13 @@ impl TabRef {
     }
 }
 
+/// Which classifier stage sorted a message, and the rule when a rule did (store v2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClassifyReason {
+    pub stage: ClassifyStage,
+    pub rule_id: Option<String>,
+}
+
 /// One message seen in one mailbox at header time (MR-3 builds these).
 #[derive(Debug, Clone)]
 pub struct MessageInput {
@@ -110,6 +117,8 @@ pub struct MessageInput {
     pub tab: Option<TabRef>,
     pub priority: bool,
     pub attachments: Vec<AttachmentInput>,
+    /// The classifier's reason, stored for "Why is this in X?" (None keeps the stored one).
+    pub classify: Option<ClassifyReason>,
 }
 
 #[derive(Debug, Clone)]
@@ -162,6 +171,12 @@ pub struct ThreadRow {
     pub priority: bool,
     pub muted: bool,
     pub snoozed_until_ms: Option<i64>,
+    /// "Remind me if no reply" due time (kv `followup:<thread>`), else None.
+    pub follow_up_at_ms: Option<i64>,
+    /// Why it came back to the Inbox: `snooze` or `reply` (kv `returned:<thread>`).
+    pub return_reason: Option<String>,
+    /// `pending` or `in_flight` while the thread's send waits in the Outbox.
+    pub outbox_state: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -176,6 +191,11 @@ pub struct ListPage {
 pub struct Counts {
     pub by_view_key: std::collections::BTreeMap<String, i64>,
     pub badge: i64,
+    /// Sends waiting in the Outbox (pending or in flight).
+    pub outbox: i64,
+    /// Triage ops saved on this Mac and not yet on the server (pending or in
+    /// flight, user origin only): the offline line's "{m} triage actions".
+    pub pending_ops: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -216,6 +236,8 @@ pub struct MessageRow {
 pub struct ThreadDetail {
     pub row: ThreadRow,
     pub messages: Vec<MessageRow>,
+    /// "Always" load images from the newest sender, on this Mac (kv `images_allow:<address>`).
+    pub images_allowed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

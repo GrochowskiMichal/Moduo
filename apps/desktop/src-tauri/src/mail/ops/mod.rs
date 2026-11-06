@@ -23,10 +23,12 @@ mod tests;
 
 mod plan;
 use plan::*;
+mod record;
+pub use record::{FailedOp, OpRecord};
 
 use super::contracts::{MailboxRole, OpKind, OpState, FLAG_SEEN};
 use super::store::write::refresh_thread;
-use super::store::{now_ms, Store, StoreError, StoreResult, TabRef, ViewRef};
+use super::store::{now_ms, ClassifyReason, Store, StoreError, StoreResult, TabRef, ViewRef};
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, OptionalExtension, Transaction};
 use serde::{Deserialize, Serialize};
@@ -37,6 +39,8 @@ pub const MAX_BACKOFF_MS: i64 = 5 * 60_000;
 pub const GIVE_UP_AFTER_MS: i64 = 24 * 3_600_000;
 /// Done rows are kept this long so a late `z` can still compensate.
 pub const KEEP_DONE_MS: i64 = 24 * 3_600_000;
+/// The most threads one op row carries; a bigger action is queued as several rows.
+pub const OP_CHUNK: usize = 1_000;
 
 /// A triage action from the UI.
 #[derive(Debug, Clone)]
@@ -48,6 +52,9 @@ pub struct OpRequest {
     /// Move source; defaults to the account's Inbox.
     pub from_mailbox_id: Option<String>,
     pub snooze_until_ms: Option<i64>,
+    /// A `system` origin: the engine acted on new mail (rule effects, mute), not
+    /// the user. It runs at once (no undo window) and never reaches the undo toast.
+    pub system: bool,
 }
 
 impl OpRequest {
@@ -58,7 +65,14 @@ impl OpRequest {
             to_mailbox_id: None,
             from_mailbox_id: None,
             snooze_until_ms: None,
+            system: false,
         }
+    }
+
+    /// The same request with a `system` origin.
+    pub fn system(mut self) -> Self {
+        self.system = true;
+        self
     }
 }
 
@@ -148,6 +162,9 @@ struct Effect {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Args {
     action: String,
+    /// Queued by the engine itself (decision 4); absent on older rows.
+    #[serde(default)]
+    system: bool,
     /// Forward ops apply `effect`; compensating ops re-assert `revert_to`.
     effect: Option<Effect>,
     revert_to: Option<Snapshot>,
@@ -166,19 +183,6 @@ struct ThreadSnap {
     state: Option<(bool, bool, Option<i64>)>,
     messages: Vec<(i64, u32)>,
     memberships: Vec<(String, i64, i64, Option<i64>)>,
-}
-
-/// A row for the "Couldn't sync N actions" bar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FailedOp {
-    pub id: String,
-    pub action_id: String,
-    pub account_id: String,
-    pub kind: OpKind,
-    pub thread_ids: Vec<String>,
-    pub error: String,
-    pub attempts: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -345,6 +349,94 @@ fn insert_op(
     Ok(())
 }
 
+fn kv_put(tx: &Transaction, key: &str, value: &str) -> StoreResult<()> {
+    tx.execute(
+        "INSERT INTO kv (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        params![key, value],
+    )?;
+    Ok(())
+}
+
+/// Keeps `returned:<thread>` (the row's "Back" / "New reply" flag, decision 7):
+/// an unsnooze of a snoozed thread records why it came back; a new snooze or
+/// leaving the Inbox clears it (and the pending `snooze_reply:` note, so no later
+/// unsnooze reads a stale "reply"). Undoing the unsnooze clears both too.
+fn note_return(tx: &Transaction, kind: OpKind, threads: &[String]) -> StoreResult<()> {
+    use OpKind::*;
+    for t in threads {
+        let returned = format!("returned:{t}");
+        let replied = format!("snooze_reply:{t}");
+        match kind {
+            Snooze | Done | Delete | Spam | Move | BlockSender => {
+                tx.execute(
+                    "DELETE FROM kv WHERE key IN (?1, ?2)",
+                    params![returned, replied],
+                )?;
+            }
+            Unsnooze => {
+                let snoozed: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?1 AND snoozed_until_ms IS NOT NULL)",
+                    [t],
+                    |r| r.get(0),
+                )?;
+                if snoozed {
+                    let reply: bool = tx.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM kv WHERE key = ?1)",
+                        [&replied],
+                        |r| r.get(0),
+                    )?;
+                    kv_put(tx, &returned, if reply { "reply" } else { "snooze" })?;
+                }
+                tx.execute("DELETE FROM kv WHERE key = ?1", [&replied])?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// A local-only re-tab inside an action (a Put-in-tab rule applied to existing
+/// mail): every message's sort before it, kept under the action id so its `z`
+/// puts them back. Tabs never reach the server, so there is no op row (and no
+/// op kind) for it.
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct RetabUndo {
+    at: i64,
+    threads: Vec<String>,
+    /// (message id, tab, classify stage, classify rule id), oldest first.
+    messages: Vec<(i64, Option<String>, Option<String>, Option<String>)>,
+}
+
+const RETAB_PREFIX: &str = "retab_undo:";
+
+fn retab_key(action: &str) -> String {
+    format!("{RETAB_PREFIX}{action}")
+}
+
+/// Puts back the sort a re-tab under `action` replaced; false when it had none.
+fn restore_retab(tx: &Transaction, action: &str) -> StoreResult<bool> {
+    let key = retab_key(action);
+    let raw: Option<String> = tx
+        .query_row("SELECT value FROM kv WHERE key = ?1", [&key], |r| r.get(0))
+        .optional()?;
+    let Some(raw) = raw else {
+        return Ok(false);
+    };
+    tx.execute("DELETE FROM kv WHERE key = ?1", [&key])?;
+    let undo: RetabUndo = from_json(&raw)?;
+    // Newest first, so a message re-tabbed twice ends at its first sort.
+    for (id, tab, stage, rule) in undo.messages.iter().rev() {
+        tx.execute(
+            "UPDATE messages SET tab = ?2, classify_stage = ?3, classify_rule_id = ?4 WHERE id = ?1",
+            params![id, tab, stage, rule],
+        )?;
+    }
+    for t in &undo.threads {
+        refresh_thread(tx, t)?;
+    }
+    Ok(true)
+}
+
 impl Store {
     /// Applies the action locally and queues it, in one transaction.
     pub fn enqueue_op(&self, req: &OpRequest) -> StoreResult<ActionHandle> {
@@ -352,24 +444,45 @@ impl Store {
     }
 
     pub fn enqueue_op_at(&self, req: &OpRequest, now: i64) -> StoreResult<ActionHandle> {
+        self.enqueue_in_action(req, &new_id(), now)
+    }
+
+    /// Queues `req` under an existing action id, so a bulk apply queued in
+    /// chunks is still one action that one `z` undoes.
+    pub fn enqueue_in_action(
+        &self,
+        req: &OpRequest,
+        action_id: &str,
+        now: i64,
+    ) -> StoreResult<ActionHandle> {
         let mut conn = self.w();
         let tx = conn.transaction()?;
-        let action = new_id();
+        let action = action_id.to_string();
         let mut op_ids = Vec::new();
-        let not_before = now + UNDO_WINDOW_MS;
-        for (account, threads) in group_accounts(&tx, &req.thread_ids)? {
-            let snap = snapshot(&tx, &account, &threads)?;
-            let (effect, steps) = plan(&tx, &account, req, &snap)?;
-            apply(&tx, &account, &threads, &effect)?;
-            let id = new_id();
-            let args = Args {
-                action: action.clone(),
-                effect: Some(effect),
-                revert_to: None,
-                steps,
-            };
-            insert_op(&tx, &id, &account, req.kind, &threads, &args, &snap, not_before, now)?;
-            op_ids.push(id);
+        let not_before = if req.system {
+            now
+        } else {
+            now + UNDO_WINDOW_MS
+        };
+        note_return(&tx, req.kind, &req.thread_ids)?;
+        // ⌘A over a huge view: any number of threads, one action, one row per
+        // account per chunk, all in one transaction (all or nothing).
+        for chunk in req.thread_ids.chunks(OP_CHUNK) {
+            for (account, threads) in group_accounts(&tx, chunk)? {
+                let snap = snapshot(&tx, &account, &threads)?;
+                let (effect, steps) = plan(&tx, &account, req, &snap)?;
+                apply(&tx, &account, &threads, &effect)?;
+                let id = new_id();
+                let args = Args {
+                    action: action.clone(),
+                    system: req.system,
+                    effect: Some(effect),
+                    revert_to: None,
+                    steps,
+                };
+                insert_op(&tx, &id, &account, req.kind, &threads, &args, &snap, not_before, now)?;
+                op_ids.push(id);
+            }
         }
         tx.commit()?;
         Ok(ActionHandle {
@@ -377,6 +490,52 @@ impl Store {
             op_ids,
             undo_until_ms: not_before,
         })
+    }
+
+    /// Re-tabs `thread_ids` as part of the action `action_id` (one `z` undoes it
+    /// with the action's ops). Callable once per chunk under the same id.
+    pub fn retab_in_action(
+        &self,
+        thread_ids: &[String],
+        tab: &TabRef,
+        reason: &ClassifyReason,
+        action_id: &str,
+        now: i64,
+    ) -> StoreResult<()> {
+        let mut conn = self.w();
+        let tx = conn.transaction()?;
+        let key = retab_key(action_id);
+        let prev: Option<String> = tx
+            .query_row("SELECT value FROM kv WHERE key = ?1", [&key], |r| r.get(0))
+            .optional()?;
+        let mut undo: RetabUndo = match prev {
+            Some(j) => from_json(&j)?,
+            None => RetabUndo::default(),
+        };
+        undo.at = now;
+        {
+            let mut s = tx.prepare_cached(
+                "SELECT id, tab, classify_stage, classify_rule_id FROM messages WHERE thread_id = ?1",
+            )?;
+            for t in thread_ids {
+                let rows = s
+                    .query_map([t], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                    .collect::<Result<Vec<_>, _>>()?;
+                undo.messages.extend(rows);
+                undo.threads.push(t.clone());
+            }
+        }
+        kv_put(&tx, &key, &to_json(&undo)?)?;
+        for t in thread_ids {
+            tx.execute(
+                "UPDATE messages SET tab = ?2, classify_stage = ?3, classify_rule_id = ?4
+                 WHERE thread_id = ?1",
+                params![t, tab.encode(), reason.stage.as_str(), reason.rule_id],
+            )?;
+            refresh_thread(&tx, t)?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     /// `z`: cancel if unsent, else queue the compensating action.
@@ -392,13 +551,22 @@ impl Store {
             "json_extract(args_json, '$.action') = ?1",
             &[Value::Text(action_id.into())],
         )?;
+        let retabbed = restore_retab(&tx, action_id)?;
         if ops.is_empty() {
+            if retabbed {
+                tx.commit()?;
+                return Ok(UndoOutcome::Cancelled);
+            }
             return Ok(UndoOutcome::Nothing);
         }
         let mut comp_ids = Vec::new();
         let comp_action = new_id();
         // Newest first, so stacked rows of one action unwind in order.
         for op in ops.iter().rev() {
+            // The thread is snoozed again: it no longer reads "Back" / "New reply".
+            if op.kind == OpKind::Unsnooze.as_str() {
+                note_return(&tx, OpKind::Snooze, &op.thread_ids)?;
+            }
             let snap = op.undo.clone().unwrap_or_default();
             let unsent = op.state == OpState::Pending.as_str() || op.state == OpState::Failed.as_str();
             if unsent {
@@ -411,6 +579,7 @@ impl Store {
             let kind = OpKind::parse(&op.kind).unwrap_or(OpKind::Move);
             let args = Args {
                 action: comp_action.clone(),
+                system: false,
                 effect: None,
                 revert_to: Some(snap),
                 steps: inverse_steps(&tx, &op.args.steps)?,
@@ -561,6 +730,10 @@ impl Store {
                 "DELETE FROM ops WHERE state = 'done' AND created_at_ms < ?1",
                 [now - KEEP_DONE_MS],
             )?;
+            tx.execute(
+                "DELETE FROM kv WHERE key LIKE ?1 || '%' AND json_extract(value, '$.at') < ?2",
+                params![RETAB_PREFIX, now - KEEP_DONE_MS],
+            )?;
             let due = load_where(
                 &tx,
                 "state = 'pending' AND not_before_ms <= ?1",
@@ -622,37 +795,6 @@ impl Store {
             }
         }
         Ok(report)
-    }
-
-    /// The failed-actions bar: every failed op, oldest first.
-    pub fn failed_ops(&self) -> StoreResult<Vec<FailedOp>> {
-        let mut conn = self.w();
-        let tx = conn.transaction()?;
-        let rows = load_where(&tx, "state = 'failed'", &[])?;
-        let errors: Vec<(String, Option<String>)> = {
-            let mut s = tx.prepare("SELECT id, last_error FROM ops WHERE state = 'failed'")?;
-            let v = s
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-                .collect::<Result<_, _>>()?;
-            v
-        };
-        tx.commit()?;
-        Ok(rows
-            .into_iter()
-            .map(|o| FailedOp {
-                error: errors
-                    .iter()
-                    .find(|(id, _)| id == &o.id)
-                    .and_then(|(_, e)| e.clone())
-                    .unwrap_or_default(),
-                kind: OpKind::parse(&o.kind).unwrap_or(OpKind::Move),
-                action_id: o.args.action,
-                id: o.id,
-                account_id: o.account_id,
-                thread_ids: o.thread_ids,
-                attempts: o.attempts,
-            })
-            .collect())
     }
 
     /// Retry: back to pending, due now, with a fresh 24 h budget.

@@ -36,6 +36,12 @@ import { Eyebrow } from "../ui/eyebrow";
 import { IconButton } from "../ui/icon-button";
 import { MetaCount } from "../ui/meta-count";
 
+const DEFAULT_PLACEHOLDER = "Search messages, tasks, notes, contacts… or jump to a page";
+/** With the Email chip on, the input teaches the mail operators (specs/mail-v3.md §11, AC37). */
+export const MAIL_PLACEHOLDER = "Search mail: from: subject: has:attachment is:unread";
+const placeholderFor = (chip: PaletteChipKey) =>
+  chip === "email" ? MAIL_PLACEHOLDER : DEFAULT_PLACEHOLDER;
+
 export type PaletteAction = {
   id: string;
   label: string;
@@ -467,7 +473,7 @@ export function GlobalSearchPalette({
         value={query}
         onValueChange={onQueryChange}
         onKeyDown={onInputKeyDown}
-        placeholder="Search messages, tasks, notes, contacts… or jump to a page"
+        placeholder={placeholderFor(chip)}
       />
       <TypeChips chips={chips} chip={chip} onChipChange={onChipChange} />
       <ProgressLine slow={slow} />

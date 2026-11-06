@@ -15,13 +15,19 @@
 
 use std::collections::BTreeMap;
 
-use serde::Deserialize;
+use rusqlite::{params, OptionalExtension};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::mail::contracts::{BlockDestination, OpKind, RuleAction, RuleCondition};
+use crate::mail::contracts::{
+    BlockDestination, ClassifyStage, OpKind, RuleAction, RuleCondition, FLAG_DELETED,
+};
 use crate::mail::ops::OpRequest;
-use crate::mail::store::TabRef;
-use crate::mail::sync::classify::{classify, ClassifyConfig, CustomTab, Outcome, Rule};
+use crate::mail::store::query::json_col;
+use crate::mail::store::{Address, ClassifyReason, Store, StoreError, StoreResult, TabRef};
+use crate::mail::sync::classify::{
+    classify, rule_matches, ClassifyConfig, CustomTab, Outcome, Rule,
+};
 use crate::mail::sync::headers::ParsedHeader;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -133,6 +139,47 @@ pub fn apply_settings_items(base: &mut ClassifyConfig, items: &[SettingsItem]) {
 /// thread's account; `None` when that account has no such folder.
 pub trait FolderResolver {
     fn by_path(&self, thread_id: &str, path: &str) -> Option<String>;
+    /// A label's mailbox for the thread's account (Gmail labels are folders).
+    fn label(&self, thread_id: &str, label: &str) -> Option<String> {
+        self.by_path(thread_id, label)
+    }
+}
+
+/// Folder targets resolved against the store: a path, a folder name or a role
+/// name (`archive`, `trash` …) in the thread's account. Labels resolve only on
+/// Gmail accounts, to a label folder (custom role).
+pub struct StoreFolders<'a>(pub &'a Store);
+
+impl FolderResolver for StoreFolders<'_> {
+    fn by_path(&self, thread_id: &str, path: &str) -> Option<String> {
+        self.0
+            .r()
+            .prepare_cached(
+                "SELECT mb.id FROM mailboxes mb
+                 WHERE mb.account_id = (SELECT account_id FROM messages WHERE thread_id = ?1 LIMIT 1)
+                   AND (mb.path = ?2 COLLATE NOCASE OR mb.name = ?2 COLLATE NOCASE
+                        OR (mb.role != 'custom' AND mb.role = lower(?2)))
+                 ORDER BY mb.path = ?2 DESC, mb.path LIMIT 1",
+            )
+            .and_then(|mut s| s.query_row(params![thread_id, path.trim()], |r| r.get(0)).optional())
+            .ok()
+            .flatten()
+    }
+
+    fn label(&self, thread_id: &str, label: &str) -> Option<String> {
+        self.0
+            .r()
+            .prepare_cached(
+                "SELECT mb.id FROM mailboxes mb JOIN accounts a ON a.id = mb.account_id
+                 WHERE mb.account_id = (SELECT account_id FROM messages WHERE thread_id = ?1 LIMIT 1)
+                   AND a.provider IN ('gmail', 'google_workspace') AND mb.role = 'custom'
+                   AND (mb.path = ?2 COLLATE NOCASE OR mb.name = ?2 COLLATE NOCASE)
+                 ORDER BY mb.path LIMIT 1",
+            )
+            .and_then(|mut s| s.query_row(params![thread_id, label.trim()], |r| r.get(0)).optional())
+            .ok()
+            .flatten()
+    }
 }
 
 impl<F: Fn(&str, &str) -> Option<String>> FolderResolver for F {
@@ -144,8 +191,8 @@ impl<F: Fn(&str, &str) -> Option<String>> FolderResolver for F {
 /// Turns outcomes into batched op requests, one per (kind, target). Blocked
 /// mail goes where the setting says (AC28); a rule's move/skip-inbox/mark-read
 /// become Move/Done/MarkRead (AC26). Screened mail needs no op: it stays held
-/// in New senders by its `screened` mark. Labels are local-only until the ops
-/// outbox grows a label target (MR-12 decision).
+/// in New senders by its `screened` mark. A label becomes a LabelAdd when the
+/// resolver finds its label folder (Gmail); elsewhere it is skipped.
 pub fn plan_effects(effects: &[(String, Outcome)], folders: &dyn FolderResolver) -> Vec<OpRequest> {
     let mut groups: BTreeMap<(&'static str, Option<String>), Vec<String>> = BTreeMap::new();
     let mut push = |kind: OpKind, to: Option<String>, t: &str| {
@@ -172,6 +219,11 @@ pub fn plan_effects(effects: &[(String, Outcome)], folders: &dyn FolderResolver)
         }
         if o.mark_read {
             push(OpKind::MarkRead, None, t);
+        }
+        for l in &o.labels {
+            if let Some(id) = folders.label(t, l) {
+                push(OpKind::LabelAdd, Some(id), t);
+            }
         }
         if let Some(id) = o.move_to.as_deref().and_then(|f| folders.by_path(t, f)) {
             push(OpKind::Move, Some(id), t);
@@ -209,6 +261,138 @@ pub fn apply_to_existing(
         })
         .collect();
     plan_effects(&effects, folders)
+}
+
+/// Threads per queued op when a rule runs over existing mail (decision 5).
+pub const APPLY_CHUNK: usize = 500;
+
+/// `MailApplyRuleResult`: threads matched (dry run) or acted on, and the one
+/// undoable bulk action (empty on a dry run or when nothing needed an op).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ApplyRuleResult {
+    pub count: usize,
+    pub op_ids: Vec<String>,
+}
+
+/// Every live message's stored headers (not in Trash or Spam) that `rule` matches.
+fn rule_hits(store: &Store, rule: &Rule) -> StoreResult<Vec<(String, ParsedHeader)>> {
+    let conn = store.r();
+    let mut s = conn.prepare(
+        "SELECT m.thread_id, m.from_name, m.from_email, m.to_json, m.cc_json, m.subject,
+           m.list_unsubscribe, m.list_unsubscribe_post, m.precedence, m.auto_submitted
+         FROM messages m
+         WHERE (m.flags & ?1) = 0 AND EXISTS (SELECT 1 FROM thread_views tv
+           WHERE tv.thread_id = m.thread_id AND tv.role NOT IN ('trash', 'spam'))
+         ORDER BY m.date_ms DESC, m.id DESC",
+    )?;
+    let mut rows = s.query([FLAG_DELETED])?;
+    let mut out = Vec::new();
+    while let Some(r) = rows.next()? {
+        let to: String = r.get(3)?;
+        let cc: String = r.get(4)?;
+        let h = ParsedHeader {
+            from: Address {
+                name: r.get(1)?,
+                email: r.get(2)?,
+            },
+            to: json_col(3, &to)?,
+            cc: json_col(4, &cc)?,
+            subject: r.get(5)?,
+            list_unsubscribe: r.get(6)?,
+            list_unsubscribe_post: r.get(7)?,
+            precedence: r.get(8)?,
+            auto_submitted: r.get(9)?,
+            ..ParsedHeader::default()
+        };
+        if rule_matches(rule, &h) {
+            out.push((r.get(0)?, h));
+        }
+    }
+    Ok(out)
+}
+
+/// "Also apply to the N already on this Mac" (`mail_apply_rule_existing`, AC7).
+/// The dry run counts the matching threads. The apply queues the rule's ops in
+/// chunks of [`APPLY_CHUNK`] threads under one action id (one `z` undoes it all)
+/// and returns once every chunk is queued; a Put-in-tab rule re-tabs them too,
+/// inside the same action (a tab-only rule's action is just the re-tab).
+pub fn apply_rule_existing(
+    store: &Store,
+    cfg: &ClassifyConfig,
+    rule_id: &str,
+    dry_run: bool,
+    now: i64,
+) -> StoreResult<ApplyRuleResult> {
+    let rule = cfg
+        .rules
+        .iter()
+        .find(|r| r.id == rule_id)
+        .cloned()
+        .ok_or_else(|| StoreError::Invalid("rule_not_found".into()))?;
+    let hits = rule_hits(store, &rule)?;
+    let mut threads: Vec<String> = Vec::new();
+    for (t, _) in &hits {
+        if !threads.contains(t) {
+            threads.push(t.clone());
+        }
+    }
+    let count = threads.len();
+    if dry_run || count == 0 {
+        return Ok(ApplyRuleResult {
+            count,
+            op_ids: vec![],
+        });
+    }
+    // Only this rule acts: the block list and the other rules stay out of it.
+    let one = ClassifyConfig {
+        rules: vec![rule.clone()],
+        block_destination: cfg.block_destination,
+        block_folder: cfg.block_folder.clone(),
+        ..ClassifyConfig::default()
+    };
+    let action = uuid::Uuid::new_v4().to_string();
+    // All or nothing: a failed chunk drops what this action already did (the
+    // re-tab included).
+    let rollback = |e: StoreError| {
+        let _ = store.undo_action_at(&action, now);
+        Err(e)
+    };
+    let mut acted = false;
+    if let Some((_, arg)) = rule
+        .actions
+        .iter()
+        .find(|(a, _)| *a == RuleAction::PutInTab)
+    {
+        let tab = TabRef::decode(arg.as_deref().unwrap_or("personal"));
+        let reason = ClassifyReason {
+            stage: ClassifyStage::Rules,
+            rule_id: Some(rule.id.clone()),
+        };
+        // Part of the action: its undo puts each message's previous tab back.
+        for chunk in threads.chunks(APPLY_CHUNK) {
+            if let Err(e) = store.retab_in_action(chunk, &tab, &reason, &action, now) {
+                return rollback(e);
+            }
+            acted = true;
+        }
+    }
+    let folders = StoreFolders(store);
+    let reqs = apply_to_existing(&hits, &one, &folders);
+    for req in reqs {
+        for chunk in req.thread_ids.chunks(APPLY_CHUNK) {
+            let mut r = OpRequest::new(req.kind, chunk.to_vec());
+            r.to_mailbox_id = req.to_mailbox_id.clone();
+            if let Err(e) = store.enqueue_in_action(&r, &action, now) {
+                return rollback(e);
+            }
+            acted = true;
+        }
+    }
+    Ok(ApplyRuleResult {
+        count,
+        op_ids: if acted { vec![action] } else { vec![] },
+    })
 }
 
 /// Whether a new-mail outcome should raise a notification: Priority people
@@ -249,6 +433,181 @@ mod tests {
     }
     fn folders(_t: &str, p: &str) -> Option<String> {
         (p != "Missing").then(|| format!("acc|{p}"))
+    }
+
+    #[test]
+    fn apply_existing_counts_then_applies_in_chunks() {
+        use crate::mail::contracts::{MailboxRole, TabKind};
+        use crate::mail::store::{
+            now_ms, AccountInput, ListInput, MailboxInput, MessageInput, ViewRef,
+        };
+        let d = std::env::temp_dir().join(format!(
+            "moduo-mail-rules-apply-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        let st = Store::open(&d).unwrap();
+        st.upsert_account(&AccountInput {
+            id: "a1".into(),
+            address: "me@x.test".into(),
+            display_name: "Me".into(),
+            provider: "imap".into(),
+            hue: 1,
+        })
+        .unwrap();
+        for (id, role) in [
+            ("inbox", MailboxRole::Inbox),
+            ("archive", MailboxRole::Archive),
+            ("trash", MailboxRole::Trash),
+        ] {
+            st.upsert_mailbox(&MailboxInput {
+                id: id.into(),
+                account_id: "a1".into(),
+                path: id.to_uppercase(),
+                name: id.into(),
+                role,
+                delimiter: Some("/".into()),
+                live: true,
+            })
+            .unwrap();
+        }
+        let msg = |i: usize, from: &str, mailbox: &str| MessageInput {
+            classify: None,
+            account_id: "a1".into(),
+            ext_id: format!("e{i}"),
+            mailbox_id: mailbox.into(),
+            uid: i as i64 + 1,
+            modseq: None,
+            message_id: Some(format!("<e{i}@x>")),
+            in_reply_to: None,
+            references: vec![],
+            thread_id: format!("t{i}"),
+            from: Address {
+                name: String::new(),
+                email: from.into(),
+            },
+            to: vec![],
+            cc: vec![],
+            subject: format!("Receipt {i}"),
+            snippet: String::new(),
+            date_ms: 1_000 + i as i64,
+            flags: 0,
+            size: 1,
+            list_unsubscribe: None,
+            list_unsubscribe_post: None,
+            precedence: None,
+            auto_submitted: None,
+            has_invite: false,
+            tab: Some(TabRef::of(TabKind::Personal)),
+            priority: false,
+            attachments: vec![],
+        };
+        let mut batch: Vec<MessageInput> = (0..1_200)
+            .map(|i| msg(i, "billing@shop.test", "inbox"))
+            .collect();
+        batch.push(msg(5_000, "friend@y.test", "inbox"));
+        batch.push(msg(5_001, "billing@shop.test", "trash"));
+        st.ingest(&batch).unwrap();
+        let mut cfg = ClassifyConfig::default();
+        apply_settings_items(
+            &mut cfg,
+            &[item(
+                "r-bills",
+                "rule",
+                0.0,
+                json!({"conditions":[{"field":"from","value":"billing@shop.test"}],"actions":[{"action":"skip_inbox"},{"action":"put_in_tab","arg":"notifications"}]}),
+            )],
+        );
+        let inbox_count = || {
+            let mut n = 0;
+            let mut after = None;
+            loop {
+                let p = st
+                    .list_threads(&ListInput {
+                        view: ViewRef::Unified(MailboxRole::Inbox),
+                        tab: None,
+                        after,
+                        limit: 500,
+                    })
+                    .unwrap();
+                n += p.rows.len();
+                match p.next {
+                    Some(c) => after = Some(c),
+                    None => return n,
+                }
+            }
+        };
+        let ops = || -> Vec<(String, String)> {
+            let c = st.r();
+            let mut s = c
+                .prepare("SELECT json_extract(args_json, '$.action'), thread_ids_json FROM ops")
+                .unwrap();
+            s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        let tab_of = |t: &str| -> String {
+            st.r()
+                .query_row(
+                    "SELECT tab FROM thread_views WHERE thread_id = ?1 LIMIT 1",
+                    [t],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+        // Dry run: counts the 1,200 (not the one in Trash), touches nothing.
+        let dry = apply_rule_existing(&st, &cfg, "r-bills", true, 10_000).unwrap();
+        assert_eq!(
+            dry,
+            ApplyRuleResult {
+                count: 1_200,
+                op_ids: vec![]
+            }
+        );
+        assert!(ops().is_empty());
+        assert_eq!(inbox_count(), 1_201);
+        // Apply: one action, queued as 500 + 500 + 200.
+        let done = apply_rule_existing(&st, &cfg, "r-bills", false, 10_000).unwrap();
+        assert_eq!(done.count, 1_200);
+        assert_eq!(done.op_ids.len(), 1);
+        let rows = ops();
+        let sizes: Vec<usize> = rows
+            .iter()
+            .map(|(_, t)| serde_json::from_str::<Vec<String>>(t).unwrap().len())
+            .collect();
+        assert_eq!(sizes, vec![500, 500, 200]);
+        assert!(
+            rows.iter().all(|(a, _)| *a == done.op_ids[0]),
+            "one bulk id"
+        );
+        assert_eq!(inbox_count(), 1, "only the friend stays");
+        assert_eq!(tab_of("t7"), "notifications");
+        // One z undoes every chunk, the re-tab included.
+        st.undo_action_at(&done.op_ids[0], 11_000).unwrap();
+        assert!(ops().is_empty());
+        assert_eq!(inbox_count(), 1_201);
+        assert_eq!(tab_of("t7"), "personal", "undo puts the tab back");
+        assert!(apply_rule_existing(&st, &cfg, "nope", true, 0).is_err());
+
+        // A tab-only rule queues no server op, yet its re-tab is one undoable action.
+        apply_settings_items(
+            &mut cfg,
+            &[item(
+                "r-tab",
+                "rule",
+                0.0,
+                json!({"conditions":[{"field":"from","value":"friend@y.test"}],"actions":[{"action":"put_in_tab","arg":"custom:team"}]}),
+            )],
+        );
+        let tabbed = apply_rule_existing(&st, &cfg, "r-tab", false, 12_000).unwrap();
+        assert_eq!(tabbed.count, 1);
+        assert_eq!(tabbed.op_ids.len(), 1, "something to undo");
+        assert!(ops().is_empty(), "nothing for the server");
+        assert_eq!(tab_of("t5000"), "custom:team");
+        st.undo_action_at(&tabbed.op_ids[0], 13_000).unwrap();
+        assert_eq!(tab_of("t5000"), "personal");
     }
 
     #[test]

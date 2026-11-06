@@ -201,6 +201,14 @@ CREATE VIRTUAL TABLE messages_fts USING fts5 (
   prefix = '2 3'
 );
 "#,
+    // v2 (specs/mail-v3.md decision 2): when the account last finished a round
+    // and whether it pushes, and which classifier stage (and rule) sorted each message.
+    r#"
+ALTER TABLE accounts ADD COLUMN last_synced_ms INTEGER;
+ALTER TABLE accounts ADD COLUMN push INTEGER;
+ALTER TABLE messages ADD COLUMN classify_stage TEXT;
+ALTER TABLE messages ADD COLUMN classify_rule_id TEXT;
+"#,
 ];
 
 pub fn migrate(conn: &mut Connection) -> rusqlite::Result<u32> {
@@ -212,4 +220,61 @@ pub fn migrate(conn: &mut Connection) -> rusqlite::Result<u32> {
         tx.commit()?;
     }
     Ok(MIGRATIONS.len() as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn columns(conn: &Connection, table: &str) -> Vec<String> {
+        let mut s = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .unwrap();
+        s.query_map([], |r| r.get::<_, String>(1))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    }
+
+    #[test]
+    fn v2_adds_columns_and_keeps_rows() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        // A v1 database with a row in each table v2 touches.
+        conn.execute_batch(MIGRATIONS[0]).unwrap();
+        conn.pragma_update(None, "user_version", 1u32).unwrap();
+        conn.execute_batch(
+            "INSERT INTO accounts (id, address, provider, created_at_ms) VALUES ('a1', 'me@x.test', 'imap', 1);
+             INSERT INTO messages (account_id, ext_id, thread_id, subject, date_ms, tab)
+               VALUES ('a1', 'e1', 't1', 'Hello', 5, 'personal');",
+        )
+        .unwrap();
+        assert_eq!(migrate(&mut conn).unwrap(), 2);
+        let v: u32 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, 2);
+        let acc = columns(&conn, "accounts");
+        assert!(acc.contains(&"last_synced_ms".to_string()) && acc.contains(&"push".to_string()));
+        let msg = columns(&conn, "messages");
+        assert!(msg.contains(&"classify_stage".to_string()));
+        assert!(msg.contains(&"classify_rule_id".to_string()));
+        let (addr, synced): (String, Option<i64>) = conn
+            .query_row(
+                "SELECT address, last_synced_ms FROM accounts WHERE id = 'a1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((addr.as_str(), synced), ("me@x.test", None));
+        let (subject, stage): (String, Option<String>) = conn
+            .query_row(
+                "SELECT subject, classify_stage FROM messages WHERE ext_id = 'e1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!((subject.as_str(), stage), ("Hello", None));
+        // Re-running is a no-op.
+        assert_eq!(migrate(&mut conn).unwrap(), 2);
+    }
 }

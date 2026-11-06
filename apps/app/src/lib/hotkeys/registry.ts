@@ -10,6 +10,9 @@
 // timeline canvas). They own the focused element, so no scope has to win for them.
 import { areHotkeysEqual, type HotkeyChord as Hotkey } from "@tanstack/hotkeys";
 
+/** How long the second key of a chord (`g` then `i`) may take (specs/mail-v3.md decision 15). */
+export const CHORD_TIMEOUT_MS = 1000;
+
 /** A route's scope: active while its page is mounted. */
 export type RouteScope = "tasks" | "chat" | "notes" | "calendar" | "contacts" | "home" | "email";
 
@@ -41,8 +44,20 @@ export const SCOPE_PARENT: Record<Exclude<HotkeyScope, "global">, HotkeyScope> =
   modal: "global",
 };
 
-/** A key, or one that exists only on one platform (fullscreen: ⌃⌘F on a Mac, F11 elsewhere). */
-export type HotkeyKey = Hotkey | { key: Hotkey; only: "mac" | "other" };
+/** Two keys pressed one after the other within `CHORD_TIMEOUT_MS` (`g` then `i`). A slow
+ *  second key, or any key that isn't the second step, drops the chord and acts normally. */
+export type HotkeySequenceKey = readonly [Hotkey, Hotkey];
+
+/** A key, one that exists only on one platform (fullscreen: ⌃⌘F on a Mac, F11
+ *  elsewhere), or a two-step chord written as a nested pair (`[["G", "I"]]`). */
+export type HotkeyKey = Hotkey | { key: Hotkey; only: "mac" | "other" } | HotkeySequenceKey;
+
+/** What a binding listens for on one platform: one key, or a chord's two steps. */
+export type HotkeyBinding = Hotkey | HotkeySequenceKey;
+
+export function isSequenceKey(key: HotkeyBinding | HotkeyKey): key is HotkeySequenceKey {
+  return Array.isArray(key);
+}
 
 export type HotkeyDef = {
   scope: HotkeyScope;
@@ -213,12 +228,15 @@ export const HOTKEYS = {
   "home.join": { scope: "home", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
 
   // ── email ──────────────────────────────────────────────────────────────────
-  "email.next": { scope: "email", label: "Next thread", keys: ["J"] },
-  "email.prev": { scope: "email", label: "Previous thread", keys: ["K"] },
+  // ↓/↑ walk the list like j/k (specs/mail-v3.md §7).
+  "email.next": { scope: "email", label: "Next thread", keys: ["J", "ArrowDown"] },
+  "email.prev": { scope: "email", label: "Previous thread", keys: ["K", "ArrowUp"] },
   "email.open": { scope: "email", label: "Open the thread", keys: ["Enter"] },
   "email.archive": { scope: "email", label: "Done", keys: ["E"] },
+  "email.undone": { scope: "email", label: "Not done", keys: ["Shift+E"] },
+  "email.remind": { scope: "email", label: "Remind me if no reply", keys: ["W"] },
   "email.pin": { scope: "email", label: "Pin", keys: ["P"] },
-  "email.delete": { scope: "email", label: "Delete", keys: ["Shift+3"] },
+  "email.delete": { scope: "email", label: "Delete", keys: ["Shift+3", "Backspace"] },
   "email.move": { scope: "email", label: "Move", keys: ["M"] },
   "email.snooze": { scope: "email", label: "Snooze", keys: ["S"] },
   "email.convert": { scope: "email", label: "Make a task", keys: ["T"] },
@@ -226,7 +244,13 @@ export const HOTKEYS = {
   // MR-9: the rebuilt shell's keys; the `?` legend and ⌘K list them from here (AC42).
   "email.reply-all": { scope: "email", label: "Reply all", keys: ["A"] },
   "email.forward": { scope: "email", label: "Forward", keys: ["F"] },
-  "email.compose": { scope: "email", label: "New message", keys: ["C"] },
+  // ⌘N is Mail's New message on /email (the app-wide New item yields to it).
+  "email.compose": {
+    scope: "email",
+    label: "New message",
+    keys: ["C", "Mod+N"],
+    overrides: true,
+  },
   "email.unread": { scope: "email", label: "Mark unread / read", keys: ["U"] },
   "email.link": { scope: "email", label: "Link to a task, contact or note", keys: ["L"] },
   "email.note": { scope: "email", label: "Private note", keys: ["N"] },
@@ -234,10 +258,21 @@ export const HOTKEYS = {
   "email.extend-down": { scope: "email", label: "Extend selection down", keys: ["Shift+J"] },
   "email.extend-up": { scope: "email", label: "Extend selection up", keys: ["Shift+K"] },
   "email.select-all": { scope: "email", label: "Select all in tab", keys: ["Mod+A"] },
-  "email.undo": { scope: "email", label: "Undo", keys: ["Z"] },
+  "email.undo": { scope: "email", label: "Undo", keys: ["Z", "Mod+Z"] },
   "email.tab-prev": { scope: "email", label: "Previous tab", keys: ["["] },
   "email.tab-next": { scope: "email", label: "Next tab", keys: ["]"] },
   "email.clear-selection": { scope: "email", label: "Clear selection", keys: ["Escape"] },
+  // The side panel's views (§10); MV-11 builds the panel itself.
+  "email.panel-today": { scope: "email", label: "Today panel", keys: ["Alt+1"] },
+  "email.panel-contact": { scope: "email", label: "Contact panel", keys: ["Alt+2"] },
+  "email.panel-task": { scope: "email", label: "Task panel", keys: ["Alt+3"] },
+  // `g` chords (decision 15): the second key within a second.
+  "email.go-inbox": { scope: "email", label: "Go to Inbox", keys: [["G", "I"]] },
+  "email.go-followups": { scope: "email", label: "Go to Follow-ups", keys: [["G", "F"]] },
+  "email.go-snoozed": { scope: "email", label: "Go to Snoozed", keys: [["G", "S"]] },
+  "email.go-archive": { scope: "email", label: "Go to Archive", keys: [["G", "A"]] },
+  "email.go-sent": { scope: "email", label: "Go to Sent", keys: [["G", "T"]] },
+  "email.go-drafts": { scope: "email", label: "Go to Drafts", keys: [["G", "D"]] },
   // Email's own `?` (the triage legend) beats the app-wide sheet on /email.
   "email.legend": {
     scope: "email",
@@ -246,21 +281,27 @@ export const HOTKEYS = {
     overrides: true,
   },
   "email.search": { scope: "email", label: "Search mail", keys: ["/"] },
+  // MV-8: the reader's keys (specs/mail-v3.md §7, §8).
+  "email.expand-all": { scope: "email", label: "Expand all messages", keys: ["O"] },
+  "email.allow": { scope: "email", label: "Allow this new sender", keys: ["Y"] },
+  "email.block": { scope: "email", label: "Block this new sender", keys: ["B"] },
 } as const satisfies Record<string, HotkeyDef>;
 
 export type HotkeyId = keyof typeof HOTKEYS;
 
 export type HotkeyRegistry = Readonly<Record<string, HotkeyDef>>;
 
-/** The keys a binding has on this platform. */
-export function keysFor(def: HotkeyDef, isMac: boolean): Hotkey[] {
-  const out: Hotkey[] = [];
+/** The keys a binding has on this platform (a chord stays one entry, its two steps). */
+export function keysFor(def: HotkeyDef, isMac: boolean): HotkeyBinding[] {
+  const out: HotkeyBinding[] = [];
   for (const k of def.keys) {
-    if (typeof k === "string") out.push(k);
+    if (typeof k === "string" || isSequenceKey(k)) out.push(k);
     else if ((k.only === "mac") === isMac) out.push(k.key);
   }
   return out;
 }
+
+const bindingName = (k: HotkeyBinding) => (isSequenceKey(k) ? k.join(" ") : k);
 
 const PLATFORMS = [
   { isMac: true, platform: "mac" },
@@ -271,7 +312,7 @@ function shareAKey(a: HotkeyDef, b: HotkeyDef): string | null {
   for (const { isMac, platform } of PLATFORMS) {
     for (const ka of keysFor(a, isMac)) {
       for (const kb of keysFor(b, isMac)) {
-        if (areHotkeysEqual(ka, kb, platform)) return ka;
+        if (areHotkeysEqual(ka, kb, platform)) return bindingName(ka);
       }
     }
   }
@@ -296,7 +337,7 @@ export function findDuplicateBindings(registry: HotkeyRegistry): string[] {
       const keys = keysFor(own, isMac);
       keys.forEach((k, n) => {
         if (keys.slice(n + 1).some((other) => areHotkeysEqual(k, other, platform))) {
-          problems.push(`${ids[i]} lists ${k} twice`);
+          problems.push(`${ids[i]} lists ${bindingName(k)} twice`);
         }
       });
     }
@@ -327,4 +368,36 @@ export function findUndeclaredShadows(registry: HotkeyRegistry): string[] {
     }
   }
   return problems;
+}
+
+/** The plain (single) keys a binding has on one platform. */
+function plainKeys(def: HotkeyDef, isMac: boolean): Hotkey[] {
+  return keysFor(def, isMac).filter((k): k is Hotkey => !isSequenceKey(k));
+}
+
+/** The chords a binding has on one platform. */
+function chordKeys(def: HotkeyDef, isMac: boolean): HotkeySequenceKey[] {
+  return keysFor(def, isMac).filter(isSequenceKey);
+}
+
+/**
+ * A chord whose first key is also a plain key in its scope: both would fire on
+ * the first press (the second step is the chord's, the first is not).
+ */
+export function findChordPrefixClashes(registry: HotkeyRegistry): string[] {
+  const problems: string[] = [];
+  const entries = Object.entries(registry);
+  for (const [id, def] of entries) {
+    for (const { isMac, platform } of PLATFORMS) {
+      const sameScope = entries.filter(([, other]) => other.scope === def.scope);
+      for (const [first] of chordKeys(def, isMac)) {
+        const clash = sameScope.filter(([, other]) =>
+          plainKeys(other, isMac).some((k) => areHotkeysEqual(k, first, platform)),
+        );
+        for (const [otherId] of clash)
+          problems.push(`${id} starts with ${first}, which ${otherId} binds in "${def.scope}"`);
+      }
+    }
+  }
+  return [...new Set(problems)];
 }

@@ -5,6 +5,8 @@ use crate::mail::store::{
     ViewRef,
 };
 
+mod bulk;
+
 const T0: i64 = 1_000_000_000;
 
 #[derive(Default)]
@@ -78,6 +80,7 @@ fn open(d: &std::path::Path) -> Store {
 
 fn msg(a: &str, ext: &str, mb: &str, uid: i64, thread: &str, date: i64, flags: u32) -> MessageInput {
     MessageInput {
+        classify: None,
         account_id: a.into(),
         ext_id: ext.into(),
         mailbox_id: format!("{a}-{mb}"),
@@ -605,4 +608,297 @@ fn labels_need_gmail_and_a_label_folder() {
     let mut bad = label_req(OpKind::LabelAdd);
     bad.to_mailbox_id = Some("g-inbox".into());
     assert!(g.enqueue_op_at(&bad, T0).is_err(), "a system folder is not a label");
+}
+
+#[tokio::test]
+async fn mute_archives_new_replies() {
+    use crate::mail::sync::classify::ClassifyConfig;
+    use crate::mail::sync::events::EventBus;
+    use crate::mail::sync::live::AccountSync;
+    use crate::mail::sync::testing::{raw, store, Fake};
+    use std::sync::{Arc, RwLock};
+    let f = Fake::new(true, false);
+    f.add_folder("INBOX", &[]);
+    f.add_folder("Archive", &["\\Archive"]);
+    f.add_folder("Sent", &["\\Sent"]);
+    f.append("INBOX", "noisy", 1_000);
+    f.append("INBOX", "quiet", 2_000);
+    let s = Arc::new(store("mute"));
+    let a = AccountSync::new(
+        "a1",
+        s.clone(),
+        EventBus::new(),
+        Arc::new(RwLock::new(ClassifyConfig::default())),
+        None,
+    );
+    let mut srv = f.session();
+    let plans = a.first_round(&mut srv).await.unwrap();
+    let inbox_plan = plans.iter().find(|p| p.path == "INBOX").unwrap().clone();
+    let sent_plan = plans.iter().find(|p| p.path == "Sent").unwrap().clone();
+    let thread_of = |subject: &str| -> String {
+        s.r()
+            .query_row(
+                "SELECT thread_id FROM messages WHERE subject = ?1",
+                [subject],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let noisy = thread_of("Subject noisy");
+    s.enqueue_op_at(&OpRequest::new(OpKind::Mute, vec![noisy.clone()]), 10_000)
+        .unwrap();
+    let roles = |t: &str| -> Vec<String> {
+        let c = s.r();
+        let mut st = c
+            .prepare("SELECT role FROM thread_views WHERE thread_id = ?1 ORDER BY role")
+            .unwrap();
+        st.query_map([t], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    assert_eq!(
+        roles(&noisy),
+        vec!["inbox"],
+        "muting alone keeps it in the Inbox"
+    );
+    // My own reply in Sent never archives it.
+    f.append_raw(
+        "Sent",
+        raw(
+            "mine",
+            &["noisy"],
+            "Me <me@y.test>",
+            "Re: Subject noisy",
+            3_000,
+        ),
+        3_000,
+        &[],
+    );
+    a.round(&mut srv, &plans, &sent_plan).await.unwrap();
+    assert!(roles(&noisy).contains(&"inbox".to_string()));
+    // A reply from someone else lands: straight to Archive, as a system op.
+    f.append_raw(
+        "INBOX",
+        raw(
+            "r1",
+            &["noisy"],
+            "Ann <ann@x.test>",
+            "Re: Subject noisy",
+            4_000,
+        ),
+        4_000,
+        &[],
+    );
+    f.append_raw(
+        "INBOX",
+        raw(
+            "r2",
+            &["quiet"],
+            "Ann <ann@x.test>",
+            "Re: Subject quiet",
+            5_000,
+        ),
+        5_000,
+        &[],
+    );
+    a.round(&mut srv, &plans, &inbox_plan).await.unwrap();
+    assert!(
+        !roles(&noisy).contains(&"inbox".to_string()),
+        "{:?}",
+        roles(&noisy)
+    );
+    assert!(roles(&noisy).contains(&"archive".to_string()));
+    let quiet = thread_of("Subject quiet");
+    assert!(
+        roles(&quiet).contains(&"inbox".to_string()),
+        "unmuted threads stay"
+    );
+    let system: Vec<(String, String, bool)> = {
+        let c = s.r();
+        let mut st = c
+            .prepare(
+                "SELECT kind, thread_ids_json, json_extract(args_json, '$.system') FROM ops
+                 WHERE kind = 'done'",
+            )
+            .unwrap();
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    assert_eq!(system.len(), 1);
+    assert!(system[0].1.contains(&noisy) && system[0].2, "{system:?}");
+    // It stays archived on the next round, and runs without an undo window.
+    a.round(&mut srv, &plans, &inbox_plan).await.unwrap();
+    assert!(!roles(&noisy).contains(&"inbox".to_string()));
+    let window: i64 = s
+        .r()
+        .query_row(
+            "SELECT not_before_ms - created_at_ms FROM ops WHERE kind = 'done'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(window, 0, "system ops are due at once");
+    let mut srv_ops = FakeServer::default();
+    let report = s.run_due_ops(&mut srv_ops, now_ms()).unwrap();
+    assert!(srv_ops
+        .calls
+        .iter()
+        .any(|(_, st)| matches!(&st.action, StepAction::MoveTo { path, .. } if path == "Archive")));
+    assert_eq!(report.failed, Vec::<String>::new());
+}
+
+#[test]
+fn counts_report_pending_user_ops() {
+    let (_d, s) = seeded("pending-count");
+    assert_eq!(s.counts().unwrap().pending_ops, 0);
+    let h = done(&s, "t1");
+    s.enqueue_op_at(&OpRequest::new(OpKind::Pin, vec!["t2".into()]), T0)
+        .unwrap();
+    // A system op (rule effect, mute) is the engine's, not a saved triage action.
+    s.enqueue_op_at(
+        &OpRequest::new(OpKind::MarkRead, vec!["t2".into()]).system(),
+        T0,
+    )
+    .unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 2);
+    let v = serde_json::to_value(s.counts().unwrap()).unwrap();
+    assert_eq!(v["pendingOps"], 2);
+    // In flight still counts; done and failed don't.
+    s.w()
+        .execute("UPDATE ops SET state = 'in_flight' WHERE id = ?1", [&h.op_ids[0]])
+        .unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 2);
+    s.recover_in_flight_ops().unwrap();
+    let mut srv = FakeServer {
+        fail: Some(OpError::Permanent("read-only".into())),
+        ..Default::default()
+    };
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 0);
+}
+
+#[test]
+fn move_record_names_its_target() {
+    let (_d, s) = seeded("move-target");
+    s.upsert_mailbox(&MailboxInput {
+        id: "a1-receipts".into(),
+        account_id: "a1".into(),
+        path: "Receipts".into(),
+        name: "Receipts".into(),
+        role: MailboxRole::Custom,
+        delimiter: Some("/".into()),
+        live: true,
+    })
+    .unwrap();
+    let mut req = OpRequest::new(OpKind::Move, vec!["t1".into()]);
+    req.to_mailbox_id = Some("a1-receipts".into());
+    let m = s.enqueue_op_at(&req, T0).unwrap();
+    let rec = s.op_record(&m.op_ids[0]).unwrap().unwrap();
+    assert_eq!(rec.target_name.as_deref(), Some("Receipts"));
+    let v = serde_json::to_value(&rec).unwrap();
+    assert_eq!(v["targetName"], "Receipts");
+    // Other kinds carry null.
+    let d = done(&s, "t2");
+    let v = serde_json::to_value(s.op_record(&d.op_ids[0]).unwrap().unwrap()).unwrap();
+    assert!(v["targetName"].is_null() && v.get("targetName").is_some());
+    // The compensating move names where it moves back to.
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    let UndoOutcome::Compensated(c) = s.undo_action_at(&m.action_id, T0 + 20_000).unwrap() else {
+        panic!("expected a compensating op");
+    };
+    let back = s.op_record(&c.op_ids[0]).unwrap().unwrap();
+    assert_eq!(back.kind, OpKind::Move);
+    assert_eq!(back.target_name.as_deref(), Some("inbox"));
+}
+
+fn return_reason(s: &Store, t: &str) -> Option<String> {
+    s.get_thread(t).unwrap().unwrap().row.return_reason
+}
+
+fn kv_has(s: &Store, key: &str) -> bool {
+    s.r()
+        .query_row("SELECT EXISTS(SELECT 1 FROM kv WHERE key = ?1)", [key], |r| r.get(0))
+        .unwrap()
+}
+
+/// Snoozes `t`, lets a reply arrive and unsnoozes it: the row reads "reply".
+fn returned_by_reply(s: &Store, t: &str, uid: i64, at: i64) -> ActionHandle {
+    let mut req = OpRequest::new(OpKind::Snooze, vec![t.into()]);
+    req.snooze_until_ms = Some(at + 3_600_000);
+    s.enqueue_op_at(&req, at).unwrap();
+    s.ingest(&[msg("a1", &format!("r{uid}"), "inbox", uid, t, at + 1, 0)])
+        .unwrap();
+    assert!(kv_has(s, &format!("snooze_reply:{t}")));
+    let h = s
+        .enqueue_op_at(&OpRequest::new(OpKind::Unsnooze, vec![t.into()]), at + 2)
+        .unwrap();
+    assert_eq!(return_reason(s, t).as_deref(), Some("reply"));
+    h
+}
+
+#[test]
+fn undoing_an_unsnooze_clears_the_return_mark() {
+    let (_d, s) = seeded("unsnooze-undo");
+    // Inside the window: the op is cancelled and the mark goes with it.
+    let h = returned_by_reply(&s, "t1", 50, T0);
+    assert_eq!(s.undo_action_at(&h.action_id, T0 + 3).unwrap(), UndoOutcome::Cancelled);
+    assert_eq!(return_reason(&s, "t1"), None);
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    assert_eq!(ids(&s, ViewRef::Snoozed), vec!["t1"]);
+    // After the flush: the compensating snooze clears it too.
+    let h = returned_by_reply(&s, "t2", 60, T0 + 10);
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 60_000).unwrap();
+    assert!(matches!(
+        s.undo_action_at(&h.action_id, T0 + 70_000).unwrap(),
+        UndoOutcome::Compensated(_)
+    ));
+    assert_eq!(return_reason(&s, "t2"), None);
+    assert!(!kv_has(&s, "returned:t2") && !kv_has(&s, "snooze_reply:t2"));
+}
+
+#[test]
+fn snooze_again_or_done_clears_the_return_mark() {
+    let (_d, s) = seeded("unsnooze-clear");
+    returned_by_reply(&s, "t1", 50, T0);
+    let mut req = OpRequest::new(OpKind::Snooze, vec!["t1".into()]);
+    req.snooze_until_ms = Some(T0 + 7_200_000);
+    s.enqueue_op_at(&req, T0 + 100).unwrap();
+    assert_eq!(return_reason(&s, "t1"), None);
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    // Done on a snoozed thread a reply woke drops both marks, so no later
+    // unsnooze reads a stale "reply".
+    s.ingest(&[msg("a1", "r51", "inbox", 51, "t1", T0 + 200, 0)])
+        .unwrap();
+    assert!(kv_has(&s, "snooze_reply:t1"));
+    s.enqueue_op_at(&OpRequest::new(OpKind::Done, vec!["t1".into()]), T0 + 300)
+        .unwrap();
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    returned_by_reply(&s, "t2", 60, T0 + 400);
+    s.enqueue_op_at(&OpRequest::new(OpKind::Done, vec!["t2".into()]), T0 + 500)
+        .unwrap();
+    assert_eq!(return_reason(&s, "t2"), None);
+    assert!(!kv_has(&s, "returned:t2"));
+}
+
+#[test]
+fn your_own_sent_copy_on_a_snoozed_thread_is_not_a_reply() {
+    let (_d, s) = seeded("own-reply");
+    let mut req = OpRequest::new(OpKind::Snooze, vec!["t1".into()]);
+    req.snooze_until_ms = Some(T0 + 3_600_000);
+    s.enqueue_op_at(&req, T0).unwrap();
+    let mut mine = msg("a1", "own1", "inbox", 60, "t1", T0 + 1, 0);
+    mine.from = Address {
+        name: "Me".into(),
+        email: "Me@A1.test".into(),
+    };
+    s.ingest(&[mine]).unwrap();
+    assert!(!kv_has(&s, "snooze_reply:t1"), "your own message isn't a reply");
+    s.ingest(&[msg("a1", "their1", "inbox", 61, "t1", T0 + 2, 0)])
+        .unwrap();
+    assert!(kv_has(&s, "snooze_reply:t1"));
 }

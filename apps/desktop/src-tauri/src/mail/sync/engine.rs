@@ -26,6 +26,7 @@ use super::headers::{self, ParsedHeader};
 use super::roles::{assign_roles, is_live};
 use super::server::{FetchedHeader, FlagUpdate, MailServer, SelectInfo};
 use super::threading::Threader;
+use super::effects::act_on_round;
 use crate::mail::contracts::{MailboxRole, SyncState, TabKind};
 use crate::mail::store::query::view_key;
 use crate::mail::store::{
@@ -102,8 +103,11 @@ pub struct RoundReport {
     pub thread_ids: BTreeSet<String>,
     /// Threads with mail above the previous UIDNEXT (genuinely new mail).
     pub new_thread_ids: BTreeSet<String>,
-    /// Rule/block/screener outcomes the ops outbox applies on the server (MR-5/MR-12).
+    /// Rule/block/screener outcomes of genuinely new mail that landed in an
+    /// Inbox; [`act_on_round`] queues them as `system` ops (decision 4).
     pub effects: Vec<(String, Outcome)>,
+    /// Threads with genuinely new mail in an Inbox (mute archives these, decision 12).
+    pub new_inbox_thread_ids: BTreeSet<String>,
     pub backfill_pending: bool,
 }
 
@@ -249,17 +253,34 @@ fn ingest_chunk(
     parsed.sort_by_key(|(h, p)| (p.date_ms.or(h.internal_date_ms).unwrap_or(0), h.uid));
     let mut threader = Threader::new(ctx.store, ctx.account_id);
     let mut batch = Vec::with_capacity(parsed.len());
+    let inbox_ids: BTreeSet<String> = {
+        let conn = ctx.store.r();
+        let mut st = conn
+            .prepare_cached("SELECT id FROM mailboxes WHERE account_id = ?1 AND role = 'inbox'")?;
+        let v = st
+            .query_map([ctx.account_id], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        v
+    };
     for (h, p) in &parsed {
         let ext_id = ext_id_for(ctx.account_id, origin, h, p);
         let date_ms = p.date_ms.or(h.internal_date_ms).unwrap_or(0);
         let thread_id = threader.assign(&ext_id, p, date_ms)?;
         let mut cfg_hit = classify(p, ctx.classify);
-        if cfg_hit.blocked.is_some()
-            || cfg_hit.screened
-            || cfg_hit.move_to.is_some()
-            || cfg_hit.skip_inbox
-            || cfg_hit.mark_read
-            || !cfg_hit.labels.is_empty()
+        let tgts = targets(h);
+        // Rules act on new mail as it arrives in the Inbox, never on the first
+        // sync, backfill or a re-fetch (those are "Apply to existing").
+        let new_in_inbox = h.uid >= new_floor && tgts.iter().any(|mb| inbox_ids.contains(mb));
+        if new_in_inbox {
+            report.new_inbox_thread_ids.insert(thread_id.clone());
+        }
+        if new_in_inbox
+            && (cfg_hit.blocked.is_some()
+                || cfg_hit.screened
+                || cfg_hit.move_to.is_some()
+                || cfg_hit.skip_inbox
+                || cfg_hit.mark_read
+                || !cfg_hit.labels.is_empty())
         {
             report.effects.push((thread_id.clone(), cfg_hit.clone()));
         }
@@ -274,8 +295,9 @@ fn ingest_chunk(
             || h.attachments
                 .iter()
                 .any(|a| a.mime.eq_ignore_ascii_case("text/calendar"));
-        for mb in targets(h) {
+        for mb in tgts {
             batch.push(MessageInput {
+                classify: Some(cfg_hit.reason()),
                 account_id: ctx.account_id.to_string(),
                 ext_id: ext_id.clone(),
                 mailbox_id: mb,
@@ -528,6 +550,7 @@ pub async fn sync_mailbox<S: MailServer>(
     if !report.thread_ids.is_empty() || report.reset {
         ctx.store.reapply_pending_ops()?;
     }
+    act_on_round(ctx, &report);
     save_cursor(ctx.store, &plan.id, &sel, new_floor, pending)?;
     report.backfill_pending = pending;
     emit_round(ctx, plan, label_plans, &report)?;

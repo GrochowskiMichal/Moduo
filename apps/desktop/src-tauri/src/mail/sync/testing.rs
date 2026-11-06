@@ -53,6 +53,7 @@ pub fn put(
     })
     .unwrap();
     s.ingest(&[MessageInput {
+        classify: None,
         account_id: "a1".into(),
         ext_id: format!("mid:{message_id}"),
         mailbox_id: mailbox.into(),

@@ -8,6 +8,7 @@ use super::{
 use crate::mail::contracts::{BodyState, MailboxRole, TabKind, FLAG_SEEN};
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
+use std::collections::HashMap;
 
 const ROW_COLS: &str = "thread_id, account_id, subject, snippet, senders_json, last_date_ms,
   message_count, unread_count, pinned, has_attachments, has_invite, tab, priority, muted, snoozed_until_ms";
@@ -15,7 +16,7 @@ const ROW_COLS: &str = "thread_id, account_id, subject, snippet, senders_json, l
 pub const MAX_PAGE: u32 = 500;
 
 /// Decodes a JSON column, surfacing corrupt data as a row error instead of an empty value.
-pub(super) fn json_col<T: serde::de::DeserializeOwned>(
+pub(crate) fn json_col<T: serde::de::DeserializeOwned>(
     idx: usize,
     raw: &str,
 ) -> rusqlite::Result<T> {
@@ -43,7 +44,80 @@ fn thread_row(r: &Row) -> rusqlite::Result<ThreadRow> {
         priority: r.get(12)?,
         muted: r.get(13)?,
         snoozed_until_ms: r.get(14)?,
+        follow_up_at_ms: None,
+        return_reason: None,
+        outbox_state: None,
     })
+}
+
+/// Per-thread row flags that live outside `thread_views` (specs/mail-v3.md decision 7):
+/// the follow-up kv, the return reason kv and the send outbox. Each set is small, so
+/// one read per window beats a lookup per row.
+pub(crate) struct RowFlags {
+    follow_up: HashMap<String, i64>,
+    returned: HashMap<String, String>,
+    outbox: HashMap<String, String>,
+}
+
+fn kv_prefix(conn: &Connection, prefix: &str) -> rusqlite::Result<Vec<(String, String)>> {
+    // `:` + 1 is `;`, so this is every key that starts with `prefix:`.
+    let hi = format!("{};", prefix.trim_end_matches(':'));
+    let mut s = conn.prepare_cached("SELECT key, value FROM kv WHERE key >= ?1 AND key < ?2")?;
+    let v = s
+        .query_map(params![prefix, hi], |r| {
+            let k: String = r.get(0)?;
+            Ok((k[prefix.len()..].to_string(), r.get(1)?))
+        })?
+        .collect::<Result<_, _>>()?;
+    Ok(v)
+}
+
+impl RowFlags {
+    pub(crate) fn load(conn: &Connection) -> StoreResult<Self> {
+        let follow_up = kv_prefix(conn, "followup:")?
+            .into_iter()
+            .filter_map(|(t, v)| {
+                let due = serde_json::from_str::<serde_json::Value>(&v).ok()?["dueMs"].as_i64()?;
+                Some((t, due))
+            })
+            .collect();
+        let returned = kv_prefix(conn, "returned:")?
+            .into_iter()
+            .filter(|(_, v)| v == "snooze" || v == "reply")
+            .collect();
+        let mut outbox = HashMap::new();
+        let mut s = conn.prepare_cached(
+            "SELECT d.thread_id, o.state FROM outbox o JOIN drafts d ON d.id = o.draft_id
+             WHERE o.state IN ('pending', 'in_flight') AND d.thread_id IS NOT NULL",
+        )?;
+        let mut rows = s.query([])?;
+        while let Some(r) = rows.next()? {
+            let (t, state): (String, String) = (r.get(0)?, r.get(1)?);
+            // In flight beats pending when a thread has two sends queued.
+            if state == "in_flight" || !outbox.contains_key(&t) {
+                outbox.insert(t, state);
+            }
+        }
+        Ok(RowFlags {
+            follow_up,
+            returned,
+            outbox,
+        })
+    }
+
+    pub(crate) fn apply(&self, row: &mut ThreadRow) {
+        row.follow_up_at_ms = self.follow_up.get(&row.thread_id).copied();
+        row.return_reason = self.returned.get(&row.thread_id).cloned();
+        if row.outbox_state.is_none() {
+            row.outbox_state = self.outbox.get(&row.thread_id).cloned();
+        }
+    }
+
+    pub(crate) fn apply_all(&self, rows: &mut [ThreadRow]) {
+        for r in rows {
+            self.apply(r);
+        }
+    }
 }
 
 /// `mailViewKey` from runtime.types.mail-engine.ts.
@@ -119,6 +193,7 @@ impl Store {
             }
         });
         rows.extend(body);
+        RowFlags::load(&conn)?.apply_all(&mut rows);
         Ok(ListPage { rows, next })
     }
 
@@ -151,6 +226,16 @@ impl Store {
             .get(&format!("unified:inbox|{}", TabKind::Personal.as_str()))
             .copied()
             .unwrap_or(0);
+        out.outbox = conn
+            .prepare_cached("SELECT COUNT(*) FROM outbox WHERE state IN ('pending', 'in_flight')")?
+            .query_row([], |r| r.get(0))?;
+        // System ops (rule effects, mute) are the engine's, not saved actions.
+        out.pending_ops = conn
+            .prepare_cached(
+                "SELECT COUNT(*) FROM ops WHERE state IN ('pending', 'in_flight')
+                   AND COALESCE(json_extract(args_json, '$.system'), 0) = 0",
+            )?
+            .query_row([], |r| r.get(0))?;
         Ok(out)
     }
 
@@ -182,9 +267,10 @@ impl Store {
     /// The whole conversation, oldest first, with bodies where downloaded.
     pub fn get_thread(&self, thread_id: &str) -> StoreResult<Option<ThreadDetail>> {
         let conn = self.r();
-        let Some(row) = best_row(&conn, thread_id)? else {
+        let Some(mut row) = best_row(&conn, thread_id)? else {
             return Ok(None);
         };
+        RowFlags::load(&conn)?.apply(&mut row);
         let mut s = conn.prepare_cached(
             "SELECT m.id, m.ext_id, m.message_id, m.from_name, m.from_email, m.to_json, m.cc_json,
                m.date_ms, m.subject, m.snippet, m.flags, m.body_state, b.html, b.text,
@@ -243,7 +329,18 @@ impl Store {
                 });
             }
         }
-        Ok(Some(ThreadDetail { row, messages }))
+        // The newest sender's "Always load images" (decision 11).
+        let images_allowed = match messages.last() {
+            Some(m) if !m.from.email.is_empty() => conn
+                .prepare_cached("SELECT EXISTS(SELECT 1 FROM kv WHERE key = ?1)")?
+                .query_row([images_allow_key(&m.from.email)], |r| r.get(0))?,
+            _ => false,
+        };
+        Ok(Some(ThreadDetail {
+            row,
+            messages,
+            images_allowed,
+        }))
     }
 
     /// ⌘K search: FTS5 for words and from/to/subject, indexed columns for the
@@ -320,6 +417,7 @@ impl Store {
                 out.push(r);
             }
         }
+        RowFlags::load(&conn)?.apply_all(&mut out);
         Ok(out)
     }
 
@@ -345,6 +443,11 @@ impl Store {
             .collect::<Result<_, _>>()?;
         Ok(v)
     }
+}
+
+/// The engine kv key of a sender's "Always load images" (decision 11).
+pub fn images_allow_key(address: &str) -> String {
+    format!("images_allow:{}", address.trim().to_ascii_lowercase())
 }
 
 /// The list row a thread shows outside a view: its Inbox row if it has one.

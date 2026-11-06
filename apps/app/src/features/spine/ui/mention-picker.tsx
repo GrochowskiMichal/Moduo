@@ -45,7 +45,7 @@ export function mentionCandidateKey(candidate: MentionCandidate): string {
   }
 }
 
-function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
+function CandidateRow({ candidate, hint }: { candidate: MentionCandidate; hint?: string | null }) {
   if (
     candidate.kind === "command" ||
     candidate.kind === "tag" ||
@@ -77,6 +77,7 @@ function CandidateRow({ candidate }: { candidate: MentionCandidate }) {
           person
         </Eyebrow>
       ) : null}
+      {hint ? <span className="shrink-0 text-xs text-muted-foreground">{hint}</span> : null}
     </>
   );
 }
@@ -94,6 +95,8 @@ export type MentionCommandProps = {
    * picker) MUST pass this or the surface is keyboard-stranded and keys
    * fall through to the editor. */
   autoFocusInput?: boolean;
+  /** A quiet trailing word per row (Mail's link picker: "Linked" for what is already linked). */
+  hintFor?: (candidate: MentionCandidate) => string | null;
 };
 
 /** The inner Command list — reusable by both the Popover picker and the caret menu. */
@@ -106,6 +109,7 @@ export function MentionCommand({
   placeholder = "Search…",
   emptyLabel = "No matches.",
   autoFocusInput = false,
+  hintFor,
 }: MentionCommandProps) {
   return (
     <Command shouldFilter={false}>
@@ -128,7 +132,7 @@ export function MentionCommand({
                 value={mentionCandidateKey(candidate)}
                 onSelect={() => onSelect(candidate)}
               >
-                <CandidateRow candidate={candidate} />
+                <CandidateRow candidate={candidate} hint={hintFor?.(candidate)} />
               </CommandItem>
             ))}
           </CommandGroup>

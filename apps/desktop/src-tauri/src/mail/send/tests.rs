@@ -331,3 +331,74 @@ fn mime_never_reads_a_path_outside_staging() {
         assert!(e.starts_with("attachment_unreadable:x:invalid_attachment"), "{e}");
     }
 }
+
+#[test]
+fn draft_upload_emits_draft_changed_with_server_uid() {
+    let st = store("dcuid", "imap");
+    let bus = EventBus::new();
+    let mut rx = bus.subscribe();
+    let mut t = Fake::default();
+    let id = st.save_draft_at(None, "a", None, doc(), T0).unwrap();
+    // Inside the 2 s debounce nothing uploads and nothing is said.
+    st.sync_drafts_and_emit(&mut t, T0 + 1_000, &bus).unwrap();
+    assert!(rx.try_recv().is_err());
+    st.sync_drafts_and_emit(&mut t, T0 + 2_000, &bus).unwrap();
+    assert_eq!(
+        rx.try_recv().unwrap(),
+        MailEvent::DraftChanged {
+            draft_id: id.clone(),
+            server_uid: Some(1),
+        }
+    );
+    assert_eq!(st.draft(&id).unwrap().unwrap().server_uid, Some(1));
+    // An unchanged draft is not uploaded (or announced) again.
+    st.sync_drafts_and_emit(&mut t, T0 + 9_000, &bus).unwrap();
+    assert!(rx.try_recv().is_err());
+}
+
+#[test]
+fn saving_a_draft_under_another_account_moves_it_and_its_server_copy() {
+    let st = store("moveacct", "imap");
+    st.upsert_account(&AccountInput {
+        id: "b".into(),
+        address: "me@b.test".into(),
+        display_name: "Me B".into(),
+        provider: "imap".into(),
+        hue: 2,
+    })
+    .unwrap();
+    st.upsert_mailbox(&MailboxInput {
+        id: "b-drafts".into(),
+        account_id: "b".into(),
+        path: "B-DRAFTS".into(),
+        name: "drafts".into(),
+        role: MailboxRole::Drafts,
+        delimiter: Some("/".into()),
+        live: true,
+    })
+    .unwrap();
+    let mut t = Fake::default();
+    let id = st.save_draft_at(None, "a", None, doc(), T0).unwrap();
+    st.sync_drafts(&mut t, T0 + 2_000).unwrap();
+    assert_eq!(st.draft(&id).unwrap().unwrap().server_uid, Some(1));
+    // An alias switch saves the same id under account b.
+    let mut d2 = doc();
+    d2.from_addr = "me@b.test".into();
+    st.save_draft_at(Some(&id), "b", None, d2, T0 + 5_000).unwrap();
+    let row = st.draft(&id).unwrap().unwrap();
+    assert_eq!(row.account_id, "b");
+    assert_eq!(row.server_uid, None, "the server copy is a's, not b's");
+    assert!(st.drafts("a").unwrap().is_empty());
+    // The next sync deletes a's server copy and uploads to b's Drafts.
+    let rep = st.sync_drafts(&mut t, T0 + 8_000).unwrap();
+    assert_eq!(rep.deleted_server_copies, 1);
+    assert_eq!(t.deletes, vec![("DRAFTS".to_string(), 1)]);
+    assert_eq!(t.appends.last().unwrap().0, "B-DRAFTS");
+    assert_eq!(rep.uploaded, vec![id.clone()]);
+    // The send reads the new account.
+    st.queue_send_at(&id, 10, T0 + 9_000).unwrap();
+    assert_eq!(st.outbox_items("b").unwrap().len(), 1);
+    assert!(st.outbox_items("a").unwrap().is_empty());
+    // A queued draft can't change account.
+    assert!(st.save_draft_at(Some(&id), "a", None, doc(), T0 + 9_500).is_err());
+}

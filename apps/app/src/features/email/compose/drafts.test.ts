@@ -6,7 +6,6 @@ import { type ComposeOpenSpec, createComposeSession } from "./session";
 
 const spec = (p: Partial<ComposeOpenSpec> = {}): ComposeOpenSpec => ({
   kind: "reply",
-  placement: "inline",
   accountId: "acc",
   threadId: "t1",
   fromAddr: "me@x.com",
@@ -51,7 +50,7 @@ describe("compose drafts and send (AC21, AC22)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].doc.html).toBe("<p>Hello</p>");
     const reopened = draftToOpenSpec(draftForThread(rows, "t1")!);
-    expect(reopened).toMatchObject({ draftId: rows[0].id, kind: "reply", placement: "inline" });
+    expect(reopened).toMatchObject({ draftId: rows[0].id, kind: "reply" });
   });
 
   it("server drafts made elsewhere appear", async () => {
@@ -105,6 +104,24 @@ describe("compose drafts and send (AC21, AC22)", () => {
     const drafts = await port.listDrafts();
     expect(drafts[0].doc.lastError).toBe("550 mailbox unavailable");
     expect(draftToOpenSpec(drafts[0]).lastError).toBe("550 mailbox unavailable");
+  });
+
+  it("switching to another account's alias moves the draft to that account (AC29)", async () => {
+    const { port, session } = setup();
+    await session.open(spec());
+    await session.update({ bodyHtml: "<p>Hi</p>" });
+    const oldId = session.active!.draftId!;
+    await session.update({ accountId: "acc-2", fromAddr: "me@acc2.com" });
+    await session.flush();
+    const newId = session.active!.draftId!;
+    expect(newId).not.toBe(oldId);
+    expect((await port.getDraft(newId))?.accountId).toBe("acc-2");
+    expect(await port.getDraft(oldId)).toBeNull();
+    expect(await port.listDrafts("acc")).toHaveLength(0);
+    // Later saves keep updating the new draft, not a third one.
+    await session.update({ bodyHtml: "<p>Hi again</p>" });
+    expect(await port.listDrafts("acc-2")).toHaveLength(1);
+    expect(session.active!.draftId).toBe(newId);
   });
 
   it("refuses to send without recipients or over the size limit", async () => {

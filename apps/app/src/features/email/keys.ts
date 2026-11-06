@@ -2,42 +2,110 @@
 // legend and ⌘K's mail actions both read this, so neither can drift from the
 // keys the shell actually binds.
 
-import { type HotkeyDef, type HotkeyId, HOTKEYS, keysFor } from "@/lib/hotkeys/registry";
+import {
+  type HotkeyBinding,
+  type HotkeyDef,
+  type HotkeyId,
+  HOTKEYS,
+  isSequenceKey,
+  keysFor,
+} from "@/lib/hotkeys/registry";
 
 export type MailKeyId = Extract<HotkeyId, `email.${string}`>;
 
 export type MailKeyEntry = { id: MailKeyId; label: string; keys: string[] };
 
-/** Groups for the legend, in reading order. Ids not listed fall into "More". */
-const GROUPS: { title: string; ids: MailKeyId[] }[] = [
+/** A legend row: one or more registry keys under one label ("j k" next · previous).
+ *  `all` lists every key of each binding ("m # ⌫"); otherwise each binding's first.
+ *  A row with `show` and no ids is a key another surface owns (the composer's). */
+type LegendRowDef = {
+  label: string;
+  ids: MailKeyId[];
+  all?: boolean;
+  show?: (isMac: boolean) => string[];
+};
+
+type LegendGroupDef = { title: string; column: 0 | 1 | 2; rows: LegendRowDef[] };
+
+/** The `?` sheet (specs/mail-v3.md §7): three columns Move, Act and Connect, with
+ *  Select under Move and Write and More under Connect. */
+const LEGEND: LegendGroupDef[] = [
   {
-    title: "Move around",
-    ids: ["email.next", "email.prev", "email.open", "email.tab-prev", "email.tab-next"],
-  },
-  {
-    title: "Triage",
-    ids: [
-      "email.archive",
-      "email.snooze",
-      "email.pin",
-      "email.delete",
-      "email.unread",
-      "email.move",
-      "email.undo",
+    title: "Move",
+    column: 0,
+    rows: [
+      { label: "Next · previous thread", ids: ["email.next", "email.prev"] },
+      { label: "Next · previous tab", ids: ["email.tab-next", "email.tab-prev"] },
+      { label: "Into the thread", ids: ["email.open"] },
+      { label: "Expand all messages", ids: ["email.expand-all"] },
+      {
+        label: "Inbox · Follow-ups · Snoozed",
+        ids: ["email.go-inbox", "email.go-followups", "email.go-snoozed"],
+      },
+      {
+        label: "Archive · Sent · Drafts",
+        ids: ["email.go-archive", "email.go-sent", "email.go-drafts"],
+      },
     ],
   },
   {
     title: "Select",
-    ids: [
-      "email.select",
-      "email.extend-down",
-      "email.extend-up",
-      "email.select-all",
-      "email.clear-selection",
+    column: 0,
+    rows: [
+      { label: "Select", ids: ["email.select"] },
+      { label: "Extend down · up", ids: ["email.extend-down", "email.extend-up"] },
+      { label: "All in tab", ids: ["email.select-all"] },
+      { label: "Clear the selection", ids: ["email.clear-selection"] },
     ],
   },
-  { title: "Write", ids: ["email.reply", "email.reply-all", "email.forward", "email.compose"] },
-  { title: "Connect", ids: ["email.convert", "email.link", "email.note"] },
+  {
+    title: "Act",
+    column: 1,
+    rows: [
+      { label: "Done · not done", ids: ["email.archive", "email.undone"] },
+      { label: "Snooze", ids: ["email.snooze"] },
+      { label: "Remind me if no reply", ids: ["email.remind"] },
+      { label: "Allow · block a new sender", ids: ["email.allow", "email.block"] },
+      { label: "Pin · unread", ids: ["email.pin", "email.unread"] },
+      { label: "Move · delete", ids: ["email.move", "email.delete"], all: true },
+      { label: "Undo", ids: ["email.undo"], all: true },
+    ],
+  },
+  {
+    title: "Connect",
+    column: 2,
+    rows: [
+      {
+        label: "Today · Contact · Task",
+        ids: ["email.panel-today", "email.panel-contact", "email.panel-task"],
+      },
+      { label: "Make a task", ids: ["email.convert"] },
+      { label: "Link to a task, contact or note", ids: ["email.link"] },
+      { label: "Private note", ids: ["email.note"] },
+    ],
+  },
+  {
+    title: "Write",
+    column: 2,
+    rows: [
+      {
+        label: "Reply · reply all · forward",
+        ids: ["email.reply", "email.reply-all", "email.forward"],
+      },
+      { label: "New message", ids: ["email.compose"], all: true },
+      { label: "Send", ids: [], show: (isMac) => [isMac ? "⌘↵" : "Ctrl+↵"] },
+      { label: "Snippet", ids: [], show: () => [";;"] },
+      { label: "Close, keep the draft", ids: [], show: () => ["Esc"] },
+    ],
+  },
+  {
+    title: "More",
+    column: 2,
+    rows: [
+      { label: "Search mail", ids: ["email.search"] },
+      { label: "Mail keys", ids: ["email.legend"] },
+    ],
+  },
 ];
 
 /** Keys that open surfaces rather than act on mail: not ⌘K actions. */
@@ -47,11 +115,15 @@ const PRETTY: Record<string, string> = {
   "Shift+3": "#",
   "Shift+/": "?",
   Escape: "Esc",
-  Enter: "Enter",
+  Enter: "↵",
+  Backspace: "⌫",
+  ArrowDown: "↓",
+  ArrowUp: "↑",
 };
 
-/** How a chord reads in the legend: ⌘A, ⇧J, #, ?. */
-export function formatMailKey(chord: string, isMac = true): string {
+/** How a key reads in the legend: ⌘A, ⇧J, #, ?; a `g` chord reads "gi". */
+export function formatMailKey(chord: HotkeyBinding, isMac = true): string {
+  if (isSequenceKey(chord)) return chord.map((step) => formatMailKey(step, isMac)).join("");
   if (PRETTY[chord]) return PRETTY[chord];
   return chord
     .split("+")
@@ -76,26 +148,24 @@ export function mailKeys(isMac = true): MailKeyEntry[] {
     }));
 }
 
-export type MailLegendGroup = { title: string; entries: MailKeyEntry[] };
+export type MailLegendRow = { ids: MailKeyId[]; label: string; keys: string[] };
 
-/** The `?` legend: every mail key exactly once, grouped. */
+export type MailLegendGroup = { title: string; column: 0 | 1 | 2; rows: MailLegendRow[] };
+
+/** The `?` sheet: every mail key exactly once, in rows grouped into three columns. */
 export function mailLegend(isMac = true): MailLegendGroup[] {
-  const all = mailKeys(isMac);
-  const byId = new Map(all.map((e) => [e.id, e]));
-  const used = new Set<MailKeyId>();
-  const groups: MailLegendGroup[] = [];
-  for (const g of GROUPS) {
-    const entries = g.ids.flatMap((id) => {
-      const e = byId.get(id);
-      if (!e) return [];
-      used.add(id);
-      return [e];
+  const byId = new Map(mailKeys(isMac).map((e) => [e.id, e]));
+  const keysOf = (row: LegendRowDef) =>
+    row.show?.(isMac) ??
+    row.ids.flatMap((id) => {
+      const keys = byId.get(id)?.keys ?? [];
+      return row.all ? keys : keys.slice(0, 1);
     });
-    if (entries.length > 0) groups.push({ title: g.title, entries });
-  }
-  const rest = all.filter((e) => !used.has(e.id));
-  if (rest.length > 0) groups.push({ title: "More", entries: rest });
-  return groups;
+  return LEGEND.map((g) => ({
+    title: g.title,
+    column: g.column,
+    rows: g.rows.map((row) => ({ ids: row.ids, label: row.label, keys: keysOf(row) })),
+  }));
 }
 
 export type MailPaletteAction = { id: MailKeyId; label: string; shortcut: string };

@@ -15,11 +15,13 @@ use chrono::{NaiveDate, NaiveDateTime, TimeZone};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
+use crate::mail::contracts::{ClassifyStage, TabKind};
 use crate::mail::invite::Invite;
-use crate::mail::store::query::best_row;
-use crate::mail::store::{Address, Store, StoreResult, ThreadRow};
 use crate::mail::send::DraftDoc;
-use crate::mail::contracts::TabKind;
+use crate::mail::store::query::{best_row, images_allow_key, json_col, RowFlags};
+use crate::mail::store::{Address, Store, StoreResult, TabRef, ThreadRow};
+use crate::mail::sync::classify::{classify, ClassifyConfig};
+use crate::mail::sync::headers::ParsedHeader;
 
 const FOLLOWUP: &str = "followup:";
 const SCREENED: &str = "screened:";
@@ -30,6 +32,19 @@ const VIEW_CAP: usize = 500;
 pub struct FollowUp {
     pub due_ms: i64,
     pub armed_at_ms: i64,
+}
+
+/// Why a thread sits in its tab (`MailExplain`, specs/mail-v3.md decision 3).
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Explain {
+    /// None only when the thread has no stored reason and no headers to re-run.
+    pub stage: Option<ClassifyStage>,
+    pub rule_id: Option<String>,
+    pub custom_tab_id: Option<String>,
+    /// The sender the decision was about (the newest message's).
+    pub address: String,
+    pub tab: TabKind,
 }
 
 /// One message's addressing for on-demand fetches.
@@ -216,6 +231,7 @@ impl Store {
             }
         }
         sort_rows(&mut out);
+        RowFlags::load(&self.r())?.apply_all(&mut out);
         Ok(out)
     }
 
@@ -249,6 +265,7 @@ impl Store {
             }
         }
         sort_rows(&mut out);
+        RowFlags::load(&self.r())?.apply_all(&mut out);
         Ok(out)
     }
 
@@ -258,7 +275,7 @@ impl Store {
     pub fn outbox_rows(&self) -> StoreResult<Vec<ThreadRow>> {
         let conn = self.r();
         let mut s = conn.prepare_cached(
-            "SELECT o.id, o.account_id, o.created_at_ms, d.thread_id, d.json
+            "SELECT o.id, o.account_id, o.created_at_ms, d.thread_id, d.json, o.state
              FROM outbox o LEFT JOIN drafts d ON d.id = o.draft_id
              WHERE o.state IN ('pending', 'in_flight')
              ORDER BY o.created_at_ms DESC, o.id DESC",
@@ -271,13 +288,14 @@ impl Store {
                     r.get::<_, i64>(2)?,
                     r.get::<_, Option<String>>(3)?,
                     r.get::<_, Option<String>>(4)?,
+                    r.get::<_, String>(5)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows
             .into_iter()
             .take(VIEW_CAP)
-            .map(|(id, account_id, created, thread_id, json)| {
+            .map(|(id, account_id, created, thread_id, json, state)| {
                 let doc: DraftDoc = match json.as_deref().map(serde_json::from_str) {
                     None => DraftDoc::default(),
                     Some(Ok(doc)) => doc,
@@ -315,9 +333,126 @@ impl Store {
                     priority: false,
                     muted: false,
                     snoozed_until_ms: None,
+                    follow_up_at_ms: None,
+                    return_reason: None,
+                    outbox_state: Some(state),
                 }
             })
             .collect())
+    }
+
+    // ---- Why here (decision 3) ----
+
+    /// The newest message's stored classifier reason; a thread classified before
+    /// store v2 is re-classified on its stored headers with the current settings.
+    pub fn explain_thread(
+        &self,
+        thread_id: &str,
+        cfg: &ClassifyConfig,
+    ) -> StoreResult<Option<Explain>> {
+        let conn = self.r();
+        let Some(row) = best_row(&conn, thread_id)? else {
+            return Ok(None);
+        };
+        type Newest = (
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        );
+        let newest: Option<Newest> = conn
+            .prepare_cached(
+                "SELECT from_name, from_email, to_json, cc_json, subject, list_unsubscribe,
+                   list_unsubscribe_post, precedence, auto_submitted, classify_stage,
+                   classify_rule_id, tab
+                 FROM messages WHERE thread_id = ?1 AND (flags & 16) = 0
+                 ORDER BY date_ms DESC, id DESC LIMIT 1",
+            )?
+            .query_row([thread_id], |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                    r.get(9)?,
+                    r.get(10)?,
+                    r.get(11)?,
+                ))
+            })
+            .optional()?;
+        let Some((name, email, to, cc, subject, lu, lup, prec, auto, stage, rule_id, tab)) = newest
+        else {
+            return Ok(None);
+        };
+        drop(conn);
+        if let Some(stage) = stage.as_deref().and_then(ClassifyStage::parse) {
+            let custom_tab_id = (stage == ClassifyStage::CustomTabs)
+                .then(|| tab.as_deref().map(TabRef::decode).and_then(|t| t.custom_id))
+                .flatten();
+            return Ok(Some(Explain {
+                stage: Some(stage),
+                rule_id,
+                custom_tab_id,
+                address: email,
+                tab: row.tab,
+            }));
+        }
+        if email.is_empty() {
+            return Ok(Some(Explain {
+                stage: None,
+                rule_id: None,
+                custom_tab_id: None,
+                address: email,
+                tab: row.tab,
+            }));
+        }
+        let h = ParsedHeader {
+            from: Address {
+                name,
+                email: email.clone(),
+            },
+            to: json_col(2, &to)?,
+            cc: json_col(3, &cc)?,
+            subject,
+            list_unsubscribe: lu,
+            list_unsubscribe_post: lup,
+            precedence: prec,
+            auto_submitted: auto,
+            ..ParsedHeader::default()
+        };
+        let o = classify(&h, cfg);
+        Ok(Some(Explain {
+            stage: Some(o.stage),
+            rule_id: o.rule_id,
+            custom_tab_id: o.tab.custom_id,
+            address: email,
+            tab: o.tab.kind,
+        }))
+    }
+
+    // ---- Images (decision 11) ----
+
+    /// "Always load images" from this sender, on this Mac (or forget it).
+    pub fn set_image_allow(&self, address: &str, allow: bool) -> StoreResult<()> {
+        let key = images_allow_key(address);
+        if allow {
+            self.kv_set(&key, "1")
+        } else {
+            self.kv_delete(&key)
+        }
     }
 
     // ---- Avatars ----
@@ -456,6 +591,7 @@ mod tests {
 
     fn msg(ext: &str, mailbox: &str, thread: &str, from: &str, date: i64) -> MessageInput {
         MessageInput {
+            classify: None,
             account_id: "a1".into(),
             ext_id: ext.into(),
             mailbox_id: mailbox.into(),

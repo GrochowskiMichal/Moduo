@@ -17,4 +17,7 @@ Compiled on 2026-10-27 (HV-14c, specs/harness-v3.md AC30): every entry became an
 
 ## Open entries
 
-None. A new trap goes here (the trap, why, what to do instead) only until it has a better home; one that bites twice becomes a hook, a lint rule or a test.
+A new trap goes here (the trap, why, what to do instead) only until it has a better home; one that bites twice becomes a hook, a lint rule or a test.
+
+- **`x!.prop` inside a closure crashes the production build when `x` is null (MV-12).** The React Compiler memoizes a hook's closures on their dependencies and reads them unconditionally, so `useRead(active ? key : null, () => port.sizeLimit(active!.accountId))` threw "null is not an object (evaluating '$.accountId')" on every Mail load with no compose open, while every jsdom test passed (Rstest doesn't run the compiler). Pull the value out first (`const accountId = active?.accountId ?? null`) and guard inside the closure (`ui/use-compose-extras.ts`). Only a production build (the lab, `rsbuild preview`) shows it.
+- **The lab's Mail states open the first row, and pinned threads head the list.** The fixture pins about one thread in ten, so "the newest Personal thread" is below the Pinned group; a scenario that dresses one thread (`intro`, `bodyOffline`) also pins it so it is the first row (`testing/fake-engine.ts` `headTheList`).

@@ -367,3 +367,17 @@ describe("type chips", () => {
     expect(action).toBeGreaterThan(result);
   });
 });
+
+describe("the Email chip (specs/mail-v3.md AC37)", () => {
+  it("email chip placeholder", () => {
+    render(<GlobalCommandPalette />);
+    act(() => {
+      dispatchOpenPalette({ chip: "email" });
+    });
+    screen.getByPlaceholderText("Search mail: from: subject: has:attachment is:unread");
+    act(() => {
+      dispatchOpenPalette({ chip: "all" });
+    });
+    screen.getByPlaceholderText(/tasks, notes, contacts/);
+  });
+});

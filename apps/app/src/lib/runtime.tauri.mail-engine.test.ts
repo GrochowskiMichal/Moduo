@@ -72,6 +72,27 @@ describe("tauri mail engine", () => {
     ]);
   });
 
+  it("maps the v3 engine reads and writes to their commands", async () => {
+    const calls: [string, unknown][] = [];
+    const engine = createTauriMailEngine(
+      async <T>(cmd: string, args?: Record<string, unknown>) => {
+        calls.push([cmd, args]);
+        return null as T;
+      },
+      () => "channel",
+    );
+    await engine.explainThread!("t1");
+    await engine.setImageAllow!("ana@acme.test", true);
+    await engine.applyRuleExisting!({ ruleId: "r1", dryRun: true });
+    await engine.applyRuleExisting!({ ruleId: "r1", dryRun: false });
+    expect(calls).toEqual([
+      ["mail_explain", { threadId: "t1" }],
+      ["mail_set_image_allow", { address: "ana@acme.test", allow: true }],
+      ["mail_apply_rule_existing", { ruleId: "r1", dryRun: true }],
+      ["mail_apply_rule_existing", { ruleId: "r1", dryRun: false }],
+    ]);
+  });
+
   it("refuses Show original without the thread", async () => {
     const engine = createTauriMailEngine(
       async <T>() => "" as T,
