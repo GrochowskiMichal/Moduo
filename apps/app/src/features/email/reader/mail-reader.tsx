@@ -5,7 +5,6 @@
 
 import { type ReactNode, useEffect, useImperativeHandle, useMemo, useState } from "react";
 
-import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type {
   MailAccount,
   MailEngine,
@@ -19,7 +18,9 @@ import { ChipRow } from "./chip-row";
 import { useAttachmentFiles } from "./engine-reader";
 import type { MessageAction } from "./message-card";
 import { MessageStack } from "./message-stack";
+import type { ReaderMoreActions } from "./more-menu";
 import { isDarkTheme, type Person, shortDay } from "./reader-format";
+import { type ReaderWhy, useReaderMore } from "./reader-more";
 import { type ReaderAction, ReaderToolbar } from "./reader-toolbar";
 import { SendNote, type SendNotePort, useSendNote } from "./send-note";
 import { type ReaderLinks, useThreadLinks } from "./thread-links";
@@ -58,8 +59,12 @@ export type MailReaderProps = {
   behavior: Pick<MailBehavior, "remoteImages" | "trackerBlocking">;
   /** Page content above the stack (the invite card). */
   renderAbove?: (thread: MailThread) => ReactNode;
-  /** Extra ⋯ menu items (Labels on Gmail); MV-9 rebuilds the menu. */
+  /** Labels… in the ⋯ menu (Gmail threads). */
   menuItems?: (thread: MailThread) => ReactNode;
+  /** The ⋯ menu's actions (MV-9); absent leaves only Labels and Show original. */
+  more?: ReaderMoreActions | null;
+  /** "Why is this in {Tab}?": names from Settings and the Settings link. */
+  why?: ReaderWhy | null;
   now?: () => number;
   accounts?: readonly MailAccount[];
   /** Your addresses (lower-case): "you" in to-lines, never the who-card's sender. */
@@ -136,25 +141,6 @@ function ReaderLine({ account }: { account: MailAccount | undefined }) {
   );
 }
 
-/** The ⋯ menu's items (MV-9 rebuilds the menu); null when there are none. */
-function readerMenu(
-  thread: MailThread,
-  canOriginal: boolean,
-  onOriginal: () => void,
-  menuItems?: MailReaderProps["menuItems"],
-): ReactNode {
-  const extra = menuItems?.(thread) ?? null;
-  if (!canOriginal && !extra) return null;
-  return (
-    <>
-      {extra}
-      {canOriginal ? (
-        <DropdownMenuItem onSelect={onOriginal}>Show original</DropdownMenuItem>
-      ) : null}
-    </>
-  );
-}
-
 type Head = {
   thread: MailThread;
   threadLinks: MailThreadLink[];
@@ -207,10 +193,26 @@ function ReaderWhoCard({
   );
 }
 
+/** The newest sender who isn't you (Block, Mark Priority); null on your own thread. */
+function otherSender(messages: readonly MailMessage[], self: ReadonlySet<string>): Person | null {
+  const m = senderOf(messages, self);
+  return m && !self.has(m.from.email.toLowerCase()) ? m.from : null;
+}
+
 function ReaderHead(props: MailReaderProps & Head) {
   const { thread, threadLinks: links, self, nowMs, account } = props;
   const row = thread.row;
   const note = useSendNote(props.sendNotes?.port, row, props.sendNotes?.refreshKey ?? "");
+  const more = useReaderMore({
+    engine: props.engine,
+    thread,
+    version: props.version,
+    sender: otherSender(thread.messages, self),
+    more: props.more,
+    why: props.why,
+    labels: props.menuItems?.(thread) ?? null,
+    onOriginal: props.engine?.getRawMessage ? props.onOriginal : null,
+  });
   return (
     <>
       <ReaderToolbar
@@ -222,9 +224,10 @@ function ReaderHead(props: MailReaderProps & Head) {
           note: links.some((l) => l.entity.type === "note"),
           pin: row.pinned,
         }}
-        menu={readerMenu(thread, !!props.engine?.getRawMessage, props.onOriginal, props.menuItems)}
+        menu={more.menu}
         panel={props.panel}
       />
+      {more.popover}
       <h2 className="min-w-0 px-4 pt-3 pb-2 text-lg font-semibold text-foreground">
         {row.subject || "(no subject)"}
       </h2>

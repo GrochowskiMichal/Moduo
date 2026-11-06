@@ -47,7 +47,7 @@ import { useMailStore } from "../store/use-mail-store";
 import { SubscriptionsView } from "../views/subscriptions";
 import { useSubscriptionUnsubscribe } from "../views/use-subscription-unsubscribe";
 import { ConnectSlot, type MailConnectRequest } from "./connect-slot";
-import { EmailSnoozePicker } from "./email-snooze-picker";
+import { useSnoozePicker } from "./email-snooze-picker";
 import { useMailLabels } from "./mail-labels";
 import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
@@ -134,8 +134,13 @@ export type MailPageProps = {
   renderLinkPicker?: (args: MailLinkPickerArgs) => ReactNode;
   aliases?: MailAlias[];
   snippets?: MailSnippet[];
-  /** Custom inbox tabs from Settings, in position order, at most three (AC2). */
-  customTabs?: readonly { id: string; label: string }[];
+  /** Custom inbox tabs from Settings, in position order, at most three (AC2); `domains`
+   *  lets "Why is this in {Tab}?" name the domain a tab collects. */
+  customTabs?: readonly { id: string; label: string; domains?: readonly string[] }[];
+  /** Rules from Settings by item id, named for "Why is this in {Tab}?" (MV-9). */
+  rules?: readonly { id: string; label: string }[];
+  /** Priority people from Settings (item id, lower-case address), for ⋯ → Mark Priority. */
+  priorityPeople?: readonly { id: string; address: string }[];
   /** Sync now for one account (Retry now, AC5); defaults to the runtime's. */
   syncAccount?: (accountId: string) => Promise<unknown> | void;
   /** Contacts for autocomplete and "Add as contact" (lower-case addresses). */
@@ -240,6 +245,11 @@ function useComposeSession(
   return { port, session };
 }
 
+/** Rule and custom-tab names for "Why is this in {Tab}?" (MV-9). */
+function useWhyNames(rules: MailPageProps["rules"], customTabs: MailPageProps["customTabs"]) {
+  return useMemo(() => ({ rules: rules ?? [], customTabs: customTabs ?? [] }), [rules, customTabs]);
+}
+
 export function MailPage({
   store = mailStore,
   compose,
@@ -252,6 +262,8 @@ export function MailPage({
   aliases,
   snippets,
   customTabs,
+  rules,
+  priorityPeople,
   syncAccount,
   contacts = [],
   onAddContact,
@@ -267,7 +279,10 @@ export function MailPage({
   const commands = useMemo(() => createMailCommands(store), [store]);
   const shell = useRef<MailShellApi | null>(null);
   const [connect, setConnect] = useState<MailConnectRequest | null>(null);
-  const [snoozeIds, setSnoozeIds] = useState<string[]>([]);
+  // Through the shell so the list advances like Done (AC14).
+  const snooze = useSnoozePicker(now, (ids, untilMs) => {
+    void shell.current?.act("snooze", ids, { untilMs });
+  });
   const [move, setMove] = useState<{ ids: string[]; boxes: MailMailbox[] } | null>(null);
   const [linkFor, setLinkFor] = useState<MailThreadRow | null>(null);
   const [current, setCurrent] = useState<string | null>(initialThreadId);
@@ -361,6 +376,7 @@ export function MailPage({
     setMove({ ids: threadIds, boxes });
   };
 
+  const whyNames = useWhyNames(rules, customTabs);
   const reader = useReaderWiring({
     engine,
     commands,
@@ -382,6 +398,8 @@ export function MailPage({
     editOutbox: (id) => void editOutbox(id),
     runGesture: (label, run) => void runGesture(label, run),
     now,
+    whyNames,
+    priorityPeople,
   });
   const linked = useThreadLinks(reader.links, linkFor?.threadId ?? null);
 
@@ -392,7 +410,7 @@ export function MailPage({
       void openCompose(kind, threadIds[0] ?? null);
       return;
     }
-    if (intent === "email.snooze") setSnoozeIds(threadIds);
+    if (intent === "email.snooze") snooze.open(threadIds);
     else if (intent === "email.move") void openMove(threadIds);
     // `t` on a selection: one task per thread, one Undo (spec §6).
     else if (intent === "email.convert" && spine && threadIds.length > 1)
@@ -571,18 +589,7 @@ export function MailPage({
           />
         </div>
       ) : null}
-      <EmailSnoozePicker
-        open={snoozeIds.length > 0}
-        onOpenChange={(o) => (o ? null : setSnoozeIds([]))}
-        onPick={(at) => {
-          const ids = snoozeIds;
-          setSnoozeIds([]);
-          // Through the shell so the list advances like Done (AC14).
-          void shell.current?.act("snooze", ids, { untilMs: at.getTime() });
-        }}
-      >
-        <span aria-hidden className="pointer-events-none absolute top-2 left-1/3 h-0 w-0" />
-      </EmailSnoozePicker>
+      {snooze.picker}
       {move ? (
         <MailMoveDialog
           mailboxes={move.boxes}

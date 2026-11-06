@@ -105,6 +105,7 @@ function ToolButton({
         tooltipSide="bottom"
         aria-pressed={pressed || undefined}
         className={pressed ? "text-foreground" : undefined}
+        data-reader-action={tool.action}
         onClick={() => onAction(tool.action)}
       />
       {pressed ? (
@@ -115,6 +116,13 @@ function ToolButton({
       ) : null}
     </span>
   );
+}
+
+/** A menu item that opened a popover (Why here, the remind picker) keeps the
+ *  focus there instead of handing it back to the ⋯ button. */
+function keepPopoverFocus(e: Event) {
+  const at = document.activeElement;
+  if (at && at !== document.body && at.closest('[data-slot="popover-content"]')) e.preventDefault();
 }
 
 const Sep = () => <span aria-hidden className="mx-1 h-4 w-px shrink-0 bg-hairline" />;
@@ -151,9 +159,16 @@ export function ReaderToolbar({ onAction, pressed = {}, menu, panel }: ReaderToo
       {menu ? (
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="More actions" tooltip={null} />
+            <IconButton
+              icon={MoreHorizontal}
+              label="More actions"
+              tooltip={null}
+              data-reader-action="more"
+            />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">{menu}</DropdownMenuContent>
+          <DropdownMenuContent align="end" onCloseAutoFocus={keepPopoverFocus}>
+            {menu}
+          </DropdownMenuContent>
         </DropdownMenu>
       ) : null}
       <span className="flex-1" />

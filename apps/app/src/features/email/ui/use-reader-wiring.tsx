@@ -2,11 +2,13 @@
 // per-message actions onto the page's intents, the chip row's links from the
 // spine (open, unlink with undo), the who-card's lookup and Allow/Block (as the
 // New senders panel acts), the send notes over the compose port, the invite
-// cards, the remind picker and the reader's `o` / `y` / `b` keys.
+// cards, the reader's `o` / `y` / `b` keys, and (MV-9) the ⋯ menu's actions,
+// "Why is this in {Tab}?" names and the anchored remind picker.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import { getRuntime } from "@/lib/runtime";
 import type { MailComposeEngine, MailDraftRow } from "@/lib/runtime.types.mail-compose";
 import type {
   MailEngine,
@@ -16,7 +18,9 @@ import type {
   MailView,
 } from "@/lib/runtime.types.mail-engine";
 import { undoToast } from "@/lib/undo-toast";
+import { webOrigin } from "@/lib/web-origin";
 
+import { dispatchOpenSettings } from "../../settings/settings-events";
 import { openReferenceFull } from "../../spine/references/open";
 import type { MailSpineCommands } from "../commands/spine";
 import type { MailCommands } from "../commands/triage";
@@ -26,11 +30,19 @@ import { addInviteToCalendar, engineInviteLoader, engineRsvp } from "../reader/e
 import { InviteCard, type MailInvite, type MailPartstat } from "../reader/invite-card";
 import type { MailReaderApi, MailReaderProps, ReaderWho } from "../reader/mail-reader";
 import type { MessageAction } from "../reader/message-card";
+import { menuOps, type ReaderMoreActions, type SenderSettingsPort } from "../reader/more-menu";
 import { type Person, shortDay } from "../reader/reader-format";
+import type { ReaderWhy } from "../reader/reader-more";
 import type { ReaderAction } from "../reader/reader-toolbar";
 import { bumpThreadLinks, linkChipLabel, type ReaderLinks } from "../reader/thread-links";
 import type { MailWho } from "../reader/who-card";
-import { EmailSnoozePicker } from "./email-snooze-picker";
+import type { WhyNames } from "../reader/why-here";
+import {
+  EmailSnoozePicker,
+  type PickerAnchor,
+  pickerAnchor,
+  usePressedButton,
+} from "./email-snooze-picker";
 import { decideNewSender, groupNewSenders, saveSenderSetting } from "./new-senders-panel";
 
 const errText = (e: unknown, fallback: string) =>
@@ -119,7 +131,43 @@ export type ReaderWiringDeps = {
   /** Runs a spine gesture with the undo toast (the page's `runGesture`). */
   runGesture: (label: string, run: () => Promise<{ undo: () => Promise<void> }>) => void;
   now: () => number;
+  /** Rule and custom-tab names from Settings, for "Why is this in {Tab}?". */
+  whyNames?: WhyNames;
+  /** Priority people from Settings (item id, lower-case address). */
+  priorityPeople?: readonly { id: string; address: string }[];
+  /** Where Block and Mark Priority save the sender; defaults to the runtime's. */
+  senderSettings?: SenderSettingsPort | null;
 };
+
+const NO_NAMES: WhyNames = { rules: [], customTabs: [] };
+const NO_PEOPLE: readonly { id: string; address: string }[] = [];
+
+/** Settings items through the runtime (`upsertSetting` / `deleteSetting`). */
+function runtimeSenderSettings(): SenderSettingsPort | null {
+  const email = getRuntime()?.email;
+  if (!email) return null;
+  return {
+    upsert: async (kind, value) => {
+      const id = crypto.randomUUID();
+      await email.upsertSetting({ id, kind, value });
+      return id;
+    },
+    remove: (id) => email.deleteSetting({ id }),
+  };
+}
+
+/** ⋯ → Copy link: the thread's `/email?thread=` deep link. */
+function copyThreadLink(threadId: string) {
+  const url = `${webOrigin()}/email?thread=${encodeURIComponent(threadId)}`;
+  if (!navigator.clipboard) {
+    toast.error("Couldn't copy the link.");
+    return;
+  }
+  void navigator.clipboard.writeText(url).then(
+    () => toast("Link copied"),
+    () => toast.error("Couldn't copy the link."),
+  );
+}
 
 const INTENT: Partial<Record<ReaderAction, MailKeyId>> = {
   snooze: "email.snooze",
@@ -191,12 +239,54 @@ function useReaderWho(deps: ReaderWiringDeps): ReaderWho {
   );
 }
 
+/** The ⋯ menu's actions (AC26) and the Why names (AC8). */
+function useReaderMenu(deps: ReaderWiringDeps, openRemind: (ids: string[]) => void) {
+  const { commands, engine } = deps;
+  const people = deps.priorityPeople ?? NO_PEOPLE;
+  const settings = useMemo(
+    () => (deps.senderSettings === undefined ? runtimeSenderSettings() : deps.senderSettings),
+    [deps.senderSettings],
+  );
+  const ops = useMemo(
+    () =>
+      menuOps({
+        commands,
+        settings,
+        priorityPeople: () => people,
+        showUndo: (label, onUndo) => undoToast(label, { onUndo }),
+        onError: (message) => toast.error(message),
+      }),
+    [commands, settings, people],
+  );
+  const { act, onIntent } = deps;
+  const more: ReaderMoreActions = {
+    ...ops,
+    remind: engine?.setFollowUp ? (id) => openRemind([id]) : undefined,
+    unread: (row) => act(row.unread ? "mark_read" : "mark_unread", [row.threadId]),
+    move: (id) => onIntent("email.move", [id]),
+    copyLink: copyThreadLink,
+    delete: (id) => act("delete", [id]),
+  };
+  const why: ReaderWhy = {
+    names: deps.whyNames ?? NO_NAMES,
+    onOpenSettings: () => dispatchOpenSettings({ section: "mail" }),
+  };
+  return { more, why };
+}
+
 export function useReaderWiring(deps: ReaderWiringDeps) {
   const apiRef = useRef<MailReaderApi | null>(null);
-  const [remindIds, setRemindIds] = useState<string[]>([]);
+  const [remind, setRemind] = useState<{ ids: string[]; anchor: PickerAnchor | null } | null>(null);
+  const pressed = usePressedButton();
   const links = useReaderLinks(deps.spine);
   const who = useReaderWho(deps);
   const { engine, spine, port } = deps;
+  /** `w`, the toolbar's Remind and ⋯ → Remind me if no reply…: the picker on its button. */
+  const openRemind = (ids: string[]) => {
+    if (ids.length === 0 || !engine?.setFollowUp) return;
+    setRemind({ ids, anchor: pickerAnchor(ids[0], "remind", pressed()) });
+  };
+  const menu = useReaderMenu(deps, openRemind);
 
   const onAction = (action: ReaderAction | MessageAction, threadId: string, messageId?: string) => {
     const compose = COMPOSE[action];
@@ -204,7 +294,7 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
     if (compose) deps.openCompose(compose, threadId, messageId);
     else if (intent) deps.onIntent(intent, [threadId]);
     else if (action === "done") deps.act("done", [threadId]);
-    else if (action === "remind" && engine?.setFollowUp) setRemindIds([threadId]);
+    else if (action === "remind") openRemind([threadId]);
     else if (action === "pin")
       void deps.rowOf(threadId).then((row) => deps.act(row?.pinned ? "unpin" : "pin", [threadId]));
   };
@@ -213,7 +303,7 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
   const onKey = (intent: MailKeyId, threadIds: string[]): boolean => {
     // `w` (MV-7): Remind me if no reply, on every picked thread.
     if (intent === "email.remind") {
-      if (engine?.setFollowUp && threadIds.length > 0) setRemindIds(threadIds);
+      openRemind(threadIds);
       return true;
     }
     if (intent === "email.expand-all") {
@@ -260,6 +350,8 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
     links,
     who,
     renderAbove,
+    more: menu.more,
+    why: menu.why,
     done: view?.kind === "unified" && view.role === "archive",
     sendNotes: port
       ? { port, refreshKey: deps.placeKey, onEditOutbox: deps.editOutbox, onFix: deps.openDraft }
@@ -268,24 +360,22 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
 
   const remindPicker = (
     <EmailSnoozePicker
-      open={remindIds.length > 0}
-      onOpenChange={(o) => (o ? null : setRemindIds([]))}
-      title="Remind me if no reply"
-      confirmLabel="Remind me"
+      mode="remind"
+      open={remind !== null}
+      anchor={remind?.anchor ?? null}
+      now={deps.now}
+      onOpenChange={(o) => (o ? null : setRemind(null))}
       onPick={(at) => {
-        const ids = remindIds;
-        setRemindIds([]);
-        const set = engine?.setFollowUp?.bind(engine);
-        if (ids.length === 0 || !set) return;
-        void Promise.all(ids.map((id) => set(id, at.getTime()))).then(
+        const ids = remind?.ids ?? [];
+        setRemind(null);
+        if (ids.length === 0 || !engine?.setFollowUp) return;
+        void Promise.all(ids.map((id) => engine.setFollowUp!(id, at.getTime()))).then(
           () => toast(`Reminds you ${shortDay(at.getTime(), deps.now())} if no reply`),
           (e) => toast.error(errText(e, "Couldn't set the reminder.")),
         );
       }}
-    >
-      <span aria-hidden className="pointer-events-none absolute top-2 left-1/2 h-0 w-0" />
-    </EmailSnoozePicker>
+    />
   );
 
-  return { props, links, onKey, remindPicker };
+  return { props, links, onKey, remindPicker, openRemind };
 }

@@ -29,6 +29,8 @@ import {
   createRuntimeSpinePort,
   customTabsFromItems,
   localDate,
+  priorityPeopleFromItems,
+  rulesFromItems,
   snippetsFromItems,
   type SpineRuntime,
   whoFromLinks,
@@ -181,6 +183,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
   }, [runtime, workspaceId, tissue.tissueRefs, contacts, inbox, liveTasks]);
 
   const customTabs = useMemo(() => customTabsFromItems(items), [items]);
+  const rules = useMemo(() => rulesFromItems(items), [items]);
+  const priorityPeople = useMemo(() => priorityPeopleFromItems(items), [items]);
 
   // The reader's who-card (MV-8): the contact, and what is open with them in the spine.
   const whoFor = useCallback(
@@ -221,6 +225,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     aliases: aliasesFromItems(items),
     snippets: snippetsFromItems(items),
     customTabs,
+    rules,
+    priorityPeople,
     contacts: composeContacts,
     whoFor,
     onAddContact: (email, name) => {

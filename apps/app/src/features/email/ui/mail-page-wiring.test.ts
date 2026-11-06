@@ -10,6 +10,8 @@ import {
   customTabsFromItems,
   localDate,
   nextEventSlot,
+  priorityPeopleFromItems,
+  rulesFromItems,
   snippetsFromItems,
   type SpineRuntime,
   unsubscribeTarget,
@@ -161,10 +163,37 @@ describe("customTabsFromItems (specs/mail-v3.md AC2)", () => {
       tab("t0", "  ", 0),
     ];
     expect(customTabsFromItems(items)).toEqual([
-      { id: "t1", label: "Investors" },
-      { id: "t2", label: "Hiring" },
-      { id: "t3", label: "Press" },
+      { id: "t1", label: "Investors", domains: [] },
+      { id: "t2", label: "Hiring", domains: [] },
+      { id: "t3", label: "Press", domains: [] },
     ]);
+  });
+
+  it("keeps a tab's domains, for Why here (MV-9)", () => {
+    const items = [item("custom_tab", { name: "Investors", domains: ["northzone.vc"] }, "t1")];
+    expect(customTabsFromItems(items)[0]?.domains).toEqual(["northzone.vc"]);
+  });
+});
+
+describe("rulesFromItems and priorityPeopleFromItems (MV-9)", () => {
+  it("names a rule by its name, else by what it does; priority people by address", () => {
+    const items = [
+      item("rule", { name: "Receipts", conditions: [], actions: [] }, "r1"),
+      item(
+        "rule",
+        {
+          conditions: [{ field: "from", value: "billing@shop.test" }],
+          actions: [{ action: "skip_inbox" }],
+        },
+        "r2",
+      ),
+      item("priority_person", { address: "Boss@X.test" }, "p1"),
+    ];
+    const rules = rulesFromItems(items);
+    expect(rules[0]).toEqual({ id: "r1", label: "Receipts" });
+    expect(rules[1]?.id).toBe("r2");
+    expect(rules[1]?.label).toContain("billing@shop.test");
+    expect(priorityPeopleFromItems(items)).toEqual([{ id: "p1", address: "boss@x.test" }]);
   });
 });
 

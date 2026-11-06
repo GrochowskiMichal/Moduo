@@ -8,6 +8,7 @@ import { MAIL_MAX_CUSTOM_TABS } from "@contracts/mail";
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
+import { describeRule } from "../../settings/mail/model";
 import type { MailLinkedKind, MailSpinePort, MailThreadLink, SpineEntity } from "../commands/spine";
 import type { MailAlias } from "../compose/aliases";
 import type { MailSnippet } from "../compose/snippets";
@@ -43,12 +44,36 @@ export function snippetsFromItems(items: readonly EmailSettingsItem[]): MailSnip
  *  order, at most three (specs/mail-v3.md §2, AC2). */
 export function customTabsFromItems(
   items: readonly EmailSettingsItem[],
-): { id: string; label: string }[] {
+): { id: string; label: string; domains: string[] }[] {
   return items
     .filter((i) => i.kind === "custom_tab" && str(i.value.name).trim())
     .sort((a, b) => a.position - b.position)
     .slice(0, MAIL_MAX_CUSTOM_TABS)
-    .map((i) => ({ id: i.id, label: str(i.value.name).trim() }));
+    .map((i) => ({
+      id: i.id,
+      label: str(i.value.name).trim(),
+      // "Why is this in {Tab}?" names the domain a tab collects (MV-9).
+      domains: (Array.isArray(i.value.domains) ? i.value.domains : []).map(str).filter(Boolean),
+    }));
+}
+
+/** Rules from the settings mirror, named for "Why is this in {Tab}?": the rule's
+ *  own name when it has one, else what it does ("From anna@x.com → skip the inbox"). */
+export function rulesFromItems(
+  items: readonly EmailSettingsItem[],
+): { id: string; label: string }[] {
+  return items
+    .filter((i) => i.kind === "rule")
+    .map((i) => ({ id: i.id, label: str(i.value.name).trim() || describeRule(i.value) }));
+}
+
+/** Priority people from the settings mirror (item id, lower-case address). */
+export function priorityPeopleFromItems(
+  items: readonly EmailSettingsItem[],
+): { id: string; address: string }[] {
+  return items
+    .filter((i) => i.kind === "priority_person" && str(i.value.address).trim())
+    .map((i) => ({ id: i.id, address: str(i.value.address).trim().toLowerCase() }));
 }
 
 /** Local `YYYY-MM-DD` for a day drop. */
