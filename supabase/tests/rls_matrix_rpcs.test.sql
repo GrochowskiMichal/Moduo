@@ -72,6 +72,7 @@ INSERT INTO test.mx_unreached (fn) VALUES
   ('email_op_link'),
   ('email_op_ref_remove'),
   ('email_op_ref_upsert'),
+  ('email_op_settings_upsert'),
   ('email_op_snooze'),
   ('email_op_snooze_due'),
   ('email_op_unsnooze'),
