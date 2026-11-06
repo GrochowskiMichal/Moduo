@@ -3,7 +3,7 @@
 // the app-chrome `MailEngineProvider` fills. Search is ⌘K (MR-13) and the
 // settings live in Settings → Mail (MR-15).
 
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getRuntime } from "@/lib/runtime";
@@ -18,6 +18,7 @@ import type {
 } from "@/lib/runtime.types.mail-engine";
 import { undoToast } from "@/lib/undo-toast";
 
+import { openReferenceFull } from "../../spine/references/open";
 import type {
   MailDropTarget,
   MailSpineCommands,
@@ -36,13 +37,16 @@ import {
 } from "../compose/session";
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
+import type { MailContactDetail } from "../panels/contact-view";
+import { MailSidePanel, showMailPanel, toggleMailPanel } from "../panels/side-panel";
+import type { MailTaskDetail } from "../panels/task-view";
 import type { TodayEvent } from "../panels/today-events";
-import { TodayPanel, type TodayTask } from "../panels/today-panel";
+import type { TodayTask } from "../panels/today-panel";
 import type { MailInvite, MailPartstat } from "../reader/invite-card";
 import { MailReader } from "../reader/mail-reader";
 import { bumpThreadLinks, useThreadLinks } from "../reader/thread-links";
 import type { MailWho } from "../reader/who-card";
-import { type MailStore, mailStore } from "../store/mail-store";
+import { type MailPanelView, type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
 import { SubscriptionsView } from "../views/subscriptions";
 import { useSubscriptionUnsubscribe } from "../views/use-subscription-unsubscribe";
@@ -148,6 +152,10 @@ export type MailPageProps = {
   onAddContact?: (email: string, name: string) => void;
   /** The reader's who-card: what Moduo knows about a sender address (MV-8). */
   whoFor?: (address: string) => Promise<MailWho | null>;
+  /** The side panel's Contact view: the open tasks, notes and meetings with a contact. */
+  contactDetailFor?: (address: string) => Promise<MailContactDetail | null>;
+  /** The side panel's Task view: a linked task's status, due date, project and notes. */
+  taskFor?: (taskId: string) => MailTaskDetail | null;
   /** An invite's parsed event; absent means the card isn't shown. */
   loadInvite?: (messageId: string) => Promise<MailInvite | null>;
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
@@ -165,7 +173,7 @@ const errText = (e: unknown, fallback: string) =>
  * `t` convert with the undo toast plus "Also mark done": Done chains onto the
  * convert's plan, and the follow-up toast's one Undo reverts both (AC33).
  */
-async function runConvert(spine: MailSpineCommands, row: MailThreadRow) {
+async function runConvert(spine: MailSpineCommands, row: MailThreadRow, onMade?: () => void) {
   let res: SpineResult;
   try {
     res = await spine.convert(row);
@@ -173,8 +181,9 @@ async function runConvert(spine: MailSpineCommands, row: MailThreadRow) {
     toast.error(errText(e, "That didn't go through. Nothing was changed."));
     return;
   }
-  // The reader's chips show the new task (MV-8).
+  // The reader's chips and the side panel's Task view show the new task (MV-8, §10).
   bumpThreadLinks();
+  onMade?.();
   const undo = () => void res.undo().then(bumpThreadLinks, () => {});
   undoToast("Task created", {
     onUndo: undo,
@@ -198,6 +207,16 @@ async function runGesture(label: string, run: () => Promise<{ undo: () => Promis
   } catch (e) {
     toast.error(errText(e, "That didn't go through. Nothing was changed."));
   }
+}
+
+/** The side panel's Today view: only with the spine (its drops and tasks need it). */
+function todayView<T>(spine: MailSpineCommands | null, today: T): T | null {
+  return spine ? today : null;
+}
+
+/** An action on the open thread, absent with none open. */
+function forThread(threadId: string | null, act: (threadId: string) => void) {
+  return threadId ? () => act(threadId) : undefined;
 }
 
 /** A known display name for an address (contacts, correspondents, the open thread). */
@@ -268,6 +287,8 @@ export function MailPage({
   contacts = [],
   onAddContact,
   whoFor,
+  contactDetailFor,
+  taskFor,
   loadInvite,
   onRsvp,
   now = Date.now,
@@ -276,6 +297,7 @@ export function MailPage({
   const behavior = useMailStore((s) => s.behavior, store);
   const accounts = useMailStore((s) => s.accounts, store);
   const version = useMailStore((s) => s.threadsVersion, store);
+  const panelOpen = useMailStore((s) => s.panel !== null, store);
   const commands = useMemo(() => createMailCommands(store), [store]);
   const shell = useRef<MailShellApi | null>(null);
   const [connect, setConnect] = useState<MailConnectRequest | null>(null);
@@ -377,6 +399,7 @@ export function MailPage({
   };
 
   const whyNames = useWhyNames(rules, customTabs);
+  const openPanel = useCallback((view: MailPanelView) => showMailPanel(store, view), [store]);
   const reader = useReaderWiring({
     engine,
     commands,
@@ -390,6 +413,7 @@ export function MailPage({
     loadInvite,
     onRsvp,
     onIntent: (intent, ids) => onIntent(intent, ids),
+    openPanel,
     openCompose: (kind, threadId, messageId) =>
       void openCompose(kind, threadId, undefined, undefined, messageId),
     act: (kind, ids, args) => void shell.current?.act(kind, ids, args),
@@ -416,7 +440,9 @@ export function MailPage({
     else if (intent === "email.convert" && spine && threadIds.length > 1)
       void makeTasks(spine, threadIds, rowOf);
     else if (intent === "email.convert" && spine && threadIds[0])
-      void rowOf(threadIds[0]).then((row) => (row ? runConvert(spine, row) : undefined));
+      void rowOf(threadIds[0]).then((row) =>
+        row ? runConvert(spine, row, () => showMailPanel(store, "task")) : undefined,
+      );
     else if (intent === "email.note") gesture("Note created", threadIds, (row) => spine!.note(row));
     else if (intent === "email.link" && spine && threadIds[0])
       void rowOf(threadIds[0]).then((row) => setLinkFor(row));
@@ -552,21 +578,39 @@ export function MailPage({
                 selfAddresses={own}
                 contacts={contactSet}
                 {...reader.props}
+                panel={{ open: panelOpen, onToggle: () => toggleMailPanel(store) }}
               />
             );
           }}
         />
-        {spine ? (
-          <div className="w-60 shrink-0 border-l border-hairline">
-            <TodayPanel
-              tasks={todayTasks}
-              events={todayEvents}
-              date={localDate(now())}
-              onDropThread={onDropThread}
-              onCreateEvent={current ? () => createEvent(current) : undefined}
-            />
-          </div>
-        ) : null}
+        <MailSidePanel
+          store={store}
+          threadId={current}
+          engine={engine}
+          version={version}
+          nowMs={now()}
+          today={todayView(spine, {
+            tasks: todayTasks,
+            events: todayEvents,
+            date: localDate(now()),
+            onDropThread,
+            onCreateEvent: forThread(current, createEvent),
+          })}
+          links={reader.links}
+          rowOf={rowOf}
+          selfAddresses={own}
+          contacts={contactSet}
+          whoFor={reader.props.who?.lookup}
+          contactDetailFor={contactDetailFor}
+          taskFor={taskFor}
+          onAddContact={onAddContact}
+          onOpenContact={(id) => openReferenceFull({ type: "contact", id })}
+          onOpenItem={(type, id) => openReferenceFull({ type, id })}
+          onOpenTask={(id) => openReferenceFull({ type: "task", id })}
+          onMakeTask={forThread(current, (id) => onIntent("email.convert", [id]))}
+          onOpenThread={(id) => shell.current?.open(id)}
+          onPreview={(entry) => shell.current?.open(entry.threadId)}
+        />
       </div>
       {session ? (
         <div className="absolute right-4 bottom-4 w-96 max-w-full">

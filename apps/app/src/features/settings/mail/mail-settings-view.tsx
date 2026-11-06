@@ -21,6 +21,7 @@ import {
 import { BehaviorGroup } from "./behavior-group";
 import { ChoiceSelect } from "./controls";
 import { type ItemActions, ItemsGroups } from "./items-groups";
+import type { RuleApplyPort } from "./rule-apply";
 
 const BLOCK_LABEL: Record<MailBlockDestination, string> = {
   trash: "Trash",
@@ -41,14 +42,23 @@ export type MailSettingsViewProps = {
   storage: { stats: MailStorageStats[]; actions: StorageActions } | null;
   /** Null on the web. */
   defaultApp: { isDefault: boolean; make: () => void } | null;
+  /** "Also apply to the {n} already on this Mac?" after a rule is saved; null on the web. */
+  ruleApply?: RuleApplyPort | null;
+  /** The clock for "Last synced …". */
+  nowMs?: number;
 };
 
 export function MailSettingsView(p: MailSettingsViewProps) {
   const { behavior, onBehavior } = p;
   return (
     <div className="flex flex-col gap-8">
-      <AccountsGroup accounts={p.accounts} actions={p.accountActions} />
-      <ItemsGroups items={p.items} actions={p.itemActions} accounts={p.accounts} />
+      <AccountsGroup accounts={p.accounts} actions={p.accountActions} nowMs={p.nowMs} />
+      <ItemsGroups
+        items={p.items}
+        actions={p.itemActions}
+        accounts={p.accounts}
+        ruleApply={p.ruleApply}
+      />
       <PrefGroup label="Screening">
         <PrefRow title="Screener" description="New senders wait for you to let them in.">
           <Switch

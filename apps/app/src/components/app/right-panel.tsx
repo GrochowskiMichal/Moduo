@@ -12,7 +12,7 @@
 // item's "Open in …" last. Keys: ⌥1–9 pick a view, Esc goes back one item
 // (keymap.md, rules 4 and 8).
 
-import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
+import { ArrowLeft, ChevronDown, ExternalLink, EyeOff, type LucideIcon } from "lucide-react";
 import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
 import { HotkeyScope, isMacPlatform, useAppHotkeys, useFocusWithin } from "../../lib/hotkeys";
@@ -28,6 +28,7 @@ import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -70,6 +71,8 @@ type Props = {
   onClearItems?: () => void;
   /** ⌥1–9 work from a field too (Chat: its key map says anywhere in Chat). */
   viewKeysInFields?: boolean;
+  /** Adds "Hide" under the views in the title row's menu (Mail, specs/mail-v3.md §10). */
+  onHide?: () => void;
 };
 
 /**
@@ -120,6 +123,7 @@ export function RightPanel({
   onBack,
   onClearItems,
   viewKeysInFields = false,
+  onHide,
 }: Props) {
   const listed = panelViewsFor(module, (id) => Boolean(views[id]));
   const active = listed.find((v) => v.id === activeId) ?? listed[0];
@@ -222,6 +226,7 @@ export function RightPanel({
               title={title ?? active.label}
               isMac={isMac}
               onPick={pick}
+              onHide={onHide}
             />
           ) : (
             <h2
@@ -260,6 +265,7 @@ function ViewMenu({
   title,
   isMac,
   onPick,
+  onHide,
 }: {
   listed: PanelViewDef[];
   active: PanelViewDef;
@@ -267,6 +273,7 @@ function ViewMenu({
   title: string;
   isMac: boolean;
   onPick: (id: string) => void;
+  onHide?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -305,6 +312,15 @@ function ViewMenu({
             </Fragment>
           ))}
         </DropdownMenuRadioGroup>
+        {onHide ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onHide}>
+              <EyeOff aria-hidden />
+              Hide
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

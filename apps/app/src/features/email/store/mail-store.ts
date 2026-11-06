@@ -48,7 +48,8 @@ export type MailStoreState = {
   /** The spine kinds each thread links to, for the row flags (specs/mail-v3.md
    *  decision 7): one batched read per list window, refreshed when links change. */
   linkedKinds: Record<string, MailLinkedKind[]>;
-  /** The open side-panel view, or null when it is hidden (decision 16). */
+  /** The side panel's view, or null while it is hidden. It starts hidden below
+   *  1200 px (`panels/side-panel.tsx`). */
   panel: MailPanelView | null;
   /** Bumps on every `threads_changed`; list windows re-read on change. */
   threadsVersion: number;
@@ -77,7 +78,7 @@ export function initialMailState(): MailStoreState {
     followupsDue: [],
     dismissedFollowups: [],
     linkedKinds: {},
-    panel: null,
+    panel: "today",
     threadsVersion: 0,
     changedViewKeys: [],
   };

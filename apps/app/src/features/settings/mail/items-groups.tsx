@@ -25,9 +25,19 @@ import {
   normalizeAddress,
   RULE_ACTIONS_WITH_ARG,
 } from "./model";
+import {
+  applyPrompt,
+  forgetRuleApply,
+  ruleApplyLine,
+  type RuleApplyPort,
+  startRuleApply,
+  undoRuleApply,
+  useRuleApply,
+} from "./rule-apply";
 
 export type ItemActions = {
-  add: (kind: EmailSettingsKind, value: Record<string, unknown>) => void;
+  /** Returns the new row's id when it knows it (the rule apply prompt needs it). */
+  add: (kind: EmailSettingsKind, value: Record<string, unknown>) => string | void;
   update: (item: EmailSettingsItem, value: Record<string, unknown>, position?: number) => void;
   remove: (id: string) => void;
 };
@@ -92,12 +102,129 @@ function AddressList({
 const CONDITIONS = MAIL_RULE_CONDITIONS.map((c) => ({ value: c, label: CONDITION_LABEL[c] ?? c }));
 const ACTIONS = MAIL_RULE_ACTIONS.map((a) => ({ value: a, label: ACTION_LABEL[a] ?? a }));
 
-function RulesGroup({ items, actions }: { items: EmailSettingsItem[]; actions: ItemActions }) {
+/** A rule's row: its sentence, the apply-to-existing line, and its controls. */
+function RuleRow({
+  rule,
+  at,
+  last,
+  ruleApply,
+  onMove,
+  onRemove,
+}: {
+  rule: EmailSettingsItem;
+  at: number;
+  last: boolean;
+  ruleApply?: RuleApplyPort | null;
+  onMove: (by: -1 | 1) => void;
+  onRemove: () => void;
+}) {
+  const applied = useRuleApply(rule.id);
+  return (
+    <div
+      data-rule-row={rule.id}
+      className="flex items-center justify-between gap-4 border-b border-border py-4 first:pt-2 last:border-b-0 last:pb-2"
+    >
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="text-sm font-medium text-foreground">{describeRule(rule.value)}</span>
+        {applied ? (
+          <output className="flex items-center gap-1 text-xs text-muted-foreground">
+            {ruleApplyLine(applied)}
+            {applied.status === "applied" && ruleApply ? (
+              <>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-foreground underline-offset-4 hover:underline"
+                  onClick={() => void undoRuleApply(ruleApply, rule.id)}
+                >
+                  Undo
+                </button>
+              </>
+            ) : null}
+          </output>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <IconButton
+          icon={ArrowUp}
+          label="Move rule up"
+          disabled={at === 0}
+          onClick={() => onMove(-1)}
+        />
+        <IconButton
+          icon={ArrowDown}
+          label="Move rule down"
+          disabled={last}
+          onClick={() => onMove(1)}
+        />
+        <RemoveButton label="Delete rule" onClick={onRemove} />
+      </div>
+    </div>
+  );
+}
+
+/** "Also apply to the {n} already on this Mac?", asked in place after a save. */
+function ApplyPrompt({
+  ask,
+  onApply,
+  onSkip,
+}: {
+  ask: { ruleId: string; count: number };
+  onApply: () => void;
+  onSkip: () => void;
+}) {
+  return (
+    <fieldset
+      aria-label="Apply to existing mail"
+      className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted px-3 py-2"
+    >
+      <span className="text-sm text-foreground">{applyPrompt(ask.count)}</span>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={onSkip}>
+          Only new mail
+        </Button>
+        <Button size="sm" onClick={onApply}>
+          Apply
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+/** After a save: the dry run's count, then the in-place question (none when nothing matches). */
+function useApplyAsk(ruleApply: RuleApplyPort | null | undefined) {
+  const [ask, setAsk] = useState<{ ruleId: string; count: number } | null>(null);
+  const offer = (ruleId: string | void) => {
+    if (!ruleApply || !ruleId) return;
+    void ruleApply.count(ruleId).then(
+      (count) => (count > 0 ? setAsk({ ruleId, count }) : undefined),
+      () => {},
+    );
+  };
+  const apply = () => {
+    if (!ask || !ruleApply) return;
+    setAsk(null);
+    // Not awaited: the apply carries on if Settings closes (rule-apply.ts).
+    void startRuleApply(ruleApply, ask.ruleId, ask.count);
+  };
+  return { ask, offer, apply, skip: () => setAsk(null) };
+}
+
+function RulesGroup({
+  items,
+  actions,
+  ruleApply,
+}: {
+  items: EmailSettingsItem[];
+  actions: ItemActions;
+  ruleApply?: RuleApplyPort | null;
+}) {
   const list = itemsOfKind(items, "rule");
   const [field, setField] = useState<string>("from");
   const [value, setValue] = useState("");
   const [action, setAction] = useState<string>("skip_inbox");
   const [arg, setArg] = useState("");
+  const asking = useApplyAsk(ruleApply);
   const needsValue = field !== "is_newsletter";
   const needsArg = RULE_ACTIONS_WITH_ARG.has(action);
   const ready = (!needsValue || value.trim()) && (!needsArg || arg.trim());
@@ -110,33 +237,34 @@ function RulesGroup({ items, actions }: { items: EmailSettingsItem[]; actions: I
       description="The first matching rule decides where mail goes; marking read, labels and Priority all apply."
     >
       {list.map((r, at) => (
-        <PrefRow key={r.id} title={describeRule(r.value)}>
-          <div className="flex items-center gap-1">
-            <IconButton
-              icon={ArrowUp}
-              label="Move rule up"
-              disabled={at === 0}
-              onClick={() => move(r.id, -1)}
-            />
-            <IconButton
-              icon={ArrowDown}
-              label="Move rule down"
-              disabled={at === list.length - 1}
-              onClick={() => move(r.id, 1)}
-            />
-            <RemoveButton label="Delete rule" onClick={() => actions.remove(r.id)} />
-          </div>
-        </PrefRow>
+        <RuleRow
+          key={r.id}
+          rule={r}
+          at={at}
+          last={at === list.length - 1}
+          ruleApply={ruleApply}
+          onMove={(by) => move(r.id, by)}
+          onRemove={() => {
+            forgetRuleApply(r.id);
+            actions.remove(r.id);
+          }}
+        />
       ))}
+      {asking.ask ? (
+        <div className="pt-4">
+          <ApplyPrompt ask={asking.ask} onApply={asking.apply} onSkip={asking.skip} />
+        </div>
+      ) : null}
       <form
         className="flex flex-wrap items-center gap-2 py-4"
         onSubmit={(e) => {
           e.preventDefault();
           if (!ready) return;
-          actions.add("rule", {
+          const id = actions.add("rule", {
             conditions: [needsValue ? { field, value: value.trim() } : { field }],
             actions: [needsArg ? { action, arg: arg.trim() } : { action }],
           });
+          asking.offer(id);
           setValue("");
           setArg("");
         }}
@@ -186,10 +314,15 @@ function splitList(raw: string): string[] {
     .filter(Boolean);
 }
 
+/** The custom tabs the strip can hold. */
+export const MAX_CUSTOM_TABS = 3;
+
 function TabsGroup({ items, actions }: { items: EmailSettingsItem[]; actions: ItemActions }) {
   const list = itemsOfKind(items, "custom_tab");
   const [name, setName] = useState("");
   const [match, setMatch] = useState("");
+  // The strip shows at most three custom tabs (specs/mail-v3.md §12, AC2).
+  const full = list.length >= MAX_CUSTOM_TABS;
   return (
     <PrefGroup
       label="Custom tabs"
@@ -216,7 +349,7 @@ function TabsGroup({ items, actions }: { items: EmailSettingsItem[]; actions: It
         onSubmit={(e) => {
           e.preventDefault();
           const entries = splitList(match);
-          if (!name.trim() || entries.length === 0) return;
+          if (full || !name.trim() || entries.length === 0) return;
           actions.add("custom_tab", {
             name: name.trim(),
             senders: entries.filter((x) => x.includes("@")),
@@ -239,10 +372,16 @@ function TabsGroup({ items, actions }: { items: EmailSettingsItem[]; actions: It
           value={match}
           onChange={(e) => setMatch(e.target.value)}
         />
-        <Button type="submit" size="sm" variant="outline" disabled={!name.trim() || !match.trim()}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={full || !name.trim() || !match.trim()}
+        >
           Add tab
         </Button>
       </form>
+      {full ? <p className="pb-4 text-xs text-muted-foreground">Up to 3 custom tabs</p> : null}
     </PrefGroup>
   );
 }
@@ -409,16 +548,19 @@ export function ItemsGroups({
   items,
   actions,
   accounts,
+  ruleApply,
 }: {
   items: EmailSettingsItem[];
   actions: ItemActions;
   accounts: { id: string; address: string }[];
+  /** The engine's apply-to-existing; absent on the web (no prompt). */
+  ruleApply?: RuleApplyPort | null;
 }) {
   return (
     <>
       <AliasesGroup items={items} actions={actions} accounts={accounts} />
       <SnippetsGroup items={items} actions={actions} />
-      <RulesGroup items={items} actions={actions} />
+      <RulesGroup items={items} actions={actions} ruleApply={ruleApply} />
       <TabsGroup items={items} actions={actions} />
       <AddressList
         kind="priority_person"

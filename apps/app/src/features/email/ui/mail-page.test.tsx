@@ -174,7 +174,8 @@ describe("/email on the engine (MR-16 cutover)", () => {
     await tick();
     await tick();
     expect(calls).toEqual([`convert ${rowIds()[0]}`, `note ${rowIds()[0]}`]);
-    screen.getByRole("complementary", { name: "Today" });
+    // `t` opens the side panel on the new task (specs/mail-v3.md §10).
+    screen.getByRole("complementary", { name: "Task" });
   });
 
   describe("wiring the page (specs/mail-v3.md MV-3)", () => {

@@ -37,6 +37,7 @@ import type { ReaderAction } from "../reader/reader-toolbar";
 import { bumpThreadLinks, linkChipLabel, type ReaderLinks } from "../reader/thread-links";
 import type { MailWho } from "../reader/who-card";
 import type { WhyNames } from "../reader/why-here";
+import type { MailPanelView } from "../store/mail-store";
 import {
   EmailSnoozePicker,
   type PickerAnchor,
@@ -123,6 +124,8 @@ export type ReaderWiringDeps = {
   loadInvite?: (messageId: string) => Promise<MailInvite | null>;
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
   onIntent: (intent: MailKeyId, threadIds: string[]) => void;
+  /** Opens the side panel on a view: the who-card's Open contact, a task chip (§10). */
+  openPanel?: (view: MailPanelView) => void;
   openCompose: (kind: ComposeKind, threadId: string, messageId?: string) => void;
   act: (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => void;
   rowOf: (threadId: string) => Promise<MailThreadRow | null>;
@@ -183,12 +186,19 @@ const COMPOSE: Partial<Record<ReaderAction | MessageAction, ComposeKind>> = {
   forward: "forward",
 };
 
-function useReaderLinks(spine: MailSpineCommands | null): ReaderLinks | null {
+function useReaderLinks(
+  spine: MailSpineCommands | null,
+  openPanel?: (view: MailPanelView) => void,
+): ReaderLinks | null {
   return useMemo(() => {
     if (!spine) return null;
     return {
       read: (threadId) => spine.linksFor(threadId),
-      open: (link) => openReferenceFull({ type: link.entity.type, id: link.entity.id }),
+      // A task chip opens the side panel's Task view (§10); the rest open in full.
+      open: (link) =>
+        link.entity.type === "task" && openPanel
+          ? openPanel("task")
+          : openReferenceFull({ type: link.entity.type, id: link.entity.id }),
       unlink: (link) =>
         void spine.unlink(link).then(
           (res) => {
@@ -200,11 +210,11 @@ function useReaderLinks(spine: MailSpineCommands | null): ReaderLinks | null {
           (e) => toast.error(errText(e, "Couldn't unlink that.")),
         ),
     };
-  }, [spine]);
+  }, [spine, openPanel]);
 }
 
 function useReaderWho(deps: ReaderWiringDeps): ReaderWho {
-  const { engine, commands, contacts, whoFor, onAddContact, view } = deps;
+  const { engine, commands, contacts, whoFor, onAddContact, view, openPanel } = deps;
   const lookup = useMemo<ReaderWho["lookup"]>(() => {
     if (whoFor) return whoFor;
     const byEmail = new Map(contacts.map((c) => [c.email.toLowerCase(), c.name]));
@@ -233,9 +243,15 @@ function useReaderWho(deps: ReaderWiringDeps): ReaderWho {
           toast.error(errText(e, "Couldn't save that.")),
         ),
       onAddContact: onAddContact ? (p: Person) => onAddContact(p.email, p.name) : undefined,
-      onOpenContact: (id) => (id ? openReferenceFull({ type: "contact", id }) : undefined),
+      // Open contact opens the side panel's Contact view (§10).
+      onOpenContact: (id) =>
+        openPanel
+          ? openPanel("contact")
+          : id
+            ? openReferenceFull({ type: "contact", id })
+            : undefined,
     }),
-    [lookup, view, engine, commands, onAddContact],
+    [lookup, view, engine, commands, onAddContact, openPanel],
   );
 }
 
@@ -278,7 +294,7 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
   const apiRef = useRef<MailReaderApi | null>(null);
   const [remind, setRemind] = useState<{ ids: string[]; anchor: PickerAnchor | null } | null>(null);
   const pressed = usePressedButton();
-  const links = useReaderLinks(deps.spine);
+  const links = useReaderLinks(deps.spine, deps.openPanel);
   const who = useReaderWho(deps);
   const { engine, spine, port } = deps;
   /** `w`, the toolbar's Remind and ⋯ → Remind me if no reply…: the picker on its button. */

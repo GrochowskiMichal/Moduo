@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
+import type { EntityRef } from "@/lib/entity-links";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
 
@@ -17,6 +18,9 @@ import { useTasksSelector } from "../../tasks/tasks-context";
 import { createMailSpineCommands } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
 import { mailEngineMode } from "../engine/behavior";
+import type { MailContactDetail } from "../panels/contact-view";
+import { contactDetailFrom, isDueOn, taskDetailFrom } from "../panels/panel-wiring";
+import type { MailTaskDetail } from "../panels/task-view";
 import { todayEvents as eventsToday } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
 import { isLinked, linkPickerHint } from "../reader/thread-links";
@@ -95,6 +99,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
   });
   const inbox = useTasksSelector((d) => d.inbox);
   const liveTasks = useTasksSelector((d) => d.liveTasks);
+  const buckets = useTasksSelector((d) => d.buckets);
+  const statuses = useTasksSelector((d) => d.statuses);
   const tissue = useEmailTissue(runtime, workspaceId);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [mirror, setMirror] = useState<EmailSettingsMirror | null>(null);
@@ -135,10 +141,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
 
   const today = localDate(Date.now());
   const todayTasks = useMemo<TodayTask[]>(
-    () =>
-      liveTasks
-        .filter((t) => t.dueDate === today && t.status !== "done" && t.status !== "archived")
-        .map((t) => ({ id: t.id, title: t.title })),
+    () => liveTasks.filter((t) => isDueOn(t, today)).map((t) => ({ id: t.id, title: t.title })),
     [liveTasks, today],
   );
 
@@ -212,6 +215,46 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     [contacts, runtime, workspaceId, liveTasks, calendar.events],
   );
 
+  // The side panel's Contact view (§10): the open tasks, notes and meetings by name.
+  const contactDetailFor = useCallback(
+    async (address: string): Promise<MailContactDetail | null> => {
+      const contact = contacts.find((c) => c.emails.includes(address.toLowerCase()));
+      if (!contact || !runtime || !workspaceId) return null;
+      const links = await runtime.spine
+        .listLinks({ workspaceId, entityType: "contact", entityId: contact.id })
+        .catch(() => []);
+      const noteRefs = links
+        .flatMap((l) => [
+          { type: l.sourceType, id: l.sourceId },
+          { type: l.targetType, id: l.targetId },
+        ])
+        .filter((r) => r.type === "note");
+      const records = noteRefs.length
+        ? await runtime.spine
+            .getEntities({ workspaceId, refs: noteRefs as EntityRef[] })
+            .catch(() => [])
+        : [];
+      return contactDetailFrom({
+        contactId: contact.id,
+        links,
+        tasks: liveTasks,
+        labels: new Map(records.map((r) => [`${r.type}:${r.id}`, r.label])),
+        events: calendar.events,
+        nowMs: Date.now(),
+      });
+    },
+    [contacts, runtime, workspaceId, liveTasks, calendar.events],
+  );
+
+  // The side panel's Task view (§10): a linked task from the Tasks data.
+  const taskFor = useCallback(
+    (taskId: string): MailTaskDetail | null => {
+      const task = liveTasks.find((t) => t.id === taskId);
+      return task ? taskDetailFrom(task, { projects: buckets, statuses, nowMs: Date.now() }) : null;
+    },
+    [liveTasks, buckets, statuses],
+  );
+
   const composeContacts = useMemo(
     () => contacts.flatMap((c) => c.emails.map((email) => ({ name: c.name, email }))),
     [contacts],
@@ -229,6 +272,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     priorityPeople,
     contacts: composeContacts,
     whoFor,
+    contactDetailFor,
+    taskFor,
     onAddContact: (email, name) => {
       if (!runtime || !workspaceId) return;
       void runtime.contacts.createContact({ workspaceId, name: name || email, email }).then(
