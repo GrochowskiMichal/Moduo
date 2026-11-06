@@ -1,3 +1,4 @@
+import { USER_RELATION_KINDS } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
 
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
@@ -86,6 +87,10 @@ function fakePort(
       );
     },
     async createLink(input) {
+      // Mirrors links_op_create: a kind outside the closed vocabulary is refused.
+      if (!(USER_RELATION_KINDS as readonly string[]).includes(input.relationKind)) {
+        throw new Error(`Unknown relation kind: ${input.relationKind}`);
+      }
       const lid = id("link");
       state.links.push({ id: lid, a: input.source, b: input.target, kind: input.relationKind });
       return { id: lid };
@@ -132,11 +137,12 @@ describe("mail spine commands (AC33)", () => {
     expect(state.links.map((l) => l.id)).toEqual(["pre"]);
   });
 
-  it("link: relates the thread to the target; undo removes only that link", async () => {
+  it("link: the thread references the target; undo removes only that link", async () => {
     const { port, state } = fakePort();
     const res = await createMailSpineCommands(port).link(thread, { type: "project", id: "p1" });
     expect(state.links).toHaveLength(1);
     expect(state.links[0]?.b).toEqual({ type: "project", id: "p1" });
+    expect(state.links[0]?.kind).toBe("references");
     await res.undo();
     expect(state.links).toEqual([]);
   });
