@@ -15,6 +15,7 @@ import type {
   MailThreadRow,
 } from "@/lib/runtime.types.mail-engine";
 
+import type { MailLinkedKind } from "../commands/spine";
 import { DEFAULT_MAIL_BEHAVIOR, type MailBehavior } from "../engine/behavior";
 
 export type MailUndoEntry = {
@@ -41,6 +42,9 @@ export type MailStoreState = {
   /** Due follow-ups shown at the inbox top until dismissed. */
   followupsDue: MailThreadRow[];
   dismissedFollowups: string[];
+  /** The spine kinds each thread links to, for the row flags (specs/mail-v3.md
+   *  decision 7): one batched read per list window, refreshed when links change. */
+  linkedKinds: Record<string, MailLinkedKind[]>;
   /** Bumps on every `threads_changed`; list windows re-read on change. */
   threadsVersion: number;
   changedViewKeys: string[];
@@ -67,6 +71,7 @@ export function initialMailState(): MailStoreState {
     awayReturned: [],
     followupsDue: [],
     dismissedFollowups: [],
+    linkedKinds: {},
     threadsVersion: 0,
     changedViewKeys: [],
   };

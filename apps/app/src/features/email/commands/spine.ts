@@ -86,6 +86,14 @@ function emptyPlan(): SpinePlan {
 const lastSender = (t: MailThreadRow) => t.senders[t.senders.length - 1] ?? null;
 const subjectOf = (t: MailThreadRow) => t.subject || "(no subject)";
 
+/** Fired on `window` after a gesture links or unlinks a thread, so the row flags
+ *  re-read (`shell/use-linked-kinds.ts`). */
+export const MAIL_LINKS_CHANGED_EVENT = "moduo:mail:links-changed";
+
+function announceLinksChanged() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(MAIL_LINKS_CHANGED_EVENT));
+}
+
 export function createMailSpineCommands(port: MailSpinePort) {
   async function teardown(plan: SpinePlan) {
     // Reverse order, each step best-effort so one failure never strands the rest.
@@ -106,6 +114,7 @@ export function createMailSpineCommands(port: MailSpinePort) {
       await teardown(plan);
       throw err;
     }
+    announceLinksChanged();
     let undone = false;
     return {
       plan,
@@ -113,6 +122,7 @@ export function createMailSpineCommands(port: MailSpinePort) {
         if (undone) return;
         undone = true;
         await teardown(plan);
+        announceLinksChanged();
       },
     };
   }
@@ -168,6 +178,9 @@ export function createMailSpineCommands(port: MailSpinePort) {
   }
 
   return {
+    /** The row flags' one batched read per window (decision 7); absent when the
+     *  port can't read links. */
+    linkedKindsFor: port.linkedKindsFor?.bind(port),
     /** `t`: a task spawned from the thread; the thread references the contact. */
     convert(thread: MailThreadRow, opts: { alsoDone?: boolean } = {}) {
       return run((plan) => convertInto(plan, thread, opts));

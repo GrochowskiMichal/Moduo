@@ -96,6 +96,8 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/notes/editor/plugins/slash-menu-plugin.tsx": ["command.group"],
   // Email: snooze picker headings.
   "src/features/email/ui/email-snooze-picker.tsx": ["title"],
+  // Mail list group headers: fixed labels ("Pinned", "Everything else", …).
+  "src/features/email/ui/thread-list.tsx": ["label"],
   "src/features/transactional-email/ui/email-preview.tsx": ["title"],
   // Shared: a form field's label; the command palette's kind of result; the
   // paywall's plan names and its section eyebrow.

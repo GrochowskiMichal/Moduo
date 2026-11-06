@@ -166,3 +166,53 @@ describe("customTabsFromItems (specs/mail-v3.md AC2)", () => {
     ]);
   });
 });
+
+describe("linkedKindsFor (specs/mail-v3.md decision 7, AC15)", () => {
+  const link = (sourceType: string, sourceId: string, targetType: string, targetId: string) => ({
+    sourceType,
+    sourceId,
+    targetType,
+    targetId,
+  });
+
+  it("reads each ref'd thread's links once and names the other ends' kinds", async () => {
+    const { rt } = fakeRuntime();
+    const asked: string[] = [];
+    rt.spine.listLinks = async ({ entityId }) => {
+      asked.push(entityId);
+      if (entityId === "ref-a")
+        return [
+          link("task", "t1", "email_thread", "ref-a"),
+          link("email_thread", "ref-a", "note", "n1"),
+          link("email_thread", "ref-a", "project", "p1"),
+        ];
+      return [];
+    };
+    const port = createRuntimeSpinePort({
+      runtime: rt,
+      workspaceId: "w",
+      makeTask: (i) => i,
+      hasRef: () => true,
+      contacts: [],
+      refIdFor: (key) => ({ a: "ref-a", b: "ref-b" })[key] ?? null,
+    });
+    expect(await port.linkedKindsFor!(["a", "b", "no-ref"])).toEqual({ a: ["task", "note"] });
+    // Threads without a cloud ref can't have links: no read for them.
+    expect(asked).toEqual(["ref-a", "ref-b"]);
+  });
+
+  it("reads nothing without refIdFor (tests, the fixture engine)", async () => {
+    const { rt } = fakeRuntime();
+    let calls = 0;
+    rt.spine.listLinks = async () => (calls++, []);
+    const port = createRuntimeSpinePort({
+      runtime: rt,
+      workspaceId: "w",
+      makeTask: (i) => i,
+      hasRef: () => true,
+      contacts: [],
+    });
+    expect(await port.linkedKindsFor!(["a"])).toEqual({});
+    expect(calls).toBe(0);
+  });
+});

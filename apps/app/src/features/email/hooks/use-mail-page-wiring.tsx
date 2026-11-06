@@ -16,6 +16,7 @@ import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksSelector } from "../../tasks/tasks-context";
 import { createMailSpineCommands } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
+import { mailEngineMode } from "../engine/behavior";
 import { todayEvents as eventsToday } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
 import { type EmailSettingsMirror, startEmailSettingsMirror } from "../settings/mirror";
@@ -131,12 +132,16 @@ export function useMailPageWiring(): Partial<MailPageProps> {
   const spine = useMemo(() => {
     if (!runtime || !workspaceId) return null;
     const refKeys = new Set(tissue.tissueRefs.map((r) => r.threadKey));
+    const refIds = new Map(tissue.tissueRefs.map((r) => [r.threadKey, r.id] as const));
+    // The fixture's threads have no cloud refs: its row flags read no links.
+    const readsLinks = mailEngineMode() !== "fixture";
     const triage = createMailCommands(mailStore);
     return createMailSpineCommands(
       createRuntimeSpinePort({
         runtime: runtime as unknown as SpineRuntime,
         workspaceId,
         hasRef: (key) => refKeys.has(key),
+        refIdFor: readsLinks ? (key) => refIds.get(key) ?? null : undefined,
         contacts,
         makeTask: ({ title, description, dueDate }) => {
           if (!inbox) throw new Error("Your Tasks inbox isn't ready yet.");

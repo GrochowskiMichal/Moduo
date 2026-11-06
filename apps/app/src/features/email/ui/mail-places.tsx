@@ -4,7 +4,7 @@
 // them into the row design; this block mounts them on real data.
 
 import { Send } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -103,6 +103,24 @@ export function FailedSends({
         </li>
       ))}
     </ul>
+  );
+}
+
+const NO_PORT_READ = async () => [];
+
+/** Threads with a draft whose send failed: their rows carry "Not sent" (spec §3). */
+export function useNotSentThreadIds(
+  port: MailComposeEngine | null,
+  refreshKey: string,
+): ReadonlySet<string> {
+  const drafts = usePortRead<MailDraftRow>(
+    port ? () => port.listDrafts() : NO_PORT_READ,
+    `${port ? "port" : "none"}:${refreshKey}`,
+  );
+  return useMemo(
+    () =>
+      new Set(drafts.filter((d) => d.doc.lastError && d.threadId).map((d) => d.threadId as string)),
+    [drafts],
   );
 }
 

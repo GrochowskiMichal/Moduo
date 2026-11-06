@@ -48,7 +48,7 @@ import { EmailSnoozePicker } from "./email-snooze-picker";
 import { useMailLabels } from "./mail-labels";
 import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
-import { AttachmentsPlace, FailedSends, OutboxPlace } from "./mail-places";
+import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
 
@@ -321,6 +321,7 @@ export function MailPage({
   const { port, session } = useComposeSession(compose, store, commands, engine);
   const extras = useComposeExtras({ port, session, engine, accounts });
   const placeKey = useMailStore(selPlaceKey, store);
+  const notSent = useNotSentThreadIds(port, placeKey);
 
   /** Reopens a saved draft in the composer (Fix and send, Outbox Edit; AC11). */
   const openDraft = (draft: MailDraftRow) => void session?.open(draftOpenSpec(draft));
@@ -504,6 +505,8 @@ export function MailPage({
           initialThreadId={initialThreadId}
           apiRef={shell}
           customTabs={customTabs}
+          linkedKindsFor={spine?.linkedKindsFor}
+          notSentThreadIds={notSent}
           onConnect={(provider) => setConnect({ reconnect: null, provider })}
           onReconnect={(id) => setConnect({ reconnect: accounts.find((a) => a.id === id) ?? null })}
           onRetryAccount={retryAccount}

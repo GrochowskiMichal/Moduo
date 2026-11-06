@@ -8,7 +8,7 @@ import { MAIL_MAX_CUSTOM_TABS } from "@contracts/mail";
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
-import type { MailSpinePort, SpineEntity } from "../commands/spine";
+import type { MailLinkedKind, MailSpinePort, SpineEntity } from "../commands/spine";
 import type { MailAlias } from "../compose/aliases";
 import type { MailSnippet } from "../compose/snippets";
 import { resolveContactIdByAddress } from "../convert";
@@ -131,7 +131,48 @@ export type RuntimeSpineDeps = {
   hasRef(threadKey: string): boolean;
   contacts: readonly { id: string; emails: string[] }[];
   markDone?: MailSpinePort["markDone"];
+  /** A thread's cloud ref id (its `email_thread` entity), when it has one. Absent
+   *  (tests, the fixture engine), the row flags read no links. */
+  refIdFor?: (threadKey: string) => string | null;
 };
+
+/** The spine entity types a thread's row flags name (decision 7). */
+const LINKED_KIND: Readonly<Record<string, MailLinkedKind>> = {
+  task: "task",
+  note: "note",
+  calendar_event: "event",
+  contact: "contact",
+};
+
+/** Which kinds each thread links to: the `email_thread` end of its ref's links. Only
+ *  threads with a ref can have links, so the read covers just those, in parallel. */
+async function readLinkedKinds(
+  rt: SpineRuntime,
+  workspaceId: string,
+  threadIds: readonly string[],
+  refIdFor: (threadKey: string) => string | null,
+): Promise<Record<string, MailLinkedKind[]>> {
+  const pairs = threadIds
+    .map((id) => [id, refIdFor(id)] as const)
+    .filter((p): p is readonly [string, string] => Boolean(p[1]));
+  const answers = await Promise.all(
+    pairs.map(async ([threadId, refId]) => {
+      const links = await rt.spine.listLinks({
+        workspaceId,
+        entityType: "email_thread",
+        entityId: refId,
+      });
+      const kinds = new Set<MailLinkedKind>();
+      for (const l of links) {
+        const own = l.sourceType === "email_thread" && l.sourceId === refId;
+        const kind = LINKED_KIND[own ? l.targetType : l.sourceType];
+        if (kind) kinds.add(kind);
+      }
+      return [threadId, [...kinds]] as [string, MailLinkedKind[]];
+    }),
+  );
+  return Object.fromEntries(answers.filter(([, kinds]) => kinds.length > 0));
+}
 
 const same = (a: SpineEntity, type: string, id: string) => a.type === type && a.id === id;
 
@@ -201,5 +242,9 @@ export function createRuntimeSpinePort(deps: RuntimeSpineDeps): MailSpinePort {
     deleteLink: async (linkId) => void (await rt.spine.deleteLink({ workspaceId, linkId })),
     resolveContactId: (address) => resolveContactIdByAddress(address, [...deps.contacts]),
     markDone: deps.markDone,
+    async linkedKindsFor(threadIds) {
+      if (!deps.refIdFor || threadIds.length === 0) return {};
+      return readLinkedKinds(rt, workspaceId, threadIds, deps.refIdFor);
+    },
   };
 }

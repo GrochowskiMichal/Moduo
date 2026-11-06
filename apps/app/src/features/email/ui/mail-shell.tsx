@@ -38,6 +38,8 @@ import {
   targets,
   togglePick,
 } from "../shell/selection";
+import type { LinkedKindsRead } from "../shell/use-linked-kinds";
+import { useListGroups } from "../shell/use-list-groups";
 import { useThreadWindow } from "../shell/use-thread-window";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
@@ -46,6 +48,7 @@ import { FollowupNudges } from "./followup-nudge";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
+import { rowPlace } from "./mail-row-model";
 import { type MailConnectProvider, mailListState, MailListStateView } from "./mail-states";
 import { cycleTab, liveTab, MailTabs, mailTabs } from "./mail-tabs";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
@@ -54,7 +57,14 @@ import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
 
 /** Ops that take a thread out of the current list (auto-advance after them). */
-const REMOVES = new Set<MailOpInput["kind"]>(["done", "delete", "snooze", "spam", "move"]);
+const REMOVES = new Set<MailOpInput["kind"]>([
+  "done",
+  "undone",
+  "delete",
+  "snooze",
+  "spam",
+  "move",
+]);
 
 const selEngine = (s: { engine: unknown }) => s.engine;
 const selOutbox = (s: ReturnType<MailStore["getState"]>) => s.counts?.outbox ?? 0;
@@ -149,6 +159,17 @@ export type MailShellProps = {
   onViewChange?: (view: MailView) => void;
   /** The open thread changed (the page's Today panel acts on it). */
   onCursorChange?: (threadId: string | null) => void;
+  /** The row flags' batched spine read (`MailSpinePort.linkedKindsFor`, decision 7). */
+  linkedKindsFor?: LinkedKindsRead;
+  /** Threads with a draft whose send failed: their rows say "Not sent". */
+  notSentThreadIds?: ReadonlySet<string>;
+};
+
+const SMART_VIEW_NAMES: Partial<Record<MailView["kind"], string>> = {
+  snoozed: "Snoozed",
+  followups: "Follow-ups",
+  new_senders: "New senders",
+  outbox: "Outbox",
 };
 
 /** The folder name the empty state names. */
@@ -164,6 +185,26 @@ function viewFolderName(view: MailView, mailboxes: Record<string, MailMailbox[]>
     );
   }
   return "this view";
+}
+
+/** Outside Inbox, the place's name sits where the tabs would be (spec §3). */
+function PlaceHeading({
+  view,
+  mailboxes,
+  hidden,
+  accountCount,
+}: {
+  view: MailView;
+  mailboxes: Record<string, MailMailbox[]>;
+  hidden: boolean;
+  accountCount: number;
+}) {
+  if (hidden || accountCount === 0) return null;
+  return (
+    <h2 className="truncate px-4 pt-3 text-sm font-semibold text-foreground">
+      {SMART_VIEW_NAMES[view.kind] ?? viewFolderName(view, mailboxes)}
+    </h2>
+  );
 }
 
 /** Each account's mailboxes, refetched when the engine's threads change. */
@@ -218,6 +259,8 @@ export function MailShell({
   onOpenSettings = openMailSettings,
   onViewChange,
   onCursorChange,
+  linkedKindsFor,
+  notSentThreadIds,
 }: MailShellProps) {
   const engine = useMailStore(selEngine, store) as ReturnType<MailStore["getState"]>["engine"];
   const counts = useMailStore((s) => s.counts, store);
@@ -242,14 +285,26 @@ export function MailShell({
   const mailboxes = useAccountMailboxes(engine, accounts, version);
   // A folder belongs to one account already; the scope narrows the unified views.
   const scoped = view.kind === "mailbox" ? null : scope;
-  const win = useThreadWindow(engine, view, tabbed ? tab : null, version, scoped);
+  const listTab = tabbed ? tab : null;
+  const win = useThreadWindow(engine, view, listTab, version, scoped);
   const scopedInbox = scopedInboxView(mailboxes, scoped);
   const viewCounts = useRailViewCounts(engine, version, {
     screenerOn,
     nowMs: now(),
     dueNow: followupsDue.length,
   });
-  const ids = useMemo(() => win.rows.map((r) => r.threadId), [win.rows]);
+  const groups = useListGroups({
+    store,
+    rows: win.rows,
+    tab: listTab,
+    accounts,
+    linkedKindsFor,
+    // `act` is declared below; this runs only from a click.
+    done: (threadIds) => void act("done", threadIds),
+  });
+  const { items, ids } = groups;
+
+  const place = rowPlace(view, mailboxes);
 
   const [sel, setSel] = useState<MailSelection>(() =>
     initialThreadId ? { ...EMPTY_SELECTION, cursor: initialThreadId } : EMPTY_SELECTION,
@@ -334,6 +389,7 @@ export function MailShell({
         teach("email.archive");
         void act("done", [id]);
       },
+      undone: (id) => void act("undone", [id]),
       snooze: (id) => {
         teach("email.snooze");
         onIntent?.("email.snooze", [id]);
@@ -360,6 +416,8 @@ export function MailShell({
   };
 
   const handlers: AppHotkeyHandlers = {
+    // Enter on a folded newsletter sender expands it (spec §3).
+    "email.open": () => groups.expandAt(sel.cursor),
     "email.next": () => setSel((s) => moveCursor(ids, s, 1)),
     "email.prev": () => setSel((s) => moveCursor(ids, s, -1)),
     "email.extend-down": () => setSel((s) => extendPick(ids, s, 1)),
@@ -403,7 +461,7 @@ export function MailShell({
   });
 
   const zero = (age: ZeroAge) => {
-    void bulk.getMeToZero(view, tabbed ? tab : null, age).then((e) => {
+    void bulk.getMeToZero(view, listTab, age).then((e) => {
       if (e) setCleared((n) => n + e.threadIds.length);
     });
   };
@@ -459,7 +517,7 @@ export function MailShell({
       </aside>
       <section
         aria-label="Mail list"
-        className="flex min-h-0 w-96 shrink-0 flex-col border-r border-hairline"
+        className="flex min-h-0 w-(--mail-list-w) shrink-0 flex-col border-r border-hairline"
       >
         {tabbed && accounts.length > 0 ? (
           <MailTabs
@@ -472,6 +530,12 @@ export function MailShell({
             onZero={zero}
           />
         ) : null}
+        <PlaceHeading
+          view={view}
+          mailboxes={mailboxes}
+          hidden={tabbed}
+          accountCount={accounts.length}
+        />
         <div className="pt-2">
           <MailSystemLines
             accounts={accounts}
@@ -525,16 +589,22 @@ export function MailShell({
           onConnect={(p) => onConnect?.(p)}
         >
           <MailThreadList
-            rows={win.rows}
+            items={items}
             cursor={sel.cursor}
             picked={sel.picked}
             hovered={hovered ?? sel.cursor}
             hues={hues}
-            showHue={view.kind === "unified" && accounts.length > 1}
+            showHue={accounts.length > 1 && scope === null}
             density={density}
             previewLines={previewLines}
+            place={place}
+            self={groups.self}
+            linkedKinds={groups.linkedKinds}
+            notSent={notSentThreadIds}
+            offlineAccounts={groups.offlineAccounts}
             nowMs={now()}
             actions={rowActions}
+            groupActions={groups.groupActions}
             onNearEnd={win.loadMore}
           />
         </MailListBody>
