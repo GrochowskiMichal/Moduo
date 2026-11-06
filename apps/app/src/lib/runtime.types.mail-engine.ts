@@ -251,6 +251,8 @@ export type MailOpRecord = {
   createdAtMs: number;
   /** The first thread's subject, for "Done · Workshop materials" in the failed line. */
   subject?: string | null;
+  /** `move` only: the destination mailbox's display name, for "Move to Receipts"; null otherwise. */
+  targetName?: string | null;
 };
 
 /** `applyOp`'s answer: the undoable op ids and when the undo window closes (engine clock). */

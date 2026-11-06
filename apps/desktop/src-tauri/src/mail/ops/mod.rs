@@ -23,6 +23,8 @@ mod tests;
 
 mod plan;
 use plan::*;
+mod record;
+pub use record::{FailedOp, OpRecord};
 
 use super::contracts::{MailboxRole, OpKind, OpState, FLAG_SEEN};
 use super::store::write::refresh_thread;
@@ -179,19 +181,6 @@ struct ThreadSnap {
     state: Option<(bool, bool, Option<i64>)>,
     messages: Vec<(i64, u32)>,
     memberships: Vec<(String, i64, i64, Option<i64>)>,
-}
-
-/// A row for the "Couldn't sync N actions" bar.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FailedOp {
-    pub id: String,
-    pub action_id: String,
-    pub account_id: String,
-    pub kind: OpKind,
-    pub thread_ids: Vec<String>,
-    pub error: String,
-    pub attempts: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -358,21 +347,6 @@ fn insert_op(
     Ok(())
 }
 
-/// `MailOpRecord` (runtime.types.mail-engine.ts): the failed line names each op's
-/// threads and the first thread's subject.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OpRecord {
-    pub op_id: String,
-    pub kind: OpKind,
-    pub thread_ids: Vec<String>,
-    pub state: OpState,
-    pub attempts: i64,
-    pub last_error: Option<String>,
-    pub created_at_ms: i64,
-    pub subject: Option<String>,
-}
-
 fn kv_put(tx: &Transaction, key: &str, value: &str) -> StoreResult<()> {
     tx.execute(
         "INSERT INTO kv (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -383,13 +357,20 @@ fn kv_put(tx: &Transaction, key: &str, value: &str) -> StoreResult<()> {
 
 /// Keeps `returned:<thread>` (the row's "Back" / "New reply" flag, decision 7):
 /// an unsnooze of a snoozed thread records why it came back; a new snooze or
-/// leaving the Inbox clears it.
+/// leaving the Inbox clears it (and the pending `snooze_reply:` note, so no later
+/// unsnooze reads a stale "reply"). Undoing the unsnooze clears both too.
 fn note_return(tx: &Transaction, kind: OpKind, threads: &[String]) -> StoreResult<()> {
     use OpKind::*;
     for t in threads {
         let returned = format!("returned:{t}");
         let replied = format!("snooze_reply:{t}");
         match kind {
+            Snooze | Done | Delete | Spam | Move | BlockSender => {
+                tx.execute(
+                    "DELETE FROM kv WHERE key IN (?1, ?2)",
+                    params![returned, replied],
+                )?;
+            }
             Unsnooze => {
                 let snoozed: bool = tx.query_row(
                     "SELECT EXISTS(SELECT 1 FROM threads WHERE id = ?1 AND snoozed_until_ms IS NOT NULL)",
@@ -405,15 +386,6 @@ fn note_return(tx: &Transaction, kind: OpKind, threads: &[String]) -> StoreResul
                     kv_put(tx, &returned, if reply { "reply" } else { "snooze" })?;
                 }
                 tx.execute("DELETE FROM kv WHERE key = ?1", [&replied])?;
-            }
-            Snooze => {
-                tx.execute(
-                    "DELETE FROM kv WHERE key IN (?1, ?2)",
-                    params![returned, replied],
-                )?;
-            }
-            Done | Delete | Spam | Move | BlockSender => {
-                tx.execute("DELETE FROM kv WHERE key = ?1", [&returned])?;
             }
             _ => {}
         }
@@ -492,6 +464,10 @@ impl Store {
         let comp_action = new_id();
         // Newest first, so stacked rows of one action unwind in order.
         for op in ops.iter().rev() {
+            // The thread is snoozed again: it no longer reads "Back" / "New reply".
+            if op.kind == OpKind::Unsnooze.as_str() {
+                note_return(&tx, OpKind::Snooze, &op.thread_ids)?;
+            }
             let snap = op.undo.clone().unwrap_or_default();
             let unsent = op.state == OpState::Pending.as_str() || op.state == OpState::Failed.as_str();
             if unsent {
@@ -718,37 +694,6 @@ impl Store {
         Ok(report)
     }
 
-    /// The failed-actions bar: every failed op, oldest first.
-    pub fn failed_ops(&self) -> StoreResult<Vec<FailedOp>> {
-        let mut conn = self.w();
-        let tx = conn.transaction()?;
-        let rows = load_where(&tx, "state = 'failed'", &[])?;
-        let errors: Vec<(String, Option<String>)> = {
-            let mut s = tx.prepare("SELECT id, last_error FROM ops WHERE state = 'failed'")?;
-            let v = s
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
-                .collect::<Result<_, _>>()?;
-            v
-        };
-        tx.commit()?;
-        Ok(rows
-            .into_iter()
-            .map(|o| FailedOp {
-                error: errors
-                    .iter()
-                    .find(|(id, _)| id == &o.id)
-                    .and_then(|(_, e)| e.clone())
-                    .unwrap_or_default(),
-                kind: OpKind::parse(&o.kind).unwrap_or(OpKind::Move),
-                action_id: o.args.action,
-                id: o.id,
-                account_id: o.account_id,
-                thread_ids: o.thread_ids,
-                attempts: o.attempts,
-            })
-            .collect())
-    }
-
     /// Retry: back to pending, due now, with a fresh 24 h budget.
     pub fn retry_op(&self, op_id: &str, now: i64) -> StoreResult<bool> {
         let n = self.w().execute(
@@ -775,43 +720,6 @@ impl Store {
         tx.execute("DELETE FROM ops WHERE id = ?1", [op_id])?;
         tx.commit()?;
         Ok(true)
-    }
-
-    /// One op as the UI's `MailOpRecord`, with the first thread's subject.
-    pub fn op_record(&self, op_id: &str) -> StoreResult<Option<OpRecord>> {
-        let conn = self.w();
-        let row: Option<(String, String, String, i64, Option<String>, i64)> = conn
-            .query_row(
-                "SELECT kind, thread_ids_json, state, attempts, last_error, created_at_ms FROM ops WHERE id = ?1",
-                [op_id],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?)),
-            )
-            .optional()?;
-        let Some((kind, threads, state, attempts, last_error, created_at_ms)) = row else {
-            return Ok(None);
-        };
-        let thread_ids: Vec<String> = from_json(&threads)?;
-        let subject = match thread_ids.first() {
-            Some(t) => conn
-                .query_row(
-                    "SELECT subject FROM messages WHERE thread_id = ?1 AND subject != ''
-                     ORDER BY date_ms LIMIT 1",
-                    [t],
-                    |r| r.get(0),
-                )
-                .optional()?,
-            None => None,
-        };
-        Ok(Some(OpRecord {
-            op_id: op_id.to_string(),
-            kind: OpKind::parse(&kind).unwrap_or(OpKind::Move),
-            thread_ids,
-            state: OpState::parse(&state).unwrap_or(OpState::Failed),
-            attempts,
-            last_error,
-            created_at_ms,
-            subject,
-        }))
     }
 
     pub fn op(&self, op_id: &str) -> StoreResult<Option<OpRow>> {

@@ -66,9 +66,12 @@ const OP_LABEL: Record<MailOpKind, string> = {
 
 export const opLabel = (kind: MailOpKind) => OP_LABEL[kind] ?? kind;
 
-/** "Done · Workshop materials". */
-const opItem = (op: MailOpRecord) =>
-  `${opLabel(op.kind)} · ${op.subject?.trim() || "(No subject)"}`;
+/** "Done · Workshop materials", "Move to Receipts · Studio rent, November". */
+const opItem = (op: MailOpRecord) => {
+  const target = op.kind === "move" ? op.targetName?.trim() : "";
+  const label = target ? `${opLabel(op.kind)} to ${target}` : opLabel(op.kind);
+  return `${label} · ${op.subject?.trim() || "(No subject)"}`;
+};
 
 /**
  * The failed line's sentence naming each action and thread: "A.", "A, and B.",

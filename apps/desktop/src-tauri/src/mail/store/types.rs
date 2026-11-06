@@ -193,6 +193,9 @@ pub struct Counts {
     pub badge: i64,
     /// Sends waiting in the Outbox (pending or in flight).
     pub outbox: i64,
+    /// Triage ops saved on this Mac and not yet on the server (pending or in
+    /// flight, user origin only): the offline line's "{m} triage actions".
+    pub pending_ops: i64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

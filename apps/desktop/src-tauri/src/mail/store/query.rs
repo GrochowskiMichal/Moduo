@@ -229,6 +229,13 @@ impl Store {
         out.outbox = conn
             .prepare_cached("SELECT COUNT(*) FROM outbox WHERE state IN ('pending', 'in_flight')")?
             .query_row([], |r| r.get(0))?;
+        // System ops (rule effects, mute) are the engine's, not saved actions.
+        out.pending_ops = conn
+            .prepare_cached(
+                "SELECT COUNT(*) FROM ops WHERE state IN ('pending', 'in_flight')
+                   AND COALESCE(json_extract(args_json, '$.system'), 0) = 0",
+            )?
+            .query_row([], |r| r.get(0))?;
         Ok(out)
     }
 

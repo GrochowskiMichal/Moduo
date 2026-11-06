@@ -177,6 +177,12 @@ function classifyContext(c: FakeClassifyOptions): ClassifyContext {
   };
 }
 
+/** A move's destination name: the fixture's mailbox ids end in their role ("…:archive" → "Archive"). */
+function moveTargetName(mailboxId: string | undefined): string | null {
+  const role = mailboxId?.split(":").pop()?.trim();
+  return role ? role[0]!.toUpperCase() + role.slice(1) : null;
+}
+
 /** Polled providers check every minute; the rest push (IDLE / Gmail push). */
 const PUSH_PROVIDERS = new Set(["gmail", "google_workspace", "icloud"]);
 
@@ -541,6 +547,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
           lastError: null,
           createdAtMs: now(),
           subject: threads.get(input.threadIds[0] ?? "")?.row.subject ?? null,
+          targetName: input.kind === "move" ? moveTargetName(input.args?.mailboxId) : null,
         },
         before,
         notBeforeMs: now() + windowMs,

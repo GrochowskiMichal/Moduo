@@ -154,6 +154,18 @@ describe("Mail system lines (specs/mail-v3.md §4, AC18, AC9)", () => {
     screen.getByRole("button", { name: "Undo all" });
   });
 
+  it("a failed move names its destination", () => {
+    mount({
+      failed: [
+        { ...op("o1", "move", "t1", "Studio rent, November"), targetName: "Receipts" },
+        { ...op("o2", "move", "t2", "Pilot terms"), targetName: null },
+      ],
+    });
+    screen.getByText(
+      "Move to Receipts · Studio rent, November, and Move · Pilot terms. Its server is read-only; Moduo keeps retrying for a day.",
+    );
+  });
+
   it("offline counts what waits, or that reading works", () => {
     const offline = [acc("studio", "Studio", { syncState: "offline" })];
     mount({ accounts: offline, outboxCount: 1, pendingOps: 3 });

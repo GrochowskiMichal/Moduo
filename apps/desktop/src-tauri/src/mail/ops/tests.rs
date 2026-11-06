@@ -747,3 +747,138 @@ async fn mute_archives_new_replies() {
         .any(|(_, st)| matches!(&st.action, StepAction::MoveTo { path, .. } if path == "Archive")));
     assert_eq!(report.failed, Vec::<String>::new());
 }
+
+#[test]
+fn counts_report_pending_user_ops() {
+    let (_d, s) = seeded("pending-count");
+    assert_eq!(s.counts().unwrap().pending_ops, 0);
+    let h = done(&s, "t1");
+    s.enqueue_op_at(&OpRequest::new(OpKind::Pin, vec!["t2".into()]), T0)
+        .unwrap();
+    // A system op (rule effect, mute) is the engine's, not a saved triage action.
+    s.enqueue_op_at(
+        &OpRequest::new(OpKind::MarkRead, vec!["t2".into()]).system(),
+        T0,
+    )
+    .unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 2);
+    let v = serde_json::to_value(s.counts().unwrap()).unwrap();
+    assert_eq!(v["pendingOps"], 2);
+    // In flight still counts; done and failed don't.
+    s.w()
+        .execute("UPDATE ops SET state = 'in_flight' WHERE id = ?1", [&h.op_ids[0]])
+        .unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 2);
+    s.recover_in_flight_ops().unwrap();
+    let mut srv = FakeServer {
+        fail: Some(OpError::Permanent("read-only".into())),
+        ..Default::default()
+    };
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    assert_eq!(s.counts().unwrap().pending_ops, 0);
+}
+
+#[test]
+fn move_record_names_its_target() {
+    let (_d, s) = seeded("move-target");
+    s.upsert_mailbox(&MailboxInput {
+        id: "a1-receipts".into(),
+        account_id: "a1".into(),
+        path: "Receipts".into(),
+        name: "Receipts".into(),
+        role: MailboxRole::Custom,
+        delimiter: Some("/".into()),
+        live: true,
+    })
+    .unwrap();
+    let mut req = OpRequest::new(OpKind::Move, vec!["t1".into()]);
+    req.to_mailbox_id = Some("a1-receipts".into());
+    let m = s.enqueue_op_at(&req, T0).unwrap();
+    let rec = s.op_record(&m.op_ids[0]).unwrap().unwrap();
+    assert_eq!(rec.target_name.as_deref(), Some("Receipts"));
+    let v = serde_json::to_value(&rec).unwrap();
+    assert_eq!(v["targetName"], "Receipts");
+    // Other kinds carry null.
+    let d = done(&s, "t2");
+    let v = serde_json::to_value(s.op_record(&d.op_ids[0]).unwrap().unwrap()).unwrap();
+    assert!(v["targetName"].is_null() && v.get("targetName").is_some());
+    // The compensating move names where it moves back to.
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 9_000).unwrap();
+    let UndoOutcome::Compensated(c) = s.undo_action_at(&m.action_id, T0 + 20_000).unwrap() else {
+        panic!("expected a compensating op");
+    };
+    let back = s.op_record(&c.op_ids[0]).unwrap().unwrap();
+    assert_eq!(back.kind, OpKind::Move);
+    assert_eq!(back.target_name.as_deref(), Some("inbox"));
+}
+
+fn return_reason(s: &Store, t: &str) -> Option<String> {
+    s.get_thread(t).unwrap().unwrap().row.return_reason
+}
+
+fn kv_has(s: &Store, key: &str) -> bool {
+    s.r()
+        .query_row("SELECT EXISTS(SELECT 1 FROM kv WHERE key = ?1)", [key], |r| r.get(0))
+        .unwrap()
+}
+
+/// Snoozes `t`, lets a reply arrive and unsnoozes it: the row reads "reply".
+fn returned_by_reply(s: &Store, t: &str, uid: i64, at: i64) -> ActionHandle {
+    let mut req = OpRequest::new(OpKind::Snooze, vec![t.into()]);
+    req.snooze_until_ms = Some(at + 3_600_000);
+    s.enqueue_op_at(&req, at).unwrap();
+    s.ingest(&[msg("a1", &format!("r{uid}"), "inbox", uid, t, at + 1, 0)])
+        .unwrap();
+    assert!(kv_has(s, &format!("snooze_reply:{t}")));
+    let h = s
+        .enqueue_op_at(&OpRequest::new(OpKind::Unsnooze, vec![t.into()]), at + 2)
+        .unwrap();
+    assert_eq!(return_reason(s, t).as_deref(), Some("reply"));
+    h
+}
+
+#[test]
+fn undoing_an_unsnooze_clears_the_return_mark() {
+    let (_d, s) = seeded("unsnooze-undo");
+    // Inside the window: the op is cancelled and the mark goes with it.
+    let h = returned_by_reply(&s, "t1", 50, T0);
+    assert_eq!(s.undo_action_at(&h.action_id, T0 + 3).unwrap(), UndoOutcome::Cancelled);
+    assert_eq!(return_reason(&s, "t1"), None);
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    assert_eq!(ids(&s, ViewRef::Snoozed), vec!["t1"]);
+    // After the flush: the compensating snooze clears it too.
+    let h = returned_by_reply(&s, "t2", 60, T0 + 10);
+    let mut srv = FakeServer::default();
+    s.run_due_ops(&mut srv, T0 + 60_000).unwrap();
+    assert!(matches!(
+        s.undo_action_at(&h.action_id, T0 + 70_000).unwrap(),
+        UndoOutcome::Compensated(_)
+    ));
+    assert_eq!(return_reason(&s, "t2"), None);
+    assert!(!kv_has(&s, "returned:t2") && !kv_has(&s, "snooze_reply:t2"));
+}
+
+#[test]
+fn snooze_again_or_done_clears_the_return_mark() {
+    let (_d, s) = seeded("unsnooze-clear");
+    returned_by_reply(&s, "t1", 50, T0);
+    let mut req = OpRequest::new(OpKind::Snooze, vec!["t1".into()]);
+    req.snooze_until_ms = Some(T0 + 7_200_000);
+    s.enqueue_op_at(&req, T0 + 100).unwrap();
+    assert_eq!(return_reason(&s, "t1"), None);
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    // Done on a snoozed thread a reply woke drops both marks, so no later
+    // unsnooze reads a stale "reply".
+    s.ingest(&[msg("a1", "r51", "inbox", 51, "t1", T0 + 200, 0)])
+        .unwrap();
+    assert!(kv_has(&s, "snooze_reply:t1"));
+    s.enqueue_op_at(&OpRequest::new(OpKind::Done, vec!["t1".into()]), T0 + 300)
+        .unwrap();
+    assert!(!kv_has(&s, "returned:t1") && !kv_has(&s, "snooze_reply:t1"));
+    returned_by_reply(&s, "t2", 60, T0 + 400);
+    s.enqueue_op_at(&OpRequest::new(OpKind::Done, vec!["t2".into()]), T0 + 500)
+        .unwrap();
+    assert_eq!(return_reason(&s, "t2"), None);
+    assert!(!kv_has(&s, "returned:t2"));
+}
