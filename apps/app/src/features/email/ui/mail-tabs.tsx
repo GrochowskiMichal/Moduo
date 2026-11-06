@@ -55,8 +55,11 @@ export function MailTabs({
   counts,
   onSelect,
   onZero,
+  countView = view,
 }: {
   view: MailView;
+  /** Where the counts are read: the scoped account's inbox while the rail scopes (spec §1). */
+  countView?: MailView;
   tabs: readonly MailTabDef[];
   current: MailTab;
   counts: MailCounts | null;
@@ -73,7 +76,7 @@ export function MailTabs({
       >
         {tabs.map((t) => {
           const k = mailViewKey(view, t.tab);
-          const unread = counts?.byViewKey[k] ?? 0;
+          const unread = counts?.byViewKey[mailViewKey(countView, t.tab)] ?? 0;
           const active = k === currentKey;
           return (
             <button

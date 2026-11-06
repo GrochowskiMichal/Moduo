@@ -641,6 +641,24 @@
   --feed-person-gap: 0.625rem;   /* 10 (+6 = 16) */
 }
 
+/* The mail rail (specs/mail-v3.md §1): rows take the row rung and sections sit
+   apart; in a window 780 px tall or less the rows drop to --row-h-sm and the
+   gaps tighten, so three accounts stay visible at 1024 × 700. Declared on every
+   density scope because it reads --row-h. */
+:root,
+[data-density] {
+  --mail-rail-row: var(--row-h);
+  --mail-rail-gap: 0.75rem; /* 12 */
+}
+
+@media (max-height: 780px) {
+  :root,
+  [data-density] {
+    --mail-rail-row: var(--row-h-sm);
+    --mail-rail-gap: 0.25rem; /* 4 */
+  }
+}
+
 /* ============================================================================
  * 8. Radius variants
  * ==========================================================================*/

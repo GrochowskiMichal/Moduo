@@ -320,7 +320,10 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       const u: MailView = { kind: "unified", role: t.role };
       bump(mailViewKey(u));
       bump(mailViewKey(u, { kind: t.row.tab, customTabId: t.customTabId }));
-      bump(mailViewKey({ kind: "mailbox", mailboxId: mailboxId(t.row.accountId, t.role) }));
+      const box: MailView = { kind: "mailbox", mailboxId: mailboxId(t.row.accountId, t.role) };
+      bump(mailViewKey(box));
+      // Per-account tab counts, as the Rust store's `mailbox:<id>|<tab>` (the rail's scope).
+      bump(mailViewKey(box, { kind: t.row.tab, customTabId: t.customTabId }));
     }
     return {
       byViewKey,

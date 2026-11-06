@@ -13,8 +13,12 @@ import type {
   MailDraftRow,
   MailOutboxItem,
 } from "@/lib/runtime.types.mail-compose";
+import type { MailEngine, MailMessage } from "@/lib/runtime.types.mail-engine";
 
 import { OutboxView } from "../compose/outbox-view";
+import { emptyMailQuery } from "../search/query";
+import { AttachmentsView } from "../views/attachments";
+import type { AttachmentEntry } from "../views/attachments-model";
 
 /** A port read re-run whenever `key` changes; failures read as empty. */
 function usePortRead<T>(read: () => Promise<T[]>, key: string): T[] {
@@ -99,5 +103,43 @@ export function FailedSends({
         </li>
       ))}
     </ul>
+  );
+}
+
+/** How many conversations with files the Attachments place opens (newest first). */
+export const ATTACHMENT_THREADS = 50;
+
+/** The messages of the newest conversations with files (the engine's `has:attachment`). */
+async function readAttachmentMessages(engine: MailEngine) {
+  const rows = await engine.search({
+    query: { ...emptyMailQuery(), hasAttachment: true },
+    limit: ATTACHMENT_THREADS,
+  });
+  const threads = await Promise.all(rows.map((r) => engine.getThread(r.threadId)));
+  return threads.flatMap((t) =>
+    t
+      ? t.messages.map((m): MailMessage & { threadId: string } => ({
+          ...m,
+          threadId: t.row.threadId,
+        }))
+      : [],
+  );
+}
+
+/** The Attachments place (specs/mail-v3.md §1): every file across recent mail, by type. */
+export function AttachmentsPlace({
+  engine,
+  refreshKey,
+  onPreview,
+}: {
+  engine: MailEngine;
+  refreshKey: string;
+  onPreview: (entry: AttachmentEntry) => void;
+}) {
+  const messages = usePortRead(() => readAttachmentMessages(engine), refreshKey);
+  return (
+    <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">
+      <AttachmentsView messages={messages} onPreview={onPreview} />
+    </div>
   );
 }

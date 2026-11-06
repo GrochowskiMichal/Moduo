@@ -1,13 +1,36 @@
-// The mail rail (spec §Layout): Unified folders, the views, then each account
-// with its hue, unread count, status and collapsed folder tree, a backfill
-// progress line with Cancel, and Connect account at the bottom.
+// The mail rail (specs/mail-v3.md §1): the header with Sync and Settings, New
+// message, the places (Outbox only while it holds a message), the smart views
+// with their counts, Accounts, Saved searches, and Connect account at the foot.
+// Rows take `--mail-rail-row`; at 780 px of height or less it drops to
+// `--row-h-sm` and the gaps tighten (tokens.css), so three accounts fit at 700.
 
-import { AlertCircle, ChevronRight, Plus } from "lucide-react";
-import { memo, useState } from "react";
+import {
+  Archive,
+  ArrowUpFromLine,
+  Clock,
+  FileText,
+  Hourglass,
+  Inbox,
+  type LucideIcon,
+  MailOpen,
+  OctagonAlert,
+  Paperclip,
+  PenLine,
+  Plus,
+  RefreshCw,
+  Search,
+  Send,
+  Settings,
+  Trash2,
+  UserPlus,
+} from "lucide-react";
+import { memo } from "react";
 
 import type { LabelColor } from "@/components/tag-colors";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { IconButton } from "@/components/ui/icon-button";
+import { Kbd } from "@/components/ui/kbd";
 import { mailViewKey } from "@/lib/runtime.types";
 import type {
   MailAccount,
@@ -18,6 +41,8 @@ import type {
 import { cn } from "@/lib/utils";
 
 import type { SavedSearch } from "../search/palette";
+import { AccountsSection, type AccountsSectionProps, RAIL_ROW } from "./mail-rail-accounts";
+import { railCount, type RailViewCounts, syncTooltip } from "./rail-counts";
 
 export const UNIFIED_FOLDERS = [
   { role: "inbox", label: "Inbox" },
@@ -28,11 +53,14 @@ export const UNIFIED_FOLDERS = [
   { role: "spam", label: "Spam" },
 ] as const;
 
-export const RAIL_VIEWS: { view: MailView; label: string; screenerOnly?: boolean }[] = [
-  { view: { kind: "snoozed" }, label: "Snoozed" },
-  { view: { kind: "followups" }, label: "Follow-ups" },
-  { view: { kind: "new_senders" }, label: "New senders", screenerOnly: true },
-];
+const FOLDER_ICON: Record<(typeof UNIFIED_FOLDERS)[number]["role"], LucideIcon> = {
+  inbox: Inbox,
+  sent: Send,
+  drafts: FileText,
+  archive: Archive,
+  trash: Trash2,
+  spam: OctagonAlert,
+};
 
 type Props = {
   current: MailView;
@@ -53,37 +81,273 @@ type Props = {
   /** Opens the Subscriptions view (X6, AC29) the page renders in the reader slot. */
   onOpenSubscriptions?: () => void;
   subscriptionsActive?: boolean;
+  /** Opens the Attachments view (AC30) the page renders in the reader slot. */
+  onOpenAttachments?: () => void;
+  attachmentsActive?: boolean;
+  /** The smart views' counts. */
+  viewCounts?: RailViewCounts;
+  /** Sync now across accounts. */
+  onSync?: () => void;
+  /** Settings → Mail. */
+  onOpenSettings?: () => void;
+  /** New message (`c`). */
+  onCompose?: () => void;
+  /** The store is still loading: Saved searches stay hidden. */
+  loading?: boolean;
+  /** The account the list is scoped to (a click on its row), else null. */
+  scope?: string | null;
+  onScope?: (accountId: string) => void;
+  nowMs?: number;
 };
 
 const RailItem = memo(function RailItem({
   label,
+  icon: Icon,
   count,
+  countLabel,
+  dot,
   active,
   onClick,
-  indent,
 }: {
   label: string;
+  icon: LucideIcon;
   count?: number;
+  /** What a screen reader hears after the number ("unread", "waiting to send"). */
+  countLabel?: string;
+  /** The amber due dot (Follow-ups). */
+  dot?: string;
   active: boolean;
   onClick: () => void;
-  indent?: boolean;
 }) {
+  const shown = railCount(count);
   return (
     <button
       type="button"
       aria-current={active ? "page" : undefined}
       onClick={onClick}
       className={cn(
-        "flex h-(--row-h-sm) w-full items-center gap-2 rounded-md px-2 text-left text-sm",
-        indent && "pl-7",
+        RAIL_ROW,
         active ? "bg-state-active text-foreground" : "text-muted-foreground hover:bg-state-hover",
       )}
     >
+      <Icon className="size-icon-sm shrink-0" aria-hidden />
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {count ? <span className="text-xs tabular-nums">{count}</span> : null}
+      {dot ? (
+        <span
+          data-slot="rail-due-dot"
+          title={dot}
+          className="size-1.5 shrink-0 rounded-full bg-warning"
+          aria-hidden
+        />
+      ) : null}
+      {shown ? (
+        <span aria-hidden className="text-xs tabular-nums">
+          {shown}
+        </span>
+      ) : null}
+      {shown || dot ? (
+        <span className="sr-only">
+          {[shown && (countLabel ? `${shown} ${countLabel}` : shown), dot]
+            .filter(Boolean)
+            .map((part) => `, ${part}`)
+            .join("")}
+        </span>
+      ) : null}
     </button>
   );
 });
+
+function RailHeader({
+  accounts,
+  nowMs,
+  onSync,
+  onOpenSettings,
+}: Pick<Props, "accounts" | "onSync" | "onOpenSettings"> & { nowMs: number }) {
+  return (
+    <div className="flex h-(--mail-rail-row) items-center gap-1 pl-2">
+      <h1 className="min-w-0 flex-1 truncate text-md font-semibold text-foreground">Mail</h1>
+      {accounts.length > 0 ? (
+        <IconButton
+          icon={RefreshCw}
+          label="Sync now"
+          tooltip={syncTooltip(accounts, nowMs)}
+          onClick={onSync}
+          disabled={!onSync}
+        />
+      ) : null}
+      <IconButton
+        icon={Settings}
+        label="Mail settings"
+        tooltip="Mail settings ⌘,"
+        aria-keyshortcuts="Meta+Comma"
+        onClick={onOpenSettings}
+      />
+    </div>
+  );
+}
+
+/** New message, with its `c` key cap outside the button (it is not part of the name). */
+function NewMessage({ onCompose }: { onCompose?: () => void }) {
+  return (
+    <div className="relative grid">
+      <Button
+        size="sm"
+        className="w-full justify-start pr-8"
+        aria-keyshortcuts="c"
+        onClick={onCompose}
+      >
+        <PenLine className="size-icon-sm" aria-hidden />
+        New message
+      </Button>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 right-2 flex items-center"
+      >
+        <Kbd>c</Kbd>
+      </span>
+    </div>
+  );
+}
+
+function drafts(counts: Props["counts"], mailboxes: Props["mailboxes"]): number {
+  const total = Object.values(mailboxes)
+    .flat()
+    .filter((b) => b.role === "drafts")
+    .reduce((n, b) => n + b.total, 0);
+  return total || (counts?.byViewKey[mailViewKey({ kind: "unified", role: "drafts" })] ?? 0);
+}
+
+function Places({
+  currentKey,
+  counts,
+  mailboxes,
+  outboxCount,
+  onSelect,
+}: Pick<Props, "counts" | "mailboxes" | "outboxCount" | "onSelect"> & { currentKey: string }) {
+  const inbox = counts?.byViewKey[mailViewKey({ kind: "unified", role: "inbox" })] ?? 0;
+  const draftCount = drafts(counts, mailboxes);
+  const row = (f: (typeof UNIFIED_FOLDERS)[number]) => {
+    const v: MailView = { kind: "unified", role: f.role };
+    return (
+      <RailItem
+        key={f.role}
+        label={f.label}
+        icon={FOLDER_ICON[f.role]}
+        count={f.role === "inbox" ? inbox : f.role === "drafts" ? draftCount : undefined}
+        countLabel={f.role === "inbox" ? "unread" : undefined}
+        active={currentKey === mailViewKey(v)}
+        onClick={() => onSelect(v)}
+      />
+    );
+  };
+  return (
+    <div role="group" aria-label="Places" className="flex flex-col gap-0.5">
+      {UNIFIED_FOLDERS.slice(0, 3).map(row)}
+      {/* Shown while it holds a message; it stays while you're on it (spec edge cases). */}
+      {outboxCount > 0 || currentKey === "outbox" ? (
+        <RailItem
+          label="Outbox"
+          icon={ArrowUpFromLine}
+          count={outboxCount}
+          countLabel="waiting to send"
+          active={currentKey === "outbox"}
+          onClick={() => onSelect({ kind: "outbox" })}
+        />
+      ) : null}
+      {UNIFIED_FOLDERS.slice(3).map(row)}
+    </div>
+  );
+}
+
+function SmartViews({
+  currentKey,
+  viewCounts: c = {},
+  screenerOn,
+  onSelect,
+  onOpenSubscriptions,
+  subscriptionsActive = false,
+  onOpenAttachments,
+  attachmentsActive = false,
+}: Pick<
+  Props,
+  | "viewCounts"
+  | "screenerOn"
+  | "onSelect"
+  | "onOpenSubscriptions"
+  | "subscriptionsActive"
+  | "onOpenAttachments"
+  | "attachmentsActive"
+> & { currentKey: string }) {
+  const special = subscriptionsActive || attachmentsActive;
+  const view = (v: MailView, label: string, icon: LucideIcon, count?: number, dot?: string) => (
+    <RailItem
+      label={label}
+      icon={icon}
+      count={count}
+      dot={dot}
+      active={!special && currentKey === mailViewKey(v)}
+      onClick={() => onSelect(v)}
+    />
+  );
+  const due = c.followupsDue ?? 0;
+  return (
+    <div role="group" aria-label="Views" className="flex flex-col gap-0.5">
+      {view({ kind: "snoozed" }, "Snoozed", Clock, c.snoozed)}
+      {view(
+        { kind: "followups" },
+        "Follow-ups",
+        Hourglass,
+        c.followups,
+        due > 0 ? `${due} due` : undefined,
+      )}
+      {screenerOn ? view({ kind: "new_senders" }, "New senders", UserPlus, c.newSenders) : null}
+      {onOpenSubscriptions ? (
+        <RailItem
+          label="Subscriptions"
+          icon={MailOpen}
+          count={c.subscriptions}
+          active={subscriptionsActive}
+          onClick={onOpenSubscriptions}
+        />
+      ) : null}
+      {onOpenAttachments ? (
+        <RailItem
+          label="Attachments"
+          icon={Paperclip}
+          count={c.attachments}
+          active={attachmentsActive}
+          onClick={onOpenAttachments}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SavedSearches({
+  savedSearches,
+  onOpenSearch,
+}: {
+  savedSearches: readonly SavedSearch[];
+  onOpenSearch?: (query: string) => void;
+}) {
+  if (savedSearches.length === 0) return null;
+  return (
+    <section aria-labelledby="mail-rail-saved" className="flex flex-col gap-0.5">
+      <Eyebrow as="h2" id="mail-rail-saved" className="px-2 pb-1">
+        Saved searches
+      </Eyebrow>
+      {savedSearches.map((s) => (
+        <RailItem
+          key={s.id}
+          label={s.name}
+          icon={Search}
+          active={false}
+          onClick={() => onOpenSearch?.(s.query)}
+        />
+      ))}
+    </section>
+  );
+}
 
 export function MailRail({
   current,
@@ -99,169 +363,54 @@ export function MailRail({
   onLoadHistory,
   savedSearches = [],
   onOpenSearch,
-  onOpenSubscriptions,
-  subscriptionsActive = false,
+  onSync,
+  onOpenSettings,
+  onCompose,
+  loading = false,
+  scope = null,
+  onScope,
+  nowMs = Date.now(),
+  ...views
 }: Props) {
-  const [open, setOpen] = useState<Record<string, boolean>>({});
-  const key = mailViewKey(current);
-  const count = (v: MailView) => counts?.byViewKey[mailViewKey(v)] ?? 0;
-
+  const currentKey = mailViewKey(current);
+  const accountProps: Omit<AccountsSectionProps, "accounts"> = {
+    mailboxes,
+    hues,
+    currentKey,
+    scope,
+    onScope,
+    onSelect,
+    onCancelBackfill,
+    onLoadHistory,
+  };
   return (
     <nav
       aria-label="Mail folders"
-      className="pane-scroll flex h-full flex-col gap-3 overflow-y-auto p-2"
+      className="pane-scroll flex h-full flex-col gap-(--mail-rail-gap) overflow-y-auto p-2"
     >
-      <div className="flex flex-col gap-0.5">
-        {UNIFIED_FOLDERS.map((f) => {
-          const v: MailView = { kind: "unified", role: f.role };
-          return (
-            <RailItem
-              key={f.role}
-              label={f.label}
-              count={f.role === "inbox" || f.role === "drafts" ? count(v) : undefined}
-              active={key === mailViewKey(v)}
-              onClick={() => onSelect(v)}
-            />
-          );
-        })}
-        {/* Shown while it holds a message; it stays while you're on it (spec edge cases). */}
-        {outboxCount > 0 || key === "outbox" ? (
-          <RailItem
-            label="Outbox"
-            count={outboxCount}
-            active={key === "outbox"}
-            onClick={() => onSelect({ kind: "outbox" })}
-          />
-        ) : null}
-      </div>
-      <div className="flex flex-col gap-0.5">
-        {RAIL_VIEWS.filter((r) => !r.screenerOnly || screenerOn).map((r) => (
-          <RailItem
-            key={r.label}
-            label={r.label}
-            active={key === mailViewKey(r.view)}
-            onClick={() => onSelect(r.view)}
-          />
-        ))}
-        {onOpenSubscriptions ? (
-          <RailItem
-            label="Subscriptions"
-            active={subscriptionsActive}
-            onClick={onOpenSubscriptions}
-          />
-        ) : null}
-      </div>
-      {savedSearches.length > 0 ? (
-        <div className="flex flex-col gap-0.5" aria-label="Saved searches" role="group">
-          {savedSearches.map((s) => (
-            <RailItem
-              key={s.id}
-              label={s.name}
-              active={false}
-              onClick={() => onOpenSearch?.(s.query)}
-            />
-          ))}
-        </div>
-      ) : null}
-      <div className="flex flex-col gap-0.5">
-        {accounts.map((a) => {
-          const expanded = open[a.id] ?? false;
-          const boxes = mailboxes[a.id] ?? [];
-          const unread = boxes.find((b) => b.role === "inbox")?.unread ?? 0;
-          const bad = a.syncState === "reconnect" || a.syncState === "error";
-          return (
-            <div key={a.id} className="flex flex-col gap-0.5">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                onClick={() => setOpen((o) => ({ ...o, [a.id]: !expanded }))}
-                className="flex h-(--row-h-sm) w-full items-center gap-2 rounded-md px-2 text-left text-sm text-muted-foreground hover:bg-state-hover"
-              >
-                <ChevronRight
-                  className={cn(
-                    "size-3.5 shrink-0 transition-transform duration-(--motion-fade)",
-                    expanded && "rotate-90",
-                  )}
-                  aria-hidden
-                />
-                <span
-                  data-label={hues[a.id] ?? "gray"}
-                  className="tag-dot size-2 shrink-0 rounded-full"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate">{a.displayName || a.address}</span>
-                {bad ? (
-                  <AlertCircle className="size-3.5 text-destructive" aria-label="Needs attention" />
-                ) : null}
-                {unread ? <span className="text-xs tabular-nums">{unread}</span> : null}
-              </button>
-              <AccountHistoryRow
-                account={a}
-                onCancelBackfill={onCancelBackfill}
-                onLoadHistory={onLoadHistory}
-              />
-              {expanded
-                ? boxes.map((b) => {
-                    const v: MailView = { kind: "mailbox", mailboxId: b.id };
-                    return (
-                      <RailItem
-                        key={b.id}
-                        indent
-                        label={b.name}
-                        count={b.unread || undefined}
-                        active={key === mailViewKey(v)}
-                        onClick={() => onSelect(v)}
-                      />
-                    );
-                  })
-                : null}
-            </div>
-          );
-        })}
-      </div>
+      <RailHeader
+        accounts={accounts}
+        nowMs={nowMs}
+        onSync={onSync}
+        onOpenSettings={onOpenSettings}
+      />
+      {accounts.length > 0 ? <NewMessage onCompose={onCompose} /> : null}
+      <Places
+        currentKey={currentKey}
+        counts={counts}
+        mailboxes={mailboxes}
+        outboxCount={outboxCount}
+        onSelect={onSelect}
+      />
+      <SmartViews currentKey={currentKey} screenerOn={screenerOn} onSelect={onSelect} {...views} />
+      <AccountsSection accounts={accounts} {...accountProps} />
+      {loading ? null : <SavedSearches savedSearches={savedSearches} onOpenSearch={onOpenSearch} />}
       <div className="mt-auto">
         <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onConnect}>
-          <Plus className="size-4" aria-hidden />
+          <Plus className="size-icon-sm" aria-hidden />
           Connect account
         </Button>
       </div>
     </nav>
-  );
-}
-
-function AccountHistoryRow({
-  account: a,
-  onCancelBackfill,
-  onLoadHistory,
-}: {
-  account: Props["accounts"][number];
-  onCancelBackfill?: (accountId: string) => void;
-  onLoadHistory?: (accountId: string) => void;
-}) {
-  if (a.syncState === "backfilling" && a.backfillProgress !== null) {
-    return (
-      <div className="flex items-center gap-2 pl-7 pr-2 text-xs text-muted-foreground">
-        <span className="shrink-0">Syncing history · {Math.round(a.backfillProgress * 100)}%</span>
-        <Progress
-          value={a.backfillProgress * 100}
-          max={100}
-          label="History sync"
-          className="flex-1"
-        />
-        {onCancelBackfill ? (
-          <Button size="sm" variant="ghost" onClick={() => onCancelBackfill(a.id)}>
-            Cancel
-          </Button>
-        ) : null}
-      </div>
-    );
-  }
-  if (!onLoadHistory || a.syncState === "backfilling") return null;
-  return (
-    <div className="flex pl-5 pr-2">
-      <Button size="sm" variant="ghost" onClick={() => onLoadHistory(a.id)}>
-        Load more history
-      </Button>
-    </div>
   );
 }

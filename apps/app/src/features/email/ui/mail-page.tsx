@@ -48,7 +48,7 @@ import { EmailSnoozePicker } from "./email-snooze-picker";
 import { useMailLabels } from "./mail-labels";
 import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
-import { FailedSends, OutboxPlace } from "./mail-places";
+import { AttachmentsPlace, FailedSends, OutboxPlace } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
 
@@ -311,6 +311,7 @@ export function MailPage({
   const [linkFor, setLinkFor] = useState<MailThreadRow | null>(null);
   const [current, setCurrent] = useState<string | null>(initialThreadId);
   const [subs, setSubs] = useState<MailThreadRow[] | null>(null);
+  const [files, setFiles] = useState(false);
   const [dismissedAdd, setDismissedAdd] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
@@ -419,6 +420,7 @@ export function MailPage({
       tab: { kind: "newsletters" },
       limit: 500,
     });
+    setFiles(false);
     setSubs(page.rows);
   };
 
@@ -523,10 +525,35 @@ export function MailPage({
           onIntent={onIntent}
           onOpenSubscriptions={engine ? () => void openSubscriptions() : undefined}
           subscriptionsActive={subs !== null}
-          onViewChange={() => setSubs(null)}
+          onOpenAttachments={
+            engine
+              ? () => {
+                  setSubs(null);
+                  setFiles(true);
+                }
+              : undefined
+          }
+          attachmentsActive={files}
+          onSyncNow={() => accounts.forEach((a) => retryAccount(a.id))}
+          onViewChange={() => {
+            setSubs(null);
+            setFiles(false);
+          }}
           onCursorChange={setCurrent}
           renderSelectionActions={labels.selectionActions}
           renderReader={(threadId) => {
+            if (files && engine) {
+              return (
+                <AttachmentsPlace
+                  engine={engine}
+                  refreshKey={String(version)}
+                  onPreview={(entry) => {
+                    setFiles(false);
+                    shell.current?.open(entry.threadId);
+                  }}
+                />
+              );
+            }
             if (subs) {
               return (
                 <div className="pane-scroll min-h-0 flex-1 overflow-y-auto">

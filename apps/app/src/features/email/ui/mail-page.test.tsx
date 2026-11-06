@@ -214,6 +214,24 @@ describe("/email on the engine (MR-16 cutover)", () => {
       return { ui, engine, store };
     }
 
+    it("the rail's Sync now syncs every account and Attachments opens the files place (AC12)", async () => {
+      const synced: string[] = [];
+      const { store } = await mountWired([], { syncAccount: (id) => void synced.push(id) });
+      fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+      expect(synced).toEqual(store.getState().accounts.map((a) => a.id));
+
+      fireEvent.click(screen.getByRole("button", { name: /^Attachments/ }));
+      await tick();
+      await tick();
+      screen.getByRole("toolbar", { name: "Filter by type" });
+      expect(
+        screen.getByRole("button", { name: /^Attachments/ }).getAttribute("aria-current"),
+      ).toBe("page");
+      fireEvent.click(screen.getByRole("button", { name: /^Sent/ }));
+      await tick();
+      expect(screen.queryByRole("toolbar", { name: "Filter by type" })).toBeNull();
+    });
+
     it("passes outbox count, custom tabs, offline and reconnect account", async () => {
       const synced: string[] = [];
       const compose = createFakeCompose({ now: () => FIXTURE_NOW_MS, scenario: ["outbox"] });
@@ -226,7 +244,7 @@ describe("/email on the engine (MR-16 cutover)", () => {
       const [first, second, third] = accounts;
 
       // AC1: the Outbox shows with its count and opens the queued messages.
-      const outbox = screen.getByRole("button", { name: /^Outbox\s*1$/ });
+      const outbox = screen.getByRole("button", { name: "Outbox, 1 waiting to send" });
       fireEvent.click(outbox);
       await tick();
       await tick();

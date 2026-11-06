@@ -30,12 +30,15 @@ export function useThreadWindow(
   view: MailView,
   tab: MailTab | null,
   version: number,
+  /** Scopes the window to one account (the rail's account row, spec §1); the
+   *  engine's lists span every account, so rows are filtered as pages arrive. */
+  accountId: string | null = null,
 ): ThreadWindow {
   const [rows, setRows] = useState<MailThreadRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const want = useRef(MAIL_PAGE);
-  const key = JSON.stringify([view, tab]);
+  const key = JSON.stringify([view, tab, accountId]);
   const lastKey = useRef(key);
   const seq = useRef(0);
 
@@ -47,7 +50,7 @@ export function useThreadWindow(
     let more = false;
     do {
       const page = await engine.listThreads({ view, tab, after, limit: MAIL_PAGE });
-      out.push(...page.rows);
+      out.push(...(accountId ? page.rows.filter((r) => r.accountId === accountId) : page.rows));
       after = page.next;
       more = after !== null;
     } while (after && out.length < want.current);

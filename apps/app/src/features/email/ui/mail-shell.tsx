@@ -13,6 +13,7 @@ import {
   useAppHotkeys,
 } from "@/lib/hotkeys/use-app-hotkeys";
 import { getRuntime } from "@/lib/runtime";
+import { mailViewKey } from "@/lib/runtime.types";
 import type {
   MailMailbox,
   MailOpInput,
@@ -21,6 +22,7 @@ import type {
   MailView,
 } from "@/lib/runtime.types.mail-engine";
 
+import { dispatchOpenSettings } from "../../settings/settings-events";
 import { createBulkCommands, type ZeroAge } from "../commands/bulk";
 import { createMailCommands } from "../commands/triage";
 import { useSavedSearches } from "../hooks/use-saved-searches";
@@ -47,6 +49,7 @@ import type { MailDensity, MailRowActions } from "./mail-row";
 import { type MailConnectProvider, mailListState, MailListStateView } from "./mail-states";
 import { cycleTab, liveTab, MailTabs, mailTabs } from "./mail-tabs";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
+import { useRailViewCounts } from "./rail-counts";
 import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
 
@@ -55,6 +58,19 @@ const REMOVES = new Set<MailOpInput["kind"]>(["done", "delete", "snooze", "spam"
 
 const selEngine = (s: { engine: unknown }) => s.engine;
 const selOutbox = (s: ReturnType<MailStore["getState"]>) => s.counts?.outbox ?? 0;
+
+const INBOX: MailView = { kind: "unified", role: "inbox" };
+
+const openMailSettings = () => dispatchOpenSettings({ section: "mail" });
+
+/** The scoped account's inbox, where its tab counts are keyed (`mailbox:<id>|<tab>`). */
+function scopedInboxView(
+  mailboxes: Record<string, MailMailbox[]>,
+  accountId: string | null,
+): MailView | undefined {
+  const box = accountId ? mailboxes[accountId]?.find((b) => b.role === "inbox") : undefined;
+  return box ? { kind: "mailbox", mailboxId: box.id } : undefined;
+}
 
 /** The list pane's body: a place the page renders (the Outbox), the rows, or the list state. */
 function MailListBody({
@@ -122,6 +138,13 @@ export type MailShellProps = {
   /** Shows Subscriptions in the rail; the page renders it in the reader slot. */
   onOpenSubscriptions?: () => void;
   subscriptionsActive?: boolean;
+  /** Shows Attachments in the rail; the page renders it in the reader slot. */
+  onOpenAttachments?: () => void;
+  attachmentsActive?: boolean;
+  /** The rail's Sync button: Sync now across accounts. */
+  onSyncNow?: () => void;
+  /** The rail's settings button; defaults to Settings → Mail. */
+  onOpenSettings?: () => void;
   /** Called when a rail folder is picked (the page leaves Subscriptions). */
   onViewChange?: (view: MailView) => void;
   /** The open thread changed (the page's Today panel acts on it). */
@@ -189,6 +212,10 @@ export function MailShell({
   apiRef,
   onOpenSubscriptions,
   subscriptionsActive = false,
+  onOpenAttachments,
+  attachmentsActive = false,
+  onSyncNow,
+  onOpenSettings = openMailSettings,
   onViewChange,
   onCursorChange,
 }: MailShellProps) {
@@ -211,7 +238,17 @@ export function MailShell({
   // A custom tab deleted while selected falls back to Personal (spec edge cases).
   const tab = liveTab(tabs, picked);
   const tabbed = view.kind === "unified" && view.role === "inbox";
-  const win = useThreadWindow(engine, view, tabbed ? tab : null, version);
+  const [scope, setScope] = useState<string | null>(null);
+  const mailboxes = useAccountMailboxes(engine, accounts, version);
+  // A folder belongs to one account already; the scope narrows the unified views.
+  const scoped = view.kind === "mailbox" ? null : scope;
+  const win = useThreadWindow(engine, view, tabbed ? tab : null, version, scoped);
+  const scopedInbox = scopedInboxView(mailboxes, scoped);
+  const viewCounts = useRailViewCounts(engine, version, {
+    screenerOn,
+    nowMs: now(),
+    dueNow: followupsDue.length,
+  });
   const ids = useMemo(() => win.rows.map((r) => r.threadId), [win.rows]);
 
   const [sel, setSel] = useState<MailSelection>(() =>
@@ -221,7 +258,15 @@ export function MailShell({
   const [legend, setLegend] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [cleared, setCleared] = useState(0);
-  const mailboxes = useAccountMailboxes(engine, accounts, version);
+
+  // An account removed while scoped: the scope clears and the list returns to Inbox.
+  useEffect(() => {
+    if (scope && !accounts.some((a) => a.id === scope)) {
+      setScope(null);
+      setView(INBOX);
+      setSel(EMPTY_SELECTION);
+    }
+  }, [scope, accounts]);
 
   // Latest list and selection for stable callbacks.
   const live = useRef({ ids, sel });
@@ -375,6 +420,8 @@ export function MailShell({
           outboxCount={outboxCount}
           screenerOn={screenerOn}
           onSelect={(v) => {
+            // Inbox unscopes (spec §1).
+            if (mailViewKey(v) === mailViewKey(INBOX)) setScope(null);
             setView(v);
             setSel(EMPTY_SELECTION);
             onViewChange?.(v);
@@ -383,6 +430,20 @@ export function MailShell({
           }}
           onOpenSubscriptions={onOpenSubscriptions}
           subscriptionsActive={subscriptionsActive}
+          onOpenAttachments={onOpenAttachments}
+          attachmentsActive={attachmentsActive}
+          viewCounts={viewCounts}
+          onSync={onSyncNow}
+          onOpenSettings={onOpenSettings}
+          onCompose={() => onIntent?.("email.compose", [])}
+          loading={counts === null}
+          scope={scope}
+          onScope={(id) => {
+            setScope((s) => (s === id ? null : id));
+            setSel(EMPTY_SELECTION);
+            if (view.kind === "mailbox") setView(INBOX);
+          }}
+          nowMs={now()}
           onConnect={() => onConnect?.()}
           onCancelBackfill={
             engine?.cancelBackfill
@@ -406,6 +467,7 @@ export function MailShell({
             tabs={tabs}
             current={tab}
             counts={counts}
+            countView={scopedInbox}
             onSelect={setTab}
             onZero={zero}
           />
