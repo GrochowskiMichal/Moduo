@@ -79,6 +79,8 @@ export type MailReaderProps = {
   sendNotes?: ReaderSendNotes | null;
   panel?: { open: boolean; onToggle: () => void } | null;
   apiRef?: { current: MailReaderApi | null };
+  /** The inline reply under the conversation (MV-10, decision 17). */
+  composer?: ReactNode;
 };
 
 function useThread(engine: MailEngine | null, threadId: string | null, version: number) {
@@ -374,6 +376,7 @@ function ThreadStack(props: MailReaderProps) {
           onAttachment: files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined,
         }}
       />
+      {props.composer}
     </div>
   );
 }

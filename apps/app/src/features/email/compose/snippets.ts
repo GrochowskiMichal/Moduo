@@ -102,6 +102,16 @@ export function snippetRecipient(
   return { name: own || hit?.name || "", email };
 }
 
+/** The popup's line when no snippet has that key (specs/mail-v3.md §9). */
+export function snippetMissLine(key: string): string {
+  return `No snippet called ;;${key}. Make one in Settings → Mail → Snippets.`;
+}
+
+/** A snippet's one-line preview with its placeholders filled. */
+export function snippetPreview(snippet: MailSnippet, ctx: SnippetContext): string {
+  return fillPlaceholders(snippet.body, ctx).replace(/\s+/g, " ").trim();
+}
+
 /** Replaces the trigger with the filled snippet; returns the new text and caret. */
 export function insertSnippet(
   text: string,

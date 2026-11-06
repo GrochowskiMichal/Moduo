@@ -1,6 +1,12 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { detectIntroducer } from "./intro";
+import {
+  detectIntroducer,
+  instantIntro,
+  introducerFirstName,
+  introducerName,
+  undoInstantIntro,
+} from "./intro";
 
 const p = (name: string, email: string) => ({ name, email });
 const me = "mike@x.test";
@@ -33,5 +39,34 @@ describe("detectIntroducer (specs/mail-v3.md §9 Instant intro)", () => {
       cc: [p("Ana", "ana@b.test")],
     };
     expect(detectIntroducer([first, reply], [me])).toBeNull();
+  });
+});
+
+describe("instant intro (specs/mail-v3.md §9, AC33)", () => {
+  it("detects introducer, moves to Bcc, undo", () => {
+    const intro = {
+      from: p("Priya Shah", "priya@a.test"),
+      to: [p("", me)],
+      cc: [p("Ana Lima", "ana@b.test")],
+    };
+    const introducer = detectIntroducer([intro], [me])!;
+    expect(introducerName(introducer)).toBe("Priya Shah");
+    expect(introducerFirstName(introducer)).toBe("Priya");
+
+    const reply = {
+      to: "Priya Shah <priya@a.test>",
+      cc: "Ana Lima <ana@b.test>",
+      bcc: "",
+      bodyHtml: "<p>Hi Ana</p>",
+    };
+    const moved = instantIntro(reply, introducer);
+    expect(moved).toEqual({
+      to: "",
+      cc: "Ana Lima <ana@b.test>",
+      bcc: "priya@a.test",
+      bodyHtml: "<p>Thanks Priya (moving you to Bcc).</p><p>Hi Ana</p>",
+    });
+    // Undo returns her to To and takes the line back out.
+    expect(undoInstantIntro(moved, introducer)).toEqual(reply);
   });
 });

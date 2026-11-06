@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
 
 import type { MailSpineCommands } from "../commands/spine";
-import { followUpDueMs } from "../compose/follow-up";
+import { snoozePresets } from "../snooze";
 import { createMailStore } from "../store/mail-store";
 import { createFakeCompose } from "../testing/fake-compose";
 import { createFakeMailEngine } from "../testing/fake-engine";
@@ -91,7 +91,7 @@ describe("/email on the engine (MR-16 cutover)", () => {
     await tick();
     await tick();
     expect(screen.getByDisplayValue("Cold launch")).toBeTruthy();
-    expect(screen.getByDisplayValue("anna@x.test")).toBeTruthy();
+    screen.getByRole("button", { name: "Remove anna@x.test" });
     queue.push("mailto:bob@x.test?subject=Warm%20link");
     await act(async () => (nudge as unknown as () => void)());
     await tick();
@@ -313,15 +313,18 @@ describe("/email on the engine (MR-16 cutover)", () => {
       press("c");
       await tick();
       await tick();
+      // The To field asks the engine per query, after its 120 ms debounce (MV-10).
       fireEvent.change(screen.getByLabelText("To"), { target: { value: "an" } });
-      fireEvent.click(
-        within(screen.getByRole("listbox", { name: "Suggestions" })).getByRole("button", {
+      await act(async () => await new Promise((r) => setTimeout(r, 160)));
+      fireEvent.mouseDown(
+        within(screen.getByRole("listbox", { name: "To suggestions" })).getByRole("option", {
           name: /Ana Lima/,
         }),
       );
       await tick();
-      fireEvent.change(screen.getByLabelText("Message"), { target: { value: "Hi ;;th" } });
-      fireEvent.click(screen.getByRole("button", { name: "thx" }));
+      const message = screen.getByLabelText("Message");
+      fireEvent.change(message, { target: { value: "Hi ;;th" } });
+      fireEvent.keyDown(message, { key: "Enter" });
       await tick();
       expect((screen.getByLabelText("Message") as HTMLTextAreaElement).value).toBe(
         "Hi Thanks Ana!",
@@ -354,28 +357,32 @@ describe("/email on the engine (MR-16 cutover)", () => {
       press("r");
       await tick();
       await tick();
-      const reply = screen.getByRole("region", { name: "Reply" });
-      // " · reminds you {Thu}" when the reply set a follow-up.
-      fireEvent.change(within(reply).getByLabelText("Follow-up"), { target: { value: "3d" } });
+      const reply = screen.getByRole("region", { name: `Reply to ${firstName}` });
+      // " · reminds you {Thu}" when the reply set a follow-up (the `w` presets, MV-10).
+      fireEvent.pointerDown(within(reply).getByRole("button", { name: "Remind me if no reply" }), {
+        button: 0,
+        pointerType: "mouse",
+      });
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Tomorrow/ }));
       await tick();
-      fireEvent.click(within(reply).getByRole("button", { name: "Send" }));
+      const tomorrow = snoozePresets(new Date(FIXTURE_NOW_MS)).find((p) => p.id === "tomorrow")!;
+      const day = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(tomorrow.at);
+      within(reply).getByRole("button", { name: `Remind me ${day} if no reply` });
+      fireEvent.click(within(reply).getByRole("button", { name: /^Send/ }));
       await tick();
       await tick();
-      const day = new Intl.DateTimeFormat("en-US", { weekday: "short" }).format(
-        new Date(followUpDueMs("3d", FIXTURE_NOW_MS)),
-      );
       // The countdown runs to the engine's send time: 10 s (the default window) from now.
       await screen.findByText(
         `Reply to ${firstName} sends in 10 s · thread marked Done · reminds you ${day}`,
       );
-      expect(screen.queryByRole("region", { name: "Reply" })).toBeNull();
+      expect(screen.queryByRole("region", { name: /^Reply/ })).toBeNull();
       expect((await compose.listOutbox()).length).toBe(1);
 
       // Edit pulls it back from the Outbox and reopens it.
       fireEvent.click(screen.getByRole("button", { name: "Edit" }));
       await tick();
       await tick();
-      screen.getByRole("region", { name: "Reply" });
+      screen.getByRole("region", { name: /^Reply/ });
       expect((await compose.listOutbox()).length).toBe(0);
     });
 

@@ -13,7 +13,6 @@ export function draftToOpenSpec(
   const d = row.doc;
   return {
     kind: d.inReplyTo ? "reply" : "new",
-    placement: row.threadId ? "inline" : "pane",
     accountId: row.accountId,
     threadId: row.threadId,
     draftId: row.id,

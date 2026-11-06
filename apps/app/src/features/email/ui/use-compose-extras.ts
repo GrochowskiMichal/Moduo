@@ -1,10 +1,10 @@
 // What the composer needs from the engines beyond the session (specs/mail-v3.md
-// §9, MV-3): the account's send size limit, the correspondents autocomplete
-// reads, and who introduced you in the message replied to. Also the open spec
+// §9, MV-3, MV-10): the account's send limit and provider, the per-query correspondents
+// read, and who introduced you in the message replied to. Also the open spec
 // for reopening a saved draft (Fix and send, Outbox Edit) and the connect
 // dialog's reconnect target for an engine account.
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import type { MailComposeEngine, MailDraftRow } from "@/lib/runtime.types.mail-compose";
 import type { MailAccount, MailEngine } from "@/lib/runtime.types.mail-engine";
@@ -12,14 +12,15 @@ import type { MailAccount, MailEngine } from "@/lib/runtime.types.mail-engine";
 import { plainToHtml } from "../compose";
 import { detectIntroducer } from "../compose/intro";
 import type { ComposeOpenSpec, ComposeSession, ComposeState } from "../compose/session";
+import type { SendLimit } from "../compose/size-limit";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
 
 type Correspondent = { name: string; email: string; count: number };
 
 const NO_SESSION = () => () => {};
 const NONE = () => null;
-/** How many correspondents the To field ranks from (MV-10 adds the per-query read). */
-const CORRESPONDENT_POOL = 200;
+/** How many correspondents one typed query reads. */
+const SUGGEST_LIMIT = 8;
 
 function useActiveCompose(session: ComposeSession | null): ComposeState | null {
   return useSyncExternalStore(
@@ -52,14 +53,24 @@ export function useComposeExtras(input: {
   session: ComposeSession | null;
   engine: MailEngine | null;
   accounts: readonly MailAccount[];
-}): { sizeLimit?: number; correspondents?: Correspondent[]; introducer: string | null } {
+}): {
+  sizeLimit: SendLimit | null;
+  suggestPeople?: (query: string) => Promise<Correspondent[]>;
+  introducer: string | null;
+} {
   const { port, engine, accounts } = input;
   const active = useActiveCompose(input.session);
-  const sizeLimit = useRead(port && active ? `size:${active.accountId}` : null, () =>
+  const bytes = useRead(port && active ? `size:${active.accountId}` : null, () =>
     port!.sizeLimit(active!.accountId),
   );
-  const correspondents = useRead(port && active ? `corr:${active.key}` : null, () =>
-    port!.correspondents({ prefix: "", limit: CORRESPONDENT_POOL }),
+  const provider = accounts.find((a) => a.id === active?.accountId)?.provider ?? null;
+  // The To field asks per typed query (debounced there), not a pool read up front.
+  const suggestPeople = useMemo(
+    () =>
+      port
+        ? (query: string) => port.correspondents({ prefix: query, limit: SUGGEST_LIMIT })
+        : undefined,
+    [port],
   );
   const replyTo =
     engine && active?.threadId && (active.kind === "reply" || active.kind === "reply-all")
@@ -75,8 +86,8 @@ export function useComposeExtras(input: {
       : null;
   });
   return {
-    sizeLimit: sizeLimit ?? undefined,
-    correspondents: correspondents ?? undefined,
+    sizeLimit: bytes ? { bytes, provider } : null,
+    suggestPeople,
     introducer,
   };
 }
@@ -87,7 +98,6 @@ export function draftOpenSpec(draft: MailDraftRow): ComposeOpenSpec {
   const threaded = draft.threadId !== null;
   return {
     kind: threaded ? "reply" : "new",
-    placement: threaded ? "inline" : "pane",
     accountId: draft.accountId,
     threadId: draft.threadId,
     draftId: draft.id,

@@ -3,6 +3,8 @@
 // (the engine uploads it to the server Drafts folder after its 2 s debounce).
 // Send queues it with the undo window; Undo cancels and reopens it, Edit does
 // the same, and Done-on-send marks the thread Done when replying from the inbox.
+// Where it renders follows from the compose (specs/mail-v3.md decision 17): a
+// reply sits under its conversation, everything else fills the reader column.
 
 import type {
   MailComposeEngine,
@@ -11,15 +13,15 @@ import type {
 } from "@/lib/runtime.types.mail-compose";
 
 import { htmlToPlainText, splitAddresses } from "../compose";
-import { checkSendSize } from "./size-limit";
+import { checkSendSize, type SendLimit } from "./size-limit";
 
-export type ComposePlacement = "inline" | "pane";
 export type ComposeKind = "new" | "reply" | "reply-all" | "forward";
+/** The draft's save stage (AC10): not saved yet, on this Mac, or in the server's Drafts. */
+export type DraftSaved = "none" | "local" | "server";
 
 export type ComposeState = {
   key: string;
   kind: ComposeKind;
-  placement: ComposePlacement;
   accountId: string;
   threadId: string | null;
   draftId: string | null;
@@ -36,13 +38,24 @@ export type ComposeState = {
   followUp: number | null;
   /** Opened from the inbox: Done-on-send applies (E48). */
   fromInbox: boolean;
+  /** "Also mark the email Done" for this compose; null follows Settings (Done on send). */
+  doneOnSend: boolean | null;
   lastError: string | null;
+  saved: DraftSaved;
 };
 
-export type ComposeOpenSpec = Omit<ComposeState, "key" | "draftId" | "followUp" | "lastError"> & {
+export type ComposeOpenSpec = Omit<
+  ComposeState,
+  "key" | "draftId" | "followUp" | "lastError" | "doneOnSend" | "saved"
+> & {
   draftId?: string | null;
   lastError?: string | null;
 };
+
+/** A reply renders under its conversation; a new message or a forward fills the reader column. */
+export function composePlacement(s: Pick<ComposeState, "threadId">): "inline" | "column" {
+  return s.threadId ? "inline" : "column";
+}
 
 export type ComposeDeps = {
   port: MailComposeEngine;
@@ -90,9 +103,16 @@ export function toDraftDoc(s: ComposeState): MailDraftDoc {
   };
 }
 
+function recipientCount(s: ComposeState): number {
+  return splitAddresses(s.to).length + splitAddresses(s.cc).length + splitAddresses(s.bcc).length;
+}
+
 export function createComposeSession(deps: ComposeDeps) {
   let active: ComposeState | null = null;
   let saving: Promise<void> = Promise.resolve();
+  // Compose key → its draft id, so a save queued before the first one answered
+  // updates that draft instead of making another.
+  const ids = new Map<string, string>();
   const listeners = new Set<() => void>();
   const emit = () => {
     for (const l of listeners) l();
@@ -101,12 +121,18 @@ export function createComposeSession(deps: ComposeDeps) {
   function save(state: ComposeState): Promise<void> {
     const run = saving.then(async () => {
       const { draftId } = await deps.port.saveDraft({
-        draftId: state.draftId,
+        draftId: state.draftId ?? ids.get(state.key) ?? null,
         accountId: state.accountId,
         threadId: state.threadId,
         doc: toDraftDoc(state),
       });
+      ids.set(state.key, draftId);
       state.draftId = draftId;
+      // The local copy is newer than the server's until the next upload (AC10).
+      if (active?.key === state.key) {
+        active = { ...active, draftId, saved: "local" };
+        emit();
+      }
     });
     saving = run.catch((error) => {
       console.warn("[mail] draft save failed:", error);
@@ -122,8 +148,41 @@ export function createComposeSession(deps: ComposeDeps) {
     if (opts.keepDraft) await save(prev);
     else {
       await saving;
-      if (prev.draftId) await deps.port.discardDraft(prev.draftId);
+      const id = prev.draftId ?? ids.get(prev.key);
+      if (id) await deps.port.discardDraft(id);
     }
+  }
+
+  /** What "Also mark the email Done" starts as: Done on send, for a reply opened from the inbox. */
+  function defaultDoneOnSend(s: ComposeState): boolean {
+    return Boolean(s.threadId && s.fromInbox && s.kind !== "new" && deps.settings().doneOnSend);
+  }
+
+  async function finishSend(s: ComposeState, handle: MailSendHandle) {
+    if (s.threadId && s.followUp && deps.setFollowUp)
+      await deps.setFollowUp(s.threadId, s.followUp);
+    const markedDone = Boolean(
+      s.threadId && s.kind !== "new" && (s.doneOnSend ?? defaultDoneOnSend(s)),
+    );
+    if (markedDone && s.threadId) await deps.markDone(s.threadId);
+    const reopen = async () => {
+      const { draftId } = await deps.port.undoSend(handle.outboxId);
+      if (!draftId) return;
+      if (active) await close({ keepDraft: true });
+      active = { ...s, key: `compose-${++seq}`, draftId, saved: "local" };
+      emit();
+    };
+    deps.showSent?.(
+      handle,
+      { undo: () => void reopen(), edit: () => void reopen() },
+      {
+        kind: s.kind,
+        to: s.to,
+        threadId: s.threadId,
+        markedDone,
+        followUpMs: s.threadId ? s.followUp : null,
+      },
+    );
   }
 
   return {
@@ -142,7 +201,9 @@ export function createComposeSession(deps: ComposeDeps) {
         key: `compose-${++seq}`,
         draftId: spec.draftId ?? null,
         followUp: null,
+        doneOnSend: null,
         lastError: spec.lastError ?? null,
+        saved: spec.draftId ? "local" : "none",
       };
       emit();
       return active;
@@ -155,50 +216,35 @@ export function createComposeSession(deps: ComposeDeps) {
       emit();
       return save(active);
     },
+    /** The engine's `draft_changed` with a server uid: the open draft reached Drafts (AC10). */
+    markUploaded(draftId: string) {
+      if (!active) return;
+      if (active.draftId !== draftId && ids.get(active.key) !== draftId) return;
+      active = { ...active, saved: "server" };
+      emit();
+    },
+    defaultDoneOnSend,
     /** Esc / switching away keeps the draft; Discard drops it. */
     close,
     flush: () => saving,
-    async send(sizeLimit?: number): Promise<SendResult> {
+    async send(limit?: number | SendLimit | null): Promise<SendResult> {
       const s = active;
       if (!s) return { ok: false, reason: "Nothing to send." };
-      if (
-        splitAddresses(s.to).length + splitAddresses(s.cc).length + splitAddresses(s.bcc).length ===
-        0
-      )
-        return { ok: false, reason: "Add a recipient." };
-      if (sizeLimit) {
-        const size = checkSendSize(s.attachments, new Blob([s.bodyHtml]).size, sizeLimit);
+      if (recipientCount(s) === 0) return { ok: false, reason: "Add a recipient." };
+      if (limit) {
+        const size = checkSendSize(s.attachments, new Blob([s.bodyHtml]).size, limit);
         if (!size.ok) return { ok: false, reason: size.message };
       }
       await save(s);
       await saving;
       if (!s.draftId) return { ok: false, reason: "The draft couldn't be saved." };
-      const { undoSeconds, doneOnSend } = deps.settings();
-      const handle = await deps.port.queueSend({ draftId: s.draftId, undoSeconds });
+      const handle = await deps.port.queueSend({
+        draftId: s.draftId,
+        undoSeconds: deps.settings().undoSeconds,
+      });
       active = null;
       emit();
-      if (s.threadId && s.followUp && deps.setFollowUp)
-        await deps.setFollowUp(s.threadId, s.followUp);
-      const markedDone = Boolean(s.threadId && s.fromInbox && doneOnSend && s.kind !== "new");
-      if (markedDone && s.threadId) await deps.markDone(s.threadId);
-      const reopen = async () => {
-        const { draftId } = await deps.port.undoSend(handle.outboxId);
-        if (!draftId) return;
-        if (active) await close({ keepDraft: true });
-        active = { ...s, key: `compose-${++seq}`, draftId };
-        emit();
-      };
-      deps.showSent?.(
-        handle,
-        { undo: () => void reopen(), edit: () => void reopen() },
-        {
-          kind: s.kind,
-          to: s.to,
-          threadId: s.threadId,
-          markedDone,
-          followUpMs: s.threadId ? s.followUp : null,
-        },
-      );
+      await finishSend(s, handle);
       return { ok: true, handle };
     },
   };

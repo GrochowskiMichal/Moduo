@@ -6,7 +6,6 @@ import { type ComposeOpenSpec, createComposeSession } from "./session";
 
 const spec = (p: Partial<ComposeOpenSpec> = {}): ComposeOpenSpec => ({
   kind: "reply",
-  placement: "inline",
   accountId: "acc",
   threadId: "t1",
   fromAddr: "me@x.com",
@@ -51,7 +50,7 @@ describe("compose drafts and send (AC21, AC22)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].doc.html).toBe("<p>Hello</p>");
     const reopened = draftToOpenSpec(draftForThread(rows, "t1")!);
-    expect(reopened).toMatchObject({ draftId: rows[0].id, kind: "reply", placement: "inline" });
+    expect(reopened).toMatchObject({ draftId: rows[0].id, kind: "reply" });
   });
 
   it("server drafts made elsewhere appear", async () => {

@@ -26,8 +26,8 @@ import type {
   SpineResult,
 } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
-import type { MailAlias } from "../compose/aliases";
-import { MailComposer } from "../compose/mail-composer";
+import { personEntry } from "../compose/address-list";
+import { type MailAlias, openWithAlias } from "../compose/aliases";
 import { applyMailtoPrefill, drainMailto, type MailtoPrefill } from "../compose/mailto";
 import {
   type ComposeDeps,
@@ -60,6 +60,7 @@ import { MailShell, type MailShellApi } from "./mail-shell";
 import { makeTasks } from "./make-tasks";
 import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
+import { useComposerSlot } from "./use-composer-slot";
 import { useReaderWiring } from "./use-reader-wiring";
 
 const COMPOSE_INTENTS: Partial<Record<MailKeyId, ComposeKind>> = {
@@ -73,14 +74,11 @@ type Person = { name: string; email: string };
 
 function replyRecipients(kind: ComposeKind, last: MailMessage | null, self: string) {
   if (!last || kind === "new" || kind === "forward") return { to: "", cc: "" };
-  if (kind === "reply") return { to: last.from.email, cc: "" };
+  if (kind === "reply") return { to: personEntry(last.from), cc: "" };
   const others = (p: Person) => p.email.toLowerCase() !== self.toLowerCase();
   return {
-    to: last.from.email,
-    cc: [...last.to, ...last.cc]
-      .filter(others)
-      .map((p) => p.email)
-      .join(", "),
+    to: personEntry(last.from),
+    cc: [...last.to, ...last.cc].filter(others).map(personEntry).join(", "),
   };
 }
 
@@ -92,12 +90,13 @@ export function composeSpec(
   /** A message's own reply / forward (the reader's per-message actions); else the newest. */
   messageId?: string,
 ): ComposeOpenSpec {
+  // `c` with a thread open starts a fresh message from that account, not a reply.
+  if (kind === "new") thread = null;
   const picked = messageId ? thread?.messages.find((m) => m.id === messageId) : undefined;
   const last = picked ?? thread?.messages.at(-1) ?? null;
   const threaded = kind !== "forward" && last !== null;
   return {
     kind,
-    placement: thread ? "inline" : "pane",
     accountId: account.id,
     threadId: threaded ? (thread?.row.threadId ?? null) : null,
     fromAddr: account.address,
@@ -320,17 +319,28 @@ export function MailPage({
   const undoSend = useUndoSendToast({ now, nameFor: (email) => names.current(email) });
   const { port, session } = useComposeSession(compose, store, commands, engine, undoSend.sent);
   const extras = useComposeExtras({ port, session, engine, accounts });
+  const composer = useComposerSlot({
+    session,
+    port,
+    engine,
+    accounts,
+    extras,
+    aliases,
+    snippets,
+    contacts,
+    spellCheck: behavior.spellCheck,
+    now,
+  });
   names.current = (email) =>
-    knownName(email, [
-      contacts,
-      extras.correspondents,
-      current ? shell.current?.row(current)?.senders : undefined,
-    ]);
+    knownName(email, [contacts, current ? shell.current?.row(current)?.senders : undefined]);
   const placeKey = useMailStore(selPlaceKey, store);
   const notSent = useNotSentThreadIds(port, placeKey);
 
-  /** Reopens a saved draft in the composer (Fix and send, Outbox Edit; AC11). */
-  const openDraft = (draft: MailDraftRow) => void session?.open(draftOpenSpec(draft));
+  /** Reopens a saved draft (Fix and send, Outbox Edit; AC11); a reply opens under its thread. */
+  const openDraft = (draft: MailDraftRow) => {
+    if (draft.threadId) shell.current?.open(draft.threadId);
+    void session?.open(draftOpenSpec(draft));
+  };
   const editOutbox = async (outboxId: string) => {
     if (!port) return;
     const { draftId } = await port.undoSend(outboxId);
@@ -359,7 +369,14 @@ export function MailPage({
     const accountId = thread?.row.accountId ?? accounts[0]?.id;
     const account = accounts.find((a) => a.id === accountId);
     if (!account) return;
-    const spec = composeSpec(kind, thread, account, messageId);
+    // The alias the original was addressed to (else the default), its signature inserted.
+    const orig = thread?.messages.find((m) => m.id === messageId) ?? thread?.messages.at(-1);
+    const addressed = orig ? [...orig.to, ...orig.cc].map((p) => p.email) : [];
+    const spec = openWithAlias(
+      composeSpec(kind, thread, account, messageId),
+      aliases ?? [],
+      addressed,
+    );
     await session.open(prefill ? applyMailtoPrefill(spec, prefill) : to ? { ...spec, to } : spec);
   };
   const openComposeRef = useRef(openCompose);
@@ -533,6 +550,8 @@ export function MailPage({
           onCursorChange={setCurrent}
           renderSelectionActions={labels.selectionActions}
           renderReader={(threadId, { listEmpty } = { listEmpty: false }) => {
+            // A New message takes the reader column; the list stays beside it (decision 17).
+            if (composer.column) return composer.column;
             if (files && engine) {
               return (
                 <AttachmentsPlace
@@ -579,6 +598,7 @@ export function MailPage({
                 contacts={contactSet}
                 {...reader.props}
                 panel={{ open: panelOpen, onToggle: () => toggleMailPanel(store) }}
+                composer={composer.inline(threadId)}
               />
             );
           }}
@@ -612,27 +632,6 @@ export function MailPage({
           onPreview={(entry) => shell.current?.open(entry.threadId)}
         />
       </div>
-      {session ? (
-        <div className="absolute right-4 bottom-4 w-96 max-w-full">
-          <MailComposer
-            session={session}
-            spellCheck={behavior.spellCheck}
-            aliases={aliases}
-            snippets={snippets}
-            contacts={contacts}
-            correspondents={extras.correspondents}
-            sizeLimit={extras.sizeLimit}
-            introducer={extras.introducer}
-            now={now}
-            stageFile={
-              port
-                ? async (f) => port.stageAttachment(new Uint8Array(await f.arrayBuffer()))
-                : undefined
-            }
-            pickFiles={port ? () => port.pickAttachments() : undefined}
-          />
-        </div>
-      ) : null}
       {snooze.picker}
       {move ? (
         <MailMoveDialog

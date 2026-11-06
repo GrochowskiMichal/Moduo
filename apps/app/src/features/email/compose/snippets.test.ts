@@ -1,6 +1,13 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { fillPlaceholders, insertSnippet, snippetRecipient } from "./snippets";
+import {
+  fillPlaceholders,
+  insertSnippet,
+  matchSnippets,
+  snippetMissLine,
+  snippetPreview,
+  snippetRecipient,
+} from "./snippets";
 
 const me = { name: "Mike G", email: "mike@x.com" };
 
@@ -49,5 +56,24 @@ describe("snippet placeholders (specs/mail-v3.md §9, AC31)", () => {
       },
     );
     expect(r?.text).toBe("Hey thanks Ana!");
+  });
+
+  it("first name from display name; unknown key line", () => {
+    const snippets = [
+      { id: "1", name: "thanks", body: "Thanks {first name}, talk soon." },
+      { id: "2", name: "intro", body: "Hi {first name}, meet {my first name}." },
+    ];
+    const ctx = { recipient: snippetRecipient('"Ana Lima" <a.lima@acme.test>'), me };
+    // The popup's preview and the inserted text read the display name, not the address.
+    expect(snippetPreview(snippets[0]!, ctx)).toBe("Thanks Ana, talk soon.");
+    expect(insertSnippet("Hey ;;tha", 9, snippets[0]!, ctx)?.text).toBe(
+      "Hey Thanks Ana, talk soon.",
+    );
+    // Typing filters by key.
+    expect(matchSnippets(snippets, "in").map((s) => s.name)).toEqual(["intro"]);
+    expect(matchSnippets(snippets, "zzz")).toEqual([]);
+    expect(snippetMissLine("zzz")).toBe(
+      "No snippet called ;;zzz. Make one in Settings → Mail → Snippets.",
+    );
   });
 });

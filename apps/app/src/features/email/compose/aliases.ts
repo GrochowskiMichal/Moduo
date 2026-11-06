@@ -33,6 +33,24 @@ export function pickAlias(
   );
 }
 
+/**
+ * A compose opens from its alias (specs/mail-v3.md §9): the one the original was
+ * addressed to, else the account's default, with that alias's signature inserted.
+ * Without aliases for the account the spec is unchanged.
+ */
+export function openWithAlias<
+  T extends { accountId: string; fromAddr: string; fromName: string | null; bodyHtml: string },
+>(spec: T, aliases: readonly MailAlias[], addressedTo: string[] = []): T {
+  const alias = pickAlias([...aliases], spec.accountId, addressedTo);
+  if (!alias) return spec;
+  return {
+    ...spec,
+    fromAddr: alias.address,
+    fromName: alias.name || spec.fromName,
+    bodyHtml: swapSignature(spec.bodyHtml, alias),
+  };
+}
+
 /** Replaces the signature block (or appends one) with the new alias's signature. */
 export function swapSignature(html: string, next: MailAlias | null): string {
   const block = signatureBlock(next?.signatureHtml ?? "");
