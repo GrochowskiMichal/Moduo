@@ -331,3 +331,27 @@ fn mime_never_reads_a_path_outside_staging() {
         assert!(e.starts_with("attachment_unreadable:x:invalid_attachment"), "{e}");
     }
 }
+
+#[test]
+fn draft_upload_emits_draft_changed_with_server_uid() {
+    let st = store("dcuid", "imap");
+    let bus = EventBus::new();
+    let mut rx = bus.subscribe();
+    let mut t = Fake::default();
+    let id = st.save_draft_at(None, "a", None, doc(), T0).unwrap();
+    // Inside the 2 s debounce nothing uploads and nothing is said.
+    st.sync_drafts_and_emit(&mut t, T0 + 1_000, &bus).unwrap();
+    assert!(rx.try_recv().is_err());
+    st.sync_drafts_and_emit(&mut t, T0 + 2_000, &bus).unwrap();
+    assert_eq!(
+        rx.try_recv().unwrap(),
+        MailEvent::DraftChanged {
+            draft_id: id.clone(),
+            server_uid: Some(1),
+        }
+    );
+    assert_eq!(st.draft(&id).unwrap().unwrap().server_uid, Some(1));
+    // An unchanged draft is not uploaded (or announced) again.
+    st.sync_drafts_and_emit(&mut t, T0 + 9_000, &bus).unwrap();
+    assert!(rx.try_recv().is_err());
+}

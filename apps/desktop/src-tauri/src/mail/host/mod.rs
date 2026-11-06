@@ -55,6 +55,10 @@ pub struct AccountRow {
     pub last_error: Option<String>,
     /// The webview's depth name (`threeMonths` … `everything`).
     pub history_depth: String,
+    /// When this account last finished a sync round on this Mac (store v2).
+    pub last_synced_ms: Option<i64>,
+    /// True when new mail is pushed (IDLE); false when polled every minute.
+    pub push: bool,
 }
 
 /// Every account in the store, oldest first.
@@ -63,7 +67,7 @@ pub fn list_accounts(store: &Store) -> Result<Vec<AccountRow>, String> {
     let mut s = c
         .prepare_cached(
             "SELECT id, address, display_name, provider, hue, sync_state, backfill_progress, last_error,
-                    history_depth_days
+                    history_depth_days, last_synced_ms, push
              FROM accounts ORDER BY created_at_ms, id",
         )
         .map_err(|e| e.to_string())?;
@@ -79,12 +83,25 @@ pub fn list_accounts(store: &Store) -> Result<Vec<AccountRow>, String> {
                 backfill_progress: r.get(6)?,
                 last_error: r.get(7)?,
                 history_depth: lifecycle::depth_name(r.get(8)?).to_string(),
+                last_synced_ms: r.get(9)?,
+                push: r.get::<_, Option<bool>>(10)?.unwrap_or(false),
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
     Ok(rows)
+}
+
+/// One `op_failed` per newly failed op, carrying its thread ids and the first
+/// thread's subject (AC9: the failed line names each action and its thread).
+pub fn failed_op_events(store: &Store, failed: &[String]) -> Vec<MailEvent> {
+    failed
+        .iter()
+        .filter_map(|id| store.op_record(id).ok().flatten())
+        .filter_map(|op| serde_json::to_value(op).ok())
+        .map(|op| MailEvent::OpFailed { op })
+        .collect()
 }
 
 /// What the host needs from the app's config.
@@ -328,6 +345,16 @@ impl MailHost {
             .ok_or_else(|| "mail_not_started".to_string())
     }
 
+    /// A copy of the shared classify config ("Why here?", Apply to existing).
+    pub fn classify_config(&self) -> Result<ClassifyConfig, String> {
+        self.running
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+            .map(|r| r.classify.read().unwrap_or_else(|p| p.into_inner()).clone())
+            .ok_or_else(|| "mail_not_started".to_string())
+    }
+
     /// Replaces the shared classify config (rules, tabs, Priority, blocks).
     /// Workers read it at every ingest, so the change applies to new mail.
     pub fn set_classify(&self, cfg: ClassifyConfig) {
@@ -533,20 +560,8 @@ impl Worker {
             .store
             .run_due_ops(&mut ImapOps { srv: &mut *srv }, now)
             .map_err(|e| e.to_string())?;
-        for id in &report.failed {
-            if let Ok(Some(op)) = self.store.op(id) {
-                self.events.emit(MailEvent::OpFailed {
-                    op: serde_json::json!({
-                        "opId": op.id,
-                        "kind": op.kind,
-                        "threadIds": [],
-                        "state": op.state,
-                        "attempts": op.attempts,
-                        "lastError": op.last_error,
-                        "createdAtMs": now,
-                    }),
-                });
-            }
+        for e in failed_op_events(&self.store, &report.failed) {
+            self.events.emit(e);
         }
         if !report.done.is_empty() || !report.failed.is_empty() {
             if let Ok(counts) = self.store.counts() {
@@ -572,7 +587,7 @@ impl Worker {
             },
         };
         self.store
-            .sync_drafts(&mut send, now)
+            .sync_drafts_and_emit(&mut send, now, &self.events)
             .map_err(|e| e.to_string())?;
         let sends = self
             .store
@@ -584,8 +599,182 @@ impl Worker {
             .filter_map(|(_, d)| d.clone())
             .chain(sends.failed.iter().filter_map(|(d, _)| d.clone()))
         {
-            self.events.emit(MailEvent::DraftChanged { draft_id: d });
+            self.events.emit(MailEvent::DraftChanged {
+                draft_id: d,
+                server_uid: None,
+            });
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mail::contracts::{MailboxRole, OpKind, TabKind};
+    use crate::mail::ops::{OpError, OpRequest, OpServer, ResolvedStep};
+    use crate::mail::store::{AccountInput, Address, MailboxInput, MessageInput, TabRef};
+
+    fn store(tag: &str) -> Store {
+        let d = std::env::temp_dir().join(format!(
+            "moduo-mail-host-{tag}-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        let s = Store::open(&d).unwrap();
+        s.upsert_account(&AccountInput {
+            id: "a1".into(),
+            address: "me@x.test".into(),
+            display_name: "Me".into(),
+            provider: "imap".into(),
+            hue: 1,
+        })
+        .unwrap();
+        for (id, role) in [
+            ("inbox", MailboxRole::Inbox),
+            ("archive", MailboxRole::Archive),
+        ] {
+            s.upsert_mailbox(&MailboxInput {
+                id: id.into(),
+                account_id: "a1".into(),
+                path: id.into(),
+                name: id.into(),
+                role,
+                delimiter: Some("/".into()),
+                live: true,
+            })
+            .unwrap();
+        }
+        s
+    }
+
+    fn put(s: &Store, ext: &str, thread: &str, subject: &str, from: &str, date: i64) {
+        s.ingest(&[MessageInput {
+            classify: None,
+            account_id: "a1".into(),
+            ext_id: ext.into(),
+            mailbox_id: "inbox".into(),
+            uid: date,
+            modseq: None,
+            message_id: Some(format!("<{ext}@x>")),
+            in_reply_to: None,
+            references: vec![],
+            thread_id: thread.into(),
+            from: Address {
+                name: "Ann".into(),
+                email: from.into(),
+            },
+            to: vec![],
+            cc: vec![],
+            subject: subject.into(),
+            snippet: String::new(),
+            date_ms: date,
+            flags: 0,
+            size: 1,
+            list_unsubscribe: None,
+            list_unsubscribe_post: None,
+            precedence: None,
+            auto_submitted: None,
+            has_invite: false,
+            tab: Some(TabRef::of(TabKind::Personal)),
+            priority: false,
+            attachments: vec![],
+        }])
+        .unwrap();
+    }
+
+    struct Refuse;
+    impl OpServer for Refuse {
+        fn run(&mut self, _a: &str, _s: &ResolvedStep) -> Result<(), OpError> {
+            Err(OpError::Permanent(
+                "The folder is read-only on the server".into(),
+            ))
+        }
+    }
+
+    #[test]
+    fn op_failed_carries_thread_ids_and_subject() {
+        let s = store("opf");
+        put(&s, "m1", "t1", "Workshop materials", "ann@y.test", 1_000);
+        put(&s, "m2", "t2", "Studio rent", "bob@y.test", 2_000);
+        let h = s
+            .enqueue_op_at(
+                &OpRequest::new(OpKind::Done, vec!["t1".into(), "t2".into()]),
+                10_000,
+            )
+            .unwrap();
+        let report = s.run_due_ops(&mut Refuse, 20_000).unwrap();
+        assert_eq!(report.failed, h.op_ids);
+        let events = failed_op_events(&s, &report.failed);
+        assert_eq!(events.len(), 1);
+        let MailEvent::OpFailed { op } = &events[0] else {
+            panic!("not op_failed: {:?}", events[0]);
+        };
+        assert_eq!(op["threadIds"], serde_json::json!(["t1", "t2"]));
+        assert_eq!(op["subject"], "Workshop materials");
+        assert_eq!(op["kind"], "done");
+        assert_eq!(op["state"], "failed");
+        assert_eq!(op["lastError"], "The folder is read-only on the server");
+        assert_eq!(op["createdAtMs"], 10_000);
+        // The failed list carries the same record.
+        let listed = s.op_record(&h.op_ids[0]).unwrap().unwrap();
+        assert_eq!(listed.subject.as_deref(), Some("Workshop materials"));
+        assert_eq!(listed.thread_ids, vec!["t1", "t2"]);
+        // A missing op yields no event.
+        assert!(failed_op_events(&s, &["nope".into()]).is_empty());
+    }
+
+    #[test]
+    fn explain_falls_back_to_reclassify() {
+        use crate::mail::contracts::{ClassifyStage, RuleAction, RuleCondition};
+        use crate::mail::sync::classify::Rule;
+        let s = store("explain");
+        // Classified before store v2: no stored stage, only headers.
+        put(&s, "m1", "t1", "Invoice 7", "billing@shop.test", 1_000);
+        let cfg = ClassifyConfig {
+            rules: vec![Rule {
+                id: "r-invoices".into(),
+                conditions: vec![(RuleCondition::SubjectContains, "invoice".into())],
+                actions: vec![(RuleAction::PutInTab, Some("notifications".into()))],
+            }],
+            ..ClassifyConfig::default()
+        };
+        let e = s.explain_thread("t1", &cfg).unwrap().unwrap();
+        assert_eq!(e.stage, Some(ClassifyStage::Rules));
+        assert_eq!(e.rule_id.as_deref(), Some("r-invoices"));
+        assert_eq!(e.tab, TabKind::Notifications);
+        assert_eq!(e.address, "billing@shop.test");
+        // A stored reason wins over a re-run with today's settings.
+        s.w()
+            .execute(
+                "UPDATE messages SET classify_stage = 'known_contact' WHERE thread_id = 't1'",
+                [],
+            )
+            .unwrap();
+        let e = s.explain_thread("t1", &cfg).unwrap().unwrap();
+        assert_eq!(e.stage, Some(ClassifyStage::KnownContact));
+        assert_eq!((e.rule_id, e.tab), (None, TabKind::Personal));
+        // No stored reason and no headers to re-run: stage is null.
+        put(&s, "m2", "t2", "Hi", "", 2_000);
+        let e = s.explain_thread("t2", &cfg).unwrap().unwrap();
+        assert_eq!(e.stage, None);
+        assert!(s.explain_thread("missing", &cfg).unwrap().is_none());
+        // Serializes as `MailExplain`.
+        let v = serde_json::to_value(s.explain_thread("t1", &ClassifyConfig::default()).unwrap())
+            .unwrap();
+        assert_eq!(v["stage"], "known_contact");
+        assert!(v.get("customTabId").is_some() && v.get("ruleId").is_some());
+    }
+
+    #[test]
+    fn image_allow_is_read_in_get_thread() {
+        let s = store("img");
+        put(&s, "m1", "t1", "Look", "News@Shop.test", 1_000);
+        assert!(!s.get_thread("t1").unwrap().unwrap().images_allowed);
+        s.set_image_allow("news@shop.test", true).unwrap();
+        assert!(s.get_thread("t1").unwrap().unwrap().images_allowed);
+        s.set_image_allow("NEWS@shop.test", false).unwrap();
+        assert!(!s.get_thread("t1").unwrap().unwrap().images_allowed);
     }
 }

@@ -34,6 +34,7 @@ use super::contracts::{MailboxRole, Provider};
 use super::invite::{itip_reply, Invite, Rsvp};
 use super::ops::backoff_ms;
 use super::store::{now_ms, Store, StoreError, StoreResult};
+use super::sync::events::{EventBus, MailEvent};
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
@@ -168,6 +169,8 @@ pub struct SendReport {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DraftSyncReport {
     pub uploaded: Vec<String>,
+    /// (draft id, the server copy's UID) for each upload, in `uploaded` order.
+    pub server_uids: Vec<(String, Option<i64>)>,
     pub deleted_server_copies: usize,
     pub errors: Vec<(String, String)>,
 }
@@ -451,9 +454,28 @@ impl Store {
                     }
                     self.kv_set(&rev_key(&row.id), &rev)?;
                     rep.uploaded.push(row.id.clone());
+                    rep.server_uids.push((row.id.clone(), new_uid));
                 }
                 Err(e) => rep.errors.push((row.id.clone(), e.message().to_string())),
             }
+        }
+        Ok(rep)
+    }
+
+    /// [`Store::sync_drafts`], then one `draft_changed` with `serverUid` per upload, so
+    /// the composer can move from "Saved on this Mac" to "Saved to Drafts" (AC10).
+    pub fn sync_drafts_and_emit<T: SendTransport>(
+        &self,
+        t: &mut T,
+        now: i64,
+        events: &EventBus,
+    ) -> StoreResult<DraftSyncReport> {
+        let rep = self.sync_drafts(t, now)?;
+        for (draft_id, uid) in &rep.server_uids {
+            events.emit(MailEvent::DraftChanged {
+                draft_id: draft_id.clone(),
+                server_uid: *uid,
+            });
         }
         Ok(rep)
     }

@@ -78,6 +78,7 @@ fn open(d: &std::path::Path) -> Store {
 
 fn msg(a: &str, ext: &str, mb: &str, uid: i64, thread: &str, date: i64, flags: u32) -> MessageInput {
     MessageInput {
+        classify: None,
         account_id: a.into(),
         ext_id: ext.into(),
         mailbox_id: format!("{a}-{mb}"),

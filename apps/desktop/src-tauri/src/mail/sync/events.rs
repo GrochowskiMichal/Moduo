@@ -39,8 +39,10 @@ pub enum MailEvent {
         account_id: String,
         thread_ids: Vec<String>,
     },
+    /// `server_uid` is set once the draft's upload reached the server's Drafts.
     DraftChanged {
         draft_id: String,
+        server_uid: Option<i64>,
     },
 }
 
@@ -151,6 +153,7 @@ mod tests {
             },
             MailEvent::DraftChanged {
                 draft_id: "d".into(),
+                server_uid: None,
             },
         ];
         let kinds: Vec<EventKind> = samples.iter().map(MailEvent::kind).collect();
@@ -158,6 +161,14 @@ mod tests {
         for s in &samples {
             assert_eq!(serde_json::to_value(s).unwrap()["kind"], s.kind().as_str());
         }
+        assert_eq!(
+            serde_json::to_value(MailEvent::DraftChanged {
+                draft_id: "d".into(),
+                server_uid: Some(4),
+            })
+            .unwrap(),
+            serde_json::json!({"kind":"draft_changed","draftId":"d","serverUid":4})
+        );
     }
 
     #[tokio::test]
@@ -167,6 +178,7 @@ mod tests {
         let mut b = bus.subscribe();
         bus.emit(MailEvent::DraftChanged {
             draft_id: "d1".into(),
+            server_uid: Some(7),
         });
         assert_eq!(a.recv().await.unwrap(), b.recv().await.unwrap());
     }

@@ -276,6 +276,7 @@ fn ingest_chunk(
                 .any(|a| a.mime.eq_ignore_ascii_case("text/calendar"));
         for mb in targets(h) {
             batch.push(MessageInput {
+                classify: Some(cfg_hit.reason()),
                 account_id: ctx.account_id.to_string(),
                 ext_id: ext_id.clone(),
                 mailbox_id: mb,

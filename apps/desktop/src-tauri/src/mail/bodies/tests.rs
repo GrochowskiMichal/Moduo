@@ -42,6 +42,7 @@ fn msg(
     atts: Vec<AttachmentInput>,
 ) -> MessageInput {
     MessageInput {
+        classify: None,
         account_id: "a1".into(),
         ext_id: ext.into(),
         mailbox_id: "inbox".into(),

@@ -59,6 +59,8 @@ export function createTauriMailEngine(
     setFollowUp: (threadId, dueMs) => call("mail_set_follow_up", { input: { threadId, dueMs } }),
     releaseNewSenders: (threadIds) => call("mail_release_new_senders", { threadIds }),
     applyOp: (input) => call("mail_apply_op", { input }),
+    explainThread: (threadId) => call("mail_explain", { threadId }),
+    setImageAllow: (address, allow) => call("mail_set_image_allow", { address, allow }),
     undoOp: (opId) => call("mail_undo_op", { opId }),
     listFailedOps: () => call("mail_list_failed_ops"),
     retryOp: (opId) => call("mail_retry_op", { opId }),

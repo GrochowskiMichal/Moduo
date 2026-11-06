@@ -42,6 +42,7 @@ fn store(tag: &str) -> Store {
 
 fn msg(ext: &str, mailbox: &str, uid: i64, thread: &str, date: i64, flags: u32) -> MessageInput {
     MessageInput {
+        classify: None,
         account_id: "a1".into(),
         ext_id: ext.into(),
         mailbox_id: mailbox.into(),
@@ -444,4 +445,100 @@ fn storage_stats_split_mail_and_attachments_and_disconnect_purges() {
 fn user_dir_rejects_traversal() {
     assert!(Store::user_dir(std::path::Path::new("/x"), "../etc").is_err());
     assert!(Store::user_dir(std::path::Path::new("/x"), "abc-123").is_ok());
+}
+
+fn queued_send(s: &Store, thread: Option<&str>, now: i64) -> String {
+    let doc = crate::mail::send::DraftDoc {
+        from_addr: "me@x.test".into(),
+        to: vec!["ana@y.test".into()],
+        subject: "Pilot terms".into(),
+        text: "Signed.".into(),
+        ..Default::default()
+    };
+    let id = s.save_draft_at(None, "a1", thread, doc, now).unwrap();
+    s.queue_send_at(&id, 5, now).unwrap().outbox_id
+}
+
+#[test]
+fn counts_include_outbox() {
+    let s = store("counts-outbox");
+    assert_eq!(s.counts().unwrap().outbox, 0);
+    let o1 = queued_send(&s, None, 1_000);
+    queued_send(&s, None, 2_000);
+    assert_eq!(s.counts().unwrap().outbox, 2);
+    s.undo_send(&o1).unwrap();
+    assert_eq!(s.counts().unwrap().outbox, 1);
+    let v = serde_json::to_value(s.counts().unwrap()).unwrap();
+    assert_eq!(v["outbox"], 1);
+}
+
+#[test]
+fn thread_row_flags() {
+    use crate::mail::contracts::OpKind;
+    use crate::mail::ops::OpRequest;
+    let s = store("row-flags");
+    s.ingest(&[
+        msg("f1", "inbox", 1, "follow", 1_000, FLAG_SEEN),
+        msg("r1", "inbox", 2, "reply", 2_000, FLAG_SEEN),
+        msg("s1", "inbox", 3, "snooze", 3_000, FLAG_SEEN),
+        msg("o1", "inbox", 4, "out", 4_000, FLAG_SEEN),
+    ])
+    .unwrap();
+    let row = |id: &str| -> ThreadRow {
+        list(&s, ViewRef::Unified(MailboxRole::Inbox), None, 50)
+            .rows
+            .into_iter()
+            .find(|r| r.thread_id == id)
+            .unwrap_or_else(|| panic!("no row {id}"))
+    };
+    // Follow-up: the armed due time.
+    s.set_follow_up("follow", Some(99_000), 5_000).unwrap();
+    assert_eq!(row("follow").follow_up_at_ms, Some(99_000));
+    assert_eq!(row("reply").follow_up_at_ms, None);
+    // A snooze that a reply woke reads "reply"; one that ran out reads "snooze".
+    let snooze = |t: &str| {
+        let mut r = OpRequest::new(OpKind::Snooze, vec![t.into()]);
+        r.snooze_until_ms = Some(50_000);
+        s.enqueue_op_at(&r, 6_000).unwrap();
+    };
+    snooze("reply");
+    snooze("snooze");
+    s.ingest(&[msg("r2", "inbox", 5, "reply", 7_000, 0)])
+        .unwrap();
+    for t in ["reply", "snooze"] {
+        assert_eq!(row(t).return_reason, None, "still snoozed");
+        s.enqueue_op_at(&OpRequest::new(OpKind::Unsnooze, vec![t.into()]), 8_000)
+            .unwrap();
+    }
+    assert_eq!(row("reply").return_reason.as_deref(), Some("reply"));
+    assert_eq!(row("snooze").return_reason.as_deref(), Some("snooze"));
+    // Unsnoozing a thread that was never snoozed says nothing.
+    s.enqueue_op_at(
+        &OpRequest::new(OpKind::Unsnooze, vec!["follow".into()]),
+        8_000,
+    )
+    .unwrap();
+    assert_eq!(row("follow").return_reason, None);
+    // Done clears it (the row leaves the Inbox; read it from Archive).
+    s.enqueue_op_at(&OpRequest::new(OpKind::Done, vec!["snooze".into()]), 9_000)
+        .unwrap();
+    let archived = list(&s, ViewRef::Unified(MailboxRole::Archive), None, 50).rows;
+    assert_eq!(archived[0].thread_id, "snooze");
+    assert_eq!(archived[0].return_reason, None);
+    // A send waiting in the Outbox for this thread.
+    assert_eq!(row("out").outbox_state, None);
+    queued_send(&s, Some("out"), 10_000);
+    assert_eq!(row("out").outbox_state.as_deref(), Some("pending"));
+    s.w()
+        .execute("UPDATE outbox SET state = 'in_flight'", [])
+        .unwrap();
+    assert_eq!(row("out").outbox_state.as_deref(), Some("in_flight"));
+    // The thread load and search carry the same flags.
+    assert_eq!(
+        s.get_thread("follow").unwrap().unwrap().row.follow_up_at_ms,
+        Some(99_000)
+    );
+    let v = serde_json::to_value(row("reply")).unwrap();
+    assert_eq!(v["returnReason"], "reply");
+    assert!(v.get("followUpAtMs").is_some() && v.get("outboxState").is_some());
 }
