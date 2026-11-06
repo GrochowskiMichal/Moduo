@@ -29,6 +29,8 @@ export type FixtureMessage = {
   fromName: string;
   fromEmail: string;
   to: string[];
+  /** Cc addresses; the generator leaves it out (the intro lab state adds one). */
+  cc?: string[];
   subject: string;
   snippet: string;
   bodyText: string;

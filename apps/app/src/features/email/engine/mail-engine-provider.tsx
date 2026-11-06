@@ -53,13 +53,15 @@ function useFixturePorts(wanted: boolean): FixturePorts | null {
       import("../testing/fake-engine"),
       import("../testing/fixture"),
       import("../testing/fake-compose"),
-    ]).then(([fake, fx, fc]) => {
+      import("../testing/fixture-settings"),
+    ]).then(([fake, fx, fc, settings]) => {
       if (gone) return;
       const scenario = mailFixtureScenario();
       const engine = fake.createFakeMailEngine({
         fixture: fx.generateFixture({ messages: mailFixtureMessages() }),
         now: () => Date.now(),
         scenario: scenario.filter(fake.isMailFixtureScenario),
+        classify: settings.fixtureClassify(scenario),
       });
       const compose = fc.createFakeCompose({
         now: () => Date.now(),

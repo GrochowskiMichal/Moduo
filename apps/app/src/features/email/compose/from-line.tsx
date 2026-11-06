@@ -58,7 +58,9 @@ function FromMenu(props: {
   const accountOf = (a: MailAlias) => props.accounts.find((x) => x.id === a.accountId);
   const hue = props.current ? accountOf(props.current)?.hue : undefined;
   return (
-    <DropdownMenu>
+    // Not modal: a modal menu aria-hides the composer while its fields stay focusable
+    // (axe aria-hidden-focus); Escape and an outside click still close it.
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"

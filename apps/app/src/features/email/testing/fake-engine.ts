@@ -83,6 +83,7 @@ export const MAIL_FIXTURE_SCENARIOS = [
   "followups",
   "bodyFetch",
   "bodyOffline",
+  "intro",
 ] as const;
 export type MailFixtureScenario = (typeof MAIL_FIXTURE_SCENARIOS)[number];
 
@@ -488,7 +489,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
           messageId: m.messageId,
           from: { name: m.fromName, email: m.fromEmail },
           to: m.to.map((email) => ({ name: "", email })),
-          cc: [],
+          cc: (m.cc ?? []).map((email) => ({ name: "", email })),
           dateMs: m.dateMs,
           subject: m.subject,
           snippet: m.snippet,
@@ -760,6 +761,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
     bodyStates,
     addFailed: (op) => failed.set(op.record.opId, op),
     nextOpId: () => `op${++opSeq}`,
+    dropThreads: () => threads.clear(),
   });
   sorted = null;
   return engine;
@@ -773,6 +775,7 @@ type ScenarioDeps = {
   bodyStates: Map<string, MailThread["messages"][number]["bodyState"]>;
   addFailed: (op: PendingOp) => void;
   nextOpId: () => string;
+  dropThreads: () => void;
 };
 
 const DAY_MS = 86_400_000;
@@ -790,6 +793,7 @@ function applyScenario(scenario: Set<MailFixtureScenario>, d: ScenarioDeps) {
   }
   if (scenario.has("bodyFetch")) scenarioBody(d, "text_only");
   if (scenario.has("bodyOffline")) scenarioBody(d, "none");
+  if (scenario.has("intro")) scenarioIntro(d);
 }
 
 const personalThreads = (d: ScenarioDeps) =>
@@ -808,7 +812,11 @@ function scenarioAccounts(scenario: Set<MailFixtureScenario>, d: ScenarioDeps) {
       to: ["ana@acme.test"],
     });
   if (scenario.has("offline")) setAll("offline");
-  if (scenario.has("firstSync")) setAll("first_sync");
+  // The first sync before its newest mail lands: no threads yet, skeleton rows.
+  if (scenario.has("firstSync")) {
+    setAll("first_sync");
+    d.dropThreads();
+  }
   const [, second, third] = d.accounts;
   if (scenario.has("reconnect") && second)
     d.engine.setAccountState(second, { syncState: "reconnect", lastError: "invalid_grant" });
@@ -844,9 +852,27 @@ function scenarioFailed(d: ScenarioDeps) {
   }
 }
 
+/** The newest Personal thread becomes an introduction: Priya wrote last and put Dana in Cc. */
+function scenarioIntro(d: ScenarioDeps) {
+  const t = personalThreads(d)[0];
+  const newest = t?.messages.reduce((a, b) => (b.dateMs > a.dateMs ? b : a));
+  if (!t || !newest) return;
+  headTheList(t);
+  newest.fromName = "Priya Shah";
+  newest.fromEmail = "priya@northzone.test";
+  newest.cc = ["dana@acme.test"];
+}
+
+/** Pinned, the newest Personal thread heads the list above the other pins: the row a lab
+ *  state opens first. */
+function headTheList(t: ThreadState) {
+  t.row.pinned = true;
+}
+
 function scenarioBody(d: ScenarioDeps, state: "text_only" | "none") {
   const t = personalThreads(d)[0];
   if (!t) return;
+  headTheList(t);
   d.bodyStates.set(t.row.threadId, state);
   if (state === "none") d.engine.setAccountState(t.row.accountId, { syncState: "offline" });
 }

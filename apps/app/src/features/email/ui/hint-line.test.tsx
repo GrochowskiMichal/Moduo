@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
@@ -97,7 +97,7 @@ describe("the hint line (specs/mail-v3.md §5, AC19)", () => {
     expect(line(ui.container)).toMatch(/^Done, in Archive · (⌘Z|Ctrl\+Z) undoes$/);
 
     const row = ui.container.querySelector<HTMLElement>("[data-thread-id]")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Done" }));
+    fireEvent.click(row.querySelector('[data-row-control="Done"]')!);
     await tick();
     expect(line(ui.container)).toBe("Next time press e");
     screen.getByText("e", { selector: "kbd" });

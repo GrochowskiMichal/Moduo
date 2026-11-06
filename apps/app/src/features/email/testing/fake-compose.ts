@@ -23,13 +23,22 @@ export type FakeComposeEngine = MailComposeEngine & {
   uploadDrafts(): void;
 };
 
-/** Compose lab states: a failed send back in Drafts, a queued send. */
-export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox"] as const;
+/** Compose lab states: a failed send back in Drafts, a queued send, and files over the
+ *  provider's limit waiting in the attach picker. */
+export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox", "tooBig"] as const;
 export type FakeComposeScenario = (typeof FAKE_COMPOSE_SCENARIOS)[number];
 
 export function isFakeComposeScenario(v: string): v is FakeComposeScenario {
   return (FAKE_COMPOSE_SCENARIOS as readonly string[]).includes(v);
 }
+
+const MB = 1024 * 1024;
+/** The prototype's `tooBig` files: 31.4 MB together, over Gmail's 25 MB once encoded. */
+const TOO_BIG = [
+  { id: "att-shot-list", filename: "shot-list.pdf", size: Math.round(0.4 * MB) },
+  { id: "att-moodboard", filename: "moodboard.pdf", size: Math.round(6.2 * MB) },
+  { id: "att-raw", filename: "test-shoot-raw.zip", size: Math.round(24.8 * MB) },
+];
 
 export function createFakeCompose(
   opts: {
@@ -125,7 +134,7 @@ export function createFakeCompose(
       return crypto.randomUUID();
     },
     async pickAttachments() {
-      return [];
+      return opts.scenario?.includes("tooBig") ? TOO_BIG.map((f) => ({ ...f })) : [];
     },
     drain() {
       if (!engine.online) return;

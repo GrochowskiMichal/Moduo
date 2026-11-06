@@ -211,7 +211,7 @@ function ToLine({ message, self }: { message: MailMessage; self: ReadonlySet<str
       <span aria-hidden>·</span>
       <button
         type="button"
-        className="shrink-0 rounded-sm outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="min-h-6 shrink-0 rounded-sm outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
         aria-expanded={addresses}
         onClick={() => setAddresses((a) => !a)}
       >
@@ -248,7 +248,7 @@ function OpenHeader({
           type="button"
           onClick={onToggle}
           aria-expanded
-          className="min-w-0 truncate text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="min-h-6 min-w-0 truncate text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {senderName(message)}
           {message.from.name ? (

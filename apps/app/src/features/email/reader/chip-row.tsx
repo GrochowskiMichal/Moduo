@@ -94,7 +94,7 @@ function LinkChip({
         <button
           type="button"
           onClick={() => onOpen(link)}
-          className="max-w-full truncate rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="min-h-6 max-w-full truncate rounded-sm outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           {label}
         </button>

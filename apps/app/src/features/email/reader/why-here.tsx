@@ -150,7 +150,14 @@ export function WhyHereCard({
       </ol>
       {answer.link && onOpenSettings ? (
         <div className="border-t border-hairline pt-2">
-          <Button type="button" size="sm" variant="ghost" onClick={onOpenSettings}>
+          {/* The link names the sender: it wraps inside the popover rather than run past it. */}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="h-auto py-1 text-left whitespace-normal"
+            onClick={onOpenSettings}
+          >
             {answer.link}
           </Button>
         </div>

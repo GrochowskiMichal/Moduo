@@ -176,7 +176,8 @@ describe("MailRow (specs/mail-v3.md §3, AC15)", () => {
     expect(avatar.className).toContain("bg-label-fill");
     expect(el.querySelector<HTMLElement>("[data-account-ring]")!.dataset.label).toBe("teal");
     expect(el.querySelector("[data-unread-dot]")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Select · x" }));
+    // Pointer-only (the row is a listbox option): hidden from the role tree, found by its label.
+    fireEvent.click(el.querySelector('[data-row-control="Select · x"]')!);
     expect(a.togglePick).toHaveBeenCalledWith("t1");
     expect(a.open).not.toHaveBeenCalled();
     cleanup();
@@ -189,12 +190,13 @@ describe("MailRow (specs/mail-v3.md §3, AC15)", () => {
     const { el, actions: a } = mount({ showActions: true });
     expect(el.querySelector("time")).not.toBeNull();
     expect(el.querySelector("[data-row-actions]")!.className).toContain("absolute");
-    screen.getByRole("button", { name: "Done" });
+    expect(el.querySelector('[data-row-control="Done"]')).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
     cleanup();
     const done = mount({ showActions: true, place: "archive", actions: a });
-    fireEvent.click(screen.getByRole("button", { name: "Not done" }));
+    fireEvent.click(done.el.querySelector('[data-row-control="Not done"]')!);
     expect(a.undone).toHaveBeenCalledWith("t1");
-    expect(screen.queryByRole("button", { name: "Done" })).toBeNull();
+    expect(done.el.querySelector('[data-row-control="Done"]')).toBeNull();
     expect(done.el.querySelector("time")).not.toBeNull();
   });
 

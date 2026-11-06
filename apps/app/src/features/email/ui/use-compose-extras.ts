@@ -60,10 +60,13 @@ export function useComposeExtras(input: {
 } {
   const { port, engine, accounts } = input;
   const active = useActiveCompose(input.session);
-  const bytes = useRead(port && active ? `size:${active.accountId}` : null, () =>
-    port!.sizeLimit(active!.accountId),
+  // No `active!.x` inside a closure: the React Compiler reads a closure's dependencies
+  // unconditionally, so `active!.accountId` there throws while nothing is composed.
+  const accountId = active?.accountId ?? null;
+  const bytes = useRead(port && accountId !== null ? `size:${accountId}` : null, () =>
+    port && accountId !== null ? port.sizeLimit(accountId) : Promise.resolve(0),
   );
-  const provider = accounts.find((a) => a.id === active?.accountId)?.provider ?? null;
+  const provider = accounts.find((a) => a.id === accountId)?.provider ?? null;
   // The To field asks per typed query (debounced there), not a pool read up front.
   const suggestPeople = useMemo(
     () =>
@@ -76,8 +79,9 @@ export function useComposeExtras(input: {
     engine && active?.threadId && (active.kind === "reply" || active.kind === "reply-all")
       ? active.threadId
       : null;
-  const introducer = useRead(replyTo ? `intro:${active!.key}` : null, async () => {
-    const thread = await engine!.getThread(replyTo!);
+  const composeKey = active?.key ?? null;
+  const introducer = useRead(replyTo ? `intro:${composeKey}` : null, async () => {
+    const thread = engine && replyTo ? await engine.getThread(replyTo) : null;
     return thread
       ? detectIntroducer(
           thread.messages,

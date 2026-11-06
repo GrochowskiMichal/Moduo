@@ -10,7 +10,7 @@ import { memo } from "react";
 
 import type { LabelColor } from "@/components/tag-colors";
 import { avatarHue } from "@/components/ui/avatar";
-import { IconButton } from "@/components/ui/icon-button";
+import { Button } from "@/components/ui/button";
 import { SELECTED_ROW } from "@/components/ui/selection";
 import { initialsOf } from "@/lib/initials";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
@@ -52,6 +52,30 @@ const stop = (fn: () => void) => (e: React.MouseEvent) => {
   fn();
 };
 
+/**
+ * A pointer-only row control. The row is a listbox option, which may not hold interactive
+ * children (axe nested-interactive), so the hover actions and the pick box are plain spans
+ * hidden from assistive tech; the keys (e, s, x, ⇧E) and the reader toolbar carry the same
+ * actions for keyboard and screen-reader use (specs/mail-v3.md §3, §7).
+ */
+function RowControl({
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  label: string;
+  icon: typeof Check;
+  onClick: (e: React.MouseEvent<HTMLElement>) => void;
+}) {
+  return (
+    <Button asChild variant="ghost" size="icon" className="size-(--ctrl-h-sm)">
+      <span aria-hidden data-row-control={label} title={label} onClick={onClick}>
+        <Icon aria-hidden />
+      </span>
+    </Button>
+  );
+}
+
 function RowActions({
   threadId,
   done,
@@ -72,30 +96,14 @@ function RowActions({
       )}
     >
       {done ? (
-        <IconButton
-          icon={Undo2}
-          label="Not done"
-          size="sm"
-          onClick={stop(() => actions.undone(threadId))}
-        />
+        <RowControl icon={Undo2} label="Not done" onClick={stop(() => actions.undone(threadId))} />
       ) : (
         <>
-          <IconButton
-            icon={Check}
-            label="Done"
-            size="sm"
-            onClick={stop(() => actions.done(threadId))}
-          />
-          <IconButton
-            icon={Clock3}
-            label="Snooze"
-            size="sm"
-            onClick={stop(() => actions.snooze(threadId))}
-          />
-          <IconButton
+          <RowControl icon={Check} label="Done" onClick={stop(() => actions.done(threadId))} />
+          <RowControl icon={Clock3} label="Snooze" onClick={stop(() => actions.snooze(threadId))} />
+          <RowControl
             icon={MoreHorizontal}
             label="More"
-            size="sm"
             onClick={(e) => {
               e.stopPropagation();
               actions.more(threadId, e.currentTarget);
@@ -152,11 +160,11 @@ function RowLead({
           {initialsOf(person.name || person.email)}
         </span>
       </span>
-      <button
-        type="button"
-        tabIndex={-1}
-        aria-label={picked ? "Deselect · x" : "Select · x"}
-        aria-pressed={picked}
+      {/* Pointer-only like the hover actions (see RowControl); x picks from the keyboard. */}
+      <span
+        aria-hidden
+        data-row-control={picked ? "Deselect · x" : "Select · x"}
+        title={picked ? "Deselect · x" : "Select · x"}
         onClick={stop(() => actions.togglePick(row.threadId))}
         className={cn(
           "absolute inset-1 hidden items-center justify-center rounded-sm border border-muted-foreground bg-card group-hover:flex",
@@ -165,7 +173,7 @@ function RowLead({
         )}
       >
         {picked ? <Check aria-hidden className="size-3" /> : null}
-      </button>
+      </span>
     </span>
   );
 }

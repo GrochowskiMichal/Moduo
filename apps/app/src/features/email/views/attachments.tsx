@@ -1,7 +1,7 @@
 // Attachments view (AC30): every attachment across synced mail, filterable by
 // type, with Space/click preview handed to the reader's preview surface.
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -25,14 +25,17 @@ export function AttachmentList({
   onPreview: (entry: AttachmentEntry) => void;
   emptyTitle?: string;
 }) {
+  const base = useId();
   if (entries.length === 0) return <EmptyState title={emptyTitle} />;
   return (
     <ul aria-label="Attachments" className="flex flex-col divide-y divide-border">
-      {entries.map((e) => (
+      {entries.map((e, i) => (
         <li key={`${e.messageId}:${e.attachment.id}`}>
           <button
             type="button"
-            aria-label={`Preview ${e.attachment.filename}`}
+            // Named by what it shows (axe label-content-name-mismatch); the verb is the title.
+            aria-labelledby={`${base}-${i}-name ${base}-${i}-meta`}
+            title={`Preview ${e.attachment.filename}`}
             className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-state-hover"
             onClick={() => onPreview(e)}
             onKeyDown={(ev) => {
@@ -43,10 +46,13 @@ export function AttachmentList({
             }}
           >
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-foreground">
+              <span id={`${base}-${i}-name`} className="block truncate text-sm text-foreground">
                 {e.attachment.filename}
               </span>
-              <span className="block truncate text-xs text-muted-foreground">
+              <span
+                id={`${base}-${i}-meta`}
+                className="block truncate text-xs text-muted-foreground"
+              >
                 {e.from.name || e.from.email} · {formatBytes(e.attachment.size)}
               </span>
             </span>

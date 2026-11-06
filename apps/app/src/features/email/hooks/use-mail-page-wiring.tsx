@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 
 import { toast } from "sonner";
 
 import type { EntityRef } from "@/lib/entity-links";
+import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
 
@@ -17,7 +18,7 @@ import { endPosition, makeTask } from "../../tasks/helpers";
 import { useTasksSelector } from "../../tasks/tasks-context";
 import { createMailSpineCommands } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
-import { mailEngineMode } from "../engine/behavior";
+import { mailEngineMode, mailFixtureScenario } from "../engine/behavior";
 import type { MailContactDetail } from "../panels/contact-view";
 import { contactDetailFrom, isDueOn, taskDetailFrom } from "../panels/panel-wiring";
 import type { MailTaskDetail } from "../panels/task-view";
@@ -88,6 +89,23 @@ function LinkPicker({ open, onOpenChange, onPick, linked = [], onUnlink }: MailL
   );
 }
 
+/** The fixture's lab Settings (custom tabs, aliases, snippets) in place of the mirror's,
+ *  loaded on demand so the fixture stays out of the main bundle (MV-12). */
+function useFixtureSettings(): EmailSettingsItem[] {
+  const [items, setItems] = useState<EmailSettingsItem[]>(EMPTY);
+  useEffect(() => {
+    if (mailEngineMode() !== "fixture") return;
+    let gone = false;
+    void import("../testing/fixture-settings").then((m) => {
+      if (!gone) setItems(m.fixtureSettingsItems(mailFixtureScenario()));
+    });
+    return () => {
+      gone = true;
+    };
+  }, []);
+  return items;
+}
+
 export function useMailPageWiring(): Partial<MailPageProps> {
   const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId, modulePermissions } = useWorkspace();
@@ -111,7 +129,12 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     setMirror(started?.mirror ?? null);
     return () => started?.stop();
   }, [userId]);
-  const items = useSyncExternalStore(mirror?.subscribe ?? noop, mirror?.items ?? (() => EMPTY));
+  const synced = useSyncExternalStore(mirror?.subscribe ?? noop, mirror?.items ?? (() => EMPTY));
+  const labItems = useFixtureSettings();
+  const items = useMemo(
+    () => (labItems.length ? [...synced, ...labItems] : synced),
+    [synced, labItems],
+  );
 
   useEffect(() => {
     if (!runtime || !workspaceId) return;
