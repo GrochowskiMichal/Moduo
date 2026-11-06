@@ -59,7 +59,9 @@ describe("/email on the engine (MR-16 cutover)", () => {
     await tick();
     expect(ui.container.querySelectorAll("[data-thread-id]").length).toBeGreaterThan(0);
     expect(ui.container.querySelector(`[data-reader-thread="${first.threadId}"]`)).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "Show original" }).length).toBeGreaterThan(0);
+    // The reader's toolbar; "Show original" lives in its ⋯ menu (MV-8).
+    screen.getByRole("toolbar", { name: "Conversation actions" });
+    screen.getByRole("button", { name: "More actions" });
     expect(consumed).toBe(1);
   });
 
@@ -163,6 +165,7 @@ describe("/email on the engine (MR-16 cutover)", () => {
       link: async () => result,
       drop: async () => result,
       createEvent: async () => result,
+      linksFor: async () => [],
     } as unknown as MailSpineCommands;
     const { rowIds } = await mountPage(spine);
     press("j");

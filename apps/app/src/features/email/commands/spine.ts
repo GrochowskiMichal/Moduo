@@ -53,6 +53,20 @@ export type MailSpinePort = {
   /** One batched read per visible window: which kinds each thread links to. Threads
    *  with no links are absent from the answer. */
   linkedKindsFor?(threadIds: string[]): Promise<Record<string, MailLinkedKind[]>>;
+  /** The open thread's links (the reader's chip row, MV-8): every live link where one
+   *  side is this thread's `email_ref`. Empty when the thread has no ref yet. */
+  linksFor?(threadId: string): Promise<MailThreadLink[]>;
+};
+
+/** One link of a thread, as the reader's chip row shows it (specs/mail-v3.md §8). */
+export type MailThreadLink = {
+  linkId: string;
+  /** The other end (the task, note, event, contact or project). */
+  entity: SpineEntity;
+  /** The link as stored, so an unlink's Undo recreates it exactly. */
+  source: SpineEntity;
+  target: SpineEntity;
+  relationKind: SpineLinkInput["relationKind"];
 };
 
 /** What a gesture made, so Undo removes exactly that. */
@@ -181,6 +195,26 @@ export function createMailSpineCommands(port: MailSpinePort) {
     /** The row flags' one batched read per window (decision 7); absent when the
      *  port can't read links. */
     linkedKindsFor: port.linkedKindsFor?.bind(port),
+    /** The thread's links for the reader's chips; empty when the port can't read them. */
+    linksFor(threadId: string): Promise<MailThreadLink[]> {
+      return port.linksFor ? port.linksFor(threadId) : Promise.resolve([]);
+    },
+    /** A chip's ✕: removes the link; Undo recreates it as it was. */
+    async unlink(link: MailThreadLink): Promise<{ undo: () => Promise<void> }> {
+      await port.deleteLink(link.linkId);
+      let undone = false;
+      return {
+        undo: async () => {
+          if (undone) return;
+          undone = true;
+          await port.createLink({
+            source: link.source,
+            target: link.target,
+            relationKind: link.relationKind,
+          });
+        },
+      };
+    },
     /** `t`: a task spawned from the thread; the thread references the contact. */
     convert(thread: MailThreadRow, opts: { alsoDone?: boolean } = {}) {
       return run((plan) => convertInto(plan, thread, opts));

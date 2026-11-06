@@ -260,6 +260,32 @@ export function buildReaderDoc(
   rawHtml: string,
   images: ReaderImagesInput,
   trackerBlocking = true,
+  darkSurface = false,
+): ReaderDoc {
+  const doc = buildReaderDocBase(messageId, rawHtml, images, trackerBlocking);
+  return darkSurface ? { ...doc, srcDoc: withDarkSurface(doc.srcDoc) } : doc;
+}
+
+/**
+ * Moduo's dark surface for HTML mail in dark mode (specs/mail-v3.md §8, the
+ * "Original colours" toggle): the whole document inverts and turns its hues
+ * back, and pictures invert again so they keep their own colours. All inside
+ * the sandboxed frame; the style lands before the document's last `</body>`,
+ * which is always the reader template's own.
+ */
+export function withDarkSurface(srcDoc: string): string {
+  const at = srcDoc.lastIndexOf("</body>");
+  if (at < 0) return srcDoc;
+  const flip = "filter: invert(1) hue-rotate(180deg);";
+  const style = `<style>html { ${flip} } img, video, picture, svg, [style*="background-image"] { ${flip} }</style>`;
+  return srcDoc.slice(0, at) + style + srcDoc.slice(at);
+}
+
+function buildReaderDocBase(
+  messageId: string,
+  rawHtml: string,
+  images: ReaderImagesInput,
+  trackerBlocking: boolean,
 ): ReaderDoc {
   const imagesLoaded = shouldLoadImages(images);
   // With images on, a style URL we can't parse with confidence is dropped

@@ -13,6 +13,7 @@ import {
   snippetsFromItems,
   type SpineRuntime,
   unsubscribeTarget,
+  whoFromLinks,
 } from "./mail-page-wiring";
 
 const item = (kind: string, value: Record<string, unknown>, id = kind) =>
@@ -214,5 +215,105 @@ describe("linkedKindsFor (specs/mail-v3.md decision 7, AC15)", () => {
     });
     expect(await port.linkedKindsFor!(["a"])).toEqual({});
     expect(calls).toBe(0);
+  });
+});
+
+describe("the reader's spine reads (specs/mail-v3.md §8, MV-8)", () => {
+  it("linksFor reads the thread ref's links with registry labels; unlink undoes", async () => {
+    const { rt, log } = fakeRuntime();
+    rt.spine.listLinks = async () => [
+      {
+        id: "l1",
+        relationKind: "spawned-from",
+        sourceType: "task",
+        sourceId: "task1",
+        targetType: "email_thread",
+        targetId: "ref-known",
+      },
+      {
+        id: "l2",
+        relationKind: "references",
+        sourceType: "email_thread",
+        sourceId: "ref-known",
+        targetType: "contact",
+        targetId: "c1",
+      },
+      {
+        id: "l3",
+        relationKind: "references",
+        sourceType: "note",
+        sourceId: "gone",
+        targetType: "email_thread",
+        targetId: "ref-known",
+      },
+    ];
+    rt.spine.getEntities = async () => [
+      { type: "task", id: "task1", label: "Confirm Acme pilot" },
+      { type: "contact", id: "c1", label: "Ann" },
+      { type: "note", id: "gone", label: "Old", deletedAt: "2026-11-01T00:00:00Z" },
+    ];
+    const spine = createMailSpineCommands(
+      createRuntimeSpinePort({
+        runtime: rt,
+        workspaceId: "w",
+        makeTask: (i) => i,
+        hasRef: (key) => key === "t-known",
+        refIdFor: (key) => (key === "t-known" ? "ref-known" : null),
+        contacts: [],
+      }),
+    );
+    expect(await spine.linksFor("t-none")).toEqual([]);
+    const links = await spine.linksFor("t-known");
+    expect(links.map((l) => [l.entity.type, l.entity.label, l.relationKind])).toEqual([
+      ["task", "Confirm Acme pilot", "spawned-from"],
+      ["contact", "Ann", "references"],
+    ]);
+    const res = await spine.unlink(links[0]!);
+    await res.undo();
+    expect(log).toEqual(["-link", "link task->email_thread"]);
+  });
+
+  it("a ref made this session is found again after the port is rebuilt", async () => {
+    const { rt } = fakeRuntime();
+    let asked = "";
+    rt.spine.listLinks = async (i) => ((asked = i.entityId), []);
+    const deps = { runtime: rt, workspaceId: "w2", makeTask: (i: unknown) => i, contacts: [] };
+    const first = createMailSpineCommands(createRuntimeSpinePort({ ...deps, hasRef: () => false }));
+    await first.note(row);
+    const again = createMailSpineCommands(createRuntimeSpinePort({ ...deps, hasRef: () => true }));
+    await again.linksFor(row.threadId);
+    expect(asked).toBe("ref1");
+  });
+
+  it("whoFromLinks counts open tasks, notes and the next meeting", () => {
+    const now = new Date(2026, 10, 5, 10).getTime(); // Thu
+    const who = whoFromLinks({
+      contact: { id: "c1", name: "Jonas Weber", title: "Head of IT", company: "Acme" },
+      links: [
+        { sourceType: "task", sourceId: "t-open", targetType: "contact", targetId: "c1" },
+        { sourceType: "contact", sourceId: "c1", targetType: "task", targetId: "t-open2" },
+        { sourceType: "task", sourceId: "t-done", targetType: "contact", targetId: "c1" },
+        { sourceType: "note", sourceId: "n1", targetType: "contact", targetId: "c1" },
+        { sourceType: "calendar_event", sourceId: "e-past", targetType: "contact", targetId: "c1" },
+        { sourceType: "calendar_event", sourceId: "e-next", targetType: "contact", targetId: "c1" },
+      ],
+      openTaskIds: new Set(["t-open", "t-open2"]),
+      events: [
+        { id: "e-past", startsAt: new Date(2026, 10, 2, 9).toISOString() },
+        { id: "e-next", startsAt: new Date(2026, 10, 9, 9).toISOString() },
+        { id: "e-other", startsAt: new Date(2026, 10, 6, 9).toISOString() },
+      ],
+      nowMs: now,
+    });
+    expect(who).toEqual({
+      contactId: "c1",
+      name: "Jonas Weber",
+      role: "Head of IT",
+      company: "Acme",
+      lastTouch: null,
+      openTasks: 2,
+      notes: 1,
+      nextMeeting: new Date(2026, 10, 9, 9).toLocaleDateString(undefined, { weekday: "short" }),
+    });
   });
 });

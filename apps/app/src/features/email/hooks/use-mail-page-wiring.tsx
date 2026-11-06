@@ -3,7 +3,7 @@
 // composer's aliases/snippets/contacts, the custom tabs and "Add as contact". Needs a
 // <TasksProvider> above it (the Tasks inbox and today's tasks).
 
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import { useAuth } from "@/providers/auth-provider";
@@ -19,6 +19,8 @@ import { createMailCommands } from "../commands/triage";
 import { mailEngineMode } from "../engine/behavior";
 import { todayEvents as eventsToday } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
+import { isLinked, linkPickerHint } from "../reader/thread-links";
+import type { MailWho } from "../reader/who-card";
 import { type EmailSettingsMirror, startEmailSettingsMirror } from "../settings/mirror";
 import { mailStore } from "../store/mail-store";
 import type { MailLinkPickerArgs, MailPageProps } from "../ui/mail-page";
@@ -29,15 +31,22 @@ import {
   localDate,
   snippetsFromItems,
   type SpineRuntime,
+  whoFromLinks,
 } from "../ui/mail-page-wiring";
 import { useEmailTissue } from "./use-email-tissue";
 
 const EMPTY: never[] = [];
 const noop = () => () => {};
 
-type ContactRow = { id: string; name: string; emails: string[] };
+type ContactRow = {
+  id: string;
+  name: string;
+  emails: string[];
+  title?: string | null;
+  company?: string | null;
+};
 
-function LinkPicker({ open, onOpenChange, onPick }: MailLinkPickerArgs) {
+function LinkPicker({ open, onOpenChange, onPick, linked = [], onUnlink }: MailLinkPickerArgs) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId } = useWorkspace();
   const search = useMentionSearch({
@@ -61,8 +70,13 @@ function LinkPicker({ open, onOpenChange, onPick }: MailLinkPickerArgs) {
       loading={search.loading}
       placeholder="Link to a task, contact, note or project…"
       emptyLabel="Nothing to link."
+      hintFor={(c) => (c.kind === "entity" ? linkPickerHint(linked, c.ref) : null)}
       onSelect={(c) => {
-        if (c.kind === "entity") onPick({ type: c.ref.type, id: c.ref.id, label: c.label });
+        if (c.kind !== "entity") return;
+        const target = { type: c.ref.type, id: c.ref.id, label: c.label };
+        // A row already linked toggles the link off (specs/mail-v3.md §8).
+        if (onUnlink && isLinked(linked, c.ref)) onUnlink(target);
+        else onPick(target);
       }}
     />
   );
@@ -97,6 +111,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     void runtime.contacts.list(workspaceId).then(
       (b) => {
         if (gone) return;
+        const company = new Map(b.companies.map((co) => [co.id, co.name]));
         setContacts(
           b.contacts.map((c) => ({
             id: c.id,
@@ -104,6 +119,8 @@ export function useMailPageWiring(): Partial<MailPageProps> {
             emails: [c.email ?? "", ...c.emails.map((e) => e.value)]
               .map((e) => e.trim().toLowerCase())
               .filter(Boolean),
+            title: c.title,
+            company: c.companyId ? (company.get(c.companyId) ?? null) : null,
           })),
         );
       },
@@ -165,6 +182,32 @@ export function useMailPageWiring(): Partial<MailPageProps> {
 
   const customTabs = useMemo(() => customTabsFromItems(items), [items]);
 
+  // The reader's who-card (MV-8): the contact, and what is open with them in the spine.
+  const whoFor = useCallback(
+    async (address: string): Promise<MailWho | null> => {
+      const contact = contacts.find((c) => c.emails.includes(address.toLowerCase()));
+      if (!contact || !runtime || !workspaceId) return null;
+      const links = await runtime.spine
+        .listLinks({ workspaceId, entityType: "contact", entityId: contact.id })
+        .catch(() => []);
+      return whoFromLinks({
+        contact: {
+          id: contact.id,
+          name: contact.name,
+          title: contact.title ?? null,
+          company: contact.company ?? null,
+        },
+        links,
+        openTaskIds: new Set(
+          liveTasks.filter((t) => t.status !== "done" && t.status !== "archived").map((t) => t.id),
+        ),
+        events: calendar.events,
+        nowMs: Date.now(),
+      });
+    },
+    [contacts, runtime, workspaceId, liveTasks, calendar.events],
+  );
+
   const composeContacts = useMemo(
     () => contacts.flatMap((c) => c.emails.map((email) => ({ name: c.name, email }))),
     [contacts],
@@ -179,6 +222,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     snippets: snippetsFromItems(items),
     customTabs,
     contacts: composeContacts,
+    whoFor,
     onAddContact: (email, name) => {
       if (!runtime || !workspaceId) return;
       void runtime.contacts.createContact({ workspaceId, name: name || email, email }).then(

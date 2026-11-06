@@ -3,18 +3,18 @@
 // the app-chrome `MailEngineProvider` fills. Search is ⌘K (MR-13) and the
 // settings live in Settings → Mail (MR-15).
 
-import { type ComponentProps, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { getRuntime } from "@/lib/runtime";
 import type { MailComposeEngine, MailDraftRow } from "@/lib/runtime.types.mail-compose";
 import type {
   MailAccount,
-  MailEngine,
   MailMailbox,
   MailMessage,
   MailThread,
   MailThreadRow,
+  MailView,
 } from "@/lib/runtime.types.mail-engine";
 import { undoToast } from "@/lib/undo-toast";
 
@@ -36,16 +36,14 @@ import {
 } from "../compose/session";
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
-import { ContactMailPanel } from "../panels/contact-mail";
-import { useMailWithPerson } from "../panels/mail-with-person";
 import type { TodayEvent } from "../panels/today-events";
 import { TodayPanel, type TodayTask } from "../panels/today-panel";
-import { addInviteToCalendar, engineInviteLoader, engineRsvp } from "../reader/engine-reader";
-import { InviteCard, type MailInvite, type MailPartstat } from "../reader/invite-card";
+import type { MailInvite, MailPartstat } from "../reader/invite-card";
 import { MailReader } from "../reader/mail-reader";
+import { bumpThreadLinks, useThreadLinks } from "../reader/thread-links";
+import type { MailWho } from "../reader/who-card";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
-import { suggestContacts } from "../suggest-contact";
 import { SubscriptionsView } from "../views/subscriptions";
 import { useSubscriptionUnsubscribe } from "../views/use-subscription-unsubscribe";
 import { ConnectSlot, type MailConnectRequest } from "./connect-slot";
@@ -57,6 +55,7 @@ import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from 
 import { MailShell, type MailShellApi } from "./mail-shell";
 import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
+import { useReaderWiring } from "./use-reader-wiring";
 
 const COMPOSE_INTENTS: Partial<Record<MailKeyId, ComposeKind>> = {
   "email.compose": "new",
@@ -85,8 +84,11 @@ export function composeSpec(
   kind: ComposeKind,
   thread: MailThread | null,
   account: MailAccount,
+  /** A message's own reply / forward (the reader's per-message actions); else the newest. */
+  messageId?: string,
 ): ComposeOpenSpec {
-  const last = thread?.messages.at(-1) ?? null;
+  const picked = messageId ? thread?.messages.find((m) => m.id === messageId) : undefined;
+  const last = picked ?? thread?.messages.at(-1) ?? null;
   const threaded = kind !== "forward" && last !== null;
   return {
     kind,
@@ -110,6 +112,9 @@ export type MailLinkPickerArgs = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onPick: (target: SpineEntity) => void;
+  /** What the thread already links to: those rows read "Linked" and toggle an unlink. */
+  linked?: readonly SpineEntity[];
+  onUnlink?: (target: SpineEntity) => void;
 };
 
 export type MailPageProps = {
@@ -135,6 +140,8 @@ export type MailPageProps = {
   /** Contacts for autocomplete and "Add as contact" (lower-case addresses). */
   contacts?: { name: string; email: string }[];
   onAddContact?: (email: string, name: string) => void;
+  /** The reader's who-card: what Moduo knows about a sender address (MV-8). */
+  whoFor?: (address: string) => Promise<MailWho | null>;
   /** An invite's parsed event; absent means the card isn't shown. */
   loadInvite?: (messageId: string) => Promise<MailInvite | null>;
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
@@ -160,91 +167,31 @@ async function runConvert(spine: MailSpineCommands, row: MailThreadRow) {
     toast.error(errText(e, "That didn't go through. Nothing was changed."));
     return;
   }
+  // The reader's chips show the new task (MV-8).
+  bumpThreadLinks();
+  const undo = () => void res.undo().then(bumpThreadLinks, () => {});
   undoToast("Task created", {
-    onUndo: () => void res.undo(),
+    onUndo: undo,
     link: {
       label: "Also mark done",
       onClick: () =>
         void spine.alsoDone(res, row).then(
-          (ok) =>
-            ok && undoToast("Task created and marked done", { onUndo: () => void res.undo() }),
+          (ok) => ok && undoToast("Task created and marked done", { onUndo: undo }),
           (e) => toast.error(errText(e, "Couldn't mark it done.")),
         ),
     },
   });
 }
 
-/** Runs a spine gesture with the one undo grammar (DF-5). */
-async function runGesture(label: string, run: () => Promise<SpineResult>) {
+/** Runs a spine gesture with the one undo grammar (DF-5); the reader's chips re-read. */
+async function runGesture(label: string, run: () => Promise<{ undo: () => Promise<void> }>) {
   try {
     const res = await run();
-    undoToast(label, { onUndo: () => void res.undo() });
+    bumpThreadLinks();
+    undoToast(label, { onUndo: () => void res.undo().then(bumpThreadLinks, () => {}) });
   } catch (e) {
     toast.error(errText(e, "That didn't go through. Nothing was changed."));
   }
-}
-
-/** "Add to Moduo calendar" from an invite card, with the undo toast (AC18). */
-function addInviteGesture(spine: MailSpineCommands | null, row: MailThreadRow, inv: MailInvite) {
-  if (spine) void runGesture("Added to Moduo calendar", () => addInviteToCalendar(spine, row, inv));
-}
-
-/**
- * The Contact panel over the engine: "All mail with this person" searches all
- * synced mail for the address; the open thread shows until it answers.
- */
-function PersonMail({
-  engine,
-  version,
-  thread,
-  ...rest
-}: { engine: MailEngine | null; version: number; thread: MailThread } & Omit<
-  ComponentProps<typeof ContactMailPanel>,
-  "rows" | "messages"
->) {
-  const fallback = useMemo(
-    () => ({
-      rows: [thread.row],
-      messages: thread.messages.map((m) => ({ ...m, threadId: thread.row.threadId })),
-    }),
-    [thread],
-  );
-  const found = useMailWithPerson(engine, rest.email, version, fallback);
-  return <ContactMailPanel {...rest} rows={found.rows} messages={found.messages} />;
-}
-
-function InviteSlot({
-  messageId,
-  loadInvite,
-  onRsvp,
-  onAddToCalendar,
-}: {
-  messageId: string;
-  loadInvite: (messageId: string) => Promise<MailInvite | null>;
-  onRsvp?: MailPageProps["onRsvp"];
-  onAddToCalendar: (invite: MailInvite) => void;
-}) {
-  const [invite, setInvite] = useState<MailInvite | null>(null);
-  useEffect(() => {
-    let gone = false;
-    void loadInvite(messageId).then(
-      (i) => !gone && setInvite(i),
-      () => {},
-    );
-    return () => {
-      gone = true;
-    };
-  }, [messageId, loadInvite]);
-  if (!invite) return null;
-  return (
-    <div className="px-4 pb-2">
-      <InviteCard
-        invite={invite}
-        onRsvp={onRsvp && invite.organizer ? (status) => onRsvp(messageId, status) : undefined}
-        onAddToCalendar={() => onAddToCalendar(invite)}
-      />
-    </div>
-  );
 }
 
 /** A known display name for an address (contacts, correspondents, the open thread). */
@@ -307,6 +254,7 @@ export function MailPage({
   syncAccount,
   contacts = [],
   onAddContact,
+  whoFor,
   loadInvite,
   onRsvp,
   now = Date.now,
@@ -324,7 +272,7 @@ export function MailPage({
   const [current, setCurrent] = useState<string | null>(initialThreadId);
   const [subs, setSubs] = useState<MailThreadRow[] | null>(null);
   const [files, setFiles] = useState(false);
-  const [dismissedAdd, setDismissedAdd] = useState<ReadonlySet<string>>(new Set());
+  const [view, setView] = useState<MailView | null>(null);
 
   useEffect(() => {
     if (initialThreadId) onConsumeThreadDeepLink?.();
@@ -366,13 +314,14 @@ export function MailPage({
     threadId: string | null,
     to?: string,
     prefill?: MailtoPrefill,
+    messageId?: string,
   ) => {
     if (!session) return;
     const thread = threadId && engine ? await engine.getThread(threadId) : null;
     const accountId = thread?.row.accountId ?? accounts[0]?.id;
     const account = accounts.find((a) => a.id === accountId);
     if (!account) return;
-    const spec = composeSpec(kind, thread, account);
+    const spec = composeSpec(kind, thread, account, messageId);
     await session.open(prefill ? applyMailtoPrefill(spec, prefill) : to ? { ...spec, to } : spec);
   };
   const openComposeRef = useRef(openCompose);
@@ -411,7 +360,32 @@ export function MailPage({
     setMove({ ids: threadIds, boxes });
   };
 
+  const reader = useReaderWiring({
+    engine,
+    commands,
+    spine,
+    port,
+    placeKey,
+    view,
+    contacts,
+    whoFor,
+    onAddContact,
+    loadInvite,
+    onRsvp,
+    onIntent: (intent, ids) => onIntent(intent, ids),
+    openCompose: (kind, threadId, messageId) =>
+      void openCompose(kind, threadId, undefined, undefined, messageId),
+    act: (kind, ids, args) => void shell.current?.act(kind, ids, args),
+    rowOf,
+    openDraft,
+    editOutbox: (id) => void editOutbox(id),
+    runGesture: (label, run) => void runGesture(label, run),
+    now,
+  });
+  const linked = useThreadLinks(reader.links, linkFor?.threadId ?? null);
+
   const onIntent = (intent: MailKeyId, threadIds: string[]) => {
+    if (reader.onKey(intent, threadIds)) return;
     const kind = COMPOSE_INTENTS[intent];
     if (kind) {
       void openCompose(kind, threadIds[0] ?? null);
@@ -454,63 +428,7 @@ export function MailPage({
   });
 
   const contactSet = useMemo(() => new Set(contacts.map((c) => c.email.toLowerCase())), [contacts]);
-  const own = useMemo(() => new Set(accounts.map((a) => a.address.toLowerCase())), [accounts]);
-
-  const renderAbove = (thread: MailThread) => {
-    const sender = [...thread.messages]
-      .reverse()
-      .find((m) => !own.has(m.from.email.toLowerCase()))?.from;
-    const suggestions = suggestContacts(thread.messages, {
-      ownAddresses: own,
-      contacts: contactSet,
-      dismissed: dismissedAdd,
-    });
-    const suggest = sender
-      ? suggestions.find((x) => x.email === sender.email.toLowerCase())
-      : undefined;
-    // The engine's invite reader unless the host passed its own.
-    const invites = loadInvite ?? engineInviteLoader(engine, thread.row.threadId);
-    const rsvp = onRsvp ?? engineRsvp(engine, thread.row.threadId);
-    return (
-      <>
-        {invites
-          ? thread.messages
-              .filter((m) => m.hasInvite)
-              .map((m) => (
-                <InviteSlot
-                  key={m.id}
-                  messageId={m.id}
-                  loadInvite={invites}
-                  onRsvp={rsvp}
-                  onAddToCalendar={(inv) => addInviteGesture(spine, thread.row, inv)}
-                />
-              ))
-          : null}
-        {sender ? (
-          <details className="px-0 pb-2">
-            <summary className="cursor-default px-4 text-xs text-muted-foreground">
-              Mail with {sender.name || sender.email}
-            </summary>
-            <PersonMail
-              engine={engine}
-              version={version}
-              thread={thread}
-              email={sender.email}
-              name={sender.name}
-              nowMs={now()}
-              suggestAdd={Boolean(suggest && onAddContact)}
-              onOpenThread={(id) => shell.current?.open(id)}
-              onPreview={(entry) => shell.current?.open(entry.threadId)}
-              onAddContact={(email, name) => {
-                onAddContact?.(email, name);
-                setDismissedAdd((s) => new Set([...s, email.toLowerCase()]));
-              }}
-            />
-          </details>
-        ) : null}
-      </>
-    );
-  };
+  const own = useMemo(() => accounts.map((a) => a.address.toLowerCase()), [accounts]);
 
   return (
     <div className="relative flex h-full min-h-0 w-full flex-col" data-slot="mail-page">
@@ -559,7 +477,8 @@ export function MailPage({
           }
           attachmentsActive={files}
           onSyncNow={() => accounts.forEach((a) => retryAccount(a.id))}
-          onViewChange={() => {
+          onViewChange={(v) => {
+            setView(v);
             setSubs(null);
             setFiles(false);
           }}
@@ -605,8 +524,12 @@ export function MailPage({
                 threadId={threadId}
                 version={version}
                 behavior={behavior}
-                renderAbove={renderAbove}
-                renderMenu={labels.readerMenu}
+                menuItems={labels.readerMenuItems}
+                now={now}
+                accounts={accounts}
+                selfAddresses={own}
+                contacts={contactSet}
+                {...reader.props}
               />
             );
           }}
@@ -668,6 +591,7 @@ export function MailPage({
         />
       ) : null}
       {labels.dialog}
+      {reader.remindPicker}
       {renderLinkPicker && linkFor
         ? renderLinkPicker({
             open: true,
@@ -676,6 +600,14 @@ export function MailPage({
               const row = linkFor;
               setLinkFor(null);
               if (spine) void runGesture("Linked", () => spine.link(row, target));
+            },
+            linked: linked.map((l) => l.entity),
+            onUnlink: (target) => {
+              setLinkFor(null);
+              const link = linked.find(
+                (l) => l.entity.type === target.type && l.entity.id === target.id,
+              );
+              if (link) reader.links?.unlink(link);
             },
           })
         : null}

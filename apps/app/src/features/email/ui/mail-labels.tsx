@@ -3,7 +3,6 @@
 // `args.mailboxId`, which the engine COPYs from All Mail (add) or moves back
 // into All Mail (remove), `mail/ops/plan.rs`.
 
-import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -16,13 +15,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { IconButton } from "@/components/ui/icon-button";
+import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import type {
   MailAccount,
   MailEngine,
@@ -132,18 +125,12 @@ export function useMailLabels({
           </Button>
         )
       : undefined,
-    readerMenu: (thread: MailThread) =>
+    /** Labels… in the reader's ⋯ menu (Gmail threads only). */
+    readerMenuItems: (thread: MailThread) =>
       enabled && supportsLabels(accountOf(thread.row.accountId)) ? (
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <IconButton icon={MoreHorizontal} label="More actions" tooltip={null} />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => void openFor([thread.row.threadId])}>
-              Labels…
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <DropdownMenuItem onSelect={() => void openFor([thread.row.threadId])}>
+          Labels…
+        </DropdownMenuItem>
       ) : null,
     dialog: open ? (
       <MailLabelDialog

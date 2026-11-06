@@ -485,6 +485,10 @@ export function MailShell({
     "email.reply-all": intent("email.reply-all"),
     "email.forward": intent("email.forward"),
     "email.compose": intent("email.compose"),
+    // The reader's keys (MV-8): `o` expands every message, `y`/`b` decide a new sender.
+    "email.expand-all": intent("email.expand-all"),
+    "email.allow": intent("email.allow"),
+    "email.block": intent("email.block"),
     // `/` opens ⌘K on the Email chip: Mail has no search bar (MR-13, AC32).
     "email.search": () => openMailSearch(),
   };

@@ -246,6 +246,10 @@ export const HOTKEYS = {
     overrides: true,
   },
   "email.search": { scope: "email", label: "Search mail", keys: ["/"] },
+  // MV-8: the reader's keys (specs/mail-v3.md §7, §8).
+  "email.expand-all": { scope: "email", label: "Expand all messages", keys: ["O"] },
+  "email.allow": { scope: "email", label: "Allow this new sender", keys: ["Y"] },
+  "email.block": { scope: "email", label: "Block this new sender", keys: ["B"] },
 } as const satisfies Record<string, HotkeyDef>;
 
 export type HotkeyId = keyof typeof HOTKEYS;

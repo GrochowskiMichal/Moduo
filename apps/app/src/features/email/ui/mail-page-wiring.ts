@@ -8,10 +8,12 @@ import { MAIL_MAX_CUSTOM_TABS } from "@contracts/mail";
 import type { EmailSettingsItem } from "@/lib/runtime.types.email";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 
-import type { MailLinkedKind, MailSpinePort, SpineEntity } from "../commands/spine";
+import type { MailLinkedKind, MailSpinePort, MailThreadLink, SpineEntity } from "../commands/spine";
 import type { MailAlias } from "../compose/aliases";
 import type { MailSnippet } from "../compose/snippets";
 import { resolveContactIdByAddress } from "../convert";
+import { shortDay } from "../reader/reader-format";
+import type { MailWho } from "../reader/who-card";
 import { buildRefUpsertArgs } from "../refs";
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
@@ -108,7 +110,12 @@ export type SpineRuntime = {
       workspaceId: string;
       entityType: string;
       entityId: string;
-    }): Promise<{ sourceType: string; sourceId: string; targetType: string; targetId: string }[]>;
+    }): Promise<SpineLinkRow[]>;
+    /** Registry labels for the other ends of a thread's links (the reader's chips). */
+    getEntities?(input: {
+      workspaceId: string;
+      refs: { type: string; id: string }[];
+    }): Promise<{ type: string; id: string; label: string; deletedAt?: string | null }[]>;
     createLink(input: {
       workspaceId: string;
       source: { type: string; id: string };
@@ -132,8 +139,19 @@ export type RuntimeSpineDeps = {
   contacts: readonly { id: string; emails: string[] }[];
   markDone?: MailSpinePort["markDone"];
   /** A thread's cloud ref id (its `email_thread` entity), when it has one. Absent
-   *  (tests, the fixture engine), the row flags read no links. */
+   *  (tests, the fixture engine), the row flags read no links and the reader's chips
+   *  only the refs made this session. */
   refIdFor?: (threadKey: string) => string | null;
+};
+
+/** One `entity_links` row as the spine runtime returns it (the fields the port reads). */
+export type SpineLinkRow = {
+  id?: string;
+  relationKind?: string;
+  sourceType: string;
+  sourceId: string;
+  targetType: string;
+  targetId: string;
 };
 
 /** The spine entity types a thread's row flags name (decision 7). */
@@ -176,6 +194,52 @@ async function readLinkedKinds(
 
 const same = (a: SpineEntity, type: string, id: string) => a.type === type && a.id === id;
 
+/** Ref ids this session made, kept across port rebuilds (the tissue list loads once). */
+const sessionRefs = new Map<string, string>();
+const refKey = (workspaceId: string, threadKey: string) => `${workspaceId}:${threadKey}`;
+
+const LINK_KINDS = new Set<MailThreadLink["relationKind"]>([
+  "spawned-from",
+  "references",
+  "related",
+]);
+
+/** The thread ref's links, each with its other end labelled from the registry. */
+async function readThreadLinks(
+  rt: SpineRuntime,
+  workspaceId: string,
+  refId: string,
+): Promise<MailThreadLink[]> {
+  const self = { type: "email_thread", id: refId };
+  const rows = await rt.spine.listLinks({ workspaceId, entityType: self.type, entityId: refId });
+  const links = rows.flatMap((l): MailThreadLink[] => {
+    if (!l.id) return [];
+    const source = { type: l.sourceType, id: l.sourceId };
+    const target = { type: l.targetType, id: l.targetId };
+    const kind = l.relationKind as MailThreadLink["relationKind"];
+    return [
+      {
+        linkId: l.id,
+        entity: same(self, source.type, source.id) ? target : source,
+        source,
+        target,
+        relationKind: LINK_KINDS.has(kind) ? kind : "references",
+      },
+    ];
+  });
+  if (links.length === 0 || !rt.spine.getEntities) return links;
+  const records = await rt.spine
+    .getEntities({ workspaceId, refs: links.map((l) => ({ ...l.entity })) })
+    .catch(() => []);
+  const label = new Map(records.map((r) => [`${r.type}:${r.id}`, r]));
+  return links
+    .filter((l) => !label.get(`${l.entity.type}:${l.entity.id}`)?.deletedAt)
+    .map((l) => ({
+      ...l,
+      entity: { ...l.entity, label: label.get(`${l.entity.type}:${l.entity.id}`)?.label ?? null },
+    }));
+}
+
 /** `MailSpinePort` over the app runtime (EM-8's client-orchestrated sequence). */
 export function createRuntimeSpinePort(deps: RuntimeSpineDeps): MailSpinePort {
   const { runtime: rt, workspaceId } = deps;
@@ -195,6 +259,7 @@ export function createRuntimeSpinePort(deps: RuntimeSpineDeps): MailSpinePort {
           sentAt: new Date(thread.lastDateMs).toISOString(),
         }),
       });
+      sessionRefs.set(refKey(workspaceId, thread.threadId), ref.id);
       return { id: ref.id, created };
     },
     removeRef: (refId) => rt.email.removeRef({ workspaceId, refId }),
@@ -246,5 +311,45 @@ export function createRuntimeSpinePort(deps: RuntimeSpineDeps): MailSpinePort {
       if (!deps.refIdFor || threadIds.length === 0) return {};
       return readLinkedKinds(rt, workspaceId, threadIds, deps.refIdFor);
     },
+    async linksFor(threadId) {
+      const refId =
+        sessionRefs.get(refKey(workspaceId, threadId)) ?? deps.refIdFor?.(threadId) ?? null;
+      return refId ? readThreadLinks(rt, workspaceId, refId) : [];
+    },
+  };
+}
+
+/** The who-card for a contact (MV-8): open tasks, notes and the next meeting linked to them. */
+export function whoFromLinks(input: {
+  contact: { id: string; name: string; title: string | null; company: string | null };
+  links: readonly SpineLinkRow[];
+  /** Tasks still open (not done, not archived). */
+  openTaskIds: ReadonlySet<string>;
+  events: readonly { id: string; startsAt: string }[];
+  nowMs: number;
+}): MailWho {
+  const self = { type: "contact", id: input.contact.id };
+  const others = input.links.map((l) =>
+    same(self, l.sourceType, l.sourceId)
+      ? { type: l.targetType, id: l.targetId }
+      : { type: l.sourceType, id: l.sourceId },
+  );
+  const ids = (types: string[]) =>
+    new Set(others.filter((o) => types.includes(o.type)).map((o) => o.id));
+  const eventIds = ids(["calendar_event", "event"]);
+  const next = input.events
+    .filter((e) => eventIds.has(e.id))
+    .map((e) => Date.parse(e.startsAt))
+    .filter((ms) => Number.isFinite(ms) && ms > input.nowMs)
+    .sort((a, b) => a - b)[0];
+  return {
+    contactId: input.contact.id,
+    name: input.contact.name,
+    role: input.contact.title,
+    company: input.contact.company,
+    lastTouch: null,
+    openTasks: [...ids(["task"])].filter((id) => input.openTaskIds.has(id)).length,
+    notes: ids(["note"]).size,
+    nextMeeting: next === undefined ? null : shortDay(next, input.nowMs),
   };
 }
