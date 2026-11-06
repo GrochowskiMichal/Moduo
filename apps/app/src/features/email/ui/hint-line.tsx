@@ -98,11 +98,14 @@ export function MailHintLine({
   enabled,
   rest,
   hint,
+  chord = null,
 }: {
   /** Settings → Mail "Show key hints". */
   enabled: boolean;
   rest: string | null;
   hint: MailHint | null;
+  /** A `g` chord waiting for its second key: the line reads "g…" (spec §7). */
+  chord?: string | null;
 }) {
   if (!enabled) return null;
   let body: ReactNode = rest ? <span className="text-subtle-foreground">{rest}</span> : null;
@@ -113,6 +116,7 @@ export function MailHintLine({
         Next time press <Kbd>{hint.key}</Kbd>
       </>
     );
+  if (chord) body = `${chord}…`;
   return (
     <div
       data-slot="mail-hint-line"

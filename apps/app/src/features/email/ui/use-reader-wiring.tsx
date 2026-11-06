@@ -211,6 +211,11 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
 
   /** The reader's own keys; true when handled. */
   const onKey = (intent: MailKeyId, threadIds: string[]): boolean => {
+    // `w` (MV-7): Remind me if no reply, on every picked thread.
+    if (intent === "email.remind") {
+      if (engine?.setFollowUp && threadIds.length > 0) setRemindIds(threadIds);
+      return true;
+    }
     if (intent === "email.expand-all") {
       apiRef.current?.expandAll();
       return true;
@@ -268,10 +273,11 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
       title="Remind me if no reply"
       confirmLabel="Remind me"
       onPick={(at) => {
-        const id = remindIds[0];
+        const ids = remindIds;
         setRemindIds([]);
-        if (!id || !engine?.setFollowUp) return;
-        void engine.setFollowUp(id, at.getTime()).then(
+        const set = engine?.setFollowUp?.bind(engine);
+        if (ids.length === 0 || !set) return;
+        void Promise.all(ids.map((id) => set(id, at.getTime()))).then(
           () => toast(`Reminds you ${shortDay(at.getTime(), deps.now())} if no reply`),
           (e) => toast.error(errText(e, "Couldn't set the reminder.")),
         );

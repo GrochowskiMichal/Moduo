@@ -25,6 +25,9 @@ export type MailUndoEntry = {
   atMs: number;
 };
 
+/** The side panel's views (specs/mail-v3.md §10, decision 16): ⌥1 Today, ⌥2 Contact, ⌥3 Task. */
+export type MailPanelView = "today" | "contact" | "task";
+
 export type MailStoreState = {
   engine: MailEngine | null;
   /** The compose port when the provider supplies one (the fixture's); the page
@@ -45,6 +48,8 @@ export type MailStoreState = {
   /** The spine kinds each thread links to, for the row flags (specs/mail-v3.md
    *  decision 7): one batched read per list window, refreshed when links change. */
   linkedKinds: Record<string, MailLinkedKind[]>;
+  /** The open side-panel view, or null when it is hidden (decision 16). */
+  panel: MailPanelView | null;
   /** Bumps on every `threads_changed`; list windows re-read on change. */
   threadsVersion: number;
   changedViewKeys: string[];
@@ -72,6 +77,7 @@ export function initialMailState(): MailStoreState {
     followupsDue: [],
     dismissedFollowups: [],
     linkedKinds: {},
+    panel: null,
     threadsVersion: 0,
     changedViewKeys: [],
   };

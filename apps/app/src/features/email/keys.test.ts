@@ -12,18 +12,32 @@ const registryMailIds = Object.entries(HOTKEYS)
 describe("mail keys (AC42)", () => {
   it("legend from registry", () => {
     const ids = mailLegend()
-      .flatMap((g) => g.entries.map((e) => e.id))
+      .flatMap((g) => g.rows.flatMap((r) => r.ids))
       .sort();
     expect(ids).toEqual(registryMailIds);
     expect(new Set(ids).size).toBe(ids.length);
     const done = mailLegend()
-      .flatMap((g) => g.entries)
-      .find((e) => e.id === "email.archive");
+      .flatMap((g) => g.rows)
+      .find((r) => r.ids.includes("email.archive"));
     expect(done).toEqual({
-      id: "email.archive",
-      label: HOTKEYS["email.archive"].label,
-      keys: ["e"],
+      ids: ["email.archive", "email.undone"],
+      label: "Done · not done",
+      keys: ["e", "⇧E"],
     });
+  });
+
+  it("the ? sheet: Move, Act, Connect columns, a Write group, next · previous pairs", () => {
+    const legend = mailLegend(true);
+    const firstOf = (column: number) => legend.find((g) => g.column === column)?.title;
+    expect([firstOf(0), firstOf(1), firstOf(2)]).toEqual(["Move", "Act", "Connect"]);
+    const keysIn = (title: string) =>
+      legend.find((g) => g.title === title)!.rows.map((r) => r.keys.join(" "));
+    expect(keysIn("Connect")).toEqual(["⌥1 ⌥2 ⌥3", "t", "l", "n"]);
+    expect(keysIn("Write")).toEqual(expect.arrayContaining(["⌘↵", ";;", "Esc"]));
+    expect(keysIn("Move")).toEqual(
+      expect.arrayContaining(["j k", "] [", "↵", "gi gf gs", "ga gt gd"]),
+    );
+    expect(keysIn("Act")).toEqual(expect.arrayContaining(["m # ⌫", "z ⌘z"]));
   });
 
   it("⌘K lists exactly the registry's acting mail keys", () => {
@@ -42,5 +56,7 @@ describe("mail keys (AC42)", () => {
     expect(formatMailKey("Shift+J")).toBe("⇧J");
     expect(formatMailKey("E")).toBe("e");
     expect(mailKeyHint("email.snooze")).toBe("s");
+    expect(formatMailKey(["G", "I"])).toBe("gi");
+    expect(formatMailKey("Backspace")).toBe("⌫");
   });
 });

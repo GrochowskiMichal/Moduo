@@ -53,6 +53,7 @@ import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
 import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
+import { makeTasks } from "./make-tasks";
 import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
 import { useReaderWiring } from "./use-reader-wiring";
@@ -393,6 +394,9 @@ export function MailPage({
     }
     if (intent === "email.snooze") setSnoozeIds(threadIds);
     else if (intent === "email.move") void openMove(threadIds);
+    // `t` on a selection: one task per thread, one Undo (spec §6).
+    else if (intent === "email.convert" && spine && threadIds.length > 1)
+      void makeTasks(spine, threadIds, rowOf);
     else if (intent === "email.convert" && spine && threadIds[0])
       void rowOf(threadIds[0]).then((row) => (row ? runConvert(spine, row) : undefined));
     else if (intent === "email.note") gesture("Note created", threadIds, (row) => spine!.note(row));

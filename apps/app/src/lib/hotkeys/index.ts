@@ -6,5 +6,6 @@ export {
   isMacPlatform,
   isTypingTarget,
   useAppHotkeys,
+  useChordPending,
 } from "./use-app-hotkeys";
 export { useFocusWithin } from "./use-focus-within";

@@ -1,6 +1,8 @@
 // The list's selection model (AC13, AC14): a cursor (the open thread), a set
 // of picked threads (`x`, ⇧J/⇧K, ⌘A), and auto-advance after a removal.
 
+import type { MailCursor, MailEngine, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
+
 export type MailSelection = {
   cursor: string | null;
   picked: readonly string[];
@@ -87,4 +89,41 @@ export function advanceAfterRemoval(
     }
   }
   return { cursor: next, picked, anchor: null };
+}
+
+/** What ⌘A covers: the list the shell shows (a view, its tab, the rail's account scope). */
+export type MailSelectAllQuery = {
+  view: MailView;
+  tab: MailTab | null;
+  accountId: string | null;
+};
+
+/** Ids read per page while ⌘A walks the whole list. */
+export const SELECT_ALL_PAGE = 1000;
+
+/**
+ * ⌘A (AC20): every thread id in the tab, not only the loaded window. Walks the
+ * engine's keyset pages for the same query the list reads; the bulk op then
+ * takes the full list as one op with one undo (the engine chunks it).
+ */
+export async function allThreadIds(
+  engine: Pick<MailEngine, "listThreads">,
+  query: MailSelectAllQuery,
+  pageSize = SELECT_ALL_PAGE,
+): Promise<string[]> {
+  const ids: string[] = [];
+  let after: MailCursor | null = null;
+  do {
+    const page = await engine.listThreads({
+      view: query.view,
+      tab: query.tab,
+      after,
+      limit: pageSize,
+    });
+    for (const r of page.rows) {
+      if (!query.accountId || r.accountId === query.accountId) ids.push(r.threadId);
+    }
+    after = page.next;
+  } while (after);
+  return ids;
 }

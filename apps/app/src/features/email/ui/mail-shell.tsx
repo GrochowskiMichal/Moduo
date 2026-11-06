@@ -3,14 +3,18 @@
 // registry (AC42); every removal auto-advances (AC14); multi-select acts as
 // one undoable action (AC13); failures sit in the failed-actions bar (AC12).
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { LABEL_COLORS, type LabelColor } from "@/components/tag-colors";
-import {
-  type AppHotkeyHandlers,
-  isMacPlatform,
-  useAppHotkeys,
-} from "@/lib/hotkeys/use-app-hotkeys";
+import { isMacPlatform, useChordPending } from "@/lib/hotkeys/use-app-hotkeys";
 import { getRuntime } from "@/lib/runtime";
 import { mailViewKey } from "@/lib/runtime.types";
 import type {
@@ -29,10 +33,9 @@ import { mailKeyHint, type MailKeyId } from "../keys";
 import { openMailSearch } from "../search/open";
 import {
   advanceAfterRemoval,
+  allThreadIds,
   EMPTY_SELECTION,
-  extendPick,
   type MailSelection,
-  moveCursor,
   pickAll,
   targets,
   togglePick,
@@ -43,6 +46,7 @@ import { useThreadWindow } from "../shell/use-thread-window";
 import { type MailStore, mailStore } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
 import { MailHintLine, restHint, useMailHint } from "./hint-line";
+import { type MailBulkAction, MailBulkReader } from "./mail-bulk-reader";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
 import type { MailDensity, MailRowActions } from "./mail-row";
@@ -60,6 +64,7 @@ import { useRailViewCounts } from "./rail-counts";
 import { MailSystemLines } from "./system-lines";
 import { MailThreadList } from "./thread-list";
 import { useFailedAccounts } from "./use-failed-accounts";
+import { useMailShellKeys } from "./use-mail-shell-keys";
 
 /** Ops that take a thread out of the current list (auto-advance after them). */
 const REMOVES = new Set<MailOpInput["kind"]>([
@@ -133,6 +138,34 @@ function MailListBody({
       />
     </div>
   );
+}
+
+/** Bulk reader buttons, each the same as its key (spec §6). */
+const BULK_INTENTS: Record<Exclude<MailBulkAction, "done" | "delete">, MailKeyId> = {
+  snooze: "email.snooze",
+  task: "email.convert",
+  move: "email.move",
+};
+
+/** Moves keyboard focus into the reader (Enter, spec §7): its title, else the slot. */
+function focusIn(root: HTMLElement | null): boolean {
+  if (!root) return false;
+  const target = root.querySelector<HTMLElement>("[data-reader-title], h1, h2") ?? root;
+  if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
+  target.focus({ preventScroll: true });
+  return true;
+}
+
+/** The reader slot: the bulk summary while two or more threads are picked (spec §6). */
+function ReaderSlot({
+  bulk,
+  reader,
+}: {
+  bulk: ComponentProps<typeof MailBulkReader> | null;
+  reader: () => ReactNode;
+}) {
+  if (bulk) return <MailBulkReader {...bulk} />;
+  return reader() ?? null;
 }
 
 /** What the page drives from outside the shell: pickers that finish an action
@@ -344,6 +377,9 @@ export function MailShell({
     initialThreadId ? { ...EMPTY_SELECTION, cursor: initialThreadId } : EMPTY_SELECTION,
   );
   const [hovered, setHovered] = useState<string | null>(null);
+  const readerRef = useRef<HTMLElement>(null);
+  // A ⌘A read in flight; a tab or place change makes it stale (spec edge cases).
+  const selectAllSeq = useRef(0);
   const [legend, setLegend] = useState(false);
   const hint = useMailHint(isMacPlatform());
   const [cleared, setCleared] = useState(0);
@@ -352,11 +388,42 @@ export function MailShell({
   // An account removed while scoped: the scope clears and the list returns to Inbox.
   useEffect(() => {
     if (scope && !accounts.some((a) => a.id === scope)) {
+      selectAllSeq.current++;
       setScope(null);
       setView(INBOX);
       setSel(EMPTY_SELECTION);
     }
   }, [scope, accounts]);
+
+  /** A rail place, a `g` chord or "Back to Inbox": the selection starts over. */
+  const selectView = (v: MailView) => {
+    selectAllSeq.current++;
+    // Inbox unscopes (spec §1).
+    if (mailViewKey(v) === mailViewKey(INBOX)) setScope(null);
+    setView(v);
+    setSel(EMPTY_SELECTION);
+    onViewChange?.(v);
+    // Opening a folder rounds it now instead of on the next sweep.
+    if (v.kind === "mailbox") void engine?.openFolder?.(v.mailboxId).catch(() => {});
+  };
+  /** The selection keeps only the current tab's threads: switching tabs clears it. */
+  const switchTab = (next: MailTab | ((t: MailTab) => MailTab)) => {
+    selectAllSeq.current++;
+    setTab(next);
+    setSel((s) => (s.picked.length > 0 ? { ...s, picked: [] } : s));
+  };
+  /** ⌘A (AC20): the loaded rows at once, then every id in the tab from the engine. */
+  const selectAll = () => {
+    setSel((s) => pickAll(ids, s));
+    if (!engine) return;
+    const my = ++selectAllSeq.current;
+    void allThreadIds(engine, { view, tab: listTab, accountId: scoped }).then(
+      (all) => {
+        if (my === selectAllSeq.current && all.length > 0) setSel((s) => ({ ...s, picked: all }));
+      },
+      () => {},
+    );
+  };
 
   // Latest list and selection for stable callbacks.
   const live = useRef({ ids, sel });
@@ -446,53 +513,46 @@ export function MailShell({
     const first = win.rows.find((r) => r.threadId === t[0]);
     actKey(first?.[flag] ? off : on, t);
   };
-  const intent = (id: MailKeyId) => () => {
-    const t = cur();
+  const intent = (id: MailKeyId, t: string[]) => {
     if (t.length === 0 && id !== "email.compose") return false;
     onIntent?.(id, t);
   };
 
-  const handlers: AppHotkeyHandlers = {
-    // Enter on a folded newsletter sender expands it (spec §3).
-    "email.open": () => groups.expandAt(sel.cursor),
-    "email.next": () => setSel((s) => moveCursor(ids, s, 1)),
-    "email.prev": () => setSel((s) => moveCursor(ids, s, -1)),
-    "email.extend-down": () => setSel((s) => extendPick(ids, s, 1)),
-    "email.extend-up": () => setSel((s) => extendPick(ids, s, -1)),
-    "email.select": () => setSel((s) => togglePick(s)),
-    "email.select-all": () => setSel((s) => pickAll(ids, s)),
-    "email.clear-selection": () => {
-      if (sel.picked.length === 0) return false;
-      setSel((s) => ({ ...s, picked: [] }));
-    },
-    "email.archive": () => actKey("done", cur()),
-    "email.delete": () => actKey("delete", cur()),
-    "email.pin": () => toggleKind("pin", "unpin", "pinned"),
-    "email.unread": () => toggleKind("mark_unread", "mark_read", "unread"),
-    "email.undo": () => {
+  useMailShellKeys({
+    ids,
+    sel,
+    setSel,
+    targets: cur,
+    expandAt: groups.expandAt,
+    focusReader: () => focusIn(readerRef.current),
+    actKey,
+    toggle: toggleKind,
+    undo: () => {
       if (onUndoFirst?.()) return;
       void commands.undo();
     },
-    "email.tab-prev": () => (tabbed ? setTab((t) => cycleTab(tabs, t, -1)) : false),
-    "email.tab-next": () => (tabbed ? setTab((t) => cycleTab(tabs, t, 1)) : false),
-    "email.legend": () => setLegend(true),
-    "email.snooze": intent("email.snooze"),
-    "email.move": intent("email.move"),
-    "email.convert": intent("email.convert"),
-    "email.link": intent("email.link"),
-    "email.note": intent("email.note"),
-    "email.reply": intent("email.reply"),
-    "email.reply-all": intent("email.reply-all"),
-    "email.forward": intent("email.forward"),
-    "email.compose": intent("email.compose"),
-    // The reader's keys (MV-8): `o` expands every message, `y`/`b` decide a new sender.
-    "email.expand-all": intent("email.expand-all"),
-    "email.allow": intent("email.allow"),
-    "email.block": intent("email.block"),
-    // `/` opens ⌘K on the Email chip: Mail has no search bar (MR-13, AC32).
-    "email.search": () => openMailSearch(),
+    cycleTab: (delta) => {
+      if (!tabbed) return false;
+      switchTab((t) => cycleTab(tabs, t, delta));
+    },
+    openLegend: () => setLegend(true),
+    intent,
+    goTo: selectView,
+    selectAll,
+    setPanel: (panel) => store.setState({ panel }),
+  });
+  const chord = useChordPending("email");
+
+  const onBulk = (action: MailBulkAction) => {
+    const t = [...sel.picked];
+    if (action === "done" || action === "delete") actKey(action, t);
+    else intent(BULK_INTENTS[action], t);
   };
-  useAppHotkeys(handlers);
+  const bulkRows = (() => {
+    if (sel.picked.length < 2) return null;
+    const pickedSet = new Set(sel.picked);
+    return win.rows.filter((r) => pickedSet.has(r.threadId));
+  })();
 
   const folderName = viewFolderName(view, mailboxes);
   const countView = scopedInbox ?? view;
@@ -507,11 +567,7 @@ export function MailShell({
     clearedToday: cleared,
     others: otherTabsWithUnread(tabbed ? tabs : [], tab, counts, countView),
   });
-  const goInbox = () => {
-    setView(INBOX);
-    setSel(EMPTY_SELECTION);
-    onViewChange?.(INBOX);
-  };
+  const goInbox = () => selectView(INBOX);
 
   const zero = (age: ZeroAge) => {
     void bulk.getMeToZero(view, listTab, age).then((e) => {
@@ -530,15 +586,7 @@ export function MailShell({
           hues={hues}
           outboxCount={outboxCount}
           screenerOn={screenerOn}
-          onSelect={(v) => {
-            // Inbox unscopes (spec §1).
-            if (mailViewKey(v) === mailViewKey(INBOX)) setScope(null);
-            setView(v);
-            setSel(EMPTY_SELECTION);
-            onViewChange?.(v);
-            // Opening a folder rounds it now instead of on the next sweep.
-            if (v.kind === "mailbox") void engine?.openFolder?.(v.mailboxId).catch(() => {});
-          }}
+          onSelect={selectView}
           onOpenSubscriptions={onOpenSubscriptions}
           subscriptionsActive={subscriptionsActive}
           onOpenAttachments={onOpenAttachments}
@@ -550,6 +598,7 @@ export function MailShell({
           loading={counts === null}
           scope={scope}
           onScope={(id) => {
+            selectAllSeq.current++;
             setScope((s) => (s === id ? null : id));
             setSel(EMPTY_SELECTION);
             if (view.kind === "mailbox") setView(INBOX);
@@ -579,7 +628,7 @@ export function MailShell({
             current={tab}
             counts={counts}
             countView={scopedInbox}
-            onSelect={setTab}
+            onSelect={switchTab}
             onZero={zero}
             onCustomTabs={onOpenSettings}
           />
@@ -638,7 +687,7 @@ export function MailShell({
           view={view}
           state={state}
           onConnect={(p) => onConnect?.(p)}
-          onTab={setTab}
+          onTab={switchTab}
           onBackToInbox={goInbox}
         >
           <MailThreadList
@@ -665,10 +714,14 @@ export function MailShell({
           enabled={showHints}
           rest={restHint(view, state.kind === "rows")}
           hint={hint.hint}
+          chord={chord}
         />
       </section>
-      <section aria-label="Reader" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        {renderReader?.(sel.cursor, { listEmpty: state.kind !== "rows" }) ?? null}
+      <section ref={readerRef} aria-label="Reader" className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <ReaderSlot
+          bulk={bulkRows ? { count: sel.picked.length, rows: bulkRows, onAction: onBulk } : null}
+          reader={() => renderReader?.(sel.cursor, { listEmpty: state.kind !== "rows" })}
+        />
       </section>
       <MailLegendDialog open={legend} onOpenChange={setLegend} />
     </div>
