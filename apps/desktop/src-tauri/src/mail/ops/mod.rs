@@ -48,6 +48,9 @@ pub struct OpRequest {
     /// Move source; defaults to the account's Inbox.
     pub from_mailbox_id: Option<String>,
     pub snooze_until_ms: Option<i64>,
+    /// A `system` origin: the engine acted on new mail (rule effects, mute), not
+    /// the user. It runs at once (no undo window) and never reaches the undo toast.
+    pub system: bool,
 }
 
 impl OpRequest {
@@ -58,7 +61,14 @@ impl OpRequest {
             to_mailbox_id: None,
             from_mailbox_id: None,
             snooze_until_ms: None,
+            system: false,
         }
+    }
+
+    /// The same request with a `system` origin.
+    pub fn system(mut self) -> Self {
+        self.system = true;
+        self
     }
 }
 
@@ -148,6 +158,9 @@ struct Effect {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct Args {
     action: String,
+    /// Queued by the engine itself (decision 4); absent on older rows.
+    #[serde(default)]
+    system: bool,
     /// Forward ops apply `effect`; compensating ops re-assert `revert_to`.
     effect: Option<Effect>,
     revert_to: Option<Snapshot>,
@@ -415,11 +428,26 @@ impl Store {
     }
 
     pub fn enqueue_op_at(&self, req: &OpRequest, now: i64) -> StoreResult<ActionHandle> {
+        self.enqueue_in_action(req, &new_id(), now)
+    }
+
+    /// Queues `req` under an existing action id, so a bulk apply queued in
+    /// chunks is still one action that one `z` undoes.
+    pub fn enqueue_in_action(
+        &self,
+        req: &OpRequest,
+        action_id: &str,
+        now: i64,
+    ) -> StoreResult<ActionHandle> {
         let mut conn = self.w();
         let tx = conn.transaction()?;
-        let action = new_id();
+        let action = action_id.to_string();
         let mut op_ids = Vec::new();
-        let not_before = now + UNDO_WINDOW_MS;
+        let not_before = if req.system {
+            now
+        } else {
+            now + UNDO_WINDOW_MS
+        };
         note_return(&tx, req.kind, &req.thread_ids)?;
         for (account, threads) in group_accounts(&tx, &req.thread_ids)? {
             let snap = snapshot(&tx, &account, &threads)?;
@@ -428,6 +456,7 @@ impl Store {
             let id = new_id();
             let args = Args {
                 action: action.clone(),
+                system: req.system,
                 effect: Some(effect),
                 revert_to: None,
                 steps,
@@ -475,6 +504,7 @@ impl Store {
             let kind = OpKind::parse(&op.kind).unwrap_or(OpKind::Move);
             let args = Args {
                 action: comp_action.clone(),
+                system: false,
                 effect: None,
                 revert_to: Some(snap),
                 steps: inverse_steps(&tx, &op.args.steps)?,

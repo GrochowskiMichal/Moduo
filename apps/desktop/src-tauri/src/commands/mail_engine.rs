@@ -10,6 +10,7 @@ use crate::mail::contracts::{MailboxRole, OpKind, TabKind};
 use crate::mail::host::reader::Explain;
 use crate::mail::host::{list_accounts, AccountRow, MailHost};
 use crate::mail::ops::{OpRequest, UndoOutcome};
+use crate::mail::rules::{apply_rule_existing, ApplyRuleResult};
 use crate::mail::store::{
     now_ms, Counts, ListCursor, ListInput, ListPage, MailboxRow, SearchQuery, TabRef, ThreadDetail,
     ThreadRow, ViewRef,
@@ -305,6 +306,30 @@ pub fn mail_set_image_allow(
 ) -> Result<(), String> {
     check_address(&address)?;
     host.store()?.set_image_allow(&address, allow).map_err(s)
+}
+
+/// "Also apply to the N already on this Mac" (decision 5): the dry run counts;
+/// the apply queues one undoable bulk action in chunks and resolves when every
+/// chunk is queued. It runs off the main thread.
+#[tauri::command]
+pub async fn mail_apply_rule_existing(
+    rule_id: String,
+    dry_run: bool,
+    host: State<'_, MailHost>,
+) -> Result<ApplyRuleResult, String> {
+    check_id(&rule_id)?;
+    let store = host.store()?;
+    let cfg = host.classify_config()?;
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        apply_rule_existing(&store, &cfg, &rule_id, dry_run, now_ms())
+    })
+    .await
+    .map_err(s)?
+    .map_err(s)?;
+    if !dry_run && result.count > 0 {
+        changed(&host, vec![]);
+    }
+    Ok(result)
 }
 
 #[tauri::command]

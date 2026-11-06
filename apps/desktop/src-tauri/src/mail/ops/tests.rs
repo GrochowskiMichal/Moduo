@@ -607,3 +607,143 @@ fn labels_need_gmail_and_a_label_folder() {
     bad.to_mailbox_id = Some("g-inbox".into());
     assert!(g.enqueue_op_at(&bad, T0).is_err(), "a system folder is not a label");
 }
+
+#[tokio::test]
+async fn mute_archives_new_replies() {
+    use crate::mail::sync::classify::ClassifyConfig;
+    use crate::mail::sync::events::EventBus;
+    use crate::mail::sync::live::AccountSync;
+    use crate::mail::sync::testing::{raw, store, Fake};
+    use std::sync::{Arc, RwLock};
+    let f = Fake::new(true, false);
+    f.add_folder("INBOX", &[]);
+    f.add_folder("Archive", &["\\Archive"]);
+    f.add_folder("Sent", &["\\Sent"]);
+    f.append("INBOX", "noisy", 1_000);
+    f.append("INBOX", "quiet", 2_000);
+    let s = Arc::new(store("mute"));
+    let a = AccountSync::new(
+        "a1",
+        s.clone(),
+        EventBus::new(),
+        Arc::new(RwLock::new(ClassifyConfig::default())),
+        None,
+    );
+    let mut srv = f.session();
+    let plans = a.first_round(&mut srv).await.unwrap();
+    let inbox_plan = plans.iter().find(|p| p.path == "INBOX").unwrap().clone();
+    let sent_plan = plans.iter().find(|p| p.path == "Sent").unwrap().clone();
+    let thread_of = |subject: &str| -> String {
+        s.r()
+            .query_row(
+                "SELECT thread_id FROM messages WHERE subject = ?1",
+                [subject],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    let noisy = thread_of("Subject noisy");
+    s.enqueue_op_at(&OpRequest::new(OpKind::Mute, vec![noisy.clone()]), 10_000)
+        .unwrap();
+    let roles = |t: &str| -> Vec<String> {
+        let c = s.r();
+        let mut st = c
+            .prepare("SELECT role FROM thread_views WHERE thread_id = ?1 ORDER BY role")
+            .unwrap();
+        st.query_map([t], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    assert_eq!(
+        roles(&noisy),
+        vec!["inbox"],
+        "muting alone keeps it in the Inbox"
+    );
+    // My own reply in Sent never archives it.
+    f.append_raw(
+        "Sent",
+        raw(
+            "mine",
+            &["noisy"],
+            "Me <me@y.test>",
+            "Re: Subject noisy",
+            3_000,
+        ),
+        3_000,
+        &[],
+    );
+    a.round(&mut srv, &plans, &sent_plan).await.unwrap();
+    assert!(roles(&noisy).contains(&"inbox".to_string()));
+    // A reply from someone else lands: straight to Archive, as a system op.
+    f.append_raw(
+        "INBOX",
+        raw(
+            "r1",
+            &["noisy"],
+            "Ann <ann@x.test>",
+            "Re: Subject noisy",
+            4_000,
+        ),
+        4_000,
+        &[],
+    );
+    f.append_raw(
+        "INBOX",
+        raw(
+            "r2",
+            &["quiet"],
+            "Ann <ann@x.test>",
+            "Re: Subject quiet",
+            5_000,
+        ),
+        5_000,
+        &[],
+    );
+    a.round(&mut srv, &plans, &inbox_plan).await.unwrap();
+    assert!(
+        !roles(&noisy).contains(&"inbox".to_string()),
+        "{:?}",
+        roles(&noisy)
+    );
+    assert!(roles(&noisy).contains(&"archive".to_string()));
+    let quiet = thread_of("Subject quiet");
+    assert!(
+        roles(&quiet).contains(&"inbox".to_string()),
+        "unmuted threads stay"
+    );
+    let system: Vec<(String, String, bool)> = {
+        let c = s.r();
+        let mut st = c
+            .prepare(
+                "SELECT kind, thread_ids_json, json_extract(args_json, '$.system') FROM ops
+                 WHERE kind = 'done'",
+            )
+            .unwrap();
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect()
+    };
+    assert_eq!(system.len(), 1);
+    assert!(system[0].1.contains(&noisy) && system[0].2, "{system:?}");
+    // It stays archived on the next round, and runs without an undo window.
+    a.round(&mut srv, &plans, &inbox_plan).await.unwrap();
+    assert!(!roles(&noisy).contains(&"inbox".to_string()));
+    let window: i64 = s
+        .r()
+        .query_row(
+            "SELECT not_before_ms - created_at_ms FROM ops WHERE kind = 'done'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(window, 0, "system ops are due at once");
+    let mut srv_ops = FakeServer::default();
+    let report = s.run_due_ops(&mut srv_ops, now_ms()).unwrap();
+    assert!(srv_ops
+        .calls
+        .iter()
+        .any(|(_, st)| matches!(&st.action, StepAction::MoveTo { path, .. } if path == "Archive")));
+    assert_eq!(report.failed, Vec::<String>::new());
+}

@@ -3,8 +3,8 @@
 //! reader never sees a message without its row or a row without its message.
 
 use super::{
-    now_ms, AccountInput, BodyInput, MailboxCursor, MailboxInput, MessageInput, Store, StoreResult,
-    TabRef,
+    now_ms, AccountInput, BodyInput, ClassifyReason, MailboxCursor, MailboxInput, MessageInput,
+    Store, StoreResult, TabRef,
 };
 use crate::mail::contracts::{TabKind, FLAG_DELETED, FLAG_SEEN};
 use rusqlite::{params, OptionalExtension, Transaction};
@@ -200,6 +200,28 @@ impl Store {
                     params![t, flag],
                 )?;
             }
+            refresh_thread(&tx, t)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Puts every message of these threads in `tab` with the reason that did it
+    /// (a rule applied to existing mail), and refreshes their rows.
+    pub fn retab_threads(
+        &self,
+        thread_ids: &[String],
+        tab: &TabRef,
+        reason: &ClassifyReason,
+    ) -> StoreResult<()> {
+        let mut conn = self.w();
+        let tx = conn.transaction()?;
+        for t in thread_ids {
+            tx.execute(
+                "UPDATE messages SET tab = ?2, classify_stage = ?3, classify_rule_id = ?4
+                 WHERE thread_id = ?1",
+                params![t, tab.encode(), reason.stage.as_str(), reason.rule_id],
+            )?;
             refresh_thread(&tx, t)?;
         }
         tx.commit()?;

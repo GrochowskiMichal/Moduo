@@ -83,9 +83,13 @@ describe("tauri mail engine", () => {
     );
     await engine.explainThread!("t1");
     await engine.setImageAllow!("ana@acme.test", true);
+    await engine.applyRuleExisting!({ ruleId: "r1", dryRun: true });
+    await engine.applyRuleExisting!({ ruleId: "r1", dryRun: false });
     expect(calls).toEqual([
       ["mail_explain", { threadId: "t1" }],
       ["mail_set_image_allow", { address: "ana@acme.test", allow: true }],
+      ["mail_apply_rule_existing", { ruleId: "r1", dryRun: true }],
+      ["mail_apply_rule_existing", { ruleId: "r1", dryRun: false }],
     ]);
   });
 

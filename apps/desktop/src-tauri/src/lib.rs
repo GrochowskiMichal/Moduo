@@ -504,6 +504,7 @@ pub fn run() {
             commands::mail_engine::mail_set_foreground,
             commands::mail_engine::mail_explain,
             commands::mail_engine::mail_set_image_allow,
+            commands::mail_engine::mail_apply_rule_existing,
             commands::mail_reader::mail_get_raw_message,
             commands::mail_reader::mail_attachment_file,
             commands::mail_reader::mail_get_invite,
