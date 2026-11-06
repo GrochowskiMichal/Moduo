@@ -31,7 +31,11 @@ describe("fixture compose: MV-0", () => {
     const compose = createFakeCompose({
       onDraftChanged: (draftId, serverUid) => changed.push({ draftId, serverUid }),
     });
-    const { draftId } = await compose.saveDraft({ accountId: "acc-gmail", threadId: null, doc: doc() });
+    const { draftId } = await compose.saveDraft({
+      accountId: "acc-gmail",
+      threadId: null,
+      doc: doc(),
+    });
     expect((await compose.getDraft(draftId))!.serverUid).toBeNull();
     compose.uploadDrafts();
     const uid = (await compose.getDraft(draftId))!.serverUid;

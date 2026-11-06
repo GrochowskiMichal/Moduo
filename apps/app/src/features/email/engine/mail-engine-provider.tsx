@@ -12,7 +12,12 @@ import type { MailEngine } from "@/lib/runtime.types.mail-engine";
 import { useAuth } from "../../../providers/auth-provider";
 import { startEmailSettingsMirror } from "../settings/mirror";
 import { type MailStore, mailStore } from "../store/mail-store";
-import { mailEngineMode, mailFixtureMessages, readMailBehavior } from "./behavior";
+import {
+  mailEngineMode,
+  mailFixtureMessages,
+  mailFixtureScenario,
+  readMailBehavior,
+} from "./behavior";
 import { createMailController, type MailControllerDeps } from "./controller";
 
 async function notifyDesktop(title: string, body: string): Promise<void> {
@@ -40,6 +45,7 @@ function useFixtureEngine(wanted: boolean): MailEngine | null {
           fake.createFakeMailEngine({
             fixture: fx.generateFixture({ messages: mailFixtureMessages() }),
             now: () => Date.now(),
+            scenario: mailFixtureScenario().filter(fake.isMailFixtureScenario),
           }),
         );
       },

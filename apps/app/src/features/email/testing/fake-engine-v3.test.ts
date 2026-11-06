@@ -155,14 +155,20 @@ describe("fixture engine: MV-0 port additions", () => {
   it("counts the Outbox and lists queued sends with their state", async () => {
     const { engine } = setup();
     expect((await engine.counts()).outbox).toBe(0);
-    const id = engine.queueOutbox({ accountId: "acc-gmail", subject: "Pilot", to: ["ana@acme.test"] });
+    const id = engine.queueOutbox({
+      accountId: "acc-gmail",
+      subject: "Pilot",
+      to: ["ana@acme.test"],
+    });
     expect((await engine.counts()).outbox).toBe(1);
     const page = await engine.listThreads({ view: { kind: "outbox" }, limit: 10 });
     expect(page.rows).toHaveLength(1);
     expect(page.rows[0]).toMatchObject({ threadId: id, outboxState: "pending", subject: "Pilot" });
     engine.drainOutbox();
     expect((await engine.counts()).outbox).toBe(0);
-    expect((await engine.listThreads({ view: { kind: "outbox" }, limit: 10 })).rows).toHaveLength(0);
+    expect((await engine.listThreads({ view: { kind: "outbox" }, limit: 10 })).rows).toHaveLength(
+      0,
+    );
   });
 
   it("carries the follow-up time and lists due follow-ups", async () => {
@@ -171,7 +177,9 @@ describe("fixture engine: MV-0 port additions", () => {
     const due = FIXTURE_NOW_MS + 3_600_000;
     await engine.setFollowUp!(first!.threadId, due);
     expect((await engine.getThread(first!.threadId))!.row.followUpAtMs).toBe(due);
-    expect((await engine.listThreads({ view: { kind: "followups" }, limit: 10 })).rows).toHaveLength(0);
+    expect(
+      (await engine.listThreads({ view: { kind: "followups" }, limit: 10 })).rows,
+    ).toHaveLength(0);
     advance(3_600_001);
     const rows = (await engine.listThreads({ view: { kind: "followups" }, limit: 10 })).rows;
     expect(rows.map((r) => r.threadId)).toEqual([first!.threadId]);
@@ -182,7 +190,11 @@ describe("fixture engine: MV-0 port additions", () => {
   it("says why a thread came back: the snooze ran out, or a reply woke it", async () => {
     const { engine } = setup();
     const [a, b] = (await engine.listThreads({ view: inbox, limit: 2 })).rows;
-    await engine.applyOp({ kind: "snooze", threadIds: [a!.threadId, b!.threadId], args: { untilMs: FIXTURE_NOW_MS + 1 } });
+    await engine.applyOp({
+      kind: "snooze",
+      threadIds: [a!.threadId, b!.threadId],
+      args: { untilMs: FIXTURE_NOW_MS + 1 },
+    });
     await engine.applyOp({ kind: "unsnooze", threadIds: [a!.threadId] });
     expect((await engine.getThread(a!.threadId))!.row.returnReason).toBe("snooze");
     engine.deliver(msg("x@acme.test", { threadId: b!.threadId, accountId: b!.accountId }));
@@ -244,7 +256,9 @@ describe("fixture engine: lab scenarios", () => {
 
   it("followups: one due follow-up", async () => {
     const { engine } = setup({ scenario: ["followups"] });
-    expect((await engine.listThreads({ view: { kind: "followups" }, limit: 10 })).rows).toHaveLength(1);
+    expect(
+      (await engine.listThreads({ view: { kind: "followups" }, limit: 10 })).rows,
+    ).toHaveLength(1);
   });
 
   it("bodyFetch and bodyOffline: the newest Personal thread waits for its body", async () => {
@@ -253,8 +267,9 @@ describe("fixture engine: lab scenarios", () => {
       ["bodyOffline", "none"],
     ] as const) {
       const { engine } = setup({ scenario: [scenario] });
-      const [first] = (await engine.listThreads({ view: inbox, tab: { kind: "personal" }, limit: 1 }))
-        .rows;
+      const [first] = (
+        await engine.listThreads({ view: inbox, tab: { kind: "personal" }, limit: 1 })
+      ).rows;
       const thread = await engine.getThread(first!.threadId);
       expect(thread!.messages.at(-1)!.bodyState).toBe(state);
       if (scenario === "bodyOffline") {
@@ -268,7 +283,9 @@ describe("fixture engine: lab scenarios", () => {
     const { engine } = setup({ classify: CLASSIFY });
     engine.deliver(msg("dana@northzone.vc"));
     const c = await engine.counts();
-    expect(c.byViewKey[mailViewKey(inbox, { kind: "custom", customTabId: "ct-investors" })]).toBe(1);
+    expect(c.byViewKey[mailViewKey(inbox, { kind: "custom", customTabId: "ct-investors" })]).toBe(
+      1,
+    );
     const rows = (
       await engine.listThreads({
         view: inbox,
