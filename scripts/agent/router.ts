@@ -187,6 +187,12 @@ export function askHaiku(prompt: string, budgetMs: number): Promise<string> {
   });
 }
 
+/** MODUO_ROUTER_BUDGET_MS as a timer: 1800 when unset or not a positive number, at most 10 s. */
+export function budgetMs(raw: string | undefined): number {
+  const ms = Number(raw);
+  return Number.isFinite(ms) && ms > 0 ? Math.min(ms, 10_000) : 1800;
+}
+
 export async function classify(
   prompt: string,
   opts: { mode: string; budgetMs: number; ask?: typeof askHaiku },
@@ -233,8 +239,10 @@ async function main() {
   };
   if (typeof input.prompt !== "string" || !input.prompt.trim() || isEvent(input.prompt)) return;
   const started = performance.now();
-  const budgetMs = Number(process.env.MODUO_ROUTER_BUDGET_MS) || 1800;
-  const r = await classify(input.prompt, { mode, budgetMs });
+  const r = await classify(input.prompt, {
+    mode,
+    budgetMs: budgetMs(process.env.MODUO_ROUTER_BUDGET_MS),
+  });
   log(r, input.session_id, Math.round(performance.now() - started));
   process.stdout.write(
     JSON.stringify({

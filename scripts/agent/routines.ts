@@ -260,6 +260,14 @@ export function watchStatus(f: WatchFacts): "ok" | "attention" {
   return f.checks.every((c) => c.ok) && f.failedRuns.length === 0 ? "ok" : "attention";
 }
 
+/** One table cell: backslashes and pipes escaped, line breaks flattened, so a detail can't end its row. */
+export function cell(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\s*[\r\n]+\s*/g, " ");
+}
+
 export function renderWatch(f: WatchFacts): string {
   const status = watchStatus(f);
   const lines = [
@@ -269,9 +277,7 @@ export function renderWatch(f: WatchFacts): string {
     "",
     "| | Check | Result |",
     "| --- | --- | --- |",
-    ...f.checks.map(
-      (c) => `| ${c.ok ? "✅" : "❌"} | ${c.name} | ${c.detail.replace(/\|/g, "\\|")} |`,
-    ),
+    ...f.checks.map((c) => `| ${c.ok ? "✅" : "❌"} | ${c.name} | ${cell(c.detail)} |`),
     "",
   ];
   if (f.failedRuns.length === 0)
@@ -680,8 +686,13 @@ export const COMMANDS: Record<string, (rest: string[]) => Promise<void>> = {
   },
 };
 
+/** A command by name; never an inherited property such as `constructor` or `__proto__`. */
+export function commandFor(cmd: string): ((rest: string[]) => Promise<void>) | undefined {
+  return Object.hasOwn(COMMANDS, cmd) ? COMMANDS[cmd] : undefined;
+}
+
 async function main([cmd, ...rest]: string[]): Promise<void> {
-  const run = cmd ? COMMANDS[cmd] : undefined;
+  const run = cmd ? commandFor(cmd) : undefined;
   if (!run)
     throw new Error(
       "usage: bun run routine list | body <id> | task <id> | seed | watch | retro-facts | post <channel> [file] | note <title> [file] | bug <seed> <title> [file]",
