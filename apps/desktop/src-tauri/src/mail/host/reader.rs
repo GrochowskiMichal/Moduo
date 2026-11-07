@@ -736,3 +736,32 @@ mod tests {
         assert!(ics_time_ms("junk").is_none());
     }
 }
+
+// HV-15 variant of benchmarks/escapes/509-5-decode-failure-then-delete: a follow-up
+// that won't decode is deleted by the Follow-ups view. Fails until the fix lands.
+// Run: cargo test --lib hunt_509_5 -- --ignored
+#[cfg(test)]
+mod hunt_509_5 {
+    use super::*;
+
+    #[test]
+    #[ignore = "HV-15 variant 509-5: an undecodable follow-up is deleted when the Follow-ups view reads"]
+    fn an_unreadable_follow_up_survives_the_followups_read() {
+        let d = std::env::temp_dir().join(format!(
+            "moduo-mail-hunt-509-5-{}-{}",
+            std::process::id(),
+            crate::mail::store::now_ms()
+        ));
+        let _ = std::fs::remove_dir_all(&d);
+        let s = Store::open(&d).unwrap();
+        // A follow-up in a shape this build can't read (older/newer build, partial write).
+        let raw = r#"{"dueMs":5000}"#;
+        s.kv_set("followup:t1", raw).unwrap();
+        let _ = s.followup_rows(6_000);
+        assert_eq!(
+            s.kv_get("followup:t1").unwrap().as_deref(),
+            Some(raw),
+            "the armed follow-up was deleted because it didn't decode"
+        );
+    }
+}
