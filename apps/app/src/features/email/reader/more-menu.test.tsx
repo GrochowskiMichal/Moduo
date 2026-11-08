@@ -102,10 +102,12 @@ describe("reader ⋯ menu (specs/mail-v3.md §8, AC26)", () => {
     await tick();
     await tick();
 
+    // specs/mail-improve.md AC14: Pin, Move and Private note join ⋯; Remind is on the toolbar.
     expect(openMenu()).toEqual([
-      "Remind me if no reply… · w",
-      "Mark unread · u",
+      "Pin · p",
       "Move… · m",
+      "Private note · n",
+      "Mark unread · u",
       "Labels…",
       "Mute",
       "Why is this in Personal?",
@@ -143,8 +145,6 @@ describe("reader ⋯ menu (specs/mail-v3.md §8, AC26)", () => {
     expect(settings.remove).toHaveBeenCalledWith("set1");
 
     // The rest call the page's actions.
-    await pick("Remind me if no reply…");
-    expect(more.remind).toHaveBeenCalledWith("t1");
     await pick("Move…");
     expect(more.move).toHaveBeenCalledWith("t1");
     await pick("Copy link");

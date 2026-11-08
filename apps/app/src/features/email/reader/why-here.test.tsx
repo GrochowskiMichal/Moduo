@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 
-import type { MailExplain } from "@/lib/runtime.types.mail-engine";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import type { MailExplain, MailThread } from "@/lib/runtime.types.mail-engine";
 
-import { explainWhy, WHY_STEPS, WhyHereCard, type WhyNames } from "./why-here";
+import { SETTINGS_OPEN_EVENT, type SettingsOpenDetail } from "../../settings/settings-events";
+import { message, NOW, oneThreadEngine, row } from "../testing/reader-kit";
+import { MailReader } from "./mail-reader";
+import { explainWhy, WHY_STEPS, WhyHereCard, WhyHereSheet, type WhyNames } from "./why-here";
 
 afterEach(cleanup);
 
@@ -103,15 +107,15 @@ describe("Why is this in {Tab}? (specs/mail-v3.md §8, AC8)", () => {
       const steps = within(
         screen.getByRole("list", { name: "The order Moduo checks" }),
       ).getAllByRole("listitem");
-      expect(steps.map((li) => li.textContent?.replace(" (this decided it)", ""))).toEqual(
-        WHY_STEPS.map((s) => s.label),
-      );
-      // Only the deciding step carries the sr-only mark; the ones before it are dimmed.
+      const label = (li: HTMLElement) => li.querySelector("[data-step-label]")?.textContent;
+      expect(steps.map(label)).toEqual(WHY_STEPS.map((s) => s.label));
+      // The decider says "decided it"; the steps before it are dimmed and say "didn't match".
       for (const [i, li] of steps.entries()) {
-        expect(li.textContent?.includes("(this decided it)")).toBe(i === at);
+        expect(li.querySelector("[data-step-tag]")?.textContent ?? null).toBe(
+          i === at ? "decided it" : i < at ? "didn't match" : null,
+        );
         expect(li.hasAttribute("data-past")).toBe(i < at);
       }
-      expect(steps[at]!.textContent).toBe(`${c.step} (this decided it)`);
 
       fireEvent.click(screen.getByRole("button", { name: c.link }));
       expect(onOpenSettings).toHaveBeenCalledTimes(1);
@@ -131,7 +135,7 @@ describe("Why is this in {Tab}? (specs/mail-v3.md §8, AC8)", () => {
     const steps = screen.getAllByRole("listitem");
     expect(steps).toHaveLength(6);
     for (const li of steps) {
-      expect(li.textContent?.includes("(this decided it)")).toBe(false);
+      expect(li.querySelector("[data-step-tag]")).toBeNull();
       expect(li.hasAttribute("data-past")).toBe(false);
     }
     expect(screen.queryByRole("button")).toBeNull();
@@ -149,5 +153,86 @@ describe("Why is this in {Tab}? (specs/mail-v3.md §8, AC8)", () => {
       "Kim",
     );
     expect(answer.sentence).toBe("Your Investors tab collects mail from kim@seed.vc.");
+  });
+});
+
+// specs/mail-improve.md MI-0, AC15: "Why here?" is a sheet inside the reader, under the
+// sender card; the subject stays visible; no strikethrough; Settings opens at Mail → Rules.
+describe("sheet under the card, no strikethrough, rules link (AC15)", () => {
+  const tick = () => act(async () => await new Promise((r) => setTimeout(r, 0)));
+  const THREAD: MailThread = { row: row({ subject: "Pilot week" }), messages: [message()] };
+
+  it("renders in the reader body under the who-card and opens Settings at Mail → Rules", async () => {
+    const explain: MailExplain = {
+      stage: "rules",
+      ruleId: "r-receipts",
+      customTabId: null,
+      address: "jonas@acme.test",
+      tab: "notifications",
+    };
+    const engine = oneThreadEngine(() => THREAD, { explainThread: async () => explain });
+    const ui = render(
+      <TooltipProvider>
+        <MailReader
+          engine={engine}
+          threadId="t1"
+          version={0}
+          behavior={{ remoteImages: "block", trackerBlocking: true }}
+          now={() => NOW}
+          selfAddresses={["robin@me.test"]}
+          who={{ lookup: async () => null, screened: false }}
+          more={{
+            unread: rs.fn(),
+            move: rs.fn(),
+            mute: rs.fn(),
+            copyLink: rs.fn(),
+            block: rs.fn(),
+            spam: rs.fn(),
+            delete: rs.fn(),
+          }}
+          why={{ names: NAMES }}
+        />
+      </TooltipProvider>,
+    );
+    await tick();
+    await tick();
+    fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+      button: 0,
+      pointerType: "mouse",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Why is this in Notifications?" }));
+    await tick();
+
+    const sheet = screen.getByRole("region", { name: "Why this is in Notifications" });
+    // In the reader, after the who-card, and the subject is still on screen.
+    const reader = ui.container.querySelector("[data-reader-thread]")!;
+    expect(reader.contains(sheet)).toBe(true);
+    const card = screen.getByRole("region", { name: "Who this is from" });
+    expect(card.compareDocumentPosition(sheet) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    screen.getByRole("heading", { name: "Pilot week" });
+    // No popover, no strikethrough.
+    expect(document.querySelector('[data-slot="popover-content"]')).toBeNull();
+    expect(sheet.querySelector(".line-through")).toBeNull();
+    expect(within(sheet).getAllByText("didn't match")).toHaveLength(1);
+    within(sheet).getByText("decided it");
+
+    const seen: SettingsOpenDetail[] = [];
+    const listen = (e: Event) => seen.push((e as CustomEvent<SettingsOpenDetail>).detail);
+    window.addEventListener(SETTINGS_OPEN_EVENT, listen);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Edit rules in Settings" }));
+    window.removeEventListener(SETTINGS_OPEN_EVENT, listen);
+    expect(seen).toEqual([{ section: "mail", sub: "rules" }]);
+    expect(screen.queryByRole("region", { name: "Why this is in Notifications" })).toBeNull();
+  });
+
+  it("Esc and × close it", () => {
+    const onClose = rs.fn();
+    render(
+      <WhyHereSheet answer={explainWhy(CASES[1]!.explain, NAMES, "Shop")} onClose={onClose} />,
+    );
+    const sheet = screen.getByRole("region", { name: "Why this is in Notifications" });
+    fireEvent.keyDown(sheet, { key: "Escape" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 import type { MailAccount } from "@/lib/runtime.types.mail-engine";
 
-import { MailFirstSync, mailListState, MailListStateView } from "./mail-states";
+import { MailFirstSync, mailListState, MailListStateView, MailNextTabs } from "./mail-states";
 
 afterEach(cleanup);
 
@@ -42,8 +42,9 @@ describe("Mail list states (specs/mail-v3.md §4, AC17)", () => {
     const ui = render(<MailListStateView state={clear as never} onTab={onTab} />);
     screen.getByText("Personal is clear");
     screen.getByText("You cleared 12 today.");
-    fireEvent.click(screen.getByRole("button", { name: "Notifications · 4" }));
-    expect(onTab).toHaveBeenCalledWith({ kind: "notifications" });
+    // specs/mail-improve.md AC22: the next tabs are the reader's, not the list's.
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(onTab).not.toHaveBeenCalled();
     ui.unmount();
 
     // Nothing cleared and no other tab waiting.
@@ -105,5 +106,45 @@ describe("Mail list states (specs/mail-v3.md §4, AC17)", () => {
     const names = ["Google", "Microsoft", "iCloud", "Other (IMAP)"];
     for (const name of names) fireEvent.click(screen.getByRole("button", { name }));
     expect(onConnect.mock.calls.map((c) => c[0])).toEqual(["gmail", "outlook", "icloud", "custom"]);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC22: inbox zero says "{Tab} is clear · You cleared {n}
+// today" in the list; the reader shows only a small "Next" label and the next tabs as
+// buttons with their counts and `g` keys, no second heading. An empty place keeps its
+// state (with "Back to Inbox" and its `g i` key) in the list; the reader stays empty.
+describe("inbox zero and empty place (AC22)", () => {
+  it("the reader's Next: tabs with counts and their g keys, no heading", () => {
+    const onTab = rs.fn();
+    const ui = render(
+      <MailNextTabs
+        others={[
+          { tab: { kind: "notifications" }, label: "Notifications", unread: 4 },
+          { tab: { kind: "custom", customTabId: "ct1" }, label: "Investors", unread: 2 },
+        ]}
+        onTab={onTab}
+      />,
+    );
+    screen.getByText("Next");
+    expect(ui.container.querySelector("h1, h2, h3, h4")).toBeNull();
+    const notif = screen.getByRole("button", { name: "Notifications · 4" });
+    expect(notif.getAttribute("aria-keyshortcuts")).toBe("g n");
+    expect(notif.querySelector("kbd")?.textContent).toBe("gn");
+    const custom = screen.getByRole("button", { name: "Investors · 2" });
+    expect(custom.getAttribute("aria-keyshortcuts")).toBe("g v");
+    fireEvent.click(notif);
+    expect(onTab).toHaveBeenCalledWith({ kind: "notifications" });
+    cleanup();
+    // Nothing else waiting: nothing at all.
+    const none = render(<MailNextTabs others={[]} onTab={onTab} />);
+    expect(none.container.textContent).toBe("");
+  });
+
+  it("an empty place: Back to Inbox with its g i key", () => {
+    const state = mailListState({ ...base, view: { kind: "snoozed" }, isInbox: false });
+    render(<MailListStateView state={state as never} onBackToInbox={() => {}} />);
+    const back = screen.getByRole("button", { name: "Back to Inbox" });
+    expect(back.getAttribute("aria-keyshortcuts")).toBe("g i");
+    expect(back.querySelector("kbd")?.textContent).toBe("gi");
   });
 });

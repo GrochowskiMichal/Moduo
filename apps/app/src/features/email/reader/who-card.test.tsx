@@ -137,3 +137,36 @@ describe("who-card (specs/mail-v3.md §8, AC23)", () => {
     expect(releaseNewSenders).toHaveBeenLastCalledWith(["t3"]);
   });
 });
+
+// specs/mail-improve.md MI-0, AC24: a sender waiting in the Screener is decided in the
+// reader's sender header first; until then the triage toolbar is dimmed and inert.
+describe("screener disables triage (AC24)", () => {
+  it("Allow/Block sit in the header and the toolbar is aria-disabled until screened", async () => {
+    const onAction = rs.fn();
+    const thread = { row: row(), messages: [message()] };
+    render(
+      <TooltipProvider>
+        <MailReader
+          engine={oneThreadEngine(() => thread)}
+          threadId="t1"
+          version={0}
+          behavior={{ remoteImages: "block", trackerBlocking: true }}
+          now={() => NOW}
+          selfAddresses={["robin@me.test"]}
+          onAction={onAction}
+          who={{ lookup: async () => null, screened: true }}
+        />
+      </TooltipProvider>,
+    );
+    await act(async () => await new Promise((r) => setTimeout(r, 0)));
+    const card = screen.getByRole("region", { name: "Who this is from" });
+    within(card).getByRole("button", { name: "Allow" });
+    within(card).getByRole("button", { name: "Block" });
+    const toolbar = screen.getByRole("toolbar", { name: "Conversation actions" });
+    expect(toolbar.getAttribute("aria-disabled")).toBe("true");
+    const done = within(toolbar).getByRole("button", { name: /^Done/ });
+    expect(done.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(done);
+    expect(onAction).not.toHaveBeenCalled();
+  });
+});

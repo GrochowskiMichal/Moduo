@@ -374,3 +374,106 @@ describe("account scope through the thread window and tab counts (AC12)", () => 
     expect(rowAccounts().size).toBeGreaterThan(1);
   });
 });
+
+// specs/mail-improve.md MI-0, AC4 (and AC5, AC25, AC26 on the rail): the rail's upper part
+// scrolls above a pinned footer, a fade shows at its bottom edge while more is below, the
+// rail is one Tab stop with arrow keys inside, account marks are the tick, and first run
+// dims the places instead of hiding them.
+describe("pinned footer and scroll fade (AC4)", () => {
+  const two = [
+    { ...account("idle", null), id: "a1", displayName: "Work", address: "w@x.com" },
+    { ...account("idle", null), id: "a2", displayName: "Home", address: "h@x.com" },
+  ];
+  function mountRail(accounts: MailAccount[] = two) {
+    return render(
+      <TooltipProvider>
+        <MailRail
+          current={{ kind: "unified", role: "inbox" }}
+          counts={null}
+          accounts={accounts}
+          mailboxes={{}}
+          hues={{ a1: "blue", a2: "green" }}
+          outboxCount={0}
+          screenerOn={false}
+          onSelect={() => {}}
+          onConnect={() => {}}
+        />
+      </TooltipProvider>,
+    );
+  }
+
+  it("the body scrolls above the footer and fades while more is below", () => {
+    const sizes = Object.getOwnPropertyDescriptors(HTMLElement.prototype);
+    let scrollTop = 0;
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).hasAttribute("data-rail-body") ? 800 : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).hasAttribute("data-rail-body") ? 400 : 0;
+      },
+    });
+    try {
+      const ui = mountRail();
+      const body = ui.container.querySelector<HTMLElement>("[data-rail-body]")!;
+      const footer = ui.container.querySelector<HTMLElement>("[data-rail-footer]")!;
+      expect(body.className).toContain("overflow-y-auto");
+      expect(body.contains(footer)).toBe(false);
+      within(footer).getByRole("button", { name: "Connect account" });
+      Object.defineProperty(body, "scrollTop", { configurable: true, get: () => scrollTop });
+      fireEvent.scroll(body);
+      expect(body.getAttribute("data-fade")).toBe("bottom");
+      scrollTop = 400;
+      fireEvent.scroll(body);
+      expect(body.hasAttribute("data-fade")).toBe(false);
+    } finally {
+      Object.defineProperty(HTMLElement.prototype, "scrollHeight", sizes.scrollHeight!);
+      Object.defineProperty(HTMLElement.prototype, "clientHeight", sizes.clientHeight!);
+    }
+  });
+
+  it("one Tab stop; ↓ ↑ Home End move between items", async () => {
+    const ui = mountRail();
+    await act(async () => await new Promise((r) => setTimeout(r, 0)));
+    const nav = ui.getByRole("navigation", { name: "Mail folders" });
+    const body = nav.querySelector<HTMLElement>("[data-rail-body]")!;
+    const items = within(body).getAllByRole("button");
+    expect(items.filter((b) => b.tabIndex === 0)).toHaveLength(1);
+    const start = items.find((b) => b.tabIndex === 0)!;
+    start.focus();
+    fireEvent.keyDown(start, { key: "ArrowDown" });
+    const next = document.activeElement as HTMLElement;
+    expect(next).not.toBe(start);
+    expect(items).toContain(next);
+    fireEvent.keyDown(next, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(start);
+    fireEvent.keyDown(start, { key: "End" });
+    expect(document.activeElement).toBe(items.at(-1));
+    fireEvent.keyDown(items.at(-1)!, { key: "Home" });
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it("accounts carry the tick, not a dot or ring", () => {
+    const ui = mountRail();
+    const ticks = ui.container.querySelectorAll<HTMLElement>("[data-account-tick]");
+    expect([...ticks].map((t) => t.dataset.label)).toEqual(["blue", "green"]);
+    cleanup();
+    // One account: no tick.
+    const one = mountRail([two[0]!]);
+    expect(one.container.querySelector("[data-account-tick]")).toBeNull();
+  });
+
+  it("first run dims folders and views (aria-disabled, a tooltip), never hides them", () => {
+    const ui = mountRail([]);
+    for (const name of ["Inbox", "Archive", "Snoozed", "Follow-ups"]) {
+      const item = ui.getByRole("button", { name: new RegExp(`^${name}`) });
+      expect(item.getAttribute("aria-disabled")).toBe("true");
+      expect(item.title).toBe("Connect an account first");
+      expect(item.className).toContain("text-muted-foreground");
+    }
+  });
+});

@@ -225,3 +225,74 @@ describe("reader (specs/mail-v3.md §8)", () => {
     expect(screen.getByLabelText("Original message").textContent).toContain("raw body");
   });
 });
+
+// specs/mail-improve.md MI-0, AC3 and AC16: one reading width for every thread (the
+// thread column capped at --measure-thread, message text at --measure-reading), the
+// title unclamped, the link chip labelled, and a sticky subject while composing.
+describe("thread column uses the measure tokens (AC3, AC16)", () => {
+  it("the tokens exist", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const css = readFileSync(join(process.cwd(), "src/styles/tokens.css"), "utf8");
+    expect(css).toMatch(/--measure-thread:\s*48rem/);
+    expect(css).toMatch(/--measure-reading:\s*70ch/);
+    expect(css).toMatch(/--scrim:\s*color-mix\(in oklab, var\(--background\) 82%, transparent\)/);
+  });
+
+  it("column and text measures, an unclamped title, the Link… chip", async () => {
+    const long = "A".repeat(80) + " the subject keeps going " + "B".repeat(80);
+    const thread: MailThread = { row: row({ subject: long }), messages: [message()] };
+    const links: ReaderLinks = { read: async () => [], open() {}, unlink() {} };
+    const ui = mount(() => thread, { links, onAction: () => {} });
+    await tick();
+    await tick();
+    const column = ui.container.querySelector<HTMLElement>("[data-thread-column]")!;
+    expect(column.className).toContain("max-w-(--measure-thread)");
+    // Left-aligned: no auto margins.
+    expect(column.className).not.toContain("mx-auto");
+    const body = ui.container.querySelector<HTMLElement>("[data-message-body]")!;
+    expect(body.className).toContain("max-w-(--measure-reading)");
+    const title = screen.getByRole("heading", { name: long });
+    expect(title.className).not.toMatch(/line-clamp|truncate/);
+    const chip = screen.getByRole("button", { name: /^Link…/ });
+    expect(chip.textContent).toContain("Link…");
+    expect(chip.querySelector("kbd")?.textContent).toBe("l");
+  });
+
+  it("while composing, a compact subject stays once the title scrolls away", async () => {
+    const seen: ((entries: { isIntersecting: boolean }[]) => void)[] = [];
+    const Original = globalThis.IntersectionObserver;
+    globalThis.IntersectionObserver = class {
+      constructor(cb: (entries: { isIntersecting: boolean }[]) => void) {
+        seen.push(cb);
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    } as unknown as typeof IntersectionObserver;
+    try {
+      const thread: MailThread = { row: row({ subject: "Pilot week" }), messages: [message()] };
+      const ui = mount(() => thread, { composer: <div>composer</div> });
+      await tick();
+      await tick();
+      expect(ui.container.querySelector("[data-sticky-subject]")).toBeNull();
+      act(() => seen.forEach((cb) => cb([{ isIntersecting: false }])));
+      const sticky = ui.container.querySelector<HTMLElement>("[data-sticky-subject]")!;
+      expect(sticky.textContent).toContain("Pilot week");
+      expect(sticky.className).toContain("sticky");
+      act(() => seen.forEach((cb) => cb([{ isIntersecting: true }])));
+      expect(ui.container.querySelector("[data-sticky-subject]")).toBeNull();
+      cleanup();
+      // Not composing: no sticky subject, even scrolled.
+      const plain = mount(() => thread);
+      await tick();
+      act(() => seen.forEach((cb) => cb([{ isIntersecting: false }])));
+      expect(plain.container.querySelector("[data-sticky-subject]")).toBeNull();
+    } finally {
+      globalThis.IntersectionObserver = Original;
+    }
+  });
+});

@@ -80,25 +80,23 @@ describe("MailTabs (specs/mail-v3.md §2, AC13)", () => {
     const onSelect = mount({ kind: "personal" }, counts([[notifications, 4]]));
     // 600 px of tabs in 350: the three on the right fold behind "+3".
     expect(visibleTabs()).toEqual(["Personal", "Investors", "Hiring"]);
-    const more = screen.getByRole("button", { name: /^3 more tabs/ });
+    const more = screen.getByRole("button", { name: /^\+3 more tabs/ });
     expect(more.textContent).toContain("+3");
     // A folded tab (Notifications) has unread: "+N" carries the dot.
     expect(more.querySelector('[data-slot="mail-tabs-more-dot"]')).toBeTruthy();
 
-    // The menu lists every tab with its count, then Custom tabs… Settings.
+    // specs/mail-improve.md AC23: the menu lists only the hidden tabs, with their counts,
+    // then Custom tabs… Settings.
     fireEvent.pointerDown(more, pointer);
     const menu = await screen.findByRole("menu");
     const items = within(menu).getAllByRole("menuitemradio");
     expect(items.map((i) => i.textContent)).toEqual([
-      "Personal",
-      "Investors",
-      "Hiring",
       "Press",
       "Notifications4 unread",
       "Newsletters",
     ]);
     within(menu).getByRole("menuitem", { name: /Custom tabs…\s*Settings/ });
-    fireEvent.click(items[4]!);
+    fireEvent.click(items[1]!);
     expect(onSelect).toHaveBeenCalledWith(notifications);
   });
 
@@ -106,7 +104,7 @@ describe("MailTabs (specs/mail-v3.md §2, AC13)", () => {
     room = 350;
     mount({ kind: "newsletters" });
     expect(visibleTabs()).toEqual(["Personal", "Investors", "Newsletters"]);
-    screen.getByRole("button", { name: /^3 more tabs: Hiring, Press, Notifications$/ });
+    screen.getByRole("button", { name: "+3 more tabs" });
   });
 
   it("at its narrowest (1024 px, three custom tabs) Personal and the selected tab still show", () => {
@@ -163,5 +161,31 @@ describe("MailTabs (specs/mail-v3.md §2, AC13)", () => {
     expect(foldTabs([100, 100, 100, 100], 300, 0, 30)).toEqual([2, 3]);
     expect(foldTabs([100, 100, 100, 100], 300, 3, 30)).toEqual([1, 2]);
     expect(foldTabs([100, 100, 100, 100], 50, 2, 30)).toEqual([1, 3]);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC23: "+N" explains itself: its tooltip and name say
+// "{n} more tabs · {m} has new mail", and its menu holds only the hidden tabs.
+describe("+N tooltip and hidden-only menu (AC23)", () => {
+  it("names the count and which hidden tabs have new mail", async () => {
+    room = 350;
+    mount(
+      { kind: "personal" },
+      counts([
+        [{ kind: "notifications" }, 4],
+        [{ kind: "custom", customTabId: "press" }, 1],
+      ]),
+    );
+    const more = screen.getByRole("button", { name: "+3 more tabs · 2 have new mail" });
+    fireEvent.focus(more);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("3 more tabs · 2 have new mail");
+    cleanup();
+    room = 350;
+    mount({ kind: "personal" }, counts([[{ kind: "notifications" }, 4]]));
+    screen.getByRole("button", { name: "+3 more tabs · Notifications has new mail" });
+    cleanup();
+    room = 580;
+    mount({ kind: "personal" });
+    screen.getByRole("button", { name: "+1 more tab" });
   });
 });

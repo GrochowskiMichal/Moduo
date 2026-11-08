@@ -386,7 +386,7 @@ describe("/email on the engine (MR-16 cutover)", () => {
       expect((await compose.listOutbox()).length).toBe(0);
     });
 
-    it("failed send shows Not sent and Fix and send", async () => {
+    it("failed send shows Not sent with its cause, and Edit", async () => {
       const compose = createFakeCompose({ now: () => FIXTURE_NOW_MS, scenario: ["sendFailed"] });
       await mountWired([], { compose });
       fireEvent.click(screen.getByRole("button", { name: /^Drafts/ }));
@@ -395,9 +395,9 @@ describe("/email on the engine (MR-16 cutover)", () => {
       const failed = screen.getByRole("list", { name: "Not sent" });
       expect(failed.textContent).toContain("Deck for Thursday");
       expect(failed.textContent).toContain(
-        "Not sent: The server refused the address dana@northzone.tst",
+        "Not sent · The server refused the address dana@northzone.tst",
       );
-      fireEvent.click(screen.getByRole("button", { name: "Fix and send" }));
+      fireEvent.click(within(failed).getByRole("button", { name: "Edit" }));
       await tick();
       // AC11: the composer reopens that draft, its reason shown.
       const composer = screen.getByRole("region", { name: "New message" });
@@ -408,5 +408,86 @@ describe("/email on the engine (MR-16 cutover)", () => {
         "Not sent: The server refused the address dana@northzone.tst",
       );
     });
+  });
+});
+
+// specs/mail-improve.md MI-0, AC13: after `t` the toast's "Also mark the email Done" is a
+// button with its `e` key cap, styled like Undo; the task's title opens as an editable,
+// auto-growing field with its text selected (Enter saves, Esc cancels).
+describe("task toast has an Also mark Done button (AC13)", () => {
+  it("the toast's button and key cap", async () => {
+    const engine = createFakeMailEngine({
+      fixture: generateFixture({ messages: 200 }),
+      now: () => FIXTURE_NOW_MS,
+    });
+    const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+    const result = { plan: {} as never, undo: async () => {} };
+    const alsoDone = rs.fn(async () => true);
+    const spine = {
+      convert: async () => result,
+      alsoDone,
+      linksFor: async () => [],
+    } as unknown as MailSpineCommands;
+    render(<Toaster />);
+    render(
+      <TooltipProvider>
+        <HotkeyScope scope="email">
+          <MailPage store={store} compose={null} spine={spine} now={() => FIXTURE_NOW_MS} />
+        </HotkeyScope>
+      </TooltipProvider>,
+    );
+    await tick();
+    await tick();
+    act(() => {
+      for (const key of ["j", "t"])
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            code: `Key${key.toUpperCase()}`,
+            bubbles: true,
+            cancelable: true,
+          }),
+        );
+    });
+    await tick();
+    await tick();
+    await screen.findByText("Task created");
+    const also = screen.getByRole("button", { name: /^Also mark the email Done/ });
+    expect(also.querySelector("kbd")?.textContent).toBe("e");
+    expect(also.getAttribute("aria-keyshortcuts")).toBe("e");
+    fireEvent.click(also);
+    await tick();
+    expect(alsoDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("the task title field: selected on open, Enter saves, Esc cancels", async () => {
+    const { TaskView } = await import("../panels/task-view");
+    const link = {
+      linkId: "l1",
+      entity: { type: "task", id: "task-1", label: "Hero photo options" },
+      source: { type: "task", id: "task-1" },
+      target: { type: "email_thread", id: "ref-1" },
+      relationKind: "spawned-from",
+    } as const;
+    const onRename = rs.fn();
+    const ui = render(
+      <TaskView threadId="t1" links={[link]} editTitleFor="task-1" onRenameTask={onRename} />,
+    );
+    const field = screen.getByRole("textbox", { name: "Task title" }) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(field);
+    expect(field.selectionStart).toBe(0);
+    expect(field.selectionEnd).toBe("Hero photo options".length);
+    fireEvent.change(field, { target: { value: "Hero photo options for the relaunch" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(onRename).toHaveBeenCalledWith("task-1", "Hero photo options for the relaunch");
+    ui.unmount();
+
+    render(<TaskView threadId="t1" links={[link]} editTitleFor="task-1" onRenameTask={onRename} />);
+    const again = screen.getByRole("textbox", { name: "Task title" });
+    fireEvent.change(again, { target: { value: "Nope" } });
+    fireEvent.keyDown(again, { key: "Escape" });
+    expect(onRename).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("textbox", { name: "Task title" })).toBeNull();
+    screen.getByRole("heading", { name: "Hero photo options" });
   });
 });

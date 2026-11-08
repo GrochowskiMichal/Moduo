@@ -2,9 +2,10 @@
 // key the `?` sheet lists is dead.
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { getHotkeyManager } from "@tanstack/hotkeys";
-import { act, cleanup, render, screen, within } from "@testing-library/react";
-import { toast } from "sonner";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { toast, Toaster } from "sonner";
 
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
 import { isMacPlatform } from "@/lib/hotkeys/use-app-hotkeys";
@@ -240,5 +241,155 @@ describe("mail shell keys (AC21)", () => {
     screen.getByRole("region", { name: region });
     expect(cursor()).toBe(before);
     error.mockRestore();
+  });
+});
+
+// ── specs/mail-improve.md MI-0 ────────────────────────────────────────────────
+
+async function mountWithToaster(opts: { scenario?: "noAccount"[] } = {}) {
+  const engine = createFakeMailEngine({
+    fixture: generateFixture({ messages: 300 }),
+    now: () => FIXTURE_NOW_MS,
+    scenario: opts.scenario,
+  });
+  const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+  engine.subscribe((e) => {
+    if (e.kind === "threads_changed")
+      store.setState((s) => ({ threadsVersion: s.threadsVersion + 1 }));
+  });
+  const onViewChange = rs.fn<(view: MailView) => void>();
+  render(<Toaster />);
+  const ui = render(
+    <TooltipProvider>
+      <HotkeyScope scope="email">
+        <MailShell
+          store={store}
+          now={() => FIXTURE_NOW_MS}
+          onViewChange={onViewChange}
+          renderReader={(id) => (id ? <h2>Reading {id}</h2> : null)}
+        />
+      </HotkeyScope>
+    </TooltipProvider>,
+  );
+  await tick();
+  await tick();
+  const cursor = () =>
+    ui.container.querySelector<HTMLElement>('[aria-selected="true"][data-thread-id]')?.dataset
+      .threadId ?? null;
+  const rowIds = () =>
+    [...ui.container.querySelectorAll<HTMLElement>("[data-thread-id]")].map(
+      (el) => el.dataset.threadId!,
+    );
+  return { ui, store, engine, onViewChange, cursor, rowIds };
+}
+
+const settle = async () => {
+  for (let i = 0; i < 4; i++) await tick();
+};
+
+describe("triage shows one undo toast; hint line keeps keys (AC10)", () => {
+  it("e: one toast 'Done · in Archive' with Undo and its key; the hint line is key hints", async () => {
+    const { ui } = await mountWithToaster();
+    press("j");
+    press("e");
+    await settle();
+    await screen.findByText("Done · in Archive");
+    const undo = screen.getByRole("button", { name: /^Undo/ });
+    expect(undo.textContent).toContain(isMacPlatform() ? "⌘Z" : "Ctrl+Z");
+    const hint = ui.container.querySelector('[data-slot="mail-hint-line"]')!.textContent;
+    expect(hint).toBe("j k to move · e Done · s Snooze · t Task · ? all keys");
+  });
+
+  it("delete and a bulk Done say where they went", async () => {
+    await mountWithToaster();
+    press("j");
+    press("Backspace");
+    await settle();
+    await screen.findByText("Deleted · in Trash");
+    press("x");
+    press("j");
+    press("x");
+    press("e");
+    await settle();
+    await screen.findByText("2 done · in Archive");
+  });
+});
+
+describe("undo selects and opens the restored thread (AC11)", () => {
+  it("z brings the thread back selected and open", async () => {
+    const { cursor, rowIds } = await mountWithToaster();
+    press("j");
+    press("j");
+    const done = cursor()!;
+    press("e");
+    await settle();
+    expect(rowIds()).not.toContain(done);
+    expect(cursor()).not.toBe(done);
+    press("z");
+    await settle();
+    expect(rowIds()).toContain(done);
+    expect(cursor()).toBe(done);
+    screen.getByRole("heading", { name: `Reading ${done}` });
+  });
+
+  it("after the place changed, undo goes back to it first", async () => {
+    const { cursor, onViewChange } = await mountWithToaster();
+    press("j");
+    const done = cursor()!;
+    press("e");
+    await settle();
+    press("g");
+    press("a");
+    expect(onViewChange).toHaveBeenLastCalledWith({ kind: "unified", role: "archive" });
+    press("z");
+    await settle();
+    expect(onViewChange).toHaveBeenLastCalledWith({ kind: "unified", role: "inbox" });
+    expect(cursor()).toBe(done);
+  });
+
+  it("the toast's Undo button does the same", async () => {
+    const { cursor } = await mountWithToaster();
+    press("j");
+    const done = cursor()!;
+    press("e");
+    await settle();
+    fireEvent.click(await screen.findByRole("button", { name: /^Undo/ }));
+    await settle();
+    expect(cursor()).toBe(done);
+  });
+});
+
+describe("opening a thread clears its unread dot (AC8)", () => {
+  it("the dot goes the moment the thread opens", async () => {
+    const { ui } = await mountWithToaster();
+    const dotted = ui.container
+      .querySelector<HTMLElement>("[data-unread-dot]")!
+      .closest<HTMLElement>("[data-thread-id]")!;
+    const id = dotted.dataset.threadId!;
+    fireEvent.click(dotted);
+    await settle();
+    const row = ui.container.querySelector<HTMLElement>(`[data-thread-id="${id}"]`)!;
+    expect(row.querySelector("[data-unread-dot]")).toBeNull();
+  });
+});
+
+describe("first run dims places (AC25)", () => {
+  it("places are aria-disabled with no account; dialogs use the scrim", async () => {
+    const { ui } = await mountWithToaster({ scenario: ["noAccount"] });
+    const inbox = within(ui.getByRole("navigation", { name: "Mail folders" })).getByRole("button", {
+      name: /^Inbox/,
+    });
+    expect(inbox.getAttribute("aria-disabled")).toBe("true");
+    cleanup();
+    render(
+      <Dialog open>
+        <DialogContent>
+          <DialogTitle>Connect</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+    const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]')!;
+    expect(overlay.className).toContain("bg-(--scrim)");
+    expect(overlay.className).not.toContain("bg-background/60");
   });
 });
