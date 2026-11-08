@@ -384,7 +384,6 @@ export const MailRow = memo(function MailRow(props: Props) {
     <div
       role="option"
       aria-selected={cursor}
-      aria-label={rowAccessibleName(props, f)}
       data-mail-row
       data-thread-id={row.threadId}
       data-picked={picked ? "true" : undefined}
@@ -406,8 +405,15 @@ export const MailRow = memo(function MailRow(props: Props) {
         cursor || picked ? cn(SELECTED_ROW, "after:hidden") : "hover:bg-state-hover",
       )}
     >
+      {/* The row's name: one line read with commas (AC28). The visual parts below are
+          hidden from assistive tech, so axe never compares a label to the initials. */}
+      <span data-row-name className="sr-only">
+        {rowAccessibleName(props, f)}
+      </span>
       <RowLead row={row} person={f.person} picked={picked} compact={compact} actions={actions} />
-      {compact ? <CompactBody p={props} f={f} /> : <ComfortableBody p={props} f={f} />}
+      <span aria-hidden className="contents">
+        {compact ? <CompactBody p={props} f={f} /> : <ComfortableBody p={props} f={f} />}
+      </span>
     </div>
   );
 });

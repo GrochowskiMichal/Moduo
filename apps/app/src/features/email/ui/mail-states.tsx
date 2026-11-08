@@ -141,17 +141,21 @@ function ConnectCard({ onConnect }: { onConnect?: (provider: MailConnectProvider
         className="mt-1 grid w-full grid-cols-2 gap-2"
       >
         {PROVIDERS.map((p) => (
-          <Button
-            key={p.id}
-            variant="outline"
-            size="sm"
-            aria-label={p.label}
-            className="h-auto flex-col items-start gap-0 py-2"
-            onClick={() => onConnect?.(p.id)}
-          >
-            <span className="text-sm">{p.label}</span>
-            <span className="text-2xs font-normal text-muted-foreground">{p.note}</span>
-          </Button>
+          // The note sits beside the button, not in it, so the button's name is its visible
+          // label (axe label-content-name-mismatch).
+          <div key={p.id} className="relative grid">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-auto flex-col items-start gap-0 pt-2 pb-6"
+              onClick={() => onConnect?.(p.id)}
+            >
+              <span className="text-sm">{p.label}</span>
+            </Button>
+            <span className="pointer-events-none absolute bottom-2 left-3 text-2xs text-muted-foreground">
+              {p.note}
+            </span>
+          </div>
         ))}
       </div>
     </div>

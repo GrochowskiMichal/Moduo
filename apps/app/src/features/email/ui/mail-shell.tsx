@@ -35,6 +35,7 @@ import { mailKeyHint, type MailKeyId } from "../keys";
 import { showMailPanel, toggleMailPanel } from "../panels/side-panel";
 import { openMailSearch } from "../search/open";
 import { cyclePane, focusIn } from "../shell/panes";
+import { useReadOnOpen } from "../shell/read-on-open";
 import {
   advanceAfterRemoval,
   allThreadIds,
@@ -587,17 +588,8 @@ export function MailShell({
     onCursorChange?.(sel.cursor);
   }, [sel.cursor, onCursorChange]);
 
-  // Opening a thread reads it: its unread dot goes at once (specs/mail-improve.md AC8).
-  // Not an undoable action: no toast, no undo entry.
-  const readOnOpen = useRef<string | null>(null);
-  useEffect(() => {
-    const id = sel.cursor;
-    if (!id || !engine || readOnOpen.current === id) return;
-    const row = win.rows.find((r) => r.threadId === id);
-    if (!row) return;
-    readOnOpen.current = id;
-    if (row.unread) void engine.applyOp({ kind: "mark_read", threadIds: [id] }).catch(() => {});
-  }, [sel.cursor, engine, win.rows]);
+  // Opening a thread reads it: the dot goes at once, the engine hears in a batch (AC8).
+  const readNow = useReadOnOpen(engine, sel.cursor, win.rows);
 
   /** A click's toast names the key that does it (X21 hints, now in the toast). */
   const keyFor = useCallback(
@@ -710,7 +702,8 @@ export function MailShell({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full">
+    // min-w-0: the shell gives the side panel its room (it never pushes it off screen).
+    <div className="flex h-full min-h-0 w-full min-w-0">
       <aside data-mail-pane="rail" className="flex w-56 shrink-0 flex-col border-r border-hairline">
         <MailRail
           current={view}
@@ -829,6 +822,7 @@ export function MailShell({
         >
           <MailThreadList
             items={items}
+            readNow={readNow}
             cursor={sel.cursor}
             picked={sel.picked}
             hovered={hovered ?? sel.cursor}

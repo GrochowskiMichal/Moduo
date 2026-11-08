@@ -71,6 +71,8 @@ type Props = {
   picked: readonly string[];
   hovered: string | null;
   hues: Readonly<Record<string, LabelColor>>;
+  /** Threads opened just now: read on screen before the engine's write lands. */
+  readNow?: ReadonlySet<string>;
   /** Account names by id, for the tick's tooltip and the row's name. */
   accountNames?: Readonly<Record<string, string>>;
   /** More than one account: rows carry the account tick. */
@@ -151,6 +153,7 @@ export function MailThreadList({
   hovered,
   hues,
   accountNames = EMPTY_NAMES,
+  readNow = EMPTY_SET,
   showHue,
   density,
   previewLines,
@@ -202,27 +205,30 @@ export function MailThreadList({
     if (onNearEnd && items.length > 0 && lastShown >= items.length - 20) onNearEnd();
   }, [lastShown, items.length, onNearEnd]);
 
-  const renderRow = (row: MailThreadRow) => (
-    <MailRow
-      row={row}
-      cursor={row.threadId === cursor}
-      picked={pickedSet.has(row.threadId)}
-      selecting={selecting}
-      showActions={row.threadId === hovered}
-      accountHue={showHue ? (hues[row.accountId] ?? "gray") : null}
-      accountName={accountNames[row.accountId]}
-      inPinnedGroup={underPinned.has(row.threadId)}
-      density={density}
-      previewLines={previewLines}
-      place={place}
-      self={self}
-      linked={linkedKinds[row.threadId]}
-      notSent={notSent.has(row.threadId)}
-      offline={row.outboxState ? offlineAccounts.has(row.accountId) : false}
-      nowMs={nowMs}
-      actions={actions}
-    />
-  );
+  const renderRow = (raw: MailThreadRow) => {
+    const row = raw.unread && readNow.has(raw.threadId) ? { ...raw, unread: false } : raw;
+    return (
+      <MailRow
+        row={row}
+        cursor={row.threadId === cursor}
+        picked={pickedSet.has(row.threadId)}
+        selecting={selecting}
+        showActions={row.threadId === hovered}
+        accountHue={showHue ? (hues[row.accountId] ?? "gray") : null}
+        accountName={accountNames[row.accountId]}
+        inPinnedGroup={underPinned.has(row.threadId)}
+        density={density}
+        previewLines={previewLines}
+        place={place}
+        self={self}
+        linked={linkedKinds[row.threadId]}
+        notSent={notSent.has(row.threadId)}
+        offline={row.outboxState ? offlineAccounts.has(row.accountId) : false}
+        nowMs={nowMs}
+        actions={actions}
+      />
+    );
+  };
 
   const renderItem = (item: MailListItem): ReactNode => {
     if (item.kind === "row") return renderRow(item.row);

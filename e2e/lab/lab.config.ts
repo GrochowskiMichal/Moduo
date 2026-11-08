@@ -108,6 +108,8 @@ export default {
       "[data-slot^='avatar'] *",
       "img",
       "svg *",
+      // Screen-reader text is never seen.
+      ".sr-only",
     ],
   },
 

@@ -269,7 +269,10 @@ describe("avatar, tick and checks (AC5, AC6)", () => {
     // After the time, at the right edge.
     const time = el.querySelector("time")!;
     expect(time.compareDocumentPosition(tick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(el.getAttribute("aria-label")).toContain("Work");
+    // The row's name comes from its one screen-reader line (no aria-label: axe's
+    // label-content-name-mismatch would compare it to the visible initials and snippet).
+    expect(el.hasAttribute("aria-label")).toBe(false);
+    expect(el.querySelector("[data-row-name]")!.textContent).toContain("Work");
     cleanup();
     // Read rows: the tick at half strength.
     const read = mount({ accountHue: "teal", accountName: "Work", row: row({ unread: false }) });
@@ -346,9 +349,13 @@ describe("pinned rows, fade, selected contrast, accessible name (AC7, AC8, AC28)
       accountName: "Work",
     });
     const time = el.querySelector("time")!.textContent;
-    expect(el.getAttribute("aria-label")).toBe(
+    expect(el.hasAttribute("aria-label")).toBe(false);
+    screen.getByRole("option", {
+      name: `Ana Lopes, 6 messages, unread, priority person, has attachments, has a task, ${time}, Hale & Co renewal, Work`,
+    });
+    expect(el.querySelector("[data-row-name]")!.textContent).toBe(
       `Ana Lopes, 6 messages, unread, priority person, has attachments, has a task, ${time}, Hale & Co renewal, Work`,
     );
-    expect(el.getAttribute("aria-label")).not.toContain("AL,");
+    expect(el.querySelector("[data-row-name]")!.textContent).not.toContain("AL,");
   });
 });

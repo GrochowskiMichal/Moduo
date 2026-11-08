@@ -2,8 +2,6 @@
 // on a route that has one, visible on focus. On Email it reads "Skip to mail list" and
 // lands on the selected row (else the list). Other modules can add theirs to SKIP_LINKS.
 
-import type { MouseEvent } from "react";
-
 type SkipTarget = { label: string; target: string; focus: string[] };
 
 /** Route prefix → where its skip link goes; the first matching focus selector wins. */
@@ -24,7 +22,7 @@ export function skipLinkFor(pathname: string): SkipTarget | null {
 export function SkipLink({ pathname }: { pathname: string }) {
   const link = skipLinkFor(pathname);
   if (!link) return null;
-  const go = (e: MouseEvent<HTMLAnchorElement>) => {
+  const go = (e: { preventDefault(): void }) => {
     e.preventDefault();
     const root = document.querySelector<HTMLElement>(`[data-skip-target="${link.target}"]`);
     if (!root) return;
@@ -37,9 +35,16 @@ export function SkipLink({ pathname }: { pathname: string }) {
     hit.focus();
   };
   return (
+    // No href: WebKit (Safari, the Mac app's WKWebView) leaves links out of the Tab order
+    // unless the person turns on "Press Tab to highlight each item"; an element with its
+    // own tab stop and the link role is reachable everywhere.
     <a
-      href={`#${link.target}`}
+      role="link"
+      tabIndex={0}
       onClick={go}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") go(e);
+      }}
       className="sr-only rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--z-popover) focus-visible:ring-2 focus-visible:ring-ring"
     >
       {link.label}

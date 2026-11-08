@@ -383,6 +383,10 @@ body {
   transition: opacity var(--motion-fast) var(--ease-out) !important;
 }
 
+[data-sonner-toast].motion-key-toast * {
+  transition-duration: var(--motion-fade) !important;
+}
+
 /* 1 · Panels. Slides in from the right by default; `data-side="left"` comes
    from the left. Applied by the panel shell when a panel opens. */
 .motion-panel {

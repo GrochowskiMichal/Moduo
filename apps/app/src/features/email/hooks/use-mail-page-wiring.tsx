@@ -187,6 +187,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
         workspaceId,
         hasRef: (key) => refKeys.has(key),
         refIdFor: readsLinks ? (key) => refIds.get(key) ?? null : undefined,
+        realAccounts: readsLinks,
         contacts,
         makeTask: ({ title, description, dueDate }) => {
           if (!inbox) throw new Error("Your Tasks inbox isn't ready yet.");

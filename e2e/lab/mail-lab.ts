@@ -419,11 +419,12 @@ export const mailJourneys = [
         expect: async () =>
           page.evaluate(() => !!document.activeElement?.closest('[aria-label="Reader"]')),
       });
+      // Reader → the side panel (open at 1440 px) → round to the rail.
       await press("F6");
       await press("F6");
-      await step("round to the list", {
+      await step("round to the rail", {
         expect: async () =>
-          page.evaluate(() => !!document.activeElement?.closest('[aria-label="Mail list"]')),
+          page.evaluate(() => !!document.activeElement?.closest('[aria-label="Mail folders"]')),
       });
     },
   },

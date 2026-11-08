@@ -342,12 +342,12 @@ export function score(rows, tokens, rgba) {
   return { overall, band, families, top, tokenCount: tokens.length };
 }
 
-/** `harvest`'s context-resolution inputs: the colour tokens built from other variables, and
- *  every colour already resolved at the root (those need no second look). */
+/** `harvest`'s context-resolution inputs: every colour token (a custom property reads back
+ *  with its var() already substituted, so which ones are scoped can't be told from the
+ *  value; a token redeclared per element, like `--label-fill` on `[data-label]`, resolves
+ *  differently inside each), and every colour already resolved at the root (those need
+ *  no second look). */
 export function scopedColorTokens(tokens) {
   const colors = (tokens ?? []).filter((t) => t.kind === "color");
-  return {
-    scoped: colors.filter((t) => /var\(/.test(t.raw ?? "")).map((t) => t.name),
-    known: colors.map((t) => t.value),
-  };
+  return { scoped: colors.map((t) => t.name), known: colors.map((t) => t.value) };
 }
