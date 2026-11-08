@@ -45,9 +45,10 @@ export function SkipLink({ pathname }: { pathname: string }) {
       onKeyDown={(e) => {
         if (e.key === "Enter") go(e);
       }}
-      className="sr-only rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--z-popover) focus-visible:ring-2 focus-visible:ring-ring"
+      className="sr-only rounded-md bg-background text-sm font-medium text-foreground shadow-lg focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--z-popover) focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {link.label}
+      {/* Padding inside: `not-sr-only` resets the element's own. */}
+      <span className="block px-3 py-2">{link.label}</span>
     </span>
   );
 }

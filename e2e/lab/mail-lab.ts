@@ -404,6 +404,8 @@ export const mailJourneys = [
     target: { keys: 6, clicks: 0 },
     async keyboard({ page, press, step }: J) {
       await onFixture(page, 5_000);
+      // Let the chrome's load fade finish: the motion row measures keyed changes only.
+      await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
       await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
       await press("Tab");
       await step("skip link first", {
