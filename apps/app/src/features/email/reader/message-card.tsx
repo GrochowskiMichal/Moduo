@@ -17,7 +17,7 @@ import type { MailAttachment, MailMessage } from "@/lib/runtime.types.mail-engin
 import { EMAIL_IFRAME_HEIGHT_MESSAGE } from "../utils/email-html";
 import { AttachmentStrip } from "./attachments";
 import { bodyIsPending, BodyPending } from "./body-pending";
-import { recipientsOf, toLine } from "./reader-format";
+import { recipientsOf, shortDay, toLine } from "./reader-format";
 import { buildReaderDoc, type ReaderImagesInput } from "./sanitize";
 import { TrackerBar } from "./tracker-bar";
 
@@ -34,6 +34,8 @@ const DEFAULT_IMAGES: ReaderImagesInput = {
 export type MessageAction = "reply" | "reply-all" | "forward";
 
 export type MessageCardProps = {
+  /** "now" for the collapsed row's day ("Thu", "today"); defaults to the clock. */
+  nowMs?: number;
   message: MailMessage;
   threadId?: string;
   expanded?: boolean;
@@ -278,33 +280,38 @@ function OpenHeader({
   );
 }
 
+/** A collapsed message: the sender, the first line of substance (the engine skips
+ *  "Hi Robin,"), the day. It reads "Jonas Weber, Thu: Following up…, collapsed"
+ *  (specs/mail-improve.md AC17); the day sits before the snippet in the DOM, as in the
+ *  name, and shows last. */
 function ClosedHeader({
   message,
-  date,
+  nowMs,
   onToggle,
 }: {
   message: MailMessage;
-  date: string;
+  nowMs: number;
   onToggle?: () => void;
 }) {
+  const day = shortDay(message.dateMs, nowMs);
   return (
     <header>
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={false}
+        aria-label={`${senderName(message)}, ${day}: ${message.snippet}, collapsed`}
         className="flex w-full min-w-0 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <SenderAvatar message={message} small />
         <span className="shrink-0 font-medium text-foreground">{senderName(message)}</span>
+        <time className="order-last shrink-0 text-xs text-muted-foreground">{day}</time>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{message.snippet}</span>
-        <time className="shrink-0 text-xs text-muted-foreground">{date}</time>
       </button>
     </header>
   );
 }
 
-/** Message text stays at a reading measure; extra width is margin (specs/mail-improve.md §1). */
 function MessageBody(props: MessageCardProps & { images: ReaderImagesInput }) {
   return (
     <div data-message-body className="max-w-(--measure-reading) min-w-0">
@@ -354,7 +361,7 @@ export function MessageCard(props: MessageCardProps) {
           onAction={props.onAction}
         />
       ) : (
-        <ClosedHeader message={message} date={date} onToggle={onToggle} />
+        <ClosedHeader message={message} nowMs={props.nowMs ?? Date.now()} onToggle={onToggle} />
       )}
       {expanded ? (
         <>

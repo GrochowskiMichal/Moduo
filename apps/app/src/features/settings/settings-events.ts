@@ -33,6 +33,8 @@ export const SETTINGS_OPEN_EVENT = "moduo:settings:open";
 
 export type SettingsOpenDetail = {
   section?: SettingsSectionId;
+  /** A part of the section to scroll to (Mail → Rules, specs/mail-improve.md §4). */
+  sub?: string;
 };
 
 // Remembers a STICKY dispatch (the cold-load `/settings?section=…` deep link)

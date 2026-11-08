@@ -1,5 +1,5 @@
-// The reader's ⋯ menu (specs/mail-v3.md §8, AC26), in exactly this order:
-// Remind me if no reply… w · Mark unread u · Move… m · Labels… (Gmail only) ·
+// The reader's ⋯ menu (specs/mail-v3.md §8, AC26; specs/mail-improve.md §4), in
+// exactly this order: Pin p · Move… m · Private note n · Mark unread u · Labels… (Gmail only) ·
 // Mute · Why is this in {Tab}? · Mark Priority · Show original · Copy link ·
 // Block {sender} · Report spam · Delete #. Mute, Report spam and Block run the
 // engine's `mute`, `spam` and `block_sender` ops through the triage commands,
@@ -72,6 +72,8 @@ export type ReaderMoreItemsProps = {
   why: { tab: string; open: () => void } | null;
   /** Show original; null when the engine can't read raw messages. */
   onOriginal: (() => void) | null;
+  /** The toolbar's actions that live in ⋯ (specs/mail-improve.md §4): Pin, Private note. */
+  onTool?: (action: "pin" | "note") => void;
 };
 
 /** The person's display name for "Block {sender}". */
@@ -84,6 +86,7 @@ export function ReaderMoreItems({
   labels,
   why,
   onOriginal,
+  onTool,
 }: ReaderMoreItemsProps) {
   const row = thread.row;
   const id = row.threadId;
@@ -91,16 +94,17 @@ export function ReaderMoreItems({
   const isPriority = !!sender && !!priority?.isPriority(sender.email.toLowerCase());
   return (
     <>
-      {actions.remind ? (
-        <Item keyCap="w" onSelect={() => actions.remind!(id)}>
-          Remind me if no reply…
-        </Item>
-      ) : null}
-      <Item keyCap="u" onSelect={() => actions.unread(row)}>
-        {row.unread ? "Mark read" : "Mark unread"}
+      <Item keyCap="p" onSelect={() => onTool?.("pin")}>
+        {row.pinned ? "Unpin" : "Pin"}
       </Item>
       <Item keyCap="m" onSelect={() => actions.move(id)}>
         Move…
+      </Item>
+      <Item keyCap="n" onSelect={() => onTool?.("note")}>
+        Private note
+      </Item>
+      <Item keyCap="u" onSelect={() => actions.unread(row)}>
+        {row.unread ? "Mark read" : "Mark unread"}
       </Item>
       {labels}
       <Item onSelect={() => actions.mute(row)}>{row.muted ? "Unmute" : "Mute"}</Item>

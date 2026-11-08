@@ -285,7 +285,7 @@ function useReaderMenu(deps: ReaderWiringDeps, openRemind: (ids: string[]) => vo
   };
   const why: ReaderWhy = {
     names: deps.whyNames ?? NO_NAMES,
-    onOpenSettings: () => dispatchOpenSettings({ section: "mail" }),
+    onOpenSettings: () => dispatchOpenSettings({ section: "mail", sub: "rules" }),
   };
   return { more, why };
 }

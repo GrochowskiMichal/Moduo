@@ -12,6 +12,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ReaderToolbar } from "./reader-toolbar";
 
 afterEach(cleanup);
+// Focus opens a button's tooltip, whose popper measures with ResizeObserver (jsdom has none).
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 let width = 1400;
 beforeEach(() => {

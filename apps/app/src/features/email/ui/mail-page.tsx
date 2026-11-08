@@ -38,7 +38,12 @@ import {
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
 import type { MailContactDetail } from "../panels/contact-view";
-import { MailSidePanel, showMailPanel, toggleMailPanel } from "../panels/side-panel";
+import {
+  createEventAllowed,
+  MailSidePanel,
+  showMailPanel,
+  toggleMailPanel,
+} from "../panels/side-panel";
 import type { MailTaskDetail } from "../panels/task-view";
 import type { TodayEvent } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
@@ -640,7 +645,14 @@ export function MailPage({
             events: todayEvents,
             date: localDate(now()),
             onDropThread,
-            onCreateEvent: forThread(current, createEvent),
+            // Not for a draft, an Outbox message or a new message (AC18).
+            onCreateEvent: createEventAllowed({
+              view,
+              composingNew: !!composer.column,
+              threadId: current,
+            })
+              ? forThread(current, createEvent)
+              : undefined,
           })}
           links={reader.links}
           rowOf={rowOf}

@@ -3,7 +3,15 @@
 // account's sign-in line and the conversation stack from the engine. Re-reads
 // when the engine's threads change (a fetched body swaps in that way).
 
-import { type ReactNode, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   MailAccount,
@@ -214,7 +222,11 @@ function ReaderHead(props: MailReaderProps & Head) {
     why: props.why,
     labels: props.menuItems?.(thread) ?? null,
     onOriginal: props.engine?.getRawMessage ? props.onOriginal : null,
+    onTool: (a) => toolbarAction(props, props, a),
   });
+  // The title's place: once it scrolls away while composing, a compact subject stays.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const titleGone = useScrolledAway(titleRef, !!props.composer);
   return (
     <>
       <ReaderToolbar
@@ -228,9 +240,22 @@ function ReaderHead(props: MailReaderProps & Head) {
         }}
         menu={more.menu}
         panel={props.panel}
+        // A sender waiting in the Screener is decided first (AC24).
+        disabled={!!props.who?.screened}
       />
-      {more.popover}
-      <h2 className="min-w-0 px-4 pt-3 pb-2 text-lg font-semibold text-foreground">
+      {props.composer && titleGone ? (
+        <div
+          data-sticky-subject
+          className="motion-key sticky top-0 z-(--z-sticky) truncate border-b border-hairline bg-background px-4 py-2 text-sm font-medium text-foreground"
+        >
+          {row.subject || "(no subject)"}
+        </div>
+      ) : null}
+      <h2
+        ref={titleRef}
+        data-reader-title
+        className="min-w-0 px-4 pt-3 pb-2 text-lg font-semibold break-words text-foreground"
+      >
         {row.subject || "(no subject)"}
       </h2>
       {note ? (
@@ -256,8 +281,25 @@ function ReaderHead(props: MailReaderProps & Head) {
       {props.who ? (
         <ReaderWhoCard thread={thread} self={self} nowMs={nowMs} source={props.who} />
       ) : null}
+      {more.sheet}
     </>
   );
+}
+
+/** True once `ref` has scrolled out of its scroller (only while `watch`). */
+function useScrolledAway(ref: RefObject<HTMLElement | null>, watch: boolean): boolean {
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!watch || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1];
+      if (last) setGone(!last.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, watch]);
+  return gone && watch;
 }
 
 function useStackState(

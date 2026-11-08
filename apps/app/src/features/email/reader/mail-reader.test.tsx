@@ -87,9 +87,10 @@ describe("reader (specs/mail-v3.md §8)", () => {
     await tick();
 
     const bar = screen.getByRole("toolbar", { name: "Conversation actions" });
+    // specs/mail-improve.md AC14: Note, Pin and Move moved to ⋯; Done shows its word.
     const names = within(bar)
       .getAllByRole("button")
-      .map((b) => b.getAttribute("aria-label"));
+      .map((b) => b.getAttribute("aria-label") ?? b.textContent);
     expect(names).toEqual([
       "Reply",
       "Reply all",
@@ -99,12 +100,9 @@ describe("reader (specs/mail-v3.md §8)", () => {
       "Remind me if no reply",
       "Open the task",
       "Link to a task, contact or note",
-      "Open the private note",
-      "Unpin",
-      "Move",
     ]);
     // Pressed tools carry the dot's state.
-    for (const name of ["Snooze", "Remind me if no reply", "Open the task", "Unpin"])
+    for (const name of ["Snooze", "Remind me if no reply", "Open the task"])
       expect(within(bar).getByRole("button", { name }).getAttribute("aria-pressed")).toBe("true");
     expect(
       within(bar).getByRole("button", { name: "Done" }).getAttribute("aria-pressed"),
@@ -125,8 +123,8 @@ describe("reader (specs/mail-v3.md §8)", () => {
     fireEvent.click(within(chips).getByRole("button", { name: "Unlink Task: Confirm Acme pilot" }));
     expect(links.unlink).toHaveBeenCalledWith(TASK);
 
-    const linkChip = within(chips).getByRole("button", { name: "Link to a task, contact or note" });
-    expect(linkChip.textContent).toBe("l");
+    const linkChip = within(chips).getByRole("button", { name: /^Link… to a task/ });
+    expect(linkChip.textContent).toBe("Link… l");
     fireEvent.click(linkChip);
     expect(onAction).toHaveBeenLastCalledWith("link", "t1");
     expect(links.read).toHaveBeenCalledWith("t1");
