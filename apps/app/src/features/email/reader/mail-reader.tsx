@@ -58,6 +58,8 @@ export type ReaderSendNotes = {
   refreshKey: string;
   onEditOutbox?: (outboxId: string) => void;
   onFix?: Parameters<typeof SendNote>[0]["onFix"];
+  onRetry?: Parameters<typeof SendNote>[0]["onRetry"];
+  onRemoveAndSend?: Parameters<typeof SendNote>[0]["onRemoveAndSend"];
 };
 
 export type MailReaderProps = {
@@ -264,6 +266,8 @@ function ReaderHead(props: MailReaderProps & Head) {
           offline={account?.syncState === "offline"}
           onEditOutbox={props.sendNotes?.onEditOutbox}
           onFix={props.sendNotes?.onFix}
+          onRetry={props.sendNotes?.onRetry}
+          onRemoveAndSend={props.sendNotes?.onRemoveAndSend}
         />
       ) : null}
       {note ? null : (

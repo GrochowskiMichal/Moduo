@@ -7,6 +7,13 @@ import type { MailCounts, MailTab, MailView } from "@/lib/runtime.types.mail-eng
 
 import { cycleTab, foldTabs, MailTabs, mailTabs } from "./mail-tabs";
 
+// The "+N" tooltip's popper measures with ResizeObserver, which jsdom lacks.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
 // jsdom has no layout: every tab is 100 px, "+N" is 30 px, and the strip's
 // room is whatever `room` says.
 const TAB_W = 100;

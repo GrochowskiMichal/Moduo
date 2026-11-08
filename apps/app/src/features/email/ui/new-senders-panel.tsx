@@ -55,9 +55,13 @@ export async function decideNewSender(
 export function NewSendersPanel({
   rows,
   onDecide,
+  openThreadId = null,
 }: {
   rows: readonly MailThreadRow[];
   onDecide: (sender: NewSender, decision: SenderDecision) => Promise<void> | void;
+  /** The open thread's sender is decided in the reader's sender header, not here
+   *  (specs/mail-improve.md §5, AC24). */
+  openThreadId?: string | null;
 }) {
   const senders = groupNewSenders(rows);
   if (senders.length === 0) return null;
@@ -69,22 +73,28 @@ export function NewSendersPanel({
             {s.name}
             <span className="ml-1 text-xs text-muted-foreground">{s.threadIds.length}</span>
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            aria-label={`Allow ${s.name}`}
-            onClick={() => void Promise.resolve(onDecide(s, "allow")).catch(() => {})}
-          >
-            Allow
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            aria-label={`Block ${s.name}`}
-            onClick={() => void Promise.resolve(onDecide(s, "block")).catch(() => {})}
-          >
-            Block
-          </Button>
+          {openThreadId && s.threadIds.includes(openThreadId) ? (
+            <span className="text-xs text-muted-foreground">Decide in the reader</span>
+          ) : (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                aria-label={`Allow ${s.name}`}
+                onClick={() => void Promise.resolve(onDecide(s, "allow")).catch(() => {})}
+              >
+                Allow
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Block ${s.name}`}
+                onClick={() => void Promise.resolve(onDecide(s, "block")).catch(() => {})}
+              >
+                Block
+              </Button>
+            </>
+          )}
         </li>
       ))}
     </ul>

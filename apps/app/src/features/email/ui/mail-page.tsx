@@ -367,6 +367,28 @@ export function MailPage({
     if (draft.threadId) shell.current?.open(draft.threadId);
     void session?.open(draftOpenSpec(draft));
   };
+  /** Sends a failed draft again, optionally without one file (AC19). */
+  const resend = async (draft: MailDraftRow, without?: string) => {
+    if (!port) return;
+    try {
+      const attachments = without
+        ? draft.doc.attachments.filter((a) => a.filename !== without)
+        : draft.doc.attachments;
+      await port.saveDraft({
+        draftId: draft.id,
+        accountId: draft.accountId,
+        threadId: draft.threadId,
+        doc: { ...draft.doc, attachments, lastError: null },
+      });
+      await port.queueSend({
+        draftId: draft.id,
+        undoSeconds: store.getState().behavior.undoSendSeconds,
+      });
+      toast(without ? `Sending without ${without}` : "Sending again");
+    } catch (e) {
+      toast.error(errText(e, "Couldn't send it. It's still in Drafts."));
+    }
+  };
   const editOutbox = async (outboxId: string) => {
     if (!port) return;
     const { draftId } = await port.undoSend(outboxId);
@@ -462,6 +484,8 @@ export function MailPage({
     act: (kind, ids, args) => void shell.current?.act(kind, ids, args),
     rowOf,
     openDraft,
+    retrySend: (d) => void resend(d),
+    removeAndSend: (d, file) => void resend(d, file),
     editOutbox: (id) => void editOutbox(id),
     runGesture: (label, run) => void runGesture(label, run),
     now,
@@ -557,7 +581,13 @@ export function MailPage({
           }
           renderListTop={(view) =>
             view.kind === "unified" && view.role === "drafts" && port ? (
-              <FailedSends port={port} refreshKey={placeKey} onFix={openDraft} />
+              <FailedSends
+                port={port}
+                refreshKey={placeKey}
+                onFix={openDraft}
+                onRetry={(d) => void resend(d)}
+                onRemoveAndSend={(d, file) => void resend(d, file)}
+              />
             ) : null
           }
           onIntent={onIntent}
@@ -580,7 +610,7 @@ export function MailPage({
           }}
           onCursorChange={setCurrent}
           renderSelectionActions={labels.selectionActions}
-          renderReader={(threadId, { listEmpty } = { listEmpty: false }) => {
+          renderReader={(threadId, { listEmpty, empty } = { listEmpty: false, empty: null }) => {
             // A New message takes the reader column; the list stays beside it (decision 17).
             if (composer.column) return composer.column;
             if (files && engine) {
@@ -614,8 +644,8 @@ export function MailPage({
                 </div>
               );
             }
-            // An empty list leaves the reader blank (spec §4).
-            if (!threadId && listEmpty) return null;
+            // An empty list: inbox zero's next tabs, else a blank reader (spec §4, AC22).
+            if (!threadId && listEmpty) return empty;
             return (
               <MailReader
                 engine={engine}

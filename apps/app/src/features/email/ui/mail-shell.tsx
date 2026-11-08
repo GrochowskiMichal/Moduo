@@ -59,6 +59,7 @@ import {
   MailFirstSync,
   mailListState,
   MailListStateView,
+  MailNextTabs,
   type MailTabUnread,
 } from "./mail-states";
 import { cycleTab, liveTab, type MailTabDef, MailTabs, mailTabs, sameTab } from "./mail-tabs";
@@ -253,8 +254,12 @@ export type MailShellProps = {
   showHints?: boolean;
   screenerOn?: boolean;
   customTabs?: readonly { id: string; label: string }[];
-  /** The reader slot; `listEmpty` asks it to stay blank (spec §4). */
-  renderReader?: (threadId: string | null, ctx: { listEmpty: boolean }) => ReactNode;
+  /** The reader slot; with `listEmpty` it shows `empty` (inbox zero's next tabs) or
+   *  stays blank (spec §4, specs/mail-improve.md AC22). */
+  renderReader?: (
+    threadId: string | null,
+    ctx: { listEmpty: boolean; empty: ReactNode },
+  ) => ReactNode;
   /** Runs before the undo key undoes triage: true when it undid something (a send). */
   onUndoFirst?: () => boolean;
   /** Actions beside "N selected" (multi-select), e.g. Labels. */
@@ -626,8 +631,14 @@ export function MailShell({
     (id: MailKeyId) => (showHints ? (mailKeyHint(id, isMacPlatform()) ?? undefined) : undefined),
     [showHints],
   );
-  /** A key's op. */
-  const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => void act(kind, threadIds);
+  /** A key's op. In New senders the sender is decided first (AC24 edge case). */
+  const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => {
+    if (view.kind === "new_senders" && threadIds.length > 0) {
+      toast("Allow or block the sender first", { id: MAIL_TRIAGE_TOAST });
+      return;
+    }
+    void act(kind, threadIds);
+  };
 
   const rowActions: MailRowActions = useMemo(
     () => ({
@@ -815,6 +826,7 @@ export function MailShell({
           {view.kind === "new_senders" ? (
             <NewSendersPanel
               rows={win.rows}
+              openThreadId={sel.cursor}
               onDecide={(sender, decision) =>
                 decideNewSender(sender, decision, {
                   commands,
@@ -877,7 +889,16 @@ export function MailShell({
       >
         <ReaderSlot
           bulk={bulkRows ? { count: sel.picked.length, rows: bulkRows, onAction: onBulk } : null}
-          reader={() => renderReader?.(sel.cursor, { listEmpty: state.kind !== "rows" })}
+          reader={() =>
+            renderReader?.(sel.cursor, {
+              listEmpty: state.kind !== "rows",
+              // Inbox zero: the reader offers the tabs still waiting (AC22).
+              empty:
+                state.kind === "tab_clear" ? (
+                  <MailNextTabs others={state.others} onTab={switchTab} />
+                ) : null,
+            })
+          }
         />
       </section>
       <MailLegendDialog open={legend} onOpenChange={setLegend} />

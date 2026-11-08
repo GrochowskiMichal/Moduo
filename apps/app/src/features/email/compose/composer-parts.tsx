@@ -141,10 +141,22 @@ export function SnippetPopup(props: {
         <p className="px-2 py-1 text-xs text-muted-foreground">{props.missLine}</p>
       )}
       {props.hits.length > 0 ? (
-        <p className="flex items-center gap-1 px-2 pt-1 text-xs text-muted-foreground">
-          <Kbd>Tab</Kbd> or <Kbd>↵</Kbd> inserts
-          {props.firstName ? ` · {first name} becomes ${props.firstName}` : ""}
-        </p>
+        // The offer says how to take it before anything is inserted (specs/mail-improve.md AC21).
+        <div
+          role="group"
+          aria-label="Snippet offer"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 pt-1 text-xs text-muted-foreground"
+        >
+          <span>Tab to insert</span>
+          <span className="flex items-center gap-1">
+            <span aria-hidden>↑↓</span>
+            <span>
+              {props.active + 1} of {props.hits.length}
+            </span>
+          </span>
+          <span>Esc dismiss</span>
+          {props.firstName ? <span>{`{first name} becomes ${props.firstName}`}</span> : null}
+        </div>
       ) : null}
     </div>
   );
