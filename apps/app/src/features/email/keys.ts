@@ -23,6 +23,8 @@ type LegendRowDef = {
   ids: MailKeyId[];
   all?: boolean;
   show?: (isMac: boolean) => string[];
+  /** The keys are alternatives: they read "z or ⌘Z". */
+  or?: boolean;
 };
 
 type LegendGroupDef = { title: string; column: 0 | 1 | 2; rows: LegendRowDef[] };
@@ -46,6 +48,16 @@ const LEGEND: LegendGroupDef[] = [
         label: "Archive · Sent · Drafts",
         ids: ["email.go-archive", "email.go-sent", "email.go-drafts"],
       },
+      {
+        label: "Personal · your tab · Notifications · Newsletters",
+        ids: [
+          "email.go-personal",
+          "email.go-custom",
+          "email.go-notifications",
+          "email.go-newsletters",
+        ],
+      },
+      { label: "Next · previous pane", ids: ["email.pane-next", "email.pane-prev"] },
     ],
   },
   {
@@ -68,7 +80,7 @@ const LEGEND: LegendGroupDef[] = [
       { label: "Allow · block a new sender", ids: ["email.allow", "email.block"] },
       { label: "Pin · unread", ids: ["email.pin", "email.unread"] },
       { label: "Move · delete", ids: ["email.move", "email.delete"], all: true },
-      { label: "Undo", ids: ["email.undo"], all: true },
+      { label: "Undo", ids: ["email.undo"], all: true, or: true },
     ],
   },
   {
@@ -79,6 +91,9 @@ const LEGEND: LegendGroupDef[] = [
         label: "Today · Contact · Task",
         ids: ["email.panel-today", "email.panel-contact", "email.panel-task"],
       },
+      { label: "Show or hide the panel", ids: ["email.panel-toggle"] },
+      // A pointer gesture: no key cap (specs/mail-improve.md §6).
+      { label: "Drag a thread onto Today or a task", ids: [], show: () => [] },
       { label: "Make a task", ids: ["email.convert"] },
       { label: "Link to a task, contact or note", ids: ["email.link"] },
       { label: "Private note", ids: ["email.note"] },
@@ -119,22 +134,29 @@ const PRETTY: Record<string, string> = {
   Backspace: "⌫",
   ArrowDown: "↓",
   ArrowUp: "↑",
+  "Shift+F6": "⇧F6",
 };
 
 /** How a key reads in the legend: ⌘A, ⇧J, #, ?; a `g` chord reads "gi". */
 export function formatMailKey(chord: HotkeyBinding, isMac = true): string {
   if (isSequenceKey(chord)) return chord.map((step) => formatMailKey(step, isMac)).join("");
   if (PRETTY[chord]) return PRETTY[chord];
-  return chord
-    .split("+")
-    .map((part) => {
-      if (part === "Mod") return isMac ? "⌘" : "Ctrl+";
-      if (part === "Shift") return "⇧";
-      if (part === "Alt") return isMac ? "⌥" : "Alt+";
-      return part.length === 1 ? part.toLowerCase() : part;
-    })
-    .join("")
-    .replace(/^⇧([a-z])$/, (_, c: string) => `⇧${c.toUpperCase()}`);
+  return (
+    chord
+      .split("+")
+      .map((part) => {
+        if (part === "Mod") return isMac ? "⌘" : "Ctrl+";
+        if (part === "Shift") return "⇧";
+        if (part === "Alt") return isMac ? "⌥" : "Alt+";
+        return part.length === 1 ? part.toLowerCase() : part;
+      })
+      .join("")
+      // A letter after a modifier reads upper-case: ⇧E, ⌘Z, ⌥⇧N.
+      .replace(
+        /^((?:⌘|Ctrl\+|⌥|Alt\+|⇧)+)([a-z])$/,
+        (_, mods: string, c: string) => mods + c.toUpperCase(),
+      )
+  );
 }
 
 /** Every mail binding in the registry, in registry order. */
@@ -148,7 +170,7 @@ export function mailKeys(isMac = true): MailKeyEntry[] {
     }));
 }
 
-export type MailLegendRow = { ids: MailKeyId[]; label: string; keys: string[] };
+export type MailLegendRow = { ids: MailKeyId[]; label: string; keys: string[]; or?: boolean };
 
 export type MailLegendGroup = { title: string; column: 0 | 1 | 2; rows: MailLegendRow[] };
 
@@ -164,7 +186,12 @@ export function mailLegend(isMac = true): MailLegendGroup[] {
   return LEGEND.map((g) => ({
     title: g.title,
     column: g.column,
-    rows: g.rows.map((row) => ({ ids: row.ids, label: row.label, keys: keysOf(row) })),
+    rows: g.rows.map((row) => ({
+      ids: row.ids,
+      label: row.label,
+      keys: keysOf(row),
+      ...(row.or ? { or: true } : {}),
+    })),
   }));
 }
 

@@ -130,3 +130,29 @@ describe("EmailWebView (AC36)", () => {
     expect(out).toEqual({ r1: [{ kind: "task", id: "t1", title: "Sign the pilot" }], r2: [] });
   });
 });
+
+// specs/mail-improve.md MI-0, AC25 (web): the web view hides compose and + in the bottom
+// bar while it shows, and its conversations sit in one centred column at --measure-thread.
+describe("no compose on web (AC25)", () => {
+  it("hides Quick capture and Create new while mounted; one centred column", async () => {
+    const { GlobalBottomBar } = await import("../../../components/app/global-bottom-bar");
+    const { TooltipProvider } = await import("../../../components/ui/tooltip");
+    const bar = render(
+      <TooltipProvider>
+        <GlobalBottomBar />
+      </TooltipProvider>,
+    );
+    within(bar.container).getByRole("button", { name: /^Create new/ });
+    const view = render(
+      <EmailWebView email={{ ...empty, loading: false }} highlightedRefId={null} />,
+    );
+    expect(within(bar.container).queryByRole("button", { name: /^Create new/ })).toBeNull();
+    expect(within(bar.container).queryByRole("button", { name: /^Quick capture/ })).toBeNull();
+    within(bar.container).getByRole("button", { name: /^Search/ });
+    const column = view.container.querySelector<HTMLElement>("[data-web-column]")!;
+    expect(column.className).toContain("max-w-(--measure-thread)");
+    expect(column.className).toContain("mx-auto");
+    view.unmount();
+    within(bar.container).getByRole("button", { name: /^Create new/ });
+  });
+});

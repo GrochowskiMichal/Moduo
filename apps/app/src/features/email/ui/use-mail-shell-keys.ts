@@ -4,7 +4,7 @@
 import type { Dispatch, SetStateAction } from "react";
 
 import { type AppHotkeyHandlers, useAppHotkeys } from "@/lib/hotkeys/use-app-hotkeys";
-import type { MailOpInput, MailView } from "@/lib/runtime.types.mail-engine";
+import type { MailOpInput, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
 
 import type { MailKeyId } from "../keys";
 import { openMailSearch } from "../search/open";
@@ -20,6 +20,14 @@ export const MAIL_GO_VIEWS = {
   "email.go-sent": { kind: "unified", role: "sent" },
   "email.go-drafts": { kind: "unified", role: "drafts" },
 } as const satisfies Partial<Record<MailKeyId, MailView>>;
+
+/** Where each tab chord goes (specs/mail-improve.md §6); `custom` is the first custom tab. */
+export const MAIL_GO_TABS = {
+  "email.go-personal": "personal",
+  "email.go-custom": "custom",
+  "email.go-notifications": "notifications",
+  "email.go-newsletters": "newsletters",
+} as const satisfies Partial<Record<MailKeyId, MailTab["kind"]>>;
 
 const PANEL_KEYS = {
   "email.panel-today": "today",
@@ -68,6 +76,12 @@ export type MailShellKeys = {
   /** ⌘A: every thread in the tab (AC20). */
   selectAll(): void;
   setPanel(view: MailPanelView): void;
+  /** ⌥0: show or hide the side panel. */
+  togglePanel(): void;
+  /** F6 / ⇧F6: focus the next or previous pane. */
+  cyclePane(delta: 1 | -1): void;
+  /** `g p` `g v` `g n` `g l`: a tab of the Inbox; false when there is no such tab. */
+  goTab(kind: MailTab["kind"]): false | undefined;
 };
 
 function intentHandlers(k: MailShellKeys): AppHotkeyHandlers {
@@ -82,6 +96,8 @@ function goHandlers(k: MailShellKeys): AppHotkeyHandlers {
     out[id] = () => k.goTo(view);
   for (const [id, panel] of Object.entries(PANEL_KEYS) as [MailKeyId, MailPanelView][])
     out[id] = () => k.setPanel(panel);
+  for (const [id, kind] of Object.entries(MAIL_GO_TABS) as [MailKeyId, MailTab["kind"]][])
+    out[id] = () => k.goTab(kind);
   return out;
 }
 
@@ -127,6 +143,9 @@ export function mailShellHandlers(k: MailShellKeys): AppHotkeyHandlers {
     "email.tab-prev": () => k.cycleTab(-1),
     "email.tab-next": () => k.cycleTab(1),
     "email.legend": () => k.openLegend(),
+    "email.panel-toggle": () => k.togglePanel(),
+    "email.pane-next": () => k.cyclePane(1),
+    "email.pane-prev": () => k.cyclePane(-1),
     // `/` opens ⌘K on the Email chip: Mail has no search bar (MR-13, AC32).
     "email.search": () => openMailSearch(),
   };

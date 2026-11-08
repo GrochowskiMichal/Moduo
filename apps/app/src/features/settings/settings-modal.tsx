@@ -17,7 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { type ComponentType, useEffect, useState } from "react";
+import { type ComponentType, useCallback, useEffect, useState } from "react";
 
 import {
   Dialog,
@@ -126,9 +126,38 @@ const SECTION_BY_ID = Object.fromEntries(SECTIONS.map((s) => [s.id, s])) as Reco
   SectionEntry
 >;
 
+/** Scrolls `[data-settings-sub="{sub}"]` into view once the (lazy) section has drawn it;
+ *  gives up quietly after a second. */
+function useScrollToSub(
+  open: boolean,
+  section: SettingsSectionId,
+  sub: string | null,
+  done: () => void,
+) {
+  useEffect(() => {
+    if (!open || !sub) return;
+    let frame = 0;
+    const until = Date.now() + 1000;
+    const look = () => {
+      const el = document.querySelector<HTMLElement>(`[data-settings-sub="${CSS.escape(sub)}"]`);
+      if (el) {
+        el.scrollIntoView?.({ block: "start" });
+        done();
+      } else if (Date.now() < until) frame = requestAnimationFrame(look);
+      else done();
+    };
+    frame = requestAnimationFrame(look);
+    return () => cancelAnimationFrame(frame);
+  }, [open, section, sub, done]);
+}
+
 export function SettingsModal() {
   const [open, setOpen] = useState(false);
   const [section, setSection] = useState<SettingsSectionId>("appearance");
+  // A part of the section to scroll to once it renders (Mail → Rules).
+  const [sub, setSub] = useState<string | null>(null);
+  const clearSub = useCallback(() => setSub(null), []);
+  useScrollToSub(open, section, sub, clearSub);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -136,6 +165,7 @@ export function SettingsModal() {
       if (detail.section && isSettingsSectionId(detail.section)) {
         setSection(detail.section);
       }
+      setSub(detail.sub ?? null);
       setOpen(true);
     };
     const handler = (event: Event) => {

@@ -60,8 +60,11 @@ export function composePlacement(s: Pick<ComposeState, "threadId">): "inline" | 
 export type ComposeDeps = {
   port: MailComposeEngine;
   settings: () => { undoSeconds: number; doneOnSend: boolean };
-  /** Marks the thread Done (the triage command). */
+  /** Marks the thread Done (through the shell, so the list advances like `e`). May
+   *  answer with how to undo it: undoing the send then brings the thread back too. */
   markDone: (threadId: string) => Promise<unknown> | void;
+  /** Undo send reopened a reply: the page selects and opens its thread again. */
+  onReopen?: (threadId: string) => void;
   /** Records the follow-up reminder on the thread. */
   setFollowUp?: (threadId: string, dueMs: number) => Promise<unknown> | void;
   /** Shows the undo-send toast; the callbacks are its Undo and Edit buttons. */
@@ -178,18 +181,21 @@ export function createComposeSession(deps: ComposeDeps) {
     return Boolean(s.threadId && s.fromInbox && s.kind !== "new" && deps.settings().doneOnSend);
   }
 
-  async function finishSend(s: ComposeState, handle: MailSendHandle) {
+  async function finishSend(s: ComposeState, handle: MailSendHandle, done?: boolean) {
     if (s.threadId && s.followUp && deps.setFollowUp)
       await deps.setFollowUp(s.threadId, s.followUp);
     const markedDone = Boolean(
-      s.threadId && s.kind !== "new" && (s.doneOnSend ?? defaultDoneOnSend(s)),
+      s.threadId && s.kind !== "new" && (done ?? s.doneOnSend ?? defaultDoneOnSend(s)),
     );
-    if (markedDone && s.threadId) await deps.markDone(s.threadId);
+    const undoDone = markedDone && s.threadId ? await deps.markDone(s.threadId) : undefined;
     const reopen = async () => {
       const { draftId } = await deps.port.undoSend(handle.outboxId);
       if (!draftId) return;
       if (active) await close({ keepDraft: true });
+      // The send took the thread Done: it comes back, then the reply opens on it.
+      if (typeof undoDone === "function") await (undoDone as () => Promise<unknown>)();
       active = { ...s, key: `compose-${++seq}`, draftId, saved: "local" };
+      if (s.threadId) deps.onReopen?.(s.threadId);
       emit();
     };
     deps.showSent?.(
@@ -248,7 +254,11 @@ export function createComposeSession(deps: ComposeDeps) {
     /** Esc / switching away keeps the draft; Discard drops it. */
     close,
     flush: () => saving,
-    async send(limit?: number | SendLimit | null): Promise<SendResult> {
+    /** Sends; `done` (⌘⇧↩, Send & Done) marks the thread Done whatever the box says. */
+    async send(
+      limit?: number | SendLimit | null,
+      opts: { done?: boolean } = {},
+    ): Promise<SendResult> {
       const s = active;
       if (!s) return { ok: false, reason: "Nothing to send." };
       if (recipientCount(s) === 0) return { ok: false, reason: "Add a recipient." };
@@ -265,7 +275,7 @@ export function createComposeSession(deps: ComposeDeps) {
       });
       active = null;
       emit();
-      await finishSend(s, handle);
+      await finishSend(s, handle, opts.done);
       return { ok: true, handle };
     },
   };

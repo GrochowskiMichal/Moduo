@@ -1,7 +1,7 @@
 // The send notes in the reader (specs/mail-v3.md §8, AC11): a reply waiting in
 // the Outbox reads "Waiting for connection" (or "Sending…") with Edit; a draft
-// of this thread whose send failed reads "Not sent: {reason}" with Fix and
-// send, which reopens it in the composer.
+// of this thread whose send failed reads "Not sent · {cause}" with Retry (or "Remove
+// {file} and send" for a size limit) and Edit, which reopens it in the composer.
 
 import { AlertTriangle, Pencil, Send, WifiOff } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { MailComposeEngine, MailDraftRow } from "@/lib/runtime.types.mail-compose";
 import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
+
+import { sendFailure } from "../compose/send-failure";
 
 export type SendNoteState =
   | { kind: "outbox"; outboxId: string | null }
@@ -62,13 +64,20 @@ export function SendNote({
   offline,
   onEditOutbox,
   onFix,
+  onRetry,
+  onRemoveAndSend,
 }: {
   note: SendNoteState;
   offline: boolean;
   onEditOutbox?: (outboxId: string) => void;
+  /** Edit: reopens the draft. */
   onFix?: (draft: MailDraftRow) => void;
+  onRetry?: (draft: MailDraftRow) => void;
+  onRemoveAndSend?: (draft: MailDraftRow, filename: string) => void;
 }) {
   if (note.kind === "failed") {
+    // The cause first, unclipped, and the action that fits it (specs/mail-improve.md AC19).
+    const f = sendFailure(note.reason, note.draft.doc.attachments);
     return (
       <div
         role="alert"
@@ -76,15 +85,28 @@ export function SendNote({
       >
         <AlertTriangle aria-hidden className="mt-0.5 size-icon-sm shrink-0 text-warning" />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="font-medium text-foreground">Not sent: {note.reason}</b>
+          <b className="line-clamp-2 font-medium text-foreground">Not sent · {f.cause}</b>
           <small className="text-xs text-muted-foreground">
             Moduo put it back in Drafts with everything you wrote.
           </small>
         </div>
+        {f.kind === "size" && f.file && onRemoveAndSend ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => onRemoveAndSend(note.draft, f.file!)}
+          >
+            Remove {f.file} and send
+          </Button>
+        ) : onRetry ? (
+          <Button size="sm" variant="secondary" onClick={() => onRetry(note.draft)}>
+            Retry
+          </Button>
+        ) : null}
         {onFix ? (
-          <Button size="sm" variant="secondary" onClick={() => onFix(note.draft)}>
+          <Button size="sm" variant="ghost" onClick={() => onFix(note.draft)}>
             <Pencil aria-hidden />
-            Fix and send
+            Edit
           </Button>
         ) : null}
       </div>

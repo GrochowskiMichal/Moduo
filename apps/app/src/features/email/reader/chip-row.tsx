@@ -117,14 +117,17 @@ export function ChipRow({ row, nowMs, done, links, onOpenLink, onUnlink, onLink 
         <LinkChip key={link.linkId} link={link} onOpen={onOpenLink} onUnlink={onUnlink} />
       ))}
       {onLink ? (
+        // "Link…" with its key after it (specs/mail-improve.md §4), named from its content ("Link… l"), the purpose in the tooltip.
         <ChipButton
           size="xs"
           icon={Link2}
-          aria-label="Link to a task, contact or note"
-          title="Link to a task, contact or note"
+          aria-keyshortcuts="l"
+          title="Link to a task, contact or note  l"
           onClick={onLink}
         >
-          <Kbd>l</Kbd>
+          <span className="flex items-center gap-1">
+            Link… <Kbd>l</Kbd>
+          </span>
         </ChipButton>
       ) : null}
     </div>

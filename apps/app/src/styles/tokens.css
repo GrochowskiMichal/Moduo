@@ -669,6 +669,26 @@
   --mail-sender-w: 7rem; /* 112 */
   /* A list group header ("Pinned", "Everything else"). */
   --mail-group-h: 1.75rem; /* 28 */
+  /* specs/mail-improve.md: one reading width for every thread. The thread column
+     (subject, chips, sender card, messages, composer) is capped at --measure-thread
+     and left-aligned; message text at --measure-reading. Extra width is margin. */
+  --measure-thread: 48rem; /* 768 */
+  --measure-reading: 70ch;
+  /* The folded side panel below a 1180 px window: one icon per view. */
+  --panel-strip-w: 2.5rem; /* 40 */
+  /* A list row's own background, opaque, for the quick actions' fade (§2): rest, hover,
+     selected. global.css sets --row-bg on each row from these. */
+  --mail-row-bg: var(--background);
+  --mail-row-bg-hover: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --mail-row-bg-selected: color-mix(in oklab, var(--primary) 13%, var(--background));
+  /* "N actions didn't sync", expanded: five lines, then it scrolls. */
+  --failed-list-max: calc(var(--mail-row-compact) * 5);
+}
+
+/* Dialog scrims (specs/mail-improve.md §5): strong enough that the content behind
+   doesn't show through. Resolves per theme from --background. */
+:root {
+  --scrim: color-mix(in oklab, var(--background) 82%, transparent);
 }
 
 @media (min-width: 1200px) {

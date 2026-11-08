@@ -15,7 +15,7 @@ import { useCalendarModule } from "../../calendar/hooks/use-calendar-module";
 import { useMentionSearch } from "../../spine/hooks/use-mention-search";
 import { MentionPicker } from "../../spine/ui/mention-picker";
 import { endPosition, makeTask } from "../../tasks/helpers";
-import { useTasksSelector } from "../../tasks/tasks-context";
+import { useTaskCommands, useTasksSelector } from "../../tasks/tasks-context";
 import { createMailSpineCommands } from "../commands/spine";
 import { createMailCommands } from "../commands/triage";
 import { mailEngineMode, mailFixtureScenario } from "../engine/behavior";
@@ -187,6 +187,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
         workspaceId,
         hasRef: (key) => refKeys.has(key),
         refIdFor: readsLinks ? (key) => refIds.get(key) ?? null : undefined,
+        realAccounts: readsLinks,
         contacts,
         makeTask: ({ title, description, dueDate }) => {
           if (!inbox) throw new Error("Your Tasks inbox isn't ready yet.");
@@ -278,6 +279,13 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     [liveTasks, buckets, statuses],
   );
 
+  // The just-made task's title, renamed in the side panel (specs/mail-improve.md AC13).
+  const taskCommands = useTaskCommands();
+  const onRenameTask = useCallback(
+    (taskId: string, title: string) => taskCommands.patchTask(taskId, { title }),
+    [taskCommands],
+  );
+
   const composeContacts = useMemo(
     () => contacts.flatMap((c) => c.emails.map((email) => ({ name: c.name, email }))),
     [contacts],
@@ -297,6 +305,7 @@ export function useMailPageWiring(): Partial<MailPageProps> {
     whoFor,
     contactDetailFor,
     taskFor,
+    onRenameTask,
     onAddContact: (email, name) => {
       if (!runtime || !workspaceId) return;
       void runtime.contacts.createContact({ workspaceId, name: name || email, email }).then(

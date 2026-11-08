@@ -130,6 +130,10 @@ export type ReaderWiringDeps = {
   act: (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => void;
   rowOf: (threadId: string) => Promise<MailThreadRow | null>;
   openDraft: (draft: MailDraftRow) => void;
+  /** A failed send again, as it was (specs/mail-improve.md AC19). */
+  retrySend?: (draft: MailDraftRow) => void;
+  /** A size-limited send without its largest file. */
+  removeAndSend?: (draft: MailDraftRow, filename: string) => void;
   editOutbox: (outboxId: string) => void;
   /** Runs a spine gesture with the undo toast (the page's `runGesture`). */
   runGesture: (label: string, run: () => Promise<{ undo: () => Promise<void> }>) => void;
@@ -285,7 +289,7 @@ function useReaderMenu(deps: ReaderWiringDeps, openRemind: (ids: string[]) => vo
   };
   const why: ReaderWhy = {
     names: deps.whyNames ?? NO_NAMES,
-    onOpenSettings: () => dispatchOpenSettings({ section: "mail" }),
+    onOpenSettings: () => dispatchOpenSettings({ section: "mail", sub: "rules" }),
   };
   return { more, why };
 }
@@ -370,7 +374,14 @@ export function useReaderWiring(deps: ReaderWiringDeps) {
     why: menu.why,
     done: view?.kind === "unified" && view.role === "archive",
     sendNotes: port
-      ? { port, refreshKey: deps.placeKey, onEditOutbox: deps.editOutbox, onFix: deps.openDraft }
+      ? {
+          port,
+          refreshKey: deps.placeKey,
+          onEditOutbox: deps.editOutbox,
+          onFix: deps.openDraft,
+          onRetry: deps.retrySend,
+          onRemoveAndSend: deps.removeAndSend,
+        }
       : null,
   };
 

@@ -15,7 +15,13 @@ import { createFakeMailEngine } from "../testing/fake-engine";
 import { FIXTURE_NOW_MS, generateFixture } from "../testing/fixture";
 import { MailPage } from "../ui/mail-page";
 import { MAIL_THREAD_MIME } from "../ui/mail-page-wiring";
-import { MailSidePanel, type MailSidePanelProps, toggleMailPanel } from "./side-panel";
+import {
+  createEventAllowed,
+  MailSidePanel,
+  type MailSidePanelProps,
+  SIDE_PANEL_MIN_VIEWPORT,
+  toggleMailPanel,
+} from "./side-panel";
 
 afterEach(cleanup);
 
@@ -94,7 +100,7 @@ function alt(n: number) {
 const panelName = () => screen.queryByRole("complementary")?.getAttribute("aria-label") ?? null;
 
 describe("the side panel (§10, AC34)", () => {
-  it("toggle, ⌥1–3, hidden under 1200", async () => {
+  it("toggle and ⌥1–3", async () => {
     const store = createMailStore();
     mount(store, { threadId: "t1", links: { read: async () => [], open() {}, unlink() {} } });
     expect(panelName()).toBe("Today");
@@ -127,47 +133,6 @@ describe("the side panel (§10, AC34)", () => {
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Hide" }));
     expect(panelName()).toBeNull();
     expect(store.getState().panel).toBeNull();
-
-    cleanup();
-
-    // On the page, under 1200 px: it starts hidden, ⌥2 opens Contact (the shell's
-    // key while hidden), and the reader's panel button hides it and brings it back.
-    width = 1100;
-    const engine = createFakeMailEngine({
-      fixture: generateFixture({ messages: 60 }),
-      now: () => FIXTURE_NOW_MS,
-    });
-    const page = createMailStore({ engine, accounts: await engine.listAccounts() });
-    const first = (await engine.listThreads({ view: { kind: "unified", role: "inbox" }, limit: 1 }))
-      .rows[0]!;
-    render(
-      <TooltipProvider>
-        <HotkeyScope scope="email">
-          <MailPage
-            store={page}
-            compose={null}
-            initialThreadId={first.threadId}
-            now={() => FIXTURE_NOW_MS}
-          />
-        </HotkeyScope>
-      </TooltipProvider>,
-    );
-    await tick();
-    await tick();
-    const shown = () =>
-      document.querySelector<HTMLElement>("[data-mail-panel]")?.dataset.mailPanel ?? null;
-    expect(shown()).toBeNull();
-    expect(page.getState().panel).toBeNull();
-    alt(2);
-    expect(shown()).toBe("contact");
-    alt(1);
-    expect(shown()).toBe("today");
-    alt(3);
-    expect(shown()).toBe("task");
-    fireEvent.click(screen.getByRole("button", { name: "Hide the side panel" }));
-    expect(shown()).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Today, contact and task" }));
-    expect(shown()).toBe("task");
   });
 
   it("Today: the date, the due-today count, past events muted, the drop hint while dragging", () => {
@@ -282,5 +247,139 @@ describe("the side panel (§10, AC34)", () => {
     within(aside).getByText("Pick three for Ana.");
     fireEvent.click(within(aside).getByRole("button", { name: /Open in Tasks/ }));
     expect(openTask).toHaveBeenCalledWith("k1");
+  });
+});
+
+// ── specs/mail-improve.md MI-0 ────────────────────────────────────────────────
+
+async function mountPage(over: { panel?: "today" | null } = {}) {
+  const engine = createFakeMailEngine({
+    fixture: generateFixture({ messages: 120 }),
+    now: () => FIXTURE_NOW_MS,
+  });
+  const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+  if (over.panel !== undefined) store.setState({ panel: over.panel });
+  engine.subscribe((e) => {
+    if (e.kind === "threads_changed")
+      store.setState((s) => ({ threadsVersion: s.threadsVersion + 1 }));
+  });
+  render(
+    <TooltipProvider>
+      <HotkeyScope scope="email">
+        <MailPage store={store} compose={null} now={() => FIXTURE_NOW_MS} />
+      </HotkeyScope>
+    </TooltipProvider>,
+  );
+  await tick();
+  await tick();
+  return { store, engine };
+}
+
+function key(k: string, extra: KeyboardEventInit = {}) {
+  act(() => {
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: k,
+        code: /^[a-z]$/.test(k) ? `Key${k.toUpperCase()}` : k,
+        bubbles: true,
+        cancelable: true,
+        ...extra,
+      }),
+    );
+  });
+}
+
+describe("visibility only follows the person (AC1)", () => {
+  it("threads, places and compose never show or hide it", async () => {
+    for (const start of ["today", null] as const) {
+      const { store } = await mountPage({ panel: start });
+      for (const k of ["j", "j", "e", "j", "k"]) {
+        key(k);
+        await tick();
+      }
+      key("g");
+      key("a");
+      await tick();
+      key("g");
+      key("i");
+      await tick();
+      key("c");
+      await tick();
+      expect(store.getState().panel).toBe(start);
+      cleanup();
+    }
+  });
+
+  it("⌥0, ⌥1–3 and the panel button are what change it", async () => {
+    const { store } = await mountPage({ panel: "today" });
+    key("0", { altKey: true, code: "Digit0" });
+    expect(store.getState().panel).toBeNull();
+    alt(2);
+    expect(store.getState().panel).toBe("contact");
+  });
+});
+
+describe("folds to a strip below 1180 and follows resize (AC2)", () => {
+  it("a 40 px strip of view icons, each opening its view over the reader; resize restores", async () => {
+    expect(SIDE_PANEL_MIN_VIEWPORT).toBe(1180);
+    width = 1100;
+    const store = createMailStore();
+    mount(store, { threadId: "t1", links: { read: async () => [], open() {}, unlink() {} } });
+    expect(document.querySelector("[data-mail-panel]")).toBeNull();
+    const strip = document.querySelector<HTMLElement>("[data-mail-panel-strip]")!;
+    expect(strip.className).toContain("w-(--panel-strip-w)");
+    const icons = within(strip).getAllByRole("button");
+    expect(icons.map((b) => b.getAttribute("aria-label"))).toEqual(["Today", "Contact", "Task"]);
+    fireEvent.click(within(strip).getByRole("button", { name: "Contact" }));
+    const overlay = document.querySelector<HTMLElement>("[data-mail-panel-overlay]")!;
+    expect(overlay.getAttribute("aria-label")).toBe("Contact");
+    // The person's state is unchanged: the overlay is a peek, not a setting.
+    expect(store.getState().panel).toBe("today");
+    fireEvent.keyDown(overlay, { key: "Escape" });
+    expect(document.querySelector("[data-mail-panel-overlay]")).toBeNull();
+
+    // Widening restores the panel as the person left it.
+    width = 1400;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(document.querySelector("[data-mail-panel-strip]")).toBeNull();
+    expect(document.querySelector<HTMLElement>("[data-mail-panel]")!.dataset.mailPanel).toBe(
+      "today",
+    );
+    // Narrow again: it folds again.
+    width = 1024;
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(document.querySelector("[data-mail-panel-strip]")).not.toBeNull();
+    expect(store.getState().panel).toBe("today");
+  });
+
+  it("hidden stays hidden when narrow", () => {
+    width = 1100;
+    const store = createMailStore({ panel: null });
+    mount(store);
+    expect(document.querySelector("[data-mail-panel-strip]")).toBeNull();
+    expect(document.querySelector("[data-mail-panel]")).toBeNull();
+  });
+});
+
+describe("create event hidden for drafts (AC18)", () => {
+  it("no event action for a draft, an Outbox message or a new message", () => {
+    const inbox = { kind: "unified", role: "inbox" } as const;
+    expect(createEventAllowed({ view: inbox, composingNew: false, threadId: "t1" })).toBe(true);
+    expect(
+      createEventAllowed({
+        view: { kind: "unified", role: "drafts" },
+        composingNew: false,
+        threadId: "t1",
+      }),
+    ).toBe(false);
+    expect(
+      createEventAllowed({ view: { kind: "outbox" }, composingNew: false, threadId: "t1" }),
+    ).toBe(false);
+    expect(createEventAllowed({ view: inbox, composingNew: true, threadId: "t1" })).toBe(false);
+    expect(createEventAllowed({ view: inbox, composingNew: false, threadId: null })).toBe(false);
   });
 });

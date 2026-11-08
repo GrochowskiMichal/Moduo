@@ -73,6 +73,19 @@ export function rowWho(row: MailThreadRow, place: MailRowPlace, self: ReadonlySe
   return other ? `To ${displayName(other)}` : senderLine(row);
 }
 
+/** Compact's narrow sender column (specs/mail-improve.md §2): one first name, "To Ana"
+ *  where you wrote; senders outside Personal keep their whole name (a list's name is one). */
+export function rowWhoCompact(
+  row: MailThreadRow,
+  place: MailRowPlace,
+  self: ReadonlySet<string>,
+): string {
+  const person = rowPerson(row, place, self);
+  const name = displayName(person);
+  const first = row.tab === "personal" ? (name.split(/\s+/)[0] ?? name) : name;
+  return TO_PLACES.has(place) && counterpart(row, self) ? `To ${first}` : first;
+}
+
 /** The person the avatar stands for: the counterpart where you wrote, else the newest sender. */
 export function rowPerson(
   row: MailThreadRow,
@@ -180,6 +193,8 @@ export type MailRowFlagContext = {
   notSent?: boolean;
   /** The row's account is offline (the Outbox then waits for connection). */
   offline?: boolean;
+  /** Under the PINNED heading the pin says nothing new (specs/mail-improve.md §2, C2). */
+  inPinnedGroup?: boolean;
 };
 
 export const MAX_ROW_FLAGS = 3;
@@ -206,7 +221,7 @@ function glyphFlags(row: MailThreadRow, ctx: MailRowFlagContext): MailRowFlag[] 
   const candidates: [boolean, MailRowFlag][] = [
     [wait !== null, { id: "waiting", label: wait ?? "", tone: "warning" }],
     [row.priority, { id: "priority", label: "Priority person", tone: "warning" }],
-    [row.pinned, { id: "pinned", label: "Pinned" }],
+    [row.pinned && !ctx.inPinnedGroup, { id: "pinned", label: "Pinned" }],
     [linked.includes("task"), { id: "task", label: "Has a task" }],
     [linked.includes("note"), { id: "note", label: "Has a note" }],
     [row.hasInvite, { id: "invite", label: "Invite" }],

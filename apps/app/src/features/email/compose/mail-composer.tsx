@@ -245,9 +245,9 @@ function useSend(props: BodyProps, blocked: string | null) {
   const [error, setError] = useState<string | null>(
     state.lastError ? `Not sent: ${state.lastError}` : null,
   );
-  const send = async () => {
+  const send = async (opts: { done?: boolean } = {}) => {
     if (blocked) return;
-    const res = await session.send(props.sizeLimit);
+    const res = await session.send(props.sizeLimit, opts);
     if (!res.ok) setError(res.reason);
   };
   const onKeyDown = (e: KeyboardEvent) => {
@@ -255,7 +255,8 @@ function useSend(props: BodyProps, blocked: string | null) {
     if (e.defaultPrevented || !e.currentTarget.contains(e.target as Node)) return;
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
-      void send();
+      // ⌘⇧↩ is Send & Done (specs/mail-improve.md §3).
+      void send(e.shiftKey ? { done: true } : {});
     } else if (e.key === "Escape") {
       e.preventDefault();
       void session.close({ keepDraft: true });

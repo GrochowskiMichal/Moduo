@@ -25,13 +25,17 @@ import type {
   MailThreadRow,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
+import { undoToast } from "@/lib/undo-toast";
 
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { createBulkCommands, type ZeroAge } from "../commands/bulk";
 import { createMailCommands } from "../commands/triage";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { mailKeyHint, type MailKeyId } from "../keys";
+import { showMailPanel, toggleMailPanel } from "../panels/side-panel";
 import { openMailSearch } from "../search/open";
+import { cyclePane, focusIn } from "../shell/panes";
+import { useReadOnOpen } from "../shell/read-on-open";
 import {
   advanceAfterRemoval,
   allThreadIds,
@@ -44,9 +48,9 @@ import {
 import type { LinkedKindsRead } from "../shell/use-linked-kinds";
 import { useListGroups } from "../shell/use-list-groups";
 import { useThreadWindow } from "../shell/use-thread-window";
-import { type MailStore, mailStore } from "../store/mail-store";
+import { type MailStore, mailStore, type MailUndoEntry } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
-import { MailHintLine, restHint, useMailHint } from "./hint-line";
+import { MailHintLine, restHint, triageToastLabel } from "./hint-line";
 import { type MailBulkAction, MailBulkReader } from "./mail-bulk-reader";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
@@ -57,9 +61,11 @@ import {
   MailFirstSync,
   mailListState,
   MailListStateView,
+  MailNextTabs,
   type MailTabUnread,
 } from "./mail-states";
 import { cycleTab, liveTab, type MailTabDef, MailTabs, mailTabs, sameTab } from "./mail-tabs";
+import { KEYED_TOAST } from "./mail-toast";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
 import { useRailViewCounts } from "./rail-counts";
 import { humaniseError } from "./system-copy";
@@ -149,13 +155,32 @@ const BULK_INTENTS: Record<Exclude<MailBulkAction, "done" | "delete">, MailKeyId
   move: "email.move",
 };
 
-/** Moves keyboard focus into the reader (Enter, spec §7): its title, else the slot. */
-function focusIn(root: HTMLElement | null): boolean {
-  if (!root) return false;
-  const target = root.querySelector<HTMLElement>("[data-reader-title], h1, h2") ?? root;
-  if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
-  target.focus({ preventScroll: true });
-  return true;
+/**
+ * One toast for every triage action (specs/mail-improve.md §3, AC10): where the threads
+ * went, Undo and its key. A click's toast teaches the key. One at a time: the latest
+ * action's replaces the last.
+ */
+function showTriageToast(t: {
+  kind: MailOpInput["kind"];
+  count: number;
+  args: MailOpInput["args"] | undefined;
+  boxes: Record<string, MailMailbox[]>;
+  teach: string | undefined;
+  onUndo: () => void;
+}) {
+  const boxId = (t.args as { mailboxId?: string } | undefined)?.mailboxId;
+  const target = boxId
+    ? Object.values(t.boxes)
+        .flat()
+        .find((b) => b.id === boxId)?.name
+    : null;
+  undoToast(triageToastLabel(t.kind, t.count, t.args, target), {
+    onUndo: t.onUndo,
+    undoKey: isMacPlatform() ? "⌘Z" : "Ctrl+Z",
+    id: MAIL_TRIAGE_TOAST,
+    className: KEYED_TOAST,
+    description: t.teach ? `Next time press ${t.teach}` : undefined,
+  });
 }
 
 /** The reader slot: the bulk summary while two or more threads are picked (spec §6). */
@@ -170,10 +195,25 @@ function ReaderSlot({
   return reader() ?? null;
 }
 
+/** Mail's triage toasts share one id: the latest action's replaces the last. */
+export const MAIL_TRIAGE_TOAST = "mail-triage";
+
+/** `quiet`: no result toast (Send & Done: the undo-send toast speaks for it).
+ *  `teach`: the key a pointer action could have used, said in the toast. */
+export type MailActOptions = { quiet?: boolean; teach?: string };
+
 /** What the page drives from outside the shell: pickers that finish an action
  * (snooze, move) go through `act` so they auto-advance like Done (AC14). */
 export type MailShellApi = {
-  act(kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]): Promise<void>;
+  /** Applies an op as one undoable action; answers with its undo entry (null if refused). */
+  act(
+    kind: MailOpInput["kind"],
+    threadIds: string[],
+    args?: MailOpInput["args"],
+    opts?: MailActOptions,
+  ): Promise<MailUndoEntry | null>;
+  /** Undoes that entry and selects and opens the first thread it restored. */
+  undo(entry: MailUndoEntry): Promise<void>;
   /** The loaded row for a thread, when it is in the current window. */
   row(threadId: string): MailThreadRow | null;
   /** Selects and opens a thread. */
@@ -189,8 +229,12 @@ export type MailShellProps = {
   showHints?: boolean;
   screenerOn?: boolean;
   customTabs?: readonly { id: string; label: string }[];
-  /** The reader slot; `listEmpty` asks it to stay blank (spec §4). */
-  renderReader?: (threadId: string | null, ctx: { listEmpty: boolean }) => ReactNode;
+  /** The reader slot; with `listEmpty` it shows `empty` (inbox zero's next tabs) or
+   *  stays blank (spec §4, specs/mail-improve.md AC22). */
+  renderReader?: (
+    threadId: string | null,
+    ctx: { listEmpty: boolean; empty: ReactNode },
+  ) => ReactNode;
   /** Runs before the undo key undoes triage: true when it undid something (a send). */
   onUndoFirst?: () => boolean;
   /** Actions beside "N selected" (multi-select), e.g. Labels. */
@@ -383,7 +427,6 @@ export function MailShell({
   // A ⌘A read in flight; a tab or place change makes it stale (spec edge cases).
   const selectAllSeq = useRef(0);
   const [legend, setLegend] = useState(false);
-  const hint = useMailHint(isMacPlatform());
   const [cleared, setCleared] = useState(0);
   const failedAccount = useFailedAccounts(engine, failedOps, win.rows);
 
@@ -427,72 +470,138 @@ export function MailShell({
     );
   };
 
-  // Latest list and selection for stable callbacks.
-  const live = useRef({ ids, sel });
+  // Latest list, selection and place for stable callbacks.
+  const live = useRef({ ids, sel, view, tab: listTab });
   useEffect(() => {
-    live.current = { ids, sel };
+    live.current = { ids, sel, view, tab: listTab };
   });
+  // The toast's Undo outlives the render that made it: it calls the latest undo.
+  const undoRef = useRef<(entry?: MailUndoEntry) => Promise<void>>(async () => {});
+  const boxesRef = useRef(mailboxes);
+  useEffect(() => {
+    undoRef.current = undoAndOpen;
+    boxesRef.current = mailboxes;
+  });
+  /** Where each undoable action was taken, so Undo can go back there (AC11). */
+  const actedFrom = useRef(
+    new WeakMap<MailUndoEntry, { view: MailView; tab: MailTab | null; list: readonly string[] }>(),
+  );
 
+  const accountNames = useMemo(
+    () => Object.fromEntries(accounts.map((a) => [a.id, a.displayName || a.address])),
+    [accounts],
+  );
   const hues = useMemo(() => {
     const out: Record<string, LabelColor> = {};
     accounts.forEach((a, i) => (out[a.id] = LABEL_COLORS[i % LABEL_COLORS.length]!));
     return out;
   }, [accounts]);
 
+  /** The list's move before the engine answers: advance past removed threads, or drop the picks. */
+  const moveFirst = useCallback((kind: MailOpInput["kind"], threadIds: string[]) => {
+    const { ids: list, sel: s } = live.current;
+    if (!REMOVES.has(kind)) {
+      setSel((cur) => ({ ...cur, picked: [] }));
+      return 0;
+    }
+    setSel(
+      advanceAfterRemoval(list, { ...s, cursor: s.cursor ?? threadIds[0] ?? null }, threadIds),
+    );
+    const cleared = kind === "done" || kind === "delete" ? threadIds.length : 0;
+    if (cleared) setCleared((n) => n + cleared);
+    return cleared;
+  }, []);
+
   const act = useCallback(
-    async (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => {
-      if (threadIds.length === 0) return;
+    async (
+      kind: MailOpInput["kind"],
+      threadIds: string[],
+      args?: MailOpInput["args"],
+      opts: MailActOptions = {},
+    ): Promise<MailUndoEntry | null> => {
+      if (threadIds.length === 0) return null;
       const before = live.current.sel;
-      const clears = REMOVES.has(kind) && (kind === "done" || kind === "delete");
-      if (REMOVES.has(kind)) {
-        const { ids: list, sel: s } = live.current;
-        setSel(
-          advanceAfterRemoval(list, { ...s, cursor: s.cursor ?? threadIds[0] ?? null }, threadIds),
-        );
-        if (clears) setCleared((n) => n + threadIds.length);
-      } else {
-        setSel((s) => ({ ...s, picked: [] }));
-      }
+      const from = { view: live.current.view, tab: live.current.tab, list: live.current.ids };
+      const cleared = moveFirst(kind, threadIds);
       try {
-        await bulk.apply(kind, threadIds, args);
+        const entry = await bulk.apply(kind, threadIds, args);
+        if (entry) {
+          actedFrom.current.set(entry, from);
+          if (!opts.quiet)
+            showTriageToast({
+              kind,
+              count: threadIds.length,
+              args,
+              boxes: boxesRef.current,
+              teach: opts.teach,
+              onUndo: () => void undoRef.current(entry),
+            });
+        }
+        return entry;
       } catch (error) {
         // The engine refused: nothing moved, so the list and the picks go back.
         setSel(before);
-        if (clears) setCleared((n) => Math.max(0, n - threadIds.length));
+        if (cleared) setCleared((n) => Math.max(0, n - cleared));
         const reason = humaniseError(error instanceof Error ? error.message : String(error));
         toast.error(reason ? `That didn't apply: ${reason}.` : "That didn't apply.");
+        return null;
       }
     },
-    [bulk],
+    [bulk, moveFirst],
   );
 
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
-      act: (kind, threadIds, args) => {
-        if (threadIds.length > 0) hint.result(kind, args);
-        return act(kind, threadIds, args);
-      },
+      act: (kind, threadIds, args, opts) => act(kind, threadIds, args, opts),
+      undo: (entry) => undoAndOpen(entry),
       row: (id) => win.rows.find((r) => r.threadId === id) ?? null,
       open: (id) => setSel({ ...EMPTY_SELECTION, cursor: id }),
     };
   });
 
+  /**
+   * Undo (`z`, ⌘Z, a toast's Undo): restores the threads, goes back to the place and tab
+   * the action was taken in, then selects and opens the first restored thread in list
+   * order (specs/mail-improve.md §3, AC11).
+   */
+  async function undoAndOpen(entry?: MailUndoEntry): Promise<void> {
+    const stack = store.getState().undoStack;
+    const target = entry ?? stack[stack.length - 1];
+    if (!target) return;
+    const from = actedFrom.current.get(target);
+    const restored = await commands.undo(target);
+    if (restored.length === 0) return;
+    const order = from?.list ?? [];
+    const rank = (id: string) => {
+      const i = order.indexOf(id);
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    const first = [...restored].sort((a, b) => rank(a) - rank(b))[0]!;
+    const now = live.current;
+    if (from && mailViewKey(from.view) !== mailViewKey(now.view)) selectView(from.view);
+    if (from?.tab && !(now.tab && sameTab(now.tab, from.tab))) switchTab(from.tab);
+    setSel({ ...EMPTY_SELECTION, cursor: first });
+  }
+
   useEffect(() => {
     onCursorChange?.(sel.cursor);
   }, [sel.cursor, onCursorChange]);
 
-  const { teach: teachKey, result: showResult } = hint;
-  const teach = useCallback(
-    (id: MailKeyId) => {
-      const k = mailKeyHint(id, isMacPlatform());
-      if (k) teachKey(k);
-    },
-    [teachKey],
+  // Opening a thread reads it: the dot goes at once, the engine hears in a batch (AC8).
+  const readNow = useReadOnOpen(engine, sel.cursor, win.rows);
+
+  /** A click's toast names the key that does it (X21 hints, now in the toast). */
+  const keyFor = useCallback(
+    (id: MailKeyId) => (showHints ? (mailKeyHint(id, isMacPlatform()) ?? undefined) : undefined),
+    [showHints],
   );
-  /** A key's op: acts, then the hint line says what it did. */
+  /** A key's op. In New senders the sender is decided first (AC24 edge case). */
   const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => {
-    if (threadIds.length > 0) showResult(kind);
+    if (view.kind === "new_senders" && threadIds.length > 0) {
+      toast("Allow or block the sender first", { id: MAIL_TRIAGE_TOAST });
+      return;
+    }
     void act(kind, threadIds);
   };
 
@@ -501,18 +610,12 @@ export function MailShell({
       open: (id) => setSel((s) => ({ ...s, cursor: id, picked: [] })),
       togglePick: (id) => setSel((s) => togglePick(s, id)),
       hover: setHovered,
-      done: (id) => {
-        teach("email.archive");
-        void act("done", [id]);
-      },
+      done: (id) => void act("done", [id], undefined, { teach: keyFor("email.archive") }),
       undone: (id) => void act("undone", [id]),
-      snooze: (id) => {
-        teach("email.snooze");
-        onIntent?.("email.snooze", [id]);
-      },
+      snooze: (id) => onIntent?.("email.snooze", [id]),
       more: (id) => onIntent?.("email.move", [id]),
     }),
-    [act, teach, onIntent],
+    [act, keyFor, onIntent],
   );
 
   const cur = () => targets(live.current.sel);
@@ -541,7 +644,7 @@ export function MailShell({
     toggle: toggleKind,
     undo: () => {
       if (onUndoFirst?.()) return;
-      void commands.undo();
+      void undoAndOpen();
     },
     cycleTab: (delta) => {
       if (!tabbed) return false;
@@ -551,7 +654,18 @@ export function MailShell({
     intent,
     goTo: selectView,
     selectAll,
-    setPanel: (panel) => store.setState({ panel }),
+    setPanel: (panel) => showMailPanel(store, panel),
+    togglePanel: () => toggleMailPanel(store),
+    cyclePane,
+    goTab: (kind) => {
+      const def =
+        kind === "custom"
+          ? tabs.find((t) => t.tab.kind === "custom")
+          : tabs.find((t) => t.tab.kind === kind);
+      if (!def) return false;
+      if (!tabbed) selectView(INBOX);
+      switchTab(def.tab);
+    },
   });
   const chord = useChordPending("email");
 
@@ -588,8 +702,9 @@ export function MailShell({
   };
 
   return (
-    <div className="flex h-full min-h-0 w-full">
-      <aside className="flex w-56 shrink-0 flex-col border-r border-hairline">
+    // min-w-0: the shell gives the side panel its room (it never pushes it off screen).
+    <div className="flex h-full min-h-0 w-full min-w-0">
+      <aside data-mail-pane="rail" className="flex w-56 shrink-0 flex-col border-r border-hairline">
         <MailRail
           current={view}
           counts={counts}
@@ -631,6 +746,8 @@ export function MailShell({
       </aside>
       <section
         aria-label="Mail list"
+        data-mail-pane="list"
+        data-skip-target="mail-list"
         className="flex min-h-0 w-(--mail-list-w) shrink-0 flex-col border-r border-hairline"
       >
         {tabbed && accounts.length > 0 ? (
@@ -675,6 +792,7 @@ export function MailShell({
           {view.kind === "new_senders" ? (
             <NewSendersPanel
               rows={win.rows}
+              openThreadId={sel.cursor}
               onDecide={(sender, decision) =>
                 decideNewSender(sender, decision, {
                   commands,
@@ -704,10 +822,12 @@ export function MailShell({
         >
           <MailThreadList
             items={items}
+            readNow={readNow}
             cursor={sel.cursor}
             picked={sel.picked}
             hovered={hovered ?? sel.cursor}
             hues={hues}
+            accountNames={accountNames}
             showHue={accounts.length > 1 && scope === null}
             density={density}
             previewLines={previewLines}
@@ -725,14 +845,27 @@ export function MailShell({
         <MailHintLine
           enabled={showHints}
           rest={restHint(view, state.kind === "rows")}
-          hint={hint.hint}
           chord={chord}
         />
       </section>
-      <section ref={readerRef} aria-label="Reader" className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <section
+        ref={readerRef}
+        aria-label="Reader"
+        data-mail-pane="reader"
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
+      >
         <ReaderSlot
           bulk={bulkRows ? { count: sel.picked.length, rows: bulkRows, onAction: onBulk } : null}
-          reader={() => renderReader?.(sel.cursor, { listEmpty: state.kind !== "rows" })}
+          reader={() =>
+            renderReader?.(sel.cursor, {
+              listEmpty: state.kind !== "rows",
+              // Inbox zero: the reader offers the tabs still waiting (AC22).
+              empty:
+                state.kind === "tab_clear" ? (
+                  <MailNextTabs others={state.others} onTab={switchTab} />
+                ) : null,
+            })
+          }
         />
       </section>
       <MailLegendDialog open={legend} onOpenChange={setLegend} />

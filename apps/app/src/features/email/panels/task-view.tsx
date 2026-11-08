@@ -4,9 +4,11 @@
 // notes, plus "Open in Tasks"; with no linked task, "No task yet · t makes one".
 
 import { ExternalLink } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { Textarea } from "@/components/ui/textarea";
 
 import type { MailThreadLink } from "../commands/spine";
 import { NoThread } from "./contact-view";
@@ -30,7 +32,56 @@ export type TaskViewProps = {
   onOpenTask?: (taskId: string) => void;
   /** `t` from the panel: make a task from the thread. */
   onMakeTask?: () => void;
+  /** The task `t` just made: its title opens editable, text selected (specs/mail-improve.md AC13). */
+  editTitleFor?: string | null;
+  onRenameTask?: (taskId: string, title: string) => void;
+  /** The edit ended (saved or cancelled). */
+  onEditTitleDone?: () => void;
 };
+
+/** The just-made task's title: an auto-growing field, text selected; Enter saves, Esc cancels. */
+function TitleField({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial: string;
+  onSave: (title: string) => void;
+  onCancel: () => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [value, setValue] = useState(initial);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(0, el.value.length);
+  }, []);
+  return (
+    <Textarea
+      ref={ref}
+      id="task-title"
+      aria-label="Task title"
+      rows={1}
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          const next = value.trim();
+          if (next && next !== initial) onSave(next);
+          else onCancel();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
+      onBlur={onCancel}
+      className="field-sizing-content min-h-0 resize-none text-sm font-medium"
+    />
+  );
+}
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
@@ -45,16 +96,37 @@ function TaskCard({
   link,
   detail,
   onOpenTask,
+  editing,
+  onRename,
+  onEditDone,
 }: {
   link: MailThreadLink;
   detail: MailTaskDetail | null;
   onOpenTask?: (taskId: string) => void;
+  editing: boolean;
+  onRename?: (taskId: string, title: string) => void;
+  onEditDone: () => void;
 }) {
   const id = link.entity.id;
-  const title = detail?.title ?? link.entity.label ?? "Task";
+  const known = detail?.title ?? link.entity.label ?? "Task";
+  // A saved rename shows at once, before the task data catches up.
+  const [renamed, setRenamed] = useState<string | null>(null);
+  const title = renamed ?? known;
   return (
     <article aria-label={`Task: ${title}`} className="flex flex-col gap-3 px-2">
-      <h3 className="text-sm font-medium break-words text-foreground">{title}</h3>
+      {editing && onRename ? (
+        <TitleField
+          initial={title}
+          onSave={(next) => {
+            setRenamed(next);
+            onRename(id, next);
+            onEditDone();
+          }}
+          onCancel={onEditDone}
+        />
+      ) : (
+        <h3 className="text-sm font-medium break-words text-foreground">{title}</h3>
+      )}
       <dl className="flex flex-col gap-1.5">
         {detail ? <Field label="Status" value={detail.status} /> : null}
         <Field label="Due" value={detail?.due ?? "No date"} />
@@ -75,7 +147,23 @@ function TaskCard({
   );
 }
 
-export function TaskView({ threadId, links, taskFor, onOpenTask, onMakeTask }: TaskViewProps) {
+export function TaskView({
+  threadId,
+  links,
+  taskFor,
+  onOpenTask,
+  onMakeTask,
+  editTitleFor = null,
+  onRenameTask,
+  onEditTitleDone,
+}: TaskViewProps) {
+  // Local so Esc or Enter ends the edit even when the page never clears `editTitleFor`.
+  const [editing, setEditing] = useState(editTitleFor);
+  const [seen, setSeen] = useState(editTitleFor);
+  if (editTitleFor !== seen) {
+    setSeen(editTitleFor);
+    setEditing(editTitleFor);
+  }
   if (!threadId) {
     return <NoThread what="Pick a conversation to see the task made from it." />;
   }
@@ -105,6 +193,12 @@ export function TaskView({ threadId, links, taskFor, onOpenTask, onMakeTask }: T
           link={l}
           detail={taskFor?.(l.entity.id) ?? null}
           onOpenTask={onOpenTask}
+          editing={editing === l.entity.id}
+          onRename={onRenameTask}
+          onEditDone={() => {
+            setEditing(null);
+            onEditTitleDone?.();
+          }}
         />
       ))}
     </div>

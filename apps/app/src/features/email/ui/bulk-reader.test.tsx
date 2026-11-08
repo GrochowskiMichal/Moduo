@@ -139,9 +139,11 @@ describe("bulk reader (AC20)", () => {
     const reader = screen.getByRole("region", { name: "2 selected" });
     fireEvent.click(within(reader).getByRole("button", { name: /^Done/ }));
     await tick();
-    expect(apply).toHaveBeenCalledTimes(1);
-    expect(apply.mock.calls[0]![0]).toMatchObject({ kind: "done" });
-    expect(apply.mock.calls[0]![0].threadIds).toHaveLength(2);
+    // Opening a thread reads it (specs/mail-improve.md AC8); the triage is one op.
+    const acts = apply.mock.calls.map((c) => c[0]).filter((o) => o.kind !== "mark_read");
+    expect(acts).toHaveLength(1);
+    expect(acts[0]).toMatchObject({ kind: "done" });
+    expect(acts[0]!.threadIds).toHaveLength(2);
   });
 
   it("a failed convert leaves no task behind", async () => {

@@ -1,6 +1,9 @@
 // The mail rail (specs/mail-v3.md §1): the header with Sync and Settings, New
 // message, the places (Outbox only while it holds a message), the smart views
 // with their counts, Accounts, Saved searches, and Connect account at the foot.
+// specs/mail-improve.md §1, §6: the upper part scrolls above the pinned footer, a
+// fade shows at its bottom edge while more is below, and it is one Tab stop with
+// arrow keys inside. With no account yet, places and views are dimmed, not hidden.
 // Rows take `--mail-rail-row`; at 780 px of height or less it drops to
 // `--row-h-sm` and the gaps tighten (tokens.css), so three accounts fit at 700.
 
@@ -24,7 +27,7 @@ import {
   Trash2,
   UserPlus,
 } from "lucide-react";
-import { memo } from "react";
+import { memo, type ReactNode, useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import type { LabelColor } from "@/components/tag-colors";
 import { Button } from "@/components/ui/button";
@@ -41,6 +44,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 import type { SavedSearch } from "../search/palette";
+import { useRoving } from "../shell/roving";
 import { AccountsSection, type AccountsSectionProps, RAIL_ROW } from "./mail-rail-accounts";
 import { railCount, type RailViewCounts, syncTooltip } from "./rail-counts";
 
@@ -108,6 +112,7 @@ const RailItem = memo(function RailItem({
   dot,
   active,
   onClick,
+  dimmed = false,
 }: {
   label: string;
   icon: LucideIcon;
@@ -118,16 +123,24 @@ const RailItem = memo(function RailItem({
   dot?: string;
   active: boolean;
   onClick: () => void;
+  /** First run: shown but inert until an account is connected (AC25). */
+  dimmed?: boolean;
 }) {
   const shown = railCount(count);
   return (
     <button
       type="button"
-      aria-current={active ? "page" : undefined}
-      onClick={onClick}
+      aria-current={active && !dimmed ? "page" : undefined}
+      aria-disabled={dimmed || undefined}
+      title={dimmed ? "Connect an account first" : undefined}
+      onClick={dimmed ? undefined : onClick}
       className={cn(
         RAIL_ROW,
-        active ? "bg-state-active text-foreground" : "text-muted-foreground hover:bg-state-hover",
+        dimmed
+          ? "cursor-default text-muted-foreground"
+          : active
+            ? "bg-state-active text-foreground hover:bg-state-active-hover"
+            : "text-muted-foreground hover:bg-state-hover",
       )}
     >
       <Icon className="size-icon-sm shrink-0" aria-hidden />
@@ -223,7 +236,11 @@ function Places({
   mailboxes,
   outboxCount,
   onSelect,
-}: Pick<Props, "counts" | "mailboxes" | "outboxCount" | "onSelect"> & { currentKey: string }) {
+  dimmed,
+}: Pick<Props, "counts" | "mailboxes" | "outboxCount" | "onSelect"> & {
+  currentKey: string;
+  dimmed: boolean;
+}) {
   const inbox = counts?.byViewKey[mailViewKey({ kind: "unified", role: "inbox" })] ?? 0;
   const draftCount = drafts(counts, mailboxes);
   const row = (f: (typeof UNIFIED_FOLDERS)[number]) => {
@@ -237,6 +254,7 @@ function Places({
         countLabel={f.role === "inbox" ? "unread" : undefined}
         active={currentKey === mailViewKey(v)}
         onClick={() => onSelect(v)}
+        dimmed={dimmed}
       />
     );
   };
@@ -268,6 +286,7 @@ function SmartViews({
   subscriptionsActive = false,
   onOpenAttachments,
   attachmentsActive = false,
+  dimmed,
 }: Pick<
   Props,
   | "viewCounts"
@@ -277,7 +296,7 @@ function SmartViews({
   | "subscriptionsActive"
   | "onOpenAttachments"
   | "attachmentsActive"
-> & { currentKey: string }) {
+> & { currentKey: string; dimmed: boolean }) {
   const special = subscriptionsActive || attachmentsActive;
   const view = (v: MailView, label: string, icon: LucideIcon, count?: number, dot?: string) => (
     <RailItem
@@ -287,6 +306,7 @@ function SmartViews({
       dot={dot}
       active={!special && currentKey === mailViewKey(v)}
       onClick={() => onSelect(v)}
+      dimmed={dimmed}
     />
   );
   const due = c.followupsDue ?? 0;
@@ -308,6 +328,7 @@ function SmartViews({
           count={c.subscriptions}
           active={subscriptionsActive}
           onClick={onOpenSubscriptions}
+          dimmed={dimmed}
         />
       ) : null}
       {onOpenAttachments ? (
@@ -317,6 +338,7 @@ function SmartViews({
           count={c.attachments}
           active={attachmentsActive}
           onClick={onOpenAttachments}
+          dimmed={dimmed}
         />
       ) : null}
     </div>
@@ -383,34 +405,87 @@ export function MailRail({
     onCancelBackfill,
     onLoadHistory,
   };
+  const dimmed = accounts.length === 0;
   return (
-    <nav
-      aria-label="Mail folders"
-      className="pane-scroll flex h-full flex-col gap-(--mail-rail-gap) overflow-y-auto p-2"
-    >
-      <RailHeader
-        accounts={accounts}
-        nowMs={nowMs}
-        onSync={onSync}
-        onOpenSettings={onOpenSettings}
-      />
-      {accounts.length > 0 ? <NewMessage onCompose={onCompose} /> : null}
-      <Places
-        currentKey={currentKey}
-        counts={counts}
-        mailboxes={mailboxes}
-        outboxCount={outboxCount}
-        onSelect={onSelect}
-      />
-      <SmartViews currentKey={currentKey} screenerOn={screenerOn} onSelect={onSelect} {...views} />
-      <AccountsSection accounts={accounts} {...accountProps} />
-      {loading ? null : <SavedSearches savedSearches={savedSearches} onOpenSearch={onOpenSearch} />}
-      <div className="mt-auto">
+    <nav aria-label="Mail folders" className="flex h-full min-h-0 flex-col">
+      <div className="px-2 pt-2">
+        <RailHeader
+          accounts={accounts}
+          nowMs={nowMs}
+          onSync={onSync}
+          onOpenSettings={onOpenSettings}
+        />
+      </div>
+      <RailBody>
+        {accounts.length > 0 ? <NewMessage onCompose={onCompose} /> : null}
+        <Places
+          currentKey={currentKey}
+          counts={counts}
+          mailboxes={mailboxes}
+          outboxCount={outboxCount}
+          onSelect={onSelect}
+          dimmed={dimmed}
+        />
+        <SmartViews
+          currentKey={currentKey}
+          screenerOn={screenerOn}
+          onSelect={onSelect}
+          dimmed={dimmed}
+          {...views}
+        />
+        <AccountsSection accounts={accounts} {...accountProps} />
+        {loading ? null : (
+          <SavedSearches savedSearches={savedSearches} onOpenSearch={onOpenSearch} />
+        )}
+      </RailBody>
+      <div data-rail-footer className="border-t border-hairline p-2">
         <Button variant="ghost" size="sm" className="w-full justify-start" onClick={onConnect}>
           <Plus className="size-icon-sm" aria-hidden />
           Connect account
         </Button>
       </div>
     </nav>
+  );
+}
+
+/** The rail's scrolling part: one Tab stop (arrows inside), a fade while more is below. */
+function RailBody({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const roving = useRoving(ref, { axis: "vertical" });
+  const [fade, setFade] = useState(false);
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setFade(el.scrollTop + el.clientHeight < el.scrollHeight - 1);
+  }, []);
+  useLayoutEffect(() => {
+    measure();
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    return () => ro.disconnect();
+  }, [measure]);
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={ref}
+        data-rail-body
+        data-fade={fade ? "bottom" : undefined}
+        onScroll={measure}
+        onKeyDown={roving.onKeyDown}
+        onFocus={roving.onFocus}
+        className="pane-scroll flex min-h-0 flex-1 flex-col gap-(--mail-rail-gap) overflow-y-auto px-2 pb-2"
+      >
+        {children}
+      </div>
+      {fade ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-(--mail-rail-row) bg-linear-to-t from-background to-transparent"
+        />
+      ) : null}
+    </div>
   );
 }

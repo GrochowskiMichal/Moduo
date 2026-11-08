@@ -232,78 +232,81 @@ function RulesGroup({
     for (const m of moveItem(list, id, by)) actions.update(m.item, m.item.value, m.position);
   };
   return (
-    <PrefGroup
-      label="Rules"
-      description="The first matching rule decides where mail goes; marking read, labels and Priority all apply."
-    >
-      {list.map((r, at) => (
-        <RuleRow
-          key={r.id}
-          rule={r}
-          at={at}
-          last={at === list.length - 1}
-          ruleApply={ruleApply}
-          onMove={(by) => move(r.id, by)}
-          onRemove={() => {
-            forgetRuleApply(r.id);
-            actions.remove(r.id);
-          }}
-        />
-      ))}
-      {asking.ask ? (
-        <div className="pt-4">
-          <ApplyPrompt ask={asking.ask} onApply={asking.apply} onSkip={asking.skip} />
-        </div>
-      ) : null}
-      <form
-        className="flex flex-wrap items-center gap-2 py-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!ready) return;
-          const id = actions.add("rule", {
-            conditions: [needsValue ? { field, value: value.trim() } : { field }],
-            actions: [needsArg ? { action, arg: arg.trim() } : { action }],
-          });
-          asking.offer(id);
-          setValue("");
-          setArg("");
-        }}
+    // Mail's "Why here?" opens Settings here (`sub: "rules"`, specs/mail-improve.md §4).
+    <div data-settings-sub="rules">
+      <PrefGroup
+        label="Rules"
+        description="The first matching rule decides where mail goes; marking read, labels and Priority all apply."
       >
-        <ChoiceSelect
-          label="Rule condition"
-          className="w-40"
-          value={field}
-          choices={CONDITIONS}
-          onChange={setField}
-        />
-        {needsValue ? (
-          <Input
-            aria-label="Condition value"
+        {list.map((r, at) => (
+          <RuleRow
+            key={r.id}
+            rule={r}
+            at={at}
+            last={at === list.length - 1}
+            ruleApply={ruleApply}
+            onMove={(by) => move(r.id, by)}
+            onRemove={() => {
+              forgetRuleApply(r.id);
+              actions.remove(r.id);
+            }}
+          />
+        ))}
+        {asking.ask ? (
+          <div className="pt-4">
+            <ApplyPrompt ask={asking.ask} onApply={asking.apply} onSkip={asking.skip} />
+          </div>
+        ) : null}
+        <form
+          className="flex flex-wrap items-center gap-2 py-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!ready) return;
+            const id = actions.add("rule", {
+              conditions: [needsValue ? { field, value: value.trim() } : { field }],
+              actions: [needsArg ? { action, arg: arg.trim() } : { action }],
+            });
+            asking.offer(id);
+            setValue("");
+            setArg("");
+          }}
+        >
+          <ChoiceSelect
+            label="Rule condition"
             className="w-40"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
+            value={field}
+            choices={CONDITIONS}
+            onChange={setField}
           />
-        ) : null}
-        <ChoiceSelect
-          label="Rule action"
-          className="w-36"
-          value={action}
-          choices={ACTIONS}
-          onChange={setAction}
-        />
-        {needsArg ? (
-          <Input
-            aria-label="Action target"
-            className="w-32"
-            value={arg}
-            onChange={(e) => setArg(e.target.value)}
+          {needsValue ? (
+            <Input
+              aria-label="Condition value"
+              className="w-40"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+          ) : null}
+          <ChoiceSelect
+            label="Rule action"
+            className="w-36"
+            value={action}
+            choices={ACTIONS}
+            onChange={setAction}
           />
-        ) : null}
-        <Button type="submit" size="sm" variant="outline" disabled={!ready}>
-          Add rule
-        </Button>
-      </form>
-    </PrefGroup>
+          {needsArg ? (
+            <Input
+              aria-label="Action target"
+              className="w-32"
+              value={arg}
+              onChange={(e) => setArg(e.target.value)}
+            />
+          ) : null}
+          <Button type="submit" size="sm" variant="outline" disabled={!ready}>
+            Add rule
+          </Button>
+        </form>
+      </PrefGroup>
+    </div>
   );
 }
 

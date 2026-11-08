@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { undoToast } from "@/lib/undo-toast";
 
 import type { ComposeDeps, SentInfo } from "../compose/session";
+import { KEYED_TOAST } from "./mail-toast";
 
 /** What a send did besides queueing, for the toast's tail. */
 export type MailSentInfo = SentInfo;
@@ -124,6 +125,7 @@ export function showUndoSendToast(opts: {
     />,
     {
       durationMs: Math.max(0, opts.untilMs - opts.now()),
+      className: KEYED_TOAST,
       onUndo: opts.onUndo,
       link: { label: "Edit", onClick: opts.onEdit },
     },

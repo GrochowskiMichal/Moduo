@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import type { MailAttachment } from "@/lib/runtime.types.mail-engine";
 
+import { MiddleTruncate } from "../ui/middle-truncate";
 import { ATTACHMENT_TYPE_LABEL, attachmentType } from "../views/attachments-model";
 
 export const MODUO_ENTITY_MIME = "application/x-moduo-entity";
@@ -96,7 +97,8 @@ export function AttachmentStrip({
               onClick={() => (onOpen ? onOpen(a) : showPreview(a))}
               className="flex items-center gap-2 rounded-md border border-hairline px-2 py-1 text-xs text-foreground hover:bg-state-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span className="max-w-48 truncate">{a.filename}</span>
+              {/* Cut in the middle: the version and extension stay (§4, AC18). */}
+              <MiddleTruncate text={a.filename} className="max-w-48" />
               <span className="text-muted-foreground">{formatBytes(a.size)}</span>
             </button>
           </li>

@@ -1,15 +1,18 @@
-// Mail's side panel (specs/mail-v3.md §10, decision 16): the shell's right
-// panel (`components/app/right-panel.tsx`) with Mail's views from
-// `panel-views.ts`: Today (⌥1), Contact (⌥2) and Task (⌥3). The open view is
-// the mail store's `panel`; null hides it. The reader's panel button toggles
-// it, the title row's menu switches views or hides it, and ⌥1–3 pick a view
-// (the shell's `email.panel-*` keys while hidden, the right panel's own while
-// it shows). Below 1200 px it starts hidden.
+// Mail's side panel (specs/mail-v3.md §10, decision 16; specs/mail-improve.md §1):
+// the shell's right panel (`components/app/right-panel.tsx`) with Mail's views from
+// `panel-views.ts`: Today (⌥1), Contact (⌥2) and Task (⌥3). The open view is the
+// mail store's `panel`; null hides it. Its visibility is the person's setting only:
+// ⌥0, the reader's panel button, ⌥1–3 or this panel's menu. Nothing else (a thread, a
+// place, compose) shows or hides it, so the reading column never changes width.
+// Below a 1180 px window it folds to a 40 px icon strip; an icon opens that view as
+// an overlay over the reader (Esc closes it). This follows live resizes; widening
+// restores the panel as the person left it.
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { RightPanel } from "@/components/app/right-panel";
-import type { MailEngine, MailThreadRow } from "@/lib/runtime.types.mail-engine";
+import { IconButton } from "@/components/ui/icon-button";
+import type { MailEngine, MailThreadRow, MailView } from "@/lib/runtime.types.mail-engine";
 
 import { emailPanelViews } from "../panel-views";
 import type { ReaderLinks } from "../reader/thread-links";
@@ -24,19 +27,18 @@ import { type MailWithPerson, useMailWithPerson } from "./mail-with-person";
 import { type MailTaskDetail, TaskView } from "./task-view";
 import { TodayPanel, type TodayPanelProps } from "./today-panel";
 
-/** Below this width the panel starts hidden (§10). */
-export const SIDE_PANEL_MIN_VIEWPORT = 1200;
+/** Below this window width the panel folds to the icon strip (§1). */
+export const SIDE_PANEL_MIN_VIEWPORT = 1180;
 
 const lastView = new WeakMap<MailStore, MailPanelView>();
-const narrowChecked = new WeakSet<MailStore>();
 
 /** Shows `view`, remembering it for the next toggle. */
 export function showMailPanel(store: MailStore, view: MailPanelView): void {
   lastView.set(store, view);
-  store.setState({ panel: view });
+  store.setState((s) => ({ panel: view, panelAsked: s.panelAsked + 1 }));
 }
 
-/** The panel button: hides the panel, or brings back the last view (Today first). */
+/** ⌥0 and the panel button: hides the panel, or brings back the last view (Today first). */
 export function toggleMailPanel(store: MailStore): void {
   const open = store.getState().panel;
   if (open) {
@@ -45,17 +47,31 @@ export function toggleMailPanel(store: MailStore): void {
   } else showMailPanel(store, lastView.get(store) ?? "today");
 }
 
-/** Starts hidden on a narrow window: once per store, so a choice made after sticks. */
-function useNarrowStart(store: MailStore) {
-  useLayoutEffect(() => {
-    if (narrowChecked.has(store)) return;
-    narrowChecked.add(store);
-    if (typeof window !== "undefined" && window.innerWidth < SIDE_PANEL_MIN_VIEWPORT) {
-      const open = store.getState().panel;
-      if (open) lastView.set(store, open);
-      store.setState({ panel: null });
-    }
-  }, [store]);
+/** "Create event from this email" makes sense only for a received conversation (AC18). */
+export function createEventAllowed(input: {
+  view: MailView | null;
+  composingNew: boolean;
+  threadId: string | null;
+}): boolean {
+  if (!input.threadId || input.composingNew) return false;
+  const v = input.view;
+  if (v?.kind === "outbox") return false;
+  if (v?.kind === "unified" && v.role === "drafts") return false;
+  return true;
+}
+
+const narrowNow = () =>
+  typeof window !== "undefined" && window.innerWidth < SIDE_PANEL_MIN_VIEWPORT;
+
+/** True below 1180 px, following live resizes. */
+function useNarrowWindow(): boolean {
+  const [narrow, setNarrow] = useState(narrowNow);
+  useEffect(() => {
+    const on = () => setNarrow(narrowNow());
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return narrow;
 }
 
 export type MailSidePanelProps = {
@@ -81,16 +97,97 @@ export type MailSidePanelProps = {
   onOpenItem?: (type: "task" | "note" | "calendar_event", id: string) => void;
   onOpenTask?: (taskId: string) => void;
   onMakeTask?: () => void;
+  /** Task made (`t`): its title opens editable with the text selected (AC13). */
+  editTitleFor?: string | null;
+  onRenameTask?: (taskId: string, title: string) => void;
+  onEditTitleDone?: () => void;
   onOpenThread: (threadId: string) => void;
   onPreview: (entry: AttachmentEntry) => void;
 };
 
+function PanelViews({
+  props,
+  view,
+  onChange,
+  onHide,
+}: {
+  props: MailSidePanelProps;
+  view: MailPanelView;
+  onChange: (view: MailPanelView) => void;
+  onHide: () => void;
+}) {
+  return (
+    <RightPanel
+      module="email"
+      activeId={view}
+      onChange={(id) => onChange(id as MailPanelView)}
+      onHide={onHide}
+      views={{
+        today: () => <TodayBody {...props} />,
+        contact: () => <ContactBody {...props} />,
+        task: () => <TaskBody {...props} />,
+      }}
+    />
+  );
+}
+
+/** The folded panel: one icon per view; an icon opens its view over the reader. */
+function PanelStrip(props: MailSidePanelProps) {
+  const [peek, setPeek] = useState<MailPanelView | null>(null);
+  // ⌥1–3 or `t` while folded: that view opens over the reader.
+  const asked = useMailStore((s) => s.panelAsked, props.store);
+  const seen = useRef(asked);
+  useEffect(() => {
+    if (asked === seen.current) return;
+    seen.current = asked;
+    setPeek(props.store.getState().panel);
+  }, [asked, props.store]);
+  const label = emailPanelViews.find((v) => v.id === peek)?.label ?? "Today";
+  return (
+    <>
+      <nav
+        aria-label="Side panel"
+        data-mail-panel-strip
+        className="flex w-(--panel-strip-w) shrink-0 flex-col items-center gap-1 border-l border-hairline py-2"
+      >
+        {emailPanelViews.map((v, i) => (
+          <IconButton
+            key={v.id}
+            icon={v.icon}
+            label={v.label}
+            tooltip={`${v.label}  ⌥${i + 1}`}
+            tooltipSide="left"
+            aria-pressed={peek === v.id}
+            aria-keyshortcuts={`Alt+${i + 1}`}
+            onClick={() => setPeek((p) => (p === v.id ? null : v.id))}
+          />
+        ))}
+      </nav>
+      {peek ? (
+        <aside
+          aria-label={label}
+          data-mail-panel-overlay={peek}
+          onKeyDown={(e) => {
+            if (e.key !== "Escape") return;
+            e.stopPropagation();
+            setPeek(null);
+          }}
+          className="motion-key absolute inset-y-0 right-(--panel-strip-w) z-(--z-popover) flex w-72 flex-col border-l border-hairline bg-background p-(--panel-pad) shadow-lg"
+        >
+          <PanelViews props={props} view={peek} onChange={setPeek} onHide={() => setPeek(null)} />
+        </aside>
+      ) : null}
+    </>
+  );
+}
+
 export function MailSidePanel(props: MailSidePanelProps) {
   const { store } = props;
-  useNarrowStart(store);
+  const narrow = useNarrowWindow();
   const panel = useMailStore((s) => s.panel, store);
-  // Hidden, ⌥1–3 still open it: the shell binds them (`email.panel-*`, MV-7).
+  // Hidden, ⌥1–3 and ⌥0 still open it: the shell binds them (`email.panel-*`).
   if (!panel) return null;
+  if (narrow) return <PanelStrip {...props} />;
   const label = emailPanelViews.find((v) => v.id === panel)?.label ?? "Today";
   return (
     <aside
@@ -98,16 +195,11 @@ export function MailSidePanel(props: MailSidePanelProps) {
       data-mail-panel={panel}
       className="flex w-72 shrink-0 flex-col border-l border-hairline p-(--panel-pad)"
     >
-      <RightPanel
-        module="email"
-        activeId={panel}
-        onChange={(id) => showMailPanel(store, id as MailPanelView)}
+      <PanelViews
+        props={props}
+        view={panel}
+        onChange={(id) => showMailPanel(store, id)}
         onHide={() => toggleMailPanel(store)}
-        views={{
-          today: () => <TodayBody {...props} />,
-          contact: () => <ContactBody {...props} />,
-          task: () => <TaskBody {...props} />,
-        }}
       />
     </aside>
   );
@@ -124,16 +216,19 @@ function TodayBody({ today, nowMs }: MailSidePanelProps) {
   );
 }
 
-function TaskBody({ threadId, links, taskFor, onOpenTask, onMakeTask }: MailSidePanelProps) {
-  const linked = useThreadLinks(links, threadId);
+function TaskBody(p: MailSidePanelProps) {
+  const linked = useThreadLinks(p.links, p.threadId);
   return (
     <div className="pane-scroll h-full overflow-y-auto">
       <TaskView
-        threadId={threadId}
+        threadId={p.threadId}
         links={linked}
-        taskFor={taskFor}
-        onOpenTask={onOpenTask}
-        onMakeTask={onMakeTask}
+        taskFor={p.taskFor}
+        onOpenTask={p.onOpenTask}
+        onMakeTask={p.onMakeTask}
+        editTitleFor={p.editTitleFor}
+        onRenameTask={p.onRenameTask}
+        onEditTitleDone={p.onEditTitleDone}
       />
     </div>
   );

@@ -167,6 +167,9 @@ export type RuntimeSpineDeps = {
    *  (tests, the fixture engine), the row flags read no links and the reader's chips
    *  only the refs made this session. */
   refIdFor?: (threadKey: string) => string | null;
+  /** Whether the thread's account is a real account row; the fixture engine's ids
+   *  (`acc-gmail`) are not, so its refs are stored without one. */
+  realAccounts?: boolean;
 };
 
 /** One `entity_links` row as the spine runtime returns it (the fields the port reads). */
@@ -272,7 +275,7 @@ export function createRuntimeSpinePort(deps: RuntimeSpineDeps): MailSpinePort {
         workspaceId,
         ...buildRefUpsertArgs({
           threadKey: thread.threadId,
-          accountId: thread.accountId,
+          accountId: deps.realAccounts === false ? null : thread.accountId,
           fromAddr: from?.email || null,
           fromName: from?.name || null,
           subject: thread.subject || null,

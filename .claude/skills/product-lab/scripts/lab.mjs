@@ -21,7 +21,7 @@ import { PROBE, finishAll, focusInfo, hoverTargets, inventory, overlayBox, pageI
 import { launch, loadAxe, runAxe } from "./lib/pw.mjs";
 import { criticMd, dossierMd, feelRows, gates, measurementsMd } from "./lib/report.mjs";
 import { contactSheet, crop } from "./lib/sheet.mjs";
-import { harvest, resolveTokens, score, shadowLayers, toRgba, tokenNames } from "./lib/tokens.mjs";
+import { harvest, resolveTokens, score, scopedColorTokens, shadowLayers, toRgba, tokenNames } from "./lib/tokens.mjs";
 import { list, log, median, mkdirp, pad, parseArgs, percentile, rel, round, runId, sleep, slug, writeJson, writeText } from "./lib/util.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -150,7 +150,10 @@ async function waitReady(page, ready, timeout = 30000) {
   return page.waitForLoadState("networkidle", { timeout });
 }
 
-async function openScreen(page, screen, { early = false } = {}) {
+// `screen.prepare` puts the screen in the state the passes look at (Mail's fixture engine),
+// for every pass that opens the bare screen: focus, hover, themes, overlays. A state's own
+// `act` does its own preparing, so states skip it.
+async function openScreen(page, screen, { early = false, prepare = true } = {}) {
   const t0 = Date.now();
   await page.goto(new URL(screen.path ?? "/", baseURL).href, { waitUntil: "domcontentloaded" });
   if (early) {
@@ -160,7 +163,12 @@ async function openScreen(page, screen, { early = false } = {}) {
   }
   await waitReady(page, screen.ready);
   await page.evaluate(settle, 1500);
-  return Date.now() - t0;
+  const ready = Date.now() - t0;
+  if (prepare && screen.prepare) {
+    await screen.prepare({ page });
+    await page.evaluate(settle, 1500);
+  }
+  return ready;
 }
 
 const data = {
@@ -200,7 +208,7 @@ if (["states", "windows", "themes", "tokens", "a11y"].some((x) => only.has(x))) 
         if (st.delay) await page.route(st.delay.match, async (r) => { await sleep(st.delay.ms ?? 4000); await r.fallback(); });
         if (st.fail) await page.route(st.fail.match, (r) => r.fulfill({ status: st.fail.status ?? 500, contentType: "application/json", body: JSON.stringify({ message: "lab: injected failure" }) }));
         try {
-          rec.readyMs = await openScreen(page, { ...screen, path: st.path ?? screen.path }, { early: st.capture === "early" });
+          rec.readyMs = await openScreen(page, { ...screen, path: st.path ?? screen.path }, { early: st.capture === "early", prepare: false });
         } catch (e) {
           rec.error = `not ready: ${String(e.message).split("\n")[0].slice(0, 120)}`;
         }
@@ -226,7 +234,7 @@ if (["states", "windows", "themes", "tokens", "a11y"].some((x) => only.has(x))) 
         if (only.has("a11y") && !rec.error) rec.axe = await runAxe(page, axeSource).catch((e) => ({ skipped: `axe failed: ${e.message}` }));
         if (only.has("tokens") && !st.capture) {
           if (!tokenTable) tokenTable = await page.evaluate(resolveTokens, tokenNames(cfg.tokens?.files, ROOT));
-          const rows = await page.evaluate(harvest, { exclude: cfg.tokens?.exclude ?? [], max: 6000 });
+          const rows = await page.evaluate(harvest, { exclude: cfg.tokens?.exclude ?? [], max: 6000, ...scopedColorTokens(tokenTable) });
           for (const r of rows) tokenRows.push({ ...r, state: `${screen.id}/${name}`, file: rec.file });
         }
         if (name === "default" && only.has("windows")) {

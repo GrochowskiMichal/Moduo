@@ -169,12 +169,11 @@ describe("MailRow (specs/mail-v3.md §3, AC15)", () => {
     expect(rowTime(row({ lastDateMs: NOW - 60_000 }), "inbox", NOW)).toMatch(/\d:\d\d/);
   });
 
-  it("row lead: identity avatar, account ring, unread dot and the pick checkbox", () => {
-    const { el, actions: a } = mount({ accountHue: "teal" });
+  it("row lead: identity avatar, unread dot and the pick control", () => {
+    const { el, actions: a } = mount({ accountHue: "teal", accountName: "Work" });
     const avatar = el.querySelector<HTMLElement>("[data-avatar]")!;
     expect(avatar.dataset.label).toBeTruthy();
     expect(avatar.className).toContain("bg-label-fill");
-    expect(el.querySelector<HTMLElement>("[data-account-ring]")!.dataset.label).toBe("teal");
     expect(el.querySelector("[data-unread-dot]")).not.toBeNull();
     // Pointer-only (the row is a listbox option): hidden from the role tree, found by its label.
     fireEvent.click(el.querySelector('[data-row-control="Select · x"]')!);
@@ -182,7 +181,6 @@ describe("MailRow (specs/mail-v3.md §3, AC15)", () => {
     expect(a.open).not.toHaveBeenCalled();
     cleanup();
     const one = mount({ accountHue: null, row: row({ unread: false }) });
-    expect(one.el.querySelector("[data-account-ring]")).toBeNull();
     expect(one.el.querySelector("[data-unread-dot]")).toBeNull();
   });
 
@@ -251,5 +249,113 @@ describe("MailRow (specs/mail-v3.md §3, AC15)", () => {
     expect(densityChoice({ density: "comfortable", previewLines: 1 })).toBe("comfortable:1");
     expect(densityPatch("compact")).toEqual({ density: "compact" });
     expect(densityPatch("comfortable:2")).toEqual({ density: "comfortable", previewLines: 2 });
+  });
+});
+
+// specs/mail-improve.md MI-0, AC5 and AC6: initials on the label fill, no account ring, a
+// filled account tick after the time; hover draws a check ring inside the avatar, a picked
+// row fills it with primary and a check, an unpicked row in selection mode stays plain.
+describe("avatar, tick and checks (AC5, AC6)", () => {
+  it("initials, no ring, and the account tick after the time", () => {
+    const { el } = mount({ accountHue: "teal", accountName: "Work" });
+    const avatar = el.querySelector<HTMLElement>("[data-avatar]")!;
+    expect(avatar.textContent).toBe("AL");
+    expect(avatar.getAttribute("aria-hidden")).toBe("true");
+    expect(el.querySelector("[data-account-ring]")).toBeNull();
+    expect(el.querySelector(".ring-2")).toBeNull();
+    const tick = el.querySelector<HTMLElement>("[data-account-tick]")!;
+    expect(tick.dataset.label).toBe("teal");
+    expect(tick.title).toBe("Work");
+    // After the time, at the right edge.
+    const time = el.querySelector("time")!;
+    expect(time.compareDocumentPosition(tick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // The row's name comes from its one screen-reader line (no aria-label: axe's
+    // label-content-name-mismatch would compare it to the visible initials and snippet).
+    expect(el.hasAttribute("aria-label")).toBe(false);
+    expect(el.querySelector("[data-row-name]")!.textContent).toContain("Work");
+    cleanup();
+    // Read rows: the tick at half strength.
+    const read = mount({ accountHue: "teal", accountName: "Work", row: row({ unread: false }) });
+    expect(read.el.querySelector<HTMLElement>("[data-account-tick]")!.className).toContain(
+      "opacity-50",
+    );
+    cleanup();
+    // One account: no tick.
+    const single = mount({ accountHue: null });
+    expect(single.el.querySelector("[data-account-tick]")).toBeNull();
+  });
+
+  it("hover ring, picked fill, and no check on unpicked rows while selecting", () => {
+    const check = (el: HTMLElement) => el.querySelector<HTMLElement>("[data-check]")!;
+    const classes = (el: HTMLElement) => el.className.split(/\s+/);
+    let { el } = mount();
+    expect(check(el).dataset.check).toBe("hover");
+    // Hidden at rest, drawn inside the avatar circle on row hover.
+    expect(classes(check(el))).toContain("hidden");
+    expect(classes(check(el))).toContain("group-hover:flex");
+    expect(classes(check(el))).toContain("rounded-full");
+    cleanup();
+
+    ({ el } = mount({ picked: true, selecting: true }));
+    expect(check(el).dataset.check).toBe("picked");
+    expect(classes(check(el))).toContain("bg-primary");
+    expect(check(el).querySelector("svg")).not.toBeNull();
+    cleanup();
+
+    ({ el } = mount({ picked: false, selecting: true }));
+    expect(check(el).dataset.check).toBe("hover");
+    expect(classes(check(el))).not.toContain("flex");
+    expect(el.querySelector<HTMLElement>("[data-avatar]")!.className).not.toContain("invisible");
+  });
+});
+
+// specs/mail-improve.md MI-0, AC7, AC8 and AC28 (rows).
+describe("pinned rows, fade, selected contrast, accessible name (AC7, AC8, AC28)", () => {
+  it("no pin flag under PINNED; elsewhere it stays", () => {
+    let { el } = mount({ row: row({ pinned: true }), inPinnedGroup: true });
+    expect(flagIds(el)).not.toContain("pinned");
+    cleanup();
+    ({ el } = mount({ row: row({ pinned: true }) }));
+    expect(flagIds(el)).toContain("pinned");
+  });
+
+  it("quick actions sit over a fade of the row's own background", () => {
+    const { el } = mount({ showActions: true });
+    const bar = el.querySelector<HTMLElement>("[data-row-actions]")!;
+    expect(bar.hasAttribute("data-fade")).toBe(true);
+    expect(bar.className).toContain("from-transparent");
+    expect(bar.className).toContain("to-(--row-bg)");
+  });
+
+  it("the selected row keeps full-contrast sender and subject", () => {
+    const { el } = mount({ cursor: true, row: row({ unread: false }) });
+    for (const sel of ["[data-row-who]", "[data-row-subject]"]) {
+      const part = el.querySelector<HTMLElement>(sel)!;
+      expect(part.className).toContain("text-foreground");
+      expect(part.className).not.toContain("text-muted-foreground");
+    }
+  });
+
+  it("the row's name reads with commas, without the initials", () => {
+    const { el } = mount({
+      row: row({
+        messageCount: 6,
+        priority: true,
+        hasAttachments: true,
+        subject: "Hale & Co renewal",
+      }),
+      linked: ["task"],
+      accountHue: "teal",
+      accountName: "Work",
+    });
+    const time = el.querySelector("time")!.textContent;
+    expect(el.hasAttribute("aria-label")).toBe(false);
+    screen.getByRole("option", {
+      name: `Ana Lopes, 6 messages, unread, priority person, has attachments, has a task, ${time}, Hale & Co renewal, Work`,
+    });
+    expect(el.querySelector("[data-row-name]")!.textContent).toBe(
+      `Ana Lopes, 6 messages, unread, priority person, has attachments, has a task, ${time}, Hale & Co renewal, Work`,
+    );
+    expect(el.querySelector("[data-row-name]")!.textContent).not.toContain("AL,");
   });
 });

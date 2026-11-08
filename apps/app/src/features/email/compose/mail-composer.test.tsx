@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { Toaster } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
@@ -366,5 +367,90 @@ describe("OutboxView (AC22)", () => {
     const ui = render(<OutboxView items={[item]} nowMs={1000} onEdit={(id) => edited.push(id)} />);
     fireEvent.click(ui.getByText("Edit"));
     expect(edited).toEqual(["o"]);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC12: ⌘⇧↩ sends and marks Done; a send that takes the
+// thread out of the view advances like `e`; undoing the send reopens the reply on it.
+describe("⌘⇧↩ sends and marks Done (AC12)", () => {
+  it("advances to the next thread, and undo-send reopens the reply there", async () => {
+    const engine = createFakeMailEngine({
+      fixture: generateFixture({ messages: 200 }),
+      now: () => FIXTURE_NOW_MS,
+    });
+    const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+    // Done on send off: only ⌘⇧↩ marks it Done.
+    store.setState((s) => ({ behavior: { ...s.behavior, doneOnSend: false } }));
+    engine.subscribe((e) => {
+      if (e.kind === "threads_changed")
+        store.setState((st) => ({ threadsVersion: st.threadsVersion + 1 }));
+    });
+    render(<Toaster />);
+    const ui = render(
+      <TooltipProvider>
+        <HotkeyScope scope="email">
+          <MailPage
+            store={store}
+            compose={createFakeCompose({ now: () => FIXTURE_NOW_MS })}
+            now={() => FIXTURE_NOW_MS}
+          />
+        </HotkeyScope>
+      </TooltipProvider>,
+    );
+    await tick();
+    await tick();
+    const press = (key: string) =>
+      act(() => {
+        document.body.dispatchEvent(
+          new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }),
+        );
+      });
+    const ids = () =>
+      [...ui.container.querySelectorAll<HTMLElement>("[data-thread-id]")].map(
+        (el) => el.dataset.threadId!,
+      );
+    const cursor = () =>
+      ui.container.querySelector<HTMLElement>('[aria-selected="true"][data-thread-id]')?.dataset
+        .threadId ?? null;
+    press("j");
+    const [first, second] = ids();
+    expect(cursor()).toBe(first);
+    press("r");
+    await tick();
+    await tick();
+    const reply = screen.getByRole("region", { name: /^Reply to / });
+    const field = within(reply).getByLabelText("Message");
+    fireEvent.change(field, { target: { value: "Works for me." } });
+    await act(async () => {
+      fireEvent.keyDown(field, { key: "Enter", metaKey: true, shiftKey: true });
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    await tick();
+    await tick();
+    expect(ids()).not.toContain(first);
+    expect(cursor()).toBe(second);
+    expect(screen.queryByRole("region", { name: /^Reply/ })).toBeNull();
+
+    // Undo send: the reply reopens on the sent thread, selected again.
+    fireEvent.click(await screen.findByRole("button", { name: /^Undo/ }));
+    await tick();
+    await tick();
+    await tick();
+    expect(cursor()).toBe(first);
+    screen.getByRole("region", { name: /^Reply to / });
+  });
+
+  it("⌘↩ alone follows Done on send; the session's send takes done", async () => {
+    const marked: string[] = [];
+    const port = createFakeCompose();
+    const session = createComposeSession({
+      port,
+      settings: () => ({ undoSeconds: 10, doneOnSend: false }),
+      markDone: (id) => void marked.push(id),
+    });
+    await session.open(spec());
+    await session.update({ bodyHtml: "<p>ok</p>" });
+    await session.send(null, { done: true });
+    expect(marked).toEqual(["t1"]);
   });
 });

@@ -25,7 +25,7 @@ export type FakeComposeEngine = MailComposeEngine & {
 
 /** Compose lab states: a failed send back in Drafts, a queued send, and files over the
  *  provider's limit waiting in the attach picker. */
-export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox", "tooBig"] as const;
+export const FAKE_COMPOSE_SCENARIOS = ["sendFailed", "outbox", "tooBig", "sendFailedSize"] as const;
 export type FakeComposeScenario = (typeof FAKE_COMPOSE_SCENARIOS)[number];
 
 export function isFakeComposeScenario(v: string): v is FakeComposeScenario {
@@ -200,6 +200,33 @@ function applyComposeScenario(
         subject: "Deck for Thursday",
         text: "Hi Dana, the deck is attached.",
         lastError: "The server refused the address dana@northzone.tst",
+      },
+    });
+  }
+  // specs/mail-improve.md MI-0: a send the server refused for size, with the file behind it.
+  if (scenario.has("sendFailedSize")) {
+    drafts.set("draft-failed-size", {
+      id: "draft-failed-size",
+      accountId: "acc-gmail",
+      threadId: null,
+      updatedAtMs: now() - 240_000,
+      serverUid: 42,
+      queued: false,
+      doc: {
+        ...base,
+        messageId: "<draft-failed-size@moduo.local>",
+        to: ["dana@northzone.tst"],
+        subject: "Test shoot, raw files",
+        text: "Hi Dana, the raw files from the test shoot.",
+        attachments: [
+          {
+            id: "att-raw",
+            filename: "test-shoot-raw v2.zip",
+            contentType: "application/zip",
+            size: Math.round(26.4 * MB),
+          },
+        ],
+        lastError: "552 5.3.4 Message size exceeds fixed limit (attachment over 25 MB)",
       },
     });
   }

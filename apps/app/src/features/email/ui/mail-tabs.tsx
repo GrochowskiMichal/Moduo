@@ -18,11 +18,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { IconButton } from "@/components/ui/icon-button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { mailViewKey } from "@/lib/runtime.types";
 import type { MailCounts, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
 import type { ZeroAge } from "../commands/bulk";
+import { useRoving } from "../shell/roving";
 
 export type MailTabDef = { tab: MailTab; label: string };
 
@@ -149,6 +151,9 @@ export function MailTabs({
     tabs.findIndex((t) => mailViewKey(view, t.tab) === currentKey),
   );
   const fold = useTabFold(selected);
+  // One Tab stop, ← → inside (specs/mail-improve.md §6).
+  const strip = useRef<HTMLDivElement>(null);
+  const roving = useRoving(strip, { axis: "horizontal", selector: '[role="tab"]' });
   const unreadOf = (t: MailTabDef) => counts?.byViewKey[mailViewKey(countView, t.tab)] ?? 0;
   const folded = fold.hidden.map((i) => tabs[i]).filter((t): t is MailTabDef => !!t);
   const foldedUnread = folded.some((t) => unreadOf(t) > 0);
@@ -162,8 +167,11 @@ export function MailTabs({
         className="flex min-w-0 flex-1 items-center gap-1"
       >
         <div
+          ref={strip}
           role="tablist"
           aria-label="Inbox tabs"
+          onKeyDown={roving.onKeyDown}
+          onFocus={roving.onFocus}
           className="relative flex min-w-0 items-center gap-1"
         >
           {tabs.map((t, i) => {
@@ -184,7 +192,7 @@ export function MailTabs({
                 tabIndex={hide ? -1 : undefined}
                 onClick={() => onSelect(t.tab)}
                 className={cn(
-                  "flex h-(--ctrl-h) shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap",
+                  "flex h-(--ctrl-h) shrink-0 items-center gap-1.5 rounded-t-sm border-b-2 px-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   active
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -205,9 +213,8 @@ export function MailTabs({
         <MoreTabs
           ref={fold.more}
           hiddenCount={folded.length}
-          names={folded.map((t) => t.label)}
           dot={foldedUnread}
-          tabs={tabs}
+          tabs={fold.hidden.map((i) => ({ def: tabs[i]!, index: i })).filter((t) => !!t.def)}
           selected={selected}
           unreadOf={unreadOf}
           onSelect={onSelect}
@@ -241,11 +248,22 @@ export function MailTabs({
   );
 }
 
-/** "+N": every tab with its count, then "Custom tabs… Settings". */
+/** "+N"'s name and tooltip (specs/mail-improve.md §5, AC23): "3 more tabs · Notifications
+ *  has new mail", or "· 2 have new mail". */
+export function moreTabsLabel(hidden: readonly { label: string; unread: number }[]): string {
+  const n = hidden.length;
+  const fresh = hidden.filter((t) => t.unread > 0);
+  const head = `${n} more ${n === 1 ? "tab" : "tabs"}`;
+  if (fresh.length === 0) return head;
+  return fresh.length === 1
+    ? `${head} · ${fresh[0]!.label} has new mail`
+    : `${head} · ${fresh.length} have new mail`;
+}
+
+/** "+N": only the hidden tabs, with their counts, then "Custom tabs… Settings". */
 function MoreTabs({
   ref,
   hiddenCount,
-  names,
   dot,
   tabs,
   selected,
@@ -255,48 +273,54 @@ function MoreTabs({
 }: {
   ref: Ref<HTMLButtonElement>;
   hiddenCount: number;
-  names: string[];
   dot: boolean;
-  tabs: readonly MailTabDef[];
+  /** The folded tabs, with their place among all tabs (the radio value). */
+  tabs: readonly { def: MailTabDef; index: number }[];
   selected: number;
   unreadOf: (t: MailTabDef) => number;
   onSelect: (tab: MailTab) => void;
   onCustomTabs?: () => void;
 }) {
   const off = hiddenCount === 0;
+  const label = moreTabsLabel(tabs.map((t) => ({ label: t.def.label, unread: unreadOf(t.def) })));
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          ref={ref}
-          type="button"
-          data-slot="mail-tabs-more"
-          aria-hidden={off || undefined}
-          tabIndex={off ? -1 : undefined}
-          aria-label={`${hiddenCount} more tabs: ${names.join(", ")}`}
-          className={cn(
-            "flex h-(--ctrl-h) shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium tabular-nums text-muted-foreground hover:bg-state-hover hover:text-foreground",
-            off && OUT_OF_FLOW,
-          )}
-        >
-          +{hiddenCount}
-          {dot ? (
-            <span
-              data-slot="mail-tabs-more-dot"
-              aria-hidden
-              className="size-1.5 rounded-full bg-primary"
-            />
-          ) : null}
-        </button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              ref={ref}
+              type="button"
+              data-slot="mail-tabs-more"
+              aria-hidden={off || undefined}
+              tabIndex={off ? -1 : undefined}
+              aria-label={`+${label}`}
+              className={cn(
+                "flex h-(--ctrl-h) shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium tabular-nums text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                off && OUT_OF_FLOW,
+              )}
+            >
+              +{hiddenCount}
+              {dot ? (
+                <span
+                  data-slot="mail-tabs-more-dot"
+                  aria-hidden
+                  className="size-1.5 rounded-full bg-primary"
+                />
+              ) : null}
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        {off ? null : <TooltipContent side="bottom">{label}</TooltipContent>}
+      </Tooltip>
       <DropdownMenuContent align="start">
         <DropdownMenuRadioGroup value={String(selected)}>
-          {tabs.map((t, i) => {
+          {tabs.map(({ def: t, index }) => {
             const n = unreadOf(t);
             return (
               <DropdownMenuRadioItem
                 key={`${t.tab.kind}:${t.tab.customTabId ?? ""}`}
-                value={String(i)}
+                value={String(index)}
                 onSelect={() => onSelect(t.tab)}
               >
                 {t.label}

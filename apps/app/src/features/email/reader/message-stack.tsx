@@ -23,6 +23,8 @@ export function stackItems(messages: readonly MailMessage[], unfolded: boolean):
 }
 
 export type MessageStackProps = {
+  /** For the collapsed rows' day. */
+  nowMs?: number;
   threadId: string;
   messages: readonly MailMessage[];
   open: Record<string, boolean>;
@@ -76,6 +78,7 @@ export function MessageStack(props: MessageStackProps) {
             threadId={threadId}
             expanded={expanded}
             onToggle={() => props.onToggle(m.id, !expanded)}
+            nowMs={props.nowMs}
             images={props.images(m)}
             trackerBlocking={props.trackerBlocking}
             selfAddresses={props.selfAddresses}

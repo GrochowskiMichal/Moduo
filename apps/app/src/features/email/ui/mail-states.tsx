@@ -20,6 +20,7 @@ import type { ComponentProps } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Kbd } from "@/components/ui/kbd";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { MailAccount, MailTab, MailView } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
@@ -140,17 +141,21 @@ function ConnectCard({ onConnect }: { onConnect?: (provider: MailConnectProvider
         className="mt-1 grid w-full grid-cols-2 gap-2"
       >
         {PROVIDERS.map((p) => (
-          <Button
-            key={p.id}
-            variant="outline"
-            size="sm"
-            aria-label={p.label}
-            className="h-auto flex-col items-start gap-0 py-2"
-            onClick={() => onConnect?.(p.id)}
-          >
-            <span className="text-sm">{p.label}</span>
-            <span className="text-2xs font-normal text-muted-foreground">{p.note}</span>
-          </Button>
+          // The note sits beside the button, not in it, so the button's name is its visible
+          // label (axe label-content-name-mismatch).
+          <div key={p.id} className="relative grid">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-auto flex-col items-start gap-0 pt-2 pb-6"
+              onClick={() => onConnect?.(p.id)}
+            >
+              <span className="text-sm">{p.label}</span>
+            </Button>
+            <span className="pointer-events-none absolute bottom-2 left-3 text-2xs text-muted-foreground">
+              {p.note}
+            </span>
+          </div>
         ))}
       </div>
     </div>
@@ -196,11 +201,11 @@ export function MailFirstSync() {
 export function MailListStateView({
   state,
   onConnect,
-  onTab,
   onBackToInbox,
 }: {
   state: Exclude<MailListState, { kind: "rows" } | { kind: "first_sync" }>;
   onConnect?: (provider: MailConnectProvider) => void;
+  /** Unused since the next tabs moved to the reader (`MailNextTabs`); kept for callers. */
   onTab?: (tab: MailTab) => void;
   onBackToInbox?: () => void;
 }) {
@@ -217,22 +222,6 @@ export function MailListStateView({
               ? `You cleared ${state.clearedToday} today.`
               : "Nothing waiting on you here."
           }
-          action={
-            state.others.length > 0 ? (
-              <div className="flex flex-wrap justify-center gap-2">
-                {state.others.map((o) => (
-                  <Button
-                    key={`${o.tab.kind}:${o.tab.customTabId ?? ""}`}
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onTab?.(o.tab)}
-                  >
-                    {o.label} · {o.unread}
-                  </Button>
-                ))}
-              </div>
-            ) : undefined
-          }
         />
       );
     case "empty_place": {
@@ -243,14 +232,65 @@ export function MailListStateView({
           title={copy.title}
           description={copy.body}
           action={
-            <Button variant="ghost" size="sm" onClick={onBackToInbox}>
+            <Button variant="ghost" size="sm" aria-keyshortcuts="g i" onClick={onBackToInbox}>
               Back to Inbox
+              <span aria-hidden>
+                <Kbd>gi</Kbd>
+              </span>
             </Button>
           }
         />
       );
     }
   }
+}
+
+/** The `g` chord each tab answers to (specs/mail-improve.md §6). */
+const TAB_CHORD: Record<MailTab["kind"], string> = {
+  personal: "g p",
+  custom: "g v",
+  notifications: "g n",
+  newsletters: "g l",
+};
+
+/** Inbox zero in the reader (specs/mail-improve.md §5, AC22): a small "Next" and the tabs
+ *  still waiting, with their counts and `g` keys. No second heading; nothing waiting,
+ *  nothing at all. */
+export function MailNextTabs({
+  others,
+  onTab,
+}: {
+  others: readonly MailTabUnread[];
+  onTab: (tab: MailTab) => void;
+}) {
+  if (others.length === 0) return null;
+  return (
+    <div
+      data-slot="mail-next-tabs"
+      className="motion-key flex flex-1 flex-col items-center justify-center gap-2 p-4"
+    >
+      <p className="text-xs text-muted-foreground">Next</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {others.map((o) => {
+          const chord = TAB_CHORD[o.tab.kind];
+          return (
+            <Button
+              key={`${o.tab.kind}:${o.tab.customTabId ?? ""}`}
+              variant="secondary"
+              size="sm"
+              aria-keyshortcuts={chord}
+              onClick={() => onTab(o.tab)}
+            >
+              {o.label} · {o.unread}
+              <span aria-hidden>
+                <Kbd>{chord.replace(" ", "")}</Kbd>
+              </span>
+            </Button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 /** The reader's "Available when you're back online" (AC40). */

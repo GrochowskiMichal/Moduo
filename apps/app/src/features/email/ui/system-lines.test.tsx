@@ -109,8 +109,7 @@ describe("Mail system lines (specs/mail-v3.md §4, AC18, AC9)", () => {
       { role: "status", title: "Lumen needs you to sign in again" },
       { role: "status", title: "Work couldn't sync" },
       { role: "status", title: "3 emails came back while you were away" },
-      { role: "alert", title: "2 actions didn't reach Lumen" },
-      { role: "alert", title: "1 action didn't reach Work" },
+      { role: "alert", title: "3 actions didn't sync" },
     ]);
     screen.getByText("Its new mail is paused until you sign in; other accounts keep syncing.");
     screen.getByText("Connection refused; retrying every minute.");
@@ -118,52 +117,12 @@ describe("Mail system lines (specs/mail-v3.md §4, AC18, AC9)", () => {
       "Snoozes return only while Moduo runs, so these came due while it was closed. They're first in Personal, under Came back.",
     );
 
-    // The failed line names each action and thread, then the reason.
-    const [lumen, work] = screen.getAllByRole("alert");
-    within(lumen!).getByText(
-      "Done · Workshop materials, and Move · Studio rent, November. Its server is read-only; Moduo keeps retrying for a day.",
-    );
-    // Undo both / Retry now act on exactly that account's ops.
-    const undoBoth = within(lumen!).getByRole("button", { name: "Undo both" });
-    fireEvent.focus(undoBoth);
-    expect(screen.getByRole("tooltip").textContent).toBe(
-      "Shows the threads as the server has them",
-    );
-    fireEvent.click(undoBoth);
-    fireEvent.click(within(lumen!).getByRole("button", { name: "Retry now" }));
-    expect(undo).toHaveBeenCalledWith(["o1", "o2"]);
-    expect(retry).toHaveBeenCalledWith(["o1", "o2"]);
-    fireEvent.click(within(work!).getByRole("button", { name: "Retry now" }));
-    expect(retry).toHaveBeenLastCalledWith(["o3"]);
+    // specs/mail-improve.md AC20: two or more fold into one line with Show and Retry all.
+    const fold = screen.getByRole("alert");
+    fireEvent.click(within(fold).getByRole("button", { name: "Retry all" }));
+    expect(retry).toHaveBeenCalledWith(["o1", "o2", "o3"]);
+    expect(undo).not.toHaveBeenCalled();
     expect(screen.queryByText(/No reply from/)).toBeNull();
-  });
-
-  it("three or more failed actions: the first two, and N more, Undo all", () => {
-    mount({
-      failed: [
-        op("o1", "done", "t1", "A"),
-        op("o2", "snooze", "t2", "B"),
-        op("o3", "delete", "t3", "C"),
-        op("o4", "pin", "t4", "D"),
-      ],
-    });
-    screen.getByText("4 actions didn't reach Studio");
-    screen.getByText(
-      "Done · A, Snooze · B, and 2 more. Its server is read-only; Moduo keeps retrying for a day.",
-    );
-    screen.getByRole("button", { name: "Undo all" });
-  });
-
-  it("a failed move names its destination", () => {
-    mount({
-      failed: [
-        { ...op("o1", "move", "t1", "Studio rent, November"), targetName: "Receipts" },
-        { ...op("o2", "move", "t2", "Pilot terms"), targetName: null },
-      ],
-    });
-    screen.getByText(
-      "Move to Receipts · Studio rent, November, and Move · Pilot terms. Its server is read-only; Moduo keeps retrying for a day.",
-    );
   });
 
   it("offline counts what waits, or that reading works", () => {
@@ -199,5 +158,72 @@ describe("Mail system lines (specs/mail-v3.md §4, AC18, AC9)", () => {
     // Off Personal: no nudge, and nothing at all.
     const off = mount({ followups: [due], nudgeAllowed: false });
     expect(lines(off.container)).toEqual([]);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC20: each failed action is one line of at most 32 px,
+// "Couldn't archive "{subject}" · {cause} · Retry · Undo", the subject cut in the middle
+// and the cause never; two or more fold into "{n} actions didn't sync · Show · Retry all",
+// and Show lists them in a box that scrolls past five lines.
+describe("failed actions are one line and fold (AC20)", () => {
+  it("one failed action: one line, verb, subject, cause, Retry, Undo", () => {
+    const retry = rs.fn();
+    const undo = rs.fn();
+    const ui = mount({
+      failed: [op("o1", "done", "t1", "Workshop materials")],
+      onRetryOps: retry,
+      onUndoOps: undo,
+    });
+    const line = screen.getByRole("alert");
+    expect(line.getAttribute("data-slot")).toBe("mail-failed-line");
+    // ≤ 32 px (spec §5): the compact row token, not --row-h (36 px).
+    expect(line.className).toContain("h-(--mail-row-compact)");
+    expect(line.textContent).toContain('Couldn\'t archive "Workshop materials"');
+    expect(line.textContent).toContain("Its server is read-only");
+    fireEvent.click(within(line).getByRole("button", { name: "Retry" }));
+    fireEvent.click(within(line).getByRole("button", { name: "Undo" }));
+    expect(retry).toHaveBeenCalledWith(["o1"]);
+    expect(undo).toHaveBeenCalledWith(["o1"]);
+    expect(ui.container.querySelectorAll('[data-slot="mail-failed-line"]')).toHaveLength(1);
+  });
+
+  it("a 200-character subject is cut in the middle; the cause stays whole", () => {
+    const subject = `Quarterly ${"planning ".repeat(22)}final v3`;
+    mount({ failed: [{ ...op("o1", "move", "t1", subject), targetName: "Receipts" }] });
+    const line = screen.getByRole("alert");
+    const head = line.querySelector<HTMLElement>("[data-middle-head]")!;
+    const tail = line.querySelector<HTMLElement>("[data-middle-tail]")!;
+    expect(head.className).toContain("truncate");
+    expect(tail.className).not.toContain("truncate");
+    expect((head.textContent ?? "") + (tail.textContent ?? "")).toBe(subject);
+    expect(line.title).toContain(subject);
+    const cause = line.querySelector<HTMLElement>("[data-cause]")!;
+    expect(cause.textContent).toBe("Its server is read-only");
+    expect(cause.className).toContain("shrink-0");
+    expect(line.textContent).toContain("Couldn't move");
+  });
+
+  it("two or more fold into a summary with Show and Retry all", () => {
+    const retry = rs.fn();
+    mount({
+      failed: [
+        op("o1", "done", "t1", "A"),
+        op("o2", "snooze", "t2", "B"),
+        op("o3", "delete", "t3", "C"),
+        op("o4", "pin", "t4", "D"),
+        op("o5", "done", "t5", "E"),
+        op("o6", "done", "t6", "F"),
+      ],
+      onRetryOps: retry,
+    });
+    const fold = screen.getByRole("alert");
+    expect(fold.textContent).toContain("6 actions didn't sync");
+    fireEvent.click(within(fold).getByRole("button", { name: "Retry all" }));
+    expect(retry).toHaveBeenCalledWith(["o1", "o2", "o3", "o4", "o5", "o6"]);
+    fireEvent.click(within(fold).getByRole("button", { name: "Show" }));
+    const list = screen.getByRole("list", { name: "Actions that didn't sync" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(6);
+    expect(list.className).toContain("max-h-(--failed-list-max)");
+    expect(list.className).toContain("overflow-y-auto");
   });
 });
