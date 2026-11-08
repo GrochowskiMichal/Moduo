@@ -400,7 +400,7 @@ export const MailRow = memo(function MailRow(props: Props) {
       }
       onMouseEnter={() => actions.hover(row.threadId)}
       className={cn(
-        "group relative flex h-full w-full cursor-default gap-3 rounded-md px-3 text-left transition-colors duration-(--motion-fade) ease-(--ease-out)",
+        "group relative flex h-full w-full cursor-default gap-3 rounded-md px-3 text-left transition-colors duration-(--motion-fade) ease-(--ease-out) outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
         "after:absolute after:inset-x-3 after:bottom-0 after:h-px after:bg-hairline hover:after:hidden",
         compact ? "items-center gap-2" : "items-start py-2.5",
         cursor || picked ? cn(SELECTED_ROW, "after:hidden") : "hover:bg-state-hover",

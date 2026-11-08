@@ -18,8 +18,9 @@ import { AccountTick } from "./account-tick";
 import { railAccounts } from "./rail-counts";
 
 /** One rail row's box: the short-window media query swaps the height token. */
+/** A rail row; focus is the house ring, 2 px, no offset (specs/mail-improve.md §6). */
 export const RAIL_ROW =
-  "flex h-(--mail-rail-row) w-full items-center gap-2 rounded-md px-2 text-left text-sm";
+  "flex h-(--mail-rail-row) w-full items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export type AccountsSectionProps = {
   accounts: readonly MailAccount[];
@@ -100,7 +101,7 @@ function AccountRow({
           aria-expanded={expanded}
           aria-label={`${expanded ? "Hide" : "Show"} folders for ${label}`}
           onClick={onToggle}
-          className="flex size-(--hit-min) shrink-0 items-center justify-center rounded-sm hover:bg-state-hover"
+          className="flex size-(--hit-min) shrink-0 items-center justify-center rounded-sm outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronRight
             className={cn(

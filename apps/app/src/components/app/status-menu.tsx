@@ -240,7 +240,8 @@ export function StatusMenu({
         className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         aria-label={mine ? `Your status: ${statusLine(mine)}` : "Your status and settings"}
       >
-        <Avatar size="sm" className="size-full">
+        {/* The initials aren't the button's name (axe label-content-name-mismatch). */}
+        <Avatar aria-hidden size="sm" className="size-full">
           {avatarDataUrl ? <AvatarImage src={avatarDataUrl} alt="" /> : null}
           <AvatarFallback>{profileInitial}</AvatarFallback>
         </Avatar>

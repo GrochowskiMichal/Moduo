@@ -192,7 +192,7 @@ export function MailTabs({
                 tabIndex={hide ? -1 : undefined}
                 onClick={() => onSelect(t.tab)}
                 className={cn(
-                  "flex h-(--ctrl-h) shrink-0 items-center gap-1.5 border-b-2 px-2 text-sm whitespace-nowrap",
+                  "flex h-(--ctrl-h) shrink-0 items-center gap-1.5 rounded-t-sm border-b-2 px-2 text-sm whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                   active
                     ? "border-primary text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground",
@@ -296,7 +296,7 @@ function MoreTabs({
               tabIndex={off ? -1 : undefined}
               aria-label={`+${label}`}
               className={cn(
-                "flex h-(--ctrl-h) shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium tabular-nums text-muted-foreground hover:bg-state-hover hover:text-foreground",
+                "flex h-(--ctrl-h) shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium tabular-nums text-muted-foreground outline-none hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
                 off && OUT_OF_FLOW,
               )}
             >

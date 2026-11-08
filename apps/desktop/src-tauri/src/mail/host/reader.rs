@@ -824,7 +824,8 @@ mod tests {
 
     #[test]
     fn snippet_skips_salutations() {
-        let text = "Hi Robin,\n\nFollowing up on today's call.  Can we\nlock the dates?\n\nBest,\nJonas";
+        let text =
+            "Hi Robin,\n\nFollowing up on today's call.  Can we\nlock the dates?\n\nBest,\nJonas";
         assert_eq!(
             substance_snippet(Some(text), "Hi Robin, Following up", "Pilot"),
             "Following up on today's call. Can we"
@@ -835,14 +836,27 @@ mod tests {
             "following up on the deck"
         );
         for (greeting, want) in [
-            ("Dear Ms Lee:\nThe contract is attached.", "The contract is attached."),
-            ("Good morning team!\nStandup moves to 10.", "Standup moves to 10."),
+            (
+                "Dear Ms Lee:\nThe contract is attached.",
+                "The contract is attached.",
+            ),
+            (
+                "Good morning team!\nStandup moves to 10.",
+                "Standup moves to 10.",
+            ),
             ("Cześć Kasia,\nDzięki za plik.", "Dzięki za plik."),
             ("Hello\n\nQuick one.", "Quick one."),
-            ("Hiring update: three offers out.", "Hiring update: three offers out."),
+            (
+                "Hiring update: three offers out.",
+                "Hiring update: three offers out.",
+            ),
             ("> quoted\nReal line", "Real line"),
         ] {
-            assert_eq!(substance_snippet(Some(greeting), "", "S"), want, "{greeting}");
+            assert_eq!(
+                substance_snippet(Some(greeting), "", "S"),
+                want,
+                "{greeting}"
+            );
         }
         // A long clause after "Hi" isn't a salutation.
         assert_eq!(
@@ -850,7 +864,10 @@ mod tests {
             "Hi there is a problem with the build, again"
         );
         // Only a salutation (and a sign-off): the subject.
-        assert_eq!(substance_snippet(Some("Hi Robin,\n\nThanks,\n"), "", "Pilot"), "Pilot");
+        assert_eq!(
+            substance_snippet(Some("Hi Robin,\n\nThanks,\n"), "", "Pilot"),
+            "Pilot"
+        );
         assert_eq!(substance_snippet(Some("  "), "", "Pilot"), "Pilot");
         // Capped at 140 characters.
         let long = "word ".repeat(80);
