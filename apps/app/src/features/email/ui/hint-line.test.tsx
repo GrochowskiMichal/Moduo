@@ -1,5 +1,10 @@
-import { afterEach, describe, expect, it, rs } from "@rstest/core";
+// The hint line (specs/mail-v3.md §5; specs/mail-improve.md §3, AC10): key hints only.
+// What an action did is the undo toast's; the key a click could have used rides in
+// that toast's description.
+
+import { afterEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Toaster } from "sonner";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeyScope } from "@/lib/hotkeys/scope";
@@ -8,24 +13,15 @@ import type { MailView } from "@/lib/runtime.types.mail-engine";
 import { createMailStore } from "../store/mail-store";
 import { createFakeMailEngine } from "../testing/fake-engine";
 import { FIXTURE_NOW_MS, generateFixture } from "../testing/fixture";
-import { HINT_MS, MailHintLine, restHint, useMailHint } from "./hint-line";
+import { MailHintLine, restHint, triageToastLabel } from "./hint-line";
 import { MailShell } from "./mail-shell";
 
-afterEach(() => {
-  cleanup();
-  rs.useRealTimers();
-});
+afterEach(cleanup);
 
 const INBOX: MailView = { kind: "unified", role: "inbox" };
+const REST = "j k to move · e Done · s Snooze · t Task · ? all keys";
 const line = (c: HTMLElement) =>
   c.querySelector<HTMLElement>('[data-slot="mail-hint-line"]')?.textContent ?? null;
-
-let api: ReturnType<typeof useMailHint> | null = null;
-function Harness({ enabled = true }: { enabled?: boolean }) {
-  const h = useMailHint(true);
-  api = h;
-  return <MailHintLine enabled={enabled} rest={restHint(INBOX, true)} hint={h.hint} />;
-}
 
 const tick = () => act(async () => await new Promise((r) => setTimeout(r, 0)));
 function press(key: string) {
@@ -41,37 +37,28 @@ function press(key: string) {
   });
 }
 
-describe("the hint line (specs/mail-v3.md §5, AC19)", () => {
-  it("rest, after key, after click", () => {
-    rs.useFakeTimers();
-    const ui = render(<Harness />);
-    expect(line(ui.container)).toBe("e Done · s Snooze · t Task");
-
-    // After a key: what it did, for 4 s, then back to rest.
-    act(() => api!.result("done"));
-    expect(line(ui.container)).toBe("Done, in Archive · ⌘Z undoes");
-    act(() => rs.advanceTimersByTime(HINT_MS - 1));
-    expect(line(ui.container)).toBe("Done, in Archive · ⌘Z undoes");
-    act(() => rs.advanceTimersByTime(1));
-    expect(line(ui.container)).toBe("e Done · s Snooze · t Task");
-
-    // After a pointer action: the key that does it, for 4 s.
-    act(() => api!.teach("e"));
-    expect(line(ui.container)).toBe("Next time press e");
-    act(() => rs.advanceTimersByTime(HINT_MS));
-    expect(line(ui.container)).toBe("e Done · s Snooze · t Task");
-
-    // A snooze names when it returns.
-    act(() => api!.result("snooze", { untilMs: new Date(2026, 10, 9, 9, 0).getTime() }));
-    expect(line(ui.container)).toBe("Snoozed until Mon 9:00 · ⌘Z undoes");
+describe("the hint line (AC10)", () => {
+  it("rest, a waiting chord, off", () => {
+    const ui = render(<MailHintLine enabled rest={restHint(INBOX, true)} />);
+    expect(line(ui.container)).toBe(REST);
+    ui.rerender(<MailHintLine enabled rest={restHint(INBOX, true)} chord="g" />);
+    expect(line(ui.container)).toBe("g…");
     cleanup();
-
-    // "Show key hints" off: no line at all.
-    const off = render(<Harness enabled={false} />);
+    const off = render(<MailHintLine enabled={false} rest={REST} />);
     expect(line(off.container)).toBeNull();
   });
 
-  it("the shell feeds it: a key shows the result, a click teaches the key", async () => {
+  it("toast words: where the threads went", () => {
+    expect(triageToastLabel("done", 1)).toBe("Done · in Archive");
+    expect(triageToastLabel("done", 3)).toBe("3 done · in Archive");
+    expect(triageToastLabel("delete", 1)).toBe("Deleted · in Trash");
+    expect(triageToastLabel("move", 1, undefined, "Receipts")).toBe("Moved · to Receipts");
+    expect(triageToastLabel("snooze", 1, { untilMs: new Date(2026, 10, 9, 9, 0).getTime() })).toBe(
+      "Snoozed · until Mon 9:00",
+    );
+  });
+
+  it("the shell: a key leaves the line alone; a click's toast teaches the key", async () => {
     const engine = createFakeMailEngine({
       fixture: generateFixture({ messages: 200 }),
       now: () => FIXTURE_NOW_MS,
@@ -81,6 +68,7 @@ describe("the hint line (specs/mail-v3.md §5, AC19)", () => {
       if (e.kind === "threads_changed")
         store.setState((s) => ({ threadsVersion: s.threadsVersion + 1 }));
     });
+    render(<Toaster />);
     const ui = render(
       <TooltipProvider>
         <HotkeyScope scope="email">
@@ -90,16 +78,17 @@ describe("the hint line (specs/mail-v3.md §5, AC19)", () => {
     );
     await tick();
     await tick();
-    expect(line(ui.container)).toBe("e Done · s Snooze · t Task");
+    expect(line(ui.container)).toBe(REST);
     press("j");
     press("e");
     await tick();
-    expect(line(ui.container)).toMatch(/^Done, in Archive · (⌘Z|Ctrl\+Z) undoes$/);
+    expect(line(ui.container)).toBe(REST);
 
     const row = ui.container.querySelector<HTMLElement>("[data-thread-id]")!;
     fireEvent.click(row.querySelector('[data-row-control="Done"]')!);
     await tick();
-    expect(line(ui.container)).toBe("Next time press e");
-    screen.getByText("e", { selector: "kbd" });
+    await tick();
+    await screen.findByText("Next time press e");
+    expect(line(ui.container)).toBe(REST);
   });
 });

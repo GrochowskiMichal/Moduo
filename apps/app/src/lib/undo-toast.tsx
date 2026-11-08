@@ -7,6 +7,15 @@
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
+/** A key cap inside a toast button (the Kbd primitive's look; this lib stays free of
+ *  `@/` component imports). */
+const KEY_CAP =
+  "rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs text-muted-foreground";
+
+/** A body button with its key, styled like sonner's Undo (Mail's "Also mark the email Done"). */
+const KEYED_BUTTON =
+  "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 font-display text-sm text-foreground outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring";
+
 /** The one undo window. Don't inline 8000 — drift is how grammars die. */
 export const UNDO_TOAST_MS = 8000;
 
@@ -34,7 +43,18 @@ type UndoToastOptions = {
    * rendered as a quiet text link in the toast BODY; clicking it closes the
    * toast without undoing (a deferred commit then commits).
    */
-  link?: { label: string; onClick: () => void };
+  link?: {
+    label: string;
+    onClick: () => void;
+    /** Its key, shown as a key cap after the label and named in `aria-keyshortcuts`
+     *  (Mail's "Also mark the email Done  e"); styled like the Undo button then. */
+    keyHint?: string;
+  };
+  /** Undo's key, shown as a key cap after "Undo" (Mail's ⌘Z, specs/mail-improve.md §3). */
+  undoKey?: string;
+  /** A stable id: the next toast with it replaces this one instead of stacking
+   *  (Mail's triage: one toast, the latest action's). */
+  id?: string;
   /**
    * Only for a window another clock owns (Mail's undo send, whose end the
    * engine reports): the toast stays exactly that long. Everything else keeps
@@ -58,6 +78,7 @@ export function undoToast(label: ReactNode, opts: UndoToastOptions): string | nu
   // the time the closure reads it.
   const extra = opts.danger ?? opts.link;
   const toastId: string | number = toast(label, {
+    ...(opts.id ? { id: opts.id } : {}),
     duration: opts.durationMs ?? UNDO_TOAST_MS,
     description: extra ? (
       <span className="flex flex-col items-start gap-1">
@@ -68,10 +89,13 @@ export function undoToast(label: ReactNode, opts: UndoToastOptions): string | nu
             the `@/` component value-import chain vitest can't resolve. */}
         <button
           type="button"
+          aria-keyshortcuts={opts.link?.keyHint}
           className={
             opts.danger
               ? "rounded-md font-display text-sm text-destructive underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
-              : "rounded-md font-display text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
+              : opts.link?.keyHint
+                ? KEYED_BUTTON
+                : "rounded-md font-display text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
           }
           onClick={() => {
             toast.dismiss(toastId);
@@ -79,12 +103,23 @@ export function undoToast(label: ReactNode, opts: UndoToastOptions): string | nu
           }}
         >
           {extra.label}
+          {opts.link?.keyHint ? <kbd className={KEY_CAP}>{opts.link.keyHint}</kbd> : null}
         </button>
       </span>
     ) : (
       opts.description
     ),
-    action: { label: "Undo", onClick: commit ? settle(opts.onUndo) : opts.onUndo },
+    action: {
+      label: opts.undoKey ? (
+        <span className="flex items-center gap-1">
+          Undo
+          <kbd className={KEY_CAP}>{opts.undoKey}</kbd>
+        </span>
+      ) : (
+        "Undo"
+      ),
+      onClick: commit ? settle(opts.onUndo) : opts.onUndo,
+    },
     ...(commit ? { onAutoClose: commit, onDismiss: commit } : {}),
   });
   return toastId;

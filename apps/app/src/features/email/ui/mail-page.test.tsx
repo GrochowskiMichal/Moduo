@@ -438,8 +438,9 @@ describe("task toast has an Also mark Done button (AC13)", () => {
     );
     await tick();
     await tick();
-    act(() => {
-      for (const key of ["j", "t"])
+    // One act per key: `t` reads the selection `j` made.
+    for (const key of ["j", "t"])
+      act(() => {
         document.body.dispatchEvent(
           new KeyboardEvent("keydown", {
             key,
@@ -448,7 +449,7 @@ describe("task toast has an Also mark Done button (AC13)", () => {
             cancelable: true,
           }),
         );
-    });
+      });
     await tick();
     await tick();
     await screen.findByText("Task created");

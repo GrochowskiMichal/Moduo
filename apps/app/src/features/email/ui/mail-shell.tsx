@@ -25,6 +25,7 @@ import type {
   MailThreadRow,
   MailView,
 } from "@/lib/runtime.types.mail-engine";
+import { undoToast } from "@/lib/undo-toast";
 
 import { dispatchOpenSettings } from "../../settings/settings-events";
 import { createBulkCommands, type ZeroAge } from "../commands/bulk";
@@ -47,7 +48,7 @@ import { useListGroups } from "../shell/use-list-groups";
 import { useThreadWindow } from "../shell/use-thread-window";
 import { type MailStore, mailStore, type MailUndoEntry } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
-import { MailHintLine, restHint, useMailHint } from "./hint-line";
+import { MailHintLine, restHint, triageToastLabel } from "./hint-line";
 import { type MailBulkAction, MailBulkReader } from "./mail-bulk-reader";
 import { MailLegendDialog } from "./mail-legend-dialog";
 import { MailRail, UNIFIED_FOLDERS } from "./mail-rail";
@@ -218,8 +219,12 @@ function ReaderSlot({
   return reader() ?? null;
 }
 
-/** `quiet`: no result toast (Send & Done: the undo-send toast speaks for it). */
-export type MailActOptions = { quiet?: boolean };
+/** Mail's triage toasts share one id: the latest action's replaces the last. */
+export const MAIL_TRIAGE_TOAST = "mail-triage";
+
+/** `quiet`: no result toast (Send & Done: the undo-send toast speaks for it).
+ *  `teach`: the key a pointer action could have used, said in the toast. */
+export type MailActOptions = { quiet?: boolean; teach?: string };
 
 /** What the page drives from outside the shell: pickers that finish an action
  * (snooze, move) go through `act` so they auto-advance like Done (AC14). */
@@ -442,7 +447,6 @@ export function MailShell({
   // A ⌘A read in flight; a tab or place change makes it stale (spec edge cases).
   const selectAllSeq = useRef(0);
   const [legend, setLegend] = useState(false);
-  const hint = useMailHint(isMacPlatform());
   const [cleared, setCleared] = useState(0);
   const failedAccount = useFailedAccounts(engine, failedOps, win.rows);
 
@@ -491,6 +495,13 @@ export function MailShell({
   useEffect(() => {
     live.current = { ids, sel, view, tab: listTab };
   });
+  // The toast's Undo outlives the render that made it: it calls the latest undo.
+  const undoRef = useRef<(entry?: MailUndoEntry) => Promise<void>>(async () => {});
+  const boxesRef = useRef(mailboxes);
+  useEffect(() => {
+    undoRef.current = undoAndOpen;
+    boxesRef.current = mailboxes;
+  });
   /** Where each undoable action was taken, so Undo can go back there (AC11). */
   const actedFrom = useRef(
     new WeakMap<MailUndoEntry, { view: MailView; tab: MailTab | null; list: readonly string[] }>(),
@@ -528,7 +539,25 @@ export function MailShell({
       }
       try {
         const entry = await bulk.apply(kind, threadIds, args);
-        if (entry) actedFrom.current.set(entry, from);
+        if (entry) {
+          actedFrom.current.set(entry, from);
+          // One toast for every triage action: where the threads went, Undo and its key
+          // (specs/mail-improve.md §3, AC10). A click's toast teaches the key.
+          if (!opts.quiet) {
+            const boxId = (args as { mailboxId?: string } | undefined)?.mailboxId;
+            const target = boxId
+              ? Object.values(boxesRef.current)
+                  .flat()
+                  .find((b) => b.id === boxId)?.name
+              : null;
+            undoToast(triageToastLabel(kind, threadIds.length, args, target), {
+              onUndo: () => void undoRef.current(entry),
+              undoKey: isMacPlatform() ? "⌘Z" : "Ctrl+Z",
+              id: MAIL_TRIAGE_TOAST,
+              description: opts.teach ? `Next time press ${opts.teach}` : undefined,
+            });
+          }
+        }
         return entry;
       } catch (error) {
         // The engine refused: nothing moved, so the list and the picks go back.
@@ -557,7 +586,7 @@ export function MailShell({
    * the action was taken in, then selects and opens the first restored thread in list
    * order (specs/mail-improve.md §3, AC11).
    */
-  async function undoAndOpen(entry?: MailUndoEntry) {
+  async function undoAndOpen(entry?: MailUndoEntry): Promise<void> {
     const stack = store.getState().undoStack;
     const target = entry ?? stack[stack.length - 1];
     if (!target) return;
@@ -592,37 +621,25 @@ export function MailShell({
     if (row.unread) void engine.applyOp({ kind: "mark_read", threadIds: [id] }).catch(() => {});
   }, [sel.cursor, engine, win.rows]);
 
-  const { teach: teachKey, result: showResult } = hint;
-  const teach = useCallback(
-    (id: MailKeyId) => {
-      const k = mailKeyHint(id, isMacPlatform());
-      if (k) teachKey(k);
-    },
-    [teachKey],
+  /** A click's toast names the key that does it (X21 hints, now in the toast). */
+  const keyFor = useCallback(
+    (id: MailKeyId) => (showHints ? (mailKeyHint(id, isMacPlatform()) ?? undefined) : undefined),
+    [showHints],
   );
-  /** A key's op: acts, then the hint line says what it did. */
-  const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => {
-    if (threadIds.length > 0) showResult(kind);
-    void act(kind, threadIds);
-  };
+  /** A key's op. */
+  const actKey = (kind: MailOpInput["kind"], threadIds: string[]) => void act(kind, threadIds);
 
   const rowActions: MailRowActions = useMemo(
     () => ({
       open: (id) => setSel((s) => ({ ...s, cursor: id, picked: [] })),
       togglePick: (id) => setSel((s) => togglePick(s, id)),
       hover: setHovered,
-      done: (id) => {
-        teach("email.archive");
-        void act("done", [id]);
-      },
+      done: (id) => void act("done", [id], undefined, { teach: keyFor("email.archive") }),
       undone: (id) => void act("undone", [id]),
-      snooze: (id) => {
-        teach("email.snooze");
-        onIntent?.("email.snooze", [id]);
-      },
+      snooze: (id) => onIntent?.("email.snooze", [id]),
       more: (id) => onIntent?.("email.move", [id]),
     }),
-    [act, teach, onIntent],
+    [act, keyFor, onIntent],
   );
 
   const cur = () => targets(live.current.sel);
@@ -849,7 +866,6 @@ export function MailShell({
         <MailHintLine
           enabled={showHints}
           rest={restHint(view, state.kind === "rows")}
-          hint={hint.hint}
           chord={chord}
         />
       </section>

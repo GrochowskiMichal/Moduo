@@ -155,6 +155,8 @@ export type MailPageProps = {
   contactDetailFor?: (address: string) => Promise<MailContactDetail | null>;
   /** The side panel's Task view: a linked task's status, due date, project and notes. */
   taskFor?: (taskId: string) => MailTaskDetail | null;
+  /** Renames a task (the title `t` opens editable, specs/mail-improve.md AC13). */
+  onRenameTask?: (taskId: string, title: string) => void;
   /** An invite's parsed event; absent means the card isn't shown. */
   loadInvite?: (messageId: string) => Promise<MailInvite | null>;
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
@@ -172,7 +174,11 @@ const errText = (e: unknown, fallback: string) =>
  * `t` convert with the undo toast plus "Also mark done": Done chains onto the
  * convert's plan, and the follow-up toast's one Undo reverts both (AC33).
  */
-async function runConvert(spine: MailSpineCommands, row: MailThreadRow, onMade?: () => void) {
+async function runConvert(
+  spine: MailSpineCommands,
+  row: MailThreadRow,
+  onMade?: (taskId: string | null) => void,
+) {
   let res: SpineResult;
   try {
     res = await spine.convert(row);
@@ -182,12 +188,16 @@ async function runConvert(spine: MailSpineCommands, row: MailThreadRow, onMade?:
   }
   // The reader's chips and the side panel's Task view show the new task (MV-8, §10).
   bumpThreadLinks();
-  onMade?.();
+  onMade?.(res.plan?.taskId ?? null);
   const undo = () => void res.undo().then(bumpThreadLinks, () => {});
   undoToast("Task created", {
     onUndo: undo,
+    // One at a time, like the triage toast: the newest task's replaces the last.
+    id: "mail-task",
+    // A button with its key, like Undo (specs/mail-improve.md AC13).
     link: {
-      label: "Also mark done",
+      label: "Also mark the email Done",
+      keyHint: "e",
       onClick: () =>
         void spine.alsoDone(res, row).then(
           (ok) => ok && undoToast("Task created and marked done", { onUndo: undo }),
@@ -296,6 +306,7 @@ export function MailPage({
   whoFor,
   contactDetailFor,
   taskFor,
+  onRenameTask,
   loadInvite,
   onRsvp,
   now = Date.now,
@@ -318,6 +329,8 @@ export function MailPage({
   const [subs, setSubs] = useState<MailThreadRow[] | null>(null);
   const [files, setFiles] = useState(false);
   const [view, setView] = useState<MailView | null>(null);
+  // The task `t` just made: its title opens editable in the Task view.
+  const [editTitleFor, setEditTitleFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialThreadId) onConsumeThreadDeepLink?.();
@@ -466,7 +479,12 @@ export function MailPage({
       void makeTasks(spine, threadIds, rowOf);
     else if (intent === "email.convert" && spine && threadIds[0])
       void rowOf(threadIds[0]).then((row) =>
-        row ? runConvert(spine, row, () => showMailPanel(store, "task")) : undefined,
+        row
+          ? runConvert(spine, row, (taskId) => {
+              setEditTitleFor(taskId);
+              showMailPanel(store, "task");
+            })
+          : undefined,
       );
     else if (intent === "email.note") gesture("Note created", threadIds, (row) => spine!.note(row));
     else if (intent === "email.link" && spine && threadIds[0])
@@ -631,6 +649,9 @@ export function MailPage({
           whoFor={reader.props.who?.lookup}
           contactDetailFor={contactDetailFor}
           taskFor={taskFor}
+          editTitleFor={onRenameTask ? editTitleFor : null}
+          onRenameTask={onRenameTask}
+          onEditTitleDone={() => setEditTitleFor(null)}
           onAddContact={onAddContact}
           onOpenContact={(id) => openReferenceFull({ type: "contact", id })}
           onOpenItem={(type, id) => openReferenceFull({ type, id })}
