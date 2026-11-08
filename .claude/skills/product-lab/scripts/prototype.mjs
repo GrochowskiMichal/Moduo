@@ -16,7 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { PROBE, focusInfo, hoverTargets, pageInfo, settle } from "./lib/probe.mjs";
 import { launch, loadAxe, runAxe } from "./lib/pw.mjs";
 import { contactSheet, crop } from "./lib/sheet.mjs";
-import { harvest, resolveTokens, score, shadowLayers, toRgba, tokenNames } from "./lib/tokens.mjs";
+import { harvest, resolveTokens, score, scopedColorTokens, shadowLayers, toRgba, tokenNames } from "./lib/tokens.mjs";
 import { list, log, mkdirp, pad, parseArgs, rel, runId, slug, writeJson, writeText } from "./lib/util.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -82,7 +82,7 @@ const tokenFiles = list(args.tokens) ?? [];
       rec.axe = await runAxe(page, axeSource).catch((e) => ({ skipped: `axe failed: ${e.message}` }));
       if (tokenFiles.length) {
         if (!tokenTable) tokenTable = await page.evaluate(resolveTokens, tokenNames(tokenFiles, ROOT));
-        const rows = await page.evaluate(harvest, { exclude: [], max: 6000 });
+        const rows = await page.evaluate(harvest, { exclude: [], max: 6000, ...scopedColorTokens(tokenTable) });
         for (const r of rows) tokenRows.push({ ...r, state: st.id, file: rec.file });
       }
     } catch (e) {

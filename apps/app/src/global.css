@@ -377,6 +377,12 @@ body {
   animation: motion-fade-in var(--motion-fast) var(--ease-out);
 }
 
+/* A toast a key raised (Mail's triage, undo and send): sonner's slide and height
+   transitions give way to an opacity fade on --motion-fast (zero under reduced motion). */
+[data-sonner-toast].motion-key-toast {
+  transition: opacity var(--motion-fast) var(--ease-out) !important;
+}
+
 /* 1 · Panels. Slides in from the right by default; `data-side="left"` comes
    from the left. Applied by the panel shell when a panel opens. */
 .motion-panel {

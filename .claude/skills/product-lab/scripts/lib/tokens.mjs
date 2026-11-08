@@ -68,18 +68,44 @@ export function resolveTokens(names) {
   return out;
 }
 
-/** In page: the styles every rendered element actually uses, one row per look-alike. */
-export function harvest({ exclude, max }) {
+/**
+ * In page: the styles every rendered element actually uses, one row per look-alike.
+ * `scoped`: colour tokens built from other variables (`color-mix(…, var(--label) …)`),
+ * whose value depends on where they are used (a hued avatar's `--label-fill`). A colour
+ * that matches none of the root-resolved tokens is resolved against those tokens in the
+ * element's own context, resolved to resolved, and the row names the token it matches
+ * (specs/mail-improve.md decision 2: fix the measuring, not the look).
+ */
+export function harvest({ exclude, max, scoped = [], known = [] }) {
   const rows = [];
   const seen = new Set();
   const excl = (exclude ?? []).join(",");
+  const probe = document.createElement("span");
+  probe.style.cssText = "position:absolute;visibility:hidden;pointer-events:none;width:0;height:0";
+  /** The scoped token whose value, resolved inside `el`, is exactly `value`. */
+  const knownColors = new Set(known);
+  const scopedToken = (el, prop, value) => {
+    if (!scoped.length || knownColors.has(value) || ["IMG", "INPUT", "TEXTAREA", "SELECT", "svg", "BR", "HR"].includes(el.tagName)) return null;
+    el.appendChild(probe);
+    let hit = null;
+    for (const name of scoped) {
+      probe.style.color = `var(${name})`;
+      if (getComputedStyle(probe).color === value) {
+        hit = name;
+        break;
+      }
+    }
+    probe.remove();
+    return hit;
+  };
   const push = (fam, prop, value, el, sig) => {
     const key = `${sig}|${prop}|${value}`;
     if (seen.has(key) || rows.length >= max) return;
     seen.add(key);
     const r = el.getBoundingClientRect();
     const name = el.getAttribute("aria-label") || (el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 30);
-    rows.push({ fam, prop, value, sig, where: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), tag: el.tagName.toLowerCase(), name } });
+    const ctxToken = fam === "color" ? scopedToken(el, prop, value) : null;
+    rows.push({ fam, prop, value, sig, ...(ctxToken ? { ctxToken } : {}), where: { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height), tag: el.tagName.toLowerCase(), name } });
   };
   const ownText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
   for (const el of document.querySelectorAll("body *")) {
@@ -189,6 +215,8 @@ export function score(rows, tokens, rgba) {
       case "color": {
         const c = rgba[v];
         if (!c || c[3] === 0) return { cls: "skip" };
+        // Resolved in the element's own context to a scoped token (a color-mix of --label).
+        if (row.ctxToken) return { cls: "exact", token: row.ctxToken };
         const lab = rgbToLab(c);
         let best = null;
         for (const t of colorTokens) {
@@ -312,4 +340,14 @@ export function score(rows, tokens, rgba) {
     .sort((a, b) => (a.cls === b.cls ? b.count - a.count : a.cls === "near" ? -1 : 1))
     .slice(0, 12);
   return { overall, band, families, top, tokenCount: tokens.length };
+}
+
+/** `harvest`'s context-resolution inputs: the colour tokens built from other variables, and
+ *  every colour already resolved at the root (those need no second look). */
+export function scopedColorTokens(tokens) {
+  const colors = (tokens ?? []).filter((t) => t.kind === "color");
+  return {
+    scoped: colors.filter((t) => /var\(/.test(t.raw ?? "")).map((t) => t.name),
+    known: colors.map((t) => t.value),
+  };
 }

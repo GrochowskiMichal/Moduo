@@ -104,7 +104,7 @@ function AccountRow({
         >
           <ChevronRight
             className={cn(
-              "size-3.5 transition-transform duration-(--motion-fade)",
+              "size-3.5 transition-transform duration-(--motion-fast)",
               expanded && "rotate-90",
             )}
             aria-hidden

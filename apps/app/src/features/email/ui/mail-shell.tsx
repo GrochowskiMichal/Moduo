@@ -34,6 +34,7 @@ import { useSavedSearches } from "../hooks/use-saved-searches";
 import { mailKeyHint, type MailKeyId } from "../keys";
 import { showMailPanel, toggleMailPanel } from "../panels/side-panel";
 import { openMailSearch } from "../search/open";
+import { cyclePane, focusIn } from "../shell/panes";
 import {
   advanceAfterRemoval,
   allThreadIds,
@@ -63,6 +64,7 @@ import {
   type MailTabUnread,
 } from "./mail-states";
 import { cycleTab, liveTab, type MailTabDef, MailTabs, mailTabs, sameTab } from "./mail-tabs";
+import { KEYED_TOAST } from "./mail-toast";
 import { decideNewSender, NewSendersPanel } from "./new-senders-panel";
 import { useRailViewCounts } from "./rail-counts";
 import { humaniseError } from "./system-copy";
@@ -152,60 +154,32 @@ const BULK_INTENTS: Record<Exclude<MailBulkAction, "done" | "delete">, MailKeyId
   move: "email.move",
 };
 
-/** Moves keyboard focus into the reader (Enter, spec §7): its title, else the slot. */
-function focusIn(root: HTMLElement | null): boolean {
-  if (!root) return false;
-  const target = root.querySelector<HTMLElement>("[data-reader-title], h1, h2") ?? root;
-  if (!target.hasAttribute("tabindex")) target.tabIndex = -1;
-  target.focus({ preventScroll: true });
-  return true;
-}
-
-/** The panes F6 cycles (specs/mail-improve.md §6): rail, list, reader, the side panel. */
-const PANES = [
-  '[data-mail-pane="rail"]',
-  '[data-mail-pane="list"]',
-  '[data-mail-pane="reader"]',
-  "[data-mail-panel], [data-mail-panel-strip]",
-] as const;
-
-/** Where focus lands in a pane: its current item, else its first control, else itself. */
-function focusPane(pane: HTMLElement, i: number): void {
-  const first = (...sels: string[]) =>
-    sels.reduce<HTMLElement | null>(
-      (hit, sel) => hit ?? pane.querySelector<HTMLElement>(sel),
-      null,
-    );
-  const pick =
-    i === 0
-      ? first('[data-rail-body] [tabindex="0"]', '[aria-current="page"]', "button:not([disabled])")
-      : i === 1
-        ? (pane.querySelector<HTMLElement>('[aria-selected="true"][data-thread-id]') ??
-          pane.querySelector<HTMLElement>('[role="listbox"]'))
-        : i === 2
-          ? null
-          : pane.querySelector<HTMLElement>('button:not([disabled]), [tabindex="0"]');
-  if (i === 2 && focusIn(pane)) return;
-  const target = pick ?? pane;
-  if (!target.hasAttribute("tabindex") && !target.matches("button, a[href]")) target.tabIndex = -1;
-  target.focus({ preventScroll: true });
-}
-
-/** F6 / ⇧F6: the next or previous pane that is on screen. */
-function cyclePane(delta: 1 | -1): void {
-  const panes = PANES.map((sel) => document.querySelector<HTMLElement>(sel));
-  const at = document.activeElement;
-  const here = panes.findIndex((p) => p && at && p.contains(at));
-  const n = panes.length;
-  let i = here < 0 ? (delta === 1 ? -1 : 0) : here;
-  for (let step = 0; step < n; step++) {
-    i = (i + delta + n) % n;
-    const pane = panes[i];
-    if (pane) {
-      focusPane(pane, i);
-      return;
-    }
-  }
+/**
+ * One toast for every triage action (specs/mail-improve.md §3, AC10): where the threads
+ * went, Undo and its key. A click's toast teaches the key. One at a time: the latest
+ * action's replaces the last.
+ */
+function showTriageToast(t: {
+  kind: MailOpInput["kind"];
+  count: number;
+  args: MailOpInput["args"] | undefined;
+  boxes: Record<string, MailMailbox[]>;
+  teach: string | undefined;
+  onUndo: () => void;
+}) {
+  const boxId = (t.args as { mailboxId?: string } | undefined)?.mailboxId;
+  const target = boxId
+    ? Object.values(t.boxes)
+        .flat()
+        .find((b) => b.id === boxId)?.name
+    : null;
+  undoToast(triageToastLabel(t.kind, t.count, t.args, target), {
+    onUndo: t.onUndo,
+    undoKey: isMacPlatform() ? "⌘Z" : "Ctrl+Z",
+    id: MAIL_TRIAGE_TOAST,
+    className: KEYED_TOAST,
+    description: t.teach ? `Next time press ${t.teach}` : undefined,
+  });
 }
 
 /** The reader slot: the bulk summary while two or more threads are picked (spec §6). */
@@ -522,6 +496,21 @@ export function MailShell({
     return out;
   }, [accounts]);
 
+  /** The list's move before the engine answers: advance past removed threads, or drop the picks. */
+  const moveFirst = useCallback((kind: MailOpInput["kind"], threadIds: string[]) => {
+    const { ids: list, sel: s } = live.current;
+    if (!REMOVES.has(kind)) {
+      setSel((cur) => ({ ...cur, picked: [] }));
+      return 0;
+    }
+    setSel(
+      advanceAfterRemoval(list, { ...s, cursor: s.cursor ?? threadIds[0] ?? null }, threadIds),
+    );
+    const cleared = kind === "done" || kind === "delete" ? threadIds.length : 0;
+    if (cleared) setCleared((n) => n + cleared);
+    return cleared;
+  }, []);
+
   const act = useCallback(
     async (
       kind: MailOpInput["kind"],
@@ -532,48 +521,32 @@ export function MailShell({
       if (threadIds.length === 0) return null;
       const before = live.current.sel;
       const from = { view: live.current.view, tab: live.current.tab, list: live.current.ids };
-      const clears = REMOVES.has(kind) && (kind === "done" || kind === "delete");
-      if (REMOVES.has(kind)) {
-        const { ids: list, sel: s } = live.current;
-        setSel(
-          advanceAfterRemoval(list, { ...s, cursor: s.cursor ?? threadIds[0] ?? null }, threadIds),
-        );
-        if (clears) setCleared((n) => n + threadIds.length);
-      } else {
-        setSel((s) => ({ ...s, picked: [] }));
-      }
+      const cleared = moveFirst(kind, threadIds);
       try {
         const entry = await bulk.apply(kind, threadIds, args);
         if (entry) {
           actedFrom.current.set(entry, from);
-          // One toast for every triage action: where the threads went, Undo and its key
-          // (specs/mail-improve.md §3, AC10). A click's toast teaches the key.
-          if (!opts.quiet) {
-            const boxId = (args as { mailboxId?: string } | undefined)?.mailboxId;
-            const target = boxId
-              ? Object.values(boxesRef.current)
-                  .flat()
-                  .find((b) => b.id === boxId)?.name
-              : null;
-            undoToast(triageToastLabel(kind, threadIds.length, args, target), {
+          if (!opts.quiet)
+            showTriageToast({
+              kind,
+              count: threadIds.length,
+              args,
+              boxes: boxesRef.current,
+              teach: opts.teach,
               onUndo: () => void undoRef.current(entry),
-              undoKey: isMacPlatform() ? "⌘Z" : "Ctrl+Z",
-              id: MAIL_TRIAGE_TOAST,
-              description: opts.teach ? `Next time press ${opts.teach}` : undefined,
             });
-          }
         }
         return entry;
       } catch (error) {
         // The engine refused: nothing moved, so the list and the picks go back.
         setSel(before);
-        if (clears) setCleared((n) => Math.max(0, n - threadIds.length));
+        if (cleared) setCleared((n) => Math.max(0, n - cleared));
         const reason = humaniseError(error instanceof Error ? error.message : String(error));
         toast.error(reason ? `That didn't apply: ${reason}.` : "That didn't apply.");
         return null;
       }
     },
-    [bulk],
+    [bulk, moveFirst],
   );
 
   useEffect(() => {

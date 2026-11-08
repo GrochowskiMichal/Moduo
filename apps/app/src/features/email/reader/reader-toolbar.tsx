@@ -201,8 +201,10 @@ function keepPopoverFocus(e: Event) {
   if (at && at !== document.body && at.closest('[data-slot="popover-content"]')) e.preventDefault();
 }
 
+/** A group divider: drawn only (the toolbar's buttons carry the groups' meaning). */
 const Sep = () => (
   <span
+    aria-hidden
     role="separator"
     aria-orientation="vertical"
     className="mx-1 h-4 w-px shrink-0 bg-hairline"

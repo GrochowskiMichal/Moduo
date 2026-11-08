@@ -216,6 +216,79 @@ export const mailStates = {
       await page.getByRole("note").first().waitFor({ timeout: 30_000 });
     },
   },
+  // ── specs/mail-improve.md MI-7: the improve states ──────────────────────────────────
+  /** AC10, AC11: Done on the open thread; the one toast with Undo and its key. */
+  undoDone: fixtureState({}, async (page) => {
+    await openFirst(page);
+    await page.keyboard.press("e");
+    await toast(page, /^Done · in Archive/).waitFor();
+  }),
+  /** AC12: ⌘⇧↩ sent a reply and marked it Done; the undo-send toast, the next thread open. */
+  undoSend: fixtureState({}, async (page) => {
+    await openFirst(page);
+    await page.keyboard.press("r");
+    await composer(page).getByRole("textbox", { name: "Message" }).fill("Works for me.");
+    await page.keyboard.press("Meta+Shift+Enter");
+    await toast(page, /sends in/).waitFor();
+  }),
+  /** AC13: `t` made a task; the title open for renaming, "Also mark the email Done  e". */
+  taskMade: fixtureState({}, async (page) => {
+    await openFirst(page);
+    await page.keyboard.press("t");
+    await toast(page, /^Task created/).waitFor({ timeout: 15_000 });
+  }),
+  /** AC21: `;;tha` typed in a reply: the offer before anything is inserted. */
+  snippet: fixtureState({ scenario: ["snippets"] }, async (page) => {
+    await openFirst(page);
+    await page.keyboard.press("r");
+    await composer(page).getByRole("textbox", { name: "Message" }).pressSequentially(";;tha");
+    await page.getByRole("group", { name: "Snippet offer" }).waitFor();
+  }),
+  /** AC20: the failed actions folded, then shown. */
+  failedOpen: fixtureState({ scenario: ["failed"] }, async (page) => {
+    await page.getByRole("button", { name: "Show", exact: true }).click();
+    await page.getByRole("list", { name: "Actions that didn't sync" }).waitFor();
+  }),
+  /** AC22: an empty place: its state in the list, Back to Inbox with g i; the reader empty. */
+  emptyFolder: fixtureState({}, async (page) => {
+    await page.keyboard.press("g");
+    await page.keyboard.press("f");
+    await page.getByRole("button", { name: "Back to Inbox" }).waitFor();
+  }),
+  /** AC24: the Screener: a new sender's thread open, decided in the reader's header. */
+  newSenders: fixtureState(
+    { scenario: ["newSenders"], behavior: { screener: true } },
+    async (page) => {
+      await page
+        .getByRole("group", { name: "Views" })
+        .getByRole("button", { name: /^New senders/ })
+        .click();
+      await openFirst(page);
+    },
+  ),
+  /** AC25: no account yet: places and views dimmed, the connect card. */
+  firstRun: fixtureState({
+    scenario: ["noAccount"],
+    ready: (page) => page.getByRole("button", { name: "Google" }),
+  }),
+  /** AC25: the connect dialog over the first run, on its scrim. */
+  connect: fixtureState(
+    { scenario: ["noAccount"], ready: (page) => page.getByRole("button", { name: "Google" }) },
+    async (page) => {
+      await page.getByRole("button", { name: "Google" }).click();
+      await page.getByRole("dialog").waitFor();
+    },
+  ),
+  /** AC15: Why here on a thread a setting decided (a custom tab), the step "decided it". */
+  whyRule: fixtureState({ scenario: ["customTabs"] }, async (page) => {
+    await pickTab(page, "Investors");
+    await openFirst(page);
+    await toolbar(page).getByRole("button", { name: "More actions" }).click();
+    await page.getByRole("menuitem", { name: /^Why is this in/ }).click();
+    await page.locator("[data-why-sheet]").waitFor();
+  }),
+  /** AC3, AC16: a 200-character subject: the title wraps, the column keeps its measure. */
+  long: fixtureState({ scenario: ["long"] }, openFirst),
   /** AC35: Settings → Mail with the account cards. */
   "settings-mail": fixtureState({}, async (page) => {
     await page.getByRole("button", { name: "Mail settings" }).click();
@@ -224,6 +297,8 @@ export const mailStates = {
 };
 
 const firstId = (page: Page) => rows(page).first().getAttribute("data-thread-id");
+/** The thread the reader shows. */
+const openId = (page: Page) => reader(page).getAttribute("data-reader-thread");
 const toast = (page: Page, text: RegExp) =>
   page.locator("[data-sonner-toast]").filter({ hasText: text });
 
@@ -278,10 +353,12 @@ export const mailJourneys = [
         await step(`done ${i + 1}`, { expect: async () => (await firstId(page)) !== last });
       }
       await press("z");
-      await step("last one back", { expect: async () => (await firstId(page)) === last });
+      await step("last one back, selected and open", {
+        expect: async () => (await firstId(page)) === last && (await openId(page)) === last,
+      });
     },
-    // Undo has no pointer control (the hint line names z), so the pointer path ends on z.
-    async pointer({ page, click, press, step }: J) {
+    // The toast's Undo is the pointer path (specs/mail-improve.md AC10).
+    async pointer({ page, click, step }: J) {
       await onFixture(page, 5_000);
       await click(rows(page).first());
       await step("first conversation open", { expect: reader(page) });
@@ -291,8 +368,63 @@ export const mailJourneys = [
         await click(toolbar(page).getByRole("button", { name: "Done", exact: true }));
         await step(`done ${i + 1}`, { expect: async () => (await firstId(page)) !== last });
       }
-      await press("z");
-      await step("last one back", { expect: async () => (await firstId(page)) === last });
+      await click(toast(page, /^Done · in Archive/).getByRole("button", { name: /^Undo/ }));
+      await step("last one back, selected and open", {
+        expect: async () => (await firstId(page)) === last && (await openId(page)) === last,
+      });
+    },
+  },
+  {
+    id: "mail-send-done",
+    screen: "email",
+    goal: "Reply and send with ⌘⇧↩ (Send & Done): the next thread opens; undo the send",
+    target: { keys: 4, clicks: 1 },
+    async keyboard({ page, press, type, click, step }: J) {
+      await onFixture(page, 5_000);
+      await press("j");
+      await step("conversation open", { expect: reader(page) });
+      const sent = await openId(page);
+      await press("r");
+      await step("reply open", { expect: composer(page) });
+      await type("Works for me.");
+      await press("Meta+Shift+Enter");
+      await step("next thread open", {
+        expect: async () => (await openId(page)) !== sent && !!(await openId(page)),
+      });
+      await click(toast(page, /sends in/).getByRole("button", { name: /^Undo/ }));
+      await step("the reply back on the sent thread", {
+        expect: async () => (await openId(page)) === sent && (await composer(page).isVisible()),
+      });
+    },
+  },
+  {
+    id: "mail-keyboard-reach",
+    screen: "email",
+    goal: "From the top, reach the mail list in three Tabs, then cycle the panes with F6",
+    target: { keys: 6, clicks: 0 },
+    async keyboard({ page, press, step }: J) {
+      await onFixture(page, 5_000);
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await press("Tab");
+      await step("skip link first", {
+        expect: page.getByRole("link", { name: "Skip to mail list" }),
+      });
+      await press("Enter");
+      await step("in the list", {
+        expect: async () =>
+          page.evaluate(() => !!document.activeElement?.closest('[aria-label="Mail list"]')),
+      });
+      await press("F6");
+      await step("the reader", {
+        expect: async () =>
+          page.evaluate(() => !!document.activeElement?.closest('[aria-label="Reader"]')),
+      });
+      await press("F6");
+      await press("F6");
+      await step("round to the list", {
+        expect: async () =>
+          page.evaluate(() => !!document.activeElement?.closest('[aria-label="Mail list"]')),
+      });
     },
   },
   {

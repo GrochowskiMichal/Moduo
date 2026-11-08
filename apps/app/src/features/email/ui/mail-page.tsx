@@ -62,6 +62,7 @@ import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
 import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
+import { KEYED_TOAST } from "./mail-toast";
 import { makeTasks } from "./make-tasks";
 import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
@@ -199,6 +200,7 @@ async function runConvert(
     onUndo: undo,
     // One at a time, like the triage toast: the newest task's replaces the last.
     id: "mail-task",
+    className: KEYED_TOAST,
     // A button with its key, like Undo (specs/mail-improve.md AC13).
     link: {
       label: "Also mark the email Done",

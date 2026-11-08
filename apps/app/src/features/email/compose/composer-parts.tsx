@@ -5,7 +5,6 @@ import { AlertTriangle, Paperclip, UserPlus, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
-import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
 import { introducerFirstName, introducerName } from "./intro";
