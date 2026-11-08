@@ -44,7 +44,7 @@ import {
 import type { LinkedKindsRead } from "../shell/use-linked-kinds";
 import { useListGroups } from "../shell/use-list-groups";
 import { useThreadWindow } from "../shell/use-thread-window";
-import { type MailStore, mailStore } from "../store/mail-store";
+import { type MailStore, mailStore, type MailUndoEntry } from "../store/mail-store";
 import { useMailStore } from "../store/use-mail-store";
 import { MailHintLine, restHint, useMailHint } from "./hint-line";
 import { type MailBulkAction, MailBulkReader } from "./mail-bulk-reader";
@@ -170,10 +170,21 @@ function ReaderSlot({
   return reader() ?? null;
 }
 
+/** `quiet`: no result toast (Send & Done: the undo-send toast speaks for it). */
+export type MailActOptions = { quiet?: boolean };
+
 /** What the page drives from outside the shell: pickers that finish an action
  * (snooze, move) go through `act` so they auto-advance like Done (AC14). */
 export type MailShellApi = {
-  act(kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]): Promise<void>;
+  /** Applies an op as one undoable action; answers with its undo entry (null if refused). */
+  act(
+    kind: MailOpInput["kind"],
+    threadIds: string[],
+    args?: MailOpInput["args"],
+    opts?: MailActOptions,
+  ): Promise<MailUndoEntry | null>;
+  /** Undoes that entry and selects and opens the first thread it restored. */
+  undo(entry: MailUndoEntry): Promise<void>;
   /** The loaded row for a thread, when it is in the current window. */
   row(threadId: string): MailThreadRow | null;
   /** Selects and opens a thread. */
@@ -427,11 +438,15 @@ export function MailShell({
     );
   };
 
-  // Latest list and selection for stable callbacks.
-  const live = useRef({ ids, sel });
+  // Latest list, selection and place for stable callbacks.
+  const live = useRef({ ids, sel, view, tab: listTab });
   useEffect(() => {
-    live.current = { ids, sel };
+    live.current = { ids, sel, view, tab: listTab };
   });
+  /** Where each undoable action was taken, so Undo can go back there (AC11). */
+  const actedFrom = useRef(
+    new WeakMap<MailUndoEntry, { view: MailView; tab: MailTab | null; list: readonly string[] }>(),
+  );
 
   const hues = useMemo(() => {
     const out: Record<string, LabelColor> = {};
@@ -440,9 +455,15 @@ export function MailShell({
   }, [accounts]);
 
   const act = useCallback(
-    async (kind: MailOpInput["kind"], threadIds: string[], args?: MailOpInput["args"]) => {
-      if (threadIds.length === 0) return;
+    async (
+      kind: MailOpInput["kind"],
+      threadIds: string[],
+      args?: MailOpInput["args"],
+      opts: MailActOptions = {},
+    ): Promise<MailUndoEntry | null> => {
+      if (threadIds.length === 0) return null;
       const before = live.current.sel;
+      const from = { view: live.current.view, tab: live.current.tab, list: live.current.ids };
       const clears = REMOVES.has(kind) && (kind === "done" || kind === "delete");
       if (REMOVES.has(kind)) {
         const { ids: list, sel: s } = live.current;
@@ -454,13 +475,16 @@ export function MailShell({
         setSel((s) => ({ ...s, picked: [] }));
       }
       try {
-        await bulk.apply(kind, threadIds, args);
+        const entry = await bulk.apply(kind, threadIds, args);
+        if (entry) actedFrom.current.set(entry, from);
+        return entry;
       } catch (error) {
         // The engine refused: nothing moved, so the list and the picks go back.
         setSel(before);
         if (clears) setCleared((n) => Math.max(0, n - threadIds.length));
         const reason = humaniseError(error instanceof Error ? error.message : String(error));
         toast.error(reason ? `That didn't apply: ${reason}.` : "That didn't apply.");
+        return null;
       }
     },
     [bulk],
@@ -469,14 +493,36 @@ export function MailShell({
   useEffect(() => {
     if (!apiRef) return;
     apiRef.current = {
-      act: (kind, threadIds, args) => {
-        if (threadIds.length > 0) hint.result(kind, args);
-        return act(kind, threadIds, args);
-      },
+      act: (kind, threadIds, args, opts) => act(kind, threadIds, args, opts),
+      undo: (entry) => undoAndOpen(entry),
       row: (id) => win.rows.find((r) => r.threadId === id) ?? null,
       open: (id) => setSel({ ...EMPTY_SELECTION, cursor: id }),
     };
   });
+
+  /**
+   * Undo (`z`, ⌘Z, a toast's Undo): restores the threads, goes back to the place and tab
+   * the action was taken in, then selects and opens the first restored thread in list
+   * order (specs/mail-improve.md §3, AC11).
+   */
+  async function undoAndOpen(entry?: MailUndoEntry) {
+    const stack = store.getState().undoStack;
+    const target = entry ?? stack[stack.length - 1];
+    if (!target) return;
+    const from = actedFrom.current.get(target);
+    const restored = await commands.undo(target);
+    if (restored.length === 0) return;
+    const order = from?.list ?? [];
+    const rank = (id: string) => {
+      const i = order.indexOf(id);
+      return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    const first = [...restored].sort((a, b) => rank(a) - rank(b))[0]!;
+    const now = live.current;
+    if (from && mailViewKey(from.view) !== mailViewKey(now.view)) selectView(from.view);
+    if (from?.tab && !(now.tab && sameTab(now.tab, from.tab))) switchTab(from.tab);
+    setSel({ ...EMPTY_SELECTION, cursor: first });
+  }
 
   useEffect(() => {
     onCursorChange?.(sel.cursor);
@@ -541,7 +587,7 @@ export function MailShell({
     toggle: toggleKind,
     undo: () => {
       if (onUndoFirst?.()) return;
-      void commands.undo();
+      void undoAndOpen();
     },
     cycleTab: (delta) => {
       if (!tabbed) return false;

@@ -35,15 +35,17 @@ export function createMailCommands(store: MailStore = mailStore, now: () => numb
       store.setState((s) => ({ undoStack: [...s.undoStack, entry].slice(-UNDO_STACK_MAX) }));
       return entry;
     },
-    /** Undo the newest action (`z`), or the given one (a toast's Undo). */
-    async undo(entry?: MailUndoEntry): Promise<boolean> {
+    /** Undo the newest action (`z`), or the given one (a toast's Undo). Resolves with
+     *  the threads it restored, in action order (empty when there was nothing to undo),
+     *  so the shell can select and open the first (specs/mail-improve.md AC11). */
+    async undo(entry?: MailUndoEntry): Promise<string[]> {
       const stack = store.getState().undoStack;
       const target = entry ?? stack[stack.length - 1];
-      if (!target || !stack.includes(target)) return false;
+      if (!target || !stack.includes(target)) return [];
       store.setState((s) => ({ undoStack: s.undoStack.filter((e) => e !== target) }));
       const engine = engineOrThrow();
       for (const opId of [...target.opIds].reverse()) await engine.undoOp(opId);
-      return true;
+      return [...target.threadIds];
     },
     async retry(opId: string) {
       await engineOrThrow().retryOp(opId);

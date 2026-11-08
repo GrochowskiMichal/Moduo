@@ -552,6 +552,92 @@ pub fn invite_view(inv: &Invite, me: &[String]) -> Option<InviteView> {
     })
 }
 
+// ---- Collapsed-message snippets (specs/mail-improve.md §4, AC17) ----
+
+/// Greetings a message opens with, lower-case; a salutation is one of these, an
+/// optional short name, then a comma, colon, exclamation mark or line end.
+const GREETINGS: &[&str] = &[
+    "good morning",
+    "good afternoon",
+    "good evening",
+    "dzień dobry",
+    "hello",
+    "hallo",
+    "hola",
+    "cześć",
+    "dear",
+    "hey",
+    "hi",
+];
+
+/// Sign-off lines ("Best,", "Thanks,") that end a message and carry no substance.
+const SIGN_OFFS: &[&str] = &[
+    "best",
+    "best regards",
+    "kind regards",
+    "regards",
+    "thanks",
+    "thank you",
+    "cheers",
+    "pozdrawiam",
+    "sent from my iphone",
+];
+
+const SNIPPET_CHARS: usize = 140;
+
+/// Strips a leading salutation ("Hi Robin," / "Dear Ms Lee:") from one line and
+/// returns what follows it; `None` when the line doesn't open with one.
+fn after_salutation(line: &str) -> Option<&str> {
+    let lower = line.to_lowercase();
+    let greeting = GREETINGS.iter().find(|g| {
+        lower.starts_with(*g)
+            && lower[g.len()..]
+                .chars()
+                .next()
+                .is_none_or(|c| !c.is_alphanumeric())
+    })?;
+    // The greeting's byte length is the same in `line` (lower-casing these keeps lengths).
+    let rest = &line[greeting.len()..];
+    match rest.find([',', ':', '!']) {
+        // A name of at most four words between the greeting and the mark.
+        Some(at) if rest[..at].split_whitespace().count() <= 4 => Some(rest[at + 1..].trim()),
+        Some(_) => None,
+        None if rest.split_whitespace().count() <= 3 => Some(""),
+        None => None,
+    }
+}
+
+fn is_sign_off(line: &str) -> bool {
+    let bare = line.trim_end_matches([',', '.', '!']).trim().to_lowercase();
+    SIGN_OFFS.contains(&bare.as_str())
+}
+
+/// The collapsed row's first line of substance, read from the message's text (or its
+/// stored snippet): salutations and sign-offs skipped, quoted lines skipped,
+/// whitespace collapsed; a message that is only a salutation falls back to the
+/// subject. Applied at read time, so stored rows never change.
+pub fn substance_snippet(text: Option<&str>, stored: &str, subject: &str) -> String {
+    let source = text.filter(|t| !t.trim().is_empty()).unwrap_or(stored);
+    let mut first = None;
+    for raw in source.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('>') || is_sign_off(line) {
+            continue;
+        }
+        let body = after_salutation(line).unwrap_or(line);
+        if body.is_empty() {
+            continue;
+        }
+        first = Some(body);
+        break;
+    }
+    let Some(first) = first else {
+        return subject.to_string();
+    };
+    let joined = first.split_whitespace().collect::<Vec<_>>().join(" ");
+    joined.chars().take(SNIPPET_CHARS).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -734,5 +820,40 @@ mod tests {
         assert!(v.can_rsvp);
         assert!(ics_time_ms("20261105").is_some());
         assert!(ics_time_ms("junk").is_none());
+    }
+
+    #[test]
+    fn snippet_skips_salutations() {
+        let text = "Hi Robin,\n\nFollowing up on today's call.  Can we\nlock the dates?\n\nBest,\nJonas";
+        assert_eq!(
+            substance_snippet(Some(text), "Hi Robin, Following up", "Pilot"),
+            "Following up on today's call. Can we"
+        );
+        // Inline: the greeting and the name go, the sentence stays.
+        assert_eq!(
+            substance_snippet(None, "Hi Robin, following up on the deck", "Deck"),
+            "following up on the deck"
+        );
+        for (greeting, want) in [
+            ("Dear Ms Lee:\nThe contract is attached.", "The contract is attached."),
+            ("Good morning team!\nStandup moves to 10.", "Standup moves to 10."),
+            ("Cześć Kasia,\nDzięki za plik.", "Dzięki za plik."),
+            ("Hello\n\nQuick one.", "Quick one."),
+            ("Hiring update: three offers out.", "Hiring update: three offers out."),
+            ("> quoted\nReal line", "Real line"),
+        ] {
+            assert_eq!(substance_snippet(Some(greeting), "", "S"), want, "{greeting}");
+        }
+        // A long clause after "Hi" isn't a salutation.
+        assert_eq!(
+            substance_snippet(Some("Hi there is a problem with the build, again"), "", "S"),
+            "Hi there is a problem with the build, again"
+        );
+        // Only a salutation (and a sign-off): the subject.
+        assert_eq!(substance_snippet(Some("Hi Robin,\n\nThanks,\n"), "", "Pilot"), "Pilot");
+        assert_eq!(substance_snippet(Some("  "), "", "Pilot"), "Pilot");
+        // Capped at 140 characters.
+        let long = "word ".repeat(80);
+        assert_eq!(substance_snippet(Some(&long), "", "S").chars().count(), 140);
     }
 }

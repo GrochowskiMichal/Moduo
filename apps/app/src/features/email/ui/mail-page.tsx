@@ -234,7 +234,7 @@ function knownName(
 function useComposeSession(
   compose: MailPageProps["compose"],
   store: NonNullable<MailPageProps["store"]>,
-  commands: ReturnType<typeof createMailCommands>,
+  shell: { current: MailShellApi | null },
   engine: ReturnType<typeof mailStore.getState>["engine"],
   sent: { current: ComposeDeps["showSent"] },
 ) {
@@ -250,7 +250,15 @@ function useComposeSession(
               const b = store.getState().behavior;
               return { undoSeconds: b.undoSendSeconds, doneOnSend: b.doneOnSend };
             },
-            markDone: (threadId) => commands.apply({ kind: "done", threadIds: [threadId] }),
+            // Through the shell: a send that takes the thread out of the view advances
+            // like `e`, and undoing the send brings it back (specs/mail-improve.md AC12).
+            markDone: async (threadId) => {
+              const entry = await shell.current?.act("done", [threadId], undefined, {
+                quiet: true,
+              });
+              return entry ? () => shell.current?.undo(entry) ?? Promise.resolve() : undefined;
+            },
+            onReopen: (threadId) => shell.current?.open(threadId),
             setFollowUp: engine?.setFollowUp
               ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
               : undefined,
@@ -258,7 +266,7 @@ function useComposeSession(
             showSent: (handle, actions, info) => sent.current?.(handle, actions, info),
           })
         : null,
-    [port, store, commands, engine, sent],
+    [port, store, shell, engine, sent],
   );
   return { port, session };
 }
@@ -317,7 +325,7 @@ export function MailPage({
 
   const names = useRef<(email: string) => string | null>(() => null);
   const undoSend = useUndoSendToast({ now, nameFor: (email) => names.current(email) });
-  const { port, session } = useComposeSession(compose, store, commands, engine, undoSend.sent);
+  const { port, session } = useComposeSession(compose, store, shell, engine, undoSend.sent);
   const extras = useComposeExtras({ port, session, engine, accounts });
   const composer = useComposerSlot({
     session,
