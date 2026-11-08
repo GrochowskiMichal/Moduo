@@ -676,6 +676,11 @@
   --measure-reading: 70ch;
   /* The folded side panel below a 1180 px window: one icon per view. */
   --panel-strip-w: 2.5rem; /* 40 */
+  /* A list row's own background, opaque, for the quick actions' fade (§2): rest, hover,
+     selected. global.css sets --row-bg on each row from these. */
+  --mail-row-bg: var(--background);
+  --mail-row-bg-hover: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --mail-row-bg-selected: color-mix(in oklab, var(--primary) 13%, var(--background));
   /* "N actions didn't sync", expanded: five lines, then it scrolls. */
   --failed-list-max: calc(var(--mail-row-compact) * 5);
 }

@@ -496,6 +496,10 @@ export function MailShell({
     new WeakMap<MailUndoEntry, { view: MailView; tab: MailTab | null; list: readonly string[] }>(),
   );
 
+  const accountNames = useMemo(
+    () => Object.fromEntries(accounts.map((a) => [a.id, a.displayName || a.address])),
+    [accounts],
+  );
   const hues = useMemo(() => {
     const out: Record<string, LabelColor> = {};
     accounts.forEach((a, i) => (out[a.id] = LABEL_COLORS[i % LABEL_COLORS.length]!));
@@ -575,6 +579,18 @@ export function MailShell({
   useEffect(() => {
     onCursorChange?.(sel.cursor);
   }, [sel.cursor, onCursorChange]);
+
+  // Opening a thread reads it: its unread dot goes at once (specs/mail-improve.md AC8).
+  // Not an undoable action: no toast, no undo entry.
+  const readOnOpen = useRef<string | null>(null);
+  useEffect(() => {
+    const id = sel.cursor;
+    if (!id || !engine || readOnOpen.current === id) return;
+    const row = win.rows.find((r) => r.threadId === id);
+    if (!row) return;
+    readOnOpen.current = id;
+    if (row.unread) void engine.applyOp({ kind: "mark_read", threadIds: [id] }).catch(() => {});
+  }, [sel.cursor, engine, win.rows]);
 
   const { teach: teachKey, result: showResult } = hint;
   const teach = useCallback(
@@ -815,6 +831,7 @@ export function MailShell({
             picked={sel.picked}
             hovered={hovered ?? sel.cursor}
             hues={hues}
+            accountNames={accountNames}
             showHue={accounts.length > 1 && scope === null}
             density={density}
             previewLines={previewLines}

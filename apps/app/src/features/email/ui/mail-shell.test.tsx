@@ -140,13 +140,19 @@ describe("mail shell keys (AC21)", () => {
     expect(cursor()).toBe(ids[0]);
 
     const apply = rs.spyOn(engine, "applyOp");
+    // Opening a thread reads it (specs/mail-improve.md AC8): skip those reads here.
+    const lastAct = () =>
+      apply.mock.calls
+        .map((c) => c[0])
+        .filter((o) => o.kind !== "mark_read")
+        .at(-1);
     press("E", { shiftKey: true, code: "KeyE" });
     await tick();
-    expect(apply.mock.calls.at(-1)![0]).toMatchObject({ kind: "undone", threadIds: [ids[0]] });
+    expect(lastAct()).toMatchObject({ kind: "undone", threadIds: [ids[0]] });
 
     press("Backspace");
     await tick();
-    expect(apply.mock.calls.at(-1)![0]).toMatchObject({ kind: "delete" });
+    expect(lastAct()).toMatchObject({ kind: "delete" });
 
     press("z", mod());
     expect(onUndoFirst).toHaveBeenCalledTimes(1);

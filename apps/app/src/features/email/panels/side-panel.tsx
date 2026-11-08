@@ -35,7 +35,7 @@ const lastView = new WeakMap<MailStore, MailPanelView>();
 /** Shows `view`, remembering it for the next toggle. */
 export function showMailPanel(store: MailStore, view: MailPanelView): void {
   lastView.set(store, view);
-  store.setState({ panel: view });
+  store.setState((s) => ({ panel: view, panelAsked: s.panelAsked + 1 }));
 }
 
 /** ⌥0 and the panel button: hides the panel, or brings back the last view (Today first). */
@@ -134,6 +134,14 @@ function PanelViews({
 /** The folded panel: one icon per view; an icon opens its view over the reader. */
 function PanelStrip(props: MailSidePanelProps) {
   const [peek, setPeek] = useState<MailPanelView | null>(null);
+  // ⌥1–3 or `t` while folded: that view opens over the reader.
+  const asked = useMailStore((s) => s.panelAsked, props.store);
+  const seen = useRef(asked);
+  useEffect(() => {
+    if (asked === seen.current) return;
+    seen.current = asked;
+    setPeek(props.store.getState().panel);
+  }, [asked, props.store]);
   const label = emailPanelViews.find((v) => v.id === peek)?.label ?? "Today";
   return (
     <>

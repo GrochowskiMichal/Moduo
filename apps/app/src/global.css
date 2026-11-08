@@ -744,6 +744,21 @@ body {
   animation: mindmapNodeAppear 200ms ease-out;
 }
 
+/* A mail row's own background (specs/mail-improve.md §2): the quick actions fade the
+   preview under them into it, whatever state the row is in. */
+[data-mail-row] {
+  --row-bg: var(--mail-row-bg);
+}
+
+[data-mail-row]:hover {
+  --row-bg: var(--mail-row-bg-hover);
+}
+
+[data-mail-row][aria-selected="true"],
+[data-mail-row][data-picked] {
+  --row-bg: var(--mail-row-bg-selected);
+}
+
 @keyframes mailFlagWave {
   0% {
     transform: scaleX(1) skewY(0deg);

@@ -18,7 +18,7 @@ import type { MailThreadRow } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
 import type { MailLinkedKind } from "../commands/spine";
-import type { MailListItem } from "../shell/use-thread-window";
+import { MAIL_GROUP_LABELS, type MailListItem } from "../shell/use-thread-window";
 import type { SenderGroup } from "../views/newsletter-groups";
 import { type MailDensity, MailRow, type MailRowActions, ROW_HEIGHT } from "./mail-row";
 import type { MailRowPlace } from "./mail-row-model";
@@ -45,6 +45,18 @@ const itemThread = (item: MailListItem) =>
       : null;
 
 const EMPTY_SET: ReadonlySet<string> = new Set();
+const EMPTY_NAMES: Readonly<Record<string, string>> = {};
+
+/** The rows under the PINNED heading (their pin flag says nothing new, §2). */
+function pinnedRows(items: readonly MailListItem[]): ReadonlySet<string> {
+  const out = new Set<string>();
+  let under = false;
+  for (const it of items) {
+    if (it.kind === "header") under = it.label === MAIL_GROUP_LABELS.pinned;
+    else if (under && it.kind === "row") out.add(it.row.threadId);
+  }
+  return out;
+}
 const EMPTY_KINDS: Readonly<Record<string, readonly MailLinkedKind[]>> = {};
 
 export type MailGroupActions = {
@@ -59,7 +71,9 @@ type Props = {
   picked: readonly string[];
   hovered: string | null;
   hues: Readonly<Record<string, LabelColor>>;
-  /** More than one account: avatars carry the account's hue ring. */
+  /** Account names by id, for the tick's tooltip and the row's name. */
+  accountNames?: Readonly<Record<string, string>>;
+  /** More than one account: rows carry the account tick. */
   showHue: boolean;
   density: MailDensity;
   previewLines: 1 | 2;
@@ -136,6 +150,7 @@ export function MailThreadList({
   picked,
   hovered,
   hues,
+  accountNames = EMPTY_NAMES,
   showHue,
   density,
   previewLines,
@@ -153,6 +168,7 @@ export function MailThreadList({
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const virtual = items.length >= virtualizeFrom;
   const pickedSet = new Set(picked);
+  const underPinned = pinnedRows(items);
   const selecting = picked.length > 0;
 
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -194,6 +210,8 @@ export function MailThreadList({
       selecting={selecting}
       showActions={row.threadId === hovered}
       accountHue={showHue ? (hues[row.accountId] ?? "gray") : null}
+      accountName={accountNames[row.accountId]}
+      inPinnedGroup={underPinned.has(row.threadId)}
       density={density}
       previewLines={previewLines}
       place={place}

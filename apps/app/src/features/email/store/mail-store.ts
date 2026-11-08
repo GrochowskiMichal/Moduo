@@ -52,6 +52,9 @@ export type MailStoreState = {
    *  (⌥0, ⌥1–3, the panel button). Below 1180 px it shows as an icon strip
    *  (`panels/side-panel.tsx`). */
   panel: MailPanelView | null;
+  /** Bumps each time the person asks for a view (⌥1–3, `t`): below 1180 px the strip
+   *  opens that view over the reader. */
+  panelAsked: number;
   /** Bumps on every `threads_changed`; list windows re-read on change. */
   threadsVersion: number;
   changedViewKeys: string[];
@@ -80,6 +83,7 @@ export function initialMailState(): MailStoreState {
     dismissedFollowups: [],
     linkedKinds: {},
     panel: "today",
+    panelAsked: 0,
     threadsVersion: 0,
     changedViewKeys: [],
   };
