@@ -35,10 +35,10 @@ export function SkipLink({ pathname }: { pathname: string }) {
     hit.focus();
   };
   return (
-    // No href: WebKit (Safari, the Mac app's WKWebView) leaves links out of the Tab order
-    // unless the person turns on "Press Tab to highlight each item"; an element with its
-    // own tab stop and the link role is reachable everywhere.
-    <a
+    // Not an <a href>: WebKit (Safari, the Mac app's WKWebView) leaves links out of the Tab
+    // order unless the person turns on "Press Tab to highlight each item"; an element with
+    // its own tab stop and the link role is reachable everywhere.
+    <span
       role="link"
       tabIndex={0}
       onClick={go}
@@ -48,6 +48,6 @@ export function SkipLink({ pathname }: { pathname: string }) {
       className="sr-only rounded-md bg-background px-3 py-2 text-sm font-medium text-foreground focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-(--z-popover) focus-visible:ring-2 focus-visible:ring-ring"
     >
       {link.label}
-    </a>
+    </span>
   );
 }
