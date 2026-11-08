@@ -300,13 +300,16 @@ function ClosedHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={false}
-        aria-label={`${senderName(message)}, ${day}: ${message.snippet}, collapsed`}
         className="flex w-full min-w-0 items-center gap-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <SenderAvatar message={message} small />
-        <span className="shrink-0 font-medium text-foreground">{senderName(message)}</span>
-        <time className="order-last shrink-0 text-xs text-muted-foreground">{day}</time>
-        <span className="min-w-0 flex-1 truncate text-muted-foreground">{message.snippet}</span>
+        {/* Its name is this one line; the visual parts are hidden from assistive tech. */}
+        <span className="sr-only">{`${senderName(message)}, ${day}: ${message.snippet}, collapsed`}</span>
+        <span aria-hidden className="contents">
+          <SenderAvatar message={message} small />
+          <span className="shrink-0 font-medium text-foreground">{senderName(message)}</span>
+          <time className="order-last shrink-0 text-xs text-muted-foreground">{day}</time>
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">{message.snippet}</span>
+        </span>
       </button>
     </header>
   );

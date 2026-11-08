@@ -123,7 +123,7 @@ describe("reader (specs/mail-v3.md §8)", () => {
     fireEvent.click(within(chips).getByRole("button", { name: "Unlink Task: Confirm Acme pilot" }));
     expect(links.unlink).toHaveBeenCalledWith(TASK);
 
-    const linkChip = within(chips).getByRole("button", { name: /^Link… to a task/ });
+    const linkChip = within(chips).getByRole("button", { name: /^Link…/ });
     expect(linkChip.textContent).toBe("Link… l");
     fireEvent.click(linkChip);
     expect(onAction).toHaveBeenLastCalledWith("link", "t1");

@@ -33,8 +33,8 @@ export function AttachmentList({
         <li key={`${e.messageId}:${e.attachment.id}`}>
           <button
             type="button"
-            // Named by what it shows (axe label-content-name-mismatch); the verb is the title.
-            aria-labelledby={`${base}-${i}-name ${base}-${i}-meta`}
+            // Named by what it shows, from its content (no authored name for axe's
+            // label-content-name-mismatch to compare); the verb is the title.
             title={`Preview ${e.attachment.filename}`}
             className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-state-hover"
             onClick={() => onPreview(e)}
