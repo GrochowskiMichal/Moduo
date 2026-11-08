@@ -266,6 +266,10 @@ export const HOTKEYS = {
   "email.panel-today": { scope: "email", label: "Today panel", keys: ["Alt+1"] },
   "email.panel-contact": { scope: "email", label: "Contact panel", keys: ["Alt+2"] },
   "email.panel-task": { scope: "email", label: "Task panel", keys: ["Alt+3"] },
+  // specs/mail-improve.md §6: ⌥0 shows or hides the panel; F6 / ⇧F6 cycle the panes.
+  "email.panel-toggle": { scope: "email", label: "Show or hide the side panel", keys: ["Alt+0"] },
+  "email.pane-next": { scope: "email", label: "Next pane", keys: ["F6"] },
+  "email.pane-prev": { scope: "email", label: "Previous pane", keys: ["Shift+F6"] },
   // `g` chords (decision 15): the second key within a second.
   "email.go-inbox": { scope: "email", label: "Go to Inbox", keys: [["G", "I"]] },
   "email.go-followups": { scope: "email", label: "Go to Follow-ups", keys: [["G", "F"]] },
@@ -273,6 +277,15 @@ export const HOTKEYS = {
   "email.go-archive": { scope: "email", label: "Go to Archive", keys: [["G", "A"]] },
   "email.go-sent": { scope: "email", label: "Go to Sent", keys: [["G", "T"]] },
   "email.go-drafts": { scope: "email", label: "Go to Drafts", keys: [["G", "D"]] },
+  // The inbox tabs (specs/mail-improve.md §6); `g v` is the first custom tab.
+  "email.go-personal": { scope: "email", label: "Go to Personal", keys: [["G", "P"]] },
+  "email.go-custom": { scope: "email", label: "Go to your first tab", keys: [["G", "V"]] },
+  "email.go-notifications": {
+    scope: "email",
+    label: "Go to Notifications",
+    keys: [["G", "N"]],
+  },
+  "email.go-newsletters": { scope: "email", label: "Go to Newsletters", keys: [["G", "L"]] },
   // Email's own `?` (the triage legend) beats the app-wide sheet on /email.
   "email.legend": {
     scope: "email",

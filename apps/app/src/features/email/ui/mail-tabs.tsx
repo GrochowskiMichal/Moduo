@@ -23,6 +23,7 @@ import type { MailCounts, MailTab, MailView } from "@/lib/runtime.types.mail-eng
 import { cn } from "@/lib/utils";
 
 import type { ZeroAge } from "../commands/bulk";
+import { useRoving } from "../shell/roving";
 
 export type MailTabDef = { tab: MailTab; label: string };
 
@@ -149,6 +150,9 @@ export function MailTabs({
     tabs.findIndex((t) => mailViewKey(view, t.tab) === currentKey),
   );
   const fold = useTabFold(selected);
+  // One Tab stop, ← → inside (specs/mail-improve.md §6).
+  const strip = useRef<HTMLDivElement>(null);
+  const roving = useRoving(strip, { axis: "horizontal", selector: '[role="tab"]' });
   const unreadOf = (t: MailTabDef) => counts?.byViewKey[mailViewKey(countView, t.tab)] ?? 0;
   const folded = fold.hidden.map((i) => tabs[i]).filter((t): t is MailTabDef => !!t);
   const foldedUnread = folded.some((t) => unreadOf(t) > 0);
@@ -162,8 +166,11 @@ export function MailTabs({
         className="flex min-w-0 flex-1 items-center gap-1"
       >
         <div
+          ref={strip}
           role="tablist"
           aria-label="Inbox tabs"
+          onKeyDown={roving.onKeyDown}
+          onFocus={roving.onFocus}
           className="relative flex min-w-0 items-center gap-1"
         >
           {tabs.map((t, i) => {

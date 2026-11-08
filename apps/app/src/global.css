@@ -325,6 +325,7 @@ body {
      2 · .motion-pop    a popover grows from its origin   (base in, fade out)
      3 · .motion-row    a row's height and opacity open   (base in, fast out)
      4 · .motion-view   views crossfade                   (slow)
+     5 · .motion-key    a keyed change appears            (fast, opacity only)
    An exit that removes the element after it ends should wait for the
    `motion-fade-out` animationend: the movement half can end first. ═══ */
 @keyframes motion-fade-in {
@@ -367,6 +368,13 @@ body {
   to {
     grid-template-rows: 0fr;
   }
+}
+
+/* 5 · A change a key made (Mail's list after an action, the reader swap, a panel or
+   sheet opening, specs/mail-improve.md §7): opacity only, on --motion-fast, once on
+   first appearance. --motion-fast is zero under reduced motion, so nothing fades. */
+.motion-key {
+  animation: motion-fade-in var(--motion-fast) var(--ease-out);
 }
 
 /* 1 · Panels. Slides in from the right by default; `data-side="left"` comes

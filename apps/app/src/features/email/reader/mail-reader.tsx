@@ -329,54 +329,58 @@ function ThreadStack(props: MailReaderProps) {
   const setImageAllow = engine?.setImageAllow?.bind(engine);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-reader-thread={threadId}>
-      <ReaderHead
-        {...props}
-        thread={thread}
-        threadLinks={links}
-        self={self}
-        nowMs={nowMs}
-        account={account}
-        onOriginal={stack.api.showOriginal}
-      />
-      {props.renderAbove?.(thread)}
-      <MessageStack
-        threadId={threadId}
-        messages={thread.messages}
-        open={stack.open}
-        allOpen={stack.allOpen}
-        unfolded={stack.unfolded}
-        onToggle={stack.toggle}
-        onUnfold={stack.unfold}
-        images={(m) => ({
-          policy: behavior.remoteImages,
-          senderIsContact: props.contacts?.has(m.from.email.toLowerCase()) ?? false,
-          senderAllowed,
-          loadedForMessage: false,
-        })}
-        trackerBlocking={behavior.trackerBlocking}
-        selfAddresses={self}
-        offline={account?.syncState === "offline"}
-        darkSurface={isDarkTheme()}
-        originalId={stack.originalId}
-        loadOriginal={
-          engine?.getRawMessage ? (id) => engine.getRawMessage!(id, threadId) : undefined
-        }
-        onAction={props.onAction ? (a, id) => props.onAction!(a, threadId, id) : undefined}
-        onAlwaysImages={
-          setImageAllow
-            ? (address) => {
-                setAllowed(true);
-                void setImageAllow(address, true).catch(() => setAllowed(false));
-              }
-            : undefined
-        }
-        files={{
-          fileUrl: files.available ? files.fileUrl : undefined,
-          previewUrl: files.available ? files.previewUrl : undefined,
-          onAttachment: files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined,
-        }}
-      />
-      {props.composer}
+      {/* One width for every thread: capped and left-aligned, extra width is margin
+          (specs/mail-improve.md §1, AC3). */}
+      <div data-thread-column className="flex w-full max-w-(--measure-thread) flex-col">
+        <ReaderHead
+          {...props}
+          thread={thread}
+          threadLinks={links}
+          self={self}
+          nowMs={nowMs}
+          account={account}
+          onOriginal={stack.api.showOriginal}
+        />
+        {props.renderAbove?.(thread)}
+        <MessageStack
+          threadId={threadId}
+          messages={thread.messages}
+          open={stack.open}
+          allOpen={stack.allOpen}
+          unfolded={stack.unfolded}
+          onToggle={stack.toggle}
+          onUnfold={stack.unfold}
+          images={(m) => ({
+            policy: behavior.remoteImages,
+            senderIsContact: props.contacts?.has(m.from.email.toLowerCase()) ?? false,
+            senderAllowed,
+            loadedForMessage: false,
+          })}
+          trackerBlocking={behavior.trackerBlocking}
+          selfAddresses={self}
+          offline={account?.syncState === "offline"}
+          darkSurface={isDarkTheme()}
+          originalId={stack.originalId}
+          loadOriginal={
+            engine?.getRawMessage ? (id) => engine.getRawMessage!(id, threadId) : undefined
+          }
+          onAction={props.onAction ? (a, id) => props.onAction!(a, threadId, id) : undefined}
+          onAlwaysImages={
+            setImageAllow
+              ? (address) => {
+                  setAllowed(true);
+                  void setImageAllow(address, true).catch(() => setAllowed(false));
+                }
+              : undefined
+          }
+          files={{
+            fileUrl: files.available ? files.fileUrl : undefined,
+            previewUrl: files.available ? files.previewUrl : undefined,
+            onAttachment: files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined,
+          }}
+        />
+        {props.composer}
+      </div>
     </div>
   );
 }

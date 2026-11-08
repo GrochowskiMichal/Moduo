@@ -431,8 +431,12 @@ describe("pinned footer and scroll fade (AC4)", () => {
       fireEvent.scroll(body);
       expect(body.hasAttribute("data-fade")).toBe(false);
     } finally {
-      Object.defineProperty(HTMLElement.prototype, "scrollHeight", sizes.scrollHeight!);
-      Object.defineProperty(HTMLElement.prototype, "clientHeight", sizes.clientHeight!);
+      // jsdom keeps both on Element.prototype: drop the overrides (restore any own ones).
+      for (const key of ["scrollHeight", "clientHeight"] as const) {
+        const own = sizes[key];
+        if (own) Object.defineProperty(HTMLElement.prototype, key, own);
+        else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[key];
+      }
     }
   });
 

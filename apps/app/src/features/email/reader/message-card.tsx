@@ -304,7 +304,16 @@ function ClosedHeader({
   );
 }
 
+/** Message text stays at a reading measure; extra width is margin (specs/mail-improve.md §1). */
 function MessageBody(props: MessageCardProps & { images: ReaderImagesInput }) {
+  return (
+    <div data-message-body className="max-w-(--measure-reading) min-w-0">
+      <MessageBodyInner {...props} />
+    </div>
+  );
+}
+
+function MessageBodyInner(props: MessageCardProps & { images: ReaderImagesInput }) {
   const { message } = props;
   if (bodyIsPending(message)) return <BodyPending message={message} offline={!!props.offline} />;
   if (message.html)

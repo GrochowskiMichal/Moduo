@@ -14,6 +14,7 @@ import { mailViewKey } from "@/lib/runtime.types";
 import type { MailAccount, MailMailbox, MailView } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
+import { AccountTick } from "./account-tick";
 import { railAccounts } from "./rail-counts";
 
 /** One rail row's box: the short-window media query swaps the height token. */
@@ -51,6 +52,7 @@ export function AccountsSection({ accounts, ...rest }: AccountsSectionProps) {
             account={a}
             expanded={open[a.id] ?? false}
             onToggle={() => setOpen((o) => ({ ...o, [a.id]: !(o[a.id] ?? false) }))}
+            multi={shown.length > 1}
             {...rest}
           />
         ))
@@ -71,10 +73,13 @@ function AccountRow({
   onSelect,
   onCancelBackfill,
   onLoadHistory,
+  multi,
 }: Omit<AccountsSectionProps, "accounts"> & {
   account: MailAccount;
   expanded: boolean;
   onToggle: () => void;
+  /** More than one account: the tick marks each (one account needs none). */
+  multi: boolean;
 }) {
   const boxes = mailboxes[a.id] ?? [];
   const unread = boxes.find((b) => b.role === "inbox")?.unread ?? 0;
@@ -111,11 +116,7 @@ function AccountRow({
           onClick={() => onScope?.(a.id)}
           className={cn(RAIL_ROW, "min-w-0 flex-1 pl-1")}
         >
-          <span
-            data-label={hues[a.id] ?? "gray"}
-            className="tag-dot size-2 shrink-0 rounded-full"
-            aria-hidden
-          />
+          {multi ? <AccountTick hue={hues[a.id] ?? "gray"} name={label} /> : null}
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {unread ? (
             <span aria-hidden className="text-xs tabular-nums">

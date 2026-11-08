@@ -176,7 +176,8 @@ describe("failed actions are one line and fold (AC20)", () => {
     });
     const line = screen.getByRole("alert");
     expect(line.getAttribute("data-slot")).toBe("mail-failed-line");
-    expect(line.className).toContain("h-(--row-h)");
+    // ≤ 32 px (spec §5): the compact row token, not --row-h (36 px).
+    expect(line.className).toContain("h-(--mail-row-compact)");
     expect(line.textContent).toContain('Couldn\'t archive "Workshop materials"');
     expect(line.textContent).toContain("Its server is read-only");
     fireEvent.click(within(line).getByRole("button", { name: "Retry" }));

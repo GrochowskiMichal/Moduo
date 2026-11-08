@@ -48,8 +48,9 @@ export type MailStoreState = {
   /** The spine kinds each thread links to, for the row flags (specs/mail-v3.md
    *  decision 7): one batched read per list window, refreshed when links change. */
   linkedKinds: Record<string, MailLinkedKind[]>;
-  /** The side panel's view, or null while it is hidden. It starts hidden below
-   *  1200 px (`panels/side-panel.tsx`). */
+  /** The side panel's view, or null while it is hidden: the person's setting only
+   *  (⌥0, ⌥1–3, the panel button). Below 1180 px it shows as an icon strip
+   *  (`panels/side-panel.tsx`). */
   panel: MailPanelView | null;
   /** Bumps on every `threads_changed`; list windows re-read on change. */
   threadsVersion: number;
