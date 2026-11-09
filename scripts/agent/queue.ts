@@ -115,7 +115,8 @@ function depsOf(
 ): string[] {
   const ids = new Set(plain(cell).match(ID_ANY) ?? []);
   const rest = plain(cell).replace(ID_ANY, "");
-  if (/^[\s,+&—–-]*(?:(?:\d+[a-z]?|and)[\s,+&—–-]*)+$/.test(rest)) {
+  // Each ref must end at a separator or the end, so a run of digits splits only one way.
+  if (/^[\s,+&—–-]*(?:(?:\d+[a-z]?|and)(?:[\s,+&—–-]+|$))+$/.test(rest)) {
     const prefix = self.split("-")[0];
     for (const ref of rest.match(/\b\d+[a-z]?\b/g) ?? []) {
       const hit = numbered.get(ref) ?? rows.find((r) => r.id === `${prefix}-${ref}`)?.id;

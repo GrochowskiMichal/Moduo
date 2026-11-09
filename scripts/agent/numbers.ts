@@ -141,7 +141,7 @@ const REVERT_TITLE = /^revert\b/i;
 // "Fix …", "[ID] Fix …", "Notes: fix …", "fix(sync): …": a title that leads with the fix.
 const FIX_TITLE = /^(\[[^\]]+\]\s*|[\w -]{1,24}:\s*)?(hot)?fix(es)?\b/i;
 // "t/mike/fix-…", "hotfix/…", "…-fix".
-const FIX_BRANCH = /(^|\/)(hot)?fix[-/]|-fix$/i;
+const FIX_BRANCH = /(?:(^|\/)(hot)?fix[-/]|-fix$)/i;
 
 export function isRevertPr(pr: Pr): boolean {
   return REVERT_TITLE.test(pr.title);

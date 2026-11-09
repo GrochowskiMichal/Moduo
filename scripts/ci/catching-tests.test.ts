@@ -139,8 +139,14 @@ describe("comment", () => {
     expect(fence("has ```` four")).toBe("`````");
   });
 
-  it("strips @-mentions and HTML comments from model prose", () => {
-    expect(plain("ping @mike <!-- x -->")).toBe(`ping @${"\u200b"}mike  x`);
+  it("defuses @-mentions and every HTML tag in model prose", () => {
+    const zw = "\u200b";
+    expect(plain("ping @mike <!-- x -->")).toBe(`ping @${zw}mike <${zw}!-- x -->`);
+    // Stripping "<!--" once would rebuild a comment out of "<!<!---->": defusing can't be undone that way.
+    expect(plain("a <!<!---->-- hidden")).not.toMatch(/<!--/);
+    expect(plain('<img src="https://x.test/p.gif"><script>x</script >')).not.toMatch(/<[a-z/]/i);
+    // Code spans read as written: no entities.
+    expect(plain("`a && b < c`")).toBe(`\`a && b <${zw} c\``);
   });
 
   it("carries the marker, the behaviour, both commits, the failure and the test", () => {
@@ -160,6 +166,16 @@ describe("comment", () => {
     expect(body).toContain("`bbbbbbbbb`");
     expect(body).toContain("expected 2 to be 1");
     expect(body).toContain("````ts\nconst s");
+    const html = commentBody(
+      ok({ behavior: "hidden <!-- a --> <details><summary>x</summary>" }),
+      {
+        kind: "caught",
+        parent: { status: "pass", message: "" },
+        head: { status: "fail", message: "x" },
+      },
+      { parent: "a".repeat(40), head: "b".repeat(40) },
+    );
+    expect(html.slice(MARKER.length)).not.toMatch(/<!--|<details><summary>x/);
   });
 
   it("summarises every proposal with its outcome", () => {
@@ -180,6 +196,12 @@ describe("comment", () => {
     expect(text).toContain("| `a.catching.test.ts` | rejected: path already exists |");
     expect(text).toContain("| `b.catching.test.ts` | **caught** · parent pass · head fail |");
     expect(summary([], "")).toContain("No proposals.");
+    const forged = summary(
+      [{ path: "x` <img src=//t.test> `\n| y", outcome: { kind: "rejected", reason: "bad path" } }],
+      "",
+    );
+    expect(forged).not.toMatch(/` <img/);
+    expect(forged.split("\n").filter((l) => l.startsWith("| `"))).toHaveLength(1);
   });
 });
 

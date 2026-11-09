@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { classify, contextLine, parseModelAnswer, route } from "./router";
+import { budgetMs, classify, contextLine, parseModelAnswer, route } from "./router";
 
 // The intent router and the scout agent (HV-23: AC3, AC4).
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -78,6 +78,17 @@ describe("route (the rules)", () => {
     const r = route(paste);
     expect(Date.now() - started).toBeLessThan(500);
     expect(r.ids.length).toBeLessThanOrEqual(10);
+  });
+});
+
+describe("budgetMs", () => {
+  it("defaults bad values and caps the timer at 10 s", () => {
+    expect(budgetMs(undefined)).toBe(1800);
+    expect(budgetMs("nope")).toBe(1800);
+    expect(budgetMs("-5")).toBe(1800);
+    expect(budgetMs("Infinity")).toBe(1800);
+    expect(budgetMs("6000")).toBe(6000);
+    expect(budgetMs("999999999999")).toBe(10_000);
   });
 });
 
