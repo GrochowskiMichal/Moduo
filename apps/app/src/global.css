@@ -325,6 +325,7 @@ body {
      2 · .motion-pop    a popover grows from its origin   (base in, fade out)
      3 · .motion-row    a row's height and opacity open   (base in, fast out)
      4 · .motion-view   views crossfade                   (slow)
+     5 · .motion-key    a keyed change appears            (fast, opacity only)
    An exit that removes the element after it ends should wait for the
    `motion-fade-out` animationend: the movement half can end first. ═══ */
 @keyframes motion-fade-in {
@@ -367,6 +368,23 @@ body {
   to {
     grid-template-rows: 0fr;
   }
+}
+
+/* 5 · A change a key made (Mail's list after an action, the reader swap, a panel or
+   sheet opening, specs/mail-improve.md §7): opacity only, on --motion-fast, once on
+   first appearance. --motion-fast is zero under reduced motion, so nothing fades. */
+.motion-key {
+  animation: motion-fade-in var(--motion-fast) var(--ease-out);
+}
+
+/* A toast a key raised (Mail's triage, undo and send): sonner's slide and height
+   transitions give way to an opacity fade on --motion-fast (zero under reduced motion). */
+[data-sonner-toast].motion-key-toast {
+  transition: opacity var(--motion-fast) var(--ease-out) !important;
+}
+
+[data-sonner-toast].motion-key-toast * {
+  transition-duration: var(--motion-fade) !important;
 }
 
 /* 1 · Panels. Slides in from the right by default; `data-side="left"` comes
@@ -734,6 +752,21 @@ body {
 
 .react-flow__node {
   animation: mindmapNodeAppear 200ms ease-out;
+}
+
+/* A mail row's own background (specs/mail-improve.md §2): the quick actions fade the
+   preview under them into it, whatever state the row is in. */
+[data-mail-row] {
+  --row-bg: var(--mail-row-bg);
+}
+
+[data-mail-row]:hover {
+  --row-bg: var(--mail-row-bg-hover);
+}
+
+[data-mail-row][aria-selected="true"],
+[data-mail-row][data-picked] {
+  --row-bg: var(--mail-row-bg-selected);
 }
 
 @keyframes mailFlagWave {

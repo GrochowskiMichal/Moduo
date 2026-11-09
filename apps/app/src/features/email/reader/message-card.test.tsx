@@ -7,6 +7,7 @@ import type { MailMessage } from "@/lib/runtime.types.mail-engine";
 import { message, NOW, oneThreadEngine, row } from "../testing/reader-kit";
 import { MailReader, type MailReaderApi } from "./mail-reader";
 import { MessageCard } from "./message-card";
+import { shortDay } from "./reader-format";
 
 afterEach(cleanup);
 
@@ -164,5 +165,20 @@ describe("conversation stack (specs/mail-v3.md §8, AC24)", () => {
     });
     expect(ui.container.querySelectorAll("article[data-message-id]").length).toBe(7);
     expect(ui.container.querySelectorAll("[data-to-line]").length).toBe(7);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC17: a collapsed message reads as one sentence.
+describe("collapsed row name (AC17)", () => {
+  it("reads '{Name}, {day}: {snippet}, collapsed'", () => {
+    const m = message({
+      dateMs: NOW - 2 * 86_400_000,
+      snippet: "Following up on today's call",
+    });
+    render(<MessageCard message={m} expanded={false} nowMs={NOW} onToggle={() => {}} />);
+    const day = shortDay(m.dateMs, NOW);
+    screen.getByRole("button", {
+      name: `Jonas Weber, ${day}: Following up on today's call, collapsed`,
+    });
   });
 });

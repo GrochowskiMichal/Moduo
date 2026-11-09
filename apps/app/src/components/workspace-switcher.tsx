@@ -159,14 +159,18 @@ export function WorkspaceSwitcher({ onOpenSettings }: Props) {
             <DropdownMenuTrigger
               data-slot="chrome-fade-in"
               className="flex h-8 flex-row items-center gap-1.5 rounded-md bg-transparent px-2 text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground aria-expanded:bg-state-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              aria-label={`Switch workspace · current: ${workspaceLabel}`}
             >
-              <WorkspaceMark
-                name={workspaceLabel}
-                icon={selectedWorkspace.icon}
-                logoUrl={selectedWorkspace.logoUrl}
-              />
+              <span aria-hidden className="flex">
+                <WorkspaceMark
+                  name={workspaceLabel}
+                  icon={selectedWorkspace.icon}
+                  logoUrl={selectedWorkspace.logoUrl}
+                />
+              </span>
               <span className="max-w-[14ch] truncate text-sm">{workspaceLabel}</span>
+              {/* Named from its content (no aria-label for axe's label-content-name-mismatch
+                  to hold against the mark's letter, which is hidden). */}
+              <span className="sr-only">, switch workspace</span>
               <ChevronDown className="size-4 shrink-0" aria-hidden />
             </DropdownMenuTrigger>
           </TooltipTrigger>

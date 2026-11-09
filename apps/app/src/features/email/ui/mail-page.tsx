@@ -38,7 +38,12 @@ import {
 import type { MailSnippet } from "../compose/snippets";
 import type { MailKeyId } from "../keys";
 import type { MailContactDetail } from "../panels/contact-view";
-import { MailSidePanel, showMailPanel, toggleMailPanel } from "../panels/side-panel";
+import {
+  createEventAllowed,
+  MailSidePanel,
+  showMailPanel,
+  toggleMailPanel,
+} from "../panels/side-panel";
 import type { MailTaskDetail } from "../panels/task-view";
 import type { TodayEvent } from "../panels/today-events";
 import type { TodayTask } from "../panels/today-panel";
@@ -57,6 +62,7 @@ import { MailMoveDialog } from "./mail-move-dialog";
 import { localDate, nextEventSlot } from "./mail-page-wiring";
 import { AttachmentsPlace, FailedSends, OutboxPlace, useNotSentThreadIds } from "./mail-places";
 import { MailShell, type MailShellApi } from "./mail-shell";
+import { KEYED_TOAST } from "./mail-toast";
 import { makeTasks } from "./make-tasks";
 import { useUndoSendToast } from "./undo-send-toast";
 import { draftOpenSpec, useComposeExtras } from "./use-compose-extras";
@@ -155,6 +161,8 @@ export type MailPageProps = {
   contactDetailFor?: (address: string) => Promise<MailContactDetail | null>;
   /** The side panel's Task view: a linked task's status, due date, project and notes. */
   taskFor?: (taskId: string) => MailTaskDetail | null;
+  /** Renames a task (the title `t` opens editable, specs/mail-improve.md AC13). */
+  onRenameTask?: (taskId: string, title: string) => void;
   /** An invite's parsed event; absent means the card isn't shown. */
   loadInvite?: (messageId: string) => Promise<MailInvite | null>;
   onRsvp?: (messageId: string, status: MailPartstat) => Promise<void> | void;
@@ -172,7 +180,11 @@ const errText = (e: unknown, fallback: string) =>
  * `t` convert with the undo toast plus "Also mark done": Done chains onto the
  * convert's plan, and the follow-up toast's one Undo reverts both (AC33).
  */
-async function runConvert(spine: MailSpineCommands, row: MailThreadRow, onMade?: () => void) {
+async function runConvert(
+  spine: MailSpineCommands,
+  row: MailThreadRow,
+  onMade?: (taskId: string | null) => void,
+) {
   let res: SpineResult;
   try {
     res = await spine.convert(row);
@@ -182,12 +194,17 @@ async function runConvert(spine: MailSpineCommands, row: MailThreadRow, onMade?:
   }
   // The reader's chips and the side panel's Task view show the new task (MV-8, §10).
   bumpThreadLinks();
-  onMade?.();
+  onMade?.(res.plan?.taskId ?? null);
   const undo = () => void res.undo().then(bumpThreadLinks, () => {});
   undoToast("Task created", {
     onUndo: undo,
+    // One at a time, like the triage toast: the newest task's replaces the last.
+    id: "mail-task",
+    className: KEYED_TOAST,
+    // A button with its key, like Undo (specs/mail-improve.md AC13).
     link: {
-      label: "Also mark done",
+      label: "Also mark the email Done",
+      keyHint: "e",
       onClick: () =>
         void spine.alsoDone(res, row).then(
           (ok) => ok && undoToast("Task created and marked done", { onUndo: undo }),
@@ -234,7 +251,7 @@ function knownName(
 function useComposeSession(
   compose: MailPageProps["compose"],
   store: NonNullable<MailPageProps["store"]>,
-  commands: ReturnType<typeof createMailCommands>,
+  shell: { current: MailShellApi | null },
   engine: ReturnType<typeof mailStore.getState>["engine"],
   sent: { current: ComposeDeps["showSent"] },
 ) {
@@ -250,7 +267,15 @@ function useComposeSession(
               const b = store.getState().behavior;
               return { undoSeconds: b.undoSendSeconds, doneOnSend: b.doneOnSend };
             },
-            markDone: (threadId) => commands.apply({ kind: "done", threadIds: [threadId] }),
+            // Through the shell: a send that takes the thread out of the view advances
+            // like `e`, and undoing the send brings it back (specs/mail-improve.md AC12).
+            markDone: async (threadId) => {
+              const entry = await shell.current?.act("done", [threadId], undefined, {
+                quiet: true,
+              });
+              return entry ? () => shell.current?.undo(entry) ?? Promise.resolve() : undefined;
+            },
+            onReopen: (threadId) => shell.current?.open(threadId),
             setFollowUp: engine?.setFollowUp
               ? (threadId, dueMs) => engine.setFollowUp!(threadId, dueMs)
               : undefined,
@@ -258,7 +283,7 @@ function useComposeSession(
             showSent: (handle, actions, info) => sent.current?.(handle, actions, info),
           })
         : null,
-    [port, store, commands, engine, sent],
+    [port, store, shell, engine, sent],
   );
   return { port, session };
 }
@@ -288,6 +313,7 @@ export function MailPage({
   whoFor,
   contactDetailFor,
   taskFor,
+  onRenameTask,
   loadInvite,
   onRsvp,
   now = Date.now,
@@ -310,6 +336,8 @@ export function MailPage({
   const [subs, setSubs] = useState<MailThreadRow[] | null>(null);
   const [files, setFiles] = useState(false);
   const [view, setView] = useState<MailView | null>(null);
+  // The task `t` just made: its title opens editable in the Task view.
+  const [editTitleFor, setEditTitleFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialThreadId) onConsumeThreadDeepLink?.();
@@ -317,7 +345,7 @@ export function MailPage({
 
   const names = useRef<(email: string) => string | null>(() => null);
   const undoSend = useUndoSendToast({ now, nameFor: (email) => names.current(email) });
-  const { port, session } = useComposeSession(compose, store, commands, engine, undoSend.sent);
+  const { port, session } = useComposeSession(compose, store, shell, engine, undoSend.sent);
   const extras = useComposeExtras({ port, session, engine, accounts });
   const composer = useComposerSlot({
     session,
@@ -340,6 +368,28 @@ export function MailPage({
   const openDraft = (draft: MailDraftRow) => {
     if (draft.threadId) shell.current?.open(draft.threadId);
     void session?.open(draftOpenSpec(draft));
+  };
+  /** Sends a failed draft again, optionally without one file (AC19). */
+  const resend = async (draft: MailDraftRow, without?: string) => {
+    if (!port) return;
+    try {
+      const attachments = without
+        ? draft.doc.attachments.filter((a) => a.filename !== without)
+        : draft.doc.attachments;
+      await port.saveDraft({
+        draftId: draft.id,
+        accountId: draft.accountId,
+        threadId: draft.threadId,
+        doc: { ...draft.doc, attachments, lastError: null },
+      });
+      await port.queueSend({
+        draftId: draft.id,
+        undoSeconds: store.getState().behavior.undoSendSeconds,
+      });
+      toast(without ? `Sending without ${without}` : "Sending again");
+    } catch (e) {
+      toast.error(errText(e, "Couldn't send it. It's still in Drafts."));
+    }
   };
   const editOutbox = async (outboxId: string) => {
     if (!port) return;
@@ -436,6 +486,8 @@ export function MailPage({
     act: (kind, ids, args) => void shell.current?.act(kind, ids, args),
     rowOf,
     openDraft,
+    retrySend: (d) => void resend(d),
+    removeAndSend: (d, file) => void resend(d, file),
     editOutbox: (id) => void editOutbox(id),
     runGesture: (label, run) => void runGesture(label, run),
     now,
@@ -458,7 +510,12 @@ export function MailPage({
       void makeTasks(spine, threadIds, rowOf);
     else if (intent === "email.convert" && spine && threadIds[0])
       void rowOf(threadIds[0]).then((row) =>
-        row ? runConvert(spine, row, () => showMailPanel(store, "task")) : undefined,
+        row
+          ? runConvert(spine, row, (taskId) => {
+              setEditTitleFor(taskId);
+              showMailPanel(store, "task");
+            })
+          : undefined,
       );
     else if (intent === "email.note") gesture("Note created", threadIds, (row) => spine!.note(row));
     else if (intent === "email.link" && spine && threadIds[0])
@@ -526,7 +583,13 @@ export function MailPage({
           }
           renderListTop={(view) =>
             view.kind === "unified" && view.role === "drafts" && port ? (
-              <FailedSends port={port} refreshKey={placeKey} onFix={openDraft} />
+              <FailedSends
+                port={port}
+                refreshKey={placeKey}
+                onFix={openDraft}
+                onRetry={(d) => void resend(d)}
+                onRemoveAndSend={(d, file) => void resend(d, file)}
+              />
             ) : null
           }
           onIntent={onIntent}
@@ -549,7 +612,7 @@ export function MailPage({
           }}
           onCursorChange={setCurrent}
           renderSelectionActions={labels.selectionActions}
-          renderReader={(threadId, { listEmpty } = { listEmpty: false }) => {
+          renderReader={(threadId, { listEmpty, empty } = { listEmpty: false, empty: null }) => {
             // A New message takes the reader column; the list stays beside it (decision 17).
             if (composer.column) return composer.column;
             if (files && engine) {
@@ -583,8 +646,8 @@ export function MailPage({
                 </div>
               );
             }
-            // An empty list leaves the reader blank (spec §4).
-            if (!threadId && listEmpty) return null;
+            // An empty list: inbox zero's next tabs, else a blank reader (spec §4, AC22).
+            if (!threadId && listEmpty) return empty;
             return (
               <MailReader
                 engine={engine}
@@ -614,7 +677,14 @@ export function MailPage({
             events: todayEvents,
             date: localDate(now()),
             onDropThread,
-            onCreateEvent: forThread(current, createEvent),
+            // Not for a draft, an Outbox message or a new message (AC18).
+            onCreateEvent: createEventAllowed({
+              view,
+              composingNew: !!composer.column,
+              threadId: current,
+            })
+              ? forThread(current, createEvent)
+              : undefined,
           })}
           links={reader.links}
           rowOf={rowOf}
@@ -623,6 +693,9 @@ export function MailPage({
           whoFor={reader.props.who?.lookup}
           contactDetailFor={contactDetailFor}
           taskFor={taskFor}
+          editTitleFor={onRenameTask ? editTitleFor : null}
+          onRenameTask={onRenameTask}
+          onEditTitleDone={() => setEditTitleFor(null)}
           onAddContact={onAddContact}
           onOpenContact={(id) => openReferenceFull({ type: "contact", id })}
           onOpenItem={(type, id) => openReferenceFull({ type, id })}

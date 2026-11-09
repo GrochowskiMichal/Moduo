@@ -33,8 +33,9 @@ export function AttachmentList({
         <li key={`${e.messageId}:${e.attachment.id}`}>
           <button
             type="button"
-            // Named by what it shows (axe label-content-name-mismatch); the verb is the title.
-            aria-labelledby={`${base}-${i}-name ${base}-${i}-meta`}
+            // Named by exactly what it shows (axe label-content-name-mismatch); the verb is
+            // the title. The space between the two lines keeps their words apart.
+            aria-label={`${e.attachment.filename} ${e.from.name || e.from.email} · ${formatBytes(e.attachment.size)}`}
             title={`Preview ${e.attachment.filename}`}
             className="flex w-full items-center gap-3 px-4 py-2 text-left hover:bg-state-hover"
             onClick={() => onPreview(e)}
@@ -48,7 +49,7 @@ export function AttachmentList({
             <span className="min-w-0 flex-1">
               <span id={`${base}-${i}-name`} className="block truncate text-sm text-foreground">
                 {e.attachment.filename}
-              </span>
+              </span>{" "}
               <span
                 id={`${base}-${i}-meta`}
                 className="block truncate text-xs text-muted-foreground"

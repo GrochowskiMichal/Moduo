@@ -44,6 +44,8 @@ type ThreadState = {
   /** False when an old thread's headers are gone too (explain answers without a stage). */
   headersKept: boolean;
   repliedWhileSnoozed: boolean;
+  /** Waiting in New senders (the Screener) until Allow or Block releases it. */
+  newSender?: boolean;
 };
 
 type PendingOp = {
@@ -84,6 +86,11 @@ export const MAIL_FIXTURE_SCENARIOS = [
   "bodyFetch",
   "bodyOffline",
   "intro",
+  // specs/mail-improve.md MI-0: the Screener with senders waiting, a 200-character subject
+  // at the head, and messages that open with a salutation.
+  "newSenders",
+  "long",
+  "salutation",
 ] as const;
 export type MailFixtureScenario = (typeof MAIL_FIXTURE_SCENARIOS)[number];
 
@@ -305,7 +312,7 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       case "unified":
         return view.role === "all"
           ? t.role !== "trash" && t.role !== "spam"
-          : t.role === view.role && t.row.snoozedUntilMs === null;
+          : t.role === view.role && t.row.snoozedUntilMs === null && !t.newSender;
       case "mailbox":
         return (
           mailboxId(t.row.accountId, t.role) === view.mailboxId && t.row.snoozedUntilMs === null
@@ -314,6 +321,8 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
         return t.row.snoozedUntilMs !== null;
       case "followups":
         return t.row.followUpAtMs != null && t.row.followUpAtMs <= now();
+      case "new_senders":
+        return !!t.newSender;
       default:
         return false;
     }
@@ -631,6 +640,13 @@ export function createFakeMailEngine(opts: FakeEngineOptions = {}): FakeMailEngi
       // After the window: a compensating op, itself queued like any other.
       await engine.applyOp({ kind: inverse, threadIds: done.record.threadIds });
     },
+    async releaseNewSenders(threadIds) {
+      for (const id of threadIds) {
+        const t = threads.get(id);
+        if (t) t.newSender = false;
+      }
+      touched([...threadIds]);
+    },
     async listFailedOps() {
       return [...failed.values()].map((o) => ({ ...o.record }));
     },
@@ -794,6 +810,44 @@ function applyScenario(scenario: Set<MailFixtureScenario>, d: ScenarioDeps) {
   if (scenario.has("bodyFetch")) scenarioBody(d, "text_only");
   if (scenario.has("bodyOffline")) scenarioBody(d, "none");
   if (scenario.has("intro")) scenarioIntro(d);
+  if (scenario.has("newSenders")) {
+    for (const t of personalThreads(d).slice(3, 6)) t.newSender = true;
+  }
+  if (scenario.has("long")) scenarioLong(d);
+  if (scenario.has("salutation")) scenarioSalutation(d);
+}
+
+/** A 200-character subject heads Personal (the failed-line and title wrap states). */
+function scenarioLong(d: ScenarioDeps) {
+  const t = personalThreads(d)[0];
+  if (!t) return;
+  headTheList(t);
+  const subject =
+    "Hale & Co renewal: the revised pilot agreement, the security questionnaire answers, the updated pricing for the second year and the onboarding plan for the regional teams, final v3";
+  t.row.subject = subject.padEnd(200, ".");
+}
+
+/**
+ * The head thread's messages open with "Hi Robin," as people write them; the snippet is
+ * what the engine reads at read time (specs/mail-improve.md §4: salutations skipped, a
+ * salutation-only message falls back to the subject).
+ */
+function scenarioSalutation(d: ScenarioDeps) {
+  const t = personalThreads(d).find((x) => x.messages.length >= 2);
+  if (!t) return;
+  headTheList(t);
+  const sorted = [...t.messages].sort((a, b) => a.dateMs - b.dateMs);
+  sorted.forEach((m, i) => {
+    if (i === 1) {
+      m.bodyText = "Hi Robin,";
+      m.snippet = m.subject;
+      return;
+    }
+    const line = "Following up on today's call: can we lock the pilot dates this week?";
+    m.bodyText = `Hi Robin,\n\n${line}\n\nBest,\nJonas`;
+    m.snippet = line;
+  });
+  t.row.snippet = sorted.at(-1)!.snippet;
 }
 
 const personalThreads = (d: ScenarioDeps) =>
@@ -829,11 +883,11 @@ function scenarioAccounts(scenario: Set<MailFixtureScenario>, d: ScenarioDeps) {
 
 function scenarioFailed(d: ScenarioDeps) {
   const [a, b] = personalThreads(d);
-  const kinds: [ThreadState | undefined, MailOpKind][] = [
-    [a, "done"],
-    [b, "move"],
+  const kinds: [ThreadState | undefined, MailOpKind, string][] = [
+    [a, "done", "The folder is read-only on the server"],
+    [b, "move", "The server didn't answer in 30 seconds"],
   ];
-  for (const [t, kind] of kinds) {
+  for (const [t, kind, cause] of kinds) {
     if (!t) continue;
     d.addFailed({
       record: {
@@ -842,7 +896,7 @@ function scenarioFailed(d: ScenarioDeps) {
         threadIds: [t.row.threadId],
         state: "failed",
         attempts: 3,
-        lastError: "The folder is read-only on the server",
+        lastError: cause,
         createdAtMs: d.now() - 60_000,
         subject: t.row.subject,
       },

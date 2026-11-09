@@ -134,7 +134,9 @@ export function pageInfo() {
   }
   return {
     textLength: text.length,
-    textHash: [...text.slice(0, 4000)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7),
+    // A long list (with its rows' screen-reader names) can fill a short window before the
+    // part a state changes (a reader, a sheet), so the hash reads a generous prefix.
+    textHash: [...text.slice(0, 40000)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7),
     visibleElements: visible,
     overflowX: se.scrollWidth > se.clientWidth + 1,
     scrollWidth: se.scrollWidth,

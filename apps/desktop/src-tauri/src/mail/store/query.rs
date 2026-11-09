@@ -6,6 +6,7 @@ use super::{
     SearchQuery, StorageStats, Store, StoreResult, TabRef, ThreadDetail, ThreadRow, ViewRef,
 };
 use crate::mail::contracts::{BodyState, MailboxRole, TabKind, FLAG_SEEN};
+use crate::mail::host::reader::substance_snippet;
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Row};
 use std::collections::HashMap;
@@ -310,6 +311,11 @@ impl Store {
                 })
             })?
             .collect::<Result<_, _>>()?;
+        // The collapsed row reads the first line of substance, not "Hi Robin," (read time
+        // only: stored snippets never change; specs/mail-improve.md AC17).
+        for m in &mut messages {
+            m.snippet = substance_snippet(m.text.as_deref(), &m.snippet, &m.subject);
+        }
         let mut a = conn.prepare_cached(
             "SELECT a.message_id, a.id, a.filename, a.mime, a.size, a.is_inline, a.content_id
              FROM attachments a JOIN messages m ON m.id = a.message_id

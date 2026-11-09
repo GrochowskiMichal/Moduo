@@ -7,24 +7,22 @@
 // except the failed line, which is an alert.
 
 import { AlertCircle, Clock, CloudOff, CornerUpLeft, X } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { MailAccount, MailOpRecord, MailThreadRow } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
+import { MiddleTruncate } from "./middle-truncate";
 import {
   accountErrorBody,
   accountLabel,
-  failedReason,
-  failedSentence,
-  failedTitle,
-  failedUndoLabel,
-  groupFailedOps,
+  humaniseError,
   nudgeFirstName,
   nudgeTitle,
   offlineBody,
+  opLabel,
 } from "./system-copy";
 
 export { accountLabel } from "./system-copy";
@@ -186,49 +184,120 @@ function AccountLines({
   );
 }
 
-function FailedLines({
-  accounts,
-  failed,
-  failedAccount,
+/** "Couldn't {verb}" for each op kind (specs/mail-improve.md §5). */
+const FAILED_VERB: Partial<Record<MailOpRecord["kind"], string>> = {
+  done: "archive",
+  undone: "restore",
+  move: "move",
+  delete: "delete",
+  restore: "restore",
+  snooze: "snooze",
+  unsnooze: "unsnooze",
+  pin: "pin",
+  unpin: "unpin",
+  mark_read: "mark read",
+  mark_unread: "mark unread",
+  mute: "mute",
+  unmute: "unmute",
+  spam: "report",
+  not_spam: "restore",
+  label_add: "label",
+  label_remove: "unlabel",
+  block_sender: "block",
+};
+
+/** One failed action, one line of at most 32 px: "Couldn't archive "{subject}" · {cause} ·
+ *  Retry · Undo". The subject is cut in the middle; the cause never is (AC20). */
+function FailedLine({
+  op,
+  alert,
   onRetryOps,
   onUndoOps,
-}: Pick<MailSystemLinesProps, "accounts" | "failedAccount" | "onRetryOps" | "onUndoOps"> & {
+}: {
+  op: MailOpRecord;
+  alert: boolean;
+  onRetryOps?: (opIds: string[]) => void;
+  onUndoOps?: (opIds: string[]) => void;
+}) {
+  const verb = FAILED_VERB[op.kind] ?? opLabel(op.kind).toLowerCase();
+  const subject = op.subject || "(no subject)";
+  const cause = humaniseError(op.lastError) ?? "the server refused it";
+  return (
+    <div
+      role={alert ? "alert" : undefined}
+      data-slot="mail-failed-line"
+      title={`Couldn't ${verb} "${subject}" · ${cause}`}
+      className="flex h-(--mail-row-compact) min-w-0 items-center gap-2 rounded-md bg-tag-chip-surface px-2 text-sm"
+    >
+      <AlertCircle aria-hidden className="size-3.5 shrink-0 text-warning" />
+      <span className="flex min-w-0 flex-1 items-center gap-1 text-foreground">
+        <span className="shrink-0">Couldn&apos;t {verb} &quot;</span>
+        <MiddleTruncate text={subject} keep={12} />
+        <span className="shrink-0">&quot;</span>
+        <span aria-hidden className="shrink-0 text-muted-foreground">
+          ·
+        </span>
+        <span data-cause className="shrink-0 text-muted-foreground">
+          {cause}
+        </span>
+      </span>
+      <Button size="sm" variant="ghost" onClick={() => onRetryOps?.([op.opId])}>
+        Retry
+      </Button>
+      <Tipped tip="Shows the thread as the server has it">
+        <Button size="sm" variant="ghost" onClick={() => onUndoOps?.([op.opId])}>
+          Undo
+        </Button>
+      </Tipped>
+    </div>
+  );
+}
+
+/** Failed actions (AC20): one line each; two or more fold into "{n} actions didn't sync ·
+ *  Show · Retry all", and Show lists them in a box that scrolls past five lines. */
+function FailedLines({
+  failed,
+  onRetryOps,
+  onUndoOps,
+}: Pick<MailSystemLinesProps, "onRetryOps" | "onUndoOps"> & {
   failed: readonly MailOpRecord[];
 }) {
-  const groups = groupFailedOps(failed, accounts, failedAccount ?? (() => null));
-  return groups.map((g) => {
-    const ids = g.ops.map((o) => o.opId);
-    const one = g.ops.length === 1;
-    return (
-      <Line
-        key={g.accountId ?? "unknown"}
-        alert
-        warn
-        icon={AlertCircle}
-        title={<Title>{failedTitle(g.ops.length, g.label)}</Title>}
-        body={
-          <Body>
-            {failedSentence(g.ops)} {failedReason(g.ops)}
-          </Body>
-        }
+  const [shown, setShown] = useState(false);
+  if (failed.length === 1)
+    return <FailedLine op={failed[0]!} alert onRetryOps={onRetryOps} onUndoOps={onUndoOps} />;
+  const ids = failed.map((o) => o.opId);
+  return (
+    <div className="flex flex-col gap-1">
+      <div
+        role="alert"
+        data-slot="mail-system-line"
+        className="flex h-(--mail-row-compact) items-center gap-2 rounded-md bg-tag-chip-surface px-2 text-sm"
       >
-        <Tipped
-          tip={
-            one
-              ? "Shows the thread as the server has it"
-              : "Shows the threads as the server has them"
-          }
-        >
-          <Button size="sm" variant="ghost" onClick={() => onUndoOps?.(ids)}>
-            {failedUndoLabel(g.ops.length)}
-          </Button>
-        </Tipped>
-        <Button size="sm" onClick={() => onRetryOps?.(ids)}>
-          Retry now
+        <AlertCircle aria-hidden className="size-3.5 shrink-0 text-warning" />
+        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+          {failed.length} actions didn&apos;t sync
+        </span>
+        <Button size="sm" variant="ghost" aria-expanded={shown} onClick={() => setShown((v) => !v)}>
+          {shown ? "Hide" : "Show"}
         </Button>
-      </Line>
-    );
-  });
+        <Button size="sm" variant="ghost" onClick={() => onRetryOps?.(ids)}>
+          Retry all
+        </Button>
+      </div>
+      {shown ? (
+        <ul
+          aria-label="Actions that didn't sync"
+          className="flex max-h-(--failed-list-max) flex-col gap-1 overflow-y-auto"
+        >
+          {failed.map((op) => (
+            <li key={op.opId}>
+              <FailedLine op={op} alert={false} onRetryOps={onRetryOps} onUndoOps={onUndoOps} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 function NudgeLines({
@@ -320,13 +389,7 @@ export function MailSystemLines(props: MailSystemLinesProps) {
         </Line>
       ) : null}
       {failed.length > 0 ? (
-        <FailedLines
-          accounts={accounts}
-          failed={failed}
-          failedAccount={props.failedAccount}
-          onRetryOps={props.onRetryOps}
-          onUndoOps={props.onUndoOps}
-        />
+        <FailedLines failed={failed} onRetryOps={props.onRetryOps} onUndoOps={props.onUndoOps} />
       ) : null}
       {nudge ? (
         <NudgeLines

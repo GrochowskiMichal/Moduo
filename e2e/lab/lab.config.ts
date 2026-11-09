@@ -12,7 +12,7 @@ import { signInPage } from "../tests/support/local-stack.ts";
 import { calendarStates, onGrid } from "./calendar-states.ts";
 import { homeNowNextState } from "./home-states.ts";
 import { calendarJourneys } from "./journeys-calendar.ts";
-import { mailJourneys, mailStates } from "./mail-lab.ts";
+import { mailJourneys, mailStates, onFixture } from "./mail-lab.ts";
 import { seed, type Seeded, type Variant } from "./seed.ts";
 
 const PORT = Number(process.env.LAB_PORT ?? 4317);
@@ -108,6 +108,8 @@ export default {
       "[data-slot^='avatar'] *",
       "img",
       "svg *",
+      // Screen-reader text is never seen.
+      ".sr-only",
     ],
   },
 
@@ -181,6 +183,8 @@ export default {
       title: "Email",
       path: "/email",
       ready: readyWhen("nav[aria-label='Workspace navigation']"),
+      // Focus, hover, themes and overlays look at the fixture engine too (the 7 Nov gap).
+      prepare: ({ page }: { page: Page }) => onFixture(page, 5_000),
       states: mailStates,
     },
     {

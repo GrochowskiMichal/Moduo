@@ -3,7 +3,15 @@
 // account's sign-in line and the conversation stack from the engine. Re-reads
 // when the engine's threads change (a fetched body swaps in that way).
 
-import { type ReactNode, useEffect, useImperativeHandle, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   MailAccount,
@@ -50,6 +58,8 @@ export type ReaderSendNotes = {
   refreshKey: string;
   onEditOutbox?: (outboxId: string) => void;
   onFix?: Parameters<typeof SendNote>[0]["onFix"];
+  onRetry?: Parameters<typeof SendNote>[0]["onRetry"];
+  onRemoveAndSend?: Parameters<typeof SendNote>[0]["onRemoveAndSend"];
 };
 
 export type MailReaderProps = {
@@ -214,7 +224,11 @@ function ReaderHead(props: MailReaderProps & Head) {
     why: props.why,
     labels: props.menuItems?.(thread) ?? null,
     onOriginal: props.engine?.getRawMessage ? props.onOriginal : null,
+    onTool: (a) => toolbarAction(props, props, a),
   });
+  // The title's place: once it scrolls away while composing, a compact subject stays.
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const titleGone = useScrolledAway(titleRef, !!props.composer);
   return (
     <>
       <ReaderToolbar
@@ -228,9 +242,22 @@ function ReaderHead(props: MailReaderProps & Head) {
         }}
         menu={more.menu}
         panel={props.panel}
+        // A sender waiting in the Screener is decided first (AC24).
+        disabled={!!props.who?.screened}
       />
-      {more.popover}
-      <h2 className="min-w-0 px-4 pt-3 pb-2 text-lg font-semibold text-foreground">
+      {props.composer && titleGone ? (
+        <div
+          data-sticky-subject
+          className="motion-key sticky top-0 z-(--z-sticky) truncate border-b border-hairline bg-background px-4 py-2 text-sm font-medium text-foreground"
+        >
+          {row.subject || "(no subject)"}
+        </div>
+      ) : null}
+      <h2
+        ref={titleRef}
+        data-reader-title
+        className="min-w-0 px-4 pt-3 pb-2 text-lg font-semibold break-words text-foreground"
+      >
         {row.subject || "(no subject)"}
       </h2>
       {note ? (
@@ -239,6 +266,8 @@ function ReaderHead(props: MailReaderProps & Head) {
           offline={account?.syncState === "offline"}
           onEditOutbox={props.sendNotes?.onEditOutbox}
           onFix={props.sendNotes?.onFix}
+          onRetry={props.sendNotes?.onRetry}
+          onRemoveAndSend={props.sendNotes?.onRemoveAndSend}
         />
       ) : null}
       {note ? null : (
@@ -256,8 +285,25 @@ function ReaderHead(props: MailReaderProps & Head) {
       {props.who ? (
         <ReaderWhoCard thread={thread} self={self} nowMs={nowMs} source={props.who} />
       ) : null}
+      {more.sheet}
     </>
   );
+}
+
+/** True once `ref` has scrolled out of its scroller (only while `watch`). */
+function useScrolledAway(ref: RefObject<HTMLElement | null>, watch: boolean): boolean {
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!watch || !el || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver((entries) => {
+      const last = entries[entries.length - 1];
+      if (last) setGone(!last.isIntersecting);
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, watch]);
+  return gone && watch;
 }
 
 function useStackState(
@@ -329,54 +375,58 @@ function ThreadStack(props: MailReaderProps) {
   const setImageAllow = engine?.setImageAllow?.bind(engine);
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto" data-reader-thread={threadId}>
-      <ReaderHead
-        {...props}
-        thread={thread}
-        threadLinks={links}
-        self={self}
-        nowMs={nowMs}
-        account={account}
-        onOriginal={stack.api.showOriginal}
-      />
-      {props.renderAbove?.(thread)}
-      <MessageStack
-        threadId={threadId}
-        messages={thread.messages}
-        open={stack.open}
-        allOpen={stack.allOpen}
-        unfolded={stack.unfolded}
-        onToggle={stack.toggle}
-        onUnfold={stack.unfold}
-        images={(m) => ({
-          policy: behavior.remoteImages,
-          senderIsContact: props.contacts?.has(m.from.email.toLowerCase()) ?? false,
-          senderAllowed,
-          loadedForMessage: false,
-        })}
-        trackerBlocking={behavior.trackerBlocking}
-        selfAddresses={self}
-        offline={account?.syncState === "offline"}
-        darkSurface={isDarkTheme()}
-        originalId={stack.originalId}
-        loadOriginal={
-          engine?.getRawMessage ? (id) => engine.getRawMessage!(id, threadId) : undefined
-        }
-        onAction={props.onAction ? (a, id) => props.onAction!(a, threadId, id) : undefined}
-        onAlwaysImages={
-          setImageAllow
-            ? (address) => {
-                setAllowed(true);
-                void setImageAllow(address, true).catch(() => setAllowed(false));
-              }
-            : undefined
-        }
-        files={{
-          fileUrl: files.available ? files.fileUrl : undefined,
-          previewUrl: files.available ? files.previewUrl : undefined,
-          onAttachment: files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined,
-        }}
-      />
-      {props.composer}
+      {/* One width for every thread: capped and left-aligned, extra width is margin
+          (specs/mail-improve.md §1, AC3). */}
+      <div data-thread-column className="flex w-full max-w-(--measure-thread) flex-col">
+        <ReaderHead
+          {...props}
+          thread={thread}
+          threadLinks={links}
+          self={self}
+          nowMs={nowMs}
+          account={account}
+          onOriginal={stack.api.showOriginal}
+        />
+        {props.renderAbove?.(thread)}
+        <MessageStack
+          threadId={threadId}
+          messages={thread.messages}
+          open={stack.open}
+          allOpen={stack.allOpen}
+          unfolded={stack.unfolded}
+          onToggle={stack.toggle}
+          onUnfold={stack.unfold}
+          images={(m) => ({
+            policy: behavior.remoteImages,
+            senderIsContact: props.contacts?.has(m.from.email.toLowerCase()) ?? false,
+            senderAllowed,
+            loadedForMessage: false,
+          })}
+          trackerBlocking={behavior.trackerBlocking}
+          selfAddresses={self}
+          offline={account?.syncState === "offline"}
+          darkSurface={isDarkTheme()}
+          originalId={stack.originalId}
+          loadOriginal={
+            engine?.getRawMessage ? (id) => engine.getRawMessage!(id, threadId) : undefined
+          }
+          onAction={props.onAction ? (a, id) => props.onAction!(a, threadId, id) : undefined}
+          onAlwaysImages={
+            setImageAllow
+              ? (address) => {
+                  setAllowed(true);
+                  void setImageAllow(address, true).catch(() => setAllowed(false));
+                }
+              : undefined
+          }
+          files={{
+            fileUrl: files.available ? files.fileUrl : undefined,
+            previewUrl: files.available ? files.previewUrl : undefined,
+            onAttachment: files.available ? (a) => void files.ensure(a).catch(() => {}) : undefined,
+          }}
+        />
+        {props.composer}
+      </div>
     </div>
   );
 }

@@ -77,6 +77,7 @@ import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
+import { SkipLink } from "./skip-link";
 import { StatusMenu } from "./status-menu";
 import { TasksSyncStatus } from "./sync-status";
 import { TimeRegionPrompt } from "./time-region-prompt";
@@ -514,6 +515,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       {/* Clipped, never a scroll container (MOD-161): focus or a scroll to
           something off screen can't shift the app sideways. */}
       <div className="flex h-screen min-h-screen flex-col overflow-clip bg-background">
+        {/* First focusable on a route that has one (specs/mail-improve.md AC26). */}
+        <SkipLink pathname={pathname} />
         <TrialBanner />
         <MinBuildBanner />
         <nav

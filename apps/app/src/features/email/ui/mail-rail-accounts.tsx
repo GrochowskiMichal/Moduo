@@ -14,11 +14,13 @@ import { mailViewKey } from "@/lib/runtime.types";
 import type { MailAccount, MailMailbox, MailView } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
 
+import { AccountTick } from "./account-tick";
 import { railAccounts } from "./rail-counts";
 
 /** One rail row's box: the short-window media query swaps the height token. */
+/** A rail row; focus is the house ring, 2 px, no offset (specs/mail-improve.md §6). */
 export const RAIL_ROW =
-  "flex h-(--mail-rail-row) w-full items-center gap-2 rounded-md px-2 text-left text-sm";
+  "flex h-(--mail-rail-row) w-full items-center gap-2 rounded-md px-2 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 export type AccountsSectionProps = {
   accounts: readonly MailAccount[];
@@ -51,6 +53,7 @@ export function AccountsSection({ accounts, ...rest }: AccountsSectionProps) {
             account={a}
             expanded={open[a.id] ?? false}
             onToggle={() => setOpen((o) => ({ ...o, [a.id]: !(o[a.id] ?? false) }))}
+            multi={shown.length > 1}
             {...rest}
           />
         ))
@@ -71,10 +74,13 @@ function AccountRow({
   onSelect,
   onCancelBackfill,
   onLoadHistory,
+  multi,
 }: Omit<AccountsSectionProps, "accounts"> & {
   account: MailAccount;
   expanded: boolean;
   onToggle: () => void;
+  /** More than one account: the tick marks each (one account needs none). */
+  multi: boolean;
 }) {
   const boxes = mailboxes[a.id] ?? [];
   const unread = boxes.find((b) => b.role === "inbox")?.unread ?? 0;
@@ -95,11 +101,11 @@ function AccountRow({
           aria-expanded={expanded}
           aria-label={`${expanded ? "Hide" : "Show"} folders for ${label}`}
           onClick={onToggle}
-          className="flex size-(--hit-min) shrink-0 items-center justify-center rounded-sm hover:bg-state-hover"
+          className="flex size-(--hit-min) shrink-0 items-center justify-center rounded-sm outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring"
         >
           <ChevronRight
             className={cn(
-              "size-3.5 transition-transform duration-(--motion-fade)",
+              "size-3.5 transition-transform duration-(--motion-fast)",
               expanded && "rotate-90",
             )}
             aria-hidden
@@ -111,11 +117,7 @@ function AccountRow({
           onClick={() => onScope?.(a.id)}
           className={cn(RAIL_ROW, "min-w-0 flex-1 pl-1")}
         >
-          <span
-            data-label={hues[a.id] ?? "gray"}
-            className="tag-dot size-2 shrink-0 rounded-full"
-            aria-hidden
-          />
+          {multi ? <AccountTick hue={hues[a.id] ?? "gray"} name={label} /> : null}
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {unread ? (
             <span aria-hidden className="text-xs tabular-nums">

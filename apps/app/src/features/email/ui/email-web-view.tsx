@@ -6,6 +6,7 @@
 
 import { CalendarDays, FileText, Laptop, Mail, SquareCheck } from "lucide-react";
 
+import { useHideBottomBarTools } from "../../../components/app/bottom-bar-mode";
 import { Button } from "../../../components/ui/button";
 import { Chip, ChipButton } from "../../../components/ui/chip";
 import { EmptyState } from "../../../components/ui/empty-state";
@@ -101,62 +102,69 @@ type Props = {
   onOpenEntity?: (entity: WebLinkedEntity) => void;
 };
 
+const WEB_HIDDEN_TOOLS = ["capture", "create"] as const;
+
 export function EmailWebView({ email, links, highlightedRefId, onOpenEntity }: Props) {
   const linked = [...email.tissueRefs]
     .filter((r) => !links || (links[r.id]?.length ?? 0) > 0)
     .sort((a, b) => Date.parse(b.updatedAt || "") - Date.parse(a.updatedAt || ""));
+  // No compose on the web (specs/mail-improve.md §5): the bar's capture and + go while
+  // Mail shows here.
+  useHideBottomBarTools(WEB_HIDDEN_TOOLS);
   return (
-    <div className="pane-scroll flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-4">
-      <div
-        role="note"
-        className="flex items-start gap-3 rounded-lg border border-border bg-card p-4"
-      >
-        <Mail className="mt-0.5 size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
-        <p className="min-w-0 flex-1 text-sm text-muted-foreground">
-          <span className="font-medium text-foreground">Mail lives on your Mac.</span> Here you see
-          the conversations you linked to a task, a note or an event, so the rest of your work can
-          find them. Snoozes and follow-ups stay on the Mac.
-        </p>
-        <Button asChild size="sm" variant="secondary">
-          <a href={macAppHref()} target="_blank" rel="noreferrer">
-            Open Moduo for Mac
-          </a>
-        </Button>
-      </div>
-
-      {email.loading && linked.length === 0 ? (
-        <div role="status" aria-label="Loading email" className="flex flex-col gap-2">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-16 w-full rounded-lg" />
-          ))}
+    <div className="pane-scroll flex h-full min-h-0 flex-col overflow-y-auto p-4">
+      <div data-web-column className="mx-auto flex w-full max-w-(--measure-thread) flex-col gap-4">
+        <div
+          role="note"
+          className="flex items-start gap-3 rounded-lg border border-border bg-card p-4"
+        >
+          <Mail className="mt-0.5 size-icon-sm shrink-0 text-muted-foreground" aria-hidden />
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">Mail lives on your Mac.</span> Here you
+            see the conversations you linked to a task, a note or an event, so the rest of your work
+            can find them. Snoozes and follow-ups stay on the Mac.
+          </p>
+          <Button asChild size="sm" variant="secondary">
+            <a href={macAppHref()} target="_blank" rel="noreferrer">
+              Open Moduo for Mac
+            </a>
+          </Button>
         </div>
-      ) : null}
 
-      {linked.length > 0 ? (
-        <section aria-label="Linked conversations" className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-foreground">
-            Linked conversations{" "}
-            <span className="text-muted-foreground tabular-nums">{linked.length}</span>
-          </h2>
-          {linked.map((ref) => (
-            <LinkedCard
-              key={ref.id}
-              thread={ref}
-              links={links?.[ref.id] ?? []}
-              highlighted={highlightedRefId === ref.id}
-              onOpenEntity={onOpenEntity}
-            />
-          ))}
-        </section>
-      ) : null}
+        {email.loading && linked.length === 0 ? (
+          <div role="status" aria-label="Loading email" className="flex flex-col gap-2">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-16 w-full rounded-lg" />
+            ))}
+          </div>
+        ) : null}
 
-      {linked.length === 0 && !email.loading ? (
-        <EmptyState
-          icon={Mail}
-          title="No linked conversations yet"
-          description="Link an email to a task on your Mac and it shows here."
-        />
-      ) : null}
+        {linked.length > 0 ? (
+          <section aria-label="Linked conversations" className="flex flex-col gap-2">
+            <h2 className="text-sm font-medium text-foreground">
+              Linked conversations{" "}
+              <span className="text-muted-foreground tabular-nums">{linked.length}</span>
+            </h2>
+            {linked.map((ref) => (
+              <LinkedCard
+                key={ref.id}
+                thread={ref}
+                links={links?.[ref.id] ?? []}
+                highlighted={highlightedRefId === ref.id}
+                onOpenEntity={onOpenEntity}
+              />
+            ))}
+          </section>
+        ) : null}
+
+        {linked.length === 0 && !email.loading ? (
+          <EmptyState
+            icon={Mail}
+            title="No linked conversations yet"
+            description="Link an email to a task on your Mac and it shows here."
+          />
+        ) : null}
+      </div>
     </div>
   );
 }

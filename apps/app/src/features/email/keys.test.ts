@@ -32,12 +32,12 @@ describe("mail keys (AC42)", () => {
     expect([firstOf(0), firstOf(1), firstOf(2)]).toEqual(["Move", "Act", "Connect"]);
     const keysIn = (title: string) =>
       legend.find((g) => g.title === title)!.rows.map((r) => r.keys.join(" "));
-    expect(keysIn("Connect")).toEqual(["⌥1 ⌥2 ⌥3", "t", "l", "n"]);
+    expect(keysIn("Connect")).toEqual(["⌥1 ⌥2 ⌥3", "⌥0", "", "t", "l", "n"]);
     expect(keysIn("Write")).toEqual(expect.arrayContaining(["⌘↵", ";;", "Esc"]));
     expect(keysIn("Move")).toEqual(
       expect.arrayContaining(["j k", "] [", "↵", "gi gf gs", "ga gt gd"]),
     );
-    expect(keysIn("Act")).toEqual(expect.arrayContaining(["m # ⌫", "z ⌘z"]));
+    expect(keysIn("Act")).toEqual(expect.arrayContaining(["m # ⌫", "z ⌘Z"]));
   });
 
   it("⌘K lists exactly the registry's acting mail keys", () => {
@@ -52,7 +52,7 @@ describe("mail keys (AC42)", () => {
   it("formats chords the way the legend shows them", () => {
     expect(formatMailKey("Shift+3")).toBe("#");
     expect(formatMailKey("Shift+/")).toBe("?");
-    expect(formatMailKey("Mod+A")).toBe("⌘a");
+    expect(formatMailKey("Mod+A")).toBe("⌘A");
     expect(formatMailKey("Shift+J")).toBe("⇧J");
     expect(formatMailKey("E")).toBe("e");
     expect(mailKeyHint("email.snooze")).toBe("s");

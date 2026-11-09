@@ -1,15 +1,22 @@
-// "Why is this in {Tab}?" (specs/mail-v3.md §8, A3, decision 18): explain only,
-// read-only. Over `engine.explainThread`, one sentence names the deciding reason,
-// the six classifier steps follow in order (the ones before the decider dimmed,
-// the decider marked for screen readers), and the footer links to the Settings
-// section that controls that step. No segmented control, no rule dialog.
+// "Why is this in {Tab}?" (specs/mail-v3.md §8, A3, decision 18; specs/mail-improve.md
+// §4, AC15): explain only, read-only. A sheet inside the reader, under the sender card,
+// so the subject and card stay visible. Over `engine.explainThread`, one sentence names
+// the deciding reason, the six classifier steps follow in order (the ones before the
+// decider dimmed and tagged "didn't match", never struck through; the decider tagged
+// "decided it"), and a ghost button opens Settings at Mail → Rules. Esc or × closes.
 
 import type { MailClassifyStage, MailTabKind } from "@contracts/mail";
+import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { IconButton } from "@/components/ui/icon-button";
 import type { MailExplain } from "@/lib/runtime.types.mail-engine";
 import { cn } from "@/lib/utils";
+
+import { dispatchOpenSettings } from "../../settings/settings-events";
+
+/** The sheet's Settings button: Settings at Mail → Rules (specs/mail-improve.md §4). */
+export const openMailRules = () => dispatchOpenSettings({ section: "mail", sub: "rules" });
 
 export type WhyNames = {
   /** Rules from Settings, by item id. */
@@ -137,20 +144,27 @@ export function WhyHereCard({
               key={step.stage}
               data-past={past || undefined}
               data-decided={hit || undefined}
-              className={cn(
-                hit ? "font-medium text-foreground" : "text-muted-foreground",
-                past && "text-subtle-foreground line-through",
-              )}
+              className={cn(hit ? "font-medium text-foreground" : "text-muted-foreground")}
             >
-              {step.label}
-              {hit ? <span className="sr-only"> (this decided it)</span> : null}
+              <span data-step-label>{step.label}</span>
+              {past || hit ? (
+                <span
+                  data-step-tag
+                  className={cn(
+                    "ml-2 rounded-sm px-1 text-2xs",
+                    hit ? "bg-state-selected text-foreground" : "bg-state-hover",
+                  )}
+                >
+                  {hit ? "decided it" : "didn't match"}
+                </span>
+              ) : null}
             </li>
           );
         })}
       </ol>
       {answer.link && onOpenSettings ? (
         <div className="border-t border-hairline pt-2">
-          {/* The link names the sender: it wraps inside the popover rather than run past it. */}
+          {/* The link names the sender: it wraps rather than run past the sheet. */}
           <Button
             type="button"
             size="sm"
@@ -166,42 +180,41 @@ export function WhyHereCard({
   );
 }
 
-export function WhyHerePopover({
+/** The sheet in the reader body, under the sender card (§4, AC15). */
+export function WhyHereSheet({
   answer,
-  anchor,
   onClose,
-  onOpenSettings,
+  onOpenSettings = openMailRules,
 }: {
-  /** null keeps the popover closed. */
-  answer: WhyAnswer | null;
-  anchor: { current: { getBoundingClientRect(): DOMRect } | null };
+  answer: WhyAnswer;
   onClose: () => void;
   onOpenSettings?: () => void;
 }) {
   return (
-    <Popover open={answer !== null} onOpenChange={(o) => (o ? null : onClose())}>
-      <PopoverAnchor virtualRef={anchor as React.RefObject<{ getBoundingClientRect(): DOMRect }>} />
-      <PopoverContent
-        align="end"
-        className="w-80 p-3"
-        aria-labelledby="why-here-heading"
-        // Opened from the ⋯ menu: the menu handing focus back mustn't close it.
-        onFocusOutside={(e) => e.preventDefault()}
-      >
-        {answer ? (
-          <WhyHereCard
-            answer={answer}
-            onOpenSettings={
-              onOpenSettings
-                ? () => {
-                    onClose();
-                    onOpenSettings();
-                  }
-                : undefined
-            }
-          />
-        ) : null}
-      </PopoverContent>
-    </Popover>
+    <section
+      aria-labelledby="why-here-heading"
+      data-why-sheet
+      onKeyDown={(e) => {
+        if (e.key !== "Escape") return;
+        e.stopPropagation();
+        onClose();
+      }}
+      className="motion-key relative mx-4 mb-3 rounded-lg border border-hairline bg-card p-3 pr-10"
+    >
+      <WhyHereCard
+        answer={answer}
+        onOpenSettings={() => {
+          onClose();
+          onOpenSettings();
+        }}
+      />
+      <IconButton
+        icon={X}
+        label="Close"
+        tooltip={null}
+        className="absolute top-2 right-2"
+        onClick={onClose}
+      />
+    </section>
   );
 }

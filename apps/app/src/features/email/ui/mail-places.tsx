@@ -3,7 +3,7 @@
 // sends that failed with "Not sent: {reason}" and Fix and send. MV-5 folds
 // them into the row design; this block mounts them on real data.
 
-import { Send } from "lucide-react";
+import { Paperclip, Send } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -16,9 +16,13 @@ import type {
 import type { MailEngine, MailMessage } from "@/lib/runtime.types.mail-engine";
 
 import { OutboxView } from "../compose/outbox-view";
+import { sendFailure } from "../compose/send-failure";
 import { emptyMailQuery } from "../search/query";
 import { AttachmentsView } from "../views/attachments";
 import type { AttachmentEntry } from "../views/attachments-model";
+import { MiddleTruncate } from "./middle-truncate";
+
+export { type SendFailure, sendFailure } from "../compose/send-failure";
 
 /** A port read re-run whenever `key` changes; failures read as empty. */
 function usePortRead<T>(read: () => Promise<T[]>, key: string): T[] {
@@ -71,37 +75,66 @@ export function OutboxPlace({
   );
 }
 
-/** Drafts whose send failed, each with its reason and Fix and send (AC11). */
+/** Drafts whose send failed (AC11, AC19): the cause first, on two lines at most, and the
+ *  action that fits it: "Remove {file} and send" for a size limit, else Retry; Edit always. */
 export function FailedSends({
   port,
   refreshKey,
   onFix,
+  onRetry,
+  onRemoveAndSend,
 }: {
   port: MailComposeEngine;
   refreshKey: string;
+  /** Edit: reopens the draft in the composer. */
   onFix: (draft: MailDraftRow) => void;
+  onRetry?: (draft: MailDraftRow) => void;
+  onRemoveAndSend?: (draft: MailDraftRow, filename: string) => void;
 }) {
   const drafts = usePortRead<MailDraftRow>(() => port.listDrafts(), refreshKey);
   const failed = drafts.filter((d) => d.doc.lastError);
   if (failed.length === 0) return null;
   return (
     <ul aria-label="Not sent" className="mx-2 mb-2 flex flex-col divide-y divide-border">
-      {failed.map((d) => (
-        <li key={d.id} className="flex items-center gap-3 px-1 py-2">
-          <div className="flex min-w-0 flex-1 flex-col text-sm">
-            <span className="truncate text-foreground">{d.doc.subject || "(no subject)"}</span>
-            <span className="truncate text-xs text-muted-foreground">
-              To {d.doc.to.join(", ") || "no one yet"}
-            </span>
-            <span role="alert" className="truncate text-xs text-destructive">
-              Not sent: {d.doc.lastError}
-            </span>
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => onFix(d)}>
-            Fix and send
-          </Button>
-        </li>
-      ))}
+      {failed.map((d) => {
+        const f = sendFailure(d.doc.lastError!, d.doc.attachments);
+        return (
+          <li key={d.id} className="flex flex-col gap-1.5 px-1 py-2">
+            <div className="flex min-w-0 flex-col text-sm">
+              <span className="truncate text-foreground">{d.doc.subject || "(no subject)"}</span>
+              <span className="truncate text-xs text-muted-foreground">
+                To {d.doc.to.join(", ") || "no one yet"}
+              </span>
+              <span role="alert" className="line-clamp-2 text-xs text-destructive">
+                Not sent · {f.cause}
+              </span>
+            </div>
+            {f.kind === "size" && f.file ? (
+              <span
+                data-attachment-flag={f.file}
+                className="flex max-w-full items-center gap-1 self-start rounded-md border border-warning px-1.5 py-0.5 text-xs text-warning"
+              >
+                <Paperclip aria-hidden className="size-3 shrink-0" />
+                <MiddleTruncate text={f.file} />
+              </span>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              {f.kind === "size" && f.file ? (
+                <Button size="sm" variant="secondary" onClick={() => onRemoveAndSend?.(d, f.file!)}>
+                  Remove {f.file} and send
+                </Button>
+              ) : (
+                <Button size="sm" variant="secondary" onClick={() => onRetry?.(d)}>
+                  Retry
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" onClick={() => onFix(d)}>
+                Edit
+              </Button>
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }

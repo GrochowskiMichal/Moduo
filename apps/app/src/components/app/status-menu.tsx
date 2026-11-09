@@ -237,10 +237,14 @@ export function StatusMenu({
       <PopoverTrigger
         type="button"
         data-slot="status-menu-trigger"
-        className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-avatar border border-border bg-muted text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-        aria-label={mine ? `Your status: ${statusLine(mine)}` : "Your status and settings"}
+        className="relative inline-flex size-8 shrink-0 items-center justify-center rounded-avatar border border-border bg-muted text-foreground transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
-        <Avatar size="sm" className="size-full">
+        {/* Named from this line, not an aria-label: the visible initials are hidden. */}
+        <span className="sr-only">
+          {mine ? `Your status: ${statusLine(mine)}` : "Your status and settings"}
+        </span>
+        {/* The initials aren't the button's name (axe label-content-name-mismatch). */}
+        <Avatar aria-hidden size="sm" className="size-full">
           {avatarDataUrl ? <AvatarImage src={avatarDataUrl} alt="" /> : null}
           <AvatarFallback>{profileInitial}</AvatarFallback>
         </Avatar>

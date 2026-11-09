@@ -7,6 +7,15 @@
 import type { ReactNode } from "react";
 import { toast } from "sonner";
 
+/** A key cap inside a toast button (the Kbd primitive's look; this lib stays free of
+ *  `@/` component imports). */
+const KEY_CAP =
+  "rounded border border-border bg-muted px-1 py-0.5 font-mono text-2xs text-muted-foreground";
+
+/** A body button with its key, styled like sonner's Undo (Mail's "Also mark the email Done"). */
+const KEYED_BUTTON =
+  "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 font-display text-sm text-foreground outline-none hover:bg-state-hover focus-visible:ring-2 focus-visible:ring-ring";
+
 /** The one undo window. Don't inline 8000 — drift is how grammars die. */
 export const UNDO_TOAST_MS = 8000;
 
@@ -34,7 +43,20 @@ type UndoToastOptions = {
    * rendered as a quiet text link in the toast BODY; clicking it closes the
    * toast without undoing (a deferred commit then commits).
    */
-  link?: { label: string; onClick: () => void };
+  link?: {
+    label: string;
+    onClick: () => void;
+    /** Its key, shown as a key cap after the label and named in `aria-keyshortcuts`
+     *  (Mail's "Also mark the email Done  e"); styled like the Undo button then. */
+    keyHint?: string;
+  };
+  /** Undo's key, shown as a key cap after "Undo" (Mail's ⌘Z, specs/mail-improve.md §3). */
+  undoKey?: string;
+  /** A stable id: the next toast with it replaces this one instead of stacking
+   *  (Mail's triage: one toast, the latest action's). */
+  id?: string;
+  /** Classes on the toast (Mail's `motion-key-toast`: a keyed change fades, never slides). */
+  className?: string;
   /**
    * Only for a window another clock owns (Mail's undo send, whose end the
    * engine reports): the toast stays exactly that long. Everything else keeps
@@ -42,6 +64,50 @@ type UndoToastOptions = {
    */
   durationMs?: number;
 };
+
+const LINK_DANGER =
+  "rounded-md font-display text-sm text-destructive underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50";
+const LINK_QUIET =
+  "rounded-md font-display text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50";
+
+/** The toast body: the description, then the escalation or the link as a button. */
+function toastBody(opts: UndoToastOptions, dismiss: () => void): ReactNode {
+  const extra = opts.danger ?? opts.link;
+  if (!extra) return opts.description;
+  const keyHint = opts.danger ? undefined : opts.link?.keyHint;
+  return (
+    <span className="flex flex-col items-start gap-1">
+      {opts.description ? <span>{opts.description}</span> : null}
+      {/* A quiet destructive text link — the design system's `link` button
+          role: font-display (R4), rounded-md focus ring (R2), no fill. Kept
+          as a raw button (not the Button primitive) so this lib stays free of
+          the `@/` component value-import chain vitest can't resolve. */}
+      <button
+        type="button"
+        aria-keyshortcuts={keyHint}
+        className={opts.danger ? LINK_DANGER : keyHint ? KEYED_BUTTON : LINK_QUIET}
+        onClick={() => {
+          dismiss();
+          extra.onClick();
+        }}
+      >
+        {extra.label}
+        {keyHint ? <kbd className={KEY_CAP}>{keyHint}</kbd> : null}
+      </button>
+    </span>
+  );
+}
+
+/** "Undo", with its key cap when it has one. */
+function undoLabel(undoKey: string | undefined): ReactNode {
+  if (!undoKey) return "Undo";
+  return (
+    <span className="flex items-center gap-1">
+      Undo
+      <kbd className={KEY_CAP}>{undoKey}</kbd>
+    </span>
+  );
+}
 
 /** Neutral toast + 8s Undo — returns the toast id. */
 export function undoToast(label: ReactNode, opts: UndoToastOptions): string | number {
@@ -53,38 +119,15 @@ export function undoToast(label: ReactNode, opts: UndoToastOptions): string | nu
     run();
   };
   const commit = opts.onCommit ? settle(opts.onCommit) : undefined;
-  // `toastId` is referenced only inside the danger onClick (which runs at click
+  // `toastId` is referenced only inside the body's onClick (which runs at click
   // time, after toast() has returned) — so the const is always initialized by
   // the time the closure reads it.
-  const extra = opts.danger ?? opts.link;
   const toastId: string | number = toast(label, {
+    ...(opts.id ? { id: opts.id } : {}),
+    ...(opts.className ? { className: opts.className } : {}),
     duration: opts.durationMs ?? UNDO_TOAST_MS,
-    description: extra ? (
-      <span className="flex flex-col items-start gap-1">
-        {opts.description ? <span>{opts.description}</span> : null}
-        {/* A quiet destructive text link — the design system's `link` button
-            role: font-display (R4), rounded-md focus ring (R2), no fill. Kept
-            as a raw button (not the Button primitive) so this lib stays free of
-            the `@/` component value-import chain vitest can't resolve. */}
-        <button
-          type="button"
-          className={
-            opts.danger
-              ? "rounded-md font-display text-sm text-destructive underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
-              : "rounded-md font-display text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring/50"
-          }
-          onClick={() => {
-            toast.dismiss(toastId);
-            extra.onClick();
-          }}
-        >
-          {extra.label}
-        </button>
-      </span>
-    ) : (
-      opts.description
-    ),
-    action: { label: "Undo", onClick: commit ? settle(opts.onUndo) : opts.onUndo },
+    description: toastBody(opts, () => toast.dismiss(toastId)),
+    action: { label: undoLabel(opts.undoKey), onClick: commit ? settle(opts.onUndo) : opts.onUndo },
     ...(commit ? { onAutoClose: commit, onDismiss: commit } : {}),
   });
   return toastId;

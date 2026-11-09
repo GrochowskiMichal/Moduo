@@ -20,14 +20,17 @@ function LegendGroup({ group }: { group: MailLegendGroup }) {
       <h3 className="text-xs font-medium text-muted-foreground">{group.title}</h3>
       <dl className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1">
         {group.rows.map((row) => (
-          <Fragment key={row.label}>
+          <div key={row.label} className="col-span-2 grid grid-cols-subgrid items-center">
             <dt className="text-sm text-foreground">{row.label}</dt>
-            <dd className="flex justify-end gap-1">
-              {row.keys.map((k) => (
-                <Kbd key={k}>{k}</Kbd>
+            <dd className="flex items-center justify-end gap-1 text-xs text-muted-foreground">
+              {row.keys.map((k, i) => (
+                <Fragment key={k}>
+                  {i > 0 && row.or ? " or " : null}
+                  <Kbd>{k}</Kbd>
+                </Fragment>
               ))}
             </dd>
-          </Fragment>
+          </div>
         ))}
       </dl>
     </section>

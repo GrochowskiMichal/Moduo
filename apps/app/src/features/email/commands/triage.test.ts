@@ -27,7 +27,7 @@ describe("triage commands (AC11)", () => {
     await commands.apply({ kind: "done", threadIds: [first!] });
     expect(await ids()).not.toContain(first);
     expect(store.getState().undoStack).toHaveLength(1);
-    expect(await commands.undo()).toBe(true);
+    expect(await commands.undo()).toEqual([first]);
     const after = await ids();
     expect(after.filter((id) => id === first)).toHaveLength(1);
     expect(store.getState().undoStack).toHaveLength(0);
@@ -93,5 +93,22 @@ describe("triage commands (AC11)", () => {
     await commands.releaseNewSenders(["t1", "t2"]);
     await commands.releaseNewSenders([]);
     expect(log).toEqual(["backfill:a1", "cancel:a1", "release:t1,t2"]);
+  });
+});
+
+// specs/mail-improve.md MI-0, AC11: undo reports what it restored, so the shell can
+// select and open it.
+describe("undo returns restored ids (AC11)", () => {
+  it("resolves with the thread ids of the undone action, in action order", async () => {
+    const { commands, ids } = setup();
+    const [a, b] = await ids();
+    await commands.apply({ kind: "done", threadIds: [a!, b!] });
+    expect(await commands.undo()).toEqual([a, b]);
+    expect(await ids()).toContain(a);
+  });
+
+  it("resolves empty when there is nothing to undo", async () => {
+    const { commands } = setup();
+    expect(await commands.undo()).toEqual([]);
   });
 });

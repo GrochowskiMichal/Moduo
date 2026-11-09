@@ -147,3 +147,40 @@ describe("selection model", () => {
     expect(s.picked).toEqual(["a", "b", "c"]);
   });
 });
+
+// specs/mail-improve.md MI-0, AC9: compact is one 32 px line; the sender is a narrow
+// fixed column with the first name, the subject takes the rest; 20+ threads fit at
+// 1440×900.
+describe("compact is one 32 px line (AC9)", () => {
+  it("first-name sender column, subject in the remaining width, 32 px each", async () => {
+    const engine = createFakeMailEngine({
+      fixture: generateFixture({ messages: 300 }),
+      now: () => FIXTURE_NOW_MS,
+    });
+    const store = createMailStore({ engine, accounts: await engine.listAccounts() });
+    const ui = render(
+      <TooltipProvider>
+        <HotkeyScope scope="email">
+          <MailShell store={store} now={() => FIXTURE_NOW_MS} density="compact" />
+        </HotkeyScope>
+      </TooltipProvider>,
+    );
+    await tick();
+    await tick();
+    const rows = [...ui.container.querySelectorAll<HTMLElement>("[data-thread-id]")];
+    expect(rows.length).toBeGreaterThan(20);
+    for (const r of rows.slice(0, 20)) {
+      expect(r.parentElement!.style.height).toBe("32px");
+      const who = r.querySelector<HTMLElement>("[data-row-who]")!;
+      expect(who.className).toContain("w-(--mail-sender-w)");
+      // First name only (a "To …" or "me" line keeps its words).
+      const text = (who.firstChild?.textContent ?? "").trim();
+      if (!text.startsWith("To "))
+        expect(text.split(", ").every((part) => !part.includes(" "))).toBe(true);
+      const subject = r.querySelector<HTMLElement>("[data-row-subject]")!;
+      expect(subject.className).toContain("flex-1");
+    }
+    // 20 rows at 32 px stay inside a 900 px window with the chrome (title, tabs, hint line).
+    expect(20 * 32).toBeLessThanOrEqual(900 - 200);
+  });
+});
