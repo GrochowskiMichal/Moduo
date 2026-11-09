@@ -6,7 +6,7 @@
 
 | Topic (old sections) | Now |
 | --- | --- |
-| React effects, the React Compiler, `useSyncExternalStore` snapshots, memoised rows, long lists | [.claude/rules/ui-react.md](../../.claude/rules/ui-react.md); `lint:ast` rules `sync-snapshot-fresh-value`, `sync-snapshot-ignored`, `state-shadows-window` |
+| React effects, the React Compiler, `useSyncExternalStore` snapshots, memoised rows, long lists | [.claude/rules/ui-react.md](../../.claude/rules/ui-react.md); `lint:ast` rules `sync-snapshot-fresh-value`, `sync-snapshot-ignored`, `state-shadows-window`, `non-null-in-hook-closure` |
 | Radix menus, dialogs, popovers, tooltips, `asChild`, cmdk, focus return, keys, hotkey scopes, portals bubbling, screen-reader names | [.claude/rules/ui-radix.md](../../.claude/rules/ui-radix.md); `useReturnFocus` |
 | Scrollbars, `.pane-scroll`, flex and grid sizing, `overflow`, sticky, state fills, accent wrappers, motion tokens, small caps, measuring computed style | [.claude/rules/ui-css.md](../../.claude/rules/ui-css.md); `lint:tw`, `lint:css`, `global-css.test.ts`, `eyebrow.test.tsx`, `lint:ast` `primitive-size-class-overridden` |
 | dnd-kit (`event.delta` includes auto-scroll, one page context, collision per surface, activators), hand-rolled pointer engines, file drops | [.claude/rules/ui-drag.md](../../.claude/rules/ui-drag.md); `lint:ast` `dnd-context-without-sensors`; `useFileDropGuard` |
