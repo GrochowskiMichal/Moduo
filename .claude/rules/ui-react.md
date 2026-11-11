@@ -6,7 +6,7 @@ expires: 2027-01-31
 
 # React, the React Compiler and effects (app code)
 
-Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). `bun run lint:ast` already fails the mechanical forms (`sync-snapshot-*`, `state-shadows-window`).
+Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). `bun run lint:ast` already fails the mechanical forms (`sync-snapshot-*`, `state-shadows-window`, `non-null-in-hook-closure`).
 
 ## The React Compiler is on in the app build, never in rstest
 - A hook returns what `useSyncExternalStore` hands it; never subscribe and then read the store beside it (the compiler memoises the read). A reader built from a version depends on it (`version >= 0 ? store.read(ref) : null`). `apps/app/src/lib/sync/react.ts` is the pattern.
@@ -14,6 +14,7 @@ Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). `bun run lint:ast` a
 - A component that reads or writes a ref during render, or hand-memoizes with `useMemo` over a props ref, is silently left uncompiled (`preserve-manual-memoization`). Pass plain objects; keep "latest value" refs in effects. Compare `bun lint` warnings with the base branch: they don't fail verify.
 - A file that reads TanStack Virtual's mutable virtualizer starts with `"use no memo"` (`apps/app/src/features/tasks/ui/virtual-stack.tsx`); rows stay compiled.
 - Don't construct a stateful object in a `useState`/`useMemo` initializer that captures refs (construct it in a mount effect). Files whose only warnings are SWC port gaps (try/finally, throw in catch, dynamic import) are valid code: leave them. Probe a file with `reactCompiler: { panicThreshold: "all_errors" }`, temporarily.
+- Never `x!.prop` inside a closure handed to a hook: the compiler reads the closure's dependencies during render, so a null `x` crashes the production build (MV-12, Mail). Pull the value out (`const id = x?.id ?? null`) and guard inside.
 - Unit tests can't see any of this: live-verify in the dev build.
 
 ## Effects and state

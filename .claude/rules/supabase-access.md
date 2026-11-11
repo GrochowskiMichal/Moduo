@@ -1,7 +1,7 @@
 ---
 paths: ["supabase/migrations/**", "supabase/tests/**"]
-incident: "Definer functions and service-role reads leaked rows RLS would have hidden, and helpers kept client EXECUTE after REVOKE FROM PUBLIC (OPS-2, MOD-570/571, DB-SEC-1; HV-14a compiled these gotchas)"
-expires: 2027-01-31
+incident: "Definer functions and service-role reads leaked rows RLS would have hidden, and helpers kept client EXECUTE after REVOKE FROM PUBLIC (OPS-2, MOD-570/571, DB-SEC-1; HV-14a compiled these gotchas); new definer ops missing from the RLS probe's unreached list failed db-test four times on develop syncs (72734960 and af9f1093 2026-10-28, 79c46f76 2026-11-03, 97b11087 2026-11-06)"
+expires: 2027-02-07
 ---
 
 # Access: grants, RLS, definer functions, Realtime auth
@@ -14,6 +14,7 @@ expires: 2027-01-31
 - A SECURITY INVOKER trigger or policy that calls a service-only helper (`perm_actor_id`) fails on prod with 42501: make the trigger SECURITY DEFINER.
 
 ## Definer functions and RLS
+- A new client-callable definer function joins the RLS probe (`supabase/tests/_rls_probe.sql`). If the owner can't get through it with the probe's by-name arguments (a closed key, a value it must look up), list it in both `supabase/tests/rls_matrix.md` and `supabase/tests/rls_matrix_rpcs.test.sql`'s `mx_unreached` in the same PR; check with `bun run db:test rls_matrix_rpcs` on the local stack first. CI checks this only on PRs into `develop`, so a miss blocks the next develop sync.
 - When you tighten a table's policy, grep `supabase/functions/` for every `.from("<table>")` and `rpc` returning its rows, and every definer function reading it: each bypasses RLS and needs its own filter.
 - In a definer read, filter rows with the canonical per-item check (`perm_can_see_entity(ws, type, id)` for registry rows, `can_access(type, id, level)` for a module's own rows), never a list of "private types". An op that copies, logs, previews or returns a row needs its own `can_access` too.
 - A `WHERE … auth.uid()` in a definer op guards only its own statement: gate follow-up writes on it (`IF NOT FOUND THEN RETURN;`) or re-check.
