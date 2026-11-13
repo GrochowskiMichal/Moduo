@@ -5,6 +5,17 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.8.0 · 2026-11-13
+
+### New
+
+- Mail on desktop is rebuilt: new mail shows up on its own, every folder is there (Sent, Drafts, Archive and more), drafts are kept and sends retry until they go out.
+
+### Improved
+
+- Triage in Mail is quicker: Undo brings back the thread you just cleared and opens it, failed sends say why, and the reader's buttons are grouped and labeled.
+- Mail is redesigned: each tab can tell you why a thread landed there, your rules now act on new mail, and Today sits beside the thread you're reading.
+
 ## 1.7.1 · 2026-11-03
 
 ### Improved
