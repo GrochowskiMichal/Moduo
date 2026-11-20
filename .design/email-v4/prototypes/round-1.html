@@ -1,0 +1,780 @@
+<meta charset="utf-8">
+<title>Mail v4 round 1</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* biome-ignore-all lint: a throwaway static prototype, not app code */
+/* Mail v4, round 1 (.design/email-v4/REPLAN.md §8). Frames 1–9 = calls; V cycles
+   variants; T light/dark; D density. Tokens are tokens.css values by name.
+   Layout: the app's 3×3 (top bar · rail | centre | panel · bottom bar). */
+
+/* ── House tokens: dark (tokens.css :root / [data-theme=dark]) ───────────── */
+:root {
+  --neutral-50: oklch(0.985 0 0); --neutral-100: oklch(0.965 0 0); --neutral-200: oklch(0.92 0 0);
+  --neutral-400: oklch(0.72 0 0); --neutral-600: oklch(0.45 0 0); --neutral-800: oklch(0.22 0 0);
+  --neutral-850: oklch(0.18 0 0); --neutral-900: oklch(0.14 0 0); --neutral-950: oklch(0.10 0 0);
+  --background: oklch(0 0 0); --foreground: var(--neutral-50);
+  --card: var(--neutral-900); --popover: var(--neutral-850); --muted: var(--neutral-850);
+  --muted-foreground: var(--neutral-400); --border: var(--neutral-800);
+  --primary: oklch(0.95 0 0); --primary-foreground: oklch(0.10 0 0);
+  --label-blue: oklch(0.66 0.18 245); --label-green: oklch(0.72 0.17 150); --label-amber: oklch(0.80 0.16 75);
+  --label-violet: oklch(0.66 0.20 295); --label-teal: oklch(0.72 0.13 200);
+  --font-sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", monospace;
+  color-scheme: dark;
+  --subtle-foreground: color-mix(in oklab, var(--muted-foreground) 86%, transparent);
+  --state-hover: color-mix(in oklab, var(--foreground) 5%, transparent);
+  --state-active: color-mix(in oklab, var(--foreground) 9%, transparent);
+  --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
+  --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
+  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
+  --scrim: color-mix(in oklab, var(--background) 82%, transparent);
+  --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --text-3xs: 0.5625rem; --text-2xs: 0.6875rem; --text-xs: 0.75rem; --text-sm: 0.8125rem; --text-base: 0.875rem; --text-md: 0.9375rem; --text-xl: 1.25rem;
+  --row-h: 2.25rem; --ctrl-h: 2rem; --ctrl-h-sm: 1.625rem; --icon-sm: .875rem; --icon: 1rem; --bar-h: 3rem;
+  --mail-row: 4.5rem;
+  --radius-sm: .25rem; --radius-md: .5rem; --radius-lg: .75rem;
+  /* page chrome (prototype strip only) */
+  --strip-a: color-mix(in oklab, var(--foreground) 4%, var(--popover));
+}
+/* light (tokens.css [data-theme=light]) */
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  --background: var(--neutral-50); --foreground: var(--neutral-950); --card: oklch(1 0 0); --popover: oklch(1 0 0);
+  --muted: var(--neutral-100); --muted-foreground: var(--neutral-600); --border: var(--neutral-200);
+  --primary: var(--neutral-950); --primary-foreground: oklch(0.97 0 0); color-scheme: light;
+  --label-blue: oklch(0.55 0.18 245); --label-green: oklch(0.55 0.15 150); --label-amber: oklch(0.62 0.15 70); --label-violet: oklch(0.52 0.20 295); --label-teal: oklch(0.55 0.11 200);
+} }
+:root[data-theme="light"] {
+  --background: var(--neutral-50); --foreground: var(--neutral-950); --card: oklch(1 0 0); --popover: oklch(1 0 0);
+  --muted: var(--neutral-100); --muted-foreground: var(--neutral-600); --border: var(--neutral-200);
+  --primary: var(--neutral-950); --primary-foreground: oklch(0.97 0 0); color-scheme: light;
+  --label-blue: oklch(0.55 0.18 245); --label-green: oklch(0.55 0.15 150); --label-amber: oklch(0.62 0.15 70); --label-violet: oklch(0.52 0.20 295); --label-teal: oklch(0.55 0.11 200);
+}
+[data-density="compact"] { --row-h: 2rem; --ctrl-h: 1.875rem; --ctrl-h-sm: 1.5rem; --mail-row: 2rem; }
+[data-density="dense"] { --row-h: 1.75rem; --ctrl-h: 1.625rem; --ctrl-h-sm: 1.375rem; --mail-row: 1.75rem; }
+
+* { box-sizing: border-box; margin: 0; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
+html, body { height: 100%; }
+body { background: var(--background); color: var(--foreground); font: 400 var(--text-base)/1.4 var(--font-sans); -webkit-font-smoothing: antialiased; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: var(--radius-sm); }
+.ic { width: var(--icon-sm); height: var(--icon-sm); stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.ic16 { width: var(--icon); height: var(--icon); }
+.t2 { color: var(--muted-foreground); } .t3 { color: var(--subtle-foreground); }
+.num { font-variant-numeric: tabular-nums; }
+.kbd { font: 500 var(--text-2xs)/16px var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+
+/* ── Prototype strip (not app UI) ────────────────────────────────────────── */
+.stage { display: flex; flex-direction: column; height: 100%; min-height: 640px; }
+.strip { flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px max(16px, env(safe-area-inset-right, 0px)) 6px max(16px, env(safe-area-inset-left, 0px)); font-size: var(--text-xs);
+  background: repeating-linear-gradient(-45deg, var(--strip-a) 0 7px, var(--popover) 7px 14px); border-bottom: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); }
+.ptag { height: 22px; display: inline-flex; align-items: center; padding: 0 8px; border-radius: var(--radius-sm); background: var(--foreground); color: var(--background); font-weight: 600; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--muted); border-radius: var(--radius-md); flex-wrap: wrap; }
+.seg button { height: 22px; padding: 0 8px; border-radius: calc(var(--radius-md) - 2px); color: var(--muted-foreground); font-size: var(--text-xs); font-weight: 500; white-space: nowrap; }
+.seg button:hover { color: var(--foreground); }
+.seg button.on { background: var(--control-raised); color: var(--foreground); }
+.cap { flex: 1 1 320px; min-width: 0; color: var(--muted-foreground); }
+.cap b { color: var(--foreground); font-weight: 600; }
+.pnote { font-size: var(--text-xs); line-height: 1.45; color: var(--muted-foreground); padding: 4px 8px; border-radius: var(--radius-sm); border: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent);
+  background: repeating-linear-gradient(-45deg, var(--strip-a) 0 7px, var(--popover) 7px 14px); }
+.pnote b { color: var(--foreground); }
+.critic .strip, .critic .pnote { display: none !important; }
+
+/* ── App frame: 3×3 ─────────────────────────────────────────────────────── */
+.appwrap { flex: 1; min-height: 0; overflow: auto; }
+.app { height: 100%; min-width: 1024px; min-height: 600px; display: grid; grid-template-rows: 2.5rem 1fr var(--bar-h); grid-template-columns: 15rem 1fr 20rem; background: var(--background); }
+.app.noleft { grid-template-columns: 0 1fr 20rem; } .app.noright { grid-template-columns: 15rem 1fr 0; } .app.noleft.noright { grid-template-columns: 0 1fr 0; }
+.app.wide-right { grid-template-columns: 15rem 1fr 26rem; }
+.topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+.brand { font-weight: 600; letter-spacing: -.01em; }
+.mods { display: flex; gap: 2px; margin-left: 8px; }
+.mods button { height: 26px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-sm); font-weight: 500; }
+.mods button:hover { background: var(--state-hover); color: var(--foreground); }
+.mods button.on { background: var(--state-active); color: var(--foreground); }
+.mods button.on:hover { background: color-mix(in oklab, var(--foreground) 13%, transparent); }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.ava { width: 22px; height: 22px; border-radius: 9999px; display: inline-grid; place-items: center; font-size: var(--text-3xs); font-weight: 600; color: var(--foreground); background: var(--av, color-mix(in oklab, var(--foreground) 20%, var(--card))); flex-shrink: 0; }
+.ava.lg { width: 32px; height: 32px; font-size: var(--text-xs); } .ava.xl { width: 44px; height: 44px; font-size: var(--text-md); }
+.ava.sm { width: 18px; height: 18px; font-size: var(--text-3xs); }
+.pa { --av: color-mix(in oklab, var(--label-blue) 55%, var(--card)); } .pb { --av: color-mix(in oklab, var(--label-teal) 50%, var(--card)); }
+.pc { --av: color-mix(in oklab, var(--label-violet) 52%, var(--card)); } .pd { --av: color-mix(in oklab, var(--label-amber) 40%, var(--card)); }
+.pe { --av: color-mix(in oklab, var(--label-green) 45%, var(--card)); } .pf { --av: color-mix(in oklab, var(--foreground) 22%, var(--card)); }
+.btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500; color: var(--muted-foreground); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
+.btn:hover { background: var(--state-hover); color: var(--foreground); }
+.btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
+.btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 12px; }
+.btn.primary:hover { background: color-mix(in oklab, var(--primary) 86%, var(--background)); color: var(--primary-foreground); }
+.btn.secondary:hover { background: color-mix(in oklab, var(--foreground) 14%, transparent); }
+.btn.secondary { background: var(--state-active); color: var(--foreground); }
+.btn.on { background: var(--state-active); color: var(--foreground); }
+
+/* rail */
+.rail { border-right: 1px solid var(--border); overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app.noleft .rail, .app.noright .panel { display: none; }
+.railhead { display: flex; align-items: center; gap: 6px; height: var(--row-h); padding: 0 8px; }
+.railhead .ttl { font-weight: 600; flex: 1; }
+.newmsg { display: flex; align-items: center; gap: 8px; margin: 2px 0 8px; }
+.newmsg .btn.primary { flex: 1; justify-content: center; height: var(--ctrl-h); }
+.nav { display: flex; align-items: center; gap: 8px; height: var(--row-h); padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-sm); width: 100%; text-align: left; }
+.nav:hover { background: var(--state-hover); color: var(--foreground); }
+.nav.on { background: var(--state-active); color: var(--foreground); }
+.nav.on:hover { background: color-mix(in oklab, var(--foreground) 13%, transparent); }
+.btn.on:hover { background: color-mix(in oklab, var(--foreground) 13%, transparent); }
+.nav .n { margin-left: auto; font-size: var(--text-xs); color: var(--subtle-foreground); font-variant-numeric: tabular-nums; }
+.nav.on .n, .nav .n.strong { color: var(--foreground); }
+.dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+.eyebrow { font-size: var(--text-2xs); font-weight: 500; color: var(--subtle-foreground); padding: 12px 8px 4px; }
+
+/* centre */
+.centre { min-width: 0; display: flex; min-height: 0; }
+.listcol { width: 24rem; flex-shrink: 0; border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.listcol.full { width: auto; flex: 1; border-right: 0; }
+.listhead { display: flex; align-items: center; gap: 8px; height: var(--bar-h); padding: 0 12px 0 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.listhead h2 { font-size: var(--text-md); font-weight: 600; }
+.listhead .grow { flex: 1; }
+.tabs { display: flex; gap: 2px; padding: 4px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tabs button { height: 26px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-sm); font-weight: 500; display: inline-flex; gap: 6px; align-items: center; }
+.tabs button.on { background: var(--state-active); color: var(--foreground); }
+.tabs button .n { font-size: var(--text-2xs); color: var(--subtle-foreground); }
+.rows { overflow: auto; flex: 1; min-height: 0; }
+.grp { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px 0 16px; font-size: var(--text-xs); font-weight: 500; color: var(--muted-foreground); position: sticky; top: 0; background: var(--background); z-index: 1; }
+.grp .n { color: var(--subtle-foreground); font-weight: 400; }
+.grp .grow { flex: 1; }
+.grp .clear { font-size: var(--text-xs); color: var(--subtle-foreground); display: inline-flex; gap: 6px; align-items: center; }
+.row { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: start; padding: 12px 12px 12px 16px; min-height: var(--mail-row); border-radius: 0; cursor: default; position: relative; }
+.row:hover { background: var(--state-hover); }
+.row.sel { background: var(--state-selected); }
+.row.sel:hover { background: color-mix(in oklab, var(--primary) 18%, transparent); }
+.row.sel::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--primary); }
+.row .who { font-weight: 500; display: flex; gap: 6px; align-items: center; min-width: 0; }
+.row .who span.nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.unread .who, .row.unread .sub { font-weight: 600; color: var(--foreground); }
+.row .when { font-size: var(--text-xs); color: var(--subtle-foreground); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row .sub { grid-column: 2 / 4; font-size: var(--text-sm); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .snip { grid-column: 2 / 4; font-size: var(--text-sm); color: var(--subtle-foreground); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.row .ava { grid-row: 1 / 4; margin-top: 1px; }
+.row .udot { width: 6px; height: 6px; border-radius: 9999px; background: var(--primary); }
+.row .flags { grid-column: 2 / 4; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+[data-density="compact"] .row, [data-density="dense"] .row { grid-template-columns: auto minmax(7rem, 11rem) 1fr auto auto; align-items: center; padding: 0 12px 0 16px; gap: 12px; }
+[data-density="compact"] .row .ava, [data-density="dense"] .row .ava { grid-row: auto; width: 18px; height: 18px; font-size: var(--text-3xs); margin: 0; }
+[data-density="dense"] .row .ava { display: none; }
+[data-density="dense"] .row { grid-template-columns: minmax(7rem, 11rem) 1fr auto auto; }
+[data-density="compact"] .row .sub, [data-density="dense"] .row .sub { grid-column: auto; }
+[data-density="compact"] .row .snip, [data-density="dense"] .row .snip { display: none; }
+[data-density="compact"] .row .flags, [data-density="dense"] .row .flags { grid-column: auto; margin: 0; flex-wrap: nowrap; }
+[data-density="dense"] .row { font-size: var(--text-sm); }
+.chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-sm); background: var(--ref-bg); color: var(--muted-foreground); font-size: var(--text-2xs); font-weight: 500; white-space: nowrap; }
+.chip .ic { width: 11px; height: 11px; }
+.chip.done { text-decoration: line-through; }
+
+/* reader */
+.reader { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.rscroll { overflow: auto; flex: 1; min-height: 0; }
+.rin { max-width: 48rem; margin: 0 auto; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 12px; }
+.subj { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.linkline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--muted-foreground); }
+.msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.msg.coll { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: var(--muted-foreground); font-size: var(--text-sm); }
+.msg.coll .nm { color: var(--foreground); font-weight: 500; white-space: nowrap; }
+.msg.coll .ex { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mhead { display: flex; align-items: center; gap: 12px; padding: 12px 14px 0; }
+.mhead .nm { font-weight: 600; } .mhead .ad { font-size: var(--text-xs); color: var(--muted-foreground); }
+.mhead .grow { flex: 1; }
+.mbody { padding: 10px 14px 14px 56px; font-size: var(--text-base); line-height: 1.6; max-width: 70ch; }
+.mbody p + p { margin-top: 10px; }
+.mact { display: flex; gap: 2px; padding: 0 10px 10px 50px; }
+.invitebar { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); flex-wrap: wrap; }
+.invitebar .when { font-weight: 600; }
+.cal-ic { width: 40px; height: 44px; border-radius: var(--radius-md); background: var(--state-active); display: grid; place-items: center; text-align: center; line-height: 1.1; font-size: var(--text-2xs); color: var(--muted-foreground); }
+.cal-ic b { display: block; font-size: var(--text-md); color: var(--foreground); }
+.composer { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); overflow: hidden; }
+.cfield { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--hairline); font-size: var(--text-sm); color: var(--muted-foreground); }
+.cfield .v { color: var(--foreground); }
+.cbody { padding: 12px 14px; min-height: 140px; font-size: var(--text-base); line-height: 1.6; }
+.cbody .caret { display: inline-block; width: 1px; height: 1.1em; background: var(--foreground); vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cbody .caret { animation: none; } * { transition: none !important; } }
+.fmtbar { display: inline-flex; gap: 2px; padding: 4px; border-radius: var(--radius-md); background: var(--popover); border: 1px solid var(--border); box-shadow: 0 6px 20px color-mix(in oklab, var(--background) 60%, transparent); }
+.slots { display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; margin: 6px 0; border-left: 2px solid var(--hairline); }
+.inlineimg { width: 240px; height: 120px; border-radius: var(--radius-md); background: linear-gradient(135deg, color-mix(in oklab, var(--label-teal) 30%, var(--card)), color-mix(in oklab, var(--label-blue) 25%, var(--card))); display: grid; place-items: center; color: var(--muted-foreground); font-size: var(--text-xs); margin: 8px 0; }
+
+/* panel */
+.panel { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--background); }
+.ptitle { display: flex; align-items: center; gap: 6px; height: var(--bar-h); padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ptitle .dd { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-md); font-weight: 600; }
+.ptitle .dd:hover { background: var(--state-hover); }
+.ptitle .grow { flex: 1; }
+.pbody { overflow: auto; flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.psec { display: flex; flex-direction: column; gap: 6px; }
+.psec h4 { font-size: var(--text-xs); font-weight: 500; color: var(--subtle-foreground); display: flex; align-items: center; gap: 6px; }
+.psec h4 .grow { flex: 1; }
+.prow { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; border-radius: var(--radius-md); font-size: var(--text-sm); }
+.prow:hover { background: var(--state-hover); }
+.prow .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .meta { font-size: var(--text-xs); color: var(--subtle-foreground); white-space: nowrap; }
+.cb { width: 14px; height: 14px; border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); flex-shrink: 0; }
+.person { display: flex; gap: 12px; align-items: center; }
+.person .nm { font-weight: 600; font-size: var(--text-md); } .person .ad { font-size: var(--text-xs); color: var(--muted-foreground); }
+/* day timeline */
+.day { position: relative; border-left: 1px solid var(--hairline); margin-left: 40px; }
+.hr { height: 40px; position: relative; border-top: 1px solid var(--hairline); }
+.hr span { position: absolute; left: -40px; top: -8px; font-size: var(--text-2xs); color: var(--subtle-foreground); width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.ev { position: absolute; left: 6px; right: 6px; border-radius: var(--radius-sm); padding: 4px 8px; font-size: var(--text-xs); line-height: 1.3; background: color-mix(in oklab, var(--label-blue) 22%, var(--card)); border-left: 2px solid var(--label-blue); overflow: hidden; }
+.ev.focus { background: color-mix(in oklab, var(--label-green) 16%, var(--card)); border-left-color: var(--label-green); }
+.ev.ghost { background: transparent; border: 1.5px dashed var(--primary); }
+.ev.hold { background: color-mix(in oklab, var(--primary) 10%, transparent); border: 1.5px dashed var(--muted-foreground); }
+.ev.conf { box-shadow: inset 0 0 0 1.5px var(--label-amber); }
+.ev .t3 { font-size: var(--text-2xs); }
+/* week grid for Schedule */
+.week { display: grid; grid-template-columns: 34px repeat(5, 1fr); font-size: var(--text-2xs); }
+.week .h { text-align: center; color: var(--muted-foreground); padding: 4px 0; font-weight: 500; }
+.week .tl { color: var(--subtle-foreground); text-align: right; padding-right: 4px; height: 26px; font-variant-numeric: tabular-nums; }
+.week .c { height: 26px; border-top: 1px solid var(--hairline); border-left: 1px solid var(--hairline); position: relative; }
+.week .c.busy { background: color-mix(in oklab, var(--label-blue) 18%, var(--card)); }
+.week .c.pick { outline: none; }
+.week .c.pick { background: color-mix(in oklab, var(--primary) 18%, transparent); box-shadow: inset 0 0 0 1.5px var(--primary); }
+
+/* bottom bar */
+.bottombar { grid-column: 1 / -1; display: grid; grid-template-columns: 15rem 1fr 20rem; border-top: 1px solid var(--border); align-items: center; }
+.app.wide-right .bottombar { grid-template-columns: 15rem 1fr 26rem; }
+.bb-l, .bb-r { display: flex; align-items: center; gap: 4px; padding: 0 8px; }
+.bb-r { justify-content: flex-end; }
+.bb-c { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; overflow: hidden; }
+.act { height: 30px; display: inline-flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500; color: var(--muted-foreground); white-space: nowrap; }
+.act:hover { background: var(--state-hover); color: var(--foreground); }
+.act.prim { background: var(--primary); color: var(--primary-foreground); }
+.act.prim:hover { background: color-mix(in oklab, var(--primary) 86%, var(--background)); color: var(--primary-foreground); }
+.btn.primary .kbd, .act.prim .kbd { color: var(--primary-foreground); border-color: color-mix(in oklab, var(--primary-foreground) 30%, transparent); }
+.bb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.selcount { font-size: var(--text-sm); font-weight: 600; padding: 0 8px; }
+
+/* overlays */
+.overlay { position: absolute; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 20; }
+.dialog { width: 30rem; max-width: calc(100% - 32px); background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 20px 60px color-mix(in oklab, var(--background) 70%, transparent); }
+.dialog .dh { padding: 14px 16px 6px; font-weight: 600; }
+.dialog .db { padding: 6px 16px 14px; display: flex; flex-direction: column; gap: 12px; font-size: var(--text-sm); }
+.dialog .df { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+.menu { position: absolute; z-index: 15; min-width: 15rem; background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 4px; box-shadow: 0 12px 36px color-mix(in oklab, var(--background) 60%, transparent); }
+.menu .mi { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: var(--radius-md); font-size: var(--text-sm); width: 100%; }
+.menu .mi:hover, .menu .mi.on { background: var(--state-hover); }
+.menu .mi .grow { flex: 1; text-align: left; }
+.menu .sep { height: 1px; background: var(--border); margin: 4px 0; }
+.input { height: var(--ctrl-h); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); padding: 0 10px; display: flex; align-items: center; color: var(--muted-foreground); font-size: var(--text-sm); }
+.systemline { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: var(--text-sm); color: var(--muted-foreground); border-bottom: 1px solid var(--border); }
+.systemline .grow { flex: 1; }
+.empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; text-align: center; color: var(--muted-foreground); }
+.empty h3 { font-size: var(--text-md); color: var(--foreground); font-weight: 600; }
+.empty .keys { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: var(--text-xs); }
+.sk { background: color-mix(in oklab, var(--foreground) 7%, transparent); border-radius: 4px; height: 10px; }
+.batch { display: flex; flex-direction: column; gap: 16px; }
+.bcard { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.bcard.cur { box-shadow: 0 0 0 2px var(--primary); }
+.bcard .bh { display: flex; gap: 12px; align-items: center; padding: 12px 14px 4px; }
+.bcard .bq { padding: 0 14px 10px 56px; color: var(--muted-foreground); font-size: var(--text-sm); line-height: 1.55; }
+.bcard .bbox { margin: 0 14px 14px 56px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; min-height: 64px; font-size: var(--text-sm); color: var(--subtle-foreground); background: var(--background); }
+.bcard.cur .bbox { color: var(--foreground); }
+.comment { display: flex; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--hairline); font-size: var(--text-sm); }
+.chatcard { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; background: var(--card); }
+.toast { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(var(--bar-h) + 12px); background: var(--popover); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 8px 10px 8px 14px; display: flex; align-items: center; gap: 12px; font-size: var(--text-sm); box-shadow: 0 12px 30px color-mix(in oklab, var(--background) 60%, transparent); z-index: 12; white-space: nowrap; }
+.cardgrid { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+.card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
+.card .chd { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 600; font-size: var(--text-sm); }
+.card .chd .n { color: var(--subtle-foreground); font-weight: 400; }
+.card .chd .grow { flex: 1; }
+.card .crow { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--hairline); font-size: var(--text-sm); }
+.card .crow .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .more { padding: 8px 12px; border-top: 1px solid var(--hairline); font-size: var(--text-xs); color: var(--muted-foreground); }
+.rel { position: relative; }
+</style>
+
+<div class="stage" id="stage">
+  <div class="strip" id="strip" role="region" aria-label="Prototype controls (not part of Mail)">
+    <span class="ptag">Mail v4 · round 1</span>
+    <div class="seg" id="frames" role="group" aria-label="Frames"></div>
+    <div class="seg" id="variants" role="group" aria-label="Variants"></div>
+    <div class="seg" id="themeSeg" role="group" aria-label="Theme"><button data-th="dark">Dark</button><button data-th="light">Light</button></div>
+    <div class="seg" id="denSeg" role="group" aria-label="Density"><button data-den="comfortable">Comfortable</button><button data-den="compact">Compact</button><button data-den="dense">Dense</button></div>
+    <div class="cap" id="cap"></div>
+  </div>
+  <div class="appwrap"><div class="app" id="app"></div></div>
+</div>
+
+<script>
+document.documentElement.lang = "en";
+const critic = new URLSearchParams(location.search).has("critic");
+if (critic) document.getElementById("stage").classList.add("critic");
+
+/* ── icons (lucide-style strokes) ── */
+const P = {
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  aside: '<path d="M4 4h16v5H4z"/><path d="M6 9v10h12V9"/><path d="M10 13h4"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  reply: '<path d="m9 17-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+  file: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/>',
+  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+  archive: '<rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  task: '<circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  note: '<path d="M4 4h12l4 4v12H4z"/><path d="M8 12h8M8 16h5"/>',
+  more: '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+  chev: '<path d="m6 9 6 6 6-6"/>',
+  back: '<path d="m15 18-6-6 6-6"/>',
+  pin: '<path d="M12 17v5"/><path d="M9 3h6l-1 6 4 4H6l4-4z"/>',
+  clip: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  sync: '<path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5M3 21v-5h5"/>',
+  alert: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/>',
+  wifioff: '<path d="M2 2l20 20"/><path d="M8.5 16.5a5 5 0 0 1 7 0"/><path d="M5 12.5a10 10 0 0 1 5-2.7M19 12.5a10 10 0 0 0-2.3-1.6M2 8.8a15 15 0 0 1 4.2-2.6M22 8.8A15 15 0 0 0 10.7 5"/><path d="M12 20h.01"/>',
+  panelL: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
+  panelR: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/>',
+  expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  img: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+  bold: '<path d="M6 4h8a4 4 0 0 1 0 8H6zM6 12h9a4 4 0 0 1 0 8H6z"/>',
+  italic: '<path d="M19 4h-9M14 20H5M15 4 9 20"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  quote: '<path d="M3 21c3 0 7-1 7-8V5H3v8h4M14 21c3 0 7-1 7-8V5h-7v8h4"/>',
+  share: '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><path d="m16 6-4-4-4 4M12 2v13"/>',
+  fwd: '<path d="m15 17 5-5-5-5"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+  folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2z"/>',
+  layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+  zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+};
+const I = (n, c = "ic") => `<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ""}</svg>`;
+const K = (k) => `<span class="kbd">${k}</span>`;
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+/* ── fictional data: a small studio's Tuesday ── */
+const people = {
+  ana: { n: "Ana Ruiz", i: "AR", c: "pa", a: "ana@fjordline.example", co: "Fjordline Ferries", role: "Marketing lead" },
+  tom: { n: "Tomasz Nowak", i: "TN", c: "pb", a: "tomasz@northwind.studio", co: "Northwind Studio", role: "Designer · your team" },
+  lena: { n: "Lena Park", i: "LP", c: "pc", a: "lena@northwind.studio", co: "Northwind Studio", role: "Producer · your team" },
+  sam: { n: "Sam Oduya", i: "SO", c: "pd", a: "sam@harbourbank.example", co: "Harbour Bank", role: "Head of brand" },
+  priya: { n: "Priya Raman", i: "PR", c: "pe", a: "priya@lumen.example", co: "Lumen Health", role: "Founder" },
+  marco: { n: "Marco Bellini", i: "MB", c: "pa", a: "marco@bellini.photo", co: "Bellini Photo", role: "Photographer" },
+  gh: { n: "GitHub", i: "GH", c: "pf", a: "notifications@github.example" },
+  stripe: { n: "Stripe", i: "ST", c: "pf", a: "receipts@stripe.example" },
+  linear: { n: "Linear", i: "LI", c: "pf", a: "updates@linear.example" },
+  lenny: { n: "Field Notes", i: "FN", c: "pf", a: "hello@fieldnotes.example" },
+  figma: { n: "Figma", i: "FI", c: "pf", a: "no-reply@figma.example" },
+  dana: { n: "Dana Whitfield", i: "DW", c: "pc", a: "dana@kestrel.example", co: "Kestrel Labs", role: "COO" },
+};
+const T = [
+  { id: "t1", p: "ana", sec: "people", unread: false, when: "10:42", sub: "Spring campaign: hero photos and the launch date", snip: "Could we see two more crops of the harbour shot before Friday? Legal also needs the final copy by Thursday noon.", task: { t: "Send two harbour crops to Ana", due: "Fri", done: false }, n: 4 },
+  { id: "t2", p: "sam", sec: "people", unread: true, when: "10:15", sub: "Can we meet next week about the rebrand?", snip: "We'd love an hour with you and Tomasz to walk through the first concepts. When works?", n: 1 },
+  { id: "t3", p: "priya", sec: "people", unread: true, when: "9:58", sub: "Invitation: Lumen kickoff · Thu Nov 27, 2:00 PM", snip: "Priya Raman invited you to Lumen kickoff. Google Meet.", invite: true, n: 1 },
+  { id: "t4", p: "dana", sec: "people", unread: false, when: "9:12", sub: "Re: Proposal for Q1 retainer", snip: "Thanks for the proposal. Two questions on the second phase before we sign.", shared: true, aside: false, n: 6 },
+  { id: "t5", p: "marco", sec: "people", unread: false, when: "Mon", sub: "Invoice 2026-114 for the Fjordline shoot", snip: "Attached is the invoice for the two-day shoot, due in 14 days.", clip: true, n: 1 },
+  { id: "t6", p: "lena", sec: "people", unread: false, when: "Mon", sub: "Friday: the hiring plan", snip: "I drafted the plan for the junior designer role; can you look before Friday?", n: 2 },
+  { id: "n1", p: "gh", sec: "notifications", unread: true, when: "10:31", sub: "[moduo-site] Deploy preview ready for #212", snip: "The preview for “Update pricing copy” is ready.", n: 1 },
+  { id: "n2", p: "stripe", sec: "notifications", unread: false, when: "9:40", sub: "Your receipt from Northwind Studio #3021", snip: "Amount paid €1,200.00", n: 1 },
+  { id: "n3", p: "linear", sec: "notifications", unread: true, when: "8:05", sub: "3 issues assigned to you", snip: "NW-88 Fjordline: export print sizes, and 2 more", n: 1 },
+  { id: "n4", p: "figma", sec: "notifications", unread: false, when: "Mon", sub: "Tomasz commented on Fjordline / Hero", snip: "“Prefer the warmer crop for print.”", n: 1 },
+  { id: "r1", p: "lenny", sec: "newsletters", unread: true, when: "7:00", sub: "The quiet power of a good brief", snip: "This week: how three studios write briefs clients actually read.", n: 1, group: 4 },
+];
+const P_ = (id) => people[T.find((t) => t.id === id)?.p] || people.ana;
+
+/* ── state ── */
+const FRAMES = [
+  { k: "1", id: "layout", name: "Layout", calls: "1, 4", vars: [["a", "a · Split"], ["b", "b · Full"], ["c", "c · In the panel"]] },
+  { k: "2", id: "inbox", name: "Inbox", calls: "5, 6, 7", vars: [["a", "a · Tabs"], ["b", "b · Sections"], ["c", "c · Cards"]] },
+  { k: "3", id: "bar", name: "Bottom bar", calls: "2, 10, 17", vars: [["a", "a · Reading"], ["b", "b · 3 selected"], ["c", "c · Writing"]] },
+  { k: "4", id: "panel", name: "Right panel", calls: "3, 28", vars: [["a", "Person"], ["b", "Links"], ["c", "Today"], ["d", "Schedule"]] },
+  { k: "5", id: "links", name: "Links", calls: "26, 30, 31", vars: [["a", "a · Email + task"], ["b", "b · Invite + your day"], ["c", "c · Offer times"]] },
+  { k: "6", id: "team", name: "Team", calls: "34, 35, 36", vars: [["a", "a · Shared + comments"], ["b", "b · Discuss in chat"]] },
+  { k: "7", id: "aside", name: "Set aside", calls: "8, 9", vars: [["a", "a · Batch reply"], ["b", "b · Plain list"]] },
+  { k: "8", id: "states", name: "States", calls: "§5.8, 20", vars: [["a", "Inbox clear"], ["b", "Loading"], ["c", "Couldn't load"], ["d", "Offline"], ["e", "Long content"], ["f", "First run"]] },
+  { k: "9", id: "compose", name: "Compose", calls: "13–16, 24", vars: [["a", "a · Rich text"], ["b", "b · Template"]] },
+];
+const CAPS = {
+  "layout-a": "<b>Call 1a/d · Split.</b> List and conversation side by side in the centre; the right panel is context (Person). The reader has no toolbar: its actions live in the bottom bar (call 2). The rail puts working places first (call 4).",
+  "layout-b": "<b>Call 1b · Full.</b> Enter (or ⇧Enter from Split) opens the conversation full width; Esc goes back to the list. Best for long emails and newsletters.",
+  "layout-c": "<b>Call 1c · In the panel.</b> Tasks' model: list in the centre, conversation in the right panel. No room left for context; shown for comparison.",
+  "inbox-a": "<b>Call 5a · Tabs</b> (today): one tab at a time. Splits (call 6) would add tabs here.",
+  "inbox-b": "<b>Call 5b/d · Sections</b> (Spark's Focused list): everything at once; each header clears its section (⇧E). Newsletters collapse to one row per sender (call 7 extends grouping to any sender).",
+  "inbox-c": "<b>Call 5c · Cards</b> (Spark's Unread cards): each section shows its top three.",
+  "bar-a": "<b>Call 2a · Reading:</b> the bar carries the conversation's actions with keys; More holds the rest. Keys follow call 10 b (⇧S Set aside, a Reply all).",
+  "bar-b": "<b>Call 2 · Multi-select:</b> the same row pattern as Tasks' 82b, for a selection.",
+  "bar-c": "<b>Call 2 + 17 · Writing:</b> the composer's row: Send, Send later (open), Template, Attach. Send later's note follows call 17 b/d.",
+  "panel-a": "<b>Call 3a · Person</b> (recommended default): the sender, their company, open work with them, recent mail, next meeting.",
+  "panel-b": "<b>Call 28 · Links:</b> everything this email touches, with add and remove. Replaces the chip row.",
+  "panel-c": "<b>Call 3 · Today</b> (today's default): your day from Calendar.",
+  "panel-d": "<b>Call 30 · Schedule:</b> pick slots in your week to offer; held as tentative.",
+  "links-a": "<b>Call 26 · Email + task:</b> the row shows the task; the task shows “New reply”; completing it offers Done on the email.",
+  "links-b": "<b>Call 31 · Invite:</b> answer with your day beside it; the invite is a dashed ghost, the clash is marked.",
+  "links-c": "<b>Call 30 · Offer times:</b> slots picked in Schedule are inserted with a booking link limited to them.",
+  "team-a": "<b>Call 34 · Shared with the team:</b> teammates read it in Moduo and comment under it. Only this conversation leaves the Mac.",
+  "team-b": "<b>Call 35 · Discuss in chat:</b> posts an email card into a channel with the excerpt you choose.",
+  "aside-a": "<b>Calls 8 + 9a · Set aside as a batch-reply page:</b> every set-aside email with its reply box; ⌘↵ sends and moves to the next.",
+  "aside-b": "<b>Call 9b · Set aside as a plain list.</b>",
+  "states-a": "<b>Inbox clear.</b> What comes back next, and the check-in line (call 20).",
+  "states-b": "<b>Loading:</b> skeleton rows at their final size.",
+  "states-c": "<b>Couldn't load:</b> today this case shows “Inbox is clear” (a trust bug, §5.8). v4 keeps the last rows and says what failed.",
+  "states-d": "<b>Offline:</b> actions and sends wait in the Outbox; reading stays usable.",
+  "states-e": "<b>Long content:</b> a 200-character subject, a long name, a 12-message conversation.",
+  "states-f": "<b>First run:</b> no account yet; one sentence and one action.",
+  "compose-a": "<b>Call 13 · Rich text:</b> a toolbar on selection, an inline image, signature switcher (call 15).",
+  "compose-b": "<b>Call 14 · Template</b> with blanks; ⌘⇧T opens the picker.",
+};
+let S = { f: "layout", v: "a", theme: "dark", den: "comfortable" };
+try { const s = JSON.parse(localStorage.getItem("mailv4r1") || "null"); if (s && !critic) S = { ...S, ...s }; } catch (e) {}
+
+/* ── pieces ── */
+function topbar() {
+  return `<header class="topbar"><span class="brand" aria-hidden="true">Moduo</span>
+  <nav class="mods" aria-label="Modules">${["Home", "Tasks", "Calendar", "Mail", "Notes", "Contacts", "Chat"].map((m) => `<button class="${m === "Mail" ? "on" : ""}">${m}</button>`).join("")}</nav>
+  <div class="tb-right"><button class="btn icon" aria-label="Search (⌘K)">${I("search")}</button><button class="btn icon" aria-label="Notifications">${I("bell")}</button><span class="ava pa" aria-label="You">MG</span></div></header>`;
+}
+function rail(o = {}) {
+  const place = o.place || "inbox";
+  const nav = (id, ic, label, n, extra = "") => `<button class="nav ${place === id ? "on" : ""}">${I(ic)}<span>${label}</span>${extra}${n != null ? `<span class="n num">${n}</span>` : ""}</button>`;
+  return `<aside class="rail" aria-label="Mail places">
+  <div class="railhead"><span class="ttl">Mail</span><button class="btn icon" aria-label="Sync now, synced 1 min ago">${I("sync")}</button><button class="btn icon" aria-label="Mail settings">${I("gear")}</button></div>
+  <div class="newmsg"><button class="btn primary">${I("plus")} New message</button>${K("c")}</div>
+  ${o.first ? `<div class="pnote" style="margin:4px 0">Rail rows are dimmed until an account is connected.</div>` : ""}
+  ${nav("inbox", "inbox", "Inbox", o.first ? null : 7)}
+  ${nav("aside", "aside", "Set aside", o.first ? null : 3)}
+  ${nav("snoozed", "clock", "Snoozed", o.first ? null : 2)}
+  ${nav("follow", "reply", "Follow-ups", o.first ? null : 1, `<span class="dot" style="background:var(--label-amber);margin-left:2px" title="one due"></span>`)}
+  ${nav("drafts", "file", "Drafts", o.first ? null : 1)}
+  ${nav("sent", "send", "Sent")}
+  ${o.offline ? nav("outbox", "send", "Outbox", 1) : ""}
+  <div class="eyebrow">Accounts</div>
+  <button class="nav"><span class="dot" style="background:var(--label-blue)"></span><span>Northwind Studio</span><span class="n num">5</span></button>
+  <button class="nav"><span class="dot" style="background:var(--label-green)"></span><span>Personal</span><span class="n num">2</span></button>
+  <div class="eyebrow">Saved searches</div>
+  <button class="nav">${I("search")}<span>Fjordline</span></button>
+  <button class="nav">${I("search")}<span>Invoices this month</span></button>
+  <div class="eyebrow">More</div>
+  ${nav("archive", "archive", "Archive")}
+  <button class="nav">${I("more")}<span>Trash, Spam, Subscriptions…</span></button>
+  </aside>`;
+}
+function row(t, sel, extra = {}) {
+  const p = people[t.p];
+  const flags = [];
+  if (t.task) flags.push(`<span class="chip ${t.task.done ? "done" : ""}">${I("task")}Task · due ${t.task.due}</span>`);
+  if (extra.reply) flags.push(`<span class="chip" style="color:var(--foreground)">${I("reply")}New reply</span>`);
+  if (t.shared) flags.push(`<span class="chip">${I("users")}Shared · 2 comments</span>`);
+  if (t.clip) flags.push(`<span class="chip">${I("clip")}PDF</span>`);
+  if (t.invite) flags.push(`<span class="chip">${I("cal")}Thu 2:00 PM</span>`);
+  if (t.group) flags.push(`<span class="chip">${t.group} issues</span>`);
+  return `<div role="listitem" class="row ${sel ? "sel" : ""} ${t.unread ? "unread" : ""}" tabindex="${sel ? 0 : -1}" aria-current="${sel ? "true" : "false"}">
+    <span class="ava ${p.c}">${p.i}</span>
+    <div class="who"><span class="nm">${esc(p.n)}${t.n > 1 ? ` <span class="t3" style="font-weight:400">${t.n}</span>` : ""}</span>${t.unread ? `<span class="udot" title="unread"></span>` : ""}</div>
+    <span class="when">${t.when}</span>
+    <div class="sub">${esc(t.sub)}</div>
+    <div class="snip">${esc(t.snip)}</div>
+    ${flags.length ? `<div class="flags">${flags.join("")}</div>` : `<div class="flags"></div>`}
+  </div>`;
+}
+function grp(label, n, clear = true) {
+  return `<div class="grp"><span>${label}</span><span class="n num">${n}</span><span class="grow"></span>${clear ? `<span class="clear">Done all ${K("⇧E")}</span>` : ""}</div>`;
+}
+function listSections(sel = "t1", o = {}) {
+  const ppl = T.filter((t) => t.sec === "people");
+  const nts = T.filter((t) => t.sec === "notifications");
+  return `${grp("People", ppl.length)}${ppl.map((t) => row(t, t.id === sel, o.rowExtra?.[t.id] || {})).join("")}
+  ${grp("Notifications", nts.length)}${nts.map((t) => row(t, t.id === sel)).join("")}
+  ${grp("Newsletters", 1)}${row(T.find((t) => t.id === "r1"), sel === "r1")}
+  ${grp("Seen today", 3, false)}<div style="padding:6px 16px 14px" class="t3">3 read and left in the inbox, folded ${K("⇧↓")}</div>`;
+}
+function listCol(o = {}) {
+  const title = o.title || "Inbox";
+  let body;
+  if (o.mode === "tabs") {
+    body = `<div class="tabs" role="tablist" aria-label="Inbox tabs"><button class="on" role="tab">Personal <span class="n">2</span></button><button role="tab">Fjordline <span class="n">1</span></button><button role="tab">Notifications <span class="n">2</span></button><button role="tab">Newsletters <span class="n">1</span></button></div>
+    <div class="rows" role="list" aria-label="Conversations">${T.filter((t) => t.sec === "people").map((t) => row(t, t.id === (o.sel || "t1"))).join("")}</div>`;
+  } else if (o.mode === "cards") {
+    const card = (label, sec, n) => `<section class="card"><div class="chd">${label} <span class="n">${n}</span><span class="grow"></span><span class="clear t3" style="font-weight:400;font-size: var(--text-xs)">Done all ${K("⇧E")}</span></div>
+      ${T.filter((t) => t.sec === sec).slice(0, 3).map((t) => `<div class="crow"><span class="ava sm ${people[t.p].c}">${people[t.p].i}</span><span style="font-weight:${t.unread ? 600 : 500};white-space:nowrap">${esc(people[t.p].n)}</span><span class="grow t2">${esc(t.sub)}</span><span class="t3 num" style="font-size: var(--text-xs)">${t.when}</span></div>`).join("")}
+      ${n > 3 ? `<div class="more">Show all ${n}</div>` : ""}</section>`;
+    body = `<div class="rows"><div class="cardgrid">${card("People", "people", 6)}${card("Notifications", "notifications", 4)}${card("Newsletters", "newsletters", 1)}</div></div>`;
+  } else body = o.body || `<div class="rows" role="list" aria-label="Conversations">${listSections(o.sel || "t1", o)}</div>`;
+  return `<section class="listcol ${o.full ? "full" : ""}" aria-label="Conversation list">
+    <div class="listhead"><h2>${title}</h2>${o.count != null ? `<span class="t3 num">${o.count}</span>` : `<span class="t3 num">7 unread</span>`}<span class="grow"></span>
+    <button class="btn">${I("layers")} Sections ${I("chev")}</button><button class="btn icon" aria-label="Search mail (/)">${I("search")}</button></div>
+    ${o.line || ""}${body}</section>`;
+}
+function msgCollapsed(pk, when, ex) { const p = people[pk]; return `<div class="msg coll"><span class="ava sm ${p.c}">${p.i}</span><span class="nm">${esc(p.n)}</span><span class="ex">${esc(ex)}</span><span class="t3 num">${when}</span></div>`; }
+function msgOpen(pk, when, paras, o = {}) {
+  const p = people[pk];
+  return `<article class="msg"><div class="mhead"><span class="ava lg ${p.c}">${p.i}</span><div><div class="nm">${esc(p.n)}</div><div class="ad">to you${o.cc ? `, ${o.cc}` : ""} · ${esc(p.a)}</div></div><span class="grow"></span><span class="t3 num">${when}</span></div>
+  <div class="mbody">${paras.map((x) => `<p>${x}</p>`).join("")}</div>
+  <div class="mact"><button class="btn">${I("reply")} Reply</button><button class="btn">${I("fwd")} Forward</button><button class="btn icon" aria-label="More for this message">${I("more")}</button></div></article>`;
+}
+function readerT1(o = {}) {
+  return `<section class="reader" aria-label="Conversation"><div class="rscroll"><div class="rin">
+  <h1 class="subj">Spring campaign: hero photos and the launch date</h1>
+  <div class="linkline">${o.taskLine ? `<span class="chip">${I("task")}Task · Send two harbour crops to Ana · due Fri</span>` : `<span class="chip">${I("task")}Task · due Fri</span>`}<span class="chip">${I("folder")}Fjordline · Spring campaign</span><span class="t3">and Ana's contact</span><button class="btn" style="height:22px;font-size: var(--text-xs)">${I("link")} Links ${K("⌥3")}</button></div>
+  ${msgCollapsed("ana", "Nov 14", "Kicking off the spring campaign: here's the brief and the dates we discussed.")}
+  ${msgCollapsed("tom", "Nov 17", "First round of hero shots is in the shared folder. Three directions.")}
+  ${msgCollapsed("ana", "Nov 18", "We like the harbour direction. One note on the colours for print.")}
+  ${msgOpen("ana", "10:42", ["Hi both,", "Could we see two more crops of the harbour shot before Friday? One square for social and one wide for the ferry terminal screens.", "Legal also needs the final copy by <b>Thursday noon</b>, so the launch date of <b>March 3</b> holds if we get it to them in time.", "Thanks, Ana"], { cc: "Tomasz Nowak" })}
+  ${o.after || ""}
+  </div></div></section>`;
+}
+function personPanel() {
+  const p = people.ana;
+  return `<div class="pbody"><div class="person"><span class="ava xl ${p.c}">${p.i}</span><div><div class="nm">${p.n}</div><div class="ad">${p.role} · ${p.co}</div><div class="ad">${p.a}</div></div></div>
+  <div class="psec"><h4>Open work with Ana<span class="grow"></span><span class="num">3</span></h4>
+    <div class="prow"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri</span></div>
+    <div class="prow"><span class="cb"></span><span class="grow">Print sizes for terminal screens</span><span class="meta">Mon</span></div>
+    <div class="prow"><span class="cb"></span><span class="grow">Invoice Fjordline phase 1</span><span class="meta">Dec 1</span></div></div>
+  <div class="psec"><h4>Next meeting</h4><div class="prow">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+  <div class="psec"><h4>Recent mail<span class="grow"></span><span class="num">14</span></h4>
+    <div class="prow"><span class="grow">Spring campaign: hero photos…</span><span class="meta">10:42</span></div>
+    <div class="prow"><span class="grow">Contract for phase 2</span><span class="meta">Nov 12</span></div>
+    <div class="prow"><span class="grow">Re: Terminal screen specs</span><span class="meta">Nov 3</span></div></div>
+  <div class="psec"><h4>Company</h4><div class="prow">${I("users")}<span class="grow">Fjordline Ferries · 4 people</span><span class="meta">Client</span></div></div>
+  <button class="btn" style="align-self:flex-start">Open in Contacts</button></div>`;
+}
+function linksPanel(o = {}) {
+  return `<div class="pbody">
+  <div class="psec"><h4>Task</h4><div class="prow"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri · Tomasz</span></div>${o.reply ? `<div class="pnote">The task shows <b>New reply</b> when Ana writes again (call 26).</div>` : ""}</div>
+  <div class="psec"><h4>Project</h4><div class="prow">${I("folder")}<span class="grow">Fjordline · Spring campaign</span><span class="meta">12 emails</span></div></div>
+  <div class="psec"><h4>People</h4><div class="prow"><span class="ava sm pa">AR</span><span class="grow">Ana Ruiz</span><span class="meta">Contact</span></div><div class="prow"><span class="ava sm pb">TN</span><span class="grow">Tomasz Nowak</span><span class="meta">Teammate</span></div></div>
+  <div class="psec"><h4>Event</h4><div class="prow">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+  <div class="psec"><h4>Note</h4><div class="prow">${I("note")}<span class="grow">Spring campaign brief</span><span class="meta">Notes</span></div></div>
+  <div class="psec"><h4>Chat</h4><div class="prow">${I("chat")}<span class="grow">#fjordline · “warmer crop for print?”</span><span class="meta">Mon</span></div></div>
+  <button class="btn" style="align-self:flex-start">${I("link")} Link to… ${K("l")}</button></div>`;
+}
+function dayPanel(o = {}) {
+  const hours = ["9", "10", "11", "12", "1", "2", "3", "4", "5"];
+  const top = (h, m = 0) => (h * 40 + (m / 60) * 40);
+  return `<div class="pbody"><div class="psec"><h4>${o.date || "Tuesday, Nov 25"}<span class="grow"></span>${o.note || "3 events · 2h free"}</h4></div>
+  <div class="day">${hours.map((h) => `<div class="hr"><span>${h}${h === "12" ? " PM" : h === "9" ? " AM" : ""}</span></div>`).join("")}
+  ${(o.events || [[0.5, 1, "Studio stand-up", ""], [1, 1.5, "Fjordline weekly", "Meet · Ana, Tomasz"], [2.25, 3.75, "Focus · harbour crops", "focus"], [5, 6, "Lumen kickoff prep", ""]]).map(([a, b, t, s]) => `<div class="ev ${s === "focus" ? "focus" : s === "ghost" ? "ghost" : ""} ${s === "conf" ? "conf" : ""}" style="top:${top(a)}px;height:${top(b) - top(a) - 2}px"><b style="font-weight:600">${t}</b>${s && s !== "focus" && s !== "ghost" && s !== "conf" ? `<div class="t3">${s}</div>` : s === "ghost" ? `<div class="t2">Invite · not answered</div>` : s === "conf" ? `<div class="t3">overlaps the invite</div>` : ""}</div>`).join("")}
+  </div>${o.after || ""}</div>`;
+}
+function schedPanel() {
+  const days = ["Mon 1", "Tue 2", "Wed 3", "Thu 4", "Fri 5"];
+  const hours = ["9", "10", "11", "12", "1", "2", "3", "4"];
+  const busy = { "0-0": 1, "0-1": 1, "1-4": 1, "1-5": 1, "2-0": 1, "3-2": 1, "3-3": 1, "4-6": 1, "4-7": 1 };
+  const pick = { "1-1": 1, "2-5": 1, "3-6": 1 };
+  let g = `<div></div>${days.map((d) => `<div class="h">${d}</div>`).join("")}`;
+  hours.forEach((h, r) => { g += `<div class="tl">${h}</div>`; days.forEach((_, c) => { const k = `${c}-${r}`; g += `<div class="c ${busy[k] ? "busy" : ""} ${pick[k] ? "pick" : ""}" ${pick[k] ? 'title="offered"' : ""}></div>`; }); });
+  return `<div class="pbody"><div class="psec"><h4>Offer times · Dec 1–5<span class="grow"></span>3 picked</h4><div class="t2" style="font-size: var(--text-xs)">Drag over free time to offer it. Offered times show as held in your calendar until Sam books one.</div></div>
+  <div class="week">${g}</div>
+  <div class="psec"><h4>Length</h4><div class="seg"><button>30m</button><button class="on">1h</button><button>1h 30m</button></div></div>
+  <div class="psec"><h4>Booking link</h4><div class="prow">${I("link")}<span class="grow">moduo.app/b/northwind/rebrand</span><span class="meta">only these times</span></div></div>
+  <button class="btn primary" style="align-self:flex-start">Insert in reply ${K("↵")}</button></div>`;
+}
+function panel(view, o = {}) {
+  const names = { person: "Person", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
+  const body = view === "person" ? personPanel() : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
+  return `<aside class="panel" aria-label="Right panel: ${names[view] || view}"><div class="ptitle">${o.back ? `<button class="btn icon" aria-label="Back to email">${I("back")}</button>` : ""}<button class="dd" aria-haspopup="menu">${names[view] || o.title || view} ${I("chev")}</button><span class="grow"></span><span class="t3" style="font-size: var(--text-xs)">${view === "person" ? "⌥1" : view === "today" ? "⌥2" : view === "links" ? "⌥3" : ""}</span></div>${body}</aside>`;
+}
+function taskPanel() {
+  return `<div class="pbody"><div class="psec"><div class="prow" style="padding:0"><span class="cb"></span><span class="grow" style="font-weight:600;font-size: var(--text-md);white-space:normal">Send two harbour crops to Ana</span></div></div>
+  <div class="psec"><div class="prow">Status<span class="grow"></span><span class="meta" style="color:var(--foreground)">To do</span></div><div class="prow">Due<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fri</span></div><div class="prow">Assignee<span class="grow"></span><span class="ava sm pb">TN</span><span class="meta" style="color:var(--foreground)">Tomasz</span></div><div class="prow">Project<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fjordline · Spring</span></div></div>
+  <div class="psec"><h4>From email</h4><div class="chatcard"><div style="display:flex;gap:6px;align-items:center"><span class="chip" style="color:var(--foreground)">${I("reply")}New reply</span><span class="t3" style="font-size: var(--text-xs)">10:42</span></div><div style="font-weight:500">Spring campaign: hero photos and the launch date</div><div class="t2" style="font-size: var(--text-xs)">Ana: “Could we see two more crops of the harbour shot before Friday?”</div></div></div>
+  <div class="psec"><h4>When you complete this task</h4><div class="prow"><span class="cb" style="border-radius:3px;background:var(--primary);border-color:var(--primary)"></span><span class="grow">Also mark the email Done</span></div></div></div>`;
+}
+function commentsPanel() {
+  return `<div class="pbody"><div class="psec"><h4>${I("users")} Shared with Northwind Studio<span class="grow"></span><button class="btn" style="height:22px;font-size: var(--text-xs)">Stop sharing</button></h4><div class="t2" style="font-size: var(--text-xs)">Lena and Tomasz can read this conversation and its new replies in Moduo. Nothing else from your mail is shared.</div></div>
+  <div class="psec"><h4>Comments<span class="grow"></span>2</h4>
+  <div class="prow" style="align-items:flex-start"><span class="ava sm pc">LP</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Lena</b> <span class="t3" style="font-size: var(--text-xs)">9:30</span><div>Phase 2 pricing: let's hold the rate, offer an extra review round instead.</div></div></div>
+  <div class="prow" style="align-items:flex-start"><span class="ava sm pb">TN</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Tomasz</b> <span class="t3" style="font-size: var(--text-xs)">9:41</span><div>Agree. I can draft the answer to her second question.</div></div></div>
+  <div class="input">Comment, @ to mention…</div></div>
+  <div class="psec"><h4>Assigned</h4><div class="prow"><span class="cb"></span><span class="grow">Answer Dana's two questions</span><span class="ava sm pb">TN</span><span class="meta">Today</span></div></div></div>`;
+}
+function bar(mode, o = {}) {
+  const a = (label, k, prim) => `<button class="act ${prim ? "prim" : ""}">${label}${k ? " " + K(k) : ""}</button>`;
+  let c = "";
+  if (mode === "read") c = `${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Reply", "r")}${a("Task", "t")}${a("Link", "l")}<button class="act">More ${I("chev")}</button>`;
+  else if (mode === "multi") c = `<span class="selcount">3 selected</span><span class="bb-sep"></span>${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Tasks", "t")}${a("Move", "m")}<button class="act">More ${I("chev")}</button><span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">Esc</span>`;
+  else if (mode === "write") c = `${a("Send", "⌘↵", true)}${a("Send & Done", "⌘⇧↵")}<span class="rel"><button class="act" style="background:var(--state-active);color:var(--foreground)">Send later ${I("chev")}</button></span>${a("Template", "⌘⇧T")}${a("Attach", "⌘⇧A")}<button class="act">More ${I("chev")}</button>`;
+  else if (mode === "list") c = `${a("New message", "c")}${a("Search", "/")}${a("Quick capture", "⌘⇧K")}`;
+  else if (mode === "aside") c = `${a("Send & next", "⌘↵", true)}${a("Skip", "j")}${a("Done", "e")}${a("Snooze", "s")}<button class="act">More ${I("chev")}</button>`;
+  return `<footer class="bottombar" aria-label="Bottom bar"><div class="bb-l"><button class="btn icon on" aria-label="Hide the rail (⌥[)">${I("panelL")}</button></div><div class="bb-c" role="toolbar" aria-label="Conversation actions">${c}</div><div class="bb-r"><button class="btn icon ${o.noright ? "" : "on"}" aria-label="Hide the right panel (⌥0)">${I("panelR")}</button></div></footer>`;
+}
+function sendLaterMenu() {
+  return `<div class="menu" style="left:50%;bottom:calc(var(--bar-h) + 6px);transform:translateX(-30%)" role="group" aria-label="Send later">
+  <button class="mi on">Tomorrow morning<span class="grow"></span><span class="t3 num">Wed 8:00 AM</span></button>
+  <button class="mi">Tomorrow afternoon<span class="grow"></span><span class="t3 num">Wed 1:00 PM</span></button>
+  <button class="mi">Monday morning<span class="grow"></span><span class="t3 num">Dec 1, 8:00 AM</span></button>
+  <div class="sep"></div><div style="padding:4px 6px"><div class="input">Type a time: “thu 9”</div></div>
+  <div class="sep"></div><div style="padding:6px 8px;font-size: var(--text-xs);max-width:17rem" class="t2">Sends from this Mac. If it's asleep at that time, it sends as soon as Moduo wakes and tells you it was late.</div></div>`;
+}
+function composerReply(o = {}) {
+  return `<section class="composer" aria-label="Reply">
+  <div class="cfield">From <span class="v">maciej@northwind.studio</span><span style="flex:1"></span>${o.sig ? `Signature <button class="btn" style="height:22px" aria-label="Previous signature">${I("back")}</button><span class="v">Studio, short</span><button class="btn" style="height:22px;transform:scaleX(-1)" aria-label="Next signature">${I("back")}</button>` : ""}</div>
+  <div class="cfield">To <span class="v">${o.to || "Ana Ruiz"}</span>${o.cc ? `<span>Cc</span><span class="v">${o.cc}</span>` : ""}</div>
+  ${o.subject ? `<div class="cfield">Subject <span class="v">${o.subject}</span></div>` : ""}
+  <div class="cbody">${o.body || "Hi Ana,<br><br>Two crops attached <span class='caret'></span>"}</div></section>`;
+}
+function app(cols, centre, right, bottom, extras = "") {
+  return { cls: cols, html: topbar() + centre + right + bottom + extras };
+}
+
+/* ── frames ── */
+function render() {
+  const app$ = document.getElementById("app");
+  document.documentElement.setAttribute("data-theme", S.theme);
+  app$.setAttribute("data-density", S.den);
+  const key = `${S.f}-${S.v}`;
+  let cls = "", html = "";
+  const L = rail();
+  const R = (v, o) => panel(v, o);
+  switch (key) {
+    case "layout-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read"); break;
+    case "layout-b": html = topbar() + L + `<main class="centre">${readerT1({ after: "" }).replace('class="reader"', 'class="reader" style="flex:1"')}</main>` + R("person") + bar("read"); break;
+    case "layout-c": cls = "wide-right"; html = topbar() + L + `<main class="centre">${listCol({ full: true })}</main>` + `<aside class="panel" aria-label="Right panel: Conversation"><div class="ptitle"><button class="dd">Conversation ${I("chev")}</button><span class="grow"></span><button class="btn icon" aria-label="Open full">${I("expand")}</button></div><div class="pbody" style="padding:0">${readerT1().replace('<section class="reader"', '<section class="reader" style="font-size: var(--text-sm)"')}</div></aside>` + bar("read"); break;
+    case "inbox-a": html = topbar() + L + `<main class="centre">${listCol({ mode: "tabs" })}${readerT1()}</main>` + R("person") + bar("read"); break;
+    case "inbox-b": html = topbar() + L + `<main class="centre">${listCol({ full: true, sel: "t2" })}</main>` + R("person") + bar("list"); break;
+    case "inbox-c": html = topbar() + L + `<main class="centre">${listCol({ mode: "cards", full: true })}</main>` + R("today") + bar("list"); break;
+    case "bar-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read"); break;
+    case "bar-b": {
+      const b = `<div class="rows" role="list" aria-label="Conversations">${grp("People", 6)}${T.filter((t) => t.sec === "people").map((t, i) => row(t, i >= 3)).join("")}</div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ body: b })}<section class="reader"><div class="empty"><h3>3 conversations selected</h3><p>Sam Oduya, Priya Raman, Dana Whitfield</p><div class="keys"><span>${K("e")} Done all</span><span>${K("t")} Make 3 tasks</span><span>${K("Esc")} Clear</span></div></div></section></main>` + R("person") + bar("multi"); break;
+    }
+    case "bar-c": html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ after: composerReply() })}</main>` + R("person") + bar("write") + sendLaterMenu(); break;
+    case "panel-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + `<div class="menu" style="right:12px;top:calc(2.5rem + var(--bar-h) - 4px)" role="group" aria-label="Right panel views"><button class="mi on">${I("user")}<span class="grow">Person</span>${K("⌥1")}</button><button class="mi">${I("cal")}<span class="grow">Today</span>${K("⌥2")}</button><button class="mi">${I("link")}<span class="grow">Links</span>${K("⌥3")}</button><button class="mi">${I("task")}<span class="grow">Task</span><span class="t3" style="font-size: var(--text-xs)">after t</span></button><button class="mi">${I("clock")}<span class="grow">Schedule</span><span class="t3" style="font-size: var(--text-xs)">offer times</span></button></div>`; break;
+    case "panel-b": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("links") + bar("read"); break;
+    case "panel-c": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("today") + bar("read"); break;
+    case "panel-d": {
+      const t2 = T.find((t) => t.id === "t2");
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1><div class="linkline"><span class="t3">No links yet</span></div>${msgOpen("sam", "10:15", ["Hi Maciej,", "We'd love an hour with you and Tomasz next week to walk through the first rebrand concepts. When works for you?", "Best, Sam"])}${composerReply({ to: "Sam Oduya", cc: "Tomasz Nowak", body: "Hi Sam,<br><br>Happy to. Any of these work for us:<span class='caret'></span>" })}</div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t2" })}${rd}</main>` + R("sched") + bar("write"); break;
+    }
+    case "links-a": html = topbar() + L + `<main class="centre">${listCol({ rowExtra: { t1: { reply: true } } })}${readerT1({ taskLine: true })}</main>` + panel("task", { back: true }) + bar("read"); break;
+    case "links-b": {
+      const t3 = T.find((t) => t.id === "t3");
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Lumen kickoff</h1>
+      <div class="invitebar"><div class="cal-ic">Nov<b>27</b></div><div style="flex:1;min-width:12rem"><div class="when">Thursday, Nov 27 · 2:00 – 3:00 PM</div><div class="t2" style="font-size: var(--text-xs)">Google Meet · Priya Raman and 3 others · <span style="color:var(--foreground)">⚠ overlaps Harbour Bank review</span></div></div>
+      <button class="btn primary">Accept ${K("⇧Y")}</button><button class="btn secondary">Maybe</button><button class="btn secondary">Decline</button></div>
+      ${msgOpen("priya", "9:58", ["Priya Raman has invited you to <b>Lumen kickoff</b>.", "Agenda: goals for the first 90 days, the brand audit, who signs off. Join with Google Meet."])}</div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t3" })}${rd}</main>` + panel("today", { date: "Thursday, Nov 27", note: "with the invite", events: [[0, 1, "Studio stand-up", ""], [1, 2, "Fjordline weekly", "Meet · Ana"], [4.5, 5.5, "Harbour Bank review", "conf"], [5, 6, "Lumen kickoff", "ghost"], [6.5, 8, "Focus · Lumen audit", "focus"]] }) + bar("read"); break;
+    }
+    case "links-c": {
+      const body = `Hi Sam,<br><br>Happy to. Any of these work for us (1 hour, your time zone):<div class="slots"><div>• Tue, Dec 2 · 10:00 – 11:00 AM</div><div>• Wed, Dec 3 · 2:00 – 3:00 PM</div><div>• Thu, Dec 4 · 3:00 – 4:00 PM</div><div class="t2">Or pick one here: <u>moduo.app/b/northwind/rebrand</u></div></div>I'll bring Tomasz.<span class='caret'></span>`;
+      const t2 = T.find((t) => t.id === "t2");
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1>${msgCollapsed("sam", "10:15", "We'd love an hour with you and Tomasz next week…")}${composerReply({ to: "Sam Oduya", cc: "Tomasz Nowak", body })}<div class="pnote">The three slots show as <b>held</b> in your calendar until Sam books one; the booked event links back to this email.</div></div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t2" })}${rd}</main>` + R("sched") + bar("write"); break;
+    }
+    case "team-a": {
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1><div class="linkline"><span class="chip">${I("users")}Shared with Northwind Studio</span><span class="chip">${I("task")}Task · Tomasz · today</span></div>
+      ${msgCollapsed("dana", "Nov 20", "Thanks for sending this over, reading it with our CFO.")}${msgCollapsed("lena", "Nov 20", "Glad to walk you through it whenever suits.")}
+      ${msgOpen("dana", "9:12", ["Thanks for the proposal. Two questions on the second phase before we sign:", "1. Is the rate for phase 2 fixed if the scope grows by one more product line?<br>2. Can we add a third review round?", "Dana"])}</div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}${rd}</main>` + panel("comments", { title: "Team" }).replace(">comments ", ">Team ") + bar("read"); break;
+    }
+    case "team-b": {
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1>${msgOpen("dana", "9:12", ["Thanks for the proposal. Two questions on the second phase before we sign:", "1. Is the rate for phase 2 fixed if the scope grows by one more product line?<br>2. Can we add a third review round?", "Dana"])}</div></div></section>`;
+      const dlg = `<div class="overlay" role="dialog" aria-modal="true" aria-label="Discuss in chat"><div class="dialog"><div class="dh">Discuss in chat</div><div class="db">
+        <div class="input" style="color:var(--foreground)"># kestrel</div>
+        <div class="chatcard"><div style="display:flex;gap:8px;align-items:center"><span class="ava sm pc">DW</span><b style="font-weight:600">Dana Whitfield</b><span class="t3" style="font-size: var(--text-xs)">9:12</span></div><div style="font-weight:500">Re: Proposal for Q1 retainer</div><div class="t2">“1. Is the rate for phase 2 fixed if the scope grows by one more product line? 2. Can we add a third review round?”</div></div>
+        <div class="t3" style="font-size: var(--text-xs)">Teammates see this card and the excerpt you chose. The full email stays in your mail unless you share it.</div>
+        <div class="input">How should we answer the rate question?</div></div>
+        <div class="df"><button class="btn">Cancel</button><button class="btn primary">Post ${K("⌘↵")}</button></div></div></div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}${rd}</main>` + R("person") + bar("read") + dlg; break;
+    }
+    case "aside-a": {
+      const items = [["sam", "Can we meet next week about the rebrand?", "We'd love an hour with you and Tomasz to walk through the first concepts. When works?", "Hi Sam, happy to. I'll send times this afternoon."], ["lena", "Friday: the hiring plan", "I drafted the plan for the junior designer role; can you look before Friday?", ""], ["marco", "Invoice 2026-114 for the Fjordline shoot", "Attached is the invoice for the two-day shoot, due in 14 days.", ""]];
+      const b = `<div class="rscroll"><div class="rin" style="max-width:52rem"><div style="display:flex;align-items:baseline;gap:10px"><h1 class="subj">Set aside</h1><span class="t3">3 to answer</span></div>
+      <div class="batch">${items.map(([pk, s, q, r], i) => `<article class="bcard ${i === 0 ? "cur" : ""}"><div class="bh"><span class="ava lg ${people[pk].c}">${people[pk].i}</span><div style="flex:1;min-width:0"><b style="font-weight:600">${people[pk].n}</b><div class="t2" style="font-size: var(--text-sm)">${s}</div></div><span class="t3" style="font-size: var(--text-xs)">set aside Mon</span></div><div class="bq">${q}</div><div class="bbox">${r || "Reply…"}${i === 0 ? "<span class='caret'></span>" : ""}</div></article>`).join("")}</div></div></div>`;
+      html = topbar() + rail({ place: "aside" }) + `<main class="centre"><section class="reader">${b}</section></main>` + R("person") + bar("aside"); break;
+    }
+    case "aside-b": {
+      const b = `<div class="rows" role="list" aria-label="Set aside">${["t2", "t6", "t5"].map((id, i) => row(T.find((t) => t.id === id), i === 0)).join("")}</div>`;
+      html = topbar() + rail({ place: "aside" }) + `<main class="centre">${listCol({ title: "Set aside", count: 3, body: b })}${(function () { const t2 = T.find((t) => t.id === "t2"); return `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1>${msgOpen("sam", "10:15", ["Hi Maciej,", "We'd love an hour with you and Tomasz next week to walk through the first rebrand concepts. When works for you?", "Best, Sam"])}</div></div></section>`; })()}</main>` + R("person") + bar("read"); break;
+    }
+    case "states-a": {
+      const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Inbox clear</h3><p>Nothing waits for you. 3 set aside, 2 snoozed.</p>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:20rem;text-align:left;margin-top:6px">
+      <div class="prow">${I("clock")}<span class="grow">Snooze returns: Marco's invoice</span><span class="meta">Tomorrow 9:00 AM</span></div>
+      <div class="prow">${I("reply")}<span class="grow">Follow-up due: Harbour Bank brief</span><span class="meta">Thu</span></div>
+      <div class="prow">${I("cal")}<span class="grow">Next: Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+      <div class="keys" style="margin-top:8px"><span>${K("⇧A")} Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
+      html = topbar() + L.replace('<span class="n num">7</span>', "") + `<main class="centre">${listCol({ full: false, count: 0, body: `<div class="empty"><p class="t3">Nothing in the inbox.</p></div>` })}${e}</main>` + R("today") + bar("list"); break;
+    }
+    case "states-b": {
+      const sk = Array.from({ length: 9 }, (_, i) => `<div class="row" aria-hidden="true"><span class="ava" style="background:color-mix(in oklab, var(--foreground) 7%, transparent)"></span><div class="sk" style="width:${40 + (i * 13) % 35}%"></div><div class="sk" style="width:2.5rem"></div><div class="sub"><div class="sk" style="width:${60 + (i * 7) % 30}%"></div></div><div class="snip"><div class="sk" style="width:${70 + (i * 5) % 25}%;height:8px"></div></div><div class="flags"></div></div>`).join("");
+      html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" aria-busy="true" role="status" aria-label="Loading conversations">${sk}</div>` })}<section class="reader"><div class="rin" style="width:100%"><div class="sk" style="height:20px;width:60%"></div><div class="sk" style="width:30%"></div><div class="msg" style="height:180px"></div></div></section></main>` + R("person") + bar("list"); break;
+    }
+    case "states-c": {
+      const line = `<div class="systemline" role="alert">${I("alert")}<span class="grow">Couldn't load Northwind Studio's inbox. Showing what was here at 10:38.</span><button class="btn secondary">Retry</button></div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ line })}${readerT1()}</main>` + R("person") + bar("read"); break;
+    }
+    case "states-d": {
+      const line = `<div class="systemline" role="status">${I("wifioff")}<span class="grow">Offline. 2 actions and 1 email wait in the Outbox and go when you're back.</span></div>`;
+      html = topbar() + rail({ offline: true }) + `<main class="centre">${listCol({ line })}${readerT1()}</main>` + R("person") + bar("read"); break;
+    }
+    case "states-e": {
+      const long = { id: "x", p: "dana", sec: "people", unread: true, when: "10:59", n: 12, sub: "Re: Re: Fwd: Kestrel Labs × Northwind Studio: final scope, timeline, payment terms and the signed statement of work for the Q1 retainer, plus the two open questions from legal about usage rights in the Nordics", snip: "Following up on everyone's notes from the call: legal is fine with the usage terms as long as the Nordic rights are limited to print and out-of-home, and finance wants the second invoice moved to February." };
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${long.sub}</h1><div class="linkline"><span class="t3">12 messages · 7 people</span></div>
+      ${msgCollapsed("dana", "Nov 3", "Kicking this off with the scope we agreed on Friday.")}<div class="msg coll" style="justify-content:center"><span>8 more messages</span>${K("o")}</div>${msgCollapsed("lena", "Nov 19", "Updated SOW attached with the Nordic usage terms.")}${msgCollapsed("tom", "Nov 20", "Design side is fine with the timeline.")}
+      ${msgOpen("dana", "10:59", [long.snip, "Alexandra Konstantinidou-Whitfield from our legal team is copied for the usage rights wording."], { cc: "Alexandra Konstantinidou-Whitfield and 5 others" })}</div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" role="list" aria-label="Conversations">${grp("People", 7)}${row(long, true)}${T.filter((t) => t.sec === "people").map((t) => row(t, false)).join("")}</div>` })}${rd}</main>` + R("person") + bar("read"); break;
+    }
+    case "states-f": {
+      const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Bring your email into Moduo</h3><p style="max-width:28rem">Your mail stays on this Mac. Connect an account and Moduo links emails to your tasks, calendar and contacts.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn primary">Google</button><button class="btn secondary">Microsoft</button><button class="btn secondary">iCloud</button><button class="btn secondary">Other (IMAP)</button></div></div></section>`;
+      html = topbar() + rail({ first: true }) + `<main class="centre">${e}</main>` + R("today") + bar("list"); break;
+    }
+    case "compose-a": {
+      const body = `Hi Ana,<br><br>Here are the two crops: square for social and the wide one for the terminal screens.<div class="inlineimg">${I("img")} harbour-wide.jpg · inline</div><span style="background:var(--state-selected);border-radius:2px">The warmer version prints better</span>, so I'd go with it for the screens too.<div style="position:relative;height:0"><div class="fmtbar" style="position:absolute;top:-58px;left:40px" role="toolbar" aria-label="Formatting"><button class="btn icon" aria-label="Bold (⌘B)">${I("bold")}</button><button class="btn icon" aria-label="Italic (⌘I)">${I("italic")}</button><button class="btn icon" aria-label="Link (⌘K)">${I("link")}</button><button class="btn icon" aria-label="List">${I("list")}</button><button class="btn icon" aria-label="Quote">${I("quote")}</button></div></div><br><br>Maciej<span class='caret'></span>`;
+      html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ after: composerReply({ cc: "Tomasz Nowak", body, sig: true }) })}</main>` + R("person") + bar("write"); break;
+    }
+    case "compose-b": {
+      const body = `Hi <span class="chip" style="color:var(--foreground)">Dana</span>,<br><br>Thanks for your questions on the <span class="chip" style="color:var(--foreground)">Q1 retainer</span>. Here's how phase 2 works:<br><br><span class="chip" style="border:1px dashed var(--muted-foreground);background:transparent">answer: rate if scope grows</span><br><br>Happy to set up a call: <span class="chip" style="color:var(--foreground)">booking link</span><span class='caret'></span>`;
+      const pick = `<div class="menu" style="left:calc(15rem + 24rem + 40px);top:7rem;width:20rem" role="group" aria-label="Templates"><div style="padding:4px 6px"><div class="input">Templates · type to filter</div></div><button class="mi on">${I("file")}<span class="grow">Answer: proposal questions</span><span class="t3" style="font-size: var(--text-xs)">3 blanks</span></button><button class="mi">${I("file")}<span class="grow">Invoice reminder</span><span class="t3" style="font-size: var(--text-xs)">2 blanks</span></button><button class="mi">${I("file")}<span class="grow">New client onboarding</span><span class="t3" style="font-size: var(--text-xs)">+2 files</span></button><div class="sep"></div><button class="mi"><span class="grow t2">Save this email as a template</span></button></div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1>${composerReply({ to: "Dana Whitfield", body })}<div class="pnote">Tab moves to the next blank (dashed). Snippets (;;) stay for short pieces.</div></div></div></section></main>` + R("person") + bar("write") + pick; break;
+    }
+  }
+  app$.className = "app " + cls;
+  app$.innerHTML = html;
+  app$.style.position = "relative";
+  // strip
+  document.getElementById("frames").innerHTML = FRAMES.map((f) => `<button class="${f.id === S.f ? "on" : ""}" data-f="${f.id}" title="Calls ${f.calls}">${f.k} ${f.name}</button>`).join("");
+  const F = FRAMES.find((f) => f.id === S.f);
+  document.getElementById("variants").innerHTML = F.vars.map(([v, l]) => `<button class="${v === S.v ? "on" : ""}" data-v="${v}">${l}</button>`).join("");
+  document.getElementById("cap").innerHTML = (CAPS[key] || "") + ` <span class="t3">Calls ${F.calls} · keys 1–9 frames · V variant · T theme · D density</span>`;
+  document.querySelectorAll("#themeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.th === S.theme));
+  document.querySelectorAll("#denSeg button").forEach((b) => b.classList.toggle("on", b.dataset.den === S.den));
+  try { if (!critic) localStorage.setItem("mailv4r1", JSON.stringify(S)); } catch (e) {}
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.f) { S.f = b.dataset.f; S.v = FRAMES.find((f) => f.id === S.f).vars[0][0]; render(); }
+  else if (b.dataset.v) { S.v = b.dataset.v; render(); }
+  else if (b.dataset.th) { S.theme = b.dataset.th; render(); }
+  else if (b.dataset.den) { S.den = b.dataset.den; render(); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const f = FRAMES.find((x) => x.k === e.key);
+  if (f) { S.f = f.id; S.v = f.vars[0][0]; render(); return; }
+  const F = FRAMES.find((x) => x.id === S.f);
+  if (e.key === "v" || e.key === "V") { const i = F.vars.findIndex(([v]) => v === S.v); S.v = F.vars[(i + (e.shiftKey ? F.vars.length - 1 : 1)) % F.vars.length][0]; render(); }
+  else if (e.key === "t" || e.key === "T") { S.theme = S.theme === "dark" ? "light" : "dark"; render(); }
+  else if (e.key === "d" || e.key === "D") { const ds = ["comfortable", "compact", "dense"]; S.den = ds[(ds.indexOf(S.den) + 1) % 3]; render(); }
+});
+
+/* studio contract: every frame×variant, plus density and light for the default */
+const STATES = [];
+FRAMES.forEach((f) => f.vars.forEach(([v, l]) => STATES.push({ id: `${f.id}-${v}`, label: `${f.name}: ${l.replace(/^\w · /, "")}` })));
+STATES.splice(1, 0, { id: "dense-dark", label: "Split layout, dense rows" }, { id: "compact-light", label: "Split layout, compact rows, light theme" });
+window.studio = {
+  states: STATES,
+  set(id) {
+    if (id === "dense-dark") { S = { f: "layout", v: "a", theme: "dark", den: "dense" }; }
+    else if (id === "compact-light") { S = { f: "layout", v: "a", theme: "light", den: "compact" }; }
+    else { const [f, v] = id.split("-"); S = { f, v, theme: S.theme === "light" && critic ? "dark" : S.theme, den: "comfortable" }; if (critic) S.theme = "dark"; }
+    render();
+  },
+};
+render();
+</script>
