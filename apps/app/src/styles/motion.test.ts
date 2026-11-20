@@ -4,6 +4,7 @@
 // relies on; tests/visual/motion.spec.ts reads the computed styles in Storybook.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { type CssBlock, cssBlocks, declarations, selectors } from "./css-blocks";

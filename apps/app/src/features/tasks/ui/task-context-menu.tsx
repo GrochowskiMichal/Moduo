@@ -7,6 +7,7 @@
 import { isClosedTask, taskCategoryOf } from "@contracts/vocabularies";
 import { type ReactNode, useRef } from "react";
 import { toast } from "sonner";
+
 import {
   ContextMenu,
   ContextMenuContent,
@@ -172,7 +173,7 @@ export function TaskContextMenu({
             </ContextMenuItem>
           ) : null}
           <ContextMenuSeparator />
-          <AssignContextMenu task={task} api={actions} />
+          <AssignContextMenu task={task} patchTask={actions.patchTask} />
           <ContextMenuSub>
             <ContextMenuSubTrigger>Priority</ContextMenuSubTrigger>
             <ContextMenuSubContent>

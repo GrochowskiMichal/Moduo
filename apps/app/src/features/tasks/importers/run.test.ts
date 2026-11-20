@@ -3,6 +3,7 @@
 // supabase/tests/import.test.sql, import_native.test.sql).
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { ProjectStatus } from "../model";
 import { choosePlan, type ImportPlan, planTask } from "./plan";
 import { type ImportApi, type ImportContext, resolvePlan, runImport } from "./run";

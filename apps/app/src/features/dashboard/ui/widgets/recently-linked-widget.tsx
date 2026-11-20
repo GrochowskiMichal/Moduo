@@ -10,7 +10,7 @@ import type { RecentLinkEndpoint } from "@/features/spine/recent";
 import { RELATION_KIND_LABELS } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -44,7 +44,7 @@ function Endpoint({ end }: { end: RecentLinkEndpoint }) {
 }
 
 export function RecentlyLinkedWidget({ size }: WidgetComponentProps) {
-  const { recentLinks } = useDashboardData();
+  const recentLinks = useDashboardSource("recentLinks");
   const density = useDensity();
 
   if (recentLinks.loading && recentLinks.data.length === 0) return <WidgetLoading />;

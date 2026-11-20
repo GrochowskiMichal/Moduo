@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { EDITOR_CASES, ID, PASTE_CASES, STORED_CASES } from "./corpus";

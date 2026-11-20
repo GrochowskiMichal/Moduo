@@ -86,3 +86,50 @@ describe("expandEventOccurrences — range expansion (AC5)", () => {
     expect(occ).toHaveLength(1);
   });
 });
+
+// AC44 (CALR-11): "This event" changes one occurrence. A deleted or replaced
+// occurrence is an exdate on its series (the replacement is an override row of
+// its own), so the series skips exactly that one and the rest stay.
+describe("this event only (AC44)", () => {
+  const daily = (exdates: string[]) =>
+    event({
+      startsAt: new Date(2026, 5, 29, 9, 0).toISOString(), // Mon Jun 29 09:00
+      endsAt: new Date(2026, 5, 29, 9, 30).toISOString(),
+      rrule: "FREQ=DAILY",
+      exdates,
+    });
+
+  it("an exdate removes exactly that occurrence; the series stays", () => {
+    const wednesday = new Date(2026, 6, 1, 9, 0);
+    const occ = expandEventOccurrences(daily([wednesday.toISOString()]), WEEK_START, WEEK_END);
+    expect(occ).toHaveLength(6);
+    expect(occ.some((o) => o.startMs === wednesday.getTime())).toBe(false);
+    expect(occ.some((o) => o.startMs === new Date(2026, 6, 2, 9, 0).getTime())).toBe(true);
+  });
+
+  it("an exdate written in another offset still matches its instant", () => {
+    // 09:00 in Warsaw (UTC+2 in July) is 07:00Z.
+    const occ = expandEventOccurrences(daily(["2026-07-01T07:00:00Z"]), WEEK_START, WEEK_END);
+    expect(occ).toHaveLength(6);
+  });
+
+  it("an exdate that is no occurrence of the series changes nothing", () => {
+    const occ = expandEventOccurrences(
+      daily([new Date(2026, 6, 1, 10, 0).toISOString()]),
+      WEEK_START,
+      WEEK_END,
+    );
+    expect(occ).toHaveLength(7);
+  });
+
+  it("no exdates, or an empty list, keeps every occurrence", () => {
+    expect(expandEventOccurrences(daily([]), WEEK_START, WEEK_END)).toHaveLength(7);
+    const { exdates: _x, ...plain } = daily([]);
+    expect(expandEventOccurrences(plain, WEEK_START, WEEK_END)).toHaveLength(7);
+  });
+
+  it("an exdate on a one-off event is ignored", () => {
+    const one = event({ exdates: [new Date(2026, 5, 30, 9, 0).toISOString()] });
+    expect(expandEventOccurrences(one, WEEK_START, WEEK_END)).toHaveLength(1);
+  });
+});

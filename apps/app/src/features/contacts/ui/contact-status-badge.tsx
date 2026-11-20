@@ -3,7 +3,8 @@
 // tooltip-able title so the dense directory dot is still legible.
 
 import { cn } from "@/lib/utils";
-import { type ContactStatusTone, contactStatusMeta } from "../status";
+
+import { contactStatusMeta, type ContactStatusTone } from "../status";
 
 /** Status tone → the semantic token that tints the dot (never a raw hue). */
 const TONE_DOT: Record<ContactStatusTone, string> = {

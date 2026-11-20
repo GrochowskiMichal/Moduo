@@ -1,5 +1,6 @@
 import { ArrowDownToLine } from "lucide-react";
 import { useEffect } from "react";
+
 import { APP_VERSION, IS_DESKTOP } from "../../features/settings/about";
 import { dispatchOpenSettings } from "../../features/settings/settings-events";
 import { applyMinBuild, useMinBuild } from "../../lib/min-build";

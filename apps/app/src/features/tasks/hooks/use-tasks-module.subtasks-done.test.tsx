@@ -4,7 +4,7 @@
 // open (TV-D12 resets them per cycle); a subtask has none of its own.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -23,7 +23,7 @@ rs.mock("sonner", () => {
 });
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const ME = "u1";
 const PROJECT = {
@@ -91,9 +91,11 @@ async function mount(tasks: Task[]) {
     opCatchUp: rs.fn(async () => []),
   };
   const runtime = { tasks: api } as unknown as ModuoRuntime;
-  const hook = renderHook(() =>
-    useTasksModule(runtime, { userId: ME, workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(runtime, {
+    userId: ME,
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { api, hook };
 }
@@ -118,7 +120,7 @@ describe("call 87: finishing a task finishes its open subtasks", () => {
       task("c2", { parentId: "p" }),
       task("c3", { parentId: "p", ...done }),
     ]);
-    act(() => hook.result.current.toggleDone(parent));
+    act(() => hook.result.current.commands.toggleDone(parent));
     await waitFor(() => expect(api.opSetStatus).toHaveBeenCalledTimes(3));
     expect(statusCalls(api).sort()).toEqual(["c1:done", "c2:done", "p:done"]);
     const said = toasts.notes.find((n) => n.msg.startsWith("Done · also"));
@@ -136,7 +138,7 @@ describe("call 87: finishing a task finishes its open subtasks", () => {
   it("does the same through the status picker", async () => {
     const parent = task("p");
     const { api, hook } = await mount([parent, task("c1", { parentId: "p" })]);
-    act(() => hook.result.current.setTaskStatus("p", { statusId: "s-done" }));
+    act(() => hook.result.current.commands.setTaskStatus("p", { statusId: "s-done" }));
     await waitFor(() => expect(api.opSetStatus).toHaveBeenCalledTimes(2));
     expect(statusCalls(api).sort()).toEqual(["c1:done", "p:s-done"]);
     expect(toasts.notes.some((n) => n.msg === "Done · also 1 subtask")).toBe(true);
@@ -152,9 +154,11 @@ describe("call 87: finishing a task finishes its open subtasks", () => {
       task("p"),
       task("c1", { parentId: "p" }),
     ]);
-    act(() => hook.result.current.toggleDone(repeating));
+    act(() => hook.result.current.commands.toggleDone(repeating));
     act(() =>
-      hook.result.current.toggleDone(hook.result.current.tasks.find((t) => t.id === "c1") as Task),
+      hook.result.current.commands.toggleDone(
+        hook.result.current.tasks.find((t) => t.id === "c1") as Task,
+      ),
     );
     await waitFor(() => expect(api.opSetStatus).toHaveBeenCalledTimes(2));
     expect(statusCalls(api).sort()).toEqual(["c1:done", "r:done"]);

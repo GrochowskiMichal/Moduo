@@ -1,0 +1,6 @@
+{
+  "$comment": "Frozen tests (HV-18, AC16): the implement phase may not write a test. scripts/agent/lane.sh --implement adds these to lane.srt.json's denyWrite, resolved against the worktree, so a shell write (sed -i, >, mv, rm, git checkout) fails too. The globs need macOS: on Linux srt skips write patterns, so lanes run on the Mac. The same paths are denied to Edit and Write in .claude/settings.implement.json.",
+  "filesystem": {
+    "denyWrite": ["**/*.test.*", "**/*.spec.*", "supabase/tests", "benchmarks"]
+  }
+}

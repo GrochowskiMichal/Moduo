@@ -21,6 +21,10 @@
 #   - a job-started hook (job-started.sh) that refuses every job except pushes to develop/mike,
 #     v* tags and the owner's manual runs, so pull_request jobs never run here
 #
+# The runner has only this (plus Node per job from setup-node), not GitHub's macOS image: no jq,
+# Homebrew or global Node. A new tool in the Mac build needs an install here, or a workflow step
+# guarded by `runner.environment == 'self-hosted'`.
+#
 # Trust boundary: a job runs as moduo-ci and can change anything moduo-ci owns, so nothing that
 # decides what runs next is moduo-ci's. The runner lives in /Library/Moduo/actions-runner, owned by
 # root (its directory is sticky and group-writable only so the runner can add its own state files;

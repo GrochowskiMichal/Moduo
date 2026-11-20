@@ -135,6 +135,7 @@ export const linksConnectorModule: ConnectorModule = {
       description:
         "Search the central registry by label — the @mention / link picker source. Excludes tombstones; optionally scoped to entity types.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -169,6 +170,7 @@ export const linksConnectorModule: ConnectorModule = {
       name: "links_list",
       description: "Every live link touching an entity (matched on either end) — the hub roll-up source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -202,6 +204,7 @@ export const linksConnectorModule: ConnectorModule = {
       // Edit, not View: suggestions only exist to be accepted, and the RPC sits
       // behind the Links Edit guard.
       access: "edit",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -235,6 +238,7 @@ export const linksConnectorModule: ConnectorModule = {
       description:
         "An item's comments (a task's, a note's, …), the newest last: who wrote each (a person by name, an app as \"<key name> (app)\"), when, whether it was edited, and the text. Read the answers people left you here. Needs View on the item's module too, and shows only what the key's person can open.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -266,6 +270,7 @@ export const linksConnectorModule: ConnectorModule = {
       description:
         "Link two entities with a typed, direction-agnostic relation (idempotent; rejects self-links and unknown kinds). Registers both endpoints.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -292,6 +297,7 @@ export const linksConnectorModule: ConnectorModule = {
       name: "links_set_kind",
       description: "Re-type an existing link's relation kind. No-op if unchanged.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -313,6 +319,7 @@ export const linksConnectorModule: ConnectorModule = {
       name: "links_delete",
       description: "Soft-delete a link (Undo-friendly, idempotent).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { link_id: { type: "string", description: "Link uuid." } },
@@ -329,6 +336,7 @@ export const linksConnectorModule: ConnectorModule = {
       description:
         "Add a comment to any entity. Member @mentions (mentioned_user_ids) become attributed notifications for those members.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {

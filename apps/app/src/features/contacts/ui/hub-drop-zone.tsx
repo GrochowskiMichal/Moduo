@@ -6,9 +6,11 @@
 // the page's <DndContext>. Tokens only.
 
 import type { ReactNode } from "react";
+
 import { linkTarget } from "@/lib/drag-payload";
 import type { EntityRef } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
+
 import { useDropLinkTarget } from "../../spine/hooks/use-drag-payload";
 
 export function HubDropZone({

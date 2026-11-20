@@ -10,7 +10,7 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import type React from "react";
 
 import type { WidgetInstance } from "../engine/types";
-import { type UseGridDragArgs, useGridDrag } from "./use-grid-drag";
+import { useGridDrag, type UseGridDragArgs } from "./use-grid-drag";
 
 afterEach(cleanup);
 

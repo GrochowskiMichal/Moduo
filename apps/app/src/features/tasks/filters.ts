@@ -8,7 +8,6 @@
 // Operators: is / is not / any of, AND across dimensions. Yes/no dimensions
 // (In your Focus, Blocked, …) offer only "is".
 
-import { TASK_STATUSES } from "@contracts/vocabularies";
 import {
   type FilterCondition,
   type FilterDimension,
@@ -18,8 +17,14 @@ import {
   toggleFilterValue,
 } from "../../components/ui/filter-model";
 import { completedFilterValues, dueFilterValues, scheduledFilterValues } from "./day-buckets";
-import type { PriorityLevel, Task, TaskStatus } from "./model";
-import { type StatusKey, statusKeyOf } from "./statuses";
+import type { PriorityLevel, Task } from "./model";
+import {
+  categoryKey,
+  isStatusKey,
+  type StatusCategoryOf,
+  type StatusKey,
+  statusKeyOf,
+} from "./statuses";
 
 export const TASK_FILTER_DIMENSIONS = [
   // MOD-141: the project a task is in, where more than one shows.
@@ -174,7 +179,9 @@ export function taskFilterValues(
       return ids.length > 0 ? ids : [NONE_VALUE];
     }
     case "status":
-      return [statusKeyOf(task)];
+      // Its key (a category, as older filters and every cross-project scope
+      // store it) and its exact status (one project's own, MOD-240).
+      return task.statusId ? [statusKeyOf(task), task.statusId] : [statusKeyOf(task)];
     case "priority":
       return [task.priority ?? NONE_VALUE];
     case "energy":
@@ -216,10 +223,25 @@ export function filterTasks<T extends Task>(
   );
 }
 
-/** Whether a Status condition asks for this status (is / is any of). */
-function asksForStatus(conditions: readonly FilterCondition[], status: string): boolean {
+/** The key a Status filter value stands for: itself, or its status's category. */
+function statusValueKey(value: string, categoryOf?: StatusCategoryOf): StatusKey | null {
+  if (isStatusKey(value)) return value;
+  const category = categoryOf?.(value);
+  return category ? categoryKey(category) : null;
+}
+
+/** Whether a Status condition asks for this status key (is / is any of),
+ *  by the key or by a status of its category. */
+function asksForStatus(
+  conditions: readonly FilterCondition[],
+  key: StatusKey,
+  categoryOf?: StatusCategoryOf,
+): boolean {
   return conditions.some(
-    (c) => c.dimension === "status" && c.operator !== "is_not" && c.values.includes(status),
+    (c) =>
+      c.dimension === "status" &&
+      c.operator !== "is_not" &&
+      c.values.some((v) => statusValueKey(v, categoryOf) === key),
   );
 }
 
@@ -227,8 +249,11 @@ function asksForStatus(conditions: readonly FilterCondition[], status: string): 
  * Archived ("won't do") tasks are out of every scope until a Status filter
  * asks for them (tasks-v2 §6: "reachable through Filter → Status: Archived").
  */
-export function showsArchived(conditions: readonly FilterCondition[]): boolean {
-  return asksForStatus(conditions, "archived");
+export function showsArchived(
+  conditions: readonly FilterCondition[],
+  categoryOf?: StatusCategoryOf,
+): boolean {
+  return asksForStatus(conditions, "archived", categoryOf);
 }
 
 /**
@@ -236,8 +261,11 @@ export function showsArchived(conditions: readonly FilterCondition[]): boolean {
  * Completed says: otherwise "Status is Done" would list nothing but
  * a "N completed · Show" line.
  */
-export function showsDone(conditions: readonly FilterCondition[]): boolean {
-  return asksForStatus(conditions, "done") || asksForCompletion(conditions);
+export function showsDone(
+  conditions: readonly FilterCondition[],
+  categoryOf?: StatusCategoryOf,
+): boolean {
+  return asksForStatus(conditions, "done", categoryOf) || asksForCompletion(conditions);
 }
 
 /** A Completed filter that asks for a finished day ("Done last week"): it
@@ -251,31 +279,54 @@ function asksForCompletion(conditions: readonly FilterCondition[]): boolean {
   );
 }
 
+/** What a Status filter lets through, asked per status key, or per one
+ *  project's status (`statusId`) where a column stands for one. */
+export type StatusFilter = { has: (key: StatusKey, statusId?: string) => boolean };
+
 /**
  * The statuses a Status filter lets through, or null without one: "is" /
  * "is any of" its values; "is not" every open or done status it doesn't
  * name (Won't do only joins when asked). The Board shows a group for each, so
  * "Status is Won't do" is one Won't do group, not three empty ones (TV-U2).
+ * A value naming one project's status (MOD-240) lets that status through,
+ * and its category where a column stands for a whole category.
  */
 export function statusesLetThrough(
   conditions: readonly FilterCondition[],
-): ReadonlySet<StatusKey> | null {
+  categoryOf?: StatusCategoryOf,
+): StatusFilter | null {
   const condition = conditions.find((c) => c.dimension === "status");
   if (!condition) return null;
+  const values = condition.values;
   if (condition.operator === "is_not") {
-    const open: StatusKey[] = ["todo", "in_progress", "done"];
-    return new Set(open.filter((s) => !condition.values.includes(s)));
+    const open: readonly StatusKey[] = ["todo", "in_progress", "done"];
+    return {
+      has: (key, statusId) =>
+        open.includes(key) &&
+        !values.includes(key) &&
+        (statusId === undefined || !values.includes(statusId)),
+    };
   }
-  const all: StatusKey[] = ["backlog", ...TASK_STATUSES];
-  return new Set(all.filter((s) => condition.values.includes(s)));
+  const keys = new Set<StatusKey>();
+  for (const v of values) {
+    const key = statusValueKey(v, categoryOf);
+    if (key) keys.add(key);
+  }
+  return {
+    has: (key, statusId) =>
+      statusId === undefined ? keys.has(key) : values.includes(key) || values.includes(statusId),
+  };
 }
 
 /**
  * Backlog tasks join My tasks when a Status filter asks for them (TV-D9: they
  * sit out of it otherwise).
  */
-export function showsBacklog(conditions: readonly FilterCondition[]): boolean {
-  return asksForStatus(conditions, "backlog");
+export function showsBacklog(
+  conditions: readonly FilterCondition[],
+  categoryOf?: StatusCategoryOf,
+): boolean {
+  return asksForStatus(conditions, "backlog", categoryOf);
 }
 
 export type CaptureSeed = {

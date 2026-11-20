@@ -7,6 +7,7 @@
 // network.
 
 import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies";
+
 import type { RecurrenceRule } from "../model";
 
 export type ImportSource = "todoist" | "trello" | "linear" | "jira" | "asana";

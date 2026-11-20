@@ -44,7 +44,7 @@ export const WILDCARD_PROBE = "dns-diff-wildcard-probe";
 const VERCEL_ANYCAST = [/^216\.198\.79\.\d+$/, /^64\.29\.17\.\d+$/, /^76\.76\.21\.\d+$/];
 
 /** Records each provider manages for itself (Domain Connect discovery); never ours to copy. */
-export const providerOwned = (name: string) => /^_domainconnect\./.test(name);
+export const providerOwned = (name: string) => name.startsWith("_domainconnect.");
 
 const host = (s: string) => s.trim().toLowerCase().replace(/\.$/, "");
 

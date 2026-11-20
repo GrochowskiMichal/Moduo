@@ -81,8 +81,22 @@ async function setDockBadge(count: number): Promise<void> {
   }
 }
 
+const sources = new Map<string, number>();
+
 /** Show the sum on the app (idempotent: the same count changes nothing). */
 export function showAppBadge(count: number): void {
+  showAppBadgeSource("notices", count);
+}
+
+/** One source's share of the app badge (Catch up's "notices", desktop "mail"): the badge shows their sum. */
+export function showAppBadgeSource(source: string, count: number): void {
+  sources.set(source, Math.max(0, count));
+  let total = 0;
+  for (const n of sources.values()) total += n;
+  renderAppBadge(total);
+}
+
+function renderAppBadge(count: number): void {
   if (typeof document === "undefined" || count === shownCount) return;
   const before = shownCount;
   shownCount = count;

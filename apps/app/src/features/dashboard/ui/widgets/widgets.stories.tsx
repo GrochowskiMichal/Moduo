@@ -12,7 +12,7 @@ import type { HabitRow } from "@/lib/runtime.types";
 
 import {
   type DashboardData,
-  DashboardDataContext,
+  DashboardSources,
   loadedSource,
   makeMockDashboardData,
 } from "../../context/dashboard-data-context";
@@ -252,7 +252,7 @@ function Gallery({ density }: { density: WidgetDensity }) {
 
   return (
     <TooltipProvider>
-      <DashboardDataContext.Provider value={MOCK_DATA}>
+      <DashboardSources value={MOCK_DATA}>
         <div className="flex flex-wrap items-start gap-3 bg-background p-4">
           {items.map(([type, size]) => (
             <div
@@ -263,7 +263,7 @@ function Gallery({ density }: { density: WidgetDensity }) {
             </div>
           ))}
         </div>
-      </DashboardDataContext.Provider>
+      </DashboardSources>
     </TooltipProvider>
   );
 }

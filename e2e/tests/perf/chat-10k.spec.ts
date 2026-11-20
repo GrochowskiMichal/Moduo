@@ -130,7 +130,7 @@ test("the budgets", async ({ page }) => {
   expect(elements).toBeLessThanOrEqual(MAX_ELEMENTS);
 
   // Your own message is on screen within 50 ms of ⏎.
-  const composer = page.locator("[data-chat-composer] textarea");
+  const composer = page.locator("[data-chat-composer]").getByRole("textbox");
   const text = `perf own ${Date.now()}`;
   await composer.fill(text);
   const own = await timeUntil(page, () => composer.press("Enter"), text);

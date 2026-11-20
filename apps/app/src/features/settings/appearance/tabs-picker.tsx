@@ -1,6 +1,5 @@
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import type { Tabs } from "../../../lib/appearance";
-
 import { AppearancePickerRow } from "./picker-row";
 
 const OPTIONS: ReadonlyArray<{ value: Tabs; label: string; hint: string }> = [

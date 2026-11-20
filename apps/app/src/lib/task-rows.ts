@@ -38,6 +38,7 @@ import {
   type TaskStatusCategory,
   taskStatusWord,
 } from "@contracts/vocabularies";
+
 import type {
   AgentSession,
   AgentSessionLine,
@@ -75,6 +76,18 @@ export function localDayOf(iso: string | null | undefined): string | null {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/**
+ * A patch that sets the due date also sets `dueOn`, the day it stands for on
+ * this device (TV-D9), so the copy never shows a new date with an old day.
+ * One that sets `dueOn` itself (a repeat's occurrence) keeps it.
+ */
+export function withDueOn<T extends { dueDate?: string | null; dueOn?: string | null }>(
+  patch: T,
+): T {
+  if (patch.dueDate === undefined || patch.dueOn !== undefined) return patch;
+  return { ...patch, dueOn: localDayOf(patch.dueDate) };
 }
 
 /**
@@ -261,118 +274,6 @@ export function taskCreateOpInput(task: Task): Record<string, unknown> {
   return input;
 }
 
-/**
- * A create or edit for a database before TV-D10: its ops refuse
- * `section_id`, `team_id`, `estimate_minutes` and `imported_from`. The
- * estimate goes back to duration_minutes (which held it); the rest is
- * dropped, as that database has nowhere to keep it. Remove in TV-D7.
- */
-export function withoutTvD10Fields(fields: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...fields };
-  if ("estimate_minutes" in out && !("duration_minutes" in out)) {
-    out.duration_minutes = out.estimate_minutes;
-  }
-  delete out.estimate_minutes;
-  delete out.section_id;
-  delete out.team_id;
-  delete out.imported_from;
-  return out;
-}
-
-/**
- * Send a task op, and when the database is older than the fields sent (the
- * op answers 'Tasks have no field "…"'), send it again without TV-D10's
- * fields, then without TV-D9's too. Remove in TV-D7.
- */
-export async function withFieldFallback<T extends { error: { message?: string } | null }>(
-  fields: Record<string, unknown>,
-  send: (fields: Record<string, unknown>) => PromiseLike<T>,
-): Promise<T> {
-  let res = await send(fields);
-  if (isMissingTvD10FieldError(res.error)) {
-    res = await send(withoutTvD10Fields(fields));
-  }
-  if (isMissingTvD9FieldError(res.error)) {
-    res = await send(withoutTvD9Fields(withoutTvD10Fields(fields)));
-  }
-  return res;
-}
-
-/** The op's answer when it doesn't know a TV-D10 field (a database before it). */
-export function isMissingTvD10FieldError(error: { message?: string } | null | undefined): boolean {
-  return /no field "(section_id|team_id|estimate_minutes|imported_from)"/.test(
-    error?.message ?? "",
-  );
-}
-
-/**
- * A create or edit for a database before TV-D9 (the merge-before-apply
- * window): the op there refuses `due_on`, `due_time` and `status_id`, so the
- * date goes back to the old instant and the status to its legacy value.
- * Remove in TV-D7.
- */
-export function withoutTvD9Fields(fields: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = { ...fields };
-  if ("due_on" in out) {
-    out.due_date = dueOnToLocalInstant(out.due_on as string | null);
-    delete out.due_on;
-  }
-  delete out.due_time;
-  delete out.status_id;
-  if (typeof out.status === "string") {
-    out.status = legacyTaskStatus(normalizeTaskStatusCategory(out.status));
-  }
-  return out;
-}
-
-/** The op's answer when it doesn't know a TV-D9 field (a database before it). */
-export function isMissingTvD9FieldError(error: { message?: string } | null | undefined): boolean {
-  return /no field "(due_on|due_time|status_id)"/.test(error?.message ?? "");
-}
-
-/**
- * The INSERT payload for a new task. No `owner_id`: the server records whoever
- * creates the task as its creator. The assignee is always sent, so an explicit
- * Unassigned (null) is told apart from a build that doesn't know the column;
- * "" (not chosen) means the creator.
- */
-export function taskCreateRow(task: Task, actorId: string | null): Record<string, unknown> {
-  return {
-    id: task.id,
-    workspace_id: task.workspaceId,
-    assignee_id: task.assigneeId === "" ? actorId : task.assigneeId,
-    bucket_id: task.bucketId,
-    parent_id: task.parentId ?? null,
-    title: task.title,
-    description: task.description ?? "",
-    due_date: task.dueDate ?? null,
-    scheduled_at: task.scheduledAt ?? null,
-    duration_minutes: task.durationMinutes ?? null,
-    time_spent_seconds: task.timeSpentSeconds ?? 0,
-    recurrence: task.recurrence ?? null,
-    energy_level: task.energyLevel ?? null,
-    priority: task.priority ?? null,
-    status: task.status,
-    committed_for: task.committedFor ?? null,
-    commit_order: task.commitOrder ?? null,
-    reschedule_count: task.rescheduleCount ?? 0,
-    position: task.position ?? "",
-    created_at: task.createdAt,
-    updated_at: task.updatedAt,
-    deleted_at: task.deletedAt ?? null,
-  };
-}
-
-/**
- * The same INSERT for a database the TV-D1 migration hasn't reached yet, where
- * owner_id still held the assignee (the merge-before-apply window). Remove in
- * TV-D7 together with the database's legacy shim.
- */
-export function taskCreateRowLegacy(task: Task, actorId: string | null): Record<string, unknown> {
-  const { assignee_id: assignee, ...rest } = taskCreateRow(task, actorId);
-  return { ...rest, owner_id: assignee };
-}
-
 /** PostgREST's answer when a column the payload names doesn't exist (yet). */
 export function isMissingColumnError(
   error: { code?: string; message?: string } | null | undefined,
@@ -533,6 +434,8 @@ export function taskRowToModel(raw: unknown): Task {
     description: r.description ?? "",
     // TV-D9: the due date is a date; the app's readers get its local midnight
     // here, so everyone sees the same day. Before TV-D9: the stored instant.
+    // Never take the day from `due_date` when `due_on` is there: the server writes
+    // it as noon UTC of `due_on`, which is the next day at UTC+12 to +14.
     dueDate: r.due_on !== undefined ? dueOnToLocalInstant(r.due_on) : (r.due_date ?? null),
     dueOn: r.due_on ?? localDayOf(r.due_date),
     dueTime: r.due_time ?? null,

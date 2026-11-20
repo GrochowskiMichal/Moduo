@@ -7,8 +7,6 @@
 // Card-level extras (a project's name, subtask counts, progress) ride the same
 // rules. Split out of runtime.web.ts so it stays testable with a fake client.
 
-import type { SupabaseClient } from "@supabase/supabase-js";
-
 import type {
   ContactPreviewRow,
   EmailPreviewRow,
@@ -19,8 +17,10 @@ import type {
   TagPreviewRow,
   TaskPreviewRow,
 } from "../features/spine/references/rows";
+import { noteExcerpt } from "./note-excerpt";
+import { type Db, DbError } from "./runtime.db";
 import { handleWithCurrentKey } from "./task-handle";
-import { dueOnToLocalInstant, isMissingColumnError } from "./task-rows";
+import { dueOnToLocalInstant } from "./task-rows";
 
 /** PostgREST rows are untyped here; each is mapped below. */
 type Row = Record<string, any>;
@@ -29,42 +29,27 @@ const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const unique = (values: Array<string | null | undefined>): string[] =>
   Array.from(new Set(values.filter((v): v is string => typeof v === "string" && v.length > 0)));
 
-/** A note's text, cut to about two card lines (whole words, no trailing space). */
-function excerptOf(text: string | null): string | null {
-  const flat = (text ?? "").replace(/\s+/g, " ").trim();
-  if (!flat) return null;
-  if (flat.length <= 240) return flat;
-  const cut = flat.slice(0, 240);
-  const space = cut.lastIndexOf(" ");
-  return `${(space > 160 ? cut.slice(0, space) : cut).trimEnd()}…`;
-}
-
 /** A typed `%` or `_` is a character, not a LIKE wildcard. */
 const likeEscape = (text: string): string => text.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** Statuses that count towards progress: Backlog and Won't do sit out (53b). */
 const COUNTED = ["todo", "in_progress", "done"];
 
-export function createReferencePreviews(client: SupabaseClient): ReferencePreviewApi {
+export function createReferencePreviews(client: Db): ReferencePreviewApi {
   const fail = (error: { message: string } | null) => {
-    if (error) throw new Error(error.message);
+    if (error) throw new DbError(error);
   };
 
   return {
     async tasks({ workspaceId, ids, card }) {
       if (!ids.length) return [];
-      const read = (extra: string) =>
-        client
-          .from("tasks")
-          .select(`id, title, status, due_date, bucket_id, assignee_id, deleted_at${extra}`)
-          .eq("workspace_id", workspaceId)
-          .in("id", ids);
-      let { data, error } = await read(", number, status_category, due_on");
-      // A database before TV-D9 has no status category or due_on (a backlog
-      // task's legacy status reads "todo"); before TV-D8, no task numbers.
-      if (isMissingColumnError(error, "status_category") || isMissingColumnError(error, "due_on"))
-        ({ data, error } = await read(", number"));
-      if (isMissingColumnError(error, "number")) ({ data, error } = await read(""));
+      const { data, error } = await client
+        .from("tasks")
+        .select(
+          "id, title, status, due_date, bucket_id, assignee_id, deleted_at, number, status_category, due_on",
+        )
+        .eq("workspace_id", workspaceId)
+        .in("id", ids);
       fail(error);
       const rows: TaskPreviewRow[] = ((data ?? []) as Row[]).map((r) => ({
         id: r.id,
@@ -166,16 +151,14 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): NotePreviewRow => ({
-          id: r.id,
-          title: str(r.title) ?? "",
-          icon: str(r.icon),
-          updatedAt: str(r.updated_at) ?? "",
-          deletedAt: str(r.deleted_at),
-          excerpt: card ? excerptOf(str(r.body_text)) : undefined,
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): NotePreviewRow => ({
+        id: r.id,
+        title: str(r.title) ?? "",
+        icon: str(r.icon),
+        updatedAt: str(r.updated_at) ?? "",
+        deletedAt: str(r.deleted_at),
+        excerpt: card ? noteExcerpt(str(r.body_text), str(r.title)) : undefined,
+      }));
     },
 
     async events({ workspaceId, ids }) {
@@ -186,17 +169,15 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): EventPreviewRow => ({
-          id: r.id,
-          title: str(r.title) ?? "",
-          startsAt: str(r.start_time) ?? "",
-          endsAt: str(r.end_time) ?? "",
-          allDay: r.all_day === true,
-          attendeeCount: Array.isArray(r.attendees) ? r.attendees.length : 0,
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): EventPreviewRow => ({
+        id: r.id,
+        title: str(r.title) ?? "",
+        startsAt: str(r.start_time) ?? "",
+        endsAt: str(r.end_time) ?? "",
+        allDay: r.all_day === true,
+        attendeeCount: Array.isArray(r.attendees) ? r.attendees.length : 0,
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async contacts({ workspaceId, ids, kind }) {
@@ -208,18 +189,16 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
           .eq("workspace_id", workspaceId)
           .in("id", ids);
         fail(error);
-        return ((data ?? []) as Row[]).map(
-          (r): ContactPreviewRow => ({
-            id: r.id,
-            kind: "company",
-            name: str(r.name) ?? "",
-            role: null,
-            companyName: null,
-            email: str(r.website),
-            avatarUrl: str(r.avatar_url),
-            deletedAt: str(r.deleted_at),
-          }),
-        );
+        return ((data ?? []) as Row[]).map((r): ContactPreviewRow => ({
+          id: r.id,
+          kind: "company",
+          name: str(r.name) ?? "",
+          role: null,
+          companyName: null,
+          email: str(r.website),
+          avatarUrl: str(r.avatar_url),
+          deletedAt: str(r.deleted_at),
+        }));
       }
       const { data, error } = await client
         .from("contacts")
@@ -240,18 +219,16 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
       const companyName = new Map(
         ((companies.data ?? []) as Row[]).map((c) => [c.id as string, str(c.name)]),
       );
-      return rows.map(
-        (r): ContactPreviewRow => ({
-          id: r.id,
-          kind: "contact",
-          name: str(r.name) ?? "",
-          role: str(r.title),
-          companyName: r.company_id ? (companyName.get(r.company_id) ?? null) : null,
-          email: str(r.email),
-          avatarUrl: str(r.avatar_url),
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return rows.map((r): ContactPreviewRow => ({
+        id: r.id,
+        kind: "contact",
+        name: str(r.name) ?? "",
+        role: str(r.title),
+        companyName: r.company_id ? (companyName.get(r.company_id) ?? null) : null,
+        email: str(r.email),
+        avatarUrl: str(r.avatar_url),
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async emails({ workspaceId, ids }) {
@@ -264,18 +241,16 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): EmailPreviewRow => ({
-          id: r.id,
-          subject: str(r.subject) ?? "",
-          fromName: str(r.from_name),
-          fromAddr: str(r.from_addr),
-          snippet: str(r.snippet),
-          sentAt: str(r.sent_at),
-          waitingOnReply: !!r.follow_up_at && !r.follow_up_cleared_at,
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): EmailPreviewRow => ({
+        id: r.id,
+        subject: str(r.subject) ?? "",
+        fromName: str(r.from_name),
+        fromAddr: str(r.from_addr),
+        snippet: str(r.snippet),
+        sentAt: str(r.sent_at),
+        waitingOnReply: !!r.follow_up_at && !r.follow_up_cleared_at,
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async tags({ workspaceId, ids }) {
@@ -286,14 +261,12 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("workspace_id", workspaceId)
         .in("id", ids);
       fail(error);
-      return ((data ?? []) as Row[]).map(
-        (r): TagPreviewRow => ({
-          id: r.id,
-          name: str(r.name) ?? "",
-          color: str(r.color),
-          deletedAt: str(r.deleted_at),
-        }),
-      );
+      return ((data ?? []) as Row[]).map((r): TagPreviewRow => ({
+        id: r.id,
+        name: str(r.name) ?? "",
+        color: str(r.color),
+        deletedAt: str(r.deleted_at),
+      }));
     },
 
     async searchProjects({ workspaceId, query, limit }) {
@@ -352,7 +325,6 @@ export function createReferencePreviews(client: SupabaseClient): ReferencePrevie
         .eq("entity_type", "task")
         .eq("handle", current)
         .limit(1);
-      if (isMissingColumnError(error, "handle")) return null;
       fail(error);
       const row = ((data ?? []) as Row[])[0];
       return row ? (str(row.entity_id) ?? null) : null;

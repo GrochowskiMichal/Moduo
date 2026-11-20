@@ -10,8 +10,8 @@ import {
   avatarHue,
   initialsOf,
   PersonAvatar,
-  TeamMark,
   teamLettersOf,
+  TeamMark,
 } from "./avatar";
 
 describe("initialsOf (call 43)", () => {

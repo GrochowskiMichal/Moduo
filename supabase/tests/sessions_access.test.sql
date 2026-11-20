@@ -60,13 +60,14 @@ BEGIN
     'public.tasks__can_hold_session(uuid, uuid, uuid)',
     'public.tasks__busy_sessions(uuid, uuid, timestamptz, timestamptz)',
     'public.tasks__fire_reminders(timestamptz, integer)', 'public.tasks__session_legacy()',
-    'public.buckets__area_sync()', 'public.buckets__project_check()'] LOOP
+    'public.buckets__area_sync()', 'public.buckets__project_check()',
+    'public.tasks__editable(uuid)'] LOOP  -- no policy calls it (DB-SEC-1)
     PERFORM test.ok(NOT has_function_privilege('anon', v_fn, 'EXECUTE')
                 AND NOT has_function_privilege('authenticated', v_fn, 'EXECUTE')
                 AND has_function_privilege('service_role', v_fn, 'EXECUTE'),
       format('grants: %s is the server''s only', v_fn));
   END LOOP;
-  FOREACH v_fn IN ARRAY ARRAY['public.tasks__visible(uuid)', 'public.tasks__editable(uuid)'] LOOP
+  FOREACH v_fn IN ARRAY ARRAY['public.tasks__visible(uuid)'] LOOP
     PERFORM test.ok(NOT has_function_privilege('anon', v_fn, 'EXECUTE')
                 AND has_function_privilege('authenticated', v_fn, 'EXECUTE'),
       format('grants: the policies'' %s (answers only for the caller)', v_fn));
@@ -80,15 +81,15 @@ BEGIN
       format('grants: %s is read-only for the app (every write is an op)', v_table));
     PERFORM test.ok((SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = ('public.' || v_table)::regclass)
                 AND (SELECT string_agg(p.qual, ' ') FROM pg_policies p
-                     WHERE p.schemaname = 'public' AND p.tablename = v_table) LIKE '%tasks__visible(task_id)%'
+                     WHERE p.schemaname = 'public' AND p.tablename = v_table AND p.policyname <> 'app_tokens_refused') LIKE '%tasks__visible(task_id)%'
                 AND (SELECT count(*) FROM pg_policies p
-                     WHERE p.schemaname = 'public' AND p.tablename = v_table) = 1,
+                     WHERE p.schemaname = 'public' AND p.tablename = v_table AND p.policyname <> 'app_tokens_refused') = 1,
       format('path: RLS — %s is read through tasks__visible, its only policy', v_table));
     PERFORM test.ok(EXISTS (SELECT 1 FROM pg_publication_tables
                             WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = v_table),
       format('path: Realtime — %s streams under that policy (RLS on, so a subscriber gets only what it reads)', v_table));
   END LOOP;
-  PERFORM test.ok((SELECT p.qual FROM pg_policies p WHERE p.tablename = 'task_reminders') LIKE '%user_id = ( SELECT %uid()%tasks__visible(task_id)%',
+  PERFORM test.ok((SELECT p.qual FROM pg_policies p WHERE p.tablename = 'task_reminders' AND p.policyname <> 'app_tokens_refused') LIKE '%user_id = ( SELECT %uid()%tasks__visible(task_id)%',
     'path: RLS — a reminder is read only by its own person');
 END;
 $$;
@@ -190,11 +191,13 @@ BEGIN
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'write: view access can''t add to Waiting on', r);
   r := test.try('N', format($q$SELECT * FROM public.tasks_op_waiting_remove(%L, %L)$q$, test.id('W'), v_entry));
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%', 'write: view access can''t clear an entry', r);
+  -- RLS asks for Edit before an UPDATE, so the row isn't matched at all.
   r := test.try('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z' WHERE id = %L$q$, test.id('TV')));
-  PERFORM test.ok(r LIKE '42501%', 'write: view access can''t move it as an old build either', r);
-  -- The schedule trigger holds the gate itself, not only PERM-W's write check.
+  PERFORM test.ok(r = 'ok 0', 'write: view access can''t move it as an old build either', r);
+  -- The schedule trigger holds the gate itself, not only PERM-W's write check
+  -- and RLS: N as the actor, past RLS, with the write check off.
   ALTER TABLE public.tasks DISABLE TRIGGER perm_enforce_write;
-  r := test.try('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z', duration_minutes = 90 WHERE id = %L$q$, test.id('TV')));
+  r := test.as_op('N', format($q$UPDATE public.tasks SET scheduled_at = '2030-03-06T09:00:00Z', duration_minutes = 90 WHERE id = %L$q$, test.id('TV')));
   ALTER TABLE public.tasks ENABLE TRIGGER perm_enforce_write;
   PERFORM test.ok(r LIKE '42501%don''t have access to this task%',
     'write: the scheduled_at / duration_minutes trigger refuses view access on its own', r);

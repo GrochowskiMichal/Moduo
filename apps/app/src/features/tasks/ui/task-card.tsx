@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CornerDownRight } from "lucide-react";
 import { memo, useCallback } from "react";
+
 import { TagChipList } from "../../../components/tag-chip";
 import { TeamMark } from "../../../components/ui/avatar";
 import { DROP_TARGET } from "../../../components/ui/drag-visuals";

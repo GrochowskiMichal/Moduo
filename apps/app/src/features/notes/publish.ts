@@ -7,12 +7,16 @@
  * derives server-side, so the header control can say "includes N nested pages"
  * and a test can pin the invariant without a live DB.
  *
- * Scope rules (mirrored in supabase/functions/notes-public):
+ * Scope rules (mirrored server-side by notes_public_subtree, which
+ * supabase/functions/notes-public calls):
  *   - The ROOT must be live (not trashed) AND published (publishedAt +
  *     publishToken). No token → empty scope (revocation empties it).
  *   - Descendants are included only while live AND not archived — a trashed or
  *     archived child leaves the public subtree immediately (edge case in the
  *     spec: "publish a note whose child is later trashed → child disappears").
+ *   - Descendants are included only while they inherit their parent's sharing
+ *     (shareMode "inherit"): a sub-note with its own sharing, and everything
+ *     below it, stays off the parent's link (notes_public_subtree, 2026-10-20).
  *   - Depth-first, position-ordered (the sidebar tree order), depth-capped so
  *     corrupt legacy cycles can never hang the walk.
  */
@@ -28,6 +32,9 @@ function liveChildrenMap(notes: Note[]): Map<string | null, Note[]> {
   for (const n of notes) {
     if (n.deletedAt || n.isArchived) continue; // never public
     const key = n.parentId && byId.has(n.parentId) ? n.parentId : null;
+    // A sub-note with its own sharing doesn't follow its parent's link
+    // (can_access stops walking up at it), and neither does anything below it.
+    if (key && n.shareMode !== "inherit") continue;
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(n);
   }
@@ -50,9 +57,23 @@ export function isPublished(note: Note | undefined | null): boolean {
  * unpublishing (token cleared) empties the scope.
  */
 export function selectPublishSubtree(rootId: string, notes: Note[]): Note[] {
-  const byId = new Map(notes.map((n) => [n.id, n]));
-  const root = byId.get(rootId);
+  const root = notes.find((n) => n.id === rootId);
   if (!isPublished(root)) return [];
+  return walkSubtree(root!, notes);
+}
+
+/**
+ * What publishing a note WOULD put on its link, before it is published: the
+ * same scope rules with the root's token not yet there. The Publish popover
+ * names these pages, so nobody publishes sub-pages without being told.
+ */
+export function selectPublishCandidates(rootId: string, notes: Note[]): Note[] {
+  const root = notes.find((n) => n.id === rootId);
+  if (!root || root.deletedAt || root.isArchived) return [];
+  return walkSubtree(root, notes);
+}
+
+function walkSubtree(root: Note, notes: Note[]): Note[] {
   const kids = liveChildrenMap(notes);
   const out: Note[] = [];
   const walk = (note: Note, depth: number) => {
@@ -60,7 +81,7 @@ export function selectPublishSubtree(rootId: string, notes: Note[]): Note[] {
     if (depth >= MAX_DEPTH) return;
     for (const child of kids.get(note.id) ?? []) walk(child, depth + 1);
   };
-  walk(root!, 0);
+  walk(root, 0);
   return out;
 }
 
@@ -76,9 +97,4 @@ export function buildPublishTree(rootId: string, notes: Note[]): NoteTreeNode | 
     children: depth >= MAX_DEPTH ? [] : (kids.get(note.id) ?? []).map((c) => build(c, depth + 1)),
   });
   return build(root!, 0);
-}
-
-/** Count of nested pages under a published root (subtree minus the root). */
-export function publishedChildCount(rootId: string, notes: Note[]): number {
-  return Math.max(0, selectPublishSubtree(rootId, notes).length - 1);
 }

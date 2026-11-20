@@ -9,8 +9,8 @@ import type { BulkWrite } from "../bulk";
 import { endPositions, positionsAfter, tasksWord } from "../bulk";
 import { PRIORITY_LABELS } from "../helpers";
 import type { Task } from "../model";
-import { STATUS_KEY_LABELS, statusKeyOf } from "../statuses";
-import type { DropNames, TaskDropWrite } from "./drop-write";
+import { statusKeyOf } from "../statuses";
+import { type DropNames, droppedStatusName, type TaskDropWrite } from "./drop-write";
 
 const same = (a: unknown, b: unknown) => (a ?? null) === (b ?? null);
 
@@ -116,7 +116,7 @@ export function multiDropLabel(write: TaskDropWrite, n: number, names: DropNames
   const many = tasksWord(n);
   if (write.parentId) return `Moved ${many} under “${names.taskTitle(write.parentId)}”`;
   if (write.bucketId !== undefined) return `Moved ${many} to ${names.bucketName(write.bucketId)}`;
-  if (write.status !== undefined) return `Moved ${many} to ${STATUS_KEY_LABELS[write.status]}`;
+  if (write.status !== undefined) return `Moved ${many} to ${droppedStatusName(write, names)}`;
   if (write.assigneeId !== undefined) {
     return write.assigneeId
       ? `Assigned ${many} to ${names.assigneeName(write.assigneeId)}`

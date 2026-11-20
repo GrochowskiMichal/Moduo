@@ -1,14 +1,15 @@
 import { useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import {
   useNotificationDetails,
   useNotificationReferenceNames,
 } from "../features/spine/hooks/use-notification-labels";
 import {
   groupNotifications,
-  type NotificationGroup,
   notificationDeepLink,
   notificationDeepLinkNoun,
+  type NotificationGroup,
   notificationSubject,
   notificationSummary,
   withNoticeDetails,

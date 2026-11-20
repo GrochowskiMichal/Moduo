@@ -7,7 +7,7 @@
 // this imports the Supabase client directly: a socket is outside the runtime
 // seam. Polling (run.ts) stays the backstop.
 
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 
 export function subscribeOwnRuns(
   userId: string,

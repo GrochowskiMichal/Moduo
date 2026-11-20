@@ -4,7 +4,7 @@ name: landing-deploy
 #
 # Staging only (https://staging.moduo.app): after `checks` passes on a develop push, for exactly
 # the commit checks tested, or by hand. The staging build: the portal at /, the marketing page at
-# /landing (noindex). Production (moduo.app) is deployed by deploy-prod.yml.
+# /landing (noindex). Production (moduo.app) is deployed by release.yml on a vX.Y.Z tag.
 #
 # The build is a copy step (no app build), so a deploy takes well under a minute. Roll back from
 # the Cloudflare dashboard or `wrangler rollback --env staging`.
@@ -37,7 +37,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # Only develop, main, mike and prod-app may use this environment, which holds the Cloudflare token.
+    # Only develop, mike and v* tags may use this environment, which holds the Cloudflare token.
     environment: cloudflare-deploy
     env:
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -51,10 +51,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
 

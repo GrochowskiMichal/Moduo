@@ -24,8 +24,8 @@ rs.mock("../tasks/realtime", () => ({ listenTasksLive: () => () => {} }));
 
 import type { ModuoRuntime } from "../../lib/runtime.types";
 import { makeTask } from "../tasks/helpers";
-import { useTasksModule } from "../tasks/hooks/use-tasks-module";
 import type { Bucket, Tag, TagLink, Task } from "../tasks/model";
+import { renderTasksHook } from "../tasks/testing/tasks-hook";
 import { useEntityTags } from "./hooks/use-entity-tags";
 import {
   attachTagUser,
@@ -192,11 +192,13 @@ function fakeServer(init: { tasks?: Task[]; tags?: Tag[]; links?: TagLink[] } = 
   };
 }
 
-/** One `useTasksModule`, as the Tasks, Calendar, Notes or Email page runs it. */
+/** One `TasksProvider`, as the Tasks, Calendar, Notes or Email page mounts it. */
 async function mountTasks(runtime: ModuoRuntime) {
-  const hook = renderHook(() =>
-    useTasksModule(runtime, { userId: "u1", workspaceId: WS, modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(runtime, {
+    userId: "u1",
+    workspaceId: WS,
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return hook;
 }
@@ -218,7 +220,7 @@ describe("T1-1 · one tag store feeds every surface", () => {
     const calendarPage = await mountTasks(server.runtime);
 
     const release = server.hold();
-    act(() => tasksPage.result.current.toggleTaskTag("t1", "g1"));
+    act(() => tasksPage.result.current.commands.toggleTaskTag("t1", "g1"));
 
     expect(names(tasksPage.result.current.tagsByTask.get("t1"))).toEqual(["design"]);
     expect(names(calendarPage.result.current.tagsByTask.get("t1"))).toEqual(["design"]);
@@ -228,7 +230,7 @@ describe("T1-1 · one tag store feeds every surface", () => {
     await waitFor(() => expect(server.db.links).toHaveLength(1));
     expect(names(calendarPage.result.current.tagsByTask.get("t1"))).toEqual(["design"]);
     // Removing it, from the other surface, shows everywhere too.
-    act(() => calendarPage.result.current.toggleTaskTag("t1", "g1"));
+    act(() => calendarPage.result.current.commands.toggleTaskTag("t1", "g1"));
     expect(tasksPage.result.current.tagsByTask.get("t1")).toBeUndefined();
     await waitFor(() => expect(server.db.links).toHaveLength(0));
   });
@@ -239,7 +241,7 @@ describe("T1-1 · one tag store feeds every surface", () => {
     const tasksPage = await mountTasks(server.runtime);
     const notesPage = await mountTasks(server.runtime);
 
-    act(() => tasksPage.result.current.toggleTaskTag("t1", "g1"));
+    act(() => tasksPage.result.current.commands.toggleTaskTag("t1", "g1"));
     await waitFor(() =>
       expect(toastMock.error).toHaveBeenCalledWith("Couldn’t add the tag", {
         description: "offline",
@@ -263,7 +265,7 @@ describe("T1-1 · one tag store feeds every surface", () => {
     await waitFor(() => expect(server.db.links).toHaveLength(1));
     const client = server.db.tags.find((t) => t.name === "Client") as Tag;
 
-    act(() => tasksPage.result.current.setTagColor(client.id, "green"));
+    act(() => tasksPage.result.current.commands.setTagColor(client.id, "green"));
     expect(noteRow.result.current.attached[0]?.color).toBe("green");
 
     // Delete from the note's row: gone from Tasks at once; Undo brings it back.
@@ -275,7 +277,7 @@ describe("T1-1 · one tag store feeds every surface", () => {
     expect(server.api.deleteTag).not.toHaveBeenCalled();
 
     // Deleted again and left to close: the server delete runs then.
-    act(() => tasksPage.result.current.deleteTag(client.id));
+    act(() => tasksPage.result.current.commands.deleteTag(client.id));
     expect(names(noteRow.result.current.tags)).toEqual(["design"]);
     expect(noteRow.result.current.attached).toEqual([]);
     const commitOpts = toastMock.mock.calls.at(-1)?.[1] as ToastOpts;
@@ -474,8 +476,8 @@ describe("T1-2 · create-or-attach by name", () => {
     const release = server.hold();
     let created!: Promise<Task | null>;
     act(() => {
-      created = tasksPage.result.current.createTask({ bucketId: "b1", title: "Brief" });
-      tasksPage.result.current.createTagForTask("Launch", created);
+      created = tasksPage.result.current.commands.createTask({ bucketId: "b1", title: "Brief" });
+      tasksPage.result.current.commands.createTagForTask("Launch", created);
     });
     expect(names(tasksPage.result.current.tags)).toEqual(["design", "Launch"]);
     expect(server.api.attachTag).not.toHaveBeenCalled();

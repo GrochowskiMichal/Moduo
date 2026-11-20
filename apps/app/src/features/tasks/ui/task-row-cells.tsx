@@ -3,10 +3,11 @@
 // Each takes what it shows and id-taking callbacks only (TV-D11b: a memoised
 // row never holds the module API or a whole list).
 
-import { isClosedTask, type TaskStatusCategory, taskCategoryOf } from "@contracts/vocabularies";
+import { isClosedTask, taskCategoryOf, type TaskStatusCategory } from "@contracts/vocabularies";
 import { CalendarPlus, Clock } from "lucide-react";
 import type * as React from "react";
 import { toast } from "sonner";
+
 import { DatePickerPanel, useDateDraft } from "../../../components/ui/date-field";
 import {
   DropdownMenu,

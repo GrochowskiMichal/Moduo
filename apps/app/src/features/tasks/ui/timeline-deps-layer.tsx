@@ -117,7 +117,7 @@ export function TimelineDepsLayer({
     setDrawn(next);
   }, [bodyRef, edges, pointDay, nameW, range, dw, focus, canvas]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the rows moving is the cue
+  // The rows moving is the cue.
   useLayoutEffect(() => {
     measure();
   }, [measure, layoutKey]);

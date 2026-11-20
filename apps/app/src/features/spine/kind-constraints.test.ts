@@ -3,6 +3,7 @@
 // party must include paid-by. Symmetric and canonically ordered.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { RELATION_KINDS } from "../../lib/entity-links";
 import { allowedKinds, coerceKindForPair, isKindAllowed } from "./kind-constraints";
 

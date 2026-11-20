@@ -32,6 +32,7 @@ import {
 } from "@lexical/yjs";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import { encodeUint8ToBase64 } from "../utils/base64";
 import {
   $noteMarkdown,

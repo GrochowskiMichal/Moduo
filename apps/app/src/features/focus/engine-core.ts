@@ -20,6 +20,7 @@
 
 import { FOCUS_TIMER_MODES, type FocusTimerMode } from "@contracts/vocabularies";
 import { z } from "zod";
+
 import type { FocusPrefs } from "../../lib/focus-prefs";
 
 /** A gap longer than this between two looks at the clock means the app was away. */

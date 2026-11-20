@@ -15,7 +15,7 @@ import { NavRowDot } from "../../../components/ui/nav-row";
 import { Toolbar } from "../../../components/ui/toolbar";
 import type { TrashTarget } from "../hooks/use-tasks-module";
 import type { TasksTrash } from "../model";
-import { type TrashEntry, trashDaysLeft, trashEntries } from "../trash";
+import { trashDaysLeft, trashEntries, type TrashEntry } from "../trash";
 
 /** The quiet line under a deleted project or task. */
 export function trashEntryMeta(entry: TrashEntry): string {

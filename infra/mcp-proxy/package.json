@@ -1,0 +1,9 @@
+{
+  "name": "@moduo/mcp-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "bun check",
+    "test": "rstest"
+  }
+}

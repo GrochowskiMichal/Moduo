@@ -1,19 +1,26 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, Calendar, Globe, Mail } from "lucide-react";
+import { Bot, Calendar, Check, Copy, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
+
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
+import { IconButton } from "../../../components/ui/icon-button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
+import { connectErrorText } from "../../calendar/connect-error";
 import type { CalendarAccountModel } from "../../calendar/events";
 import {
   disconnectGoogleLogin,
   ensureGoogleCalendarAccounts,
   startWebGoogleConnect,
 } from "../../calendar/google-web";
+import { disconnectOutlookLogin, startWebOutlookConnect } from "../../calendar/outlook-web";
 import { CalendarConnectDialog, IcsFeedDialog } from "../../calendar/ui/calendar-connect-dialog";
+import { NewEventsToSetting } from "../../calendar/ui/new-events-to-setting";
+import { disconnectMailAccount, unsentCopy } from "../../email/disconnect";
 import {
   asHistoryDepth,
   describeDepthChange,
@@ -23,13 +30,17 @@ import {
 import type { SavedAccount } from "../../email/model/email-types";
 import { EmailConnectDialog } from "../../email/ui/email-connect-dialog";
 import { EmailHistoryDepthSelect } from "../../email/ui/email-history-depth-select";
-import { keyLifecycle } from "../api-keys";
+import {
+  CONNECT_BY_URL_LEAD,
+  isConnectedApp,
+  keyLifecycle,
+  KEYS_FOR_SCRIPTS_LABEL,
+} from "../api-keys";
 import { MCP_KEYS_SECTION, mcpConnectorStatus } from "../integrations";
 import { dispatchOpenSettings } from "../settings-events";
-
 import { SettingsSectionShell } from "./section-shell";
 
-/** Outlook, CalDAV, and ICS still use the desktop keychain. Google works on the web. */
+/** CalDAV and ICS still use the desktop keychain. Google and Outlook work on the web too. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
 type OAuthResult = {
@@ -45,7 +56,7 @@ const CAL_PROVIDERS = [
 ];
 
 export function IntegrationsSection() {
-  const { runtime } = useAuth();
+  const { runtime, userId } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
   const [calAccounts, setCalAccounts] = useState<CalendarAccountModel[]>([]);
@@ -72,23 +83,22 @@ export function IntegrationsSection() {
   // AI/MCP connector status: count of active (non-revoked) API keys for this
   // workspace. `null` = not yet loaded or unreadable (e.g. a non-admin) — the
   // card then avoids asserting a connection state either way.
-  const [mcpKeyCount, setMcpKeyCount] = useState<number | null>(null);
+  const [mcpCounts, setMcpCounts] = useState<{ apps: number; keys: number } | null>(null);
+  const [urlCopied, setUrlCopied] = useState(false);
 
   const loadAccounts = useCallback(async () => {
     if (!runtime || !workspaceId) return;
     try {
       const bundle = await runtime.calendar.listModule(workspaceId);
-      let accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
+      const accounts = bundle.accounts.filter((a) => a.provider !== "moduo");
       try {
-        const added = await ensureGoogleCalendarAccounts({
-          runtime,
+        // Only picked calendars sync (CALR-20): the picker is in Calendar accounts.
+        const { awaiting } = await ensureGoogleCalendarAccounts({
           workspaceId,
           accounts,
+          peek: true,
         });
-        if (added) {
-          const again = await runtime.calendar.listModule(workspaceId);
-          accounts = again.accounts.filter((a) => a.provider !== "moduo");
-        }
+        if (awaiting[0]) toast(`Pick which calendars of ${awaiting[0]} to show in Calendar.`);
       } catch (err) {
         console.warn("[integrations] google link", err);
       }
@@ -111,12 +121,15 @@ export function IntegrationsSection() {
   const loadMcpKeys = useCallback(async () => {
     if (!runtime || !workspaceId) return;
     try {
-      const keys = await runtime.workspace.listApiKeys(workspaceId);
-      setMcpKeyCount(keys.filter((k) => keyLifecycle(k).status !== "expired").length);
+      const live = (await runtime.workspace.listApiKeys(workspaceId)).filter(
+        (k) => keyLifecycle(k).status !== "expired",
+      );
+      const apps = live.filter(isConnectedApp).length;
+      setMcpCounts({ apps, keys: live.length - apps });
     } catch {
       // Non-admins can't list keys (RLS) and reads can transiently fail — keep
       // the status neutral rather than falsely reporting "not connected".
-      setMcpKeyCount(null);
+      setMcpCounts(null);
     }
   }, [runtime, workspaceId]);
 
@@ -128,28 +141,36 @@ export function IntegrationsSection() {
 
   const handleConnect = async (provider: "google" | "microsoft", command: string) => {
     if (!runtime || !workspaceId) return;
-    if (!IS_DESKTOP && provider === "google") {
+    if (!IS_DESKTOP) {
       setCalBusy(provider);
       setCalError(null);
       try {
-        await startWebGoogleConnect();
+        // Both come back on the Calendar page, which adds what was connected.
+        await (provider === "google" ? startWebGoogleConnect() : startWebOutlookConnect());
       } catch (e) {
         setCalError(e instanceof Error ? e.message : String(e));
         setCalBusy(null);
       }
       return;
     }
-    if (!IS_DESKTOP) return;
     setCalBusy(provider);
     setCalError(null);
     try {
       const result = await invoke<OAuthResult>(command);
       // Register the account in Supabase so web + desktop both see it. The
-      // provider event sync (fetch → mirror) runs from the desktop engine.
+      // provider event sync (fetch → mirror) runs from the desktop engine. A
+      // login already added on the web (its id lowercased) keeps that one row,
+      // or every event would show twice; it syncs through the web sign-in.
+      const sameLogin = calAccounts.find(
+        (a) =>
+          a.provider === provider &&
+          !a.deletedAt &&
+          a.externalId.toLowerCase() === result.accountId.toLowerCase(),
+      );
       await runtime.calendar.upsertAccount({
         workspaceId,
         provider,
-        externalId: result.accountId,
+        externalId: sameLogin?.externalId ?? result.accountId,
         displayLabel: result.email || result.displayName,
         color: null,
         status: "ok",
@@ -157,7 +178,9 @@ export function IntegrationsSection() {
       });
       await loadAccounts();
     } catch (e) {
-      setCalError(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      console.warn("[integrations] calendar connect", provider, raw);
+      setCalError(connectErrorText(provider, raw));
     } finally {
       setCalBusy(null);
     }
@@ -193,6 +216,10 @@ export function IntegrationsSection() {
         ? rows[0].externalId.slice("google:".length).split(":")[0]
         : "";
       if (email) await disconnectGoogleLogin(email);
+      // A web sign-in of this Outlook login goes too (none from a desktop-only connect).
+      if (rows[0].provider === "microsoft") {
+        await disconnectOutlookLogin(rows[0].externalId.replace(/^outlook:/, ""));
+      }
       for (const row of rows) {
         await cleanupCredentialsForRemoval({
           isDesktop: IS_DESKTOP,
@@ -255,8 +282,13 @@ export function IntegrationsSection() {
     setEmailBusy(account.id);
     setEmailError(null);
     try {
-      await runtime.email.disconnect(account.id);
-      await loadEmailAccounts();
+      await disconnectMailAccount(
+        runtime.email,
+        account.id,
+        (unsent, proceed) =>
+          toast(unsentCopy(unsent), { action: { label: "Disconnect anyway", onClick: proceed } }),
+        () => void loadEmailAccounts(),
+      );
     } catch (e) {
       setEmailError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -264,7 +296,13 @@ export function IntegrationsSection() {
     }
   };
 
-  const mcpStatus = mcpConnectorStatus(mcpKeyCount);
+  const mcpStatus = mcpConnectorStatus(mcpCounts);
+  const mcpEndpoint = runtime?.workspace.getMcpEndpoint() ?? "";
+  const copyMcpEndpoint = async () => {
+    await navigator.clipboard.writeText(mcpEndpoint).catch(() => {});
+    setUrlCopied(true);
+    setTimeout(() => setUrlCopied(false), 2000);
+  };
 
   const caldavIcsGroups = groupRailAccounts(
     calAccounts.filter((a) => a.provider === "caldav" || a.provider === "ics"),
@@ -324,15 +362,19 @@ export function IntegrationsSection() {
         <h3 className="font-display text-base text-foreground">Calendar</h3>
         <p className="mt-1 text-xs text-muted-foreground">
           Google Calendar is a two-way copy — events you add on a linked Google calendar are created
-          in Google too. Outlook and CalDAV still connect from the desktop app.
+          in Google too. Outlook is view only; CalDAV still connects from the desktop app.
         </p>
+        {workspaceId && userId ? (
+          <div className="mt-4">
+            <NewEventsToSetting {...{ workspaceId, userId }} accounts={calAccounts} />
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-col gap-2">
           {CAL_PROVIDERS.map(({ key, label, command }) => {
             const connected = calAccounts.filter((a) => a.provider === key);
             const logins = groupRailAccounts(connected);
             const loginCount = connectedLoginCount(connected);
-            const canConnect = IS_DESKTOP || key === "google";
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -345,27 +387,19 @@ export function IntegrationsSection() {
                       <span className="text-xs text-muted-foreground">
                         {loginCount > 0
                           ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
-                          : canConnect
-                            ? "Not connected"
-                            : "Connect from the desktop app"}
+                          : "Not connected"}
                       </span>
                     </div>
                   </div>
-                  {canConnect ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => void handleConnect(key, command)}
-                      disabled={calBusy === key}
-                    >
-                      {calBusy === key ? "Connecting…" : "Connect account"}
-                    </Button>
-                  ) : (
-                    <Button type="button" variant="outline" size="sm" disabled>
-                      Desktop only
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void handleConnect(key, command)}
+                    disabled={calBusy === key}
+                  >
+                    {calBusy === key ? "Connecting…" : "Connect account"}
+                  </Button>
                 </div>
 
                 {logins.length > 0 ? (
@@ -668,10 +702,19 @@ export function IntegrationsSection() {
 
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-base text-foreground">AI &amp; MCP</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Connect Claude and other AI assistants to this workspace over MCP. They reach your tasks
-          and notes through a scoped API key you create and can revoke anytime.
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{CONNECT_BY_URL_LEAD}</p>
+
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-border bg-muted/30 py-1 pr-1 pl-3">
+          <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+            {mcpEndpoint}
+          </p>
+          <IconButton
+            icon={urlCopied ? Check : Copy}
+            label={urlCopied ? "Copied" : "Copy connector URL"}
+            onClick={() => void copyMcpEndpoint()}
+            className={urlCopied ? "text-success" : undefined}
+          />
+        </div>
 
         <div className="mt-4 flex flex-col gap-2">
           <div className="flex items-center justify-between gap-4 rounded-md border border-border bg-muted/40 px-4 py-3">
@@ -680,7 +723,7 @@ export function IntegrationsSection() {
                 <Bot className="size-4" />
               </span>
               <div className="flex flex-col">
-                <span className="text-sm font-medium text-foreground">AI assistants (MCP)</span>
+                <span className="text-sm font-medium text-foreground">Connections and keys</span>
                 <span className="text-xs text-muted-foreground">{mcpStatus.label}</span>
               </div>
             </div>
@@ -690,9 +733,12 @@ export function IntegrationsSection() {
               size="sm"
               onClick={() => dispatchOpenSettings({ section: MCP_KEYS_SECTION })}
             >
-              {mcpStatus.connected ? "Manage keys" : "Set up"}
+              {mcpStatus.connected ? "Manage" : "Set up"}
             </Button>
           </div>
+          <p className="px-1 text-xs text-muted-foreground">
+            {KEYS_FOR_SCRIPTS_LABEL}: create an API key in Settings → API keys.
+          </p>
         </div>
       </section>
     </SettingsSectionShell>

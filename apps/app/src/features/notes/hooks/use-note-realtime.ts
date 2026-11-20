@@ -16,7 +16,9 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+
 import type { ModuoRuntime } from "@/lib/runtime";
+
 import type { NotesSyncEngineV2 } from "../sync/engine-v2";
 import { type NoteViewer, type PresencePerson, presenceViewers } from "../sync/notes-realtime";
 

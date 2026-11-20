@@ -6,6 +6,8 @@
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+
 import { onCreateNew } from "../../../components/app/create-events";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -75,14 +77,19 @@ export function useNotesShell() {
   );
 
   /** A focused new note: in the Inbox (root), under a page (`parentId`), or
-   * straight into Pages (`toPages`). Exists only here until its first character. */
+   * straight into Pages (`toPages`). Exists only here until its first character.
+   * Returns the draft's id (null when this person can't write). */
   const openDraft = useCallback(
-    (parentId: string | null = null, opts: { toPages?: boolean; replace?: boolean } = {}) => {
-      if (!engine || !canEdit || degraded) return;
+    (
+      parentId: string | null = null,
+      opts: { toPages?: boolean; replace?: boolean } = {},
+    ): string | null => {
+      if (!engine || !canEdit || degraded) return null;
       const id = crypto.randomUUID();
       engine.openDraft(id);
       dispatchDraft({ type: "open", draft: { id, parentId, toPages: opts.toPages } });
       select(id, opts.replace ?? false);
+      return id;
     },
     [engine, canEdit, degraded, dispatchDraft, select],
   );
@@ -132,10 +139,50 @@ export function useNotesShell() {
 
   // Stale deep link: loaded and the id is neither a note nor the draft.
   useEffect(() => {
-    if (loading || !selectedId) return;
+    // Only against the server's list: the device cache can lack a note made
+    // elsewhere, and a reload used to close the note you had open.
+    if (loading || !module.listFresh || !selectedId) return;
     if (selectedId === draftId && engine?.isDraft(draftId)) return;
-    if (!notes.some((n) => n.id === selectedId)) select(null, true);
-  }, [loading, selectedId, draftId, notes, select, engine]);
+    if (!notes.some((n) => n.id === selectedId)) {
+      // Say why the note you followed a link to isn't there.
+      toast("That note isn’t available. It may have been deleted, or it isn’t shared with you.");
+      select(null, true);
+    }
+  }, [loading, module.listFresh, selectedId, draftId, notes, select, engine]);
+
+  // Notes reopens where you left it: the last note you had open in this
+  // workspace, when you arrive with nothing in the URL.
+  const lastKey = userId && workspaceId ? `moduo:notes:last-open:${userId}:${workspaceId}` : null;
+  useEffect(() => {
+    if (!lastKey || !selectedId || selectedId === draftId) return;
+    if (!notes.some((n) => n.id === selectedId && !n.deletedAt)) return;
+    try {
+      localStorage.setItem(lastKey, selectedId);
+    } catch {
+      // A lost "last note" only means opening on the empty state.
+    }
+  }, [lastKey, selectedId, draftId, notes]);
+  const resumedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!lastKey || loading || resumedFor.current === lastKey) return;
+    if (selectedId || search.action) {
+      resumedFor.current = lastKey;
+      return;
+    }
+    let last: string | null = null;
+    try {
+      last = localStorage.getItem(lastKey);
+    } catch {
+      resumedFor.current = lastKey;
+      return;
+    }
+    const found = last ? notes.find((n) => n.id === last) : undefined;
+    // A device cache that doesn't hold it yet: wait for the server's list
+    // before deciding it's gone (a first visit on a new device opened empty).
+    if (last && !found && !module.listFresh) return;
+    resumedFor.current = lastKey;
+    if (found && !found.deletedAt && !found.isArchived) select(found.id, true);
+  }, [lastKey, loading, selectedId, search.action, notes, select, module.listFresh]);
 
   // Opening a note jumps it to the front of the blank-note repair queue.
   useEffect(() => {
@@ -219,7 +266,6 @@ function draftAsNote(draft: Draft, workspaceId: string, userId: string | null): 
     parentId: draft.parentId,
     title: "",
     icon: null,
-    isPinned: false,
     // Sorts last among siblings until the real create assigns a position.
     position: "~",
     isArchived: false,

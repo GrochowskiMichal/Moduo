@@ -58,7 +58,7 @@ _Was 12 when first run. **NOTE-FIX-1 wrote files back for `notes_op_seed_doc` an
 
   **Demonstrated end-to-end** in a rolled-back transaction: with the caller unauthenticated (`{"role":"anon"}`, no `sub`) and the invite explicitly in **`status='revoked'`**, `workspace_members` for the target pair went **0 → 1** and the granted role was **`admin`**. So an unauthenticated request holding an invite UUID could add the invited account to a workspace at the invite's privilege level, using an invite the workspace owner had already revoked. Prod currently holds **7 non-revoked invites**, which were live targets. Mitigating factor: invite ids are v4 UUIDs, so this needs a leaked/forwarded id rather than guessing — but ids travel in invite emails and links, and nothing expired them.
 
-  It predates the migration files and DF-24 replaced the flow with token-based `/join?invite=<token>`; nothing in `src/`, `supabase/functions/` or `src-tauri/` calls it (the only hit is generated types). Revoked from both client roles, and re-verified after: `has_function_privilege('anon', …) = false`. **Dropping it is the follow-up** once a release confirms nothing regressed.
+  It predates the migration files and DF-24 replaced the flow with token-based `/join?invite=<token>`; nothing in `src/`, `supabase/functions/` or `src-tauri/` calls it (the only hit is generated types). Revoked from both client roles, and re-verified after: `has_function_privilege('anon', …) = false`. **Dropping it is the follow-up** once a release confirms nothing regressed. _(Drop added 2026-10-23: `20261023220000_drop_legacy_accept_workspace_invite.sql`.)_
 
 **Deliberately NOT revoked — needs its own block:**
 

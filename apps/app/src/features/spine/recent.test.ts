@@ -3,6 +3,7 @@
 // type, and tombstoned endpoints are flagged (never dropped).
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink, EntityRecord } from "../../lib/entity-links";
 import { shapeRecentLinks } from "./recent";
 

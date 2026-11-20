@@ -1,0 +1,28 @@
+{
+  "id": "509-4-stale-derived-field",
+  "title": "A due-date edit leaves the derived `dueOn` stale",
+  "mechanism": "derived-field-drift",
+  "sites": [
+    "apps/app/src/lib/task-rows.ts",
+    "apps/app/src/features/tasks/write-plan.ts",
+    "apps/app/src/features/tasks/project-overview.ts",
+    "apps/app/src/features/tasks/list-export.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/tasks/due-on.test.ts",
+      "name": "a single due-date edit carries the local day",
+      "run": "bun run --cwd apps/app test src/features/tasks/due-on.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/tasks/due-on.test.ts",
+      "name": "a task without dueOn exports its due date's local day",
+      "run": "bun run --cwd apps/app test src/features/tasks/due-on.test.ts"
+    }
+  ],
+  "pr": 509,
+  "fixCommit": "9a45905456d59aab9ea8535b25c284bcd2c901ff",
+  "foundBy": "manual audit 2026-10-20"
+}

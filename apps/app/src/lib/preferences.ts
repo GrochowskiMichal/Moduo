@@ -19,7 +19,9 @@
 import { normalizeTasksRole, type TasksRole } from "@contracts/vocabularies";
 import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { z } from "zod";
+
 import { getSyncMeta, isDomainReconciled, subscribeReconciled, useDomainSync } from "./prefs-sync";
+import { newerVersion } from "./versions";
 
 export type LandingView = "home" | "tasks" | "calendar" | "notes" | "contacts" | "email" | "last";
 
@@ -115,7 +117,10 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
  *  all, any future type) has no toggle and is NEVER muted — mutes are opt-in per
  *  known type. `comments.add` reaches the feed as an @mention-to-me OR a comment on
  *  your entity (DF-21d), both governed by `mention`; the two `email.*_due` ops
- *  share the `dueFollowUp` toggle. */
+ *  share the `dueFollowUp` toggle. A new notification type extends
+ *  `NotificationType` and this map, and every feed filtering through
+ *  `isNotificationEnabled` picks it up: never build a second prefs classifier
+ *  (DF-21a's parallel taxonomy was a permanent no-op). */
 const OP_TO_NOTIFICATION_TYPE: Record<string, NotificationType> = {
   "comments.add": "comments",
   // TV-U13: an edit only reaches the people it newly names, so it's a mention.
@@ -272,12 +277,10 @@ export interface Preferences {
   tasksOnboarding: TasksOnboardingPrefs;
   /** Folded groups and columns in each List and Board (TV-U8), following the person. */
   tasksFolds: Record<string, TasksFoldEntry>;
-  /** Which Notes UI this person uses while the refresh ships behind a switch
-   *  (specs/notes-refresh.md NR-2). Classic until NR-12 flips the default. */
-  notesExperience: NotesExperience;
+  /** The newest app version this person has been told about (What's new, REL-4).
+   *  Only moves forward, so the "Updated to X" toast shows once per version. */
+  lastSeenVersion: string | null;
 }
-
-export type NotesExperience = "classic" | "next";
 
 export const DEFAULT_PREFERENCES: Preferences = {
   landingView: "home",
@@ -293,7 +296,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   tasksInbox: { snoozed: {} },
   tasksOnboarding: { role: null, roleAt: null, welcomeSeenAt: null, seeded: {}, viewsSeeded: {} },
   tasksFolds: {},
-  notesExperience: "classic",
+  lastSeenVersion: null,
 };
 
 const LOCAL_STORAGE_KEY = "moduo.preferences";
@@ -301,7 +304,6 @@ const LAST_ROUTE_KEY = "moduo.lastRoute";
 
 const LANDING_VIEWS = ["home", "tasks", "calendar", "notes", "contacts", "email", "last"] as const;
 const MOTION_PREFS = ["system", "reduced", "full"] as const;
-const NOTES_EXPERIENCES = ["classic", "next"] as const;
 
 const notificationPrefsSchema = z
   .preprocess(
@@ -478,7 +480,13 @@ const preferencesSchema = z.object({
   tasksInbox: tasksInboxSchema,
   tasksOnboarding: tasksOnboardingSchema,
   tasksFolds: tasksFoldsSchema,
-  notesExperience: z.enum(NOTES_EXPERIENCES).catch(DEFAULT_PREFERENCES.notesExperience),
+  lastSeenVersion: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .nullable()
+    .catch(DEFAULT_PREFERENCES.lastSeenVersion),
 });
 
 export function sanitizeNotificationPrefs(raw: unknown): NotificationPrefs {
@@ -796,6 +804,7 @@ export function usePreferences(opts?: {
           ...cloud,
           tasksOnboarding: mergeOnboardingForward(store.tasksOnboarding, cloud.tasksOnboarding),
           tasksFolds: mergeFoldsForward(store.tasksFolds, cloud.tasksFolds),
+          lastSeenVersion: newerVersion(store.lastSeenVersion, cloud.lastSeenVersion),
         }
       : cloud;
     setStore(next);

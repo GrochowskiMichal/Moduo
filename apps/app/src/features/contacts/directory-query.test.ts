@@ -3,6 +3,7 @@
 // "title · company" secondary line.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { TagLink } from "../tasks/model";
 import {
   filterCompanies,
@@ -10,8 +11,8 @@ import {
   matchesCompany,
   matchesPerson,
   personSecondary,
-  STATUS_FILTER_NONE,
   sortRecent,
+  STATUS_FILTER_NONE,
 } from "./directory-query";
 import type { Company, Contact } from "./model";
 

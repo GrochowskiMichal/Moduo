@@ -44,24 +44,25 @@ export const DESKTOP_CHANNEL: DesktopChannel | null = resolveDesktopChannel();
 /** Staging builds only — drives the STAGING badge on the login page. */
 export const IS_STAGING_PORTAL = DESKTOP_CHANNEL === "staging";
 
-// Public releases-only repo (installers + auto-update manifests, no source) — no GitHub login needed.
-const RELEASE_BASE = "https://github.com/GrochowskiMichal/moduo-releases/releases/download";
+// The update server (infra/update-server) redirects `latest/<file>` to the channel's current
+// version. The GitHub moduo-releases `*-latest` releases are frozen bridges for old installs.
+const DOWNLOAD_BASE = "https://updates.moduo.app/download/desktop";
 
 export type DesktopDownload = { platform: "mac" | "windows"; label: string; href: string };
 
-/** Signed-in Settings → About installers for a channel (rolling `<tag>-latest` GitHub release). */
+/** Signed-in Settings → About installers for a channel (its current version on the update server). */
 export function desktopDownloads(channel: DesktopChannel): DesktopDownload[] {
-  const tag = channel === "production" ? "prod-latest" : "staging-latest";
+  const base = `${DOWNLOAD_BASE}/${channel}/latest`;
   return [
     {
       platform: "mac",
       label: "Download for Mac",
-      href: `${RELEASE_BASE}/${tag}/Moduo_universal.dmg`,
+      href: `${base}/Moduo_universal.dmg`,
     },
     {
       platform: "windows",
       label: "Download for Windows",
-      href: `${RELEASE_BASE}/${tag}/Moduo_x64-setup.exe`,
+      href: `${base}/Moduo_x64-setup.exe`,
     },
   ];
 }
@@ -77,18 +78,18 @@ export const ABOUT_RUNTIME_LINE = "Web & desktop (Tauri 2) · React 19";
 
 export type AboutLink = { label: string; href: string; kind: "changelog" | "legal" | "support" };
 
-/** The privacy policy (apps/landing/privacy.html on prod-landing). */
+/** The privacy policy (apps/landing/privacy.html). */
 export const PRIVACY_POLICY_URL = "https://moduo.app/privacy";
 
-/** Release notes: the public releases repo, until moduo.app has a changelog page. */
-export const RELEASE_NOTES_URL = "https://github.com/GrochowskiMichal/moduo-releases/releases";
+/** Every release's notes, newest first (apps/landing renders it from release-notes/releases.json). */
+export const CHANGELOG_URL = "https://moduo.app/changelog";
 
 /**
  * External links shown at the bottom of About. The legal and support pages
  * live on the canonical marketing domain (moduo.app).
  */
 export const ABOUT_LINKS: AboutLink[] = [
-  { label: "What's new", href: RELEASE_NOTES_URL, kind: "changelog" },
+  { label: "Full changelog", href: CHANGELOG_URL, kind: "changelog" },
   { label: "Privacy", href: PRIVACY_POLICY_URL, kind: "legal" },
   { label: "Terms", href: "https://moduo.app/terms", kind: "legal" },
   { label: "Support", href: "https://moduo.app/support", kind: "support" },

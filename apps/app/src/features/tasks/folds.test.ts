@@ -2,11 +2,12 @@
 // and the burst is written to the synced preferences in one write.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
+
 import { currentPreferences } from "../../lib/preferences";
 import {
   boardFoldKey,
-  FOLDS_WRITE_DELAY_MS,
   flushFolds,
+  FOLDS_WRITE_DELAY_MS,
   listFoldKey,
   readFolds,
   resetFoldsForTests,

@@ -2,6 +2,7 @@
 // the stamp an open strip re-reads on (AT3-3, the live strip refresh).
 
 import { describe, expect, it } from "@rstest/core";
+
 import { LIVE_SIDE_TABLES, parseLiveChange } from "../../features/tasks/live";
 import { attachmentMarkRowToModel } from "../task-rows";
 import { countAttachments, SYNC_TABLES } from "./store";

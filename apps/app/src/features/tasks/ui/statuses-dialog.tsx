@@ -268,7 +268,7 @@ function NewStatusInput({
       <StatusIcon category={category} className="text-muted-foreground" />
       <Input
         size="sm"
-        // biome-ignore lint/a11y/noAutofocus: the field opens on the user's own "Add status".
+        // eslint-disable-next-line jsx-a11y/no-autofocus -- the field opens on the user's own "Add status".
         autoFocus
         value={name}
         disabled={disabled}

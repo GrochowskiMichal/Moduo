@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { nextFlush } from "./engine-v2";
 
 describe("nextFlush (NR-7: peers see edits when saved)", () => {

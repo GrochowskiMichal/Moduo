@@ -35,7 +35,8 @@ type AgentEdit = { kind: "append" | "replace"; markdown: string };
 
 // deno-lint-ignore no-explicit-any
 let notesDocModule: Promise<any> | null = null;
-/** The headless notes-doc writer, loaded once, on the first notes write. */
+/** The headless notes-doc writer, loaded once, on the first notes write (or
+ * the first read of a body saved with old escapes). */
 function notesDoc() {
   notesDocModule ??= import("../../_shared/notes-doc/notes-doc.bundle.js");
   return notesDocModule;
@@ -95,6 +96,23 @@ function shapeNote(n: Row): Row {
   };
 }
 
+const LIST_PAGE = 1000;
+
+/** U+E000 / U+E001 around a match in a SearchHit snippet; agents read **bold**. */
+const SNIPPET_MARKS = /[\uE000\uE001]/g;
+
+/** Every note of the key's workspace its person can view (notes__visible_ids,
+ * the set form of can_access). The key's own notes scope is checked before
+ * any tool runs. */
+async function notesVisibleIds(ctx: ToolContext): Promise<Set<string>> {
+  const { data, error } = await ctx.db.rpc("notes__visible_ids", {
+    p_workspace_id: ctx.key.workspaceId,
+    p_actor: ctx.key.createdBy,
+  });
+  if (error) throw new Error(error.message);
+  return new Set((data ?? []) as string[]);
+}
+
 async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row | null> {
   const { data, error } = await ctx.db.rpc(fn, { p_workspace_id: ctx.key.workspaceId, ...args });
   if (error) throw new Error(error.message);
@@ -115,11 +133,86 @@ async function getNote(ctx: ToolContext, id: string, cols: string): Promise<Row 
   return found[0] ?? null;
 }
 
+/** A note's content (NS-11: note_bodies, keyed on note_id), or null. Read as
+ * service_role, so scoped to the key's workspace here; callers check the note. */
+async function getNoteBody(ctx: ToolContext, id: string, cols: string): Promise<Row | null> {
+  const found = await rows(
+    ctx.db
+      .from("note_bodies")
+      .select(cols)
+      .eq("workspace_id", ctx.key.workspaceId)
+      .eq("note_id", id)
+      .limit(1),
+  );
+  return found[0] ?? null;
+}
+
 const UPDATE_PAGE = 1000;
 
+/** A note's update log after `after` and, when asked, its snapshot, through
+ * notes_pull (NS-7): access checked once on the server for the key's person
+ * (and its Notes scope), the page and the snapshot from one snapshot, a call
+ * per 1,000 rows. A later page that brings a snapshot (a compaction ran
+ * between calls) is the newer one; the rows read stay lossless on top of it.
+ * Null while the function isn't deployed yet. */
+async function pullNote(
+  ctx: ToolContext,
+  noteId: string,
+  after: number,
+): Promise<{ updates: string[]; upto: number; snapshotB64: string | null } | null> {
+  const updates: string[] = [];
+  let upto = after;
+  let known: number | null = null;
+  let snapshotB64: string | null = null;
+  for (let first = true; ; first = false) {
+    const { data, error } = await ctx.db.rpc("notes_pull", {
+      p_workspace_id: ctx.key.workspaceId,
+      p_note_id: noteId,
+      p_after_id: upto,
+      p_known_version: known,
+    });
+    if (error) {
+      if (first && isMissingPull(error)) return null;
+      throw new Error(error.message);
+    }
+    const page = readPullPage(data);
+    if (page.snapshot !== undefined) snapshotB64 = page.snapshot;
+    known = page.docVersion;
+    updates.push(...page.updates);
+    const before = upto;
+    upto = Math.max(upto, page.upto);
+    if (!page.hasMore || upto === before) return { updates, upto, snapshotB64 };
+  }
+}
+
+/** PostgREST's answer before NS-7's migration: no notes_pull yet. */
+function isMissingPull(error: { code?: string; message?: string }): boolean {
+  return (error.code === "PGRST202" || error.code === "42883") &&
+    String(error.message ?? "").includes("notes_pull");
+}
+
+/** One notes_pull answer. `snapshot` is undefined when the server left it
+ * out (the version asked for is current), null for a note with no snapshot. */
+function readPullPage(data: unknown) {
+  const page = (data ?? {}) as Row;
+  const rowsRead = Array.isArray(page.updates) ? (page.updates as Row[]) : [];
+  const snapshot = !("snapshot" in page)
+    ? undefined
+    : typeof page.snapshot === "string" && page.snapshot
+    ? page.snapshot as string
+    : null;
+  return {
+    snapshot,
+    docVersion: Number(page.doc_version ?? 0),
+    updates: rowsRead.map((r) => r.update_b64).filter((u): u is string => typeof u === "string"),
+    upto: rowsRead.reduce((max, r) => Math.max(max, Number(r.id)), 0),
+    hasMore: page.has_more === true,
+  };
+}
+
 /** Every update row after `after`, paged past PostgREST's 1000-row cap, and
- * the highest id read. */
-async function noteUpdateLog(
+ * the highest id read. Before NS-7's migration: the table, as service_role. */
+async function noteUpdateLogFromTable(
   ctx: ToolContext,
   noteId: string,
   after = 0,
@@ -146,15 +239,54 @@ async function noteUpdateLog(
   }
 }
 
-/** Log first, snapshot second (the app's pull order): a compaction in
- * between only makes the snapshot newer than the log, and applying both is
- * lossless. */
+/** Every update row after `after`, and the highest id read. */
+async function noteUpdateLog(
+  ctx: ToolContext,
+  noteId: string,
+  after = 0,
+): Promise<{ updates: string[]; upto: number }> {
+  const pulled = await pullNote(ctx, noteId, after);
+  if (pulled) return { updates: pulled.updates, upto: pulled.upto };
+  return noteUpdateLogFromTable(ctx, noteId, after);
+}
+
+/** The note's doc (snapshot + log) and stored body. The live check comes from
+ * the note's row, the body from its note_bodies row (NS-11); the doc from notes_pull, or before NS-7 log
+ * first, snapshot second (a compaction in between only makes the snapshot
+ * newer than the log, and applying both is lossless). */
 async function readNoteDoc(ctx: ToolContext, noteId: string) {
-  const log = await noteUpdateLog(ctx, noteId);
-  const note = await getNote(ctx, noteId, "id, body_md, doc_state");
-  if (!note) throw new Error("Note not found in this workspace.");
-  const snapshotB64 = typeof note.doc_state === "string" && note.doc_state ? note.doc_state : null;
-  return { log, snapshotB64, bodyMd: String(note.body_md ?? "") };
+  const pulled = await pullNote(ctx, noteId, 0);
+  const log = pulled
+    ? { updates: pulled.updates, upto: pulled.upto }
+    : await noteUpdateLogFromTable(ctx, noteId);
+  const note = await getNote(ctx, noteId, "id");
+  const body = note ? await getNoteBody(ctx, noteId, pulled ? "body_md" : "body_md, doc_state") : null;
+  if (!note || !body) throw new Error("Note not found in this workspace.");
+  const snapshotB64 = pulled
+    ? pulled.snapshotB64
+    : typeof body.doc_state === "string" && body.doc_state
+    ? body.doc_state
+    : null;
+  return { log, snapshotB64, bodyMd: String(body.body_md ?? "") };
+}
+
+/** A body saved before stored markdown escaped only what changes meaning
+ * still reads `sbp\_x` (an underscore escaped between two letters or digits,
+ * which the export no longer writes); until its note is edited again, read
+ * it from the doc, through the same bundle the writes use. Any other body
+ * goes out as stored, and so does one whose doc can't be read. */
+const OLD_ESCAPES = /[\p{L}\p{N}]\\_[\p{L}\p{N}]/u;
+
+async function currentMarkdown(ctx: ToolContext, noteId: string, stored: string): Promise<string> {
+  if (!OLD_ESCAPES.test(stored)) return stored;
+  try {
+    const { log, snapshotB64 } = await readNoteDoc(ctx, noteId);
+    if (!snapshotB64 && log.updates.length === 0) return stored;
+    const lib = await notesDoc();
+    return String(lib.bodyFromLog({ snapshotB64, updatesB64: log.updates }).bodyMd);
+  } catch {
+    return stored;
+  }
 }
 
 type AgentPlan =
@@ -234,28 +366,42 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "The note tree — every live note's id, title, parent, icon, and published flag (trashed excluded). Reconstruct the hierarchy from parent_id.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max notes (default 200, max 1000)." } },
       },
       handler: async (args, ctx) => {
-        const data = await rows(
-          ctx.db
-            .from("notes")
-            .select("id, title, parent_id, icon, is_archived, published_at, position")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .is("deleted_at", null)
-            .order("position")
-            .limit(clampLimit(args, 200, 1000)),
-        );
-        const visible = await visibleIds(ctx, "note");
-        return data.filter((n) => visible.has(n.id)).map(shapeNote);
+        // Visibility before the limit (GS-2): the visible set first, then the
+        // tree in pages until the limit is met, so notes the key's person
+        // can't see never crowd out the ones they can.
+        const limit = clampLimit(args, 200, 1000);
+        const visible = await notesVisibleIds(ctx);
+        const out: Row[] = [];
+        for (let from = 0; out.length < limit && visible.size > 0; from += LIST_PAGE) {
+          const page = await rows(
+            ctx.db
+              .from("notes")
+              .select("id, title, parent_id, icon, is_archived, published_at, position")
+              .eq("workspace_id", ctx.key.workspaceId)
+              .is("deleted_at", null)
+              .order("position")
+              .order("id")
+              .range(from, from + LIST_PAGE - 1),
+          );
+          for (const n of page) if (visible.has(n.id) && out.length < limit) out.push(n);
+          // Only an empty page ends the tree: PostgREST may answer fewer rows
+          // than asked (its max_rows) before the end.
+          if (page.length === 0) break;
+        }
+        return out.map(shapeNote);
       },
     },
     {
       name: "notes_get",
       description: "One note as markdown (`body_md`) plus its meta — the read source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -265,12 +411,13 @@ export const notesConnectorModule: ConnectorModule = {
         const n = await getNote(
           ctx,
           str(args, "note_id"),
-          "id, title, parent_id, icon, is_archived, published_at, publish_token, body_md",
+          "id, title, parent_id, icon, is_archived, published_at, publish_token",
         );
         if (!n || !(await visibleIds(ctx, "note")).has(n.id)) return null;
+        const body = await getNoteBody(ctx, n.id, "body_md");
         return {
           ...shapeNote(n),
-          markdown: n.body_md ?? "",
+          markdown: await currentMarkdown(ctx, n.id, String(body?.body_md ?? "")),
           // Only expose a token an agent could act on when actually published.
           publish_token: n.published_at != null ? (n.publish_token ?? null) : null,
         };
@@ -278,8 +425,10 @@ export const notesConnectorModule: ConnectorModule = {
     },
     {
       name: "notes_search",
-      description: "Full-text search over note titles and body — returns matches with a snippet.",
+      description:
+        "Search notes by words in their title or body (word-starts, any order, accents ignored; quotes for a phrase, -word to exclude). Returns the notes you can open, best first, each with where it lives and, for a body match, a snippet with the match in **bold**.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -288,23 +437,23 @@ export const notesConnectorModule: ConnectorModule = {
         },
         required: ["query"],
       },
+      // The server's notes__search, the same rows the sidebar and ⌘K get
+      // (GS-2): the key's scope and its person's access are applied there,
+      // before the limit, so nothing is filtered here.
       handler: async (args, ctx) => {
-        const q = str(args, "query");
-        const data = await rows(
-          ctx.db
-            .from("notes")
-            .select("id, title, body_text, is_archived")
-            .eq("workspace_id", ctx.key.workspaceId)
-            .is("deleted_at", null)
-            .textSearch("search_tsv", q, { type: "websearch", config: "simple" })
-            .limit(clampLimit(args, 20, 50)),
-        );
-        const visible = await visibleIds(ctx, "note");
-        return data.filter((n) => visible.has(n.id)).map((n) => ({
-          id: n.id,
-          title: (n.title ?? "").trim() || "Untitled",
-          archived: Boolean(n.is_archived),
-          snippet: String(n.body_text ?? "").replace(/\s+/g, " ").trim().slice(0, 200),
+        const { data, error } = await ctx.db.rpc("notes__search", {
+          p_workspace_id: ctx.key.workspaceId,
+          p_query: str(args, "query"),
+          p_limit: clampLimit(args, 20, 50),
+        });
+        if (error) throw new Error(error.message);
+        return ((data ?? []) as Row[]).map((h) => ({
+          id: h.entity_id,
+          title: (h.title ?? "").trim() || "Untitled",
+          context: h.context ?? null,
+          snippet: typeof h.snippet === "string" ? h.snippet.replace(SNIPPET_MARKS, "**") : null,
+          match: h.match,
+          archived: h.archived === true,
         }));
       },
     },
@@ -314,6 +463,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Create a note from markdown (optionally under a parent) — agents build whole trees this way. The note is immediately listable, searchable, publishable and editable, and lands in the Inbox when it has no parent.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -327,10 +477,9 @@ export const notesConnectorModule: ConnectorModule = {
         const title = str(args, "title");
         const body = md(args, "markdown", false);
         const parentId = str(args, "parent_id", false) || null;
-        // notes_op_import (unlike notes_op_create) does NOT guard the parent —
-        // there's no FK on parent_id — so an unresolvable/foreign parent would
-        // silently import the note as an orphan root. Guard it here so the agent
-        // gets a clear error instead of a mis-parented note.
+        // notes_op_import refuses a parent outside the workspace (22023) but
+        // checks no access to it. Guard it here so the agent gets a clear
+        // error for a parent it can't reach.
         if (parentId) await assertReach(ctx, "note", parentId);
         const id = crypto.randomUUID();
         const bodyMd = composeBody(title, body);
@@ -359,6 +508,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Append markdown to the end of a note. It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -390,6 +540,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Replace a note's markdown body wholesale (optionally rename it). It appears live for anyone with the note open, is attributed to this key, and they can undo it.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -435,6 +586,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Reparent a note (with its subtree) under another note, or to the root (omit parent_id). Cycle-guarded server-side. Ordering among siblings is not controllable here — the note takes a default position.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -459,6 +611,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_archive",
       description: "Archive a note (with its subtree) — hides it from the tree, reversible.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -473,6 +626,7 @@ export const notesConnectorModule: ConnectorModule = {
       name: "notes_trash",
       description: "Move a note (with its subtree) to the Trash (soft-delete; 30-day purge, Undo-friendly).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { note_id: { type: "string", description: "The note uuid." } },
@@ -488,6 +642,7 @@ export const notesConnectorModule: ConnectorModule = {
       description:
         "Link a note to another entity with a typed relation (idempotent; rides the spine, so the key also needs Links: Edit). Use `references` for a manual connection.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {

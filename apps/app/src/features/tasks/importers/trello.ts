@@ -9,6 +9,7 @@
 // export names members without emails, so assignees aren't matched.
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
+
 import { dueFromInstant, isoDay } from "./dates";
 import {
   addStatus,
@@ -19,8 +20,8 @@ import {
   emptyPlan,
   type ImportPlan,
   keepComments,
-  type PlanComment,
   personFrom,
+  type PlanComment,
   planTask,
   projectNamed,
   shapeProjectTasks,

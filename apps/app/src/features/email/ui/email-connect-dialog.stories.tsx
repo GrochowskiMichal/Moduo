@@ -6,7 +6,6 @@ import type { ModuoRuntime } from "../../../lib/runtime";
 import { AuthContext, type AuthContextValue } from "../../../providers/auth-provider";
 import { WorkspaceContext, type WorkspaceContextValue } from "../../workspaces/workspace-context";
 import type { SavedAccount } from "../model/email-types";
-
 import { EmailConnectDialog } from "./email-connect-dialog";
 
 // A story-level runtime shim: the connect calls resolve to a fake saved account

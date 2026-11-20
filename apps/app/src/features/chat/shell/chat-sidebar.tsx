@@ -24,6 +24,7 @@ import {
 import { NavRow, NavSectionHeader } from "@/components/ui/nav-row";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { PresenceState } from "@/lib/statuses/model";
+
 import type { ChatPerson } from "../model";
 import type { ChatRow, ChatSidebarModel } from "./sidebar-model";
 

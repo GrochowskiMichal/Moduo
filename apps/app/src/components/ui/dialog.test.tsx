@@ -4,6 +4,7 @@
 import { afterEach, describe, expect, it } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
+
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./dialog";
 
 afterEach(() => cleanup());

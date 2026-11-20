@@ -7,6 +7,7 @@ import { createHeadlessEditor } from "@lexical/headless";
 import { $generateHtmlFromNodes, $generateNodesFromDOM } from "@lexical/html";
 import { describe, expect, it } from "@rstest/core";
 import { $createParagraphNode, $getRoot, $isElementNode, type LexicalNode } from "lexical";
+
 import { $createDateNode, $isDateNode, DateNode } from "../references/date-node";
 import { $createEntityRefNode, $isEntityRefNode, EntityRefNode } from "./entity-ref-node";
 

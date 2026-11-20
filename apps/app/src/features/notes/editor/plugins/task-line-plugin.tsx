@@ -29,7 +29,6 @@ import {
 } from "@lexical/list";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
-  $addUpdateTag,
   $createTextNode,
   $getNearestNodeFromDOMNode,
   $getNodeByKey,
@@ -40,7 +39,6 @@ import {
   COLLABORATION_TAG,
   type ElementNode,
   HISTORIC_TAG,
-  HISTORY_MERGE_TAG,
   type LexicalEditor,
   type LexicalNode,
   type NodeKey,
@@ -56,22 +54,29 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+
 import { CompleteToggle } from "@/components/ui/complete-toggle";
 import { DateField } from "@/components/ui/date-field";
 import { MetaCount } from "@/components/ui/meta-count";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { filesLabel } from "@/features/attachments/files";
 import { formatDue, formatScheduled } from "@/features/tasks/helpers";
 import type { Task } from "@/features/tasks/model";
+import { cn } from "@/lib/utils";
+
 import type { TaskLineSnapshot } from "../../tasks/detach";
+import { updateWithoutUndo } from "../collab-undo";
 import { type NotesTaskBridge, useNotesEditorBridge } from "../notes-editor-bridge";
-import { $createTaskLineNode, $isTaskLineNode, type TaskLineNode } from "../schema/task-line-node";
+import { $createTaskLineNode, $isTaskLineNode, TaskLineNode } from "../schema/task-line-node";
 
 /** Our own programmatic updates — the deletion detector skips these. */
 export const TASK_LINE_TAG = "moduo-task-line";
 
 const RENAME_DEBOUNCE_MS = 500;
+/** Time to cross from a checkbox line to its "Make task" pill. */
+const PILL_GRACE_MS = 250;
 
 type LineEntry = {
   taskId: string | null;
@@ -86,6 +91,9 @@ type LineEntry = {
   height: number;
   left: number;
   right: number;
+  /** Where a one-line task's text ends (null when it wraps): its details sit
+   * right after the words, not at the far edge of the column. */
+  textRight: number | null;
 };
 
 // ── document walking ─────────────────────────────────────────────────────────
@@ -137,8 +145,14 @@ function $selectedChecklistItemKeys(): NodeKey[] {
 }
 
 /** Replace a checklist item with a PENDING task line carrying its text. */
-function $convertItemToPendingLine(item: ListItemNode): NodeKey {
+export function $convertItemToPendingLine(item: ListItemNode): NodeKey {
   const list = item.getParent();
+  // Where the item sits, read BEFORE its children move: moving them makes a
+  // writable copy of the item, and the list then holds that copy, so looking
+  // the old instance up in it found nothing (-1). The line then jumped to the
+  // top of the list and left an empty list behind.
+  const index = item.getIndexWithinParent();
+  const after = item.getNextSiblings().filter($isListItemNode);
   const line = $createTaskLineNode(null, false);
   for (const child of item.getChildren()) line.append(child);
 
@@ -146,10 +160,10 @@ function $convertItemToPendingLine(item: ListItemNode): NodeKey {
     // Insert while the list is still ATTACHED — removing a list's last item
     // self-destructs the list (Lexical), and inserting after a detached node
     // throws. Order: place the line (splitting if needed), THEN remove.
-    const items = list.getChildren();
-    const index = items.indexOf(item);
-    const after = items.slice(index + 1).filter($isListItemNode);
-    if (after.length === 0) {
+    if (index === 0) {
+      // The first item leaves from the top: no split, no empty list above.
+      list.insertBefore(line);
+    } else if (after.length === 0) {
       list.insertAfter(line);
     } else {
       // Split the list so document order survives the extraction.
@@ -158,7 +172,10 @@ function $convertItemToPendingLine(item: ListItemNode): NodeKey {
       list.insertAfter(tail);
       tail.insertBefore(line);
     }
-    item.remove(); // an emptied list removes itself
+    item.remove();
+    // An emptied list must go too: one left behind synced as an empty <ul>
+    // (a gap with a drag handle above the new task line, after a reload too).
+    if (list.isAttached() && list.getChildrenSize() === 0) list.remove();
   } else {
     item.replace(line);
   }
@@ -204,13 +221,12 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
   // the plugin's mount sweep.
   if (editor.getRootElement() === null) return false;
   let landed = false;
-  editor.update(
+  updateWithoutUndo(
+    editor,
     () => {
-      // Fold the stamp into the SAME undo step as the insert/convert — ⌘Z
-      // must revert the whole mint (destroying a line that still carries its
-      // taskId, so the revert plan can delete the task too), never strand a
-      // pending line with no task behind it.
-      $addUpdateTag(HISTORY_MERGE_TAG);
+      // The stamp is never an undo step of its own: ⌘Z reverts the insert or
+      // convert, which takes the line WITH its taskId (so the revert plan can
+      // delete the task too), never strands a pending line with no task.
       const node = $getNodeByKey(nodeKey);
       if ($isTaskLineNode(node)) {
         node.setTaskId(task.id);
@@ -218,7 +234,7 @@ export function stampMintedTask(editor: LexicalEditor, nodeKey: NodeKey, task: T
         landed = true;
       }
     },
-    { tag: TASK_LINE_TAG },
+    TASK_LINE_TAG,
   );
   return landed;
 }
@@ -272,6 +288,44 @@ export function convertChecklistItems(
   })();
 }
 
+/**
+ * Turn a text block (a paragraph, heading or quote) into a task line and mint
+ * its task (the block menu's Turn into → Task). Same pending → stamp path as
+ * the checkbox gestures; a failed mint degrades the line to a checkbox.
+ */
+export function convertBlockToTask(
+  editor: LexicalEditor,
+  tasks: NotesTaskBridge,
+  blockKey: NodeKey,
+): void {
+  if (!tasks.canEditTasks) return;
+  let lineKey: NodeKey | null = null;
+  let title = "";
+  editor.update(
+    () => {
+      const block = $getNodeByKey(blockKey);
+      if (!$isElementNode(block) || $isTaskLineNode(block)) return;
+      title = block.getTextContent().trim();
+      if (title === "") return;
+      const line = $createTaskLineNode(null, false);
+      for (const child of block.getChildren()) line.append(child);
+      block.replace(line);
+      line.selectEnd();
+      lineKey = line.getKey();
+    },
+    { tag: TASK_LINE_TAG },
+  );
+  const key = lineKey;
+  if (!key) return;
+  void tasks.mintTask(title).then((task) => {
+    if (!task) {
+      degradePendingLine(editor, key);
+      return;
+    }
+    if (!stampMintedTask(editor, key, task)) tasks.revertMintIfJustMinted(task.id);
+  });
+}
+
 // ── overlay widgets ──────────────────────────────────────────────────────────
 
 function TaskLineCheckbox({
@@ -289,14 +343,23 @@ function TaskLineCheckbox({
   const missing = !pending && task === null;
   const done = task ? task.status === "done" : entry.done;
   return (
-    <CompleteToggle
-      done={done}
-      disabled={pending || missing || !editable || !tasks.canEditTasks}
-      onToggle={() => {
-        if (entry.taskId) tasks.toggleTask(entry.taskId);
-      }}
-      aria-label={done ? "Reopen task" : "Complete task"}
-    />
+    // A circle is a live task (a square is a plain checkbox): say so once,
+    // on hover, since nothing else in the line does.
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex">
+          <CompleteToggle
+            done={done}
+            disabled={pending || missing || !editable || !tasks.canEditTasks}
+            onToggle={() => {
+              if (entry.taskId) tasks.toggleTask(entry.taskId);
+            }}
+            aria-label={done ? "Reopen task" : "Complete task"}
+          />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="left">A live task, also in Tasks</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -379,7 +442,8 @@ function TaskLineMeta({
             title="Open task details"
             onClick={() => tasks.openTaskDetail(entry.taskId!)}
           >
-            {chipLabel ?? "Details"}
+            {/* With no date the chip still says what the line is. */}
+            {chipLabel ?? "Task"}
           </button>
           {editable && tasks.canEditTasks ? (
             <span
@@ -597,16 +661,26 @@ export function TaskLinePlugin({
 
   /** Geometry of a line element relative to the overlay (scroll-content space). */
   const measure = useCallback(
-    (el: HTMLElement | null): Pick<LineEntry, "top" | "height" | "left" | "right"> => {
+    (
+      el: HTMLElement | null,
+    ): Pick<LineEntry, "top" | "height" | "left" | "right" | "textRight"> => {
       const container = overlayEl?.parentElement;
-      if (!el || !container) return { top: 0, height: 0, left: 0, right: 0 };
+      if (!el || !container) return { top: 0, height: 0, left: 0, right: 0, textRight: null };
       const cRect = container.getBoundingClientRect();
       const rect = el.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const lines = Array.from(range.getClientRects()).filter((r) => r.width > 0);
+      const oneLine =
+        lines.length > 0 && lines.every((r) => Math.abs(r.top - lines[0]!.top) < r.height / 2);
       return {
         top: rect.top - cRect.top + container.scrollTop,
         height: rect.height,
         left: rect.left - cRect.left + container.scrollLeft,
         right: rect.right - cRect.left + container.scrollLeft,
+        textRight: oneLine
+          ? Math.max(...lines.map((r) => r.right)) - cRect.left + container.scrollLeft
+          : null,
       };
     },
     [overlayEl],
@@ -619,14 +693,42 @@ export function TaskLinePlugin({
     if (!container) return;
     const ro = new ResizeObserver(() => setMeasureStamp((s) => s + 1));
     ro.observe(container);
-    return () => ro.disconnect();
-  }, [overlayEl]);
+    // The document's own height too: the meta line arriving, an image or a
+    // web font loading moves every line with no editor update to re-measure
+    // on, and the checkboxes drifted off their lines until the next keystroke.
+    const unregister = editor.registerRootListener((root, prev) => {
+      if (prev) ro.unobserve(prev);
+      if (root) ro.observe(root);
+    });
+    return () => {
+      unregister();
+      ro.disconnect();
+    };
+  }, [overlayEl, editor]);
 
   // ── the one document listener: track lines, renames OUT, deletions ────────
   useEffect(() => {
-    const recompute = () => {
-      const collected = editor.getEditorState().read($collectTaskLines);
+    // How many task lines the doc holds, kept by the node's mutations (which
+    // fire before update listeners): a note without any skips the document
+    // walks on every keystroke, not just the measuring after them.
+    let lineCount = 0;
+    const offCount = editor.registerMutationListener(
+      TaskLineNode,
+      (mutations) => {
+        for (const kind of mutations.values()) {
+          if (kind === "created") lineCount += 1;
+          else if (kind === "destroyed") lineCount = Math.max(0, lineCount - 1);
+        }
+      },
+      { skipInitialization: false },
+    );
+    const recompute = (
+      collected: Map<NodeKey, LineData> = editor.getEditorState().read($collectTaskLines),
+    ) => {
       const prev = entriesRef.current;
+      // Most notes have no task lines: then there is nothing to measure, and
+      // typing costs no forced layout per keystroke.
+      if (collected.size === 0 && prev.size === 0) return prev;
       const next = new Map<NodeKey, LineEntry>();
       for (const [key, data] of collected) {
         const el = editor.getElementByKey(key);
@@ -646,7 +748,8 @@ export function TaskLinePlugin({
             before.top !== entry.top ||
             before.height !== entry.height ||
             before.left !== entry.left ||
-            before.right !== entry.right
+            before.right !== entry.right ||
+            before.textRight !== entry.textRight
           ) {
             changed = true;
             break;
@@ -660,9 +763,10 @@ export function TaskLinePlugin({
     // Geometry-only refresh (resize).
     recompute();
 
-    return editor.registerUpdateListener(({ editorState, tags }) => {
-      const collected = editorState.read($collectTaskLines);
+    const offUpdate = editor.registerUpdateListener(({ editorState, tags }) => {
       const prev = entriesRef.current;
+      if (lineCount === 0 && prev.size === 0) return;
+      const collected = editorState.read($collectTaskLines);
 
       const ourOwn = tags.has(TASK_LINE_TAG);
       const remote = tags.has(COLLABORATION_TAG);
@@ -690,10 +794,16 @@ export function TaskLinePlugin({
           );
         }
 
-        // Deletions: lines gone from the doc.
+        // Deletions: lines gone from the doc. A task whose line is still in
+        // the doc under a new key was only re-created (a block move or its
+        // undo re-creates every block it jumps over): that is no deletion, so
+        // never revert the mint or detach it.
         const restored: string[] = [];
+        const stillLined = new Set<string>();
+        for (const entry of collected.values()) if (entry.taskId) stillLined.add(entry.taskId);
         for (const [key, before] of prev) {
           if (collected.has(key) || !before.taskId) continue;
+          if (stillLined.has(before.taskId)) continue;
           if (historic && t.revertMintIfJustMinted(before.taskId)) continue;
           pendingDetach.current.set(before.taskId, {
             taskId: before.taskId,
@@ -707,8 +817,13 @@ export function TaskLinePlugin({
         // 200ms batch window must also pull the line back OUT of the batch,
         // or the flush detaches a line that's visibly back (validator B1).
         if (historic) {
+          const hadLine = new Set<string>();
+          for (const before of prev.values()) if (before.taskId) hadLine.add(before.taskId);
           for (const [key, entry] of collected) {
-            if (!prev.has(key) && entry.taskId) restored.push(entry.taskId);
+            // Back from a deletion, not a line that only got a new key.
+            if (!prev.has(key) && entry.taskId && !hadLine.has(entry.taskId)) {
+              restored.push(entry.taskId);
+            }
           }
           for (const taskId of restored) pendingDetach.current.delete(taskId);
           if (pendingDetach.current.size === 0 && detachTimer.current !== null) {
@@ -722,8 +837,12 @@ export function TaskLinePlugin({
         }
       }
 
-      recompute();
+      recompute(collected);
     });
+    return () => {
+      offCount();
+      offUpdate();
+    };
   }, [editor, flushDetach, measure, measureStamp]);
 
   // ── sync IN: live task → line (done snapshot + title, edit-gated) ─────────
@@ -744,10 +863,10 @@ export function TaskLinePlugin({
       if (fix.done !== undefined || fix.title !== undefined) fixes.push(fix);
     }
     if (fixes.length === 0) return;
-    editor.update(
+    updateWithoutUndo(
+      editor,
       () => {
-        // Reconciling remote task state must never become its own undo step.
-        $addUpdateTag(HISTORY_MERGE_TAG);
+        // Reconciling remote task state is never an undo step.
         const selection = $getSelection();
         for (const fix of fixes) {
           const node = $getNodeByKey(fix.key);
@@ -770,7 +889,7 @@ export function TaskLinePlugin({
           }
         }
       },
-      { tag: TASK_LINE_TAG },
+      TASK_LINE_TAG,
     );
   }, [editor, editable, tasks, entries]);
 
@@ -808,12 +927,36 @@ export function TaskLinePlugin({
   // Hover tracking: reveal a line's quiet actions + the "Make task" pill on
   // plain checkbox lines. The pill is fixed-positioned off the line's rect —
   // any scroll dismisses it (stale coordinates must never invite a mis-click).
+  // Both live OUTSIDE the contenteditable (the overlay; the pill in a portal),
+  // so reaching for them leaves the root: that must not hide them. Leaving
+  // into either keeps the hover, and the pill gets a short grace to cross the
+  // gap from its line.
+  const hoverGrace = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keepHover = useCallback(() => {
+    if (hoverGrace.current) clearTimeout(hoverGrace.current);
+    hoverGrace.current = null;
+  }, []);
+  const dropHover = useCallback(
+    (delay = 0) => {
+      keepHover();
+      const clear = () => {
+        setHover(null);
+        setHoveredLine(null);
+      };
+      if (delay > 0) hoverGrace.current = setTimeout(clear, delay);
+      else clear();
+    },
+    [keepHover],
+  );
   useEffect(() => {
     const onScroll = () => setHover(null);
+    const intoWidgets = (to: EventTarget | null) =>
+      to instanceof Element && to.closest("[data-task-line-overlay], [data-task-pill]") !== null;
     const onOver = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
       const lineEl = target?.closest<HTMLElement>("[data-task-line]");
       if (lineEl) {
+        keepHover();
         const key = getNearestNodeKey(editor, lineEl);
         setHoveredLine(key);
         setHover(null);
@@ -825,19 +968,28 @@ export function TaskLinePlugin({
         ".notes-list-item-unchecked, .notes-list-item-checked",
       );
       if (!li) {
-        setHover(null);
+        dropHover(PILL_GRACE_MS);
         return;
       }
       const key = getNearestNodeKey(editor, li);
-      if (!key) return setHover(null);
+      if (!key) return dropHover();
+      keepHover();
       const rect = li.getBoundingClientRect();
       setHover({ itemKey: key, top: rect.top, left: rect.right + 8 });
     };
-    const onLeave = () => {
-      setHover(null);
-      setHoveredLine(null);
+    const onLeave = (event: MouseEvent) => {
+      if (intoWidgets(event.relatedTarget)) return;
+      dropHover(PILL_GRACE_MS);
+    };
+    // Leaving the line's widgets for anywhere but the editor drops the hover.
+    const onWidgetsLeave = (event: MouseEvent) => {
+      const to = event.relatedTarget;
+      if (intoWidgets(to)) return;
+      if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+      dropHover();
     };
     window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    overlayEl?.addEventListener("mouseout", onWidgetsLeave);
     const teardown = editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener("mouseover", onOver);
       prevRoot?.removeEventListener("mouseleave", onLeave);
@@ -846,12 +998,14 @@ export function TaskLinePlugin({
     });
     return () => {
       window.removeEventListener("scroll", onScroll, { capture: true });
+      overlayEl?.removeEventListener("mouseout", onWidgetsLeave);
       const root = editor.getRootElement();
       root?.removeEventListener("mouseover", onOver);
       root?.removeEventListener("mouseleave", onLeave);
       teardown();
+      keepHover();
     };
-  }, [editor, editable]);
+  }, [editor, editable, overlayEl, keepHover, dropHover]);
 
   // Right-click menu on checkbox lines + task lines.
   useEffect(() => {
@@ -875,19 +1029,60 @@ export function TaskLinePlugin({
         left: event.clientX,
       });
     };
+    // The same menu from the keyboard (⇧F10 or the menu key), for the line
+    // under the caret: no hover or right-click needed.
+    const onKeyDown = (event: KeyboardEvent) => {
+      const menuKey =
+        event.key === "ContextMenu" ||
+        (event.key === "F10" && event.shiftKey && !event.altKey && !event.metaKey);
+      if (!menuKey) return;
+      const at = editor.getEditorState().read(() => {
+        const selection = $getSelection();
+        if (!$isRangeSelection(selection)) return null;
+        for (let n: LexicalNode | null = selection.anchor.getNode(); n; n = n.getParent()) {
+          if ($isTaskLineNode(n)) return { key: n.getKey(), kind: "task-line" as const };
+          if ($isListItemNode(n)) {
+            const list = n.getParent();
+            return $isListNode(list) && list.getListType() === "check"
+              ? { key: n.getKey(), kind: "checkbox" as const }
+              : null;
+          }
+        }
+        return null;
+      });
+      const el = at ? editor.getElementByKey(at.key) : null;
+      if (!at || !el) return;
+      event.preventDefault();
+      const rect = el.getBoundingClientRect();
+      setHover(null);
+      setMenu({
+        kind: at.kind,
+        nodeKey: at.key,
+        taskId: at.kind === "task-line" ? (el.getAttribute("data-task-id") ?? null) : null,
+        top: rect.bottom + 4,
+        left: rect.left + 24,
+      });
+    };
     const teardown = editor.registerRootListener((root, prevRoot) => {
       prevRoot?.removeEventListener("contextmenu", onContextMenu);
+      prevRoot?.removeEventListener("keydown", onKeyDown);
       root?.addEventListener("contextmenu", onContextMenu);
+      root?.addEventListener("keydown", onKeyDown);
     });
     return () => {
       editor.getRootElement()?.removeEventListener("contextmenu", onContextMenu);
+      editor.getRootElement()?.removeEventListener("keydown", onKeyDown);
       teardown();
     };
   }, [editor, editable]);
 
-  // Menu dismissal: click-away + Escape.
+  // Menu dismissal: click-away + Escape (back to the text). Opening puts
+  // focus on its first item, so ↑ ↓ and ↵ work like any menu.
   useEffect(() => {
     if (!menu) return;
+    const focusFirst = requestAnimationFrame(() =>
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus(),
+    );
     const onPointerDown = (event: PointerEvent) => {
       if (menuRef.current?.contains(event.target as Node)) return;
       setMenu(null);
@@ -896,15 +1091,34 @@ export function TaskLinePlugin({
       if (event.key === "Escape") {
         event.preventDefault();
         setMenu(null);
+        editor.focus();
+        return;
       }
+      const items = [
+        ...(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []),
+      ];
+      const at = items.indexOf(document.activeElement as HTMLElement);
+      if (at === -1 || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+      event.preventDefault();
+      const step = event.key === "ArrowDown" ? 1 : -1;
+      items[(at + step + items.length) % items.length]?.focus();
     };
     document.addEventListener("pointerdown", onPointerDown, { capture: true });
     document.addEventListener("keydown", onKeyDown, { capture: true });
     return () => {
+      cancelAnimationFrame(focusFirst);
       document.removeEventListener("pointerdown", onPointerDown, { capture: true });
       document.removeEventListener("keydown", onKeyDown, { capture: true });
     };
-  }, [menu]);
+  }, [menu, editor]);
+
+  /** Close the line menu after an action; keyboard focus goes back to the
+   * text (it was on the menu, which is gone). */
+  const closeMenu = useCallback(() => {
+    const inMenu = menuRef.current?.contains(document.activeElement) ?? false;
+    setMenu(null);
+    if (inMenu) editor.focus();
+  }, [editor]);
 
   // ── detach actions (meta buttons + menu) ───────────────────────────────────
   const detachKeep = useCallback(
@@ -1022,14 +1236,27 @@ export function TaskLinePlugin({
                 <TaskLineCheckbox entry={entry} task={task} tasks={tasks} editable={editable} />
               </span>
               <span
-                className="absolute inline-flex items-center justify-end"
-                style={{
-                  top: entry.top + 2,
-                  left: Math.max(entry.left, entry.right - 320),
-                  width: Math.min(entry.right - entry.left, 320),
-                  height: Math.min(entry.height, 28),
-                  pointerEvents: "none",
-                }}
+                className={cn(
+                  "absolute inline-flex items-center",
+                  entry.textRight === null ? "justify-end" : "justify-start",
+                )}
+                style={
+                  entry.textRight === null
+                    ? {
+                        top: entry.top + 2,
+                        left: Math.max(entry.left, entry.right - 320),
+                        width: Math.min(entry.right - entry.left, 320),
+                        height: Math.min(entry.height, 28),
+                        pointerEvents: "none",
+                      }
+                    : {
+                        top: entry.top + 2,
+                        left: entry.textRight + 12,
+                        width: Math.max(0, entry.right - entry.textRight - 12),
+                        height: Math.min(entry.height, 28),
+                        pointerEvents: "none",
+                      }
+                }
               >
                 <span style={{ pointerEvents: "auto" }}>
                   <TaskLineMeta
@@ -1059,10 +1286,27 @@ export function TaskLinePlugin({
         ? createPortal(
             <button
               type="button"
-              className="fixed z-40 inline-flex items-center gap-1 rounded-md border border-border bg-popover px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              data-task-pill=""
+              className={cn(
+                FLOATING_SURFACE,
+                "fixed z-(--z-popover) inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground shadow-sm hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              )}
               style={{ top: hover.top, left: hover.left }}
+              onMouseEnter={keepHover}
+              onMouseLeave={(e) => {
+                const to = e.relatedTarget;
+                if (to instanceof Node && editor.getRootElement()?.contains(to)) return;
+                dropHover();
+              }}
               onMouseDown={(e) => {
                 e.preventDefault();
+                const t = tasksRef.current;
+                if (t) convertChecklistItems(editor, t, [hover.itemKey]);
+                setHover(null);
+              }}
+              onClick={(e) => {
+                // A keyboard press (no pointer): the mouse path ran on mousedown.
+                if (e.detail !== 0) return;
                 const t = tasksRef.current;
                 if (t) convertChecklistItems(editor, t, [hover.itemKey]);
                 setHover(null);
@@ -1079,13 +1323,17 @@ export function TaskLinePlugin({
             // Deliberately NOT the shadcn/Radix ContextMenu: its trigger model
             // wraps a React-owned element, but these targets are Lexical-owned
             // DOM inside the contenteditable (same constraint as the slash
-            // menu, which uses this exact portal pattern). Keyboard users
-            // reach every action through the focusable meta buttons.
+            // menu, which uses this exact portal pattern). ⇧F10 or the menu
+            // key opens it for the line under the caret.
             <div
               ref={menuRef}
-              className="fixed z-50 min-w-48 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              className={cn(
+                FLOATING_SURFACE,
+                "fixed z-(--z-popover) min-w-48 overflow-hidden p-1 shadow-lg",
+              )}
               style={{ top: menu.top, left: menu.left }}
               role="menu"
+              aria-label={menu.kind === "checkbox" ? "Checkbox line" : "Task line"}
             >
               {menu.kind === "checkbox" ? (
                 <ContextMenuItem
@@ -1095,7 +1343,7 @@ export function TaskLinePlugin({
                   onSelect={() => {
                     const t = tasksRef.current;
                     if (t) convertChecklistItems(editor, t, [menu.nodeKey]);
-                    setMenu(null);
+                    closeMenu();
                   }}
                 />
               ) : (
@@ -1105,7 +1353,7 @@ export function TaskLinePlugin({
                     label="Open task details"
                     onSelect={() => {
                       if (menu.taskId) tasks.openTaskDetail(menu.taskId);
-                      setMenu(null);
+                      closeMenu();
                     }}
                   />
                   <ContextMenuItem
@@ -1113,7 +1361,7 @@ export function TaskLinePlugin({
                     label="Detach, keep task"
                     onSelect={() => {
                       detachKeep(menu.nodeKey);
-                      setMenu(null);
+                      closeMenu();
                     }}
                   />
                   <ContextMenuItem
@@ -1122,7 +1370,7 @@ export function TaskLinePlugin({
                     destructive
                     onSelect={() => {
                       detachDelete(menu.nodeKey);
-                      setMenu(null);
+                      closeMenu();
                     }}
                   />
                 </>
@@ -1152,17 +1400,22 @@ function ContextMenuItem({
     <button
       type="button"
       role="menuitem"
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring ${
+      tabIndex={-1}
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm outline-none hover:bg-accent focus-visible:bg-accent ${
         destructive ? "text-destructive" : "text-foreground"
       }`}
       onMouseDown={(e) => {
         e.preventDefault();
         onSelect();
       }}
+      onClick={(e) => {
+        // ↵ / Space on a focused item (the mouse path ran on mousedown).
+        if (e.detail === 0) onSelect();
+      }}
     >
       <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <span className="min-w-0 flex-1">{label}</span>
-      {shortcut ? <span className="text-xs text-muted-foreground/70">{shortcut}</span> : null}
+      {shortcut ? <span className="text-xs text-subtle-foreground">{shortcut}</span> : null}
     </button>
   );
 }

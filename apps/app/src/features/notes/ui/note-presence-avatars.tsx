@@ -8,6 +8,7 @@
 
 import { AvatarGroup, AvatarGroupCount, PersonAvatar } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
 import type { NoteViewer } from "../sync/notes-realtime";
 
 const MAX_SHOWN = 3;

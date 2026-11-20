@@ -27,7 +27,6 @@ export function useAgentCaptures(
   const asked = useRef<{ ws: string; ids: Set<string> }>({ ws: workspaceId, ids: new Set() });
   const key = taskIds.join(",");
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` names the ids.
   useEffect(() => {
     if (!enabled || !runtime || !workspaceId) return;
     if (asked.current.ws !== workspaceId) asked.current = { ws: workspaceId, ids: new Set() };
@@ -53,6 +52,7 @@ export function useAgentCaptures(
         // Offline or refused: ask again the next time the Inbox changes.
         if (asked.current.ws === ws) for (const id of fresh) seen.delete(id);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` names the ids.
   }, [enabled, runtime, workspaceId, key]);
 
   return via.ws === workspaceId ? via.map : NONE;

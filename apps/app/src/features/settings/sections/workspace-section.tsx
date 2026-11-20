@@ -1,6 +1,7 @@
 import { LogOut, Plus, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
+
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -22,7 +23,6 @@ import { normalizeWorkspaceIcon } from "../../branding/image-asset";
 import { clearWorkspaceLogo, uploadWorkspaceLogo } from "../../branding/upload-image";
 import { departureLines } from "../../tasks/project-overview";
 import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspace-mark";
-
 import { useDepartureSummary } from "../access/departure";
 import { dispatchOpenSettings } from "../settings-events";
 import { SettingsSectionShell } from "./section-shell";

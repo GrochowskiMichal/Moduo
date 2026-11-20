@@ -2,6 +2,7 @@
 // the next column, ⌥⇧←/→ moves the card there), and the cursor's walk.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { boardKeyAction, moveInGrid } from "./board-keys";
 
 const key = (

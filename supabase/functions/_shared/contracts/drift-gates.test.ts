@@ -18,6 +18,7 @@ import {
   ATTACHMENT_PREVIEW_MIMES,
   ATTACHMENT_STATUSES,
   CALENDAR_ACCOUNT_STATUSES,
+  CALENDAR_ITEM_KINDS,
   CHAT_CATCHUP_DONE_HOW,
   CHAT_CHANNEL_KINDS,
   CHAT_CATCHUP_REASONS,
@@ -27,6 +28,7 @@ import {
   CHAT_MESSAGE_KINDS,
   CHAT_NOTIFY_LEVELS,
   CLIENT_SURFACES,
+  CONFERENCE_PROVIDERS,
   CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
   DEFAULT_QUICK_REACTIONS,
@@ -49,6 +51,7 @@ import {
   CALENDAR_PROVIDERS,
   EMAIL_ACCOUNT_STATUSES,
   EMAIL_PROVIDERS,
+  EMAIL_SETTINGS_KINDS,
   FOCUS_RUN_PHASES,
   FOCUS_RUN_STATUSES,
   FOCUS_TIMER_MODES,
@@ -83,6 +86,7 @@ import {
   STATUS_CLEAR_AFTER,
   STATUS_PRESETS,
   WAITLIST_STATUSES,
+  SLOT_OFFER_STATUSES,
 } from "./vocabularies.ts";
 
 const MIGRATIONS_DIR = resolve(
@@ -107,8 +111,37 @@ describe("cross-runtime drift guards", () => {
     expect(sql).toContain(`provider IN (${inList(EMAIL_PROVIDERS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_ACCOUNT_STATUSES)})`);
     expect(sql).toContain(`provider IN (${inList(CALENDAR_PROVIDERS)})`);
-    expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
+    expect(sql).toContain(`status IN ('ok','error')`);
     expect(sql).toContain("founder");
+  });
+
+  it("calendar_accounts.status CHECK lists the canonical account statuses (CALR-20)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261028193000_calendar_accounts_reconnect.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`status IN (${inList(CALENDAR_ACCOUNT_STATUSES)})`);
+  });
+
+  it("calendar_events CHECKs list the canonical event vocabularies (CALR-6)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261027230000_calendar_event_data_v2.sql"),
+      "utf8",
+    );
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`conference_provider IN (${inList(CONFERENCE_PROVIDERS)})`);
+    expect(sql).toContain(`kind IN (${inList(CALENDAR_ITEM_KINDS)})`);
+    // The ops' friendly refusals repeat the lists; keep them in step too.
+    expect(sql).toContain(`provider NOT IN (${inList(CONFERENCE_PROVIDERS)})`);
+    expect(sql).toContain(`v_kind NOT IN (${inList(CALENDAR_ITEM_KINDS)})`);
+  });
+
+  it("slot_offers CHECK lists the canonical offer statuses (CALR-19)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261029190000_calendar_slot_offers.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect([...SLOT_OFFER_STATUSES]).toEqual(["open", "booked", "released", "expired"]);
+    expect(sql).toContain(`status IN (${inList(SLOT_OFFER_STATUSES)})`);
   });
 
   it("waitlist migration CHECKs + join function list the canonical IN-lists", () => {
@@ -140,6 +173,12 @@ describe("cross-runtime drift guards", () => {
     expect(kinds).toContain(`CHECK (kind IN (${inList(EMAIL_KINDS)}))`);
     expect(sql).toContain(`stream IN (${inList(EMAIL_STREAMS)})`);
     expect(sql).toContain(`status IN (${inList(EMAIL_OUTBOX_STATUSES)})`);
+  });
+
+  it("email_settings_items.kind CHECK lists the canonical settings kinds (MR-7)", () => {
+    const sql = readFileSync(resolve(MIGRATIONS_DIR, "20261104010000_email_settings_items.sql"), "utf8");
+    const inList = (values: readonly string[]) => values.map((v) => `'${v}'`).join(",");
+    expect(sql).toContain(`CHECK (kind IN (${inList(EMAIL_SETTINGS_KINDS)}))`);
   });
 
   it("email_suppressions CHECK lists the canonical suppression reasons", () => {

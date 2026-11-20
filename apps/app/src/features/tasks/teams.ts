@@ -6,6 +6,7 @@
 // Upcoming and the Home team-load widget (TV-H1) read teams the same way.
 
 import { isBacklogTask, isOpenTask } from "@contracts/vocabularies";
+
 import { AVATAR_HUES, type AvatarHue, avatarHue } from "../../components/ui/avatar";
 import type { Task, Team, TeamMember } from "./model";
 

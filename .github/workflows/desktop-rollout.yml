@@ -35,7 +35,7 @@ jobs:
   set:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # The Cloudflare token lives in this environment: dispatch from develop, main, mike or prod-app.
+    # The Cloudflare token lives in this environment: dispatch from develop or mike.
     environment: cloudflare-deploy
     env:
       WRANGLER: npx --yes wrangler@4.147.0

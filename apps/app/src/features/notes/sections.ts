@@ -2,14 +2,14 @@
  * Pure sidebar sections for the refreshed Notes shell (NR-1, specs/notes-refresh.md).
  *
  * Favorites · Inbox · Pages, plus the Published / Archive / Trash footer.
- * Unlike the classic `buildNoteSections`, Inbox membership is STORED
+ * Unlike `buildNoteSections` (the derived tree), Inbox membership is STORED
  * (`notes.in_inbox`), so a note only changes section when someone moves it:
  * adding a first child to an Inbox note keeps it in Inbox (children nest
  * under it there), and trashing that child doesn't push it anywhere.
  *
  * Archive/Trash/Published and the "what is active" rules (live, not archived
- * at any ancestor, re-rooted orphans) reuse the classic builder so the two
- * UIs never disagree on what exists while the switch is live.
+ * at any ancestor, re-rooted orphans) reuse `buildNoteSections` (the retired
+ * classic page's builder, kept as the one definition of what is active).
  */
 
 import type { Note, NoteFavorite } from "./model";

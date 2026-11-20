@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { fileLegacyRows } from "./redb-import";
 
 describe("fileLegacyRows (NR-1)", () => {

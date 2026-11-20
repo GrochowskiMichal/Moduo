@@ -18,6 +18,7 @@
 // phrase in the title.)
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
+
 import type { PriorityLevel, RecurrenceRule } from "../model";
 import type { CaptureToken, TitleSegment } from "../parse/capture-tokens";
 
@@ -162,7 +163,7 @@ export function loadDraft(
       subtasks: Array.isArray(parsed.subtasks) ? parsed.subtasks : [],
       fields: {
         ...EMPTY_FIELDS,
-        ...(parsed.fields ?? {}),
+        ...parsed.fields,
         tags: Array.isArray(parsed.fields?.tags) ? parsed.fields.tags : [],
         waitingOn: Array.isArray(parsed.fields?.waitingOn) ? parsed.fields.waitingOn : [],
       },

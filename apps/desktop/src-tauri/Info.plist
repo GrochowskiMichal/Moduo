@@ -12,5 +12,23 @@
   -->
   <key>CFBundleIconName</key>
   <string>Moduo</string>
+  <!--
+    mailto: (AC24). Declaring the scheme lets "Make Moduo the default mail
+    app" (LSSetDefaultHandlerForURLScheme) succeed; the URL arrives as
+    RunEvent::Opened and opens compose filled (src/mail/deeplink.rs).
+  -->
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>Email Address URL</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>mailto</string>
+      </array>
+      <key>CFBundleTypeRole</key>
+      <string>Viewer</string>
+    </dict>
+  </array>
 </dict>
 </plist>

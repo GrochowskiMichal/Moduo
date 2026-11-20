@@ -1,10 +1,9 @@
 import { describe, expect, it } from "@rstest/core";
-import { formatTime } from "../time-format";
 
+import { formatTime } from "../time-format";
 // Statuses as people read them (CV-17, AC11.1, AC11.3, AC11.4): the shape for
 // each state, the words, "until", the line above the composer and the person
 // picker's suffix, and what "clear after" turns into.
-
 import {
   activeChoice,
   clearAtFor,

@@ -22,8 +22,20 @@
     "lint:tw": {
       "outputs": []
     },
+    "lint:boundaries": {
+      "outputs": []
+    },
     "lint:css": {
       "outputs": []
+    },
+    "size": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!dist/**",
+        "$TURBO_ROOT$/scripts/check-bundle-size.ts",
+        "$TURBO_ROOT$/supabase/functions/_shared/**"
+      ],
+      "outputs": ["dist/web/**"]
     },
     "test": {
       "outputs": []
@@ -32,7 +44,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/app/public/favicon*",
-        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png",
+        "$TURBO_ROOT$/release-notes/**"
       ],
       "outputs": ["dist/**"]
     },
@@ -40,20 +53,73 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/apps/app/public/favicon*",
-        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png"
+        "$TURBO_ROOT$/apps/app/public/apple-touch-icon.png",
+        "$TURBO_ROOT$/release-notes/**"
       ],
       "outputs": ["dist/**"]
     },
     "//#typecheck:root": {
-      "inputs": ["tsconfig.json", "scripts/**", "apps/app/src/components/ui/moduo-mark-path.ts"],
+      "inputs": [
+        "tsconfig.json",
+        "scripts/**",
+        "tools/ast-grep/*.ts",
+        "apps/app/src/components/ui/moduo-mark-path.ts"
+      ],
       "outputs": []
     },
     "//#lint:js": {
       "inputs": ["$TURBO_DEFAULT$", "!**/.turbo/**"],
       "outputs": []
     },
+    "//#lint:ast": {
+      "inputs": [
+        "tools/ast-grep/**",
+        "apps/app/src/**",
+        "apps/desktop/src-tauri/src/**",
+        "bun.lock"
+      ],
+      "outputs": []
+    },
+    "//#lint:ratchets": {
+      "cache": false
+    },
+    "//#lint:notes": {
+      "inputs": [
+        ".changes/**",
+        "release-notes/**",
+        "scripts/release/**",
+        "supabase/migrations/**",
+        "supabase/functions/**"
+      ],
+      "outputs": []
+    },
+    "//#lint:rules": {
+      "cache": false
+    },
+    "//#lint:decisions": {
+      "inputs": ["docs/decisions.md", "docs/decisions/*.md", "scripts/docs/decisions.ts"],
+      "outputs": []
+    },
     "//#test:scripts": {
-      "inputs": ["scripts/**", "VERSION", "brand/**", "apps/app/src/**", "apps/app/public/**"],
+      "inputs": [
+        "scripts/**",
+        "tools/ast-grep/**",
+        ".claude/hooks/guard-release*",
+        ".claude/hooks/guard-git*",
+        ".claude/rules/**",
+        "AGENTS.md",
+        "VERSION",
+        "brand/**",
+        "apps/app/src/**",
+        "apps/app/public/**",
+        ".changes/**",
+        "release-notes/**",
+        "CHANGELOG.md",
+        "docs/decisions.md",
+        "docs/decisions/*.md",
+        "supabase/migrations/**",
+        "supabase/functions/**"
+      ],
       "outputs": []
     }
   }

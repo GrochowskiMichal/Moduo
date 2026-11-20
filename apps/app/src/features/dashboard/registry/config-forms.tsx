@@ -10,7 +10,7 @@ import { Eyebrow } from "@/components/ui/eyebrow";
 import { useFocusPrefs } from "@/lib/focus-prefs";
 import { cn } from "@/lib/utils";
 
-import { useDashboardData } from "../context/dashboard-data-context";
+import { useDashboardSource } from "../context/dashboard-data-context";
 import type { WidgetInstance, WidgetType } from "../engine/types";
 
 export interface ConfigFormProps {
@@ -127,7 +127,7 @@ function PomodoroConfig(_props: ConfigFormProps) {
 
 // ── Tasks (project filter) ───────────────────────────────────────────────────
 function TasksConfig({ widget, updateConfig }: ConfigFormProps) {
-  const { tasks } = useDashboardData();
+  const tasks = useDashboardSource("tasks");
   const buckets = tasks.data.buckets;
   const selected = Array.isArray(widget.config.projectIds)
     ? (widget.config.projectIds as unknown[]).filter((id): id is string => typeof id === "string")
@@ -180,7 +180,7 @@ function TasksConfig({ widget, updateConfig }: ConfigFormProps) {
 
 // ── Team (one team, or everyone; TV-H1) ──────────────────────────────────────
 function TeamConfig({ widget, updateConfig }: ConfigFormProps) {
-  const { tasks } = useDashboardData();
+  const tasks = useDashboardSource("tasks");
   const teams = tasks.data.teams ?? [];
   const selected = typeof widget.config.teamId === "string" ? widget.config.teamId : null;
   const choices = [

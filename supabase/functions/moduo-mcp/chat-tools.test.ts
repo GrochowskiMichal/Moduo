@@ -12,7 +12,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, rs } from "@rstest/core";
 import { chatModuleManifest } from "../../../apps/app/src/features/chat/ops-manifest";
 import { byline, chatConnectorModule, conversation, readable } from "./modules/chat";
-import { type KeyContext, toolsForKey } from "./registry";
+import { type KeyContext, type ToolContext } from "./registry";
+import { callThroughSdk, listThroughSdk } from "./through-sdk";
 
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
 
@@ -53,10 +54,11 @@ const TOOLS = [
   "chat_create_channel",
 ];
 
+/** A chat tool, called as a client calls it: through the SDK server. */
 function tool(name: string) {
   const t = chatConnectorModule.tools.find((x) => x.name === name);
   if (!t) throw new Error(`no tool ${name}`);
-  return t;
+  return { ...t, handler: (args: Record<string, unknown>, ctx: ToolContext) => callThroughSdk(name, args, ctx) };
 }
 
 describe("chat tools: the ten of §14 and their scopes (AC15.1)", () => {
@@ -64,18 +66,18 @@ describe("chat tools: the ten of §14 and their scopes (AC15.1)", () => {
     expect(chatConnectorModule.tools.map((t) => t.name).sort()).toEqual([...TOOLS].sort());
   });
 
-  it("None sees no chat tool, View the four reads, Edit all ten", () => {
-    const names = (scopes: Record<string, string>) =>
-      toolsForKey(key(scopes))
+  it("None sees no chat tool, View the four reads, Edit all ten", async () => {
+    const names = async (scopes: Record<string, string>) =>
+      (await listThroughSdk(key(scopes)))
         .map((t) => t.name)
         .filter((n) => n.startsWith("chat_"))
         .sort();
-    expect(names({ chat: "none" })).toEqual([]);
-    expect(names({ tasks: "edit" })).toEqual([]);
-    expect(names({ chat: "view" })).toEqual(
+    expect(await names({ chat: "none" })).toEqual([]);
+    expect(await names({ tasks: "edit" })).toEqual([]);
+    expect(await names({ chat: "view" })).toEqual(
       ["chat_addressed_to_me", "chat_list_channels", "chat_read", "chat_search"].sort(),
     );
-    expect(names({ chat: "edit" })).toEqual([...TOOLS].sort());
+    expect(await names({ chat: "edit" })).toEqual([...TOOLS].sort());
   });
 
   it("never reads a table: every chat tool goes through one RPC", () => {

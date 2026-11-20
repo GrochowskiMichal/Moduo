@@ -16,6 +16,57 @@ fn default_keychain_service() -> &'static str {
     }
 }
 
+/// A Calendar sign-in client (Google's desktop client, Microsoft's public
+/// client): the environment at launch when set (a dev run with `.env`), else the
+/// value the release build baked in. A shipped app opened from Finder, the Dock
+/// or the Start menu has no `MODUO_*` environment, so without the baked value
+/// Connect always failed. Installed-app clients ship inside the app by design;
+/// never bake a server app's secret (Zoom, Meet) this way.
+macro_rules! oauth_client {
+    ($name:literal) => {
+        pick_setting(std::env::var($name).ok(), option_env!($name))
+    };
+}
+
+fn pick_setting(runtime: Option<String>, built: Option<&str>) -> Option<String> {
+    let clean = |value: &str| Some(value.trim().to_string()).filter(|v| !v.is_empty());
+    runtime
+        .as_deref()
+        .and_then(clean)
+        .or_else(|| built.and_then(clean))
+}
+
+/// Google's client ID and secret come as a pair: from the launch environment when
+/// it names a client, else both baked values, never one of each.
+fn google_calendar_client() -> (Option<String>, Option<String>) {
+    pick_pair(
+        (
+            runtime_setting("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
+            runtime_setting("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+        ),
+        (
+            oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
+            oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+        ),
+    )
+}
+
+fn pick_pair(
+    runtime: (Option<String>, Option<String>),
+    built: (Option<String>, Option<String>),
+) -> (Option<String>, Option<String>) {
+    if runtime.0.is_some() {
+        runtime
+    } else {
+        built
+    }
+}
+
+/// A setting read only from the environment at launch.
+fn runtime_setting(name: &str) -> Option<String> {
+    pick_setting(std::env::var(name).ok(), None)
+}
+
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub keychain_service: String,
@@ -37,47 +88,21 @@ pub struct AppConfig {
 
 impl AppConfig {
     pub fn from_env() -> Self {
+        let (calendar_google_client_id, calendar_google_client_secret) = google_calendar_client();
         Self {
             keychain_service: std::env::var("MODUO_KEYCHAIN_SERVICE")
                 .ok()
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| default_keychain_service().to_string()),
-            calendar_google_client_id: std::env::var("MODUO_CALENDAR_GOOGLE_CLIENT_ID")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            calendar_google_client_secret: std::env::var("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            email_google_client_id: std::env::var("MODUO_EMAIL_GOOGLE_CLIENT_ID")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            email_google_client_secret: std::env::var("MODUO_EMAIL_GOOGLE_CLIENT_SECRET")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            calendar_microsoft_client_id: std::env::var("MODUO_CALENDAR_MICROSOFT_CLIENT_ID")
-                .ok()
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty()),
-            zoom_client_id: std::env::var("MODUO_ZOOM_CLIENT_ID")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
-            zoom_client_secret: std::env::var("MODUO_ZOOM_CLIENT_SECRET")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
-            google_meet_client_id: std::env::var("MODUO_GOOGLE_MEET_CLIENT_ID")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
-            google_meet_client_secret: std::env::var("MODUO_GOOGLE_MEET_CLIENT_SECRET")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
+            calendar_google_client_id,
+            calendar_google_client_secret,
+            email_google_client_id: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
+            email_google_client_secret: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
+            calendar_microsoft_client_id: oauth_client!("MODUO_CALENDAR_MICROSOFT_CLIENT_ID"),
+            zoom_client_id: runtime_setting("MODUO_ZOOM_CLIENT_ID"),
+            zoom_client_secret: runtime_setting("MODUO_ZOOM_CLIENT_SECRET"),
+            google_meet_client_id: runtime_setting("MODUO_GOOGLE_MEET_CLIENT_ID"),
+            google_meet_client_secret: runtime_setting("MODUO_GOOGLE_MEET_CLIENT_SECRET"),
             token_encryption_secret: std::env::var("MODUO_TOKEN_ENCRYPTION_SECRET")
                 .ok()
                 .map(|v| v.trim().to_string())
@@ -100,5 +125,22 @@ mod tests {
         assert_ne!(DEV_KEYCHAIN_SERVICE, RELEASE_KEYCHAIN_SERVICE);
         // `cargo test` is a debug build, so it must land on the dev service.
         assert_eq!(default_keychain_service(), DEV_KEYCHAIN_SERVICE);
+    }
+
+    #[test]
+    fn an_oauth_client_comes_from_the_launch_env_first_then_the_build() {
+        assert_eq!(pick_setting(Some(" run ".into()), Some("built")), Some("run".into()));
+        assert_eq!(pick_setting(None, Some(" built ")), Some("built".into()));
+        assert_eq!(pick_setting(Some("  ".into()), Some("built")), Some("built".into()));
+        assert_eq!(pick_setting(Some(String::new()), Some("")), None);
+        assert_eq!(pick_setting(None, None), None);
+    }
+
+    #[test]
+    fn a_google_client_id_and_secret_never_mix_sources() {
+        let some = |v: &str| Some(v.to_string());
+        let built = (some("built-id"), some("built-secret"));
+        assert_eq!(pick_pair((some("dev-id"), None), built.clone()), (some("dev-id"), None));
+        assert_eq!(pick_pair((None, some("dev-secret")), built.clone()), built);
     }
 }

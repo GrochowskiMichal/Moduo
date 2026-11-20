@@ -1,7 +1,8 @@
 import { describe, expect, it } from "@rstest/core";
+
 import {
-  AttachmentOpError,
   almostFullCaption,
+  AttachmentOpError,
   classifyUploadError,
   describeProblem,
   describeTooLarge,

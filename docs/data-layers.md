@@ -5,14 +5,14 @@
 >
 > This doc answers: **where does each kind of data live, who is the source of truth, and what is the target shape every new module must adopt** — especially the *connective-tissue spine* that is Moduo's actual moat. Read it before adding a new module or a new data store.
 
-> ### ⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14) — read this before the tables below
-> This doc was written 2026-06-24 for its **intent and philosophy**, which still hold. Its per-module **status** is several waves stale — where it disagrees with the code, the code wins. **The status of record is [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).** What actually shipped since:
+> ### ⚠ STATUS UPDATE (2026-07-11, refreshed 2026-08-14; §1–§2 tables refreshed 2026-10-20) — read this before the tables below
+> This doc was written 2026-06-24 for its **intent and philosophy**, which still hold. Its per-module **status** is several waves stale — where it disagrees with the code, the code wins. **The status of record is the block queue in Moduo (`bun run queue`).** What actually shipped since:
 > - **43 migrations** (not ~16), all applied to prod as of OPS-1/OPS-2 (2026-07-29); **7+ modules are cloud-first**, not just Tasks.
 > - **The spine is built**, not a "TARGET": central `entities` registry + typed `entity_links` + comments/activity/notifications/suggestions (migrations `20260625…`–`20260627…`).
 > - **Notes is cloud-synced + collaboratively editable** (Yjs↔Postgres + one Realtime latency layer), *not* single-player redb.
 > - **Contacts, Calendar, Email** are all built (Email = desktop engine + lightweight cloud `email_refs` tissue).
 > - **The MCP connector exposes 6 modules (~60 tools)**, not "Tasks only."
-> For current status see [`onboarding/HANDOFF.md`](./onboarding/HANDOFF.md) and the live ledger [`specs/BUILD_ORDER.md`](../specs/BUILD_ORDER.md).
+> For current status see [`onboarding/HANDOFF.md`](./onboarding/HANDOFF.md) and the block queue (`bun run queue`).
 
 ---
 
@@ -28,9 +28,9 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 
 | File | Role |
 | --- | --- |
-| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary — `RuntimeSession`, `RuntimeCapabilities`, `WorkspaceApiKey`. |
-| `apps/app/src/lib/runtime.web.ts` | Web runtime — a direct Supabase client. Cloud-only, no offline. |
-| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for auth/workspaces/tasks, and Tauri `invoke` for the legacy redb-backed modules (notes, email, calendar, time-tracking, graph). |
+| `apps/app/src/lib/runtime.types.ts` | The abstraction boundary: `ModuoRuntime` and the shared types (`RuntimeCapabilities`, …). Each module's port and its own types live in `runtime.types.<module>.ts`, re-exported from here, so callers import from `runtime.types` only. |
+| `apps/app/src/lib/runtime.web.ts` | Web runtime: the composition root that assembles `webRuntime` from one file per module (`runtime.web.<module>.ts`, each typed by its port). The Supabase client is `runtime.web.client.ts` (light: importing it doesn't load every module); helpers several modules share are in `runtime.web.shared.ts`. Cloud-only, no offline. |
+| `apps/app/src/lib/runtime.tauri.ts` | Desktop runtime — **composite**: reuses `runtime.web` for nearly every module (auth, workspaces, tasks, notes, chat, contacts, calendar, dashboard, …), and Tauri `invoke` only for the desktop engines: the mail engine (`mail_*` commands over SQLite), the device key-value store (`localStore`), the legacy time-tracking commands (`tt_*`), integrations, and the one-off import of old redb notes. |
 
 - Desktop mirrors the Supabase session into Rust `AppState` via the `auth_set_cloud_session` command, so Rust-side code can attribute actions to the signed-in user.
 - **Footgun (see memory):** never import a bare `{ runtime }`; always resolve via `getRuntime()`. Grep `./runtime` when auditing lib exports.
@@ -59,13 +59,15 @@ The frontend talks to data through a runtime abstraction, so the *same* React fe
 | User preferences (appearance, focus) | **Supabase** (`user_preferences`) | Supabase | Yes | ✅ prod |
 | MCP connector keys | **Supabase** (`workspace_api_keys`) | Supabase | Yes | ✅ prod |
 | **Notes** | **Supabase** (Yjs update log `note_updates` + snapshot `doc_state`; y-indexeddb local cache) | Supabase | Yes (live via server-sent pulls, NR-7) | ✅ prod; refresh in progress ([specs/notes-refresh.md](../specs/notes-refresh.md)) |
-| **Email** | redb + in-memory cache; Rust IMAP/SMTP engine | redb (local) | No | 🟡 desktop-only, 2/5 |
-| **Calendar** | localStorage + OAuth tokens | local | No | 🟡 logic only, no UI |
-| **Time-tracking** | redb | local | No | 🟡 Rust backend, no UI |
-| Dashboard widgets | mostly stateless / demo | n/a | No | 🟡 prototype (`/grid` to be replaced) |
-| **Contacts / Finance** | — | — | — | ⚫ not built |
+| **Chat** | **Supabase** (Chat v2: `chat_messages`, conversations, reactions, files) + a device copy in IndexedDB (`moduo-chat`) | Supabase | Yes (Realtime) | ✅ prod |
+| **Contacts** (people, companies) | **Supabase** (`contacts`, `companies`, spine links) | Supabase | Yes | ✅ prod |
+| **Calendar** | **Supabase** (`calendar_accounts`, `calendars`, calendar sets, booking links) + Google and Zoom integrations | Supabase (events from Google) | Yes | ✅ prod |
+| **Email** | Desktop Rust mail engine (`src-tauri/src/mail/`) with a per-user SQLite store and OS-keychain secrets; cloud `email_refs` link threads into the spine | the mail server; Supabase for links | Links only | 🟡 desktop-only client |
+| **Time tracking** | **Supabase** (`task_time_entries`, totals and reports); legacy `tt_*` desktop commands remain | Supabase | Yes | ✅ prod (on tasks) |
+| Dashboard widgets | read the other modules through one shared data context | n/a | — | ✅ prod |
+| **Finance** | — | — | — | ⚫ not built |
 
-**Takeaway:** only Tasks (+ the account/workspace/prefs platform) is genuinely cloud-first today. Everything else is a local-first island or a shell. The alpha plan moves every kept module onto the Supabase-first pattern below.
+**Takeaway (2026-10-20):** every shipped module except the desktop email client is cloud-first on Supabase. Email stays a desktop engine by design (§ Email below); Mindmap is the one local-only island left.
 
 ---
 
@@ -130,15 +132,16 @@ Moduo's differentiation is **not** any single module; it is the layer that lets 
 
 A full multi-account Spark replacement on a cloud-first web app would mean building/operating a server-side mail relay (IMAP/SMTP sync, OAuth app verification, token vault, security review). **At alpha we do not.** Instead:
 
-- The **full client lives on desktop**, on the existing Rust engine (`apps/desktop/src-tauri/src/commands/email.rs` + `email/` submodules) → redb cache. This replaces Spark for the founder *now*.
-- **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) is synced to Supabase so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop.
+- The **full client lives on desktop**, on the rebuilt Rust engine (`apps/desktop/src-tauri/src/mail/`, specs/mail-rebuild.md) → one SQLite file per signed-in user (`<app data>/mail/<user_id>/mail.db`, WAL + FTS5, bodies and attachments as files beside it). Mail never leaves the Mac. The store is at schema v2 (specs/mail-v3.md decision 2): `accounts.last_synced_ms`/`push` and `messages.classify_stage`/`classify_rule_id`, all device-local, so "Why is this here?" and the account status answer without Supabase. The legacy engine (`commands/email*`, `email_sync`, redb mail tables) was deleted in MR-16; on the first launch after upgrade `mail::migrate` carries its accounts over (same ids, so the keychain entries are reused) and drops the old redb tables, which a fresh install never creates. Moduo-side mail settings that follow the user live in `email_settings_items` (Supabase).
+- **Lightweight message metadata** (message id, thread id, account, from, subject, date, snippet) reaches Supabase (`email_refs`) only when you act on a thread (convert, link, snooze, follow up, tag), so an email can participate in `entity_links` (email↔task, email↔contact) on **every** client — even though the body/management stays desktop. Plain reading writes nothing.
+- **The web `/email` page is the tissue view** (`EmailWebPage`: only the conversations linked to a task, note or event, read-only, with `?thread=` deep links, under a "Mail lives on your Mac" banner; snoozes and follow-ups are desktop-local since the rebuild); MCP reads the same `email_refs`.
 - The full **web** email client is a post-alpha decision, made once it's proven to matter to customers (not just to us).
 
 ```
   Desktop only                                  All clients (web + desktop)
   ┌──────────────────────────┐                  ┌───────────────────────────┐
-  │ Rust IMAP/SMTP engine     │  metadata only   │ Supabase: email_refs       │
-  │  → redb (full bodies,     │ ───────────────▶ │  (id, thread, from, subj,  │
+  │ Rust mail engine (SQLite) │  metadata only   │ Supabase: email_refs       │
+  │  (full bodies, FTS,       │ ───────────────▶ │  (id, thread, from, subj,  │
   │     folders, flags, send) │                  │   date, account)           │
   └──────────────────────────┘                  │  ↕ entity_links            │
         full client UX                           │  → task / contact / note   │
@@ -152,6 +155,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 - **Shared-workspace *async* multiplayer**, NOT real-time collaborative editing. Built on Supabase RLS + `workspace_members`; changes appear on refresh/poll. Enough to build Moduo with a partner. No live cursors / simultaneous block-editing at alpha (that is the expensive trap).
 - Consequence: **every new module is Supabase-first**, and **Notes must move to Supabase** (cloud-sync) — notes are the one kept module still local-CRDT, and shared design notes require it. The Notes rebuild is where this lands.
 - In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md): Supabase rows + Realtime, a device store in IndexedDB); calls are being re-planned from Moduo Meet ([ROADMAP](./ROADMAP.md)). Coordination on entities stays comments + @mentions + notifications.
+- **The client side of sync (2026-10-20).** Tasks, Chat and Notes sync through one kernel (`apps/app/src/lib/sync/kernel/`): an IndexedDB device copy per person and workspace, delta reads by server stamp, Realtime as a latency layer that lands only newer rows, an outbox, and write overlays. Under the Tasks store, every table is an in-memory **TanStack DB** collection fed by that kernel (`lib/sync/tanstack/`, `supabaseCollectionOptions()`); the device copy stays the persistence. Live queries are used only for narrow, indexed reads: whole-workspace queries measured too slow at 10k rows. Moving Chat, writes and other modules onto collections, and SQLite persistence, are paused. Why and when to re-test: [specs/tanstack-spine.md](../specs/tanstack-spine.md).
 
 ---
 

@@ -122,6 +122,9 @@ test("AC10.1 — ⌘⇧K files to the Inbox from Notes; ⌘N in a section files 
 
   // ⌘N in a project, with a task of a section selected: that section.
   const projectId = await createProject(`Rebrand ${tag}`);
+  // sections_op_create answers the project's whole section list by position, not
+  // the new section: first() is right only for a project's first one. For more,
+  // pass each an id or read them back by name.
   const section = first(
     await rpc<{ id: string } | Array<{ id: string }>>(dev, "sections_op_create", {
       p_workspace_id: ws.id,

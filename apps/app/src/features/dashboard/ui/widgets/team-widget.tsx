@@ -10,7 +10,7 @@ import { useContext, useMemo } from "react";
 
 import { PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { canBeAssignee } from "@/features/sharing/rules";
-import { loadLine, type TeamPerson, teamLoad } from "@/features/tasks/home";
+import { loadLine, teamLoad, type TeamPerson } from "@/features/tasks/home";
 import { teamHue } from "@/features/tasks/teams";
 import { reportRange } from "@/features/tasks/time-report";
 import { useToday } from "@/features/tasks/use-today";
@@ -20,7 +20,7 @@ import { useTimeRegion } from "@/lib/time-region";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import type { WidgetComponentProps } from "../../registry/types";
 import { teamNowLine } from "../../team-now";
 import { WidgetBodyRoot, WidgetEmpty, WidgetGroupLabel, WidgetLoading } from "./widget-primitives";
@@ -28,7 +28,10 @@ import { WidgetBodyRoot, WidgetEmpty, WidgetGroupLabel, WidgetLoading } from "./
 const NO_MEMBERS: never[] = [];
 
 export function TeamWidget({ widget, size }: WidgetComponentProps) {
-  const { tasks, taskQueue, taskWaiting, workspaceId } = useDashboardData();
+  const tasks = useDashboardSource("tasks");
+  const taskQueue = useDashboardSource("taskQueue");
+  const taskWaiting = useDashboardSource("taskWaiting");
+  const workspaceId = useDashboardSource("workspaceId");
   const members = useContext(WorkspaceContext)?.members ?? NO_MEMBERS;
   const { userId } = useAuth();
   const { weekStartsOn } = useTimeRegion();

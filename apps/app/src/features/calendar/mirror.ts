@@ -10,8 +10,8 @@
 // east of UTC. We resolve it to LOCAL midnight so the grid's local-day math
 // lands it on the right column.
 
-import type { CalendarMirrorEventInput } from "./events";
-import { googleMeetingLink, graphMeetingLink } from "./meeting-link";
+import type { CalendarAttendee, CalendarMirrorEventInput } from "./events";
+import { googleConferenceUrl, graphConferenceUrl } from "./meeting-link";
 
 /** Loosely-typed provider JSON — we read only the fields we normalize. */
 export type RawProviderEvent = Record<string, unknown>;
@@ -71,14 +71,49 @@ function normalizeStatus(raw: string | null): "confirmed" | "cancelled" {
 // recurring series often arrives with no start/end (just an originalStartTime),
 // so it maps to null and its tombstone never reaches the op — that one instance
 // keeps rendering. Acceptable at alpha; a per-occurrence exception tombstone is
-// a follow-up (needs the op to accept occurrence keys).
+// a follow-up. CALR-11 stores an instance's externalSeriesId and originalStart,
+// but the op still skips a row without times.
 
 /** Only send `location` when there is one, so the sync never clears it by accident. */
 function withLocation(value: string | null): { location?: string } {
   return value ? { location: value } : {};
 }
 
+/**
+ * Always send `conferenceUrl`: the provider event is the whole truth, so null says
+ * its meeting link was removed and the op clears the stored one (CALR-6). A meeting
+ * URL someone pasted into the location still fills in: the op splits the location.
+ * The op drops a value that is no web address.
+ */
+function withConferenceUrl(value: string | null): { conferenceUrl: string | null } {
+  return { conferenceUrl: value };
+}
+
+/** A trimmed, non-empty string or null. */
+function trimmed(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim() : null;
+}
+
 // ── Google Calendar API v3 event → mirror input ──────────────────────────────
+
+/** Google's guests → the stored shape; guests without an email are dropped. */
+function googleAttendees(value: unknown): CalendarAttendee[] {
+  if (!Array.isArray(value)) return [];
+  const out: CalendarAttendee[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const raw = item as Record<string, unknown>;
+    const email = str(raw.email);
+    if (!email) continue;
+    out.push({
+      email,
+      name: str(raw.displayName) ?? "",
+      status: str(raw.responseStatus) ?? "needsAction",
+      ...(raw.self === true ? { self: true } : {}),
+    });
+  }
+  return out;
+}
 
 /**
  * Map one Google event. Returns null when it lacks an id or resolvable times.
@@ -119,7 +154,45 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
     status: normalizeStatus(str(raw.status)),
     description: str(raw.description) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
-    ...withLocation(googleMeetingLink(raw)),
+    // The place and the meeting link travel separately (CALR-6).
+    ...withLocation(trimmed(raw.location)),
+    ...withConferenceUrl(googleConferenceUrl(raw)),
+    // CALR-8: privacy and guests, always sent (Google's event is the whole truth).
+    isPrivate: raw.visibility === "private" || raw.visibility === "confidential",
+    attendees: googleAttendees(raw.attendees),
+    // CALR-11: an instance of a repeat says which one, and which occurrence it replaces.
+    ...googleInstance(raw),
+    // CALR-20b: which meeting it is, and whether you organize it.
+    ...googleIdentity(raw),
+  };
+}
+
+/**
+ * Google's iCalUID and whether you organize the event (organizer.self), each
+ * sent only when Google gives it, so the stored value stays otherwise.
+ */
+function googleIdentity(
+  raw: RawProviderEvent,
+): Pick<CalendarMirrorEventInput, "iCalUID" | "isOrganizer"> {
+  const iCalUID = str(raw.iCalUID);
+  const organizer = raw.organizer && typeof raw.organizer === "object" ? raw.organizer : null;
+  return {
+    ...(iCalUID ? { iCalUID } : {}),
+    ...(organizer ? { isOrganizer: (organizer as Record<string, unknown>).self === true } : {}),
+  };
+}
+
+/** The repeat an instance belongs to; nothing for an event that is no instance. */
+function googleInstance(
+  raw: RawProviderEvent,
+): Pick<CalendarMirrorEventInput, "externalSeriesId" | "originalStart"> {
+  const externalSeriesId = str(raw.recurringEventId);
+  const original = (raw.originalStartTime ?? {}) as Record<string, unknown>;
+  const date = str(original.date);
+  const originalStart = date ? localMidnightIso(date) : instantIso(original.dateTime);
+  return {
+    ...(externalSeriesId ? { externalSeriesId } : {}),
+    ...(originalStart ? { originalStart } : {}),
   };
 }
 
@@ -129,8 +202,7 @@ export function mapGoogleEvent(raw: RawProviderEvent): CalendarMirrorEventInput 
 function graphRecurrenceToRrule(recurrence: unknown): string | null {
   if (!recurrence || typeof recurrence !== "object") return null;
   const pattern = (recurrence as Record<string, unknown>).pattern as
-    | Record<string, unknown>
-    | undefined;
+    Record<string, unknown> | undefined;
   if (!pattern) return null;
   const type = str(pattern.type)?.toLowerCase();
   const interval = typeof pattern.interval === "number" ? pattern.interval : 1;
@@ -197,7 +269,11 @@ export function mapOutlookEvent(raw: RawProviderEvent): CalendarMirrorEventInput
     status: cancelled ? "cancelled" : "confirmed",
     description: str(raw.bodyPreview) ?? "",
     calendarId: str(raw.calendarId) ?? undefined,
-    ...withLocation(graphMeetingLink(raw)),
+    // The place and the meeting link travel separately (CALR-6).
+    ...withLocation(
+      trimmed((raw.location as { displayName?: unknown } | null | undefined)?.displayName),
+    ),
+    ...withConferenceUrl(graphConferenceUrl(raw)),
   };
 }
 

@@ -17,6 +17,7 @@ import {
   type BottomBarAction,
   type BottomBarMode,
   useBottomBarMode,
+  useHiddenBottomBarTools,
 } from "./bottom-bar-mode";
 import { dispatchOpenCapture } from "./capture-shell";
 import { dispatchCreateNew } from "./create-events";
@@ -138,6 +139,7 @@ export function GlobalBottomBar() {
 }
 
 function GlobalTools() {
+  const hidden = useHiddenBottomBarTools();
   const createHint = newItemShortcut ? formatShortcut(newItemShortcut) : undefined;
   const searchHint = paletteShortcut ? formatShortcut(paletteShortcut) : undefined;
   const captureHint = captureShortcut ? formatShortcut(captureShortcut) : undefined;
@@ -149,21 +151,27 @@ function GlobalTools() {
       role="toolbar"
       aria-label="Global actions"
     >
-      <BarButton
-        onClick={() => {
-          if (!requestModuleSearch()) dispatchOpenPalette();
-        }}
-        label="Search"
-        hint={searchHint}
-      >
-        <Search className="size-4" aria-hidden />
-      </BarButton>
-      <BarButton onClick={() => dispatchOpenCapture()} label="Quick capture" hint={captureHint}>
-        <SquarePen className="size-4" aria-hidden />
-      </BarButton>
-      <BarButton onClick={() => dispatchCreateNew()} label="Create new" hint={createHint}>
-        <Plus className="size-4" aria-hidden />
-      </BarButton>
+      {hidden.has("search") ? null : (
+        <BarButton
+          onClick={() => {
+            if (!requestModuleSearch()) dispatchOpenPalette();
+          }}
+          label="Search"
+          hint={searchHint}
+        >
+          <Search className="size-4" aria-hidden />
+        </BarButton>
+      )}
+      {hidden.has("capture") ? null : (
+        <BarButton onClick={() => dispatchOpenCapture()} label="Quick capture" hint={captureHint}>
+          <SquarePen className="size-4" aria-hidden />
+        </BarButton>
+      )}
+      {hidden.has("create") ? null : (
+        <BarButton onClick={() => dispatchCreateNew()} label="Create new" hint={createHint}>
+          <Plus className="size-4" aria-hidden />
+        </BarButton>
+      )}
     </div>
   );
 }

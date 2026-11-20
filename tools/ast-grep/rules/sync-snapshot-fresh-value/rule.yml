@@ -1,0 +1,58 @@
+id: sync-snapshot-fresh-value
+language: tsx
+severity: error
+message: "A `useSyncExternalStore` snapshot getter that builds a fresh value (`() => []`) changes on every read, so React re-renders until it throws #185 \"Maximum update depth exceeded\"."
+note: |
+  Return the same value until the store changes: a module-level constant
+  (`const EMPTY: T[] = []`) and a module-level getter. Chat shipped this to prod on
+  2026-10-06 (the typing store's `() => []` fallback crashed every load).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: arrow_function
+  has:
+    field: body
+    any:
+      - kind: array
+      - kind: new_expression
+      - kind: parenthesized_expression
+        has:
+          kind: object
+  inside:
+    kind: arguments
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        regex: (^|\.)useSyncExternalStore$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: sync-snapshot-fresh-value-ts
+language: typescript
+severity: error
+message: "A `useSyncExternalStore` snapshot getter that builds a fresh value (`() => []`) changes on every read, so React re-renders until it throws #185 \"Maximum update depth exceeded\"."
+note: |
+  Return the same value until the store changes: a module-level constant
+  (`const EMPTY: T[] = []`) and a module-level getter. Chat shipped this to prod on
+  2026-10-06 (the typing store's `() => []` fallback crashed every load).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: arrow_function
+  has:
+    field: body
+    any:
+      - kind: array
+      - kind: new_expression
+      - kind: parenthesized_expression
+        has:
+          kind: object
+  inside:
+    kind: arguments
+    inside:
+      kind: call_expression
+      has:
+        field: function
+        regex: (^|\.)useSyncExternalStore$

@@ -1,6 +1,7 @@
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+
 import { Button, type ButtonProps } from "./button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
@@ -18,7 +19,7 @@ type IconButtonProps = Omit<ButtonProps, "size" | "children" | "aria-label"> & {
 
 /**
  * The single icon-only button for the app. Wraps Button size="icon", enforces
- * an accessible `label` (aria-label + tooltip, per the a11y rule in src/components/ui/AGENTS.md), and
+ * an accessible `label` (aria-label + tooltip, per the a11y rule in .claude/rules/ui-primitives.md), and
  * sizes to the control rung so it stacks with text controls. Defaults to the
  * `ghost` variant + `sm` rung (the common toolbar/row affordance).
  */

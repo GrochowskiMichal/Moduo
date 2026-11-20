@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { TaskTimeTotals } from "../model";
 
 const FRESH_MS = 30_000;

@@ -7,6 +7,7 @@
 // already has. Pure, so the rules are tested without a component.
 
 import { type AgentSessionState, isClosedTask } from "@contracts/vocabularies";
+
 import { formatAge } from "../../lib/time-format";
 
 export type AgentSessionLink = { url: string; label?: string };
@@ -83,7 +84,7 @@ export function agentWho(
 ): string {
   if (viewerId && s.userId === viewerId) return s.agent;
   const owner = ownerName(s.userId)?.trim();
-  return `${owner || "A teammate"}'s ${s.agent}`;
+  return `${owner || "A workspace member"}'s ${s.agent}`;
 }
 
 /** A link's words: its label, else its host. */

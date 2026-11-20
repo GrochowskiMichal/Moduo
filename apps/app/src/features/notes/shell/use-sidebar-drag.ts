@@ -7,14 +7,17 @@
  */
 
 import { type DragEndEvent, type DragStartEvent, useDndMonitor } from "@dnd-kit/core";
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useRef, useState } from "react";
+
 import { asDragPayload } from "@/lib/drag-payload";
+
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import type { SidebarSections } from "../sections";
 import {
   type DropIntent,
   type DropTarget,
+  effectiveDropTarget,
   resolveDropIntent,
   type SidebarSection,
   zoneFromPointer,
@@ -22,6 +25,8 @@ import {
 import type { RowHover } from "./sidebar-tree";
 
 const POS = { endPosition, betweenPositions };
+/** How close to the tree's top or bottom edge a drag starts scrolling it. */
+const EDGE_PX = 32;
 
 type DragState = { noteId: string; section: SidebarSection };
 
@@ -49,6 +54,10 @@ export function useSidebarDrag(input: {
   sections: SidebarSections;
   favoritePositions: Map<string, string>;
   onDrop: (intent: DropIntent) => void;
+  /** The tree's scroller: a drag held near its top or bottom edge scrolls it,
+   * so a target out of view can be reached (dnd-kit's own auto-scroll is off:
+   * it would scroll the editor and the panels too). */
+  scrollerRef?: RefObject<HTMLElement | null>;
 }) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [hover, setHover] = useState<RowHover>(null);
@@ -68,15 +77,16 @@ export function useSidebarDrag(input: {
       return null;
     }
     const { notes, sections, favoritePositions } = inputRef.current;
+    const target = effectiveDropTarget(hit.target, sections);
     const intent = resolveDropIntent({
       notes,
       layout: sections,
       favoritePositions,
       dragId: state.noteId,
-      target: hit.target,
+      target,
       pos: POS,
     });
-    return intent ? { hit, intent } : null;
+    return intent ? { target, key: target === hit.target ? hit.key : null, intent } : null;
   };
 
   // The pointer is tracked from the moment the drag starts (listener attached
@@ -86,7 +96,22 @@ export function useSidebarDrag(input: {
   const dragRef = useRef<DragState | null>(null);
   const detachRef = useRef<(() => void) | null>(null);
 
+  const scrollFrame = useRef(0);
+  const autoScroll = () => {
+    const el = inputRef.current.scrollerRef?.current;
+    if (!el || !dragRef.current) return;
+    const rect = el.getBoundingClientRect();
+    const { x, y } = pointer.current;
+    if (x >= rect.left && x <= rect.right) {
+      if (y < rect.top + EDGE_PX) el.scrollTop -= Math.ceil((rect.top + EDGE_PX - y) / 4);
+      else if (y > rect.bottom - EDGE_PX)
+        el.scrollTop += Math.ceil((y - (rect.bottom - EDGE_PX)) / 4);
+    }
+    scrollFrame.current = requestAnimationFrame(autoScroll);
+  };
+
   const stopTracking = () => {
+    cancelAnimationFrame(scrollFrame.current);
     detachRef.current?.();
     detachRef.current = null;
     dragRef.current = null;
@@ -103,9 +128,9 @@ export function useSidebarDrag(input: {
       const current = dragRef.current;
       if (!current) return;
       const res = resolve(current, e.clientX, e.clientY);
-      const t = res?.hit.target;
+      const t = res?.target;
       const nextHover: RowHover =
-        t?.kind === "row" && res?.hit.key ? { key: res.hit.key, zone: t.zone } : null;
+        t?.kind === "row" && res?.key ? { key: res.key, zone: t.zone } : null;
       setHover((prev) =>
         prev?.key === nextHover?.key && prev?.zone === nextHover?.zone ? prev : nextHover,
       );
@@ -114,10 +139,18 @@ export function useSidebarDrag(input: {
     document.addEventListener("pointermove", onMove, { capture: true });
     detachRef.current = () =>
       document.removeEventListener("pointermove", onMove, { capture: true });
+    cancelAnimationFrame(scrollFrame.current);
+    scrollFrame.current = requestAnimationFrame(autoScroll);
     setDrag(state);
   };
 
-  useEffect(() => () => detachRef.current?.(), []);
+  useEffect(
+    () => () => {
+      cancelAnimationFrame(scrollFrame.current);
+      detachRef.current?.();
+    },
+    [],
+  );
 
   useDndMonitor({
     onDragStart: (e: DragStartEvent) => {

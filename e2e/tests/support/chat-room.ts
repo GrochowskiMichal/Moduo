@@ -1,4 +1,4 @@
-import { rest, rpc, type Session, signIn, stackKeys } from "./local-stack";
+import { rest, rpc, type Session, setLocalPassword, signIn, stackKeys } from "./local-stack";
 
 /**
  * A chat room of its own for a spec (CV-7a): two throwaway people and a
@@ -34,11 +34,8 @@ export async function ensureChatPerson(who: ChatPersonSeed): Promise<Session> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: who.password }),
-  });
+  // Auth refuses password writes; set it in SQL (supabase/seed.sql does the same).
+  setLocalPassword(user.id, who.password);
   await rest("service", `profiles?id=eq.${user.id}`, {
     method: "PATCH",
     body: { display_name: who.name },
@@ -81,7 +78,12 @@ export async function makeChatRoom(
   return { owner, member, ws: created.id, general };
 }
 
-/** Send a v2 message as someone; returns its id. */
+/**
+ * Send a v2 message as someone; returns its id. Your own send reads the
+ * conversation through (closes your Catch up items there), and so does opening
+ * it: to seed someone's Catch up, send as the other person and check the list
+ * before opening the conversation.
+ */
 export async function sendAs(
   who: Session,
   channelId: string,

@@ -14,6 +14,8 @@ import { rest, rpc, type Session, signIn, signInPage } from "../support/local-st
  *   bun run local:up && bun run env:local
  *   MODUO_TARGET=web ./node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8131
  *   E2E_BASE_URL=http://127.0.0.1:8131 bun run perf
+ * AC1's warm-open budget holds a production build: `bun run build` in apps/app,
+ * `rsbuild preview --port 8132`, then E2E_BASE_URL=http://127.0.0.1:8132 PERF_PROD=1.
  * (`bun run perf` seeds the fixture first: `bun run perf:seed`.)
  *
  * Each step is a real input (Playwright's click or fill), timed inside the
@@ -45,12 +47,25 @@ test.beforeAll(async () => {
 type PerfWindow = Window & {
   __perfArm?: (kind: string, arg: string) => void;
   __perfResult?: Promise<number>;
+  /** When the first List row was drawn (performance.now()). */
+  __firstRows?: number;
 };
 
 /** In the page: what each measured step waits for, and the clock. */
 function installClock() {
   const w = window as PerfWindow;
   const rows = () => [...document.querySelectorAll<HTMLElement>("[data-list-row]")];
+  // The frame that first shows a List row (AC1's "paint from device").
+  const watch = () => {
+    if (document.querySelector("[data-list-row]")) {
+      requestAnimationFrame(() => {
+        w.__firstRows ??= performance.now();
+      });
+      return;
+    }
+    requestAnimationFrame(watch);
+  };
+  requestAnimationFrame(watch);
   const holds: Record<string, (arg: string) => boolean> = {
     // The panel shows the task that was clicked.
     panel: (title) =>
@@ -64,6 +79,11 @@ function installClock() {
     list: () =>
       document.querySelector("[data-list-row]") !== null &&
       document.querySelector('[data-task-id][role="button"]') === null,
+    // The List's first row is another task than `arg` (a project switch).
+    changed: (before) => {
+      const first = document.querySelector<HTMLElement>("[data-list-row]");
+      return !!first && first.dataset.listRow !== before;
+    },
     // The List shows only the matching tasks (`ids`, comma-separated).
     matches: (ids) => {
       const want = new Set(ids.split(","));
@@ -221,6 +241,74 @@ test("AC12.3 — opening a task, searching and switching views stay under 200 ms
   expect(median(opens)).toBeLessThan(BUDGET_MS);
   expect(median(switches)).toBeLessThan(BUDGET_MS);
   expect(median(searches)).toBeLessThan(BUDGET_MS);
+});
+
+test("AC1 — a warm open paints the Inbox from the device copy in 150 ms", async ({ page }) => {
+  await page.addInitScript(installClock);
+  await signInPage(page, perf, workspaceId);
+  await page.goto("/tasks");
+  await expect(listRows(page).first()).toBeVisible({ timeout: 30_000 });
+  // Let the whole copy land on the device before reopening from it.
+  await page.waitForTimeout(8_000);
+  const fromStore: number[] = [];
+  const fromNavigation: number[] = [];
+  for (let k = 0; k < 5; k++) {
+    await page.reload();
+    await expect(listRows(page).first()).toBeVisible({ timeout: 30_000 });
+    const [store, nav, read, shown] = await page.evaluate(async () => {
+      const w = window as PerfWindow;
+      while (w.__firstRows === undefined) await new Promise((r) => requestAnimationFrame(r));
+      const mark = performance.getEntriesByName("moduo:tasks-store-start")[0];
+      const at = (n: string) =>
+        (performance.getEntriesByName(n)[0]?.startTime ?? 0) - (mark?.startTime ?? 0);
+      return [
+        w.__firstRows - (mark?.startTime ?? 0),
+        w.__firstRows,
+        at("moduo:tasks-copy-read"),
+        at("moduo:tasks-copy-shown"),
+      ];
+    });
+    console.log(
+      `  device copy read ${read?.toFixed(0)} · shown ${shown?.toFixed(0)} · first rows ${store.toFixed(0)} ms`,
+    );
+    fromStore.push(store);
+    fromNavigation.push(nav);
+  }
+  // The store opens once the app has booted (the bundle, sign-in): the clock
+  // starts there, so it holds what the device copy costs to paint. The budget
+  // is the shipped build's: point E2E_BASE_URL at `rsbuild preview` and set
+  // PERF_PROD=1. A dev server draws React's dev build, about twice as slow
+  // (TS-3b measured 310 ms there against 151 ms built), so it only logs.
+  report("warm open → first rows from the store's start", fromStore);
+  report("warm open → first rows from navigation (not budgeted)", fromNavigation);
+  if (process.env.PERF_PROD === "1") expect(median(fromStore)).toBeLessThanOrEqual(150);
+});
+
+test("project switch: Inbox → a project → another, under 200 ms", async ({ page }) => {
+  await page.addInitScript(installClock);
+  await signInPage(page, perf, workspaceId);
+  await page.goto("/tasks");
+  await expect(listRows(page).first()).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(3_000);
+  const nav = page.getByRole("navigation", { name: "Tasks", exact: true });
+  const switches: number[] = [];
+  for (const name of ["Website", "Billing", "Docs", "Search", "Docs", "Website"]) {
+    const before = (await listRows(page).first().getAttribute("data-list-row")) ?? "";
+    switches.push(
+      await timed(
+        page,
+        "changed",
+        () =>
+          nav
+            .getByRole("button", { name: new RegExp(`^${name} ,`) })
+            .first()
+            .click(),
+        before,
+      ),
+    );
+  }
+  report("project switch", switches);
+  expect(median(switches)).toBeLessThan(BUDGET_MS);
 });
 
 test("AC12.4 — long lists and columns draw only what's on screen", async ({ page }) => {

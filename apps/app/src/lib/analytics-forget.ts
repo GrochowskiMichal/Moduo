@@ -5,7 +5,7 @@
  */
 
 import { getRuntime } from "./runtime";
-import { SUPABASE_URL } from "./runtime.web";
+import { SUPABASE_URL } from "./runtime.web.client";
 
 /** true once the server has taken the request. false means try again later: offline, a
  *  server error or a PostHog setup it can't use yet (502/503), or `userId` isn't who's

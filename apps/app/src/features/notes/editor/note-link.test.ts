@@ -7,6 +7,7 @@ import {
   type ParagraphNode,
 } from "lexical";
 import * as Y from "yjs";
+
 import { $isEntityRefNode } from "../../spine/editor/entity-ref-schema";
 import { resolveMention } from "../../spine/mention";
 import type { Note } from "../model";
@@ -29,7 +30,6 @@ function note(id: string, title: string, extra: Partial<Note> = {}): Note {
     parentId: null,
     title,
     icon: null,
-    isPinned: false,
     position: "a",
     isArchived: false,
     publishedAt: null,

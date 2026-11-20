@@ -229,7 +229,8 @@ test("AC1.6 — Focus time is saved while you're on Notes", async ({ page }) => 
   await page.getByRole("button", { name: /^Start/ }).click();
   // Leave Tasks: the save must not wait for it.
   await page.getByRole("button", { name: /^Notes/ }).click();
-  await expect(page).toHaveURL(/\/notes/);
+  // Notes is a lazy route: on a fresh dev server its first visit compiles it.
+  await expect(page).toHaveURL(/\/notes/, { timeout: 20_000 });
   await page.waitForTimeout(3000);
   const saved = page.waitForRequest((r) => r.url().includes("rpc/tasks_op_track_time"));
   await page.getByRole("button", { name: "Pause Focus" }).click();
@@ -374,8 +375,10 @@ test("AC1.10 — a link to a task you can't open says “Private item”", async
   const hidden = await createTask(dev, { title: `Not yours ${tag}`, bucketId: secret.id });
   await signInPage(page, mate, ws.id);
   await page.goto("/tasks");
+  // The bundle answered: the sidebar lists All (with or without a count; the
+  // teammate's Inbox may be empty, "Inbox is clear").
   await expect(
-    page.getByRole("navigation", { name: "Location" }).or(page.getByText("No tasks in")).first(),
+    page.getByRole("navigation", { name: "Tasks" }).getByRole("button", { name: /^All(\s*,|$)/ }),
   ).toBeVisible({ timeout: 20_000 });
   await page.evaluate((id) => {
     window.dispatchEvent(new CustomEvent("moduo:entity:open", { detail: { type: "task", id } }));
@@ -390,7 +393,10 @@ test("AC1.11 — no “Rescheduled N×”", async ({ page }) => {
   const t = await createTask(dev, { title: `Slipped ${tag}`, bucketId: ws.inboxId });
   await rest("service", `tasks?id=eq.${t.id}`, { method: "PATCH", body: { reschedule_count: 4 } });
   await openTasks(page, t.id);
-  await expect(page.getByText(/Created/).last()).toBeVisible();
+  // The feed shows comments by default; the trail is under All.
+  const feed = page.getByRole("region", { name: "Comments and activity" });
+  await feed.getByRole("radio", { name: "All" }).click();
+  await expect(feed.getByText(/created this/i).last()).toBeVisible();
   await expect(page.getByText(/Rescheduled \d+×/)).toHaveCount(0);
 });
 
@@ -412,7 +418,10 @@ test("AC1.12 — a date popover writes once, and scheduling is in the trail", as
   await expect(picker).toHaveCount(0);
   await expect.poll(() => writes.length).toBe(1);
   expect(writes).toEqual(["POST rpc/tasks_op_reschedule"]);
-  await expect(page.getByText(/rescheduled this to Tomorrow/)).toBeVisible();
+  // The trail is under the feed's All (it shows comments by default).
+  const feed = page.getByRole("region", { name: "Comments and activity" });
+  await feed.getByRole("radio", { name: "All" }).click();
+  await expect(feed.getByText(/rescheduled this to Tomorrow/)).toBeVisible();
 });
 
 test("AC1.3 — ⌘A selects the text in capture", async ({ page }) => {

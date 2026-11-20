@@ -200,7 +200,11 @@ test("AC11.4 — a sorted project says so; dragging asks to switch back and writ
 
   // Back to manual order: the order kept underneath comes back.
   await page.getByRole("button", { name: "Back to manual order" }).first().click();
-  await expect.poll(() => titles(page)).toEqual([`Later ${tag}`, `Sooner ${tag}`]);
+  // A busy dev workspace re-renders the List for seconds after a project is
+  // made (gotchas/ui.md): give the re-sort the first-load wait, not 5 s.
+  await expect
+    .poll(() => titles(page), { timeout: 20_000 })
+    .toEqual([`Later ${tag}`, `Sooner ${tag}`]);
   await expect(line).toHaveCount(0);
 });
 

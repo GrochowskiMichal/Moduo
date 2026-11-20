@@ -57,9 +57,9 @@ import {
 } from "lexical";
 
 import {
-  DESCRIPTION_LINK,
   dateMarkdown,
   defuseReferences,
+  DESCRIPTION_LINK,
   descriptionToMarkdown,
   escapeBlockStarts,
   escapeMarkdownText,

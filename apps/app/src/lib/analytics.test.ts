@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, rs } from "@rstest/core";
 import type { CaptureResult } from "posthog-js";
 

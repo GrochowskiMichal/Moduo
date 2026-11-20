@@ -19,6 +19,7 @@ import { MarkNode } from "@lexical/mark";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { TableCellNode, TableNode, TableRowNode } from "@lexical/table";
 import type { Klass, LexicalNode } from "lexical";
+
 import { EntityRefNode } from "../../../spine/editor/entity-ref-schema";
 import { EmbedNode } from "./embed-node";
 import { PageRowNode } from "./page-row-node";

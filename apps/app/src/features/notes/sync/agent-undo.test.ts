@@ -10,6 +10,7 @@
 
 import { describe, expect, it } from "@rstest/core";
 import * as Y from "yjs";
+
 import { agentWriteFromLog, applyAgentEdit, bodyFromLog } from "../editor/agent-write";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
 import { buildDocStateFromMarkdown } from "../editor/materialize";

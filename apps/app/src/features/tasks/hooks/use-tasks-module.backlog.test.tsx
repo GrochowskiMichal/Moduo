@@ -5,7 +5,7 @@
 // values change the category the list reads.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -23,7 +23,7 @@ rs.mock("sonner", () => {
 });
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const ME = "u1";
 const PROJECT = {
@@ -115,9 +115,11 @@ function fakeRuntime(tasks: Task[]) {
 
 async function mount(tasks: Task[]) {
   const fake = fakeRuntime(tasks);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: ME, workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: ME,
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -130,7 +132,7 @@ beforeEach(() => {
   toasts.errors = [];
 });
 
-describe("useTasksModule: statuses (TV-D9)", () => {
+describe("Tasks: statuses (TV-D9)", () => {
   it("reads the project's statuses, and the sidebar count leaves Backlog out", async () => {
     const { hook } = await mount([backlog("b1"), task("t1")]);
     expect(hook.result.current.statusesForBucket("p1").map((s) => s.name)).toEqual([
@@ -146,7 +148,7 @@ describe("useTasksModule: statuses (TV-D9)", () => {
 
   it("queuing a backlog task shows it in To do at once (the server moves it)", async () => {
     const { api, hook } = await mount([backlog("b1")]);
-    act(() => hook.result.current.addToQueue("b1"));
+    act(() => hook.result.current.commands.addToQueue("b1"));
     const shown = hook.result.current.tasks.find((t) => t.id === "b1");
     expect(shown?.statusCategory).toBe("todo");
     expect(shown?.statusId).toBe("s-todo");
@@ -155,14 +157,14 @@ describe("useTasksModule: statuses (TV-D9)", () => {
 
   it("scheduling a backlog task shows it in To do at once", async () => {
     const { api, hook } = await mount([backlog("b1")]);
-    act(() => hook.result.current.scheduleTaskAt("b1", "2026-11-12T09:00:00.000Z"));
+    act(() => hook.result.current.commands.scheduleTaskAt("b1", "2026-11-12T09:00:00.000Z"));
     expect(hook.result.current.tasks.find((t) => t.id === "b1")?.statusCategory).toBe("todo");
     await waitFor(() => expect(api.opReschedule).toHaveBeenCalledTimes(1));
   });
 
   it("assigning a backlog task offers Move to To do, which sets the category", async () => {
     const { api, hook } = await mount([backlog("b1")]);
-    act(() => hook.result.current.patchTask("b1", { assigneeId: "u2" }));
+    act(() => hook.result.current.commands.patchTask("b1", { assigneeId: "u2" }));
     await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
     const offer = toasts.notes.find((n) => n.options?.action?.label === "Move to To do");
     expect(offer?.msg).toBe("b1 is still in Backlog");
@@ -173,15 +175,19 @@ describe("useTasksModule: statuses (TV-D9)", () => {
 
   it("giving a backlog task a due date offers it too; an open task's doesn't", async () => {
     const { hook } = await mount([backlog("b1"), task("t1")]);
-    act(() => hook.result.current.patchTask("t1", { dueDate: "2026-11-20T00:00:00.000Z" }));
+    act(() =>
+      hook.result.current.commands.patchTask("t1", { dueDate: "2026-11-20T00:00:00.000Z" }),
+    );
     expect(toasts.notes.some((n) => n.options?.action)).toBe(false);
-    act(() => hook.result.current.patchTask("b1", { dueDate: "2026-11-20T00:00:00.000Z" }));
+    act(() =>
+      hook.result.current.commands.patchTask("b1", { dueDate: "2026-11-20T00:00:00.000Z" }),
+    );
     expect(toasts.notes.some((n) => n.options?.action?.label === "Move to To do")).toBe(true);
   });
 
   it("sets a status by the project's id, or by category (sent as the category word)", async () => {
     const { api, hook } = await mount([task("t1")]);
-    act(() => hook.result.current.setTaskStatus("t1", { statusId: "s-review" }));
+    act(() => hook.result.current.commands.setTaskStatus("t1", { statusId: "s-review" }));
     expect(hook.result.current.tasks.find((t) => t.id === "t1")).toMatchObject({
       statusId: "s-review",
       statusCategory: "in_progress",
@@ -190,7 +196,7 @@ describe("useTasksModule: statuses (TV-D9)", () => {
     await waitFor(() => expect(api.opSetStatus).toHaveBeenCalledTimes(1));
     expect(api.opSetStatus.mock.calls[0]![0]).toMatchObject({ status: "s-review" });
 
-    act(() => hook.result.current.setTaskStatus("t1", { category: "backlog" }));
+    act(() => hook.result.current.commands.setTaskStatus("t1", { category: "backlog" }));
     expect(hook.result.current.tasks.find((t) => t.id === "t1")).toMatchObject({
       statusId: "s-backlog",
       statusCategory: "backlog",
@@ -202,7 +208,7 @@ describe("useTasksModule: statuses (TV-D9)", () => {
 
   it("the checkbox's done changes the category the list reads, before the server answers", async () => {
     const { api, hook } = await mount([task("t1")]);
-    act(() => hook.result.current.toggleDone(hook.result.current.tasks[0]!));
+    act(() => hook.result.current.commands.toggleDone(hook.result.current.tasks[0]!));
     expect(hook.result.current.tasks.find((t) => t.id === "t1")).toMatchObject({
       status: "done",
       statusCategory: "done",

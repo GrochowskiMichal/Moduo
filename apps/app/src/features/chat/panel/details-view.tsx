@@ -29,6 +29,7 @@ import { Switch } from "@/components/ui/switch";
 import type { PresenceState } from "@/lib/statuses/model";
 import { formatAge, formatDate, formatStamp } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import { spineActivityLine, spineActorName } from "../../spine/activity";
 import type { ChainEntry } from "../chains";
 import { messageTree, toBodyText } from "../markup-v2";

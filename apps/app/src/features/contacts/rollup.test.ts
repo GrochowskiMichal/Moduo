@@ -3,6 +3,7 @@
 // live reads are the hook's job.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
 import { entityRefKey } from "../spine/rollup";
 import type { ActivityEntry } from "../tasks/model";

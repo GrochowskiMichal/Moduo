@@ -3,7 +3,7 @@
 // in the trail; a date edit is one write.
 
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -12,7 +12,7 @@ import type { Bucket, Task, TasksModuleBundle } from "../model";
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const bucket = (id: string, over: Partial<Bucket> = {}): Bucket => ({
   id,
@@ -97,9 +97,11 @@ function fakeRuntime(tasks: Task[]) {
 
 async function mount(tasks: Task[]) {
   const fake = fakeRuntime(tasks);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: "u1",
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -115,7 +117,7 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
       task("child-b", { bucketId: "p1", parentId: "parent", status: "done" }),
       task("other", { bucketId: "p1" }),
     ]);
-    act(() => hook.result.current.patchTask("parent", { bucketId: "p2" }));
+    act(() => hook.result.current.commands.patchTask("parent", { bucketId: "p2" }));
     // Shown at once…
     expect(bucketOf(hook, "child-a")).toBe("p2");
     expect(bucketOf(hook, "child-b")).toBe("p2");
@@ -142,7 +144,7 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
       task("parent", { bucketId: "p1" }),
       task("child", { bucketId: "p2", parentId: "parent" }),
     ]);
-    act(() => hook.result.current.patchTask("parent", { bucketId: "p2" }));
+    act(() => hook.result.current.commands.patchTask("parent", { bucketId: "p2" }));
     await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
     expect(api.opUpdateTask.mock.calls[0][0].taskId).toBe("parent");
     expect(api.updateTask).not.toHaveBeenCalled();
@@ -154,7 +156,7 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
       task("child", { bucketId: "p1", parentId: "parent" }),
       task("locked-child", { bucketId: "p1", parentId: "parent" }),
     ]);
-    act(() => hook.result.current.patchTask("parent", { bucketId: "p2" }));
+    act(() => hook.result.current.commands.patchTask("parent", { bucketId: "p2" }));
     expect(bucketOf(hook, "locked-child")).toBe("p2");
     await waitFor(() => expect(api.opUpdateTask).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(bucketOf(hook, "locked-child")).toBe("p1"));
@@ -167,7 +169,7 @@ describe("moving a parent moves its subtasks (AC1.8)", () => {
       task("parent", { bucketId: "p1" }),
       task("child", { bucketId: "p1", parentId: "parent" }),
     ]);
-    act(() => hook.result.current.patchTask("parent", { title: "Renamed" }));
+    act(() => hook.result.current.commands.patchTask("parent", { title: "Renamed" }));
     await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
     expect(api.updateTask.mock.calls[0][0].taskId).toBe("parent");
   });
@@ -177,7 +179,7 @@ describe("scheduling is in the trail (AC1.12)", () => {
   it("setting a scheduled time goes through the reschedule op, once", async () => {
     const { api, hook } = await mount([task("t1")]);
     const at = new Date(2026, 9, 12, 15, 0).toISOString();
-    act(() => hook.result.current.patchTask("t1", { scheduledAt: at }));
+    act(() => hook.result.current.commands.patchTask("t1", { scheduledAt: at }));
     await waitFor(() => expect(api.opReschedule).toHaveBeenCalledTimes(1));
     expect(api.opReschedule).toHaveBeenCalledWith({
       workspaceId: "w1",
@@ -190,9 +192,9 @@ describe("scheduling is in the trail (AC1.12)", () => {
   it("clearing it goes through unschedule; setting the same time writes nothing", async () => {
     const at = new Date(2026, 9, 12, 15, 0).toISOString();
     const { api, hook } = await mount([task("t1", { scheduledAt: at })]);
-    act(() => hook.result.current.patchTask("t1", { scheduledAt: at }));
+    act(() => hook.result.current.commands.patchTask("t1", { scheduledAt: at }));
     expect(api.opReschedule).not.toHaveBeenCalled();
-    act(() => hook.result.current.patchTask("t1", { scheduledAt: null }));
+    act(() => hook.result.current.commands.patchTask("t1", { scheduledAt: null }));
     await waitFor(() => expect(api.opUnschedule).toHaveBeenCalledTimes(1));
     expect(api.updateTask).not.toHaveBeenCalled();
   });
@@ -200,7 +202,7 @@ describe("scheduling is in the trail (AC1.12)", () => {
   it("a due date stays a single field write", async () => {
     const { api, hook } = await mount([task("t1")]);
     const due = new Date(2026, 9, 16).toISOString();
-    act(() => hook.result.current.patchTask("t1", { dueDate: due }));
+    act(() => hook.result.current.commands.patchTask("t1", { dueDate: due }));
     await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
     expect(api.updateTask.mock.calls[0][0].patch).toEqual({ dueDate: due });
   });

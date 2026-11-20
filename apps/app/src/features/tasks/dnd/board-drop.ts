@@ -12,6 +12,7 @@
 // project (that stays a deliberate Move, call 85's research).
 
 import type { TaskWaitingKind } from "@contracts/vocabularies";
+
 import type { BoardTarget } from "../board-columns";
 import { statusNameKey } from "../board-columns";
 import type { ProjectStatus, Task } from "../model";

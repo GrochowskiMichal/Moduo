@@ -12,6 +12,7 @@ import type { WorkspaceRole } from "@contracts/vocabularies";
 import { CornerUpLeft, Loader2, MessageSquareText, MessagesSquare, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "@/components/app/create-events";
 import { FeaturePanelsShell } from "@/components/app/feature-panels-shell";
 import { type PanelItem, RightPanel, usePanelStack } from "@/components/app/right-panel";
@@ -31,14 +32,16 @@ import {
 } from "@/lib/statuses/model";
 import { usePeopleNow } from "@/lib/statuses/store";
 import { useTimeRegion } from "@/lib/time-region";
+
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import { publicConfig } from "../../../lib/public-config";
 import { catchupStoreFor } from "../catchup/catchup-store";
 import { useCatchupScreen } from "../catchup/catchup-view";
 import { LaterDialog } from "../catchup/later-dialog";
 import { laterHint } from "../catchup/later-times";
 import {
-  type ChainRights,
   chainGroups,
+  type ChainRights,
   chainsStamp,
   excerptOf,
   mayAttach,
@@ -55,7 +58,7 @@ import {
   makePrivateCopy,
   RecentlyDeletedDialog,
 } from "../dialogs/channel-dialogs";
-import { type MoveStep, MoveToDialog, moveTargets } from "../dialogs/move-dialog";
+import { type MoveStep, moveTargets, MoveToDialog } from "../dialogs/move-dialog";
 import { NewConversationDialog } from "../dialogs/new-conversation-dialog";
 import { CustomEmojiProvider } from "../emoji/context";
 import { useComposerFiles } from "../files/composer-files";
@@ -337,7 +340,7 @@ export function ChatScreen({
   );
   // A conversation's own Search: the find bar under its toolbar (frame 2 "find").
   const [finding, setFinding] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new conversation closes it
+  // A new conversation closes it.
   useEffect(() => setFinding(false), [conversationId]);
   const ordered = useMemo(() => sidebarOrder(model, collapsed), [model, collapsed]);
 
@@ -401,7 +404,7 @@ export function ChatScreen({
   const panelStack = usePanelStack<ChatPanelEntry>();
   const clearPanelItems = panelStack.clear;
   // Another conversation: its own panel, from its view (items belong to the last one).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- a switch of conversation is the trigger
   useEffect(() => clearPanelItems(), [conversationId]);
   const pushPanelItem = panelStack.push;
   const openInPanel = useCallback(
@@ -500,29 +503,28 @@ export function ChatScreen({
     [canStart],
   );
 
-  // ── keyboard ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!e.altKey || e.metaKey || e.ctrlKey) return;
-      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
-      if (document.querySelector("[role='dialog'], [role='menu']")) return;
-      const list = e.shiftKey
-        ? ordered.filter((r) => r.unread || r.channel.id === conversationId)
-        : ordered;
-      if (list.length === 0) return;
-      e.preventDefault();
-      const i = list.findIndex((r) => r.channel.id === conversationId);
-      const d = e.key === "ArrowDown" ? 1 : -1;
-      const next = list[(i + d + list.length) % list.length];
-      if (next) onOpen(next.channel.id);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [ordered, conversationId, onOpen]);
+  // ── keyboard: ⌥↑/⌥↓ walk the conversations, ⌥⇧ only the unread ones ─────
+  // Registry bindings in the "chat" scope (lib/hotkeys).
+  const walk = (dir: 1 | -1, unreadOnly: boolean) => () => {
+    if (document.querySelector("[role='dialog'], [role='menu']")) return false;
+    const list = unreadOnly
+      ? ordered.filter((r) => r.unread || r.channel.id === conversationId)
+      : ordered;
+    if (list.length === 0) return false;
+    const i = list.findIndex((r) => r.channel.id === conversationId);
+    const next = list[(i + dir + list.length) % list.length];
+    if (next) onOpen(next.channel.id);
+  };
+  useAppHotkeys({
+    "chat.prev": walk(-1, false),
+    "chat.next": walk(1, false),
+    "chat.prev-unread": walk(-1, true),
+    "chat.next-unread": walk(1, true),
+  });
 
   // ── writes ────────────────────────────────────────────────────────────────
   const [editingId, setEditingId] = useState<string | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setEditingId(null), [conversationId]);
 
   const streamRef = useRef<MessageStreamHandle | null>(null);
@@ -569,7 +571,7 @@ export function ChatScreen({
   // `@channel` from a role that may not mention everyone is sent as text; the
   // server decides (CV-2a) and the composer says so once the message is back.
   const [channelNote, setChannelNote] = useState<{ id: string; note: string | null } | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setChannelNote(null), [conversationId]);
   useEffect(() => {
     if (!channelNote || channelNote.note) return;
@@ -686,7 +688,7 @@ export function ChatScreen({
   const [moveFor, setMoveFor] = useState<ChatMessage[] | null>(null);
   const [moveStep, setMoveStep] = useState<MoveStep>({ step: "pick" });
   const [moveBusy, setMoveBusy] = useState(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setMoveFor(null), [conversationId]);
   const moveTargetsFor = useCallback(
     (query: string) =>
@@ -752,7 +754,7 @@ export function ChatScreen({
 
   // Reply (R, the toolbar): the main box answers a message ("Replying to …").
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a switch of conversation is the trigger
+  // A switch of conversation is the trigger.
   useEffect(() => setReplyingTo(null), [conversationId]);
 
   // Wrap up ("Which reply settled it?") and Reply to… (CV-12).
@@ -1629,6 +1631,7 @@ export function ChatScreen({
   ) : channel ? (
     <RightPanel
       module="chat"
+      viewKeysInFields
       views={{
         details: () => (
           <DetailsView

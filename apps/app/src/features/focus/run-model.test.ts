@@ -8,9 +8,9 @@ import { onThisLabel, runClaimsByTask } from "./claims";
 import { REST_SESSION } from "./engine-core";
 import {
   type FocusRun,
-  type FollowTask,
   focusRunRowToModel,
   followStep,
+  type FollowTask,
   READ_THROUGH_MAX_S,
   readRunClock,
   runClockForAdopt,

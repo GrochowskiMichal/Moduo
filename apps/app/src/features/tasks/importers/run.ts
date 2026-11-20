@@ -16,15 +16,16 @@
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
 import { taskStatusWord } from "@contracts/vocabularies";
+
 import { formatFullDate } from "../../../lib/time-format";
 import { positionsAfter } from "../helpers";
 import type { ProjectStatus, Section, Task } from "../model";
 import {
   categoryFromName,
   type ImportPlan,
+  personKey,
   type PlanComment,
   type PlanTask,
-  personKey,
   sourceLabel,
 } from "./plan";
 

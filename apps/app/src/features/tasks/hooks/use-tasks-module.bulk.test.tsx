@@ -5,7 +5,7 @@
 // three back.
 
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -27,7 +27,7 @@ const toastMock = rs.hoisted(() => {
 rs.mock("sonner", () => ({ toast: toastMock }));
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const bucket = (id: string, over: Partial<Bucket> = {}): Bucket => ({
   id,
@@ -189,9 +189,11 @@ async function mount(tasks: Task[], readOnly: string, opts: FakeOptions = {}) {
   toastMock.mockClear();
   toastMock.error.mockClear();
   const fake = fakeRuntime(tasks, readOnly, opts);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: "u1",
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -204,7 +206,7 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
     );
     let changed: string[] = [];
     await act(async () => {
-      changed = await hook.result.current.bulkWrite(
+      changed = await hook.result.current.commands.bulkWrite(
         ["a", "b", "c", "locked"].map((taskId) => ({ taskId, bucketId: "p2" })),
         { label: (n) => `Moved ${n} tasks to p2` },
       );
@@ -238,7 +240,7 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
   it("says the change alone when every task saved", async () => {
     const { hook } = await mount([task("a"), task("b")], "none");
     await act(async () => {
-      await hook.result.current.bulkWrite(
+      await hook.result.current.commands.bulkWrite(
         ["a", "b"].map((taskId) => ({ taskId, status: "done" as const })),
         { label: (n) => `Completed ${n} tasks` },
       );
@@ -252,7 +254,7 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
     const { hook, api, rows } = await mount([task("a", { scheduledAt: from })], "none");
     const followUp = rs.fn((_changed: readonly string[]) => null);
     await act(async () => {
-      await hook.result.current.bulkWrite([{ taskId: "a", scheduledAt: to }], {
+      await hook.result.current.commands.bulkWrite([{ taskId: "a", scheduledAt: to }], {
         label: () => "Moved to Fri",
         followUp,
       });
@@ -278,7 +280,7 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
     const alsoUndo = rs.fn();
     const due = new Date(2026, 9, 20).toISOString();
     await act(async () => {
-      await hook.result.current.bulkWrite([{ taskId: "b", dueDate: due }], {
+      await hook.result.current.commands.bulkWrite([{ taskId: "b", dueDate: due }], {
         label: () => "Also moved",
         alsoUndo,
       });
@@ -299,7 +301,7 @@ describe("bulkWrite — one write for a selection, one Undo (AC4.6, AC11.9)", ()
       "none",
     );
     await act(async () => {
-      await hook.result.current.bulkDelete(["parent", "sub", "other"]);
+      await hook.result.current.commands.bulkDelete(["parent", "sub", "other"]);
     });
     const call = toastMock.mock.calls.find((c) => c[0] === "Deleted 3 tasks");
     expect(call).toBeTruthy();
@@ -330,7 +332,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
     );
     await waitFor(() => expect(hook.result.current.queuedTaskIds.size).toBe(3));
     await act(async () => {
-      hook.result.current.bulkQueue(["a", "b", "c"]);
+      hook.result.current.commands.bulkQueue(["a", "b", "c"]);
       await wait(40);
     });
     expect(api.opQueueRemove).toHaveBeenCalledTimes(3);
@@ -345,7 +347,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
     const { hook, api } = await mount([task("a"), task("b")], "none", { queued: ["a", "b"] });
     await waitFor(() => expect(hook.result.current.queuedTaskIds.size).toBe(2));
     await act(async () => {
-      hook.result.current.bulkQueue(["a", "b"], { mode: "add" });
+      hook.result.current.commands.bulkQueue(["a", "b"], { mode: "add" });
       await wait(30);
     });
     expect(api.opQueueRemove).not.toHaveBeenCalled();
@@ -366,7 +368,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
       { relations: [relation] },
     );
     await act(async () => {
-      hook.result.current.bulkQueue(["a", "b"], { mode: "add" });
+      hook.result.current.commands.bulkQueue(["a", "b"], { mode: "add" });
       await wait(40);
     });
     expect(api.opQueueAdd).toHaveBeenCalledTimes(2);
@@ -382,7 +384,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
       refuseStatus: "b",
     });
     await act(async () => {
-      await hook.result.current.bulkWrite(
+      await hook.result.current.commands.bulkWrite(
         ["a", "b"].map((taskId) => ({ taskId, bucketId: "p2", status: "done" as const })),
         { label: (n) => `Moved ${n} tasks to p2` },
       );
@@ -411,7 +413,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
       { refuseRestore: "old" },
     );
     await act(async () => {
-      await hook.result.current.bulkDelete(["parent", "old"]);
+      await hook.result.current.commands.bulkDelete(["parent", "old"]);
     });
     // The server promoted the unselected subtask when its parent went.
     expect(rows.get("child")?.parentId).toBeNull();
@@ -434,7 +436,7 @@ describe("bulk follow-ups (TV-U13b)", () => {
   it("Undo of Waiting on keeps the entries it couldn't remove and takes the rest away", async () => {
     const { hook } = await mount([task("a"), task("b")], "none", { refuseWaitingRemove: "b" });
     await act(async () => {
-      await hook.result.current.bulkWaiting(
+      await hook.result.current.commands.bulkWaiting(
         ["a", "b"],
         { kind: "text", label: "the printer" },
         "the printer",

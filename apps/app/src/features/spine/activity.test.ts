@@ -141,6 +141,13 @@ describe("spineActivityLine", () => {
     );
     expect(spineActivityLine(entry("comments.add"))).toBe("left a comment");
     expect(spineActivityLine(entry("notes.agent_edit"))).toBe("edited this note");
+    // A note's own ops read as words in its Details panel, never "notes.import".
+    expect(spineActivityLine(entry("notes.import", { imported: 7, skipped: 0 }))).toBe(
+      "imported this note with 6 more",
+    );
+    expect(spineActivityLine(entry("notes.import", { imported: 1 }))).toBe("imported this note");
+    expect(spineActivityLine(entry("notes.publish"))).toBe("published this note");
+    expect(spineActivityLine(entry("notes.trash"))).toBe("deleted this note");
     // TV-U13: edits, deletes and their Undo read as words, never the op name.
     expect(spineActivityLine(entry("comments.edit", { excerpt: "now with @Mike" }))).toBe(
       "edited a comment: “now with @Mike”",
@@ -298,6 +305,24 @@ describe("spineActivityLine", () => {
 
   it("never lies by omission — unknown ops fall back to the op name", () => {
     expect(spineActivityLine(entry("links.future_op"))).toBe("links.future_op");
+  });
+});
+
+describe("connected apps (MCPO-3)", () => {
+  it("names the app's access, edit first, in the key card's module order", () => {
+    expect(spineActivityLine(entry("api_keys.connected", { scopes: { tasks: "view" } }))).toBe(
+      "connected to Moduo · View: Tasks",
+    );
+    expect(
+      spineActivityLine(
+        entry("api_keys.connected", {
+          scopes: { links: "view", tasks: "edit", notes: "view", chat: "none" },
+        }),
+      ),
+    ).toBe("connected to Moduo · Edit: Tasks · View: Notes, Links");
+    expect(spineActivityLine(entry("api_keys.connected", { scopes: { tasks: "none" } }))).toBe(
+      "connected to Moduo · no access",
+    );
   });
 });
 

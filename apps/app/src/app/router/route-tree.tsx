@@ -5,6 +5,7 @@ import {
   Outlet,
   redirect,
 } from "@tanstack/react-router";
+
 import { useFileDropGuard } from "../../features/attachments/hooks/use-file-drop-guard";
 import { validateCalendarSearch } from "../../features/calendar/search";
 import { validateChatSearch } from "../../features/chat/search";
@@ -13,20 +14,14 @@ import { validateEmailSearch } from "../../features/email/url-search";
 import { validateNotesSearch } from "../../features/notes/search";
 import { validateAuthSearch } from "../../features/settings/delete-account";
 import { validateTasksSearch } from "../../features/tasks/search";
+import { withHotkeyScope } from "../../lib/hotkeys";
 import { consumeLandingRedirect } from "../../lib/preferences";
 import { AuthProvider } from "../../providers/auth-provider";
 import { AppGate } from "../../routes/layouts/app-gate";
+// Only these three pages ship in the entry chunk. A heavy page (editors, XYFlow) loads via
+// `lazyRouteComponent` like /notes below; a heavy dep inside an eager page undoes the split.
 import { AuthPage } from "../../routes/pages/auth-page";
-import { BookCancelPage } from "../../routes/pages/book-cancel-page";
-import { BookPage } from "../../routes/pages/book-page";
-import { CalendarPage } from "../../routes/pages/calendar-page";
-import { ChatPage } from "../../routes/pages/chat-page";
-import { ContactsPage } from "../../routes/pages/contacts-page";
 import { HomePage } from "../../routes/pages/home-page";
-import { JoinPage } from "../../routes/pages/join-page";
-import { OnboardingPage } from "../../routes/pages/onboarding-page";
-import { PaywallPage } from "../../routes/pages/paywall-page";
-import { SettingsPage } from "../../routes/pages/settings-page";
 import { TasksPage } from "../../routes/pages/tasks-page";
 
 function RootLayout() {
@@ -74,13 +69,17 @@ const authRoute = createRoute({
 const onboardingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/onboarding",
-  component: preWorkspace(OnboardingPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/onboarding-page"), "OnboardingPage"),
+  ),
 });
 
 const paywallRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/paywall",
-  component: preWorkspace(PaywallPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/paywall-page"), "PaywallPage"),
+  ),
 });
 
 // Public, unauthenticated reader for a published note (NO-9b). Direct child of
@@ -101,17 +100,30 @@ const publishedNoteRoute = createRoute({
 const bookCancelRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/cancel",
-  component: preWorkspace(BookCancelPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-cancel-page"), "BookCancelPage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { token?: string } => {
     const token = typeof search.token === "string" && search.token ? search.token : undefined;
     return token ? { token } : {};
   },
 });
 
+// An offer's specific times (CALR-19): the same page, asking by the offer.
+const bookOfferRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/book/r/$slug",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-page"), "BookOfferPage"),
+  ),
+});
+
 const bookRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/book/$slug",
-  component: preWorkspace(BookPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/book-page"), "BookPage"),
+  ),
 });
 
 // Workspace invite accept surface (DF-24). Sibling of /auth, OUTSIDE the app
@@ -122,10 +134,30 @@ const bookRoute = createRoute({
 const joinRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/join",
-  component: preWorkspace(JoinPage),
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/join-page"), "JoinPage"),
+  ),
   validateSearch: (search: Record<string, unknown>): { invite?: string } => {
     const invite = typeof search.invite === "string" && search.invite ? search.invite : undefined;
     return invite ? { invite } : {};
+  },
+});
+
+// The consent screen an app's "Sign in with Moduo" lands on (MCPO-4,
+// specs/mcp-oauth.md). Outside the app gate like /join (Maciej OK'd the route,
+// 2026-10-22): Supabase Auth's OAuth server sends the browser here (its
+// authorization path in supabase/config.toml), signed in or not. Not in the
+// nav. `?authorization_id=` names the app's sign-in.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/oauth/consent",
+  component: preWorkspace(
+    lazyRouteComponent(() => import("../../routes/pages/oauth-consent-page"), "OAuthConsentPage"),
+  ),
+  validateSearch: (search: Record<string, unknown>): { authorization_id?: string } => {
+    // Auth puts it into a request path as it is: letters, digits, - and _ only.
+    const id = typeof search.authorization_id === "string" ? search.authorization_id.trim() : "";
+    return /^[A-Za-z0-9_-]{1,128}$/.test(id) ? { authorization_id: id } : {};
   },
 });
 
@@ -146,7 +178,7 @@ const homeRoute = createRoute({
     const target = consumeLandingRedirect(location.pathname, location.searchStr);
     if (target) throw redirect({ to: target, replace: true });
   },
-  component: HomePage,
+  component: withHotkeyScope("home", HomePage),
 });
 
 const legacyGridRoute = createRoute({
@@ -161,14 +193,17 @@ const legacyGridRoute = createRoute({
 const notesRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/notes",
-  component: lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
+  component: withHotkeyScope(
+    "notes",
+    lazyRouteComponent(() => import("../../routes/pages/notes-page"), "NotesPage"),
+  ),
   validateSearch: validateNotesSearch,
 });
 
 const tasksRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/tasks",
-  component: TasksPage,
+  component: withHotkeyScope("tasks", TasksPage),
   // URL-held task selection (?id=) — deep links + refresh keep it (DF-1).
   validateSearch: validateTasksSearch,
 });
@@ -178,7 +213,10 @@ const tasksRoute = createRoute({
 const calendarRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/calendar",
-  component: CalendarPage,
+  component: withHotkeyScope(
+    "calendar",
+    lazyRouteComponent(() => import("../../routes/pages/calendar-page"), "CalendarPage"),
+  ),
   // `?event=` deep link → navigate to the event's day + select + open detail (DF-2).
   validateSearch: validateCalendarSearch,
 });
@@ -192,7 +230,10 @@ const mindmapRoute = createRoute({
 const emailRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/email",
-  component: lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
+  component: withHotkeyScope(
+    "email",
+    lazyRouteComponent(() => import("../../routes/pages/email-page"), "EmailPage"),
+  ),
   // `?thread=` deep link → select + scroll the thread (desktop) / tissue card (web) (DF-2).
   validateSearch: validateEmailSearch,
 });
@@ -202,14 +243,20 @@ const emailRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/chat",
-  component: ChatPage,
+  component: withHotkeyScope(
+    "chat",
+    lazyRouteComponent(() => import("../../routes/pages/chat-page"), "ChatPage"),
+  ),
   validateSearch: validateChatSearch,
 });
 
 const contactsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/contacts",
-  component: ContactsPage,
+  component: withHotkeyScope(
+    "contacts",
+    lazyRouteComponent(() => import("../../routes/pages/contacts-page"), "ContactsPage"),
+  ),
   // URL-held selection + palette action (fix pack FX-1 AC1/AC2).
   validateSearch: validateContactsSearch,
 });
@@ -228,7 +275,7 @@ const legacyCrmRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => appGateRoute,
   path: "/settings",
-  component: SettingsPage,
+  component: lazyRouteComponent(() => import("../../routes/pages/settings-page"), "SettingsPage"),
 });
 
 export const routeTree = rootRoute.addChildren([
@@ -237,8 +284,10 @@ export const routeTree = rootRoute.addChildren([
   paywallRoute,
   publishedNoteRoute,
   bookCancelRoute,
+  bookOfferRoute,
   bookRoute,
   joinRoute,
+  oauthConsentRoute,
   appGateRoute.addChildren([
     homeRoute,
     legacyGridRoute,

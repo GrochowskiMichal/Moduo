@@ -10,19 +10,19 @@ import {
   copyName,
   daysBetween,
   offsetLabel,
-  type ProjectTemplateBody,
   patchTemplateSection,
   patchTemplateTask,
+  type ProjectTemplateBody,
   removeTemplateSection,
   removeTemplateTask,
   renameTemplateStatus,
   shiftDay,
   type TaskTemplateBody,
-  type TemplateTask,
   templateBodyOf,
   templateFromRow,
   templateOutline,
   templateSize,
+  type TemplateTask,
 } from "./model";
 
 const task = (

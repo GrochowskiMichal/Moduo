@@ -3,6 +3,7 @@
 // permission lane (not Tasks), conforming to ModuleManifest.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { moduleManifests } from "../../lib/module-registry";
 import { emailModuleManifest } from "./ops-manifest";
 

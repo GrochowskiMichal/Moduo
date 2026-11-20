@@ -1,0 +1,21 @@
+{
+  "id": "645-notes-reset",
+  "title": "A failed notes DB open reads as nothing unsynced to the Reset guard",
+  "source": {
+    "pr": 645,
+    "escape": "645-3-error-as-empty"
+  },
+  "base": "adddc0de3099e0524aa2ee6ab56a9e19d10e5a4c",
+  "fix": "fd2ac715c706763af7e76c11a8d2dcfa7ae0a7e3",
+  "prompt": "Bug: Settings → Advanced → Reset local cache is meant to stay blocked while Notes has edits waiting to sync. It asks `countPendingOutbox` in apps/app/src/features/notes/sync/idb.ts, which returns 0 when the notes database fails to open, so the reset is allowed and the unsynced edits are wiped. `countPendingOutbox` must return the string \"unknown\" when the database or its stores can't be read (0 only when the device has no IndexedDB at all), and the Reset guard must stay blocked on \"unknown\". Fix it and add a regression test. Don't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": ["apps/app/src/features/notes/sync/idb-pending.test.ts"],
+    "checks": [
+      {
+        "name": "a failed open is unknown",
+        "run": "bun run --cwd apps/app test src/features/notes/sync/idb-pending.test.ts"
+      }
+    ]
+  }
+}

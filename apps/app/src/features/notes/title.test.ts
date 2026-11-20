@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { displayTitle, firstLineTitle, TITLE_MAX_LENGTH } from "./title";
 
 describe("firstLineTitle (AC1)", () => {

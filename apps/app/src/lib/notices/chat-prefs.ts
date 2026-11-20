@@ -7,7 +7,7 @@
 // "Show me as online"; a change in one tab tells the person's other tabs.
 // A sign-out forgets it.
 
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 
 export type ChatServerPrefs = {
   noticeShowText: boolean;

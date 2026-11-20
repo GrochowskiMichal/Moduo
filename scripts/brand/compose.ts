@@ -168,7 +168,7 @@ function viewBoxText(m: Master): string {
 
 /**
  * The generated TS module the ModuoMark component renders from. Its output is
- * already Biome-formatted (the drift test compares it byte for byte). The
+ * already formatted the way `bun fmt` prints it (the drift test compares it byte for byte). The
  * small drawing falls back to the standard mark until mark-small.svg exists.
  */
 export function markModule(mark: Master, small: Master | null): string {

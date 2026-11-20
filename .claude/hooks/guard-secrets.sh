@@ -2,6 +2,7 @@
 # PreToolUse (Bash; filters itself to `git commit`): block commits whose staged changes contain a
 # secret. AGENTS.md rule 2. Needs gitleaks 8.19+ (brew install gitleaks); without
 # it the hook warns and lets the commit through, and CI still scans the push.
+command -v jq >/dev/null 2>&1 || { echo "guard-secrets.sh: jq is missing (brew install jq)." >&2; exit 1; }
 cmd=$(jq -r '.tool_input.command // ""' 2>/dev/null)
 case "$cmd" in *"git commit"*) ;; *) exit 0 ;; esac
 

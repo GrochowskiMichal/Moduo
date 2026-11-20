@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { createHeadlessEditor } from "@lexical/headless";
 import { describe, expect, it } from "@rstest/core";
 import {
@@ -9,6 +10,7 @@ import {
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
 } from "lexical";
+
 import { registerMenuKeys, stepMenuIndex } from "./menu-keys";
 
 const key = () => new KeyboardEvent("keydown");

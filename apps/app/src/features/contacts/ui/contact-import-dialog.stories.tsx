@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
+
 import type { ContactImportResult } from "../import";
 import type { Company, Contact } from "../model";
 import { ContactImportDialog, type ImportDialogSeed } from "./contact-import-dialog";

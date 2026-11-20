@@ -30,6 +30,8 @@ jobs:
     permissions:
       contents: read
       actions: write
+    # inherit is required for the called jobs to see their environment's secrets (an explicit
+    # list leaves them empty); the sensitive ones live only in those environments.
     secrets: inherit
     with:
       channel: staging

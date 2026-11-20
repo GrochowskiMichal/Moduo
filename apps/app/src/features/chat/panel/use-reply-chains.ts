@@ -5,6 +5,7 @@
 // a live wrap-up or a new reply shows without another read.
 
 import { useEffect, useState } from "react";
+
 import type { ChatMessage, ChatRuntime } from "../model";
 
 export function useReplyChains(
@@ -18,7 +19,7 @@ export function useReplyChains(
     roots: null,
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `refresh` is the re-read trigger
+  // `refresh` is the re-read trigger.
   useEffect(() => {
     if (!chat || !channelId) return;
     let live = true;

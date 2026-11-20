@@ -2,7 +2,9 @@ import { Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { ChevronsLeft, ChevronsRight, Pencil, Plus } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { useUploadQueueBoot } from "@/features/attachments/hooks/use-attachments";
+
 import { ensureProfileAvatar } from "../../features/branding/profile-avatar";
 import { useChatTab } from "../../features/chat/shell/chat-tab";
 import {
@@ -14,7 +16,9 @@ import {
   dispatchDashboardToggleEdit,
 } from "../../features/dashboard/edit-mode-events";
 import { PageDots } from "../../features/dashboard/ui/page-dots";
+import { MailEngineProvider } from "../../features/email/engine/mail-engine-provider";
 import { EmailDueWebSweep } from "../../features/email/hooks/use-email-due-web-sweep";
+import { useMailBadge } from "../../features/email/store/use-mail-store";
 import { FocusRunFollower } from "../../features/focus/focus-run-follower";
 import { useFocusTimeSaver } from "../../features/focus/use-focus-time-saver";
 import {
@@ -29,15 +33,25 @@ import {
 import { PROFILE_UPDATED_EVENT } from "../../features/profile/profile-storage";
 import { dispatchOpenSettings, isSettingsSectionId } from "../../features/settings/settings-events";
 import { SettingsModal } from "../../features/settings/settings-modal";
+import { SoundspaceNowPlayingChip } from "../../features/soundspace/ui/now-playing-chip";
 import { ReferencesProvider } from "../../features/spine/references/provider";
 import { requestTasksWelcome } from "../../features/tasks/welcome-request";
 import { UpdateOnLaunch } from "../../features/updater/update-on-launch";
-import { ENTITY_OPEN_EVENT, entityOpenTarget, markEntityOpenIntent } from "../../lib/entity-open";
+import { WhatsNewOnLaunch } from "../../features/whats-new/whats-new-on-launch";
+import {
+  ENTITY_OPEN_EVENT,
+  entityOpenTarget,
+  markEntityOpenHighlight,
+  markEntityOpenIntent,
+  recordEntityOpen,
+  recordLocationOpen,
+} from "../../lib/entity-open";
+import { useAppHotkeys } from "../../lib/hotkeys";
 import { initialsOf } from "../../lib/initials";
 import {
   formatShortcut,
-  SHORTCUTS,
   type ShortcutId,
+  SHORTCUTS,
   useGlobalShortcuts,
   useShortcut,
 } from "../../lib/shortcuts";
@@ -63,6 +77,7 @@ import { GlobalShortcutsDialog } from "./global-shortcuts-dialog";
 import { HelpMenu } from "./help-menu";
 import { MinBuildBanner } from "./min-build-banner";
 import { NoticeDeliveries } from "./notice-deliveries";
+import { SkipLink } from "./skip-link";
 import { StatusMenu } from "./status-menu";
 import { TasksSyncStatus } from "./sync-status";
 import { TimeRegionPrompt } from "./time-region-prompt";
@@ -132,6 +147,17 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   useLayoutEffect(() => {
     workspaceNav.current = { selectedWorkspaceId, workspaces, selectWorkspace };
   });
+  // An item picked inside its module (Notes sidebar, Tasks list, …) is your
+  // open of it too (GS-8): every module mirrors its selection into the URL.
+  const locationSearch = useRouterState({ select: (state) => state.location.search });
+  useEffect(() => {
+    recordLocationOpen(
+      runtime?.spine,
+      selectedWorkspaceId,
+      pathname,
+      locationSearch as Record<string, unknown>,
+    );
+  }, [runtime, selectedWorkspaceId, pathname, locationSearch]);
   // Chat tab: its count, whether it shows, and app-wide presence (you show as
   // online anywhere in Moduo). It reads the chat store (CV-8a).
   const chatMemberCount = members.filter((m) => m.isActive && !m.removedAt).length;
@@ -164,6 +190,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
   const [avatarDataUrl, setAvatarDataUrl] = useState<string | null>(null);
   // Email unread badge (AC3): the Email page broadcasts its count on change.
   const [emailUnread, setEmailUnread] = useState(0);
+  const mailBadge = useMailBadge();
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -209,38 +236,16 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     }
   }, [isHomeRoute]);
 
-  useEffect(() => {
-    if (!runtime || typeof window === "undefined") return;
-
-    const isMac =
-      typeof navigator !== "undefined" &&
-      (navigator.platform?.toLowerCase().includes("mac") ||
-        navigator.userAgent?.toLowerCase().includes("mac os"));
-
-    const isEditableTarget = (target: EventTarget | null) => {
-      const el = target as HTMLElement | null;
-      if (!el) return false;
-      if ((el as HTMLElement & { isContentEditable?: boolean }).isContentEditable) return true;
-      const tag = el.tagName?.toLowerCase();
-      return tag === "input" || tag === "textarea" || tag === "select";
-    };
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) return;
-      if (isEditableTarget(event.target)) return;
-
-      const key = event.key.toLowerCase();
-      const shouldToggle =
-        (isMac && event.metaKey && event.ctrlKey && key === "f") || (!isMac && key === "f11");
-
-      if (!shouldToggle) return;
-      event.preventDefault();
-      void runtime.window.toggleFullscreen();
-    };
-
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [runtime]);
+  // ⌃⌘F on a Mac, F11 elsewhere (registry: `fullscreen`). Not from fields.
+  useAppHotkeys(
+    {
+      fullscreen: () => {
+        if (!runtime) return false;
+        void runtime.window.toggleFullscreen();
+      },
+    },
+    { enabled: !!runtime },
+  );
 
   // The host listener for the spine's deep-link event (FX-1 AC1). Every linked
   // row, entity-ref chip, and dashboard widget dispatches `moduo:entity:open`;
@@ -258,6 +263,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           /** A chat notice's message and chain (CV-3). */
           messageId?: string;
           chainId?: string;
+          /** The search that found a note: it lands on the match (GS-10). */
+          query?: string;
         }>
       ).detail;
       // A dashboard widget header opens its whole module with an explicit route
@@ -294,7 +301,10 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       const target = entityOpenTarget(detail.type, detail.id ?? "", {
         messageId: detail.messageId,
         chainId: detail.chainId,
+        query: detail.query,
       });
+      // Your open of an item, for ⌘K's Recent and the personal ranking (GS-8).
+      recordEntityOpen(runtime?.spine, workspaceNav.current.selectedWorkspaceId, detail);
       if (!target) {
         toast("Nothing to open yet", {
           description: `There's no page for "${detail.type}" yet.`,
@@ -305,6 +315,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
         // Mark the navigation as an external "take me there" so the target
         // page can distinguish it from its own mirrored id (refresh/back).
         if (target.intentId) markEntityOpenIntent(target.intentId);
+        // A note found by its body lands on the match; any other open drops a
+        // match still waiting to land (GS-10).
+        if (target.intentId) markEntityOpenHighlight(target.intentId, target.highlight ?? "");
         void navigate({ to: target.to, search: target.search as any });
       } else {
         void navigate({ to: target.to });
@@ -312,7 +325,7 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
     };
     window.addEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
     return () => window.removeEventListener(ENTITY_OPEN_EVENT, onEntityOpen);
-  }, [navigate]);
+  }, [navigate, runtime]);
 
   const chatTabShows = chatBadge.shows;
   const modulesNavItems = useMemo(
@@ -400,51 +413,6 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       right: currentPanels.right,
     });
   }, [currentFeature, currentPanels.left, currentPanels.right]);
-
-  useEffect(() => {
-    if (!runtime || typeof document === "undefined") return;
-    if (!isEmailRoute) return;
-    const publishActivity = async () => {
-      // Email workspace publishes account/folder-specific foreground state.
-      // Outside of /email we avoid background email signals to prevent secret access.
-      if (document.visibilityState !== "hidden") return;
-      const mode = "appBackground";
-      try {
-        await runtime.email.setActivityState({
-          mode,
-          activeAccountId: null,
-          activeFolder: null,
-        });
-      } catch {
-        // best-effort signal only
-      }
-    };
-
-    void publishActivity();
-    const onVisibilityChange = () => {
-      void publishActivity();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [isEmailRoute, runtime]);
-
-  useEffect(() => {
-    if (!runtime || typeof document === "undefined" || typeof window === "undefined") return;
-    if (!isEmailRoute) return;
-    // Desktop-only: `email.syncNow` is a Tauri command that rejects on web — don't
-    // arm the interval there (it would throw an unhandled rejection every tick).
-    if (!("__TAURI_INTERNALS__" in window)) return;
-    const timer = window.setInterval(
-      () => {
-        if (document.visibilityState === "hidden") return;
-        void runtime.email.syncNow({ folder: "inbox" }).catch(() => {});
-      },
-      5 * 60 * 1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [isEmailRoute, runtime]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -547,6 +515,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
       {/* Clipped, never a scroll container (MOD-161): focus or a scroll to
           something off screen can't shift the app sideways. */}
       <div className="flex h-screen min-h-screen flex-col overflow-clip bg-background">
+        {/* First focusable on a route that has one (specs/mail-improve.md AC26). */}
+        <SkipLink pathname={pathname} />
         <TrialBanner />
         <MinBuildBanner />
         <nav
@@ -578,7 +548,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                   onClick={() => void navigate({ to: tab.href })}
                   badgeCount={
                     tab.module === "email"
-                      ? emailUnread
+                      ? mailBadge.live
+                        ? mailBadge.count
+                        : emailUnread
                       : tab.module === "chat"
                         ? chatBadge.count
                         : 0
@@ -592,7 +564,11 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
           <div className="@container flex flex-row items-center justify-end gap-1">
             {/* DF-21f — web-only email follow-up-due sweep (renders nothing). */}
             <EmailDueWebSweep />
+            {/* MR-8 — the desktop mail engine, app-wide (renders nothing). */}
+            <MailEngineProvider />
             <UpdateOnLaunch />
+            {/* "Updated to X · See what's new" once, and the What's new dialog (REL-4). */}
+            <WhatsNewOnLaunch />
             {/* The shared Tasks store for this workspace, held all session, and its
                 quiet sync state: Offline / "2 waiting to sync" (TV-D11a). */}
             <TasksSyncStatus />
@@ -600,6 +576,8 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
                 renders nothing). */}
             <FocusRunFollower />
             {/* Global, so top bar (call 96): the running Focus timer, then Help. */}
+            {/* A playing Soundspace (Home widget), pausable from any module. */}
+            <SoundspaceNowPlayingChip />
             <FocusSessionChip />
             <HelpMenu
               onWhatsInTasks={

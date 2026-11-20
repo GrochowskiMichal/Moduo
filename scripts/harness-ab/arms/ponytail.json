@@ -1,0 +1,8 @@
+{
+  "id": "ponytail",
+  "description": "Control with the Ponytail plugin on (DietrichGebert/ponytail, still Claude). Install it once at user scope, disabled; only this arm enables it.",
+  "experiment": { "name": "ponytail", "baseline": "control" },
+  "model": "opus",
+  "effort": "high",
+  "settings": { "enabledPlugins": { "ponytail@ponytail": true } }
+}

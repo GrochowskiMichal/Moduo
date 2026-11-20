@@ -12,10 +12,6 @@ rs.mock("./widget-frame", () => ({
     <div data-testid={`widget-${widget.id}`}>body</div>
   ),
 }));
-// jsdom has no matchMedia; the grid's FLIP timing is beside the point here.
-rs.mock("../motion", () => ({
-  useGridMotion: () => ({ duration: 0, ease: [0, 0, 1, 1] }),
-}));
 
 import type { DashboardLayout } from "../engine/types";
 import { DashboardPager } from "./dashboard-pager";

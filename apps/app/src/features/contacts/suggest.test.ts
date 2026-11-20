@@ -2,6 +2,7 @@
 // (origin='suggest'); declining records the pair for the spine to remember.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityRef } from "../../lib/entity-links";
 import type { LinkSuggestion } from "../spine/suggest";
 import { contactDeclineArgs, contactSuggestLinkArgs } from "./suggest-link";

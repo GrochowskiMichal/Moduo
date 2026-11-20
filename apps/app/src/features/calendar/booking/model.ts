@@ -68,6 +68,9 @@ export function questionsFromJson(raw: unknown): GuestQuestion[] {
  */
 export const TASKS_BUSY_ID = "tasks";
 
+/** The busy list's pseudo-calendar for focus time (CALR-14): off by default, so guests can book over focus time unless a link ticks it. */
+export const FOCUS_BUSY_ID = "focus";
+
 /** A new link's busy list: Moduo's calendar and your work sessions. */
 export const DEFAULT_BUSY_IDS: readonly string[] = ["moduo", TASKS_BUSY_ID];
 

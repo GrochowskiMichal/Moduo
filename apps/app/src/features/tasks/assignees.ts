@@ -4,7 +4,7 @@
 
 import { useMemo } from "react";
 
-import { supabaseClient } from "../../lib/runtime.web";
+import { supabaseClient } from "../../lib/runtime.web.client";
 import { pickerSuffix } from "../../lib/statuses/model";
 import { usePeopleNow } from "../../lib/statuses/store";
 import { useAuth } from "../../providers/auth-provider";

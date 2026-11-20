@@ -1,9 +1,10 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note } from "./model";
 import {
   buildPublishTree,
   isPublished,
-  publishedChildCount,
+  selectPublishCandidates,
   selectPublishSubtree,
 } from "./publish";
 
@@ -15,7 +16,6 @@ function note(p: Partial<Note> & { id: string }): Note {
     parentId: p.parentId ?? null,
     title: p.title ?? p.id,
     icon: null,
-    isPinned: false,
     position: p.position ?? p.id,
     isArchived: p.isArchived ?? false,
     publishedAt: p.publishedAt ?? null,
@@ -24,7 +24,8 @@ function note(p: Partial<Note> & { id: string }): Note {
     createdAt: "2026-07-04T00:00:00Z",
     updatedAt: "2026-07-04T00:00:00Z",
     deletedAt: p.deletedAt ?? null,
-    shareMode: p.shareMode ?? "custom",
+    // A new sub-note inherits its parent's sharing (the insert trigger and the app).
+    shareMode: p.shareMode ?? (p.parentId ? "inherit" : "custom"),
     workspaceShared: p.workspaceShared ?? false,
     inInbox: p.inInbox ?? null,
     fullWidth: p.fullWidth ?? false,
@@ -43,7 +44,18 @@ describe("publish — subtree selection (AC10)", () => {
     ];
     const ids = selectPublishSubtree("root", notes).map((n) => n.id);
     expect(ids).toEqual(["root", "c1", "g1", "c2"]);
-    expect(publishedChildCount("root", notes)).toBe(3);
+    expect(selectPublishSubtree("root", notes)).toHaveLength(4);
+  });
+
+  it("excludes a sub-note with its own sharing, and what is below it, from the parent's link", () => {
+    const notes = [
+      note({ id: "root", ...published }),
+      note({ id: "open", parentId: "root", position: "a" }),
+      note({ id: "private", parentId: "root", position: "b", shareMode: "custom" }),
+      note({ id: "under-private", parentId: "private", position: "a" }),
+    ];
+    expect(selectPublishSubtree("root", notes).map((n) => n.id)).toEqual(["root", "open"]);
+    expect(buildPublishTree("root", notes)?.children.map((c) => c.note.id)).toEqual(["open"]);
   });
 
   it("excludes a trashed child from the public subtree", () => {
@@ -75,7 +87,6 @@ describe("publish — subtree selection (AC10)", () => {
       note({ id: "c1", parentId: "root" }),
     ];
     expect(selectPublishSubtree("root", revoked)).toEqual([]);
-    expect(publishedChildCount("root", revoked)).toBe(0);
     expect(buildPublishTree("root", revoked)).toBeNull();
   });
 
@@ -110,5 +121,25 @@ describe("publish — subtree selection (AC10)", () => {
       note({ id: "loop", parentId: "loop", position: "a" }),
     ];
     expect(() => selectPublishSubtree("root", notes)).not.toThrow();
+  });
+});
+
+describe("publish — what publishing would expose", () => {
+  it("names the sub-pages an unpublished note would take onto its link", () => {
+    const notes = [
+      note({ id: "root" }),
+      note({ id: "c1", parentId: "root", position: "a" }),
+      note({ id: "private", parentId: "root", position: "b", shareMode: "custom" }),
+      note({ id: "gone", parentId: "root", position: "c", deletedAt: "2026-07-05T00:00:00Z" }),
+    ];
+    expect(selectPublishSubtree("root", notes)).toEqual([]);
+    expect(selectPublishCandidates("root", notes).map((n) => n.id)).toEqual(["root", "c1"]);
+  });
+
+  it("has nothing to expose for a trashed or archived note", () => {
+    expect(selectPublishCandidates("root", [note({ id: "root", isArchived: true })])).toEqual([]);
+    expect(
+      selectPublishCandidates("root", [note({ id: "root", deletedAt: "2026-07-05T00:00:00Z" })]),
+    ).toEqual([]);
   });
 });

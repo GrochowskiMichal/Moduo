@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from "react";
 
-import { supabaseClient } from "@/lib/runtime.web";
+import { supabaseClient } from "@/lib/runtime.web.client";
 
 export const HELD_REFRESH_MS = 30_000;
 

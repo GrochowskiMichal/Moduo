@@ -127,13 +127,13 @@ export function useReferences(
     ZERO,
   );
   const keys = refs.map(referenceKey).sort().join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `keys` is the identity of `refs`
   useEffect(() => {
     if (!store || refs.length === 0) return;
     const releases = refs.map((ref) => store.want(ref, "chip"));
     return () => {
       for (const release of releases) release();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `keys` is the identity of `refs`
   }, [store, keys]);
   // The reader uses `version`, so it changes with every answer (the React
   // Compiler memoises on what a function reads, not on a deps list).

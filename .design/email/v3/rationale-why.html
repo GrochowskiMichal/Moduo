@@ -1,0 +1,113 @@
+<script>
+window.WHY_HTML = `
+<p class="lede">Mail, rethought: version 3. Version 2 matched the rebuilt module's screens. This one matches its engine: the local store, the action and send outboxes, per-account sync, the classifier, the settings that sync per row. Every state the engine can be in now has a screen, and every promise a screen makes is one the engine keeps.</p>
+
+<h2>Version 3: built on the engine</h2>
+<p>Read from the code on the personal branch after the mail rebuild (the spec, decisions MR-0 to MR-16 and the engine, store and compose code). Each card says what the engine does and how the prototype shows it. Pick the state named in brackets from the state menu.</p>
+<ul class="hole-list">
+  <li><span class="pill need">engine</span><div><b>Each account is its own worker, so each gets its own status.</b> The account row's status button opens a card: Up to date, Syncing…, Offline, Can't sync, or Needs you to sign in again. It says whether new mail arrives instantly or every minute (servers without push are polled). It shows history depth and storage on this Mac, mail and attachments apart against the 2 GB cap. For Google sign-in it shows the honest 7-day re-approval line. <i>(Account status: live · Lumen needs you to sign in again)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Outbox is real.</b> Offline, Send queues the message on this Mac. Outbox appears in the rail only while something waits. A row reads "Waiting for connection", and Edit pulls the message back into Drafts. Today the build hard-wires Outbox to zero, so nothing you send offline is visible. <i>(Offline: Outbox)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>A failed send comes back to Drafts with its reason.</b> The engine returns a refused or timed-out message to Drafts. The thread says "Not sent: Hale &amp; Co's server refused marco.reyes@pixelforge.cp (no such domain)" with Fix and send, and the row carries "Not sent". <i>(A send that failed)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Drafts save in two steps, and the composer says which.</b> Every keystroke saves on this Mac. The server's Drafts folder gets it 2 s after you stop typing. The footer reads "Saved on this Mac", then "Saved to Drafts on Hale &amp; Co". Offline it reads "reaches Drafts when you're online".</div></li>
+  <li><span class="pill need">engine</span><div><b>Bodies have states.</b> Older mail keeps only its headers and first lines on this Mac until you open it. Opening it shows those first lines at once and "Downloading the rest of this message…". Offline it says "Available when you're back online", and attachments say "when online". <i>(Offline: an older message · Opening older mail)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>The classifier explains itself.</b> The engine sorts in a fixed order: blocked, your rules, your choice per sender, custom tabs, contacts, mailing-list headers. "Why here?" on any automated sender shows that order with the step that decided it. Below it sit "Always put {sender} in" and Make a rule or Edit the rule. Trusting the auto-sort is what makes a split inbox usable. <i>(Why is this in Notifications · Why here: a rule)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Rules from the thread, not only from Settings.</b> The same rule shape Settings stores: When From/Domain, Then put in tab, label, mark read. Also apply to the conversations already on this Mac (the engine can; the build has no command for it yet). The first match decides; additive actions all apply. <i>(Make a rule from a sender)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Custom tabs show up.</b> Settings defines up to three. The build never passes them to the tab bar, so they're invisible. Here "Investors" sits beside Personal. Tabs that don't fit fold into "+N" with their unread counts; the selected tab never folds. <i>(A custom tab: Investors)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Snoozes return only while Moduo runs, and the app says so.</b> At launch: "3 emails came back while you were away", with those threads marked Back at the top. A reply on a snoozed thread brings it back marked "New reply". <i>(Launch after a weekend)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Compose power the engine already has:</b> send-as aliases, each with its signature ("Signs Robin Hale · Hale &amp; Co · default"), <span class="kbd">;;</span> snippets with {first name} filled from To, and the size limit (Gmail 25 MB, iCloud 20 MB) caught before Send with the big file marked. The instant intro: "Move Priya to Bcc" adds "Thanks Priya (moving you to Bcc)." <i>(Compose states)</i></div></li>
+  <li><span class="pill need">engine</span><div><b>Mute and Report spam</b> are engine actions with no key or menu in the build; they're in the ⋯ menu here.</div></li>
+  <li><span class="pill need">engine</span><div><b>Failed actions name what failed,</b> and the line says the engine keeps retrying for a day before giving up. Put back shows them as the server has them.</div></li>
+  <li><span class="pill need">engine</span><div><b>No pop-out windows.</b> The spec has New message take the reader pane; the composer's "Open in a window" button is gone.</div></li>
+  <li><span class="pill need">honest</span><div><b>The web view promises only what web has.</b> Snoozes and follow-ups live in the Mac's local store and never reach the cloud. Today's web page says they show there; they can't. Web now shows only the conversations you linked to a task, note or event, each with "Continue on Mac". <i>(On the web)</i></div></li>
+  <li><span class="pill need">tokens</span><div><b>Identity colours are house tokens.</b> Avatars and account dots use the eight <code>[data-label]</code> hues and the DS-6 avatar strength (<code>--label-fill</code>) from tokens.css, not values of their own. This closes version 2's open token question with no token addition.</div></li>
+</ul>
+
+<h2>The idea</h2>
+<dl class="card-grid">
+  <div class="k-card"><dt>Idea</dt><dd>Your inbox is a queue of decisions. Every thread says what it is to you, and one key turns it into work that stays linked to the person, the thread and your day.</dd></div>
+  <div class="k-card"><dt>Core loop</dt><dd><span class="kbd">j</span> <span class="kbd">k</span> walk the tab and the reader follows. One key decides: <span class="kbd">e</span> Done · <span class="kbd">s</span> Snooze · <span class="kbd">t</span> Task · <span class="kbd">l</span> Link · <span class="kbd">n</span> Note · <span class="kbd">r</span> Reply. The next thread opens. <span class="kbd">[</span> <span class="kbd">]</span> to the next tab. Inbox zero, quietly.</dd></div>
+  <div class="k-card"><dt>Signature: the state line</dt><dd>Under the subject, one line says where the thread stands, written by the keys: Waiting for Jonas's reply · reminds Thu · Task: Confirm the pilot week · Private note · Returns Fri 9:00 · Done Mon, in Archive. Each chip opens the thing. The row carries the same marks as small glyphs.</dd></div>
+  <div class="k-card"><dt>Your day beside your mail</dt><dd>The Today column (shipped) holds the agenda and what's due. Drag a thread onto it to do it today; "Create event from this email" makes the meeting without leaving the thread.</dd></div>
+  <div class="k-card"><dt>Motion verb</dt><dd>Advance. A decided thread leaves and the next one is open; the hint line under the list says what happened and which key undoes it; nothing animates on a key press.</dd></div>
+  <div class="k-card"><dt>100th use</dt><dd>Three-line rows with a hairline between them; tabs that count only unread; nudges for follow-ups that came due at the top of Personal; a quiet hint line instead of toasts for triage.</dd></div>
+</dl>
+
+<h2>Matches the shipped module</h2>
+<p>These follow the rebuilt module as it is on the personal branch after the mail rebuild, so building this prototype is a polish pass, not a rewrite.</p>
+<ul class="hole-list">
+  <li><span class="pill ok">same</span><div><b>Rail:</b> Inbox · Sent · Drafts · Archive · Trash · Spam, Outbox only when something waits; Snoozed · Follow-ups · New senders (Screener on) · Subscriptions · Attachments; Saved searches; each account with its hue dot, unread count, a warning glyph and a collapsed folder tree; "Syncing history · 40%" with Cancel; Connect account at the bottom.</div></li>
+  <li><span class="pill ok">same</span><div><b>Split-inbox tabs:</b> Personal · up to 3 custom tabs · Notifications · Newsletters with unread counts, <span class="kbd">[</span> <span class="kbd">]</span> to switch, and the ⋯ menu "Get me to zero" with "Done everything older than a day / week / month".</div></li>
+  <li><span class="pill ok">same</span><div><b>Search is the global ⌘K only:</b> Mail has no search field of its own. ⌘K (and the search button in the bottom bar) searches everything; <span class="kbd">/</span> opens the same ⌘K already scoped to the Email chip; operators from: to: subject: has:attachment is:unread is:pinned in:; "Search older mail on {account}"; "Save this search to Mail".</div></li>
+  <li><span class="pill ok">same</span><div><b>Rows:</b> avatar, sender, message count, Priority star, pin, attachment, invite, snoozed glyphs, time, subject, two-line snippet; hover shows Done · Snooze · More.</div></li>
+  <li><span class="pill ok">same</span><div><b>Reader:</b> newest and unread messages open, quoted text behind "Show quoted text", "N trackers blocked" with Load images, Show original, the attachment strip, the invite card with Accept · Maybe · Decline and "Add to Moduo calendar", the unsubscribe bar, "Mail with {sender}".</div></li>
+  <li><span class="pill ok">same</span><div><b>Status lines:</b> "Offline, changes will sync"; "{address} needs you to sign in again" with Reconnect; "Couldn't sync N actions" with Discard and Retry; "No reply from {name} in N days" with Dismiss.</div></li>
+  <li><span class="pill ok">same</span><div><b>Compose:</b> From alias, "Remind me if no reply in" Never · 1 day · 3 days · 1 week · 2 weeks, <span class="kbd">⌘↩</span> sends, Esc keeps the draft, <span class="kbd">;;</span> snippets, "Sending…" with Undo and Edit, sending from the inbox marks it Done.</div></li>
+  <li><span class="pill ok">same</span><div><b>Keys:</b> the shipped registry, j k e p # m s t r a f c u l n x ⇧J ⇧K ⌘A z [ ] Esc ? /, and the legend titled "Mail keys", "Triage without the mouse."</div></li>
+  <li><span class="pill ok">same</span><div><b>Triage gives no toast;</b> <span class="kbd">z</span> undoes. Pointer users get the shipped "Next time press E" hint. Snooze presets include Someday.</div></li>
+</ul>
+
+<h2>Beyond today's build, and why</h2>
+<p>Each change answers a finding from the blind critics who scored the rebuilt module (6.0 on every category), or a part of the spec the build hasn't reached yet.</p>
+<ul class="hole-list">
+  <li><span class="pill need">new</span><div><b>New message at the top of the rail.</b> Critics: "No visible Compose" (sev 3). Search stays in the global ⌘K, reachable from the bottom bar's search button and <span class="kbd">/</span>; Mail adds no second search field.</div></li>
+  <li><span class="pill need">new</span><div><b>A reader toolbar with every verb and its key.</b> Today the reader has no actions beyond a Gmail labels menu. Reply · Reply all · Forward | Done · Snooze · Task · Link · Note | Pin · Move · ⋯, each tooltip with its key.</div></li>
+  <li><span class="pill need">new</span><div><b>The state line and the sender card.</b> Critics read the rebuilt module as "a competent multi-account mail client" with no link to tasks or notes (Character 6). The state line and "Mail with Jonas · 5 · 3 open tasks · 2 notes · Acme weekly Thu 11:00" make the spine visible in every thread.</div></li>
+  <li><span class="pill need">new</span><div><b>Rows with rhythm and a sender avatar.</b> Critics: rows run together; the avatar shows the account's letter, not the sender's (sev 2). A hairline between threads; the avatar is the sender; the account keeps its dot. Pinned threads get a "Pinned" header.</div></li>
+  <li><span class="pill need">new</span><div><b>Hover never moves text.</b> The cluster sits over the snippet's end; the time and the flags stay put; the checkbox replaces the avatar (sev 2).</div></li>
+  <li><span class="pill need">new</span><div><b>Banners wrap and name what failed.</b> "Couldn't sync 2 actions · M…" becomes "Done on “Invoice HC-2026-031” and “Re: Workshop materials”: Lumen's mailbox is read-only right now", with Put back and Retry (sev 3).</div></li>
+  <li><span class="pill need">new</span><div><b>Empty and loading states stay inside the shell.</b> Inbox zero offers the other tabs; an empty folder offers "Back to Inbox"; first sync shows skeleton rows under "Getting your newest mail" (sev 3).</div></li>
+  <li><span class="pill need">new</span><div><b>Reply under the thread; New message takes the reader column.</b> The spec asks for both; the build floats a card bottom-right. Recipient chips with suggestions, Cc/Bcc.</div></li>
+  <li><span class="pill need">new</span><div><b>Today, Contact and Task as one switcher</b> (⌥1–3) beside the thread, as the spec's right panel; Today is the default view, as shipped.</div></li>
+  <li><span class="pill need">new</span><div><b>Newsletters one row per sender,</b> with "Done all", as the spec says; Subscriptions and Attachments mounted as views in the rail.</div></li>
+  <li><span class="pill need">new</span><div><b>Connect: one provider group</b> (Gmail · Microsoft · iCloud · Other IMAP, arrow keys), sign-in first, the app password behind "Use an app password instead", history after the credentials, Connect disabled with a reason until both fields are filled; reconnect focuses the password (sev 2).</div></li>
+  <li><span class="pill need">new</span><div><b><span class="kbd">w</span> Remind me if no reply</b> on a sent thread, not only in the composer, with "only if nobody replies / regardless" one Tab apart.</div></li>
+</ul>
+
+<h2>Needs the designer</h2>
+<ul>
+  <li>New message at the top of the Mail rail (a new pattern for a module rail).</li>
+  <li>The <span class="kbd">w</span> key and the hint line's resting text "j k to move · e Done · s Snooze · t Task · ? all keys".</li>
+  <li>Today as the default right-panel view inside the app-wide switcher, rather than a fixed fourth column.</li>
+  <li>A status button on each account row that opens the account card (version 3).</li>
+  <li>Tabs folding into "+N" when they don't fit, rather than scrolling (version 3).</li>
+  <li>"Why here?" and Make a rule in the reader, so rules start from a thread as well as from Settings (version 3).</li>
+</ul>
+<p>Token additions proposed: none. Every value is a house token under its own name. One deliberate exception kept: the mail row is three text lines (sender, subject, two-line snippet), so it is taller than any row rung; it matches the shipped 72 px comfortable row.</p>
+
+<h2>The rebuilt module today</h2>
+<p class="lede">Storybook frames of the shipped shell (fixture engine, 2,000 messages). The stories show the rail and the list; the reader, Today column and composer mount only in the app.</p>
+<div class="frames">
+  <figure><img src="__F_SHELL__" alt="The rebuilt Mail shell: rail with folders and accounts, split tabs and avatar rows"><figcaption>Rail, tabs and the list. Rows run together; the avatar is the account's letter.</figcaption></figure>
+  <figure><img src="__F_FAILED__" alt="The failed actions bar, truncated before its Discard and Retry buttons"><figcaption>"Couldn't sync 2 actions · M…": the reason is cut off next to Discard.</figcaption></figure>
+  <figure><img src="__F_EMPTY__" alt="An empty folder state alone on a black page"><figcaption>"Nothing in Spam" with nothing that leads back.</figcaption></figure>
+  <figure><img src="__F_CONNECT__" alt="The connect dialog with Google sign-in and an app password form"><figcaption>Connect: history sits between the email and the password.</figcaption></figure>
+</div>
+
+<h2>Against the best</h2>
+<div class="tbl-wrap"><table class="t">
+<thead><tr><th></th><th>Old module</th><th>Rebuilt today</th><th>This prototype</th><th>Superhuman</th><th>HEY</th><th>Spark</th><th>Apple Mail</th></tr></thead>
+<tbody>
+<tr><td>Triage speed for an expert</td><td class="n">2</td><td class="n">4</td><td class="n">5</td><td class="n">5</td><td class="n">3</td><td class="n">4</td><td class="n">2</td></tr>
+<tr><td>Clarity for a newcomer</td><td class="n">2</td><td class="n">3</td><td class="n">4</td><td class="n">3</td><td class="n">2</td><td class="n">4</td><td class="n">5</td></tr>
+<tr><td>Reading comfort</td><td class="n">1</td><td class="n">3</td><td class="n">4</td><td class="n">3</td><td class="n">4</td><td class="n">3</td><td class="n">4</td></tr>
+<tr><td>Inbox model, noise without AI</td><td class="n">3</td><td class="n">4</td><td class="n">4</td><td class="n">2</td><td class="n">5</td><td class="n">3</td><td class="n">2</td></tr>
+<tr><td>Mail → work in one gesture</td><td class="n">3</td><td class="n">4</td><td class="n">5</td><td class="n">1</td><td class="n">1</td><td class="n">4</td><td class="n">2</td></tr>
+<tr><td>Follow-up handling</td><td class="n">3</td><td class="n">4</td><td class="n">5</td><td class="n">5</td><td class="n">4</td><td class="n">4</td><td class="n">3</td></tr>
+<tr><td>Sender context beside the mail</td><td class="n">2</td><td class="n">3</td><td class="n">5</td><td class="n">4</td><td class="n">3</td><td class="n">1</td><td class="n">2</td></tr>
+<tr><td>Every-state care</td><td class="n">2</td><td class="n">4</td><td class="n">4</td><td class="n">4</td><td class="n">3</td><td class="n">3</td><td class="n">4</td></tr>
+</tbody></table></div>
+<p class="muted">"Rebuilt today" and "This prototype" are my estimates; the blind scores are on the Score tab. Extremes: Superhuman's one grammar with act-and-advance (5); HEY's Screener as human decisions (5); Apple Mail's pane that follows the selection (5); Superhuman and HEY have no task object (1); Spark has no contact panel (1); the old module read mail in a 280 px tab (1).</p>
+
+<h2>Patterns taken, with their source</h2>
+<ul class="src">
+  <li>Done is an archive that comes back on a reply; <span class="kbd">z</span> undoes. <a href="https://help.superhuman.com/hc/en-us/articles/47439134613773-Mark-Done">Superhuman</a>, <a href="https://sparkmailapp.com/help/manage-your-inbox/mark-as-done">Spark</a>.</li>
+  <li>Remind me if no reply, from the composer and the thread, "regardless" one Tab away. <a href="https://help.superhuman.com/hc/en-us/articles/46005666142733-Remind-Me">Superhuman</a>, <a href="https://updates.37signals.com/post/new-in-hey-bubble-up-if-no-reply-by">HEY</a>.</li>
+  <li>Split inbox tabs, decided once per sender. <a href="https://help.superhuman.com/hc/en-us/articles/46005619081101-Default-Split-Inbox">Superhuman</a>, <a href="https://help.hey.com/article/722-the-screener">HEY Screener</a>.</li>
+  <li>Context lives in the conversation, not a hidden tab. <a href="https://front.com/blog/the-new-front-inbox">Front, "Behind the inbox"</a>.</li>
+  <li>Email → task keeps the thread and the person. <a href="https://culturedcode.com/things/support/articles/2908262/">Things</a>, <a href="https://help.sunsama.com/docs/integrations/gmail">Sunsama</a> (drag onto a day).</li>
+  <li>Older messages fold, unread never; quoted text behind a toggle; images withheld with one button. <a href="https://mimestream.com/help/user-guide/viewing-messages">Mimestream</a>, <a href="https://support.apple.com/guide/mail/change-privacy-preferences-mlhlae4a4fe6/mac">Apple Mail</a>.</li>
+  <li>⌘K prints each action's key. <a href="https://help.superhuman.com/hc/en-us/articles/46005789591693-Speed-Up-With-Shortcuts">Superhuman</a>.</li>
+  <li>Inbox zero stays quiet. <a href="https://help.hey.com/article/781-cover-art">HEY</a>.</li>
+</ul>
+`;
+</script>

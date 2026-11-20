@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+
 import { reloadOnceForChunkError } from "../../lib/chunk-reload";
 
 type RootErrorBoundaryProps = {

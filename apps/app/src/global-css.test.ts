@@ -5,6 +5,7 @@
 // WebKit, ::-webkit-scrollbar for pre-18.2 WKWebView) are token-coloured.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { type CssBlock, cssBlocks, declarations } from "./styles/css-blocks";
@@ -89,7 +90,7 @@ describe("global.css scrollbars (DS-1)", () => {
     for (const rel of [
       "src/features/tasks/ui/task-list-view.tsx",
       "src/features/notes/ui/note-editor.tsx",
-      "src/features/email/ui/email-thread-list.tsx",
+      "src/features/email/ui/thread-list.tsx",
       "src/features/contacts/ui/contact-hub.tsx",
     ]) {
       expect({ rel, gutter: (await read(rel)).includes("pane-scroll") }).toEqual({

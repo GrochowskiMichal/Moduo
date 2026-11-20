@@ -6,10 +6,12 @@
 // them; the upload queue keeps the bytes (and retries) underneath.
 
 import { useCallback, useSyncExternalStore } from "react";
+
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
 import { AttachmentOpError, describeProblem } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
+
 import { newMessageId } from "../store/outbox";
 import { capNotice, fileShape, takeFiles } from "./model";
 

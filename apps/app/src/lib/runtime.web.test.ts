@@ -8,8 +8,6 @@ import {
   isMissingFunctionError,
   isMissingTableError,
   sortQueueEntries,
-  taskCreateRow,
-  taskCreateRowLegacy,
   taskPatchToColumns,
   taskQueueRowToModel,
   taskRowToModel,
@@ -105,17 +103,6 @@ describe("creating a task", () => {
     id: "t1",
   };
 
-  it("sends the assignee explicitly and no owner_id (the server records the creator)", () => {
-    const row = taskCreateRow({ ...base, assigneeId: "u2" }, "u1");
-    expect(row.assignee_id).toBe("u2");
-    expect(row).not.toHaveProperty("owner_id");
-  });
-
-  it("an unchosen assignee is the creator; null stays Unassigned", () => {
-    expect(taskCreateRow({ ...base, assigneeId: "" }, "u1").assignee_id).toBe("u1");
-    expect(taskCreateRow({ ...base, assigneeId: null }, "u1").assignee_id).toBeNull();
-  });
-
   it("makeTask leaves the assignee unchosen unless told", () => {
     expect(
       makeTask({ workspaceId: "w", bucketId: "b", title: "x", position: "a" }).assigneeId,
@@ -124,12 +111,6 @@ describe("creating a task", () => {
       makeTask({ workspaceId: "w", bucketId: "b", title: "x", position: "a", assigneeId: null })
         .assigneeId,
     ).toBeNull();
-  });
-
-  it("before the migration, the assignee goes in owner_id (the old meaning)", () => {
-    const row = taskCreateRowLegacy({ ...base, assigneeId: "u2" }, "u1");
-    expect(row.owner_id).toBe("u2");
-    expect(row).not.toHaveProperty("assignee_id");
   });
 });
 

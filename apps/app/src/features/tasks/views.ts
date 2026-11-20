@@ -10,13 +10,14 @@
 // same way (`preferences.tasksSidebar.pinned[ws]`, beside project ids).
 
 import type { TasksRole, TaskViewScope } from "@contracts/vocabularies";
+
 import type { FilterCondition } from "../../components/ui/filter-model";
 import {
   displayOf,
   sanitizeTasksView,
   type TasksDisplay,
-  type TasksViewPrefs,
   tasksViewDefaults,
+  type TasksViewPrefs,
 } from "./display";
 import { NONE_VALUE, WAITING_ANY } from "./filters";
 import type { RowPreset } from "./row-layout";

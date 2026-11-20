@@ -1,0 +1,29 @@
+id: postgrest-limit-over-cap
+language: typescript
+severity: error
+message: PostgREST returns at most 1000 rows per request; `.limit()` above 1000 doesn't lift that, it silently truncates.
+note: |
+  Page with `.range()` through `readPaged` (lib/paged-select.ts) or `selectCapped`
+  (lib/runtime.web.shared.ts), ordered by a unique tiebreaker (`id`). For an exact
+  total use `select("id", { count: "exact", head: true })`. Probed SCALE-1: 1,510 rows,
+  `.limit(5000)` returned 1000 with no error.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+rule:
+  kind: call_expression
+  all:
+    - has:
+        field: function
+        kind: member_expression
+        has:
+          field: property
+          regex: ^limit$
+    - has:
+        field: arguments
+        has:
+          kind: number
+          regex: ^(100[1-9]|10[1-9]\d|1[1-9]\d\d|[2-9]\d{3}|[1-9]\d{4,})$

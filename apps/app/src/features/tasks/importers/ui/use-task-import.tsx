@@ -3,14 +3,19 @@
 // dialog reads from the shared store. After an import or an Undo the store
 // reads again, so new projects and tasks show everywhere at once.
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { ModuoRuntime } from "../../../../lib/runtime.types";
 import type { WorkspaceStore } from "../../../../lib/sync/store";
 import { useAuth } from "../../../../providers/auth-provider";
 import { useAssignees } from "../../assignees";
 import type { Bucket, Section, Task } from "../../model";
-import { importApiOf, TaskImportDialog } from "./import-dialog";
+import { importApiOf } from "./import-api";
+
+// The dialog (parsers, chrono-node) is its own async chunk, mounted on first open.
+const TaskImportDialog = lazy(() =>
+  import("./import-dialog").then((m) => ({ default: m.TaskImportDialog })),
+);
 
 export function useTaskImport({
   runtime,
@@ -40,6 +45,11 @@ export function useTaskImport({
   // The pickers' people: names only (members' emails aren't readable here).
   const { assignees } = useAssignees();
   const [open, setOpen] = useState(false);
+  // Mounted from the first open on, so closing still animates out.
+  const [opened, setOpened] = useState(false);
+  useEffect(() => {
+    if (open) setOpened(true);
+  }, [open]);
   const supported = canEdit && Boolean(workspaceId && userId) && importApiOf(runtime) !== null;
   const latest = useRef({ buckets, sections, tasks, archivedTasks });
   latest.current = { buckets, sections, tasks, archivedTasks };
@@ -63,23 +73,26 @@ export function useTaskImport({
 
   const dialog = useMemo(
     () =>
-      supported && workspaceId && userId ? (
-        <TaskImportDialog
-          open={open}
-          onOpenChange={setOpen}
-          runtime={runtime}
-          workspaceId={workspaceId}
-          userId={userId}
-          userEmail={userEmail}
-          assignees={assignees}
-          readContext={readContext}
-          whenReady={whenReady}
-          onChanged={onChanged}
-          onOpenProject={onOpenProject}
-        />
+      supported && workspaceId && userId && (opened || open) ? (
+        <Suspense fallback={null}>
+          <TaskImportDialog
+            open={open}
+            onOpenChange={setOpen}
+            runtime={runtime}
+            workspaceId={workspaceId}
+            userId={userId}
+            userEmail={userEmail}
+            assignees={assignees}
+            readContext={readContext}
+            whenReady={whenReady}
+            onChanged={onChanged}
+            onOpenProject={onOpenProject}
+          />
+        </Suspense>
       ) : null,
     [
       supported,
+      opened,
       open,
       runtime,
       workspaceId,

@@ -3,6 +3,7 @@ import { Select as SelectPrimitive } from "radix-ui";
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+
 import { eyebrowVariants } from "./eyebrow";
 import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
 import { FLOATING_SURFACE } from "./surface";
@@ -19,6 +20,8 @@ function SelectValue({ ...props }: React.ComponentProps<typeof SelectPrimitive.V
   return <SelectPrimitive.Value data-slot="select-value" {...props} />;
 }
 
+// Label it with a visible `<label htmlFor>` or `aria-labelledby`: an `aria-label` replaces the
+// selected value in what a screen reader announces.
 function SelectTrigger({
   className,
   size = "default",
@@ -110,6 +113,8 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
   );
 }
 
+// Radix throws on an empty-string item `value`: an optional choice ("No status")
+// rides a sentinel such as "__none__", mapped back in `onValueChange`.
 function SelectItem({
   className,
   children,

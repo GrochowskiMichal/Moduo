@@ -9,6 +9,7 @@
 // app's other icons; colour comes from the text colour (currentColor).
 
 import type { TaskStatusCategory } from "@contracts/vocabularies";
+
 import { cn } from "../../../lib/utils";
 import { CATEGORY_LABELS } from "../statuses";
 

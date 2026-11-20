@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
 import { resolveEntityIcon } from "@/features/spine/icon-map";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import type { ChatPerson } from "../model";
 import { CREATE_COMMANDS, type CreateCommand, peopleFor } from "./grammar";
 

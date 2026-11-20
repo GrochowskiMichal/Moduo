@@ -6,8 +6,8 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   bottomTier,
-  DAY_WIDTH,
   dateOfDay,
+  DAY_WIDTH,
   dayAtX,
   dayCenterX,
   dayNumOf,

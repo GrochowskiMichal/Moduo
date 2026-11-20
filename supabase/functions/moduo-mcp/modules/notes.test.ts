@@ -21,7 +21,7 @@ import { notesDocCodeHash, notesDocSourceHash } from "../../_shared/notes-doc/so
 
 rs.mock("../share.ts", () => ({
   assertReach: async () => {},
-  visibleIds: async () => new Set<string>(),
+  visibleIds: async () => new Set<string>(["44444444-4444-4444-8444-444444444444"]),
 }));
 
 import type { ToolContext } from "../registry.ts";
@@ -36,29 +36,73 @@ const b64ToBytes = (b64: string) => Uint8Array.from(Buffer.from(b64, "base64"));
 
 /** notes + note_updates + the RPCs the write path calls.
  * `beforeApply` runs inside the next apply call, before its insert (to
- * stage a write that races the connector's). */
-function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
+ * stage a write that races the connector's). The connector reads a note's doc
+ * through notes_pull (NS-7), recorded apart in `pullCalls`; `pullMissing`
+ * answers it as a database before NS-7 would (PGRST202). */
+function fakeDb(note: Row, opts: { beforeApply?: () => void; pullMissing?: boolean } = {}) {
   const tables: Record<string, Row[]> = { notes: [note], note_updates: [] };
   const rpcCalls: Array<{ fn: string; args: Row }> = [];
+  const pullCalls: Row[] = [];
+  const fromTables: string[] = [];
+  const selects: Array<{ table: string; cols: string }> = [];
   let nextId = 1;
   function from(table: string) {
+    fromTables.push(table);
     const filters: Array<(r: Row) => boolean> = [];
     let max = Number.POSITIVE_INFINITY;
     const query: any = {
-      select: () => query,
+      select: (cols: string) => (selects.push({ table, cols }), query),
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), query),
       is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), query),
       gt: (c: string, v: number) => (filters.push((r) => Number(r[c]) > v), query),
       order: () => query,
       limit: (n: number) => ((max = n), query),
       then<T>(resolve: (res: { data: Row[]; error: null }) => T) {
-        const data = (tables[table] ?? []).filter((r) => filters.every((f) => f(r)));
+        // NS-11: a note's content is its note_bodies row; here one record holds both.
+        const source =
+          table === "note_bodies"
+            ? tables.notes!.map((n) => ({ ...n, note_id: n.id }))
+            : (tables[table] ?? []);
+        const data = source.filter((r) => filters.every((f) => f(r)));
         return Promise.resolve({ data: data.slice(0, max), error: null }).then(resolve);
       },
     };
     return query;
   }
   async function rpc(fn: string, args: Row) {
+    if (fn === "notes_pull") {
+      pullCalls.push(args);
+      if (opts.pullMissing) {
+        return {
+          data: null,
+          error: { code: "PGRST202", message: "Could not find the function public.notes_pull" },
+        };
+      }
+      const n = tables.notes!.find(
+        (r) => r.id === args.p_note_id && r.workspace_id === args.p_workspace_id,
+      );
+      if (!n) return { data: null, error: { code: "P0002", message: "Note not found in this workspace." } };
+      const after = tables
+        .note_updates!.filter((u) => u.note_id === n.id && Number(u.id) > Number(args.p_after_id))
+        .sort((a, b) => Number(a.id) - Number(b.id));
+      const version = Number(n.doc_version ?? 0);
+      const out: Row = {
+        updates: after.slice(0, 1000).map((u) => ({
+          id: u.id,
+          client_id: u.client_id ?? "c",
+          client_seq: u.client_seq ?? 1,
+          update_b64: u.update_b64,
+          origin: u.origin,
+          actor_key_id: null,
+        })),
+        has_more: after.length > 1000,
+        doc_version: version,
+      };
+      if (args.p_known_version == null || Number(args.p_known_version) !== version) {
+        out.snapshot = n.doc_state ?? null;
+      }
+      return { data: out, error: null };
+    }
     rpcCalls.push({ fn, args });
     if (fn === "notes_op_apply_updates") {
       const stage = opts.beforeApply;
@@ -116,7 +160,7 @@ function fakeDb(note: Row, opts: { beforeApply?: () => void } = {}) {
       update_b64: Buffer.from(update).toString("base64"),
       origin: "user",
     });
-  return { ctx, tables, rpcCalls, pushRow };
+  return { ctx, tables, rpcCalls, pullCalls, fromTables, selects, pushRow };
 }
 
 function tool(name: string) {
@@ -236,6 +280,80 @@ describe("crdt write", () => {
   });
 });
 
+describe("the connector's pull (NS-7)", () => {
+  it("reads a note's doc through notes_pull, never the log table", async () => {
+    const { ctx, tables, pullCalls, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(pullCalls.length).toBeGreaterThan(0);
+    expect(pullCalls[0]).toMatchObject({ p_workspace_id: WS, p_note_id: NOTE, p_after_id: 0 });
+    expect(fromTables).not.toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
+  });
+
+  it("builds on the logged updates notes_pull returns, not just the snapshot", async () => {
+    const { ctx, tables } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+
+  it("falls back to the tables while notes_pull is missing", async () => {
+    const { ctx, tables, fromTables } = fakeDb(materializedNote("# Plan\n\nHello"), {
+      pullMissing: true,
+    });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "First" }, ctx);
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "Second" }, ctx);
+    expect(fromTables).toContain("note_updates");
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nFirst\n\nSecond");
+  });
+});
+
+describe("content reads (NS-11)", () => {
+  const CONTENT = /\b(doc_state|doc_version|body_text|body_md|search_tsv)\b/;
+
+  it("reads a note's stored body from note_bodies, in the key's workspace", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"));
+    await tool("notes_update").handler({ note_id: NOTE, markdown: "New body" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("body_md"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("Plan\n\nNew body");
+  });
+
+  it("reads the snapshot from note_bodies too while notes_pull is missing", async () => {
+    const { ctx, tables, selects } = fakeDb(materializedNote("# Plan\n\nHello"), { pullMissing: true });
+    await tool("notes_append").handler({ note_id: NOTE, markdown: "More" }, ctx);
+    expect(selects.some((s) => s.table === "note_bodies" && s.cols.includes("doc_state"))).toBe(true);
+    expect(selects.filter((s) => s.table === "notes").every((s) => !CONTENT.test(s.cols))).toBe(true);
+    expect(clientMarkdown(tables, NOTE)).toBe("# Plan\n\nHello\n\nMore");
+  });
+});
+
+describe("notes_get reads text as written", () => {
+  it("re-reads a body saved with old escapes from the doc", async () => {
+    const note = materializedNote("Keys\n\nsbp_fc7797 and C:\\Users\\mike");
+    note.body_md = "Keys\n\nsbp\\_fc7797 and C:\\\\Users\\\\mike";
+    const { ctx } = fakeDb(note);
+    const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+    expect(got.markdown).toBe("Keys\n\nsbp_fc7797 and C:\\Users\\mike");
+  });
+
+  it("returns a body with nothing to fix as stored, without reading the doc", async () => {
+    for (const body of ["Keys\n\nsbp_fc7797", "2\\*3\\*4 in C:\\Users", "\\_lead and trail_"]) {
+      const { ctx, pullCalls } = fakeDb({ ...materializedNote("x"), body_md: body });
+      const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+      expect(got.markdown).toBe(body);
+      expect(pullCalls).toEqual([]);
+    }
+  });
+
+  it("keeps the stored body when the note has no doc to read", async () => {
+    const note = { ...materializedNote("x"), doc_state: null, body_md: "a\\_b" };
+    const { ctx } = fakeDb(note);
+    const got = (await tool("notes_get").handler({ note_id: NOTE }, ctx)) as Row;
+    expect(got.markdown).toBe("a\\_b");
+  });
+});
+
 describe("notes-doc bundle is current", () => {
   it("was rebuilt after the last change to the notes editor sources, and not edited by hand", () => {
     const here = dirname(fileURLToPath(import.meta.url));
@@ -254,4 +372,194 @@ describe("notes-doc bundle is current", () => {
     const code = bundle.slice(bundle.indexOf("\n", bundle.indexOf("// packages: ")) + 1);
     expect(notesDocCodeHash(code)).toBe(header("code-hash"));
   });
+});
+
+/**
+ * GS-2 (specs/global-search.md AC10, AC3, AC4): the agent's notes search is
+ * the server's notes__search, the same function the sidebar and ⌘K use, so it
+ * returns the same notes; visibility (the key's scope and its person's access)
+ * is applied there, before the limit. notes_list filters on notes__visible_ids
+ * before its limit too.
+ */
+describe("notes_search uses notes__search", () => {
+  const ACTOR = "22222222-2222-4222-8222-222222222222";
+
+  function searchDb(opts: { hits?: Row[]; notes?: Row[]; visible?: string[] } = {}) {
+    const rpcCalls: Array<{ fn: string; args: Row }> = [];
+    const tableReads: string[] = [];
+    function from(table: string) {
+      tableReads.push(table);
+      const filters: Array<(r: Row) => boolean> = [];
+      const orders: string[] = [];
+      let lo = 0;
+      let hi = Number.POSITIVE_INFINITY;
+      const query: any = {
+        select: () => query,
+        eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), query),
+        is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), query),
+        order: (c: string) => (orders.push(c), query),
+        limit: (n: number) => ((hi = Math.min(hi, n - 1)), query),
+        range: (a: number, b: number) => ((lo = a), (hi = b), query),
+        then<T>(resolve: (res: { data: Row[]; error: null }) => T) {
+          const rowsIn = (table === "notes" ? (opts.notes ?? []) : []).filter((r) =>
+            filters.every((f) => f(r)),
+          );
+          const sorted = [...rowsIn].sort((a, b) => {
+            for (const c of orders) {
+              const d = String(a[c]).localeCompare(String(b[c]));
+              if (d !== 0) return d;
+            }
+            return 0;
+          });
+          // PostgREST answers at most 1000 rows, whatever was asked.
+          const page = sorted.slice(lo, Math.min(hi + 1, lo + 1000));
+          return Promise.resolve({ data: page, error: null }).then(resolve);
+        },
+      };
+      return query;
+    }
+    async function rpc(fn: string, args: Row) {
+      rpcCalls.push({ fn, args });
+      if (fn === "notes__search") return { data: opts.hits ?? [], error: null };
+      if (fn === "notes__visible_ids") return { data: opts.visible ?? [], error: null };
+      return { data: null, error: { message: `unexpected rpc ${fn}` } };
+    }
+    const ctx: ToolContext = {
+      key: { id: "key-1", workspaceId: WS, name: "Reader", createdBy: ACTOR, scopes: { notes: "view" } } as any,
+      db: { from, rpc } as any,
+    };
+    return { ctx, rpcCalls, tableReads };
+  }
+
+  const hitRow = (id: string, over: Row = {}): Row => ({
+    entity_type: "note",
+    entity_id: id,
+    title: "Retro",
+    context: "Planning",
+    snippet: "We tasted a kumquat at lunch",
+    icon: null,
+    match: "body",
+    rank: 0.4,
+    updated_at: "2026-10-28T09:00:00Z",
+    archived: false,
+    ...over,
+  });
+
+  it("returns exactly the notes notes__search returns, in its order", async () => {
+    const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+    const { ctx, rpcCalls, tableReads } = searchDb({
+      hits: [hitRow(B, { title: "Kumquat jam", match: "title", snippet: null, context: null }), hitRow(A)],
+    });
+    const out = (await tool("notes_search").handler({ query: " kumquat " }, ctx)) as Row[];
+    expect(out.map((r) => r.id)).toEqual([B, A]);
+    expect(rpcCalls).toEqual([
+      { fn: "notes__search", args: { p_workspace_id: WS, p_query: "kumquat", p_limit: 20 } },
+    ]);
+    // No second read of the notes table and no filtering after the fact.
+    expect(tableReads).toEqual([]);
+    expect(out[1]).toEqual({
+      id: A,
+      title: "Retro",
+      context: "Planning",
+      snippet: "We tasted a **kumquat** at lunch",
+      match: "body",
+      archived: false,
+    });
+    expect(out[0]).toMatchObject({ title: "Kumquat jam", snippet: null, match: "title" });
+  });
+
+  it("says whether each note is archived (GS-3, Q8)", async () => {
+    const A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    const { ctx } = searchDb({ hits: [hitRow(A, { archived: true })] });
+    const out = (await tool("notes_search").handler({ query: "kumquat" }, ctx)) as Row[];
+    expect(out[0].archived).toBe(true);
+  });
+
+  it("caps the limit at 50 and defaults it to 20", async () => {
+    const { ctx, rpcCalls } = searchDb();
+    await tool("notes_search").handler({ query: "plan", limit: 500 }, ctx);
+    await tool("notes_search").handler({ query: "plan", limit: 0 }, ctx);
+    expect(rpcCalls.map((c) => c.args.p_limit)).toEqual([50, 20]);
+  });
+
+  it("notes_list filters on notes__visible_ids before its limit, past 1,500 notes it can't see", async () => {
+    const hidden = Array.from({ length: 1500 }, (_, i) => ({
+      id: `hidden-${i}`,
+      workspace_id: WS,
+      deleted_at: null,
+      title: `Private ${i}`,
+      parent_id: null,
+      position: `a${String(i).padStart(5, "0")}`,
+    }));
+    const shown = ["v1", "v2", "v3"].map((id, i) => ({
+      id,
+      workspace_id: WS,
+      deleted_at: null,
+      title: `Shared ${i}`,
+      parent_id: null,
+      position: `b${i}`,
+    }));
+    const { ctx, rpcCalls } = searchDb({ notes: [...hidden, ...shown], visible: ["v1", "v2", "v3"] });
+    const out = (await tool("notes_list").handler({ limit: 2 }, ctx)) as Row[];
+    expect(out.map((n) => n.id)).toEqual(["v1", "v2"]);
+    expect(rpcCalls).toEqual([
+      { fn: "notes__visible_ids", args: { p_workspace_id: WS, p_actor: ACTOR } },
+    ]);
+  });
+});
+
+// NS-5 (AC6): the meta ops return public.notes_meta, the row without doc_state
+// and the bodies. The connector shapes that lean row as it shaped the full one.
+describe("meta results still map", () => {
+  const PARENT = "55555555-5555-4555-8555-555555555555";
+  const LEAN: Row = {
+    id: NOTE,
+    workspace_id: WS,
+    created_by: null,
+    parent_id: PARENT,
+    title: "  Q4 plan ",
+    icon: "📌",
+    position: "a0",
+    is_archived: true,
+    published_at: null,
+    publish_token: null,
+    doc_version: 3,
+    share_mode: "inherit",
+    workspace_shared: false,
+    in_inbox: false,
+    full_width: false,
+    edited_by: null,
+    edited_at: null,
+    created_at: "2026-10-01T08:00:00+00:00",
+    updated_at: "2026-10-28T09:00:00+00:00",
+    deleted_at: null,
+  };
+  const FULL: Row = { ...LEAN, doc_state: "AQLx2b8B", body_md: "Body", body_text: "Body", search_tsv: "'q4':1A" };
+
+  function opDb(row: Row): ToolContext {
+    const rpc = async (fn: string) =>
+      fn === "notes_op_move" || fn === "notes_op_archive"
+        ? { data: row, error: null }
+        : { data: null, error: { message: `unexpected rpc ${fn}` } };
+    return { key: { id: "key-1", workspaceId: WS, name: "Bot", createdBy: null, scopes: {} } as any, db: { rpc } as any };
+  }
+
+  for (const [name, args] of [
+    ["notes_move", { note_id: NOTE, parent_id: PARENT }],
+    ["notes_archive", { note_id: NOTE }],
+  ] as const) {
+    it(`${name} returns the same note for the lean row as for the full row`, async () => {
+      const fromLean = await tool(name).handler(args as any, opDb(LEAN));
+      expect(fromLean).toEqual(await tool(name).handler(args as any, opDb(FULL)));
+      expect(fromLean).toEqual({
+        id: NOTE,
+        title: "Q4 plan",
+        parent_id: PARENT,
+        icon: "📌",
+        archived: true,
+        published: false,
+      });
+    });
+  }
 });

@@ -1,13 +1,15 @@
-// Email's right-panel views (lib/panel-registry.ts), registered unchanged from
-// its old tabs until the module is rebuilt. All four are about the open thread.
+// Email's right-panel views (lib/panel-registry.ts, specs/mail-v3.md §10):
+// Today (⌥1), Contact (⌥2) and Task (⌥3), in that order, so the ⌥ digits the
+// registry derives from the menu position hold. The open one lives in the mail
+// store (`panel`); `panels/side-panel.tsx` renders them.
 
-import { CheckSquare, Contact, Info, Mail } from "lucide-react";
+import { CalendarDays, CheckSquare, Contact } from "lucide-react";
 
 import type { PanelViewDef } from "../../lib/panel-registry";
+import type { MailPanelView } from "./store/mail-store";
 
-export const emailPanelViews: readonly PanelViewDef[] = [
-  { id: "reader", label: "Reader", group: "about", icon: Mail },
+export const emailPanelViews: readonly (PanelViewDef & { id: MailPanelView })[] = [
+  { id: "today", label: "Today", group: "about", icon: CalendarDays },
   { id: "contact", label: "Contact", group: "about", icon: Contact },
-  { id: "detail", label: "Detail", group: "about", icon: Info },
   { id: "task", label: "Task", group: "about", icon: CheckSquare },
 ];

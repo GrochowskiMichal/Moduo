@@ -103,6 +103,21 @@ export function securityHeaders(cspExtraScriptSrc: readonly string[] = []): Reco
   };
 }
 
+/**
+ * The staging rehearsal of the canary (HV-28, scripts/release/canary.ts): a version uploaded with
+ * `--var CANARY_FORCE_ERROR_AFTER:<epoch ms>` throws on every request the Worker handles once that
+ * time has passed, so the canary sees an error spike mid-soak. Honoured only on staging
+ * (STAGING_PORTAL), never in production, whatever the var says.
+ */
+export function rehearsalError(
+  env: { STAGING_PORTAL?: string; CANARY_FORCE_ERROR_AFTER?: string },
+  now: number,
+): boolean {
+  if (value(env.STAGING_PORTAL) !== "true") return false;
+  const after = Number(value(env.CANARY_FORCE_ERROR_AFTER));
+  return value(env.CANARY_FORCE_ERROR_AFTER) !== "" && Number.isFinite(after) && now >= after;
+}
+
 /** Revalidate on every load: index.html, /config.json and the push service workers. */
 export const NO_CACHE = "no-cache";
 /** Hashed files under /static/ never change. */

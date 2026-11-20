@@ -10,7 +10,7 @@
 // One store per runtime: each test makes its own server, with its own ids.
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { act, cleanup, waitFor } from "@testing-library/react";
 
 type ToastOpts = {
   action: { onClick: () => void };
@@ -29,7 +29,7 @@ rs.mock("sonner", () => ({ toast: toastMock }));
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
 import type { Area, Bucket, Task } from "../model";
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const WS = "ws-projects";
 let clock = 10;
@@ -275,7 +275,7 @@ const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)))
 const bucketIds = (api: { buckets: Bucket[] }) => api.buckets.map((b) => b.id);
 
 async function mount(runtime: unknown) {
-  const hook = renderHook(() => useTasksModule(runtime as never, params));
+  const hook = renderTasksHook(runtime as never, params);
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return hook;
 }
@@ -298,7 +298,7 @@ describe("deleting a project (REPLAN 78, AC5.5)", () => {
       return real(input);
     });
     const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
+    act(() => result.current.commands.deleteBucket(ids.x));
     expect(bucketIds(result.current)).toEqual([ids.y]);
     const placed = (id: string) => result.current.tasks.find((t) => t.id === id)?.bucketId;
     expect(placed("d1-mine")).toBe(ids.inbox);
@@ -322,7 +322,7 @@ describe("deleting a project (REPLAN 78, AC5.5)", () => {
   it("Undo restores the project through Recently deleted's op", async () => {
     const { ids, runtime } = makeServer("d2-");
     const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
+    act(() => result.current.commands.deleteBucket(ids.x));
     await settle();
     const [, opts] = lastToast();
     act(() => opts.action.onClick());
@@ -342,7 +342,7 @@ describe("deleting a project (REPLAN 78, AC5.5)", () => {
       throw new Error("Only people with full access to this project can delete or restore it.");
     });
     const { result } = await mount(runtime);
-    act(() => result.current.deleteBucket(ids.x));
+    act(() => result.current.commands.deleteBucket(ids.x));
     await settle();
     await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
     expect(toastMock.error).toHaveBeenCalledWith(
@@ -355,7 +355,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
   it("Keep: out of the sidebar, lists and counts, into Archived projects; Undo unarchives", async () => {
     const { ids, runtime } = makeServer("a1-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "keep" }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "keep" }));
     expect(bucketIds(result.current)).toEqual([ids.y]);
     expect(result.current.archivedBuckets.map((b) => b.id)).toEqual([ids.x]);
     expect(result.current.tasks.some((t) => t.bucketId === ids.x)).toBe(false);
@@ -376,7 +376,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
   it("Won't do marks each open task before archiving", async () => {
     const { ids, runtime } = makeServer("a2-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "wont_do" }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "wont_do" }));
     await settle();
     const statuses = result.current.archivedTasks
       .filter((t) => t.id !== "a2-done")
@@ -388,7 +388,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
   it("Undo after Won't do unarchives and puts each open task back", async () => {
     const { ids, runtime } = makeServer("a4-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "wont_do" }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "wont_do" }));
     await settle();
     const [, opts] = lastToast();
     act(() => opts.action.onClick());
@@ -405,7 +405,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
   it("Move sends the open tasks to another project first", async () => {
     const { ids, runtime } = makeServer("a3-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
     await settle();
     const inY = result.current.tasks.filter((t) => t.bucketId === ids.y).map((t) => t.id);
     expect(inY.sort()).toEqual(["a3-annas", "a3-mine", "a3-other"].sort());
@@ -415,7 +415,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
   it("Undo after Move brings the open tasks back with the move op", async () => {
     const { ids, runtime } = makeServer("a5-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
     await settle();
     const [, opts] = lastToast();
     act(() => opts.action.onClick());
@@ -446,7 +446,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     const { result } = await mount(runtime);
     const archivedToast = () =>
       toastMock.mock.calls.some((call) => (call as unknown[])[0] === "“X” archived");
-    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
     await settle();
     expect(archivedToast()).toBe(false);
     release();
@@ -460,7 +460,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     });
     const second = await mount(refused.runtime);
     act(() =>
-      second.result.current.archiveBucket(refused.ids.x, {
+      second.result.current.commands.archiveBucket(refused.ids.x, {
         kind: "move",
         projectId: refused.ids.y,
       }),
@@ -484,7 +484,9 @@ describe("archiving a project (REPLAN 16, 78)", () => {
     const { result } = await mount(runtime);
     const doneToast = () =>
       toastMock.mock.calls.some((call) => (call as unknown[])[0] === "“X” is done");
-    act(() => result.current.setProjectState(ids.x, "done", { kind: "move", projectId: ids.y }));
+    act(() =>
+      result.current.commands.setProjectState(ids.x, "done", { kind: "move", projectId: ids.y }),
+    );
     await settle();
     expect(doneToast()).toBe(false);
     release();
@@ -497,7 +499,7 @@ describe("archiving a project (REPLAN 16, 78)", () => {
       throw new Error("Only people with full access to this project can archive it.");
     });
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "move", projectId: ids.y }));
     await settle();
     await waitFor(() => expect(bucketIds(result.current)).toEqual([ids.x, ids.y]));
     await waitFor(() =>
@@ -518,10 +520,10 @@ describe("a task of an archived project", () => {
   it("is read-only until its project is unarchived", async () => {
     const { ids, runtime } = makeServer("a7-");
     const { result } = await mount(runtime);
-    act(() => result.current.archiveBucket(ids.x, { kind: "keep" }));
+    act(() => result.current.commands.archiveBucket(ids.x, { kind: "keep" }));
     await settle();
-    act(() => result.current.patchTask("a7-mine", { status: "done" }));
-    act(() => result.current.deleteTask("a7-mine"));
+    act(() => result.current.commands.patchTask("a7-mine", { status: "done" }));
+    act(() => result.current.commands.deleteTask("a7-mine"));
     expect(toastMock.error).toHaveBeenCalledWith("Unarchive “X” to change its tasks.");
     expect(runtime.tasks.opSetStatus).not.toHaveBeenCalled();
   });
@@ -536,7 +538,7 @@ describe("a delete on a store that reads by delta (TV-D11a)", () => {
         ["g1-annas", "g1-done", "g1-mine", "g1-other"].sort(),
       ),
     );
-    act(() => result.current.deleteBucket(ids.x));
+    act(() => result.current.commands.deleteBucket(ids.x));
     // Recently deleted is read again once the delete has settled.
     await waitFor(() => expect(runtime.tasks.listTrash).toHaveBeenCalledTimes(2));
     await settle();
@@ -550,13 +552,13 @@ describe("colours and areas (TV-D10's ops)", () => {
   it("colours a project with only that field, neutral stored as none", async () => {
     const { ids, runtime } = makeServer("c1-");
     const { result } = await mount(runtime);
-    act(() => result.current.setBucketColor(ids.y, "teal"));
+    act(() => result.current.commands.setBucketColor(ids.y, "teal"));
     expect(result.current.buckets.find((b) => b.id === ids.y)?.color).toBe("teal");
     await settle();
     expect(runtime.tasks.updateProject).toHaveBeenLastCalledWith(
       expect.objectContaining({ projectId: ids.y, patch: { color: "teal" } }),
     );
-    act(() => result.current.setBucketColor(ids.y, "gray"));
+    act(() => result.current.commands.setBucketColor(ids.y, "gray"));
     await settle();
     expect(runtime.tasks.updateProject).toHaveBeenLastCalledWith(
       expect.objectContaining({ patch: { color: null } }),
@@ -568,12 +570,12 @@ describe("colours and areas (TV-D10's ops)", () => {
     const { result } = await mount(runtime);
     let made: string | null = null;
     await act(async () => {
-      made = await result.current.createArea("Clients");
+      made = await result.current.commands.createArea("Clients");
     });
     expect(made).toBe(ids.area);
     expect(result.current.areas.map((a) => a.name)).toEqual(["Clients"]);
     act(() => {
-      void result.current.moveBucketToArea(ids.x, ids.area);
+      void result.current.commands.moveBucketToArea(ids.x, ids.area);
     });
     await settle();
     const call = runtime.tasks.updateProject.mock.calls.at(-1)?.[0] as {

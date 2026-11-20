@@ -1,0 +1,27 @@
+{
+  "id": "587-status-ops-race",
+  "title": "A task's status write overtakes an older one still on its way live",
+  "mechanism": "queue-bypass",
+  "sites": [
+    "apps/app/src/lib/sync/store.ts",
+    "apps/app/src/lib/sync/status-order.ts",
+    "apps/app/src/features/tasks/commands/shared.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.order.test.ts",
+      "name": "MOD-587: a second check-off waits for a live one still on its way",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/sync/store.order.test.ts",
+      "name": "MOD-587: a live check-off that fails on the network goes back in front of the newer one",
+      "run": "bun run --cwd apps/app test src/lib/sync/store.order.test.ts"
+    }
+  ],
+  "pr": 642,
+  "fixCommit": "a1623827b19c1f909ffb1e44343c9e5a39d5bc97",
+  "foundBy": "HV-17 outbox property harness (PR #626)"
+}

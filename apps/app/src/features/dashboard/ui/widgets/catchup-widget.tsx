@@ -7,6 +7,7 @@
 // its type id `chat`, so saved dashboards keep their widget.
 
 import { useMemo } from "react";
+
 import { PersonAvatar } from "@/components/ui/avatar";
 import { useCatchup } from "@/features/chat/catchup/catchup-store";
 import { shapeCatchupWidget } from "@/features/chat/catchup/widget";
@@ -14,6 +15,7 @@ import { useChatSnapshot, useChatStore } from "@/features/chat/store/react";
 import { formatPastDay, formatTime } from "@/lib/time-format";
 import { useAuth } from "@/providers/auth-provider";
 import { useWorkspace } from "@/providers/workspace-provider";
+
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";

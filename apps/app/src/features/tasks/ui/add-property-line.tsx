@@ -45,7 +45,7 @@ export function AddPropertyLine<K extends string>({
   const picked = useRef(false);
   const key = items.map((i) => i.key).join(" ");
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the names change
+  // Re-measure whenever the names change.
   useLayoutEffect(() => {
     const box = boxRef.current;
     const button = buttonRef.current;

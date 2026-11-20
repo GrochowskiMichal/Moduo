@@ -4,7 +4,9 @@
 // density tokens; this half runs in `bun run verify`.
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
+
 import { KIT, kitStoryId } from "./kit";
 import { DENSITIES } from "./kit-densities";
 

@@ -1,0 +1,27 @@
+{
+  "description": "Moduo agent presence: online at session start, idle at each stop, on the task this worktree claimed.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/moduo-report.sh\" SessionStart"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/moduo-report.sh\" Stop"
+          }
+        ]
+      }
+    ]
+  }
+}

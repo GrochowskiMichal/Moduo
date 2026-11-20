@@ -13,7 +13,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-import { PersonAvatar, TeamMark, teamLettersOf } from "../../../components/ui/avatar";
+import { PersonAvatar, teamLettersOf, TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { IconButton } from "../../../components/ui/icon-button";
 import { Input } from "../../../components/ui/input";

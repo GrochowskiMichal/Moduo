@@ -12,6 +12,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import {
   bundledPackages,
   notesDocCodeHash,

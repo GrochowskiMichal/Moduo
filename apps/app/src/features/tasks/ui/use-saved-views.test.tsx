@@ -5,12 +5,12 @@
 // only as a new one.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { tasksViewDefaults } from "../display";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import { newViewPrefs, type TaskView } from "../views";
+import { renderWithTasks } from "../testing/render-with-tasks";
+import { newViewPrefs, type TaskView, viewPayload } from "../views";
 import { useSavedViews } from "./use-saved-views";
 
 beforeAll(() => {
@@ -47,26 +47,29 @@ function view(over: Partial<TaskView> = {}): TaskView {
   };
 }
 
-function renderSavedViews({ openView = null as TaskView | null, drafting = false, dirty = false }) {
+/**
+ * The hook on the page's real saved views (the provider's ops), over a fake
+ * server: `createView` and `updateView` are what Save and Save as new reach.
+ */
+async function renderSavedViews({
+  openView = null as TaskView | null,
+  drafting = false,
+  dirty = false,
+}) {
   const saved = view({ id: "v-new", name: "Launch week" });
-  const api = {
-    views: openView ? [openView] : [],
-    saveView: rs.fn(async () => saved),
-    saveViewChanges: rs.fn(async () => true),
-    renameView: rs.fn(),
-    shareView: rs.fn(),
-    deleteView: rs.fn(),
-    moveView: rs.fn(),
-    seedViews: rs.fn(async () => true),
-    reachedServer: true,
-  } as unknown as TasksModuleApi;
+  const server = {
+    createView: rs.fn(async () => saved),
+    updateView: rs.fn(async ({ viewId }: { viewId: string }) => ({
+      ...(openView ?? saved),
+      id: viewId,
+    })),
+  };
   const onOpen = rs.fn();
   const onNewView = rs.fn();
   const revert = rs.fn();
   const prefs = { ...newViewPrefs(), layout: "board" as const };
   function Harness() {
     const views = useSavedViews({
-      api,
       workspaceId: "w1",
       userId: "me",
       place: "all",
@@ -95,8 +98,12 @@ function renderSavedViews({ openView = null as TaskView | null, drafting = false
       </TooltipProvider>
     );
   }
-  render(<Harness />);
-  return { api, onOpen, onNewView, revert, prefs };
+  await renderWithTasks(<Harness />, {
+    seed: { views: openView ? [openView] : [] },
+    runtime: { tasks: server },
+    userId: "me",
+  });
+  return { server, onOpen, onNewView, revert, prefs };
 }
 
 async function openMore() {
@@ -109,14 +116,14 @@ async function openMore() {
 }
 
 describe("a new view (MOD-142)", () => {
-  it("the Views header's + opens one", () => {
-    const { onNewView } = renderSavedViews({});
+  it("the Views header's + opens one", async () => {
+    const { onNewView } = await renderSavedViews({});
     fireEvent.click(screen.getByRole("button", { name: "Views +" }));
     expect(onNewView).toHaveBeenCalledTimes(1);
   });
 
   it("shows Save view… from the start, and is named when it's saved", async () => {
-    const { api, onOpen, revert, prefs } = renderSavedViews({ drafting: true });
+    const { server, onOpen, revert, prefs } = await renderSavedViews({ drafting: true });
     // It saves from its own button, not the ⋯.
     expect(screen.getByTestId("save-as").textContent).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "Save view…" }));
@@ -130,11 +137,13 @@ describe("a new view (MOD-142)", () => {
     await act(async () => {
       fireEvent.click(within(dialog).getByRole("button", { name: "Save view" }));
     });
-    expect(api.saveView).toHaveBeenCalledWith({
+    expect(server.createView).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      id: expect.any(String),
       name: "Launch week",
       scope: "all",
       projectId: null,
-      prefs,
+      ...viewPayload(prefs),
     });
     // The new view opens, and the blank copy is let go.
     expect(revert).toHaveBeenCalled();
@@ -142,7 +151,7 @@ describe("a new view (MOD-142)", () => {
   });
 
   it("once changed, its ▾ can start it over", async () => {
-    const { revert } = renderSavedViews({ drafting: true, dirty: true });
+    const { revert } = await renderSavedViews({ drafting: true, dirty: true });
     const menu = await openMore();
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Revert changes" }));
     // It runs once the menu has closed (a ▾ item may open a dialog).
@@ -152,20 +161,24 @@ describe("a new view (MOD-142)", () => {
 });
 
 describe("updating a view you're on (MOD-142)", () => {
-  it("shows nothing while it's as saved", () => {
-    renderSavedViews({ openView: view() });
+  it("shows nothing while it's as saved", async () => {
+    await renderSavedViews({ openView: view() });
     expect(screen.queryByTestId("view-changes")).toBeNull();
   });
 
   it("your view with changes: a clear Save, then Save as new view… and Revert in its ▾", async () => {
     const mine = view();
-    const { api, revert, prefs } = renderSavedViews({ openView: mine, dirty: true });
+    const { server, revert, prefs } = await renderSavedViews({ openView: mine, dirty: true });
     const save = within(screen.getByTestId("toolbar")).getByRole("button", { name: "Save" });
     expect(save.className).toContain("bg-state-active");
     await act(async () => {
       fireEvent.click(save);
     });
-    expect(api.saveViewChanges).toHaveBeenCalledWith("v1", prefs);
+    expect(server.updateView).toHaveBeenCalledWith({
+      workspaceId: "w1",
+      viewId: "v1",
+      patch: viewPayload(prefs),
+    });
     expect(revert).toHaveBeenCalled();
 
     const menu = await openMore();
@@ -180,7 +193,7 @@ describe("updating a view you're on (MOD-142)", () => {
   });
 
   it("someone else's view saves only as a new one", async () => {
-    renderSavedViews({ openView: view({ ownerId: "them", shared: true }), dirty: true });
+    await renderSavedViews({ openView: view({ ownerId: "them", shared: true }), dirty: true });
     const toolbar = screen.getByTestId("toolbar");
     expect(within(toolbar).queryByRole("button", { name: "Save" })).toBeNull();
     expect(within(toolbar).getByRole("button", { name: "Save as new view…" })).toBeTruthy();

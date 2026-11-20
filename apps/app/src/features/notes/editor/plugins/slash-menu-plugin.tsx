@@ -22,6 +22,7 @@ import {
   $insertNodes,
   $isRangeSelection,
   $isTextNode,
+  type ElementNode,
   type LexicalEditor,
   type NodeKey,
 } from "lexical";
@@ -44,10 +45,12 @@ import {
   Table,
   Type,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { $createEntityRefNode } from "@/features/spine/editor/entity-ref-node";
 import { closeOnOutsidePointer, registerMenuKeys } from "@/features/spine/editor/menu-keys";
 import { useMentionSearch } from "@/features/spine/hooks/use-mention-search";
@@ -56,8 +59,11 @@ import { executeMention, type MentionContext } from "@/features/spine/mention-ac
 import { MentionCommand } from "@/features/spine/ui/mention-picker";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { cn } from "@/lib/utils";
+
 import { filterTaskCandidates, shouldOfferCreate } from "../../tasks/task-line";
 import { displayTitle } from "../../title";
+import { afterFocusRestore } from "../after-focus-restore";
 import { $runBlockCommand } from "../block-actions";
 import { useNotesEditorBridge } from "../notes-editor-bridge";
 import { $createPageRowNode } from "../schema/page-row-node";
@@ -132,7 +138,8 @@ function resolveSlashMenuState(editor: LexicalEditor): SlashMenuState | null {
     if (!$isTextNode(node) || !node.isSimpleText()) return null;
 
     const textBefore = node.getTextContent().slice(0, anchor.offset);
-    const match = textBefore.match(/(?:^|\s)\/([^\s/]*)$/);
+    // One space is allowed ("/heading 1", "/head 2"); a second word ends it.
+    const match = textBefore.match(/(?:^|\s)\/([^\s/]*(?: [^\s/]*)?)$/);
     if (!match) return null;
 
     const query = match[1] ?? "";
@@ -178,8 +185,13 @@ function runBasicCommand(id: SlashCommandId): void {
       $insertNodes([$createHorizontalRuleNode(), $createParagraphNode()]);
       break;
     case "table": {
-      const table = $createTableNodeWithDimensions(3, 3, true);
+      // A header row only: a header COLUMN greyed the first column of every
+      // table and read as a rendering bug.
+      const table = $createTableNodeWithDimensions(3, 3, { rows: true, columns: false });
       $insertNodes([table, $createParagraphNode()]);
+      // Start typing in the first cell, not on the line under the table.
+      const firstCell = table.getFirstChild<ElementNode>()?.getFirstChild<ElementNode>();
+      firstCell?.selectStart();
       break;
     }
     case "text":
@@ -213,6 +225,7 @@ export function SlashMenuPlugin({
   const [pickerQuery, setPickerQuery] = useState("");
   const pickerPortalRef = useRef<HTMLDivElement | null>(null);
   const menuBoxRef = useRef<HTMLDivElement | null>(null);
+  const listId = useId();
 
   const commands = filterSlashCommands(menu?.query ?? "");
 
@@ -278,6 +291,13 @@ export function SlashMenuPlugin({
     setSelectedIndex((current) => Math.min(current, Math.max(0, commands.length - 1)));
   }, [commands.length]);
 
+  // Arrowing past the visible rows scrolls the highlight along.
+  useEffect(() => {
+    menuBoxRef.current
+      ?.querySelector<HTMLElement>('[aria-selected="true"]')
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedIndex]);
+
   // A fresh query means a fresh list — never a stale mid-list highlight.
   useEffect(() => {
     setSelectedIndex(0);
@@ -296,10 +316,9 @@ export function SlashMenuPlugin({
   // stranding the keyboard in the document body (validator BLOCKER).
   useEffect(() => {
     if (!picker) return;
-    const id = setTimeout(() => {
+    return afterFocusRestore(() => {
       pickerPortalRef.current?.querySelector<HTMLInputElement>("[cmdk-input]")?.focus();
-    }, 30);
-    return () => clearTimeout(id);
+    });
   }, [picker]);
 
   // The stage-2 picker's dismissal paths: Escape inside the picker (the
@@ -465,6 +484,13 @@ export function SlashMenuPlugin({
         closeAll();
         return;
       }
+      // The page lists its sub-pages under the body (MOD-81): open the new
+      // child, like the sidebar's "+", instead of mirroring it as a row.
+      if (bridge?.subpagesListedFor) {
+        closeAll();
+        bridge.openNote(childId);
+        return;
+      }
       const label = displayTitle(bridge?.getNoteMeta(childId)?.title ?? "");
       editor.update(() => {
         $insertNodes([$createPageRowNode(childId, label), $createParagraphNode()]);
@@ -516,7 +542,11 @@ export function SlashMenuPlugin({
   useEffect(
     () =>
       registerMenuKeys(editor, {
-        isOpen: () => menuRef.current !== null || pickerRef.current !== null,
+        // A menu with no matching command is not drawn, so it must not hold
+        // ↵ either ("call /api" + ↵ is a new line).
+        isOpen: () =>
+          (menuRef.current !== null && commandsRef.current.length > 0) ||
+          pickerRef.current !== null,
         count: () => (menuRef.current ? commandsRef.current.length : 0),
         index: () => selectedIndexRef.current,
         setIndex: setSelectedIndex,
@@ -530,6 +560,20 @@ export function SlashMenuPlugin({
     [editor],
   );
   const menuOpen = menu !== null && commands.length > 0;
+  // The text is the menu's input: tell assistive tech which list it drives
+  // and which option ↑↓ are on (the caret never leaves the text).
+  useEffect(() => {
+    const root = editor.getRootElement();
+    if (!root || !menuOpen) return;
+    root.setAttribute("aria-autocomplete", "list");
+    root.setAttribute("aria-controls", listId);
+    root.setAttribute("aria-activedescendant", `${listId}-${selectedIndex}`);
+    return () => {
+      root.removeAttribute("aria-autocomplete");
+      root.removeAttribute("aria-controls");
+      root.removeAttribute("aria-activedescendant");
+    };
+  }, [editor, menuOpen, selectedIndex, listId]);
   useEffect(() => {
     if (!menuOpen) return;
     return closeOnOutsidePointer(
@@ -543,7 +587,7 @@ export function SlashMenuPlugin({
     return createPortal(
       <div
         ref={pickerPortalRef}
-        className="fixed z-50 w-72 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-lg"
+        className={cn(FLOATING_SURFACE, "fixed z-(--z-popover) w-72 overflow-hidden shadow-lg")}
         style={{ top: picker.top, left: picker.left }}
         onKeyDown={(event) => {
           // Focus lives in the picker's input — the editor's Escape handler
@@ -562,7 +606,11 @@ export function SlashMenuPlugin({
           onSelect={commitPick}
           loading={search.loading}
           placeholder={`Search ${picker.command}s…`}
-          emptyLabel={`No ${picker.command} found.`}
+          emptyLabel={
+            picker.command === "task" && pickerQuery.trim() === ""
+              ? "No open tasks yet. Type a title to create one."
+              : `No ${picker.command} found.`
+          }
           autoFocusInput
         />
       </div>,
@@ -570,14 +618,36 @@ export function SlashMenuPlugin({
     );
   }
 
-  if (!menu || commands.length === 0) return null;
+  if (!menu) return null;
+  if (commands.length === 0) {
+    // A one-word miss says so (the menu used to just vanish); after a space
+    // you are writing prose, so nothing shows.
+    if (menu.query.includes(" ")) return null;
+    return createPortal(
+      <div
+        className={cn(FLOATING_SURFACE, "fixed z-(--z-popover) w-72 p-1 shadow-lg")}
+        style={{ top: menu.top, left: menu.left }}
+        role="status"
+      >
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">No matching block</p>
+      </div>,
+      document.body,
+    );
+  }
 
+  // Filtered results are ranked across groups: headers would repeat
+  // ("Basics · Insert · Basics…"), so only the full menu shows them.
+  const grouped = menu.query === "";
   let lastGroup: string | null = null;
   return createPortal(
     <div
       ref={menuBoxRef}
-      className="fixed z-50 max-h-80 w-72 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg scrollbar-thin"
+      className={cn(
+        FLOATING_SURFACE,
+        "fixed z-(--z-popover) max-h-80 w-72 overflow-y-auto p-1 shadow-lg scrollbar-thin",
+      )}
       style={{ top: menu.top, left: menu.left }}
+      id={listId}
       role="listbox"
       aria-label="Insert block"
     >
@@ -585,7 +655,7 @@ export function SlashMenuPlugin({
         const isSelected = index === selectedIndex;
         const Icon = COMMAND_ICONS[command.id];
         const groupHeader =
-          command.group !== lastGroup ? (
+          grouped && command.group !== lastGroup ? (
             <Eyebrow as="div" className="px-2 pb-0.5 pt-2 first:pt-1">
               {command.group}
             </Eyebrow>
@@ -596,6 +666,8 @@ export function SlashMenuPlugin({
             {groupHeader}
             <button
               type="button"
+              id={`${listId}-${index}`}
+              tabIndex={-1}
               role="option"
               aria-selected={isSelected}
               className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors duration-(--motion-fade) ease-(--ease-out) ${
@@ -608,8 +680,10 @@ export function SlashMenuPlugin({
               }}
             >
               <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{command.title}</span>
-              <span className="shrink-0 truncate text-xs text-muted-foreground/70">
+              {/* The name never truncates; the hint gives way ("Che…" read as
+                  nothing). */}
+              <span className="shrink-0">{command.title}</span>
+              <span className="min-w-0 flex-1 truncate text-right text-xs text-subtle-foreground">
                 {command.description}
               </span>
             </button>

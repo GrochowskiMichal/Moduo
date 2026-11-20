@@ -5,14 +5,15 @@
 // holds one never redraws for it.
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+
 import {
   extendSelection,
   isMulti,
   NO_SELECTION,
   pruneSelection,
+  selectAll as selectAllIn,
   type SelectMods,
   type SelectResult,
-  selectAll as selectAllIn,
   selectWith,
   type TaskSelection,
 } from "../selection";

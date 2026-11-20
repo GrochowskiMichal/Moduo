@@ -5,6 +5,7 @@
  *
  * POST { action: "preview", slug, timeZone }
  * POST { action: "book", slug, start, timeZone, name, email, note, guests, answers, video, origin }
+ * An offer (/book/r/<slug>) sends `offer: <slug>` instead of `slug` (offer.ts).
  *
  * `book` is rate-limited per IP and per host (booking_rate_check). `origin` is
  * only a hint for which of our own hosts the guest email's cancel link uses;
@@ -27,14 +28,15 @@ import {
   deleteGoogleEvent,
   googleFreeBusy,
   googleUserEmail,
-  refreshGoogleAccess,
 } from "../_shared/google-calendar.ts";
+import { googleAccessForRow, googleClients, type GoogleTokenRow } from "../_shared/google-token.ts";
 import {
   appOrigin,
   bookingCancelUrl,
   bookingOrigin,
   CANONICAL_BOOKING_ORIGIN,
 } from "../_shared/app-origin.ts";
+import { busyFromHostEvents, readHostEvents } from "../_shared/booking-busy.ts";
 import { sessionBusyIntervals, TASKS_BUSY_ID } from "../_shared/booking-sessions.ts";
 import { clientIp } from "../_shared/client-ip.ts";
 import { escapeHtml, singleLine } from "../_shared/escape.ts";
@@ -47,7 +49,6 @@ import {
   zoomConnected,
   zoomMeetingIdFromLink,
 } from "../_shared/zoom.ts";
-import { decryptToken, encryptToken } from "../_shared/token-cipher.ts";
 import {
   type BookingFacts,
   bookEmails,
@@ -56,6 +57,17 @@ import {
   emailContext,
   guestTimeZone,
 } from "./emails.ts";
+import {
+  bookOffer,
+  commitFailure,
+  freeOfferSlots,
+  guestPageUrl,
+  type LoadedOffer,
+  loadOffer,
+  offerSlots,
+  offerState,
+  rebookSlug,
+} from "./offer.ts";
 import { isEmailAddress, parseGuestEmails } from "../../../apps/app/src/features/calendar/booking/guests.ts";
 import {
   computeOpenSlots,
@@ -73,16 +85,7 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
 const ENC = Deno.env.get("MODUO_TOKEN_ENCRYPTION_SECRET") ?? "";
-const GOOGLE_CLIENTS = [
-  {
-    id: Deno.env.get("GOOGLE_CALENDAR_CLIENT_ID") ?? "",
-    secret: Deno.env.get("GOOGLE_CALENDAR_CLIENT_SECRET") ?? "",
-  },
-  {
-    id: Deno.env.get("GOOGLE_CALENDAR_WEB_CLIENT_ID") ?? "",
-    secret: Deno.env.get("GOOGLE_CALENDAR_WEB_CLIENT_SECRET") ?? "",
-  },
-].filter((client) => client.id.length > 0 && client.secret.length > 0);
+const GOOGLE_CLIENTS = googleClients((name) => Deno.env.get(name));
 const APP_ORIGIN = appOrigin(Deno.env.get("APP_URL"));
 
 const CORS: Record<string, string> = {
@@ -186,6 +189,49 @@ async function loadLink(db: SupabaseClient, slug: string): Promise<LinkRow | nul
   return res.data as LinkRow;
 }
 
+/** The request's link: by the offer (overlaid) when it names one, else by its slug. */
+async function requestedLink(db: SupabaseClient, body: Record<string, unknown>) {
+  const offer = typeof body.offer === "string" ? body.offer.trim() : "";
+  if (offer) {
+    const found = await loadOffer<LinkRow>(db, offer);
+    return { link: found?.link ?? null, found };
+  }
+  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
+  return { link: slug ? await loadLink(db, slug) : null, found: null };
+}
+
+/**
+ * An open offer's times the host is still free for (their busy calendars as the
+ * link reads them, bookings through the link included), its own holds aside.
+ * null when the busy read fails: "can't check times", never every time free.
+ */
+async function offerOpenSlots(
+  db: SupabaseClient,
+  link: LinkRow,
+  found: LoadedOffer<LinkRow>,
+  now: Date,
+  access: { accessToken: string } | null,
+): Promise<Date[] | null> {
+  const slots = offerSlots(found.offer, found.times, now);
+  if (slots.length === 0) return slots;
+  const last = new Date(Math.max(...found.times.map((t) => Date.parse(t.end_at))));
+  try {
+    const busy = await busyIntervals(db, link, now, last, access?.accessToken ?? null);
+    return freeOfferSlots(slots, found.offer.duration_minutes, busy, found.times);
+  } catch (err) {
+    console.error("[booking-public] offer availability read failed:", err);
+    return null;
+  }
+}
+
+/** A picked, released or expired offer's answer: a 409 to book, its status to preview. */
+function offerClosed(found: LoadedOffer<LinkRow>, action: string, base: object): Response | null {
+  const status = offerState(found.offer, new Date());
+  if (status === "open") return null;
+  if (action === "book") return json({ error: "offer_closed" }, 409);
+  return json({ ...base, slots: [], offer: { status } });
+}
+
 async function googleAccess(
   db: SupabaseClient,
   userId: string,
@@ -193,59 +239,19 @@ async function googleAccess(
   if (!ENC || GOOGLE_CLIENTS.length === 0) return null;
   const row = await db
     .from("user_integrations")
-    .select("refresh_token_enc, access_token_enc, token_expiry")
+    .select("id, refresh_token_enc, access_token_enc, token_expiry")
     .eq("user_id", userId)
     .eq("provider", "google_calendar")
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const refreshEnc = row.data?.refresh_token_enc as string | null | undefined;
-  if (!refreshEnc) return null;
-  let refresh: string;
-  try {
-    refresh = await decryptToken(refreshEnc, ENC, userId);
-  } catch {
-    return null;
-  }
-  const expiry = row.data?.token_expiry ? Date.parse(String(row.data.token_expiry)) : 0;
-  let access = "";
-  if (expiry > Date.now() + 60_000 && row.data?.access_token_enc) {
-    try {
-      access = await decryptToken(String(row.data.access_token_enc), ENC, userId);
-    } catch {
-      access = "";
-    }
-  }
-  if (!access) {
-    let fresh: { accessToken: string; expiresAt: string; refreshToken: string } | null = null;
-    for (const client of GOOGLE_CLIENTS) {
-      try {
-        fresh = await refreshGoogleAccess({
-          clientId: client.id,
-          clientSecret: client.secret,
-          refreshToken: refresh,
-        });
-        break;
-      } catch {
-        fresh = null;
-      }
-    }
-    if (!fresh) return null;
-    access = fresh.accessToken;
-    const accessEnc = await encryptToken(fresh.accessToken, ENC, userId);
-    const refreshOut =
-      fresh.refreshToken === refresh ? refreshEnc : await encryptToken(fresh.refreshToken, ENC, userId);
-    await db
-      .from("user_integrations")
-      .update({
-        access_token_enc: accessEnc,
-        refresh_token_enc: refreshOut,
-        token_expiry: fresh.expiresAt,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("user_id", userId)
-      .eq("provider", "google_calendar");
-  }
+  if (row.error || !row.data) return null;
+  const access = await googleAccessForRow(
+    { db, encSecret: ENC, clients: GOOGLE_CLIENTS },
+    userId,
+    row.data as GoogleTokenRow,
+  );
+  if (!access) return null;
   const email = await googleUserEmail(access);
   return { accessToken: access, email };
 }
@@ -258,28 +264,18 @@ async function busyIntervals(
   accessToken: string | null,
 ): Promise<Interval[]> {
   const ids = new Set(busyIds(link.busy_calendar_ids));
-  const events = await db
-    .from("calendar_events")
-    .select("start_time, end_time, source_account_id, calendar_id")
-    .eq("workspace_id", link.workspace_id)
-    // PERM-0: only the host's own calendar decides their availability —
-    // a teammate's events must neither block slots nor be inferable here.
-    .eq("owner_id", link.owner_user_id)
-    .is("deleted_at", null)
-    .lt("start_time", to.toISOString())
-    .gt("end_time", from.toISOString());
-  const intervals: Interval[] = [];
-  for (const row of events.data ?? []) {
-    const account = (row.source_account_id as string | null) ?? null;
-    const calendarId = (row.calendar_id as string | null) ?? "moduo";
-    const isModuo = account == null && (calendarId === "moduo" || calendarId === "");
-    const selected = (account != null && ids.has(account)) || (isModuo && ids.has("moduo"));
-    if (!selected) continue;
-    intervals.push({
-      start: new Date(String(row.start_time)),
-      end: new Date(String(row.end_time)),
-    });
-  }
+  // PERM-0: only the host's own calendar decides their availability (a
+  // teammate's events must neither block slots nor be inferable here), with
+  // repeats expanded over the window on the server. A day either side, so an
+  // occurrence inside a buffer of the first or last slot still counts.
+  const rows = await readHostEvents((fn, args, page) => db.rpc(fn, args).range(page.from, page.to), {
+    workspaceId: link.workspace_id,
+    hostId: link.owner_user_id,
+    from: new Date(from.getTime() - 86_400_000),
+    to: new Date(to.getTime() + 86_400_000),
+    zone: link.host_timezone,
+  });
+  const intervals: Interval[] = busyFromHostEvents(rows, ids);
 
   // TV-D10 (default d): the host's work sessions from Tasks, when the link's
   // busy list has them. Times only; a guest never learns what the work is.
@@ -301,6 +297,8 @@ async function busyIntervals(
     .in("status", ["pending", "confirmed"])
     .lt("start_at", to.toISOString())
     .gt("end_at", from.toISOString());
+  // Booked times hide slots: a failed read must not offer them again.
+  if (bookings.error) throw new Error(`bookings: ${bookings.error.message}`);
   const staleBefore = Date.now() - 5 * 60_000;
   for (const row of bookings.data ?? []) {
     if (row.status === "pending" && Date.parse(String(row.updated_at)) < staleBefore) continue;
@@ -455,13 +453,34 @@ function publicLink(
   };
 }
 
-/** The host's own inbox (their Moduo account), for the host emails. */
-async function hostInbox(db: SupabaseClient, link: LinkRow): Promise<{ email: string; userId: string | null }> {
+/**
+ * The host's own inbox (their Moduo account), for the host emails. `account`
+ * is that address only when it was read from Auth (verified at sign-in), never
+ * the link's `owner_email`, which the owner can write.
+ */
+async function hostInbox(
+  db: SupabaseClient,
+  link: LinkRow,
+): Promise<{ email: string; userId: string | null; account: string }> {
   const fallback = (link.owner_email ?? "").trim();
-  if (!link.owner_user_id) return { email: fallback, userId: null };
+  if (!link.owner_user_id) return { email: fallback, userId: null, account: "" };
   const user = await db.auth.admin.getUserById(link.owner_user_id).catch(() => null);
-  const email = user?.data?.user?.email?.trim() || fallback;
-  return { email, userId: link.owner_user_id };
+  // Confirmed only: "Confirm email" is on in prod, but a local stack may not be.
+  const account = user?.data?.user?.email_confirmed_at ? user.data.user.email?.trim() || "" : "";
+  return { email: account || fallback, userId: link.owner_user_id, account };
+}
+
+/**
+ * The address guest emails and calendar files name as the host (ORGANIZER,
+ * Reply-To): the connected Google account or the Moduo account, both verified.
+ * Guests are anyone the booker typed, so a typed address would let a host send
+ * a "reply to security@bank.example" from our domain.
+ */
+function verifiedHostEmail(
+  access: { email: string | null } | null,
+  inbox: { account: string },
+): string {
+  return access?.email?.trim() || inbox.account;
 }
 
 /**
@@ -528,6 +547,7 @@ Deno.serve(async (req: Request) => {
       attendee_email: string;
       guest_emails: string[] | null;
       timezone: string | null;
+      slot_slug: string | null;
     };
     const linkRes = await db
       .from("exposed_slot_links")
@@ -599,7 +619,7 @@ Deno.serve(async (req: Request) => {
         guestZone: row.timezone ?? "",
         video: zoomId ? VIDEO_LABEL.zoom : VIDEO_LABEL.google_meet,
         joinUrl: row.meeting_link ?? "",
-        host: { name: host.name, avatarUrl: host.avatarUrl, email: access?.email || link.owner_email || inbox.email },
+        host: { name: host.name, avatarUrl: host.avatarUrl, email: verifiedHostEmail(access, inbox) },
         hostInbox: inbox,
         guest: { name: row.attendee_name, email: row.attendee_email },
         guests: Array.isArray(row.guest_emails) ? row.guest_emails : [],
@@ -607,7 +627,8 @@ Deno.serve(async (req: Request) => {
         at: cancelledAt.toISOString(),
       };
       const planned = cancelEmails(facts, {
-        rebookUrl: `${CANONICAL_BOOKING_ORIGIN}/book/${encodeURIComponent(link.slug)}`,
+        // An offer's booking rebooks on the offer's page, never the host's link.
+        rebookUrl: guestPageUrl(CANONICAL_BOOKING_ORIGIN, rebookSlug(row.slot_slug, link.slug)),
         nowMs: cancelledAt.getTime(),
         googleDropped,
       });
@@ -618,10 +639,11 @@ Deno.serve(async (req: Request) => {
     return json({ ok: true, status: "cancelled", googleInvites: googleCreated && googleDropped, emailed });
   }
 
-  const slug = typeof body.slug === "string" ? body.slug.trim() : "";
-  const link = slug ? await loadLink(db, slug) : null;
+  const { link, found } = await requestedLink(db, body);
   if (!link || !link.workspace_id) return json({ error: "not_found" }, 404);
   const host = await hostIdentity(db, link);
+  const closed = found ? offerClosed(found, action, publicLink(link, host, [])) : null;
+  if (closed) return closed;
   const setting = videoSetting(link.video_provider);
   // A `book` on a link that can't take bookings is an error, never the preview
   // payload: the guest page treats any 200 as booked.
@@ -649,7 +671,14 @@ Deno.serve(async (req: Request) => {
     if (action === "book") return json({ error: "host_unavailable" }, 409);
     return json({ ...publicLink(link, host, video), slots: [] });
   }
-  const collective = await collectiveOpenSlots(db, link, now, horizonEnd);
+  // A busy read that failed answers "can't check times", never every slot free.
+  const collective = found
+    ? await offerOpenSlots(db, link, found, now, access)
+    : await collectiveOpenSlots(db, link, now, horizonEnd).catch((err: unknown) => {
+        console.error("[booking-public] availability read failed:", err);
+        return null;
+      });
+  if (collective === null) return json({ error: "unavailable" }, 503);
   if (collective === "paused") {
     if (action === "book") return json({ error: "paused" }, 409);
     return json({ ...publicLink(link, host, video), paused: true, slots: [] });
@@ -660,6 +689,7 @@ Deno.serve(async (req: Request) => {
     return json({
       ...publicLink(link, host, video),
       slots: slots.map((slot) => slot.toISOString()),
+      ...(found && { offer: { status: "open" } }),
     });
   }
 
@@ -684,7 +714,9 @@ Deno.serve(async (req: Request) => {
     ? parseGuestEmails(body.guests, email)
     : { ok: true as const, emails: [] as string[] };
   if (!guests.ok) return json({ error: "bad_guest" }, 400);
-  const hostAddress = (access?.email || link.owner_email || "").trim().toLowerCase();
+  const inbox = await hostInbox(db, link);
+  const hostEmail = verifiedHostEmail(access, inbox);
+  const hostAddress = hostEmail.toLowerCase();
   const invitedEmails = guests.emails.filter((address) => address !== hostAddress);
   const answersIn = Array.isArray(body.answers) ? body.answers : [];
   const questions = Array.isArray(link.questions_json)
@@ -694,10 +726,10 @@ Deno.serve(async (req: Request) => {
   for (const question of questions) {
     const id = typeof question.id === "string" ? question.id : "";
     const label = typeof question.label === "string" ? question.label : "";
-    const found = answersIn.find(
+    const answer = answersIn.find(
       (item) => item && typeof item === "object" && (item as { id?: string }).id === id,
     ) as { value?: string } | undefined;
-    const value = typeof found?.value === "string" ? found.value.trim() : "";
+    const value = typeof answer?.value === "string" ? answer.value.trim() : "";
     if (question.required && !value) return json({ error: "missing_answer", id }, 400);
     if (id && value) answers.push({ id, label, value });
   }
@@ -705,7 +737,6 @@ Deno.serve(async (req: Request) => {
   // An unusable zone falls back to the host's (AC30): Intl would otherwise
   // throw after the booking is committed, and the guest's email names the zone used.
   const guestZone = guestTimeZone(body.timeZone, link.host_timezone);
-  const hostEmail = access?.email || link.owner_email || "";
   if (!hostEmail) return json({ error: "host_unavailable" }, 409);
 
   const gate = await bookingGate(db, req, link.owner_user_id);
@@ -826,7 +857,16 @@ Deno.serve(async (req: Request) => {
   const mirror = meet.eventId && access?.email
     ? await googleMirrorAccount(db, link, access.email)
     : null;
-  const committed = await db.rpc("booking_op_commit", {
+  const committed = found
+    ? await bookOffer(db, found, start, {
+        description,
+        location: meet.meetLink,
+        name,
+        email,
+        hostEmail,
+        mirror: mirror && { ...mirror, eventId: meet.eventId },
+      })
+    : await db.rpc("booking_op_commit", {
     p_workspace_id: link.workspace_id,
     p_owner_id: link.owner_user_id,
     p_title: link.name || "Meeting",
@@ -847,7 +887,8 @@ Deno.serve(async (req: Request) => {
   });
   if (committed.error || !committed.data) {
     await undoMeeting();
-    return fail("book_failed");
+    const failure = commitFailure(found, committed.error);
+    return fail(failure.error, failure.status);
   }
   const ids = committed.data as { event_id?: string; contact_id?: string };
 
@@ -865,7 +906,7 @@ Deno.serve(async (req: Request) => {
     video: VIDEO_LABEL[platform],
     joinUrl: meet.meetLink,
     host: { name: host.name, avatarUrl: host.avatarUrl, email: hostEmail },
-    hostInbox: await hostInbox(db, link),
+    hostInbox: inbox,
     guest: { name, email },
     guests: invitedEmails,
     googleInvites,
@@ -883,7 +924,7 @@ Deno.serve(async (req: Request) => {
     calendar_synced: true,
     updated_at: new Date().toISOString(),
   };
-  const context = emailContext(facts, { cancelUrl, rebookUrl: `${origin}/book/${encodeURIComponent(link.slug)}` });
+  const context = emailContext(facts, { cancelUrl, rebookUrl: guestPageUrl(origin, link.slug) });
   const withContext = {
     ...(await db
       .from("slot_bookings")

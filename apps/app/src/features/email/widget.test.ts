@@ -126,4 +126,39 @@ describe("shapeEmailInbox", () => {
     expect(view.awaitingFollowUp[0]!.fromName).toBe("x@y.com");
     expect(view.awaitingFollowUp[0]!.subject).toBe("(No subject)");
   });
+
+  it("desktop: Personal unread and today's snoozes come from the local engine (AC41)", () => {
+    const today = NOW.getTime() + 3600_000;
+    const row = (id: string, until: number | null) => ({
+      threadId: id,
+      accountId: "a",
+      subject: `S ${id}`,
+      snippet: "",
+      senders: [{ name: "Anna", email: "anna@x.com" }],
+      lastDateMs: 0,
+      messageCount: 1,
+      unread: false,
+      pinned: false,
+      hasAttachments: false,
+      hasInvite: false,
+      tab: "personal" as const,
+      priority: false,
+      muted: false,
+      snoozedUntilMs: until,
+    });
+    const view = shapeEmailInbox(
+      bundle({ refs: [ref({ isSnoozed: true, snoozeUntil: NOW.toISOString() })] }),
+      {
+        now: NOW,
+        local: {
+          counts: { byViewKey: { "unified:inbox|personal": 4 }, badge: 9 },
+          snoozed: [row("later", today + 30 * 86_400_000), row("t", today)],
+        },
+      },
+    );
+    expect(view.snoozedDueToday.map((r) => r.threadKey)).toEqual(["t"]);
+    expect(view.snoozedDueToday[0]?.local).toBe(true);
+    expect(view.personalUnread).toBe(4);
+    expect(shapeEmailInbox(bundle({}), { now: NOW }).personalUnread).toBeNull();
+  });
 });

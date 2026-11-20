@@ -22,21 +22,29 @@ tauri-build = { version = "2.0", features = [] }
 active-win-pos-rs = "0.11"
 aes-gcm = "0.11"
 anyhow = "1"
-argon2 = "0.6"
 base64 = "0.23"
-bip39 = { version = "3", features = ["rand"] }
 ed25519-dalek = "3"
 chrono = { version = "0.4", features = ["serde"] }
 fastrand = "2"
-# 3.0 is still alpha. 2.4.1 is the newest stable.
-imap = "2.4.1"
+# Async IMAP on tokio, driven natively by the mail engine's account actors
+# (src/mail/session.rs). Replaced the unmaintained `imap` 2.x crate.
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
 lettre = "0.11"
-mailparse = "0.18"
+# MR-4: the new engine's MIME parser (Stalwart), tolerant of malformed mail.
+mail-parser = "0.11"
+# MR-4: collecting async-imap FETCH streams.
+futures-util = "0.3"
 native-tls = "0.2"
+# Per-read/per-write socket timeouts for the async IMAP stream (the old std
+# TcpStream set_read_timeout semantics).
+tokio-io-timeout = "1"
+tokio-native-tls = "0.3"
 rand = "0.10"
 # 4.x cannot open a 2.x database file. Desktop stores (mail, identity) stay on 2.x.
 redb = "2.6"
 roxmltree = "0.21"
+# The rebuilt mail store (specs/mail-rebuild.md decision 2): bundled SQLite with FTS5.
+rusqlite = { version = "0.36", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -46,7 +54,7 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "form", "query", "rustls", "http2"] }
 url = "2"
 uuid = { version = "1", features = ["v4", "v5", "serde"] }
@@ -54,3 +62,23 @@ webbrowser = "1"
 # v4's default `v1` feature picks the native store per OS. The old
 # apple-native / windows-native / linux-native feature names are gone.
 keyring = "4"
+
+[dev-dependencies]
+
+# Release builds trade build time for a smaller, faster binary (Tauri's size guide). Unwinding stays
+# on (no panic = "abort"): a panicking tokio task must not take the whole app down. Nothing reads
+# symbols from a shipped binary (no crash reporter), so stripping them is free.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+# Size over peak speed: the shell is I/O-bound (IMAP, HTTP, redb), so "s" costs
+# nothing a user feels. Measured 2026-10-20 (binary with the frontend embedded):
+# opt-level 3 = 14.15 MB, "s" = 10.80 MB, "z" = 8.14 MB. "z" was not taken:
+# it de-inlines hot loops (MIME parsing, search) for a smaller further gain.
+opt-level = "s"
+# panic stays "unwind" on purpose: a panic in one tokio task (an IMAP worker
+# choking on a malformed message, say) ends only that task and the app keeps
+# running. "abort" would save another ~2.7 MB (10.80 -> 8.11 MB) but turn any
+# such panic into a crash of the whole app.
+panic = "unwind"

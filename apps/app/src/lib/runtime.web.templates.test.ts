@@ -50,7 +50,7 @@ function fakeClient(opts: { tables?: Record<string, Answer>; rpc?: Record<string
 }
 
 describe("templates through the runtime (TV-D15)", () => {
-  it("lists both kinds; a database before the migration has none", async () => {
+  it("lists both kinds; a missing table fails loudly", async () => {
     const { api } = fakeClient({
       tables: {
         task_templates: { data: [row({ id: "a", name: "Brief" })], error: null },
@@ -74,7 +74,9 @@ describe("templates through the runtime (TV-D15)", () => {
         },
       },
     });
-    expect(await before.api.listTemplates("ws")).toEqual([]);
+    await expect(before.api.listTemplates("ws")).rejects.toThrow(
+      /task_templates|project_templates/,
+    );
   });
 
   it("duplicates through the op with the minted id and maps the answer", async () => {
@@ -119,7 +121,7 @@ describe("templates through the runtime (TV-D15)", () => {
     ).toEqual({ id: "t", title: "Brief", project_id: "p", section_id: "s1", assignee_id: null });
   });
 
-  it("says what's missing when the server is older than the app", async () => {
+  it("passes the server's error through", async () => {
     const { api } = fakeClient({
       rpc: {
         task_templates_op_save: {
@@ -132,7 +134,7 @@ describe("templates through the runtime (TV-D15)", () => {
       },
     });
     await expect(api.saveTaskTemplate({ workspaceId: "ws", taskId: "t1" })).rejects.toThrow(
-      /needs a newer server/,
+      /Could not find the function public.task_templates_op_save/,
     );
   });
 

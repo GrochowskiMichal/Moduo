@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
 
-import { type Diagnostics, describeSyncStatus, formatDebugInfo } from "./advanced";
+import { describeSyncStatus, type Diagnostics, formatDebugInfo } from "./advanced";
 
 describe("describeSyncStatus (AC11)", () => {
   it("reports Synced / Offline when there are no pending note changes", () => {

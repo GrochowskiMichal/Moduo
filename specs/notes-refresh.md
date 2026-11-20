@@ -1,6 +1,6 @@
 # Spec: Notes refresh (new core, new surface)
 
-> Status: **In build — NR-1–4 and NR-6–8 built and on prod (2026-10-16); NR-5 and NR-9–12 open, parked 2026-10-16; New Notes still behind the switch** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
+> Status: **In build — NR-1–4 and NR-6–8 built and on prod (2026-10-16); NR-12 flipped early on 2026-10-24 (classic deleted, New Notes is the only Notes; see decisions/notes.md); NR-5, NR-9, NR-10 and NR-11 open as follow-ups** · Owner: mike (engineer-mode `/s1`, 2026-10-13; 20 product-code calls ratified by Mike) · Supersedes: [specs/notes.md](./notes.md) and [.design/notes/DESIGN_BRIEF.md](../.design/notes/DESIGN_BRIEF.md) wherever they disagree (§2 page anatomy, §2a sidebar, §3c `/mindmap`, quote-comments). Everything else in them (task-line semantics, `@` = people, publish, markdown at every door, offline) still holds · Module contract: [docs/moduo-module-contract.md](../docs/moduo-module-contract.md)
 
 ## Scope
 

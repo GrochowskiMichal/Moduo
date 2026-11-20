@@ -28,6 +28,7 @@ import {
   Zap,
 } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
 import { normalizeLabelColor } from "../../../components/tag-colors";
 import { TeamMark } from "../../../components/ui/avatar";
 import { FilterBar, FilterButton } from "../../../components/ui/filter-bar";
@@ -37,6 +38,7 @@ import type {
   FilterOption,
 } from "../../../components/ui/filter-model";
 import { NavRowDot } from "../../../components/ui/nav-row";
+import { useAppHotkeys } from "../../../lib/hotkeys";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { assigneeListName, SELF_KEYWORDS } from "../assignee-options";
 import type { Assignee } from "../assignees";
@@ -52,11 +54,22 @@ import {
   taskFilterShape,
   WAITING_ANY,
 } from "../filters";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
-import type { Bucket, Tag, Task, Team } from "../model";
+import type { Bucket, ProjectStatus, Tag, Task, Team } from "../model";
 import { takeSearchTokens, taskMatchesQuery } from "../search";
 import { bucketDotColor } from "../sidebar";
-import { STATUS_KEY_LABELS } from "../statuses";
+import {
+  CATEGORY_LABELS,
+  isStatusKey,
+  STATUS_KEY_LABELS,
+  statusChoiceGroups,
+  statusKeyCategory,
+} from "../statuses";
+import {
+  useStatusesForBucket,
+  useTaskCommands,
+  useTasksSelector,
+  useTaskTagIndex,
+} from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 import { AssigneeAvatar } from "./assignee-avatar";
 import { StatusIcon } from "./status-icon";
@@ -95,32 +108,82 @@ const LEVELS = (none: string): FilterOption[] => [
   { value: NONE_VALUE, label: none },
 ];
 
+/** Filter → Status across projects: the five categories by their keys. The
+ *  labels every surface uses ("To do", "Won't do", calls 21/53a). Won't do
+ *  tasks are out of every scope until this asks for them (TV-U2, AC1.4).
+ *  TV-D9: Backlog joins, and each value leads with its category's icon (the
+ *  values stay the stored legacy ones, so saved filters keep working). */
+const STATUS_KEY_OPTIONS: FilterOption[] = [
+  {
+    value: "backlog",
+    label: STATUS_KEY_LABELS.backlog,
+    leading: <StatusIcon category="backlog" />,
+    keywords: ["someday", "not planned"],
+  },
+  { value: "todo", label: STATUS_KEY_LABELS.todo, leading: <StatusIcon category="todo" /> },
+  {
+    value: "in_progress",
+    label: STATUS_KEY_LABELS.in_progress,
+    leading: <StatusIcon category="in_progress" />,
+  },
+  { value: "done", label: STATUS_KEY_LABELS.done, leading: <StatusIcon category="done" /> },
+  {
+    value: "archived",
+    label: STATUS_KEY_LABELS.archived,
+    leading: <StatusIcon category="wont_do" />,
+    keywords: ["won't do", "wont do", "archived"],
+  },
+];
+
+/**
+ * What Filter → Status offers (MOD-240): inside one project, its own
+ * statuses by name (the Details picker's list, by id); elsewhere, or when
+ * the project's statuses can't be read, the five categories. A value the
+ * list lacks keeps a readable chip: a category from an older filter by its
+ * name, another project's status by its own, a deleted one as such.
+ */
+export function statusFilterOptions(
+  set: readonly ProjectStatus[],
+  statusById: ReadonlyMap<string, ProjectStatus>,
+  conditions: readonly FilterCondition[],
+): FilterOption[] {
+  const asked = new Set(
+    conditions.filter((c) => c.dimension === "status").flatMap((c) => c.values),
+  );
+  const groups = statusChoiceGroups(set, (s) => asked.has(s.id));
+  const options: FilterOption[] =
+    groups.length === 0
+      ? STATUS_KEY_OPTIONS
+      : groups.flatMap((g) =>
+          g.statuses.map((s) => ({
+            value: s.id,
+            label: s.name,
+            leading: <StatusIcon category={s.category} />,
+            // Typing a category still finds its statuses ("done" → Shipped).
+            keywords: [CATEGORY_LABELS[s.category]],
+          })),
+        );
+  const known = new Set(options.map((o) => o.value));
+  const extra = [...asked].filter((v) => !known.has(v));
+  return [
+    ...options,
+    ...extra.map((value): FilterOption => {
+      if (isStatusKey(value)) {
+        return {
+          value,
+          label: STATUS_KEY_LABELS[value],
+          leading: <StatusIcon category={statusKeyCategory(value)} />,
+        };
+      }
+      const status = statusById.get(value);
+      return status
+        ? { value, label: status.name, leading: <StatusIcon category={status.category} /> }
+        : { value, label: "Deleted status" };
+    }),
+  ];
+}
+
 const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
-  // The labels every surface uses ("To do", "Won't do", calls 21/53a). Won't
-  // do tasks are out of every scope until this asks for them (TV-U2, AC1.4).
-  // TV-D9: Backlog joins, and each value leads with its category's icon (the
-  // values stay the stored legacy ones, so saved filters keep working).
-  status: [
-    {
-      value: "backlog",
-      label: STATUS_KEY_LABELS.backlog,
-      leading: <StatusIcon category="backlog" />,
-      keywords: ["someday", "not planned"],
-    },
-    { value: "todo", label: STATUS_KEY_LABELS.todo, leading: <StatusIcon category="todo" /> },
-    {
-      value: "in_progress",
-      label: STATUS_KEY_LABELS.in_progress,
-      leading: <StatusIcon category="in_progress" />,
-    },
-    { value: "done", label: STATUS_KEY_LABELS.done, leading: <StatusIcon category="done" /> },
-    {
-      value: "archived",
-      label: STATUS_KEY_LABELS.archived,
-      leading: <StatusIcon category="wont_do" />,
-      keywords: ["won't do", "wont do", "archived"],
-    },
-  ],
   priority: LEVELS("No priority"),
   energy: LEVELS("No energy"),
   due: [
@@ -146,7 +209,7 @@ const OPTIONS: Partial<Record<TaskFilterDimension, FilterOption[]>> = {
   // Who or what a task waits on (TV-U8): any entry, or one kind.
   waiting: [
     { value: WAITING_ANY, label: "Anything", keywords: ["waiting"] },
-    { value: "person", label: "A teammate", keywords: ["person", "people"] },
+    { value: "person", label: "A workspace member", keywords: ["person", "people"] },
     { value: "email", label: "An email reply", keywords: ["client", "reply"] },
     { value: "agent", label: "An agent" },
     { value: "text", label: "Something else", keywords: ["client"] },
@@ -209,8 +272,22 @@ export function taskFilterDimensions(input: {
   teams?: readonly Team[];
   /** Absent or null: no Project dimension (one project, the Inbox). */
   projects?: ProjectFilterChoices | null;
+  /** Filter → Status's choices (MOD-240): the project's own set inside one
+   *  (empty elsewhere: the categories), and every status by id for chips. */
+  statuses?: {
+    set: readonly ProjectStatus[];
+    byId: ReadonlyMap<string, ProjectStatus>;
+  };
 }): FilterDimension[] {
-  const { assignees, tags, countByTag, conditions, teams = [], projects = null } = input;
+  const {
+    assignees,
+    tags,
+    countByTag,
+    conditions,
+    teams = [],
+    projects = null,
+    statuses = { set: [], byId: new Map() },
+  } = input;
   const projectOptions: FilterOption[] = [
     ...(projects?.inbox ? [{ value: INBOX_VALUE, label: "Inbox", icon: Inbox }] : []),
     ...(projects?.projects ?? []).map((project) => ({
@@ -268,6 +345,8 @@ export function taskFilterDimensions(input: {
           id,
           "Deleted tag",
         );
+      case "status":
+        return statusFilterOptions(statuses.set, statuses.byId, conditions);
       default:
         return OPTIONS[id] ?? [];
     }
@@ -286,51 +365,33 @@ export function taskFilterDimensions(input: {
     }));
 }
 
-function isTypingTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el?.tagName) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
-}
-
 /**
  * `/` opens search and `f` opens Filter, from anywhere on the page except a
- * text field, a dialog or an open menu. Bubble phase, after the list's own
- * keys; a modified key (⌘/ is notifications) or Shift (`?` is the shortcuts
- * sheet) is never ours.
+ * text field, a dialog or an open menu. Registry bindings in the "tasks"
+ * scope (lib/hotkeys): bubble phase on document, after the list's own keys; a
+ * modified key (⌘/ is notifications) or Shift (`?` is the shortcuts sheet)
+ * never matches them.
  */
 function useToolbarKeys(enabled: boolean, onSearch: () => void, onFilter: () => void) {
-  const handlers = useRef({ onSearch, onFilter });
-  useEffect(() => {
-    handlers.current = { onSearch, onFilter };
-  });
-  useEffect(() => {
-    if (!enabled) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) {
-        return;
-      }
-      if (isTypingTarget(e.target)) return;
-      if (
-        e.target instanceof Element &&
-        e.target.closest(
-          '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
-        )
-      ) {
-        return;
-      }
-      if (e.key === "/") {
-        e.preventDefault();
-        handlers.current.onSearch();
-      } else if (e.key.toLowerCase() === "f") {
-        e.preventDefault();
-        handlers.current.onFilter();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [enabled]);
+  // An open overlay (a menu's typeahead, a dialog) keeps its plain keys.
+  const overlayFocused = (event: KeyboardEvent) =>
+    event.target instanceof Element &&
+    !!event.target.closest(
+      '[role="dialog"],[role="alertdialog"],[role="menu"],[role="listbox"],[data-slot="popover-content"]',
+    );
+  useAppHotkeys(
+    {
+      "tasks.search": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onSearch();
+      },
+      "tasks.filter": (event) => {
+        if (event.repeat || overlayFocused(event)) return false;
+        onFilter();
+      },
+    },
+    { enabled },
+  );
 }
 
 export type TasksFilterControls = {
@@ -368,7 +429,6 @@ export function useTasksFilters({
   scopeTasks,
   conditions,
   onConditionsChange,
-  api,
   assignees,
   enabled,
   keepTaskId = null,
@@ -382,7 +442,6 @@ export function useTasksFilters({
   scopeTasks: Task[];
   conditions: FilterCondition[];
   onConditionsChange: (next: FilterCondition[]) => void;
-  api: TasksModuleApi;
   runtime: ModuoRuntime | null;
   assignees: readonly Assignee[];
   enabled: boolean;
@@ -406,22 +465,40 @@ export function useTasksFilters({
   const inputRef = useRef<HTMLInputElement>(null);
   const filterWrapRef = useRef<HTMLSpanElement>(null);
 
+  const { tags, tagsByTask, openTaskCountByTag } = useTaskTagIndex();
+  const teams = useTasksSelector((d) => d.teams);
+  const waiting = useTasksSelector((_, snap) => snap.waiting);
+  const queuedTaskIds = useTasksSelector((d) => d.queuedTaskIds);
+  const blockedTaskIds = useTasksSelector((d) => d.blockedIds);
+  const subtasksByParent = useTasksSelector((d) => d.subtasksByParent);
+  // Inside one project (or the Inbox), Filter → Status offers its own
+  // statuses (MOD-240); anywhere else the lookup finds no set.
+  const statusesForBucket = useStatusesForBucket();
+  const statusById = useTasksSelector((d) => d.statusById);
+  const statuses = useMemo(
+    () => ({
+      set: statusesForBucket(scope === "inbox" ? (inboxId ?? "") : scope),
+      byId: statusById,
+    }),
+    [statusesForBucket, scope, inboxId, statusById],
+  );
   const dimensions = useMemo(
     () =>
       taskFilterDimensions({
         assignees,
-        tags: api.tags,
-        countByTag: api.openTaskCountByTag,
+        tags,
+        countByTag: openTaskCountByTag,
         conditions,
-        teams: api.teams,
+        teams,
         projects,
+        statuses,
       }),
-    [assignees, api.tags, api.openTaskCountByTag, conditions, api.teams, projects],
+    [assignees, tags, openTaskCountByTag, conditions, teams, projects, statuses],
   );
 
   // "Has attachments" reads the store's live 📎 counts (AT-3): files on tasks
   // you can see, finished and not deleted.
-  const fileCounts = api.attachmentCounts;
+  const fileCounts = useTasksSelector((_, snap) => snap.attachmentCounts);
   const attachmentCount = useCallback(
     (taskId: string) => fileCounts?.get(taskId) ?? 0,
     [fileCounts],
@@ -430,13 +507,13 @@ export function useTasksFilters({
   // Each task's Waiting on… kinds (the Waiting on filter).
   const waitingKinds = useMemo(() => {
     const out = new Map<string, string[]>();
-    for (const w of api.waiting ?? []) {
+    for (const w of waiting ?? []) {
       const list = out.get(w.taskId);
       if (list) list.push(w.kind);
       else out.set(w.taskId, [w.kind]);
     }
     return out;
-  }, [api.waiting]);
+  }, [waiting]);
 
   // Today's date keys the context, so "Today" and "This week" roll over at
   // midnight.
@@ -444,10 +521,10 @@ export function useTasksFilters({
   const ctx = useMemo<TaskFilterContext>(
     () => ({
       now: new Date(),
-      tagIdsOf: (id) => (api.tagsByTask.get(id) ?? []).map((t) => t.id),
-      isQueued: (id) => api.queuedTaskIds.has(id),
-      isBlocked: (id) => api.blockedTaskIds.has(id),
-      hasSubtasks: (id) => (api.subtasksByParent.get(id)?.length ?? 0) > 0,
+      tagIdsOf: (id) => (tagsByTask.get(id) ?? []).map((t) => t.id),
+      isQueued: (id) => queuedTaskIds.has(id),
+      isBlocked: (id) => blockedTaskIds.has(id),
+      hasSubtasks: (id) => (subtasksByParent.get(id)?.length ?? 0) > 0,
       attachmentCount,
       waitingKindsOf: (id) => waitingKinds.get(id) ?? [],
       inboxId,
@@ -456,10 +533,10 @@ export function useTasksFilters({
       today,
       inboxId,
       waitingKinds,
-      api.tagsByTask,
-      api.queuedTaskIds,
-      api.blockedTaskIds,
-      api.subtasksByParent,
+      tagsByTask,
+      queuedTaskIds,
+      blockedTaskIds,
+      subtasksByParent,
       attachmentCount,
     ],
   );
@@ -486,7 +563,7 @@ export function useTasksFilters({
   // tasks still loading, a read cut at its ceiling): the store reads the
   // matches it lacks, and they pass here by id. The copy's own matches show
   // at once; these join a moment later.
-  const searchServer = api.searchTasks;
+  const searchServer = useTaskCommands().searchTasks;
   const [serverHits, setServerHits] = useState<{ query: string; ids: ReadonlySet<string> } | null>(
     null,
   );
@@ -527,10 +604,10 @@ export function useTasksFilters({
 
   const tokenContext = useMemo(
     () => ({
-      tags: api.tags,
+      tags,
       people: assignees.map((a) => ({ userId: a.userId, name: a.name, isMe: a.isMe })),
     }),
-    [api.tags, assignees],
+    [tags, assignees],
   );
   const setQuery = useCallback(
     (next: string, final = false) => {

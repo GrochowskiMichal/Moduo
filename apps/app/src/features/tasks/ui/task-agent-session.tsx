@@ -11,18 +11,19 @@
 import { ArrowUpRight, CircleCheck, CircleX, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { Button } from "../../../components/ui/button";
 import { chipClasses } from "../../../components/ui/chip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { cn } from "../../../lib/utils";
 import {
-  type AgentChipTone,
-  type AgentSession,
-  type AgentSessionLink,
   agentChip,
+  type AgentChipTone,
   agentLineText,
   agentSentence,
+  type AgentSession,
+  type AgentSessionLink,
   agentWho,
   isOwnSession,
   linkWords,

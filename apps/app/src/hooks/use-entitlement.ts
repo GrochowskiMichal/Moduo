@@ -13,6 +13,7 @@
 
 import { normalizePlanTier } from "@contracts/vocabularies";
 import { useCallback } from "react";
+
 import { startCheckout } from "../features/billing/checkout";
 import { type PaidPlan, tierRank } from "../features/billing/plans";
 import { isDesktopShell, openStripeUrl } from "../features/billing/stripe-url";

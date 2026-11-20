@@ -1,6 +1,6 @@
 # Architecture Notes
 
-Last reviewed: 4:05 PM 14th May 2026.
+Last reviewed: 2026-10-20.
 
 ## Current Direction
 
@@ -28,14 +28,27 @@ Paths in docs written before 2026-10-17 are pre-move: `src/` is now `apps/app/sr
 - `apps/app/src/components/ui`: reusable design-system primitives with no domain knowledge.
 - `apps/app/src/components/app`: reusable app shell/chrome components.
 - `apps/app/src/lib`: cross-feature runtime adapters and platform services.
+- **The runtime (2026-10-20), one file per module.** The port: `lib/runtime.types.ts` holds `ModuoRuntime` and the shared types, and each module's port lives in `lib/runtime.types.<module>.ts` (re-exported, so callers import from `runtime.types` only). The web implementation: `lib/runtime.web.ts` is only the composition root; `lib/runtime.web.client.ts` is the Supabase client (plus the boot read cache and the auth listener; light, so code that only needs the client imports this, never `runtime.web`); `lib/runtime.web.shared.ts` holds helpers more than one module uses; each module is `lib/runtime.web.<module>.ts`, typed by its port. **Adding a runtime method:** add it to `runtime.types.<module>.ts` and implement it in `runtime.web.<module>.ts` (and in `runtime.tauri.ts` only if desktop doesn't delegate that module). A helper used by one module stays in that module's file; move it to `shared` when a second module needs it. Larger Tasks areas have their own factories (`runtime.web.structure.ts`, `.templates`, `.views`, `.agents`, `.previews`).
 - `apps/app/src/styles`: global tokens and stylesheet entry points.
 
 Shared data pieces (added 2026-10-17):
 
-- `apps/app/src/lib/sync/`: the Tasks v3 shared store (TV-D11a): one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
-- `apps/app/src/features/chat/store/`: the Chat v2 store (CV-3): device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
+- `apps/app/src/lib/sync/kernel/`: the shared offline-sync kernel (2026-10-20): stamps, one IndexedDB opener, keyset deltas with lookback, the strictly-newer landing rule and delete marks, op-keyed overlays, a persisted outbox (`fifo-drop-on-refusal` or `hold-failed-for-retry`), and a per-person store registry. Tasks and Chat run on it; Notes uses its IndexedDB, network and registry parts only (it syncs Yjs documents, not rows). The rules it encodes are in `docs/gotchas/supabase.md` (sync section).
+- `apps/app/src/lib/sync/store.ts`: the Tasks shared store (TV-D11a) on that kernel: one per person and workspace, a device copy in IndexedDB `moduo-sync`, delta sync by `updated_at`, Realtime merge.
+- `apps/app/src/features/chat/store/`: the Chat v2 store (CV-3) on that kernel: device copy in IndexedDB `moduo-chat` (`messages` + one `meta` record per person and workspace), outbox, presence, typing.
 - `apps/app/src/features/chat/markup-v2/`: Chat v2's stored message form (parse, serialize, canonical blocks, mentions, the Lexical bridge).
 - `apps/app/src/lib/runtime.web.notes-live.ts`: a note's live channel (NR-7): each person listens on a private `notes-live:<uid>` topic the server writes to; clients send nothing over Realtime.
+
+### Tasks data and commands
+
+How a surface reads and writes Tasks (since 2026-10-20):
+
+- `features/tasks/selectors.ts`: pure selectors over the store's snapshot, cached on the identity of their input arrays (`liveTasksOf`, `byIdOf`, `subtasksByParentOf`, … and `tasksDataOf` for the whole set). Every page that shows a workspace shares their results.
+- `features/tasks/commands/`: `createTaskCommands(ctx)`, one stable set of commands per store, runtime, workspace and person, grouped by aggregate (`task`, `status`, `queue`, `time`, `projects`, `bulk`, …). A command reads the store when it runs (`ctx.data()`), so it never changes identity and an Undo closure never sees stale rows.
+- `features/tasks/write-plan.ts`: `planTaskWrite`, the one place that decides a task write (refusals, status mapping, recurrence, queue-follow, subtask-follow, `dueOn`). Single, drop and bulk edits all call it.
+- `features/tasks/tasks-context.tsx`: `<TasksProvider>` (one per page) and the narrow hooks a component uses: `useTaskCommands()`, `useTasksSelector(…)`, `useTaskById(id)`, `useTasksStatus()`. A selector must return a cached value; never build a new array or object inside it.
+- `features/tasks/ui/plan/`: the Tasks page as a controller (`useTasksPlanController`, a chain of small hooks) and a layout. The place lives in the URL (`?place=`, `resolveEntryPlace`); deep links go through one state machine (`deep-link.ts`).
+- Tests render through `features/tasks/testing/` (`renderWithTasks`, `renderTasksHook`, `fakeTasksRuntime`).
 
 Prefer `@/` imports for source-root imports. The alias resolves to `src`, so use `@/components/ui/button` rather than the older `@/src/components/ui/button`.
 
@@ -53,18 +66,7 @@ Keep route files and page adapters small. When a workspace crosses a few hundred
 
 ### Email Feature Module Map
 
-The email frontend uses `email-workspace.tsx` as the orchestration layer and delegates rendering/model details to focused modules:
-
-- `model/email-types.ts`: shared email DTOs and local UI model types.
-- `model/email-cache.ts`: in-memory account/list cache state and folder constants.
-- `utils/email-format.ts`: date formatting helpers.
-- `utils/email-html.ts`: sanitized email HTML iframe document construction.
-- `ui/email-account-sidebar.tsx`: connected account and folder navigation.
-- `ui/email-compose-panel.tsx`: compose overlay.
-- `ui/email-connection-setup.tsx`: mailbox provider selection and credential form.
-- `ui/email-message-detail.tsx`: selected message header/body rendering.
-- `ui/email-message-list.tsx`: list, loading, empty, error, and retry states.
-- `ui/email-workspace.tsx`: runtime calls, effects, cache orchestration, and feature shell composition.
+`features/email/` keeps its pure rules at the top level (`classify.ts`, `compose.ts`, `convert.ts`, `snooze.ts`, `followup.ts`, `search.ts`, `refs.ts`, `history-depth.ts`, each with its test). The desktop page runs on the rebuilt engine: `engine/` (the `MailEngine` provider and controller), `store/` (the mail store), `ui/mail-page.tsx` composing `mail-shell.tsx` (rail, tabs, `thread-list.tsx`), `reader/`, `compose/`, `search/`, `commands/` (triage, bulk and spine gestures) and `views/`; `utils/email-html.ts` builds the sandboxed message iframe. The web page is `ui/email-web-view.tsx` (`EmailWebPage`) over `hooks/use-email-tissue.ts`, the `email_refs` tissue only.
 
 ## Router
 
@@ -78,26 +80,9 @@ Keep `apps/desktop/src-tauri/src/commands` as the Tauri command boundary. Large 
 
 Reference: https://v2.tauri.app/start/project-structure/
 
-### Email Command Module Map
+### Mail engine module map
 
-The email command boundary now keeps Tauri command registration stable while delegating implementation to focused modules:
-
-- `account_commands.rs`: account list/connect/disconnect Tauri handlers.
-- `account_config.rs`: provider normalization, account IDs, credential lookup, mailbox selection, and connection validation.
-- `body_fetch.rs`: message body cache miss fetches.
-- `connection.rs`: blocking IMAP connection setup.
-- `constants.rs`: email command constants.
-- `flags.rs`: optimistic flag updates and flag outbox flushing.
-- `graph_outbox.rs`: email-to-graph outbox queueing.
-- `model.rs`: command DTOs and persisted email data shapes.
-- `parsing.rs`: MIME/header/date parsing helpers.
-- `realtime.rs`: IDLE worker supervision and sync de-duplication.
-- `send_commands.rs`: email send Tauri handler and account send-status updates.
-- `smtp.rs`: SMTP send path.
-- `storage.rs`: Redb/KV email persistence helpers.
-- `sync.rs`: folder/envelope synchronization.
-
-Keep adding command submodules by behavior, then re-export only where Tauri registration requires a stable path.
+The desktop mail engine is `apps/desktop/src-tauri/src/mail/` (specs/mail-rebuild.md), hosted by the `mail_*` commands in `commands/mail_engine.rs` and `commands/mail_events.rs`. By behavior: `store/` (the per-user SQLite store, FTS5), `sync/` (UID-diff sync, threading, headers), `actor.rs` + `session.rs` (per-account actor and IMAP sessions), `auth/` (password, Google, Microsoft XOAUTH2, keychain), `accounts.rs`, `ops/` (triage ops with undo), `send/` (drafts, outbox, SMTP/Graph), `bodies/` + `mime/` (bodies and attachments on disk), `rules.rs` (sender intelligence), `host/` (the engine host and IMAP adapters) and `migrate.rs` (the one-time cutover from the deleted legacy engine's redb tables). The legacy `commands/email/` tree is gone; `scripts/ci/legacy-email.test.ts` keeps it out.
 
 ## TypeScript Boundaries
 

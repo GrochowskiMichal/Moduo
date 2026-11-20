@@ -23,23 +23,19 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import {
-  AppAvatar,
-  type AppAvatarKind,
-  PersonAvatar as KitPersonAvatar,
-  TeamMark,
-} from "@/components/ui/avatar";
+import { AppAvatar, type AppAvatarKind, PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { FeedCard, FeedComposer, FeedComposerInput } from "@/components/ui/feed";
 import { IconButton } from "@/components/ui/icon-button";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+
 import { CustomEmojiGlyph } from "../../chat/emoji/custom-emoji";
 import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
 import { splitTextTokens, tokenText } from "../../chat/markup-v2/tokens";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import {
-  type CommentPerson,
   commentBodyWithReferences,
+  type CommentPerson,
   filterPeople,
   filterTeams,
   insertMention,
@@ -67,7 +63,7 @@ import { Reference } from "../references/ui/reference";
  * former member) is a gray "?", like an unknown assignee; never the empty
  * "unassigned" ring.
  */
-export function PersonAvatar({
+export function CommentAvatar({
   person,
   app = null,
   className,
@@ -79,7 +75,7 @@ export function PersonAvatar({
 }) {
   if (app) return <AppAvatar kind={app} size="icon" className={className} />;
   return (
-    <KitPersonAvatar
+    <PersonAvatar
       name={person && !person.unnamed ? person.name || "?" : "?"}
       id={person?.id}
       src={person?.avatarUrl}
@@ -183,14 +179,14 @@ function EmojiText({
       {parts.map((p, i) =>
         p.t === "emoji" ? (
           <CustomEmojiGlyph
-            // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+            // eslint-disable-next-line react/no-array-index-key -- parts of one text, never reordered
             key={i}
             name={p.name}
             emoji={emoji.byName.get(p.name)}
             urlOf={emoji.urlOf}
           />
         ) : (
-          // biome-ignore lint/suspicious/noArrayIndexKey: parts of one text, never reordered
+          // eslint-disable-next-line react/no-array-index-key -- parts of one text, never reordered
           <HandleText key={i} text={p.t === "text" ? p.v : tokenText(p)} taskKey={taskKey} />
         ),
       )}
@@ -260,7 +256,7 @@ export function CommentCard({
 }) {
   return (
     <FeedCard
-      avatar={<PersonAvatar person={author} app={app ? "app" : null} />}
+      avatar={<CommentAvatar person={author} app={app ? "app" : null} />}
       author={authorName}
       time={time}
       timeTitle={timeTitle}
@@ -418,7 +414,7 @@ export function CommentComposer({
   const activeIndex = Math.min(active, Math.max(0, items.length - 1));
 
   // Grow with the text (WebKit desktop builds don't all have field-sizing).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-measure whenever the text changes
+  // Re-measure whenever the text changes.
   useLayoutEffect(() => {
     const el = areaRef.current;
     if (!el) return;
@@ -632,7 +628,7 @@ export function CommentComposer({
             >
               {item.kind === "person" ? (
                 <>
-                  <PersonAvatar person={item.person} />
+                  <CommentAvatar person={item.person} />
                   <span className="truncate">{item.person.name}</span>
                 </>
               ) : item.kind === "team" ? (

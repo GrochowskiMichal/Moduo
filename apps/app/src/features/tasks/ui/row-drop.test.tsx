@@ -3,7 +3,7 @@
 // count after a title, hidden at 0 (AT3-3).
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 
 const PEOPLE = {
   u1: {
@@ -34,8 +34,11 @@ rs.mock("../../attachments/attach-to-task", () => ({
 }));
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { resetTagStore } from "../../tags/store";
 import { makeTask } from "../helpers";
-import type { Task } from "../model";
+import type { Tag, Task } from "../model";
+import { type FakeTasksSeed, tagLink } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { fileDropTaskId } from "./row-drop";
 import { TaskBoardView } from "./task-board-view";
 import { TaskListView } from "./task-list-view";
@@ -51,7 +54,11 @@ beforeAll(() => {
 beforeEach(() => {
   attached.length = 0;
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  // The tag store is per workspace, not per render: no tags carry over.
+  resetTagStore();
+});
 
 function task(id: string, over: Partial<Task> = {}): Task {
   return {
@@ -63,34 +70,10 @@ function task(id: string, over: Partial<Task> = {}): Task {
   };
 }
 
-function viewApi(tasks: Task[], extra: Record<string, unknown> = {}) {
-  return {
-    loaded: true,
-    tasks,
-    currentUserId: "u1",
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    toggleDone: rs.fn(),
-    toggleQueue: rs.fn(),
-    patchTask: rs.fn(),
-    deleteTask: rs.fn(),
-    setTaskParent: rs.fn(),
-    skipOccurrence: rs.fn(),
-    ...extra,
-  };
-}
-
-function renderList(
-  tasks: Task[],
-  opts: { canEdit?: boolean; api?: Record<string, unknown> } = {},
-) {
+/** The List over a store holding these tasks (or `seed`'s rows), as the page has it (A4). */
+async function renderList(tasks: Task[], opts: { canEdit?: boolean; seed?: FakeTasksSeed } = {}) {
   const onSelectTask = rs.fn();
-  render(
+  const view = await renderWithTasks(
     <TooltipProvider>
       <TaskListView
         tasks={tasks}
@@ -106,15 +89,15 @@ function renderList(
         onRequestCapture={() => {}}
         selectedTaskId={null}
         onSelectTask={onSelectTask}
-        api={viewApi(tasks, opts.api) as never}
       />
     </TooltipProvider>,
+    { seed: opts.seed ?? { tasks }, workspaceId: "w" },
   );
-  return { onSelectTask };
+  return { onSelectTask, store: view.store };
 }
 
-function renderBoard(tasks: Task[]) {
-  render(
+async function renderBoard(tasks: Task[]) {
+  await renderWithTasks(
     <TooltipProvider>
       <TaskBoardView
         tasks={tasks}
@@ -130,11 +113,31 @@ function renderBoard(tasks: Task[]) {
         onRequestCapture={() => {}}
         selectedTaskId={null}
         onSelectTask={() => {}}
-        api={viewApi(tasks) as never}
       />
     </TooltipProvider>,
+    { seed: { tasks }, workspaceId: "w" },
   );
 }
+
+const STAMP = "2026-01-01T00:00:00.000Z";
+const file = (id: string, taskId: string) => ({
+  id,
+  taskId,
+  status: "ready",
+  updatedAt: STAMP,
+  deletedAt: null,
+});
+const comment = (id: string, taskId: string) => ({ id, taskId, updatedAt: STAMP, deletedAt: null });
+const tag = (id: string, name: string): Tag => ({
+  id,
+  workspaceId: "w",
+  ownerId: "u1",
+  name,
+  color: null,
+  createdAt: STAMP,
+  updatedAt: STAMP,
+  deletedAt: null,
+});
 
 const shot = () => new File([new Uint8Array(4)], "shot.png", { type: "image/png" });
 
@@ -173,7 +176,7 @@ describe("fileDropTaskId (AT3-1: hit-testing the row under the pointer)", () => 
 
 describe("List rows take file drops (AT3-1)", () => {
   it("lights the row under a file drag, moves with it, and attaches the drop to that task", async () => {
-    const { onSelectTask } = renderList([task("a"), task("b")]);
+    const { onSelectTask } = await renderList([task("a"), task("b")]);
     const b = rowEl("Task b");
     fireEvent.dragOver(screen.getByText("Task a"), fileDrag([shot()]));
     expect(lit(rowEl("Task a"))).toBe(true);
@@ -198,16 +201,16 @@ describe("List rows take file drops (AT3-1)", () => {
     expect(onSelectTask).toHaveBeenCalledWith("b");
   });
 
-  it("ignores a drag that carries no files", () => {
-    renderList([task("a")]);
+  it("ignores a drag that carries no files", async () => {
+    await renderList([task("a")]);
     fireEvent.dragOver(screen.getByText("Task a"), textDrag);
     expect(lit(rowEl("Task a"))).toBe(false);
     fireEvent.drop(screen.getByText("Task a"), textDrag);
     expect(attached).toHaveLength(0);
   });
 
-  it("takes no files where the view is read-only", () => {
-    renderList([task("a")], { canEdit: false });
+  it("takes no files where the view is read-only", async () => {
+    await renderList([task("a")], { canEdit: false });
     fireEvent.dragOver(screen.getByText("Task a"), fileDrag([shot()]));
     expect(lit(rowEl("Task a"))).toBe(false);
     fireEvent.drop(screen.getByText("Task a"), fileDrag([shot()]));
@@ -215,7 +218,13 @@ describe("List rows take file drops (AT3-1)", () => {
   });
 
   it("a drop on a task still waiting to sync waits with it", async () => {
-    renderList([task("a")], { api: { pendingTaskIds: new Set(["a"]) } });
+    // Captured offline: the task waits in the store's outbox, not on the server.
+    const { store } = await renderList([task("a")], { seed: {} });
+    await act(async () => {
+      store.wentOffline();
+      await store.sendCreate(task("a"));
+    });
+    expect(store.getSnapshot().pendingTaskIds.has("a")).toBe(true);
     fireEvent.drop(screen.getByText("Task a"), fileDrag([shot()]));
     await Promise.resolve();
     expect(attached[0]).toMatchObject({ taskId: "a", awaitTask: true });
@@ -224,7 +233,7 @@ describe("List rows take file drops (AT3-1)", () => {
 
 describe("Board cards take file drops (AT3-1)", () => {
   it("lights the card under a file drag and attaches the drop to it", async () => {
-    renderBoard([task("a"), task("b")]);
+    await renderBoard([task("a"), task("b")]);
     fireEvent.dragOver(screen.getByText("Task b"), fileDrag([shot()]));
     expect(lit(rowEl("Task b"))).toBe(true);
     expect(lit(rowEl("Task a"))).toBe(false);
@@ -235,26 +244,21 @@ describe("Board cards take file drops (AT3-1)", () => {
 });
 
 describe("The 📎 mark on rows (AT3-3)", () => {
-  it("shows the file count after the tags, hidden at 0", () => {
-    renderList([task("a"), task("b")], {
-      api: {
-        attachmentCounts: new Map([["a", 2]]),
-        commentCounts: new Map([["a", 3]]),
-        tagsByTask: new Map([
-          [
-            "a",
-            [
-              { id: "t1", name: "ui" },
-              { id: "t2", name: "bug" },
-            ],
-          ],
-        ]),
+  it("shows the file count after the tags, hidden at 0", async () => {
+    const a = task("a");
+    await renderList([a, task("b")], {
+      seed: {
+        tasks: [a, task("b")],
+        attachments: [file("f1", "a"), file("f2", "a")],
+        comments: [comment("c1", "a"), comment("c2", "a"), comment("c3", "a")],
+        tags: [tag("t1", "ui"), tag("t2", "bug")],
+        tagLinks: [tagLink("t1", "a", "w"), tagLink("t2", "a", "w")],
       },
     });
-    const a = rowEl("Task a");
+    const row = rowEl("Task a");
     expect(screen.getByText("2 files").className).toContain("sr-only");
     // Tags, then files, then comments (tasks-v3 §4).
-    const text = a.textContent ?? "";
+    const text = row.textContent ?? "";
     expect(text.indexOf("2 tags")).toBeLessThan(text.indexOf("2 files"));
     expect(text.indexOf("2 files")).toBeLessThan(text.indexOf("3 comments"));
     expect(rowEl("Task b").textContent).not.toMatch(/file/);

@@ -6,6 +6,7 @@
 // from a project; Project lanes and area columns take no moves.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { BoardTarget } from "../board-columns";
 import { makeTask } from "../helpers";
 import type { ProjectStatus, Task } from "../model";

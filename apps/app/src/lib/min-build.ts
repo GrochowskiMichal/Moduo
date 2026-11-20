@@ -105,6 +105,10 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "attachments_largest",
   "booking_google_connected",
   "calendar_busy_blocks",
+  // CALR-15: the masked week.
+  "calendar_events_visible",
+  "calendar_preview_levels",
+  "calendar_shared_with_me",
   "chat_caps_get",
   // CV-10: a message reference's chip and card, and an item's "Mentioned in" lines.
   "chat_conversations_for_item",
@@ -128,11 +132,19 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "chat_unread_counts",
   "chat_catchup_open",
   "chat_workspace_enabled",
-  "contact_merge_candidates",
   "focus_claims",
   "links_suggest",
   "notes_list_unmaterialized",
+  // NS-7: the notes list and a note's document pull.
+  "notes_list_meta",
+  "notes_pull",
+  // GS-2: Notes' sidebar search (the global search contract).
+  "notes__search",
   "notifications_list",
+  // GS-3: ⌘K's one search (search_all merges every module's search).
+  "search_all",
+  // GS-8: ⌘K's Recent (what you opened last).
+  "search_recents_list",
   "share_assign_preview",
   "share_defaults_get",
   "share_op_state",
@@ -152,6 +164,8 @@ export const READ_RPCS: ReadonlySet<string> = new Set([
   "user_time_region",
   // CV-18: the workspaces whose notifications you paused (the switcher).
   "workspace_notice_pauses",
+  // MCPO-4: the consent screen reads an app's sign-in.
+  "workspace_api_keys_oauth_request",
 ]);
 
 /**

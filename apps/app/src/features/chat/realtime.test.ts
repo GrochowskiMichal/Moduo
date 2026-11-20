@@ -1,5 +1,4 @@
 import { describe, expect, it } from "@rstest/core";
-
 // Chat's live layer (CV-3): the Postgres Changes adapter the store's merge
 // takes its input from (the message binding narrowed with `select`, a join
 // counted only once Realtime says "Subscribed to PostgreSQL"), and the typing

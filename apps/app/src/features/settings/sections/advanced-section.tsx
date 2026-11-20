@@ -2,6 +2,7 @@ import { strToU8 } from "fflate";
 import { AlertTriangle, Check, Copy, Download, Loader2, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+
 import { customEmojiExportFiles } from "@/features/chat/emoji/export-files";
 import { readChatExport, signedFileBytes } from "@/features/chat/export";
 import { listMyClients, listMyNoticePauses } from "@/lib/notices/clients";
@@ -12,6 +13,7 @@ import {
   otherAccountsHaveUploads,
   UPLOADS_DB_NAME,
 } from "@/lib/uploads";
+
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -28,13 +30,12 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { allTimeCalendarWindow } from "../../calendar/window";
 import { downloadZip } from "../../notes/export";
-import { closeNotesDb, countPendingOutbox } from "../../notes/sync/idb";
-
+import { closeNotesDb, countPendingOutbox, type PendingCount } from "../../notes/sync/idb";
 import {
   attachmentsManifest,
   buildExportBundle,
-  type Diagnostics,
   describeSyncStatus,
+  type Diagnostics,
   type ExportMeta,
   exportZipName,
   formatDebugInfo,
@@ -180,12 +181,12 @@ export function AdvancedSection() {
   const [resetOpen, setResetOpen] = useState(false);
   const [checking, setChecking] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [pendingNotes, setPendingNotes] = useState(0);
+  const [pendingNotes, setPendingNotes] = useState<PendingCount>(0);
   const [pendingUploads, setPendingUploads] = useState(0);
 
   // Diagnostics.
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
-  const [diagPending, setDiagPending] = useState(0);
+  const [diagPending, setDiagPending] = useState<PendingCount>(0);
   const [lastSyncAt, setLastSyncAt] = useState<string | null>(null);
   const [copiedDebug, setCopiedDebug] = useState(false);
 
@@ -288,9 +289,13 @@ export function AdvancedSection() {
       const keepUploads = await otherAccountsHaveUploads(userId ?? null);
       // Clear only Moduo's own on-device caches — the auth session and other
       // apps' keys are left intact; cloud data re-syncs on the reload below.
+      // This drops `moduo.appearance` too, with its device-only fields (density, tab
+      // style) that never sync: the confirm copy says so. Keep them or keep saying so.
       for (const key of moduoCacheKeysToClear(Object.keys(localStorage))) {
         localStorage.removeItem(key);
       }
+      // Deleting the notes DBs is lossless only with both outboxes empty: the blocked
+      // dialog has no reset button at all, so keep it removed there, not disabled.
       await closeNotesDb();
       await closeUploadsDb();
       // The meta/outbox DB is deleted by name always; per-note doc DBs are
@@ -323,7 +328,8 @@ export function AdvancedSection() {
     setTimeout(() => setCopiedDebug(false), 2000);
   }, [diagnostics]);
 
-  const blocked = pendingNotes > 0 || pendingUploads > 0;
+  // "unknown" (the notes DB couldn't be read) blocks too: it may hold unsynced changes.
+  const blocked = pendingNotes !== 0 || pendingUploads > 0;
 
   return (
     <SettingsSectionShell
@@ -422,9 +428,11 @@ export function AdvancedSection() {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  {pendingNotes > 0
-                    ? "You have unsynced note changes"
-                    : "Files are still uploading"}
+                  {pendingNotes === "unknown"
+                    ? "Couldn't check for unsynced notes"
+                    : pendingNotes > 0
+                      ? "You have unsynced note changes"
+                      : "Files are still uploading"}
                 </DialogTitle>
                 <DialogDescription>
                   {resetBlockedMessage({ pendingNotes, pendingUploads, online })}

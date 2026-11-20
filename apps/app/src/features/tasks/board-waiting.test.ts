@@ -3,6 +3,7 @@
 // waiting" last; a drop into a column adds that wait (no field changes).
 
 import { describe, expect, it } from "@rstest/core";
+
 import { type BoardContext, buildBoardColumns } from "./board-columns";
 import { planBoardDrop } from "./dnd/board-drop";
 import { makeTask } from "./helpers";

@@ -4,6 +4,7 @@
 // input untouched) rather than exact positions — the robust way to test physics.
 
 import { describe, expect, it } from "@rstest/core";
+
 import {
   addWidget,
   canPlace,

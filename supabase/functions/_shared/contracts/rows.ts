@@ -26,6 +26,7 @@ import {
   mailboxProviderSchema,
   normalizeEmailProvider,
   normalizeRelationKind,
+  noteShareModeSchema,
   priorityLevelSchema,
   relationKindSchema,
   taskTimeAdjustmentReasonSchema,
@@ -257,14 +258,13 @@ export const noteRowSchema = z.object({
   parent_id: optStr,
   title: z.string().optional(),
   icon: optStr,
-  is_pinned: z.union([z.boolean(), z.number()]).optional(),
   position: z.string().optional(),
   is_archived: z.union([z.boolean(), z.number()]).optional(),
   published_at: optStr,
   publish_token: optStr,
   doc_version: optNum,
   // PERM-3: a sub-note follows its parent ("inherit") or has its own sharing.
-  share_mode: z.enum(["inherit", "custom"]).optional(),
+  share_mode: noteShareModeSchema.optional(),
   workspace_shared: z.boolean().optional(),
   // NR-1: stored Inbox + per-note reading width (optional until deployed).
   in_inbox: z.boolean().optional(),
@@ -656,7 +656,7 @@ export const calendarEventRowSchema = z.object({
   external_event_id: optStr,
   calendar_id: z.string().optional(),
   title: z.string().optional(),
-  description: z.string().optional(),
+  description: optStr, // NULL in the masked read (CALR-15)
   start_time: z.string(),
   end_time: z.string(),
   all_day: z.boolean().optional(),
@@ -667,6 +667,24 @@ export const calendarEventRowSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
   deleted_at: optStr,
+  // CALR-6 (20261027230000_calendar_event_data_v2): optional, rows from before it lack them.
+  calendar_ref: optStr,
+  is_private: z.boolean().optional(),
+  conference_url: optStr,
+  conference_provider: optStr,
+  kind: optStr,
+  focus_task_id: optStr,
+  offer_id: optStr,
+  attendees: z.unknown().optional(),
+  // CALR-11: repeat exceptions (columns from CALR-6).
+  series_id: optStr,
+  original_start: optStr,
+  exdates: z.array(z.string()).nullable().optional(),
+  external_series_id: optStr,
+  // Google's iCalUID: one meeting reached through two logins shows once.
+  ical_uid: optStr,
+  // Google's organizer.self: you organize it (NULL: the provider didn't say).
+  is_organizer: z.boolean().nullable().optional(),
 });
 
 export const calendarAccountRowSchema = z.object({
@@ -681,6 +699,9 @@ export const calendarAccountRowSchema = z.object({
   last_sync_at: optStr,
   status: calendarAccountStatusSchema.optional(),
   sync_token: optStr,
+  read_only: z.boolean().optional(),
+  busy_default: z.boolean().optional(),
+  last_error: optStr,
   deleted_at: optStr,
 });
 

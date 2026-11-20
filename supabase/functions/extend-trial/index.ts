@@ -21,6 +21,7 @@ import {
   stripeSecretKeyConfigError,
   TRIAL_DAYS_WITH_CARD,
 } from "../_shared/billing.ts";
+import { APP_TOKEN_REFUSAL } from "../_shared/app-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = makeStripe();
@@ -36,8 +37,10 @@ Deno.serve(async (req: Request) => {
     const supabase = createClient(Deno.env.get("SUPABASE_URL") ?? "", getDefaultSecretKey(), {
       auth: { persistSession: false },
     });
-    const user = await authenticate(supabase, req.headers.get("Authorization"));
-    if (!user) return json({ error: "Unauthorized" }, { status: 401 });
+    const caller = await authenticate(supabase, req.headers.get("Authorization"));
+    if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, { status: 403 });
+    if (caller.kind !== "person") return json({ error: "Unauthorized" }, { status: 401 });
+    const user = caller.user;
 
     const { data: profile } = await supabase.from("profiles").select("stripe_customer_id").eq("id", user.id).single();
     const customerId = profile?.stripe_customer_id;

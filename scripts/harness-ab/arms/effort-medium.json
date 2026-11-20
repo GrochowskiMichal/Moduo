@@ -1,0 +1,7 @@
+{
+  "id": "effort-medium",
+  "description": "Control at medium effort instead of high: does the build model need high effort on these tasks?",
+  "experiment": { "name": "effort", "baseline": "control" },
+  "model": "opus",
+  "effort": "medium"
+}

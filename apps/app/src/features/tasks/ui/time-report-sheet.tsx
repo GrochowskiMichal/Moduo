@@ -39,15 +39,15 @@ import type { TimeReportResult } from "../model";
 import { dayToDate, isoDay } from "../time-entries";
 import {
   customRangeProblem,
+  rangeLabel,
   REPORT_PERIOD_LABELS,
   REPORT_PERIODS,
-  type ReportGroupBy,
-  type ReportPeriodId,
-  type ReportRange,
-  rangeLabel,
   reportCsv,
   reportFileName,
+  type ReportGroupBy,
   reportLength,
+  type ReportPeriodId,
+  type ReportRange,
   reportRange,
   type ShapedReport,
   shapeTimeReport,
@@ -127,7 +127,7 @@ export function TimeReportSheet({ open, onOpenChange, workspaceId, scope }: Prop
         ? shapeTimeReport(result.rows, { groupBy, roundToQuarter: round, nameOf })
         : null,
     // nameOf reads the members list, which byId follows.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: byId is nameOf's input
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- byId is nameOf's input
     [result, rangeProblem, groupBy, round, byId],
   );
   const label = rangeLabel(range);

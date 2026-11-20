@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PersonAvatar } from "@/components/ui/avatar";
 import { formatPastDay, formatTime } from "@/lib/time-format";
 import { cn } from "@/lib/utils";
+
 import type { ChatMessage, ChatPerson, ChatRuntime } from "../model";
 import { keyOf } from "../store/keys";
 import { type BodyContext, MessageBody } from "../stream/message-body";

@@ -12,7 +12,7 @@ import { SELECTED_ROW } from "../../../components/ui/selection";
 import { formatTime } from "../../../lib/time-format";
 import { cn } from "../../../lib/utils";
 import { type ScheduledToday, scheduledToday } from "../focus-screen";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
+import { useTaskCommands, useTasksSelector, useTasksUserId } from "../tasks-context";
 import { nowOn, useToday } from "../use-today";
 
 // ── the empty state: three ways in (66) ─────────────────────────────────────
@@ -43,37 +43,37 @@ export function FocusKeyHints({ where = "here" }: { where?: string }) {
  * (TV-U17), which shows this screen.
  */
 export function FocusEmptyState({
-  api,
   canEdit,
   bucketNameById,
   selectedTaskId,
   onSelectTask,
   onRequestCapture,
 }: {
-  api: Pick<
-    TasksModuleApi,
-    "tasks" | "sessions" | "currentUserId" | "queuedTaskIds" | "addToQueue" | "toggleQueue"
-  >;
   canEdit: boolean;
   bucketNameById: (id: string) => string;
   selectedTaskId: string | null;
   onSelectTask: (id: string | null) => void;
   onRequestCapture: () => void;
 }) {
+  const { addToQueue, toggleQueue } = useTaskCommands();
+  const tasks = useTasksSelector((d) => d.liveTasks);
+  const sessions = useTasksSelector((_, snap) => snap.sessions);
+  const queuedIds = useTasksSelector((d) => d.queuedTaskIds);
+  const me = useTasksUserId();
   const today = useToday();
   const rows = useMemo(
     () =>
       scheduledToday({
-        tasks: api.tasks,
-        sessions: api.sessions,
-        me: api.currentUserId,
+        tasks,
+        sessions,
+        me,
         now: nowOn(today),
-        queuedIds: api.queuedTaskIds,
+        queuedIds,
       }),
-    [api.tasks, api.sessions, api.currentUserId, api.queuedTaskIds, today],
+    [tasks, sessions, me, queuedIds, today],
   );
   const lineUp = (list: ScheduledToday[]) => {
-    for (const row of list) api.addToQueue(row.task.id, "end");
+    for (const row of list) addToQueue(row.task.id, "end");
     if (list.length > 1) toast(`Lined up ${list.length} tasks`);
   };
 
@@ -133,7 +133,7 @@ export function FocusEmptyState({
                     label="Add to Focus"
                     // One task, like Q: a blocked one offers its unblocked
                     // tasks first (the page's guarded toggle).
-                    onClick={() => api.toggleQueue(row.task.id)}
+                    onClick={() => toggleQueue(row.task.id)}
                   />
                 ) : null}
               </li>

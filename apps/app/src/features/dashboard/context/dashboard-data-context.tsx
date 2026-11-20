@@ -14,6 +14,7 @@
 // TV-D14's report, read again whenever a tracked total in the store moves.
 
 import {
+  type Context,
   createContext,
   type ReactNode,
   useCallback,
@@ -23,6 +24,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import type { CalendarModuleBundle } from "@/features/calendar/events";
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 import type { ReconnectItem } from "@/features/contacts/reconnect";
@@ -130,7 +132,6 @@ function useSource<T>(
     emptyRef.current = empty;
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: refreshKey re-runs the read on purpose
   const load = useCallback((): Promise<void> => {
     // A retired source clears itself; the seq bump cancels any in-flight read.
     if (!enabled || !workspaceId) {
@@ -166,6 +167,7 @@ function useSource<T>(
     // `empty` arrives via emptyRef — array sources pass a fresh `[]` per render,
     // so listing it as a dep would loop the fetch; the ref reads the latest.
     // `refreshKey` is listed only so a new stamp reads again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey re-runs the read on purpose
   }, [enabled, workspaceId, refreshKey]);
 
   useEffect(() => {
@@ -205,7 +207,17 @@ const DEFAULT_DATA: DashboardData = {
   habits: idleSource<HabitRow[]>([]),
 };
 
-const DashboardDataContext = createContext<DashboardData>(DEFAULT_DATA);
+// One context per source (TS-3b): a widget reads only the sources it shows,
+// so a task change re-renders the task widgets and never Email's or Notes'.
+// The provider holds the shared store's snapshot; each source keeps its
+// identity until its own slice moves, so its context alone changes.
+type SourceKey = keyof DashboardData;
+
+const SOURCE_KEYS = Object.keys(DEFAULT_DATA).concat("taskFiles") as SourceKey[];
+
+const sourceContexts = Object.fromEntries(
+  SOURCE_KEYS.map((key) => [key, createContext<unknown>(DEFAULT_DATA[key])]),
+) as { [K in SourceKey]: Context<DashboardData[K]> };
 
 /** The set of widget types placed anywhere in the layout (across all pages). */
 function presentTypes(layout: DashboardLayout): Set<WidgetType> {
@@ -384,20 +396,37 @@ export function DashboardDataProvider({
     ],
   );
 
-  return <DashboardDataContext.Provider value={value}>{children}</DashboardDataContext.Provider>;
+  return <DashboardSources value={value}>{children}</DashboardSources>;
 }
 
-/** Widget bodies read their slice here. Returns idle-empty outside a provider (stories). */
-export function useDashboardData(): DashboardData {
-  return useContext(DashboardDataContext);
+/** Each source into its own context (the provider's, or a story's sample data). */
+export function DashboardSources({
+  value,
+  children,
+}: {
+  value: DashboardData;
+  children: ReactNode;
+}) {
+  let tree = children;
+  for (const key of SOURCE_KEYS) {
+    const Source = sourceContexts[key] as Context<unknown>;
+    tree = <Source.Provider value={value[key]}>{tree}</Source.Provider>;
+  }
+  return <>{tree}</>;
+}
+
+/**
+ * One source, re-rendering only when it changes (TS-3b). Idle-empty outside a
+ * provider (stories without sample data).
+ */
+export function useDashboardSource<K extends SourceKey>(key: K): DashboardData[K] {
+  return useContext(sourceContexts[key]);
 }
 
 // ── Story / test helpers ────────────────────────────────────────────────────
-// The raw context + a loaded-source wrapper let a story inject sample data
+// `DashboardSources` + a loaded-source wrapper let a story inject sample data
 // without the fetching provider (Storybook render is blocked in worktrees, so
 // this is the human-capture path for DB-8's visual baselines).
-
-export { DashboardDataContext };
 
 /** Wrap sample data as a settled (non-loading) source. */
 export function loadedSource<T>(data: T): WidgetSource<T> {

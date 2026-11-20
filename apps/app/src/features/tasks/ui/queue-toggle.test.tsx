@@ -4,6 +4,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
 
 const PEOPLE = {
   u1: {
@@ -32,6 +33,7 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import { setRunClaims } from "../../focus/claims";
 import { makeTask } from "../helpers";
 import type { Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { QueueToggle, withoutPeopleOnIt } from "./queue-toggle";
 import { type TaskFacts, taskFactsOf } from "./row-facts";
 import { TaskBoardView } from "./task-board-view";
@@ -227,21 +229,12 @@ describe("TaskRow in My tasks (D4-4)", () => {
 
 describe("List, Board and cards in My tasks (D4-4)", () => {
   const tasks = [task("t1"), task("t2", { bucketId: "b2" })];
-  const viewApi = {
-    tasks,
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set(),
-    blockersByTask: new Map(),
-    statusById: new Map(),
-    toggleDone: rs.fn(),
-    patchTask: rs.fn(),
-    deleteTask: rs.fn(),
-    setTaskParent: rs.fn(),
-    skipOccurrence: rs.fn(),
-    ...api([], {}),
-  };
+  /** The view over a store holding these tasks, nobody's queue (A4). */
+  const renderView = (ui: ReactElement) =>
+    renderWithTasks(<TooltipProvider>{ui}</TooltipProvider>, {
+      seed: { tasks },
+      workspaceId: "w",
+    });
   const shared = (selection: string) => ({
     tasks,
     scopeTitle: selection === "mine" ? "My tasks" : "All",
@@ -255,41 +248,24 @@ describe("List, Board and cards in My tasks (D4-4)", () => {
     onRequestCapture: () => {},
     selectedTaskId: null,
     onSelectTask: () => {},
-    api: viewApi as never,
   });
   const avatars = () => screen.queryAllByLabelText(/^Assignee:/).length;
 
-  it("the List leaves the avatar out in My tasks and keeps it in All", () => {
-    render(
-      <TooltipProvider>
-        <TaskListView {...shared("mine")} groupBy="none" />
-      </TooltipProvider>,
-    );
+  it("the List leaves the avatar out in My tasks and keeps it in All", async () => {
+    await renderView(<TaskListView {...shared("mine")} groupBy="none" />);
     expect(screen.getAllByRole("row")).toHaveLength(2);
     expect(avatars()).toBe(0);
     cleanup();
-    render(
-      <TooltipProvider>
-        <TaskListView {...shared("all")} groupBy="none" />
-      </TooltipProvider>,
-    );
+    await renderView(<TaskListView {...shared("all")} groupBy="none" />);
     expect(avatars()).toBe(2);
   });
 
-  it("the Board leaves the avatar out in My tasks and keeps it in All", () => {
-    render(
-      <TooltipProvider>
-        <TaskBoardView {...shared("mine")} boardGroupBy="status" />
-      </TooltipProvider>,
-    );
+  it("the Board leaves the avatar out in My tasks and keeps it in All", async () => {
+    await renderView(<TaskBoardView {...shared("mine")} boardGroupBy="status" />);
     expect(screen.getByText("Task t1")).toBeTruthy();
     expect(avatars()).toBe(0);
     cleanup();
-    render(
-      <TooltipProvider>
-        <TaskBoardView {...shared("all")} boardGroupBy="status" />
-      </TooltipProvider>,
-    );
+    await renderView(<TaskBoardView {...shared("all")} boardGroupBy="status" />);
     expect(avatars()).toBe(2);
   });
 

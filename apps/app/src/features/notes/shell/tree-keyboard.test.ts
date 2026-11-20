@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@rstest/core";
-import { type TreeRow, treeKeyAction } from "./tree-keyboard";
+
+import { treeKeyAction, type TreeRow } from "./tree-keyboard";
 
 // pages:a (expanded) ─ pages:a1 (leaf)
 //                    └ pages:a2 (collapsed, has children)
@@ -67,6 +68,18 @@ describe("tree keys — sidebar keyboard (NR-2, AC4)", () => {
       type: "focus",
       key: "pages:a",
     });
+  });
+
+  it("⇧F10, the menu key and ⌥↵ open the focused row's menu, for viewers too", () => {
+    const menu = { type: "menu", key: "pages:a1" };
+    expect(press("pages:a1", "F10", { shiftKey: true })).toEqual(menu);
+    expect(press("pages:a1", "ContextMenu")).toEqual(menu);
+    expect(press("pages:a1", "Enter", { altKey: true })).toEqual(menu);
+    expect(treeKeyAction(rows, "pages:a1", { key: "ContextMenu" }, { canEdit: false })).toEqual(
+      menu,
+    );
+    expect(press("pages:a1", "F10")).toBeNull();
+    expect(press(null, "ContextMenu")).toBeNull();
   });
 
   it("leaves ⌘-chords and plain letters to the rest of the app", () => {

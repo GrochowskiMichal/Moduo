@@ -7,10 +7,12 @@
 // line. Emoji-only messages draw large ("jumbo").
 
 import type { ReactNode } from "react";
+
 import { canShowAsCard, referenceKind } from "@/features/spine/references/kinds";
 import { DateChip } from "@/features/spine/references/ui/date-chip";
 import { Reference } from "@/features/spine/references/ui/reference";
 import { cn } from "@/lib/utils";
+
 import { InlineCustomEmoji } from "../emoji/context";
 import {
   type Block,

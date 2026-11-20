@@ -41,7 +41,7 @@ export function readFolds(key: string | null): Record<string, boolean> {
 /** Remember one fold choice; written with the others a moment later. */
 export function writeFold(key: string | null, id: string, folded: boolean): void {
   if (!key || !id) return;
-  pending.set(key, { ...(pending.get(key) ?? {}), [id]: folded });
+  pending.set(key, { ...pending.get(key), [id]: folded });
   if (timer) return;
   timer = setTimeout(flushFolds, FOLDS_WRITE_DELAY_MS);
 }
@@ -55,7 +55,7 @@ export function flushFolds(): void {
   const next: Record<string, TasksFoldEntry> = { ...currentPreferences().tasksFolds };
   for (const [key, folds] of pending) {
     // A changed fold moves to the end: the newest are the ones kept.
-    const kept = { ...(next[key]?.folds ?? {}) };
+    const kept = { ...next[key]?.folds };
     for (const id of Object.keys(folds)) delete kept[id];
     next[key] = { at, folds: { ...kept, ...folds } };
   }

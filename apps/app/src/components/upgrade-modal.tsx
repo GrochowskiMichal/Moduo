@@ -1,4 +1,5 @@
 import { Sparkles, Users, Zap } from "lucide-react";
+
 import { PLAN_CARDS } from "../features/billing/plans";
 import { type FeatureGate, useEntitlement } from "../hooks/use-entitlement";
 import { Button } from "./ui/button";

@@ -263,3 +263,66 @@ export function clockIn(timeZone: string, now: Date = new Date()): string {
     return "";
   }
 }
+
+// ---- the book button ----
+
+export type BookStepInput = {
+  /** The platforms the guest still picks between ("Google Meet or Zoom"), or null once settled. */
+  videoToPick: string | null;
+  dayKey: string | null;
+  start: string | null;
+  timeZone: string;
+  /** The details step (name, email, the host's question) is open under the sentence. */
+  detailsOpen: boolean;
+  nameOk: boolean;
+  emailOk: boolean;
+  /** The host's first name while a required question is unanswered, else null. */
+  question: string | null;
+};
+
+export type DetailsField = "name" | "email" | "question";
+
+export type BookStep =
+  | { kind: "video" | "day" | "time"; label: string }
+  | { kind: "details"; field: DetailsField; label: string }
+  | { kind: "book"; label: string };
+
+/** "Book Wednesday 28 October at 12:00": what the button says once nothing is missing. */
+export function bookLabel(start: string, timeZone: string): string {
+  return `Book ${dayLongOfKey(zoneKey(new Date(start), timeZone))} at ${timeLabel(start, timeZone)}`;
+}
+
+function missingDetail(input: BookStepInput): DetailsField | null {
+  if (!input.nameOk) return "name";
+  if (!input.emailOk) return "email";
+  return input.question ? "question" : null;
+}
+
+const DETAIL_LABEL: Record<Exclude<DetailsField, "question">, string> = {
+  name: "Add your name",
+  email: "Add your email",
+};
+
+/**
+ * What the book button does next (AC33): the first missing choice, then the
+ * details as one step ("Next: your details" until it's open, then the field it
+ * still needs), then "Book <day> at <time>". The optional answer never holds it back.
+ */
+export function nextBookStep(input: BookStepInput): BookStep {
+  if (input.videoToPick) return { kind: "video", label: `Pick ${input.videoToPick}` };
+  if (!input.dayKey) return { kind: "day", label: "Pick a day" };
+  if (!input.start) return { kind: "time", label: "Pick a time" };
+  const field = missingDetail(input);
+  if (!field) return { kind: "book", label: bookLabel(input.start, input.timeZone) };
+  if (!input.detailsOpen) return { kind: "details", field, label: "Next: your details" };
+  const label = field === "question" ? `Answer ${input.question}'s question` : DETAIL_LABEL[field];
+  return { kind: "details", field, label };
+}
+
+/** "See the other 18 open times" under a picked time, or null when it's the only one. */
+export function otherOpenTimes(slots: string[], start: string | null): string | null {
+  if (!start) return null;
+  const others = slots.filter((slot) => slot !== start).length;
+  if (others === 0) return null;
+  return others === 1 ? "See the one other open time" : `See the other ${others} open times`;
+}

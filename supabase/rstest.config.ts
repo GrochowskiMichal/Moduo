@@ -1,12 +1,10 @@
 import { fileURLToPath } from "node:url";
 
-import { pluginReact } from "@rsbuild/plugin-react";
 import { defineConfig } from "@rstest/core";
 
 // @moduo/backend: the Edge Function and contract tests. Some import app code
 // (`@/types/supabase`, booking and notes helpers), so the app aliases resolve here too.
 export default defineConfig({
-  plugins: [pluginReact()],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("../apps/app/src", import.meta.url)),
@@ -24,16 +22,19 @@ export default defineConfig({
           : callback(),
     ],
   },
-  testEnvironment: "jsdom",
+  testEnvironment: "node",
   include: [
     "functions/_shared/contracts/**/*.test.ts",
     "functions/_shared/*.test.ts",
-    // The MCP connector's own tests mock its esm.sh imports (Deno-only).
+    // The MCP connector's own tests mock its esm.sh imports (Deno-only). For the
+    // database, copy key-scopes.test.ts's in-memory `fakeDb`. moduo-mcp isn't in
+    // tsconfig.json, so `bun check` doesn't type-check these tests.
     "functions/moduo-mcp/**/*.test.ts",
     "functions/_shared/email/**/*.test.ts",
     "functions/auth-email-hook/*.test.ts",
     "functions/email-worker/*.test.ts",
     "functions/booking-public/*.test.ts",
+    "functions/notes-public/*.test.ts",
     "functions/push-send/*.test.ts",
   ],
   globals: true,

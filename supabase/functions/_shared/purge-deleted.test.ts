@@ -13,6 +13,8 @@ class FakeDb implements PurgeDb {
   orphans: string[] = [];
   expiredTasks = 0;
   expiredBuckets = 0;
+  expiredNotes = 0;
+  staleViewers = 0;
   storageFails = false;
   rpcFails: string | null = null;
 
@@ -23,7 +25,11 @@ class FakeDb implements PurgeDb {
     switch (fn) {
       case "purge__preview":
         return Promise.resolve({
-          data: { attachments: this.candidates.length, tasks: this.expiredTasks },
+          data: {
+            attachments: this.candidates.length,
+            tasks: this.expiredTasks,
+            notes: this.expiredNotes,
+          },
           error: null,
         });
       case "attachments__purge_candidates":
@@ -46,6 +52,16 @@ class FakeDb implements PurgeDb {
         this.expiredBuckets -= buckets;
         return Promise.resolve({ data: { tasks, buckets }, error: null });
       }
+      case "notes__purge_expired": {
+        const notes = Math.min(this.expiredNotes, limit);
+        const viewers = this.staleViewers;
+        this.expiredNotes -= notes;
+        this.staleViewers = 0;
+        return Promise.resolve({ data: { notes, viewers, failed: 0 }, error: null });
+      }
+      case "notes__compact_candidates":
+        // Compaction itself is notes-compact.test.ts's.
+        return Promise.resolve({ data: [], error: null });
       case "storage_usage__reconcile":
         return Promise.resolve({ data: 2, error: null });
       default:
@@ -100,6 +116,12 @@ describe("purgeDeleted", () => {
       orphanObjects: 1,
       tasks: 3,
       buckets: 1,
+      notes: 0,
+      noteViewers: 0,
+      notesFailed: 0,
+      notesCompacted: 0,
+      notesCompactSkipped: 0,
+      notesCompactFailed: 0,
       poolsRecounted: 2,
     });
     expect([...db.files]).toEqual(["ws/kept/original.png"]);
@@ -110,6 +132,8 @@ describe("purgeDeleted", () => {
       "rpc attachments__orphan_objects",
       "remove attachments 1",
       "rpc tasks__purge_expired",
+      "rpc notes__purge_expired",
+      "rpc notes__compact_candidates",
       "rpc storage_usage__reconcile",
     ]);
   });
@@ -175,9 +199,45 @@ describe("purgeDeleted", () => {
 
     const result = await purgeDeleted(db, { dryRun: true });
 
-    expect(result).toEqual({ dryRun: true, preview: { attachments: 1, tasks: 4 } });
+    expect(result).toEqual({ dryRun: true, preview: { attachments: 1, tasks: 4, notes: 0 } });
     expect(db.log).toEqual(["rpc purge__preview"]);
     expect(db.files.size).toBe(2);
+  });
+
+  it("notes step: sweeps expired notes after tasks, in rounds, and reports the counts", async () => {
+    const db = new FakeDb();
+    db.expiredTasks = 1;
+    db.expiredNotes = 25;
+    db.staleViewers = 4;
+
+    const result = await purgeDeleted(db, { batch: 10 });
+
+    expect(result.dryRun).toBe(false);
+    if (!result.dryRun) {
+      expect(result.notes).toBe(25);
+      expect(result.noteViewers).toBe(4);
+      expect(result.notesFailed).toBe(0);
+    }
+    expect(db.expiredNotes).toBe(0);
+    // Three rounds of 10, 10 and 5; the short one is the last.
+    expect(db.log.filter((l) => l === "rpc notes__purge_expired")).toHaveLength(3);
+    expect(db.log.indexOf("rpc notes__purge_expired")).toBeGreaterThan(
+      db.log.indexOf("rpc tasks__purge_expired"),
+    );
+    expect(db.log.at(-1)).toBe("rpc storage_usage__reconcile");
+  });
+
+  it("notes step: a failure names the notes step and keeps what tasks did", async () => {
+    const db = new FakeDb();
+    db.expiredTasks = 2;
+    db.rpcFails = "notes__purge_expired";
+
+    const err = (await purgeDeleted(db).catch((e: unknown) => e)) as PurgeError;
+
+    expect(err).toBeInstanceOf(PurgeError);
+    expect(err.step).toBe("notes");
+    expect(err.partial.tasks).toBe(2);
+    expect(db.log).not.toContain("rpc storage_usage__reconcile");
   });
 
   it("names the step that failed and what was already done", async () => {

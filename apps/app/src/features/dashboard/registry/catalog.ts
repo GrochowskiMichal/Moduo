@@ -186,6 +186,15 @@ export const WIDGET_CATALOG: Record<WidgetType, WidgetMeta> = {
     permissionModule: "tasks",
     openRoute: "/tasks",
   },
+  // Soundspace: an ambient mix around your head. Its scene lives in the
+  // widget's config; it's personal, so no permission lane.
+  soundspace: {
+    type: "soundspace",
+    label: "Soundspace",
+    sizes: ["S", "M", "L"],
+    defaultSize: "M",
+    defaultConfig: {},
+  },
   // TV-H1: Upcoming's days (TV-U15), the ones with work in them.
   upcoming: {
     type: "upcoming",

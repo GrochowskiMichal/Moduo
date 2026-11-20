@@ -4,6 +4,7 @@
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
 import { SegmentedControl } from "./segmented-control";
 import { Toolbar } from "./toolbar";
 

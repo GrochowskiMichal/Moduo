@@ -11,7 +11,7 @@ name: landing-preview
 # run first. PRs from forks get no secrets and are skipped. Nothing here runs `bun install`.
 on:
   pull_request:
-    branches: [develop, main, mike, maciej]
+    branches: [develop, mike, maciej]
     paths:
       - apps/landing/**
       - apps/app/public/favicon*
@@ -39,6 +39,7 @@ jobs:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # A preview-only CLOUDFLARE_API_TOKEN lives in this environment; there is no repo-level token.
     environment: cloudflare-preview
     permissions:
       contents: read
@@ -56,10 +57,10 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
 

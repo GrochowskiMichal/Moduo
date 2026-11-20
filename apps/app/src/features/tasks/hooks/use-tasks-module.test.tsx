@@ -2,7 +2,7 @@
 // tasks_op_assign (D1-2), and its Undo restores only what it changed.
 
 import { beforeEach, describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -19,7 +19,7 @@ rs.mock("../../../lib/undo-toast", () => ({
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const BUCKET = {
   id: "b1",
@@ -87,9 +87,11 @@ function fakeRuntime(tasks: Task[]) {
 
 async function mount(tasks: Task[]) {
   const fake = fakeRuntime(tasks);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: "u1",
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -97,7 +99,7 @@ async function mount(tasks: Task[]) {
 describe("teams and hand-overs (TV-D13)", () => {
   it("taking a team's task shows it as mine at once and keeps the server's row", async () => {
     const { api, hook } = await mount([task("t1", { assigneeId: null, teamId: "team-ds" })]);
-    act(() => hook.result.current.claimTask("t1"));
+    act(() => hook.result.current.commands.claimTask("t1"));
     expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBe("u1");
     await waitFor(() =>
       expect(api.opClaim).toHaveBeenCalledWith({ workspaceId: "w1", taskId: "t1" }),
@@ -110,7 +112,7 @@ describe("teams and hand-overs (TV-D13)", () => {
     api.opClaim.mockImplementationOnce(async () => {
       throw new Error("Someone already took this task.");
     });
-    act(() => hook.result.current.claimTask("t1"));
+    act(() => hook.result.current.commands.claimTask("t1"));
     await waitFor(() => expect(api.opClaim).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect(hook.result.current.tasks.find((t) => t.id === "t1")?.assigneeId).toBeNull(),
@@ -127,7 +129,7 @@ describe("teams and hand-overs (TV-D13)", () => {
       assigneeId: "u3",
       bucketId: "inbox-u3",
     }));
-    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    act(() => hook.result.current.commands.patchTask("t1", { assigneeId: "u3" }));
     await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(hook.result.current.tasks.map((t) => t.id)).toEqual([]));
   });
@@ -147,7 +149,7 @@ describe("teams and hand-overs (TV-D13)", () => {
         return { ...task(taskId, { creatorId: "u9" }), bucketId: "b2", assigneeId };
       },
     );
-    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3", bucketId: "b2" }));
+    act(() => hook.result.current.commands.patchTask("t1", { assigneeId: "u3", bucketId: "b2" }));
     await waitFor(() => expect(order).toEqual(["update", "assign"]));
     expect(api.opUpdateTask).toHaveBeenCalledWith({
       workspaceId: "w1",
@@ -163,21 +165,21 @@ describe("teams and hand-overs (TV-D13)", () => {
       assigneeId: "u3",
       bucketId: "inbox-u3",
     }));
-    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3" }));
+    act(() => hook.result.current.commands.patchTask("t1", { assigneeId: "u3" }));
     await waitFor(() =>
       expect(hook.result.current.tasks.find((t) => t.id === "t1")?.bucketId).toBe("inbox-u3"),
     );
   });
 });
 
-describe("useTasksModule saves (TV-D1)", () => {
+describe("Tasks saves (TV-D1)", () => {
   beforeEach(() => {
     undo.last = null;
   });
 
   it("an edit sends only the fields it changed, not the whole task", async () => {
     const { api, hook } = await mount([task("t1", { priority: null, title: "Old" })]);
-    act(() => hook.result.current.patchTask("t1", { priority: "high" }));
+    act(() => hook.result.current.commands.patchTask("t1", { priority: "high" }));
     await waitFor(() => expect(api.updateTask).toHaveBeenCalledTimes(1));
     expect(api.updateTask).toHaveBeenCalledWith({
       workspaceId: "w1",
@@ -189,7 +191,7 @@ describe("useTasksModule saves (TV-D1)", () => {
 
   it("assigning goes through the op, Unassigned included, and nothing else is written", async () => {
     const { api, hook } = await mount([task("t1")]);
-    act(() => hook.result.current.patchTask("t1", { assigneeId: null }));
+    act(() => hook.result.current.commands.patchTask("t1", { assigneeId: null }));
     await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
     expect(api.opAssign).toHaveBeenCalledWith({
       workspaceId: "w1",
@@ -204,7 +206,7 @@ describe("useTasksModule saves (TV-D1)", () => {
 
   it("an Inbox task edited and reassigned at once: the edit through the op first, then the assignment (TV-D13)", async () => {
     const { api, hook } = await mount([task("t1")]);
-    act(() => hook.result.current.patchTask("t1", { assigneeId: "u3", title: "New" }));
+    act(() => hook.result.current.commands.patchTask("t1", { assigneeId: "u3", title: "New" }));
     await waitFor(() => expect(api.opAssign).toHaveBeenCalledTimes(1));
     expect(api.opUpdateTask).toHaveBeenCalledWith({
       workspaceId: "w1",
@@ -223,13 +225,21 @@ describe("useTasksModule saves (TV-D1)", () => {
     const { api, hook } = await mount([]);
     // createTask returns the save's promise (TV-T1); a block body keeps act synchronous.
     act(() => {
-      hook.result.current.createTask({ bucketId: "b1", title: "Mine" });
+      hook.result.current.commands.createTask({ bucketId: "b1", title: "Mine" });
     });
     act(() => {
-      hook.result.current.createTask({ bucketId: "b1", title: "Nobody's", assigneeId: null });
+      hook.result.current.commands.createTask({
+        bucketId: "b1",
+        title: "Nobody's",
+        assigneeId: null,
+      });
     });
     act(() => {
-      hook.result.current.createTask({ bucketId: "b1", title: "Theirs", assigneeId: "u2" });
+      hook.result.current.commands.createTask({
+        bucketId: "b1",
+        title: "Theirs",
+        assigneeId: "u2",
+      });
     });
     await waitFor(() => expect(api.upsertTask).toHaveBeenCalledTimes(3));
     const sent = api.upsertTask.mock.calls.map(([t]) => [t.title, t.assigneeId, t.creatorId]);
@@ -242,7 +252,7 @@ describe("useTasksModule saves (TV-D1)", () => {
 
   it("Undo of a delete restores only deleted_at and the subtasks' parent", async () => {
     const { api, hook } = await mount([task("p"), task("c", { parentId: "p" })]);
-    act(() => hook.result.current.deleteTask("p"));
+    act(() => hook.result.current.commands.deleteTask("p"));
     await waitFor(() => expect(undo.last).not.toBeNull());
     await act(async () => {
       undo.last?.();

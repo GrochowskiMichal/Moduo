@@ -50,8 +50,8 @@ import { useSyncExternalStore } from "react";
 import { type FocusPrefs, readLocalFocusPrefs } from "../../lib/focus-prefs";
 import { isTauriRuntime } from "../../lib/runtime";
 import {
-  type AwayChoice,
   adoptSession,
+  type AwayChoice,
   bindTask,
   blankRecord,
   type FlushItem,
@@ -64,15 +64,15 @@ import {
   type FocusTaskRef,
   hasFailedSaves,
   isRunning,
-  OWNER_STALE_MS,
   observe,
   overlapAfter,
+  OWNER_STALE_MS,
   parseRecord,
   pauseSession,
   previewInterval,
-  REST_SESSION,
   relinquishSession,
   resolveAway,
+  REST_SESSION,
   resumeSession,
   reviveDeadFlights,
   sameSession,

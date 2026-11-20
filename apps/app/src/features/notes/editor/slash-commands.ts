@@ -85,7 +85,7 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   {
     id: "todo",
     title: "Checkbox",
-    description: "A humble checkbox — never a task",
+    description: "Tick it off",
     keywords: ["check", "checkbox", "checklist", "to-do"],
     group: "Basics",
   },
@@ -121,21 +121,21 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   {
     id: "page",
     title: "Page",
-    description: "New child note, right here",
+    description: "A note inside this one",
     keywords: ["child", "subpage", "subnote", "new"],
     group: "Insert",
   },
   {
     id: "note",
     title: "Note",
-    description: "Link a note — or type [[",
+    description: "Link a note, or type [[",
     keywords: ["ref", "reference", "link", "[["],
     group: "Insert",
   },
   {
     id: "task",
     title: "Task",
-    description: "Task line — create or link a real task",
+    description: "A real task, in Tasks too",
     keywords: ["todo-task", "work"],
     group: "Insert",
   },
@@ -162,22 +162,51 @@ export const SLASH_COMMANDS: readonly SlashCommandDef[] = [
   },
 ] as const;
 
+/**
+ * The full menu (an empty `/`) leads with what only Moduo's notes do — a live
+ * task first, then a page, a link to a note, a person — and the Basics
+ * follow, so the spine isn't below the fold. A typed query still ranks by
+ * the registry order above.
+ */
+const GROUP_ORDER: readonly SlashCommandGroup[] = ["Insert", "Basics"];
+const INSERT_ORDER: readonly SlashCommandId[] = [
+  "task",
+  "page",
+  "note",
+  "contact",
+  "company",
+  "event",
+];
+
+function menuRank(cmd: SlashCommandDef): number {
+  const group = GROUP_ORDER.indexOf(cmd.group) * 100;
+  const pinned = INSERT_ORDER.indexOf(cmd.id);
+  // An Insert command not pinned above goes after the pinned ones.
+  const within =
+    cmd.group === "Insert" && pinned !== -1
+      ? pinned
+      : INSERT_ORDER.length + SLASH_COMMANDS.indexOf(cmd);
+  return group + within;
+}
+
 /** Case-insensitive filter over title + keywords. Empty query → the full
- * menu in registry order. Title-prefix matches rank before keyword ones. */
+ * menu, spine first. Title-prefix matches rank before keyword ones. */
 export function filterSlashCommands(query: string): SlashCommandDef[] {
   const q = query.trim().toLowerCase();
-  if (q === "") return [...SLASH_COMMANDS];
+  if (q === "") return [...SLASH_COMMANDS].sort((a, b) => menuRank(a) - menuRank(b));
+  // Every typed word must start a word of the name, the id or a keyword:
+  // "/head 2" finds Heading 2. Descriptions don't count ("/ul" matched Quote
+  // and Divider through theirs).
+  const words = q.split(/\s+/);
   const titleHits: SlashCommandDef[] = [];
   const keywordHits: SlashCommandDef[] = [];
   for (const cmd of SLASH_COMMANDS) {
     const title = cmd.title.toLowerCase();
+    const titleWords = title.split(/\s+/);
+    const allWords = [...titleWords, cmd.id, ...cmd.keywords.map((k) => k.toLowerCase())];
     if (title.startsWith(q) || cmd.id.startsWith(q)) {
       titleHits.push(cmd);
-    } else if (
-      title.includes(q) ||
-      cmd.keywords.some((k) => k.startsWith(q)) ||
-      cmd.description.toLowerCase().includes(q)
-    ) {
+    } else if (words.every((w) => allWords.some((t) => t.startsWith(w)))) {
       keywordHits.push(cmd);
     }
   }

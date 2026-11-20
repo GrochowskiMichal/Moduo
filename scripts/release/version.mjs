@@ -1,9 +1,9 @@
 /**
  * The desktop release version (_desktop-release.yml), from the committed VERSION
  * file. The web deploys read VERSION directly (app-staging.yml, app-preview.yml
- * add `-rc`; deploy-prod.yml ships it as is), so the channels line up:
+ * add `-rc`; _deploy-web.yml ships it as is), so the channels line up:
  *
- *   production web (deploy-prod.yml)         → 1.1.0
+ *   production web (a v1.1.0 tag)            → 1.1.0
  *   staging and preview web                  → 1.1.0-rc
  *   production desktop                       → 1.1.0
  *   staging desktop                          → 1.1.0-rc.<run number>

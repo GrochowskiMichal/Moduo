@@ -109,6 +109,11 @@ export const linksModuleManifest: ModuleManifest = {
       name: "entities.search",
       summary: "Search the central registry by label (the @mention / link picker source).",
     },
+    {
+      name: "search.all",
+      summary:
+        "Search everything the caller can open, across modules, best first (search_all: the ⌘K results; MCP search, GS-7).",
+    },
     { name: "links.list", summary: "Every live link touching an entity (the hub roll-up source)." },
     {
       name: "comments.list",
