@@ -29,7 +29,7 @@ Marked rules are enforced in code; the rest you hold yourself.
 
 ## Working posture
 
-The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing. (Mike, the CTO, may run sessions in engineer mode: technical calls are yours, assumptions go under ❓ Needs you.)
+The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing. (Mike, the CTO, may run sessions in engineer mode: technical calls are yours, assumptions go under ❓ Needs you.) Before planning or building UI, read [docs/agents/designer-brief.md](./docs/agents/designer-brief.md): who decides what, how the designer likes to work, the process that worked for Tasks v3 and the lessons of past rebuilds.
 
 **Two lanes.** A prompt hook (`scripts/agent/router.ts`) suggests the lane; you decide.
 - **Fast lane:** a change that fits one sentence needs no spec, block or Moduo task. Branch, edit, run the checks it touches, PR with a short Test-this, merge into the personal branch on green (`/s2` §Fast lane, `/s3` step 3). A bug fix still starts with a failing test (`/s2` §Bug lane).
