@@ -447,11 +447,16 @@ Three fresh critics per round, prototype grading (0.375 Usability + 0.3125 Craft
 | Round | Overall | Usability · Craft · Platform · Character | Gates (a11y · states · layout · system · pointer) | Severity 3 confirmed |
 | --- | --- | --- | --- | --- |
 | r1 | 6.75 | 6 · 7 · 7 · 8 | 8.5 · 10 · 10 · 9 · 10 | Person panel didn't follow the open email (3/3); reader collapsed at 1024 px (3/3); bulk summary named the wrong people (2/3); first run showed connected accounts (3/3, sev 2–3) |
-| r2 | (running) | | 8.5 · 10 · 10 · 9.2 · 10 | |
+| r2 | 7.13 | 7 · 7 · 7 · 8 | 8.5 · 10 · 10 · 9.2 · 10 | Right panel rows and collapsed messages not reachable by Tab (1 run sev 3, 1 run sev 2) |
+| r3 | 7.13 | 7 · 7 · 7 · 8 (all three runs identical) | 8.5 · 10 · 10 · 8.7 · 10 | none |
 
 All three critics read the idea the same way: *"mail as a keyboard-first triage desk inside the work: every email shows its task, project, person and calendar, and you finish an email by turning it into linked work."* That matches the intended idea (§3).
 
 Fixed after r1: the Person panel follows the focused email (a multi-select shows the selected people, loading shows a skeleton); the right panel folds away below 1200 px so the reader keeps its width; the bulk summary and a check mark show the real selection; first run shows only "Connect an account"; compact rows keep the subject and shrink chips to icons; a skip link plus one tab stop per group puts the list two Tabs away; Inbox clear shows once; Send later opens beside its button and isn't styled as primary; the invite ghost sits beside the clashing event; "Done all" names its section; one hour format.
+
+After r2: keyboard reaches panel rows and collapsed messages; first run's bar offers only Connect; Schedule has a legend; selection labels match; stronger hover; full long subject; panel data matches Today. After r3 (polish, no re-score): message avatars round again (a CSS clash), compose header on separate rows, format toolbar clear of the selection, Busy hatched and Offered outlined, account counts clear with the inbox, focus ring outside filled buttons, Today titled by its date when it shows another day.
+
+**Bar not met (8.0) after three rounds, as expected for a shape prototype:** it is a set of variants, not one finished module. What holds the score at 7: polish items (identity colours not yet tokens, one light-mode contrast pair) and what a prototype can't show (undo, journeys). The final prototype gets its own critic loop before the spec.
 
 ## 9. What happens next
 
