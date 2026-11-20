@@ -95,7 +95,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .brand { font-weight: 600; letter-spacing: -.01em; }
 .mods { display: flex; gap: 2px; margin-left: 8px; }
 .mods button { height: 26px; padding: 0 8px; border-radius: var(--radius-md); color: var(--muted-foreground); font-size: var(--text-sm); font-weight: 500; }
-.mods button:hover { background: var(--state-hover); color: var(--foreground); }
+.mods button:hover { background: var(--state-active); color: var(--foreground); }
 .mods button.on { background: var(--state-active); color: var(--foreground); }
 .mods button.on:hover { background: color-mix(in oklab, var(--foreground) 13%, transparent); }
 .tb-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
@@ -106,7 +106,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .pc { --av: color-mix(in oklab, var(--label-violet) 52%, var(--card)); } .pd { --av: color-mix(in oklab, var(--label-amber) 40%, var(--card)); }
 .pe { --av: color-mix(in oklab, var(--label-green) 45%, var(--card)); } .pf { --av: color-mix(in oklab, var(--foreground) 22%, var(--card)); }
 .btn { height: var(--ctrl-h-sm); padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: var(--radius-md); font-size: var(--text-sm); font-weight: 500; color: var(--muted-foreground); white-space: nowrap; transition: background-color var(--motion-fade) var(--ease-out); }
-.btn:hover { background: var(--state-hover); color: var(--foreground); }
+.btn:hover { background: var(--state-active); color: var(--foreground); }
 .btn.icon { width: var(--ctrl-h-sm); padding: 0; justify-content: center; }
 .btn.primary { background: var(--primary); color: var(--primary-foreground); padding: 0 12px; }
 .btn.primary:hover { background: color-mix(in oklab, var(--primary) 86%, var(--background)); color: var(--primary-foreground); }
@@ -182,7 +182,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .reader { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .rscroll { overflow: auto; flex: 1; min-height: 0; }
 .rin { max-width: 48rem; margin: 0 auto; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 12px; }
-.subj { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.subj { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.subj.long { font-size: var(--text-md); line-height: 1.45; }
 .linkline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--muted-foreground); }
 .msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .msg.coll { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: var(--muted-foreground); font-size: var(--text-sm); }
@@ -214,14 +215,14 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .panel { border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--background); }
 .ptitle { display: flex; align-items: center; gap: 6px; height: var(--bar-h); padding: 0 8px 0 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .ptitle .dd { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border-radius: var(--radius-md); font-weight: 600; }
-.ptitle .dd:hover { background: var(--state-hover); }
+.ptitle .dd:hover { background: var(--state-active); }
 .ptitle .grow { flex: 1; }
 .pbody { overflow: auto; flex: 1; padding: 14px; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
 .psec { display: flex; flex-direction: column; gap: 6px; }
 .psec h4 { font-size: var(--text-xs); font-weight: 500; color: var(--subtle-foreground); display: flex; align-items: center; gap: 6px; }
 .psec h4 .grow { flex: 1; }
 .prow { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 4px 6px; border-radius: var(--radius-md); font-size: var(--text-sm); }
-.prow:hover { background: var(--state-hover); }
+.prow:hover, .msg.coll:hover { background: var(--state-active); }
 .prow .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prow .meta { font-size: var(--text-xs); color: var(--subtle-foreground); white-space: nowrap; }
 .cb { width: 14px; height: 14px; border-radius: 9999px; border: 1.5px solid color-mix(in oklab, var(--foreground) 42%, transparent); flex-shrink: 0; }
@@ -244,8 +245,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .week .tl { color: var(--subtle-foreground); text-align: right; padding-right: 4px; height: 26px; font-variant-numeric: tabular-nums; }
 .week .c { height: 26px; border-top: 1px solid var(--hairline); border-left: 1px solid var(--hairline); position: relative; }
 .week .c.busy { background: color-mix(in oklab, var(--label-blue) 18%, var(--card)); }
-.week .c.pick { outline: none; }
-.week .c.pick { background: color-mix(in oklab, var(--primary) 18%, transparent); box-shadow: inset 0 0 0 1.5px var(--primary); }
+.lg { width: 12px; height: 12px; border-radius: var(--radius-sm); display: inline-block; }
+.lg.busy { background: color-mix(in oklab, var(--label-blue) 18%, var(--card)); }
+.lg.pick { background: var(--primary); }
+.week .c.pick { background: var(--primary); }
 
 /* bottom bar */
 .bottombar { grid-column: 1 / -1; display: grid; grid-template-columns: 15rem 1fr 20rem; border-top: 1px solid var(--border); align-items: center; }
@@ -282,7 +285,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .sk { background: color-mix(in oklab, var(--foreground) 7%, transparent); border-radius: var(--radius-sm); height: 10px; }
 .batch { display: flex; flex-direction: column; gap: 16px; }
 .bcard { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
-.bcard.cur { box-shadow: 0 0 0 2px var(--primary); }
+.bcard.cur { background: var(--state-selected); border-color: var(--hairline); }
 .bcard .bh { display: flex; gap: 12px; align-items: center; padding: 12px 14px 4px; }
 .bcard .bq { padding: 0 14px 10px 56px; color: var(--muted-foreground); font-size: var(--text-sm); line-height: 1.55; }
 .bcard .bbox { margin: 0 14px 14px 56px; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px 12px; min-height: 64px; font-size: var(--text-sm); color: var(--subtle-foreground); background: var(--background); }
@@ -363,7 +366,7 @@ const P = {
   zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
 };
 const I = (n, c = "ic") => `<svg class="${c}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ""}</svg>`;
-const K = (k) => `<span class="kbd">${k}</span>`;
+const K = (k) => `<span class="kbd">${k.length === 1 ? k.toUpperCase() : k}</span>`;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 /* ── fictional data: a small studio's Tuesday ── */
@@ -470,7 +473,7 @@ function rail(o = {}) {
   <button class="nav" tabindex="-1">${I("search")}<span>Invoices this month</span></button>
   <div class="eyebrow">More</div>
   ${nav("archive", "archive", "Archive")}
-  <button class="nav" tabindex="-1">${I("more")}<span>Trash, Spam, Subscriptions…</span></button>
+  <button class="nav" tabindex="-1">${I("more")}<span>Other folders</span></button>
   </aside>`;
 }
 function row(t, sel, extra = {}) {
@@ -520,7 +523,7 @@ function listCol(o = {}) {
     <button class="btn">${I("layers")} Sections ${I("chev")}</button><button class="btn icon" aria-label="Search mail (/)">${I("search")}</button></div>
     ${o.line || ""}${body}</section>`;
 }
-function msgCollapsed(pk, when, ex) { const p = people[pk]; return `<div class="msg coll"><span class="ava sm ${p.c}">${p.i}</span><span class="nm">${esc(p.n)}</span><span class="ex">${esc(ex)}</span><span class="t3 num">${when}</span></div>`; }
+function msgCollapsed(pk, when, ex) { const p = people[pk]; return `<div class="msg coll" tabindex="0" role="button"><span class="ava sm ${p.c}">${p.i}</span><span class="nm">${esc(p.n)}</span><span class="ex">${esc(ex)}</span><span class="t3 num">${when}</span></div>`; }
 function msgOpen(pk, when, paras, o = {}) {
   const p = people[pk];
   return `<article class="msg"><div class="mhead"><span class="ava lg ${p.c}">${p.i}</span><div><div class="nm">${esc(p.n)}</div><div class="ad">to you${o.cc ? `, ${o.cc}` : ""} · ${esc(p.a)}</div></div><span class="grow"></span><span class="t3 num">${when}</span></div>
@@ -530,40 +533,40 @@ function msgOpen(pk, when, paras, o = {}) {
 function readerT1(o = {}) {
   return `<section class="reader" aria-label="Conversation"><div class="rscroll"><div class="rin">
   <h1 class="subj">Spring campaign: hero photos and the launch date</h1>
-  <div class="linkline">${o.taskLine ? `<span class="chip">${I("task")}Task · Send two harbour crops to Ana · due Fri</span>` : `<span class="chip">${I("task")}Task · due Fri</span>`}<span class="chip">${I("folder")}Fjordline · Spring campaign</span><span class="t3">and Ana's contact</span><button class="btn" style="height:22px;font-size: var(--text-xs)">${I("link")} Links ${K("⌥3")}</button></div>
+  <div class="linkline">${o.taskLine ? `<span class="chip">${I("task")}Task · Send two harbour crops to Ana · due Fri</span>` : `<span class="chip">${I("task")}Task · due Fri</span>`}<span class="chip">${I("folder")}Fjordline · Spring campaign</span><span class="chip">${I("user")}Ana Ruiz</span><button class="btn" style="height:22px;font-size: var(--text-xs)">${I("link")} Links ${K("⌥3")}</button></div>
   ${msgCollapsed("ana", "Nov 14", "Kicking off the spring campaign: here's the brief and the dates we discussed.")}
   ${msgCollapsed("tom", "Nov 17", "First round of hero shots is in the shared folder. Three directions.")}
   ${msgCollapsed("ana", "Nov 18", "We like the harbour direction. One note on the colours for print.")}
-  ${msgOpen("ana", "10:42", ["Hi both,", "Could we see two more crops of the harbour shot before Friday? One square for social and one wide for the ferry terminal screens.", "Legal also needs the final copy by <b>Thursday noon</b>, so the launch date of <b>March 3</b> holds if we get it to them in time.", "Thanks, Ana"], { cc: "Tomasz Nowak" })}
+  ${o.compose ? msgCollapsed("ana", "10:42", "Could we see two more crops of the harbour shot before Friday?") : msgOpen("ana", "10:42", ["Hi both,", "Could we see two more crops of the harbour shot before Friday? One square for social and one wide for the ferry terminal screens.", "Legal also needs the final copy by <b>Thursday noon</b>, so the launch date of <b>March 3</b> holds if we get it to them in time.", "Thanks, Ana"], { cc: "Tomasz Nowak" })}
   ${o.after || ""}
   </div></div></section>`;
 }
 function personPanel(pk = "ana") {
-  if (pk === "multi") return `<div class="pbody"><div class="psec"><h4>3 people selected</h4>${["dana","marco","lena"].map((k) => `<div class="prow"><span class="ava sm ${people[k].c}">${people[k].i}</span><span class="grow">${people[k].n}</span><span class="meta">${people[k].co}</span></div>`).join("")}</div><div class="t2" style="font-size:var(--text-xs)">Actions in the bottom bar apply to all three conversations.</div></div>`;
+  if (pk === "multi") return `<div class="pbody"><div class="psec"><h4>3 people selected</h4>${["dana","marco","lena"].map((k) => `<div class="prow" tabindex="0"><span class="ava sm ${people[k].c}">${people[k].i}</span><span class="grow">${people[k].n}</span><span class="meta">${people[k].co}</span></div>`).join("")}</div><div class="t2" style="font-size:var(--text-xs)">Actions in the bottom bar apply to all three conversations.</div></div>`;
   if (pk === "loading") return `<div class="pbody" aria-hidden="true"><div class="person"><span class="ava xl" style="background:color-mix(in oklab, var(--foreground) 7%, transparent)"></span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div></div>${[1,2,3].map(() => `<div class="sk" style="width:${70}%"></div>`).join("")}</div>`;
-  if (pk !== "ana") { const q = people[pk]; const W = { sam: [["Rebrand concepts v1","Dec 2"],["Send Harbour Bank quote","Fri"]], dana: [["Answer Dana's two questions","Today"],["Q1 retainer SOW","Dec 5"]], priya: [["Lumen brand audit","Dec 1"]], lena: [["Review the hiring plan","Fri"]], marco: [["Pay invoice 2026-114","Dec 5"]] }[pk] || []; return `<div class="pbody"><div class="person"><span class="ava xl ${q.c}">${q.i}</span><div><div class="nm">${q.n}</div><div class="ad">${q.role || ""}${q.co ? " · " + q.co : ""}</div><div class="ad">${q.a}</div></div></div><div class="psec"><h4>Open work with ${q.n.split(" ")[0]}<span class="grow"></span><span class="num">${W.length}</span></h4>${W.map(([t,d]) => `<div class="prow"><span class="cb"></span><span class="grow">${t}</span><span class="meta">${d}</span></div>`).join("") || `<div class="t3" style="font-size:var(--text-xs)">Nothing yet</div>`}</div><div class="psec"><h4>Recent mail<span class="grow"></span><span class="num">3</span></h4><div class="prow"><span class="grow">${T.find((t) => t.p === pk)?.sub || ""}</span><span class="meta">${T.find((t) => t.p === pk)?.when || ""}</span></div></div><button class="btn" style="align-self:flex-start">Open in Contacts</button></div>`; }
+  if (pk !== "ana") { const q = people[pk]; const W = { sam: [["Rebrand concepts v1","Dec 2"],["Send Harbour Bank quote","Fri"]], dana: [["Answer Dana's two questions","Today"],["Q1 retainer SOW","Dec 5"]], priya: [["Lumen brand audit","Dec 1"]], lena: [["Review the hiring plan","Fri"]], marco: [["Pay invoice 2026-114","Dec 5"]] }[pk] || []; return `<div class="pbody"><div class="person"><span class="ava xl ${q.c}">${q.i}</span><div><div class="nm">${q.n}</div><div class="ad">${q.role || ""}${q.co ? " · " + q.co : ""}</div><div class="ad">${q.a}</div></div></div><div class="psec"><h4>Open work with ${q.n.split(" ")[0]}<span class="grow"></span><span class="num">${W.length}</span></h4>${W.map(([t,d]) => `<div class="prow" tabindex="0"><span class="cb"></span><span class="grow">${t}</span><span class="meta">${d}</span></div>`).join("") || `<div class="t3" style="font-size:var(--text-xs)">Nothing yet</div>`}</div><div class="psec"><h4>Recent mail<span class="grow"></span><span class="num">1</span></h4><div class="prow" tabindex="0"><span class="grow">${T.find((t) => t.p === pk)?.sub || ""}</span><span class="meta">${T.find((t) => t.p === pk)?.when || ""}</span></div></div><button class="btn" style="align-self:flex-start">Open in Contacts</button></div>`; }
   const p = people.ana;
   return `<div class="pbody"><div class="person"><span class="ava xl ${p.c}">${p.i}</span><div><div class="nm">${p.n}</div><div class="ad">${p.role} · ${p.co}</div><div class="ad">${p.a}</div></div></div>
   <div class="psec"><h4>Open work with Ana<span class="grow"></span><span class="num">3</span></h4>
-    <div class="prow"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri</span></div>
-    <div class="prow"><span class="cb"></span><span class="grow">Print sizes for terminal screens</span><span class="meta">Mon</span></div>
-    <div class="prow"><span class="cb"></span><span class="grow">Invoice Fjordline phase 1</span><span class="meta">Dec 1</span></div></div>
-  <div class="psec"><h4>Next meeting</h4><div class="prow">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+    <div class="prow" tabindex="0"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri</span></div>
+    <div class="prow" tabindex="0"><span class="cb"></span><span class="grow">Print sizes for terminal screens</span><span class="meta">Mon</span></div>
+    <div class="prow" tabindex="0"><span class="cb"></span><span class="grow">Invoice Fjordline phase 1</span><span class="meta">Dec 1</span></div></div>
+  <div class="psec"><h4>Next meeting</h4><div class="prow" tabindex="0">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
   <div class="psec"><h4>Recent mail<span class="grow"></span><span class="num">14</span></h4>
-    <div class="prow"><span class="grow">Spring campaign: hero photos…</span><span class="meta">10:42</span></div>
-    <div class="prow"><span class="grow">Contract for phase 2</span><span class="meta">Nov 12</span></div>
-    <div class="prow"><span class="grow">Re: Terminal screen specs</span><span class="meta">Nov 3</span></div></div>
-  <div class="psec"><h4>Company</h4><div class="prow">${I("users")}<span class="grow">Fjordline Ferries · 4 people</span><span class="meta">Client</span></div></div>
+    <div class="prow" tabindex="0"><span class="grow">Spring campaign: hero photos…</span><span class="meta">10:42</span></div>
+    <div class="prow" tabindex="0"><span class="grow">Contract for phase 2</span><span class="meta">Nov 12</span></div>
+    <div class="prow" tabindex="0"><span class="grow">Re: Terminal screen specs</span><span class="meta">Nov 3</span></div></div>
+  <div class="psec"><h4>Company</h4><div class="prow" tabindex="0">${I("users")}<span class="grow">Fjordline Ferries · 4 people</span><span class="meta">Client</span></div></div>
   <button class="btn" style="align-self:flex-start">Open in Contacts</button></div>`;
 }
 function linksPanel(o = {}) {
   return `<div class="pbody">
-  <div class="psec"><h4>Task</h4><div class="prow"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri · Tomasz</span></div>${o.reply ? `<div class="pnote">The task shows <b>New reply</b> when Ana writes again (call 26).</div>` : ""}</div>
-  <div class="psec"><h4>Project</h4><div class="prow">${I("folder")}<span class="grow">Fjordline · Spring campaign</span><span class="meta">12 emails</span></div></div>
-  <div class="psec"><h4>People</h4><div class="prow"><span class="ava sm pa">AR</span><span class="grow">Ana Ruiz</span><span class="meta">Contact</span></div><div class="prow"><span class="ava sm pb">TN</span><span class="grow">Tomasz Nowak</span><span class="meta">Teammate</span></div></div>
-  <div class="psec"><h4>Event</h4><div class="prow">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
-  <div class="psec"><h4>Note</h4><div class="prow">${I("note")}<span class="grow">Spring campaign brief</span><span class="meta">Notes</span></div></div>
-  <div class="psec"><h4>Chat</h4><div class="prow">${I("chat")}<span class="grow">#fjordline · “warmer crop for print?”</span><span class="meta">Mon</span></div></div>
+  <div class="psec"><h4>Task</h4><div class="prow" tabindex="0"><span class="cb"></span><span class="grow">Send two harbour crops to Ana</span><span class="meta">Fri · Tomasz</span></div>${o.reply ? `<div class="pnote">The task shows <b>New reply</b> when Ana writes again (call 26).</div>` : ""}</div>
+  <div class="psec"><h4>Project</h4><div class="prow" tabindex="0">${I("folder")}<span class="grow">Fjordline · Spring campaign</span><span class="meta">12 emails</span></div></div>
+  <div class="psec"><h4>People</h4><div class="prow" tabindex="0"><span class="ava sm pa">AR</span><span class="grow">Ana Ruiz</span><span class="meta">Contact</span></div><div class="prow" tabindex="0"><span class="ava sm pb">TN</span><span class="grow">Tomasz Nowak</span><span class="meta">Teammate</span></div></div>
+  <div class="psec"><h4>Event</h4><div class="prow" tabindex="0">${I("cal")}<span class="grow">Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+  <div class="psec"><h4>Note</h4><div class="prow" tabindex="0">${I("note")}<span class="grow">Spring campaign brief</span><span class="meta">Notes</span></div></div>
+  <div class="psec"><h4>Chat</h4><div class="prow" tabindex="0">${I("chat")}<span class="grow">#fjordline · “warmer crop for print?”</span><span class="meta">Mon</span></div></div>
   <button class="btn" style="align-self:flex-start">${I("link")} Link to… ${K("l")}</button></div>`;
 }
 function dayPanel(o = {}) {
@@ -571,7 +574,7 @@ function dayPanel(o = {}) {
   const top = (h, m = 0) => (h * 40 + (m / 60) * 40);
   return `<div class="pbody"><div class="psec"><h4>${o.date || "Tuesday, Nov 25"}<span class="grow"></span>${o.note || "3 events · 2h free"}</h4></div>
   <div class="day">${hours.map((h) => `<div class="hr"><span>${h}${["9","10","11"].includes(h) ? " AM" : " PM"}</span></div>`).join("")}
-  ${(o.events || [[0.5, 1, "Studio stand-up", ""], [1, 1.5, "Fjordline weekly", "Meet · Ana, Tomasz"], [2.25, 3.75, "Focus · harbour crops", "focus"], [5, 6, "Lumen kickoff prep", ""]]).map(([a, b, t, s]) => `<div class="ev ${s === "focus" ? "focus" : s === "ghost" ? "ghost" : ""} ${s === "conf" ? "conf" : ""}" style="top:${top(a)}px;height:${top(b) - top(a) - 2}px"><b style="font-weight:600">${t}</b>${s && s !== "focus" && s !== "ghost" && s !== "conf" ? `<div class="t3">${s}</div>` : s === "ghost" ? `<div class="t2">Invite · not answered</div>` : s === "conf" ? `<div class="t3">overlaps the invite</div>` : ""}</div>`).join("")}
+  ${(o.events || [[0.5, 1, "Studio stand-up", ""], [1, 1.5, "Harbour Bank call", "Meet · Sam"], [2.25, 3.75, "Focus · harbour crops", "focus"], [5, 6, "Lumen kickoff prep", ""]]).map(([a, b, t, s]) => `<div class="ev ${s === "focus" ? "focus" : s === "ghost" ? "ghost" : ""} ${s === "conf" ? "conf" : ""}" style="top:${top(a)}px;height:${top(b) - top(a) - 2}px"><b style="font-weight:600">${t}</b>${s && s !== "focus" && s !== "ghost" && s !== "conf" ? `<div class="t3">${s}</div>` : s === "ghost" ? `<div class="t2">Invite · not answered</div>` : s === "conf" ? `<div class="t3">overlaps the invite</div>` : ""}</div>`).join("")}
   </div>${o.after || ""}</div>`;
 }
 function schedPanel() {
@@ -582,36 +585,38 @@ function schedPanel() {
   let g = `<div></div>${days.map((d) => `<div class="h">${d}</div>`).join("")}`;
   hours.forEach((h, r) => { g += `<div class="tl">${h}${["9","10","11"].includes(h) ? "a" : "p"}</div>`; days.forEach((_, c) => { const k = `${c}-${r}`; g += `<div class="c ${busy[k] ? "busy" : ""} ${pick[k] ? "pick" : ""}" ${pick[k] ? 'title="offered"' : ""}></div>`; }); });
   return `<div class="pbody"><div class="psec"><h4>Offer times · Dec 1–5<span class="grow"></span>3 picked</h4><div class="t2" style="font-size: var(--text-xs)">Drag over free time to offer it. Offered times show as held in your calendar until Sam books one.</div></div>
-  <div class="week">${g}</div>
+  <div class="week">${g}</div><div style="display:flex;gap:14px;font-size:var(--text-xs)" class="t2"><span style="display:inline-flex;gap:6px;align-items:center"><span class="lg busy"></span>Busy</span><span style="display:inline-flex;gap:6px;align-items:center"><span class="lg pick"></span>Offered</span></div>
   <div class="psec"><h4>Length</h4><div class="seg"><button>30m</button><button class="on">1h</button><button>1h 30m</button></div></div>
-  <div class="psec"><h4>Booking link</h4><div class="prow">${I("link")}<span class="grow">moduo.app/b/northwind/rebrand</span><span class="meta">only these times</span></div></div>
+  <div class="psec"><h4>Booking link</h4><div class="prow" tabindex="0">${I("link")}<span class="grow">moduo.app/b/northwind/rebrand</span><span class="meta">only these times</span></div></div>
   <button class="btn primary" style="align-self:flex-start">Insert in reply ${K("↵")}</button></div>`;
 }
 function panel(view, o = {}) {
-  const names = { person: "Person", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
-  const body = view === "person" ? personPanel(o.pk) : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
+  const names = { multi: "3 people", person: "Person", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
+  const body = view === "multi" ? personPanel("multi") : view === "person" ? personPanel(o.pk) : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
+  if (view === "person" && o.pk === "multi") view = "multi";
   return `<aside class="panel" aria-label="Right panel: ${names[view] || view}"><div class="ptitle">${o.back ? `<button class="btn icon" aria-label="Back to email">${I("back")}</button>` : ""}<button class="dd" aria-haspopup="menu">${names[view] || o.title || view} ${I("chev")}</button><span class="grow"></span><span class="t3" style="font-size: var(--text-xs)">${view === "person" ? "⌥1" : view === "today" ? "⌥2" : view === "links" ? "⌥3" : ""}</span></div>${body}</aside>`;
 }
 function taskPanel() {
   return `<div class="pbody"><div class="psec"><div class="prow" style="padding:0"><span class="cb"></span><span class="grow" style="font-weight:600;font-size: var(--text-md);white-space:normal">Send two harbour crops to Ana</span></div></div>
-  <div class="psec"><div class="prow">Status<span class="grow"></span><span class="meta" style="color:var(--foreground)">To do</span></div><div class="prow">Due<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fri</span></div><div class="prow">Assignee<span class="grow"></span><span class="ava sm pb">TN</span><span class="meta" style="color:var(--foreground)">Tomasz</span></div><div class="prow">Project<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fjordline · Spring</span></div></div>
+  <div class="psec"><div class="prow" tabindex="0">Status<span class="grow"></span><span class="meta" style="color:var(--foreground)">To do</span></div><div class="prow" tabindex="0">Due<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fri</span></div><div class="prow" tabindex="0">Assignee<span class="grow"></span><span class="ava sm pb">TN</span><span class="meta" style="color:var(--foreground)">Tomasz</span></div><div class="prow" tabindex="0">Project<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fjordline · Spring</span></div></div>
   <div class="psec"><h4>From email</h4><div class="chatcard"><div style="display:flex;gap:6px;align-items:center"><span class="chip" style="color:var(--foreground)">${I("reply")}New reply</span><span class="t3" style="font-size: var(--text-xs)">10:42</span></div><div style="font-weight:500">Spring campaign: hero photos and the launch date</div><div class="t2" style="font-size: var(--text-xs)">Ana: “Could we see two more crops of the harbour shot before Friday?”</div></div></div>
-  <div class="psec"><h4>When you complete this task</h4><div class="prow"><span class="cb" style="border-radius:var(--radius-sm);background:var(--primary);border-color:var(--primary)"></span><span class="grow">Also mark the email Done</span></div></div></div>`;
+  <div class="psec"><h4>When you complete this task</h4><div class="prow" tabindex="0"><span class="cb" style="border-radius:var(--radius-sm);background:var(--primary);border-color:var(--primary)"></span><span class="grow">Also mark the email Done</span></div></div></div>`;
 }
 function commentsPanel() {
   return `<div class="pbody"><div class="psec"><h4>${I("users")} Shared with Northwind Studio<span class="grow"></span><button class="btn" style="height:22px;font-size: var(--text-xs)">Stop sharing</button></h4><div class="t2" style="font-size: var(--text-xs)">Lena and Tomasz can read this conversation and its new replies in Moduo. Nothing else from your mail is shared.</div></div>
   <div class="psec"><h4>Comments<span class="grow"></span>2</h4>
-  <div class="prow" style="align-items:flex-start"><span class="ava sm pc">LP</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Lena</b> <span class="t3" style="font-size: var(--text-xs)">9:30</span><div>Phase 2 pricing: let's hold the rate, offer an extra review round instead.</div></div></div>
-  <div class="prow" style="align-items:flex-start"><span class="ava sm pb">TN</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Tomasz</b> <span class="t3" style="font-size: var(--text-xs)">9:41</span><div>Agree. I can draft the answer to her second question.</div></div></div>
+  <div class="prow" tabindex="0" style="align-items:flex-start"><span class="ava sm pc">LP</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Lena</b> <span class="t3" style="font-size: var(--text-xs)">9:30</span><div>Phase 2 pricing: let's hold the rate, offer an extra review round instead.</div></div></div>
+  <div class="prow" tabindex="0" style="align-items:flex-start"><span class="ava sm pb">TN</span><div class="grow" style="white-space:normal"><b style="font-weight:600">Tomasz</b> <span class="t3" style="font-size: var(--text-xs)">9:41</span><div>Agree. I can draft the answer to her second question.</div></div></div>
   <div class="input">Comment, @ to mention…</div></div>
-  <div class="psec"><h4>Assigned</h4><div class="prow"><span class="cb"></span><span class="grow">Answer Dana's two questions</span><span class="ava sm pb">TN</span><span class="meta">Today</span></div></div></div>`;
+  <div class="psec"><h4>Assigned</h4><div class="prow" tabindex="0"><span class="cb"></span><span class="grow">Answer Dana's two questions</span><span class="ava sm pb">TN</span><span class="meta">Today</span></div></div></div>`;
 }
 function bar(mode, o = {}) {
   const a = (label, k, prim) => `<button class="act ${prim ? "prim" : ""}">${label}${k ? " " + K(k) : ""}</button>`;
   let c = "";
   if (mode === "read") c = `${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Reply", "r")}${a("Task", "t")}${a("Link", "l")}<button class="act">More ${I("chev")}</button>`;
-  else if (mode === "multi") c = `<span class="selcount">3 selected</span><span class="bb-sep"></span>${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Tasks", "t")}${a("Move", "m")}<button class="act">More ${I("chev")}</button><span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">Esc</span>`;
+  else if (mode === "multi") c = `<span class="selcount">3 selected</span><span class="bb-sep"></span>${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Make tasks", "t")}${a("Move", "m")}<button class="act">More ${I("chev")}</button><span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">Esc</span>`;
   else if (mode === "write") c = `${a("Send", "⌘↵", true)}${a("Send & Done", "⌘⇧↵")}<span class="rel"><button class="act" aria-expanded="true" id="slbtn">Send later ${I("chev")}</button></span>${a("Template", "⌘⇧T")}${a("Attach", "⌘⇧A")}<button class="act">More ${I("chev")}</button>`;
+  else if (mode === "first") c = `${a("Connect an account", "", true)}${a("Quick capture", "⌘⇧K")}`;
   else if (mode === "list") c = `${a("New message", "c")}${a("Search", "/")}${a("Quick capture", "⌘⇧K")}`;
   else if (mode === "aside") c = `${a("Send & next", "⌘↵", true)}${a("Skip", "j")}${a("Done", "e")}${a("Snooze", "s")}<button class="act">More ${I("chev")}</button>`;
   return `<footer class="bottombar" aria-label="Bottom bar"><div class="bb-l"><button class="btn icon on" aria-label="Hide the rail (⌥[)">${I("panelL")}</button></div><div class="bb-c" role="toolbar" aria-label="Conversation actions">${c}</div><div class="bb-r"><button class="btn icon ${o.noright ? "" : "on"}" aria-label="Hide the right panel (⌥0)">${I("panelR")}</button></div></footer>`;
@@ -626,7 +631,7 @@ function sendLaterMenu() {
 }
 function composerReply(o = {}) {
   return `<section class="composer" aria-label="Reply">
-  <div class="cfield">From <span class="v">maciej@northwind.studio</span><span style="flex:1"></span>${o.sig ? `Signature <button class="btn" style="height:22px" aria-label="Previous signature">${I("back")}</button><span class="v" style="white-space:nowrap">Studio, short</span><button class="btn" style="height:22px;transform:scaleX(-1)" aria-label="Next signature">${I("back")}</button>` : ""}</div>
+  <div class="cfield">From <span class="v">maciej@northwind.studio</span><span class="t3" style="font-size:var(--text-xs)">· Saved</span><span style="flex:1"></span>${o.sig ? `Signature <button class="btn" style="height:22px" aria-label="Previous signature">${I("back")}</button><span class="v" style="white-space:nowrap">Studio, short</span><button class="btn" style="height:22px;transform:scaleX(-1)" aria-label="Next signature">${I("back")}</button>` : ""}</div>
   <div class="cfield">To <span class="v">${o.to || "Ana Ruiz"}</span>${o.cc ? `<span>Cc</span><span class="v">${o.cc}</span>` : ""}</div>
   ${o.subject ? `<div class="cfield">Subject <span class="v">${o.subject}</span></div>` : ""}
   <div class="cbody">${o.body || "Hi Ana,<br><br>Two crops attached <span class='caret'></span>"}</div></section>`;
@@ -709,9 +714,9 @@ function render() {
     case "states-a": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Inbox clear</h3><p>Nothing waits for you. 3 set aside, 2 snoozed.</p>
       <div style="display:flex;flex-direction:column;gap:6px;min-width:20rem;text-align:left;margin-top:6px">
-      <div class="prow">${I("clock")}<span class="grow">Snooze returns: Marco's invoice</span><span class="meta">Tomorrow 9:00 AM</span></div>
-      <div class="prow">${I("reply")}<span class="grow">Follow-up due: Harbour Bank brief</span><span class="meta">Thu</span></div>
-      <div class="prow">${I("cal")}<span class="grow">Next: Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
+      <div class="prow" tabindex="0">${I("clock")}<span class="grow">Snooze returns: Marco's invoice</span><span class="meta">Tomorrow 9:00 AM</span></div>
+      <div class="prow" tabindex="0">${I("reply")}<span class="grow">Follow-up due: Harbour Bank brief</span><span class="meta">Thu</span></div>
+      <div class="prow" tabindex="0">${I("cal")}<span class="grow">Next: Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
       <div class="keys" style="margin-top:8px"><span>${K("g")} ${K("a")} Go to Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
       html = topbar() + L.replace('<span class="n num">7</span>', "") + `<main class="centre">${e}</main>` + R("today") + bar("list"); break;
     }
@@ -729,7 +734,7 @@ function render() {
     }
     case "states-e": {
       const long = { id: "x", p: "dana", sec: "people", unread: true, when: "10:59", n: 12, sub: "Re: Re: Fwd: Kestrel Labs × Northwind Studio: final scope, timeline, payment terms and the signed statement of work for the Q1 retainer, plus the two open questions from legal about usage rights in the Nordics", snip: "Following up on everyone's notes from the call: legal is fine with the usage terms as long as the Nordic rights are limited to print and out-of-home, and finance wants the second invoice moved to February." };
-      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${long.sub}</h1><div class="linkline"><span class="t3">12 messages · 7 people</span></div>
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj long">${long.sub}</h1><div class="linkline"><span class="t3">12 messages · 7 people</span></div>
       ${msgCollapsed("dana", "Nov 3", "Kicking this off with the scope we agreed on Friday.")}<div class="msg coll" style="justify-content:center"><span>8 more messages</span>${K("o")}</div>${msgCollapsed("lena", "Nov 19", "Updated SOW attached with the Nordic usage terms.")}${msgCollapsed("tom", "Nov 20", "Design side is fine with the timeline.")}
       ${msgOpen("dana", "10:59", [long.snip, "Alexandra Konstantinidou-Whitfield from our legal team is copied for the usage rights wording."], { cc: "Alexandra Konstantinidou-Whitfield and 5 others" })}</div></div></section>`;
       html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" role="list" aria-label="Conversations">${grp("People", 7)}${row(long, true)}${T.filter((t) => t.sec === "people").map((t) => row(t, false)).join("")}</div>` })}${rd}</main>` + R("person", { pk: "dana" }) + bar("read"); break;
@@ -737,11 +742,11 @@ function render() {
     case "states-f": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Bring your email into Moduo</h3><p style="max-width:28rem">Your mail stays on this Mac. Connect an account and Moduo links emails to your tasks, calendar and contacts.</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn primary">Google</button><button class="btn secondary">Microsoft</button><button class="btn secondary">iCloud</button><button class="btn secondary">Other (IMAP)</button></div></div></section>`;
-      html = topbar() + rail({ first: true }) + `<main class="centre">${e}</main>` + R("today") + bar("list"); break;
+      html = topbar() + rail({ first: true }) + `<main class="centre">${e}</main>` + R("today") + bar("first"); break;
     }
     case "compose-a": {
       const body = `Hi Ana,<br><br>Here are the two crops: square for social and the wide one for the terminal screens.<div class="inlineimg">${I("img")} harbour-wide.jpg · inline</div><span style="background:var(--state-selected);border-radius:2px">The warmer version prints better</span>, so I'd go with it for the screens too.<div style="position:relative;height:0"><div class="fmtbar" style="position:absolute;top:-58px;left:40px" role="toolbar" aria-label="Formatting"><button class="btn icon" aria-label="Bold (⌘B)">${I("bold")}</button><button class="btn icon" aria-label="Italic (⌘I)">${I("italic")}</button><button class="btn icon" aria-label="Link (⌘K)">${I("link")}</button><button class="btn icon" aria-label="List">${I("list")}</button><button class="btn icon" aria-label="Quote">${I("quote")}</button></div></div><br><br>Maciej<span class='caret'></span>`;
-      html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ after: composerReply({ cc: "Tomasz Nowak", body, sig: true }) })}</main>` + R("person") + bar("write"); break;
+      html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ compose: true, after: composerReply({ cc: "Tomasz Nowak", body, sig: true }) })}</main>` + R("person") + bar("write"); break;
     }
     case "compose-b": {
       const body = `Hi <span class="chip" style="color:var(--foreground)">Dana</span>,<br><br>Thanks for your questions on the <span class="chip" style="color:var(--foreground)">Q1 retainer</span>. Here's how phase 2 works:<br><br><span class="chip" style="border:1px dashed var(--muted-foreground);background:transparent">answer: rate if scope grows</span><br><br>Happy to set up a call: <span class="chip" style="color:var(--foreground)">booking link</span><span class='caret'></span>`;
