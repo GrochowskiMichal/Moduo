@@ -544,6 +544,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 - 2026-10-27 · `/product-studio` is the only product-quality command, and its output is always one Claude Artifact, never code
 - 2026-10-23 · Product UI quality is measured by a lab and scored by blind critics: `/product-lab`, `/product-jury`, `/product-studio`
+- 2026-10-17 · Long waits get a grey Thinking orb instead of a spinner, starting with the data export
 - 2026-10-16 · A collection header's count is the tertiary text level, and 4 px sit between a header and its rows
 - 2026-10-16 · 8 px between two panels, 16 at the window's edges, and the resize handle still grabs over 16 px
 - 2026-10-16 · A text field marks focus on its own edge; the 2 px ring stays the keyboard's mark on controls, and no focus ring is offset
@@ -581,6 +582,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Product scope, alpha, settings, cross-cutting fixes → [decisions/product.md](decisions/product.md)
 
+- 2026-10-21 · Mindmap removed from the product
 - 2026-10-15 · TX-7: workspace emails are queued by the database, the inviter is whoever is signed in, and the daily cap counts queued emails
 - 2026-10-14 · TX-6: reminders and the host's cancel are queued by Postgres triggers from an email context saved on the booking
 - 2026-10-10 · TX-5: booking emails are queued by `booking-public` and rendered by the worker; the bell names the guest

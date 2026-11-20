@@ -1,7 +1,7 @@
 # Moduo — Notes Brief
 
 > **Status:** Shipped in Wave 3 (full rebuild on the spine primitives). Refresh in progress: [specs/notes-refresh.md](../../specs/notes-refresh.md).
-> **Pairs with:** Tasks (real schedulable checkboxes), Mindmap (note-in-canvas), Contacts/Calendar/Email/Finance (via `/refs` + `@mentions`), and the spine itself. Siblings: [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) · [ROADMAP.md](../../docs/ROADMAP.md) · [data-layers.md](../../docs/data-layers.md).
+> **Pairs with:** Tasks (real schedulable checkboxes), Contacts/Calendar/Email/Finance (via `/refs` + `@mentions`), and the spine itself. Siblings: [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) · [ROADMAP.md](../../docs/ROADMAP.md) · [data-layers.md](../../docs/data-layers.md).
 
 ---
 
@@ -44,7 +44,7 @@ This is the loop Routine got the warmest reception for — *"every checkbox is a
 | **Fast markdown editor (Lexical)** | Markdown-native input, slash menu, the usual blocks — already in the stack. | Obsidian-grade *feel* without local-first lock-in; Lexical is already wired (`LexicalNoteEditor.tsx`). | Editor is the host for `/refs`, `@mentions`, and embeds; all three resolve against the spine. |
 | **`/task`, `/note`, `/contact` refs** | Slash-insert a typed inline reference to any entity; renders as a live chip. | Notes that float free of the rest of the app are dead weight; refs are the cheapest cross-module tie. | Each `/ref` writes a typed `entity_links` row from the note to the target `(entity_type, entity_id)`; chip shows live title/status. |
 | **Note-in-note embedding** | Embed a note inside another and see it inline. | User explicitly wants this "if possible" — yes. | `entity_links` (`note → note`, kind `embed`); transclusion renders the child's CRDT preview, edits flow to the source. |
-| **Inline embeds (task / mindmap)** | `/embed-task`, `/embed-mindmap` blocks already scaffolded in `SlashCommand`. | Existing types show the intent; embeds are how Notes hosts other modules without owning them. | Embed block = an `entity_links` edge + a render adapter; the embedded entity stays owned by its module. |
+| **Inline embeds (task)** | `/embed-task` block already scaffolded in `SlashCommand`. | Existing types show the intent; embeds are how Notes hosts other modules without owning them. | Embed block = an `entity_links` edge + a render adapter; the embedded entity stays owned by its module. |
 | **Cloud sync (Yjs ↔ Postgres)** | Notes sync to Supabase so they're shareable and multi-device. | Cloud-first is locked; Notes is the multiplayer *enabler* — a note has to be a shareable workspace entity. | Note becomes a workspace-scoped entity addressable by `(note, id)`; unlocks comments, `@mentions`, sharing, roll-ups. |
 | **Tree: categories / folders / notes** | Light hierarchy already modeled (`NoteKind`, `parentId`, `position`). | Keep the familiar object (sidebar tree), not an abstract graph. | Parenting is structural; cross-cutting relations live in the spine, not the tree. |
 
@@ -53,7 +53,7 @@ This is the loop Routine got the warmest reception for — *"every checkbox is a
 - **Capture.** Global shortcut → empty untitled note, cursor in body, zero dialogs. First line becomes the title. Saved optimistically; sync is invisible. Lives in an Inbox until the user (optionally) files it.
 - **Checkbox → task.** Type `[ ] …` → block renders as a task chip with a check, a small "schedule" affordance, and (if linked) the context it rolls up to. `/task` inserts a reference to an *existing* task; a fresh `[ ]` *mints* one. Checking it anywhere marks it done everywhere.
 - **Reference insertion.** `/` opens the slash menu; `/contact Acme` → fuzzy entity picker → inserts a live chip and records the typed link. `@` inside a note mentions a workspace member (notification + comment-style mention), distinct from `/ref` which links *entities*.
-- **Embedding.** `/embed-mindmap` or `/embed-task`, or drag an entity from another pane onto the note → inline embed block + a typed link.
+- **Embedding.** `/embed-task`, or drag an entity from another pane onto the note → inline embed block + a typed link.
 - **Drag-anything.** Drag a note onto a task/contact/calendar event (or vice-versa) → one-gesture typed link; no modal. (Spine drag contract.)
 - **Roll-up read.** Open a contact/task and the note surfaces in that hub's "Notes" roll-up, grouped by relationship, with an inline snippet — never as a bare graph node.
 
@@ -137,7 +137,7 @@ Embedded checkboxes/tasks: the `task` row lives in the Tasks module; the note ho
 - **Hard dependency on the spine.** `entity_links`, the drag contract, comments/`@mentions`, and notifications must exist before Notes' `/refs`, embeds, and roll-ups are real. Per [data-layers.md](../../docs/data-layers.md), the spine is built once alongside the *second* module (Contacts is the proof). Notes should land **after** the spine primitives, consuming them — not reinventing local linking.
 - **Tasks must expose mint/link ops first.** The great moment depends on minting a `task` and embedding it; Tasks is the reference module (already has `tasks_op_*` RPCs) and must offer a "create + return task" path the editor can call optimistically.
 - **Notes is the multiplayer enabler.** Yjs↔Postgres sync is the gate for shared-workspace async collaboration on notes; sequence it once core single-user editing + the spine are stable.
-- **Reuse existing scaffolding.** `LexicalNoteEditor.tsx`, the `sync-engine.ts` / `SyncCursor` / `LocalOutboxEntry` shapes, fractional `position`, and the `SlashCommand` set (incl. `embed-task` / `embed-mindmap`) already encode much of this — the rebuild rewires them onto Supabase + the spine, it does not start from zero.
+- **Reuse existing scaffolding.** `LexicalNoteEditor.tsx`, the `sync-engine.ts` / `SyncCursor` / `LocalOutboxEntry` shapes, fractional `position`, and the `SlashCommand` set (incl. `embed-task`) already encode much of this — the rebuild rewires them onto Supabase + the spine, it does not start from zero.
 - **Module-contract DoD.** Not "done" until: invariant-bearing mutations go through `notes_op_*`; each writes an attributed `module_activity` row; the trail renders in the detail rail; a manifest entry exists in the registry; the dashboard widget ships.
 
 ---
