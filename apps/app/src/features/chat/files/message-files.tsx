@@ -9,6 +9,7 @@
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { FileText } from "lucide-react";
 import { useEffect, useState, useSyncExternalStore } from "react";
+
 import { Progress } from "@/components/ui/progress";
 import { fileIconFor } from "@/features/attachments/files";
 import { signPaths } from "@/features/attachments/signed-urls";
@@ -17,6 +18,7 @@ import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import { getUploadQueue } from "@/lib/uploads";
 import { formatBytes } from "@/lib/uploads/errors";
 import { cn } from "@/lib/utils";
+
 import type { ChatFile, ChatMessage, ChatRuntime } from "../model";
 import { fileShape, fitMedia } from "./model";
 

@@ -3,6 +3,7 @@
 // overdue winning the priority.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { Contact } from "./model";
 import { type OverdueFollowup, selectNeedsAttention } from "./needs-attention";
 

@@ -12,8 +12,8 @@ import { formatDate, formatWeekdayDate } from "../../lib/time-format";
 import { todayStr } from "../tasks/helpers";
 import type { Task, TaskSession } from "../tasks/model";
 
-/** The two v1 grid views. Month/agenda are explicit fast-follows (§11). */
-export type CalendarView = "day" | "week";
+/** The grid views, and Month (CALR-12): six whole weeks around the anchor's month. */
+export type CalendarView = "day" | "week" | "month";
 
 /** Tasks with no duration render as a 30-minute block (spec AC2). */
 export const DEFAULT_BLOCK_MINUTES = 30;
@@ -93,9 +93,12 @@ export function visibleRange(view: CalendarView, anchor: Date, prefs: RangePrefs
   if (view === "day") {
     days = [anchorDay];
   } else {
-    const back = (anchorDay.getDay() - prefs.weekStartsOn + 7) % 7;
-    const weekStart = addDays(anchorDay, -back);
-    days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+    // Month: the six weeks from the week holding the 1st.
+    const from =
+      view === "month" ? new Date(anchorDay.getFullYear(), anchorDay.getMonth(), 1) : anchorDay;
+    const back = (from.getDay() - prefs.weekStartsOn + 7) % 7;
+    const weekStart = addDays(from, -back);
+    days = Array.from({ length: view === "month" ? 42 : 7 }, (_, i) => addDays(weekStart, i));
     if (!prefs.showWeekends) {
       days = days.filter((d) => d.getDay() !== 0 && d.getDay() !== 6);
     }
@@ -109,8 +112,9 @@ export function visibleRange(view: CalendarView, anchor: Date, prefs: RangePrefs
   };
 }
 
-/** Step the anchor one period (day/week) forward or back. */
+/** Step the anchor one period (day/week/month) forward or back; a month lands on its 1st. */
 export function stepAnchor(view: CalendarView, anchor: Date, dir: 1 | -1): Date {
+  if (view === "month") return new Date(anchor.getFullYear(), anchor.getMonth() + dir, 1);
   return addDays(startOfLocalDay(anchor), (view === "week" ? 7 : 1) * dir);
 }
 
@@ -259,6 +263,11 @@ export function blocksByDay(blocks: TaskBlock[]): Map<string, TaskBlock[]> {
 export function rangeLabel(range: VisibleRange, locale?: string, now: Date = new Date()): string {
   const first = range.days[0];
   const last = range.days[range.days.length - 1];
+  if (range.view === "month") {
+    // The middle of six weeks always sits in the month they're for.
+    const mid = range.days[Math.floor(range.days.length / 2)];
+    return mid.toLocaleDateString(locale, { month: "long", year: "numeric" });
+  }
   // The app passes no locale: the label reads the one date grammar, so it
   // follows Time & region's date order (TV-D14).
   if (!locale) {

@@ -12,7 +12,7 @@ rs.mock("./runtime", () => ({
       ? { auth: { getSession: async () => ({ data: { session: auth.session } }) } }
       : null,
 }));
-rs.mock("./runtime.web", () => ({ SUPABASE_URL: "https://project.supabase.test" }));
+rs.mock("./runtime.web.client", () => ({ SUPABASE_URL: "https://project.supabase.test" }));
 
 import { requestAnalyticsForget } from "./analytics-forget";
 

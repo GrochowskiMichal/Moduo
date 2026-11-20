@@ -12,30 +12,23 @@
 // item's "Open in …" last. Keys: ⌥1–9 pick a view, Esc goes back one item
 // (keymap.md, rules 4 and 8).
 
-import { ArrowLeft, ChevronDown, ExternalLink, type LucideIcon } from "lucide-react";
-import {
-  Fragment,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { ArrowLeft, ChevronDown, ExternalLink, EyeOff, type LucideIcon } from "lucide-react";
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
+import { HotkeyScope, isMacPlatform, useAppHotkeys, useFocusWithin } from "../../lib/hotkeys";
 import {
   type PanelModule,
-  type PanelViewDef,
   panelShortcutLabel,
   panelShortcutNumber,
+  type PanelViewDef,
   panelViewsFor,
 } from "../../lib/panel-registry";
-import { isMacPlatform } from "../../lib/shortcuts";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -76,6 +69,10 @@ type Props = {
   /** Drops every item before a view switch. Without it, `onBack` runs once per item, so its
    *  state update must be functional (pop from the latest stack). */
   onClearItems?: () => void;
+  /** ⌥1–9 work from a field too (Chat: its key map says anywhere in Chat). */
+  viewKeysInFields?: boolean;
+  /** Adds "Hide" under the views in the title row's menu (Mail, specs/mail-v3.md §10). */
+  onHide?: () => void;
 };
 
 /**
@@ -96,14 +93,6 @@ export function usePanelStack<T extends { key: string }>() {
   const back = useCallback(() => setStack((current) => current.slice(0, -1)), []);
   const clear = useCallback(() => setStack((current) => (current.length ? [] : current)), []);
   return { stack, push, back, clear };
-}
-
-function isEditable(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = el.tagName?.toLowerCase();
-  return tag === "input" || tag === "textarea" || tag === "select";
 }
 
 /** Drops every item: the page's `onClearItems`, or one `onBack` per item. */
@@ -133,6 +122,8 @@ export function RightPanel({
   items = [],
   onBack,
   onClearItems,
+  viewKeysInFields = false,
+  onHide,
 }: Props) {
   const listed = panelViewsFor(module, (id) => Boolean(views[id]));
   const active = listed.find((v) => v.id === activeId) ?? listed[0];
@@ -140,40 +131,39 @@ export function RightPanel({
   const isMac = isMacPlatform();
 
   // ⌥1–9 pick a view while the panel is on screen; Esc steps back one item from
-  // anywhere inside the panel but a field. One bubble listener on window, so
-  // it runs after React's own handlers: a child (or a Radix menu, which
-  // handles Esc on its document listener) that claims the key first wins. Both
-  // stay out of the way while a dialog that doesn't hold the panel is open.
-  // The latest props live in a ref so the listener is bound once per mount.
-  const latest = useRef({ listed, active, items, onChange, onBack, onClearItems });
-  useLayoutEffect(() => {
-    latest.current = { listed, active, items, onChange, onBack, onClearItems };
-  });
+  // anywhere inside the panel but a field. Registry bindings in the "panel"
+  // scope (nested in the page's, so its Esc outranks the page's): they listen
+  // on document in the bubble phase, after React's own handlers, so a child (or
+  // a Radix menu, which handles Esc on its document capture listener) that
+  // claims the key first wins. Esc is only live while focus is in the panel,
+  // so the page keeps it otherwise. Both stay out of the way while a dialog
+  // that doesn't hold the panel is open.
   const rootRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditable(event.target)) return;
-      const root = rootRef.current;
-      if (!root || overlayOver(root)) return;
-      const { listed, active, items, onChange, onBack, onClearItems } = latest.current;
-      const item = items.length > 0 ? items[items.length - 1] : null;
-      if (event.key === "Escape") {
-        if (!item || !onBack || !root.contains(event.target as Node)) return;
-        event.preventDefault();
+  const focusInside = useFocusWithin(rootRef);
+  useAppHotkeys(
+    {
+      "panel.view": (event) => {
+        const root = rootRef.current;
+        if (!root || overlayOver(root)) return false;
+        const n = panelShortcutNumber(event);
+        const view = n === null ? undefined : listed[n - 1];
+        if (!view) return false;
+        if (item) clearItems(items, onBack, onClearItems);
+        if (view.id !== active?.id) onChange(view.id);
+      },
+    },
+    { inInputs: viewKeysInFields },
+  );
+  useAppHotkeys(
+    {
+      "panel.back": () => {
+        const root = rootRef.current;
+        if (!root || !item || !onBack || overlayOver(root)) return false;
         onBack();
-        return;
-      }
-      const n = panelShortcutNumber(event);
-      const view = n === null ? undefined : listed[n - 1];
-      if (!view) return;
-      event.preventDefault();
-      if (item) clearItems(items, onBack, onClearItems);
-      if (view.id !== active?.id) onChange(view.id);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+      },
+    },
+    { enabled: focusInside && !!item && !!onBack },
+  );
 
   // The body crossfades when the view or item changes, never when the panel
   // mounts (a page load, or the shell remounting it when the other side panel
@@ -216,53 +206,56 @@ export function RightPanel({
   const body = item ? item.render() : views[active.id]?.();
 
   return (
-    <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
-      {/* One row tall, like the left panel's first row, so the first lines
+    <HotkeyScope scope="panel">
+      <div ref={rootRef} className="flex h-full min-h-0 flex-col gap-2" data-panel-module={module}>
+        {/* One row tall, like the left panel's first row, so the first lines
           share a centre (MOD-121). The chip's fill starts at the panel's edge
           padding and its text 8 in; the body's 4 plus a view's own 4 put the
           body's text on that same 16 px column. */}
-      <div ref={titleRowRef} className="flex min-h-(--row-h) shrink-0 items-center gap-1">
-        {item ? (
-          <ItemTitle
-            item={item}
-            backTo={items.length > 1 ? items[items.length - 2].title : active.label}
-            onBack={onBack}
+        <div ref={titleRowRef} className="flex min-h-(--row-h) shrink-0 items-center gap-1">
+          {item ? (
+            <ItemTitle
+              item={item}
+              backTo={items.length > 1 ? items[items.length - 2].title : active.label}
+              onBack={onBack}
+            />
+          ) : listed.length > 1 ? (
+            <ViewMenu
+              listed={listed}
+              active={active}
+              title={title ?? active.label}
+              isMac={isMac}
+              onPick={pick}
+              onHide={onHide}
+            />
+          ) : (
+            <h2
+              tabIndex={-1}
+              className="min-w-0 flex-1 px-2 font-display text-base font-medium text-foreground outline-none"
+            >
+              {title ?? active.label}
+            </h2>
+          )}
+          {/* The body's own actions, right-aligned; hidden while it has none. */}
+          <div
+            ref={setActionsSlot}
+            data-slot="panel-title-actions"
+            className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
           />
-        ) : listed.length > 1 ? (
-          <ViewMenu
-            listed={listed}
-            active={active}
-            title={title ?? active.label}
-            isMac={isMac}
-            onPick={pick}
-          />
-        ) : (
-          <h2
-            tabIndex={-1}
-            className="min-w-0 flex-1 px-2 font-display text-base font-medium text-foreground outline-none"
-          >
-            {title ?? active.label}
-          </h2>
-        )}
-        {/* The body's own actions, right-aligned; hidden while it has none. */}
-        <div
-          ref={setActionsSlot}
-          data-slot="panel-title-actions"
-          className="ml-auto flex shrink-0 items-center gap-1 empty:hidden"
-        />
-        {item?.open ? (
-          <IconButton
-            icon={ExternalLink}
-            label={item.open.label}
-            onClick={item.open.onOpen}
-            className="shrink-0"
-          />
-        ) : null}
+          {item?.open ? (
+            <IconButton
+              icon={ExternalLink}
+              label={item.open.label}
+              onClick={item.open.onOpen}
+              className="shrink-0"
+            />
+          ) : null}
+        </div>
+        <div key={bodyKey} className={cn("min-h-0 flex-1 px-1", crossfade && "motion-view")}>
+          <TitleActionsScope slot={actionsSlot}>{body}</TitleActionsScope>
+        </div>
       </div>
-      <div key={bodyKey} className={cn("min-h-0 flex-1 px-1", crossfade && "motion-view")}>
-        <TitleActionsScope slot={actionsSlot}>{body}</TitleActionsScope>
-      </div>
-    </div>
+    </HotkeyScope>
   );
 }
 
@@ -272,6 +265,7 @@ function ViewMenu({
   title,
   isMac,
   onPick,
+  onHide,
 }: {
   listed: PanelViewDef[];
   active: PanelViewDef;
@@ -279,6 +273,7 @@ function ViewMenu({
   title: string;
   isMac: boolean;
   onPick: (id: string) => void;
+  onHide?: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -317,6 +312,15 @@ function ViewMenu({
             </Fragment>
           ))}
         </DropdownMenuRadioGroup>
+        {onHide ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onHide}>
+              <EyeOff aria-hidden />
+              Hide
+            </DropdownMenuItem>
+          </>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   );

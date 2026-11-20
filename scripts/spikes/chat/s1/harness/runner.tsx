@@ -4,6 +4,7 @@
 
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
+
 import { control, type HarnessState } from "./app";
 import { arrival, COUNT, editGrowth, MESSAGES, type Msg, SCENARIO_CHAINS } from "./fixture";
 import {

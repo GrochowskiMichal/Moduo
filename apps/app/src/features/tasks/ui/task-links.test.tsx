@@ -14,8 +14,8 @@ rs.mock("../assignees", () => ({
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskContextMenu } from "./task-context-menu";
 import { TaskDetailHeader } from "./task-detail-header";
 
@@ -91,23 +91,21 @@ describe("Copy link (MOD-28)", () => {
 
 describe("the details' ⋯ → Copy link (MOD-28)", () => {
   async function copyFromHeader(t: Task, taskKey: string | null) {
-    const api = { sections: [], tagsByTask: new Map() } as unknown as TasksModuleApi;
-    render(
+    await renderWithTasks(
       <WorkspaceContext.Provider value={{ selectedWorkspace: { taskKey } } as never}>
         <TooltipProvider>
           <TaskDetailHeader
             task={t}
             parent={null}
             buckets={[]}
-            inbox={null}
             canEdit={false}
-            api={api}
             onOpenTask={noop}
             onSelectTask={noop}
             claimSlot={<span />}
           />
         </TooltipProvider>
       </WorkspaceContext.Provider>,
+      { seed: { tasks: [t] } },
     );
     fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
       button: 0,

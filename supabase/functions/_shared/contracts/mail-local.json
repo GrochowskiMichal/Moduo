@@ -1,0 +1,118 @@
+{
+  "mailbox_roles": [
+    "inbox",
+    "sent",
+    "drafts",
+    "archive",
+    "all",
+    "trash",
+    "spam",
+    "custom"
+  ],
+  "tab_kinds": [
+    "personal",
+    "custom",
+    "notifications",
+    "newsletters"
+  ],
+  "classify_order": [
+    "block",
+    "rules",
+    "sender_override",
+    "custom_tabs",
+    "known_contact",
+    "header_heuristics"
+  ],
+  "op_kinds": [
+    "done",
+    "undone",
+    "move",
+    "delete",
+    "restore",
+    "mark_read",
+    "mark_unread",
+    "pin",
+    "unpin",
+    "snooze",
+    "unsnooze",
+    "mute",
+    "unmute",
+    "spam",
+    "not_spam",
+    "label_add",
+    "label_remove",
+    "block_sender"
+  ],
+  "op_states": [
+    "pending",
+    "in_flight",
+    "done",
+    "failed"
+  ],
+  "rule_conditions": [
+    "from",
+    "domain",
+    "to",
+    "subject_contains",
+    "is_newsletter"
+  ],
+  "rule_actions": [
+    "move_to_folder",
+    "add_label",
+    "put_in_tab",
+    "mark_read",
+    "skip_inbox",
+    "mark_priority",
+    "block"
+  ],
+  "rule_exclusive_actions": [
+    "move_to_folder",
+    "put_in_tab",
+    "skip_inbox",
+    "block"
+  ],
+  "block_destinations": [
+    "trash",
+    "spam",
+    "archive",
+    "folder"
+  ],
+  "event_kinds": [
+    "threads_changed",
+    "counts",
+    "sync_status",
+    "op_failed",
+    "new_mail",
+    "draft_changed"
+  ],
+  "body_states": [
+    "none",
+    "text_only",
+    "full",
+    "evicted"
+  ],
+  "sync_states": [
+    "idle",
+    "first_sync",
+    "syncing",
+    "backfilling",
+    "offline",
+    "reconnect",
+    "error"
+  ],
+  "providers": [
+    "gmail",
+    "google_workspace",
+    "icloud",
+    "outlook",
+    "imap"
+  ],
+  "flag_bits": {
+    "seen": 1,
+    "flagged": 2,
+    "answered": 4,
+    "draft": 8,
+    "deleted": 16
+  },
+  "max_custom_tabs": 3
+}

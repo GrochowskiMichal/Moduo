@@ -5,7 +5,7 @@
 // back to the list, and the title editor saving once on Enter and not on Esc.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -16,6 +16,7 @@ rs.mock("../assignees", () => ({
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { Bucket, Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskListView } from "./task-list-view";
 
 beforeAll(() => {
@@ -76,17 +77,9 @@ const inbox: Bucket = {
 };
 
 /** The real list in "All", where every row shows its bucket pill. */
-function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
+async function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
   const tasks = [task("a", "Alpha"), task("b", "Beta", { dueDate: "2026-10-20T00:00:00.000Z" })];
   const api = {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set(),
-    queueClaims: new Map(),
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set(),
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -112,16 +105,16 @@ function renderList({ canEdit = true }: { canEdit?: boolean } = {}) {
           onRequestCapture={() => {}}
           selectedTaskId={selected}
           onSelectTask={setSelected}
-          api={api as never}
         />
       </TooltipProvider>
     );
   }
-  render(
+  await renderWithTasks(
     <>
       <Harness />
       <input aria-label="Elsewhere" />
     </>,
+    { seed: { tasks }, workspaceId: "w", commands: api },
   );
   return { api, grid: screen.getByRole("grid") };
 }
@@ -156,7 +149,7 @@ const POPOVERS = [
 describe("TaskRow context menu", () => {
   for (const { item, text } of POPOVERS) {
     it(`"${item}" opens its popover and it stays open once the menu has closed`, async () => {
-      renderList();
+      await renderList();
       await settle();
 
       await chooseFromRowMenu("Alpha", item);
@@ -168,7 +161,7 @@ describe("TaskRow context menu", () => {
   }
 
   it('"Rename" opens the title editor and it stays open until Enter, which saves once', async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await settle();
 
     await chooseFromRowMenu("Alpha", "Rename");
@@ -184,7 +177,7 @@ describe("TaskRow context menu", () => {
   });
 
   it("Esc in the title editor throws the draft away", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await settle();
     await chooseFromRowMenu("Alpha", "Rename");
 
@@ -199,7 +192,7 @@ describe("TaskRow context menu", () => {
   });
 
   it("Esc closes a popover opened from the menu and hands focus back to the list", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await settle();
     await chooseFromRowMenu("Alpha", "Set due date…");
     expect(popover()).not.toBeNull();
@@ -220,7 +213,7 @@ describe("TaskRow context menu", () => {
   });
 
   it("an item that acts in place still hands focus back to the list", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await settle();
 
     await chooseFromRowMenu("Beta", "Mark done");
@@ -233,7 +226,7 @@ describe("TaskRow context menu", () => {
 
 describe("TaskRow bucket menu (DS-6: a radio menu, not a hand-rolled list)", () => {
   it("picking a project from the menu moves the task once and hands focus back", async () => {
-    const { api, grid } = renderList();
+    const { api, grid } = await renderList();
     await settle();
     grid.focus();
     fireEvent.keyDown(grid, { key: "b", code: "KeyB" });
@@ -250,7 +243,7 @@ describe("TaskRow bucket menu (DS-6: a radio menu, not a hand-rolled list)", () 
 describe("TaskRow popovers: the other ways in", () => {
   for (const { key, text } of POPOVERS) {
     it(`"${key}" opens the selected row's popover; Esc hands focus back to the list`, async () => {
-      const { grid } = renderList();
+      const { grid } = await renderList();
       await settle();
       grid.focus();
 
@@ -267,7 +260,7 @@ describe("TaskRow popovers: the other ways in", () => {
   }
 
   it("a click on a chip opens its popover; Esc hands focus back to the list", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await settle();
     const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
 
@@ -284,7 +277,7 @@ describe("TaskRow popovers: the other ways in", () => {
   });
 
   it("a second click on the chip closes its popover, and focus stays with the list", async () => {
-    const { grid } = renderList();
+    const { grid } = await renderList();
     await settle();
     const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
     fireEvent.click(chip);
@@ -306,7 +299,7 @@ describe("TaskRow popovers: the other ways in", () => {
   });
 
   it("clicking into another field closes the popover and leaves focus there", async () => {
-    renderList();
+    await renderList();
     await settle();
     const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
     fireEvent.click(chip);
@@ -328,7 +321,7 @@ describe("TaskRow popovers: the other ways in", () => {
 
 describe("TaskRow read-only", () => {
   it("a chip opens nothing; right-click offers only Open · Copy link · Copy as text (TV-U10)", async () => {
-    renderList({ canEdit: false });
+    await renderList({ canEdit: false });
     await settle();
     const chip = rowOf("Beta").querySelector<HTMLElement>('[aria-label^="Due "]')!;
 
@@ -347,7 +340,7 @@ describe("TaskRow read-only", () => {
   });
 
   it("the status icon is inert", async () => {
-    const { api } = renderList({ canEdit: false });
+    const { api } = await renderList({ canEdit: false });
     await settle();
     // Read-only, it names the status and offers nothing to press.
     expect(within(rowOf("Beta")).queryByRole("button", { name: "Mark as done" })).toBeNull();

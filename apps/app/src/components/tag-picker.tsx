@@ -10,6 +10,7 @@
 
 import { Check, Plus, Tag as TagIcon, Trash2 } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
+
 import { cn } from "../lib/utils";
 import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "./tag-colors";
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";

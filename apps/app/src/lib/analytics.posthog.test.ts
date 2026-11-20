@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+
 import { afterAll, beforeAll, describe, expect, it, rs } from "@rstest/core";
 
 // Not under test here (analytics.test.ts covers it): keeps the real runtime out.

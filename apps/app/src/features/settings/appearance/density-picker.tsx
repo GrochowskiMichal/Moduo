@@ -1,6 +1,5 @@
 import { RadioGroup, RadioGroupItem } from "../../../components/ui/radio-group";
 import type { Density } from "../../../lib/appearance";
-
 import { AppearancePickerRow } from "./picker-row";
 
 const OPTIONS: ReadonlyArray<{ value: Density; label: string; hint: string }> = [

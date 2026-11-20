@@ -33,7 +33,7 @@
  * event carries `surface: "app"`: the landing shares the PostHog project and sends
  * `surface: "landing"`.
  *
- * The privacy policy (apps/landing/privacy.html on prod-landing, §04 Analytics and §11
+ * The privacy policy (apps/landing/privacy.html, §04 Analytics and §11
  * Cookies) describes all of this; change it in the same breath as anything here. Set
  * the key only once moduo.app/privacy shows "In the Moduo app", and only with the
  * PostHog erasure secrets in place (PRIV-3). See docs/decisions/permissions.md.
@@ -41,6 +41,7 @@
 
 import type { CaptureResult, PostHog, PostHogConfig } from "posthog-js";
 import { useSyncExternalStore } from "react";
+
 import { APP_VERSION, DESKTOP_CHANNEL, IS_DESKTOP } from "../features/settings/about";
 import { publicConfig } from "./public-config";
 

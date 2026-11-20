@@ -188,7 +188,7 @@ describe("vocabulary value sets", () => {
     expect(CALENDAR_PROVIDERS).toEqual(["google", "microsoft", "caldav", "ics", "moduo"]);
     expect(SYNCABLE_PROVIDERS).toEqual(["google", "microsoft", "caldav", "ics"]);
     expect(SYNCABLE_PROVIDERS).not.toContain("moduo");
-    expect(CALENDAR_ACCOUNT_STATUSES).toEqual(["ok", "error"]);
+    expect(CALENDAR_ACCOUNT_STATUSES).toEqual(["ok", "error", "reauth"]);
   });
 
   it("subscription statuses are the bounded Stripe set plus local `none`", () => {
@@ -584,6 +584,28 @@ describe("content author kinds (chat messages and comments)", () => {
   });
 });
 
+describe("note share modes (NS-9)", () => {
+  it("mirror the notes_share_mode_chk CHECK; parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.NOTE_SHARE_MODES]).toEqual(["inherit", "custom"]);
+    const sql = readFileSync(
+      new URL("../../../migrations/20261006210000_perm_sharing.sql", import.meta.url),
+      "utf8",
+    );
+    expect(sql).toContain(
+      `CHECK (share_mode IN (${v.NOTE_SHARE_MODES.map((m) => `'${m}'`).join(",")}))`,
+    );
+    expect(v.parseNoteShareMode("inherit").success).toBe(true);
+    expect(v.parseNoteShareMode("selected").success).toBe(false);
+    // A missing or unknown mode reads as custom: the note's own grants, never its parent's.
+    expect(v.normalizeNoteShareMode("inherit")).toBe("inherit");
+    expect(v.normalizeNoteShareMode(undefined)).toBe("custom");
+    expect(v.normalizeNoteShareMode("selected")).toBe("custom");
+    expect(v.isNoteShareMode("custom")).toBe(true);
+    expect(v.isNoteShareMode("private")).toBe(false);
+  });
+});
+
 describe("reaction keys (CV-7c: one key for chat, comments and the quick row)", () => {
   it("default to Moduo's six, in order", async () => {
     const v = await import("./vocabularies.ts");
@@ -802,5 +824,52 @@ describe("label hues and a new tag's colour (MOD-93: one rule for the app and th
     expect(v.pickTagColor([{ color: "blue" }, { color: "green" }])).not.toBe("gray");
     const colored = v.LABEL_COLORS.filter((c) => c !== "gray");
     expect(v.pickTagColor(colored.map((color) => ({ color })))).toBe("gray");
+  });
+});
+
+describe("calendar event vocabularies (CALR-6: conference providers and item kinds)", () => {
+  it("the canonical lists", async () => {
+    const v = await import("./vocabularies.ts");
+    expect([...v.CONFERENCE_PROVIDERS]).toEqual(["google_meet", "zoom", "teams", "other"]);
+    expect([...v.CALENDAR_ITEM_KINDS]).toEqual(["event", "focus", "hold"]);
+  });
+
+  it("is* and parse* accept only the canonical values", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.isConferenceProvider("zoom")).toBe(true);
+    expect(v.isConferenceProvider("skype")).toBe(false);
+    expect(v.isConferenceProvider(null)).toBe(false);
+    expect(v.parseConferenceProvider("google_meet").success).toBe(true);
+    expect(v.parseConferenceProvider("meet").success).toBe(false);
+    expect(v.isCalendarItemKind("focus")).toBe(true);
+    expect(v.isCalendarItemKind("meeting")).toBe(false);
+    expect(v.parseCalendarItemKind("hold").success).toBe(true);
+    expect(v.parseCalendarItemKind("Focus").success).toBe(false);
+  });
+
+  it("normalize*: a missing provider is none, an unknown one is other; an unknown kind is a plain event", async () => {
+    const v = await import("./vocabularies.ts");
+    expect(v.normalizeConferenceProvider("teams")).toBe("teams");
+    expect(v.normalizeConferenceProvider(null)).toBeNull();
+    expect(v.normalizeConferenceProvider(undefined)).toBeNull();
+    expect(v.normalizeConferenceProvider("")).toBeNull();
+    expect(v.normalizeConferenceProvider("webex")).toBe("other");
+    expect(v.normalizeCalendarItemKind("focus")).toBe("focus");
+    expect(v.normalizeCalendarItemKind("meeting")).toBe("event");
+    expect(v.normalizeCalendarItemKind(null)).toBe("event");
+  });
+});
+
+describe("email settings kinds (MR-7)", () => {
+  it("parse, normalize and is agree", async () => {
+    const v = await import("./vocabularies.ts");
+    for (const kind of v.EMAIL_SETTINGS_KINDS) {
+      expect(v.isEmailSettingsKind(kind)).toBe(true);
+      expect(v.normalizeEmailSettingsKind(kind)).toBe(kind);
+      expect(v.parseEmailSettingsKind(kind).success).toBe(true);
+    }
+    expect(v.isEmailSettingsKind("bogus")).toBe(false);
+    expect(v.normalizeEmailSettingsKind("bogus")).toBeNull();
+    expect(v.parseEmailSettingsKind("bogus").success).toBe(false);
   });
 });

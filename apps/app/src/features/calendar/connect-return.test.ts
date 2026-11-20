@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, rs } from "@rstest/core";
 
 import { connectReturnUrl } from "../../../../../supabase/functions/_shared/oauth-connect";
 import {
-  type ConnectOutcome,
   connectConfirmTitle,
   connectFailureMessage,
+  type ConnectOutcome,
   parseConnectReturn,
 } from "./connect-return";
 
@@ -13,7 +13,7 @@ const h = rs.hoisted(() => ({
   getSession: rs.fn(),
 }));
 
-rs.mock("../../lib/runtime.web", () => ({
+rs.mock("../../lib/runtime.web.client", () => ({
   supabaseClient: { functions: { invoke: h.invoke }, auth: { getSession: h.getSession } },
 }));
 

@@ -8,6 +8,7 @@
 import { LABEL_COLORS, type LabelColor, normalizeLabelColor } from "../../components/tag-colors";
 import type { CalendarAccountModel, CalendarEventModel } from "./events";
 import { parseGoogleExternalId } from "./google-account";
+import { type CalendarHue, isHexColor, normalizeHue } from "./hue";
 import { parseSyncDescriptor } from "./sync";
 
 /** Human provider name for attribution ("Personal — Google"). */
@@ -42,16 +43,22 @@ export function accountSourceLabel(account: CalendarAccountModel): string {
 export function resolveAccountHues(
   accounts: Pick<CalendarAccountModel, "id" | "color">[],
   overrides: Record<string, string> = {},
-): Record<string, LabelColor> {
-  const out: Record<string, LabelColor> = {};
+): Record<string, CalendarHue> {
+  const out: Record<string, CalendarHue> = {};
   // Colored hues only (gray is the fallback), spread by usage.
   const colored = LABEL_COLORS.filter((c) => c !== "gray");
   const counts = new Map<LabelColor, number>(colored.map((c) => [c, 0]));
   const isName = (v: string | null | undefined): v is LabelColor =>
     !!v && (LABEL_COLORS as readonly string[]).includes(v);
 
-  // First pass: honor explicit overrides / stored names and count them.
+  // First pass: honor explicit overrides / stored names and count them. A
+  // custom color is taken as is and leaves the named hues to the rest.
   for (const a of accounts) {
+    const custom = normalizeHue(overrides[a.id]);
+    if (isHexColor(custom)) {
+      out[a.id] = custom;
+      continue;
+    }
     const explicit = isName(overrides[a.id])
       ? (overrides[a.id] as LabelColor)
       : isName(a.color)
@@ -85,14 +92,35 @@ export function accountHue(color: string | null | undefined): LabelColor {
   return normalizeLabelColor(color);
 }
 
-/** Drop mirrored events whose account is toggled off. Native events always show. */
+/**
+ * Drop events that are toggled off. The hidden list holds account ids (a mirrored
+ * event hides with its account) and calendar ids (a native event hides with the
+ * calendar it is on, custom calendars included, CALR-6). A native event with no
+ * calendar always shows.
+ */
 export function visibleEvents(
   events: CalendarEventModel[],
-  hiddenAccountIds: Iterable<string>,
+  hiddenIds: Iterable<string>,
 ): CalendarEventModel[] {
-  const hidden = new Set(hiddenAccountIds);
+  const hidden = new Set(hiddenIds);
   if (hidden.size === 0) return events;
-  return events.filter((e) => e.sourceAccountId === null || !hidden.has(e.sourceAccountId));
+  return events.filter((e) => {
+    if (e.sourceAccountId !== null) return !hidden.has(e.sourceAccountId);
+    return !e.calendarRef || !hidden.has(e.calendarRef);
+  });
+}
+
+/**
+ * Showing a saved set hides everything else: each known id (account ids and
+ * Moduo or custom calendar ids) that the set doesn't list. The result feeds
+ * `visibleEvents` (CALR-6: sets apply to custom calendars too).
+ */
+export function hiddenIdsForSet(
+  visibleIds: Iterable<string>,
+  knownIds: Iterable<string>,
+): string[] {
+  const show = new Set(visibleIds);
+  return [...new Set(knownIds)].filter((id) => !show.has(id));
 }
 
 // ── rail grouping (CAL-8) ─────────────────────────────────────────────────────

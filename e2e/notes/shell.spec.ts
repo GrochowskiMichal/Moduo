@@ -1,4 +1,4 @@
-// NR-2 smoke (AC1–AC5, specs/notes-refresh.md): switch to New Notes → ⌘N →
+// NR-2 smoke (AC1–AC5, specs/notes-refresh.md): open Notes → ⌘N →
 // type → the note sits in the Inbox → drag it into Pages → reload → still
 // there; and an untouched ⌘N leaves nothing behind. Pointer moves are
 // frame-stepped (synchronous synthetic moves are dropped by dnd-kit).
@@ -8,15 +8,18 @@ import { expect, type Page, test } from "@playwright/test";
 
 const APP = process.env.E2E_APP_URL;
 
+// NR-12 made the new shell the only Notes: there is no switch to press.
+// The sidebar is one tree per section (Favorites, Inbox, Pages); an empty
+// section shows a line instead of a tree, its header is always there.
+const sidebarReady = (page: Page) => page.locator('[data-drop-header="inbox"]').first();
+
 async function useNewNotes(page: Page) {
   await page.goto(`${APP}/notes`);
-  const tryNew = page.getByRole("button", { name: "Try the new Notes" });
-  if (await tryNew.isVisible().catch(() => false)) await tryNew.click();
-  await expect(page.getByRole("tree", { name: "Notes" })).toBeVisible();
+  await expect(sidebarReady(page)).toBeVisible();
 }
 
-const inbox = (page: Page) => page.getByRole("group", { name: "Inbox" });
-const pages = (page: Page) => page.getByRole("group", { name: "Pages" });
+const inbox = (page: Page) => page.getByRole("tree", { name: "Inbox" });
+const pages = (page: Page) => page.getByRole("tree", { name: "Pages" });
 
 test.describe("New Notes shell (NR-2)", () => {
   test.skip(!APP, "E2E_APP_URL not set — run against a live authed session");
@@ -29,7 +32,7 @@ test.describe("New Notes shell (NR-2)", () => {
     // Leave without typing: open the first page instead.
     await pages(page).getByRole("treeitem").first().click();
     await page.reload();
-    await expect(page.getByRole("tree", { name: "Notes" })).toBeVisible();
+    await expect(sidebarReady(page)).toBeVisible();
     expect(await page.getByRole("treeitem", { name: /Untitled/ }).count()).toBe(before);
   });
 

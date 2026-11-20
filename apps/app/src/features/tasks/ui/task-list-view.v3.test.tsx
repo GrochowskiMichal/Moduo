@@ -5,7 +5,7 @@
 // fixes on hover (default i) and read-only views say so (research §9).
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -32,6 +32,7 @@ import { TooltipProvider } from "../../../components/ui/tooltip";
 import { resetFoldsForTests } from "../folds";
 import { makeTask } from "../helpers";
 import type { Section, Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskListView } from "./task-list-view";
 
 beforeAll(() => {
@@ -77,20 +78,8 @@ function section(id: string, name: string, position: number, over: Partial<Secti
 
 type ListProps = Partial<Parameters<typeof TaskListView>[0]>;
 
-function renderList(tasks: Task[], extra: ListProps = {}) {
+async function renderList(tasks: Task[], extra: ListProps = {}) {
   const api = {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    statuses: [],
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -117,7 +106,6 @@ function renderList(tasks: Task[], extra: ListProps = {}) {
         bucketNameById={() => "Work"}
         canEdit
         onRequestCapture={onRequestCapture}
-        api={api as never}
         {...extra}
         selectedTaskId={selected}
         onSelectTask={(id) => {
@@ -127,10 +115,15 @@ function renderList(tasks: Task[], extra: ListProps = {}) {
       />
     );
   }
-  const view = render(
+  const view = await renderWithTasks(
     <TooltipProvider>
       <Page />
     </TooltipProvider>,
+    {
+      seed: { tasks, sections: extra.sections ? [...extra.sections] : [] },
+      workspaceId: "w",
+      commands: api,
+    },
   );
   return { api, onRequestCapture, view };
 }
@@ -139,21 +132,21 @@ const rowOf = (title: string) =>
   screen.getByRole("button", { name: title }).closest('[role="row"]') as HTMLElement;
 
 describe("the status icon (default k)", () => {
-  it("finishes an open task from any open category", () => {
-    const { api } = renderList([task("a", { status: "in_progress" })]);
+  it("finishes an open task from any open category", async () => {
+    const { api } = await renderList([task("a", { status: "in_progress" })]);
     fireEvent.click(within(rowOf("Task a")).getByRole("button", { name: "Mark as done" }));
     expect(api.toggleDone).toHaveBeenCalledTimes(1);
   });
 
-  it("reopens a Won't do task to To do (not Done)", () => {
-    const { api } = renderList([task("a", { status: "archived" })], { completed: "all" });
+  it("reopens a Won't do task to To do (not Done)", async () => {
+    const { api } = await renderList([task("a", { status: "archived" })], { completed: "all" });
     fireEvent.click(within(rowOf("Task a")).getByRole("button", { name: "Reopen" }));
     expect(api.setTaskStatus).toHaveBeenCalledWith("a", { category: "todo" });
     expect(api.toggleDone).not.toHaveBeenCalled();
   });
 
-  it("Space on a selected Won't do task reopens it too (it used to mark it Done)", () => {
-    const { api } = renderList([task("a", { status: "archived" })], {
+  it("Space on a selected Won't do task reopens it too (it used to mark it Done)", async () => {
+    const { api } = await renderList([task("a", { status: "archived" })], {
       completed: "all",
       selectedTaskId: "a",
     });
@@ -164,9 +157,9 @@ describe("the status icon (default k)", () => {
     expect(api.toggleDone).not.toHaveBeenCalled();
   });
 
-  it("⏎ opens the selected task full; `e` edits its title", () => {
+  it("⏎ opens the selected task full; `e` edits its title", async () => {
     const onOpenTask = rs.fn();
-    renderList([task("a")], { selectedTaskId: "a", onOpenTask });
+    await renderList([task("a")], { selectedTaskId: "a", onOpenTask });
     const grid = screen.getByRole("grid");
     grid.focus();
     fireEvent.keyDown(grid, { key: "Enter" });
@@ -176,7 +169,7 @@ describe("the status icon (default k)", () => {
   });
 
   it("⇧S opens the status menu on the selected row", async () => {
-    renderList([task("a")], { selectedTaskId: "a" });
+    await renderList([task("a")], { selectedTaskId: "a" });
     const grid = screen.getByRole("grid");
     grid.focus();
     await act(async () => {
@@ -188,17 +181,17 @@ describe("the status icon (default k)", () => {
 });
 
 describe("Backlog (53b)", () => {
-  it("folds behind a quiet line at the end, and opens on a click", () => {
-    renderList([task("a"), task("b", { statusCategory: "backlog" })]);
+  it("folds behind a quiet line at the end, and opens on a click", async () => {
+    await renderList([task("a"), task("b", { statusCategory: "backlog" })]);
     expect(screen.queryByRole("button", { name: "Task b" })).toBeNull();
     const line = screen.getByRole("button", { name: /Backlog, 1 task, show/ });
     fireEvent.click(line);
     expect(screen.getByRole("button", { name: "Task b" })).toBeTruthy();
   });
 
-  it("j walks an opened Backlog in order: a selected Backlog task stays in its line", () => {
+  it("j walks an opened Backlog in order: a selected Backlog task stays in its line", async () => {
     const onSelectTask = rs.fn();
-    renderList(
+    await renderList(
       [
         task("a"),
         task("x", { statusCategory: "backlog" }),
@@ -216,9 +209,9 @@ describe("Backlog (53b)", () => {
     expect(screen.getByRole("button", { name: /Backlog, 3 tasks, hide/ })).toBeTruthy();
   });
 
-  it("closing the line that holds the selection closes it; the selection steps up", () => {
+  it("closing the line that holds the selection closes it; the selection steps up", async () => {
     const onSelectTask = rs.fn();
-    renderList([task("a"), task("x", { statusCategory: "backlog" })], {
+    await renderList([task("a"), task("x", { statusCategory: "backlog" })], {
       selectedTaskId: "a",
       onSelectTask,
     });
@@ -231,8 +224,8 @@ describe("Backlog (53b)", () => {
     expect(onSelectTask).toHaveBeenLastCalledWith("a");
   });
 
-  it("grouped by status, Backlog is its own group, folded", () => {
-    renderList([task("a"), task("b", { statusCategory: "backlog" })], { groupBy: "status" });
+  it("grouped by status, Backlog is its own group, folded", async () => {
+    await renderList([task("a"), task("b", { statusCategory: "backlog" })], { groupBy: "status" });
     expect(screen.queryByRole("button", { name: /Backlog, 1 task/ })).toBeNull();
     const header = screen.getByRole("button", { name: /^Backlog/ });
     expect(header.getAttribute("aria-expanded")).toBe("false");
@@ -251,8 +244,8 @@ describe("group headers (default n)", () => {
     task("c", { sectionId: "s2" }),
   ];
 
-  it("section groups read '2 of 5' and their end date; the + stays visible and adds there", () => {
-    const { onRequestCapture } = renderList(tasks(), { groupBy: "section", sections });
+  it("section groups read '2 of 5' and their end date; the + stays visible and adds there", async () => {
+    const { onRequestCapture } = await renderList(tasks(), { groupBy: "section", sections });
     const design = screen.getByRole("button", { name: /^Design/ });
     expect(design.textContent).toContain("1 of 2");
     expect(design.textContent).toMatch(/ends Oct 24/);
@@ -263,8 +256,8 @@ describe("group headers (default n)", () => {
     expect(onRequestCapture).toHaveBeenCalledWith({ projectId: "p1", sectionId: "s1" });
   });
 
-  it("your own group reads You and its + says Add a task to you (MOD-137)", () => {
-    renderList([task("a", { assigneeId: "u1" }), task("b", { assigneeId: "u2" })], {
+  it("your own group reads You and its + says Add a task to you (MOD-137)", async () => {
+    await renderList([task("a", { assigneeId: "u1" }), task("b", { assigneeId: "u2" })], {
       groupBy: "assignee",
     });
     expect(screen.getByRole("button", { name: /^You/ })).toBeTruthy();
@@ -273,9 +266,9 @@ describe("group headers (default n)", () => {
     expect(screen.queryByRole("button", { name: "Add a task to You" })).toBeNull();
   });
 
-  it("a project grouped by section ends with + Add section", () => {
+  it("a project grouped by section ends with + Add section", async () => {
     const onAddSection = rs.fn();
-    renderList(tasks(), { groupBy: "section", sections, onAddSection });
+    await renderList(tasks(), { groupBy: "section", sections, onAddSection });
     fireEvent.click(screen.getByRole("button", { name: "Add section" }));
     const input = screen.getByRole("textbox", { name: "New section name" });
     fireEvent.change(input, { target: { value: "Launch" } });
@@ -283,21 +276,21 @@ describe("group headers (default n)", () => {
     expect(onAddSection).toHaveBeenCalledWith("Launch");
   });
 
-  it("a fold is remembered for the view", () => {
+  it("a fold is remembered for the view", async () => {
     const key = "test:folds";
-    renderList(tasks(), { groupBy: "section", sections, collapseKey: key });
+    await renderList(tasks(), { groupBy: "section", sections, collapseKey: key });
     fireEvent.click(screen.getByRole("button", { name: /^Design/ }));
     expect(screen.queryByRole("button", { name: "Task a" })).toBeNull();
     cleanup();
-    renderList(tasks(), { groupBy: "section", sections, collapseKey: key });
+    await renderList(tasks(), { groupBy: "section", sections, collapseKey: key });
     expect(screen.queryByRole("button", { name: "Task a" })).toBeNull();
     expect(screen.getByRole("button", { name: "Task c" })).toBeTruthy();
   });
 });
 
 describe("hover and states", () => {
-  it("a late row offers Move · Won't do · Break down", () => {
-    const { api } = renderList([
+  it("a late row offers Move · Won't do · Break down", async () => {
+    const { api } = await renderList([
       task("a", { dueOn: "2020-01-01", dueDate: "2020-01-01T00:00:00Z" }),
     ]);
     const row = rowOf("Task a");
@@ -307,21 +300,21 @@ describe("hover and states", () => {
     expect(within(row).getByRole("button", { name: "Break down" })).toBeTruthy();
   });
 
-  it("an empty date cell offers its picker", () => {
-    renderList([task("a", { dueDate: "2026-12-01T00:00:00.000Z" }), task("b")]);
+  it("an empty date cell offers its picker", async () => {
+    await renderList([task("a", { dueDate: "2026-12-01T00:00:00.000Z" }), task("b")]);
     const cell = rowOf("Task b").querySelector('[data-col="date"]') as HTMLElement;
     expect(cell.tagName).toBe("BUTTON");
     expect(cell.getAttribute("aria-label")).toBe("Due date");
   });
 
-  it("read-only says View only and has no New", () => {
-    renderList([task("a")], { canEdit: false });
+  it("read-only says View only and has no New", async () => {
+    await renderList([task("a")], { canEdit: false });
     expect(screen.getByText("View only")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "New" })).toBeNull();
   });
 
-  it("filtered to nothing says how many the filters hide", () => {
-    renderList([], { filterActive: true, filteredOut: { hidden: 214, filters: 2 } });
+  it("filtered to nothing says how many the filters hide", async () => {
+    await renderList([], { filterActive: true, filteredOut: { hidden: 214, filters: 2 } });
     expect(screen.getByText("No tasks match")).toBeTruthy();
     expect(screen.getByText("214 hidden by 2 filters")).toBeTruthy();
   });

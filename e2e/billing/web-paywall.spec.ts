@@ -8,6 +8,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+
 import { BASE_URL } from "./helpers";
 
 test.describe("Web paywall (SubscriptionGate)", () => {

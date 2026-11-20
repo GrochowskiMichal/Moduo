@@ -12,8 +12,8 @@ import {
   focusOrOpen,
   loadLine,
   subtasksToFinish,
-  type TeamPerson,
   teamLoad,
+  type TeamPerson,
   upcomingForHome,
   weekTime,
 } from "./home";

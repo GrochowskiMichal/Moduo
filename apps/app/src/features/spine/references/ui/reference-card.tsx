@@ -23,7 +23,7 @@ import { PersonAvatar } from "../../../../components/ui/avatar";
 import { CompleteToggle } from "../../../../components/ui/complete-toggle";
 import { cn } from "../../../../lib/utils";
 import { resolveEntityIcon } from "../../icon-map";
-import type { ReferenceLead as Lead, ReferenceFacts, ReferenceMeta, TaskCategory } from "../types";
+import type { ReferenceFacts, ReferenceLead as Lead, ReferenceMeta, TaskCategory } from "../types";
 
 const STATUS_ICONS: Record<TaskCategory, LucideIcon> = {
   backlog: CircleDashed,

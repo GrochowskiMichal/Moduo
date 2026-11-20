@@ -23,13 +23,15 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { asHistoryDepth, DEFAULT_HISTORY_DEPTH, type EmailHistoryDepth } from "../history-depth";
 import type { MailboxProvider, SavedAccount } from "../model/email-types";
+import { ConnectError } from "./connect-error";
 import { EmailHistoryDepthSelect } from "./email-history-depth-select";
 
-/** The three connectable providers in EM-2 (Outlook deferred). */
-type ConnectProvider = Exclude<MailboxProvider, "outlook">;
+/** Every connectable provider (AC37); Gmail covers Google Workspace too. */
+type ConnectProvider = MailboxProvider;
 
 const PROVIDER_TABS: { id: ConnectProvider; label: string }[] = [
   { id: "gmail", label: "Gmail" },
+  { id: "outlook", label: "Microsoft" },
   { id: "icloud", label: "iCloud" },
   { id: "custom", label: "Custom IMAP" },
 ];
@@ -39,21 +41,76 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   /** When set, repair this account's credential — provider + email are locked. */
   isReconnect?: SavedAccount;
+  /** The provider the first-run card picked; the dialog opens on it. */
+  initialProvider?: ConnectProvider;
   onConnected?: (account: SavedAccount) => void;
 };
 
-export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnected }: Props) {
+/** The form's starting values: the reconnect target's, or a blank form on the picked provider. */
+function initialForm(r: SavedAccount | undefined, picked?: ConnectProvider) {
+  return {
+    provider: (r?.provider as ConnectProvider | undefined) ?? picked ?? "gmail",
+    email: r?.email ?? "",
+    imapHost: r?.imapHost ?? "",
+    smtpHost: r?.smtpHost ?? "",
+    imapPort: String(r?.imapPort ?? 993),
+    smtpPort: String(r?.smtpPort ?? 587),
+  };
+}
+
+/** The provider chips, a segmented row. */
+function ProviderTabs({
+  provider,
+  onPick,
+}: {
+  provider: ConnectProvider;
+  onPick: (id: ConnectProvider) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Email provider"
+      className="inline-flex w-fit items-center gap-1 rounded-md bg-muted p-1"
+    >
+      {PROVIDER_TABS.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={provider === tab.id}
+          onClick={() => onPick(tab.id)}
+          className={
+            "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
+            (provider === tab.id
+              ? "bg-control-raised text-foreground shadow-control-raised"
+              : "text-muted-foreground hover:text-foreground")
+          }
+        >
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function EmailConnectDialog({
+  open,
+  onOpenChange,
+  isReconnect,
+  initialProvider,
+  onConnected,
+}: Props) {
   const { runtime } = useAuth();
   const { selectedWorkspaceId: workspaceId } = useWorkspace();
 
-  const reconnectProvider = isReconnect?.provider as ConnectProvider | undefined;
-  const [provider, setProvider] = useState<ConnectProvider>(reconnectProvider ?? "gmail");
-  const [email, setEmail] = useState(isReconnect?.email ?? "");
+  const [init] = useState(() => initialForm(isReconnect, initialProvider));
+  const [provider, setProvider] = useState<ConnectProvider>(init.provider);
+  const [email, setEmail] = useState(init.email);
   const [password, setPassword] = useState("");
-  const [imapHost, setImapHost] = useState(isReconnect?.imapHost ?? "");
-  const [smtpHost, setSmtpHost] = useState(isReconnect?.smtpHost ?? "");
-  const [imapPort, setImapPort] = useState(String(isReconnect?.imapPort ?? 993));
-  const [smtpPort, setSmtpPort] = useState(String(isReconnect?.smtpPort ?? 587));
+  const [imapHost, setImapHost] = useState(init.imapHost);
+  const [smtpHost, setSmtpHost] = useState(init.smtpHost);
+  const [imapPort, setImapPort] = useState(init.imapPort);
+  const [smtpPort, setSmtpPort] = useState(init.smtpPort);
   const [historyDepth, setHistoryDepth] = useState<EmailHistoryDepth>(DEFAULT_HISTORY_DEPTH);
   const [busy, setBusy] = useState<null | "oauth" | "password">(null);
   const [error, setError] = useState<string | null>(null);
@@ -61,20 +118,20 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   // Re-seed from the reconnect target whenever it changes / the dialog re-opens.
   useEffect(() => {
     if (!open) return;
-    setProvider(reconnectProvider ?? "gmail");
-    setEmail(isReconnect?.email ?? "");
+    const seed = initialForm(isReconnect, initialProvider);
+    setProvider(seed.provider);
+    setEmail(seed.email);
     setPassword("");
-    setImapHost(isReconnect?.imapHost ?? "");
-    setSmtpHost(isReconnect?.smtpHost ?? "");
-    setImapPort(String(isReconnect?.imapPort ?? 993));
-    setSmtpPort(String(isReconnect?.smtpPort ?? 587));
+    setImapHost(seed.imapHost);
+    setSmtpHost(seed.smtpHost);
+    setImapPort(seed.imapPort);
+    setSmtpPort(seed.smtpPort);
     // Re-seed the depth too, or connecting a second mailbox silently inherits the
     // previous one's pick instead of AC6's 12-month default.
     setHistoryDepth(asHistoryDepth(isReconnect?.historyDepth));
     setBusy(null);
     setError(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, isReconnect]);
+  }, [open, isReconnect, initialProvider]);
 
   const providerLocked = Boolean(isReconnect);
 
@@ -88,10 +145,11 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
     setBusy("oauth");
     setError(null);
     try {
-      const account = (await runtime.email.startGoogleOAuth({
-        workspaceId,
-        historyDepth,
-      })) as SavedAccount;
+      const account = (await runtime.email.startGoogleOAuth(
+        provider === "outlook"
+          ? { workspaceId, historyDepth, provider: "outlook", email: email.trim() }
+          : { workspaceId, historyDepth },
+      )) as SavedAccount;
       succeed(account);
     } catch (e) {
       setError(errText(e));
@@ -134,11 +192,13 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
   };
 
   const title = isReconnect ? "Reconnect email account" : "Connect an email account";
+  const submitLabel = isReconnect ? "Reconnect" : "Connect";
   const description = isReconnect
     ? `Re-enter the credential for ${isReconnect.email}.`
-    : "Connect Gmail, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain.";
+    : "Connect Gmail, Google Workspace, Microsoft, iCloud, or any IMAP mailbox. Credentials are stored in your device keychain.";
 
   const showGoogle = provider === "gmail";
+  const isMicrosoft = provider === "outlook";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,32 +211,13 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
         <div className="flex flex-col gap-4">
           {/* Provider chips — segmented row. Locked in reconnect mode. */}
           {!providerLocked ? (
-            <div
-              role="tablist"
-              aria-label="Email provider"
-              className="inline-flex w-fit items-center gap-1 rounded-md bg-muted p-1"
-            >
-              {PROVIDER_TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={provider === tab.id}
-                  onClick={() => {
-                    setProvider(tab.id);
-                    setError(null);
-                  }}
-                  className={
-                    "rounded-md px-3 py-1.5 font-sans text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 " +
-                    (provider === tab.id
-                      ? "bg-control-raised text-foreground shadow-control-raised"
-                      : "text-muted-foreground hover:text-foreground")
-                  }
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
+            <ProviderTabs
+              provider={provider}
+              onPick={(id) => {
+                setProvider(id);
+                setError(null);
+              }}
+            />
           ) : null}
 
           {/* Gmail OAuth path (also shown in reconnect for a gmail account). */}
@@ -236,7 +277,19 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-1.5">
+          {isMicrosoft ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleGoogleOAuth()}
+              disabled={busy !== null || email.trim().length === 0}
+              className="w-full"
+            >
+              {busy === "oauth" ? "Opening browser…" : "Sign in with Microsoft"}
+            </Button>
+          ) : null}
+
+          <div className={isMicrosoft ? "hidden" : "flex flex-col gap-1.5"}>
             <Label htmlFor="email-connect-password">
               {provider === "custom" ? "Password" : "App password"}
             </Label>
@@ -331,20 +384,16 @@ export function EmailConnectDialog({ open, onOpenChange, isReconnect, onConnecte
             </>
           ) : null}
 
-          {error ? (
-            <p className="text-xs text-destructive" role="alert">
-              {error}
-            </p>
-          ) : null}
+          {error ? <ConnectError error={error} /> : null}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className={isMicrosoft ? "hidden" : undefined}>
           <Button
             type="button"
             onClick={() => void handlePasswordConnect()}
             disabled={!passwordValid || busy !== null}
           >
-            {busy === "password" ? "Connecting…" : isReconnect ? "Reconnect" : "Connect"}
+            {busy === "password" ? "Connecting…" : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

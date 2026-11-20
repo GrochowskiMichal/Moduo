@@ -72,10 +72,9 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/settings/appearance/picker-row.tsx": ["tag"],
   // Tasks: no small caps any more (Focus since TV-F7; the Timeline's month
   // names are sentence case since TV-TL1).
-  // Calendar: its Tasks groups ("Queue", "Due soon", "Backlog"), a weekday on
-  // the booking page; colour names ("blue" → "Blue") in the account colour menu.
+  // Calendar: Plan's groups ("From earlier", "Due this week", …), a weekday on
+  // the booking page.
   "src/features/calendar/ui/calendar-tasks-panel.tsx": ["title"],
-  "src/features/calendar/ui/calendar-rail.tsx": ["capitalize"],
   "src/features/calendar/booking/sentence-ui.tsx": ["parts.weekday"],
   // Spine: module names and relation kinds.
   "src/features/spine/ui/entity-hub.tsx": [
@@ -94,19 +93,20 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
   "src/features/dashboard/ui/widgets/widget-primitives.tsx": ["children"],
   // Notes: tree sections ("Pinned", "Inbox", "Workspace", "Archive"); the
   // slash menu's command groups.
-  "src/features/notes/ui/note-tree-sidebar.tsx": ["title"],
   "src/features/notes/editor/plugins/slash-menu-plugin.tsx": ["command.group"],
-  // Email: date groups ("Today"), page sections, snooze picker headings.
-  "src/features/email/ui/email-thread-list.tsx": ["group.label"],
-  "src/features/email/ui/email-page-view.tsx": ["label"],
+  // Email: snooze picker headings.
   "src/features/email/ui/email-snooze-picker.tsx": ["title"],
+  // Mail list group headers: fixed labels ("Pinned", "Everything else", …).
+  "src/features/email/ui/thread-list.tsx": ["label"],
   "src/features/transactional-email/ui/email-preview.tsx": ["title"],
   // Shared: a form field's label; the command palette's kind of result; the
   // paywall's plan names and its section eyebrow.
   "src/components/ui/field.tsx": ["label"],
-  "src/components/app/global-command-palette.tsx": [
-    "TYPE_LABEL[record.type] ?? record.type",
-    // Result groups from palette-search's fixed GROUP_DEFS ("Tasks", "Notes").
+  "src/components/app/global-search-palette.tsx": [
+    "TYPE_LABEL[row.entity_type] ?? row.entity_type",
+    // Result groups from palette-search's fixed PALETTE_GROUPS ("Tasks", "Notes").
+    "group.heading",
+    // The action groups the palette names itself ("Navigate", "Workspace").
     "group.heading",
   ],
   "src/routes/pages/paywall-page.tsx": ["heading.eyebrow", "name"],
@@ -121,14 +121,9 @@ const SMALL_CAPS_CHROME: Record<string, string[]> = {
  * here: a test fails on either.
  */
 const SMALL_CAPS_DEBT: Record<string, string[]> = {
-  // A CalDAV / ICS account's own name heads its group (Settings and the
-  // calendar rail: the username or server, accounts.ts).
+  // A CalDAV / ICS account's own name heads its group in Settings (the
+  // username or server, accounts.ts).
   "src/features/settings/sections/integrations-section.tsx": ["header"],
-  "src/features/calendar/ui/calendar-rail.tsx": ["group.header"],
-  // The sender's address heads the row menu.
-  "src/features/email/ui/email-thread-list.tsx": ["thread.fromEmail || senderText(thread)"],
-  // "<Host> also asks": the host's name on the public booking page.
-  "src/routes/pages/book-page.tsx": ["host"],
 };
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -207,7 +202,7 @@ function lucideNames(content: string): Set<string> {
   const names = new Set<string>();
   const re = /import\s*(?:type\s*)?\{([^}]*)\}\s*from\s*["']lucide-react["']/g;
   let m: RegExpExecArray | null;
-  // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+  // The regex-drain idiom: assign and test in the loop condition.
   while ((m = re.exec(content))) {
     for (const part of m[1].split(",")) {
       const alias = part.trim().split(/\s+as\s+/);
@@ -228,7 +223,7 @@ function owningTag(content: string, index: number): string | null {
   let last: { tag: string; at: number } | null = null;
   let m: RegExpExecArray | null;
   const before = content.slice(from, index);
-  // biome-ignore lint/suspicious/noAssignInExpressions: regex-drain idiom
+  // The regex-drain idiom: assign and test in the loop condition.
   while ((m = re.exec(before))) last = { tag: m[1], at: from + m.index };
   if (!last) return null;
   const open = openingTag(content, last.at);

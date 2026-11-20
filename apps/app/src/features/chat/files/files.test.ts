@@ -4,14 +4,17 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { CHAT_FILE_LINK_TTL_SECONDS } from "@contracts/attachments";
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import { act, cleanup, fireEvent, render, renderHook, screen } from "@testing-library/react";
 import { createElement } from "react";
+
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { clearSignedUrlCache, signPaths } from "@/features/attachments/signed-urls";
 import { AttachmentOpError } from "@/lib/uploads/errors";
 import type { UploadView } from "@/lib/uploads/queue";
+
 import { memoryChatCopy } from "../store/device-copy";
 import { ChatStore, FILES_ALL_STOPPED } from "../store/store";
 import { FakeChatServer, fakeLive, ME, settle, uuid, WS } from "../store/testing";

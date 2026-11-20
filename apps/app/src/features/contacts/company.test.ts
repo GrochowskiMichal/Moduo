@@ -2,10 +2,11 @@
 // links) and their work one level up, dropping the intra-company edges.
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
 import { entityRefKey } from "../spine/rollup";
 import type { ActivityEntry } from "../tasks/model";
-import { buildCompanyRollup, type CompanyRollupInput, companyLastTouchLine } from "./company";
+import { buildCompanyRollup, companyLastTouchLine, type CompanyRollupInput } from "./company";
 import type { Contact } from "./model";
 
 const COMPANY: EntityRef = { type: "company", id: "co1" };

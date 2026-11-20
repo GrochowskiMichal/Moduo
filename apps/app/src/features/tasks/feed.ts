@@ -14,6 +14,7 @@
 
 import type { SpineComment } from "@/lib/runtime.types";
 import { dayOffset, formatDate, formatTime } from "@/lib/time-format";
+
 import { isTrailEntry } from "./activity";
 import type { ActivityEntry, Task } from "./model";
 
@@ -25,38 +26,56 @@ export type FeedItem =
 /** How many of the latest items show before the rest fold away (the v2 fold). */
 export const FEED_VISIBLE = 8;
 
-export function buildTaskFeed(input: {
-  task: Pick<Task, "id" | "createdAt" | "creatorId" | "creatorUnknown">;
+/**
+ * Any item's feed: its activity and comments oldest first, led by its creation
+ * (the `createOp` row when the trail has one, else `created`: when the row says
+ * it was made, and by whom when it knows).
+ */
+export function buildFeed(input: {
+  id: string;
+  createOp: string;
+  created: { at: string; actorId: string | null };
   activity: ActivityEntry[];
   comments: SpineComment[];
 }): FeedItem[] {
-  const { task, activity, comments } = input;
-  const createEntry = activity.find((e) => e.op === "tasks.create");
+  const { id, createOp, created, activity, comments } = input;
+  const createEntry = activity.find((e) => e.op === createOp);
   const items: FeedItem[] = [
     ...activity
       .filter((entry) => isTrailEntry(entry) && entry !== createEntry)
       .map((entry): FeedItem => ({ kind: "activity", id: entry.id, at: entry.createdAt, entry })),
     ...comments
       .filter((c) => !c.deletedAt)
-      .map(
-        (comment): FeedItem => ({
-          kind: "comment",
-          id: comment.id,
-          at: comment.createdAt,
-          comment,
-        }),
-      ),
+      .map((comment): FeedItem => ({
+        kind: "comment",
+        id: comment.id,
+        at: comment.createdAt,
+        comment,
+      })),
   ];
   items.sort((a, b) => Date.parse(a.at) - Date.parse(b.at) || a.id.localeCompare(b.id));
-  const created: FeedItem = createEntry
+  const first: FeedItem = createEntry
     ? { kind: "activity", id: createEntry.id, at: createEntry.createdAt, entry: createEntry }
-    : {
-        kind: "created",
-        id: `created:${task.id}`,
-        at: task.createdAt,
-        actorId: task.creatorUnknown || !task.creatorId ? null : task.creatorId,
-      };
-  return [created, ...items];
+    : { kind: "created", id: `created:${id}`, at: created.at, actorId: created.actorId };
+  return [first, ...items];
+}
+
+export function buildTaskFeed(input: {
+  task: Pick<Task, "id" | "createdAt" | "creatorId" | "creatorUnknown">;
+  activity: ActivityEntry[];
+  comments: SpineComment[];
+}): FeedItem[] {
+  const { task, activity, comments } = input;
+  return buildFeed({
+    id: task.id,
+    createOp: "tasks.create",
+    created: {
+      at: task.createdAt,
+      actorId: task.creatorUnknown || !task.creatorId ? null : task.creatorId,
+    },
+    activity,
+    comments,
+  });
 }
 
 /**

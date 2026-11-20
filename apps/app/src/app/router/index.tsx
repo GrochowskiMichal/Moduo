@@ -1,4 +1,5 @@
 import { createRouter } from "@tanstack/react-router";
+
 import { reloadOnceForChunkError } from "../../lib/chunk-reload";
 import { writeLastRoute } from "../../lib/preferences";
 import { routeTree } from "./route-tree";

@@ -94,6 +94,9 @@ export function shapeNoteMetaLine(input: {
   for (const section of input.sections) {
     for (const row of section.rows) {
       if (row.other.type === "note" || row.tombstoned || row.title === PRIVATE_ITEM_TITLE) continue;
+      // A task this note made (a task line) is already in the body: naming it
+      // again under the title read as a second subtitle.
+      if (row.other.type === "task" && row.link.relationKind === "spawned-from") continue;
       const key = `${row.other.type}:${row.other.id}`;
       if (seen.has(key)) continue; // a pair can hold several link kinds
       seen.add(key);

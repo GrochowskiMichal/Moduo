@@ -8,17 +8,26 @@
 
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
-import { shareFollowParent } from "../../sharing/follow-parent";
+
 import { noteIsPrivate } from "../../sharing/rules";
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import { tryDeriveNoteBody } from "../editor/doc-markdown";
-import { downloadTextFile, noteFileName } from "../export";
+import {
+  buildZipEntries,
+  downloadTextFile,
+  downloadZip,
+  noteFileName,
+  safeFileStem,
+  subtreeZipNotes,
+} from "../export";
 import type { Note } from "../model";
 import { displayTitle } from "../title";
 import { descendantIds } from "../tree";
 import { type DropIntent, type DropTarget, resolveDropIntent } from "./drop-intent";
 import type { RowAction } from "./row-menu";
 import type { NotesShellState } from "./use-notes-shell";
+
+export type RowPopover = { kind: "share" | "publish"; noteId: string; rowKey: string };
 
 export type SharingQuestion = { noteId: string; parentId: string; position: string };
 
@@ -29,7 +38,9 @@ export function useShellActions(
   const { module, select, selectedId, runtime, workspaceId, sections, openDraft } = shell;
   const { notes, favorites, engine } = module;
   const [moveTarget, setMoveTarget] = useState<Note | null>(null);
-  const [publishOpen, setPublishOpen] = useState(false);
+  const [iconTarget, setIconTarget] = useState<Note | null>(null);
+  /** Share… or Publish… from a row's menu: the popover opens on that row. */
+  const [rowPopover, setRowPopover] = useState<RowPopover | null>(null);
   const [sharingQuestion, setSharingQuestionState] = useState<SharingQuestion | null>(null);
   // The dialog can answer twice (the button, then its own close); the ref
   // makes the second answer a no-op.
@@ -61,14 +72,38 @@ export function useShellActions(
     [engine, selectedId, runtime, workspaceId],
   );
 
+  const exportTree = useCallback(
+    async (note: Note) => {
+      if (!runtime || !workspaceId) return;
+      const ids = [note.id, ...descendantIds(notes, note.id)];
+      try {
+        const docs = await runtime.notesV2.fetchExportDocs({ workspaceId, ids });
+        const mdById = new Map(docs.map((d) => [d.id, d.bodyMd]));
+        downloadZip(
+          `${safeFileStem(displayTitle(note.title))}.zip`,
+          buildZipEntries(subtreeZipNotes(notes, note.id, ids, mdById)),
+        );
+      } catch {
+        toast.error("Couldn't export the notes.");
+      }
+    },
+    [runtime, workspaceId, notes],
+  );
+
+  /** Archiving or trashing the open note (or a page above it) closes it. */
+  const leaves = useCallback(
+    (id: string) =>
+      Boolean(selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId))),
+    [notes, selectedId],
+  );
+
   const trash = useCallback(
     (id: string) => {
-      const leaving =
-        selectedId && (selectedId === id || descendantIds(notes, id).includes(selectedId));
+      const leaving = leaves(id);
       void trashWithDetach(id);
       if (leaving) select(null, true);
     },
-    [trashWithDetach, notes, selectedId, select],
+    [trashWithDetach, leaves, select],
   );
 
   const applyIntent = useCallback(
@@ -99,12 +134,9 @@ export function useShellActions(
       const q = questionRef.current;
       setSharingQuestion(null);
       if (!q) return;
-      void module.moveNote(q.noteId, q.parentId, q.position).then((moved) => {
-        if (!moved || !match) return;
-        shareFollowParent(q.noteId).catch(() => {
-          toast.error("Moved, but couldn't change who can see it. Check its sharing.");
-        });
-      });
+      // One server operation: the move and, for "Match the new parent", the
+      // sharing change land together or not at all (a refusal toasts).
+      void module.moveNote(q.noteId, q.parentId, q.position, { followParent: match });
     },
     [module, setSharingQuestion],
   );
@@ -127,7 +159,7 @@ export function useShellActions(
   );
 
   const onAction = useCallback(
-    (action: RowAction, note: Note) => {
+    (action: RowAction, note: Note, rowKey: string) => {
       switch (action) {
         case "favorite":
         case "unfavorite":
@@ -144,21 +176,34 @@ export function useShellActions(
         case "move":
           setMoveTarget(note);
           return;
+        case "icon":
+          setIconTarget(note);
+          return;
         case "export":
           void exportNote(note);
           return;
+        case "export-tree":
+          void exportTree(note);
+          return;
+        case "share":
         case "publish":
-          if (note.id !== selectedId) select(note.id);
-          setPublishOpen(true);
+          // After the menu has closed (it keeps focus where it is for these).
+          setTimeout(() => setRowPopover({ kind: action, noteId: note.id, rowKey }), 0);
           return;
-        case "archive":
+        case "full-width":
+          module.setFullWidth(note.id, !note.fullWidth);
+          return;
+        case "archive": {
+          const leaving = leaves(note.id);
           module.archiveNote(note.id, true);
+          if (leaving) select(null, true);
           return;
+        }
         case "trash":
           trash(note.id);
       }
     },
-    [module, openDraft, select, selectedId, exportNote, trash],
+    [module, openDraft, select, selectedId, exportNote, exportTree, leaves, trash],
   );
 
   return {
@@ -167,9 +212,11 @@ export function useShellActions(
     trash,
     moveTarget,
     setMoveTarget,
+    iconTarget,
+    setIconTarget,
     pickMoveTarget,
-    publishOpen,
-    setPublishOpen,
+    rowPopover,
+    setRowPopover,
     sharingQuestion,
     answerSharing,
   };

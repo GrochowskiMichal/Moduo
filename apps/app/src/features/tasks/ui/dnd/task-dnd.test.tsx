@@ -39,7 +39,7 @@ function Row({
   onToggle: () => void;
 }) {
   return (
-    // biome-ignore lint/a11y/useSemanticElements: mirrors TaskRow's role="row" root.
+    // eslint-disable-next-line jsx-a11y/prefer-tag-over-role -- mirrors TaskRow's role="row" root.
     <div ref={dragActivatorRef} role="row" tabIndex={-1} data-testid="row" {...dragListeners}>
       <button type="button" onClick={onToggle}>
         Add to queue

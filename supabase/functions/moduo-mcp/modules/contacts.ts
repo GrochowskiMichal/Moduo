@@ -56,6 +56,9 @@ function shapeContact(c: Row): Row {
   };
 }
 
+/** The snippet's highlight marks (U+E000 / U+E001, the search contract's). */
+const SEARCH_MARKS = /[\uE000\uE001]/g;
+
 function shapeCompany(c: Row): Row {
   return { id: c.id, name: c.name, domains: c.domains, website: c.website };
 }
@@ -86,6 +89,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_list",
       description: "All people and companies in the workspace — the directory source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max rows per kind (default 100, max 500)." } },
@@ -127,6 +131,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_get",
       description: "A contact (or company) with every live link touching it — the roll-up hub source.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -162,58 +167,61 @@ export const contactsConnectorModule: ConnectorModule = {
     },
     {
       name: "contacts_search",
-      description: "Search people and companies by name or email.",
+      description:
+        "Search people and companies by words in their name, job title, email or domain (word-starts, any order, accents ignored; quotes for a phrase, -word to exclude). Returns the ones you can open, best first: a person with their company, and a snippet with the match in **bold** when it is not in the name.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
-          query: { type: "string", description: "Name / email substring to match." },
-          limit: { type: "number", description: "Max results (default 20, max 50)." },
+          query: { type: "string", description: "The search query (websearch syntax)." },
+          limit: { type: "number", description: "Max results of each kind (default 20, max 50)." },
         },
         required: ["query"],
       },
+      // The server's contacts__search and companies__search, the same rows ⌘K
+      // gets (GS-5): the key's scope and its person's access are applied there,
+      // before the limit, so nothing is filtered here. The details are read
+      // only for the ids they returned.
       handler: async (args, ctx) => {
-        const q = str(args, "query");
-        const limit = clampLimit(args, 20, 50);
-        const like = `%${q}%`;
-        // Two single-column ilike queries (merged) rather than a `.or()` — the
-        // .or grammar is delimited by , ( ) . so a query like "acme.com" would
-        // malform it; a plain .ilike value has no such grammar.
-        const peopleQ = (col: "name" | "email") =>
-          rows(
-            ctx.db
-              .from("contacts")
-              .select("*")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .ilike(col, like)
-              .order("name")
-              .limit(limit),
+        const params = {
+          p_workspace_id: ctx.key.workspaceId,
+          p_query: str(args, "query"),
+          p_limit: clampLimit(args, 20, 50),
+        };
+        const hits = async (fn: string): Promise<Row[]> => {
+          const { data, error } = await ctx.db.rpc(fn, params);
+          if (error) throw new Error(error.message);
+          return (data ?? []) as Row[];
+        };
+        const details = async (table: "contacts" | "companies", ids: string[]) => {
+          if (ids.length === 0) return new Map<string, Row>();
+          const found = await rows(
+            ctx.db.from(table).select("*").eq("workspace_id", ctx.key.workspaceId).in("id", ids),
           );
-        const [byName, byEmail, companies] = await Promise.all([
-          peopleQ("name"),
-          peopleQ("email"),
-          rows(
-            ctx.db
-              .from("companies")
-              .select("*")
-              .eq("workspace_id", ctx.key.workspaceId)
-              .is("deleted_at", null)
-              .ilike("name", like)
-              .order("name")
-              .limit(limit),
-          ),
+          return new Map(found.map((r) => [r.id as string, r]));
+        };
+        const snippet = (h: Row) =>
+          typeof h.snippet === "string" ? h.snippet.replace(SEARCH_MARKS, "**").replace(/\u200B/g, "") : null;
+        const [people, companies] = await Promise.all([
+          hits("contacts__search"),
+          hits("companies__search"),
         ]);
-        const peopleById = new Map<string, Row>();
-        for (const c of [...byName, ...byEmail]) if (!peopleById.has(c.id)) peopleById.set(c.id, c);
-        const visible = await visibleIds(ctx, "contact");
-        const people = [...peopleById.values()].filter((p) => visible.has(p.id)).slice(0, limit);
-        const companyIds = new Set(people.map((p) => p.company_id).filter(Boolean));
+        const [personRows, companyRows] = await Promise.all([
+          details("contacts", people.map((h) => h.entity_id)),
+          details("companies", companies.map((h) => h.entity_id)),
+        ]);
         return {
-          contacts: people.map(shapeContact),
-          companies: companies
-            .filter((c) => c.owner_id === ctx.key.createdBy || companyIds.has(c.id))
-            .map(shapeCompany),
+          contacts: people.map((h) => ({
+            ...shapeContact(personRows.get(h.entity_id) ?? { id: h.entity_id, name: h.title }),
+            company: h.context ?? null,
+            match: h.match,
+            snippet: snippet(h),
+          })),
+          companies: companies.map((h) => ({
+            ...shapeCompany(companyRows.get(h.entity_id) ?? { id: h.entity_id, name: h.title }),
+            match: h.match,
+          })),
         };
       },
     },
@@ -222,6 +230,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_create",
       description: "Create a person; registers them so they're immediately linkable/@mentionable.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -250,6 +259,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_update",
       description: "Edit a person's fields (omit a field to leave it unchanged).",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -262,8 +272,10 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_id"],
       },
       handler: async (args, ctx) => {
+        // A contact the key's person can't see reads as not found (MOD-572).
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
         const c = await callOp(ctx, "contacts_op_update", {
-          p_contact_id: str(args, "contact_id"),
+          p_contact_id: contactId,
           p_name: str(args, "name", false) || null,
           p_email: str(args, "email", false) || null,
           p_phone: str(args, "phone", false) || null,
@@ -276,6 +288,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_set_status",
       description: "Set a person's flat status (any non-empty label; no pipeline). No-op if unchanged.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -285,8 +298,9 @@ export const contactsConnectorModule: ConnectorModule = {
         required: ["contact_id", "status"],
       },
       handler: async (args, ctx) => {
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
         const c = await callOp(ctx, "contacts_op_set_status", {
-          p_contact_id: str(args, "contact_id"),
+          p_contact_id: contactId,
           p_status: str(args, "status"),
         });
         return c ? shapeContact(c) : null;
@@ -294,8 +308,10 @@ export const contactsConnectorModule: ConnectorModule = {
     },
     {
       name: "contacts_link",
-      description: "Link a contact/company to another entity (idempotent). Kinds: works-at, follow-up, references, …",
+      description:
+        "Link a contact/company to another entity (idempotent). Kinds: works-at, follow-up, references, …. A works-at link between a person and a company also makes it the person's company (replacing a previous one); removing it clears that.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -325,6 +341,7 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_unlink",
       description: "Soft-delete a link a contact/company owns (Undo-friendly, idempotent).",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { link_id: { type: "string", description: "Link uuid." } },
@@ -340,13 +357,15 @@ export const contactsConnectorModule: ConnectorModule = {
       name: "contacts_delete",
       description: "Soft-delete a contact: drops its links and removes it from search / @mention / roll-ups.",
       access: "edit",
+      hints: { destructive: true, idempotent: true },
       inputSchema: {
         type: "object",
         properties: { contact_id: { type: "string", description: "Contact uuid." } },
         required: ["contact_id"],
       },
       handler: async (args, ctx) => {
-        const c = await callOp(ctx, "contacts_op_delete", { p_contact_id: str(args, "contact_id") });
+        const contactId = await assertReach(ctx, "contact", str(args, "contact_id"));
+        const c = await callOp(ctx, "contacts_op_delete", { p_contact_id: contactId });
         return c ? shapeContact(c) : { ok: true };
       },
     },
@@ -355,6 +374,7 @@ export const contactsConnectorModule: ConnectorModule = {
       description:
         "Bulk-create people from a deduped plan: each row { op:'create'|'merge', contactId?, name, email, phone, title, company, status }.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {

@@ -45,7 +45,6 @@ export function useChatSearch(
   const key = searchKey(args);
   const typed = !!args?.query.trim();
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for `args`; `attempt` re-runs it
   useEffect(() => {
     const id = ++req.current;
     if (!args || !key) {
@@ -74,6 +73,7 @@ export function useChatSearch(
       });
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `key` stands for `args`; `attempt` re-runs it
   }, [chat, key, typed, limit, attempt]);
 
   // A list from an earlier query is shown, but it can't be continued.

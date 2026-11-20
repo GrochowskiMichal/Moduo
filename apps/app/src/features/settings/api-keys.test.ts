@@ -10,17 +10,21 @@ import { moduleManifests } from "../../lib/module-registry";
 import {
   ceilingHint,
   clampScopes,
+  CONNECT_BY_URL_LEAD,
   DEFAULT_KEY_EXPIRY,
   DEFAULT_KEY_SCOPES,
+  disconnectCopy,
   effectiveScopes,
   expiryDays,
   grantsAnyAccess,
+  isConnectedApp,
   KEY_EXPIRY_OPTIONS,
   KEY_SCOPE_LABELS,
   KEY_SCOPE_MODULES,
   KEY_SCOPE_NEEDS,
   type KeyActor,
   keyLifecycle,
+  KEYS_FOR_SCRIPTS_LABEL,
   keyScopeCap,
   MCP_KEY_MODULES,
   MCP_KEY_SCOPES,
@@ -28,8 +32,8 @@ import {
   sameScopes,
   scopeCeiling,
   scopeDependencyNotes,
-  scopeSummary,
   scopesPayload,
+  scopeSummary,
   toKeyScopes,
 } from "./api-keys";
 
@@ -55,6 +59,8 @@ type ToolSpan = { name: string; access: "view" | "edit"; source: string };
 type ConnectorFile = {
   file: string;
   id: string | undefined;
+  /** False for a module with no key scope of its own (`keyAccess`). */
+  scoped: boolean;
   /** Everything before the first tool: shared helpers. */
   preamble: string;
   tools: ToolSpan[];
@@ -74,7 +80,15 @@ function connectorModuleSources(): ConnectorFile[] {
       if (!access) throw new Error(`${file}: tool ${m[1]} has no access level`);
       return { name: m[1], access, source: span };
     });
-    return { file, id, preamble: source.slice(0, starts[0]?.index ?? source.length), tools };
+    // A module with no key scope of its own (`keyAccess`: search, across modules).
+    const scoped = !/^\s*keyAccess:/m.test(source);
+    return {
+      file,
+      id,
+      scoped,
+      preamble: source.slice(0, starts[0]?.index ?? source.length),
+      tools,
+    };
   });
 }
 
@@ -127,14 +141,15 @@ function latestSqlFunctionBodies(): Map<string, string> {
 
 const PEOPLE_ONLY =
   /if\s+(?:public\.)?module_api_key_id\(\)\s+is\s+null\s+then([\s\S]*?)end\s+if\s*;/g;
-const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|module_permission|key_scope)\s*\(/g;
+const LANE_CHECK = /\b(\w+?)_(?:op__guard\w*|_require\w*|module_permission|key_scope)\s*\(/g;
 const BEST_EFFORT =
   /\bbegin\s+perform\s[^;]*;\s*exception\s+when\s+insufficient_privilege\s+or\s+raise_exception\s+then\s+null\s*;\s*end\s*;/g;
 
 /**
  * The key-scope lanes a call into `fn` is checked against, following its calls:
- * `<module>_op__guard*`, inline `<module>_module_permission(…)` and
- * `<module>_key_scope(…)` (spine = Links). Those are leaves: their insides
+ * `<module>_op__guard*`, `<module>__require*` (Notes' one guard, NS-6),
+ * inline `<module>_module_permission(…)` and `<module>_key_scope(…)` (spine =
+ * Links). Those are leaves: their insides
  * resolve a lane, they don't add one. Blocks under `IF module_api_key_id() IS
  * NULL` are people-only, so keys never reach them (such a block must be a plain
  * IF). An auth.uid()-only `*_can_access_workspace` check refuses every key; it
@@ -162,13 +177,14 @@ function keyLanes(fn: string, bodies: Map<string, string>, seen = new Set<string
     // A permission read that lets View through (`… NOT IN ('view', 'edit',
     // 'admin')`, TV-D12/D16 reads) is a View lane, not an Edit one.
     const tail = body.slice((m.index ?? 0) + m[0].length).split(/;|\bthen\b/)[0] ?? "";
-    const viewLevel = /_module_permission\s*\($/.test(m[0]) && /'view'/.test(tail);
+    const viewLevel = /(?:_module_permission|__require\w*)\s*\($/.test(m[0]) && /'view'/.test(tail);
     lanes.add(viewLevel ? `${owner}@view` : owner);
   }
   if (/\b\w+_can_access_workspace\s*\(/.test(body)) lanes.add("no-key");
   for (const [, callee] of body.matchAll(/\b(\w+)\s*\(/g)) {
     if (callee === fn || !bodies.has(callee)) continue;
     if (callee.endsWith("_module_permission") || callee.endsWith("_key_scope")) continue;
+    if (/__require/.test(callee)) continue;
     for (const lane of keyLanes(callee, bodies, seen)) lanes.add(lane);
   }
   return lanes;
@@ -213,7 +229,8 @@ describe("key-scope modules", () => {
     const modules = connectorModuleSources();
     expect(modules.length).toBeGreaterThan(0);
     for (const { file, id } of modules) expect(id, `no module id in ${file}`).toBeTruthy();
-    expect(modules.map(({ id }) => id).sort()).toEqual([...MODULE_IDS].sort());
+    const scoped = modules.filter((m) => m.scoped);
+    expect(scoped.map(({ id }) => id).sort()).toEqual([...MODULE_IDS].sort());
   });
 
   it("matches the CHECK the scopes column carries (workspace_api_key_scopes_valid)", () => {
@@ -249,7 +266,7 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
     // sitting behind the Links Edit guard while listed at View.
     const bodies = latestSqlFunctionBodies();
     expect(bodies.size).toBeGreaterThan(50);
-    for (const { file, id, preamble, tools } of connectorModuleSources()) {
+    for (const { file, id, scoped, preamble, tools } of connectorModuleSources()) {
       for (const tool of tools) {
         const lanes = new Set<string>();
         for (const m of tool.source.matchAll(RPC_CALL)) {
@@ -258,6 +275,17 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
           for (const lane of keyLanes(rpc, bodies)) lanes.add(lane);
         }
         expect(lanes.has("no-key"), `${tool.name} has an auth.uid()-only check`).toBe(false);
+        if (!scoped) {
+          // A module without a scope (search) holds no level anywhere: its RPCs
+          // may only narrow by each module's scope (View reads, the key-scope
+          // filter), never refuse for want of Edit.
+          const edits = [...lanes].filter(
+            (lane) => !lane.endsWith("@view") && lane !== "module_api",
+          );
+          expect(edits, `${file}: ${tool.name}`).toEqual([]);
+          expect(mcpToolNeeds(tool.name), tool.name).toEqual([]);
+          continue;
+        }
         if (lanes.has(id ?? "") && tool.access === "view") {
           throw new Error(`${tool.name} is listed at View but its RPC needs ${id} Edit`);
         }
@@ -270,10 +298,12 @@ describe("cross-module needs: the connector, the SQL and the key card agree", ()
       // skips it without: a best-effort extra, like the op-side BEST_EFFORT
       // above (tasks' linkDescribed links a description's references only
       // with Links at Edit, call #15). Without that lane the key just gets less.
+      // The module's own lane at View is held by every key that reaches one of
+      // its tools, as for the tools above (notes' pull helper, NS-7).
       for (const m of preamble.matchAll(RPC_CALL)) {
         const helper = enclosingFunction(preamble, m.index ?? 0);
         const ungated = [...keyLanes(m[1], bodies)].filter(
-          (lane) => !helperChecksLane(helper, lane),
+          (lane) => (!id || lane !== `${id}@view`) && !helperChecksLane(helper, lane),
         );
         expect(ungated, `${file}: helper call to ${m[1]}`).toEqual([]);
       }
@@ -644,5 +674,35 @@ describe("key expiry", () => {
     expect(fresh.staleNote).toBeNull();
     const used = keyLifecycle({ createdAt: day(-200), lastUsedAt: day(-59), expiresAt: null }, NOW);
     expect(used.staleNote).toBeNull();
+  });
+});
+
+describe("connected apps in the list (MCPO-4, AC8, AC11)", () => {
+  it("tells a connected app from a pasted key by its app, not its name", () => {
+    expect(isConnectedApp({ oauthClientId: "c1" })).toBe(true);
+    expect(isConnectedApp({ oauthClientId: null })).toBe(false);
+    expect(isConnectedApp({})).toBe(false);
+  });
+
+  it("asks before disconnecting, in the spec's words", () => {
+    expect(disconnectCopy("Claude")).toEqual({
+      title: "Disconnect Claude?",
+      body: "It loses access immediately; it can sign in again later.",
+    });
+    expect(disconnectCopy("  ").title).toBe("Disconnect this app?");
+  });
+
+  it("nudges an idle connection to be disconnected, a key to be revoked", () => {
+    const old = { createdAt: "2026-01-01T00:00:00Z", lastUsedAt: null, expiresAt: null };
+    const now = Date.parse("2026-06-01T00:00:00Z");
+    expect(keyLifecycle({ ...old, oauthClientId: "c1" }, now).staleNote).toMatch(/Disconnect it/);
+    expect(keyLifecycle(old, now).staleNote).toMatch(/Revoke it/);
+  });
+
+  it("leads with connecting by URL; keys are for what can't sign in", () => {
+    expect(CONNECT_BY_URL_LEAD).toBe(
+      "Add Moduo as a connector in Claude, ChatGPT or Claude Code with this URL. You'll sign in and choose what it can reach.",
+    );
+    expect(KEYS_FOR_SCRIPTS_LABEL).toBe("For scripts and tools that can't sign in");
   });
 });

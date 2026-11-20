@@ -2,6 +2,7 @@
 // rich html (parse as markup) and foreign/legacy plain text (render verbatim),
 // plus the outgoing-email attribute scrub.
 import { describe, expect, it } from "@rstest/core";
+
 import { looksLikeRichHtml, plainListLine, stripEntityRefAttrs } from "./entity-rich-html";
 
 describe("looksLikeRichHtml", () => {

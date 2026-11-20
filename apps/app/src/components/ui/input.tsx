@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+
 import { type FieldShellVariant, fieldShellVariants } from "./field-shell";
 
 type InputProps = Omit<React.ComponentProps<"input">, "size"> & {
@@ -61,7 +62,7 @@ function useDraftField<T>({
   // While someone types, the text stays as typed even if the owner's value
   // moves under it (a live owner hears each readable keystroke).
   const typing = React.useRef(false);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `commits` is the trigger
+  // `commits` is the trigger.
   React.useEffect(() => {
     if (!typing.current) setDraft(shown);
   }, [shown, commits]);

@@ -1,0 +1,97 @@
+name: moduo-sync
+
+# GitHub → Moduo (Harness v3, HV-7, AC11): a block PR titled "[ID] …" moves the block's Moduo
+# task, with no model call. Draft opened → Building; ready → In review; merged → Awaiting release;
+# closed unmerged → To do with a comment; a release (release.yml succeeded on a vX.Y.Z tag) →
+# Shipped for every "[ID]" merged since the previous tag. The table and its tests live in
+# scripts/agent/moduo-sync.ts and moduo-sync.test.ts.
+#
+# Why pull_request_target: it runs this file and the script as they are on the default branch
+# (develop; GitHub's rule since 2025-12-08, whatever the PR's base), never the PR's own copy, so a
+# PR can't rewrite the job that holds MODUO_CI_KEY. Nothing from the PR is checked out or run; its
+# title reaches the script only through the event file, never through the shell. A change to this
+# file or the script therefore takes effect only once it is on develop.
+#
+# MODUO_CI_KEY is the "CI" agent's Moduo key (Tasks: Edit for the moves, Links: Edit for the
+# closed-PR comment, everything else None), an environment secret of `moduo-sync` (deployment
+# branches: develop only; every trigger here runs as develop). Unset → a notice, nothing moves.
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, converted_to_draft, closed, edited]
+    branches: [develop, mike, maciej]
+  workflow_run:
+    workflows: [release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to mark Shipped (vX.Y.Z), when the automatic run missed it"
+        required: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Plans without the key; most PR events (body edits, a PR with no block ID) stop here, so the
+  # environment that holds the key is entered only for a real move.
+  plan:
+    # Same-repo PRs only (a fork's title must not move our board); a release only when it shipped.
+    if: >-
+      (github.event_name == 'pull_request_target' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/develop')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      moves: ${{ steps.plan.outputs.moves }}
+    steps:
+      - name: Checkout the base branch
+        uses: actions/checkout@v7
+        with:
+          # A release needs its tags and history for the "[ID]" range; a PR needs only the script.
+          fetch-depth: ${{ github.event_name == 'pull_request_target' && 1 || 0 }}
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Plan
+        id: plan
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun scripts/agent/moduo-sync.ts --dry-run
+
+  apply:
+    needs: plan
+    if: needs.plan.outputs.moves != '0' && needs.plan.outputs.moves != ''
+    # One move at a time per PR (or release). Here, not on the workflow: GitHub keeps one pending
+    # run per group, so a no-op event (a body edit) queued at workflow level could cancel a real move.
+    concurrency:
+      group: moduo-sync-${{ github.event.pull_request.number || github.event.workflow_run.head_branch || inputs.tag }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: moduo-sync
+    steps:
+      - name: Checkout the base branch
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request_target' && 1 || 0 }}
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      - name: Move the block's task
+        env:
+          MODUO_CI_KEY: ${{ secrets.MODUO_CI_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: bun scripts/agent/moduo-sync.ts

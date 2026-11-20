@@ -3,6 +3,7 @@
 // nothing else, so an unchanged row is skipped.
 
 import { useEffect, useState } from "react";
+
 import { AUTHORS } from "./fixture";
 import { imageBox, type Row } from "./model";
 

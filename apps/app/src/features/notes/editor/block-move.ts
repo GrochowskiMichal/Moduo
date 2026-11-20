@@ -16,6 +16,7 @@
  */
 
 import * as Y from "yjs";
+
 import { NOTES_DOC_ROOT } from "./doc-markdown";
 
 export type BlockMoveDirection = "up" | "down";

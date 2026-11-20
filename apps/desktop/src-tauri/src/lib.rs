@@ -19,11 +19,13 @@ pub mod auth;
 pub mod commands;
 pub mod config;
 pub mod domain;
-pub mod email_sync;
 pub mod identity_acl;
 pub mod install_id;
 pub mod keychain;
+/// The rebuilt mail engine (specs/mail-rebuild.md).
+pub mod mail;
 pub mod migration_legacy;
+pub mod navigation;
 pub mod store_redb;
 /// Cloud-sync worker (redb ↔ Supabase). Superseded by the JS `notesV2` engine for
 /// the cloud build; kept behind the future offline/"lite" feature, not compiled by default.
@@ -131,6 +133,12 @@ fn perform_one_time_auth_v3_reset(
 /// confirm-before-quit could never intercept ⌘Q (it went straight to `RunEvent::Exit`).
 /// Routing ⌘Q through a custom item lets `on_menu_event` honour the toggle. DF-19f-quit.
 const QUIT_MENU_ID: &str = "moduo-quit";
+
+/// The main window is created hidden (`visible: false`) and the webview shows it after
+/// React's first commit (`apps/app/src/lib/show-window.ts`), so launch never flashes a
+/// blank frame. If the webview never gets there (a crashed bundle, a stale build without
+/// the hook), show it anyway after this delay.
+const WINDOW_SHOW_FALLBACK: std::time::Duration = std::time::Duration::from_secs(2);
 
 /// Build the application menu. On macOS this mirrors `tauri::menu::Menu::default` (v2.11)
 /// EXACTLY — same App/File/Edit/View/Window/Help structure so Copy/Paste/Undo/Fullscreen/
@@ -380,11 +388,14 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
 pub fn run() {
     tauri::Builder::default()
+        // No webview or frame may navigate to a foreign web origin (MOD-574).
+        .plugin(navigation::guard())
         .plugin(tauri_plugin_dialog::init())
         // Focus phase-end alerts (TV-F1): the JS engine fires them at the computed
         // time; the plugin can't schedule on desktop.
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_process::init())
+        .manage(mail::deeplink::MailtoInbox::default())
         .menu(build_app_menu)
         // ⌘Q (and the Apple-menu Quit) fire our custom Quit item here, NOT the predefined
         // Quit — so we can confirm before terminating. See `build_app_menu`.
@@ -432,6 +443,11 @@ pub fn run() {
                 perform_one_time_auth_v3_reset(app.handle(), &config).map_err(|e| e.to_string())?;
             let state = AppState::new(db_path).map_err(|e| e.to_string())?;
             app.manage(state);
+            let mail_events = commands::mail_events::MailEvents::default();
+            // The rebuilt engine (MR-16a): it starts per user on sign-in
+            // (`auth_set_cloud_session`), after the one-time legacy cutover.
+            app.manage(mail::host::MailHost::new(mail_events.0.clone()));
+            app.manage(mail_events);
             // A tray that fails to build (no menu bar on this desktop) never stops the app;
             // closing the window then quits as before (see `keep_in_menu_bar`).
             match build_tray(app.handle()) {
@@ -441,88 +457,104 @@ pub fn run() {
                     .store(true, Ordering::SeqCst),
                 Err(err) => eprintln!("[tray] not available: {err}"),
             }
-            commands::email::bootstrap_idle_workers(app.handle());
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(WINDOW_SHOW_FALLBACK).await;
+                if let Some(window) = handle.get_webview_window("main") {
+                    if !window.is_visible().unwrap_or(true) {
+                        let _ = window.show();
+                    }
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::auth::auth_set_cloud_session,
-            commands::auth::auth_get_local_auth_state,
-            commands::auth::auth_generate_mnemonic,
-            commands::auth::auth_register_local_mnemonic,
-            commands::auth::auth_unlock_with_mnemonic,
-            commands::auth::auth_forgot_reset_local,
-            commands::auth::auth_refresh_session,
-            commands::auth::auth_get_session,
-            commands::auth::auth_sign_out,
-            commands::auth::auth_get_local_identity,
-            commands::auth::auth_rotate_device_keys,
-            commands::auth::auth_try_auto_unlock,
-            commands::auth::auth_set_pin,
-            commands::auth::auth_unlock_with_pin,
-            commands::auth::auth_remove_pin,
-            commands::auth::auth_update_display_name,
-            commands::auth::auth_get_stored_mnemonic,
-            commands::auth::auth_accept_supabase_session,
-            commands::workspace::workspace_list_local,
-            commands::workspace::workspace_create_local,
-            commands::workspace::workspace_rename_local,
-            commands::workspace::workspace_leave_local,
-            commands::workspace::workspace_soft_delete_local,
-            commands::workspace::workspace_issue_invite,
-            commands::workspace::workspace_join_invite,
-            commands::workspace::workspace_list_members,
-            commands::workspace::workspace_list_invites,
-            commands::workspace::workspace_update_invite,
-            commands::workspace::workspace_revoke_invite,
-            commands::workspace::workspace_update_member_permissions,
-            commands::workspace::workspace_list_notifications,
-            commands::workspace::workspace_mark_notification_read,
-            commands::workspace::workspace_mark_all_notifications_read,
+            commands::mail_events::mail_subscribe,
+            commands::mail_compose::mail_save_draft,
+            commands::mail_compose::mail_stage_attachment_bytes,
+            commands::mail_compose::mail_pick_attachments,
+            commands::mail_compose::mail_unstage_attachment,
+            commands::mail_compose::mail_get_draft,
+            commands::mail_compose::mail_list_drafts,
+            commands::mail_compose::mail_discard_draft,
+            commands::mail_compose::mail_queue_send,
+            commands::mail_compose::mail_undo_send,
+            commands::mail_compose::mail_list_outbox,
+            commands::mail_compose::mail_size_limit,
+            commands::mail_compose::mail_correspondents,
+            commands::mail_compose::mail_storage_stats,
+            commands::mail_compose::mail_set_disk_cap,
+            commands::mail_compose::mail_clear_attachments,
+            commands::mail_compose::mail_clear_downloaded,
+            commands::mail_compose::mail_is_default_app,
+            commands::mail_compose::mail_make_default_app,
+            mail::deeplink::mail_take_mailto,
+            commands::mail_engine::mail_list_accounts,
+            commands::mail_engine::mail_list_mailboxes,
+            commands::mail_engine::mail_list_threads,
+            commands::mail_engine::mail_counts,
+            commands::mail_engine::mail_get_thread,
+            commands::mail_engine::mail_apply_op,
+            commands::mail_engine::mail_undo_op,
+            commands::mail_engine::mail_list_failed_ops,
+            commands::mail_engine::mail_retry_op,
+            commands::mail_engine::mail_discard_op,
+            commands::mail_engine::mail_search,
+            commands::mail_engine::mail_set_foreground,
+            commands::mail_engine::mail_explain,
+            commands::mail_engine::mail_set_image_allow,
+            commands::mail_engine::mail_apply_rule_existing,
+            commands::mail_reader::mail_get_raw_message,
+            commands::mail_reader::mail_attachment_file,
+            commands::mail_reader::mail_get_invite,
+            commands::mail_reader::mail_rsvp,
+            commands::mail_reader::mail_unsubscribe_plan,
+            commands::mail_reader::mail_unsubscribe,
+            commands::mail_reader::mail_avatar,
+            commands::mail_reader::mail_set_reader_prefs,
+            commands::mail_reader::mail_set_visible,
+            commands::mail_reader::mail_open_folder,
+            commands::mail_reader::mail_backfill,
+            commands::mail_reader::mail_cancel_backfill,
+            commands::mail_reader::mail_set_follow_up,
+            commands::mail_reader::mail_release_new_senders,
+            commands::mail_accounts::mail_connect_password,
+            commands::mail_accounts::mail_connect_oauth,
+            commands::mail_accounts::mail_disconnect,
+            commands::mail_accounts::mail_set_history_depth,
+            commands::mail_accounts::mail_sync_now,
+            commands::mail_accounts::mail_set_classify_items,
+            commands::mail_accounts::mail_search_server,
             commands::notes::notes_list,
             commands::notes::notes_get_doc_state,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_list,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_seed_inbox,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_bucket,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_bucket,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_task,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_task,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_upsert_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_delete_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_attach_tag,
+            #[cfg(feature = "lite")]
             commands::tasks_module::tasks_module_detach_tag,
             commands::migration::migration_import_legacy,
             commands::local_store::local_store_get,
             commands::local_store::local_store_set,
             commands::local_store::local_store_remove,
-            commands::email::account_commands::email_accounts_list,
-            commands::email::account_commands::email_account_connect_and_save,
-            commands::email::account_commands::email_account_disconnect,
-            commands::email::account_commands::email_account_set_history_depth,
-            commands::email::oauth::email_gmail_oauth_start,
-            commands::email::email_list_envelopes,
-            commands::email::email_get_thread,
-            commands::email::email_get_message_body,
-            commands::email::email_prefetch_bodies,
-            commands::email::email_sync_now,
-            commands::email::email_set_activity_state,
-            commands::email::email_apply_flag,
-            commands::email::email_list_folders,
-            commands::email::email_apply_message_op,
-            commands::email::email_get_mailbox_status,
-            commands::email::snooze::email_snooze_thread,
-            commands::email::snooze::email_snooze_restore,
-            commands::email::send_commands::email_send_saved,
-            commands::email::send_commands::email_send_message,
-            commands::email::attachments::email_list_attachments,
-            commands::email::attachments::email_save_attachment,
-            commands::email::attachments::email_pick_attachments,
-            commands::email::attachments::email_get_inline_images,
-            commands::email::search::email_search_bodies,
-            commands::email::search::email_search_server,
             commands::calendar::calendar_google_oauth_start,
             commands::calendar::calendar_google_publish_booking_token,
             commands::calendar::calendar_outlook_oauth_start,
-            commands::calendar::calendar_apple_oauth_start,
             commands::calendar::calendar_google_events_sync,
             commands::calendar::calendar_outlook_events_sync,
             commands::caldav::calendar_caldav_discover,
@@ -564,10 +596,20 @@ pub fn run() {
             // once an exit is actually happening — including for exits we can't intercept
             // (dock right-click → Quit, system logout), which go straight to `Exit`.
             match event {
-                tauri::RunEvent::Exit => commands::email::stop_all_idle_workers(),
+                tauri::RunEvent::Exit => {
+                    if let Some(host) = app.try_state::<mail::host::MailHost>() {
+                        host.stop();
+                    }
+                }
                 // The Dock icon brings a hidden window back (TV-D12).
                 #[cfg(target_os = "macos")]
                 tauri::RunEvent::Reopen { .. } => show_main_window(app),
+                // A `mailto:` link opened while Moduo is the default mail app (AC24).
+                #[cfg(target_os = "macos")]
+                tauri::RunEvent::Opened { urls } => mail::deeplink::route(
+                    app,
+                    urls.into_iter().map(|u| u.to_string()).collect(),
+                ),
                 _ => {}
             }
             // `app` is only read on macOS (Reopen); keep other targets warning-free.

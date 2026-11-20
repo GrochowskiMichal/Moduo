@@ -1,24 +1,16 @@
 /**
  * Small DOM bridges from the right panel into the open editor (lifted from the
- * classic page): grab the selection for a quote-comment, scroll to a quoted
- * snippet, jump to an outline heading. Best-effort by design: text edited
+ * classic page): scroll to a quoted snippet (older quote-comments), jump to
+ * an outline heading. Best-effort by design: text edited
  * away degrades to a quiet notice.
  */
 
 import { toast } from "sonner";
+
 import { findQuoteOffset } from "../comments/quote";
 import type { OutlineHeading } from "../outline";
 
 const EDITOR_SELECTOR = ".notes-editor-v2";
-
-export function getEditorSelectionQuote(): string | null {
-  const sel = window.getSelection();
-  if (!sel || sel.isCollapsed || sel.rangeCount === 0) return null;
-  const editorEl = document.querySelector(EDITOR_SELECTOR);
-  const anchor = sel.anchorNode;
-  if (!editorEl || !anchor || !editorEl.contains(anchor)) return null;
-  return sel.toString().trim() || null;
-}
 
 export function scrollEditorToQuote(quote: string): void {
   const editorEl = document.querySelector(EDITOR_SELECTOR);

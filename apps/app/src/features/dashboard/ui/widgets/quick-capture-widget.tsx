@@ -6,6 +6,7 @@
 import { ArrowUp } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { onCreateNew } from "@/components/app/create-events";
 import { Textarea } from "@/components/ui/textarea";
 import { endPosition, makeTask } from "@/features/tasks/helpers";
@@ -15,12 +16,12 @@ import { findWorkspaceStore } from "@/lib/sync/store";
 
 import {
   requestDashboardDataRefresh,
-  useDashboardData,
+  useDashboardSource,
 } from "../../context/dashboard-data-context";
 import type { WidgetComponentProps } from "../../registry/types";
 
 export function QuickCaptureWidget({ canWrite }: WidgetComponentProps) {
-  const { workspaceId } = useDashboardData();
+  const workspaceId = useDashboardSource("workspaceId");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   // A synchronous guard — `busy` state can't block a rapid double-Enter (both

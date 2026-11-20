@@ -8,7 +8,7 @@
  * = one entry in `connectorModules` + a modules/<name>.ts file.
  */
 
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   keyScopeAllows,
@@ -23,6 +23,7 @@ import { calendarConnectorModule } from "./modules/calendar.ts";
 import { notesConnectorModule } from "./modules/notes.ts";
 import { emailConnectorModule } from "./modules/email.ts";
 import { chatConnectorModule } from "./modules/chat.ts";
+import { searchConnectorModule } from "./modules/search.ts";
 
 /** A verified, live API key — the connector's caller identity. */
 export type KeyContext = {
@@ -41,6 +42,28 @@ export type ToolContext = {
   db: SupabaseClient;
 };
 
+/**
+ * What a client running tools from code may assume (MCPO-6, specs/mcp-oauth.md
+ * #12): "read" changes nothing, so it is safe to run in parallel and to retry
+ * (every View tool, and links_suggest); otherwise whether the call can delete,
+ * trash or overwrite (`destructive`) and whether repeating it with the same
+ * arguments changes nothing more (`idempotent`).
+ */
+export type ToolHints = "read" | { destructive: boolean; idempotent: boolean };
+
+/** A tool's hints as MCP tool annotations, every hint always stated. */
+export function toolAnnotations(tool: ToolDef): {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+  idempotentHint: boolean;
+  openWorldHint: false;
+} {
+  // Every tool works inside the workspace only: none reaches the outside world.
+  const closed = { openWorldHint: false as const };
+  if (tool.hints === "read") return { readOnlyHint: true, destructiveHint: false, idempotentHint: true, ...closed };
+  return { readOnlyHint: false, destructiveHint: tool.hints.destructive, idempotentHint: tool.hints.idempotent, ...closed };
+}
+
 export type ToolDef = {
   /** MCP tool name — [a-zA-Z0-9_-], so `tasks_commit`, not `tasks.commit`. */
   name: string;
@@ -51,6 +74,8 @@ export type ToolDef = {
    * need another module are listed in MCP_TOOL_NEEDS (contracts).
    */
   access: "view" | "edit";
+  /** How calling it behaves, listed as the tool's annotations (MCPO-6). */
+  hints: ToolHints;
   handler: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
 };
 
@@ -58,6 +83,11 @@ export type ConnectorModule = {
   /** Module id — matches module_activity.module and the key's scopes key. */
   module: string;
   tools: ToolDef[];
+  /**
+   * For a module with no key scope of its own (search, across modules): who
+   * may list and call its tools, and that rule in words for the refusal.
+   */
+  keyAccess?: { allows: (key: KeyContext) => boolean; needs: string };
 };
 
 export const connectorModules: ConnectorModule[] = [
@@ -68,7 +98,10 @@ export const connectorModules: ConnectorModule[] = [
   notesConnectorModule,
   emailConnectorModule,
   chatConnectorModule,
+  searchConnectorModule,
 ];
+
+const ownAccess = (module: string) => connectorModules.find((m) => m.module === module)?.keyAccess;
 
 /** Normalize a key's scope for a module (absent/unknown → none). */
 export function moduleScope(key: KeyContext, module: string): "none" | "view" | "edit" {
@@ -81,12 +114,16 @@ export function moduleScope(key: KeyContext, module: string): "none" | "view" | 
  * (MCP_TOOL_NEEDS: e.g. Calendar's task-block tools move the task itself).
  */
 export function toolAllowed(key: KeyContext, module: string, tool: ToolDef): boolean {
+  const own = ownAccess(module);
+  if (own) return own.allows(key);
   if (!keyScopeAllows(key.scopes, module, tool.access)) return false;
   return mcpToolNeeds(tool.name).every((needed) => keyScopeAllows(key.scopes, needed, "edit"));
 }
 
 /** What a tool needs, in words: "Calendar: Edit and Tasks: Edit". */
 export function toolRequirement(module: string, tool: ToolDef): string {
+  const own = ownAccess(module);
+  if (own) return own.needs;
   const label = (m: string) => (isMcpKeyModule(m) ? MCP_KEY_MODULE_LABELS[m] : m);
   const parts = [`${label(module)}: ${tool.access === "edit" ? "Edit" : "View"}`];
   for (const needed of mcpToolNeeds(tool.name)) parts.push(`${label(needed)}: Edit`);

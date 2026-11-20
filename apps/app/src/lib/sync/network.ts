@@ -23,3 +23,13 @@ export function isNetworkError(error: unknown): boolean {
 export function browserOffline(): boolean {
   return typeof navigator !== "undefined" && navigator.onLine === false;
 }
+
+/**
+ * The error a write gets when the connection went while it waited its turn
+ * (it never left the device): `isNetworkError` reads it as one.
+ */
+export function waitedOfflineError(): Error {
+  const error = new Error("The connection went before this could be sent.");
+  error.name = "NetworkError";
+  return error;
+}

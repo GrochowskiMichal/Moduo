@@ -1,9 +1,11 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { betweenPositions, endPosition } from "../../tasks/helpers";
 import type { Note } from "../model";
 import { buildSidebarSections } from "../sections";
 import {
   type DropTarget,
+  effectiveDropTarget,
   keyboardReorderIntent,
   resolveDropIntent,
   zoneFromPointer,
@@ -18,7 +20,6 @@ function note(partial: Partial<Note> & { id: string; position: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     isArchived: false,
     publishedAt: null,
     publishToken: null,
@@ -93,6 +94,19 @@ describe("drop intent — sidebar drag (NR-2, AC2/AC4)", () => {
 
   it("never reorders inside the Inbox (it sorts by capture time)", () => {
     expect(drop("cap", { kind: "section", section: "inbox" })).toBeNull();
+  });
+
+  it("beside an Inbox root targets the whole Inbox, never a slot between rows", () => {
+    expect(
+      effectiveDropTarget({ kind: "row", section: "inbox", id: "cap", zone: "after" }, layout),
+    ).toEqual({ kind: "section", section: "inbox" });
+    // Into an Inbox note still nests; beside a nested row still orders siblings.
+    const into: DropTarget = { kind: "row", section: "inbox", id: "cap", zone: "into" };
+    expect(effectiveDropTarget(into, layout)).toBe(into);
+    const nested: DropTarget = { kind: "row", section: "inbox", id: "capKid", zone: "before" };
+    expect(effectiveDropTarget(nested, layout)).toBe(nested);
+    const page: DropTarget = { kind: "row", section: "pages", id: "p1", zone: "after" };
+    expect(effectiveDropTarget(page, layout)).toBe(page);
   });
 
   it("nests into a row, including under an Inbox note", () => {

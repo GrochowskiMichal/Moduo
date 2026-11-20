@@ -1,4 +1,4 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["edge", "rstest.config.ts"]
+  "include": ["edge", "*.test.ts", "changelog.d.mts", "rstest.config.ts"]
 }

@@ -10,9 +10,9 @@ import { toast } from "sonner";
 
 import { requestDashboardDataRefresh } from "../../features/dashboard/context/dashboard-data-context";
 import {
+  canWriteRoute,
   CAPTURE_ROUTES,
   type CaptureTarget,
-  canWriteRoute,
   createCapturedEntity,
   isPermissionError,
 } from "../../features/spine/capture-command";
@@ -110,7 +110,7 @@ function CaptureLine({
         requestDashboardDataRefresh();
         toast(created.title, {
           description: created.description,
-          // biome-ignore lint/suspicious/noExplicitAny: openTo is one of the module routes
+          // OpenTo is one of the module routes.
           action: { label: "Open", onClick: () => void navigate({ to: created.openTo as any }) },
         });
         if (more) inputRef.current?.focus();

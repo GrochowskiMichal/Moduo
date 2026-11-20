@@ -1,5 +1,7 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink, EntityRecord, EntityRef, RelationKind } from "@/lib/entity-links";
+
 import {
   entityRefKey,
   HUB_SECTIONS,
@@ -155,10 +157,10 @@ describe("rollupSections (AC6)", () => {
 
 describe("section capping (Show all N)", () => {
   it("truncates a section past the cap but keeps the full count", () => {
-    const refs = Array.from(
-      { length: SECTION_ROW_CAP + 3 },
-      (_, i): EntityRef => ({ type: "task", id: `t${i}` }),
-    );
+    const refs = Array.from({ length: SECTION_ROW_CAP + 3 }, (_, i): EntityRef => ({
+      type: "task",
+      id: `t${i}`,
+    }));
     const links = refs.map((r) => link(r));
     const recs = registry(...refs.map((r, i) => record(r, `Task ${i}`)));
     const [section] = rollupSections(FOCUS, links, recs);

@@ -24,7 +24,10 @@ const MiB = 1048576;
 
 /** The hosted project's global upload cap, in bytes: every plan's per-file
  *  limit is held under it until the org moves to Supabase Pro (AT-1 decision).
- *  Mirrors `attachments__platform_file_cap()`; attachments.test.ts checks it. */
+ *  Mirrors `attachments__platform_file_cap()`; attachments.test.ts checks it.
+ *  A bucket's `file_size_limit` set by SQL isn't checked against the global cap
+ *  (only the dashboard refuses), so a bigger bucket limit silently means 50 MB.
+ *  Raise this and the SQL function together when the dashboard setting goes up. */
 export const ATTACHMENT_PLATFORM_FILE_CAP_BYTES = 50 * MiB;
 
 /** Per-file limit by the workspace owner's plan (keys = PLAN_TIERS), in bytes,

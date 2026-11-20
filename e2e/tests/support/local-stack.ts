@@ -4,10 +4,11 @@
 // people: dev@moduo.local / localdev (supabase/seed.sql) and a teammate this
 // file creates on first use.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+
 import type { Page } from "@playwright/test";
 
-type StackKeys = { url: string; anon: string; service: string };
+type StackKeys = { url: string; anon: string; service: string; db: string };
 
 let cached: StackKeys | null = null;
 
@@ -26,8 +27,31 @@ export function stackKeys(): StackKeys {
     url: status.API_URL,
     anon: status.PUBLISHABLE_KEY ?? status.ANON_KEY,
     service: status.SERVICE_ROLE_KEY ?? status.SECRET_KEY,
+    db: status.DB_URL,
   };
   return cached;
+}
+
+/**
+ * Gives a local test person a password to sign in with. Supabase Auth refuses
+ * every password write, the admin API's included
+ * (20261023000000_auth_no_password_changes.sql: an app's OAuth token must not
+ * turn into a session), so it's set in SQL as the database owner, like seed.sql.
+ */
+export function setLocalPassword(userId: string, password: string): void {
+  const { db } = stackKeys();
+  const run = spawnSync(
+    "psql",
+    [db, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-v", `id=${userId}`, "-v", `pw=${password}`],
+    {
+      input:
+        "UPDATE auth.users SET encrypted_password = extensions.crypt(:'pw', extensions.gen_salt('bf')) WHERE id = :'id' RETURNING id;\n",
+      encoding: "utf8",
+    },
+  );
+  if (run.error) throw new Error(`psql couldn't run (${run.error.message}). brew install libpq.`);
+  if (run.status !== 0) throw new Error(`setting the test password failed:\n${run.stderr}`);
+  if (!run.stdout.trim()) throw new Error(`setting the test password found no user ${userId}`);
 }
 
 export const DEV = { email: "dev@moduo.local", password: "localdev" };
@@ -119,12 +143,8 @@ export async function ensureTeammate(workspaceId: string): Promise<Session> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  // The stack blanks passwords on insert (prod signs in by code); set one after.
-  await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: TEAMMATE.password }),
-  });
+  // Auth refuses password writes; set it in SQL (supabase/seed.sql does the same).
+  setLocalPassword(user.id, TEAMMATE.password);
   await rest("service", `profiles?id=eq.${user.id}`, {
     method: "PATCH",
     body: { display_name: TEAMMATE.name },

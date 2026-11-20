@@ -10,9 +10,6 @@ import {
 import { useLayoutEffect, useMemo } from "react";
 
 import "../../app/src/global.css";
-import "@fontsource/nunito/400.css";
-import "@fontsource/nunito/600.css";
-import "@fontsource/nunito/700.css";
 
 import { TooltipProvider } from "../../app/src/components/ui/tooltip";
 import {
@@ -20,8 +17,8 @@ import {
   type WorkspaceContextValue,
 } from "../../app/src/features/workspaces/workspace-context";
 import {
-  APPEARANCE_OPTIONS,
   type Appearance,
+  APPEARANCE_OPTIONS,
   DEFAULT_APPEARANCE,
   parseAppearance,
 } from "../../app/src/lib/appearance";

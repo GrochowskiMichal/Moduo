@@ -1,0 +1,6 @@
+# GitGuardian (ggshield and the GitHub app): ignore only the risk hook's redaction
+# fixtures, whose fake credentials history still holds. Never widen this to a folder.
+version: 2
+secret:
+  ignored-paths:
+    - scripts/agent/risk-hook.test.ts

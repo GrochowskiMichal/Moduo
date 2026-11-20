@@ -1,0 +1,33 @@
+id: primitive-size-class-overridden
+language: tsx
+severity: error
+message: "A plain size class loses to the primitive's own `data-[…]:` size variant, so it never applies (an `Avatar size=\"sm\"` with `size-4` renders 24 px; a vertical `Separator` with `h-4` draws 0 px)."
+note: |
+  Size an Avatar through its `size` prop (`size="icon"` puts it on the icon rung). Size a
+  vertical Separator on the same variant: `data-[orientation=vertical]:h-4`
+  (tailwind-merge then drops the primitive's). jsdom has no layout; measure in a browser.
+files:
+  - apps/app/src/**/*.tsx
+rule:
+  kind: jsx_self_closing_element
+  any:
+    - all:
+        - has:
+            field: name
+            regex: ^Avatar$
+        - has:
+            kind: jsx_attribute
+            regex: ^size=
+        - has:
+            kind: jsx_attribute
+            regex: ^className=.*(^|[\s"'`])size-\d
+    - all:
+        - has:
+            field: name
+            regex: ^Separator$
+        - has:
+            kind: jsx_attribute
+            regex: ^orientation=.vertical.
+        - has:
+            kind: jsx_attribute
+            regex: ^className=.*(^|[\s"'`])h-\d

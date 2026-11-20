@@ -1,6 +1,5 @@
 // TV-D10 · the structure reads and ops the app runs (runtime.web.structure.ts),
-// against a fake Supabase client: what each call sends, how answers map, and
-// the fallbacks for a database before the migration.
+// against a fake Supabase client: what each call sends and how answers map.
 
 import { describe, expect, it } from "@rstest/core";
 
@@ -38,31 +37,8 @@ function fakeClient(opts: {
       return typeof a === "function" ? a(args) : a;
     },
   };
-  const legacy: {
-    upserts: Bucket[];
-    blocks: Array<[string, unknown]>;
-    deletes: Array<[string, string]>;
-  } = {
-    upserts: [],
-    blocks: [],
-    deletes: [],
-  };
-  const api = createTasksStructure(client as never, {
-    userId: async () => "u1",
-    upsertBucketLegacy: async (bucket) => {
-      legacy.upserts.push(bucket);
-      return bucket;
-    },
-    deleteProjectLegacy: async (ws, id) => {
-      legacy.deletes.push([ws, id]);
-    },
-    getTimeBlocksLegacy: async () => ({ morning: "legacy-project" }),
-    setTimeBlocksLegacy: async (ws, blocks) => {
-      legacy.blocks.push([ws, blocks]);
-      return blocks;
-    },
-  });
-  return { api, rpcCalls, legacy };
+  const api = createTasksStructure(client as never, { userId: async () => "u1" });
+  return { api, rpcCalls };
 }
 
 const project: Bucket = {
@@ -140,17 +116,18 @@ describe("project fields (AC4.1)", () => {
     expect([saved.status, saved.targetOn, saved.areaId]).toEqual(["active", "2026-12-18", "a1"]);
   });
 
-  it("before the migration, a rename still saves the old way", async () => {
-    const { api, legacy } = fakeClient({
+  it("a missing op fails loudly instead of saving some other way", async () => {
+    const { api } = fakeClient({
       rpc: { projects_op_update: missingFn("projects_op_update") },
     });
-    await api.updateProject({
-      workspaceId: "ws",
-      projectId: "p1",
-      patch: { name: "Acme rebrand" },
-      fallback: project,
-    });
-    expect(legacy.upserts.map((b) => b.name)).toEqual(["Acme rebrand"]);
+    await expect(
+      api.updateProject({
+        workspaceId: "ws",
+        projectId: "p1",
+        patch: { name: "Acme rebrand" },
+        fallback: project,
+      }),
+    ).rejects.toThrow(/projects_op_update/);
   });
 });
 
@@ -226,29 +203,12 @@ describe("the rail's Section menu files a project into an area", () => {
     expect(rpcCalls[0]?.[1].p_area_name).toBeNull();
     expect(made).toBeNull();
   });
-
-  it("before the migration, writes the old label", async () => {
-    const { api, legacy } = fakeClient({
-      rpc: { projects_op_file: missingFn("projects_op_file") },
-    });
-    await api.setProjectArea({ workspaceId: "ws", project, areaName: "School", areas });
-    expect(legacy.upserts.map((b) => b.group)).toEqual(["School"]);
-  });
 });
 
 describe("reads", () => {
-  it("carry the structure with the bundle, and an older database reads as empty", async () => {
-    const missing = (t: string): Answer => ({
-      data: null,
-      error: { code: "PGRST205", message: `Could not find the table 'public.${t}'` },
-    });
+  it("carry the structure with the bundle", async () => {
     const { api } = fakeClient({
-      tables: {
-        areas: { data: [areaRow("a1", "Clients", 1)], error: null },
-        sections: missing("sections"),
-        teams: missing("teams"),
-        team_members: missing("team_members"),
-      },
+      tables: { areas: { data: [areaRow("a1", "Clients", 1)], error: null } },
     });
     const structure = await api.listStructure("ws");
     expect(structure.areas.map((a) => a.name)).toEqual(["Clients"]);
@@ -303,24 +263,6 @@ describe("time blocks are each person's own", () => {
     });
     expect(await api.getTimeBlocks("ws")).toEqual({ morning: "p1" });
   });
-
-  it("fall back to the workspace table before the migration", async () => {
-    const { api, legacy } = fakeClient({
-      tables: {
-        user_preferences: {
-          data: null,
-          error: {
-            code: "42703",
-            message: "column user_preferences.task_time_blocks does not exist",
-          },
-        },
-      },
-      rpc: { tasks_op_set_time_blocks: missingFn("tasks_op_set_time_blocks") },
-    });
-    expect(await api.getTimeBlocks("ws")).toEqual({ morning: "legacy-project" });
-    await api.setTimeBlocks("ws", { evening: "p1" });
-    expect(legacy.blocks).toEqual([["ws", { evening: "p1" }]]);
-  });
 });
 
 describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
@@ -352,17 +294,8 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
     ]);
   });
 
-  it("before the migration, the old delete runs and says it can't be restored", async () => {
-    const { api, legacy } = fakeClient({
-      rpc: { projects_op_delete: missingFn("projects_op_delete") },
-    });
-    const done = await api.deleteProject({ workspaceId: "ws", projectId: "p1" });
-    expect(done.restorable).toBe(false);
-    expect(legacy.deletes).toEqual([["ws", "p1"]]);
-  });
-
   it("a refused delete fails with the server's words", async () => {
-    const { api, legacy } = fakeClient({
+    const { api } = fakeClient({
       rpc: {
         projects_op_delete: {
           data: null,
@@ -376,7 +309,6 @@ describe("TV-U6: colours, archiving, deleting, Recently deleted", () => {
     await expect(api.deleteProject({ workspaceId: "ws", projectId: "p1" })).rejects.toThrow(
       /full access/,
     );
-    expect(legacy.deletes).toEqual([]);
   });
 
   it("Restore and Delete forever name what they act on", async () => {

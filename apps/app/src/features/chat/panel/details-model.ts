@@ -3,6 +3,7 @@
 // New conversation may send. The screens draw these; the server decides.
 
 import type { PresenceState } from "@/lib/statuses/model";
+
 import type { ChatChannel, ChatMember, ChatMessage, ChatPerson } from "../model";
 
 /** A person in Details' People list. */
@@ -83,10 +84,7 @@ export function channelNameProblem(name: string): string | null {
 
 /** What "Open" does in the direct-message tab. */
 export type DmIntent =
-  | { kind: "empty" }
-  | { kind: "self" }
-  | { kind: "too-many" }
-  | { kind: "open"; userIds: string[] };
+  { kind: "empty" } | { kind: "self" } | { kind: "too-many" } | { kind: "open"; userIds: string[] };
 
 export function dmIntent(picked: readonly string[], selfId: string): DmIntent {
   if (picked.length === 0) return { kind: "empty" };

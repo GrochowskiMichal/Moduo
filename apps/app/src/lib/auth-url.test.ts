@@ -7,8 +7,8 @@ import {
   authCallbackKind,
   clearIgnoredAuthLink,
   ignoredAuthLink,
-  SUPABASE_AUTH_OPTIONS,
   scrubAuthCallbackFromUrl,
+  SUPABASE_AUTH_OPTIONS,
 } from "./auth-url";
 
 const SUPABASE_URL = "https://example.supabase.co";
@@ -112,7 +112,7 @@ describe("scrubAuthCallbackFromUrl", () => {
     expect(window.location.hash).toBe("");
     expect(window.location.href).not.toContain("access_token");
     expect(ignoredAuthLink()).toBe("session");
-    clearIgnoredAuthLink(); // what a SIGNED_IN does (runtime.web.ts)
+    clearIgnoredAuthLink(); // what a SIGNED_IN does (runtime.web.client.ts)
     expect(ignoredAuthLink()).toBeNull();
   });
 

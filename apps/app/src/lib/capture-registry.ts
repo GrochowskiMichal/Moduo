@@ -12,13 +12,13 @@
 import type { PriorityLevel, TaskStatusCategory } from "@contracts/vocabularies";
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
+
 import { calendarCaptureType } from "../features/calendar/capture-type";
 import { chatCaptureType } from "../features/chat/capture-type";
 import { contactsCaptureType } from "../features/contacts/capture-type";
 import { notesCaptureType } from "../features/notes/capture-type";
 import { taskCaptureType } from "../features/tasks/capture-type";
 import type { ModulePermissions } from "../features/workspaces/types";
-
 import type { CaptureSource } from "./capture-source";
 import type { EntityRef } from "./entity-links";
 

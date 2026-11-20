@@ -5,9 +5,6 @@
 // scrolls the thread row; on web (no engine) it scrolls the thread's tissue
 // card. The id can be a raw threadId OR a thread's `email_thread` entity/ref id
 // (what the spine links + dashboard widget carry), so resolution accepts both.
-//
-// The file is named `url-search.ts` (not `search.ts`) because `email/search.ts`
-// already owns the envelope full-text search.
 
 export type EmailSearch = {
   thread?: string;
@@ -31,8 +28,7 @@ export function validateEmailSearch(search: Record<string, unknown>): EmailSearc
 }
 
 export type EmailThreadDeepLinkTarget =
-  | { kind: "thread"; threadId: string; refId: string | null }
-  | { kind: "none" };
+  { kind: "thread"; threadId: string; refId: string | null } | { kind: "none" };
 
 /**
  * Resolve an inbound id to the raw `threadId` (for desktop list selection) and

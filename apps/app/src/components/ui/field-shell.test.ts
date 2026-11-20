@@ -8,6 +8,7 @@
 // box and Home's quick capture).
 import { promises as fs } from "node:fs";
 import path from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
 
 import { FIELD_FOCUS_WITHIN, fieldShellVariants } from "./field-shell";

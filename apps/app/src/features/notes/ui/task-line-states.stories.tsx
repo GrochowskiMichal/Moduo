@@ -9,6 +9,7 @@
 
 import type { Meta, StoryObj } from "@storybook/react";
 import { X } from "lucide-react";
+
 import { CompleteToggle } from "../../../components/ui/complete-toggle";
 
 function TaskLineMock({
@@ -56,7 +57,7 @@ function TaskLineMock({
             type="button"
             className="inline-flex max-w-40 items-center gap-1 truncate rounded-sm px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            {chip ?? "Details"}
+            {chip ?? "Task"}
           </button>
         )}
       </span>

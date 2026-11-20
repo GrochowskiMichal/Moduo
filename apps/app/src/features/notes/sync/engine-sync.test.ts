@@ -7,6 +7,7 @@
 
 import { afterEach, describe, expect, it, rs } from "@rstest/core";
 import * as Y from "yjs";
+
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { applyAgentEdit } from "../editor/agent-write";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "../editor/doc-markdown";
@@ -299,7 +300,7 @@ describe("compaction against a newer snapshot", () => {
     engine = new NotesSyncEngineV2(runtime, "ws1");
     const session = engine.getOrCreateSession("c1");
     await session.booted;
-    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    // Driving the private fold directly.
     const internal = engine as any;
     const s = internal.sessions.get("c1");
     s.state = { ...s.state, updatesSinceCompact: 50 };
@@ -334,7 +335,7 @@ describe("compaction against a newer snapshot", () => {
     engine = new NotesSyncEngineV2(runtime, "ws1");
     const session = engine.getOrCreateSession("c2");
     await session.booted;
-    // biome-ignore lint/suspicious/noExplicitAny: driving the private fold directly
+    // Driving the private fold directly.
     const internal = engine as any;
     const s = internal.sessions.get("c2");
     s.state = { ...s.state, updatesSinceCompact: 50 };

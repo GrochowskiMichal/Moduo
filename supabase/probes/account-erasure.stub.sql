@@ -1,5 +1,5 @@
 -- Stub of production for supabase/probes/account-erasure.probe.sql (PRIV-2a).
--- The repo can't bootstrap a database (supabase/AGENTS.md), so this recreates
+-- The repo can't bootstrap a database (.claude/rules/supabase.md), so this recreates
 -- only what 20261008013000_account_erase_workspace_data.sql touches, as
 -- production has it on 2026-10-08 (project wtoonrvuqumihpkbvwvs, read from the
 -- catalog): columns the probe uses, foreign-key delete rules, unique indexes,
@@ -60,20 +60,24 @@ CREATE TABLE public.notes (
   workspace_id uuid NOT NULL REFERENCES public.workspaces (id) ON DELETE CASCADE,
   created_by uuid REFERENCES public.profiles (id) ON DELETE SET NULL,
   title text NOT NULL DEFAULT '',
-  parent_id uuid REFERENCES public.notes (id) ON DELETE SET NULL,
+  parent_id uuid,
   deleted_at timestamptz,
   share_mode text NOT NULL DEFAULT 'custom',
   share_scope text NOT NULL DEFAULT 'private',
   share_permission text NOT NULL DEFAULT 'edit',
   workspace_shared boolean NOT NULL DEFAULT false,
   publish_token text,
-  published_at timestamptz
+  published_at timestamptz,
+  -- NS-2 (20261030110000): a parent, like a log row, is in the note's own workspace.
+  UNIQUE (workspace_id, id),
+  FOREIGN KEY (workspace_id, parent_id) REFERENCES public.notes (workspace_id, id) ON DELETE SET NULL (parent_id)
 );
 CREATE TABLE public.note_updates (
   id bigserial PRIMARY KEY,
   workspace_id uuid NOT NULL,
-  note_id uuid NOT NULL REFERENCES public.notes (id) ON DELETE CASCADE,
-  update_b64 text NOT NULL DEFAULT ''
+  note_id uuid NOT NULL,
+  update_b64 text NOT NULL DEFAULT '',
+  FOREIGN KEY (workspace_id, note_id) REFERENCES public.notes (workspace_id, id) ON DELETE CASCADE
 );
 -- note_shares_note_id_fkey exists on production, but no migration records its
 -- delete rule; the stub takes the strictest one.
@@ -764,16 +768,110 @@ AS $function$
 DECLARE
   v_type text := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_type ELSE NEW.resource_type END;
   v_id uuid := CASE WHEN TG_OP = 'DELETE' THEN OLD.resource_id ELSE NEW.resource_id END;
+  v_bypass text;
 BEGIN
+  -- NS-3 (20261030121000): held while notes__freeze_children copies grants.
+  IF coalesce(current_setting('notes.freezing', true), '') = '1' THEN
+    RETURN coalesce(NEW, OLD);
+  END IF;
   IF v_type = 'note' THEN
+    -- NS-6 (20261030150000): the derived flag write is not an edit.
+    v_bypass := current_setting('share.bypass', true);
+    PERFORM set_config('share.bypass', '1', true);
     UPDATE public.notes SET workspace_shared = EXISTS (
       SELECT 1 FROM public.resource_grants g
       WHERE g.resource_type = 'note' AND g.resource_id = v_id AND g.subject_type = 'workspace'
     ) WHERE id = v_id;
+    PERFORM set_config('share.bypass', coalesce(v_bypass, ''), true);
   END IF;
   RETURN coalesce(NEW, OLD);
 END;
 $function$;
+
+-- NS-3 (20261030121000): deleting a parent keeps its inherit children's access.
+-- Bodies copied from that migration.
+CREATE FUNCTION public.notes__copy_chain_access(p_workspace_id uuid, p_note_id uuid, p_skip_creator uuid)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_self_creator uuid;
+  v_id uuid;
+  v_parent uuid;
+  v_mode text;
+  v_creator uuid;
+  v_guard int := 0;
+BEGIN
+  SELECT parent_id, created_by INTO v_id, v_self_creator
+    FROM public.notes WHERE id = p_note_id AND workspace_id = p_workspace_id;
+  IF NOT FOUND THEN RETURN; END IF;
+  WHILE v_id IS NOT NULL AND v_guard < 100 LOOP
+    v_guard := v_guard + 1;
+    SELECT parent_id, coalesce(share_mode, 'custom'), created_by
+      INTO v_parent, v_mode, v_creator
+      FROM public.notes WHERE id = v_id;
+    EXIT WHEN NOT FOUND;
+    INSERT INTO public.resource_grants
+      (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+    SELECT p_workspace_id, 'note', p_note_id, g.subject_type, g.subject_id, g.level,
+           public.perm_actor_id()
+      FROM public.resource_grants g
+     WHERE g.resource_type = 'note' AND g.resource_id = v_id
+       AND g.subject_type IN ('member', 'workspace')
+    ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO UPDATE
+      SET level = CASE
+        WHEN public.grant_level_rank(EXCLUDED.level) > public.grant_level_rank(public.resource_grants.level)
+        THEN EXCLUDED.level ELSE public.resource_grants.level END;
+    IF v_creator IS NOT NULL AND v_creator IS DISTINCT FROM v_self_creator
+       AND v_creator IS DISTINCT FROM p_skip_creator THEN
+      INSERT INTO public.resource_grants
+        (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+      VALUES (p_workspace_id, 'note', p_note_id, 'member', v_creator, 'full', public.perm_actor_id())
+      ON CONFLICT (resource_type, resource_id, subject_type, subject_key) DO UPDATE
+        SET level = 'full';
+    END IF;
+    EXIT WHEN v_mode IS DISTINCT FROM 'inherit' OR v_parent IS NULL;
+    v_id := v_parent;
+  END LOOP;
+END;
+$$;
+
+CREATE FUNCTION public.notes__freeze_children()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_child uuid;
+  v_freezing text;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.workspaces WHERE id = OLD.workspace_id) THEN
+    RETURN OLD;
+  END IF;
+  v_freezing := current_setting('notes.freezing', true);
+  PERFORM set_config('notes.freezing', '1', true);
+  FOR v_child IN
+    SELECT n.id FROM public.notes n
+     WHERE n.parent_id = OLD.id AND n.workspace_id = OLD.workspace_id
+       AND coalesce(n.share_mode, 'custom') = 'inherit'
+     ORDER BY n.id
+  LOOP
+    PERFORM public.notes__copy_chain_access(OLD.workspace_id, v_child, NULL);
+  END LOOP;
+  PERFORM set_config('notes.freezing', coalesce(v_freezing, ''), true);
+  RETURN OLD;
+END;
+$$;
+
+CREATE FUNCTION public.notes__orphan_custom()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF OLD.parent_id IS NOT NULL AND NEW.parent_id IS NULL
+     AND coalesce(NEW.share_mode, 'custom') = 'inherit'
+     AND NOT EXISTS (SELECT 1 FROM public.notes p WHERE p.id = OLD.parent_id) THEN
+    NEW.share_mode := 'custom';
+    NEW.workspace_shared := EXISTS (
+      SELECT 1 FROM public.resource_grants g
+      WHERE g.resource_type = 'note' AND g.resource_id = NEW.id AND g.subject_type = 'workspace');
+  END IF;
+  RETURN NEW;
+END;
+$$;
 
 CREATE FUNCTION public.tasks_enforce_one_level_subtasks()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
@@ -950,6 +1048,12 @@ CREATE TRIGGER perm_enforce_write BEFORE INSERT OR UPDATE OR DELETE ON public.no
   FOR EACH ROW EXECUTE FUNCTION public.perm_enforce_write('notes');
 CREATE TRIGGER notes_share_fields_owner_only BEFORE UPDATE ON public.notes
   FOR EACH ROW EXECUTE FUNCTION public.notes_share_fields_owner_only();
+CREATE TRIGGER notes_freeze_children BEFORE DELETE ON public.notes
+  FOR EACH ROW EXECUTE FUNCTION public.notes__freeze_children();
+CREATE TRIGGER notes_orphan_custom BEFORE UPDATE OF parent_id ON public.notes
+  FOR EACH ROW EXECUTE FUNCTION public.notes__orphan_custom();
+ALTER TABLE public.notes ADD CONSTRAINT notes_inherit_has_parent
+  CHECK (share_mode = 'custom' OR parent_id IS NOT NULL);
 CREATE TRIGGER perm_enforce_write BEFORE INSERT OR UPDATE OR DELETE ON public.note_updates
   FOR EACH ROW EXECUTE FUNCTION public.perm_enforce_write('notes', 'edit');
 CREATE TRIGGER perm_enforce_write BEFORE INSERT OR UPDATE OR DELETE ON public.buckets

@@ -36,6 +36,7 @@ import {
   clientCallableDefinerQuery,
   dedupeByLastDefiner,
   dedupeDecls,
+  liveBodies,
   normalizeBody,
   parseDeclarations,
   parseFunctionBodies,
@@ -50,7 +51,10 @@ const files = readdirSync(MIGRATIONS_DIR)
 const read = (f: string) => readFileSync(`${MIGRATIONS_DIR}/${f}`, "utf8");
 
 const decls = dedupeDecls(files.flatMap((f) => parseDeclarations(read(f), f)));
-const bodies = dedupeByLastDefiner(files.flatMap((f) => parseFunctionBodies(read(f), f)));
+const bodies = liveBodies(
+  dedupeByLastDefiner(files.flatMap((f) => parseFunctionBodies(read(f), f))),
+  decls,
+);
 const list = (kind: string) =>
   sqlQuote(
     decls

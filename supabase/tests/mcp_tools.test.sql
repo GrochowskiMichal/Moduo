@@ -131,3 +131,93 @@ BEGIN
     'and so does one its person can''t see', r);
 END;
 $$;
+
+-- CALR-15 (specs/calendar-rethink.md AC28): the connector lists events through
+-- calendar_events_visible, so a key reads a teammate's private event as "Busy"
+-- (its person can only see the time), and its own person's events whole.
+-- KC is E's Calendar key; O's calendar OC is shared with E at All details.
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
+  (test.id('KC'), test.id('W'), 'E calendar', 'mdo_kc', md5('db-test-kc'), '{"calendar": "view"}'::jsonb, test.id('E'));
+INSERT INTO public.calendars (id, workspace_id, owner_id, name, kind) VALUES
+  (test.id('OC'), test.id('W'), test.id('O'), 'O work', 'custom');
+DELETE FROM public.resource_grants WHERE resource_type = 'calendar' AND resource_id = test.id('OC');
+INSERT INTO public.resource_grants (workspace_id, resource_type, resource_id, subject_type, subject_id, level, created_by)
+VALUES (test.id('W'), 'calendar', test.id('OC'), 'member', test.id('E'), 'view', test.id('O'));
+
+DO $$
+DECLARE
+  r text;
+BEGIN
+  PERFORM test.as_user('O', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Offsite planning', p_starts_at => '2030-03-04 10:00+00', p_ends_at => '2030-03-04 11:00+00',
+    p_location => 'The barn', p_calendar_id => %L, p_is_private => true)$q$, test.id('W'), test.id('OC')));
+  PERFORM test.as_user('E', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Dentist', p_starts_at => '2030-03-04 15:00+00', p_ends_at => '2030-03-04 16:00+00', p_is_private => true)$q$,
+    test.id('W')));
+  r := test.as_key('KC', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00') e
+    WHERE e.title = 'Busy' AND e.location IS NULL AND e.owner_id = %L$q$, test.id('W'), test.id('O')));
+  PERFORM test.ok(r = 'ok 1', 'calendar_events_visible: a key reads its person''s teammate''s private event as "Busy"', r);
+  r := test.as_key('KC', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00') e
+    WHERE e.title IN ('Offsite planning', 'Dentist')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 1', 'and its own person''s private event by its title, never the teammate''s', r);
+  r := test.as_key('K', format($q$SELECT 1 FROM public.calendar_events_visible(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 0', 'a key without Calendar reads no events', r);
+END;
+$$;
+
+-- CALR-21 (specs/calendar-rethink.md AC46): the connector's calendar_who_sees
+-- and calendar_event_occurrences answer for the key's person: E's key reads
+-- who sees E's own private Dentist (nobody in full), the occurrences of what
+-- E can see, and a key without Calendar reads neither.
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.as_key('KC', format($q$SELECT * FROM public.calendar_who_sees(%L, (SELECT id FROM public.calendar_events
+    WHERE workspace_id = %L AND title = 'Dentist'))$q$, test.id('W'), test.id('W')));
+  PERFORM test.ok(r LIKE 'ok %' AND r <> 'ok 0', 'calendar_who_sees: a key reads who sees its person''s own event', r);
+  r := test.as_key('KC', format($q$SELECT * FROM public.calendar_who_sees(%L, (SELECT id FROM public.calendar_events
+    WHERE workspace_id = %L AND title = 'Dentist')) WHERE sees = 'all'$q$, test.id('W'), test.id('W')));
+  PERFORM test.ok(r = 'ok 0', 'and nobody sees a private event in full', r);
+  r := test.as_key('KC', format($q$SELECT * FROM public.calendar_who_sees(%L, (SELECT id FROM public.calendar_events
+    WHERE workspace_id = %L AND title = 'Offsite planning'))$q$, test.id('W'), test.id('W')));
+  PERFORM test.ok(r LIKE '%Event not found in this workspace.%', 'but not a teammate''s', r);
+  r := test.as_key('K', format($q$SELECT * FROM public.calendar_who_sees(%L, NULL)$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 0', 'a key without Calendar reads no sharing', r);
+  r := test.as_key('KC', format($q$SELECT 1 FROM public.calendar_event_occurrences(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00') o
+    JOIN public.calendar_events e ON e.id = o.event_id WHERE e.title IN ('Offsite planning', 'Dentist')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 2', 'calendar_event_occurrences: a key reads the occurrences its person can see', r);
+  r := test.as_key('K', format($q$SELECT 1 FROM public.calendar_event_occurrences(%L, '2030-03-04 00:00+00', '2030-03-05 00:00+00')$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 0', 'a key without Calendar reads no occurrences', r);
+END;
+$$;
+
+-- CALR-21 AC46: an assistant's event with a place, a link and privacy, and its
+-- offer of times, are recorded as the key's.
+INSERT INTO public.workspace_api_keys (id, workspace_id, name, key_prefix, key_hash, scopes, created_by) VALUES
+  (test.id('KCE'), test.id('W'), 'E planner', 'mdo_kce', md5('db-test-kce'), '{"calendar": "edit"}'::jsonb, test.id('E'));
+INSERT INTO public.exposed_slot_links
+  (id, slot_id, workspace_id, owner_user_id, owner_email, name, link_name, slug, duration_minutes, video_provider)
+VALUES (test.id('SL'), 'db-test-slot-sl21', test.id('W')::text, test.id('E')::text, 'db-test-e@example.com',
+        'Intro call', 'Intro call', 'db-test-e-intro-21', 30, 'google_meet');
+
+DO $$
+DECLARE
+  r text;
+BEGIN
+  r := test.as_key('KCE', format($q$SELECT public.calendar_op_event_create(p_workspace_id => %L,
+    p_title => 'Investor prep', p_starts_at => '2030-03-05 09:00+00', p_ends_at => '2030-03-05 10:30+00',
+    p_location => 'Hale office', p_conference_url => 'https://meet.google.com/abc-defg-hij', p_is_private => true)$q$, test.id('W')));
+  PERFORM test.ok(r = 'ok 1', 'calendar_op_event_create: a key makes an event with a place, a link and privacy', r);
+  PERFORM test.ok((SELECT actor_type || ':' || actor_label FROM public.module_activity
+                    WHERE workspace_id = test.id('W') AND op = 'calendar.event_create'
+                      AND entity_id = (SELECT id FROM public.calendar_events WHERE workspace_id = test.id('W') AND title = 'Investor prep'))
+                  = 'api_key:E · via E planner', 'and it is recorded as the key''s');
+  r := test.as_key('KCE', format($q$SELECT public.calendar_op_offer_create(%L, %L, ARRAY['2030-03-06 09:00+00', '2030-03-07 09:00+00']::timestamptz[])$q$,
+    test.id('W'), test.id('SL')));
+  PERFORM test.ok(r = 'ok 1', 'calendar_op_offer_create: a key offers two held times from its person''s link', r);
+  PERFORM test.ok((SELECT actor_type || ':' || actor_label FROM public.module_activity
+                    WHERE workspace_id = test.id('W') AND op = 'calendar.offer_create' ORDER BY created_at DESC LIMIT 1)
+                  = 'api_key:E · via E planner', 'and the offer is recorded as the key''s');
+END;
+$$;

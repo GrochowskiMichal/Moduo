@@ -7,7 +7,7 @@ import { CalendarClock, Clock, UserMinus } from "lucide-react";
 
 import type { NeedsAttentionItem } from "@/features/contacts/needs-attention";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import type { WidgetComponentProps } from "../../registry/types";
 import { widgetRowBudget } from "../../widget-density";
@@ -28,7 +28,7 @@ const REASON_ICON: Record<NeedsAttentionItem["reason"], LucideIcon> = {
 };
 
 export function NeedsAttentionWidget({ size }: WidgetComponentProps) {
-  const { needsAttention } = useDashboardData();
+  const needsAttention = useDashboardSource("needsAttention");
   const density = useDensity();
 
   if (needsAttention.loading && needsAttention.data.length === 0) return <WidgetLoading />;

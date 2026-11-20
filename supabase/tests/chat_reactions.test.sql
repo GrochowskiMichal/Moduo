@@ -1,7 +1,7 @@
 -- Chat v2 · CV-7c "one key for chat and comments" (AC10.9;
 -- supabase/migrations/…_chat_v2_reactions.sql). Any emoji is a reaction on a
 -- message, a comment and in your quick row, through one server check; at most
--- 20 kinds; the six TV-U13 words became emoji, losslessly and only once; a
+-- 20 kinds; an old app's word still lands as its emoji; a
 -- viewer reacts in chat; only people who can read a message or comment react
 -- to it or see who reacted; the reactor is always the signed-in person; a
 -- reaction never writes a notice.
@@ -380,10 +380,8 @@ BEGIN
               AND NOT has_function_privilege('anon', 'public.comments_op_react(uuid, text, boolean)', 'EXECUTE')
               AND has_function_privilege('authenticated', 'public.chat_op_react(uuid, text, boolean)', 'EXECUTE')
               AND NOT has_function_privilege('anon', 'public.chat_op_react(uuid, text, boolean)', 'EXECUTE')
-              AND NOT has_function_privilege('anon', 'public.reactions__key_ok(text)', 'EXECUTE')
-              AND NOT has_function_privilege('authenticated', 'public.comment_reactions__words_to_emoji()', 'EXECUTE')
-              AND NOT has_function_privilege('anon', 'public.comment_reactions__words_to_emoji()', 'EXECUTE'),
-    'grants: members call the ops, never anonymously; the rewrite is the server''s only');
+              AND NOT has_function_privilege('anon', 'public.reactions__key_ok(text)', 'EXECUTE'),
+    'grants: members call the ops, never anonymously');
 END;
 $$;
 
@@ -403,98 +401,28 @@ BEGIN
 END;
 $$;
 
--- ── The six words became emoji: lossless, and only once ─────────────────────
+-- ── The one-shot rewrites are gone; comments still take any spelling off ─────
+-- The six words became emoji and every stored key took one spelling once, in
+-- CV-7c's migration; …_drop_one_shot_backfills.sql dropped the two helpers.
 DO $$
 DECLARE
-  v_n int;
-  v_before jsonb;
   v text;
-  v_after jsonb;
 BEGIN
-  -- Rows as TV-U13 stored them (the old CHECK set aside inside this rolled-back test).
-  ALTER TABLE public.comment_reactions DROP CONSTRAINT comment_reactions_reaction_check;
+  PERFORM test.ok(to_regprocedure('public.comment_reactions__words_to_emoji()') IS NULL
+              AND to_regprocedure('public.reactions__respell_stored()') IS NULL,
+    'the one-shot reaction rewrites are gone');
   DELETE FROM public.comment_reactions WHERE comment_id = test.id('CV');
   INSERT INTO public.comment_reactions (comment_id, user_id, reaction, workspace_id, created_at)
-  SELECT test.id('CV'), test.id(u), w, test.id('W'), timestamptz '2026-10-01 10:00Z' + make_interval(mins => i)
-    FROM (VALUES ('O', 'thumbs_up', 1), ('A', 'thumbs_up', 2), ('A', 'check', 3), ('B', 'eyes', 4),
-                 ('N', 'pray', 5), ('O', 'heart', 6), ('B', 'smile', 7), ('N', '🎉', 8),
-                 ('O', 'check', 9)) AS s(u, w, i);
-  SELECT jsonb_agg(jsonb_build_array(comment_id, user_id, workspace_id, created_at,
-           CASE reaction WHEN 'thumbs_up' THEN '👍' WHEN 'check' THEN '✅' WHEN 'eyes' THEN '👀'
-                         WHEN 'pray' THEN '🙏' WHEN 'heart' THEN '❤️' WHEN 'smile' THEN '😄' ELSE reaction END)
-           ORDER BY created_at)
-    INTO v_before FROM public.comment_reactions WHERE comment_id = test.id('CV');
-
-  v_n := public.comment_reactions__words_to_emoji();
-  SELECT jsonb_agg(jsonb_build_array(comment_id, user_id, workspace_id, created_at, reaction) ORDER BY created_at)
-    INTO v_after FROM public.comment_reactions WHERE comment_id = test.id('CV');
-  PERFORM test.ok(v_n = 8 AND v_after = v_before,
-    'rewrite: each word became its emoji; who, when and where kept; an emoji untouched', format('%s rows', v_n));
-  PERFORM test.ok(public.comment_reactions__words_to_emoji() = 0
-              AND (SELECT jsonb_agg(jsonb_build_array(comment_id, user_id, workspace_id, created_at, reaction) ORDER BY created_at)
-                     FROM public.comment_reactions WHERE comment_id = test.id('CV')) = v_after,
-    'rewrite: a second run changes nothing');
-  ALTER TABLE public.comment_reactions
-    ADD CONSTRAINT comment_reactions_reaction_check CHECK (public.reactions__key_ok(reaction));
-  PERFORM test.ok(true, 'rewrite: every rewritten row passes the shared check');
-  -- An old app takes a rewritten reaction off with its word, a new one with the emoji.
+  VALUES (test.id('CV'), test.id('O'), '✅', test.id('W'), timestamptz '2026-10-01 10:00Z'),
+         (test.id('CV'), test.id('O'), chr(10084) || chr(65039), test.id('W'), timestamptz '2026-10-01 10:01Z');
+  -- An old app takes a reaction off with its word, a new one with the emoji.
   v := test.creact('O', 'CV', 'check', false);
   PERFORM test.ok(v LIKE 'ok %' AND NOT EXISTS (SELECT 1 FROM public.comment_reactions
                                                   WHERE comment_id = test.id('CV') AND user_id = test.id('O') AND reaction = '✅'),
-    'rewrite: an old app takes a rewritten ✅ off with its word', v);
+    'an old app takes a ✅ off with its word', v);
   v := test.creact('O', 'CV', chr(10084), false);
   PERFORM test.ok(v LIKE 'ok %' AND NOT EXISTS (SELECT 1 FROM public.comment_reactions
                                                   WHERE comment_id = test.id('CV') AND user_id = test.id('O') AND reaction LIKE chr(10084) || '%'),
-    'rewrite: a new app takes a rewritten ❤️ off, whichever spelling it sends', v);
-END;
-$$;
-
--- ── Stored keys get the one spelling ───────────────────────────────────────
-DO $$
-DECLARE
-  v text;
-  v_n integer;
-  v_check_vs text := chr(9989) || chr(65039);   -- ✅ with U+FE0F
-  v_star_vs text := chr(11088) || chr(65039);   -- ⭐ with U+FE0F
-BEGIN
-  -- Spellings stored before CV-7c (or by chat v1), set down directly.
-  DELETE FROM public.comment_reactions WHERE comment_id = test.id('CV');
-  INSERT INTO public.comment_reactions (comment_id, user_id, reaction, workspace_id, created_at)
-  VALUES (test.id('CV'), test.id('B'), v_check_vs, test.id('W'), timestamptz '2026-10-01 10:00Z'),
-         (test.id('CV'), test.id('N'), v_check_vs, test.id('W'), timestamptz '2026-10-01 10:01Z'),
-         (test.id('CV'), test.id('N'), '✅', test.id('W'), timestamptz '2026-10-01 10:02Z'),
-         (test.id('CV'), test.id('O'), chr(10084), test.id('W'), timestamptz '2026-10-01 10:03Z'),
-         (test.id('CV'), test.id('O'), '👍', test.id('W'), timestamptz '2026-10-01 10:04Z');
-  UPDATE public.chat_messages
-     SET reactions = jsonb_build_object(v_check_vs, jsonb_build_array(test.id('A')::text),
-                                        '✅', jsonb_build_array(test.id('B')::text, test.id('A')::text),
-                                        v_star_vs, jsonb_build_array(test.id('A')::text),
-                                        'thumbs_up', jsonb_build_array(test.id('B')::text),
-                                        '👀', jsonb_build_array(test.id('V')::text))
-   WHERE id = test.mid('q1');
-
-  v_n := public.reactions__respell_stored();
-  PERFORM test.ok(
-    (SELECT jsonb_agg(jsonb_build_array(user_id, reaction, created_at) ORDER BY created_at)
-       FROM public.comment_reactions WHERE comment_id = test.id('CV'))
-    = jsonb_build_array(jsonb_build_array(test.id('B'), '✅', timestamptz '2026-10-01 10:00Z'),
-                        jsonb_build_array(test.id('N'), '✅', timestamptz '2026-10-01 10:02Z'),
-                        jsonb_build_array(test.id('O'), chr(10084) || chr(65039), timestamptz '2026-10-01 10:03Z'),
-                        jsonb_build_array(test.id('O'), '👍', timestamptz '2026-10-01 10:04Z')),
-    'respell: comment keys take the one spelling; two spellings one person holds become one');
-  PERFORM test.ok((test.msg('q1')).reactions
-                  = jsonb_build_object('✅', jsonb_build_array(test.id('B')::text, test.id('A')::text),
-                                       '⭐', jsonb_build_array(test.id('A')::text),
-                                       'thumbs_up', jsonb_build_array(test.id('B')::text),
-                                       '👀', jsonb_build_array(test.id('V')::text)),
-    'respell: a message''s spellings merge, each person once; what isn''t a key is left', (test.msg('q1')).reactions::text);
-  PERFORM test.ok(v_n = 4, 'respell: two comment rows changed, one dropped, one message', v_n::text);
-  PERFORM test.ok(public.reactions__respell_stored() = 0, 'respell: a second run changes nothing');
-  v := test.react('A', 'q1', '✅', false);
-  PERFORM test.ok(v = 'ok 1' AND (test.msg('q1')).reactions -> '✅' = jsonb_build_array(test.id('B')::text),
-    'respell: a person takes a respelled reaction off', v);
-  PERFORM test.ok(NOT has_function_privilege('authenticated', 'public.reactions__respell_stored()', 'EXECUTE')
-              AND NOT has_function_privilege('anon', 'public.reactions__respell_stored()', 'EXECUTE'),
-    'respell: server only');
+    'a new app takes a ❤️ off, whichever spelling it sends', v);
 END;
 $$;

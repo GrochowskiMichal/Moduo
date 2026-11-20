@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
+
 import type { AttachmentRecord, ModuoRuntime } from "@/lib/runtime.types";
 import type { UploadView } from "@/lib/uploads/queue";
+
 import { AttachmentStrip, type AttachmentStripProps } from "./attachment-strip";
 import { AttachmentViewer } from "./attachment-viewer";
 

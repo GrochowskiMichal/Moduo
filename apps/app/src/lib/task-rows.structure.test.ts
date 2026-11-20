@@ -1,13 +1,11 @@
 // TV-D10 · how the app reads and writes the new task fields (section, team,
-// estimate, import key) and the structure rows, plus the fallbacks for a
-// database before the migration.
+// estimate, import key) and the structure rows.
 
 import { describe, expect, it } from "@rstest/core";
 
 import { estimateOf, type Task } from "../features/tasks/model";
 import {
   bucketRowToModel,
-  isMissingTvD10FieldError,
   sectionRowToModel,
   taskCreateOpInput,
   taskPatchToColumns,
@@ -15,8 +13,6 @@ import {
   taskReminderRowToModel,
   taskRowToModel,
   teamRowToModel,
-  withFieldFallback,
-  withoutTvD10Fields,
 } from "./task-rows";
 
 const NOW = "2026-10-11T10:00:00Z";
@@ -88,22 +84,7 @@ describe("task rows (TV-D10)", () => {
     ]);
   });
 
-  it("before TV-D10, an estimate goes back to duration_minutes and the rest is dropped", () => {
-    expect(
-      withoutTvD10Fields({
-        title: "x",
-        estimate_minutes: 45,
-        section_id: "s1",
-        team_id: "t",
-        imported_from: {},
-      }),
-    ).toEqual({ title: "x", duration_minutes: 45 });
-    expect(withoutTvD10Fields({ duration_minutes: 30, estimate_minutes: 45 })).toEqual({
-      duration_minutes: 30,
-    });
-    expect(isMissingTvD10FieldError({ message: 'Tasks have no field "section_id".' })).toBe(true);
-    expect(isMissingTvD10FieldError({ message: 'Tasks have no field "due_on".' })).toBe(false);
-    // The raw write (a database before TV-D8) has nowhere else for it either.
+  it("the raw column write has no estimate or section column: duration_minutes only", () => {
     expect(taskPatchToColumns({ estimateMinutes: 45, sectionId: "s1" }, NOW)).toEqual({
       duration_minutes: 45,
       updated_at: NOW,
@@ -198,48 +179,5 @@ describe("structure rows (TV-D10)", () => {
         updated_at: NOW,
       }).kind,
     ).toBe("at");
-  });
-});
-
-describe("an op sent to an older database is retried without the newer fields", () => {
-  type Answer = { data: unknown; error: { message: string } | null };
-  const sender = (answers: Answer[]) => {
-    const sent: Array<Record<string, unknown>> = [];
-    return {
-      sent,
-      send: async (fields: Record<string, unknown>) => {
-        sent.push(fields);
-        return answers[sent.length - 1] ?? { data: null, error: { message: "no more answers" } };
-      },
-    };
-  };
-  const fields = { title: "x", estimate_minutes: 300, section_id: "s1", due_on: "2026-11-08" };
-
-  it("before TV-D10: the estimate goes as duration_minutes, the section is dropped", async () => {
-    const { sent, send } = sender([
-      { data: null, error: { message: 'Tasks have no field "estimate_minutes".' } },
-      { data: { id: "t1" }, error: null },
-    ]);
-    const res = await withFieldFallback(fields, send);
-    expect(res.error).toBeNull();
-    expect(sent[1]).toEqual({ title: "x", duration_minutes: 300, due_on: "2026-11-08" });
-  });
-
-  it("before TV-D9 too: then the date goes as the old instant", async () => {
-    const { sent, send } = sender([
-      { data: null, error: { message: 'Tasks have no field "section_id".' } },
-      { data: null, error: { message: 'Tasks have no field "due_on".' } },
-      { data: { id: "t1" }, error: null },
-    ]);
-    const res = await withFieldFallback(fields, send);
-    expect(res.error).toBeNull();
-    expect(sent).toHaveLength(3);
-    expect(Object.keys(sent[2]!).sort()).toEqual(["due_date", "duration_minutes", "title"]);
-  });
-
-  it("a current database gets one call, as it was", async () => {
-    const { sent, send } = sender([{ data: { id: "t1" }, error: null }]);
-    await withFieldFallback(fields, send);
-    expect(sent).toEqual([fields]);
   });
 });

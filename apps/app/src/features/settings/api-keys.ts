@@ -220,6 +220,62 @@ export function ceilingHint(input: {
     : `You can only view ${label} yourself.`;
 }
 
+/** Per module: the highest level that may be chosen, and why anything above it is off. */
+export type KeyCeilings = Record<McpKeyModule, { max: McpKeyScope; why: string | null }>;
+
+/** Each module's cap for a key acting as this person (what they can give it). */
+export function keyScopeCaps(actor: KeyActor | null): McpKeyScopes {
+  return Object.fromEntries(
+    MCP_KEY_MODULES.map((module) => [module, keyScopeCap(actor, module)]),
+  ) as McpKeyScopes;
+}
+
+/**
+ * The access card's ceilings for a key (or a connection) holding `stored`:
+ * scopeCeiling per module, with the row's own reason when it is the
+ * person's own and capped. Someone else's key gets one reason above the
+ * rows instead, so its rows carry none.
+ */
+export function keyCeilings(input: {
+  stored: Readonly<McpKeyScopes>;
+  isMine: boolean;
+  ownerName: string;
+  myCaps: Readonly<McpKeyScopes>;
+}): KeyCeilings {
+  return Object.fromEntries(
+    MCP_KEY_MODULES.map((module) => {
+      const myCap = input.myCaps[module];
+      const max = scopeCeiling({ stored: input.stored[module], isCreator: input.isMine, myCap });
+      const why =
+        input.isMine && rank(max) < rank("edit")
+          ? ceilingHint({ module, isCreator: true, myCap, creatorName: input.ownerName })
+          : null;
+      return [module, { max, why }];
+    }),
+  ) as KeyCeilings;
+}
+
+/** A row is a connected app (MCPO-3), not a pasted key: no secret, its own wording. */
+export function isConnectedApp(key: { oauthClientId?: string | null }): boolean {
+  return typeof key.oauthClientId === "string" && key.oauthClientId.length > 0;
+}
+
+/** The Disconnect confirm's question and consequence (specs/mcp-oauth.md, Settings → API keys). */
+export function disconnectCopy(name: string): { title: string; body: string } {
+  const app = name.trim() || "this app";
+  return {
+    title: `Disconnect ${app}?`,
+    body: "It loses access immediately; it can sign in again later.",
+  };
+}
+
+/** How people connect an app by URL, the Connector card's and Integrations' lead (AC11). */
+export const CONNECT_BY_URL_LEAD =
+  "Add Moduo as a connector in Claude, ChatGPT or Claude Code with this URL. You'll sign in and choose what it can reach.";
+
+/** Where pasted keys live now: the secondary path. */
+export const KEYS_FOR_SCRIPTS_LABEL = "For scripts and tools that can't sign in";
+
 // ── Expiry and staleness (API-KEY-EXP-1) ─────────────────────────────────────
 
 /** How long a new key lasts. 90 days is where the picker starts; the server takes 1–730. */
@@ -260,9 +316,16 @@ export function shortDate(iso: string): string {
 }
 
 export function keyLifecycle(
-  key: { createdAt: string; lastUsedAt: string | null; expiresAt: string | null },
+  key: {
+    createdAt: string;
+    lastUsedAt: string | null;
+    expiresAt: string | null;
+    /** A connected app is disconnected, not revoked. */
+    oauthClientId?: string | null;
+  },
   now: number = Date.now(),
 ): KeyLifecycle {
+  const cutOff = isConnectedApp(key) ? "Disconnect" : "Revoke";
   const expiresMs = key.expiresAt ? Date.parse(key.expiresAt) : null;
   // An unreadable expiry is refused by the connector, so it reads as expired here too.
   if (key.expiresAt && (expiresMs === null || Number.isNaN(expiresMs) || expiresMs <= now)) {
@@ -294,8 +357,8 @@ export function keyLifecycle(
   const staleNote =
     idleDays >= STALE_KEY_DAYS
       ? key.lastUsedAt
-        ? `Unused for ${idleDays} days. Revoke it if you no longer need it.`
-        : `Never used in ${idleDays} days. Revoke it if you no longer need it.`
+        ? `Unused for ${idleDays} days. ${cutOff} it if you no longer need it.`
+        : `Never used in ${idleDays} days. ${cutOff} it if you no longer need it.`
       : null;
   return { status, expiryLine, staleNote };
 }

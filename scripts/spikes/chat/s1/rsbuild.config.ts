@@ -5,6 +5,7 @@
 //     --config scripts/spikes/chat/s1/rsbuild.config.ts --host 127.0.0.1 --port 8391
 
 import { defineConfig, mergeRsbuildConfig } from "@rsbuild/core";
+
 import base from "../../../../rsbuild.config";
 
 export default mergeRsbuildConfig(

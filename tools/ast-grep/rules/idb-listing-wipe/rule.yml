@@ -1,0 +1,38 @@
+id: idb-listing-wipe
+language: tsx
+severity: error
+message: "`indexedDB.databases()` returns nothing in browsers without it, so a wipe that finds databases only through it leaves the previous person's data on disk."
+note: |
+  Name the databases from what the records say (a person's `noteState` cursors give
+  `docDbName(owner, noteId)`), and let the listing only add names the records don't
+  know. See apps/app/src/features/notes/sync/people.ts (SK-C4).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/testing-idb.ts"
+rule:
+  kind: member_expression
+  regex: ^indexedDB\.databases$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: idb-listing-wipe-ts
+language: typescript
+severity: error
+message: "`indexedDB.databases()` returns nothing in browsers without it, so a wipe that finds databases only through it leaves the previous person's data on disk."
+note: |
+  Name the databases from what the records say (a person's `noteState` cursors give
+  `docDbName(owner, noteId)`), and let the listing only add names the records don't
+  know. See apps/app/src/features/notes/sync/people.ts (SK-C4).
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+ignores:
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/testing-idb.ts"
+rule:
+  kind: member_expression
+  regex: ^indexedDB\.databases$

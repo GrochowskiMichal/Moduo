@@ -59,9 +59,13 @@ supabase/.temp/
 !.claude/commands/
 !.claude/hooks/
 !.claude/settings.json
+!.claude/settings.lane.json
+!.claude/settings.implement.json
+!.claude/sandbox/
 !.claude/agents/
 !.claude/rules/
 !.claude/workflows/
+!.claude/routines/
 
 # design-sync (claude.ai/design) — transient build/verification state
 .ds-sync/
@@ -73,6 +77,10 @@ ds-bundle/
 .design-sync/ds-types/
 .design-sync/*.log
 .claude/SESSION_TITLE
+# The Moduo task this worktree's agent claimed (moduo-agent skill, moduo-report.sh)
+.claude/MODUO_TASK
+# /ship's one-time release approvals (guard-release.sh), never committed
+.claude/release-approved/
 
 # Email live-test credentials (EM-1 imap_live harness — MODUO_TEST_IMAP_CREDS_PATH)
 *.creds.json
@@ -107,3 +115,14 @@ playwright-report/
 
 # Storybook static build (bun run build-storybook)
 storybook-static/
+
+# Deno writes a lock wherever it runs; the real one is supabase/functions/deno.lock.
+/deno.lock
+
+# Product lab dossiers (/product-lab, /product-jury): screenshots of seeded data, never source.
+.lab/
+# A/B rig results, transcripts and diffs (scripts/harness-ab/)
+.harness-ab/
+
+# Mail integration harness data (scripts/mail/test-server.sh)
+.mail-it/

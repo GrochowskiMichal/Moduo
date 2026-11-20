@@ -5,6 +5,7 @@
 // conversation without a subscription of its own.
 
 import { useEffect, useState } from "react";
+
 import type { ChatHistoryEntry, ChatMember, ChatMessage, ChatRuntime } from "../model";
 
 export type ConversationDetails = {
@@ -37,7 +38,7 @@ export function useConversationDetails(
     details: NONE,
   });
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: `refresh` is the re-read trigger
+  // `refresh` is the re-read trigger.
   useEffect(() => {
     if (!chat || !workspaceId || !channelId) return;
     let live = true;

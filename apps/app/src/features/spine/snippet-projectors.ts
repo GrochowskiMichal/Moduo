@@ -39,7 +39,6 @@ export type TaskSnippetMeta = {
 export type NoteSnippetMeta = {
   kind: "note";
   updatedAt: string;
-  isPinned: boolean;
   isArchived: boolean;
 };
 
@@ -62,10 +61,7 @@ export type EmailSnippetMeta = {
 
 /** The per-entity live bag a hub hook may hand a projector, keyed by type. */
 export type HubSnippetMeta =
-  | TaskSnippetMeta
-  | NoteSnippetMeta
-  | EventSnippetMeta
-  | EmailSnippetMeta;
+  TaskSnippetMeta | NoteSnippetMeta | EventSnippetMeta | EmailSnippetMeta;
 
 /** Context a projector reads beyond the registry record. */
 export type SnippetContext = {

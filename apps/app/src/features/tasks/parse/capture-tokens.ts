@@ -19,7 +19,7 @@
 import type { EntityRef } from "../../../lib/entity-links";
 import { findSigilWords, isoDay } from "../../spine/grammar";
 import type { PriorityLevel, RecurrenceRule } from "../model";
-import { type ParsedCapture, parseCapture } from "./capture-parser";
+import { parseCapture, type ParsedCapture } from "./capture-parser";
 
 /** A recognised token in a capture title. */
 export type CaptureToken =

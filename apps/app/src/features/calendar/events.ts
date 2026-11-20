@@ -2,7 +2,12 @@
 // calendar_events table) and the pure occurrence selectors that put event
 // chips on the grid. Mirrors the lens: selectors in, chips out, no state.
 
+import type { CalendarItemKind, ConferenceProvider } from "@contracts/vocabularies";
+
 import type { Truncation } from "../../lib/paged-select";
+import { formatTime } from "../../lib/time-format";
+import { showsLock } from "./event-view";
+import { type CalendarHue, normalizeHue } from "./hue";
 import { addDays, localDayKey, startOfLocalDay, type VisibleRange } from "./lens";
 import { expandEventOccurrences } from "./recurrence-expand";
 
@@ -21,13 +26,52 @@ export type CalendarEventModel = {
   allDay: boolean;
   rrule: string | null;
   status: string;
-  /** Join URL when the event was created from a booking link. */
+  /** The place. Before CALR-6 a booking's join URL sat here; now it moves to `conferenceUrl`. */
   location?: string | null;
   color: string | null;
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
+  // ── Event data v2 (CALR-6). Optional: many fixtures build the model without them.
+  /** The calendars row the event is on (null = not resolved yet). */
+  calendarRef?: string | null;
+  isPrivate?: boolean;
+  /** The meeting link, kept apart from the place. */
+  conferenceUrl?: string | null;
+  conferenceProvider?: ConferenceProvider | null;
+  kind?: CalendarItemKind;
+  /** The task focus time is for (kind "focus" only). */
+  focusTaskId?: string | null;
+  /** The offer a hold is for (kind "hold" only, CALR-19). */
+  offerId?: string | null;
+  attendees?: CalendarAttendee[];
+  // ── One occurrence (CALR-11)
+  /** Set on an override: the Moduo series this row replaces one occurrence of. */
+  seriesId?: string | null;
+  /** The occurrence an override (or a Google instance) replaces, as an ISO instant. */
+  originalStart?: string | null;
+  /** On a series: the occurrences it no longer draws. */
+  exdates?: string[];
+  /** A Google instance's recurringEventId. */
+  externalSeriesId?: string | null;
+  /** Google's iCalUID: the same meeting through two logins shares it. */
+  icalUid?: string | null;
+  /** Google's organizer.self: you organize it (null: unknown). */
+  isOrganizer?: boolean | null;
 };
+
+/** One person on an event, as calendar_op_event_create/update store them. */
+export type CalendarAttendee = {
+  email: string;
+  name: string;
+  /** Google's response status words ("needsAction", "accepted", …). */
+  status: string;
+  /** The account's own person (Google's `self`). */
+  self?: boolean;
+};
+
+/** A person as the create/update ops take them: name and status are optional. */
+export type CalendarAttendeeInput = { email: string; name?: string; status?: string };
 
 export type CalendarAccountModel = {
   id: string;
@@ -43,6 +87,12 @@ export type CalendarAccountModel = {
   /** CAL-8: the CalDAV/ICS connection descriptor JSON (see `CalendarSyncDescriptor` in sync.ts); null for OAuth/native rows. */
   syncToken: string | null;
   deletedAt: string | null;
+  /** CALR-20: Google doesn't let you write this calendar. */
+  readOnly?: boolean;
+  /** CALR-20: counts as busy for new booking links. */
+  busyDefault?: boolean;
+  /** CALR-20: why the account needs attention (Google's `invalid_grant` for reauth). */
+  lastError?: string | null;
 };
 
 export function isNativeEvent(e: Pick<CalendarEventModel, "sourceAccountId">): boolean {
@@ -59,6 +109,24 @@ export type CalendarModuleBundle = {
   truncated: Truncation[];
 };
 
+/**
+ * One live change to the event list (CALR-7): an inserted or updated event
+ * (soft-deleted ones included, so the merge can drop them), or the id of a
+ * hard-deleted one.
+ */
+export type CalendarLiveChange =
+  { kind: "upsert"; event: CalendarEventModel } | { kind: "delete"; id: string };
+
+/**
+ * What `calendar.listenLive` hands its listener: a change, or a `resync` asking
+ * for a refetch — `reconnect` after the socket rejoined or the network came
+ * back (changes may have been missed), `return` when the window comes back
+ * into view or focus.
+ */
+export type CalendarLiveEvent =
+  | { type: "change"; change: CalendarLiveChange }
+  | { type: "resync"; reason: "reconnect" | "return" };
+
 /** Only-present keys apply (the contacts_op_set_details pattern). */
 export type CalendarEventPatch = {
   title?: string;
@@ -68,6 +136,22 @@ export type CalendarEventPatch = {
   allDay?: boolean;
   /** null clears the recurrence (one-off again). */
   rrule?: string | null;
+  // ── Event data v2 (CALR-6)
+  /** The calendars row id to move the event to; null = back to your Moduo calendar. */
+  calendarId?: string | null;
+  location?: string | null;
+  /** Replaces the people as a whole. */
+  attendees?: CalendarAttendeeInput[];
+  /** null removes the link and its provider. */
+  conferenceUrl?: string | null;
+  /** Omit to read it from the link. */
+  conferenceProvider?: ConferenceProvider | null;
+  isPrivate?: boolean;
+  /** "hold" is refused (holds come from offers); leaving "focus" lets the task go. */
+  kind?: CalendarItemKind;
+  focusTaskId?: string | null;
+  /** Google events only (CALR-8): add a Meet link, or remove the one there. Never sent to the Moduo op. */
+  meet?: "add" | "remove";
 };
 
 /** One provider event as the desktop sync engine hands it to the mirror op. */
@@ -81,8 +165,22 @@ export type CalendarMirrorEventInput = {
   status?: string;
   description?: string;
   calendarId?: string;
-  /** The meeting link or place. Sent only when the provider has one. */
+  /** The place. Sent only when the provider has one. */
   location?: string;
+  /** The provider's meeting link (CALR-6). Sent only when there is one; absent keeps the stored link. */
+  conferenceUrl?: string | null;
+  /** The provider's privacy (CALR-8). Absent keeps the stored value. */
+  isPrivate?: boolean;
+  /** The provider's guests (CALR-8), the list as a whole. Absent keeps the stored ones. */
+  attendees?: CalendarAttendee[];
+  /** A repeat instance's recurringEventId (CALR-11). Absent keeps the stored one. */
+  externalSeriesId?: string;
+  /** A repeat instance's originalStartTime as an ISO instant (CALR-11). Absent keeps the stored one. */
+  originalStart?: string;
+  /** Google's iCalUID. Absent keeps the stored one. */
+  iCalUID?: string;
+  /** Google's organizer.self. Sent only when Google names an organizer; absent keeps the stored one. */
+  isOrganizer?: boolean;
 };
 
 /** One rendered occurrence of an event (recurring events yield several). */
@@ -96,14 +194,51 @@ export type EventChip = {
   dayKey: string;
   allDay: boolean;
   external: boolean;
+  /** Can't be moved, resized or deleted here (CALR-8: a Google event you connected can). */
+  readOnly: boolean;
   recurring: boolean;
   /** The mirrored account this chip belongs to (null = native Moduo) — the
    * grid resolves its hue from this for external attribution (CAL-6). */
   sourceAccountId: string | null;
+  /** The event's own stored color (a label name for native events). */
+  color: string | null;
+  /** An overnight piece: the event began on an earlier day (its start), or
+   * goes on into a later one (its end). Null when it starts / ends today. */
+  continuesFromMs: number | null;
+  continuesToMs: number | null;
+  /** Your own private event: the chip carries a lock (CALR-15). */
+  locked: boolean;
+  /** Focus time (CALR-14), and whether it holds a task (a teammate's never shows one). */
+  focus?: boolean;
+  holdsTask?: boolean;
+  /** An offer's held time (CALR-19): drawn dashed, its card releases the holds. */
+  held?: boolean;
 };
 
+/** The calendar hue an event chip takes (AC7): a mirrored event its
+ * account's, a native one its own stored label (Your calendar is gray). */
+export function eventHue(
+  chip: Pick<EventChip, "sourceAccountId" | "color">,
+  accountHues: Record<string, string>,
+): CalendarHue {
+  return normalizeHue(chip.sourceAccountId ? accountHues[chip.sourceAccountId] : chip.color);
+}
+
+/** "→ Thu 7:10" on the first day of an overnight event, "from Wed 22:40" on
+ * the next; null for an event that starts and ends on its day (AC9). */
+export function continuationLabel(
+  chip: Pick<EventChip, "continuesFromMs" | "continuesToMs">,
+  time: (ms: number) => string = formatTime,
+): string | null {
+  const day = (ms: number) => new Date(ms).toLocaleDateString(undefined, { weekday: "short" });
+  if (chip.continuesFromMs != null)
+    return `from ${day(chip.continuesFromMs)} ${time(chip.continuesFromMs)}`;
+  if (chip.continuesToMs != null) return `→ ${day(chip.continuesToMs)} ${time(chip.continuesToMs)}`;
+  return null;
+}
+
 export type EventChipsByDay = {
-  /** Timed chips per local day (assigned to their start's day, like blocks). */
+  /** Timed chips per local day (an overnight event has a piece on each day). */
   timed: Map<string, EventChip[]>;
   /** All-day chips per local day — one chip per covered day. */
   allDay: Map<string, EventChip[]>;
@@ -120,47 +255,101 @@ function push(map: Map<string, EventChip[]>, key: string, chip: EventChip) {
  * and deleted events never render; a hidden weekend day simply has no column
  * so its key is never read.
  */
+type ChipBase = Omit<EventChip, "dayKey">;
+
+function occurrenceChip(
+  event: CalendarEventModel,
+  occ: { startMs: number; endMs: number },
+  isWritable: (event: CalendarEventModel) => boolean,
+  me: string | null,
+): ChipBase {
+  return {
+    eventId: event.id,
+    occurrenceKey: `${event.id}:${occ.startMs}`,
+    title: event.title,
+    startMs: occ.startMs,
+    endMs: occ.endMs,
+    allDay: event.allDay,
+    external: !isNativeEvent(event),
+    readOnly: !isWritable(event),
+    // An override and a Google instance are occurrences of a repeat too (CALR-11).
+    recurring: Boolean(event.rrule || event.seriesId || event.externalSeriesId),
+    sourceAccountId: event.sourceAccountId,
+    color: event.color,
+    continuesFromMs: null,
+    continuesToMs: null,
+    locked: showsLock(event, me),
+    focus: event.kind === "focus",
+    holdsTask: event.kind === "focus" && !!event.focusTaskId,
+    held: event.kind === "hold",
+  };
+}
+
+/** One all-day chip per covered local day, END-EXCLUSIVE on exact midnights
+ * (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only). Provider
+ * all-day events arriving as UTC midnights still spill a day east of UTC —
+ * CAL-6's mirror mapper normalizes them to local dates. */
+function pushAllDayPieces(into: Map<string, EventChip[]>, base: ChipBase, range: VisibleRange) {
+  const lastCovered = startOfLocalDay(new Date(Math.min(base.endMs - 1, range.endMs - 1)));
+  let day = startOfLocalDay(new Date(Math.max(base.startMs, range.startMs)));
+  while (day.getTime() <= lastCovered.getTime()) {
+    push(into, localDayKey(day), { ...base, dayKey: localDayKey(day) });
+    day = addDays(day, 1);
+  }
+}
+
+/** One timed piece per local day the event touches (overnight events cross
+ * midnight, AC9), end-exclusive so an event ending at midnight stays on its
+ * day. Each piece keeps the occurrence's own start and end. */
+function pushTimedPieces(into: Map<string, EventChip[]>, base: ChipBase, range: VisibleRange) {
+  const from = Math.max(base.startMs, range.startMs);
+  const lastDay = startOfLocalDay(new Date(Math.max(from, Math.min(base.endMs, range.endMs) - 1)));
+  let day = startOfLocalDay(new Date(from));
+  while (day.getTime() <= lastDay.getTime()) {
+    const next = addDays(day, 1);
+    const dayKey = localDayKey(day);
+    push(into, dayKey, {
+      ...base,
+      dayKey,
+      continuesFromMs: base.startMs < day.getTime() ? base.startMs : null,
+      continuesToMs: base.endMs > next.getTime() ? base.endMs : null,
+    });
+    day = next;
+  }
+}
+
+/** `isWritable` says which events can change here; omitted = native events only.
+ * `me` puts the lock on your own private events. */
 export function eventChipsInRange(
   events: CalendarEventModel[],
   range: VisibleRange,
+  isWritable: (event: CalendarEventModel) => boolean = isNativeEvent,
+  me: string | null = null,
 ): EventChipsByDay {
   const timed = new Map<string, EventChip[]>();
   const allDay = new Map<string, EventChip[]>();
+  // An override goes with its series: a deleted series takes it off the grid
+  // even before its own row's delete arrives.
+  const deleted = new Set(events.filter((e) => e.deletedAt).map((e) => e.id));
   for (const event of events) {
     if (event.deletedAt) continue;
     if (event.status === "cancelled") continue;
+    if (event.seriesId && deleted.has(event.seriesId)) continue;
     const occurrences = expandEventOccurrences(
-      { id: event.id, startsAt: event.startsAt, endsAt: event.endsAt, rrule: event.rrule },
+      {
+        id: event.id,
+        startsAt: event.startsAt,
+        endsAt: event.endsAt,
+        rrule: event.rrule,
+        exdates: event.exdates,
+      },
       range.startMs,
       range.endMs,
     );
     for (const occ of occurrences) {
-      const base = {
-        eventId: event.id,
-        occurrenceKey: `${event.id}:${occ.startMs}`,
-        title: event.title,
-        startMs: occ.startMs,
-        endMs: occ.endMs,
-        allDay: event.allDay,
-        external: !isNativeEvent(event),
-        recurring: Boolean(event.rrule),
-        sourceAccountId: event.sourceAccountId,
-      };
-      if (event.allDay) {
-        // One chip per covered local day, END-EXCLUSIVE on exact midnights
-        // (a native 1-day event = [Jul 2 00:00, Jul 3 00:00) → Jul 2 only).
-        // Provider all-day events arriving as UTC midnights still spill a day
-        // east of UTC — CAL-6's mirror mapper normalizes them to local dates.
-        const lastCovered = startOfLocalDay(new Date(Math.min(occ.endMs - 1, range.endMs - 1)));
-        let day = startOfLocalDay(new Date(Math.max(occ.startMs, range.startMs)));
-        while (day.getTime() <= lastCovered.getTime()) {
-          push(allDay, localDayKey(day), { ...base, dayKey: localDayKey(day) });
-          day = addDays(day, 1);
-        }
-      } else {
-        const dayKey = localDayKey(new Date(occ.startMs));
-        push(timed, dayKey, { ...base, dayKey });
-      }
+      const base = occurrenceChip(event, occ, isWritable, me);
+      if (event.allDay) pushAllDayPieces(allDay, base, range);
+      else pushTimedPieces(timed, base, range);
     }
   }
   for (const list of timed.values()) list.sort((a, b) => a.startMs - b.startMs);

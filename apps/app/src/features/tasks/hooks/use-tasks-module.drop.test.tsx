@@ -6,7 +6,7 @@
 // the fields back and never overwrites a newer change.
 
 import { describe, expect, it, rs } from "@rstest/core";
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { makeTask } from "../helpers";
@@ -23,7 +23,7 @@ rs.mock("sonner", () => ({ toast: toastMock }));
 // Live updates (TV-D5) need a socket; these tests drive the hook without one.
 rs.mock("../realtime", () => ({ listenTasksLive: () => () => {} }));
 
-import { useTasksModule } from "./use-tasks-module";
+import { renderTasksHook } from "../testing/tasks-hook";
 
 const bucket = (id: string, over: Partial<Bucket> = {}): Bucket => ({
   id,
@@ -125,9 +125,11 @@ async function mount(tasks: Task[], opts: { failStatus?: boolean } = {}) {
   toastMock.mockClear();
   toastMock.error.mockClear();
   const fake = fakeRuntime(tasks, opts);
-  const hook = renderHook(() =>
-    useTasksModule(fake.runtime, { userId: "u1", workspaceId: "w1", modulePermission: "edit" }),
-  );
+  const hook = renderTasksHook(fake.runtime, {
+    userId: "u1",
+    workspaceId: "w1",
+    modulePermission: "edit",
+  });
   await waitFor(() => expect(hook.result.current.loading).toBe(false));
   return { ...fake, hook };
 }
@@ -147,7 +149,7 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
     ]);
     let saved: boolean | undefined;
     await act(async () => {
-      saved = await hook.result.current.dropTask(
+      saved = await hook.result.current.commands.dropTask(
         { taskId: "t", parentId: "p", position: "0000000015", status: "done", assigneeId: null },
         "Moved to Done",
       );
@@ -174,7 +176,10 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
       task("y", "0000000060"),
     ]);
     await act(async () => {
-      await hook.result.current.dropTask({ taskId: "parent", bucketId: "p2" }, "Moved to p2");
+      await hook.result.current.commands.dropTask(
+        { taskId: "parent", bucketId: "p2" },
+        "Moved to p2",
+      );
     });
     // One move op for the parent: the server carries the subtasks (TV-U10:
     // no write per subtask, so one you can only view never fails the drop).
@@ -193,7 +198,7 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
     const { hook } = await mount([task("t", "0000000010")], { failStatus: true });
     let saved: boolean | undefined;
     await act(async () => {
-      saved = await hook.result.current.dropTask(
+      saved = await hook.result.current.commands.dropTask(
         { taskId: "t", status: "in_progress" },
         "Moved to In progress",
       );
@@ -206,7 +211,7 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
   it("Undo puts back what the drop changed", async () => {
     const { hook, rows } = await mount([task("t", "0000000010", { priority: null })]);
     await act(async () => {
-      await hook.result.current.dropTask(
+      await hook.result.current.commands.dropTask(
         { taskId: "t", priority: "high", position: "0000000099" },
         "Set to High priority",
       );
@@ -221,14 +226,14 @@ describe("dropTask — one drop, its writes in order, one Undo", () => {
   it("Undo never overwrites a newer change, and says so", async () => {
     const { hook, rows, api } = await mount([task("t", "0000000010")]);
     await act(async () => {
-      await hook.result.current.dropTask(
+      await hook.result.current.commands.dropTask(
         { taskId: "t", status: "in_progress", position: "0000000099" },
         "Moved to In progress",
       );
     });
     // Someone finishes it meanwhile (here: another edit through the hook).
     await act(async () => {
-      await hook.result.current.dropTask({ taskId: "t", status: "done" }, "Moved to Done");
+      await hook.result.current.commands.dropTask({ taskId: "t", status: "done" }, "Moved to Done");
     });
     api.opSetStatus.mockClear();
     act(() => undoFor("Moved to In progress").action?.onClick());

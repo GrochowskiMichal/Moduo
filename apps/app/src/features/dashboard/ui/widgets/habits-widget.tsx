@@ -7,6 +7,7 @@
 import { Check, Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import { todayStr } from "@/features/tasks/helpers";
 import { getRuntime } from "@/lib/runtime";
 import type { HabitRow } from "@/lib/runtime.types";
@@ -15,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 import {
   requestDashboardDataRefresh,
-  useDashboardData,
+  useDashboardSource,
 } from "../../context/dashboard-data-context";
 import {
   computeStreak,
@@ -153,7 +154,8 @@ function AddHabit({ onAdd }: { onAdd: (name: string) => void }) {
 }
 
 export function HabitsWidget({ size }: WidgetComponentProps) {
-  const { habits: source, workspaceId } = useDashboardData();
+  const source = useDashboardSource("habits");
+  const workspaceId = useDashboardSource("workspaceId");
   const density = useDensity();
   const today = todayStr();
 

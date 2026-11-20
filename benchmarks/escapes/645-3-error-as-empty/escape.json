@@ -1,0 +1,20 @@
+{
+  "id": "645-3-error-as-empty",
+  "title": "A failed notes DB open reads as \"nothing unsynced\" to the Reset guard",
+  "mechanism": "error-as-empty",
+  "sites": [
+    "apps/app/src/features/notes/sync/idb.ts",
+    "apps/app/src/features/settings/sections/advanced-section.tsx"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/idb-pending.test.ts",
+      "name": "is \"unknown\" when the notes database fails to open, so the reset stays blocked",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/idb-pending.test.ts"
+    }
+  ],
+  "pr": 645,
+  "fixCommit": "fd2ac715c706763af7e76c11a8d2dcfa7ae0a7e3",
+  "foundBy": "HV-12 ast-grep rule sync-catch-returns-empty, 2026-10-23"
+}

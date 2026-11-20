@@ -5,7 +5,7 @@
 // scope-aware empty state and a note under the toolbar.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { useState } from "react";
 
 rs.mock("../assignees", () => ({
@@ -31,6 +31,7 @@ rs.mock("../assignees", () => ({
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { makeTask, type TaskGroup } from "../helpers";
 import type { Task } from "../model";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import type { ListExtraGroup, ListGrouping } from "./list-extensions";
 import { TaskListView } from "./task-list-view";
 
@@ -59,20 +60,8 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 type ListProps = Partial<Parameters<typeof TaskListView>[0]>;
 
-function renderList(tasks: Task[], extra: ListProps = {}) {
+async function renderList(tasks: Task[], extra: ListProps = {}) {
   const api = {
-    loaded: true,
-    tasks,
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map<string, string[]>(),
-    subtasksByParent: new Map<string, Task[]>(),
-    subtaskProgressByTask: new Map(),
-    tagsByTask: new Map(),
-    blockedTaskIds: new Set<string>(),
-    blockersByTask: new Map(),
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    statuses: [],
     toggleDone: rs.fn(),
     toggleQueue: rs.fn(),
     patchTask: rs.fn(),
@@ -97,17 +86,17 @@ function renderList(tasks: Task[], extra: ListProps = {}) {
         bucketNameById={() => "Work"}
         canEdit
         onRequestCapture={() => {}}
-        api={api as never}
         {...extra}
         selectedTaskId={selected}
         onSelectTask={setSelected}
       />
     );
   }
-  render(
+  await renderWithTasks(
     <TooltipProvider>
       <Page />
     </TooltipProvider>,
+    { seed: { tasks }, workspaceId: "w", commands: api },
   );
   return { api };
 }
@@ -134,15 +123,15 @@ function days(onDrop = rs.fn()): ListGrouping {
 }
 
 describe("a view's own grouping (Upcoming's days)", () => {
-  it("draws its groups in order, an empty one keeping its header and line", () => {
-    renderList([task("a", { dueDate: "2026-10-14T00:00:00.000Z" }), task("b")], {
+  it("draws its groups in order, an empty one keeping its header and line", async () => {
+    await renderList([task("a", { dueDate: "2026-10-14T00:00:00.000Z" }), task("b")], {
       grouping: days(),
     });
     expect(headers()).toEqual(["Today· 1 here", "Thu· 1 here", "Fri· 0 here"]);
   });
 
-  it("words each row's date its own way, a dateless row too", () => {
-    renderList([task("a", { dueDate: "2026-10-14T00:00:00.000Z" }), task("b")], {
+  it("words each row's date its own way, a dateless row too", async () => {
+    await renderList([task("a", { dueDate: "2026-10-14T00:00:00.000Z" }), task("b")], {
       grouping: days(),
     });
     const row = screen.getByRole("button", { name: "Task a" }).closest('[role="row"]');
@@ -151,9 +140,9 @@ describe("a view's own grouping (Upcoming's days)", () => {
     expect(dateless?.textContent).toContain("at b");
   });
 
-  it("asks the view's keys first, and the List's only when the view passes", () => {
+  it("asks the view's keys first, and the List's only when the view passes", async () => {
     const onViewKey = rs.fn((e: { key: string }, _selected: Task | null) => e.key === "t");
-    const { api } = renderList([task("a")], {
+    const { api } = await renderList([task("a")], {
       grouping: days(),
       onViewKey: onViewKey as never,
       selectedTaskId: "a",
@@ -181,13 +170,16 @@ describe("extra groups (My tasks' team block, the Inbox's snoozed)", () => {
     ...over,
   });
 
-  it("leads with the team block, its tasks in no other group, the rest behind Show n more", () => {
-    renderList([task("t1"), task("t2"), task("t3"), task("mine", { status: "in_progress" })], {
-      groupBy: "status",
-      extraGroups: [block()],
-      takeableIds: new Set(["t1", "t2", "t3"]),
-      onTake: rs.fn(),
-    });
+  it("leads with the team block, its tasks in no other group, the rest behind Show n more", async () => {
+    await renderList(
+      [task("t1"), task("t2"), task("t3"), task("mine", { status: "in_progress" })],
+      {
+        groupBy: "status",
+        extraGroups: [block()],
+        takeableIds: new Set(["t1", "t2", "t3"]),
+        onTake: rs.fn(),
+      },
+    );
     expect(headers()[0]).toBe("For Design· 3 unclaimed");
     expect(headers().slice(1)).toEqual(["In progress1"]);
     expect(screen.queryByRole("button", { name: "Task t3" })).toBeNull();
@@ -196,9 +188,9 @@ describe("extra groups (My tasks' team block, the Inbox's snoozed)", () => {
     expect(screen.getByRole("button", { name: "Show fewer" })).toBeTruthy();
   });
 
-  it("Take it on a team row takes it", () => {
+  it("Take it on a team row takes it", async () => {
     const onTake = rs.fn();
-    renderList([task("t1"), task("t2")], {
+    await renderList([task("t1"), task("t2")], {
       extraGroups: [block({ taskIds: ["t1", "t2"], limit: 5 })],
       takeableIds: new Set(["t1", "t2"]),
       onTake,
@@ -208,8 +200,8 @@ describe("extra groups (My tasks' team block, the Inbox's snoozed)", () => {
     expect(onTake).toHaveBeenCalledWith("t1");
   });
 
-  it("a folded group at the end keeps its rows out of sight until opened", () => {
-    renderList([task("a"), task("z")], {
+  it("a folded group at the end keeps its rows out of sight until opened", async () => {
+    await renderList([task("a"), task("z")], {
       extraGroups: [
         { key: "snoozed", place: "trail", label: "Snoozed", taskIds: ["z"], folded: true },
       ],
@@ -222,8 +214,8 @@ describe("extra groups (My tasks' team block, the Inbox's snoozed)", () => {
 });
 
 describe("states", () => {
-  it("an empty view says what the view gave it, with its note under the toolbar", () => {
-    renderList([], {
+  it("an empty view says what the view gave it, with its note under the toolbar", async () => {
+    await renderList([], {
       emptyState: <p>Inbox is clear</p>,
       note: "Only you see your Inbox.",
     });

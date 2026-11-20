@@ -1,0 +1,24 @@
+{
+  "id": "645-chat-edit",
+  "title": "A Chat edit jumps its own message's waiting send (MOD-562)",
+  "source": {
+    "pr": 645,
+    "escape": "645-2-queue-bypass"
+  },
+  "base": "adddc0de3099e0524aa2ee6ab56a9e19d10e5a4c",
+  "fix": "fd2ac715c706763af7e76c11a8d2dcfa7ae0a7e3",
+  "prompt": "Bug (MOD-562): in Chat (apps/app/src/features/chat/store/store.ts), editing a message that is still being sent, or still waiting for the network, loses the edit: the edit call goes out before the message exists on the server, and the server ends up with the original words. The same happens when the send's answer was lost and the message is resent, and a delete in that state never reaches the server. An edit of a message still in the outbox must change the words the send carries; an edit or delete of one whose send already went out must be applied on the server once the message lands. Fix it and add regression tests. Don't commit or push.",
+  "expect": "fix",
+  "oracle": {
+    "files": ["apps/app/src/features/chat/store/store.509-2.variant.test.ts"],
+    "checks": [
+      {
+        "name": "edits and deletes follow their send",
+        "run": "bun run --cwd apps/app test src/features/chat/store/store.509-2.variant.test.ts"
+      }
+    ],
+    "env": {
+      "MODUO_HUNT": "1"
+    }
+  }
+}

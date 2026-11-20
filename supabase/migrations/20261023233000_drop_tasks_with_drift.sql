@@ -1,0 +1,16 @@
+-- Drop the legacy view `tasks_with_drift`, ahead of the rest of TV-D7's
+-- contract cleanup.
+--
+-- It is the June tasks-module view: a fixed list of `tasks` columns plus a
+-- computed `drifted` flag (scheduled in the past, not done). Tasks v3 replaced
+-- drift with `tasks__late` and the `tasks_late` computed field (TV-D9).
+--
+-- TV-D7 waits for old desktop builds to age out because they still write the old
+-- columns. That wait doesn't apply here: no build ever read this view. Git
+-- history across every branch and release tag shows no client query, Edge
+-- Function or desktop code naming it, only the generated types.
+--
+-- Probed on prod 2026-10-23 before writing this: no view, function body, policy
+-- in any schema, cron job or publication references it, and nothing depends on
+-- it. Re-runnable.
+DROP VIEW IF EXISTS public.tasks_with_drift;

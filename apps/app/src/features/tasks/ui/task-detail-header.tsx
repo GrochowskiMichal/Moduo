@@ -65,20 +65,18 @@ import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { branchName } from "../detail-properties";
 import { duplicateFields } from "../duplicate";
 import { isUnfinished } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import { importedFromLine } from "../importers/plan";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
 import { bucketDotColor } from "../sidebar";
+import { useTaskCommands, useTasksSelector, useTaskTags } from "../tasks-context";
 import { ClaimAvatar, useClaimNames, withoutPeopleOnIt } from "./queue-toggle";
 
 type Props = {
   task: Task;
   parent: Task | null;
   buckets: Bucket[];
-  inbox: Bucket | null;
   canEdit: boolean;
-  api: TasksModuleApi;
   /** Open another task in the panel ("← item"): the parent from a subtask. */
   onOpenTask: (id: string) => void;
   /** Select a task in the page (a duplicate opens there). */
@@ -95,6 +93,8 @@ type Props = {
   onAttachFiles?: () => void;
 };
 
+const NO_CLAIMS: readonly string[] = [];
+
 const crumb =
   "flex min-h-(--ctrl-h-sm) min-w-0 shrink items-center gap-1.5 rounded-md px-1.5 py-0.5 font-sans text-xs text-muted-foreground outline-none transition-colors duration-(--motion-fade) ease-(--ease-out) hover:bg-state-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-expanded:bg-state-active aria-expanded:text-foreground disabled:hover:bg-transparent disabled:hover:text-muted-foreground";
 
@@ -102,9 +102,7 @@ export function TaskDetailHeader({
   task,
   parent,
   buckets,
-  inbox,
   canEdit,
-  api,
   onOpenTask,
   onSelectTask,
   onOpenFullPage,
@@ -113,11 +111,15 @@ export function TaskDetailHeader({
   onSaveAsTemplate,
   onAttachFiles,
 }: Props) {
+  const commands = useTaskCommands();
+  const inbox = useTasksSelector((d) => d.inbox);
+  const allSections = useTasksSelector((d) => d.sections);
+  const { taskTags } = useTaskTags(task.id);
   const bucketOptions = inbox ? [inbox, ...buckets.filter((b) => b.id !== inbox.id)] : buckets;
   const bucket = bucketOptions.find((b) => b.id === task.bucketId) ?? null;
   // A project you can't see is never shown as Inbox (TV-P0, AC1.10).
   const bucketLabel = bucket?.name ?? PRIVATE_PROJECT_LABEL;
-  const sections = api.sections
+  const sections = allSections
     .filter((s) => s.projectId === task.bucketId)
     .sort((a, b) => a.position - b.position);
   const section = sections.find((s) => s.id === task.sectionId) ?? null;
@@ -141,8 +143,8 @@ export function TaskDetailHeader({
   };
 
   const duplicate = () => {
-    const created = api.createTask(duplicateFields(task));
-    for (const tag of api.tagsByTask.get(task.id) ?? []) api.createTagForTask(tag.name, created);
+    const created = commands.createTask(duplicateFields(task));
+    for (const tag of taskTags) commands.createTagForTask(tag.name, created);
     void created.then((copyOf) => {
       if (!copyOf) return;
       onSelectTask(copyOf.id);
@@ -161,18 +163,11 @@ export function TaskDetailHeader({
           label={bucketLabel}
           options={bucketOptions}
           canEdit={canEdit}
-          api={api}
         />
         {sections.length > 0 && !parent ? (
           <>
             <ChevronRight className="size-icon-xs shrink-0 text-muted-foreground/60" aria-hidden />
-            <SectionCrumb
-              task={task}
-              section={section}
-              sections={sections}
-              canEdit={canEdit}
-              api={api}
-            />
+            <SectionCrumb task={task} section={section} sections={sections} canEdit={canEdit} />
           </>
         ) : null}
         {parent ? (
@@ -221,7 +216,7 @@ export function TaskDetailHeader({
           frame 5 shows ↗ and ⋯ there, frames 2–3 the Focus toggle). */}
       <TitleActions>
         {claimSlot ?? <TaskClaimMark workspaceId={task.workspaceId} taskId={task.id} max={1} />}
-        {open ? <QueueButton task={task} api={api} canEdit={canEdit} /> : null}
+        {open ? <QueueButton task={task} canEdit={canEdit} /> : null}
         {onOpenFullPage ? (
           <IconButton icon={Maximize2} label="Open full page" onClick={onOpenFullPage} />
         ) : null}
@@ -233,7 +228,7 @@ export function TaskDetailHeader({
             <IconButton icon={Ellipsis} label="More actions" tooltip={null} />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {open && canEdit ? <FocusOnThisItem task={task} api={api} /> : null}
+            {open && canEdit ? <FocusOnThisItem task={task} /> : null}
             <DropdownMenuItem
               onSelect={() => {
                 const name = branchName(handle, task.title);
@@ -287,24 +282,29 @@ export function TaskDetailHeader({
                   </DropdownMenuItem>
                 ) : null}
                 {parent ? (
-                  <DropdownMenuItem onSelect={() => api.setTaskParent(task.id, null)}>
+                  <DropdownMenuItem onSelect={() => commands.setTaskParent(task.id, null)}>
                     <Unlink aria-hidden />
                     Make it a task
                   </DropdownMenuItem>
                 ) : null}
                 {task.status === "archived" ? (
-                  <DropdownMenuItem onSelect={() => api.patchTask(task.id, { status: "todo" })}>
+                  <DropdownMenuItem
+                    onSelect={() => commands.patchTask(task.id, { status: "todo" })}
+                  >
                     <RotateCcw aria-hidden />
                     Reopen
                   </DropdownMenuItem>
                 ) : (
-                  <DropdownMenuItem onSelect={() => api.archiveTask(task.id)}>
+                  <DropdownMenuItem onSelect={() => commands.archiveTask(task.id)}>
                     <Ban aria-hidden />
                     Won’t do
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onSelect={() => api.deleteTask(task.id)}>
+                <DropdownMenuItem
+                  variant="destructive"
+                  onSelect={() => commands.deleteTask(task.id)}
+                >
                   <Trash2 aria-hidden />
                   Delete
                 </DropdownMenuItem>
@@ -347,17 +347,17 @@ function ProjectCrumb({
   label,
   options,
   canEdit,
-  api,
 }: {
   task: Task;
   bucket: Bucket | null;
   label: string;
   options: Bucket[];
   canEdit: boolean;
-  api: TasksModuleApi;
 }) {
+  const { patchTask } = useTaskCommands();
+  const areas = useTasksSelector((d) => d.areas);
   const [open, setOpen] = useState(false);
-  const areaName = (b: Bucket) => api.areas.find((a) => a.id === b.areaId)?.name ?? null;
+  const areaName = (b: Bucket) => areas.find((a) => a.id === b.areaId)?.name ?? null;
   const groups = new Map<string, Bucket[]>();
   for (const b of options) {
     const key = b.isSystem ? "" : (areaName(b) ?? "");
@@ -401,7 +401,7 @@ function ProjectCrumb({
                     value={`${b.name} ${area} ${b.id}`}
                     onSelect={() => {
                       setOpen(false);
-                      if (b.id !== task.bucketId) api.patchTask(task.id, { bucketId: b.id });
+                      if (b.id !== task.bucketId) patchTask(task.id, { bucketId: b.id });
                     }}
                   >
                     {/* Each project's dot, as in the bulk Move to (MOD-130). */}
@@ -433,14 +433,13 @@ function SectionCrumb({
   section,
   sections,
   canEdit,
-  api,
 }: {
   task: Task;
   section: { id: string; name: string } | null;
   sections: { id: string; name: string }[];
   canEdit: boolean;
-  api: TasksModuleApi;
 }) {
+  const { patchTask } = useTaskCommands();
   const [open, setOpen] = useState(false);
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -469,7 +468,7 @@ function SectionCrumb({
                   value={`${s.name} ${s.id}`}
                   onSelect={() => {
                     setOpen(false);
-                    if (s.id !== task.sectionId) api.patchTask(task.id, { sectionId: s.id });
+                    if (s.id !== task.sectionId) patchTask(task.id, { sectionId: s.id });
                   }}
                 >
                   <span className="min-w-0 flex-1 break-words">{s.name}</span>
@@ -479,7 +478,7 @@ function SectionCrumb({
                 value="no section"
                 onSelect={() => {
                   setOpen(false);
-                  if (task.sectionId) api.patchTask(task.id, { sectionId: null });
+                  if (task.sectionId) patchTask(task.id, { sectionId: null });
                 }}
               >
                 No section
@@ -496,12 +495,13 @@ function SectionCrumb({
  * ⋯ → "Focus on this" (call 31): on top of my Up next, with the one clock;
  * ⇧F as in the row's menu. Hidden while my session is already on this task.
  */
-function FocusOnThisItem({ task, api }: { task: Task; api: TasksModuleApi }) {
+function FocusOnThisItem({ task }: { task: Task }) {
+  const { focusOnTask } = useTaskCommands();
   const focus = useFocusTaskState();
   if (focus.active && focus.taskId === task.id) return null;
   return (
     <>
-      <DropdownMenuItem onSelect={() => api.focusOnTask(task.id)}>
+      <DropdownMenuItem onSelect={() => focusOnTask(task.id)}>
         <Play aria-hidden />
         Focus on this
         <DropdownMenuShortcut>⇧F</DropdownMenuShortcut>
@@ -518,18 +518,12 @@ function FocusOnThisItem({ task, api }: { task: Task; api: TasksModuleApi }) {
  * slot as "Mike is on this", not here too (TV-F7: one avatar per person).
  * View-only members see the state without the action.
  */
-function QueueButton({
-  task,
-  api,
-  canEdit,
-}: {
-  task: Task;
-  api: TasksModuleApi;
-  canEdit: boolean;
-}) {
-  const queued = api.queuedTaskIds.has(task.id);
+function QueueButton({ task, canEdit }: { task: Task; canEdit: boolean }) {
+  const { toggleQueue } = useTaskCommands();
+  const queued = useTasksSelector((d) => d.queuedTaskIds.has(task.id));
+  const claims = useTasksSelector((d) => d.queueClaims.get(task.id) ?? NO_CLAIMS);
   const onIt = useTaskClaim(task.workspaceId, task.id);
-  const claim = useClaimNames(withoutPeopleOnIt(api.queueClaims.get(task.id) ?? [], onIt));
+  const claim = useClaimNames(withoutPeopleOnIt(claims, onIt));
   const claimed = claim.names.length > 0;
   const note = claimed ? (queued ? alsoInLabel(claim.names) : claimLabel(claim.names)) : null;
   const claimMark = claimed ? (
@@ -588,7 +582,7 @@ function QueueButton({
         }
         variant={queued ? "secondary" : "ghost"}
         aria-pressed={queued}
-        onClick={() => api.toggleQueue(task.id)}
+        onClick={() => toggleQueue(task.id)}
         className={cn("shrink-0", queued ? "text-primary" : "text-muted-foreground")}
       />
     </>

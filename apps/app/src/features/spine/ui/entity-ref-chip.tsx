@@ -11,6 +11,7 @@
 // prose; chat still renders this one until it adopts References.
 
 import type { MouseEventHandler } from "react";
+
 // Relative for the vitest graph (docs/gotchas.md — no @/ VALUE imports in test-reachable files).
 import { cn } from "../../../lib/utils";
 import { resolveEntityIcon } from "../icon-map";

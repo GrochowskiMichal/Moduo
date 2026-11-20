@@ -169,16 +169,17 @@ export function queueTaskIds(
  * 1,000 rows per request whatever the limit says (docs/gotchas/supabase.md),
  * so a workspace past that lost tasks silently. The query must be in a total
  * order (end it with `.order("id")`) or a page boundary skips and repeats rows.
+ * A failed page throws its message, with PostgREST's `code` kept on the error.
  */
 export async function readAllPages<T>(
-  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string; code?: string } | null }>,
   pageSize = 1000,
   maxRows = 100_000,
 ): Promise<T[]> {
   const out: T[] = [];
   for (let from = 0; from < maxRows; from += pageSize) {
     const { data, error } = await page(from, from + pageSize - 1);
-    if (error) throw new Error(error.message);
+    if (error) throw Object.assign(new Error(error.message), { code: error.code });
     const got = data ?? [];
     out.push(...got);
     if (got.length < pageSize) break;

@@ -179,14 +179,12 @@ async function main() {
   }
 
   const mode = options.dryRun ? "DRY RUN" : "DONE";
-  // eslint-disable-next-line no-console
   console.log(
     `[storybook:gen] ${mode} - created ${created}, overwritten ${overwritten}, skipped ${skipped} (use --force to overwrite, --dry-run to preview)`,
   );
 }
 
 main().catch((err) => {
-  // eslint-disable-next-line no-console
   console.error("[storybook:gen] FAILED", err);
   process.exitCode = 1;
 });

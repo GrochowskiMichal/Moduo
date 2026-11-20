@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { isMissingTableError, selectFirstDeployedTier } from "./deploy-tiers";
 
 type Res = { error: { code?: string; message: string } | null; cols: string };

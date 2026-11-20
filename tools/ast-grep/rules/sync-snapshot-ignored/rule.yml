@@ -1,0 +1,40 @@
+id: sync-snapshot-ignored
+language: tsx
+severity: error
+message: "The `useSyncExternalStore` result is thrown away, so the component reads the store beside it, and the React Compiler memoises that read: the screen stops following the store."
+note: |
+  Return what `useSyncExternalStore` hands you: make the state itself the snapshot
+  (`useSyncExternalStore(subscribe, () => store.read(ref))`). Unit tests can't catch it
+  (rstest builds without the compiler); RF-1's references and CV-9's file chips both
+  shipped it.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: expression_statement
+  has:
+    kind: call_expression
+    has:
+      field: function
+      regex: (^|\.)useSyncExternalStore$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: sync-snapshot-ignored-ts
+language: typescript
+severity: error
+message: "The `useSyncExternalStore` result is thrown away, so the component reads the store beside it, and the React Compiler memoises that read: the screen stops following the store."
+note: |
+  Return what `useSyncExternalStore` hands you: make the state itself the snapshot
+  (`useSyncExternalStore(subscribe, () => store.read(ref))`). Unit tests can't catch it
+  (rstest builds without the compiler); RF-1's references and CV-9's file chips both
+  shipped it.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: expression_statement
+  has:
+    kind: call_expression
+    has:
+      field: function
+      regex: (^|\.)useSyncExternalStore$

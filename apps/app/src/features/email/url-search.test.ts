@@ -2,6 +2,7 @@
 // inbound id (raw threadId OR `email_thread` ref id) to a select target.
 
 import { describe, expect, it } from "@rstest/core";
+
 import { resolveEmailThreadTarget, validateEmailSearch } from "./url-search";
 
 describe("validateEmailSearch", () => {

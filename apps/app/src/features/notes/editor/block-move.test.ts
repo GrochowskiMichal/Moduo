@@ -7,6 +7,7 @@ import { describe, expect, it } from "@rstest/core";
 import { $getRoot, $isElementNode, $isTextNode, type LexicalEditor } from "lexical";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8 } from "../utils/base64";
 import { moveBlockInDoc, stepTarget } from "./block-move";
 import { createNotesHeadlessEditor, deriveNoteBody, NOTES_DOC_ROOT } from "./doc-markdown";

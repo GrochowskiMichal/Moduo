@@ -9,6 +9,7 @@
 // printed so regressions in the cascade are visible without opening images.
 
 import { mkdirSync } from "node:fs";
+
 import { chromium } from "playwright";
 
 const PORT = process.env.SB_PORT ?? "6106";

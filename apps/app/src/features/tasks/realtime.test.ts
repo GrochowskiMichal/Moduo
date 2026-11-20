@@ -1,4 +1,5 @@
 import { describe, expect, it, rs } from "@rstest/core";
+
 import type { TasksLiveEvent } from "./realtime";
 
 // TV-D5 (D5-3, socket side): one shared channel per workspace and person, a
@@ -18,7 +19,7 @@ const h = rs.hoisted(() => ({
   }[],
 }));
 
-rs.mock("@/lib/runtime.web", () => ({
+rs.mock("@/lib/runtime.web.client", () => ({
   supabaseClient: {
     channel: (topic: string) => {
       const ch = {

@@ -157,9 +157,27 @@
      keeps 3:1 on the card in both themes. */
   --presence-reachable: var(--status-success);
 
+  /* Links in written text: told apart from underlined words by colour. */
+  --link: var(--status-info);
+
+  /* Selected text: a blue wash that the text stays readable on (the
+     browser's default grey on dark hid white text). */
+  --text-selection: color-mix(in oklch, var(--status-info) 38%, transparent);
+
+  /* Code highlighting in notes: four quiet hues off the status set, so
+     they follow the theme; everything else stays the text colour. */
+  --code-keyword:  var(--status-info);
+  --code-string:   var(--status-success);
+  --code-number:   var(--status-warning);
+  --code-comment:  var(--muted-foreground);
+
   /* Comment highlight on anchored text (NR-8): a soft wash, stronger when its thread is open. */
-  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 22%, transparent);
-  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 45%, transparent);
+  --comment-mark-bg:         color-mix(in oklch, var(--status-warning) 14%, transparent);
+  --comment-mark-bg-focused: color-mix(in oklch, var(--status-warning) 32%, transparent);
+  --comment-mark-line:       color-mix(in oklch, var(--status-warning) 75%, transparent);
+  /* A search match in a note opened from a body hit (GS-10): the selection tint at
+     ring strength, so it reads over text without changing its weight. */
+  --search-match-bg:         var(--state-selected-ring);
 
   --success-foreground: oklch(0.12 0 0);
   --warning-foreground: oklch(0.12 0 0);
@@ -185,7 +203,10 @@
   --popover-foreground:   var(--neutral-950);
 
   --muted:                var(--neutral-100);
-  --muted-foreground:     var(--neutral-500);
+  /* neutral-600, not 500: on white, the background and a muted surface,
+     secondary text and the derived tertiary level both clear 4.5:1 (500 gave
+     4.3:1, and the tertiary level 3.1–3.3:1). */
+  --muted-foreground:     var(--neutral-600);
 
   --accent:               var(--neutral-100);
   --accent-foreground:    var(--neutral-950);
@@ -559,6 +580,12 @@
   /* Calendar grid: height of one hour row. Density-scaled so the grid's
      rhythm follows the density axis like rows/controls do. */
   --cal-hour-h: 3.5rem;  /* 56 */
+  /* Day view prep (CALR-12): the widest a note or follow-up chip beside a
+     meeting grows before it truncates. */
+  --cal-prep-chip-max: 13.75rem; /* 220 */
+  /* Second time zone (CALR-13): the hours gutter holds two zones' hours side
+     by side, each as wide as the one-zone gutter. */
+  --cal-zone-gutter-w: 6.5rem; /* 104 */
   /* Board card width (tasks-v3 default o): fixed per density so the board
      never reflows as you scroll; the column adds its drop-tint inset. */
   --board-card-w: 18.5rem;  /* 296 */
@@ -612,6 +639,63 @@
   --board-col-w: calc(var(--board-card-w) + 0.5rem);
   --avatar-feed: 1.5rem;         /* 24      */
   --feed-person-gap: 0.625rem;   /* 10 (+6 = 16) */
+}
+
+/* The mail rail (specs/mail-v3.md §1): rows take the row rung and sections sit
+   apart; in a window 780 px tall or less the rows drop to --row-h-sm and the
+   gaps tighten, so three accounts stay visible at 1024 × 700. Declared on every
+   density scope because it reads --row-h. */
+:root,
+[data-density] {
+  --mail-rail-row: var(--row-h);
+  --mail-rail-gap: 0.75rem; /* 12 */
+}
+
+@media (max-height: 780px) {
+  :root,
+  [data-density] {
+    --mail-rail-row: var(--row-h-sm);
+    --mail-rail-gap: 0.25rem; /* 4 */
+  }
+}
+
+/* The mail list (specs/mail-v3.md §3, decision 13): 320 px wide from a 1200 px
+   window, a clamp below; a compact row is one 32 px line whose sender column is
+   9rem (7rem below 1200 px). `ROW_HEIGHT.compact` in features/email/ui/mail-row.tsx
+   mirrors --mail-row-compact for the virtual list; a test keeps them equal. */
+:root {
+  --mail-list-w: clamp(17rem, 40%, 20rem);
+  --mail-row-compact: 2rem; /* 32 */
+  --mail-sender-w: 7rem; /* 112 */
+  /* A list group header ("Pinned", "Everything else"). */
+  --mail-group-h: 1.75rem; /* 28 */
+  /* specs/mail-improve.md: one reading width for every thread. The thread column
+     (subject, chips, sender card, messages, composer) is capped at --measure-thread
+     and left-aligned; message text at --measure-reading. Extra width is margin. */
+  --measure-thread: 48rem; /* 768 */
+  --measure-reading: 70ch;
+  /* The folded side panel below a 1180 px window: one icon per view. */
+  --panel-strip-w: 2.5rem; /* 40 */
+  /* A list row's own background, opaque, for the quick actions' fade (§2): rest, hover,
+     selected. global.css sets --row-bg on each row from these. */
+  --mail-row-bg: var(--background);
+  --mail-row-bg-hover: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --mail-row-bg-selected: color-mix(in oklab, var(--primary) 13%, var(--background));
+  /* "N actions didn't sync", expanded: five lines, then it scrolls. */
+  --failed-list-max: calc(var(--mail-row-compact) * 5);
+}
+
+/* Dialog scrims (specs/mail-improve.md §5): strong enough that the content behind
+   doesn't show through. Resolves per theme from --background. */
+:root {
+  --scrim: color-mix(in oklab, var(--background) 82%, transparent);
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --mail-list-w: 20rem; /* 320 */
+    --mail-sender-w: 9rem; /* 144 */
+  }
 }
 
 /* ============================================================================
@@ -736,7 +820,9 @@
   --width-rail:           20rem;   /* 320 — right rail default */
   --bar-h:                3rem;    /* 48  — shared height for top + bottom bars */
   --width-content-max:    65rem;   /* 1040 — center column cap */
-  --width-prose-max:      42rem;   /* 672  — reading width (notes body) */
+  /* 576 — reading width (notes body): ~75 characters a line at the 14 px
+     body once the column's padding is off (42rem ran ~95). */
+  --width-prose-max:      36rem;
   --notes-meta-line-space: 2.25rem; /* 36 — room under a note's title for its meta line */
   /* Shell panels (MOD-121): one inset system for the three panels, fixed
      across densities (density changes row and control heights, never the
@@ -902,7 +988,7 @@
  *      [data-label="…"] sets two vars: `--label` (solid hue → the tag chip's
  *      dot and its active ring, .tag-dot / .tag-chip-active in global.css,
  *      plus project, account and team dots) and `--label-surface` (a faint
- *      tint → external calendar chips, .cal-chip-external). A tag chip's own
+ *      tint → calendar event chips, .cal-chip). A tag chip's own
  *      pill is neutral, --tag-chip-surface (§5b, MOD-97). Surfaces are
  *      precomputed oklch-with-alpha (kept here, the sanctioned color file, so
  *      component code stays hex/arbitrary-free per the design-system rules).
@@ -923,6 +1009,11 @@
 [data-label="violet"] { --label: var(--violet-base);  --label-surface: oklch(0.66 0.20 295 / 0.18); }
 [data-label="teal"]   { --label: var(--teal-base);    --label-surface: oklch(0.72 0.13 200 / 0.18); }
 [data-label="pink"]   { --label: var(--pink-base);    --label-surface: oklch(0.71 0.20 350 / 0.18); }
+/* A calendar's custom color: the element sets --label to its hex inline
+   (features/calendar/hue.ts), and the tint follows from it. */
+[data-label="custom"] { --label-surface: color-mix(in oklab, var(--label) 18%, transparent); }
+/* The custom-color hue slider's track: the full hue circle. */
+:root { --hue-spectrum: linear-gradient(to right, hsl(0 90% 60%), hsl(60 90% 60%), hsl(120 90% 60%), hsl(180 90% 60%), hsl(240 90% 60%), hsl(300 90% 60%), hsl(359 90% 60%)); }
 
 /* The avatar strength of a hue (DS-6, calls 43 + 95): a person's two initials
    and a team's two letters sit on the hue mixed about half into the card, with
@@ -942,6 +1033,13 @@
  * ==========================================================================*/
 
 @theme inline {
+  /* Container sizes (`@max-panel-narrow:`): the right panel's narrow layout
+     starts below a 320 px panel (AC1.16). A view sits inside the panel body's
+     4 px sides (MOD-121), so its container is 320 − 8 = 312 px wide there. */
+  --container-panel-narrow: 19.5rem; /* 312 */
+  /* A calendar day header below 104 px (a week at 1024 px) drops the word in
+     "6 due" and keeps the count, so it never prints over the date (CALR-2). */
+  --container-day-narrow: 6.5rem; /* 104 */
   --color-background:           var(--background);
   --color-foreground:           var(--foreground);
   --color-card:                 var(--card);

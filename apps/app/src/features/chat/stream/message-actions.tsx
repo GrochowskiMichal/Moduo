@@ -24,6 +24,7 @@ import {
   SmilePlus,
   Trash2,
 } from "lucide-react";
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FLOATING_SURFACE } from "@/components/ui/surface";
 import { cn } from "@/lib/utils";
+
 import { ReactionKeyGlyph } from "../emoji/context";
 import type { ChatMessage } from "../model";
 

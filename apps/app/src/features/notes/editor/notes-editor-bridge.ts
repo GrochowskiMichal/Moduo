@@ -6,6 +6,8 @@
  */
 
 import { createContext, useContext } from "react";
+
+import { ENTITY_LINKED_EVENT } from "../../spine/mention-actions";
 import type { Task } from "../../tasks/model";
 import type { Note } from "../model";
 import type { TaskLineSnapshot } from "../tasks/detach";
@@ -75,8 +77,20 @@ export type NotesEditorBridge = {
   /** Create a root note titled `title` for `[[Create …]]` (NR-4). `created`
    * settles true once its server row exists (links wait for it). */
   createLinkedNote?: (title: string) => { id: string; created: Promise<boolean> } | null;
+  /** Create a subpage of the CURRENT note titled `title` (the block menu's
+   * Turn into → Page). Absent: no Page in Turn into. */
+  createSubpage?: (title: string) => { id: string; created: Promise<boolean> } | null;
   /** Open the Comments panel (the block menu's Comment, NR-4). */
   openComments?: () => void;
+  /** The note whose real sub-pages the page lists under the body (MOD-81).
+   * Set, page rows to its children are redundant: they remove themselves and
+   * `/page` opens the new child instead of inserting one. Absent (no note
+   * open, a story): page rows behave as plain content. */
+  subpagesListedFor?: string;
+  /** Hear about note-list changes (a page row's live title). The bridge
+   * itself stays the same object while notes change, so views that read the
+   * list subscribe here instead of re-rendering with every change. */
+  subscribeNotes?: (listener: () => void) => () => void;
 };
 
 export const NotesEditorBridgeContext = createContext<NotesEditorBridge | null>(null);
@@ -111,6 +125,22 @@ export type InsertEntityChipDetail = {
   clientY?: number;
 };
 
-/** Window event the page fires after a drag-onto-hub link lands (NO-7b) so the
- * Detail rail (which owns its own hub read) re-pulls and shows the new edge. */
+/** Window event fired after a link to the open note lands outside a mention (a
+ * drag onto the hub, NO-7b; a task line minted or linked) so the Detail rail
+ * and the meta line (each owns its own hub read) re-pull and show the edge. */
 export const NOTE_DETAIL_REFRESH_EVENT = "moduo:notes:detail-refresh";
+
+/** Re-read the open note's links on either signal: ours, or a mention's link
+ * (`[[`, `/contact`, ⌘K) announced by the spine. */
+export function onNoteLinksChanged(reload: () => void): () => void {
+  window.addEventListener(NOTE_DETAIL_REFRESH_EVENT, reload);
+  window.addEventListener(ENTITY_LINKED_EVENT, reload);
+  return () => {
+    window.removeEventListener(NOTE_DETAIL_REFRESH_EVENT, reload);
+    window.removeEventListener(ENTITY_LINKED_EVENT, reload);
+  };
+}
+
+export function announceNoteLinksChanged(): void {
+  window.dispatchEvent(new CustomEvent(NOTE_DETAIL_REFRESH_EVENT));
+}

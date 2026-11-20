@@ -1,28 +1,7 @@
 import type { ReactNode } from "react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import { cn } from "../../../lib/utils";
-
-export function PersonAvatar({
-  name,
-  avatarUrl,
-  size = "sm",
-  className,
-}: {
-  name: string;
-  avatarUrl?: string | null;
-  size?: "sm" | "default";
-  className?: string;
-}) {
-  const letter = name.trim().slice(0, 1).toUpperCase() || "?";
-  return (
-    <Avatar size={size} className={cn("shrink-0", className)}>
-      {avatarUrl ? <AvatarImage src={avatarUrl} alt="" /> : null}
-      <AvatarFallback>{letter}</AvatarFallback>
-    </Avatar>
-  );
-}
 
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;

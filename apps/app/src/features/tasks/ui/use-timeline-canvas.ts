@@ -27,8 +27,8 @@ import {
 import {
   autoScrollStep,
   DRAG_THRESHOLD_PX,
-  type DrawTarget,
   drawnSpan,
+  type DrawTarget,
   moveSpan,
   type SpanEdge,
   type TimelineGrab,

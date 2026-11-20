@@ -4,6 +4,7 @@
 
 import { useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
+
 import { arrival, COUNT, editGrowth, MESSAGES, type Msg, SCENARIO_CHAINS } from "./fixture";
 import {
   DENSITIES,

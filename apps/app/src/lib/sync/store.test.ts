@@ -31,250 +31,23 @@ import {
   keepWorkspaceCopies,
   setStoreOptionsForTests,
   stampMinus,
-  WorkspaceStore,
+  waitingSyncCount,
   wipeSyncCopies,
+  WorkspaceStore,
   workspaceStore,
 } from "./store";
-import type {
-  AccessChange,
-  SyncAccessResult,
-  SyncReadInput,
-  SyncReadResult,
-  SyncTableName,
-} from "./types";
-
-const WS = "ws-1";
-const ME = "u-me";
-
-const at = (minute: number) => `2026-10-11T10:${String(minute).padStart(2, "0")}:00.000000+00:00`;
-
-function task(id: string, over: Partial<Task> = {}): Task {
-  return {
-    id,
-    workspaceId: WS,
-    number: null,
-    creatorId: ME,
-    creatorUnknown: false,
-    assigneeId: ME,
-    bucketId: "inbox",
-    parentId: null,
-    title: id,
-    description: "",
-    dueDate: null,
-    dueOn: null,
-    dueTime: null,
-    scheduledAt: null,
-    durationMinutes: null,
-    timeSpentSeconds: 0,
-    recurrence: null,
-    energyLevel: null,
-    priority: null,
-    status: "todo",
-    statusId: null,
-    statusCategory: "todo",
-    completedAt: null,
-    completedBy: null,
-    committedFor: null,
-    commitOrder: null,
-    rescheduleCount: 0,
-    position: id,
-    createdAt: at(0),
-    updatedAt: at(1),
-    deletedAt: null,
-    ...over,
-  };
-}
-
-type ServerRow = { id: string; updatedAt?: string; deletedAt?: string | null };
-
-/** A server that answers `syncRead` like PostgREST does, and records each read. */
-function fakeServer() {
-  const tables: Partial<Record<SyncTableName, ServerRow[]>> = { tasks: [] };
-  /** Hard deletes' tombstones (TV-D11b): id and when. */
-  const graves: Partial<Record<SyncTableName, { id: string; at: string }[]>> = {};
-  /** Tables this database can only read whole (before TV-D11b's migration). */
-  const wholeOnly = new Set<SyncTableName>();
-  /** The grant feed (TV-D11b). */
-  const feed: AccessChange[] = [];
-  /** Holds the first load's second part (Done, Won't do, Backlog) until released. */
-  let restGate: Promise<void> | null = null;
-  const reads: SyncReadInput[] = [];
-  const created: Task[] = [];
-  const statusCalls: { taskId: string; status: string }[] = [];
-  let offline = false;
-  /** A read refused by the server (not the network), when set. */
-  let refuse: string | null = null;
-  const offlineError = () => new TypeError("Failed to fetch");
-  const isOpen = (t: Task) => t.statusCategory === "todo" || t.statusCategory === "in_progress";
-
-  const syncRead = rs.fn(async (input: SyncReadInput): Promise<SyncReadResult<unknown>> => {
-    if (input.part === "rest" && restGate) await restGate;
-    if (offline) throw offlineError();
-    if (refuse) throw new Error(refuse);
-    reads.push(input);
-    const all = (tables[input.table] ?? []) as ServerRow[];
-    const stamps = (rows: ServerRow[]) =>
-      rows.map((r) => r.updatedAt).filter((s): s is string => !!s);
-    let rows: ServerRow[];
-    if (input.since && wholeOnly.has(input.table)) {
-      const live = all.filter((r) => !r.deletedAt);
-      return {
-        rows: live,
-        deleted: [],
-        maxUpdatedAt: stamps(live).sort().pop() ?? null,
-        truncated: null,
-        whole: true,
-      };
-    }
-    if (input.ids) {
-      const wanted = new Set(input.ids);
-      rows = all.filter((r) => wanted.has(r.id) && !r.deletedAt);
-    } else if (input.since) {
-      rows = all.filter((r) => (r.updatedAt ?? "") >= (input.since as string));
-    } else {
-      rows = all.filter((r) => !r.deletedAt);
-      if (input.table === "tasks" && input.part) {
-        rows = rows.filter((r) => isOpen(r as Task) === (input.part === "open"));
-      }
-    }
-    const buried =
-      input.since && !input.ids
-        ? (graves[input.table] ?? []).filter((g) => g.at >= (input.since as string))
-        : [];
-    const maxUpdatedAt = [...stamps(rows), ...buried.map((g) => g.at)].sort().pop() ?? null;
-    return {
-      rows: rows.filter((r) => !r.deletedAt),
-      deleted: [...rows.filter((r) => r.deletedAt).map((r) => r.id), ...buried.map((g) => g.id)],
-      maxUpdatedAt,
-      truncated: null,
-    };
-  });
-
-  const syncAccessChanges = rs.fn(
-    async ({ since }: { since: string | null }): Promise<SyncAccessResult> => {
-      if (offline) throw offlineError();
-      const sorted = [...feed].sort((a, b) => a.changedAt.localeCompare(b.changedAt));
-      if (since === null) {
-        return { changes: [], maxChangedAt: sorted.at(-1)?.changedAt ?? null, supported: true };
-      }
-      const changes = sorted.filter((c) => c.changedAt >= since);
-      return { changes, maxChangedAt: changes.at(-1)?.changedAt ?? null, supported: true };
-    },
-  );
-  /** Every live task whose title has every word (the server's `tasks_search`). */
-  const searchTasks = rs.fn(async ({ query }: { query: string }) => {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    const ids = ((tables.tasks ?? []) as Task[])
-      .filter((t) => !t.deletedAt && words.every((w) => t.title.toLowerCase().includes(w)))
-      .map((t) => t.id);
-    return { ids, supported: true };
-  });
-
-  const runtime = {
-    tasks: {
-      syncRead,
-      syncAccessChanges,
-      searchTasks,
-      list: rs.fn(),
-      listQueue: rs.fn(),
-      syncIds: rs.fn(async ({ table }: { table: SyncTableName }) => ({
-        ids: ((tables[table] ?? []) as ServerRow[]).filter((r) => !r.deletedAt).map((r) => r.id),
-        complete: true,
-      })),
-      createTask: rs.fn(async (t: Task) => {
-        if (offline) throw offlineError();
-        const existing = (tables.tasks as Task[]).find((x) => x.id === t.id);
-        if (existing) return existing; // the op is idempotent on a resent id
-        const saved = { ...t, updatedAt: at(30) };
-        (tables.tasks as Task[]).push(saved);
-        created.push(saved);
-        return saved;
-      }),
-      upsertTask: rs.fn(),
-      opSetStatus: rs.fn(async ({ taskId, status }: { taskId: string; status: string }) => {
-        if (offline) throw offlineError();
-        const rows = tables.tasks as Task[];
-        const index = rows.findIndex((x) => x.id === taskId);
-        if (index === -1) throw new Error("No such task.");
-        statusCalls.push({ taskId, status });
-        rows[index] = {
-          ...rows[index]!,
-          status: status === "done" ? "done" : "todo",
-          statusCategory: status === "done" ? "done" : "todo",
-          updatedAt: at(31 + statusCalls.length),
-        };
-        return rows[index]!;
-      }),
-      opQueueAdd: rs.fn(async (): Promise<TaskQueueEntry[]> => []),
-      seedInbox: rs.fn(async (workspaceId: string) => {
-        const inbox = {
-          id: "inbox-mine",
-          workspaceId,
-          ownerId: ME,
-          name: "Inbox",
-          isSystem: true,
-          group: null,
-          position: "a0",
-          createdAt: at(40),
-          updatedAt: at(40),
-          deletedAt: null,
-        };
-        tables.buckets = [...(tables.buckets ?? []), inbox];
-        return inbox;
-      }),
-    },
-  } as unknown as ModuoRuntime;
-
-  return {
-    runtime,
-    tables,
-    graves,
-    wholeOnly,
-    feed,
-    syncAccessChanges,
-    searchTasks,
-    reads,
-    created,
-    statusCalls,
-    syncRead,
-    goOffline: () => {
-      offline = true;
-    },
-    goOnline: () => {
-      offline = false;
-    },
-    refuseReads: (message: string | null) => {
-      refuse = message;
-    },
-    /** Hold the closed tasks' read; call the answer to let it through. */
-    holdRest: () => {
-      let release = () => {};
-      restGate = new Promise<void>((resolve) => {
-        release = () => {
-          restGate = null;
-          resolve();
-        };
-      });
-      return release;
-    },
-  };
-}
-
-const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
-
-async function settled(store: WorkspaceStore) {
-  await store.whenLoaded();
-  for (let i = 0; i < 20; i += 1) await tick();
-}
-
-function makeStore(server: ReturnType<typeof fakeServer>, cache = memoryCache()) {
-  const store = new WorkspaceStore(server.runtime, ME, WS, {
-    cache,
-    timing: { persistMs: 0, throttleMs: 0, retryMs: 60_000 },
-  });
-  const release = store.acquire();
-  return { store, cache, release };
-}
+import {
+  at,
+  fakeServer,
+  makeStore,
+  ME,
+  type ServerRow,
+  settled,
+  task,
+  tick,
+  WS,
+} from "./store.fake.spec";
+import type { AccessChange, SyncReadInput, SyncTableName } from "./types";
 
 const titleOf = (store: WorkspaceStore, id: string) =>
   store.getSnapshot().bundle.tasks.find((t) => t.id === id)?.title;
@@ -416,6 +189,58 @@ describe("echo skip (AC12.2)", () => {
     emit({ table: "tasks", kind: "upsert", row: task("a", { title: "Mine", updatedAt: at(8) }) });
     expect(titleOf(store, "a")).toBe("Mine");
     expect(store.getSnapshot().bundle.tasks.find((t) => t.id === "a")?.priority).toBe("high");
+  });
+});
+
+describe("TS-3a: the snapshot comes from the collections", () => {
+  it("shows what the collection holds, with overlays on top, and keeps arrays while nothing changed", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { title: "Server", updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const tasks = store.collection("tasks");
+    expect(tasks?.status).toBe("ready");
+    expect(tasks?.has("a")).toBe(true);
+    const first = store.getSnapshot();
+    expect(first.bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+
+    // A live row lands in the collection and the snapshot together.
+    emit({ table: "tasks", kind: "upsert", row: task("b", { updatedAt: at(6) }) });
+    expect(tasks?.has("b")).toBe(true);
+    const second = store.getSnapshot();
+    expect(second.bundle.tasks.map((t) => t.id)).toEqual(["a", "b"]);
+    // Tables nothing touched keep their arrays (no redraw).
+    expect(second.bundle.buckets).toBe(first.bundle.buckets);
+    expect(second.completions).toBe(first.completions);
+
+    // An overlay shows over the collection's row, which stays the server's.
+    const write = store.begin([{ table: "tasks", patch: { id: "a", fields: { title: "Typed" } } }]);
+    expect(titleOf(store, "a")).toBe("Typed");
+    expect((tasks?.get("a") as { title?: string } | undefined)?.title).toBe("Server");
+    write.fail();
+    expect(titleOf(store, "a")).toBe("Server");
+
+    // A delete leaves both.
+    emit({ table: "tasks", kind: "delete", id: "b" });
+    expect(tasks?.has("b")).toBe(false);
+    expect(store.getSnapshot().bundle.tasks.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("dispose cleans the collections up and makes none again", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+    const tasks = store.collection("tasks");
+    store.dispose({ persist: false });
+    await tick();
+    expect(tasks?.status).toBe("cleaned-up");
+    // A late subscriber restarts it: it must come back empty.
+    const late = tasks?.subscribeChanges(() => undefined, { includeInitialState: true });
+    expect(tasks?.size).toBe(0);
+    late?.unsubscribe();
+    expect(store.collection("tasks")).toBeNull();
+    expect(store.getSnapshot().bundle.tasks).toEqual([]);
   });
 });
 
@@ -604,6 +429,34 @@ describe("offline: captures and check-offs (default g)", () => {
     release();
   });
 
+  it("a capture queued before the copy is read shows once and is sent once, with the copy's", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const first = makeStore(server);
+    await settled(first.store);
+    server.goOffline();
+    first.store.wentOffline();
+    first.store.enqueue({ kind: "create", id: "op-old", task: task("old", { title: "Old" }) });
+    first.release();
+    await first.store.whenPersisted();
+    first.store.dispose();
+
+    // The next store queues a capture before it was ever held (no copy read yet).
+    const store = new WorkspaceStore(server.runtime, ME, WS, {
+      cache: first.cache,
+      timing: { persistMs: 0, throttleMs: 0 },
+    });
+    store.enqueue({ kind: "create", id: "op-new", task: task("new", { title: "New" }) });
+    await store.whenPersisted();
+    server.goOnline();
+    const release = store.acquire();
+    await settled(store);
+    expect(store.getSnapshot().pending).toBe(0);
+    expect(server.created.map((t) => t.id).sort()).toEqual(["new", "old"]);
+    expect(store.getSnapshot().bundle.tasks.filter((t) => t.id === "new")).toHaveLength(1);
+    release();
+  });
+
   it("queue on the device and flush in order on reconnect, without duplicates", async () => {
     const server = fakeServer();
     server.tables.tasks = [task("a", { updatedAt: at(5) })];
@@ -677,6 +530,57 @@ describe("offline: captures and check-offs (default g)", () => {
   });
 });
 
+describe("outbox order (a live write never jumps a waiting one)", () => {
+  it("a check-off made while an older one for the same task is flushing waits behind it", async () => {
+    const server = fakeServer();
+    server.tables.tasks = [task("a", { updatedAt: at(5) })];
+    const { store } = makeStore(server);
+    await settled(store);
+
+    // Hold the server's answer to the first (queued) status write.
+    const tasksApi = server.runtime.tasks as unknown as {
+      opSetStatus: (input: { taskId: string; status: string }) => Promise<Task>;
+    };
+    const real = tasksApi.opSetStatus;
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let calls = 0;
+    tasksApi.opSetStatus = async (input) => {
+      calls += 1;
+      if (calls === 1) await gate;
+      return real(input);
+    };
+
+    // An older check-off waits in the outbox; the flush is sending it now.
+    store.enqueue({
+      kind: "status",
+      id: "op-old",
+      taskId: "a",
+      status: "done",
+      fields: { status: "done", statusCategory: "done" },
+    });
+    await tick();
+    expect(store.hasOutboxEntries("a")).toBe(true);
+
+    // The person un-checks it before that answer comes back.
+    const sent = store.sendStatus({
+      taskId: "a",
+      status: "todo",
+      fields: { status: "todo", statusCategory: "todo" },
+    });
+    expect(await sent).toBe("queued");
+
+    release();
+    await settled(store);
+    // In the order they were made: the newer change is the one that stays.
+    expect(server.statusCalls.map((c) => c.status)).toEqual(["done", "todo"]);
+    expect((server.tables.tasks as Task[]).find((t) => t.id === "a")?.status).toBe("todo");
+    expect(store.getSnapshot().pending).toBe(0);
+  });
+});
+
 describe("the device copy is one person's", () => {
   async function persisted(store: WorkspaceStore) {
     await settled(store);
@@ -701,6 +605,67 @@ describe("the device copy is one person's", () => {
       // Nothing is written back after sign-out.
       store.persistNow();
       await store.whenPersisted();
+      expect(cache.records.size).toBe(0);
+      release();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("sign-out keeps what waits to sync (rows go) and sends it when that person signs back in", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      server.tables.tasks = [task("private-plan")];
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await persisted(store);
+      // Captured offline; then auth-js signs the person out on its own (the
+      // refresh token died). The capture isn't written to the copy yet.
+      server.goOffline();
+      store.wentOffline();
+      store.enqueue({ kind: "create", id: "op-1", task: task("on-the-plane") });
+      expect(waitingSyncCount()).toBe(1);
+
+      await wipeSyncCopies();
+      const copy = cache.records.get(cacheKey(ME, WS));
+      expect(copy?.outbox).toHaveLength(1);
+      expect(copy?.tables).toEqual({}); // no rows stay
+      release();
+
+      // Someone else signs in on this device: the first person's capture stays.
+      await attachSyncUser("user-other");
+      expect(cache.records.get(cacheKey(ME, WS))?.outbox).toHaveLength(1);
+
+      // The person signs back in: the capture goes out, once.
+      server.goOnline();
+      await attachSyncUser(ME);
+      const back = workspaceStore(server.runtime, ME, WS);
+      const releaseBack = back.acquire();
+      await settled(back);
+      await back.flush();
+      await settled(back);
+      expect(server.created.map((t) => t.id)).toEqual(["on-the-plane"]);
+      expect(back.getSnapshot().pending).toBe(0);
+      releaseBack();
+    } finally {
+      setStoreOptionsForTests({});
+    }
+  });
+
+  it("account deletion wipes what waits too", async () => {
+    const cache = memoryCache();
+    setStoreOptionsForTests({ cache, timing: { persistMs: 0, throttleMs: 0 } });
+    try {
+      const server = fakeServer();
+      const store = workspaceStore(server.runtime, ME, WS);
+      const release = store.acquire();
+      await persisted(store);
+      store.wentOffline();
+      store.enqueue({ kind: "create", id: "op-1", task: task("gone-with-it") });
+      await store.whenPersisted();
+      await wipeSyncCopies({ keepWaiting: false });
       expect(cache.records.size).toBe(0);
       release();
     } finally {

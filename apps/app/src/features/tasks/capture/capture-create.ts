@@ -8,6 +8,7 @@
 // the top of Up next when asked.
 
 import { legacyTaskStatus, type TaskStatusCategory } from "@contracts/vocabularies";
+
 import type { CaptureSource } from "../../../lib/capture-source";
 import { type EntityRef, isChatEnd } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";

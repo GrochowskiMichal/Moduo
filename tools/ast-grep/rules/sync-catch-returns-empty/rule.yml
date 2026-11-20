@@ -1,0 +1,67 @@
+id: sync-catch-returns-empty
+language: typescript
+severity: error
+message: A caught error in sync code returns an empty value, so a failure reads as "no data".
+note: |
+  Sync code reads, merges and writes back: an empty read after a failure wipes data on
+  the next write (PR #509). Let it throw, or return a tagged result such as
+  `{ kind: "error" }` the caller must handle.
+files:
+  - apps/app/src/lib/sync/**/*.ts
+  - apps/app/src/lib/*-sync.ts
+  - apps/app/src/features/**/sync/**/*.ts
+ignores:
+  - "**/*.test.ts"
+utils:
+  empty-value:
+    any:
+      - kind: "null"
+      - kind: "undefined"
+      - pattern: "[]"
+      # `{}` as a value, never an empty `() => {}` body.
+      - kind: object
+        regex: ^\{\s*\}$
+      - kind: parenthesized_expression
+        regex: ^\(\s*\{\s*\}\s*\)$
+      - pattern: new Map()
+      - pattern: new Set()
+      - pattern: '""'
+  # `() => null` or `() => { return []; }`. A bare `() => undefined` / `() => {}` is a
+  # fire-and-forget swallow (a cleanup), not a value someone reads as data.
+  returns-empty:
+    any:
+      - all:
+          - matches: empty-value
+          - not:
+              kind: "undefined"
+      - kind: statement_block
+        has:
+          kind: return_statement
+          has:
+            matches: empty-value
+rule:
+  any:
+    # try { .. } catch { return []; }
+    - kind: catch_clause
+      has:
+        field: body
+        has:
+          kind: return_statement
+          has:
+            matches: empty-value
+    # promise.catch(() => null)
+    - kind: call_expression
+      all:
+        - has:
+            field: function
+            kind: member_expression
+            has:
+              field: property
+              regex: ^catch$
+        - has:
+            field: arguments
+            has:
+              kind: arrow_function
+              has:
+                field: body
+                matches: returns-empty

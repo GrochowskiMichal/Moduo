@@ -7,6 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+
 import {
   $convertFromMarkdownString,
   $convertSelectionToMarkdownString,
@@ -23,6 +24,7 @@ import {
   $setSelection,
 } from "lexical";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8 } from "../utils/base64";
 import {
   createNotesHeadlessEditor,
@@ -303,6 +305,17 @@ describe("single dialect (NR-3, AC9)", () => {
   it("a pipe inside a cell is escaped, not a new column", () => {
     const md = "| Formula | Note |\n| --- | --- |\n| a \\| b | ok |";
     expect(roundTrip(md)).toBe(md);
+  });
+
+  it("a backslash right before a pipe in a cell can't swallow the escape", () => {
+    // The exporter escapes the text's backslash before the cell escapes the
+    // pipe, so `a\|b` goes out as `a\\\|b`: GFM and the importer both read it
+    // as one backslash and one pipe in the same cell.
+    const md = "| Formula | Note |\n| --- | --- |\n| a\\\\\\|b | ok |";
+    expect(roundTrip(md)).toBe(md);
+    const editor = makeEditor();
+    editor.update(() => $convertFromMarkdownString(md, NOTES_TRANSFORMERS), { discrete: true });
+    expect(JSON.stringify(editor.getEditorState().toJSON())).toContain('"text":"a\\\\|b"');
   });
 
   it("a line break inside a cell is `<br>`; a literal backslash-n stays text", () => {

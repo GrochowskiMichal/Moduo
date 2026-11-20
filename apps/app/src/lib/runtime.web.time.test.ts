@@ -145,64 +145,15 @@ describe("trackTime (TV-D3)", () => {
     expect(result).toMatchObject({ status: "gone", entryId: null, totalSeconds: null });
   });
 
-  it("before the migration: reads the total and writes only the time column", async () => {
+  it("a missing op fails loudly; nothing writes the old time column", async () => {
     recorded.rpcResults.tasks_op_track_time = MISSING("tasks_op_track_time");
-    recorded.results.tasks = [
-      { data: { time_spent_seconds: 100 }, error: null },
-      { data: { time_spent_seconds: 160 }, error: null },
-    ];
-    const result = await webRuntime.tasks.trackTime({
-      workspaceId: "w1",
-      taskId: "t1",
-      action: "focus",
-      seconds: 60,
-      key: "save-key-1",
-    });
-    expect(result).toMatchObject({ status: "saved", totalSeconds: 160 });
-    const write = recorded.queries[1]?.calls.find(([m]) => m === "update");
-    expect(write?.[1]).toEqual([{ time_spent_seconds: 160 }]);
+    await expect(
+      webRuntime.tasks.trackTime({ workspaceId: "w1", taskId: "t1", action: "focus", seconds: 60 }),
+    ).rejects.toThrow(/tasks_op_track_time/);
+    expect(recorded.queries).toHaveLength(0);
   });
 
-  it("before the migration: a typed total, an Undo and a missing task", async () => {
-    recorded.rpcResults.tasks_op_track_time = MISSING("tasks_op_track_time");
-    recorded.results.tasks = [
-      { data: { time_spent_seconds: 100 }, error: null },
-      { data: { time_spent_seconds: 1800 }, error: null },
-      { data: { time_spent_seconds: 1000 }, error: null },
-      { data: { time_spent_seconds: 100 }, error: null },
-      { data: null, error: null },
-    ];
-    const typed = await webRuntime.tasks.trackTime({
-      workspaceId: "w1",
-      taskId: "t1",
-      action: "set_total",
-      seconds: 1800,
-    });
-    expect(typed).toMatchObject({ status: "saved", totalSeconds: 1800 });
-    expect(recorded.queries[1]?.calls.find(([m]) => m === "update")?.[1]).toEqual([
-      { time_spent_seconds: 1800 },
-    ]);
-    const undone = await webRuntime.tasks.trackTime({
-      workspaceId: "w1",
-      taskId: "t1",
-      action: "undo",
-      entryId: null,
-      seconds: 900,
-    });
-    expect(undone).toMatchObject({ status: "saved", totalSeconds: 100 });
-    expect(recorded.queries[3]?.calls.find(([m]) => m === "update")?.[1]).toEqual([
-      { time_spent_seconds: 100 },
-    ]);
-    const gone = await webRuntime.tasks.trackTime({
-      workspaceId: "w1",
-      taskId: "nope",
-      action: "focus",
-      seconds: 60,
-    });
-    expect(gone).toMatchObject({ status: "gone", totalSeconds: null });
-  });
-
-  it("any other error is thrown, not hidden behind the fallback", async () => {
+  it("any other error is thrown with the server's words", async () => {
     recorded.rpcResults.tasks_op_track_time = {
       data: null,
       error: { code: "42501", message: "You don't have access to this task." },
@@ -237,8 +188,8 @@ describe("listTimeTotals (TV-D3)", () => {
     });
   });
 
-  it("is empty until the migration reaches the database", async () => {
+  it("a missing function fails loudly instead of reading as no time", async () => {
     recorded.rpcResults.tasks_time_totals = MISSING("tasks_time_totals");
-    await expect(webRuntime.tasks.listTimeTotals("w1")).resolves.toEqual([]);
+    await expect(webRuntime.tasks.listTimeTotals("w1")).rejects.toThrow(/tasks_time_totals/);
   });
 });

@@ -12,19 +12,40 @@ export type TasksSearch = {
   id?: string;
   /** A saved view's link (TV-U8): `/tasks?view=<id>`. */
   view?: string;
-  /** A place to open, once (Home's Upcoming "+n more"): `/tasks?place=upcoming`. */
-  place?: TasksPlace;
+  /**
+   * The place open in the centre (DF-1): a sidebar scope, a project's id or a
+   * saved view's `view:<id>`. The URL is its only source; writes replace, so
+   * Back and Forward never walk through places.
+   */
+  place?: string;
 };
 
-/** The places a link may open by name; anything else is dropped. */
-export const TASKS_PLACES = ["upcoming"] as const;
-export type TasksPlace = (typeof TASKS_PLACES)[number];
+/** The sidebar scopes a place may name besides a project or a saved view. */
+export const TASKS_SCOPES = [
+  "inbox",
+  "today",
+  "upcoming",
+  "mine",
+  "all",
+  "wontdo",
+  "archived",
+  "trash",
+  "templates",
+  "new-view",
+] as const;
 
-function isTasksPlace(value: unknown): value is TasksPlace {
-  return typeof value === "string" && (TASKS_PLACES as readonly string[]).includes(value);
+const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+const VIEW_ID = new RegExp(`^${UUID}$`, "i");
+// A project (a `tmp-` one only just made, too) or a saved view (`view:<id>`).
+const PLACE_ID = new RegExp(`^(?:(?:tmp-)?${UUID}|view:${UUID})$`, "i");
+
+/** A place the URL may hold; anything else is dropped, never looked up. */
+export function isTasksPlace(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    ((TASKS_SCOPES as readonly string[]).includes(value) || PLACE_ID.test(value))
+  );
 }
-
-const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function validateTasksSearch(search: Record<string, unknown>): TasksSearch {
   const id = typeof search.id === "string" && search.id.length > 0 ? search.id : undefined;
@@ -32,7 +53,8 @@ export function validateTasksSearch(search: Record<string, unknown>): TasksSearc
   const view =
     typeof search.view === "string" && VIEW_ID.test(search.view) ? search.view : undefined;
   const place = isTasksPlace(search.place) ? search.place : undefined;
-  return { ...(id ? { id } : {}), ...(view ? { view } : {}), ...(place ? { place } : {}) };
+  // `place` before `id`: the address bar ends with the task (MOD-28).
+  return { ...(place ? { place } : {}), ...(view ? { view } : {}), ...(id ? { id } : {}) };
 }
 
 // ── inbound-target resolution ────────────────────────────────────────────────
@@ -73,9 +95,7 @@ export function taskIdForHandle(
  * TV-D11a), or only then ask the server (an old key, a task not loaded).
  */
 export type HandleLinkStep =
-  | { kind: "task"; taskId: string }
-  | { kind: "wait" }
-  | { kind: "lookup" };
+  { kind: "task"; taskId: string } | { kind: "wait" } | { kind: "lookup" };
 
 export function handleLinkStep(
   handle: string,
@@ -177,7 +197,8 @@ export function descriptionWords(description: string | null | undefined): string
  * Whether a task matches the search box: every word of the query appears in
  * its title, the text of its description or the key it was imported under
  * ("ENG-123", TV-D16, AC3.6), ignoring case. The server's `tasks_search`
- * reads the same fields but not quite the same text: it strips the old HTML
+ * (GS-4) reads the same fields but matches the search contract's way: word
+ * starts, accents ignored, punctuation no word. It also strips the old HTML
  * and reads Markdown as stored, so a word the editor escapes (`a\*b`) or a
  * reference's `moduo://` address can match differently there (call #15; the
  * editor escapes only what Markdown would read, so `file_name` is stored

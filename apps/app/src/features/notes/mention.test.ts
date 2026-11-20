@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "@rstest/core";
+
 import { buildMentionCandidates, resolveMention } from "../spine/mention";
 
 describe("@ = workspace people only (AC5)", () => {

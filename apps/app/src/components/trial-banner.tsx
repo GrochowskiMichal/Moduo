@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import type { EntitlementsRow } from "../features/settings/billing";
 import { dispatchOpenSettings } from "../features/settings/settings-events";
-import { supabaseClient } from "../lib/runtime.web";
+import { supabaseClient } from "../lib/runtime.web.client";
 import { useAuth } from "../providers/auth-provider";
 import { Button } from "./ui/button";
 

@@ -1,14 +1,15 @@
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, EyeOff, LogOut, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import defaultProfilePic from "../../../../../../assets/icon.png";
 import { Button } from "../../../components/ui/button";
 import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
-import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web";
-import { wipeSyncCopies } from "../../../lib/sync/store";
+import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web.client";
+import { waitingSyncCount, wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
 import { validateImageFile } from "../../branding/image-asset";
 import { ensureProfileAvatar } from "../../branding/profile-avatar";
@@ -16,9 +17,10 @@ import { clearProfileAvatar, uploadProfileAvatar } from "../../branding/upload-i
 import { wipeChatCopies } from "../../chat/store/store";
 import { forgetFocusUser } from "../../focus/engine";
 import { forgetRunUser } from "../../focus/run";
+import { wipeNotesCopies } from "../../notes/sync/people";
 import { notifyProfileUpdated, writeStoredAvatar } from "../../profile/profile-storage";
 import { forgetCaptureDrafts } from "../../tasks/capture/capture-draft";
-import { isPasswordProvider, providerLabel, validateNewPassword } from "../account";
+import { providerLabel } from "../account";
 import { DANGER_ZONE_COPY, finishAccountDeletion, matchesDeleteConfirm } from "../delete-account";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -51,11 +53,6 @@ export function AccountSection() {
 
   const [provider, setProvider] = useState<string | null>(null);
   const [providerLoaded, setProviderLoaded] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [pwBusy, setPwBusy] = useState(false);
-  const [pwMessage, setPwMessage] = useState<string | null>(null);
-  const [pwError, setPwError] = useState<string | null>(null);
 
   const [isPhraseVisible, setIsPhraseVisible] = useState(false);
   const [mnemonicPhrase, setMnemonicPhrase] = useState<string | null>(null);
@@ -112,9 +109,12 @@ export function AccountSection() {
           forgetFocusUser(userId);
           forgetRunUser(userId);
           forgetCaptureDrafts(userId);
-          // The Tasks device copy (TV-D11a): the account is gone, so is its copy.
-          void wipeSyncCopies();
-          void wipeChatCopies();
+          // The Tasks and Chat device copies (TV-D11a, CV-3): the account is gone,
+          // so is its copy (what still waited to sync too: there is no account
+          // to send it to).
+          void wipeSyncCopies({ keepWaiting: false });
+          void wipeChatCopies({ keepWaiting: false });
+          void wipeNotesCopies({ keepWaiting: false });
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,
@@ -148,16 +148,14 @@ export function AccountSection() {
     };
   }, [runtime, userId]);
 
-  // Cloud accounts: learn the sign-in provider so we know whether a password is
-  // even applicable (OAuth-only accounts have none). Future-lite (local vault)
-  // accounts skip this — they authenticate with the login key below.
+  // Cloud accounts: learn the sign-in provider for the "signed in with" line.
+  // Future-lite (local vault) accounts skip this — they authenticate with the
+  // login key below.
   useEffect(() => {
     if (hasLocalKey) return;
     let active = true;
-    // Read the provider from the CACHED session (no network round-trip) so an
-    // OAuth-only account never flashes the wrong provider + a password form it
-    // can't use before the value resolves. Nothing provider-dependent renders
-    // until `providerLoaded`.
+    // Read the provider from the CACHED session (no network round-trip) so the
+    // line never flashes the wrong provider before the value resolves.
     void supabaseClient.auth
       .getSession()
       .then(({ data }) => {
@@ -276,35 +274,22 @@ export function AccountSection() {
     setIsPhraseVisible(true);
   };
 
-  const handleLogout = async () => {
+  // Writes still waiting to sync when "Log out" was pressed: say so first. They
+  // stay on this device and go out the next time this person signs in here.
+  const [unsyncedOnLogout, setUnsyncedOnLogout] = useState(0);
+
+  const handleLogout = async (opts: { anyway?: boolean } = {}) => {
+    const waiting = waitingSyncCount();
+    if (waiting > 0 && !opts.anyway) {
+      setUnsyncedOnLogout(waiting);
+      return;
+    }
+    setUnsyncedOnLogout(0);
     try {
       await signOut();
     } finally {
       void navigate({ to: "/auth" });
     }
-  };
-
-  const canChangePassword = isPasswordProvider(provider);
-
-  const handleChangePassword = async () => {
-    const validationError = validateNewPassword(newPassword, confirmPassword);
-    if (validationError) {
-      setPwError(validationError);
-      setPwMessage(null);
-      return;
-    }
-    setPwBusy(true);
-    setPwError(null);
-    setPwMessage(null);
-    const { error } = await supabaseClient.auth.updateUser({ password: newPassword });
-    setPwBusy(false);
-    if (error) {
-      setPwError(error.message);
-      return;
-    }
-    setNewPassword("");
-    setConfirmPassword("");
-    setPwMessage("Password updated.");
   };
 
   return (
@@ -426,70 +411,6 @@ export function AccountSection() {
             <Eyebrow>Email</Eyebrow>
             <span className="text-sm text-foreground">{userEmail ?? "—"}</span>
           </div>
-
-          {!providerLoaded ? null : canChangePassword ? (
-            <div className="mt-6 border-t border-border pt-6">
-              <h4 className="text-sm font-medium text-foreground">Password</h4>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Set or change the password you use to sign in.
-              </p>
-              <div className="mt-4 flex max-w-sm flex-col gap-3">
-                <div>
-                  <Label htmlFor="account-new-password">New password</Label>
-                  <Input
-                    id="account-new-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={newPassword}
-                    onChange={(event) => {
-                      setNewPassword(event.target.value);
-                      setPwError(null);
-                      setPwMessage(null);
-                    }}
-                    className="mt-2"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="account-confirm-password">Confirm password</Label>
-                  <Input
-                    id="account-confirm-password"
-                    type="password"
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(event) => {
-                      setConfirmPassword(event.target.value);
-                      setPwError(null);
-                      setPwMessage(null);
-                    }}
-                    className="mt-2"
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button
-                    onClick={() => void handleChangePassword()}
-                    disabled={pwBusy || newPassword.length === 0}
-                  >
-                    {pwBusy ? "Saving…" : "Update password"}
-                  </Button>
-                  {pwMessage ? (
-                    <p className="text-xs text-success" role="status">
-                      {pwMessage}
-                    </p>
-                  ) : null}
-                  {pwError ? (
-                    <p className="text-xs text-destructive" role="alert">
-                      {pwError}
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-4 text-xs text-muted-foreground">
-              You sign in with {providerLabel(provider)}, so there&apos;s no password to manage
-              here.
-            </p>
-          )}
         </section>
       ) : null}
 
@@ -536,16 +457,46 @@ export function AccountSection() {
       <section className="rounded-lg border border-border bg-card p-6">
         <h3 className="font-display text-lg text-foreground">Session</h3>
         <p className="mt-1 text-sm text-muted-foreground">Sign out of Moduo on this device.</p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="mt-4"
-          onClick={() => void handleLogout()}
-        >
-          <LogOut className="size-4" aria-hidden />
-          Log out
-        </Button>
+        {unsyncedOnLogout > 0 ? (
+          <div className="mt-4" role="alert">
+            <p className="text-sm text-foreground">
+              {unsyncedOnLogout === 1
+                ? "1 change hasn't synced yet."
+                : `${unsyncedOnLogout} changes haven't synced yet.`}{" "}
+              It stays on this device and syncs the next time you sign in here.
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleLogout({ anyway: true })}
+              >
+                <LogOut className="size-4" aria-hidden />
+                Log out anyway
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setUnsyncedOnLogout(0)}
+              >
+                Stay signed in
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => void handleLogout()}
+          >
+            <LogOut className="size-4" aria-hidden />
+            Log out
+          </Button>
+        )}
       </section>
 
       {/* Danger zone — delete account (cloud accounts only; local-vault future-lite

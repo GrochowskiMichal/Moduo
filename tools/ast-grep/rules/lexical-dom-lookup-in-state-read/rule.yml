@@ -1,0 +1,34 @@
+id: lexical-dom-lookup-in-state-read
+language: tsx
+severity: error
+message: "`$getNearestNodeFromDOMNode` inside `editorState.read` has no active editor, so it returns null for every element, with no error."
+note: |
+  Use `editor.read(() => …)`: the DOM-to-node lookup reads the per-editor
+  `__lexicalKey_<editorKey>` property and needs the editor bound (NO-5's hover
+  affordances were dead this way).
+files:
+  - apps/app/src/**/*.tsx
+  - apps/app/src/**/*.ts
+rule:
+  pattern: $getNearestNodeFromDOMNode($$$ARGS)
+  inside:
+    stopBy: end
+    pattern: $E.getEditorState().read($$$BODY)
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: lexical-dom-lookup-in-state-read-ts
+language: typescript
+severity: error
+message: "`$getNearestNodeFromDOMNode` inside `editorState.read` has no active editor, so it returns null for every element, with no error."
+note: |
+  Use `editor.read(() => …)`: the DOM-to-node lookup reads the per-editor
+  `__lexicalKey_<editorKey>` property and needs the editor bound (NO-5's hover
+  affordances were dead this way).
+files:
+  - apps/app/src/**/*.tsx
+  - apps/app/src/**/*.ts
+rule:
+  pattern: $getNearestNodeFromDOMNode($$$ARGS)
+  inside:
+    stopBy: end
+    pattern: $E.getEditorState().read($$$BODY)

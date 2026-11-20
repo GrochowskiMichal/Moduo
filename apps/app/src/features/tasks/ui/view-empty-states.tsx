@@ -5,6 +5,7 @@
 // in inbox-view.tsx. Kit EmptyState only.
 
 import { Ban, CalendarDays, Layers, Plus, UserRound } from "lucide-react";
+
 import { Button } from "../../../components/ui/button";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { Kbd } from "../../../components/ui/kbd";

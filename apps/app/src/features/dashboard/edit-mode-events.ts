@@ -22,9 +22,7 @@ export interface DashboardPagerInfo {
 }
 
 export type DashboardPageAction =
-  | { type: "goto"; index: number }
-  | { type: "add" }
-  | { type: "remove" };
+  { type: "goto"; index: number } | { type: "add" } | { type: "remove" };
 
 export function dispatchDashboardEditChanged(editing: boolean): void {
   if (typeof window === "undefined") return;

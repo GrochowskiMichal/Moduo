@@ -220,7 +220,12 @@ export async function fetchProject(ctx: ToolContext, id: string): Promise<Row> {
   return found[0]!;
 }
 
-/** Call a tasks_op_* RPC that answers with a task (or tasks), and shape it. */
+/**
+ * Call a tasks_op_* RPC that answers with a task (or tasks), and shape it (the
+ * first row only). Write the RPC name literally at each call (`callOp(ctx, "…"`):
+ * api-keys.test.ts finds a tool's key lanes by that text, so a helper that takes
+ * the name as an argument hides the call from it.
+ */
 export async function callOp(ctx: ToolContext, fn: string, args: Row): Promise<Row> {
   const { data, error } = await ctx.db.rpc(fn, {
     p_workspace_id: ctx.key.workspaceId,

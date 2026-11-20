@@ -4,6 +4,7 @@
 
 import {
   Activity,
+  AudioLines,
   CalendarClock,
   CalendarDays,
   CheckSquare,
@@ -49,4 +50,8 @@ export const WIDGET_GALLERY_META: Record<WidgetType, { icon: LucideIcon; descrip
   },
   team: { icon: UsersRound, description: "What each person has on: Focus, in progress, due." },
   upcoming: { icon: CalendarClock, description: "Your coming days, from Tasks' Upcoming." },
+  soundspace: {
+    icon: AudioLines,
+    description: "Rain, fire, noise or binaural beats, placed around your head.",
+  },
 };

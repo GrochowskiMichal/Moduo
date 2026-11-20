@@ -77,6 +77,7 @@ function Stack(props: {
   items?: Item[];
   pinned?: number[];
   scrollTo?: { key: string; seq: number } | null;
+  paintKey?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const items = props.items ?? ITEMS;
@@ -96,6 +97,7 @@ function Stack(props: {
         pinned={props.pinned}
         scrollTo={props.scrollTo}
         overscan={2}
+        paintKey={props.paintKey}
       />
     </div>
   );
@@ -164,9 +166,31 @@ describe("VirtualStack (TV-D11b)", () => {
     expect(scroller.scrollTop).toBe(0);
   });
 
-  it("draws a short stack whole, in plain flow", () => {
+  it("draws a short stack whole, in plain flow: its first screen, then the rest once that paints", async () => {
     const { container } = render(<Stack items={ITEMS.slice(0, 60)} />);
+    // The window's height by the estimates (TS-R1), not all 60 at once.
+    const first = drawn(container).length;
+    expect(first).toBeLessThan(60);
+    expect(first).toBe(Math.ceil(window.innerHeight / ROW));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
     expect(drawn(container)).toHaveLength(60);
     expect(container.querySelector("[data-virtual-stack]")).toBeNull();
+  });
+
+  it("stays whole once drawn whole; a new paintKey draws its first screen first again", async () => {
+    const { container, rerender } = render(<Stack items={ITEMS.slice(0, 60)} paintKey="a" />);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    rerender(<Stack items={ITEMS.slice(1, 61)} paintKey="a" />);
+    expect(drawn(container)).toHaveLength(60);
+    rerender(<Stack items={ITEMS.slice(100, 160)} paintKey="b" />);
+    expect(drawn(container).length).toBeLessThan(60);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(drawn(container)).toHaveLength(60);
   });
 });

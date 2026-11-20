@@ -4,7 +4,7 @@
 // repeat's cycles open from a quiet "n done" beside its rule.
 
 import { afterEach, beforeAll, describe, expect, it, rs } from "@rstest/core";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const PEOPLE = {
   u1: {
@@ -40,9 +40,11 @@ rs.mock("../../spine/hooks/use-comment-people", () => ({
 
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { localDayOf } from "../../../lib/task-rows";
+import type { TaskCommands } from "../commands";
 import { makeTask } from "../helpers";
-import type { TasksModuleApi } from "../hooks/use-tasks-module";
 import type { Bucket, Task, TaskCompletion, TaskCycle, TaskReminder } from "../model";
+import type { FakeTasksSeed } from "../testing/fake-tasks";
+import { renderWithTasks } from "../testing/render-with-tasks";
 import { TaskDetailPanel } from "./task-detail-panel";
 
 beforeAll(() => {
@@ -109,65 +111,46 @@ function reminder(over: Partial<TaskReminder> = {}): TaskReminder {
   };
 }
 
-function api(t: Task, over: Partial<TasksModuleApi> = {}): TasksModuleApi {
+/** The commands the panel calls here, as spies. */
+function spies() {
   return {
-    canEdit: true,
-    tasks: [t],
-    tags: [],
-    tagsByTask: new Map(),
-    subtasksByParent: new Map(),
-    subtaskProgressByTask: new Map(),
-    statuses: [],
-    statusById: new Map(),
-    statusesForBucket: () => [],
-    blockersByTask: new Map(),
-    dependentsByTask: new Map(),
-    taskRelations: [],
-    queuedTaskIds: new Set<string>(),
-    queueClaims: new Map(),
-    activityStamp: 0,
-    currentUserId: "u1",
-    loadActivity: async () => [],
+    loadActivity: rs.fn(async () => []),
     patchTask: rs.fn(),
     moveOccurrence: rs.fn(),
     restoreReminders: rs.fn(),
-    taskHistory: rs.fn(async () => []),
-    completions: [],
-    sessions: [],
-    reminders: [],
-    waiting: [],
-    teams: [],
-    areas: [],
-    sections: [],
-    commentStamps: new Map(),
-    inbox: INBOX,
+    taskHistory: rs.fn(async (): Promise<TaskCycle[]> => []),
     addReminder: rs.fn(),
     removeReminder: rs.fn(),
-    ...over,
-  } as unknown as TasksModuleApi;
+  };
 }
 
-function renderPanel(t: Task, a: TasksModuleApi) {
-  return render(
+type Setup = ReturnType<typeof spies> & { seed: FakeTasksSeed };
+
+/** The task in the store (with `seed`'s rows), and spies for what the panel calls. */
+function api(t: Task, over: Partial<TaskCommands> & { seed?: FakeTasksSeed } = {}): Setup {
+  const { seed = {}, ...commands } = over;
+  return {
+    ...spies(),
+    ...commands,
+    seed: { buckets: [INBOX, APP], tasks: [t], ...seed },
+  } as Setup;
+}
+
+function renderPanel(t: Task, a: Setup) {
+  const { seed, ...commands } = a;
+  return renderWithTasks(
     <TooltipProvider>
-      <TaskDetailPanel
-        task={t}
-        buckets={[APP]}
-        inbox={INBOX}
-        canEdit
-        onRequestCapture={() => {}}
-        onSelectTask={() => {}}
-        api={a}
-      />
+      <TaskDetailPanel task={t} canEdit onRequestCapture={() => {}} onSelectTask={() => {}} />
     </TooltipProvider>,
+    { seed, commands, workspaceId: "w" },
   );
 }
 
 describe("a repeat's due date moved in the panel asks first (TV-U13b)", () => {
-  it("Just this one moves this occurrence; the rule stays", () => {
+  it("Just this one moves this occurrence; the rule stays", async () => {
     const t = task({ recurrence: WEEKLY });
     const a = api(t);
-    renderPanel(t, a);
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Due/ }));
     fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
     expect(a.patchTask).not.toHaveBeenCalled();
@@ -179,10 +162,10 @@ describe("a repeat's due date moved in the panel asks first (TV-U13b)", () => {
     expect(a.patchTask).not.toHaveBeenCalled();
   });
 
-  it("Change the pattern saves the new rule with the new date", () => {
+  it("Change the pattern saves the new rule with the new date", async () => {
     const t = task({ recurrence: WEEKLY });
     const a = api(t);
-    renderPanel(t, a);
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Due/ }));
     fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
     fireEvent.click(screen.getByRole("button", { name: "Change the pattern" }));
@@ -196,10 +179,10 @@ describe("a repeat's due date moved in the panel asks first (TV-U13b)", () => {
     expect(patch.recurrence?.rrule).toContain("FREQ=WEEKLY");
   });
 
-  it("a one-off task's date saves at once, no question", () => {
+  it("a one-off task's date saves at once, no question", async () => {
     const t = task({ recurrence: null });
     const a = api(t);
-    renderPanel(t, a);
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Due/ }));
     fireEvent.click(screen.getByRole("button", { name: "Tomorrow" }));
     expect(screen.queryByRole("button", { name: "Just this one" })).toBeNull();
@@ -208,24 +191,26 @@ describe("a repeat's due date moved in the panel asks first (TV-U13b)", () => {
 });
 
 describe("a paused reminder (TV-U13b)", () => {
-  it("reads Paused, and offers Restore once the task is To do again", () => {
+  it("reads Paused, and offers Restore once the task is To do again", async () => {
     const t = task({ status: "todo", statusCategory: "todo" });
-    const a = api(t, { reminders: [reminder({ suspendedAt: "2026-10-12T10:00:00Z" })] });
-    renderPanel(t, a);
+    const a = api(t, { seed: { reminders: [reminder({ suspendedAt: "2026-10-12T10:00:00Z" })] } });
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Reminder: 1 day before due · paused/ }));
     expect(screen.getByText(/· Paused/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Restore the reminder" }));
     expect(a.restoreReminders).toHaveBeenCalledWith("t1");
   });
 
-  it("a paused reminder whose time went by offers no Restore that can't work", () => {
+  it("a paused reminder whose time went by offers no Restore that can't work", async () => {
     const t = task({ status: "todo", statusCategory: "todo" });
     const a = api(t, {
-      reminders: [
-        reminder({ kind: "at", at: "2026-01-02T09:00:00Z", suspendedAt: "2026-01-01T10:00:00Z" }),
-      ],
+      seed: {
+        reminders: [
+          reminder({ kind: "at", at: "2026-01-02T09:00:00Z", suspendedAt: "2026-01-01T10:00:00Z" }),
+        ],
+      },
     });
-    renderPanel(t, a);
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Reminder:/ }));
     expect(screen.queryByRole("button", { name: "Restore the reminder" })).toBeNull();
     expect(
@@ -233,10 +218,10 @@ describe("a paused reminder (TV-U13b)", () => {
     ).toBeTruthy();
   });
 
-  it("while the task sits in Backlog it says why, with no Restore", () => {
+  it("while the task sits in Backlog it says why, with no Restore", async () => {
     const t = task({ status: "todo", statusCategory: "backlog" });
-    const a = api(t, { reminders: [reminder({ suspendedAt: "2026-10-12T10:00:00Z" })] });
-    renderPanel(t, a);
+    const a = api(t, { seed: { reminders: [reminder({ suspendedAt: "2026-10-12T10:00:00Z" })] } });
+    await renderPanel(t, a);
     fireEvent.click(screen.getByRole("button", { name: /^Reminder:/ }));
     expect(screen.queryByRole("button", { name: "Restore the reminder" })).toBeNull();
     expect(
@@ -265,13 +250,15 @@ describe("a repeat's cycles (TV-U13b)", () => {
       { kind: "done", at: "2026-09-22T10:00:00Z", cycle: null, by: "u1", mySeconds: 1500 },
     ];
     const a = api(t, {
-      completions: [
-        completion("c1", "u2", "2026-10-06T10:00:00Z"),
-        completion("c2", "u1", "2026-09-22T10:00:00Z"),
-      ],
+      seed: {
+        completions: [
+          completion("c1", "u2", "2026-10-06T10:00:00Z"),
+          completion("c2", "u1", "2026-09-22T10:00:00Z"),
+        ],
+      },
       taskHistory: rs.fn(async () => cycles),
     });
-    renderPanel(t, a);
+    await renderPanel(t, a);
     const trigger = screen.getByRole("button", { name: /^Repeat history: 2 done · last / });
     fireEvent.click(trigger);
     expect(a.taskHistory).toHaveBeenCalledWith("t1");
@@ -280,9 +267,9 @@ describe("a repeat's cycles (TV-U13b)", () => {
     expect(screen.getByText(/your time 25m/)).toBeTruthy();
   });
 
-  it("isn't offered for a one-off task", () => {
+  it("isn't offered for a one-off task", async () => {
     const t = task({ recurrence: null, energyLevel: "high" });
-    renderPanel(t, api(t));
+    await renderPanel(t, api(t));
     expect(screen.queryByRole("button", { name: /^Repeat history/ })).toBeNull();
   });
 });

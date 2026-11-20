@@ -28,4 +28,19 @@ test.describe("billing edge functions", () => {
     const res = await request.get(`${EDGE_BASE}/extend-trial`);
     expect(res.status()).toBe(405);
   });
+
+  // MOD-550: checkout creates Stripe objects, so only POST reaches it, and the
+  // token never travels in the URL.
+  test("GET /create-checkout-session returns 405, even with ?access_token", async ({ request }) => {
+    const res = await request.get(`${EDGE_BASE}/create-checkout-session?plan=pro&access_token=x`);
+    expect(res.status()).toBe(405);
+  });
+
+  test("POST /create-checkout-session with only ?access_token returns 401", async ({ request }) => {
+    const res = await request.post(`${EDGE_BASE}/create-checkout-session?access_token=x`, {
+      data: { plan: "pro" },
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(res.status()).toBe(401);
+  });
 });

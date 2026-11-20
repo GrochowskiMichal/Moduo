@@ -22,6 +22,8 @@ export type BookingPreview = {
   /** The default platform, and every platform the guest may pick from. */
   video?: VideoProvider | null;
   videoOptions?: VideoProvider[];
+  /** Offer mode (/book/r/<slug>, CALR-19). */
+  offer?: { status: string };
 };
 
 export async function bookingRequest(body: Record<string, unknown>): Promise<{

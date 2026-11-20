@@ -111,6 +111,11 @@
 /* A fenced code block (call #15's review): a plain monospace block, its
    content kept as written (no highlighting). Agent's layout, revisitable:
    mirrors Notes' code block. */
+/* Its text runs take the mono face too (global.css's `*` sets every element). */
+.desc-code-block * {
+  font-family: var(--font-mono);
+}
+
 .desc-code-block {
   display: block;
   margin: 0 0 0.5rem;

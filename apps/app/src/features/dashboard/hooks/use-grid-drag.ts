@@ -11,13 +11,24 @@
 //   • the grid rect is measured once on press into the gesture (it never scrolls);
 //   • the SAME engine call (`resolveDrag`) drives the live preview and the commit,
 //     so what you see is exactly what lands (WYSIWYG).
+//
+// The pointer offset renders urgently (the dragged widget tracks the finger 1:1);
+// a new push-preview and the drop render as transitions typed `dashboard-grid`,
+// so the canvas's <ViewTransition>s glide the moved widgets (global.css times it).
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  addTransitionType,
+  startTransition,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { commitLayout, resolveDrag } from "../engine/grid-engine";
 import type { WidgetInstance } from "../engine/types";
 import {
-  activeTransform,
   type Cell,
   cellMetrics,
   type GridMetrics,
@@ -29,6 +40,23 @@ import {
 const SLOP_PX = 6;
 /** Hold time that turns a normal-mode press into edit mode + a drag (iOS long-press). */
 const LONG_PRESS_MS = 450;
+
+/** Typed view transitions. Without them (WebKit before Safari 18.2) global.css can't
+ * keep the page out of the snapshot, so the layout just changes in place. */
+const CAN_GLIDE =
+  typeof CSS !== "undefined" && CSS.supports?.("selector(:active-view-transition-type(a))");
+
+/** Run a layout change as a view transition the canvas glides (see global.css). */
+function glide(update: () => void) {
+  if (!CAN_GLIDE) {
+    update();
+    return;
+  }
+  startTransition(() => {
+    addTransitionType("dashboard-grid");
+    update();
+  });
+}
 
 interface Gesture {
   /** The page pressed on; the gesture commits only while it is still the active page. */
@@ -49,13 +77,12 @@ interface Gesture {
   longPressTimer: number | null;
   /** Last VALID resolved layout (active pinned at its snapped cell). */
   preview: WidgetInstance[];
-  /** The active widget's cell within `preview`. */
-  activeCell: Cell;
 }
 
 /** What the canvas needs to render an in-flight drag; null when nothing is dragging. */
 export interface DragRender {
   activeId: string;
+  /** The pointer's travel since the press: the active widget stays in its pre-drag cell, offset by this. */
   transform: Point;
   preview: WidgetInstance[];
 }
@@ -92,10 +119,22 @@ function samePlacement(a: WidgetInstance[], b: WidgetInstance[]): boolean {
   return true;
 }
 
-/** A press that lands on a real control (remove/resize button, input…) must not start a drag. */
-function isInteractiveTarget(el: EventTarget | null): boolean {
+/**
+ * A press that lands on a real control (remove/resize button, input, a slider's
+ * thumb or track…) must not start a drag or a long-press. Neither may a press
+ * from a widget's popover: it's portaled out of the widget, but React still
+ * bubbles it to the widget's onPointerDown.
+ */
+function isInteractiveTarget(event: Pick<React.PointerEvent, "target" | "currentTarget">): boolean {
+  const el = event.target;
   if (!(el instanceof Element)) return false;
-  return Boolean(el.closest("button, a, input, textarea, select, [role='button'], [data-no-drag]"));
+  const host = event.currentTarget;
+  if (host instanceof Element && !host.contains(el)) return true;
+  return Boolean(
+    el.closest(
+      "button, a, input, textarea, select, [role='button'], [role='slider'], [data-slot='slider'], [data-no-drag]",
+    ),
+  );
 }
 
 export function useGridDrag({
@@ -107,7 +146,10 @@ export function useGridDrag({
 }: UseGridDragArgs): UseGridDragResult {
   const gridRef = useRef<HTMLDivElement | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
-  const [drag, setDrag] = useState<DragRender | null>(null);
+  // Split so a pointer move never carries a preview change out of its transition.
+  const [pointer, setPointer] = useState<Pick<DragRender, "activeId" | "transform"> | null>(null);
+  const [preview, setPreview] = useState<WidgetInstance[] | null>(null);
+  const drag: DragRender | null = pointer && preview ? { ...pointer, preview } : null;
 
   // Keep the live inputs in refs so the window listeners (attached once per press)
   // never read a stale closure (the calendar/timeline pattern).
@@ -144,7 +186,8 @@ export function useGridDrag({
     }
     document.body.style.userSelect = "";
     gestureRef.current = null;
-    setDrag(null);
+    setPointer(null);
+    setPreview(null);
   }, []);
 
   /** Finish the gesture: commit the previewed layout (unless it changed nothing), or just drop it. */
@@ -157,11 +200,15 @@ export function useGridDrag({
       // commit. When a valid preview exists, `samePlacement` still skips the
       // no-op case (dragged out and back to the exact start). A gesture whose
       // page is no longer the active one never commits (MOD-163).
-      if (commit && g?.started && g.preview !== g.preDrag && g.pageId === pageIdRef.current) {
-        const next = commitLayout(g.preview);
-        if (!samePlacement(next, g.preDrag)) onCommitRef.current(next);
-      }
-      teardown();
+      // The drop glides: the active widget from under the finger into its cell
+      // (or back home), in the same transition as the commit.
+      glide(() => {
+        if (commit && g?.started && g.preview !== g.preDrag && g.pageId === pageIdRef.current) {
+          const next = commitLayout(g.preview);
+          if (!samePlacement(next, g.preDrag)) onCommitRef.current(next);
+        }
+        teardown();
+      });
     },
     [teardown],
   );
@@ -183,7 +230,7 @@ export function useGridDrag({
     (widgetId: string, event: React.PointerEvent) => {
       if (event.button !== 0) return; // primary button only
       if (gestureRef.current) return; // one gesture at a time
-      if (isInteractiveTarget(event.target)) return; // a control press, not a drag
+      if (isInteractiveTarget(event)) return; // a control press, not a drag
       const grid = gridRef.current;
       if (!grid) return;
       const widget = widgetsRef.current.find((w) => w.id === widgetId);
@@ -210,7 +257,6 @@ export function useGridDrag({
         started: false,
         longPressTimer: null,
         preview: widgetsRef.current,
-        activeCell: { x: widget.x, y: widget.y },
       };
 
       // Normal mode: arm a long-press that enters edit mode and lets the SAME
@@ -245,6 +291,7 @@ export function useGridDrag({
           if (travelled <= SLOP_PX) return; // waiting for intent
           cur.started = true;
           document.body.style.userSelect = "none";
+          setPreview(cur.preview);
         }
         e.preventDefault();
 
@@ -256,17 +303,11 @@ export function useGridDrag({
         });
         const resolved = resolveDrag(cur.preDrag, cur.widgetId, target);
         if (resolved) {
+          const moved = !samePlacement(resolved, cur.preview);
           cur.preview = resolved;
-          const placed = resolved.find((w) => w.id === cur.widgetId);
-          if (placed) cur.activeCell = { x: placed.x, y: placed.y };
+          if (moved) glide(() => setPreview(resolved));
         }
-        const transform = activeTransform({
-          originalCell: cur.originalCell,
-          activeCell: cur.activeCell,
-          delta,
-          metrics: cur.metrics,
-        });
-        setDrag({ activeId: cur.widgetId, transform, preview: cur.preview });
+        setPointer({ activeId: cur.widgetId, transform: delta });
       };
 
       const up = (e: PointerEvent) => {

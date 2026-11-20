@@ -12,10 +12,12 @@
 import { FileText, Loader2, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+
 import { useEntityHub } from "@/features/spine/hooks/use-entity-hub";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { newLinkedNoteLinkArgs, selectLinkedNotes } from "../linked-notes";
 
 type Props = {

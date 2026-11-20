@@ -1,7 +1,9 @@
 // The web app on Cloudflare Workers static assets (specs/platform-v2.md, PLAT-4).
 // Deployed by .github/workflows/app-preview.yml (a version per PR, on the staging Worker) and
 // app-staging.yml (staging, after checks pass on develop); wrangler is pinned there. Production
-// is deployed by deploy-prod.yml (a commit staging already runs, on app.moduo.app).
+// is deployed by _deploy-web.yml (release.yml / deploy-prod.yml) as a canary: a version upload
+// moved to 100% by scripts/release/canary.ts (HV-28). Never add CANARY_FORCE_ERROR_AFTER here:
+// only canary-rehearsal.yml sets it, on a staging version.
 //
 // One build serves every environment. The edge Worker (edge/worker.ts) runs for HTML navigations,
 // /config.json and missing files, and writes the environment's vars below into the page as

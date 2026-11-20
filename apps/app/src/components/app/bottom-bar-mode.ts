@@ -76,3 +76,40 @@ export function useBottomBarModeOwner(mode: BottomBarMode | null): void {
     return () => clearBottomBarMode(mode.id);
   }, [mode]);
 }
+
+// ── Hidden tools ────────────────────────────────────────────────────────────
+// A page where a tool means nothing hides it while it shows (Mail on the web has no
+// compose: specs/mail-improve.md §5). Each owner hides its own set; a tool shows again
+// once no owner hides it.
+
+export type BottomBarTool = "search" | "capture" | "create";
+
+const hiders = new Map<symbol, readonly BottomBarTool[]>();
+let hidden: ReadonlySet<BottomBarTool> = new Set();
+
+function recomputeHidden() {
+  hidden = new Set([...hiders.values()].flat());
+  emit();
+}
+
+/** The tools hidden now. */
+export function useHiddenBottomBarTools(): ReadonlySet<BottomBarTool> {
+  return useSyncExternalStore(
+    subscribe,
+    () => hidden,
+    () => hidden,
+  );
+}
+
+/** Hides `tools` while the calling component is mounted. Pass a stable array. */
+export function useHideBottomBarTools(tools: readonly BottomBarTool[]): void {
+  useEffect(() => {
+    const key = Symbol("bottom-bar-hider");
+    hiders.set(key, tools);
+    recomputeHidden();
+    return () => {
+      hiders.delete(key);
+      recomputeHidden();
+    };
+  }, [tools]);
+}

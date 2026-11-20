@@ -9,12 +9,7 @@
 import { estimateOf, type Task } from "./model";
 
 export type OptionalProperty =
-  | "energy"
-  | "scheduled"
-  | "reminder"
-  | "estimate"
-  | "repeat"
-  | "waiting";
+  "energy" | "scheduled" | "reminder" | "estimate" | "repeat" | "waiting";
 
 /** Panel order of the optional rows. */
 export const OPTIONAL_PROPERTIES: OptionalProperty[] = [

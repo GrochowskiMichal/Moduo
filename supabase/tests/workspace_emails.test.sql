@@ -143,6 +143,12 @@ SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites
 SELECT test.ok((SELECT expires_at = now() + interval '7 days' AND token <> 'chosen-token' AND created_at = now()
                   FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')),
   'none of them change');
+-- What an invite shares is granted with its inviter's rights, so it is fixed too.
+SELECT test.ok(test.as_user('A', format($q$UPDATE public.workspace_invites
+    SET share_payload = '{"existing":"edit","resources":[{"type":"note","id":"00000000-0000-0000-0000-000000000001","level":"full"}]}'
+  WHERE id = %L$q$, test.invite_id('tom@becker.studio'))) = 'ok 1', 'the admin edits what an invite shares');
+SELECT test.ok((SELECT share_payload = '{}'::jsonb FROM public.workspace_invites WHERE id = test.invite_id('tom@becker.studio')),
+  'what it shares does not change');
 SELECT test.ok(test.as_user('O', format($q$UPDATE public.workspace_invites SET workspace_id = %L WHERE id = %L$q$,
   test.id('W2'), test.invite_id('tom@becker.studio'))) = '42501 An invite can''t move to another workspace. Send a new one.',
   'an invite cannot move to another workspace (its daily cap never saw it)');

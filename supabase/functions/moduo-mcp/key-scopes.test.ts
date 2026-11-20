@@ -11,7 +11,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, rs } from "@rstest/core";
 
 import { MCP_TOOL_NEEDS } from "../_shared/contracts/mcp-key-scopes.ts";
-import { parseToolArgs } from "../_shared/contracts/mcp-tool-args.ts";
 
 // tasks.ts pulls rrule from esm.sh, which only Deno can load; nothing here uses it.
 rs.mock("https://esm.sh/rrule@2.8.1?target=deno", () => ({ RRule: class {} }));
@@ -32,6 +31,7 @@ import {
   toolRequirement,
   toolsForKey,
 } from "./registry.ts";
+import { callThroughSdk, listThroughSdk } from "./through-sdk.ts";
 import { assertLiveLinkInScope, assertReach, canReach, linksInScope } from "./share.ts";
 
 type Row = Record<string, unknown>;
@@ -124,7 +124,7 @@ function fakeDb(tables: Record<string, Row[]>, rpcs: Record<string, (args: Row) 
   async function rpc(fn: string, args: Row) {
     rpcCalls.push({ fn, args });
     const impl = rpcs[fn];
-    return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}` } };
+    return impl ? { data: impl(args), error: null } : { data: null, error: { message: `unexpected rpc ${fn}`, code: "PGRST202" } };
   }
   return { db: { from, rpc }, queries, rpcCalls, ors };
 }
@@ -146,17 +146,17 @@ const ctx = (scopes: Record<string, string>, db: ReturnType<typeof fakeDb>["db"]
   key: key(scopes),
   db: db as unknown as ToolContext["db"],
 });
-const names = (k: KeyContext) => toolsForKey(k).map((t) => t.name);
+/** The tools a client lists for this key, through the SDK server. */
+const names = async (k: KeyContext) => (await listThroughSdk(k)).map((t) => t.name);
+/** A registered tool whose handler is called as a client calls it: through the SDK server. */
 function tool(module: ConnectorModule, name: string): ToolDef {
   const found = module.tools.find((t) => t.name === name);
   if (!found) throw new Error(`${name} is not registered on ${module.module}`);
-  return found;
+  return { ...found, handler: (args, c) => callThroughSdk(name, args, c) };
 }
-/** A tool call as index.ts makes it: the arguments go through the parser first. */
+/** A tool call as a client makes it: the arguments go through the parser first. */
 function callTool(module: ConnectorModule, name: string, args: Row, c: ToolContext): Promise<any> {
-  const parsed = parseToolArgs(name, args);
-  if (!parsed.success) return Promise.reject(new Error(parsed.message));
-  return tool(module, name).handler(parsed.data, c) as Promise<any>;
+  return tool(module, name).handler(args, c) as Promise<any>;
 }
 
 describe("which tools a key lists and may call", () => {
@@ -166,7 +166,8 @@ describe("which tools a key lists and may call", () => {
     // The Tasks module's tools (TV-D16: projects, sections, areas, statuses,
     // teams, templates and imports are Tasks' too).
     const tasksPrefix = /^(tasks|projects|sections|areas|statuses|teams|templates|imports)_/;
-    for (const t of viewTasks) {
+    // Plus `search` (GS-7), which spans every module the key can view.
+    for (const t of viewTasks.filter((t) => t.name !== "search")) {
       expect(tasksPrefix.test(t.name), t.name).toBe(true);
       expect(t.access, t.name).toBe("view");
     }
@@ -174,35 +175,35 @@ describe("which tools a key lists and may call", () => {
     expect(toolsForKey(key({ tasks: "admin", notes: "write" }))).toEqual([]);
   });
 
-  it("gives an Edit-everywhere key every tool", () => {
+  it("gives an Edit-everywhere key every tool", async () => {
     const everything = Object.fromEntries(connectorModules.map((m) => [m.module, "edit"]));
-    expect(names(key(everything))).toEqual(connectorModules.flatMap((m) => m.tools.map((t) => t.name)));
+    expect(await names(key(everything))).toEqual(connectorModules.flatMap((m) => m.tools.map((t) => t.name)));
   });
 
-  it("keeps Links tools from a key without Links, and suggestions behind Links: Edit", () => {
+  it("keeps Links tools from a key without Links, and suggestions behind Links: Edit", async () => {
     const linkTools = linksConnectorModule.tools.map((t) => t.name);
-    const noLinks = names(key({ tasks: "edit", notes: "edit", contacts: "edit" }));
+    const noLinks = await names(key({ tasks: "edit", notes: "edit", contacts: "edit" }));
     for (const t of linkTools) expect(noLinks).not.toContain(t);
-    const view = names(key({ links: "view" }));
+    const view = await names(key({ links: "view" }));
     expect(view).toEqual(expect.arrayContaining(["links_search_entities", "links_list"]));
     expect(view).not.toContain("links_suggest");
     expect(view).not.toContain("links_create");
-    expect(names(key({ links: "edit" }))).toContain("links_suggest");
+    expect(await names(key({ links: "edit" }))).toContain("links_suggest");
   });
 
-  it("needs Tasks: Edit as well for the four task-block tools", () => {
+  it("needs Tasks: Edit as well for the four task-block tools", async () => {
     const blockTools = MCP_TOOL_NEEDS.filter((n) => n.needs === "tasks").map((n) => n.tool);
     expect(blockTools).toHaveLength(4);
-    const calendarOnly = names(key({ calendar: "edit", tasks: "view" }));
+    const calendarOnly = await names(key({ calendar: "edit", tasks: "view" }));
     expect(calendarOnly).toContain("calendar_create_event");
     for (const t of blockTools) expect(calendarOnly).not.toContain(t);
-    const both = names(key({ calendar: "edit", tasks: "edit" }));
+    const both = await names(key({ calendar: "edit", tasks: "edit" }));
     for (const t of blockTools) expect(both).toContain(t);
   });
 
-  it("needs Links: Edit as well for notes_link", () => {
-    expect(names(key({ notes: "edit" }))).not.toContain("notes_link");
-    expect(names(key({ notes: "edit", links: "edit" }))).toContain("notes_link");
+  it("needs Links: Edit as well for notes_link", async () => {
+    expect(await names(key({ notes: "edit" }))).not.toContain("notes_link");
+    expect(await names(key({ notes: "edit", links: "edit" }))).toContain("notes_link");
   });
 
   it("refuses the same tools when called, and says everything they need", () => {
@@ -368,9 +369,9 @@ describe("comments_list (MOD-94): Links reads an item's comments, behind the ite
   });
   const seen = (answer: boolean) => ({ perm_can_see_entity: () => answer });
 
-  it("is a Links read: listed at Links: View, never for a key without Links", () => {
-    expect(names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
-    expect(names(key({ tasks: "edit" }))).not.toContain("comments_list");
+  it("is a Links read: listed at Links: View, never for a key without Links", async () => {
+    expect(await names(key({ tasks: "view", links: "view" }))).toContain("comments_list");
+    expect(await names(key({ tasks: "edit" }))).not.toContain("comments_list");
     expect(tool(linksConnectorModule, "comments_list").access).toBe("view");
   });
 
@@ -627,30 +628,33 @@ describe("calendar_day", () => {
     duration_minutes: 30,
     status: "todo",
   };
-  const shared = (tasks: string[]) => ({
+  // CALR-15: events come from the masked read (calendar_events_visible), which
+  // already answers for the key's person; the raw table is never read.
+  const shared = (tasks: string[], events: Row[] = [event]) => ({
+    calendar_events_visible: () => events,
     share_visible_ids: (args: Row) => (args.p_resource_type === "task" ? tasks : []),
   });
 
   it("leaves task blocks out, and says so, for a key without Tasks", async () => {
-    const { db, queries, rpcCalls } = fakeDb({ calendar_events: [event], tasks: [block] }, shared([TASK]));
+    const { db, queries, rpcCalls } = fakeDb({ tasks: [block] }, shared([TASK]));
     const result = (await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db))) as Row;
     expect((result.events as Row[]).map((e) => e.id)).toEqual(["event-1"]);
     expect(result.blocks).toEqual([]);
     expect(result.strip).toEqual([]);
     expect(result.note).toBe("Task blocks are left out: this API key has no access to Tasks.");
     expect(queries.some((q) => q.table === "tasks")).toBe(false);
-    expect(rpcCalls.map((c) => c.args.p_resource_type)).toEqual(["calendar"]);
+    expect(rpcCalls.filter((c) => c.fn === "share_visible_ids")).toEqual([]);
   });
 
   it("shows a Tasks key the blocks its creator can open, and no others", async () => {
-    const open = fakeDb({ calendar_events: [event], tasks: [block] }, shared([TASK]));
+    const open = fakeDb({ tasks: [block] }, shared([TASK]));
     const result = (await day.handler(
       { date: "2020-01-15" },
       ctx({ calendar: "view", tasks: "view" }, open.db),
     )) as Row;
     expect((result.blocks as Row[]).map((b) => b.task_id)).toEqual([TASK]);
     expect(result.note).toBeUndefined();
-    const hidden = fakeDb({ calendar_events: [event], tasks: [block] }, shared([]));
+    const hidden = fakeDb({ tasks: [block] }, shared([]));
     const none = (await day.handler(
       { date: "2020-01-15" },
       ctx({ calendar: "view", tasks: "view" }, hidden.db),
@@ -658,11 +662,80 @@ describe("calendar_day", () => {
     expect(none.blocks).toEqual([]);
     expect(none.strip).toEqual([]);
   });
+
+  it("reads the day's events through the masked read, never the raw table", async () => {
+    const { db, queries, rpcCalls } = fakeDb({ calendar_events: [event] }, shared([]));
+    await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db));
+    expect(queries.some((q) => q.table === "calendar_events")).toBe(false);
+    const read = rpcCalls.find((c) => c.fn === "calendar_events_visible");
+    expect(read?.args).toEqual({
+      p_workspace_id: WS,
+      p_from: "2020-01-15T00:00:00.000Z",
+      p_to: "2020-01-16T00:00:00.000Z",
+    });
+  });
+
+  it("hands a teammate's private event to the agent as the masked read gave it", async () => {
+    const busy = { ...event, id: "event-2", owner_id: "someone-else", title: "Busy", is_private: true, description: null };
+    const { db } = fakeDb({}, shared([], [event, busy]));
+    const result = (await day.handler({ date: "2020-01-15" }, ctx({ calendar: "view" }, db))) as Row;
+    const byId = new Map((result.events as Row[]).map((e) => [e.id, e]));
+    expect(byId.get("event-2")?.title).toBe("Busy");
+    expect(byId.get("event-2")?.description).toBe("");
+    expect(byId.get("event-1")?.title).toBe("Standup");
+  });
+});
+
+describe("calendar_list_events", () => {
+  const list = tool(calendarConnectorModule, "calendar_list_events");
+  const at = (id: string, start: string, end: string, extra: Row = {}) => ({
+    id,
+    workspace_id: WS,
+    deleted_at: null,
+    owner_id: ME,
+    calendar_ref: null,
+    title: id,
+    start_time: start,
+    end_time: end,
+    source_account_id: null,
+    recurrence_rule: null,
+    ...extra,
+  });
+
+  it("reads through the masked read for the range, never the raw table", async () => {
+    const rows = [at("a", "2020-01-15T10:00:00.000Z", "2020-01-15T11:00:00.000Z")];
+    const { db, queries, rpcCalls } = fakeDb({ calendar_events: rows }, { calendar_events_visible: () => rows });
+    const result = (await list.handler(
+      { from: "2020-01-15T00:00:00.000Z", to: "2020-01-16T00:00:00.000Z" },
+      ctx({ calendar: "view" }, db),
+    )) as Row[];
+    expect(result.map((e) => e.id)).toEqual(["a"]);
+    expect(queries.some((q) => q.table === "calendar_events")).toBe(false);
+    expect(rpcCalls.find((c) => c.fn === "calendar_events_visible")?.args).toEqual({
+      p_workspace_id: WS,
+      p_from: "2020-01-15T00:00:00.000Z",
+      p_to: "2020-01-16T00:00:00.000Z",
+    });
+  });
+
+  it("keeps to the range and the limit", async () => {
+    const rows = [
+      at("before", "2019-06-01T10:00:00.000Z", "2019-06-01T11:00:00.000Z", { recurrence_rule: "FREQ=WEEKLY" }),
+      at("a", "2020-01-15T10:00:00.000Z", "2020-01-15T11:00:00.000Z"),
+      at("b", "2020-01-15T12:00:00.000Z", "2020-01-15T13:00:00.000Z"),
+    ];
+    const { db } = fakeDb({}, { calendar_events_visible: () => rows });
+    const result = (await list.handler(
+      { from: "2020-01-15T00:00:00.000Z", to: "2020-01-16T00:00:00.000Z", limit: 1 },
+      ctx({ calendar: "view" }, db),
+    )) as Row[];
+    expect(result.map((e) => e.id)).toEqual(["a"]);
+  });
 });
 
 describe("connector wiring", () => {
   it("refuses an expired key in authenticate()", () => {
-    const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
     expect(source).toContain("apiKeyExpired(data.expires_at)");
   });
 });

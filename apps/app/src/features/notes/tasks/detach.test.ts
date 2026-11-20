@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from "@rstest/core";
+
 import type { EntityLink } from "../../../lib/entity-links";
 import { buildDetachPlan, buildMintRevertPlan, type TaskLineSnapshot } from "./detach";
 

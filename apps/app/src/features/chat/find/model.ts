@@ -5,6 +5,7 @@
 // here, through the member list, never through message text.
 
 import type { FilterCondition, FilterDimension } from "@/components/ui/filter-model";
+
 import type { ChatSearchHit, ChatSearchQuery } from "../model";
 
 /** The server marks a match with U+E000 … U+E001 (never HTML). */

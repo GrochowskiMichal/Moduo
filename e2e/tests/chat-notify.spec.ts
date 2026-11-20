@@ -7,6 +7,7 @@ import {
   rpc,
   runTag,
   type Session,
+  setLocalPassword,
   signIn,
   signInPage,
   stackKeys,
@@ -77,11 +78,8 @@ async function ensurePerson(who: Person): Promise<Session> {
     });
     user = (await created.json()) as { id: string; email: string };
   }
-  await fetch(`${url}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: admin,
-    body: JSON.stringify({ password: who.password }),
-  });
+  // Auth refuses password writes; set it in SQL (supabase/seed.sql does the same).
+  setLocalPassword(user.id, who.password);
   await rest("service", `profiles?id=eq.${user.id}`, {
     method: "PATCH",
     body: { display_name: who.name, plan_tier: "duo" },

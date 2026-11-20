@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
+
 import { AtThreeDensities } from "@/components/ui/kit-densities";
+
 import type { ChatMessage, ChatPerson } from "../model";
 import type { ChatWindow } from "../store/store";
 import { MessageStream } from "./message-stream";

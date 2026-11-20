@@ -115,6 +115,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "List the conversations this key can read: public channels, and private channels its creator is in when the key's \"Include private channels I'm in\" is on. Direct messages are never visible to a key.",
       access: "view",
+      hints: "read",
       inputSchema: { type: "object", properties: {} },
       handler: async (_args, ctx) => {
         const list = await call<Row[]>(ctx, "chat_agent_conversations", { p_workspace_id: ctx.key.workspaceId });
@@ -134,6 +135,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "Read a conversation (its messages, oldest first) or one reply chain when chain_id is given (the chain's first message and its replies). Pages back with before (a message id from the previous page).",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -171,6 +173,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "Search messages in the conversations this key can read, newest first. Matches whole words and their beginnings, Polish without diacritics too.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: {
@@ -206,6 +209,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "What's waiting for the key's creator in Catch up: messages that mention them, their teams or everyone, replies in chains they're in, and announcements, in conversations this key can read (never direct messages). Newest first.",
       access: "view",
+      hints: "read",
       inputSchema: {
         type: "object",
         properties: { limit: { type: "number", description: "Max items (default 30, max 100)." } },
@@ -232,6 +236,7 @@ export const chatConnectorModule: ConnectorModule = {
       name: "chat_post",
       description: `Post a message in a conversation as the key's creator ("Alex · via <key name>"). ${POST_HINT} 30 posts a minute per key.`,
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -269,6 +274,7 @@ export const chatConnectorModule: ConnectorModule = {
       name: "chat_reply",
       description: `Reply to a message, quoting it: the reply joins that message's chain. ${POST_HINT}`,
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {
@@ -293,6 +299,7 @@ export const chatConnectorModule: ConnectorModule = {
       name: "chat_react",
       description: "Add (or, with on=false, take back) the key creator's reaction on a message: an emoji like 👍, or a workspace emoji as :name:.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -319,6 +326,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "Mark a message as a decision (or unmark it with on=false). Decisions show in the conversation's Details and on the items it's linked to.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -343,6 +351,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "Wrap up a reply chain with the reply that settled it (optionally marking that reply as a decision). Whoever started the chain, the channel's managers and admins can.",
       access: "edit",
+      hints: { destructive: false, idempotent: true },
       inputSchema: {
         type: "object",
         properties: {
@@ -369,6 +378,7 @@ export const chatConnectorModule: ConnectorModule = {
       description:
         "Create a channel as the key's creator (their role decides whether they may). Private only when the key's \"Include private channels I'm in\" is on.",
       access: "edit",
+      hints: { destructive: false, idempotent: false },
       inputSchema: {
         type: "object",
         properties: {

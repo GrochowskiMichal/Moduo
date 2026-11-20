@@ -10,10 +10,12 @@
 // register email meta the same way.
 
 import { isBacklogTask, isClosedTask } from "@contracts/vocabularies";
+
 import { allTimeCalendarWindow } from "@/features/calendar/window";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { findWorkspaceStore } from "@/lib/sync/store";
+
 import { entityRefKey } from "../../spine/rollup";
 import type { HubSnippetMeta } from "../../spine/snippet-projectors";
 
@@ -38,6 +40,9 @@ export async function enrichHubRows(
 ): Promise<HubEnrichment> {
   if (!refs.length) return EMPTY;
 
+  // A wanted id with no snippetMeta entry means its module read didn't return
+  // it (the item is soft-deleted but its link and registry entry outlived it),
+  // not a lookup miss: a "missing snippet" is that row's graceful path.
   const wantTask = new Set(refs.filter((r) => r.type === "task").map((r) => r.id));
   const wantNote = new Set(refs.filter((r) => r.type === "note").map((r) => r.id));
   const wantEvent = new Set(refs.filter((r) => r.type === "event").map((r) => r.id));
@@ -88,7 +93,6 @@ export async function enrichHubRows(
               snippetMeta.set(entityRefKey({ type: "note", id: n.id }), {
                 kind: "note",
                 updatedAt: n.updatedAt,
-                isPinned: n.isPinned,
                 isArchived: n.isArchived,
               });
             }

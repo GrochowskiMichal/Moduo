@@ -38,12 +38,14 @@ import { CalendarDays, Plus } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
+
 import { PersonAvatar, TeamMark } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import { Eyebrow } from "@/components/ui/eyebrow";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+
 import { dateCommandDay, isoDay, triggerAt } from "../grammar";
 import { useMentionSearch } from "../hooks/use-mention-search";
 import { resolveEntityIcon } from "../icon-map";
@@ -635,7 +637,11 @@ export function MentionMenuPlugin({
       {loading && candidates.length === 0 ? (
         <p className="px-2 py-3 text-sm text-muted-foreground">Searching…</p>
       ) : candidates.length === 0 ? (
-        <p className="px-2 py-3 text-sm text-muted-foreground">No matches.</p>
+        <p className="px-2 py-3 text-sm text-muted-foreground">
+          {trigger === "mention" && peopleOnly
+            ? "No workspace member by that name. @ mentions people in this workspace."
+            : "No matches."}
+        </p>
       ) : (
         candidates.map((candidate, index) => {
           const isSelected = index === selectedIndex;

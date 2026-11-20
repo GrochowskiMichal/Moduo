@@ -1,8 +1,8 @@
 /**
  * Pure sidebar tree shaping for Notes v2 (Wave-3 NO-3, AC2/AC12).
  *
- * Sections (DESIGN_BRIEF §2a): Pinned · Inbox · tree · Published · Archive ·
- * Trash. With no "filed" marker in the schema, membership is DERIVED:
+ * Sections (DESIGN_BRIEF §2a): Inbox · tree · Published · Archive · Trash.
+ * (Pins are gone, NS-9: Favorites keep a note at hand.) With no "filed" marker in the schema, membership is DERIVED:
  *   - Inbox = live, unarchived ROOT notes with no live children (loose
  *     captures — global ⌘⇧N lands here).
  *   - tree  = live, unarchived root notes WITH children (the organized
@@ -23,7 +23,6 @@ export type NoteTreeNode = {
 };
 
 export type NoteSections = {
-  pinned: Note[];
   inbox: Note[];
   tree: NoteTreeNode[];
   published: Note[];
@@ -112,8 +111,6 @@ export function buildNoteSections(notes: Note[]): NoteSections {
   }
   inbox.sort(byPosition);
 
-  const pinned = live.filter((n) => n.isPinned && !archivedByAncestry(n)).sort(byPosition);
-
   const published = live.filter((n) => n.publishedAt && n.publishToken).sort(byPosition);
 
   // Archive roots = self-archived live notes whose ancestors aren't archived
@@ -138,7 +135,7 @@ export function buildNoteSections(notes: Note[]): NoteSections {
     .sort(byPosition)
     .map((root) => buildSubtree(root, trashedKids, (n) => Boolean(n.deletedAt)));
 
-  return { pinned, inbox, tree, published, archive, trash };
+  return { inbox, tree, published, archive, trash };
 }
 
 /** Would moving `noteId` under `newParentId` create a cycle? Mirrors the

@@ -7,6 +7,7 @@
 
 import { TASK_VIEW_WORD_DIMENSIONS } from "@contracts/vocabularies";
 import { describe, expect, it } from "@rstest/core";
+
 import { tasksViewDefaults } from "./display";
 import { sanitizeTaskFilters } from "./filters";
 import {

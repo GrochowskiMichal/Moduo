@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import type { EntityLink, EntityRecord, EntityRef } from "@/lib/entity-links";
+
 import { entityRefKey } from "../../spine/rollup";
 import "../projectors";
 import { buildCompanyRollup } from "../company";

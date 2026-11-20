@@ -6,6 +6,7 @@
 import { useMemo } from "react";
 
 import { useAuth } from "@/providers/auth-provider";
+
 import { useWorkspace } from "../../workspaces/workspace-context";
 import type { CommentPerson } from "../comments";
 

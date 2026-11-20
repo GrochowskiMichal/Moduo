@@ -64,8 +64,8 @@ describe("notice deliveries (TV-D12)", () => {
   });
 
   it("shows only the newest few, each once", () => {
-    const ds = ["01", "02", "03", "04"].map(
-      (n) => noticeDeliveryFromRow(row({ id: n, created_at: `2026-10-13T09:${n}:00Z` }))!,
+    const ds = ["01", "02", "03", "04"].map((n) =>
+      noticeDeliveryFromRow(row({ id: n, created_at: `2026-10-13T09:${n}:00Z` }))!,
     );
     expect(deliveriesToShow(ds, new Set(["04"])).map((d) => d.id)).toEqual(["03", "02", "01"]);
     expect(deliveriesToShow(ds, new Set(), 2).map((d) => d.id)).toEqual(["04", "03"]);

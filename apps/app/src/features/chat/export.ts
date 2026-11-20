@@ -328,7 +328,7 @@ function cleanPart(text: string): string {
   return (
     text
       // Also the direction overrides that could disguise a name's ending.
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes
+      // eslint-disable-next-line no-control-regex -- control characters are what it removes
       .replace(/[\\/:*?"<>|\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069\u200e\u200f\u061c]/g, "")
       .replace(/^[\s.]+|[\s.]+$/g, "")
       .slice(0, PART_MAX)

@@ -54,7 +54,7 @@ export function defaultViewState(now: Date = new Date()): CalendarViewState {
 }
 
 const viewStateSchema = z.object({
-  view: z.enum(["day", "week"]).optional(),
+  view: z.enum(["day", "week", "month"]).optional(),
   anchor: z.string().optional(),
 });
 
@@ -62,8 +62,7 @@ export function sanitizeViewState(raw: unknown, now: Date = new Date()): Calenda
   const fallback = defaultViewState(now);
   const parsed = viewStateSchema.safeParse(raw);
   if (!parsed.success) return fallback;
-  const view: CalendarView =
-    parsed.data.view === "day" || parsed.data.view === "week" ? parsed.data.view : fallback.view;
+  const view: CalendarView = parsed.data.view ?? fallback.view;
   const anchor =
     typeof parsed.data.anchor === "string" && parseDayKey(parsed.data.anchor)
       ? parsed.data.anchor
@@ -93,9 +92,10 @@ export function writeViewState(
 
 // ── right-panel variant (localStorage, per user+workspace — §10) ────────────
 
-export type PanelVariantId = "tasks" | "detail" | "notes";
+export type PanelVariantId = "tasks" | "detail";
 
-const PANEL_VARIANT_IDS: readonly PanelVariantId[] = ["tasks", "detail", "notes"];
+// A remembered "notes" (the old linked-notes view) reads as Plan.
+const PANEL_VARIANT_IDS: readonly PanelVariantId[] = ["tasks", "detail"];
 
 function panelVariantKey(userId: string, workspaceId: string): string {
   return `moduo:calendar:panel-variant:${userId}:${workspaceId}`;
@@ -134,6 +134,8 @@ export type CalendarPrefs = {
   /** Per-account color override (a bounded label hue name; see tag-colors). The
    * provider's own color is the default until the user recolors it. */
   accountColors: Record<string, string>;
+  /** Per workspace, the Google account new events go to; absent = Your calendar. */
+  newEventsTo: Record<string, string>;
 };
 
 /** 08:00–18:00, Monday start, weekends shown (spec §10 defaults). */
@@ -144,6 +146,7 @@ export const DEFAULT_CALENDAR_PREFS: CalendarPrefs = {
   showWeekends: true,
   hiddenAccountIds: [],
   accountColors: {},
+  newEventsTo: {},
 };
 
 function asMinute(v: unknown, fallback: number): number {
@@ -159,6 +162,7 @@ const calendarPrefsShape = z.object({
   showWeekends: z.unknown().optional(),
   hiddenAccountIds: z.unknown().optional(),
   accountColors: z.unknown().optional(),
+  newEventsTo: z.unknown().optional(),
 });
 
 /** Coerce any stored/synced value into a valid prefs object (round-trips). */
@@ -184,12 +188,17 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
   const hiddenAccountIds = Array.isArray(o.hiddenAccountIds)
     ? o.hiddenAccountIds.filter((v): v is string => typeof v === "string")
     : [];
-  const accountColors: Record<string, string> = {};
-  if (o.accountColors && typeof o.accountColors === "object") {
-    for (const [k, v] of Object.entries(o.accountColors as Record<string, unknown>)) {
-      if (typeof v === "string") accountColors[k] = v;
+  const stringMap = (raw: unknown, keep: (v: string) => boolean) => {
+    const out: Record<string, string> = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (typeof v === "string" && keep(v)) out[k] = v;
+      }
     }
-  }
+    return out;
+  };
+  const accountColors = stringMap(o.accountColors, () => true);
+  const newEventsTo = stringMap(o.newEventsTo, (v) => v !== "");
   return {
     workStartMinute,
     workEndMinute,
@@ -197,6 +206,7 @@ export function sanitizeCalendarPrefs(raw: unknown): CalendarPrefs {
     showWeekends,
     hiddenAccountIds,
     accountColors,
+    newEventsTo,
   };
 }
 
@@ -212,4 +222,15 @@ export function readCalendarPrefs(userId: string): CalendarPrefs {
 
 export function writeCalendarPrefs(userId: string, prefs: CalendarPrefs): void {
   writeStored(prefsKey(userId), sanitizeCalendarPrefs(prefs));
+}
+
+/** The quiet wash over a day column (CALR-13, AC45): off-hours above `top` and
+ * from `bottomFrom` down, in wall-clock minutes; a weekend day is all wash. */
+export function offHoursWash(
+  prefs: Pick<CalendarPrefs, "workStartMinute" | "workEndMinute">,
+  day: Date,
+): { top: number; bottomFrom: number } {
+  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  if (weekend) return { top: 24 * 60, bottomFrom: 24 * 60 };
+  return { top: prefs.workStartMinute, bottomFrom: prefs.workEndMinute };
 }

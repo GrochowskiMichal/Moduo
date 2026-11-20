@@ -106,13 +106,12 @@ export function formatTaskSnippet(meta: TaskSnippetMeta, now: Date): string | nu
 
 /**
  * Note row snippet. The v2 list carries no body, so the honest preview is
- * recency ("Edited 3 days ago"), with a "Pinned"/"Archived" state prefix. A
+ * recency ("Edited 3 days ago"), with an "Archived" state prefix. A
  * body excerpt would need a per-note fetch (an N-fan-out the roll-up forbids).
  */
 export function formatNoteSnippet(meta: NoteSnippetMeta, now: Date): string | null {
   const edited = meta.updatedAt ? `Edited ${relativeTimeAgo(meta.updatedAt, now)}` : null;
   if (meta.isArchived) return edited ? `Archived · ${edited}` : "Archived";
-  if (meta.isPinned) return edited ? `Pinned · ${edited}` : "Pinned";
   return edited;
 }
 

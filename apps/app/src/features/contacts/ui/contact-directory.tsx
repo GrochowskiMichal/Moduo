@@ -16,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+
 import { TagChip } from "@/components/tag-chip";
 import { normalizeLabelColor } from "@/components/tag-colors";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -37,6 +38,7 @@ import { SELECTED_ROW } from "@/components/ui/selection";
 import { Toolbar } from "@/components/ui/toolbar";
 import { entityDrag } from "@/lib/drag-payload";
 import { cn } from "@/lib/utils";
+
 import { useDragPayload } from "../../spine/hooks/use-drag-payload";
 import type { Tag, TagLink } from "../../tasks/model";
 import { findDuplicateGroups } from "../dedupe";
@@ -45,8 +47,8 @@ import {
   filterCompanies,
   filterPeople,
   personSecondary,
-  STATUS_FILTER_NONE,
   sortRecent,
+  STATUS_FILTER_NONE,
 } from "../directory-query";
 import { groupByLetter } from "../letter-index";
 import type { Company, Contact } from "../model";

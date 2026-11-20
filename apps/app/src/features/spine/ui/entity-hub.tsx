@@ -9,6 +9,7 @@
 
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import {
   type RelationKind,
 } from "@/lib/entity-links";
 import { cn } from "@/lib/utils";
+
 import { MentionedInLines } from "../../chat/mentioned-in";
 import type { HubStatus } from "../hooks/use-entity-hub";
 import { resolveEntityIcon } from "../icon-map";
@@ -236,11 +238,13 @@ export function EntityHubRow({
               {RELATION_KIND_LABELS[row.relationKind]}
             </span>
           ) : null
-        ) : (
+        ) : row.relationKind !== "references" ? (
+          // The rail, too, says nothing for the default kind: a REFERENCES
+          // eyebrow on every row was noise.
           <Eyebrow className="ml-auto shrink-0 pl-2" tone="tag">
             {RELATION_KIND_LABELS[row.relationKind]}
           </Eyebrow>
-        )}
+        ) : null}
       </button>
 
       {canEdit ? (

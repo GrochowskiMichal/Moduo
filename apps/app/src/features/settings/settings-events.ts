@@ -11,6 +11,7 @@ export const SETTINGS_SECTION_IDS = [
   "timeregion",
   "focus",
   "chat",
+  "mail",
   "advanced",
   "about",
 ] as const;
@@ -22,7 +23,7 @@ export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export const SETTINGS_GROUPS = [
   {
     label: "Personal",
-    ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus", "chat"],
+    ids: ["account", "billing", "appearance", "preferences", "timeregion", "focus", "chat", "mail"],
   },
   { label: "Workspace", ids: ["workspace", "access", "storage", "integrations", "apikeys"] },
   { label: "App", ids: ["advanced", "about"] },
@@ -32,6 +33,8 @@ export const SETTINGS_OPEN_EVENT = "moduo:settings:open";
 
 export type SettingsOpenDetail = {
   section?: SettingsSectionId;
+  /** A part of the section to scroll to (Mail → Rules, specs/mail-improve.md §4). */
+  sub?: string;
 };
 
 // Remembers a STICKY dispatch (the cold-load `/settings?section=…` deep link)

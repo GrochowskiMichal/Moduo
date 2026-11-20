@@ -63,6 +63,8 @@ export type AuthEmailLogRow = {
   kind: Extract<EmailKind, "auth_code">;
   stream: Extract<EmailStream, "account">;
   to_email: string;
+  // No foreign key, and don't add one: Auth runs the hook inside the transaction
+  // that creates the user, so another connection can't see that auth.users row yet.
   to_user_id: string | null;
   payload: { action: string; variant: AuthEmailVariant; fallback: boolean };
   dedupe_key: string;

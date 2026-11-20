@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note } from "../model";
 import { buildBreadcrumb } from "./breadcrumb";
 
@@ -9,7 +10,6 @@ function note(partial: Partial<Note> & { id: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     position: "0000001000",
     isArchived: false,
     publishedAt: null,
@@ -51,9 +51,9 @@ describe("crumbs — the note breadcrumb (NR-2, AC5)", () => {
     expect(labels(buildBreadcrumb(notes, "ideaKid"))).toEqual(["Inbox", "Idea", "Detail"]);
   });
 
-  it("starts archived and trashed notes at Archive / Trash", () => {
-    expect(labels(buildBreadcrumb(notes, "old"))).toEqual(["Archive", "Old"]);
-    expect(labels(buildBreadcrumb(notes, "gone"))).toEqual(["Trash", "Gone"]);
+  it("starts archived and trashed notes at Archived / Recently deleted", () => {
+    expect(labels(buildBreadcrumb(notes, "old"))).toEqual(["Archived", "Old"]);
+    expect(labels(buildBreadcrumb(notes, "gone"))).toEqual(["Recently deleted", "Gone"]);
   });
 
   it("shows a root draft as an Untitled Inbox capture, and a child draft under its page", () => {

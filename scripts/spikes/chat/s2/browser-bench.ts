@@ -16,7 +16,9 @@
 
 import { readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
 import { type BrowserContext, chromium, type Page, webkit } from "@playwright/test";
+
 import { stats } from "./db";
 
 const WS = "11111111-1111-4111-a111-111111111111";

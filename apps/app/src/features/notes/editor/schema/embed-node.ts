@@ -5,6 +5,7 @@
  */
 
 import { DecoratorNode, type NodeKey, type SerializedLexicalNode, type Spread } from "lexical";
+
 import { renderNodeView } from "../../../spine/editor/node-views";
 
 export type SerializedEmbedNode = Spread<

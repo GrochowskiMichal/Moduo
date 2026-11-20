@@ -1,5 +1,5 @@
 -- Stub of production for supabase/probes/tasks-assignee.probe.sql (TV-D1).
--- The repo can't bootstrap a database (supabase/AGENTS.md), so this recreates
+-- The repo can't bootstrap a database (.claude/rules/supabase.md), so this recreates
 -- what 20261008150000_tasks_assignee_creator.sql touches, as production has it
 -- on 2026-10-08 (project wtoonrvuqumihpkbvwvs), after PRIV-2a
 -- (20261008013000) and key_writes_act_as_creator (20261008020039):

@@ -29,9 +29,7 @@ export function linkUrlFrom(input: string): string | null {
 }
 
 export type LinkDialogRow =
-  | { kind: "url"; url: string }
-  | { kind: "note"; id: string; title: string }
-  | { kind: "unlink" };
+  { kind: "url"; url: string } | { kind: "note"; id: string; title: string } | { kind: "unlink" };
 
 /** URL first (when the text is one), then matching notes, then "Remove link"
  * when the selection already holds one. */

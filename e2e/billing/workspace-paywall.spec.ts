@@ -7,6 +7,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+
 import { BASE_URL } from "./helpers";
 
 test.describe("Workspace paywall", () => {

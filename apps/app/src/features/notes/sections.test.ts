@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import type { Note, NoteFavorite } from "./model";
 import { buildSidebarSections } from "./sections";
 
@@ -11,7 +12,6 @@ function note(partial: Partial<Note> & { id: string }): Note {
     parentId: null,
     title: partial.id,
     icon: null,
-    isPinned: false,
     position: String(seq).padStart(10, "0"),
     isArchived: false,
     publishedAt: null,

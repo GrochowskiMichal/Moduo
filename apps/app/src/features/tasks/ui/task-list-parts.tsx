@@ -4,8 +4,10 @@
 // "+ Add section" line. Kept out of task-list-view.tsx, which the Board,
 // multi-select and Upcoming blocks also touch.
 
+import type { TaskStatusCategory } from "@contracts/vocabularies";
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
+
 import { TeamMark } from "../../../components/ui/avatar";
 import { Button } from "../../../components/ui/button";
 import {
@@ -35,6 +37,8 @@ export type GroupMarkContext = {
   assignee: (userId: string) => Assignee | null;
   /** A team's name, letters and colour (its mark, TV-D13). */
   team: (teamId: string) => { name: string; mark: string; color: string | null } | null;
+  /** A status group's category: its key's, or its project status's (MOD-241). */
+  statusCategory?: (key: string) => TaskStatusCategory | null;
 };
 
 /** Each kind of group leads with its mark (research §2): glyph, dot, avatar. */
@@ -43,7 +47,7 @@ export function groupMark(groupBy: GroupBy, key: string, ctx: GroupMarkContext):
     case "status":
       return (
         <StatusIcon
-          category={statusKeyCategory(key as StatusKey)}
+          category={ctx.statusCategory?.(key) ?? statusKeyCategory(key as StatusKey)}
           className="text-muted-foreground"
         />
       );

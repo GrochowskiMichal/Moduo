@@ -1030,9 +1030,60 @@ export const SYNCABLE_PROVIDERS = ["google", "microsoft", "caldav", "ics"] as co
 export type SyncableProvider = (typeof SYNCABLE_PROVIDERS)[number];
 export const syncableProviderSchema = z.enum(SYNCABLE_PROVIDERS);
 
-export const CALENDAR_ACCOUNT_STATUSES = ["ok", "error"] as const;
+export const CALENDAR_ACCOUNT_STATUSES = ["ok", "error", "reauth"] as const;
 export type CalendarAccountStatus = (typeof CALENDAR_ACCOUNT_STATUSES)[number];
 export const calendarAccountStatusSchema = z.enum(CALENDAR_ACCOUNT_STATUSES);
+
+// ---------------------------------------------------------------------------
+// Calendar events (CALR-6) — mirror the CHECKs on calendar_events.conference_provider
+// and calendar_events.kind in 20261027230000_calendar_event_data_v2.
+// ---------------------------------------------------------------------------
+
+/** Who hosts an event's meeting link; `other` is any web address we don't recognise. */
+export const CONFERENCE_PROVIDERS = ["google_meet", "zoom", "teams", "other"] as const;
+export type ConferenceProvider = (typeof CONFERENCE_PROVIDERS)[number];
+export const conferenceProviderSchema = z.enum(CONFERENCE_PROVIDERS);
+export function isConferenceProvider(value: unknown): value is ConferenceProvider {
+  return typeof value === "string" && (CONFERENCE_PROVIDERS as readonly string[]).includes(value);
+}
+export function parseConferenceProvider(input: unknown): SafeParseResult<ConferenceProvider> {
+  return parseOrError(conferenceProviderSchema, input);
+}
+/** Lax read: no provider stays none; a provider this build doesn't know is `other`. */
+export function normalizeConferenceProvider(input: unknown): ConferenceProvider | null {
+  if (input === null || input === undefined || input === "") return null;
+  return isConferenceProvider(input) ? input : "other";
+}
+
+/** What a calendar item is: a plain event, focus time for a task, or a hold from an offer. */
+export const CALENDAR_ITEM_KINDS = ["event", "focus", "hold"] as const;
+export type CalendarItemKind = (typeof CALENDAR_ITEM_KINDS)[number];
+export const calendarItemKindSchema = z.enum(CALENDAR_ITEM_KINDS);
+export function isCalendarItemKind(value: unknown): value is CalendarItemKind {
+  return typeof value === "string" && (CALENDAR_ITEM_KINDS as readonly string[]).includes(value);
+}
+export function parseCalendarItemKind(input: unknown): SafeParseResult<CalendarItemKind> {
+  return parseOrError(calendarItemKindSchema, input);
+}
+/** Lax read: an unknown kind is a plain event, so the row still shows. */
+export function normalizeCalendarItemKind(input: unknown): CalendarItemKind {
+  return isCalendarItemKind(input) ? input : "event";
+}
+
+/** A slot offer's lifecycle (CALR-19, slot_offers.status CHECK in 20261029190000). */
+export const SLOT_OFFER_STATUSES = ["open", "booked", "released", "expired"] as const;
+export type SlotOfferStatus = (typeof SLOT_OFFER_STATUSES)[number];
+export const slotOfferStatusSchema = z.enum(SLOT_OFFER_STATUSES);
+export function isSlotOfferStatus(value: unknown): value is SlotOfferStatus {
+  return typeof value === "string" && (SLOT_OFFER_STATUSES as readonly string[]).includes(value);
+}
+export function parseSlotOfferStatus(input: unknown): SafeParseResult<SlotOfferStatus> {
+  return parseOrError(slotOfferStatusSchema, input);
+}
+/** Lax read: an unknown status is closed (expired), never open. */
+export function normalizeSlotOfferStatus(input: unknown): SlotOfferStatus {
+  return isSlotOfferStatus(input) ? input : "expired";
+}
 
 // ---------------------------------------------------------------------------
 // Subscription status — Stripe-OWNED vocabulary (bounded, documented set).
@@ -1238,6 +1289,26 @@ export function isContentAuthorKind(value: unknown): value is ContentAuthorKind 
 /** Read-side normalization: rows written before the column existed are a person's. */
 export function normalizeContentAuthorKind(input: unknown): ContentAuthorKind {
   return isContentAuthorKind(input) ? input : "user";
+}
+
+// ---------------------------------------------------------------------------
+// Note share modes (PERM-3, NS-9) — mirrors notes_share_mode_chk
+// (20261006210000_perm_sharing). `inherit` follows the parent note's sharing,
+// `custom` uses the note's own grants.
+// ---------------------------------------------------------------------------
+
+export const NOTE_SHARE_MODES = ["inherit", "custom"] as const;
+export type NoteShareMode = (typeof NOTE_SHARE_MODES)[number];
+export const noteShareModeSchema = z.enum(NOTE_SHARE_MODES);
+export function isNoteShareMode(value: unknown): value is NoteShareMode {
+  return typeof value === "string" && (NOTE_SHARE_MODES as readonly string[]).includes(value);
+}
+export function parseNoteShareMode(input: unknown): SafeParseResult<NoteShareMode> {
+  return parseOrError(noteShareModeSchema, input);
+}
+/** Read-side normalization: anything but `inherit` is the note's own grants (the column's default). */
+export function normalizeNoteShareMode(input: unknown): NoteShareMode {
+  return input === "inherit" ? "inherit" : "custom";
 }
 
 // ---------------------------------------------------------------------------
@@ -1721,4 +1792,60 @@ export function pickTagColor(existing: ReadonlyArray<{ color: string | null }>):
     }
   }
   return best;
+}
+
+// ---------------------------------------------------------------------------
+// Search hit match (GS-1, specs/global-search.md Assumption 2) — how a
+// <module>__search row matched: a handle (MOD-142), a title word, a typo-forgiven
+// title (pg_trgm, ranked below every exact hit) or a body word. No table stores
+// it, so there is no CHECK: search_all.test.sql (GS-3) asserts every returned
+// value is in this list. The row shape lives in search.ts.
+// ---------------------------------------------------------------------------
+
+export const SEARCH_MATCHES = ["handle", "title", "title_fuzzy", "body"] as const;
+export type SearchMatch = (typeof SEARCH_MATCHES)[number];
+export const searchMatchSchema = z.enum(SEARCH_MATCHES);
+export function isSearchMatch(value: unknown): value is SearchMatch {
+  return typeof value === "string" && (SEARCH_MATCHES as readonly string[]).includes(value);
+}
+export function parseSearchMatch(input: unknown): SafeParseResult<SearchMatch> {
+  return parseOrError(searchMatchSchema, input);
+}
+/** Lax read: an unknown match claims the least, a body hit. */
+export function normalizeSearchMatch(input: unknown): SearchMatch {
+  if (typeof input !== "string") return "body";
+  const key = input.trim().toLowerCase();
+  return isSearchMatch(key) ? key : "body";
+}
+
+// ---------------------------------------------------------------------------
+// Mail settings that follow the user (MR-7, specs/mail-rebuild.md decision 16):
+// one owner-scoped row per rule, custom tab, Priority person, blocked sender,
+// Screener decision, sender override, snippet, alias (with its signature) or
+// saved search. Postgres: `email_settings_items.kind` CHECK and
+// `email_op_settings_upsert`.
+// ---------------------------------------------------------------------------
+
+export const EMAIL_SETTINGS_KINDS = [
+  "rule",
+  "custom_tab",
+  "priority_person",
+  "blocked_sender",
+  "screener_decision",
+  "sender_override",
+  "snippet",
+  "alias",
+  "saved_search",
+] as const;
+export type EmailSettingsKind = (typeof EMAIL_SETTINGS_KINDS)[number];
+export const emailSettingsKindSchema = z.enum(EMAIL_SETTINGS_KINDS);
+export function isEmailSettingsKind(value: unknown): value is EmailSettingsKind {
+  return typeof value === "string" && (EMAIL_SETTINGS_KINDS as readonly string[]).includes(value);
+}
+export function parseEmailSettingsKind(input: unknown): SafeParseResult<EmailSettingsKind> {
+  return parseOrError(emailSettingsKindSchema, input);
+}
+/** Lax read: an unknown kind (a newer build's) reads as null so the caller skips the row. */
+export function normalizeEmailSettingsKind(input: unknown): EmailSettingsKind | null {
+  return isEmailSettingsKind(input) ? input : null;
 }

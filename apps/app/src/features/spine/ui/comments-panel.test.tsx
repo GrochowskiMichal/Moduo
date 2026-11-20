@@ -14,6 +14,7 @@ import {
 } from "@testing-library/react";
 
 import type { ModuoRuntime, SpineComment } from "@/lib/runtime.types";
+
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { useCommentThread } from "../hooks/use-comment-thread";
 import { CommentCard, CommentComposer } from "./comments-panel";

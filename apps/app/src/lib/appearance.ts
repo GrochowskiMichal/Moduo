@@ -7,6 +7,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
+
+import { ensureFontLoaded } from "./picker-fonts";
 import { useDomainSync } from "./prefs-sync";
 
 export type Theme = "dark" | "light";
@@ -121,7 +123,6 @@ function sanitizeSynced(raw: Record<string, unknown>): Partial<Appearance> {
   for (const key of SYNCED_KEYS) {
     const value = raw[key];
     if (typeof value === "string" && APPEARANCE_OPTIONS[key].includes(value)) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (out as any)[key] = value;
     }
   }
@@ -152,6 +153,7 @@ export function applyAppearance(appearance: Appearance): void {
   for (const key of Object.keys(DATA_ATTR_MAP) as (keyof Appearance)[]) {
     root.setAttribute(DATA_ATTR_MAP[key], appearance[key]);
   }
+  ensureFontLoaded(appearance.font);
 }
 
 function syncsField(patch: Partial<Appearance>): boolean {

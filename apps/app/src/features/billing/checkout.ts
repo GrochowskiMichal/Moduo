@@ -4,7 +4,7 @@
  * (switch a trial in place, open the portal, or open Checkout); this just carries it out.
  */
 
-import { SUPABASE_URL } from "../../lib/runtime.web";
+import { SUPABASE_URL } from "../../lib/runtime.web.client";
 import type { BillingInterval, PaidPlan } from "./plans";
 import { openStripeUrl } from "./stripe-url";
 

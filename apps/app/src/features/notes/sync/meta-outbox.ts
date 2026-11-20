@@ -7,16 +7,20 @@
  */
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
+import { isNetworkError as isSharedNetworkError } from "../../../lib/sync/network";
 import type { MetaOutboxEntry } from "./idb";
 
-/** True when an error smells like "no network", not "the server said no".
- * supabase-js surfaces fetch failures as TypeError('Failed to fetch') (and
- * friends across webviews). */
+/** Words Notes also reads as "no network" beyond the shared check: a timeout
+ * keeps a queued op for later rather than dropping it. */
+const NOTES_NETWORK_WORDS = /network\s?error|timed?\s?out|ERR_INTERNET|ERR_NETWORK/i;
+
+/** True when an error smells like "no network", not "the server said no":
+ * the sync kernel's check (supabase-js's fetch failures across engines, and a
+ * browser that says it's offline), plus Notes' own words. */
 export function isNetworkError(e: unknown): boolean {
+  if (isSharedNetworkError(e)) return true;
   const msg = e instanceof Error ? e.message : String(e ?? "");
-  return /failed to fetch|network\s?error|load failed|fetch failed|networkerror|timed?\s?out|ERR_INTERNET|ERR_NETWORK/i.test(
-    msg,
-  );
+  return NOTES_NETWORK_WORDS.test(msg);
 }
 
 /** A replayed CREATE that hits the primary key means an earlier attempt

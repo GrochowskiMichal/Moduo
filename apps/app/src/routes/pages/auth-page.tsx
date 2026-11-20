@@ -9,6 +9,7 @@ import {
   isAccountDeletedMarked,
 } from "@/features/settings/delete-account";
 import { takePendingJoin } from "@/features/workspaces/invite-join";
+import { hasPendingConsent, takePendingConsent } from "@/features/workspaces/pending-consent";
 import { ignoredAuthLink } from "@/lib/auth-url";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -28,6 +29,13 @@ export function AuthPage() {
       : ignoredLink === "error"
         ? "That link has expired or was already used. Enter your email to get a 6-digit code."
         : null;
+  // An app's sign-in sent them here (MCPO-4): say why, and that they come back.
+  const [connecting] = useState(() => hasPendingConsent());
+  const notice =
+    linkNotice ??
+    (connecting
+      ? "Sign in to connect your app. You'll come back to choose what it can reach."
+      : null);
 
   useEffect(() => {
     if (justDeleted && !loading && !isSignedIn) clearAccountDeletedMarker();
@@ -37,6 +45,17 @@ export function AuthPage() {
     // The Danger zone lands here a moment before it signs out.
     if (loading || !isSignedIn || justDeleted) return;
     if (window.sessionStorage.getItem("moduo:auth_resolving") === "1") return;
+
+    // Resume an app's sign-in the user opened while signed out (MCPO-4).
+    const pendingConsent = takePendingConsent();
+    if (pendingConsent) {
+      void navigate({
+        to: "/oauth/consent",
+        search: { authorization_id: pendingConsent },
+        replace: true,
+      });
+      return;
+    }
 
     // Resume a workspace invite the user opened while signed out (DF-24).
     const pendingJoin = takePendingJoin();
@@ -83,7 +102,7 @@ export function AuthPage() {
         ) : null}
 
         <div className="w-full rounded-xl border border-border bg-card px-6 py-7 shadow-xl sm:px-7 sm:py-8">
-          <EmailAuthPanel notice={linkNotice} />
+          <EmailAuthPanel notice={notice} />
         </div>
       </div>
     </div>

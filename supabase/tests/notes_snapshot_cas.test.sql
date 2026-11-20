@@ -14,7 +14,7 @@ SELECT test.id('W'), test.id('N'), 'B', i, 'row' || i FROM generate_series(1, 3)
 DO $$
 DECLARE
   v text;
-  n public.notes;
+  n record;
   v_max bigint := (SELECT max(id) FROM public.note_updates WHERE note_id = test.id('N'));
 BEGIN
   -- B folds (it saw version 0).
@@ -31,7 +31,7 @@ BEGIN
   PERFORM test.ok((v::jsonb ->> 'refused') = 'true' AND (v::jsonb ->> 'doc_version') = '1',
     'a stale fold is refused and reports the current version', v);
 
-  SELECT * INTO n FROM public.notes WHERE id = test.id('N');
+  SELECT * INTO n FROM test.notes_in WHERE id = test.id('N');
   PERFORM test.ok(n.doc_state = 'SNAP-B' AND n.doc_version = 1,
     'the newer snapshot survives a stale fold', n.doc_state || ' v' || n.doc_version);
 

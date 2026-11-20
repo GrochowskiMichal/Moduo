@@ -1,0 +1,15 @@
+# Failures already red on a prod-faithful stack (a fresh snapshot of prod plus
+# the repo's unapplied migrations: checks.yml's db-test job). `bun run db:test`
+# prints these as known and fails on anything else, and on a line here that
+# passes again. Fix the test or the schema and delete the line; never add one to
+# make a new failure go away. Format: `<file>: <check label>`. An SQL error can't be
+# listed: it stops the file, so every check after it would go unseen.
+
+# Reads a row of prod data (public.app_settings min_build), which a schema
+# snapshot doesn't carry.
+chat_wrappers.test.sql: min_build: at or above the first production desktop build without v1 calls (1.0.21)
+
+# security_advisor_grants (20261022130000) took EXECUTE on
+# storage__limits_for_owner away from signed-in people, which this check of
+# plan_helpers_scope (20261022100000) needs. One of the two is wrong on prod.
+plan_helpers_scope.test.sql: a member still reads the owner's storage limits

@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
 import type { Truncation } from "../../../lib/paged-select";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
@@ -18,8 +19,11 @@ import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
 import { readMetaCache, writeMetaCache } from "../sync/idb";
 import { runRedbImportOnce } from "../sync/redb-import";
 import { descendantIds, siblingsOf, wouldCreateCycle } from "../tree";
+import { WELCOME_MARKDOWN, WELCOME_TITLE } from "../welcome";
 
 const WELCOME_FLAG_PREFIX = "moduo:notes:welcome-seeded:v1:";
+const BACKGROUND_REFRESH_EVERY_MS = 60_000;
+const BACKGROUND_REFRESH_MIN_MS = 15_000;
 
 type Params = {
   userId: string | null;
@@ -44,8 +48,9 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const [truncated, setTruncated] = useState<Truncation[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<NotesSyncStatusV2>("synced");
-  const [welcomeNoteId, setWelcomeNoteId] = useState<string | null>(null);
   const reqRef = useRef(0);
+  /** The list came from the server (not only the device cache) this visit. */
+  const [listFresh, setListFresh] = useState(false);
   const serverLoadedRef = useRef(false);
   /** Optimistic creates whose op hasn't settled — merged into every server
    * bundle so a concurrent load() can't clobber a just-captured note. */
@@ -71,9 +76,8 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const fireRefresh = useCallback(() => refreshRef.current(), []);
   const engine = useMemo(() => {
     if (!ready) return null;
-    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, runtime, workspaceId, fireRefresh]);
+    return new NotesSyncEngineV2(runtime, workspaceId!, fireRefresh, userId!);
+  }, [ready, runtime, workspaceId, userId, fireRefresh]);
 
   useEffect(() => {
     if (!engine) return;
@@ -104,6 +108,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       if (reqRef.current !== req) return;
       if (favs) setFavorites(favs);
       serverLoadedRef.current = true;
+      setListFresh(true);
       // Merge unsettled optimistic creates so a load racing a capture can't
       // drop the just-created note (and deselect it via the stale-id sweep).
       const merged = [...bundle.notes];
@@ -115,15 +120,44 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       setTruncated(bundle.truncated);
       setLoadError(null);
       setLoading(false);
-      void writeMetaCache(workspaceId!, bundle.notes);
+      void writeMetaCache(userId!, workspaceId!, bundle.notes);
     } catch (e) {
       if (reqRef.current !== req) return;
       // Outage: keep whatever is painted (cache), surface quietly.
       setLoadError(e instanceof Error ? e.message : "Couldn't load notes.");
       setLoading(false);
     }
-  }, [ready, runtime, workspaceId, withFavorites]);
+  }, [ready, runtime, userId, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
+
+  // ── background refresh ─────────────────────────────────────────────────────
+  // There is no live feed for the note list (the live channel carries only the
+  // open note's body), so a teammate's or an agent's new, renamed or moved
+  // note showed only after leaving Notes. Re-read the list when the window
+  // comes back and every minute while it shows, never over our own unsettled
+  // writes (an optimistic rename would flicker back to the server's title).
+  const syncStatusRef = useRef(syncStatus);
+  syncStatusRef.current = syncStatus;
+  const inflightRef = useRef(0);
+  useEffect(() => {
+    if (!ready) return;
+    let last = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      if (Date.now() - last < BACKGROUND_REFRESH_MIN_MS) return;
+      if (inflightRef.current > 0 || syncStatusRef.current !== "synced") return;
+      last = Date.now();
+      void load();
+    };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, BACKGROUND_REFRESH_EVERY_MS);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
+  }, [ready, load]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,6 +168,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     setTruncated([]);
     setLoadError(null);
     serverLoadedRef.current = false;
+    setListFresh(false);
     pendingCreatesRef.current.clear();
     if (!ready) {
       setLoading(false);
@@ -143,7 +178,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     // Guarded on "a server bundle has RESOLVED", not on load() having merely
     // started — load() bumps reqRef synchronously, so the old guard never let
     // the cache paint at all (offline boot rendered an empty list).
-    void readMetaCache(workspaceId!).then((cached) => {
+    void readMetaCache(userId!, workspaceId!).then((cached) => {
       if (cancelled || !cached || serverLoadedRef.current) return;
       if (notesRef.current.length === 0 && cached.notes.length > 0) {
         setNotes((cached.notes as any[]).map((n) => n as Note));
@@ -246,20 +281,26 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     } catch {
       return;
     }
+    // Created and seeded before it shows: the note appears with its content,
+    // never as an empty doc an editor could retitle.
     const id = crypto.randomUUID();
-    const optimistic = welcomeOptimisticNote(id, workspaceId, userId);
-    setNotes([optimistic]);
-    setWelcomeNoteId(id);
-    pendingCreatesRef.current.set(id, optimistic);
+    const ws = workspaceId;
     void runtime!.notesV2
-      .create({ workspaceId, id, title: "Welcome to Notes", icon: "👋", position: endPosition([]) })
-      .then(() => pendingCreatesRef.current.delete(id))
+      .create({ workspaceId: ws, id, title: WELCOME_TITLE, icon: "👋", position: endPosition([]) })
+      .then(() => repairNote(runtime!, ws, id, WELCOME_MARKDOWN, { storeBodies: true }))
+      .then(async (outcome) => {
+        if (outcome === "seeded") return load();
+        // Never leave an empty welcome note behind (its first open would
+        // retitle it Untitled): take it away and try again next visit.
+        await runtime!.notesV2
+          .trash({ workspaceId: ws, noteId: id })
+          .then(() => runtime!.notesV2.purge({ workspaceId: ws, noteId: id }))
+          .catch(() => undefined);
+        throw new Error(`welcome seed ${outcome}`);
+      })
       .catch(() => {
-        // degrade quietly — the seed is a nicety, never an error surface —
-        // but don't burn the one-shot flag on a failed attempt.
-        pendingCreatesRef.current.delete(id);
-        setNotes((prev) => prev.filter((n) => n.id !== id));
-        setWelcomeNoteId(null);
+        // Degrade quietly (the seed is a nicety, never an error surface), but
+        // don't burn the one-shot flag on a failed attempt.
         try {
           window.localStorage.removeItem(flag);
         } catch {
@@ -280,14 +321,22 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const guard = useCallback(
     (fn: () => Promise<unknown>): Promise<boolean> => {
       if (!engine || !canEdit) return Promise.resolve(false);
-      return fn().then(
-        () => true,
-        (e) => {
-          toast.error(e instanceof Error ? e.message : "Something went wrong.");
-          void load();
-          return false;
-        },
-      );
+      inflightRef.current += 1;
+      return fn()
+        .then(
+          () => true,
+          (e) => {
+            // The server's wording is for us, not for the person: say what
+            // happened and put the truth back on screen.
+            console.warn("[notes] a change was refused", e);
+            toast.error("Couldn't save that change. Showing the latest version.");
+            void load();
+            return false;
+          },
+        )
+        .finally(() => {
+          inflightRef.current -= 1;
+        });
     },
     [engine, canEdit, load],
   );
@@ -316,7 +365,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         parentId,
         title: "",
         icon: null,
-        isPinned: false,
         position,
         isArchived: false,
         publishedAt: null,
@@ -353,20 +401,35 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     [engine, workspaceId, patchLocal, guard, afterCreate],
   );
 
+  /** Move a note. `followParent`: it also takes the new parent's sharing, in
+   * the same server operation (all or nothing; a refusal toasts and reloads). */
   const moveNote = useCallback(
-    (noteId: string, parentId: string | null, position: string): Promise<boolean> => {
+    (
+      noteId: string,
+      parentId: string | null,
+      position: string,
+      opts?: { followParent?: boolean },
+    ): Promise<boolean> => {
       if (!engine || !workspaceId) return Promise.resolve(false);
       if (wouldCreateCycle(notesRef.current, noteId, parentId)) return Promise.resolve(false); // quiet no-op
+      const followParent = Boolean(opts?.followParent && parentId);
       // Nesting clears the stored Inbox flag server-side (NR-1 trigger).
       patchLocal(noteId, {
         parentId,
         position,
         ...(parentId ? { inInbox: false } : {}),
+        ...(followParent ? { shareMode: "inherit" as const, workspaceShared: false } : {}),
         updatedAt: new Date().toISOString(),
       });
       return guard(
         afterCreate(noteId, () =>
-          engine.runMetaOp("move", { workspaceId, noteId, parentId, position }),
+          engine.runMetaOp("move", {
+            workspaceId,
+            noteId,
+            parentId,
+            position,
+            ...(followParent ? { followParent } : {}),
+          }),
         ),
       );
     },
@@ -391,18 +454,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       if (!engine || !workspaceId) return;
       patchLocal(noteId, { fullWidth });
       guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { fullWidth } }));
-    },
-    [engine, workspaceId, patchLocal, guard],
-  );
-
-  const togglePin = useCallback(
-    (noteId: string) => {
-      if (!engine || !workspaceId) return;
-      const existing = notesRef.current.find((n) => n.id === noteId);
-      if (!existing) return;
-      const isPinned = !existing.isPinned;
-      patchLocal(noteId, { isPinned });
-      guard(() => engine.runMetaOp("setMeta", { workspaceId, noteId, patch: { isPinned } }));
     },
     [engine, workspaceId, patchLocal, guard],
   );
@@ -492,14 +543,19 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
       const extra = ids.size - 1;
       const taskIds = opts?.detachedTaskIds ?? [];
       const n = taskIds.length;
-      const label = `Moved to Trash${extra > 0 ? ` (+${extra} nested)` : ""}${
+      const label = `Deleted${extra > 0 ? ` (+${extra} nested)` : ""}${
         n > 0 ? ` · ${n} task${n === 1 ? "" : "s"} detached` : ""
       }`;
       // One toast, one grammar (DF-5): Undo in the action slot; the destructive
       // "delete the tasks too" escalation rides the body — never sonner's
       // `cancel` slot, where a destructive verb reads as the dismiss button.
       undoToast(label, {
-        description: n > 0 ? "The tasks still live in Tasks." : undefined,
+        description:
+          n === 1
+            ? "The task still lives in Tasks."
+            : n > 1
+              ? "The tasks still live in Tasks."
+              : undefined,
         onUndo: () => {
           restoreNote(noteId);
           opts?.onUndo?.();
@@ -539,7 +595,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         parentId,
         title,
         icon: null,
-        isPinned: false,
         position,
         isArchived: false,
         publishedAt: null,
@@ -705,13 +760,13 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     notes,
     favorites,
     loading,
+    listFresh,
     degraded,
     truncated,
     loadError,
     syncStatus,
     engine,
     canEdit,
-    welcomeNoteId,
     refresh: load,
     createNote,
     materializeDraft,
@@ -721,7 +776,6 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     renameNote,
     moveNote,
     setIcon,
-    togglePin,
     duplicateNote,
     archiveNote,
     trashNote,
@@ -750,29 +804,4 @@ function descendantIdsIncludingTrashed(notes: Note[], noteId: string): string[] 
   };
   walk(noteId, 0);
   return out;
-}
-
-function welcomeOptimisticNote(id: string, workspaceId: string, userId: string | null): Note {
-  const now = new Date().toISOString();
-  return {
-    id,
-    workspaceId,
-    createdBy: userId,
-    parentId: null,
-    title: "Welcome to Notes",
-    icon: "👋",
-    isPinned: false,
-    position: endPosition([]),
-    isArchived: false,
-    publishedAt: null,
-    publishToken: null,
-    docVersion: 0,
-    createdAt: now,
-    updatedAt: now,
-    deletedAt: null,
-    shareMode: "custom",
-    workspaceShared: false,
-    inInbox: true,
-    fullWidth: false,
-  };
 }

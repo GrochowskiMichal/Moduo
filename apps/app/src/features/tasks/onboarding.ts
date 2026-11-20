@@ -7,12 +7,12 @@
 // preferences (`tasksOnboarding`), so it follows the person.
 
 import type { StarterTemplate, TasksRole } from "@contracts/vocabularies";
+
 import type { RowPreset } from "./row-layout";
 
 /** Where Tasks first opens for a role: a sidebar place, or the first project's Board. */
 export type FirstView =
-  | { kind: "scope"; scope: "inbox" | "upcoming" | "all" }
-  | { kind: "project-board" };
+  { kind: "scope"; scope: "inbox" | "upcoming" | "all" } | { kind: "project-board" };
 
 export type RoleDefaults = {
   /** The choice as the question shows it. */

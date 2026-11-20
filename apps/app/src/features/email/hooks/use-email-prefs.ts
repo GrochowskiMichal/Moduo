@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useDomainSync } from "../../../lib/prefs-sync";
 import type { EmailSection } from "../classify";
+import { type MailBehavior, writeMailBehavior } from "../engine/behavior";
 import {
   DEFAULT_EMAIL_PREFS,
   type EmailPrefs,
@@ -22,6 +23,8 @@ export function useEmailPrefs(userId: string): {
   setSenderOverride: (senderEmail: string, section: EmailSection | null) => void;
   /** Always load remote images from this sender (DF-6 per-sender allow). */
   allowImagesFromSender: (senderEmail: string) => void;
+  /** Change Settings → Mail behavior toggles (MR-15); synced, mirrored for the engine. */
+  setBehavior: (patch: Partial<MailBehavior>) => void;
 } {
   const [prefs, setPrefs] = useState<EmailPrefs>(() => readEmailPrefs(userId));
   const prefsRef = useRef(prefs);
@@ -45,6 +48,7 @@ export function useEmailPrefs(userId: string): {
       prefsRef.current = next;
       setPrefs(next);
       writeEmailPrefs(userIdRef.current, next);
+      writeMailBehavior(next.behavior);
     },
   });
 
@@ -83,5 +87,18 @@ export function useEmailPrefs(userId: string): {
     [pushLocalChange],
   );
 
-  return { prefs, setSenderOverride, allowImagesFromSender };
+  const setBehavior = useCallback(
+    (patch: Partial<MailBehavior>) => {
+      const prev = prefsRef.current;
+      const next = sanitizeEmailPrefs({ ...prev, behavior: { ...prev.behavior, ...patch } });
+      prefsRef.current = next;
+      setPrefs(next);
+      writeEmailPrefs(userIdRef.current, next);
+      writeMailBehavior(next.behavior);
+      pushLocalChange(next as unknown as Record<string, unknown>);
+    },
+    [pushLocalChange],
+  );
+
+  return { prefs, setSenderOverride, allowImagesFromSender, setBehavior };
 }

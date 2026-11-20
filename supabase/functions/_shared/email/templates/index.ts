@@ -3,6 +3,11 @@
  * Each TX block adds its templates here — one line per kind — plus a fixture in
  * `fixtures.ts`, which feeds the tests and the Storybook gallery.
  *
+ * A queued email renders from its payload alone: never read the clock in a
+ * template (put every printed time in the payload). A retry with a different
+ * body reuses the Idempotency-Key and Resend refuses it (409, row failed); a
+ * copy change deployed while a row waits to retry does the same.
+ *
  * The renderer flattens and caps every string, but a name written into a
  * sentence or paragraph only gets the paragraph cap. Templates pass every
  * user-typed name through `singleLine(name, TEXT_LIMITS.name)` before placing it.

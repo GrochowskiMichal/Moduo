@@ -6,7 +6,8 @@
   "build": {
     "beforeBuildCommand": "bun run --cwd ../app build:desktop",
     "devUrl": "http://localhost:8081",
-    "frontendDist": "../../app/dist"
+    "frontendDist": "../../app/dist",
+    "removeUnusedCommands": true
   },
   "app": {
     "windows": [
@@ -17,7 +18,9 @@
         "height": 840,
         "resizable": true,
         "maximizable": true,
-        "backgroundThrottling": "disabled"
+        "backgroundThrottling": "disabled",
+        "visible": false,
+        "backgroundColor": "#000000"
       }
     ],
     "security": {
@@ -39,7 +42,8 @@
     },
     "macOS": {
       "signingIdentity": null,
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "minimumSystemVersion": "14.0"
     }
   },
   "plugins": {

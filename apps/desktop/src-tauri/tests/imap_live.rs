@@ -25,11 +25,11 @@
 //! transport/`build_message`/secret-migration logic is covered by the unit tests
 //! in `smtp.rs` / `secrets.rs`, which DO run in CI.
 
-use std::net::TcpStream;
-
-use imap::Session;
-use native_tls::TlsStream;
+use async_imap::Session;
+use futures_util::TryStreamExt;
 use serde::Deserialize;
+use tokio::net::TcpStream;
+use tokio_native_tls::TlsStream;
 
 #[derive(Deserialize, Clone)]
 struct TestCreds {
@@ -69,20 +69,52 @@ fn load_creds() -> Option<TestCreds> {
     }
 }
 
-fn open_session(creds: &TestCreds) -> Session<TlsStream<TcpStream>> {
-    let tls = native_tls::TlsConnector::builder()
-        .build()
-        .expect("tls connector");
-    let client = imap::connect(
-        (creds.imap_host.as_str(), creds.imap_port),
-        creds.imap_host.as_str(),
-        &tls,
-    )
-    .expect("imap connect");
+async fn open_session(creds: &TestCreds) -> Session<TlsStream<TcpStream>> {
+    let tls = tokio_native_tls::TlsConnector::from(
+        native_tls::TlsConnector::builder()
+            .build()
+            .expect("tls connector"),
+    );
+    let tcp = TcpStream::connect((creds.imap_host.as_str(), creds.imap_port))
+        .await
+        .expect("imap connect");
+    let stream = tls
+        .connect(creds.imap_host.as_str(), tcp)
+        .await
+        .expect("imap tls");
+    let mut client = async_imap::Client::new(stream);
+    client
+        .read_response()
+        .await
+        .expect("imap greeting")
+        .expect("imap greeting present");
     client
         .login(&creds.email, &creds.password)
+        .await
         .map_err(|(e, _)| e)
         .expect("imap login")
+}
+
+/// UID STORE, draining the echoed FETCH lines.
+async fn uid_store(session: &mut Session<TlsStream<TcpStream>>, set: &str, query: &str) {
+    session
+        .uid_store(set, query)
+        .await
+        .expect("UID STORE")
+        .try_collect::<Vec<_>>()
+        .await
+        .expect("UID STORE responses");
+}
+
+/// EXPUNGE, draining the expunged sequence numbers.
+async fn expunge(session: &mut Session<TlsStream<TcpStream>>) {
+    session
+        .expunge()
+        .await
+        .expect("EXPUNGE")
+        .try_collect::<Vec<_>>()
+        .await
+        .expect("EXPUNGE responses");
 }
 
 /// A unique test message with a stable Message-ID we can search for.
@@ -100,36 +132,48 @@ fn test_message(from: &str, marker: &str) -> (String, String) {
     (message_id, raw)
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "live: needs MODUO_TEST_IMAP_CREDS_PATH"]
-fn connect_login_and_list_folders() {
+async fn connect_login_and_list_folders() {
     let Some(creds) = load_creds() else {
         return;
     };
-    let mut session = open_session(&creds);
-    let mailboxes = session.list(Some(""), Some("*")).expect("LIST");
+    let mut session = open_session(&creds).await;
+    let mailboxes = session
+        .list(Some(""), Some("*"))
+        .await
+        .expect("LIST")
+        .try_collect::<Vec<_>>()
+        .await
+        .expect("LIST responses");
     assert!(
-        mailboxes.iter().any(|m| m.name().eq_ignore_ascii_case("INBOX")),
+        mailboxes
+            .iter()
+            .any(|m| m.name().eq_ignore_ascii_case("INBOX")),
         "server should advertise an INBOX"
     );
-    session.logout().expect("logout");
+    session.logout().await.expect("logout");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "live: needs MODUO_TEST_IMAP_CREDS_PATH"]
-fn append_search_and_delete_roundtrip() {
+async fn append_search_and_delete_roundtrip() {
     let Some(creds) = load_creds() else {
         return;
     };
-    let mut session = open_session(&creds);
-    session.select("INBOX").expect("select INBOX");
+    let mut session = open_session(&creds).await;
+    session.select("INBOX").await.expect("select INBOX");
 
     let (message_id, raw) = test_message(&creds.email, "append");
-    session.append("INBOX", raw.as_bytes()).expect("APPEND");
+    session
+        .append("INBOX", None, None, raw.as_bytes())
+        .await
+        .expect("APPEND");
 
     // Find it by header (the id we minted) — the Sent-matching path EM-6/EM-7 use.
     let uids = session
         .uid_search(format!("HEADER Message-ID \"{message_id}\""))
+        .await
         .expect("UID SEARCH");
     assert!(!uids.is_empty(), "appended message should be searchable");
 
@@ -139,31 +183,33 @@ fn append_search_and_delete_roundtrip() {
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    session
-        .uid_store(&set, "+FLAGS (\\Deleted)")
-        .expect("UID STORE Deleted");
-    session.expunge().expect("EXPUNGE");
-    session.logout().expect("logout");
+    uid_store(&mut session, &set, "+FLAGS (\\Deleted)").await;
+    expunge(&mut session).await;
+    session.logout().await.expect("logout");
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "live: needs MODUO_TEST_IMAP_CREDS_PATH"]
-fn snooze_folder_create_move_restore() {
+async fn snooze_folder_create_move_restore() {
     let Some(creds) = load_creds() else {
         return;
     };
-    let mut session = open_session(&creds);
+    let mut session = open_session(&creds).await;
 
     // Create the snooze folder if missing (create-if-missing; EM-6).
     let snooze = "Moduo/Snoozed";
-    let _ = session.create(snooze); // already-exists is fine
+    let _ = session.create(snooze).await; // already-exists is fine
 
     // Seed a message in INBOX, then move it to the snooze folder and back.
-    session.select("INBOX").expect("select INBOX");
+    session.select("INBOX").await.expect("select INBOX");
     let (message_id, raw) = test_message(&creds.email, "snooze");
-    session.append("INBOX", raw.as_bytes()).expect("APPEND");
+    session
+        .append("INBOX", None, None, raw.as_bytes())
+        .await
+        .expect("APPEND");
     let uids = session
         .uid_search(format!("HEADER Message-ID \"{message_id}\""))
+        .await
         .expect("UID SEARCH");
     let set = uids
         .iter()
@@ -172,35 +218,48 @@ fn snooze_folder_create_move_restore() {
         .join(",");
     assert!(!set.is_empty(), "seed message should exist");
 
-    session.uid_mv(&set, snooze).expect("UID MOVE to snooze");
+    session
+        .uid_mv(&set, snooze)
+        .await
+        .expect("UID MOVE to snooze");
 
     // Restore: locate by Message-ID in the snooze folder, move back to INBOX.
-    session.select(snooze).expect("select snooze");
+    session.select(snooze).await.expect("select snooze");
     let restore = session
         .uid_search(format!("HEADER Message-ID \"{message_id}\""))
+        .await
         .expect("UID SEARCH in snooze");
     let restore_set = restore
         .iter()
         .map(u32::to_string)
         .collect::<Vec<_>>()
         .join(",");
-    assert!(!restore_set.is_empty(), "message should be in snooze folder");
-    session.uid_mv(&restore_set, "INBOX").expect("UID MOVE back");
+    assert!(
+        !restore_set.is_empty(),
+        "message should be in snooze folder"
+    );
+    session
+        .uid_mv(&restore_set, "INBOX")
+        .await
+        .expect("UID MOVE back");
 
     // Clean up the restored copy.
-    session.select("INBOX").expect("reselect INBOX");
-    if let Ok(cleanup) = session.uid_search(format!("HEADER Message-ID \"{message_id}\"")) {
+    session.select("INBOX").await.expect("reselect INBOX");
+    if let Ok(cleanup) = session
+        .uid_search(format!("HEADER Message-ID \"{message_id}\""))
+        .await
+    {
         let cleanup_set = cleanup
             .iter()
             .map(u32::to_string)
             .collect::<Vec<_>>()
             .join(",");
         if !cleanup_set.is_empty() {
-            let _ = session.uid_store(&cleanup_set, "+FLAGS (\\Deleted)");
-            let _ = session.expunge();
+            uid_store(&mut session, &cleanup_set, "+FLAGS (\\Deleted)").await;
+            expunge(&mut session).await;
         }
     }
-    session.logout().expect("logout");
+    session.logout().await.expect("logout");
 }
 
 #[test]

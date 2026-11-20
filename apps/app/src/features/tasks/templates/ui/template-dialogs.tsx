@@ -187,11 +187,11 @@ export function CopyProjectDialog({
   const sourceName = source?.name ?? "";
   const pickedId = picked?.id ?? null;
   const pickedName = picked?.name ?? "";
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the start resets with what it starts from (`dated` follows it)
   useEffect(() => {
     if (!open) return;
     setName(mode === "duplicate" ? (sourceName ? copyName(sourceName) : "") : pickedName);
     setStart(dated ? todayDay() : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the start resets with what it starts from (`dated` follows it)
   }, [open, mode, sourceName, pickedId]);
   const trimmed = name.trim();
   const blocked = mode === "duplicate" && access === false;

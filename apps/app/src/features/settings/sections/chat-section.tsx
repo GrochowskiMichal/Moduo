@@ -21,7 +21,6 @@ import { useWorkspaceEmoji, type WorkspaceEmoji } from "../../chat/emoji/store";
 import { saveQuickRow, useQuickReactions } from "../../spine/hooks/use-quick-reactions";
 import { reactionName } from "../../spine/reactions";
 import { useWorkspace } from "../../workspaces/workspace-context";
-
 import { PrefGroup, PrefRow } from "./preferences-section";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -141,7 +140,10 @@ function PresenceGroup() {
   };
 
   return (
-    <PrefGroup label="Presence" description="What teammates see about you, in every workspace.">
+    <PrefGroup
+      label="Presence"
+      description="What workspace members see about you, in every workspace."
+    >
       <PrefRow
         title="Show me as online"
         description="Off: you show as offline to everyone, even while Moduo is open."
@@ -155,7 +157,7 @@ function PresenceGroup() {
       </PrefRow>
       <PrefRow
         title="Show what I'm focusing on"
-        description="Teammates who can see the task see its name next to “Focusing”."
+        description="Workspace members who can see the task see its name next to “Focusing”."
       >
         <Switch
           checked={prefs?.showFocusTask ?? false}

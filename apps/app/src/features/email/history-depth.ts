@@ -52,7 +52,7 @@ export function asHistoryDepth(raw: unknown): EmailHistoryDepth {
  * What changing depth from `from` to `to` will actually do, in the user's terms.
  *
  * The asymmetry is the whole point and is not guessable from the control: going
- * deeper backfills in the background, going shallower is **not** destructive. A
+ * deeper fills in as Mail syncs, going shallower is **not** destructive. A
  * picker that doesn't say so reads like it might delete mail.
  */
 export function describeDepthChange(from: EmailHistoryDepth, to: EmailHistoryDepth): string | null {

@@ -16,7 +16,7 @@ import { upcomingWhen } from "@/features/tasks/upcoming";
 import { nowOn, useToday } from "@/features/tasks/use-today";
 import { useAuth } from "@/providers/auth-provider";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import { useDensity } from "../../hooks/use-density";
 import { useRowsThatFit } from "../../hooks/use-rows-that-fit";
 import type { WidgetComponentProps } from "../../registry/types";
@@ -33,7 +33,8 @@ import {
 } from "./widget-primitives";
 
 export function UpcomingWidget({ size }: WidgetComponentProps) {
-  const { tasks, taskFiles } = useDashboardData();
+  const tasks = useDashboardSource("tasks");
+  const taskFiles = useDashboardSource("taskFiles");
   const { userId } = useAuth();
   const density = useDensity();
   const today = useToday();

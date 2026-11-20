@@ -46,12 +46,11 @@ describe("About shows version + build (AC12)", () => {
 });
 
 describe("About links (AC12)", () => {
-  it("includes a What's-new / changelog link", () => {
+  it("includes the full changelog on moduo.app (REL-4, AC9)", () => {
     const changelog = ABOUT_LINKS.find((l) => l.kind === "changelog");
     expect(changelog).toBeDefined();
-    expect(changelog?.label).toMatch(/new/i);
-    // moduo.app/changelog doesn't exist; the public releases page does.
-    expect(changelog?.href).toBe("https://github.com/GrochowskiMichal/moduo-releases/releases");
+    expect(changelog?.label).toBe("Full changelog");
+    expect(changelog?.href).toBe("https://moduo.app/changelog");
   });
 
   it("includes Privacy, Terms, and Support links", () => {
@@ -69,17 +68,17 @@ describe("About links (AC12)", () => {
 });
 
 describe("Desktop downloads", () => {
-  it("staging points at the rolling staging release", () => {
+  it("staging points at the staging channel's current version", () => {
     expect(desktopDownloads("staging").map((d) => d.href)).toEqual([
-      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_universal.dmg",
-      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/staging-latest/Moduo_x64-setup.exe",
+      "https://updates.moduo.app/download/desktop/staging/latest/Moduo_universal.dmg",
+      "https://updates.moduo.app/download/desktop/staging/latest/Moduo_x64-setup.exe",
     ]);
   });
 
-  it("production points at the rolling prod release", () => {
+  it("production points at the production channel's current version", () => {
     expect(desktopDownloads("production").map((d) => d.href)).toEqual([
-      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_universal.dmg",
-      "https://github.com/GrochowskiMichal/moduo-releases/releases/download/prod-latest/Moduo_x64-setup.exe",
+      "https://updates.moduo.app/download/desktop/production/latest/Moduo_universal.dmg",
+      "https://updates.moduo.app/download/desktop/production/latest/Moduo_x64-setup.exe",
     ]);
   });
 

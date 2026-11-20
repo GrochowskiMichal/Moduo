@@ -31,6 +31,9 @@ export const Default: Story = {
           <Chip icon={User} active onRemove={() => {}} removeLabel="Remove Anna">
             Anna
           </Chip>
+          <Chip icon={FileText} removeOnHover onRemove={() => {}} removeLabel="Unlink brief">
+            Hover for ×
+          </Chip>
           <ChipButton icon={CircleDot} active={on} onClick={() => setOn((v) => !v)}>
             In progress
           </ChipButton>

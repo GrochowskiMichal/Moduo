@@ -1,15 +1,7 @@
 import { useEffect, useState } from "react";
 
 export type FeatureLayoutKey =
-  | "grid"
-  | "notes"
-  | "tasks"
-  | "mindmap"
-  | "email"
-  | "calendar"
-  | "contacts"
-  | "chat"
-  | "settings";
+  "grid" | "notes" | "tasks" | "mindmap" | "email" | "calendar" | "contacts" | "chat" | "settings";
 
 export type FeaturePanelState = {
   left: boolean;
@@ -28,7 +20,8 @@ function cloneDefaultMap(): FeaturePanelsMap {
   return {
     // Home ("grid" key) is full-bleed — no side panels.
     grid: { left: false, right: false },
-    notes: { ...defaultState },
+    // Notes writes in one reading column; its panel opens on demand (NR-2).
+    notes: { left: true, right: false },
     tasks: { ...defaultState },
     mindmap: { ...defaultState },
     email: { ...defaultState },

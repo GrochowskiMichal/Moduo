@@ -11,6 +11,7 @@
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export type SidebarFooterItem = {
@@ -20,6 +21,9 @@ export type SidebarFooterItem = {
   onSelect: () => void;
   /** The destination you're on. */
   active?: boolean;
+  /** Always the icon alone (named, with its tooltip): a secondary item that
+   * must not push the main ones' words into truncation. */
+  iconOnly?: boolean;
 };
 
 export function SidebarFooter({
@@ -63,7 +67,10 @@ export function SidebarFooter({
                   {/* Under 14rem (224 px, what Tasks' "Archived" and
                       "Recently deleted" take at the roomiest density) the
                       words step aside for the icon alone. */}
-                  <span data-slot="sidebar-footer-label" className="truncate @max-[14rem]:sr-only">
+                  <span
+                    data-slot="sidebar-footer-label"
+                    className={cn("truncate @max-[14rem]:sr-only", item.iconOnly && "sr-only")}
+                  >
                     {item.label}
                   </span>
                 </button>

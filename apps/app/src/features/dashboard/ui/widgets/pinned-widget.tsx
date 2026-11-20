@@ -12,7 +12,7 @@ import { resolveEntityIcon } from "@/features/spine/icon-map";
 import { MentionPicker } from "@/features/spine/ui/mention-picker";
 import { getRuntime } from "@/lib/runtime";
 
-import { useDashboardData } from "../../context/dashboard-data-context";
+import { useDashboardSource } from "../../context/dashboard-data-context";
 import type { WidgetComponentProps } from "../../registry/types";
 import { openEntity } from "../../widget-nav";
 
@@ -32,7 +32,7 @@ function readPinned(config: Record<string, unknown>): Pinned | null {
 }
 
 export function PinnedWidget({ widget, updateConfig }: WidgetComponentProps) {
-  const { workspaceId } = useDashboardData();
+  const workspaceId = useDashboardSource("workspaceId");
   const [open, setOpen] = useState(false);
   const pinned = readPinned(widget.config);
 

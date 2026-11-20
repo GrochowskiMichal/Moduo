@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@rstest/core";
+
 import { type Draft, type DraftEffect, draftReducer, hasDraftContent } from "./draft-note";
 
 const A: Draft = { id: "a", parentId: null };

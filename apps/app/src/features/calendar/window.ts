@@ -6,7 +6,7 @@
 // around today and WIDENS it as you navigate, so the data you can see is the
 // data that got fetched.
 //
-// Standalone (no imports) on purpose: `runtime.web.ts` needs the default
+// Standalone (no imports) on purpose: `runtime.web.calendar.ts` needs the default
 // window, and pulling the calendar lens' value chain into the runtime would
 // drag the whole feature graph with it.
 
@@ -64,4 +64,28 @@ export function widenCalendarWindow(
     fromIso: from < curFrom ? shiftMonths(needFrom, -bufferMonths).toISOString() : current.fromIso,
     toIso: to > curTo ? shiftMonths(needTo, bufferMonths).toISOString() : current.toIso,
   };
+}
+
+/**
+ * The window busy blocks are read for (CALR-16): the days on screen, a day
+ * before, and three weeks after for the composer's ⇥ hops. Never the module's
+ * months-wide fetch window: the server expands every repeat into one row per
+ * occurrence, and a reply past PostgREST's 1000 rows would drop the current
+ * week first.
+ */
+export function busyWindowFor(from: Date, to: Date): CalendarWindow {
+  const day = 86_400_000;
+  return {
+    fromIso: new Date(from.getTime() - day).toISOString(),
+    toIso: new Date(to.getTime() + 21 * day).toISOString(),
+  };
+}
+
+/** Whether `outer` already holds the whole of [from, to). */
+export function windowCovers(outer: CalendarWindow | null, from: Date, to: Date): boolean {
+  return (
+    !!outer &&
+    Date.parse(outer.fromIso) <= from.getTime() &&
+    Date.parse(outer.toIso) >= to.getTime()
+  );
 }

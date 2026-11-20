@@ -8,11 +8,11 @@
 
 import { CheckSquare } from "lucide-react";
 import type * as Y from "yjs";
+
 import { type PanelItem, RightPanel } from "../../../components/app/right-panel";
 import type { EntityRef } from "../../../lib/entity-links";
 import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { HubDropZone } from "../../contacts/ui/hub-drop-zone";
-import type { useTasksModule } from "../../tasks/hooks/use-tasks-module";
 import { TaskDetailPanel } from "../../tasks/ui/task-detail-panel";
 import type { NotesTaskBridge } from "../editor/notes-editor-bridge";
 import type { Note } from "../model";
@@ -21,7 +21,7 @@ import { displayTitle } from "../title";
 import { NoteCommentsPanel } from "../ui/note-comments-panel";
 import { NoteDetailPanel } from "../ui/note-detail-panel";
 import { NoteOutlinePanel } from "../ui/note-outline-panel";
-import { getEditorSelectionQuote, scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
+import { scrollEditorToHeading, scrollEditorToQuote } from "./editor-dom";
 
 export function NotesRightPanel({
   runtime,
@@ -34,9 +34,10 @@ export function NotesRightPanel({
   variant,
   onVariantChange,
   taskBridge,
+  location,
+  editedBy,
   taskDetailId,
   onTaskDetail,
-  tasksApi,
   onOpenEntity,
 }: {
   runtime: ModuoRuntime | null;
@@ -50,9 +51,12 @@ export function NotesRightPanel({
   variant: NotesPanelVariantId;
   onVariantChange: (variant: NotesPanelVariantId) => void;
   taskBridge: NotesTaskBridge;
+  /** Where the open note sits ("Pages › Clients"), for Details. */
+  location: string;
+  /** Its last human editor's name, for Details. */
+  editedBy?: string | null;
   taskDetailId: string | null;
   onTaskDetail: (id: string | null) => void;
-  tasksApi: ReturnType<typeof useTasksModule>;
   onOpenEntity: (ref: EntityRef) => void;
 }) {
   if (!note) {
@@ -71,7 +75,9 @@ export function NotesRightPanel({
         <NoteDetailPanel
           runtime={runtime}
           workspaceId={workspaceId}
-          noteId={note.id}
+          note={note}
+          location={location}
+          editedBy={editedBy}
           canEdit={canEdit}
           currentUserId={userId}
           onOpenEntity={onOpenEntity}
@@ -86,7 +92,7 @@ export function NotesRightPanel({
         noteLabel={displayTitle(note.title)}
         canComment={canComment}
         currentUserId={userId}
-        getSelectionQuote={getEditorSelectionQuote}
+        canModerate={canEdit}
         onScrollToQuote={scrollEditorToQuote}
       />
     ),
@@ -104,12 +110,8 @@ export function NotesRightPanel({
             <div className="h-full min-h-0 overflow-y-auto scrollbar-thin">
               <TaskDetailPanel
                 task={task}
-                buckets={tasksApi.buckets}
-                inbox={tasksApi.inbox}
-                canEdit={tasksApi.canEdit}
                 onRequestCapture={() => {}}
                 onSelectTask={onTaskDetail}
-                api={tasksApi}
                 runtime={runtime}
                 workspaceId={workspaceId}
                 onOpenEntity={onOpenEntity}

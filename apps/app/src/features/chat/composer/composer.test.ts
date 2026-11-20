@@ -9,6 +9,7 @@ import { createElement } from "react";
 import { handleFinishedAt } from "@/features/spine/references/handle-autolink-plugin";
 import { CAPTURE_OPEN_EVENT } from "@/lib/capture-open";
 import type { CaptureRequest } from "@/lib/capture-registry";
+
 import { parseStored } from "../markup-v2/parse";
 import { openCreateCapture } from "./capture";
 import { ChatComposer, type ChatComposerProps } from "./chat-composer";

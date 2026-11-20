@@ -4,6 +4,8 @@
 // DB-6/DB-7 replace their entries.
 
 import { ChatNowLine } from "@/features/chat/home/now-line";
+import { SoundspaceWidgetLazy } from "@/features/soundspace/ui/soundspace-widget-lazy";
+
 import type { WidgetType } from "../engine/types";
 import { registerTeamNowLine } from "../team-now";
 import { ActivityFeedWidget } from "../ui/widgets/activity-feed-widget";
@@ -51,6 +53,7 @@ const WIDGET_COMPONENTS: Record<WidgetType, WidgetComponent> = {
   // TV-H1:
   team: TeamWidget,
   upcoming: UpcomingWidget,
+  soundspace: SoundspaceWidgetLazy,
 };
 
 // Chat's "now" line in the Team widget (CV-22, CH70).

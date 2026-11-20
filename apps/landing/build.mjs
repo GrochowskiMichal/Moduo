@@ -1,7 +1,7 @@
 /**
  * Builds the static landing into apps/landing/dist, without building the app.
  *
- *   node build.mjs             → moduo.app: index, subpages, assets, favicons
+ *   node build.mjs             → moduo.app: index, subpages, /changelog, assets, favicons
  *   node build.mjs --staging   → staging.moduo.app: the staging portal at /, the
  *                                marketing page at /landing (noindex)
  *   node build.mjs --noindex   → the moduo.app build for a PR preview, never indexed
@@ -12,6 +12,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { renderChangelogPage } from "./changelog.mjs";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(root, "dist");
@@ -29,7 +31,7 @@ fs.mkdirSync(outDir, { recursive: true });
 if (staging) {
   fs.copyFileSync(path.join(root, "staging.html"), path.join(outDir, "index.html"));
   // Staging keeps its portal at /, so the marketing page is published for review at
-  // /landing.html (never indexed) before it's promoted to prod-landing.
+  // /landing.html (never indexed) before a release ships it.
   let page = fs.readFileSync(path.join(root, "index.html"), "utf8");
   if (!/name="robots"/.test(page)) {
     page = page.replace("<head>", '<head>\n    <meta name="robots" content="noindex, nofollow" />');
@@ -40,11 +42,26 @@ if (staging) {
   for (const page of SUBPAGES) {
     fs.copyFileSync(path.join(root, page), path.join(outDir, page));
   }
+  // /changelog: every release from the notes the app ships with (REL-4).
+  const notesFile = path.join(root, "..", "..", "release-notes", "releases.json");
+  const notes = fs.existsSync(notesFile) ? JSON.parse(fs.readFileSync(notesFile, "utf8")) : {};
+  const template = fs.readFileSync(path.join(root, "terms.html"), "utf8");
+  fs.writeFileSync(path.join(outDir, "changelog.html"), renderChangelogPage(template, notes));
 }
+
+// The real 404 page (wrangler.jsonc: not_found_handling "404-page"), on every build.
+fs.copyFileSync(path.join(root, "404.html"), path.join(outDir, "404.html"));
 
 // The landing's own static files (share image, founder photos, …) go to /assets.
 const assets = path.join(root, "assets");
 if (fs.existsSync(assets)) fs.cpSync(assets, path.join(outDir, "assets"), { recursive: true });
+
+// /.well-known: files other services read at the root, such as
+// microsoft-identity-association.json, which verifies moduo.app as the
+// publisher of the Moduo app registration in Microsoft Entra (Outlook Calendar).
+const wellKnown = path.join(root, ".well-known");
+if (fs.existsSync(wellKnown))
+  fs.cpSync(wellKnown, path.join(outDir, ".well-known"), { recursive: true });
 
 // The pages link the app's favicons at the root; the landing Worker serves its own copies.
 const appPublic = path.join(root, "..", "app", "public");

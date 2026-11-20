@@ -74,6 +74,7 @@ import type { EntityRef } from "@/lib/entity-links";
 import { isTauriRuntime } from "@/lib/runtime";
 import type { ModuoRuntime } from "@/lib/runtime.types";
 import { cn } from "@/lib/utils";
+
 import { WorkspaceContext } from "../../workspaces/workspace-context";
 import type { MentionInsert } from "../mention-actions";
 import { useReferenceHost } from "../references/context";

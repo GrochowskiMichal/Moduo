@@ -13,6 +13,7 @@ import { createBindingV2__EXPERIMENTAL, syncYjsStateToLexicalV2__EXPERIMENTAL } 
 import { describe, expect, it } from "@rstest/core";
 import { Awareness } from "y-protocols/awareness";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8 } from "../utils/base64";
 import { deriveNoteBody } from "./doc-markdown";
 import { NOTES_TRANSFORMERS } from "./markdown";

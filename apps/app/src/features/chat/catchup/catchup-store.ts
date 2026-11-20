@@ -8,6 +8,7 @@
 // answer settles the list.
 
 import { useEffect, useSyncExternalStore } from "react";
+
 import type { ChatCatchupItem, ChatMessage, ChatRuntime } from "../model";
 import type { ChatStore, ChatWriteResult } from "../store/store";
 

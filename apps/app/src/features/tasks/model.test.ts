@@ -1,7 +1,7 @@
 // TV-D9 · "backlog is out of counts and views" (specs/tasks-v3.md AC map:
 // AC4.2, AC11.6). A backlog task, exactly as the server sends it (legacy
 // status "todo", category "backlog"), sits out of the sidebar counts, My
-// tasks, Upcoming (the Calendar's Due soon and strip), drift and Focus
+// tasks, Upcoming (the Calendar's Plan and strip), drift and Focus
 // suggestions, while it stays a task you can find, group, filter and queue.
 // Plus the row mapping the client reads statuses and dates through.
 
@@ -9,15 +9,13 @@ import { describe, expect, it } from "@rstest/core";
 
 import {
   dueOnToLocalInstant,
-  isMissingTvD9FieldError,
   localDayOf,
   taskCreateOpInput,
   taskPatchToColumns,
   taskPatchToOpFields,
   taskRowToModel,
-  withoutTvD9Fields,
 } from "../../lib/task-rows";
-import { groupPanelTasks } from "../calendar/panel";
+import { groupPlanTasks } from "../calendar/panel";
 import { stripItems } from "../calendar/strip";
 import { completedWithin } from "./completed";
 import { myTasksScope, openCount } from "./default-view";
@@ -99,14 +97,14 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
     expect(rows.map((t) => t.id)).toEqual(["open"]);
   });
 
-  it("sits out of Upcoming: the Calendar's Due soon and its strip", () => {
+  it("sits out of Upcoming: the Calendar's Plan and its strip", () => {
     const due = "2026-11-11T00:00:00";
     const dueOpen = task("dueOpen", { dueDate: new Date(due).toISOString() });
     const dueParked = backlog("dueParked", { dueDate: new Date(due).toISOString() });
-    const groups = groupPanelTasks({ tasks: [dueOpen, dueParked], queuedTasks: [], now: NOW });
-    expect(groups.dueSoon.map((t) => t.id)).toEqual(["dueOpen"]);
-    // …while the panel's Backlog group (unplanned work) lists it.
-    expect(groups.backlog.map((t) => t.id)).toEqual(["dueParked"]);
+    const groups = groupPlanTasks({ tasks: [dueOpen, dueParked], me: ME, now: NOW });
+    expect(groups.thisWeek.map((t) => t.id)).toEqual(["dueOpen"]);
+    // …while Plan's No date group (unplanned work) lists it.
+    expect(groups.noDate.map((t) => t.id)).toEqual(["dueParked"]);
     const ended = "2026-11-10T08:00:00Z";
     const items = stripItems(
       [
@@ -150,11 +148,14 @@ describe("backlog is out of counts and views (AC4.2, AC11.6)", () => {
     const ctx = {} as TaskFilterContext;
     expect(taskFilterValues(parked, "status", ctx)).toEqual(["backlog"]);
     expect(taskFilterValues(open, "status", ctx)).toEqual(["todo"]);
+    const through = statusesLetThrough([
+      { dimension: "status", operator: "any_of", values: ["backlog", "todo"] },
+    ]);
     expect(
-      statusesLetThrough([
-        { dimension: "status", operator: "any_of", values: ["backlog", "todo"] },
-      ]),
-    ).toEqual(new Set(["backlog", "todo"]));
+      (["backlog", "todo", "in_progress", "done", "archived"] as const).filter((k) =>
+        through?.has(k),
+      ),
+    ).toEqual(["backlog", "todo"]);
   });
 
   it("a drop out of Backlog and its Undo go back to Backlog, not To do", () => {
@@ -305,13 +306,7 @@ describe("rows: statuses, completion and the due date (TV-D9)", () => {
     expect(taskCreateOpInput(backlog("n", { dueDate: day })).due_on).toBe("2026-11-20");
   });
 
-  it("falls back to the old fields on a database before TV-D9", () => {
-    expect(isMissingTvD9FieldError({ message: 'Tasks have no field "due_on".' })).toBe(true);
-    expect(isMissingTvD9FieldError({ message: "Task not found in this workspace." })).toBe(false);
-    expect(withoutTvD9Fields({ due_on: "2026-11-20", status: "backlog", status_id: "x" })).toEqual({
-      due_date: dueOnToLocalInstant("2026-11-20"),
-      status: "todo",
-    });
+  it("the raw column write keeps only the legacy status", () => {
     expect(taskPatchToColumns({ statusCategory: "wont_do", statusId: "x" }, "now")).toEqual({
       status: "archived",
       updated_at: "now",

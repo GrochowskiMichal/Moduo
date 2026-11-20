@@ -10,8 +10,10 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+
 import { describe, expect, it } from "@rstest/core";
 import * as Y from "yjs";
+
 import { decodeBase64ToUint8 } from "../utils/base64";
 import { GOLDEN_DOC_B64, GOLDEN_MD } from "./binding-contract.fixture";
 import { deriveNoteBody, NOTES_DOC_ROOT } from "./doc-markdown";

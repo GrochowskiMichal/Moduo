@@ -1,0 +1,416 @@
+// The one typed list of the app's keyboard shortcuts (TS-6, specs/tanstack-spine.md).
+// Every key the app binds on the document goes here, with the scope it lives in;
+// components bind them through `useAppHotkeys` (./use-app-hotkeys.ts). The tests in
+// registry.test.ts fail on a duplicate binding inside one scope and on a narrower
+// scope that shadows a wider one's key without saying so (`overrides`).
+//
+// Keys that stay outside this list on purpose: element-local `onKeyDown` handlers
+// on a focused widget (the Tasks list's j/k, menus, pickers), Lexical editor
+// commands, and transient listeners that live only during a gesture (drags, the
+// timeline canvas). They own the focused element, so no scope has to win for them.
+import { areHotkeysEqual, type HotkeyChord as Hotkey } from "@tanstack/hotkeys";
+
+/** How long the second key of a chord (`g` then `i`) may take (specs/mail-v3.md decision 15). */
+export const CHORD_TIMEOUT_MS = 1000;
+
+/** A route's scope: active while its page is mounted. */
+export type RouteScope = "tasks" | "chat" | "notes" | "calendar" | "contacts" | "home" | "email";
+
+/** A surface inside a route (a full-page view that replaces the list). */
+export type SurfaceScope = "task-page" | "focus" | "catchup";
+
+/**
+ * Where a binding fires. `global` is always on; a route scope while its page is
+ * mounted; a surface, `panel` (the right panel) and `modal` (capture, dialogs)
+ * while mounted and enabled. When two active scopes bind the same key, the
+ * narrower (nested, else the most recently opened) one wins, so a page beats a
+ * global key by scope, never by listener order.
+ */
+export type HotkeyScope = "global" | RouteScope | SurfaceScope | "panel" | "modal";
+
+/** The scopes a surface sits inside, for the shadowing rule. */
+export const SCOPE_PARENT: Record<Exclude<HotkeyScope, "global">, HotkeyScope> = {
+  tasks: "global",
+  chat: "global",
+  notes: "global",
+  calendar: "global",
+  contacts: "global",
+  home: "global",
+  email: "global",
+  "task-page": "tasks",
+  focus: "tasks",
+  catchup: "chat",
+  panel: "global",
+  modal: "global",
+};
+
+/** Two keys pressed one after the other within `CHORD_TIMEOUT_MS` (`g` then `i`). A slow
+ *  second key, or any key that isn't the second step, drops the chord and acts normally. */
+export type HotkeySequenceKey = readonly [Hotkey, Hotkey];
+
+/** A key, one that exists only on one platform (fullscreen: ⌃⌘F on a Mac, F11
+ *  elsewhere), or a two-step chord written as a nested pair (`[["G", "I"]]`). */
+export type HotkeyKey = Hotkey | { key: Hotkey; only: "mac" | "other" } | HotkeySequenceKey;
+
+/** What a binding listens for on one platform: one key, or a chord's two steps. */
+export type HotkeyBinding = Hotkey | HotkeySequenceKey;
+
+export function isSequenceKey(key: HotkeyBinding | HotkeyKey): key is HotkeySequenceKey {
+  return Array.isArray(key);
+}
+
+export type HotkeyDef = {
+  scope: HotkeyScope;
+  label: string;
+  keys: readonly HotkeyKey[];
+  /** Fires from a text field or a Lexical editor too. Off by default. */
+  inInputs?: boolean;
+  /** Deliberately shadows the same key in a wider scope (email's `?` over the sheet). */
+  overrides?: boolean;
+};
+
+const MODULE_DIGITS = ["1", "2", "3", "4", "5", "6", "7"] as const;
+
+export const HOTKEYS = {
+  // ── global (app-chrome) ─────────────────────────────────────────────────────
+  // ⌘K and ⌘⇧K fire even from fields and editors: search and capture must reach
+  // you mid-typing, and neither is a text-editing key.
+  palette: { scope: "global", label: "Command palette", keys: ["Mod+K"], inInputs: true },
+  capture: { scope: "global", label: "Quick capture", keys: ["Mod+Shift+K"], inInputs: true },
+  // A browser keeps ⌘N and ⌘⇧N (new window, private window) and never hands
+  // them to the page: ⌥N and ⌥⇧N are the web's keys, and work on desktop too.
+  "new-item": { scope: "global", label: "New item", keys: ["Mod+N", "Alt+N"] },
+  "new-note": { scope: "global", label: "New note", keys: ["Mod+Shift+N", "Alt+Shift+N"] },
+  settings: { scope: "global", label: "Settings", keys: ["Mod+,"] },
+  "workspace-switcher": { scope: "global", label: "Workspace switcher", keys: ["Mod+Shift+W"] },
+  notifications: { scope: "global", label: "Notifications", keys: ["Mod+/"] },
+  // Shift+/ matches both `key === "?"` and `key === "/"` with Shift (some layouts
+  // and synthetic events deliver the latter; docs/gotchas/ui.md).
+  help: { scope: "global", label: "Keyboard shortcuts", keys: ["Shift+/"] },
+  // ⌘1–7: the Nth visible module tab (7 = the most tabs the top bar shows).
+  "module-1": { scope: "global", label: "Module 1", keys: ["Mod+1"] },
+  "module-2": { scope: "global", label: "Module 2", keys: ["Mod+2"] },
+  "module-3": { scope: "global", label: "Module 3", keys: ["Mod+3"] },
+  "module-4": { scope: "global", label: "Module 4", keys: ["Mod+4"] },
+  "module-5": { scope: "global", label: "Module 5", keys: ["Mod+5"] },
+  "module-6": { scope: "global", label: "Module 6", keys: ["Mod+6"] },
+  "module-7": { scope: "global", label: "Module 7", keys: ["Mod+7"] },
+  fullscreen: {
+    scope: "global",
+    label: "Toggle full screen",
+    keys: [
+      { key: "Control+Meta+F", only: "mac" },
+      { key: "F11", only: "other" },
+    ],
+  },
+
+  // ── modal: the capture shell, while open ────────────────────────────────────
+  "capture.type": {
+    scope: "modal",
+    label: "Switch the capture's type",
+    keys: MODULE_DIGITS.map((d) => `Mod+${d}` as Hotkey),
+    inInputs: true,
+    overrides: true,
+  },
+
+  // ── panel: the right panel ─────────────────────────────────────────────────
+  "panel.back": { scope: "panel", label: "Back out of the open item", keys: ["Escape"] },
+  "panel.view": {
+    scope: "panel",
+    label: "Switch the panel's view",
+    keys: ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((d) => `Alt+${d}` as Hotkey),
+  },
+
+  // ── tasks ──────────────────────────────────────────────────────────────────
+  "tasks.search": { scope: "tasks", label: "Search tasks", keys: ["/"] },
+  "tasks.filter": { scope: "tasks", label: "Filter tasks", keys: ["F"] },
+  "task-page.close": { scope: "task-page", label: "Close the task", keys: ["Escape", "Mod+["] },
+  "task-page.prev": { scope: "task-page", label: "Previous task", keys: ["ArrowUp", "K"] },
+  "task-page.next": { scope: "task-page", label: "Next task", keys: ["ArrowDown", "J"] },
+  "focus.enter": { scope: "focus", label: "Done · take the offer", keys: ["Enter"] },
+  "focus.decline": { scope: "focus", label: "Decline the offer", keys: ["Escape"] },
+  "focus.capture": { scope: "focus", label: "Capture", keys: ["C"] },
+  "focus.skip": { scope: "focus", label: "Skip", keys: ["S"] },
+  "focus.hand-off": { scope: "focus", label: "Hand off", keys: ["W"] },
+  "focus.promote": { scope: "focus", label: "Make it the Now card", keys: ["Shift+F"] },
+
+  // ── chat ───────────────────────────────────────────────────────────────────
+  // ⌥↑/⌥↓ walk conversations from the composer too (chat-keys.spec.ts).
+  "chat.prev": {
+    scope: "chat",
+    label: "Previous conversation",
+    keys: ["Alt+ArrowUp"],
+    inInputs: true,
+  },
+  "chat.next": {
+    scope: "chat",
+    label: "Next conversation",
+    keys: ["Alt+ArrowDown"],
+    inInputs: true,
+  },
+  "chat.prev-unread": {
+    scope: "chat",
+    label: "Previous unread",
+    keys: ["Alt+Shift+ArrowUp"],
+    inInputs: true,
+  },
+  "chat.next-unread": {
+    scope: "chat",
+    label: "Next unread",
+    keys: ["Alt+Shift+ArrowDown"],
+    inInputs: true,
+  },
+  "catchup.down": { scope: "catchup", label: "Next item", keys: ["ArrowDown"] },
+  "catchup.up": { scope: "catchup", label: "Previous item", keys: ["ArrowUp"] },
+  "catchup.leave": { scope: "catchup", label: "Leave Catch up", keys: ["Escape"] },
+  "catchup.done": { scope: "catchup", label: "Done", keys: ["Space"] },
+  "catchup.open": { scope: "catchup", label: "Open", keys: ["Enter"] },
+  "catchup.reply": { scope: "catchup", label: "Reply", keys: ["R"] },
+  "catchup.task": { scope: "catchup", label: "Make a task", keys: ["T"] },
+  "catchup.later": { scope: "catchup", label: "Later", keys: ["H"] },
+
+  // ── calendar ───────────────────────────────────────────────────────────────
+  "calendar.today": { scope: "calendar", label: "Today", keys: ["T", "Shift+T"] },
+  "calendar.day": { scope: "calendar", label: "Day view", keys: ["D", "Shift+D"] },
+  "calendar.week": { scope: "calendar", label: "Week view", keys: ["W", "Shift+W"] },
+  "calendar.month": { scope: "calendar", label: "Month view", keys: ["M", "Shift+M"] },
+  // Period keys moved to ⌘← / ⌘→ (CALR-4): bare arrows belong to the grid cursor.
+  "calendar.prev": { scope: "calendar", label: "Previous period", keys: ["Mod+ArrowLeft"] },
+  "calendar.next": { scope: "calendar", label: "Next period", keys: ["Mod+ArrowRight"] },
+  "calendar.cursor-up": { scope: "calendar", label: "Cursor up", keys: ["ArrowUp"] },
+  "calendar.cursor-down": { scope: "calendar", label: "Cursor down", keys: ["ArrowDown"] },
+  "calendar.cursor-left": { scope: "calendar", label: "Cursor left", keys: ["ArrowLeft"] },
+  "calendar.cursor-right": { scope: "calendar", label: "Cursor right", keys: ["ArrowRight"] },
+  "calendar.next-event": { scope: "calendar", label: "Next event", keys: ["J"] },
+  "calendar.prev-event": { scope: "calendar", label: "Previous event", keys: ["K"] },
+  "calendar.card": { scope: "calendar", label: "Open the card", keys: ["Space"] },
+  "calendar.open": { scope: "calendar", label: "Open, or a new event", keys: ["Enter"] },
+  // CALR-4b: the event menu at the selection (the right-click menu by key).
+  "calendar.menu": { scope: "calendar", label: "Open the event menu", keys: ["Control+Enter"] },
+  "calendar.new": { scope: "calendar", label: "New event", keys: ["N"] },
+  "calendar.earlier": { scope: "calendar", label: "15 minutes earlier", keys: ["Alt+ArrowUp"] },
+  "calendar.later": { scope: "calendar", label: "15 minutes later", keys: ["Alt+ArrowDown"] },
+  "calendar.prev-day": { scope: "calendar", label: "A day earlier", keys: ["Alt+ArrowLeft"] },
+  "calendar.next-day": { scope: "calendar", label: "A day later", keys: ["Alt+ArrowRight"] },
+  "calendar.shorter": { scope: "calendar", label: "Shorter", keys: ["Alt+Shift+ArrowUp"] },
+  "calendar.longer": { scope: "calendar", label: "Longer", keys: ["Alt+Shift+ArrowDown"] },
+  "calendar.copy": { scope: "calendar", label: "Copy the event", keys: ["Mod+C"] },
+  "calendar.paste": { scope: "calendar", label: "Paste the event", keys: ["Mod+V"] },
+  "calendar.duplicate": { scope: "calendar", label: "Duplicate the event", keys: ["Mod+D"] },
+  "calendar.undo": { scope: "calendar", label: "Undo", keys: ["Mod+Z"] },
+  "calendar.zone": { scope: "calendar", label: "Show or hide a second time zone", keys: ["Z"] },
+  // While Plan is folded (narrow windows); the panel's own ⌥3 takes over once it shows.
+  "calendar.plan": { scope: "calendar", label: "Open Plan", keys: ["Alt+3"] },
+  "calendar.delete": {
+    scope: "calendar",
+    label: "Delete the event",
+    keys: ["Delete", "Backspace"],
+  },
+  "calendar.add-meet": { scope: "calendar", label: "Add a Meet link", keys: ["V"] },
+  "calendar.link": { scope: "calendar", label: "Link a person, note or task", keys: ["L"] },
+  "calendar.private": { scope: "calendar", label: "Make private or public", keys: ["P"] },
+  "calendar.join": { scope: "calendar", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
+  // Plan (CALR-5): S lifts the selected task to the next free slot; / finds a task.
+  "calendar.place-task": { scope: "calendar", label: "Place the selected task", keys: ["S"] },
+  "calendar.find-task": { scope: "calendar", label: "Find a task", keys: ["/"] },
+  // CALR-19: offer specific times from a booking link (↵ ⇥ ←→ ⌫ ⌘C ⇧⌘C esc while offering).
+  "calendar.offer": { scope: "calendar", label: "Offer specific times", keys: ["O"] },
+  "calendar.all-day": {
+    scope: "calendar",
+    label: "Show every all-day row",
+    keys: ["Shift+A"],
+  },
+
+  // ── home (dashboard) ───────────────────────────────────────────────────────
+  "home.prev-page": { scope: "home", label: "Previous page", keys: ["ArrowLeft"] },
+  "home.next-page": { scope: "home", label: "Next page", keys: ["ArrowRight"] },
+  "home.exit-edit": { scope: "home", label: "Leave edit mode", keys: ["Escape"] },
+  "home.join": { scope: "home", label: "Join the meeting on now", keys: ["Mod+Shift+J"] },
+
+  // ── email ──────────────────────────────────────────────────────────────────
+  // ↓/↑ walk the list like j/k (specs/mail-v3.md §7).
+  "email.next": { scope: "email", label: "Next thread", keys: ["J", "ArrowDown"] },
+  "email.prev": { scope: "email", label: "Previous thread", keys: ["K", "ArrowUp"] },
+  "email.open": { scope: "email", label: "Open the thread", keys: ["Enter"] },
+  "email.archive": { scope: "email", label: "Done", keys: ["E"] },
+  "email.undone": { scope: "email", label: "Not done", keys: ["Shift+E"] },
+  "email.remind": { scope: "email", label: "Remind me if no reply", keys: ["W"] },
+  "email.pin": { scope: "email", label: "Pin", keys: ["P"] },
+  "email.delete": { scope: "email", label: "Delete", keys: ["Shift+3", "Backspace"] },
+  "email.move": { scope: "email", label: "Move", keys: ["M"] },
+  "email.snooze": { scope: "email", label: "Snooze", keys: ["S"] },
+  "email.convert": { scope: "email", label: "Make a task", keys: ["T"] },
+  "email.reply": { scope: "email", label: "Reply", keys: ["R"] },
+  // MR-9: the rebuilt shell's keys; the `?` legend and ⌘K list them from here (AC42).
+  "email.reply-all": { scope: "email", label: "Reply all", keys: ["A"] },
+  "email.forward": { scope: "email", label: "Forward", keys: ["F"] },
+  // ⌘N is Mail's New message on /email (the app-wide New item yields to it).
+  "email.compose": {
+    scope: "email",
+    label: "New message",
+    keys: ["C", "Mod+N"],
+    overrides: true,
+  },
+  "email.unread": { scope: "email", label: "Mark unread / read", keys: ["U"] },
+  "email.link": { scope: "email", label: "Link to a task, contact or note", keys: ["L"] },
+  "email.note": { scope: "email", label: "Private note", keys: ["N"] },
+  "email.select": { scope: "email", label: "Select", keys: ["X"] },
+  "email.extend-down": { scope: "email", label: "Extend selection down", keys: ["Shift+J"] },
+  "email.extend-up": { scope: "email", label: "Extend selection up", keys: ["Shift+K"] },
+  "email.select-all": { scope: "email", label: "Select all in tab", keys: ["Mod+A"] },
+  "email.undo": { scope: "email", label: "Undo", keys: ["Z", "Mod+Z"] },
+  "email.tab-prev": { scope: "email", label: "Previous tab", keys: ["["] },
+  "email.tab-next": { scope: "email", label: "Next tab", keys: ["]"] },
+  "email.clear-selection": { scope: "email", label: "Clear selection", keys: ["Escape"] },
+  // The side panel's views (§10); MV-11 builds the panel itself.
+  "email.panel-today": { scope: "email", label: "Today panel", keys: ["Alt+1"] },
+  "email.panel-contact": { scope: "email", label: "Contact panel", keys: ["Alt+2"] },
+  "email.panel-task": { scope: "email", label: "Task panel", keys: ["Alt+3"] },
+  // specs/mail-improve.md §6: ⌥0 shows or hides the panel; F6 / ⇧F6 cycle the panes.
+  "email.panel-toggle": { scope: "email", label: "Show or hide the side panel", keys: ["Alt+0"] },
+  "email.pane-next": { scope: "email", label: "Next pane", keys: ["F6"] },
+  "email.pane-prev": { scope: "email", label: "Previous pane", keys: ["Shift+F6"] },
+  // `g` chords (decision 15): the second key within a second.
+  "email.go-inbox": { scope: "email", label: "Go to Inbox", keys: [["G", "I"]] },
+  "email.go-followups": { scope: "email", label: "Go to Follow-ups", keys: [["G", "F"]] },
+  "email.go-snoozed": { scope: "email", label: "Go to Snoozed", keys: [["G", "S"]] },
+  "email.go-archive": { scope: "email", label: "Go to Archive", keys: [["G", "A"]] },
+  "email.go-sent": { scope: "email", label: "Go to Sent", keys: [["G", "T"]] },
+  "email.go-drafts": { scope: "email", label: "Go to Drafts", keys: [["G", "D"]] },
+  // The inbox tabs (specs/mail-improve.md §6); `g v` is the first custom tab.
+  "email.go-personal": { scope: "email", label: "Go to Personal", keys: [["G", "P"]] },
+  "email.go-custom": { scope: "email", label: "Go to your first tab", keys: [["G", "V"]] },
+  "email.go-notifications": {
+    scope: "email",
+    label: "Go to Notifications",
+    keys: [["G", "N"]],
+  },
+  "email.go-newsletters": { scope: "email", label: "Go to Newsletters", keys: [["G", "L"]] },
+  // Email's own `?` (the triage legend) beats the app-wide sheet on /email.
+  "email.legend": {
+    scope: "email",
+    label: "Triage keys",
+    keys: ["Shift+/"],
+    overrides: true,
+  },
+  "email.search": { scope: "email", label: "Search mail", keys: ["/"] },
+  // MV-8: the reader's keys (specs/mail-v3.md §7, §8).
+  "email.expand-all": { scope: "email", label: "Expand all messages", keys: ["O"] },
+  "email.allow": { scope: "email", label: "Allow this new sender", keys: ["Y"] },
+  "email.block": { scope: "email", label: "Block this new sender", keys: ["B"] },
+} as const satisfies Record<string, HotkeyDef>;
+
+export type HotkeyId = keyof typeof HOTKEYS;
+
+export type HotkeyRegistry = Readonly<Record<string, HotkeyDef>>;
+
+/** The keys a binding has on this platform (a chord stays one entry, its two steps). */
+export function keysFor(def: HotkeyDef, isMac: boolean): HotkeyBinding[] {
+  const out: HotkeyBinding[] = [];
+  for (const k of def.keys) {
+    if (typeof k === "string" || isSequenceKey(k)) out.push(k);
+    else if ((k.only === "mac") === isMac) out.push(k.key);
+  }
+  return out;
+}
+
+const bindingName = (k: HotkeyBinding) => (isSequenceKey(k) ? k.join(" ") : k);
+
+const PLATFORMS = [
+  { isMac: true, platform: "mac" },
+  { isMac: false, platform: "windows" },
+] as const;
+
+function shareAKey(a: HotkeyDef, b: HotkeyDef): string | null {
+  for (const { isMac, platform } of PLATFORMS) {
+    for (const ka of keysFor(a, isMac)) {
+      for (const kb of keysFor(b, isMac)) {
+        if (areHotkeysEqual(ka, kb, platform)) return bindingName(ka);
+      }
+    }
+  }
+  return null;
+}
+
+/** Two bindings in one scope on the same key (on either platform). */
+export function findDuplicateBindings(registry: HotkeyRegistry): string[] {
+  const ids = Object.keys(registry);
+  const problems: string[] = [];
+  for (let i = 0; i < ids.length; i++) {
+    for (let j = i + 1; j < ids.length; j++) {
+      const a = registry[ids[i]];
+      const b = registry[ids[j]];
+      if (a.scope !== b.scope) continue;
+      const key = shareAKey(a, b);
+      if (key) problems.push(`${ids[i]} and ${ids[j]} both bind ${key} in "${a.scope}"`);
+    }
+    // One binding listing the same key twice would fire its handler twice.
+    const own = registry[ids[i]];
+    for (const { isMac, platform } of PLATFORMS) {
+      const keys = keysFor(own, isMac);
+      keys.forEach((k, n) => {
+        if (keys.slice(n + 1).some((other) => areHotkeysEqual(k, other, platform))) {
+          problems.push(`${ids[i]} lists ${bindingName(k)} twice`);
+        }
+      });
+    }
+  }
+  return [...new Set(problems)];
+}
+
+function ancestors(scope: HotkeyScope): HotkeyScope[] {
+  const out: HotkeyScope[] = [];
+  let current: HotkeyScope = scope;
+  while (current !== "global") {
+    current = SCOPE_PARENT[current];
+    out.push(current);
+  }
+  return out;
+}
+
+/** A binding that hides a wider scope's key without `overrides: true`. */
+export function findUndeclaredShadows(registry: HotkeyRegistry): string[] {
+  const problems: string[] = [];
+  for (const [id, def] of Object.entries(registry)) {
+    if (def.scope === "global" || def.overrides) continue;
+    const wider = new Set(ancestors(def.scope));
+    for (const [otherId, other] of Object.entries(registry)) {
+      if (!wider.has(other.scope)) continue;
+      const key = shareAKey(def, other);
+      if (key) problems.push(`${id} shadows ${otherId} on ${key} without overrides: true`);
+    }
+  }
+  return problems;
+}
+
+/** The plain (single) keys a binding has on one platform. */
+function plainKeys(def: HotkeyDef, isMac: boolean): Hotkey[] {
+  return keysFor(def, isMac).filter((k): k is Hotkey => !isSequenceKey(k));
+}
+
+/** The chords a binding has on one platform. */
+function chordKeys(def: HotkeyDef, isMac: boolean): HotkeySequenceKey[] {
+  return keysFor(def, isMac).filter(isSequenceKey);
+}
+
+/**
+ * A chord whose first key is also a plain key in its scope: both would fire on
+ * the first press (the second step is the chord's, the first is not).
+ */
+export function findChordPrefixClashes(registry: HotkeyRegistry): string[] {
+  const problems: string[] = [];
+  const entries = Object.entries(registry);
+  for (const [id, def] of entries) {
+    for (const { isMac, platform } of PLATFORMS) {
+      const sameScope = entries.filter(([, other]) => other.scope === def.scope);
+      for (const [first] of chordKeys(def, isMac)) {
+        const clash = sameScope.filter(([, other]) =>
+          plainKeys(other, isMac).some((k) => areHotkeysEqual(k, first, platform)),
+        );
+        for (const [otherId] of clash)
+          problems.push(`${id} starts with ${first}, which ${otherId} binds in "${def.scope}"`);
+      }
+    }
+  }
+  return [...new Set(problems)];
+}

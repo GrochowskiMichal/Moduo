@@ -25,15 +25,7 @@ import { normalizeContactStatus } from "./status";
 
 /** A CSV column maps to one contact field, a name part, or is ignored. */
 export type ImportField =
-  | "name"
-  | "firstName"
-  | "lastName"
-  | "email"
-  | "phone"
-  | "title"
-  | "company"
-  | "status"
-  | "ignore";
+  "name" | "firstName" | "lastName" | "email" | "phone" | "title" | "company" | "status" | "ignore";
 
 /** The pickable targets in the column-map step (order = display order). */
 export const IMPORT_FIELDS: { value: ImportField; label: string }[] = [

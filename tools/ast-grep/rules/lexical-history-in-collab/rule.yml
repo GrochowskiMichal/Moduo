@@ -1,0 +1,18 @@
+id: lexical-history-in-collab
+language: tsx
+severity: error
+message: "`HistoryPlugin` in a collaborative note editor owns ⌘Z and undoes other people's text (it restores whole snapshots, teammates' and agents' edits included)."
+note: |
+  Notes undo is the collab plugin's Yjs undo manager (`collabUndoManager`,
+  apps/app/src/features/notes/editor/collab-undo.ts). A write made straight to the doc
+  (block moves) adds its origin with `asUndoStep`; one that must never be a step goes
+  through `updateWithoutUndo`. `HISTORY_MERGE_TAG` does nothing there (NR-3).
+files:
+  - apps/app/src/features/notes/**/*.tsx
+rule:
+  any:
+    - kind: jsx_self_closing_element
+    - kind: jsx_opening_element
+  has:
+    field: name
+    regex: ^HistoryPlugin$
