@@ -30,7 +30,7 @@
   --state-selected: color-mix(in oklab, var(--primary) 13%, transparent);
   --hairline: color-mix(in oklab, var(--foreground) 10%, transparent);
   --control-raised: color-mix(in oklab, var(--foreground) 14%, var(--muted));
-  --ref-bg: color-mix(in oklab, var(--foreground) 7%, var(--card));
+  --ref-bg: var(--muted);
   --scroll-thumb: color-mix(in oklab, var(--foreground) 16%, transparent);
   --scrim: color-mix(in oklab, var(--background) 82%, transparent);
   --motion-fade: 100ms; --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -66,7 +66,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .ic16 { width: var(--icon); height: var(--icon); }
 .t2 { color: var(--muted-foreground); } .t3 { color: var(--subtle-foreground); }
 .num { font-variant-numeric: tabular-nums; }
-.kbd { font: 500 var(--text-2xs)/16px var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--hairline); border-radius: 4px; padding: 0 4px; white-space: nowrap; }
+.kbd { font: 500 var(--text-2xs)/16px var(--font-mono); color: var(--muted-foreground); border: 1px solid var(--hairline); border-radius: var(--radius-sm); padding: 0 4px; white-space: nowrap; }
 
 /* ── Prototype strip (not app UI) ────────────────────────────────────────── */
 .stage { display: flex; flex-direction: column; height: 100%; min-height: 640px; }
@@ -89,6 +89,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .app { height: 100%; min-width: 1024px; min-height: 600px; display: grid; grid-template-rows: 2.5rem 1fr var(--bar-h); grid-template-columns: 15rem 1fr 20rem; background: var(--background); }
 .app.noleft { grid-template-columns: 0 1fr 20rem; } .app.noright { grid-template-columns: 15rem 1fr 0; } .app.noleft.noright { grid-template-columns: 0 1fr 0; }
 .app.wide-right { grid-template-columns: 15rem 1fr 26rem; }
+.skip { position: absolute; left: 8px; top: -40px; z-index: 30; background: var(--popover); color: var(--foreground); padding: 6px 10px; border-radius: var(--radius-md); border: 1px solid var(--border); }
+.skip:focus { top: 6px; }
 .topbar { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid var(--border); }
 .brand { font-weight: 600; letter-spacing: -.01em; }
 .mods { display: flex; gap: 2px; margin-left: 8px; }
@@ -149,7 +151,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .row:hover { background: var(--state-hover); }
 .row.sel { background: var(--state-selected); }
 .row.sel:hover { background: color-mix(in oklab, var(--primary) 18%, transparent); }
-.row.sel::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--primary); }
+.row.sel::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: var(--radius-sm); background: var(--primary); }
 .row .who { font-weight: 500; display: flex; gap: 6px; align-items: center; min-width: 0; }
 .row .who span.nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row.unread .who, .row.unread .sub { font-weight: 600; color: var(--foreground); }
@@ -157,6 +159,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .row .sub { grid-column: 2 / 4; font-size: var(--text-sm); color: var(--muted-foreground); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .snip { grid-column: 2 / 4; font-size: var(--text-sm); color: var(--subtle-foreground); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .row .ava { grid-row: 1 / 4; margin-top: 1px; }
+.row .ava.pick { background: var(--primary); color: var(--primary-foreground); }
+.row .ava.pick .ic { width: 12px; height: 12px; stroke-width: 3; }
 .row .udot { width: 6px; height: 6px; border-radius: 9999px; background: var(--primary); }
 .row .flags { grid-column: 2 / 4; display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
 [data-density="compact"] .row, [data-density="dense"] .row { grid-template-columns: auto minmax(7rem, 11rem) 1fr auto auto; align-items: center; padding: 0 12px 0 16px; gap: 12px; }
@@ -167,6 +171,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 [data-density="compact"] .row .snip, [data-density="dense"] .row .snip { display: none; }
 [data-density="compact"] .row .flags, [data-density="dense"] .row .flags { grid-column: auto; margin: 0; flex-wrap: nowrap; }
 [data-density="dense"] .row { font-size: var(--text-sm); }
+[data-density="compact"] .row .chip, [data-density="dense"] .row .chip { font-size: 0; gap: 0; padding: 0 4px; }
+[data-density="compact"] .row .flags, [data-density="dense"] .row .flags { max-width: 4.5rem; overflow: hidden; }
+[data-density="compact"] .row .sub, [data-density="dense"] .row .sub { min-width: 10rem; }
 .chip { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: var(--radius-sm); background: var(--ref-bg); color: var(--muted-foreground); font-size: var(--text-2xs); font-weight: 500; white-space: nowrap; }
 .chip .ic { width: 11px; height: 11px; }
 .chip.done { text-decoration: line-through; }
@@ -175,7 +182,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .reader { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .rscroll { overflow: auto; flex: 1; min-height: 0; }
 .rin { max-width: 48rem; margin: 0 auto; padding: 20px 28px 40px; display: flex; flex-direction: column; gap: 12px; }
-.subj { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; }
+.subj { font-size: var(--text-xl); font-weight: 600; letter-spacing: -.01em; text-wrap: balance; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .linkline { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-xs); color: var(--muted-foreground); }
 .msg { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .msg.coll { display: flex; align-items: center; gap: 12px; padding: 8px 14px; color: var(--muted-foreground); font-size: var(--text-sm); }
@@ -192,6 +199,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .cal-ic { width: 40px; height: 44px; border-radius: var(--radius-md); background: var(--state-active); display: grid; place-items: center; text-align: center; line-height: 1.1; font-size: var(--text-2xs); color: var(--muted-foreground); }
 .cal-ic b { display: block; font-size: var(--text-md); color: var(--foreground); }
 .composer { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); overflow: hidden; }
+.cfield .v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cfield { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--hairline); font-size: var(--text-sm); color: var(--muted-foreground); }
 .cfield .v { color: var(--foreground); }
 .cbody { padding: 12px 14px; min-height: 140px; font-size: var(--text-base); line-height: 1.6; }
@@ -220,14 +228,15 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .person { display: flex; gap: 12px; align-items: center; }
 .person .nm { font-weight: 600; font-size: var(--text-md); } .person .ad { font-size: var(--text-xs); color: var(--muted-foreground); }
 /* day timeline */
-.day { position: relative; border-left: 1px solid var(--hairline); margin-left: 40px; }
+.day { position: relative; border-left: 1px solid var(--hairline); margin-left: 44px; }
 .hr { height: 40px; position: relative; border-top: 1px solid var(--hairline); }
-.hr span { position: absolute; left: -40px; top: -8px; font-size: var(--text-2xs); color: var(--subtle-foreground); width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+.hr span { position: absolute; left: -44px; top: -8px; font-size: var(--text-2xs); color: var(--subtle-foreground); width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 .ev { position: absolute; left: 6px; right: 6px; border-radius: var(--radius-sm); padding: 4px 8px; font-size: var(--text-xs); line-height: 1.3; background: color-mix(in oklab, var(--label-blue) 22%, var(--card)); border-left: 2px solid var(--label-blue); overflow: hidden; }
 .ev.focus { background: color-mix(in oklab, var(--label-green) 16%, var(--card)); border-left-color: var(--label-green); }
 .ev.ghost { background: transparent; border: 1.5px dashed var(--primary); }
 .ev.hold { background: color-mix(in oklab, var(--primary) 10%, transparent); border: 1.5px dashed var(--muted-foreground); }
-.ev.conf { box-shadow: inset 0 0 0 1.5px var(--label-amber); }
+.ev.conf { box-shadow: inset 0 0 0 1.5px var(--label-amber); right: 52%; }
+.ev.ghost { left: 50%; }
 .ev .t3 { font-size: var(--text-2xs); }
 /* week grid for Schedule */
 .week { display: grid; grid-template-columns: 34px repeat(5, 1fr); font-size: var(--text-2xs); }
@@ -241,6 +250,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 /* bottom bar */
 .bottombar { grid-column: 1 / -1; display: grid; grid-template-columns: 15rem 1fr 20rem; border-top: 1px solid var(--border); align-items: center; }
 .app.wide-right .bottombar { grid-template-columns: 15rem 1fr 26rem; }
+@media (max-width: 1199px) { .app, .app.wide-right { grid-template-columns: 15rem 1fr 0; } .app .panel { display: none; } .app .bottombar, .app.wide-right .bottombar { grid-template-columns: 3rem 1fr 3rem; } .listcol:not(.full) { width: 20rem; } }
 .bb-l, .bb-r { display: flex; align-items: center; gap: 4px; padding: 0 8px; }
 .bb-r { justify-content: flex-end; }
 .bb-c { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; overflow: hidden; }
@@ -269,7 +279,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 32px; text-align: center; color: var(--muted-foreground); }
 .empty h3 { font-size: var(--text-md); color: var(--foreground); font-weight: 600; }
 .empty .keys { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; font-size: var(--text-xs); }
-.sk { background: color-mix(in oklab, var(--foreground) 7%, transparent); border-radius: 4px; height: 10px; }
+.sk { background: color-mix(in oklab, var(--foreground) 7%, transparent); border-radius: var(--radius-sm); height: 10px; }
 .batch { display: flex; flex-direction: column; gap: 16px; }
 .bcard { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); }
 .bcard.cur { box-shadow: 0 0 0 2px var(--primary); }
@@ -433,17 +443,18 @@ try { const s = JSON.parse(localStorage.getItem("mailv4r1") || "null"); if (s &&
 
 /* ── pieces ── */
 function topbar() {
-  return `<header class="topbar"><span class="brand" aria-hidden="true">Moduo</span>
-  <nav class="mods" aria-label="Modules">${["Home", "Tasks", "Calendar", "Mail", "Notes", "Contacts", "Chat"].map((m) => `<button class="${m === "Mail" ? "on" : ""}">${m}</button>`).join("")}</nav>
+  return `<a class="skip" href="#list" onclick="event.preventDefault();document.querySelector('.row.sel, .row')?.focus()">Skip to conversations</a><header class="topbar"><span class="brand" aria-hidden="true">Moduo</span>
+  <nav class="mods" aria-label="Modules">${["Home", "Tasks", "Calendar", "Mail", "Notes", "Contacts", "Chat"].map((m) => `<button class="${m === "Mail" ? "on" : ""}" tabindex="${m === "Mail" ? 0 : -1}">${m}</button>`).join("")}</nav>
   <div class="tb-right"><button class="btn icon" aria-label="Search (⌘K)">${I("search")}</button><button class="btn icon" aria-label="Notifications">${I("bell")}</button><span class="ava pa" aria-label="You">MG</span></div></header>`;
 }
 function rail(o = {}) {
   const place = o.place || "inbox";
-  const nav = (id, ic, label, n, extra = "") => `<button class="nav ${place === id ? "on" : ""}">${I(ic)}<span>${label}</span>${extra}${n != null ? `<span class="n num">${n}</span>` : ""}</button>`;
+  if (o.first) return `<aside class="rail" aria-label="Mail places"><div class="railhead"><span class="ttl">Mail</span><button class="btn icon" aria-label="Mail settings">${I("gear")}</button></div>${[["inbox","Inbox"],["aside","Set aside"],["clock","Snoozed"],["file","Drafts"],["send","Sent"]].map(([ic,l]) => `<button class="nav" disabled style="opacity:.55">${I(ic)}<span>${l}</span></button>`).join("")}<div class="eyebrow">Accounts</div><button class="nav on">${I("plus")}<span>Connect an account</span></button></aside>`;
+  const nav = (id, ic, label, n, extra = "") => `<button class="nav ${place === id ? "on" : ""}" tabindex="${place === id ? 0 : -1}">${I(ic)}<span>${label}</span>${extra}${n != null ? `<span class="n num">${n}</span>` : ""}</button>`;
   return `<aside class="rail" aria-label="Mail places">
   <div class="railhead"><span class="ttl">Mail</span><button class="btn icon" aria-label="Sync now, synced 1 min ago">${I("sync")}</button><button class="btn icon" aria-label="Mail settings">${I("gear")}</button></div>
   <div class="newmsg"><button class="btn primary">${I("plus")} New message</button>${K("c")}</div>
-  ${o.first ? `<div class="pnote" style="margin:4px 0">Rail rows are dimmed until an account is connected.</div>` : ""}
+
   ${nav("inbox", "inbox", "Inbox", o.first ? null : 7)}
   ${nav("aside", "aside", "Set aside", o.first ? null : 3)}
   ${nav("snoozed", "clock", "Snoozed", o.first ? null : 2)}
@@ -452,14 +463,14 @@ function rail(o = {}) {
   ${nav("sent", "send", "Sent")}
   ${o.offline ? nav("outbox", "send", "Outbox", 1) : ""}
   <div class="eyebrow">Accounts</div>
-  <button class="nav"><span class="dot" style="background:var(--label-blue)"></span><span>Northwind Studio</span><span class="n num">5</span></button>
-  <button class="nav"><span class="dot" style="background:var(--label-green)"></span><span>Personal</span><span class="n num">2</span></button>
+  <button class="nav" tabindex="-1"><span class="dot" style="background:var(--label-blue)"></span><span>Northwind Studio</span><span class="n num">5</span></button>
+  <button class="nav" tabindex="-1"><span class="dot" style="background:var(--label-green)"></span><span>Personal</span><span class="n num">2</span></button>
   <div class="eyebrow">Saved searches</div>
-  <button class="nav">${I("search")}<span>Fjordline</span></button>
-  <button class="nav">${I("search")}<span>Invoices this month</span></button>
+  <button class="nav" tabindex="-1">${I("search")}<span>Fjordline</span></button>
+  <button class="nav" tabindex="-1">${I("search")}<span>Invoices this month</span></button>
   <div class="eyebrow">More</div>
   ${nav("archive", "archive", "Archive")}
-  <button class="nav">${I("more")}<span>Trash, Spam, Subscriptions…</span></button>
+  <button class="nav" tabindex="-1">${I("more")}<span>Trash, Spam, Subscriptions…</span></button>
   </aside>`;
 }
 function row(t, sel, extra = {}) {
@@ -472,7 +483,7 @@ function row(t, sel, extra = {}) {
   if (t.invite) flags.push(`<span class="chip">${I("cal")}Thu 2:00 PM</span>`);
   if (t.group) flags.push(`<span class="chip">${t.group} issues</span>`);
   return `<div role="listitem" class="row ${sel ? "sel" : ""} ${t.unread ? "unread" : ""}" tabindex="${sel ? 0 : -1}" aria-current="${sel ? "true" : "false"}">
-    <span class="ava ${p.c}">${p.i}</span>
+    ${extra.picked ? `<span class="ava pick" title="selected">${I("check")}</span>` : `<span class="ava ${p.c}">${p.i}</span>`}
     <div class="who"><span class="nm">${esc(p.n)}${t.n > 1 ? ` <span class="t3" style="font-weight:400">${t.n}</span>` : ""}</span>${t.unread ? `<span class="udot" title="unread"></span>` : ""}</div>
     <span class="when">${t.when}</span>
     <div class="sub">${esc(t.sub)}</div>
@@ -481,7 +492,8 @@ function row(t, sel, extra = {}) {
   </div>`;
 }
 function grp(label, n, clear = true) {
-  return `<div class="grp"><span>${label}</span><span class="n num">${n}</span><span class="grow"></span>${clear ? `<span class="clear">Done all ${K("⇧E")}</span>` : ""}</div>`;
+  clear = clear && label === "People";
+  return `<div class="grp"><span>${label}</span><span class="n num">${n}</span><span class="grow"></span>${clear ? `<span class="clear">Done all in ${label} ${K("⇧E")}</span>` : ""}</div>`;
 }
 function listSections(sel = "t1", o = {}) {
   const ppl = T.filter((t) => t.sec === "people");
@@ -504,7 +516,7 @@ function listCol(o = {}) {
     body = `<div class="rows"><div class="cardgrid">${card("People", "people", 6)}${card("Notifications", "notifications", 4)}${card("Newsletters", "newsletters", 1)}</div></div>`;
   } else body = o.body || `<div class="rows" role="list" aria-label="Conversations">${listSections(o.sel || "t1", o)}</div>`;
   return `<section class="listcol ${o.full ? "full" : ""}" aria-label="Conversation list">
-    <div class="listhead"><h2>${title}</h2>${o.count != null ? `<span class="t3 num">${o.count}</span>` : `<span class="t3 num">7 unread</span>`}<span class="grow"></span>
+    <div class="listhead"><h2>${title}</h2>${o.count === "" ? `<span class="sk" style="width:4rem"></span>` : o.count != null ? `<span class="t3 num">${o.count}</span>` : `<span class="t3 num">7 unread</span>`}<span class="grow"></span>
     <button class="btn">${I("layers")} Sections ${I("chev")}</button><button class="btn icon" aria-label="Search mail (/)">${I("search")}</button></div>
     ${o.line || ""}${body}</section>`;
 }
@@ -526,7 +538,10 @@ function readerT1(o = {}) {
   ${o.after || ""}
   </div></div></section>`;
 }
-function personPanel() {
+function personPanel(pk = "ana") {
+  if (pk === "multi") return `<div class="pbody"><div class="psec"><h4>3 people selected</h4>${["dana","marco","lena"].map((k) => `<div class="prow"><span class="ava sm ${people[k].c}">${people[k].i}</span><span class="grow">${people[k].n}</span><span class="meta">${people[k].co}</span></div>`).join("")}</div><div class="t2" style="font-size:var(--text-xs)">Actions in the bottom bar apply to all three conversations.</div></div>`;
+  if (pk === "loading") return `<div class="pbody" aria-hidden="true"><div class="person"><span class="ava xl" style="background:color-mix(in oklab, var(--foreground) 7%, transparent)"></span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="sk" style="width:60%"></div><div class="sk" style="width:80%"></div></div></div>${[1,2,3].map(() => `<div class="sk" style="width:${70}%"></div>`).join("")}</div>`;
+  if (pk !== "ana") { const q = people[pk]; const W = { sam: [["Rebrand concepts v1","Dec 2"],["Send Harbour Bank quote","Fri"]], dana: [["Answer Dana's two questions","Today"],["Q1 retainer SOW","Dec 5"]], priya: [["Lumen brand audit","Dec 1"]], lena: [["Review the hiring plan","Fri"]], marco: [["Pay invoice 2026-114","Dec 5"]] }[pk] || []; return `<div class="pbody"><div class="person"><span class="ava xl ${q.c}">${q.i}</span><div><div class="nm">${q.n}</div><div class="ad">${q.role || ""}${q.co ? " · " + q.co : ""}</div><div class="ad">${q.a}</div></div></div><div class="psec"><h4>Open work with ${q.n.split(" ")[0]}<span class="grow"></span><span class="num">${W.length}</span></h4>${W.map(([t,d]) => `<div class="prow"><span class="cb"></span><span class="grow">${t}</span><span class="meta">${d}</span></div>`).join("") || `<div class="t3" style="font-size:var(--text-xs)">Nothing yet</div>`}</div><div class="psec"><h4>Recent mail<span class="grow"></span><span class="num">3</span></h4><div class="prow"><span class="grow">${T.find((t) => t.p === pk)?.sub || ""}</span><span class="meta">${T.find((t) => t.p === pk)?.when || ""}</span></div></div><button class="btn" style="align-self:flex-start">Open in Contacts</button></div>`; }
   const p = people.ana;
   return `<div class="pbody"><div class="person"><span class="ava xl ${p.c}">${p.i}</span><div><div class="nm">${p.n}</div><div class="ad">${p.role} · ${p.co}</div><div class="ad">${p.a}</div></div></div>
   <div class="psec"><h4>Open work with Ana<span class="grow"></span><span class="num">3</span></h4>
@@ -555,7 +570,7 @@ function dayPanel(o = {}) {
   const hours = ["9", "10", "11", "12", "1", "2", "3", "4", "5"];
   const top = (h, m = 0) => (h * 40 + (m / 60) * 40);
   return `<div class="pbody"><div class="psec"><h4>${o.date || "Tuesday, Nov 25"}<span class="grow"></span>${o.note || "3 events · 2h free"}</h4></div>
-  <div class="day">${hours.map((h) => `<div class="hr"><span>${h}${h === "12" ? " PM" : h === "9" ? " AM" : ""}</span></div>`).join("")}
+  <div class="day">${hours.map((h) => `<div class="hr"><span>${h}${["9","10","11"].includes(h) ? " AM" : " PM"}</span></div>`).join("")}
   ${(o.events || [[0.5, 1, "Studio stand-up", ""], [1, 1.5, "Fjordline weekly", "Meet · Ana, Tomasz"], [2.25, 3.75, "Focus · harbour crops", "focus"], [5, 6, "Lumen kickoff prep", ""]]).map(([a, b, t, s]) => `<div class="ev ${s === "focus" ? "focus" : s === "ghost" ? "ghost" : ""} ${s === "conf" ? "conf" : ""}" style="top:${top(a)}px;height:${top(b) - top(a) - 2}px"><b style="font-weight:600">${t}</b>${s && s !== "focus" && s !== "ghost" && s !== "conf" ? `<div class="t3">${s}</div>` : s === "ghost" ? `<div class="t2">Invite · not answered</div>` : s === "conf" ? `<div class="t3">overlaps the invite</div>` : ""}</div>`).join("")}
   </div>${o.after || ""}</div>`;
 }
@@ -565,7 +580,7 @@ function schedPanel() {
   const busy = { "0-0": 1, "0-1": 1, "1-4": 1, "1-5": 1, "2-0": 1, "3-2": 1, "3-3": 1, "4-6": 1, "4-7": 1 };
   const pick = { "1-1": 1, "2-5": 1, "3-6": 1 };
   let g = `<div></div>${days.map((d) => `<div class="h">${d}</div>`).join("")}`;
-  hours.forEach((h, r) => { g += `<div class="tl">${h}</div>`; days.forEach((_, c) => { const k = `${c}-${r}`; g += `<div class="c ${busy[k] ? "busy" : ""} ${pick[k] ? "pick" : ""}" ${pick[k] ? 'title="offered"' : ""}></div>`; }); });
+  hours.forEach((h, r) => { g += `<div class="tl">${h}${["9","10","11"].includes(h) ? "a" : "p"}</div>`; days.forEach((_, c) => { const k = `${c}-${r}`; g += `<div class="c ${busy[k] ? "busy" : ""} ${pick[k] ? "pick" : ""}" ${pick[k] ? 'title="offered"' : ""}></div>`; }); });
   return `<div class="pbody"><div class="psec"><h4>Offer times · Dec 1–5<span class="grow"></span>3 picked</h4><div class="t2" style="font-size: var(--text-xs)">Drag over free time to offer it. Offered times show as held in your calendar until Sam books one.</div></div>
   <div class="week">${g}</div>
   <div class="psec"><h4>Length</h4><div class="seg"><button>30m</button><button class="on">1h</button><button>1h 30m</button></div></div>
@@ -574,14 +589,14 @@ function schedPanel() {
 }
 function panel(view, o = {}) {
   const names = { person: "Person", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
-  const body = view === "person" ? personPanel() : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
+  const body = view === "person" ? personPanel(o.pk) : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
   return `<aside class="panel" aria-label="Right panel: ${names[view] || view}"><div class="ptitle">${o.back ? `<button class="btn icon" aria-label="Back to email">${I("back")}</button>` : ""}<button class="dd" aria-haspopup="menu">${names[view] || o.title || view} ${I("chev")}</button><span class="grow"></span><span class="t3" style="font-size: var(--text-xs)">${view === "person" ? "⌥1" : view === "today" ? "⌥2" : view === "links" ? "⌥3" : ""}</span></div>${body}</aside>`;
 }
 function taskPanel() {
   return `<div class="pbody"><div class="psec"><div class="prow" style="padding:0"><span class="cb"></span><span class="grow" style="font-weight:600;font-size: var(--text-md);white-space:normal">Send two harbour crops to Ana</span></div></div>
   <div class="psec"><div class="prow">Status<span class="grow"></span><span class="meta" style="color:var(--foreground)">To do</span></div><div class="prow">Due<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fri</span></div><div class="prow">Assignee<span class="grow"></span><span class="ava sm pb">TN</span><span class="meta" style="color:var(--foreground)">Tomasz</span></div><div class="prow">Project<span class="grow"></span><span class="meta" style="color:var(--foreground)">Fjordline · Spring</span></div></div>
   <div class="psec"><h4>From email</h4><div class="chatcard"><div style="display:flex;gap:6px;align-items:center"><span class="chip" style="color:var(--foreground)">${I("reply")}New reply</span><span class="t3" style="font-size: var(--text-xs)">10:42</span></div><div style="font-weight:500">Spring campaign: hero photos and the launch date</div><div class="t2" style="font-size: var(--text-xs)">Ana: “Could we see two more crops of the harbour shot before Friday?”</div></div></div>
-  <div class="psec"><h4>When you complete this task</h4><div class="prow"><span class="cb" style="border-radius:3px;background:var(--primary);border-color:var(--primary)"></span><span class="grow">Also mark the email Done</span></div></div></div>`;
+  <div class="psec"><h4>When you complete this task</h4><div class="prow"><span class="cb" style="border-radius:var(--radius-sm);background:var(--primary);border-color:var(--primary)"></span><span class="grow">Also mark the email Done</span></div></div></div>`;
 }
 function commentsPanel() {
   return `<div class="pbody"><div class="psec"><h4>${I("users")} Shared with Northwind Studio<span class="grow"></span><button class="btn" style="height:22px;font-size: var(--text-xs)">Stop sharing</button></h4><div class="t2" style="font-size: var(--text-xs)">Lena and Tomasz can read this conversation and its new replies in Moduo. Nothing else from your mail is shared.</div></div>
@@ -596,13 +611,13 @@ function bar(mode, o = {}) {
   let c = "";
   if (mode === "read") c = `${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Reply", "r")}${a("Task", "t")}${a("Link", "l")}<button class="act">More ${I("chev")}</button>`;
   else if (mode === "multi") c = `<span class="selcount">3 selected</span><span class="bb-sep"></span>${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Tasks", "t")}${a("Move", "m")}<button class="act">More ${I("chev")}</button><span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">Esc</span>`;
-  else if (mode === "write") c = `${a("Send", "⌘↵", true)}${a("Send & Done", "⌘⇧↵")}<span class="rel"><button class="act" style="background:var(--state-active);color:var(--foreground)">Send later ${I("chev")}</button></span>${a("Template", "⌘⇧T")}${a("Attach", "⌘⇧A")}<button class="act">More ${I("chev")}</button>`;
+  else if (mode === "write") c = `${a("Send", "⌘↵", true)}${a("Send & Done", "⌘⇧↵")}<span class="rel"><button class="act" aria-expanded="true" id="slbtn">Send later ${I("chev")}</button></span>${a("Template", "⌘⇧T")}${a("Attach", "⌘⇧A")}<button class="act">More ${I("chev")}</button>`;
   else if (mode === "list") c = `${a("New message", "c")}${a("Search", "/")}${a("Quick capture", "⌘⇧K")}`;
   else if (mode === "aside") c = `${a("Send & next", "⌘↵", true)}${a("Skip", "j")}${a("Done", "e")}${a("Snooze", "s")}<button class="act">More ${I("chev")}</button>`;
   return `<footer class="bottombar" aria-label="Bottom bar"><div class="bb-l"><button class="btn icon on" aria-label="Hide the rail (⌥[)">${I("panelL")}</button></div><div class="bb-c" role="toolbar" aria-label="Conversation actions">${c}</div><div class="bb-r"><button class="btn icon ${o.noright ? "" : "on"}" aria-label="Hide the right panel (⌥0)">${I("panelR")}</button></div></footer>`;
 }
 function sendLaterMenu() {
-  return `<div class="menu" style="left:50%;bottom:calc(var(--bar-h) + 6px);transform:translateX(-30%)" role="group" aria-label="Send later">
+  return `<div class="menu" id="slmenu" style="bottom:calc(var(--bar-h) + 6px);right:calc(20rem + 16px)" role="group" aria-label="Send later">
   <button class="mi on">Tomorrow morning<span class="grow"></span><span class="t3 num">Wed 8:00 AM</span></button>
   <button class="mi">Tomorrow afternoon<span class="grow"></span><span class="t3 num">Wed 1:00 PM</span></button>
   <button class="mi">Monday morning<span class="grow"></span><span class="t3 num">Dec 1, 8:00 AM</span></button>
@@ -611,7 +626,7 @@ function sendLaterMenu() {
 }
 function composerReply(o = {}) {
   return `<section class="composer" aria-label="Reply">
-  <div class="cfield">From <span class="v">maciej@northwind.studio</span><span style="flex:1"></span>${o.sig ? `Signature <button class="btn" style="height:22px" aria-label="Previous signature">${I("back")}</button><span class="v">Studio, short</span><button class="btn" style="height:22px;transform:scaleX(-1)" aria-label="Next signature">${I("back")}</button>` : ""}</div>
+  <div class="cfield">From <span class="v">maciej@northwind.studio</span><span style="flex:1"></span>${o.sig ? `Signature <button class="btn" style="height:22px" aria-label="Previous signature">${I("back")}</button><span class="v" style="white-space:nowrap">Studio, short</span><button class="btn" style="height:22px;transform:scaleX(-1)" aria-label="Next signature">${I("back")}</button>` : ""}</div>
   <div class="cfield">To <span class="v">${o.to || "Ana Ruiz"}</span>${o.cc ? `<span>Cc</span><span class="v">${o.cc}</span>` : ""}</div>
   ${o.subject ? `<div class="cfield">Subject <span class="v">${o.subject}</span></div>` : ""}
   <div class="cbody">${o.body || "Hi Ana,<br><br>Two crops attached <span class='caret'></span>"}</div></section>`;
@@ -634,12 +649,12 @@ function render() {
     case "layout-b": html = topbar() + L + `<main class="centre">${readerT1({ after: "" }).replace('class="reader"', 'class="reader" style="flex:1"')}</main>` + R("person") + bar("read"); break;
     case "layout-c": cls = "wide-right"; html = topbar() + L + `<main class="centre">${listCol({ full: true })}</main>` + `<aside class="panel" aria-label="Right panel: Conversation"><div class="ptitle"><button class="dd">Conversation ${I("chev")}</button><span class="grow"></span><button class="btn icon" aria-label="Open full">${I("expand")}</button></div><div class="pbody" style="padding:0">${readerT1().replace('<section class="reader"', '<section class="reader" style="font-size: var(--text-sm)"')}</div></aside>` + bar("read"); break;
     case "inbox-a": html = topbar() + L + `<main class="centre">${listCol({ mode: "tabs" })}${readerT1()}</main>` + R("person") + bar("read"); break;
-    case "inbox-b": html = topbar() + L + `<main class="centre">${listCol({ full: true, sel: "t2" })}</main>` + R("person") + bar("list"); break;
+    case "inbox-b": html = topbar() + L + `<main class="centre">${listCol({ full: true, sel: "t2" })}</main>` + R("person", { pk: "sam" }) + bar("list"); break;
     case "inbox-c": html = topbar() + L + `<main class="centre">${listCol({ mode: "cards", full: true })}</main>` + R("today") + bar("list"); break;
     case "bar-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read"); break;
     case "bar-b": {
-      const b = `<div class="rows" role="list" aria-label="Conversations">${grp("People", 6)}${T.filter((t) => t.sec === "people").map((t, i) => row(t, i >= 3)).join("")}</div>`;
-      html = topbar() + L + `<main class="centre">${listCol({ body: b })}<section class="reader"><div class="empty"><h3>3 conversations selected</h3><p>Sam Oduya, Priya Raman, Dana Whitfield</p><div class="keys"><span>${K("e")} Done all</span><span>${K("t")} Make 3 tasks</span><span>${K("Esc")} Clear</span></div></div></section></main>` + R("person") + bar("multi"); break;
+      const b = `<div class="rows" role="list" aria-label="Conversations">${grp("People", 6)}${T.filter((t) => t.sec === "people").map((t, i) => row(t, i >= 3, { picked: i >= 3 })).join("")}</div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ body: b })}<section class="reader"><div class="empty"><h3>3 conversations selected</h3><p>Dana Whitfield, Marco Bellini, Lena Park</p><div class="keys"><span>${K("e")} Done all</span><span>${K("t")} Make 3 tasks</span><span>${K("Esc")} Clear</span></div></div></section></main>` + R("person", { pk: "multi" }) + bar("multi"); break;
     }
     case "bar-c": html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ after: composerReply() })}</main>` + R("person") + bar("write") + sendLaterMenu(); break;
     case "panel-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + `<div class="menu" style="right:12px;top:calc(2.5rem + var(--bar-h) - 4px)" role="group" aria-label="Right panel views"><button class="mi on">${I("user")}<span class="grow">Person</span>${K("⌥1")}</button><button class="mi">${I("cal")}<span class="grow">Today</span>${K("⌥2")}</button><button class="mi">${I("link")}<span class="grow">Links</span>${K("⌥3")}</button><button class="mi">${I("task")}<span class="grow">Task</span><span class="t3" style="font-size: var(--text-xs)">after t</span></button><button class="mi">${I("clock")}<span class="grow">Schedule</span><span class="t3" style="font-size: var(--text-xs)">offer times</span></button></div>`; break;
@@ -679,17 +694,17 @@ function render() {
         <div class="t3" style="font-size: var(--text-xs)">Teammates see this card and the excerpt you chose. The full email stays in your mail unless you share it.</div>
         <div class="input">How should we answer the rate question?</div></div>
         <div class="df"><button class="btn">Cancel</button><button class="btn primary">Post ${K("⌘↵")}</button></div></div></div>`;
-      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}${rd}</main>` + R("person") + bar("read") + dlg; break;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}${rd}</main>` + R("person", { pk: "dana" }) + bar("read") + dlg; break;
     }
     case "aside-a": {
       const items = [["sam", "Can we meet next week about the rebrand?", "We'd love an hour with you and Tomasz to walk through the first concepts. When works?", "Hi Sam, happy to. I'll send times this afternoon."], ["lena", "Friday: the hiring plan", "I drafted the plan for the junior designer role; can you look before Friday?", ""], ["marco", "Invoice 2026-114 for the Fjordline shoot", "Attached is the invoice for the two-day shoot, due in 14 days.", ""]];
       const b = `<div class="rscroll"><div class="rin" style="max-width:52rem"><div style="display:flex;align-items:baseline;gap:10px"><h1 class="subj">Set aside</h1><span class="t3">3 to answer</span></div>
       <div class="batch">${items.map(([pk, s, q, r], i) => `<article class="bcard ${i === 0 ? "cur" : ""}"><div class="bh"><span class="ava lg ${people[pk].c}">${people[pk].i}</span><div style="flex:1;min-width:0"><b style="font-weight:600">${people[pk].n}</b><div class="t2" style="font-size: var(--text-sm)">${s}</div></div><span class="t3" style="font-size: var(--text-xs)">set aside Mon</span></div><div class="bq">${q}</div><div class="bbox">${r || "Reply…"}${i === 0 ? "<span class='caret'></span>" : ""}</div></article>`).join("")}</div></div></div>`;
-      html = topbar() + rail({ place: "aside" }) + `<main class="centre"><section class="reader">${b}</section></main>` + R("person") + bar("aside"); break;
+      html = topbar() + rail({ place: "aside" }) + `<main class="centre"><section class="reader">${b}</section></main>` + R("person", { pk: "sam" }) + bar("aside"); break;
     }
     case "aside-b": {
       const b = `<div class="rows" role="list" aria-label="Set aside">${["t2", "t6", "t5"].map((id, i) => row(T.find((t) => t.id === id), i === 0)).join("")}</div>`;
-      html = topbar() + rail({ place: "aside" }) + `<main class="centre">${listCol({ title: "Set aside", count: 3, body: b })}${(function () { const t2 = T.find((t) => t.id === "t2"); return `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1>${msgOpen("sam", "10:15", ["Hi Maciej,", "We'd love an hour with you and Tomasz next week to walk through the first rebrand concepts. When works for you?", "Best, Sam"])}</div></div></section>`; })()}</main>` + R("person") + bar("read"); break;
+      html = topbar() + rail({ place: "aside" }) + `<main class="centre">${listCol({ title: "Set aside", count: 3, body: b })}${(function () { const t2 = T.find((t) => t.id === "t2"); return `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1>${msgOpen("sam", "10:15", ["Hi Maciej,", "We'd love an hour with you and Tomasz next week to walk through the first rebrand concepts. When works for you?", "Best, Sam"])}</div></div></section>`; })()}</main>` + R("person", { pk: "sam" }) + bar("read"); break;
     }
     case "states-a": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Inbox clear</h3><p>Nothing waits for you. 3 set aside, 2 snoozed.</p>
@@ -697,12 +712,12 @@ function render() {
       <div class="prow">${I("clock")}<span class="grow">Snooze returns: Marco's invoice</span><span class="meta">Tomorrow 9:00 AM</span></div>
       <div class="prow">${I("reply")}<span class="grow">Follow-up due: Harbour Bank brief</span><span class="meta">Thu</span></div>
       <div class="prow">${I("cal")}<span class="grow">Next: Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
-      <div class="keys" style="margin-top:8px"><span>${K("⇧A")} Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
-      html = topbar() + L.replace('<span class="n num">7</span>', "") + `<main class="centre">${listCol({ full: false, count: 0, body: `<div class="empty"><p class="t3">Nothing in the inbox.</p></div>` })}${e}</main>` + R("today") + bar("list"); break;
+      <div class="keys" style="margin-top:8px"><span>${K("g")} ${K("a")} Go to Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
+      html = topbar() + L.replace('<span class="n num">7</span>', "") + `<main class="centre">${e}</main>` + R("today") + bar("list"); break;
     }
     case "states-b": {
       const sk = Array.from({ length: 9 }, (_, i) => `<div class="row" aria-hidden="true"><span class="ava" style="background:color-mix(in oklab, var(--foreground) 7%, transparent)"></span><div class="sk" style="width:${40 + (i * 13) % 35}%"></div><div class="sk" style="width:2.5rem"></div><div class="sub"><div class="sk" style="width:${60 + (i * 7) % 30}%"></div></div><div class="snip"><div class="sk" style="width:${70 + (i * 5) % 25}%;height:8px"></div></div><div class="flags"></div></div>`).join("");
-      html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" aria-busy="true" role="status" aria-label="Loading conversations">${sk}</div>` })}<section class="reader"><div class="rin" style="width:100%"><div class="sk" style="height:20px;width:60%"></div><div class="sk" style="width:30%"></div><div class="msg" style="height:180px"></div></div></section></main>` + R("person") + bar("list"); break;
+      html = topbar() + L + `<main class="centre">${listCol({ count: "", body: `<div class="rows" aria-busy="true" role="status" aria-label="Loading conversations">${sk}</div>` })}<section class="reader"><div class="rin" style="width:100%"><div class="sk" style="height:20px;width:60%"></div><div class="sk" style="width:30%"></div><div class="msg" style="height:180px"></div></div></section></main>` + R("person", { pk: "loading" }) + bar("list"); break;
     }
     case "states-c": {
       const line = `<div class="systemline" role="alert">${I("alert")}<span class="grow">Couldn't load Northwind Studio's inbox. Showing what was here at 10:38.</span><button class="btn secondary">Retry</button></div>`;
@@ -717,7 +732,7 @@ function render() {
       const rd = `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${long.sub}</h1><div class="linkline"><span class="t3">12 messages · 7 people</span></div>
       ${msgCollapsed("dana", "Nov 3", "Kicking this off with the scope we agreed on Friday.")}<div class="msg coll" style="justify-content:center"><span>8 more messages</span>${K("o")}</div>${msgCollapsed("lena", "Nov 19", "Updated SOW attached with the Nordic usage terms.")}${msgCollapsed("tom", "Nov 20", "Design side is fine with the timeline.")}
       ${msgOpen("dana", "10:59", [long.snip, "Alexandra Konstantinidou-Whitfield from our legal team is copied for the usage rights wording."], { cc: "Alexandra Konstantinidou-Whitfield and 5 others" })}</div></div></section>`;
-      html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" role="list" aria-label="Conversations">${grp("People", 7)}${row(long, true)}${T.filter((t) => t.sec === "people").map((t) => row(t, false)).join("")}</div>` })}${rd}</main>` + R("person") + bar("read"); break;
+      html = topbar() + L + `<main class="centre">${listCol({ body: `<div class="rows" role="list" aria-label="Conversations">${grp("People", 7)}${row(long, true)}${T.filter((t) => t.sec === "people").map((t) => row(t, false)).join("")}</div>` })}${rd}</main>` + R("person", { pk: "dana" }) + bar("read"); break;
     }
     case "states-f": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Bring your email into Moduo</h3><p style="max-width:28rem">Your mail stays on this Mac. Connect an account and Moduo links emails to your tasks, calendar and contacts.</p>
@@ -731,7 +746,7 @@ function render() {
     case "compose-b": {
       const body = `Hi <span class="chip" style="color:var(--foreground)">Dana</span>,<br><br>Thanks for your questions on the <span class="chip" style="color:var(--foreground)">Q1 retainer</span>. Here's how phase 2 works:<br><br><span class="chip" style="border:1px dashed var(--muted-foreground);background:transparent">answer: rate if scope grows</span><br><br>Happy to set up a call: <span class="chip" style="color:var(--foreground)">booking link</span><span class='caret'></span>`;
       const pick = `<div class="menu" style="left:calc(15rem + 24rem + 40px);top:7rem;width:20rem" role="group" aria-label="Templates"><div style="padding:4px 6px"><div class="input">Templates · type to filter</div></div><button class="mi on">${I("file")}<span class="grow">Answer: proposal questions</span><span class="t3" style="font-size: var(--text-xs)">3 blanks</span></button><button class="mi">${I("file")}<span class="grow">Invoice reminder</span><span class="t3" style="font-size: var(--text-xs)">2 blanks</span></button><button class="mi">${I("file")}<span class="grow">New client onboarding</span><span class="t3" style="font-size: var(--text-xs)">+2 files</span></button><div class="sep"></div><button class="mi"><span class="grow t2">Save this email as a template</span></button></div>`;
-      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1>${composerReply({ to: "Dana Whitfield", body })}<div class="pnote">Tab moves to the next blank (dashed). Snippets (;;) stay for short pieces.</div></div></div></section></main>` + R("person") + bar("write") + pick; break;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1>${composerReply({ to: "Dana Whitfield", body })}<div class="pnote">Tab moves to the next blank (dashed). Snippets (;;) stay for short pieces.</div></div></div></section></main>` + R("person", { pk: "dana" }) + bar("write") + pick; break;
     }
   }
   app$.className = "app " + cls;

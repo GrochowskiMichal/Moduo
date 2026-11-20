@@ -440,6 +440,19 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 
 ---
 
+### Round 1 prototype: blind critics
+
+Three fresh critics per round, prototype grading (0.375 Usability + 0.3125 Craft + 0.1875 Platform + 0.125 Character; speed isn't judged on a prototype). Dossiers are local (`.lab/`, gitignored).
+
+| Round | Overall | Usability · Craft · Platform · Character | Gates (a11y · states · layout · system · pointer) | Severity 3 confirmed |
+| --- | --- | --- | --- | --- |
+| r1 | 6.75 | 6 · 7 · 7 · 8 | 8.5 · 10 · 10 · 9 · 10 | Person panel didn't follow the open email (3/3); reader collapsed at 1024 px (3/3); bulk summary named the wrong people (2/3); first run showed connected accounts (3/3, sev 2–3) |
+| r2 | (running) | | 8.5 · 10 · 10 · 9.2 · 10 | |
+
+All three critics read the idea the same way: *"mail as a keyboard-first triage desk inside the work: every email shows its task, project, person and calendar, and you finish an email by turning it into linked work."* That matches the intended idea (§3).
+
+Fixed after r1: the Person panel follows the focused email (a multi-select shows the selected people, loading shows a skeleton); the right panel folds away below 1200 px so the reader keeps its width; the bulk summary and a check mark show the real selection; first run shows only "Connect an account"; compact rows keep the subject and shrink chips to icons; a skip link plus one tab stop per group puts the list two Tabs away; Inbox clear shows once; Send later opens beside its button and isn't styled as primary; the invite ghost sits beside the clashing event; "Done all" names its section; one hour format.
+
 ## 9. What happens next
 
 1. Maciej answers round 1 (by number).
