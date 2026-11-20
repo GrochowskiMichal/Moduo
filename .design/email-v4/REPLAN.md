@@ -157,6 +157,17 @@ Mail owns how these look and behave inside Mail; Calendar owns the event model a
 5. **The Today view:** Mail's right panel shows Calendar's day (events, focus blocks, free gaps). Mail needs the component or a read of the day, and Calendar decides how a day looks.
 6. **Booking emails** (TX-5/TX-6, sent by Moduo itself): when they arrive in Mail, they should open the booking's event, not read like ordinary mail.
 
+### What Calendar asks of Mail (read from `origin/t/maciej/calendar-plan` §9, 2026-11-21)
+
+| Calendar's ask | Mail's answer |
+| --- | --- |
+| 1. The invite card answers the same invitation Calendar shows, through the event's provider, and shows a reply already given in Calendar (C7) | Yes: call 31's bar uses Calendar's RSVP state and writes through it |
+| 2. A button in Mail's reply opens Calendar's offer with the thread's people and takes back the inserted text and link (C28) | Yes: call 30's Schedule view is Calendar's offer, hosted in Mail's right panel; Calendar owns the slot model, Mail owns the panel and the insert |
+| 3. A follow-up draft from a past meeting, with the guests, the thread and the meeting note linked (C27) | Yes: Mail's composer accepts "new message from event" (to = guests, links = event, note, thread) |
+| 4. A booking or offer made from a thread becomes an event the thread shows as a reference | Yes: call 26/28's Links view and the link line under the subject |
+
+**One difference to settle:** Calendar wants booking emails to read as ordinary mail; my ask 6 below wants them to open their event. Proposed middle: ordinary mail, plus the event as the first item in the link line. Not a conflict worth a message yet; I'll raise it in round 2 if Maciej's answers to 30–31 make it matter.
+
 ### To Tasks
 
 7. Email ↔ task as one piece of work (call 26): the task shows "New reply" when its email gets one; completing the task offers Done on the email. Needs a reply signal on the task row (the Waiting state, 53a, may already carry it).
