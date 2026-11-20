@@ -424,7 +424,7 @@ const CAPS = {
   "bar-a": "<b>Call 2a · Reading:</b> the bar carries the conversation's actions with keys; More holds the rest. Keys follow call 10 b (⇧S Set aside, a Reply all).",
   "bar-b": "<b>Call 2 · Multi-select:</b> the same row pattern as Tasks' 82b, for a selection.",
   "bar-c": "<b>Call 2 + 17 · Writing:</b> the composer's row: Send, Send later (open), Template, Attach. Send later's note follows call 17 b/d.",
-  "panel-a": "<b>Call 3a · Person</b> (recommended default): the sender, their company, open work with them, recent mail, next meeting.",
+  "panel-a": "<b>Call 3a · Contact</b> (recommended default; today's name, kept): the sender, their company, open work with them, recent mail, next meeting.",
   "panel-b": "<b>Call 28 · Links:</b> everything this email touches, with add and remove. Replaces the chip row.",
   "panel-c": "<b>Call 3 · Today</b> (today's default): your day from Calendar.",
   "panel-d": "<b>Call 30 · Schedule:</b> pick slots in your week to offer; held as tentative.",
@@ -437,7 +437,7 @@ const CAPS = {
   "aside-b": "<b>Call 9b · Set aside as a plain list.</b>",
   "states-a": "<b>Inbox clear.</b> What comes back next, and the check-in line (call 20).",
   "states-b": "<b>Loading:</b> skeleton rows at their final size.",
-  "states-c": "<b>Couldn't load:</b> today this case shows “Inbox is clear” (a trust bug, §5.8). v4 keeps the last rows and says what failed.",
+  "states-c": "<b>Couldn't load:</b> today a failed first load shows an empty inbox (a trust bug, §5.8). v4 keeps the last rows and says what failed.",
   "states-d": "<b>Offline:</b> actions and sends wait in the Outbox; reading stays usable.",
   "states-e": "<b>Long content:</b> a 200-character subject, a long name, a 12-message conversation.",
   "states-f": "<b>First run:</b> no account yet; one sentence and one action.",
@@ -536,7 +536,7 @@ function msgOpen(pk, when, paras, o = {}) {
 function readerT1(o = {}) {
   return `<section class="reader" aria-label="Conversation"><div class="rscroll"><div class="rin">
   <h1 class="subj">Spring campaign: hero photos and the launch date</h1>
-  <div class="linkline">${o.taskLine ? `<span class="chip">${I("task")}Task · Send two harbour crops to Ana · due Fri</span>` : `<span class="chip">${I("task")}Task · due Fri</span>`}<span class="chip">${I("folder")}Fjordline · Spring campaign</span><span class="chip">${I("user")}Ana Ruiz</span><button class="btn" style="height:22px;font-size: var(--text-xs)">${I("link")} Links ${K("⌥3")}</button></div>
+  <div class="linkline">${o.taskLine ? `<span class="chip">${I("task")}Task · Send two harbour crops to Ana · due Fri</span>` : `<span class="chip">${I("task")}Task · due Fri</span>`}<span class="chip">${I("folder")}Fjordline · Spring campaign</span><span class="chip">${I("user")}Ana Ruiz</span><button class="btn" style="height:22px;font-size: var(--text-xs)">${I("link")} Links ${K("⌥4")}</button></div>
   ${msgCollapsed("ana", "Nov 14", "Kicking off the spring campaign: here's the brief and the dates we discussed.")}
   ${msgCollapsed("tom", "Nov 17", "First round of hero shots is in the shared folder. Three directions.")}
   ${msgCollapsed("ana", "Nov 18", "We like the harbour direction. One note on the colours for print.")}
@@ -594,10 +594,10 @@ function schedPanel() {
   <button class="btn primary" style="align-self:flex-start">Insert in reply ${K("↵")}</button></div>`;
 }
 function panel(view, o = {}) {
-  const names = { multi: "3 people", person: "Person", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
+  const names = { multi: "3 people", person: "Contact", links: "Links", today: "Today", sched: "Schedule", task: "Task" };
   const body = view === "multi" ? personPanel("multi") : view === "person" ? personPanel(o.pk) : view === "links" ? linksPanel(o) : view === "today" ? dayPanel(o) : view === "sched" ? schedPanel() : view === "task" ? taskPanel() : view === "comments" ? commentsPanel() : "";
   if (view === "person" && o.pk === "multi") view = "multi";
-  return `<aside class="panel" aria-label="Right panel: ${names[view] || view}"><div class="ptitle">${o.back ? `<button class="btn icon" aria-label="Back to email">${I("back")}</button>` : ""}<button class="dd" aria-haspopup="menu">${(view === "today" && o.title) || names[view] || o.title || view} ${I("chev")}</button><span class="grow"></span><span class="t3" style="font-size: var(--text-xs)">${view === "person" ? "⌥1" : view === "today" ? "⌥2" : view === "links" ? "⌥3" : ""}</span></div>${body}</aside>`;
+  return `<aside class="panel" aria-label="Right panel: ${names[view] || view}"><div class="ptitle">${o.back ? `<button class="btn icon" aria-label="Back to email">${I("back")}</button>` : ""}<button class="dd" aria-haspopup="menu">${(view === "today" && o.title) || names[view] || o.title || view} ${I("chev")}</button><span class="grow"></span><span class="t3" style="font-size: var(--text-xs)">${view === "person" ? "⌥2" : view === "today" ? "⌥1" : view === "links" ? "⌥4" : ""}</span></div>${body}</aside>`;
 }
 function taskPanel() {
   return `<div class="pbody"><div class="psec"><div class="prow" style="padding:0"><span class="cb"></span><span class="grow" style="font-weight:600;font-size: var(--text-md);white-space:normal">Send two harbour crops to Ana</span></div></div>
@@ -665,7 +665,7 @@ function render() {
       html = topbar() + L + `<main class="centre">${listCol({ body: b })}<section class="reader"><div class="empty"><h3>3 conversations selected</h3><p>Dana Whitfield, Marco Bellini, Lena Park</p><div class="keys"><span>${K("e")} Done</span><span>${K("t")} Make 3 tasks</span><span>${K("Esc")} Clear</span></div></div></section></main>` + R("person", { pk: "multi" }) + bar("multi"); break;
     }
     case "bar-c": html = topbar() + L + `<main class="centre">${listCol()}${readerT1({ after: composerReply() })}</main>` + R("person") + bar("write") + sendLaterMenu(); break;
-    case "panel-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + `<div class="menu" style="right:12px;top:calc(2.5rem + var(--bar-h) - 4px)" role="group" aria-label="Right panel views"><button class="mi on">${I("user")}<span class="grow">Person</span>${K("⌥1")}</button><button class="mi">${I("cal")}<span class="grow">Today</span>${K("⌥2")}</button><button class="mi">${I("link")}<span class="grow">Links</span>${K("⌥3")}</button><button class="mi">${I("task")}<span class="grow">Task</span><span class="t3" style="font-size: var(--text-xs)">after t</span></button><button class="mi">${I("clock")}<span class="grow">Schedule</span><span class="t3" style="font-size: var(--text-xs)">offer times</span></button></div>`; break;
+    case "panel-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + `<div class="menu" style="right:12px;top:calc(2.5rem + var(--bar-h) - 4px)" role="group" aria-label="Right panel views"><button class="mi">${I("cal")}<span class="grow">Today</span>${K("⌥1")}</button><button class="mi on">${I("user")}<span class="grow">Contact</span>${K("⌥2")}</button><button class="mi">${I("task")}<span class="grow">Task</span>${K("⌥3")}</button><button class="mi">${I("link")}<span class="grow">Links</span>${K("⌥4")}</button><button class="mi">${I("clock")}<span class="grow">Schedule</span><span class="t3" style="font-size: var(--text-xs)">offer times</span></button></div>`; break;
     case "panel-b": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("links") + bar("read"); break;
     case "panel-c": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("today") + bar("read"); break;
     case "panel-d": {
@@ -720,7 +720,7 @@ function render() {
       <div class="prow" tabindex="0">${I("clock")}<span class="grow">Snooze returns: Marco's invoice</span><span class="meta">Tomorrow 9:00 AM</span></div>
       <div class="prow" tabindex="0">${I("reply")}<span class="grow">Follow-up due: Harbour Bank brief</span><span class="meta">Thu</span></div>
       <div class="prow" tabindex="0">${I("cal")}<span class="grow">Next: Fjordline weekly</span><span class="meta">Thu 10:00 AM</span></div></div>
-      <div class="keys" style="margin-top:8px"><span>${K("g")} ${K("a")} Go to Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
+      <div class="keys" style="margin-top:8px"><span>${K("⇧A")} Open Set aside</span><span>${K("g")} ${K("s")} Snoozed</span><span>${K("c")} New message</span></div></div></section>`;
       html = topbar() + L.replace('<span class="n num">7</span>', "").replace('<span class="n num">5</span>', "").replace('<span class="n num">2</span></button>\n  <div class="eyebrow">Saved', '</button>\n  <div class="eyebrow">Saved') + `<main class="centre">${e}</main>` + R("today") + bar("list"); break;
     }
     case "states-b": {

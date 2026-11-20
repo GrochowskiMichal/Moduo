@@ -2,7 +2,7 @@
 
 > **Status (2026-11-21): round 1 sent, waiting for Maciej's answers.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html).
-> - **Open:** calls 1–44 (§8). ★ marks the load-bearing ones.
+> - **Open:** calls 1–46 (§8). ★ marks the load-bearing ones.
 > - **Blocked:** the live-app baseline score. The shared local stack lost its API gateway and needs a data-keeping restart, which needs Maciej's OK (AGENTS.md rule 13). Interim numbers: Mail as built scored 7.0 on 2026-11-07 (before "Mail, improved" landed), the improve prototype 7.7. The current build is unscored.
 > - **Next:** answers → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
@@ -109,7 +109,7 @@ The prototype's frame 1 shows this shape; the other frames show each call's vari
 | An email asks you to do something | `t` makes a task; the link is then a chip | The email and the task stay one piece of work: replies show on the task, completing the task offers Done, and the email's row shows the task's state | 26 ★ |
 | An email asks to meet | Invite card or "Create event" | Offer times from the composer (pick free slots, insert them plus a booking link); RSVP with your day beside the invite; "Schedule" from any email | 30, 31 ★ |
 | An email is about a client project | Link it by hand | Linking to a project files future replies from that conversation too; the project shows its emails | 27 |
-| You want to know who this is | Contact panel | Person view: the contact, their company, open work, recent mail, next meeting | 3 |
+| You want to know who this is | Contact panel | Contact view, richer: the contact, their company, open work, recent mail, next meeting | 3 |
 | You want to see what an email touches | A chip row | Links view in the right panel: tasks, events, notes, chat posts, the project | 3, 28 |
 | You want to note something | Private note | Note from email: a Moduo note linked both ways, or the private note | 29 |
 | You want a teammate's eyes | Nothing | Share with team (comments) or Discuss in chat | 34, 35 ★ |
@@ -174,7 +174,7 @@ Mail owns how these look and behave inside Mail; Calendar owns the event model a
 
 ### To Contacts and Chat
 
-8. Person view (call 3) reads the contact's company, open work and next meeting. Chat: "Discuss in chat" (call 35) posts an email reference card into a channel; the chat composer already accepts `email_thread` references.
+8. The Contact view (call 3) reads the contact's company, open work and next meeting. Chat: "Discuss in chat" (call 35) posts an email reference card into a channel; the chat composer already accepts `email_thread` references.
 
 ---
 
@@ -195,17 +195,17 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 - Frame 1, variants a–c.
 
 **2 ★ · The bottom bar carries the conversation's actions** · (b, adopts 82b)
-- When a conversation is open, the bar's centre shows its most-used actions with keys: **Done `e` · Snooze `s` · Set aside `a`… · Reply `r` · Task `t` · More ▾** (exact list in round 2). Multi-select shows its own row; the composer shows **Send `⌘↵` · Send later · Template · Attach**.
+- When a conversation is open, the bar's centre shows its most-used actions with keys: **Done `e` · Snooze `s` · Set aside `⇧S` · Reply `r` · Task `t` · More ▾** (exact list in round 2). Multi-select shows its own row; the composer shows **Send `⌘↵` · Send later · Template · Attach**.
 - The reader loses its toolbar; the subject, links and per-message Reply/Forward stay in the reader.
 - **a.** Yes, the bar · **b.** Keep the reader toolbar (today) · **c.** Both.
 - *Recommend a:* one place for actions app-wide, more room for the email, and the keys are always in view, which teaches them.
 - Frame 3, variants a–c.
 
 **3 ★ · The right panel's views, and which one opens first**
-- Hand-picked views: **Person** (the sender: contact, company, open work, recent mail, next meeting) · **Today** (your day from Calendar) · **Links** (everything this email touches) · **Task** (opens after `t`, or when you open a linked task, with "← email") · **Schedule** (opens when you offer times).
-- Default: **a.** Person · **b.** Today (today's default) · **c.** remember the last one.
-- *Recommend a, Person:* when you read an email, who it's from and what you're doing with them is the context you use; your day is one key away (`⌥2`). Superhuman's sidebar is the sender for the same reason.
-- Frame 4, variants Person / Links / Today / Schedule.
+- Hand-picked views, keys as today plus one: **Today** `⌥1` (your day from Calendar) · **Contact** `⌥2` (the sender: contact, company, open work, recent mail, next meeting; today's view, richer) · **Task** `⌥3` (opens after `t`, or when you open a linked task, with "← email") · **Links** `⌥4` (everything this email touches; its name is call 45) · **Schedule** (Calendar's offer, hosted here when you offer times; call 30).
+- Default: **a.** Contact · **b.** Today (today's default) · **c.** remember the last one.
+- *Recommend a, Contact:* when you read an email, who it's from and what you're doing with them is the context you use; your day is one key away. Superhuman's sidebar is the sender for the same reason.
+- Frame 4, variants Contact / Links / Today / Schedule.
 
 **4 · The rail**
 - Order: **Inbox** (unified) · **Set aside** · **Snoozed** · **Follow-ups** · **Drafts** · **Sent** · then **Accounts** (each with its folders, collapsed) · **Saved searches** · **More** (Archive, Trash, Spam, Subscriptions, Attachments, Recently seen, New senders).
@@ -221,7 +221,7 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 - **b. Sections** (Spark's Focused list): one scrolling list with **Pinned · People · Notifications · Newsletters (one row per sender) · Seen**, each section with a header, a count and its own "Done all" (`⇧E` on the header).
 - **c. Cards** (Spark's Unread cards): each section is a card showing its top 3 with "Show all".
 - **d. b by default, a as a Display choice** (Layout: Sections · Tabs · Simple list).
-- *Recommend d.* Sections show everything at once, so nothing waits in a tab you forgot (Spark's model, which Maciej uses today); tabs stay for people who want one queue at a time (Superhuman users); Simple list for those who want neither.
+- *Recommend d.* Sections show everything at once, so nothing waits in a tab you forgot (Spark's Focused list; tell me if you use Spark's cards or Simple list instead); tabs stay for people who want one queue at a time (Superhuman users); Simple list for those who want neither.
 - Frame 2, variants a–c.
 
 **6 · Splits: any saved search can become a section or tab** · (c, re-decides MR B8 "up to 3")
@@ -244,7 +244,8 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 
 **9 · Set aside's page is a batch-reply page** · (b)
 - Opening Set aside shows every set-aside email stacked, each with its reply box open, so you answer them in one pass (HEY's Focus & Reply). `⌘↵` sends and moves to the next.
-- **a.** Batch-reply page · **b.** Ordinary list.
+- HEY keeps these apart: Set Aside holds reference you keep handy, Reply Later is the batch. This option merges them, because a dateless shelf mostly holds replies you owe.
+- **a.** Batch-reply page · **b.** Ordinary list · **c.** Both, as two places (HEY's split).
 - *Recommend a:* it turns the shelf into a routine ("answer time"), and nobody else combines Spark's shelf with HEY's batch. If a looks too heavy, b with a "Reply to all of these" mode.
 - Frame 7, variants a–b.
 
@@ -451,9 +452,19 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 
 ---
 
+**45 · One name for the "what this email touches" view**
+- Calendar's plan calls its version **Details** (everything linked to an event). Mail's frames call it Links.
+- **a.** Details, app-wide · **b.** Links.
+- *Recommend a:* one name per concept across modules, and "Links" collides with the `l` Link verb.
+
+**46 · What the right panel does in a narrow window** · (c, re-decides MI's "folds to a 40 px strip below 1180 px")
+- The critics found the reader squeezed to a sliver at 1024 px with the panel open. Calendar's 30 Oct review stopped its panels folding at all.
+- **a.** Below 1200 px the panel hides; its bottom-bar toggle brings it back over the reader · **b.** Keep the icon strip (today) · **c.** Never hide; the list narrows instead.
+- *Recommend a:* no edge strips (the 3×3 rule) and the reader keeps its width. It should be one app-wide rule; I'll match whatever you pick for Calendar. The prototype draws a.
+
 ### Round 1 prototype: blind critics
 
-Three fresh critics per round, prototype grading (0.375 Usability + 0.3125 Craft + 0.1875 Platform + 0.125 Character; speed isn't judged on a prototype). Dossiers are local (`.lab/`, gitignored).
+Three fresh critics per round (the jury is "partly checked, not calibrated", so scores are estimates), prototype grading (0.375 Usability + 0.3125 Craft + 0.1875 Platform + 0.125 Character; speed isn't judged on a prototype). Dossiers are local (`.lab/`, gitignored).
 
 | Round | Overall | Usability · Craft · Platform · Character | Gates (a11y · states · layout · system · pointer) | Severity 3 confirmed |
 | --- | --- | --- | --- | --- |
