@@ -8,7 +8,14 @@
 > - **Open:** C2, C4, C5, C10–C12, C14–C21 (narrowed where Mike built part), C24, C25, C27, C29, C31, C32.
 > - **Research:** two new lanes landed: [current-state-2026-11.md](./research/current-state-2026-11.md) (what Mike's rethink shipped, read in code) and [morgen-amie-2026-11.md](./research/morgen-amie-2026-11.md) (the two benchmarks feature by feature, Nov 2026). The six October lanes stay as evidence; where they describe the pre-rethink module, current-state-2026-11 wins.
 > - **Baseline critique (/product-studio "criticise"):** blocked. The shared local database lost its API gateway on 20–21 Nov; the coordination session is fixing it with Maciej's OK. Until it runs, the last recorded scores are Mike's: built module 6.35 and his prototype 7.50 (blind jury, 28 Oct, before the 30 Oct review round).
-> - **Prototype:** [`prototypes/round-1b.html`](./prototypes/round-1b.html) (frames 1–9, V cycles variants; the hard states in its state picker), also published as a Claude Artifact. October's [`structure.html`](./prototypes/structure.html) is history.
+> - **Prototype:** [`prototypes/round-1b.html`](./prototypes/round-1b.html) (frames 1–9, V cycles variants; the hard states in its state picker), published as https://claude.ai/artifact/Tjf14nEGtYC6N1AhmyvWpo. October's [`structure.html`](./prototypes/structure.html) is history.
+> - **Critic rounds on the round-1b prototype** (three blind critics each; overall = 0.375 usability + 0.3125 craft + 0.1875 platform + 0.125 character, speed not judged on a prototype):
+>   | Round | Overall | Usability | Craft | Platform | Character | Gates below 8 | Confirmed severity 3 |
+>   | --- | --- | --- | --- | --- | --- | --- | --- |
+>   | r1 | 6.56 | 6 | 7 | 6 | 8 | none (a11y 8.5) | planning drafts broke working hours, estimates and due dates; titles broke mid-word in busy weeks and at 1280 |
+>   | r2 | 6.75 | 6 | 7 | 7 | 8 | none (all ≥ 9.7) | a dense week still unreadable in narrow lanes; the now-and-next line cut to its name at 1280–1440 |
+>   | r3 | 7.13 | 7 | 7 | 7 | 8 | none (a11y 10, system 9.7) | none. Still open at severity 2: a dense week's narrow lanes, the error line's length, two Place buttons, the tab path through all-day chips, run-together event names. The confirmed ones were fixed after r3 and not re-scored |
+>   - **The bar (8.0) was not met in three rounds**, the studio's limit. Critics agree on the idea every round ("tasks get their time on the grid, and every meeting brings its context before and after"). Character held at 8 throughout; what holds the rest at 7 is polish the build closes, and evidence a prototype can't give (undo, keyboard journeys, speed).
 > - **Waiting on Maciej, outside the calls:** is Google's OAuth consent screen published (not "Testing")? In Testing, every Google connection drops after 7 days (§6 #14).
 > - **Uncommitted:** nothing after each round's push.
 >
@@ -928,7 +935,7 @@ Checked every call against the others, against Tasks v3, and against the decisio
 
 ## 9. Cross-module asks (Email)
 
-The Email re-plan runs at the same time on `t/maciej/email-plan` (`.design/email-v4/REPLAN.md`; not yet pushed when this round was sent). Calendar owns the event model and its own screens; Email owns how these look and behave inside Mail.
+The Email re-plan runs at the same time on `t/maciej/email-plan` (`.design/email-v4/REPLAN.md`, its §7; calls 30 and 31 are its side of C28 and C7). Calendar owns the event model and its own screens; Email owns how these look and behave inside Mail.
 
 **What Calendar asks of Email:**
 1. **Invitations:** Mail's invite card answers the same invitation Calendar shows (Yes · No · Maybe go through the event's provider), and shows the reply already given in Calendar (C7).
@@ -936,12 +943,23 @@ The Email re-plan runs at the same time on `t/maciej/email-plan` (`.design/email
 3. **A follow-up draft from a meeting:** Mail's compose opened from a past meeting with the guests, the thread and the meeting note linked (C27).
 4. **Threads link to events:** when a booking or an offer made from a thread becomes an event, the thread shows the event as a reference.
 
-**What Calendar provides to Email:**
-1. **Today's events** for Mail's Today panel (built, 4 Nov): the same reading as Home's Today (now and next, Join).
-2. **The event behind an invitation**, with its RSVP state and calendar, for Mail's card.
-3. **Booking emails** (confirmation, reminder, cancel, reschedule once C19 lands) stay Calendar's content in the transactional templates; Mail shows them as ordinary mail.
+**What Email asks of Calendar** (read from `origin/t/maciej/email-plan` §7, commit a83e602a, 2026-11-21), and Calendar's answer:
 
-**Open between the two sessions:** none yet. Re-check their REPLAN before each round.
+| Email's ask | Calendar's answer |
+| --- | --- |
+| 1. Accept · Maybe · Decline an invitation into the right calendar, return the event, report conflicts with the person's day | Yes: the same invitation state as C7 (Details' Yes · No · Maybe), written through the event's provider; the conflicts are the day's events in that slot (the composer's clash check, already built) |
+| 2. Free slots for a range with working hours and buffers, and holds that stay tentative until booked or released | Yes: that is Calendar's offer (O), built with 48-hour holds (CALR-19); Mail's Schedule panel hosts it (C28) |
+| 3. List booking links with a short URL each; a booking from a link Mail sent links the event to that email | Yes (C28): the links list is built; the link to the email is new, carried by the offer or link token |
+| 4. An event from an email: its people as guests, the subject as title, linked both ways | Yes: the composer prefilled from the email (guests, title), saved with the link (C10, C28) |
+| 5. Mail's Today view shows Calendar's day, drawn the way Calendar draws a day | Yes: Calendar provides one compact day component (the List view's day, C5, with now-and-next and Join), the same one Home's Today widget uses (C15) |
+| 6. Booking emails open their event, not read as ordinary mail | Agree to Email's middle: ordinary mail, with the event as the first item in the email's link line |
+
+**What Calendar provides to Email:**
+1. **Today's events** for Mail's Today panel (built, 4 Nov), moving to the shared compact day component above.
+2. **The event behind an invitation**, with its RSVP state and calendar, for Mail's card.
+3. **Booking emails** (confirmation, reminder, cancel, reschedule once C19 lands) stay Calendar's content in the transactional templates; Mail shows them as mail with the event first in the link line.
+
+**Open between the two sessions:** none. Email's call 30 (Schedule) and 31 (invites with your day beside them) match C28 and C7; whichever way Maciej answers, the other session follows.
 
 ---
 
