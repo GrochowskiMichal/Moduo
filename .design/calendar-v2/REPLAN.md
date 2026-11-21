@@ -248,6 +248,8 @@ Top bar (global):   modules · Focus timer · Help · bell · you
 Bottom bar: the global one only (Search · Quick capture · Create new); Calendar adds no tools.
 ```
 
+**Drawing notes:** keys shown in the frames are placeholders until round 2's key map (two collide with built keys: ⇧⌘C copies an offer's times as text, and / finds a task in Plan). The dense-week state draws an overlap layout only to test legibility; overlaps stay as built in CALR-1 unless a round-2a call changes them.
+
 **What round 1b proposes to change** (each line is a call; frame 1 variant B draws them together):
 - Task work on the grid is **sessions**, several per task (★ C22, C4).
 - The strip goes; a quiet "2 missed sessions · Review" line shows only when there are some (★ C3).
@@ -373,7 +375,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 **★ C1 · The ceiling: Calendar becomes a daily driver, with a line**
 
 > **Status 2026-11-21: partly answered by Maciej; the line re-asked, narrowed.**
-> - **Maciej (2026-11-21, his words):** "Bring it up to the standard of the best modern calendar apps, with Morgen and Amie as the main benchmarks for the feature set and how it works: time-blocking, scheduling tasks into the day, booking links, several connected calendars… Then go past them using what only Moduo has: the links between modules." So the ceiling is a daily driver at Morgen/Amie level, and the Morgen-lite anti-goal is gone.
+> - **Maciej (2026-11-21, his words):** "Bring it up to the standard of the best modern calendar apps, with Morgen and Amie as the main benchmarks for the feature set and how it works: time-blocking, scheduling tasks into the day, booking links, several connected calendars… Then go past them using what only Moduo has: the links between modules." My reading (not his words): the ceiling is a daily driver at Morgen/Amie level, which retires the "Morgen-lite" ceiling and narrows its anti-goal; this call asks him to confirm the line.
 > - **Built since (Mike's answers, 27 Oct):** Google two-way; Microsoft, iCloud and .ics view only; Month; guests through Google; Find a time by ⇥ in the composer.
 > - **The question left: is this still the line?**
 >   - **In:** everything October listed. That includes writing to Outlook and iCloud (C6), alerts (C13), answering invitations (C7), List and search (C5), repeats that end or change from a date (C17), and a zone per event (C14).
@@ -439,7 +441,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 
 **★ C3 · A missed session: one state, one set of fixes, shown where you are**
 
-> **Status 2026-11-21: open, and in conflict with what's built.** Built: the old 7-day strip ("3 unfinished from earlier · Move to today · Review"), Move to today on Home, the in-grid Later today · Took longer · Remove, and the MCP `calendar_roll_forward`. Three of them still take teammates' tasks, and "Took longer" logs planned time as worked time (trust bugs B1, B6). Tasks v3, ratified by Maciej, says a missed session stays put and nothing moves by itself. October's recommendation below stands, with one addition: **the strip, Move to today and `calendar_roll_forward` retire** (roll-forward becomes the MCP form of "Fit into today", C11), and Plan's "From earlier" stays what it is today, overdue *due dates*, beside the missed sessions. *Recommend: yes.* Prototype frame 2.
+> **Status 2026-11-21: open, and in conflict with what's built.** Built: the old 7-day strip ("3 unfinished from earlier · Move to today · Review"), Move to today on Home, the in-grid Later today · Took longer · Remove, and the MCP `calendar_roll_forward`. Three of them still take teammates' tasks, and "Took longer" logs planned time as worked time (trust bugs B1, B6). Tasks v3, ratified by Maciej, says a missed session stays put and nothing moves by itself. October's recommendation below stands, with one addition: **the strip, Move to today and `calendar_roll_forward` retire** (roll-forward becomes the MCP form of "Fit into today", C11), and Plan's **From earlier** lists both, each labelled: overdue due dates ("Due Mon · Nov 23") and missed sessions ("Missed Wed 3:30 PM"); the task row under Scheduled also says "1 missed". *Recommend: yes.* Prototype frame 2.
 >
 > *October's text follows.*
 - **The problem.** Calendar today has its own fix system: a row inside an elapsed block (Done · Later today · Took longer · Remove) and a strip ("3 unfinished from earlier · Move to today · Review", looking back 7 days). Tasks v3 has since decided: a missed session stays where it was, muted; the task shows in Upcoming's Earlier as "missed 2:00 PM"; nothing moves by itself; a late *due date* has its own fixes (Move · Won't do · Break down). Two owners would ship two systems for one fact (audit C1–C3).
@@ -507,7 +509,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 
 > **Status 2026-11-21: partly settled; narrowed to writing to Outlook and iCloud.** Built and settled: Google writable from the web and desktop, Google-first with rollback; "New events go to" (the default calendar); honest per-account freshness; Reconnect. **Freshness with your Mac off and past meetings now have their own call, ★ C30.**
 > - **The question left:** Mike decided on 27 Oct that Microsoft, iCloud and .ics stay view only. Should Outlook and iCloud become editable (move, change, delete, create, guests), as Google is?
->   - (a) Yes, Outlook first, then iCloud and other CalDAV. Cost: about two blocks each, on Mike's Google pattern (write first, then the mirror stores the answer). Outlook needs a wider Microsoft permission, which every Outlook user re-consents to once.
+>   - (a) Yes, Outlook first, then iCloud and other CalDAV. Cost: about two blocks each, on Mike's Google pattern (write first, then the mirror stores the answer). Outlook needs a wider Microsoft permission, which every Outlook user re-consents to once, and may need Microsoft's publisher verification, which needs a registered company (today's interim entity is Ringdove; §6).
 >   - (b) Outlook only.
 >   - (c) Keep view only.
 > - *Recommend (a).* Why: Morgen writes to both, and Amie added Outlook two-way in August 2026. An agency's clients live in Outlook, and a calendar you can't edit sends you back to Outlook's own app. Rejected (c): Moduo stays a second calendar for half its users.
@@ -557,7 +559,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 
 **C8 · Teammates' time, and "Find a time"**
 
-> **Status 2026-11-21: settled (built as recommended, CALR-16, 30 Oct).** Members are opt-in lanes in the rail, each with their name; repeats count every week; naming members in the composer shows their busy time and ⇥ finds a time when you're all free. To check in the spec: members' sessions count as Busy.
+> **Status 2026-11-21: settled by Mike's build (CALR-16, 30 Oct), matching October's recommendation; Maciej, say if not.** Members are opt-in lanes in the rail, each with their name; repeats count every week; naming members in the composer shows their busy time and ⇥ finds a time when you're all free. To check in the spec: members' sessions count as Busy.
 >
 > *October's text follows.*
 - **Today:** teammates' calendars shared as Busy only already show as anonymous "Busy" blocks, all of them at once, not saying whose; repeating events count only once and sessions not at all.
@@ -610,9 +612,10 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 
 **C11 · "Fit into today": the one assisted gesture**
 
-> **Status 2026-11-21: open; re-asked with a week option.** Built: S places one task at a time; "Move to today" from the old loop is still there (C3 retires it). Morgen's Planner proposes a 1–7 day plan you approve; reviewers call the approval screen tedious. The question:
+> **Status 2026-11-21: open; re-asked with a week option.** Built: S places one task at a time; "Move to today" from the old loop is still there (C3 retires it). Morgen's Planner proposes a 1–7 day plan you approve; one third-party review calls the approval step tedious. The question:
 > - (a) **"Fit N into today"** as October proposed;
 > - (b) (a) **plus the week**: select tasks in Plan (or the missed ones), choose Today or This week; drafts appear on the grid dashed, in your order, inside working hours, around events; ⇥ moves the selected draft to its next free slot; ↵ places them all with one Undo. The draft on the grid *is* the approval: no separate screen.
+> - **What the frames add (after the critics):** a task that doesn't fit shows "Doesn't fit today · next free Fri 4:15 PM" and stays unticked; a placement after the due date is unticked by default and says so; the panel lists Picked and Not picked; one Place N ↵ commits.
 > - *Recommend (b).* Why: agencies plan Monday for the week; Sunsama and Morgen users do. Nothing moves without ↵. Rejected: Motion-style automatic re-planning (top churn reason). `calendar_roll_forward` becomes this gesture for MCP.
 > - Prototype frame 2, variants B and C.
 >
@@ -646,7 +649,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 **C13 · Alerts before events, and Calendar's notification rows**
 
 > **Status 2026-11-21: open; ★ load-bearing.** Nothing built: only task reminders and booking guests' reminders exist. Both benchmarks have it, and it's the gap every role names first. The table below stands, with two additions:
-> - **On time or not at all:** Morgen's reviews say its phone alerts arrive "hours late". An alert that can't arrive within a minute of its time (laptop asleep, browser closed) is dropped, never sent late. Google or iCloud on your phone still alerts you there.
+> - **On time or not at all:** one 2026 Morgen review says its phone alerts arrive "hours late". An alert that can't arrive within a minute of its time (laptop asleep, browser closed) is dropped, never sent late. Google or iCloud on your phone still alerts you there.
 > - **The sender:** one reminders table and sender for tasks and events (§6 b). Cost: about one block on top of Tasks' reminder sender; no new channel.
 > - *Recommend: yes.* Prototype frame 6.
 >
@@ -740,7 +743,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 
 **C19 · Booking links for client work** *(opening call; gaps G13, G15–G17)*
 
-> **Status 2026-11-21: partly built.** Built: guest reminders and host cancel (TX-6); **offers with holds** (October's item 4, as O). Not built: reschedule, several lengths on one link, no-show. The question, re-numbered inside this call only: (1) reschedule by the guest (Morgen's Open Invites and Calendly have it); (2) several lengths on one link; (3) mark a no-show; (4) optional co-hosts (Morgen's Team plan: "if Tom is free too, add him"). *Recommend 1–3 now, 4 with collective links in round 3.* Booking emails for reschedule are shared with Email (§9).
+> **Status 2026-11-21: partly built.** Built: guest reminders and host cancel (TX-6); **offers with holds** (October's item 4, as O). Not built: reschedule, several lengths on one link, no-show. The question, lettered so October's numbers below keep their meaning: (a) reschedule by the guest (October's 1; Morgen's Open Invites and Calendly have it); (b) several lengths on one link (October's 3); (c) mark a no-show (October's 5); (d) optional co-hosts (Morgen's Team plan: "if Tom is free too, add him"). *Recommend a–c now, d with collective links in round 3.* Booking emails for reschedule are shared with Email (§9).
 >
 > *October's text follows.*
 - **Recommend**, in this order:
@@ -811,6 +814,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
   - (b) **Chips in the all-day lane** as promised, inside the two-row cap, plus the header count.
   - (c) The count only, everywhere.
 - *Recommend (a).* Why: the count fixed a real problem (an uncapped lane), and Month is where a creator's or a student's due dates are read. Rejected (b): due chips compete with all-day events for two rows.
+- **Which frame is which:** frame 1 **B** draws option (b) (and is also the base of every hard state, for drawing only); **C** and **D** (Month) draw option (a).
 - *Outside the target roles?* Yes.
 - Prototype frame 1 (variants B and C).
 
@@ -858,7 +862,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
   - **Insert in reply** puts the times and a booking link into the reply;
   - when the guest picks one, the event is made **linked to the thread, the contacts and the offer**, and the holds release;
   - a booking link can be inserted the same way.
-- Mail owns the button and the reply; Calendar owns the offer and the event (§9).
+- Mail owns the button and the reply; Calendar owns the offer and the event (§9). Frame 7 draws the offer in Calendar's own right panel; inside Mail, Email's call 30 hosts the same offer in Mail's right panel (its "Schedule" view). One offer, two places.
 - **Options:** (a) offers and booking links from a reply, linked as above; (b) booking links only; (c) leave it to copy and paste.
 - *Recommend (a).* Rejected (c): the links are the point.
 - *Outside the target roles?* Yes: anyone who schedules by email.
@@ -868,7 +872,7 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 - **Today:** the desktop app has a menu-bar icon that keeps Moduo running, and it shows nothing.
 - **The proposal:** clicking it shows your **next meeting with Join**, the rest of today, and "New event…" (the composer, C10). An alert (C13) comes from the same place.
 - **Options:** (a) yes; (b) Join only; (c) leave it.
-- *Recommend (a).* Why: Notion Calendar's and Amie's menu bars are their most-loved desktop pieces, and Moduo already has the icon.
+- *Recommend (a).* Why: Notion Calendar, Amie and Morgen all have a menu-bar calendar, and Moduo already has the icon.
 - *Outside the target roles?* Yes.
 - Prototype frame 6 variant B.
 
@@ -926,7 +930,7 @@ Checked every call against the others, against Tasks v3, and against the decisio
 
 1. **One word per thing, with what's built:** session (C4, C22), Plan (C25), Details, Workspace members, focus time (C23), offer and booking link (C19, C28). "Block", "roll forward" and "unfinished from earlier" retire everywhere, MCP included (C32).
 2. **Nothing moves by itself:** C3 retires the strip's Move to today and the MCP roll-forward; C11's drafts land only on ↵; C23 (b)'s focus time fills only when you place.
-3. **The three quiet lines above the grid** (missed sessions C3, invitations waiting C7, the fault banner) share one place and one look, and show only when they have something. At most one shows at a time, in that order: fault, invitations, missed.
+3. **The quiet lines above the grid** (missed sessions C3, invitations waiting C7) share one row and one look, side by side, each with its own Review, and show only when they have something. A fault takes the toolbar's status slot instead ("Google not updated since 9:12 AM · Try again").
 4. **Details grows, in this order:** the event · Before this meeting (C26, upcoming only) · After this meeting (C27, past only) · people · where · Linked · activity.
 5. **Calendar's side of the Email seam** is the event, the offer and the invitation state; Mail owns its card, its compose and its Today panel (§9).
 6. **Foundation changes** (C6, C13, C14, C17, C30) are raised as calls with costs, never slipped in as "technical".
