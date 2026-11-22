@@ -12,9 +12,9 @@ import { type BulkRefusal, bulkResultText, tasksWord } from "../bulk";
 import { betweenPositions } from "../helpers";
 import type { Task, TaskQueueEntry, TaskWaitingEntry } from "../model";
 import { endOfQueue } from "../queue";
-import { isArchivedIn, messageOf, runPool } from "./bulk-write";
+import { isArchivedIn, messageOf, REFUSED, runPool } from "./bulk-write";
 import type { TaskCommandsContext } from "./context";
-import { isTempId, patchOf, type Shared } from "./shared";
+import { patchOf, type Shared, STILL_SAVING } from "./shared";
 
 export type BulkQueueOptions = {
   /** "toggle" (the bar's Focus, Q): out when every one is in already, else in.
@@ -32,6 +32,7 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
     optimisticEntry,
     queueFollowStatus,
     runQueueOp,
+    stillSaving,
     tagContext,
   } = shared;
   const isArchived = (taskId: string) => isArchivedIn(store, taskId);
@@ -49,7 +50,7 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
     for (const id of ids) {
       const t = data().allTasks.find((x) => x.id === id);
       if (!t || t.deletedAt) continue;
-      if (isTempId(id) || isArchived(id)) {
+      if (stillSaving(id) || isArchived(id)) {
         refused.set(id, { title: t.title, message: "It can’t be deleted right now." });
         continue;
       }
@@ -196,7 +197,7 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
     let lastAdded: string[] = [];
     const tasks = ids
       .map((id) => data().allTasks.find((t) => t.id === id))
-      .filter((t): t is Task => !!t && !t.deletedAt && !isTempId(t.id));
+      .filter((t): t is Task => !!t && !t.deletedAt && !stillSaving(t.id));
     const open = tasks.filter((t) => t.status !== "done" && t.status !== "archived");
     const removing = options.mode !== "add" && open.length > 0 && open.every((t) => mine.has(t.id));
     const queueAdd = (list: readonly string[], onSaved: (added: number) => void) => {
@@ -353,7 +354,11 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
       .map((id) => data().allTasks.find((t) => t.id === id))
       .filter(
         (t): t is Task =>
-          !!t && !t.deletedAt && !isTempId(t.id) && !isArchived(t.id) && !waitingAlready.has(t.id),
+          !!t &&
+          !t.deletedAt &&
+          !stillSaving(t.id) &&
+          !isArchived(t.id) &&
+          !waitingAlready.has(t.id),
       );
     if (tasks.length === 0) return;
     const shownRows = tasks.map((t): TaskWaitingEntry => ({
@@ -456,29 +461,39 @@ export function createBulkOps(ctx: TaskCommandsContext, shared: Shared) {
   ) => {
     const ctx = tagContext();
     if (!ctx) return;
+    const live = ids
+      .map((id) => data().allTasks.find((t) => t.id === id))
+      .filter((t): t is Task => !!t && !t.deletedAt && !isArchived(t.id));
+    // A task whose capture is still saving is left out (the link would reach
+    // the server first), and the toast says so.
+    const saving = live.filter((t) => stillSaving(t.id));
+    const tasks = live.filter((t) => !stillSaving(t.id));
+    if (tasks.length === 0) {
+      if (saving.length > 0) toast.error(STILL_SAVING);
+      return;
+    }
     // A typed name that matches no tag makes one (shown at once; the links
     // wait for its row).
     const tag = "id" in wanted ? wanted : tagNamed(ctx, wanted.name);
     if (!tag) return;
-    const tasks = ids
-      .map((id) => data().allTasks.find((t) => t.id === id))
-      .filter((t): t is Task => !!t && !t.deletedAt && !isTempId(t.id) && !isArchived(t.id));
-    if (tasks.length === 0) return;
     const removing = tasks.every((t) => has(t.id));
     const touched = tasks.filter((t) => has(t.id) === removing);
     const entities = touched.map((t) => ({ entityType: "task", entityId: t.id }));
     const result = await attachOrDetachMany(ctx, tag.id, entities, !removing);
     const okIds = new Set(result.changed.map((e) => e.entityId));
-    const refused = result.failed.map((f) => ({
-      title: touched.find((t) => t.id === f.entity.entityId)?.title ?? "",
-      message: f.message,
-    }));
+    const refused = [
+      ...result.failed.map((f) => ({
+        title: touched.find((t) => t.id === f.entity.entityId)?.title ?? "",
+        message: f.message,
+      })),
+      ...saving.map((t) => ({ title: t.title, message: REFUSED["still-saving"] ?? STILL_SAVING })),
+    ];
     const label = removing
       ? `Removed “${tag.name}” from ${tasksWord(okIds.size)}`
       : `Tagged ${tasksWord(okIds.size)} “${tag.name}”`;
     const text = bulkResultText(label, {
       changed: okIds.size,
-      total: touched.length,
+      total: touched.length + saving.length,
       refused,
     });
     if (okIds.size === 0) {

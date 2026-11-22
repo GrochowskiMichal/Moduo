@@ -102,6 +102,22 @@ export type ApplyOpOptions = {
 
 export type Shared = ReturnType<typeof createShared>;
 
+/** Ops under one key run one after another (a failed one doesn't stop the next). */
+function keyedChain() {
+  const chains = new Map<string, Promise<unknown>>();
+  return <T>(key: string, op: () => Promise<T>): Promise<T> => {
+    const prev = chains.get(key) ?? Promise.resolve();
+    const next = prev.catch(() => undefined).then(op);
+    chains.set(key, next);
+    // A settled chain's entry goes, unless a newer op joined it.
+    const clear = () => {
+      if (chains.get(key) === next) chains.delete(key);
+    };
+    next.then(clear, clear);
+    return next;
+  };
+}
+
 export function createShared(ctx: TaskCommandsContext) {
   const { store, runtime, workspaceId, userId, data, env, bumpActivity } = ctx;
   const failed = makeFailed(store);
@@ -364,17 +380,30 @@ export function createShared(ctx: TaskCommandsContext) {
   };
 
   /** Writes to one project go out in order (a drag, then a colour, then Undo). */
-  const projectChains = new Map<string, Promise<unknown>>();
-  const chainProjectOp = <T>(id: string, op: () => Promise<T>): Promise<T> => {
-    const prev = projectChains.get(id) ?? Promise.resolve();
-    const next = prev.catch(() => undefined).then(op);
-    projectChains.set(id, next);
-    // A settled chain's entry goes, unless a newer op joined it.
-    const clear = () => {
-      if (projectChains.get(id) === next) projectChains.delete(id);
-    };
-    next.then(clear, clear);
-    return next;
+  const chainProjectOp = keyedChain();
+  /**
+   * A task's drops (and their Undos) go out in order: a reorder made while
+   * the card's earlier drop still waits its turn (`sendStatusInTurn`) lands
+   * after it, not first (the status op carries the older place, HV-15 509-2).
+   */
+  const chainTaskOp = keyedChain();
+
+  /**
+   * A task the server doesn't have yet: shown under a `tmp-` id while its
+   * capture is on its way live, or waiting in the outbox (the entry a flush
+   * is sending now too). Only a status write can wait behind it (it queues,
+   * `applyOp`); any other write sent live is refused and rolled back, and the
+   * capture then lands with its old fields (HV-15 509-2). Offline nothing goes
+   * live: a capture waiting on the device is no reason then, and each command
+   * says "Offline" (or waits on the device) as it does for any task.
+   */
+  const stillSaving = (id: string): boolean =>
+    isTempId(id) || (!!store && !store.isOffline() && store.isQueuedCreate(id));
+  /** `stillSaving`, said ("Still saving"): true when the write must not start. */
+  const savingBlocked = (id: string): boolean => {
+    if (!stillSaving(id)) return false;
+    toast.error(STILL_SAVING);
+    return true;
   };
 
   /** Where tag writes go, or null (with a toast) when this person can't edit Tasks. */
@@ -402,6 +431,9 @@ export function createShared(ctx: TaskCommandsContext) {
     runQueueOp,
     optimisticEntry,
     chainProjectOp,
+    chainTaskOp,
+    stillSaving,
+    savingBlocked,
     tagContext,
     isBlocked,
   };

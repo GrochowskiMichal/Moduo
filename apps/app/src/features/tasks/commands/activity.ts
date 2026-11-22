@@ -12,11 +12,11 @@ import { toast } from "sonner";
 
 import type { Task, TaskReminder, TaskSession, TaskWaitingEntry } from "../model";
 import type { TaskCommandsContext } from "./context";
-import { isTempId, sayOffline, type Shared, STILL_SAVING } from "./shared";
+import { isTempId, sayOffline, type Shared } from "./shared";
 
 export function createActivityOps(ctx: TaskCommandsContext, shared: Shared) {
   const { store, runtime, workspaceId, userId, data, env, bumpActivity } = ctx;
-  const { editBlocked, refused } = shared;
+  const { editBlocked, refused, savingBlocked } = shared;
 
   /**
    * Bring a task's paused reminders back (TV-D12's `tasks_op_reminders_restore`;
@@ -86,10 +86,7 @@ export function createActivityOps(ctx: TaskCommandsContext, shared: Shared) {
     input: { startsAt: string; endsAt: string; userId: string | null },
   ): boolean => {
     if (editBlocked() || !store || !runtime || !workspaceId) return false;
-    if (isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return false;
-    }
+    if (savingBlocked(taskId)) return false;
     const shown: TaskSession = {
       id: crypto.randomUUID(),
       workspaceId,
@@ -160,10 +157,7 @@ export function createActivityOps(ctx: TaskCommandsContext, shared: Shared) {
       sayOffline();
       return false;
     }
-    if (isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return false;
-    }
+    if (savingBlocked(taskId)) return false;
     const shown: TaskReminder = {
       id: `tmp-${crypto.randomUUID()}`,
       workspaceId,
@@ -207,10 +201,7 @@ export function createActivityOps(ctx: TaskCommandsContext, shared: Shared) {
     entry: { kind: TaskWaitingEntry["kind"]; ref?: string | null; label?: string | null },
   ): string | null => {
     if (editBlocked() || !store || !runtime || !workspaceId) return null;
-    if (isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return null;
-    }
+    if (savingBlocked(taskId)) return null;
     const now = new Date().toISOString();
     const shown: TaskWaitingEntry = {
       id: crypto.randomUUID(),
