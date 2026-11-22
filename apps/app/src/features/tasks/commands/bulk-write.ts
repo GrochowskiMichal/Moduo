@@ -16,17 +16,36 @@ import { type BulkRefusal, bulkResultText, type BulkWrite, dueDayOf, tasksWord }
 import { byIdOf } from "../derived";
 import { undoWrite } from "../dnd/drop-write";
 import type { RecurrenceRule, Task } from "../model";
-import { handedOutOfSight, patchOfWrite, planTaskWrite, type WriteRefusal } from "../write-plan";
+import {
+  handedOutOfSight,
+  patchOfWrite,
+  planTaskWrite,
+  type TaskWrite,
+  type WriteRefusal,
+} from "../write-plan";
 import type { TaskCommandsContext, TaskPeers } from "./context";
 import { NO_EDIT, type Shared } from "./shared";
 
 /** What a selection's toast says of a task that was left out. */
-const REFUSED: Record<WriteRefusal, string | null> = {
+export const REFUSED: Record<WriteRefusal, string | null> = {
   "no-edit": NO_EDIT,
   deleted: null,
   "still-saving": "It’s still saving.",
   archived: "Its project is archived.",
 };
+
+const STILL_SAVING = REFUSED["still-saving"] ?? "";
+
+/** Whether a task's write is its status part alone (the one op that can queue behind a capture). */
+function isStatusOnly(write: BulkWrite, plan: TaskWrite): boolean {
+  return (
+    !!plan.status &&
+    Object.keys(plan.fields).length === 0 &&
+    write.scheduledAt === undefined &&
+    write.assigneeId === undefined &&
+    write.occurrenceOn === undefined
+  );
+}
 
 /** How many tasks' ops are in flight at once. */
 const POOL = 4;
@@ -108,7 +127,7 @@ type SessionMove = { id: string; fields: { startsAt: string; endsAt: string } };
 
 export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers: TaskPeers) {
   const { store, runtime, workspaceId, data, bumpActivity } = ctx;
-  const { applyQueueFollow, editBlocked, failed, planContext } = shared;
+  const { applyQueueFollow, editBlocked, failed, planContext, stillSaving } = shared;
 
   /** The session a reschedule moves: the one that starts at the task's old time. */
   const movedSession = (write: BulkWrite, before: Task): SessionMove | null => {
@@ -163,6 +182,12 @@ export function createBulkWrite(ctx: TaskCommandsContext, shared: Shared, peers:
         // (TV-U6), and one still saving can't be written yet.
         const message = REFUSED[plan.reason];
         if (message) refused.set(write.taskId, { title: before.title, message });
+        continue;
+      }
+      // A capture still saving: only a status part can wait behind it (it
+      // queues, `sendStatusPart`); any other op would reach the server first.
+      if (!isStatusOnly(write, plan) && stillSaving(write.taskId)) {
+        refused.set(write.taskId, { title: before.title, message: STILL_SAVING });
         continue;
       }
       // The status op carries the rule: Undo's own (the one before), else the

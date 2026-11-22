@@ -8,6 +8,7 @@
 
 import { isOpenTaskStatus } from "@contracts/vocabularies";
 
+import { localDayOf } from "../../lib/task-rows";
 import { formatDate, formatTime } from "../../lib/time-format";
 import type {
   EmailSnippetMeta,
@@ -76,7 +77,8 @@ export function relativeTimeAgo(iso: string, now: Date): string {
     const d = Math.floor(abs / DAY_MS);
     return ms >= 0 ? `${d} ${d === 1 ? "day" : "days"} ago` : `in ${d} ${d === 1 ? "day" : "days"}`;
   }
-  return `on ${iso.slice(0, 10)}`;
+  // The day on this device, not the instant's UTC day (HV-15 509-4).
+  return `on ${localDayOf(iso)}`;
 }
 
 /** "2:00 PM" from a timestamptz (local clock). */

@@ -51,6 +51,10 @@
  * sample case selects the note's meta without body_md (its body would come
  * from note_bodies, but the sample note isn't found); edited in by hand,
  * nothing else moved.
+ * HV-15 509-4 (2026-11-22) added how a repeat's UNTIL is read to the `repeat`
+ * description of tasks_create and tasks_update (the connector now stores it as
+ * the person's wall clock): edited in by hand in the five answers that list
+ * them; nothing else moved.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";

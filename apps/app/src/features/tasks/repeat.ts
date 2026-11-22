@@ -75,7 +75,10 @@ export function specToRrule(spec: RepeatSpec): string {
     else opts.byweekday = [weekdayOf(spec.monthly.weekday).nth(spec.monthly.nth)];
   }
   if (spec.end.kind === "until") {
-    // The last day it may come back, at its end (UTC, as the engines read it).
+    // The last local day it may come back, at its end. The digits are the
+    // person's wall clock (floating, like DTSTART once the engines float it):
+    // both engines read UNTIL as written, in the person's zone, so this must
+    // not be shifted to a zone here (rrule.js only prints it with a Z).
     opts.until = new Date(`${spec.end.day}T23:59:59Z`);
   } else if (spec.end.kind === "count") {
     opts.count = clampInt(spec.end.count, 1, 999);
@@ -85,6 +88,15 @@ export function specToRrule(spec: RepeatSpec): string {
     .split("\n")
     .find((l) => l.startsWith("RRULE:"));
   return (line ?? "").replace(/^RRULE:/, "");
+}
+
+/** The picker's default "On a date" end: 30 days from today on this device's
+ *  calendar, not the UTC day of now + 30 × 24 h (a day off near midnight,
+ *  HV-15 509-4). */
+export function defaultEndDay(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30, 12);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 /** The spec a stored rule reads as, or null when the form can't show it. */
@@ -112,7 +124,9 @@ export function rruleToSpec(rule: RecurrenceRule): RepeatSpec | null {
         ? { kind: "nth", nth: nthDay.n as number, weekday: code(nthDay) }
         : { kind: "day", day: typeof monthDay === "number" ? monthDay : 1 },
     end: o.until
-      ? { kind: "until", day: o.until.toISOString().slice(0, 10) }
+      ? // UNTIL's digits are the local wall clock (see specToRrule), so its
+        // UTC-rendered day is the picked local day, not a UTC day.
+        { kind: "until", day: o.until.toISOString().slice(0, 10) }
       : o.count
         ? { kind: "count", count: o.count }
         : { kind: "never" },

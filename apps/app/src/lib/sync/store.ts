@@ -82,7 +82,9 @@ import { openWrite, withOverlays } from "./kernel/overlay";
 import { personLifecycle, refcount, StoreRegistry, waitingEverywhere } from "./kernel/registry";
 import { isNewer, newestOf, stampMinus } from "./kernel/stamps";
 import { browserOffline, isNetworkError, waitedOfflineError } from "./network";
+import { countAttachments, countComments } from "./row-counts";
 import { liveStatusOf, nextTurn, trackLiveStatus, wakeTurns } from "./status-order";
+import { StatusTurns, type Turn } from "./status-turns";
 import { type KernelMirror, mirrorKernel } from "./tanstack/kernel-mirror";
 import type { AccessChange, SyncReadResult, SyncRows, SyncTableName } from "./types";
 
@@ -411,6 +413,8 @@ export class WorkspaceStore {
   private outbox = new Outbox<OutboxEntry>("fifo-drop-on-refusal");
   /** Overlay op per outbox entry (rebuilt from the copy). */
   private outboxOps = new Map<string, number>();
+  /** Status writes waiting their turn, by task, oldest first. */
+  private turns = new StatusTurns();
 
   private loaded = false;
   private error: string | null = null;
@@ -544,18 +548,21 @@ export class WorkspaceStore {
    * Whether anything for this task still waits in the outbox, including the
    * entry a flush is sending right now. A later write for it must queue behind
    * those: sent live, it would land first and the older queued one would win.
+   * For a `turn`, what was queued behind it doesn't count.
    */
-  hasOutboxEntries(taskId: string): boolean {
-    return this.outbox.some((e) => entryTaskId(e) === taskId);
+  hasOutboxEntries(taskId: string, turn?: Turn): boolean {
+    return this.outbox.some((e) => entryTaskId(e) === taskId && !turn?.blocks.has(e.id));
   }
 
   /**
    * Whether a status write for this task must wait in the outbox: something
    * for it waits there, or an older one is on its way live (this store's, or
-   * the one before it for this person). Sent live, it could land first.
+   * the one before it for this person). Sent live, it could land first. (A
+   * drop waiting its turn always waits on one of those, so a status write
+   * made meanwhile queues, behind it.)
    */
-  statusMustWait(taskId: string): boolean {
-    return this.hasOutboxEntries(taskId) || liveStatusOf(this.liveKey(taskId)) !== undefined;
+  statusMustWait(taskId: string, turn?: Turn): boolean {
+    return this.hasOutboxEntries(taskId, turn) || liveStatusOf(this.liveKey(taskId)) !== undefined;
   }
 
   /** A live status write for this task is on its way until `run` (with its fallback) settles. */
@@ -569,12 +576,20 @@ export class WorkspaceStore {
    * Offline or stopped first, it rejects as a lost connection.
    */
   async sendStatusInTurn<T>(taskId: string, op: () => Promise<T>): Promise<T> {
-    for (;;) {
-      if (this.disposed || this.offline) throw waitedOfflineError();
-      if (!this.statusMustWait(taskId)) return this.sendingStatus(taskId, op());
-      // What it waits behind goes out with the next flush.
-      if (this.hasOutboxEntries(taskId)) void this.flush();
-      await nextTurn();
+    // Its place in line: a status write queued for the task while it waits
+    // (a check-off, a bulk change) goes after it, not first.
+    const { turn, end } = this.turns.take(taskId);
+    try {
+      for (;;) {
+        if (this.disposed || this.offline) throw waitedOfflineError();
+        if (!this.statusMustWait(taskId, turn)) return this.sendingStatus(taskId, op());
+        // What it waits behind goes out with the next flush.
+        if (this.hasOutboxEntries(taskId, turn)) void this.flush();
+        await nextTurn();
+      }
+    } finally {
+      // Gone live (the flush now waits for that) or given up.
+      end();
     }
   }
 
@@ -1754,6 +1769,9 @@ export class WorkspaceStore {
     // nobody keeps (MOD-569).
     if (this.disposed) return this.handOff(entry);
     const taskId = entryTaskId(entry);
+    // Newer than a status write waiting its turn: it goes after that one. (A
+    // live write that came back is older: it doesn't.)
+    if (!opts.wasLive) this.turns.queueBehind(taskId, entry.id);
     const inFront = opts.wasLive
       ? this.outbox.pushBefore(entry, (e) => entryTaskId(e) === taskId)
       : (this.outbox.push(entry), false);
@@ -1860,6 +1878,8 @@ export class WorkspaceStore {
         // An older status write for its task still on its way live: wait for
         // it (MOD-587). One that failed came back in front: pick again.
         before: async (entry) => {
+          // Queued while a drop waited its turn: after that one.
+          if (await this.turns.heldBack(entryTaskId(entry), entry.id)) return "skip";
           const live = liveStatusOf(this.liveKey(entryTaskId(entry)));
           if (!live) return "send";
           await live;
@@ -2161,11 +2181,6 @@ export class WorkspaceStore {
   } | null = null;
 }
 
-/**
- * Finished files per task, and each task's file stamp: its newest file change
- * plus the live count (a delete that drops the row moves it). A file still
- * uploading (a Realtime row before it's finished) never counts.
- */
 /** The same fields with the same values (a row re-landed unchanged). */
 function shallowSame(a: AnyRow, b: AnyRow): boolean {
   const ka = Object.keys(a);
@@ -2178,43 +2193,6 @@ function shallowSame(a: AnyRow, b: AnyRow): boolean {
   return true;
 }
 
-export function countAttachments(files: readonly SyncRows["attachments"][]): {
-  counts: ReadonlyMap<string, number>;
-  stamps: ReadonlyMap<string, string>;
-} {
-  const counts = new Map<string, number>();
-  const newest = new Map<string, string>();
-  for (const f of files) {
-    if (f.status !== "ready") continue;
-    const seen = newest.get(f.taskId);
-    if (!seen || f.updatedAt > seen) newest.set(f.taskId, f.updatedAt);
-    if (f.deletedAt) continue;
-    counts.set(f.taskId, (counts.get(f.taskId) ?? 0) + 1);
-  }
-  const stamps = new Map<string, string>();
-  for (const [taskId, at] of newest) stamps.set(taskId, `${at}#${counts.get(taskId) ?? 0}`);
-  return { counts, stamps };
-}
-
-/** Live comments per task, and each task's comment stamp: its newest
- *  comment change plus the live count (a delete that drops the row moves it). */
-function countComments(comments: readonly SyncRows["comments"][]): {
-  counts: ReadonlyMap<string, number>;
-  stamps: ReadonlyMap<string, string>;
-} {
-  const counts = new Map<string, number>();
-  const newest = new Map<string, string>();
-  for (const c of comments) {
-    const seen = newest.get(c.taskId);
-    if (!seen || c.updatedAt > seen) newest.set(c.taskId, c.updatedAt);
-    if (c.deletedAt) continue;
-    counts.set(c.taskId, (counts.get(c.taskId) ?? 0) + 1);
-  }
-  const stamps = new Map<string, string>();
-  for (const [taskId, at] of newest) stamps.set(taskId, `${at}#${counts.get(taskId) ?? 0}`);
-  return { counts, stamps };
-}
-
 function sameTruncations(a: readonly Truncation[], b: readonly Truncation[]): boolean {
   return (
     a.length === b.length &&
@@ -2225,6 +2203,8 @@ function sameTruncations(a: readonly Truncation[], b: readonly Truncation[]): bo
 function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
+
+export { countAttachments } from "./row-counts";
 
 // ── One store per person and workspace ──────────────────────────────────────
 

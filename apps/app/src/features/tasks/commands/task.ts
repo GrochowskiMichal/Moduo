@@ -20,11 +20,13 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     applyOp,
     applyQueueFollow,
     archivedBlocked,
+    chainTaskOp,
     editBlocked,
     failed,
     planContext,
     queueFollowStatus,
     refused,
+    savingBlocked,
     sendNewTask,
   } = shared;
 
@@ -88,6 +90,18 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     optimistic.creatorId = userId ?? "";
     if (optimistic.assigneeId === "") optimistic.assigneeId = userId;
     optimistic.id = `tmp-${crypto.randomUUID()}`;
+    // A subtask of a task still waiting on the device (captured offline, or
+    // being sent from the outbox now) waits behind it: the outbox sends in
+    // order, so the parent goes first (as capture's subtasks do). Sent live,
+    // the server wouldn't have the parent yet.
+    if (fields.parentId && store.isQueuedCreate(fields.parentId)) {
+      void store.enqueue({
+        kind: "create",
+        id: crypto.randomUUID(),
+        task: { ...optimistic, id: optimistic.id.replace(/^tmp-/, "") },
+      });
+      return Promise.resolve(null);
+    }
     return sendNewTask(optimistic);
   };
 
@@ -130,6 +144,14 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
       return plan;
     }
     if (plan.kind === "noop") return plan;
+    // A task whose capture is still saving: only a status write can wait
+    // behind it (`applyOp` queues it); any other would go live first.
+    const statusOnly =
+      !!plan.status &&
+      Object.keys(plan.fields).length === 0 &&
+      plan.scheduledAt === undefined &&
+      plan.assigneeId === undefined;
+    if (!statusOnly && savingBlocked(id)) return { kind: "refused", reason: "still-saving" };
     const { followUps } = plan;
     if (plan.status && followUps.restoreReminders) {
       peers.offerReminderRestore(existing, plan.status.category);
@@ -294,6 +316,7 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
       return;
     }
     if (editBlocked() || !store) return;
+    if (savingBlocked(id)) return;
     // Snapshot the children BEFORE the optimistic promotion — Undo re-attaches
     // them (their snapshot rows still carry parentId = id).
     const children = d.bundle.tasks.filter((t) => t.parentId === id && !t.deletedAt);
@@ -370,6 +393,8 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
   const addSubtask = (parentId: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
+    // A parent still on its way live; one waiting in the outbox takes the
+    // subtask behind it (`createTask`).
     if (isTempId(parentId)) {
       toast.error(STILL_SAVING);
       return;
@@ -405,10 +430,7 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     const next = parentId ?? null;
     if ((existing.parentId ?? null) === next) return;
     if (next) {
-      if (isTempId(id) || isTempId(next)) {
-        toast.error(STILL_SAVING);
-        return;
-      }
+      if (savingBlocked(id) || savingBlocked(next)) return;
       if (next === id) return;
       const parent = d.liveTasks.find((t) => t.id === next);
       if (!parent) return;
@@ -461,6 +483,10 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     }
     if (plan.kind === "noop") return null;
     const { fields, status, assigneeId } = plan;
+    // A status part waits behind a capture still saving; a field or assign op can't.
+    if ((Object.keys(fields).length > 0 || assigneeId !== undefined) && savingBlocked(taskId)) {
+      return null;
+    }
     if (status && plan.followUps.restoreReminders) {
       peers.offerReminderRestore(existing, status.category);
     }
@@ -469,56 +495,62 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     // Won't do ones too), and the queue rows a status change takes out.
     const shown = store.begin(plan.overlay);
 
-    const saved: Task[] = [];
-    try {
-      if (Object.keys(fields).length > 0) {
-        if (plan.moving) {
-          // A move is one op (TV-D8, as `patchTask`): the server carries the
-          // subtasks it lets you edit in the same transaction and answers
-          // with every row it changed; one you can only view stays where the
-          // server has it, and the drop still lands (TV-U10).
-          saved.push(...(await rt.tasks.opUpdateTask({ workspaceId: ws, taskId, patch: fields })));
-        } else {
-          saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
+    // Shown at once; sent after this task's earlier drop has landed (a
+    // reorder made while that one waits its turn mustn't overtake it).
+    return chainTaskOp(taskId, async (): Promise<Task | null> => {
+      const saved: Task[] = [];
+      try {
+        if (Object.keys(fields).length > 0) {
+          if (plan.moving) {
+            // A move is one op (TV-D8, as `patchTask`): the server carries the
+            // subtasks it lets you edit in the same transaction and answers
+            // with every row it changed; one you can only view stays where the
+            // server has it, and the drop still lands (TV-U10).
+            saved.push(
+              ...(await rt.tasks.opUpdateTask({ workspaceId: ws, taskId, patch: fields })),
+            );
+          } else {
+            saved.push(await rt.tasks.updateTask({ workspaceId: ws, taskId, patch: fields }));
+          }
         }
+        if (status) {
+          // After any older check-off for it still on its way (MOD-561): sent
+          // first, the older one would land last and win. The drop's Undo
+          // needs the server's row, so it waits its turn rather than queueing.
+          saved.push(
+            await store.sendStatusInTurn(taskId, () =>
+              rt.tasks.opSetStatus({
+                workspaceId: ws,
+                taskId,
+                // By id when Undo puts a named status back, else the word.
+                status: status.status,
+                recurrence: status.recurrence,
+                position: status.position,
+              }),
+            ),
+          );
+        }
+        if (assigneeId !== undefined) {
+          saved.push(await rt.tasks.opAssign({ workspaceId: ws, taskId, assigneeId }));
+        }
+        // The last answer for a row is the newest.
+        const byId = new Map(saved.map((t) => [t.id, t]));
+        shown.settle({ tasks: [...byId.values()] });
+        store.forget("queue", plan.queue.rowIds);
+        bumpActivity();
+        if (plan.followUps.nextOccurrence) {
+          toast(`Done — next: ${formatScheduled(plan.followUps.nextOccurrence)}`);
+        }
+        return byId.get(taskId) ?? null;
+      } catch (e) {
+        // What already saved stays (its rows become the copy); the rest shows
+        // the server's again.
+        if (saved.length > 0) store.answer({ tasks: saved });
+        refused(shown, e);
+        if (status) store.unkeep(taskId);
+        return null;
       }
-      if (status) {
-        // After any older check-off for it still on its way (MOD-561): sent
-        // first, the older one would land last and win. The drop's Undo
-        // needs the server's row, so it waits its turn rather than queueing.
-        saved.push(
-          await store.sendStatusInTurn(taskId, () =>
-            rt.tasks.opSetStatus({
-              workspaceId: ws,
-              taskId,
-              // By id when Undo puts a named status back, else the word.
-              status: status.status,
-              recurrence: status.recurrence,
-              position: status.position,
-            }),
-          ),
-        );
-      }
-      if (assigneeId !== undefined) {
-        saved.push(await rt.tasks.opAssign({ workspaceId: ws, taskId, assigneeId }));
-      }
-      // The last answer for a row is the newest.
-      const byId = new Map(saved.map((t) => [t.id, t]));
-      shown.settle({ tasks: [...byId.values()] });
-      store.forget("queue", plan.queue.rowIds);
-      bumpActivity();
-      if (plan.followUps.nextOccurrence) {
-        toast(`Done — next: ${formatScheduled(plan.followUps.nextOccurrence)}`);
-      }
-      return byId.get(taskId) ?? null;
-    } catch (e) {
-      // What already saved stays (its rows become the copy); the rest shows
-      // the server's again.
-      if (saved.length > 0) store.answer({ tasks: saved });
-      refused(shown, e);
-      if (status) store.unkeep(taskId);
-      return null;
-    }
+    });
   };
 
   /**
@@ -609,10 +641,7 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
   /** Add a blocker → task edge. Cycle-checked here; the DB trigger backstops. */
   const addBlocker = (taskId: string, blockerId: string) => {
     if (editBlocked() || !runtime || !workspaceId || !store) return;
-    if (isTempId(taskId) || isTempId(blockerId)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (savingBlocked(taskId) || savingBlocked(blockerId)) return;
     if (taskId === blockerId) return;
     const relations = data().bundle.taskRelations;
     const exists = relations.some(

@@ -45,11 +45,9 @@ import {
 } from "./agent-origin";
 import {
   deleteDocOutboxEntries,
-  deleteMetaOutboxEntries,
   docDbName,
   type DocOutboxEntry,
   enqueueDocUpdate,
-  enqueueMetaOp,
   listDocOutboxNoteIds,
   type MetaOutboxEntry,
   type NotesOwner,
@@ -62,7 +60,8 @@ import {
   readNoteState,
   writeNoteState,
 } from "./idb";
-import { callMetaOp, isNetworkError, replayDecision, replayOrder } from "./meta-outbox";
+import { MetaOpChain } from "./meta-chain";
+import { isNetworkError } from "./meta-outbox";
 import {
   ackedKeys,
   advanceCursor,
@@ -75,6 +74,8 @@ import {
 import { notesEngines } from "./people";
 
 export type NotesSyncStatusV2 = "synced" | "pending" | "offline";
+
+export { NotesStillSyncingError } from "./meta-chain";
 
 const CLIENT_ID_KEY = "moduo:notes:client-id:v1";
 const FLUSH_DEBOUNCE_MS = 400;
@@ -194,10 +195,8 @@ export class NotesSyncEngineV2 {
   private status: NotesSyncStatusV2 = "synced";
   private destroyed = false;
   private detachWindow: (() => void) | null = null;
-  private metaReplay: Promise<boolean> | null = null;
-  private metaChain: Promise<unknown> = Promise.resolve();
-  private metaOpsWaiting = 0;
-  private metaReloadDue = false;
+  /** Metadata intent ops: one at a time, in order, behind the offline meta outbox. */
+  private readonly meta: MetaOpChain;
   /** Lazy drafts (NR-2): notes that exist only on this device until their
    * first character. Their sessions don't pull (there is nothing on the
    * server), and their edits stay out of the push outbox, so an untouched
@@ -221,11 +220,24 @@ export class NotesSyncEngineV2 {
     private readonly runtime: ModuoRuntime | null,
     readonly workspaceId: string,
     /** Called after a reconnect replay/pull so the meta layer can refresh. */
-    private readonly onRemoteMetaChange?: () => void,
+    onRemoteMetaChange?: () => void,
     /** The signed-in person (a story without one keeps its caches under "local"). */
     readonly userId = "local",
   ) {
     this.owner = { userId, workspaceId };
+    this.meta = new MetaOpChain({
+      runtime,
+      owner: this.owner,
+      onRemoteMetaChange,
+      afterLiveOp: async () => {
+        if (this.status === "offline" && !(await this.hasQueuedUpdates())) {
+          this.setStatus("synced");
+        }
+      },
+      onQueued: () => this.setStatus("offline"),
+      handOff: () => this.handOffMetaOps(),
+      pushNoteNow: (noteId) => this.pushNoteNow(noteId),
+    });
     this.untrack = notesEngines.track(this);
     if (typeof window !== "undefined") {
       const wake = () => {
@@ -799,73 +811,55 @@ export class NotesSyncEngineV2 {
     this.sessions.delete(noteId);
   }
 
-  /** Run a metadata intent op with offline queueing: online → straight
-   * through; network-dead → queue + resolve (the caller applied it
-   * optimistically); server rejection → rethrow (honest toast). Ops run one at
-   * a time in the order they were made, and what already waits replays first;
-   * while anything still waits this one queues behind it rather than
-   * overtaking it (an older rename replayed later would win; 509-2). */
+  /** Run a metadata intent op with offline queueing (`MetaOpChain.run`). */
   runMetaOp(
     kind: MetaOutboxEntry["kind"],
     args: Record<string, unknown>,
   ): Promise<"applied" | "queued"> {
-    if (!this.runtime) return Promise.reject(new Error("Runtime unavailable."));
-    // One chain: a newer op checks the outbox only after an older live call
-    // (and the enqueue its timeout leads to) has settled.
-    this.metaOpsWaiting++;
-    const run = this.metaChain
-      .then(() => this.runMetaOpInOrder(kind, args))
-      .finally(() => {
-        this.metaOpsWaiting--;
-        this.reloadMetaWhenIdle();
-      });
-    this.metaChain = run.catch(() => {});
-    return run;
+    return this.meta.run(kind, args);
   }
 
-  /** The list reload after a replay waits until no op is waiting in the chain:
-   * it would otherwise undo a newer op's optimistic change on screen. */
-  private reloadMetaWhenIdle(replayed = false): void {
-    if (replayed) this.metaReloadDue = true;
-    if (!this.metaReloadDue || this.metaOpsWaiting > 0) return;
-    this.metaReloadDue = false;
-    this.onRemoteMetaChange?.();
+  /** Run a live op that reads a note back from the server only once everything
+   * this device still holds for it is there (`MetaOpChain.runAfterQueued`). */
+  runAfterQueued<T>(noteId: string, op: () => Promise<T>): Promise<T> {
+    return this.meta.runAfterQueued(noteId, op);
   }
 
-  private async runMetaOpInOrder(
-    kind: MetaOutboxEntry["kind"],
-    args: Record<string, unknown>,
-  ): Promise<"applied" | "queued"> {
-    if (await this.replayMetaOutbox()) this.metaReloadDue = true;
-    if ((await readMetaOutbox(this.owner)).length === 0) {
-      try {
-        await this.callMetaOp(kind, args);
-        if (this.status === "offline" && !(await this.hasQueuedUpdates())) {
-          this.setStatus("synced");
-        }
-        return "applied";
-      } catch (e) {
-        if (!isNetworkError(e)) throw e;
-      }
+  /** Push a note's queued edits now; true when some still wait after. */
+  private async pushNoteNow(noteId: string): Promise<boolean> {
+    const s = this.sessions.get(noteId);
+    if (s) {
+      // A push already on its way finishes first (bounded: it retries on its own).
+      for (let i = 0; s.flushing && i < 100; i++) await new Promise((r) => setTimeout(r, 20));
+      await this.flushNote(noteId);
+      if (s.memOutbox.length > 0) return true;
+    } else {
+      await this.flushHeadless(noteId);
     }
-    await enqueueMetaOp(this.owner, {
-      kind,
-      args,
-      queuedAt: Date.now(),
-    });
-    this.setStatus("offline");
-    return "queued";
+    return (await readDocOutbox(this.owner, noteId)).length > 0;
   }
 
-  private callMetaOp(kind: MetaOutboxEntry["kind"], args: any): Promise<unknown> {
-    return callMetaOp(this.runtime!, kind, args);
+  /** The person's engine for this workspace that runs now, if any, replays what waits. */
+  private handOffMetaOps(): void {
+    for (const engine of notesEngines.all()) {
+      if (engine === this || engine.destroyed || !engine.ownsSameAs(this.owner)) continue;
+      void engine.wake();
+    }
+  }
+
+  private ownsSameAs(owner: NotesOwner): boolean {
+    return (
+      ownerLive(this.owner) &&
+      this.owner.userId === owner.userId &&
+      this.owner.workspaceId === owner.workspaceId
+    );
   }
 
   /** Reconnect/refocus pass: replay queued meta ops FIFO, flush every queued
    * doc outbox, pull open sessions. */
   async wake(): Promise<void> {
     if (this.destroyed) return;
-    this.reloadMetaWhenIdle(await this.replayMetaOutbox());
+    this.meta.reloadWhenIdle(await this.meta.replay());
     const queuedNoteIds = await listDocOutboxNoteIds(this.owner);
     const flushes: Promise<void>[] = [];
     for (const id of queuedNoteIds) {
@@ -928,60 +922,11 @@ export class NotesSyncEngineV2 {
     }
   }
 
-  /** One replay at a time; a caller that arrives mid-replay waits for it.
-   * True when it applied something (the caller reloads the list). */
-  private replayMetaOutbox(): Promise<boolean> {
-    if (!this.runtime || !ownerLive(this.owner)) return Promise.resolve(false);
-    this.metaReplay ??= this.replayMetaOutboxOnce().finally(() => {
-      this.metaReplay = null;
-    });
-    return this.metaReplay;
-  }
-
-  private async replayMetaOutboxOnce(): Promise<boolean> {
-    let replayedAny = false;
-    // Each entry is tried once per pass (a delete that failed leaves it for the next wake).
-    const tried = new Set<number>();
-    // Re-read until drained: an op queued behind this replay goes in the same pass.
-    for (;;) {
-      const entries = replayOrder(await readMetaOutbox(this.owner)).filter(
-        (e) => typeof e.key === "number" && !tried.has(e.key),
-      );
-      if (entries.length === 0) break;
-      let stop = false;
-      for (const entry of entries) {
-        tried.add(entry.key!);
-        const decision = await this.replayMetaEntry(entry);
-        if (decision === "stop") {
-          stop = true;
-          break;
-        }
-        if (decision === "applied") replayedAny = true;
-      }
-      if (stop) break;
-    }
-    return replayedAny;
-  }
-
-  /** Replay one queued op; "stop" keeps it and everything after it queued (FIFO). */
-  private async replayMetaEntry(entry: MetaOutboxEntry): Promise<"applied" | "dropped" | "stop"> {
-    if (!ownerLive(this.owner)) return "stop";
-    let error: unknown = null;
-    try {
-      await this.callMetaOp(entry.kind, entry.args);
-    } catch (e) {
-      error = e;
-    }
-    const decision = replayDecision(entry, error);
-    if (decision === "retry-later") return "stop"; // still offline — keep FIFO intact
-    await deleteMetaOutboxEntries([entry.key!]);
-    if (decision === "drop") console.warn("[notes-sync] dropped queued op", entry.kind, error);
-    return decision === "applied" ? "applied" : "dropped";
-  }
-
-  /** Stopped by a sign-in or a sign-out (`persist: false`: its caches are being wiped). */
-  dispose(opts: { persist: boolean }): void {
+  /** Stopped by a sign-in or a sign-out (`persist: false`: its caches are being
+   * wiped; `erase`: the account or workspace is gone, late ops go too). */
+  dispose(opts: { persist: boolean; erase?: boolean }): void {
     if (!opts.persist) this.owner.stopped = true;
+    if (opts.erase) this.owner.erased = true;
     void this.destroy();
   }
 

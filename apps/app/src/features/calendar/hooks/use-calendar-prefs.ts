@@ -13,6 +13,7 @@ import {
   type CalendarPrefs,
   DEFAULT_CALENDAR_PREFS,
   readCalendarPrefs,
+  readStoredCalendarPrefs,
   sanitizeCalendarPrefs,
   writeCalendarPrefs,
 } from "../prefs";
@@ -38,6 +39,8 @@ export function useCalendarPrefs(userId: string): {
   const { pushLocalChange } = useDomainSync({
     domain: "calendar",
     getLocalSyncable: () => prefsRef.current as unknown as Record<string, unknown>,
+    // One copy per person here: a parked change must be its owner's (509-3).
+    localValueOf: (id) => readStoredCalendarPrefs(id) as unknown as Record<string, unknown> | null,
     defaults: DEFAULT_CALENDAR_PREFS as unknown as Record<string, unknown>,
     sanitizeCloud: (raw) => sanitizeCalendarPrefs(raw) as unknown as Record<string, unknown>,
     apply: (value) => {

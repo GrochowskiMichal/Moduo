@@ -394,6 +394,13 @@ export function BookingLinks({ runtime, workspaceId, userId, accounts }: Props) 
         .select("display_name, avatar_url")
         .eq("id", userId)
         .maybeSingle();
+      // A failed read is not "no name, no photo": saving the fallbacks would replace
+      // the host's public name and picture on the link (644-1). Fail the save instead.
+      if (user.error || profile.error) {
+        throw new Error(
+          "Couldn't read your profile, so the link wasn't saved. Check your connection and try again.",
+        );
+      }
       const email = user.data.user?.email ?? null;
       const payload = {
         name,

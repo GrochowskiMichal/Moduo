@@ -11,26 +11,50 @@ import { AUTH_USER_KEY, bootReads, supabaseClient } from "./runtime.web.client";
  */
 export async function getAuthedUser() {
   try {
+    return await getAuthedUserOrThrow();
+  } catch {
+    return null;
+  }
+}
+
+/** `getUser()` answered with no user and no error: nobody is signed in. */
+class NoAuthedUser extends Error {}
+
+/** Signed out (no session on this device), as opposed to a lookup that failed. */
+function isSignedOut(error: unknown): boolean {
+  return (
+    error instanceof NoAuthedUser ||
+    (error as { name?: unknown } | null)?.name === "AuthSessionMissingError"
+  );
+}
+
+/**
+ * Like `getAuthedUser`, but a failed lookup (offline, a 5xx, a mid-refresh 401)
+ * throws instead of passing for "signed out" (509-1 `error-as-empty`). Null only
+ * when nobody is signed in. Use it in a read whose empty answer a caller acts on
+ * (seeding defaults, claiming a domain): there a failure must stay a failure.
+ */
+export async function getAuthedUserOrThrow() {
+  try {
     // Cache ONLY a real authenticated user. A signed-out state and a transient
     // failure (offline / a mid-refresh 401 / a 5xx) both surface as `getUser()`
     // returning an error + null user — we throw on either so the request-cache
     // does NOT retain it. Otherwise one boot blip would pin `null` forever (Infinity
     // TTL, cleared only on a real sign-in/out) and brick every user-scoped read +
-    // write for the whole session. `getAuthedUser` still resolves to `null` for the
-    // caller (the old `getUser()` graceful-null contract), it just isn't cached, so
-    // the next call retries — exactly the per-call self-heal the old code had.
+    // write for the whole session. It isn't cached, so the next call retries.
     return await bootReads.read(
       AUTH_USER_KEY,
       async () => {
         const { data, error } = await supabaseClient.auth.getUser();
         if (error) throw error;
-        if (!data.user) throw new Error("no authenticated user");
+        if (!data.user) throw new NoAuthedUser("no authenticated user");
         return data.user;
       },
       Number.POSITIVE_INFINITY,
     );
-  } catch {
-    return null;
+  } catch (error) {
+    if (isSignedOut(error)) return null;
+    throw error;
   }
 }
 

@@ -1,6 +1,7 @@
 // TV-POLISH · a reference card's Complete outside the Tasks page finishes the
-// task's open subtasks through the shared store (call 87); reopening, or a
-// task the store doesn't hold, takes the plain op.
+// task's open subtasks through the shared store (call 87); reopening is the
+// task alone, through the store too; a task the store doesn't hold takes the
+// plain op in its turn, and only without a store does it go straight out.
 
 import { describe, expect, it, rs } from "@rstest/core";
 
@@ -22,17 +23,22 @@ function task(id: string, over: Partial<Task> = {}): Task {
 
 function setup(tasks: Task[] | null) {
   const sent: string[] = [];
+  const inTurn: string[] = [];
   const ops: Array<{ taskId: string; status: string }> = [];
   const store =
     tasks === null
       ? null
       : {
-          sendStatus: async (input: { taskId: string }) => {
-            sent.push(input.taskId);
+          sendStatus: async (input: { taskId: string; status: string }) => {
+            sent.push(`${input.taskId}:${input.status}`);
             return "saved" as const;
           },
+          sendStatusInTurn: (taskId: string, op: () => Promise<unknown>) => {
+            inTurn.push(taskId);
+            return op();
+          },
           queueOp: (_o: unknown, op: () => Promise<unknown>) => op(),
-          getSnapshot: () => ({ bundle: { tasks }, queue: [] }),
+          getSnapshot: () => ({ bundle: { tasks, buckets: [] }, queue: [] }),
         };
   const runtime = {
     tasks: {
@@ -52,7 +58,7 @@ function setup(tasks: Task[] | null) {
       done,
       findStore: () => store as never,
     });
-  return { sent, ops, run };
+  return { sent, inTurn, ops, run };
 }
 
 describe("completeReferencedTask", () => {
@@ -62,24 +68,32 @@ describe("completeReferencedTask", () => {
   it("finishes the task and its open subtasks through the store", async () => {
     const { sent, ops, run } = setup([parent, sub]);
     await run("p", true);
-    expect(sent).toEqual(["p", "s"]);
+    expect(sent).toEqual(["p:done", "s:done"]);
     expect(ops).toEqual([]);
   });
 
-  it("reopens with the plain op, the task alone", async () => {
-    const { sent, ops, run } = setup([parent, sub]);
+  it("reopens through the store's status write, the task alone", async () => {
+    const { sent, ops, run } = setup([parent, { ...sub, statusCategory: "done" }]);
     await run("p", false);
-    expect(sent).toEqual([]);
-    expect(ops).toEqual([{ taskId: "p", status: "todo" }]);
+    expect(sent).toEqual(["p:todo"]);
+    expect(ops).toEqual([]);
   });
 
-  it("takes the plain op when there's no store, or the store doesn't hold the task", async () => {
+  it("takes the plain op in its turn when the store doesn't hold the task", async () => {
+    const elsewhere = setup([sub]);
+    await elsewhere.run("p", true);
+    await elsewhere.run("p", false);
+    expect(elsewhere.sent).toEqual([]);
+    expect(elsewhere.inTurn).toEqual(["p", "p"]);
+    expect(elsewhere.ops).toEqual([
+      { taskId: "p", status: "done" },
+      { taskId: "p", status: "todo" },
+    ]);
+  });
+
+  it("takes the plain op straight out only without a store", async () => {
     const none = setup(null);
     await none.run("p", true);
     expect(none.ops).toEqual([{ taskId: "p", status: "done" }]);
-    const elsewhere = setup([sub]);
-    await elsewhere.run("p", true);
-    expect(elsewhere.sent).toEqual([]);
-    expect(elsewhere.ops).toEqual([{ taskId: "p", status: "done" }]);
   });
 });

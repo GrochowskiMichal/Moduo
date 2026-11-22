@@ -69,11 +69,14 @@ describe("rules in a zone (a)", () => {
     ).toBe("2026-11-02T08:00:00.000Z");
   });
 
-  it("reads UNTIL in the zone the same way as the server", () => {
+  it("reads UNTIL as the zone's wall clock, as written (HV-15 509-4)", () => {
+    // The picker writes the local end day's 23:59:59 (repeat.ts), so UNTIL's
+    // digits are Warsaw's clock: 09:00 keeps the 9:00 occurrence, 08:59:59
+    // ends before it. The server's tasks__rrule_floating must read it the same.
     const until = (u: string) => ({ ...MONDAYS, rrule: `FREQ=WEEKLY;BYDAY=MO;UNTIL=${u}` });
     expect(
       occurrenceAfter(
-        until("20261102T080000Z"),
+        until("20261102T090000Z"),
         new Date("2026-10-27T00:00:00Z"),
         null,
         "Europe/Warsaw",
@@ -81,7 +84,7 @@ describe("rules in a zone (a)", () => {
     ).toBe("2026-11-02T08:00:00.000Z");
     expect(
       occurrenceAfter(
-        until("20261102T075959Z"),
+        until("20261102T085959Z"),
         new Date("2026-10-27T00:00:00Z"),
         null,
         "Europe/Warsaw",

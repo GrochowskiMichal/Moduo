@@ -8,6 +8,7 @@
 // Everything here is real-instant math over local calendar days — never hour
 // indices — so DST days (23h/25h) resolve correctly (see grid-layout.ts).
 
+import { taskDueDay } from "../../lib/task-rows";
 import { formatDate, formatWeekdayDate } from "../../lib/time-format";
 import { todayStr } from "../tasks/helpers";
 import type { Task, TaskSession } from "../tasks/model";
@@ -214,7 +215,7 @@ export type DueChip = {
  */
 export function dueChipsByDay(
   tasks: readonly (LensTask &
-    Partial<Pick<Task, "dueOn" | "assigneeId" | "creatorId" | "creatorUnknown">>)[],
+    Partial<Pick<Task, "dueOn" | "dueDate" | "assigneeId" | "creatorId" | "creatorUnknown">>)[],
   range: VisibleRange,
   sessions: { list: readonly Pick<LensSession, "taskId" | "userId">[]; me: string | null },
 ): Map<string, DueChip[]> {
@@ -225,7 +226,11 @@ export function dueChipsByDay(
   );
   const out = new Map<string, DueChip[]>();
   for (const t of tasks) {
-    if (t.deletedAt || t.status === "archived" || !t.dueOn) continue;
+    // The derived local day, else the due instant's local day: a task made on
+    // this device carries only `dueDate` until its create comes back (offline:
+    // until it is sent), and must not vanish from its day meanwhile.
+    const dueDay = taskDueDay(t);
+    if (t.deletedAt || t.status === "archived" || !dueDay) continue;
     // Your own (spec §18): assigned to you, or yours as its creator while
     // nobody is assigned. Teammates' tasks stay out.
     const owner = t.assigneeId ?? (t.creatorUnknown ? null : (t.creatorId ?? null));
@@ -233,7 +238,7 @@ export function dueChipsByDay(
     // In your calendar already: a session of yours (or, with no session known
     // for it, the row's schedule).
     if (mine.has(t.id) || (!known.has(t.id) && t.scheduledAt)) continue;
-    const dayKey = t.dueOn.slice(0, 10);
+    const dayKey = dueDay.slice(0, 10);
     if (!dayKeys.has(dayKey)) continue;
     const chip: DueChip = { taskId: t.id, title: t.title, dayKey, done: t.status === "done" };
     const list = out.get(dayKey);

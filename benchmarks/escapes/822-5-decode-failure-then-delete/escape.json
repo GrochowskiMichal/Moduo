@@ -1,0 +1,17 @@
+{
+  "id": "822-5-decode-failure-then-delete",
+  "title": "An undecodable mail follow-up is deleted on read",
+  "mechanism": "decode-failure-then-delete",
+  "sites": ["apps/desktop/src-tauri/src/mail/host/reader.rs"],
+  "tests": [
+    {
+      "lang": "rust",
+      "file": "apps/desktop/src-tauri/src/mail/host/reader/unreadable_followup.rs",
+      "name": "an_unreadable_follow_up_survives_the_followups_read",
+      "run": "cd apps/desktop/src-tauri && cargo test --lib an_unreadable_follow_up_survives_the_followups_read"
+    }
+  ],
+  "pr": 822,
+  "fixCommit": "d71a171f68c333d0abb45eb9555a3a7b0b982983",
+  "foundBy": "HV-15 nightly variant hunt 2026-11-07 (draft PR #801)"
+}

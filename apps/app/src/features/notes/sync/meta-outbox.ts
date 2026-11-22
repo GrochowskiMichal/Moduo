@@ -3,7 +3,7 @@
  *
  * Doc edits ride the CRDT outbox; creates/renames/moves/… are RPCs, so a
  * desktop session with no network queues the intent and replays FIFO on
- * reconnect. Pure classification here; the runner lives in engine-v2.ts.
+ * reconnect. Pure classification here; the runner lives in meta-chain.ts.
  */
 
 import type { ModuoRuntime } from "../../../lib/runtime.types";
@@ -40,6 +40,37 @@ export function replayDecision(entry: MetaOutboxEntry, error: unknown | null): R
   // A validation/permission error will never succeed on retry — drop it so
   // one poison entry can't wedge the queue forever.
   return "drop";
+}
+
+/** Which of a note's facts each op sets (creates and duplicates make a note: none). */
+const SLOT_OF: Partial<Record<MetaOutboxEntry["kind"], string>> = {
+  rename: "title",
+  move: "place",
+  file: "file",
+  setFavorite: "favorite",
+  archive: "archived",
+  unarchive: "archived",
+  trash: "trashed",
+  restore: "trashed",
+};
+
+/**
+ * The note fact an op sets (`<note>:<fact>`), or null when it sets none an
+ * older op could overwrite. `setMeta` is per set of fields: an icon change
+ * never stands for a full-width one.
+ */
+export function metaSlot(
+  kind: MetaOutboxEntry["kind"],
+  args: Record<string, unknown>,
+): string | null {
+  const noteId = typeof args.noteId === "string" ? args.noteId : null;
+  if (!noteId) return null;
+  if (kind === "setMeta") {
+    const patch = (args.patch ?? {}) as Record<string, unknown>;
+    return `${noteId}:meta:${Object.keys(patch).sort().join(",")}`;
+  }
+  const fact = SLOT_OF[kind];
+  return fact ? `${noteId}:${fact}` : null;
 }
 
 /** FIFO order for replay: strictly by queue time, then insertion key. */

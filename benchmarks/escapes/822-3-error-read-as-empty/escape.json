@@ -1,0 +1,50 @@
+{
+  "id": "822-3-error-read-as-empty",
+  "title": "Failed prefs, uploads and profile reads read as empty, then overwrite or delete; a user switch drops unsynced prefs",
+  "mechanism": "error-read-as-empty",
+  "sites": [
+    "apps/app/src/lib/runtime.web.shared.ts",
+    "apps/app/src/lib/runtime.web.preferences.ts",
+    "apps/app/src/lib/prefs-sync.ts",
+    "apps/app/src/lib/uploads/store.ts",
+    "apps/app/src/lib/uploads/index.ts",
+    "apps/app/src/features/settings/advanced.ts",
+    "apps/app/src/features/branding/profile-avatar.ts",
+    "apps/app/src/features/calendar/ui/booking-links.tsx"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/prefs-sync.509-1.test.ts",
+      "name": "a new device that boots offline never pushes its defaults over the account's prefs",
+      "run": "bun run --cwd apps/app test src/lib/prefs-sync.509-1.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/prefs-sync.509-3.test.ts",
+      "name": "A's offline preferences change reaches A's account after B used the browser in between",
+      "run": "bun run --cwd apps/app test src/lib/prefs-sync.509-3.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/lib/uploads/store.645-3.test.ts",
+      "name": "a file waiting on disk still blocks the reset when the uploads database fails to open",
+      "run": "bun run --cwd apps/app test src/lib/uploads/store.645-3.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/branding/profile-avatar.509-1.test.ts",
+      "name": "keeps the account's picture when the profile read fails",
+      "run": "bun run --cwd apps/app test src/features/branding/profile-avatar.509-1.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/calendar/ui/booking-links.644-1.test.tsx",
+      "name": "saving a link while the profile read fails never replaces the host's name and photo with fallbacks",
+      "run": "bun run --cwd apps/app test src/features/calendar/ui/booking-links.644-1.test.tsx"
+    }
+  ],
+  "pr": 822,
+  "fixCommit": "7f9e78283963e13ac056f23f24a526112ec403cf",
+  "foundBy": "HV-15 nightly variant hunts 2026-10-23 → 2026-11-15 (draft PRs #774, #777, #793, #810, #813, #814) and the parked 509-3 prefs proof"
+}

@@ -63,6 +63,7 @@ import {
   type RecurrencePreset,
 } from "../parse/recurrence";
 import {
+  defaultEndDay,
   defaultSpec,
   type RepeatFrequency,
   type RepeatSpec,
@@ -1272,10 +1273,7 @@ function CustomRepeat({
             set({
               end:
                 v === "until"
-                  ? {
-                      kind: "until",
-                      day: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10),
-                    }
+                  ? { kind: "until", day: defaultEndDay() }
                   : v === "count"
                     ? { kind: "count", count: 10 }
                     : { kind: "never" },

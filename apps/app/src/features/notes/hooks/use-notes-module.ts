@@ -461,9 +461,17 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
   const duplicateNote = useCallback(
     async (noteId: string): Promise<string | null> => {
       // Needs the server copy (doc_state + update tail) — connectivity required.
-      if (!runtime || !canEdit || !workspaceId) return null;
+      if (!canEdit) return null;
+      if (!runtime || !engine || !workspaceId) {
+        toast.error("Couldn't duplicate the note.");
+        return null;
+      }
       try {
-        const copy = await runtime.notesV2.duplicate({ workspaceId, sourceNoteId: noteId });
+        // After what this device still holds for the source (a queued rename,
+        // unpushed edits): the copy is of the note as the person sees it (645-1).
+        const copy = await engine.runAfterQueued(noteId, () =>
+          runtime.notesV2.duplicate({ workspaceId, sourceNoteId: noteId }),
+        );
         setNotes((prev) => [...prev, copy]);
         return copy.id;
       } catch (e) {
@@ -471,7 +479,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
         return null;
       }
     },
-    [runtime, canEdit, workspaceId, load],
+    [runtime, engine, canEdit, workspaceId],
   );
 
   const archiveNote = useCallback(
