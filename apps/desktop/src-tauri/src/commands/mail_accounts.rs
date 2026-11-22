@@ -270,6 +270,27 @@ pub fn mail_disconnect(
     Ok(out)
 }
 
+/// MOD-555: once the person's account is deleted, their mail leaves this Mac:
+/// the engine stops, each account's keychain secret and their store folder go.
+/// Always the signed-in person's: the webview names nobody (it isn't trusted).
+#[tauri::command(async)]
+pub fn mail_forget_signed_in_user(
+    app: tauri::AppHandle,
+    state: State<'_, crate::AppState>,
+    host: State<'_, MailHost>,
+) -> Result<usize, String> {
+    use tauri::Manager;
+    let user_id = state
+        .session
+        .lock()
+        .map_err(|e| e.to_string())?
+        .as_ref()
+        .map(|s| s.user.id.clone())
+        .ok_or("not_signed_in")?;
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    host.forget_user(&data_dir.join("moduo"), &user_id, &state.config.keychain_service)
+}
+
 /// Per-device depth (AC6): raising it backfills the gap, lowering it stops
 /// fetching and deletes nothing. The worker restarts to read the new floor.
 #[tauri::command]

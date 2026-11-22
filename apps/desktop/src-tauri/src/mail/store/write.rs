@@ -4,7 +4,7 @@
 
 use super::{
     now_ms, AccountInput, BodyInput, ClassifyReason, MailboxCursor, MailboxInput, MessageInput,
-    Store, StoreResult, TabRef,
+    Store, StoreError, StoreResult, TabRef,
 };
 use crate::mail::contracts::{MailboxRole, TabKind, FLAG_DELETED, FLAG_SEEN};
 use rusqlite::{params, OptionalExtension, Transaction};
@@ -441,6 +441,10 @@ impl Store {
             .iter()
             .map(|b| format!("{b:02x}"))
             .collect();
+        // The person's folder was erased (MOD-555): a late fetch never recreates it.
+        if !self.root.exists() {
+            return Err(StoreError::Invalid("mail_store_erased".into()));
+        }
         let dir = self.files_dir(&account);
         std::fs::create_dir_all(&dir)?;
         let path = dir.join(&hash);

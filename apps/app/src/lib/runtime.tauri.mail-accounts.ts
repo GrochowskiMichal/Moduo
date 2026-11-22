@@ -44,6 +44,9 @@ export type MailAccountsPort = Pick<
   setClassifyItems(
     items: Pick<EmailSettingsItem, "id" | "kind" | "position" | "value">[],
   ): Promise<void>;
+  /** MOD-555: the deleted account's mail leaves this Mac (engine, store folder,
+   *  keychain secrets). The engine erases the session's person, never a named one. */
+  forgetOnThisDevice(): Promise<void>;
 };
 
 export function createTauriMailAccounts(call: Invoke = invoke): MailAccountsPort {
@@ -67,5 +70,8 @@ export function createTauriMailAccounts(call: Invoke = invoke): MailAccountsPort
     syncNow: (input) => call("mail_sync_now", { accountId: input?.accountId ?? null }),
     searchServer: (input) => call("mail_search_server", { input }),
     setClassifyItems: (items) => call("mail_set_classify_items", { items }),
+    forgetOnThisDevice: async () => {
+      await call<number>("mail_forget_signed_in_user");
+    },
   };
 }

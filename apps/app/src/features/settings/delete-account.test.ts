@@ -56,6 +56,40 @@ describe("finishAccountDeletion (PRIV-2 AC11)", () => {
     await done;
     expect(calls).toEqual(["forget on device", "go to /auth?deleted=1", "landed", "sign out"]);
   });
+
+  it("finishes erasing this device before signing out (MOD-555: the desktop mail store needs the session)", async () => {
+    const calls: string[] = [];
+    window.sessionStorage.clear();
+    await finishAccountDeletion({
+      forgetOnDevice: async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        calls.push("device erased");
+      },
+      goToSignInWithNotice: async () => {
+        calls.push("go to /auth?deleted=1");
+      },
+      signOut: async () => {
+        calls.push("sign out");
+      },
+    });
+    expect(calls).toEqual(["device erased", "go to /auth?deleted=1", "sign out"]);
+  });
+
+  it("still lands on the notice and signs out when erasing this device fails", async () => {
+    const calls: string[] = [];
+    window.sessionStorage.clear();
+    await finishAccountDeletion({
+      forgetOnDevice: () => Promise.reject(new Error("keychain locked")),
+      goToSignInWithNotice: async () => {
+        calls.push("go to /auth?deleted=1");
+      },
+      signOut: async () => {
+        calls.push("sign out");
+      },
+    });
+    expect(calls).toEqual(["go to /auth?deleted=1", "sign out"]);
+  });
 });
 
 describe("Danger zone copy (PRIV-2 AC10, AC11)", () => {
