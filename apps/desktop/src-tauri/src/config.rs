@@ -82,7 +82,6 @@ pub struct AppConfig {
     pub zoom_client_secret: Option<String>,
     pub google_meet_client_id: Option<String>,
     pub google_meet_client_secret: Option<String>,
-    pub token_encryption_secret: Option<String>,
     pub supabase_url: String,
 }
 
@@ -103,10 +102,6 @@ impl AppConfig {
             zoom_client_secret: runtime_setting("MODUO_ZOOM_CLIENT_SECRET"),
             google_meet_client_id: runtime_setting("MODUO_GOOGLE_MEET_CLIENT_ID"),
             google_meet_client_secret: runtime_setting("MODUO_GOOGLE_MEET_CLIENT_SECRET"),
-            token_encryption_secret: std::env::var("MODUO_TOKEN_ENCRYPTION_SECRET")
-                .ok()
-                .map(|v| v.trim().to_string())
-                .filter(|v| !v.is_empty()),
             supabase_url: std::env::var("MODUO_SUPABASE_URL")
                 .ok()
                 .map(|v| v.trim().to_string())

@@ -122,21 +122,6 @@ fn save_calendar_tokens_to_keychain(
     .map_err(|e| format!("calendar_keychain_save_failed:{e}"))
 }
 
-fn load_calendar_tokens_from_keychain(
-    service: &str,
-    provider: &str,
-    user_id: &str,
-    account_id: &str,
-) -> Option<OAuthTokenResponse> {
-    let raw = crate::keychain::get_secret(
-        service,
-        &calendar_keychain_account(provider, user_id, account_id),
-    )
-    .ok()
-    .flatten()?;
-    serde_json::from_str::<OAuthTokenResponse>(&raw).ok()
-}
-
 fn load_stored_calendar_tokens(
     service: &str,
     provider: &str,
@@ -679,11 +664,13 @@ pub async fn calendar_google_publish_booking_token(
     state: State<'_, AppState>,
     account_id: String,
 ) -> Result<(), String> {
-    let user_id = current_user_id(&state);
-    if user_id == "local" {
-        return Err("sign_in_required".to_string());
-    }
-    let stored = load_calendar_tokens_from_keychain(
+    let (user_id, access_jwt) = crate::commands::integrations::signed_in(&state)
+        .map_err(|_| "sign_in_required".to_string())?;
+    // A fresh access token: manage-integration asks Google for the login's
+    // email with it (the row's account_key), and booking-public uses it until
+    // `expires_at`. calendar_access_token refreshes and saves back when needed.
+    let access_token = calendar_access_token(&state, "google", &account_id).await?;
+    let stored = load_stored_calendar_tokens(
         &state.config.keychain_service,
         "google",
         &user_id,
@@ -691,29 +678,21 @@ pub async fn calendar_google_publish_booking_token(
     )
     .ok_or_else(|| "google_calendar_not_connected".to_string())?;
     let refresh = stored
+        .tokens
         .refresh_token
         .clone()
         .filter(|token| !token.is_empty())
         .ok_or_else(|| "google_calendar_needs_reconnect".to_string())?;
-    let enc_secret = state
-        .config
-        .token_encryption_secret
-        .as_deref()
-        .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
-    let expires_at = stored
-        .expires_in
-        .map(|secs| chrono::Utc::now().timestamp() + secs);
+    let expires_at = stored.expires_at;
     crate::commands::integrations::upsert_integration_in_supabase(
         &state.config.supabase_url,
-        enc_secret,
-        &user_id,
+        &access_jwt,
         "google_calendar",
         &crate::commands::integrations::IntegrationTokens {
-            access_token: stored.access_token,
+            access_token,
             refresh_token: Some(refresh),
             expires_at,
         },
-        enc_secret,
     )
     .await
 }

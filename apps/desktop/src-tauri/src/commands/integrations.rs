@@ -4,17 +4,14 @@
 /// Token flow:
 ///   1. PKCE or client-secret OAuth via local TCP redirect
 ///   2. Access + refresh tokens stored in OS keychain (plaintext, private)
-///   3. Tokens stored in Supabase `user_integrations` (AES-256-GCM encrypted)
-///      so the Next.js server side can decrypt and call provider APIs.
-///
-/// Encryption key = SHA-256(TOKEN_ENCRYPTION_SECRET ":" user_id) → 32 bytes.
-/// On the Next.js side: `crypto.createHash('sha256').update(secret+':'+uid).digest()`
+///   3. Tokens handed to the `manage-integration` Edge Function over TLS,
+///      authenticated by the person's own Supabase session; the function
+///      encrypts them into `user_integrations` (MOD-554). The encryption
+///      secret never ships in the desktop app.
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::time::{Duration, Instant};
 
-use aes_gcm::aead::{Aead, KeyInit, Nonce};
-use aes_gcm::{Aes256Gcm, Key};
 use base64::engine::general_purpose::{STANDARD as B64, URL_SAFE_NO_PAD as B64URL};
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -84,70 +81,58 @@ fn delete_tokens_from_keychain(service: &str, provider: &str, user_id: &str) {
     let _ = crate::keychain::delete_secret(service, &keychain_account(provider, user_id));
 }
 
-// ── AES-256-GCM encryption ────────────────────────────────────────────────────
-// Key = SHA256(encryption_secret ":" user_id)   → 32 bytes
-// Format stored in Supabase: base64(12-byte nonce || ciphertext+16-byte GCM tag)
+// ── Supabase (manage-integration) ────────────────────────────────────────────
 
-fn derive_key(secret: &str, user_id: &str) -> [u8; 32] {
-    let mut hasher = Sha256::new();
-    hasher.update(secret.as_bytes());
-    hasher.update(b":");
-    hasher.update(user_id.as_bytes());
-    hasher.finalize().into()
+/// Providers the desktop connects. Anything else from the webview is refused
+/// before it reaches the keychain or the network.
+pub(crate) const DESKTOP_MEETING_PROVIDERS: [&str; 2] = ["zoom", "google_meet"];
+
+pub(crate) fn allowed_meeting_provider(provider: &str) -> Result<&'static str, String> {
+    DESKTOP_MEETING_PROVIDERS
+        .into_iter()
+        .find(|p| *p == provider)
+        .ok_or_else(|| "integration_unknown_provider".to_string())
 }
 
-fn encrypt_token(plaintext: &str, secret: &str, user_id: &str) -> Result<String, String> {
-    let key_bytes = derive_key(secret, user_id);
-    let key = Key::<Aes256Gcm>::from(key_bytes);
-    let cipher = Aes256Gcm::new(&key);
-    let mut nonce_raw = [0u8; 12];
-    rand::fill(&mut nonce_raw);
-    let nonce = Nonce::<Aes256Gcm>::from(nonce_raw);
-    let ciphertext = cipher
-        .encrypt(&nonce, plaintext.as_bytes())
-        .map_err(|e| format!("integration_encrypt_failed:{e}"))?;
-    let mut blob = nonce_raw.to_vec();
-    blob.extend_from_slice(&ciphertext);
-    Ok(B64.encode(blob))
+/// The signed-in person's id and Supabase access token (the webview mirrors a
+/// fresh session into AppState on every refresh).
+pub(crate) fn signed_in(state: &AppState) -> Result<(String, String), String> {
+    let guard = state
+        .session
+        .lock()
+        .map_err(|_| "integration_session_lock".to_string())?;
+    guard
+        .as_ref()
+        .map(|s| (s.user.id.clone(), s.access_token.clone()))
+        .ok_or_else(|| "integration_not_signed_in".to_string())
 }
 
-// ── Supabase upsert ───────────────────────────────────────────────────────────
+fn manage_integration_url(supabase_url: &str, provider: Option<&str>) -> Result<Url, String> {
+    let base = format!("{}/functions/v1/manage-integration", supabase_url.trim_end_matches('/'));
+    let parsed = match provider {
+        Some(p) => Url::parse_with_params(&base, &[("provider", p)]),
+        None => Url::parse(&base),
+    };
+    parsed.map_err(|e| format!("integration_supabase_url_invalid:{e}"))
+}
 
+/// Hand the person's own tokens to `manage-integration`, which encrypts and
+/// stores them for the session's user (never a user id from here).
 pub(crate) async fn upsert_integration_in_supabase(
     supabase_url: &str,
-    shared_secret: &str,
-    user_id: &str,
+    access_jwt: &str,
     provider: &str,
     tokens: &IntegrationTokens,
-    encryption_secret: &str,
 ) -> Result<(), String> {
-    let access_enc = encrypt_token(&tokens.access_token, encryption_secret, user_id)?;
-    let refresh_enc = tokens
-        .refresh_token
-        .as_deref()
-        .map(|rt| encrypt_token(rt, encryption_secret, user_id))
-        .transpose()?;
-
-    let expiry_iso = tokens.expires_at.map(|ts| {
-        chrono::DateTime::from_timestamp(ts, 0)
-            .unwrap_or_default()
-            .to_rfc3339()
-    });
-
     let body = serde_json::json!({
-        "user_id": user_id,
         "provider": provider,
-        "access_token_enc": access_enc,
-        "refresh_token_enc": refresh_enc,
-        "token_expiry": expiry_iso,
-        "updated_at": chrono::Utc::now().to_rfc3339(),
+        "access_token": tokens.access_token,
+        "refresh_token": tokens.refresh_token,
+        "expires_at": tokens.expires_at,
     });
-
-    let url = format!("{supabase_url}/functions/v1/manage-integration");
     let resp = reqwest::Client::new()
-        .post(&url)
-        .header("X-Moduo-Secret", shared_secret)
-        .header("Content-Type", "application/json")
+        .post(manage_integration_url(supabase_url, None)?)
+        .bearer_auth(access_jwt)
         .json(&body)
         .send()
         .await
@@ -162,17 +147,12 @@ pub(crate) async fn upsert_integration_in_supabase(
 
 async fn delete_integration_from_supabase(
     supabase_url: &str,
-    shared_secret: &str,
-    user_id: &str,
+    access_jwt: &str,
     provider: &str,
 ) -> Result<(), String> {
-    let url = format!(
-        "{supabase_url}/functions/v1/manage-integration?provider={provider}&user_id={user_id}"
-    );
-    let client = reqwest::Client::new();
-    let resp = client
-        .delete(&url)
-        .header("X-Moduo-Secret", shared_secret)
+    let resp = reqwest::Client::new()
+        .delete(manage_integration_url(supabase_url, Some(provider))?)
+        .bearer_auth(access_jwt)
         .send()
         .await
         .map_err(|e| format!("integration_supabase_delete_failed:{e}"))?;
@@ -487,16 +467,7 @@ pub async fn integration_connect_zoom(
     state: State<'_, AppState>,
 ) -> Result<IntegrationStatusItem, String> {
     let config = state.config.clone();
-    let user_id = {
-        let guard = state
-            .session
-            .lock()
-            .map_err(|_| "integration_session_lock".to_string())?;
-        guard
-            .as_ref()
-            .map(|s| s.user.id.clone())
-            .ok_or_else(|| "integration_not_signed_in".to_string())?
-    };
+    let (user_id, _) = signed_in(&state)?;
 
     let client_id = config
         .zoom_client_id
@@ -506,24 +477,18 @@ pub async fn integration_connect_zoom(
         .zoom_client_secret
         .as_deref()
         .ok_or_else(|| "missing_zoom_client_secret:set MODUO_ZOOM_CLIENT_SECRET".to_string())?;
-    let enc_secret = config
-        .token_encryption_secret
-        .as_deref()
-        .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
 
     let tokens = run_zoom_oauth(client_id, client_secret).await?;
 
     save_tokens_to_keychain(&config.keychain_service, "zoom", &user_id, &tokens)?;
 
-    upsert_integration_in_supabase(
-        &config.supabase_url,
-        enc_secret,
-        &user_id,
-        "zoom",
-        &tokens,
-        enc_secret,
-    )
-    .await?;
+    // The OAuth wait can outlast the session token read above: upload with
+    // the one the webview has mirrored since.
+    let (still_user, access_jwt) = signed_in(&state)?;
+    if still_user != user_id {
+        return Err("integration_session_changed".to_string());
+    }
+    upsert_integration_in_supabase(&config.supabase_url, &access_jwt, "zoom", &tokens).await?;
 
     Ok(IntegrationStatusItem {
         provider: "zoom".to_string(),
@@ -536,16 +501,7 @@ pub async fn integration_connect_google_meet(
     state: State<'_, AppState>,
 ) -> Result<IntegrationStatusItem, String> {
     let config = state.config.clone();
-    let user_id = {
-        let guard = state
-            .session
-            .lock()
-            .map_err(|_| "integration_session_lock".to_string())?;
-        guard
-            .as_ref()
-            .map(|s| s.user.id.clone())
-            .ok_or_else(|| "integration_not_signed_in".to_string())?
-    };
+    let (user_id, _) = signed_in(&state)?;
 
     let client_id = config.google_meet_client_id.as_deref().ok_or_else(|| {
         "missing_google_meet_client_id:set MODUO_GOOGLE_MEET_CLIENT_ID".to_string()
@@ -553,24 +509,18 @@ pub async fn integration_connect_google_meet(
     let client_secret = config.google_meet_client_secret.as_deref().ok_or_else(|| {
         "missing_google_meet_client_secret:set MODUO_GOOGLE_MEET_CLIENT_SECRET".to_string()
     })?;
-    let enc_secret = config
-        .token_encryption_secret
-        .as_deref()
-        .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
 
     let tokens = run_google_meet_oauth(client_id, client_secret).await?;
 
     save_tokens_to_keychain(&config.keychain_service, "google_meet", &user_id, &tokens)?;
 
-    upsert_integration_in_supabase(
-        &config.supabase_url,
-        enc_secret,
-        &user_id,
-        "google_meet",
-        &tokens,
-        enc_secret,
-    )
-    .await?;
+    // The OAuth wait can outlast the session token read above: upload with
+    // the one the webview has mirrored since.
+    let (still_user, access_jwt) = signed_in(&state)?;
+    if still_user != user_id {
+        return Err("integration_session_changed".to_string());
+    }
+    upsert_integration_in_supabase(&config.supabase_url, &access_jwt, "google_meet", &tokens).await?;
 
     Ok(IntegrationStatusItem {
         provider: "google_meet".to_string(),
@@ -594,8 +544,7 @@ pub async fn integration_get_status(
             .unwrap_or_default()
     };
 
-    let providers = ["zoom", "google_meet"];
-    let result = providers
+    let result = DESKTOP_MEETING_PROVIDERS
         .iter()
         .map(|p| {
             let connected =
@@ -616,24 +565,40 @@ pub async fn integration_disconnect(
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let config = state.config.clone();
-    let user_id = {
-        let guard = state
-            .session
-            .lock()
-            .map_err(|_| "integration_session_lock".to_string())?;
-        guard
-            .as_ref()
-            .map(|s| s.user.id.clone())
-            .ok_or_else(|| "integration_not_signed_in".to_string())?
-    };
-    let enc_secret = config
-        .token_encryption_secret
-        .as_deref()
-        .ok_or_else(|| "missing_token_enc_secret:set MODUO_TOKEN_ENCRYPTION_SECRET".to_string())?;
+    let (user_id, access_jwt) = signed_in(&state)?;
 
-    delete_tokens_from_keychain(&config.keychain_service, &provider, &user_id);
+    // The webview is not trusted: only a known provider, and the user is the
+    // session's (MOD-554: an unencoded `provider` once smuggled a user_id).
+    let provider = allowed_meeting_provider(&provider)?;
+    delete_tokens_from_keychain(&config.keychain_service, provider, &user_id);
 
-    delete_integration_from_supabase(&config.supabase_url, enc_secret, &user_id, &provider).await?;
+    delete_integration_from_supabase(&config.supabase_url, &access_jwt, provider).await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn disconnect_refuses_providers_it_does_not_connect() {
+        assert_eq!(allowed_meeting_provider("zoom"), Ok("zoom"));
+        assert_eq!(allowed_meeting_provider("google_meet"), Ok("google_meet"));
+        // MOD-554: the webview's `provider` once smuggled a second user_id.
+        let victim = "00000000-0000-0000-0000-0000000000bb";
+        assert!(allowed_meeting_provider(&format!("zoom&user_id={victim}")).is_err());
+        assert!(allowed_meeting_provider("google_calendar").is_err());
+        assert!(allowed_meeting_provider("").is_err());
+    }
+
+    #[test]
+    fn manage_integration_url_encodes_the_provider_and_names_no_user() {
+        let url = manage_integration_url("https://x.supabase.co/", Some("zoom&user_id=v")).unwrap();
+        let pairs: Vec<(String, String)> = url.query_pairs().into_owned().collect();
+        assert_eq!(pairs, vec![("provider".to_string(), "zoom&user_id=v".to_string())]);
+        assert_eq!(url.path(), "/functions/v1/manage-integration");
+        let bare = manage_integration_url("https://x.supabase.co", None).unwrap();
+        assert_eq!(bare.as_str(), "https://x.supabase.co/functions/v1/manage-integration");
+    }
 }
