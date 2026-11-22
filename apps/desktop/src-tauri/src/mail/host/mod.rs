@@ -197,6 +197,9 @@ pub struct MailHost {
     pub events: EventBus,
     foreground: Arc<AtomicBool>,
     running: Mutex<Option<Running>>,
+    /// A person whose mail was erased here (MOD-555): the engine never starts
+    /// for them again in this process, so a late session push can't recreate it.
+    forgotten: Mutex<Option<String>>,
     /// Running accounts' actors, sync and worker queues for the reader commands.
     pub ondemand: Arc<ondemand::OnDemand>,
 }
@@ -207,6 +210,7 @@ impl MailHost {
             events,
             foreground: Arc::new(AtomicBool::new(true)),
             running: Mutex::new(None),
+            forgotten: Mutex::new(None),
             ondemand: Arc::default(),
         }
     }
@@ -250,6 +254,9 @@ impl MailHost {
             }
         }
         self.stop();
+        if self.is_forgotten(user_id) {
+            return Ok(());
+        }
         let dir = Store::user_dir(app_data, user_id).map_err(|e| e.to_string())?;
         let store = Arc::new(Store::open(&dir).map_err(|e| e.to_string())?);
         // The cutover must finish before any worker reads accounts.
@@ -272,13 +279,22 @@ impl MailHost {
             }
         };
         let classify = Arc::new(RwLock::new(lifecycle::classify_config(&items)));
-        *self.running.lock().unwrap_or_else(|p| p.into_inner()) = Some(Running {
+        let mut running = self.running.lock().unwrap_or_else(|p| p.into_inner());
+        // Erased while this start was opening the store (MOD-555): never install it.
+        if self.is_forgotten(user_id) {
+            drop(running);
+            drop(store);
+            let _ = std::fs::remove_dir_all(&dir);
+            return Ok(());
+        }
+        *running = Some(Running {
             user_id: user_id.to_string(),
             store: store.clone(),
             cfg: cfg.clone(),
             classify,
             workers: Default::default(),
         });
+        drop(running);
         for a in list_accounts(&store)? {
             self.spawn_worker(&a.id)?;
         }
@@ -361,6 +377,37 @@ impl MailHost {
         if let Some(r) = self.running.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
             *r.classify.write().unwrap_or_else(|p| p.into_inner()) = cfg;
         }
+    }
+
+    fn is_forgotten(&self, user_id: &str) -> bool {
+        self.forgotten
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_deref()
+            == Some(user_id)
+    }
+
+    /// Erases a person's mail on this device after their account was deleted
+    /// (MOD-555): stops the engine if it runs for them, keeps it from starting
+    /// for them again, then [`lifecycle::forget_user`]. Returns the accounts erased.
+    pub fn forget_user(
+        &self,
+        app_data: &std::path::Path,
+        user_id: &str,
+        keychain_service: &str,
+    ) -> Result<usize, String> {
+        let dir = Store::user_dir(app_data, user_id).map_err(|e| e.to_string())?;
+        *self.forgotten.lock().unwrap_or_else(|p| p.into_inner()) = Some(user_id.to_string());
+        if self.running_user().as_deref() == Some(user_id) {
+            self.stop();
+        }
+        lifecycle::forget_user(&dir, |account_id| {
+            crate::keychain::delete_secret_strict(
+                keychain_service,
+                &super::auth::keychain_account(user_id, account_id),
+            )
+            .map_err(|e| format!("mail_forget_secret_failed:{e}"))
+        })
     }
 
     /// Stops every worker (sign-out, quit).

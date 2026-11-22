@@ -36,3 +36,13 @@ pub fn delete_secret(service: &str, account: &str) -> anyhow::Result<()> {
     let _ = entry.delete_credential();
     Ok(())
 }
+
+/// Like [`delete_secret`], but a locked keychain or a denied prompt is an
+/// error; only "nothing stored" counts as deleted.
+pub fn delete_secret_strict(service: &str, account: &str) -> anyhow::Result<()> {
+    let entry = keyring::Entry::new(service, account)?;
+    match entry.delete_credential() {
+        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}

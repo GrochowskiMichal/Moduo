@@ -522,6 +522,7 @@ pub fn run() {
             commands::mail_accounts::mail_connect_password,
             commands::mail_accounts::mail_connect_oauth,
             commands::mail_accounts::mail_disconnect,
+            commands::mail_accounts::mail_forget_signed_in_user,
             commands::mail_accounts::mail_set_history_depth,
             commands::mail_accounts::mail_sync_now,
             commands::mail_accounts::mail_set_classify_items,

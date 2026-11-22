@@ -104,8 +104,14 @@ export function AccountSection() {
       // out locally (the order is explained in finishAccountDeletion). This device's
       // focus session for the account (task titles, unsaved time) is erased too.
       await finishAccountDeletion({
-        forgetOnDevice: () => {
+        forgetOnDevice: async () => {
           if (!userId) return;
+          // The desktop mail store (accounts, cached mail, keychain secrets): the
+          // engine erases the session's person, so this finishes before sign-out
+          // (MOD-555). Web has none.
+          const erasingMail = runtime?.email.forgetOnThisDevice?.().catch((err: unknown) => {
+            console.warn("[delete-account] mail on this device wasn't erased:", err);
+          });
           void stopAnalyticsForDeletedAccount(userId);
           forgetFocusUser(userId);
           forgetRunUser(userId);
@@ -118,6 +124,7 @@ export function AccountSection() {
           void wipeSyncCopies({ keepWaiting: false });
           void wipeChatCopies({ keepWaiting: false });
           void wipeNotesCopies({ keepWaiting: false });
+          await erasingMail;
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

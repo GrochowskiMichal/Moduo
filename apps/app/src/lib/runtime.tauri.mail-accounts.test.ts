@@ -62,6 +62,17 @@ describe("tauri mail accounts", () => {
     expect(calls[7]![1]).toEqual({ accountId: "a" });
   });
 
+  it("erases the signed-in person's mail on this Mac (MOD-555)", async () => {
+    const calls: [string, unknown][] = [];
+    const port = createTauriMailAccounts(async <T>(cmd: string, args?: Record<string, unknown>) => {
+      calls.push([cmd, args]);
+      return 2 as T;
+    });
+    await port.forgetOnThisDevice();
+    // No user id from the webview: the engine erases the session's person only.
+    expect(calls).toEqual([["mail_forget_signed_in_user", undefined]]);
+  });
+
   it("pushes the classify items for the worker", async () => {
     const calls: [string, unknown][] = [];
     const port = createTauriMailAccounts(async <T>(cmd: string, args?: Record<string, unknown>) => {
