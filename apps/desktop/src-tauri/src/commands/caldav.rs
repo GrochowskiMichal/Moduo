@@ -93,24 +93,44 @@ pub(crate) fn ics_feed_key(url: &str) -> String {
     URL_SAFE_NO_PAD.encode(&digest[..12])
 }
 
-/// Same host, or same last-two-labels (registrable-domain approximation without
-/// a public-suffix crate: enough to allow `pXX-caldav.icloud.com` ↔
-/// `caldav.icloud.com` while refusing an unrelated host).
+/// Same host, or the same registrable domain (eTLD+1, from the Public Suffix
+/// List): allows `pXX-caldav.icloud.com` ↔ `caldav.icloud.com` while refusing
+/// an unrelated host. The PSL matters: a last-two-labels guess reads
+/// `mail.example.co.uk` and `attacker.co.uk` as one domain (MOD-551).
+/// IP literals and hosts with no registrable domain match only exactly.
 pub(crate) fn same_registrable_domain(a: &str, b: &str) -> bool {
-    if a.eq_ignore_ascii_case(b) {
+    let norm = |h: &str| h.trim().trim_end_matches('.').to_ascii_lowercase();
+    let (a, b) = (norm(a), norm(b));
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    if a == b {
         return true;
     }
-    let tail = |h: &str| -> Option<String> {
-        let labels: Vec<&str> = h.split('.').filter(|s| !s.is_empty()).collect();
-        let n = labels.len();
-        if n < 2 {
-            return None;
-        }
-        Some(labels[n - 2..].join(".").to_ascii_lowercase())
-    };
-    match (tail(a), tail(b)) {
+    let is_ip = |h: &str| h.trim_matches(['[', ']']).parse::<std::net::IpAddr>().is_ok();
+    if is_ip(&a) || is_ip(&b) {
+        return false;
+    }
+    match (psl::domain_str(&a), psl::domain_str(&b)) {
         (Some(x), Some(y)) => x == y,
         _ => false,
+    }
+}
+
+/// MOD-551: the CalDAV password is looked up by the account's server URL, but
+/// the calendar URL it is sent to comes from the cloud account row
+/// (`external_id`), which anyone holding the session can rewrite. Refuse to
+/// load the credential unless the calendar lives on the server's own
+/// registrable domain.
+pub(crate) fn calendar_bound_to_server(server: &Url, calendar: &Url) -> Result<(), String> {
+    let bound = server
+        .host_str()
+        .zip(calendar.host_str())
+        .is_some_and(|(s, c)| same_registrable_domain(s, c));
+    if bound {
+        Ok(())
+    } else {
+        Err("caldav_calendar_host_mismatch:reconnect_account".to_string())
     }
 }
 
@@ -582,6 +602,7 @@ pub async fn calendar_caldav_events_sync(
 ) -> Result<Vec<serde_json::Value>, String> {
     let server = normalize_secure_url(&server_url)?;
     let calendar = normalize_secure_url(&calendar_url)?;
+    calendar_bound_to_server(&server, &calendar)?;
     let creds = load_caldav_credentials(&state, server.as_str(), &username)?;
     let body = format!(
         r#"<?xml version="1.0" encoding="utf-8"?>
@@ -738,6 +759,50 @@ mod tests {
         assert!(same_registrable_domain("CALDAV.ICLOUD.COM", "caldav.icloud.com"));
         assert!(!same_registrable_domain("attacker.example", "caldav.icloud.com"));
         assert!(!same_registrable_domain("icloud.com.evil.example", "caldav.icloud.com"));
+        // Multi-label public suffixes: siblings under co.uk / github.io are
+        // different owners (the old last-two-labels guess let these through).
+        assert!(!same_registrable_domain("attacker.co.uk", "mail.example.co.uk"));
+        assert!(same_registrable_domain("dav.example.co.uk", "mail.example.co.uk"));
+        assert!(!same_registrable_domain("evil.github.io", "victim.github.io"));
+        // IP literals match only exactly (no "same /16" by label tail).
+        assert!(same_registrable_domain("192.168.1.10", "192.168.1.10"));
+        assert!(!same_registrable_domain("10.0.1.10", "192.168.1.10"));
+        assert!(same_registrable_domain("nas.local", "nas.local"));
+        assert!(!same_registrable_domain("", ""));
+    }
+
+    #[test]
+    fn caldav_password_only_goes_to_the_servers_own_domain() {
+        let url = |s: &str| normalize_secure_url(s).unwrap();
+        // Legit: iCloud partitions, Fastmail, a self-hosted server.
+        assert!(calendar_bound_to_server(
+            &url("https://caldav.icloud.com/"),
+            &url("https://p42-caldav.icloud.com/123/calendars/home/")
+        )
+        .is_ok());
+        assert!(calendar_bound_to_server(
+            &url("https://caldav.fastmail.com/"),
+            &url("https://caldav.fastmail.com/dav/calendars/user/me@fastmail.com/default/")
+        )
+        .is_ok());
+        assert!(calendar_bound_to_server(
+            &url("https://cloud.example.org/remote.php/dav"),
+            &url("https://cloud.example.org/remote.php/dav/calendars/me/personal/")
+        )
+        .is_ok());
+        // MOD-551: a cloud row rewritten to an attacker's calendar URL never
+        // receives the keychain password.
+        let err = calendar_bound_to_server(
+            &url("https://caldav.icloud.com/"),
+            &url("https://attacker.example/collect"),
+        )
+        .unwrap_err();
+        assert!(err.starts_with("caldav_calendar_host_mismatch"));
+        assert!(calendar_bound_to_server(
+            &url("https://dav.example.co.uk/"),
+            &url("https://attacker.co.uk/x")
+        )
+        .is_err());
     }
 
     #[test]
