@@ -5,7 +5,7 @@ import { isReadOnlyBuild } from "../min-build";
 import { getRuntime } from "../runtime";
 import { prepareUpload } from "./pipeline";
 import { UploadQueue } from "./queue";
-import { idbUploadStore } from "./store";
+import { idbUploadStore, readStoredUploads } from "./store";
 
 let queue: UploadQueue | null = null;
 
@@ -23,15 +23,22 @@ export function getUploadQueue(): UploadQueue {
   return queue;
 }
 
+/** A count read from the device, or "unknown" when the uploads database couldn't be read. */
+export type PendingUploads = number | "unknown";
+
 /**
  * This person's files still waiting to upload on this device (the "Reset local
  * cache" guard): what IndexedDB holds plus what's only in memory. Another
  * account's files don't block this person's reset: they can't see or clear them.
+ * "unknown" when the uploads database can't be read: a failed open must block
+ * the reset, never read as 0 (645-3).
  */
-export async function countPendingUploads(userId: string | null): Promise<number> {
+export async function countPendingUploads(userId: string | null): Promise<PendingUploads> {
   if (!userId) return 0;
+  const stored = await readStoredUploads();
+  if (stored === "unknown") return "unknown";
   const ids = new Set<string>();
-  for (const item of await idbUploadStore().all()) {
+  for (const item of stored) {
     if (item.userId === userId && item.state !== "rejected") ids.add(item.id);
   }
   for (const id of queue?.pendingIds(userId) ?? []) ids.add(id);
@@ -41,10 +48,12 @@ export async function countPendingUploads(userId: string | null): Promise<number
 /**
  * Does another account on this device still have files waiting? Then "Reset
  * local cache" keeps the uploads store: it only ever holds files that haven't
- * reached the server, and they aren't this person's to discard.
+ * reached the server, and they aren't this person's to discard. A store that
+ * can't be read might hold some, so it is kept too.
  */
 export async function otherAccountsHaveUploads(userId: string | null): Promise<boolean> {
-  const items = await idbUploadStore().all();
+  const items = await readStoredUploads();
+  if (items === "unknown") return true;
   return items.some((item) => item.userId !== userId && item.state !== "rejected");
 }
 

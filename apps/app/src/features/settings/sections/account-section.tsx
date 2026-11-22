@@ -8,6 +8,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
+import { forgetParkedPrefs } from "../../../lib/prefs-sync";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web.client";
 import { waitingSyncCount, wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
@@ -109,6 +110,8 @@ export function AccountSection() {
           forgetFocusUser(userId);
           forgetRunUser(userId);
           forgetCaptureDrafts(userId);
+          // Preference changes parked for this account (509-3): no account to send them to.
+          forgetParkedPrefs(userId);
           // The Tasks and Chat device copies (TV-D11a, CV-3): the account is gone,
           // so is its copy (what still waited to sync too: there is no account
           // to send it to).

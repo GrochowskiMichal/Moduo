@@ -23,7 +23,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../../components/ui/dialog";
-import { getSyncMeta, type SyncDomain } from "../../../lib/prefs-sync";
+import { getSyncMeta, type SyncDomain, unsyncedPrefsKeys } from "../../../lib/prefs-sync";
 import type { ModuoRuntime } from "../../../lib/runtime";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
@@ -43,6 +43,7 @@ import {
   moduoCacheKeysToClear,
   readTasksExport,
   resetBlockedMessage,
+  resetBlockedTitle,
 } from "../advanced";
 import { SettingsSectionShell } from "./section-shell";
 
@@ -181,7 +182,7 @@ export function AdvancedSection() {
   const [checking, setChecking] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [pendingNotes, setPendingNotes] = useState<PendingCount>(0);
-  const [pendingUploads, setPendingUploads] = useState(0);
+  const [pendingUploads, setPendingUploads] = useState<PendingCount>(0);
 
   // Diagnostics.
   const [online, setOnline] = useState(typeof navigator === "undefined" ? true : navigator.onLine);
@@ -290,7 +291,9 @@ export function AdvancedSection() {
       // apps' keys are left intact; cloud data re-syncs on the reload below.
       // This drops `moduo.appearance` too, with its device-only fields (density, tab
       // style) that never sync: the confirm copy says so. Keep them or keep saying so.
-      for (const key of moduoCacheKeysToClear(Object.keys(localStorage))) {
+      // A preference change that hasn't reached the account yet stays (509-3): it
+      // isn't a cache, and it goes out on the next sync after the reload.
+      for (const key of moduoCacheKeysToClear(Object.keys(localStorage), unsyncedPrefsKeys())) {
         localStorage.removeItem(key);
       }
       // Deleting the notes DBs is lossless only with both outboxes empty: the blocked
@@ -327,8 +330,9 @@ export function AdvancedSection() {
     setTimeout(() => setCopiedDebug(false), 2000);
   }, [diagnostics]);
 
-  // "unknown" (the notes DB couldn't be read) blocks too: it may hold unsynced changes.
-  const blocked = pendingNotes !== 0 || pendingUploads > 0;
+  // "unknown" (the notes or uploads DB couldn't be read) blocks too: it may hold
+  // unsynced changes or files that never uploaded.
+  const blocked = pendingNotes !== 0 || pendingUploads !== 0;
 
   return (
     <SettingsSectionShell
@@ -430,13 +434,7 @@ export function AdvancedSection() {
           {blocked ? (
             <>
               <DialogHeader>
-                <DialogTitle>
-                  {pendingNotes === "unknown"
-                    ? "Couldn't check for unsynced notes"
-                    : pendingNotes > 0
-                      ? "You have unsynced note changes"
-                      : "Files are still uploading"}
-                </DialogTitle>
+                <DialogTitle>{resetBlockedTitle({ pendingNotes, pendingUploads })}</DialogTitle>
                 <DialogDescription>
                   {resetBlockedMessage({ pendingNotes, pendingUploads, online })}
                 </DialogDescription>

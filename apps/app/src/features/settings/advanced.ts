@@ -286,10 +286,12 @@ export const MODUO_CACHE_PREFIX = "moduo.";
  * The localStorage keys a cache reset clears: Moduo's own `moduo.*` caches
  * only. The Supabase auth session (`sb-*-auth-token`) and any non-Moduo keys
  * are deliberately left untouched, so the reset never signs the user out and
- * cloud data re-syncs on the reload that follows.
+ * cloud data re-syncs on the reload that follows. `keep` names keys that hold
+ * changes not yet synced (`unsyncedPrefsKeys()`): a cache they are not (509-3).
  */
-export function moduoCacheKeysToClear(allKeys: string[]): string[] {
-  return allKeys.filter((key) => key.startsWith(MODUO_CACHE_PREFIX));
+export function moduoCacheKeysToClear(allKeys: string[], keep: Iterable<string> = []): string[] {
+  const kept = new Set(keep);
+  return allKeys.filter((key) => key.startsWith(MODUO_CACHE_PREFIX) && !kept.has(key));
 }
 
 /**
@@ -306,34 +308,60 @@ export function isModuoIdbName(name: string | null | undefined): boolean {
   );
 }
 
+/** "3 note changes haven't synced to the cloud yet". */
+function unsyncedNotesPhrase(n: number): string {
+  return `${n} note ${n === 1 ? "change hasn't" : "changes haven't"} synced to the cloud yet`;
+}
+
+/** "2 files haven't finished uploading". */
+function pendingUploadsPhrase(n: number): string {
+  return `${n} ${n === 1 ? "file hasn't" : "files haven't"} finished uploading`;
+}
+
+/** The notes database couldn't be read: say so, plus what is known of the files. */
+function unreadableNotesMessage(pendingUploads: PendingCount): string {
+  const files =
+    pendingUploads === "unknown"
+      ? " Its files waiting to upload couldn't be read either."
+      : pendingUploads > 0
+        ? ` ${pendingUploadsPhrase(pendingUploads)} either.`
+        : "";
+  return `Moduo couldn't read this device's notes, so it can't tell whether a change hasn't synced yet. Resetting now could lose it. Reload Moduo, then re-check.${files}`;
+}
+
+/** The upload queue couldn't be read: say so, plus any unsynced note changes. */
+function unreadableUploadsMessage(pendingNotes: number): string {
+  const notes = pendingNotes > 0 ? ` ${unsyncedNotesPhrase(pendingNotes)} either.` : "";
+  return `Moduo couldn't read this device's files waiting to upload, so it can't tell whether one hasn't reached the cloud yet. Resetting now could lose it. Reload Moduo, then re-check.${notes}`;
+}
+
+/** The blocked reset dialog's title: what couldn't be checked, or what still waits. */
+export function resetBlockedTitle(input: {
+  pendingNotes: PendingCount;
+  pendingUploads: PendingCount;
+}): string {
+  const { pendingNotes, pendingUploads } = input;
+  if (pendingNotes === "unknown") return "Couldn't check for unsynced notes";
+  if (pendingUploads === "unknown") return "Couldn't check for files waiting to upload";
+  return pendingNotes > 0 ? "You have unsynced note changes" : "Files are still uploading";
+}
+
 /**
  * Why "Reset local cache" is blocked: unsynced note changes and files still
  * waiting to upload (AT-2) live only on this device, so a reset would lose them.
+ * Either count is "unknown" when its database couldn't be read (645-3).
  */
 export function resetBlockedMessage(input: {
   pendingNotes: PendingCount;
-  pendingUploads: number;
+  pendingUploads: PendingCount;
   online: boolean;
 }): string {
   const { pendingNotes, pendingUploads, online } = input;
-  if (pendingNotes === "unknown") {
-    const files =
-      pendingUploads > 0
-        ? ` ${pendingUploads} ${pendingUploads === 1 ? "file hasn't" : "files haven't"} finished uploading either.`
-        : "";
-    return `Moduo couldn't read this device's notes, so it can't tell whether a change hasn't synced yet. Resetting now could lose it. Reload Moduo, then re-check.${files}`;
-  }
+  if (pendingNotes === "unknown") return unreadableNotesMessage(pendingUploads);
+  if (pendingUploads === "unknown") return unreadableUploadsMessage(pendingNotes);
   const parts: string[] = [];
-  if (pendingNotes > 0) {
-    parts.push(
-      `${pendingNotes} note ${pendingNotes === 1 ? "change hasn't" : "changes haven't"} synced to the cloud yet`,
-    );
-  }
-  if (pendingUploads > 0) {
-    parts.push(
-      `${pendingUploads} ${pendingUploads === 1 ? "file hasn't" : "files haven't"} finished uploading`,
-    );
-  }
+  if (pendingNotes > 0) parts.push(unsyncedNotesPhrase(pendingNotes));
+  if (pendingUploads > 0) parts.push(pendingUploadsPhrase(pendingUploads));
   const total = pendingNotes + pendingUploads;
   const lead = `${parts.join(", and ")}. Resetting now would lose ${total === 1 ? "it" : "them"}.`;
   const files =

@@ -14,7 +14,7 @@ import type {
   UserPreferences,
 } from "./runtime.types";
 import { supabaseClient } from "./runtime.web.client";
-import { getAuthedUser } from "./runtime.web.shared";
+import { getAuthedUserOrThrow } from "./runtime.web.shared";
 import { isMissingFunctionError } from "./task-rows";
 import { timeRegionPatchToRow, timeRegionRowToModel } from "./time-region";
 
@@ -66,7 +66,9 @@ function prefsRowToModel(raw: unknown): UserPreferences {
 export const webPreferences: { preferences: PreferencesRuntime; dashboard: DashboardRuntime } = {
   preferences: {
     async get() {
-      const user = await getAuthedUser();
+      // A failed auth lookup throws: null means "no row", and prefs-sync seeds the
+      // cloud on it (509-1). Only a real sign-out answers null here.
+      const user = await getAuthedUserOrThrow();
       if (!user) return null;
       // Retry-drop optional columns one at a time as their missing-column errors
       // surface (deploy gap). At most two optional domains → three attempts.
@@ -84,7 +86,7 @@ export const webPreferences: { preferences: PreferencesRuntime; dashboard: Dashb
       return null;
     },
     async set(patch) {
-      const user = await getAuthedUser();
+      const user = await getAuthedUserOrThrow();
       if (!user) return null;
       // Upsert only the domains present in the patch; columns omitted here keep
       // their existing value on conflict (and their table default on insert). The
@@ -128,7 +130,7 @@ export const webPreferences: { preferences: PreferencesRuntime; dashboard: Dashb
       return null;
     },
     async setDomain(domain, value, updatedAt) {
-      const user = await getAuthedUser();
+      const user = await getAuthedUserOrThrow();
       if (!user) return null;
       const { data, error } = await supabaseClient.rpc("prefs_op_set", {
         p_domain: domain,
@@ -169,7 +171,9 @@ export const webPreferences: { preferences: PreferencesRuntime; dashboard: Dashb
   },
   dashboard: {
     async get(workspaceId) {
-      const user = await getAuthedUser();
+      // A failed auth lookup throws, so the layout repo shows a placeholder instead
+      // of seeding the default as if the account had no layout (509-1).
+      const user = await getAuthedUserOrThrow();
       if (!user) return null;
       const data = await runQuery(
         supabaseClient
@@ -185,7 +189,7 @@ export const webPreferences: { preferences: PreferencesRuntime; dashboard: Dashb
       return { layout: row.layout_data, updatedAt: row.updated_at };
     },
     async save({ workspaceId, layout, updatedAt }) {
-      const user = await getAuthedUser();
+      const user = await getAuthedUserOrThrow();
       if (!user) return;
       await runQuery(
         supabaseClient.from("dashboard_layouts").upsert(
