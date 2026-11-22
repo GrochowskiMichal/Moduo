@@ -20,7 +20,6 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 active-win-pos-rs = "0.11"
-aes-gcm = "0.11"
 anyhow = "1"
 base64 = "0.23"
 ed25519-dalek = "3"
@@ -62,6 +61,7 @@ webbrowser = "1"
 # v4's default `v1` feature picks the native store per OS. The old
 # apple-native / windows-native / linux-native feature names are gone.
 keyring = "4"
+psl = "2"
 
 [dev-dependencies]
 

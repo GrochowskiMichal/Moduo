@@ -29,6 +29,7 @@ import {
   CHAT_NOTIFY_LEVELS,
   CLIENT_SURFACES,
   CONFERENCE_PROVIDERS,
+  INTEGRATION_PROVIDERS,
   CHAT_PLAN_TIERS,
   CONTENT_AUTHOR_KINDS,
   DEFAULT_QUICK_REACTIONS,
@@ -135,6 +136,15 @@ describe("cross-runtime drift guards", () => {
     // The ops' friendly refusals repeat the lists; keep them in step too.
     expect(sql).toContain(`provider NOT IN (${inList(CONFERENCE_PROVIDERS)})`);
     expect(sql).toContain(`v_kind NOT IN (${inList(CALENDAR_ITEM_KINDS)})`);
+  });
+
+  it("user_integrations provider CHECK lists the canonical integration providers (MOD-554)", () => {
+    const sql = readFileSync(
+      resolve(MIGRATIONS_DIR, "20261103120000_user_integrations_microsoft_calendar.sql"),
+      "utf8",
+    );
+    const listed = [...sql.matchAll(/'([a-z_]+)'::text/g)].map((m) => m[1]);
+    expect(listed).toEqual([...INTEGRATION_PROVIDERS]);
   });
 
   it("slot_offers CHECK lists the canonical offer statuses (CALR-19)", () => {

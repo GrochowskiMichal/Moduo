@@ -1030,6 +1030,31 @@ export const SYNCABLE_PROVIDERS = ["google", "microsoft", "caldav", "ics"] as co
 export type SyncableProvider = (typeof SYNCABLE_PROVIDERS)[number];
 export const syncableProviderSchema = z.enum(SYNCABLE_PROVIDERS);
 
+// ---------------------------------------------------------------------------
+// user_integrations.provider — mirrors user_integrations_provider_check
+// (20261103120000_user_integrations_microsoft_calendar.sql).
+// ---------------------------------------------------------------------------
+
+/** Which provider a stored OAuth token (`user_integrations` row) belongs to. */
+export const INTEGRATION_PROVIDERS = [
+  "zoom",
+  "google_meet",
+  "google_calendar",
+  "microsoft_calendar",
+] as const;
+export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
+export const integrationProviderSchema = z.enum(INTEGRATION_PROVIDERS);
+export function isIntegrationProvider(value: unknown): value is IntegrationProvider {
+  return typeof value === "string" && (INTEGRATION_PROVIDERS as readonly string[]).includes(value);
+}
+export function parseIntegrationProvider(input: unknown): SafeParseResult<IntegrationProvider> {
+  return parseOrError(integrationProviderSchema, input);
+}
+/** Lax read: a provider this build doesn't know is null (the row is skipped). */
+export function normalizeIntegrationProvider(input: unknown): IntegrationProvider | null {
+  return isIntegrationProvider(input) ? input : null;
+}
+
 export const CALENDAR_ACCOUNT_STATUSES = ["ok", "error", "reauth"] as const;
 export type CalendarAccountStatus = (typeof CALENDAR_ACCOUNT_STATUSES)[number];
 export const calendarAccountStatusSchema = z.enum(CALENDAR_ACCOUNT_STATUSES);

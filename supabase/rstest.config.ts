@@ -34,6 +34,7 @@ export default defineConfig({
     "functions/auth-email-hook/*.test.ts",
     "functions/email-worker/*.test.ts",
     "functions/booking-public/*.test.ts",
+    "functions/manage-integration/*.test.ts",
     "functions/notes-public/*.test.ts",
     "functions/push-send/*.test.ts",
   ],
