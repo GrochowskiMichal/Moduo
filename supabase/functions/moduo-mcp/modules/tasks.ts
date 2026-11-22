@@ -85,7 +85,9 @@ import {
   isRowClosed,
   isoOrThrow,
   loadWorkspace,
+  personZone,
   recurrenceFromArg,
+  recurrenceInZone,
   resolveTaskRef,
   rows,
   shapeOne,
@@ -108,6 +110,9 @@ const DESCRIPTION_MARKDOWN =
 
 /** How many different items one description written through the connector may reference. */
 const MAX_DESCRIPTION_REFERENCES = 50;
+/** How a repeat's UNTIL is read (HV-15 509-4): stored as the person's wall clock, as the app writes it. */
+const REPEAT_UNTIL =
+  "UNTIL with a Z is a UTC instant and is stored as the assignee's (else the owner's) local time; without a Z it is that local time; a date alone (UNTIL=20261215) means through that day. A rule read back from a task is already in local time and is kept as it is when sent back to the same task.";
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /** A description reference's type as the reach check knows it (the app also says project and email). */
@@ -1256,7 +1261,7 @@ export const tasksConnectorModule: ConnectorModule = {
           estimate_minutes: { type: ["number", "null"], description: "Estimate in minutes." },
           priority: { type: ["string", "null"], enum: [...PRIORITY_LEVELS, null], description: "Priority." },
           energy_level: { type: ["string", "null"], enum: [...ENERGY_LEVELS, null], description: "Energy it takes." },
-          repeat: { type: ["string", "object", "null"], description: "An RRULE like FREQ=WEEKLY;BYDAY=TU, or {rrule, mode: \"after_completion\"}." },
+          repeat: { type: ["string", "object", "null"], description: `An RRULE like FREQ=WEEKLY;BYDAY=TU, or {rrule, mode: \"after_completion\"}. ${REPEAT_UNTIL}` },
           tags: { type: "array", items: { type: "string" }, description: "Tag names (at most 20)." },
           reminders: {
             type: "array",
@@ -1283,6 +1288,12 @@ export const tasksConnectorModule: ConnectorModule = {
         const parent = str(args, "parent_id", false);
         if (parent) task.parent_id = (await fetchTask(ctx, parent)).id;
         if ("assignee_id" in args) task.assignee_id = resolveAssigneeArg(args.assignee_id, ctx.key.createdBy);
+        // A repeat's UNTIL in the wall clock of the person it rolls over for
+        // (tasks__zone_of: the assignee, else the owner, the key's creator).
+        if (task.recurrence) {
+          const person = typeof task.assignee_id === "string" ? task.assignee_id : ctx.key.createdBy;
+          task.recurrence = await recurrenceInZone(ctx, task.recurrence as Row, person);
+        }
         if (args.imported_from && typeof args.imported_from === "object") task.imported_from = args.imported_from;
         const extras: Row = {};
         if (Array.isArray(args.tags)) extras.tags = args.tags;
@@ -1335,7 +1346,7 @@ export const tasksConnectorModule: ConnectorModule = {
           estimate_minutes: { type: ["number", "null"], description: "Estimate in minutes, or null." },
           priority: { type: ["string", "null"], enum: [...PRIORITY_LEVELS, null], description: "Priority, or null." },
           energy_level: { type: ["string", "null"], enum: [...ENERGY_LEVELS, null], description: "Energy, or null." },
-          repeat: { type: ["string", "object", "null"], description: "An RRULE or {rrule, mode}; null stops the repeat." },
+          repeat: { type: ["string", "object", "null"], description: `An RRULE or {rrule, mode}; null stops the repeat. ${REPEAT_UNTIL}` },
           tags_add: { type: "array", items: { type: "string" }, description: "Tag names to add." },
           tags_remove: { type: "array", items: { type: "string" }, description: "Tag names to take off." },
         },
@@ -1344,6 +1355,10 @@ export const tasksConnectorModule: ConnectorModule = {
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
         const patch: Row = taskFieldsFromArgs(args);
+        if (patch.recurrence) {
+          const person = (task.assignee_id ?? task.owner_id) as string | null;
+          patch.recurrence = await recurrenceInZone(ctx, patch.recurrence as Row, person, task.recurrence as Row | null);
+        }
         const described =
           typeof args.description === "string" ? await describeForWrite(ctx, args.description) : null;
         if (described) patch.description = described.markdown;
@@ -1403,9 +1418,16 @@ export const tasksConnectorModule: ConnectorModule = {
         const ws = ctx.key.workspaceId;
         // The server's engine moves the pointer (TV-D8); the port's pointer
         // only serves a legacy word on a rule the server can't read.
-        const recurrence = isTaskStatus(status)
-          ? pointerOnStatusChange(before as RecurringTaskRow, status, new Date())
-          : null;
+        // In the zone the repeat rolls over in (tasks__zone_of), read only for a repeat.
+        const recurrence =
+          isTaskStatus(status) && before.recurrence
+            ? pointerOnStatusChange(
+                before as RecurringTaskRow,
+                status,
+                new Date(),
+                await personZone(ctx, (before.assignee_id ?? before.owner_id) as string | null),
+              )
+            : null;
         const row = await unwrap<Row>(ctx.db.rpc("tasks_op_set_status", {
           p_workspace_id: ws,
           p_task_id: before.id,
@@ -1765,7 +1787,10 @@ export const tasksConnectorModule: ConnectorModule = {
       inputSchema: taskIdSchema,
       handler: async (args, ctx) => {
         const task = await fetchTask(ctx, str(args, "task_id"));
-        const targets = skipOccurrenceTargets(task as RecurringTaskRow, new Date());
+        const zone = task.recurrence
+          ? await personZone(ctx, (task.assignee_id ?? task.owner_id) as string | null)
+          : "UTC";
+        const targets = skipOccurrenceTargets(task as RecurringTaskRow, new Date(), zone);
         if (!targets) {
           throw new Error("Nothing to skip to — the task must be open and recurring with a next occurrence.");
         }

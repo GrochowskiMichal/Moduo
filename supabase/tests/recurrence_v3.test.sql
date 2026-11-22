@@ -46,13 +46,33 @@ BEGIN
   PERFORM test.ok(public.tasks__rrule_prev_in(v_rec, '2026-11-03T00:00:00Z', NULL, 'Europe/Warsaw')
                   = '2026-11-02T08:00:00Z'::timestamptz,
     'and backwards too');
+  -- UNTIL's digits are the zone's wall clock, as the picker writes them (HV-15
+  -- 509-4, 20261122120000): 09:00 keeps the 9:00 occurrence, 08:59:59 ends
+  -- before it. Parity: recurrence-zones.test.ts.
   PERFORM test.ok(public.tasks__rrule_next_in(
-                    '{"rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261102T080000Z", "dtstart": "2026-10-19T07:00:00.000Z"}',
+                    '{"rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261102T090000Z", "dtstart": "2026-10-19T07:00:00.000Z"}',
                     '2026-10-27T00:00:00Z', NULL, 'Europe/Warsaw') = '2026-11-02T08:00:00Z'::timestamptz
               AND public.tasks__rrule_next_in(
-                    '{"rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261102T075959Z", "dtstart": "2026-10-19T07:00:00.000Z"}',
+                    '{"rrule": "FREQ=WEEKLY;BYDAY=MO;UNTIL=20261102T085959Z", "dtstart": "2026-10-19T07:00:00.000Z"}',
                     '2026-10-27T00:00:00Z', NULL, 'Europe/Warsaw') IS NULL,
-    'UNTIL is read in the zone the same way');
+    'UNTIL is read as the zone''s wall clock');
+  -- "Ends on Dec 15" (UNTIL=20261215T235959Z) ends on Dec 15 in any zone
+  -- (parity: repeat.509-4.test.ts). Los Angeles, daily at 18:00: Dec 15 comes.
+  PERFORM test.ok(public.tasks__rrule_next_in(
+                    '{"rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=20261215T235959Z", "dtstart": "2026-12-13T02:00:00.000Z"}',
+                    '2026-12-15T03:00:00Z', NULL, 'America/Los_Angeles') = '2026-12-16T02:00:00Z'::timestamptz
+              AND public.tasks__rrule_next_in(
+                    '{"rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=20261215T235959Z", "dtstart": "2026-12-13T02:00:00.000Z"}',
+                    '2026-12-16T03:00:00Z', NULL, 'America/Los_Angeles') IS NULL,
+    'the end day''s evening still comes west of UTC, and nothing after it');
+  -- Auckland, daily at 09:00: Dec 15 is the last; Dec 16 never comes.
+  PERFORM test.ok(public.tasks__rrule_next_in(
+                    '{"rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=20261215T235959Z", "dtstart": "2026-12-11T20:00:00.000Z"}',
+                    '2026-12-13T21:00:00Z', NULL, 'Pacific/Auckland') = '2026-12-14T20:00:00Z'::timestamptz
+              AND public.tasks__rrule_next_in(
+                    '{"rrule": "FREQ=DAILY;INTERVAL=1;UNTIL=20261215T235959Z", "dtstart": "2026-12-11T20:00:00.000Z"}',
+                    '2026-12-14T21:00:00Z', NULL, 'Pacific/Auckland') IS NULL,
+    'the end day is the last east of UTC, no day after it');
 END;
 $$;
 

@@ -1342,3 +1342,59 @@ describe("levels and scopes", () => {
     }
   });
 });
+
+describe("a repeat's UNTIL is stored as the person's wall clock, as the app writes it (HV-15 509-4)", () => {
+  const createdRule = (rpcCalls: Array<{ fn: string; args: Row }>) =>
+    ((rpcCalls.find((c) => c.fn === "tasks_op_create_with")?.args.p_task as Row).recurrence as Row).rrule;
+  const updatedRule = (rpcCalls: Array<{ fn: string; args: Row }>) =>
+    ((rpcCalls.find((c) => c.fn === "tasks_op_update_with")?.args.p_patch as Row).recurrence as Row).rrule;
+  const creates = { tasks_op_create_with: (a: Row) => ({ action: "created", task: task("t-new", 20, { ...(a.p_task as Row) }) }) };
+  const updates = { tasks_op_update_with: (a: Row) => [task(a.p_task_id as string, 1)] };
+
+  it("a UTC UNTIL becomes the assignee's local end of day (Los Angeles: Dec 15, not Dec 16)", async () => {
+    const { ctx, rpcCalls, tables } = setup({ rpcs: creates });
+    tables.user_preferences = [{ user_id: ME, time_zone: "America/Los_Angeles" }];
+    // Dec 15 23:59:59 in Los Angeles, as RFC 5545 writes it.
+    await call("tasks_create", { title: "x", repeat: "FREQ=DAILY;UNTIL=20261216T075959Z" }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=DAILY;UNTIL=20261215T235959Z");
+  });
+
+  it("reads the zone of the person assigned, not the key's creator", async () => {
+    const { ctx, rpcCalls, tables } = setup({ rpcs: creates });
+    tables.user_preferences = [
+      { user_id: ME, time_zone: "America/Los_Angeles" },
+      { user_id: BEA, time_zone: "Pacific/Auckland" },
+    ];
+    await call("tasks_create", { title: "x", assignee_id: BEA, repeat: { rrule: "FREQ=DAILY;UNTIL=20261215T105959Z" } }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=DAILY;UNTIL=20261215T235959Z");
+  });
+
+  it("a date alone runs through that day; a local time without Z keeps its digits; no zone is UTC", async () => {
+    const { ctx, rpcCalls, tables } = setup({ rpcs: creates });
+    tables.user_preferences = [];
+    await call("tasks_create", { title: "a", repeat: "FREQ=WEEKLY;UNTIL=20261215;BYDAY=TU" }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=WEEKLY;UNTIL=20261215T235959Z;BYDAY=TU");
+    rpcCalls.length = 0;
+    await call("tasks_create", { title: "b", repeat: "FREQ=DAILY;UNTIL=20261215T180000" }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=DAILY;UNTIL=20261215T180000Z");
+    rpcCalls.length = 0;
+    await call("tasks_create", { title: "c", repeat: "FREQ=DAILY;UNTIL=20261215T180000Z" }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=DAILY;UNTIL=20261215T180000Z");
+    rpcCalls.length = 0;
+    await call("tasks_create", { title: "d", repeat: "FREQ=WEEKLY;BYDAY=TU" }, ctx);
+    expect(createdRule(rpcCalls)).toBe("FREQ=WEEKLY;BYDAY=TU");
+  });
+
+  it("an update converts a new UNTIL in the task's zone but keeps one sent back as it was read", async () => {
+    const { ctx, rpcCalls, tables } = setup({ rpcs: updates });
+    tables.user_preferences = [{ user_id: ME, time_zone: "America/Los_Angeles" }];
+    const stored = "FREQ=DAILY;UNTIL=20261215T235959Z";
+    tables.tasks!.push(task("t-ends", 30, { recurrence: { rrule: stored } }));
+    // Read back from tasks_get and sent again (with another change): never shifted twice.
+    await call("tasks_update", { task_id: "MOD-30", repeat: { rrule: stored, mode: "after_completion" } }, ctx);
+    expect(updatedRule(rpcCalls)).toBe(stored);
+    rpcCalls.length = 0;
+    await call("tasks_update", { task_id: "MOD-30", repeat: "FREQ=DAILY;UNTIL=20261221T075959Z" }, ctx);
+    expect(updatedRule(rpcCalls)).toBe("FREQ=DAILY;UNTIL=20261220T235959Z");
+  });
+});

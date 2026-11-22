@@ -70,12 +70,41 @@ import type { AttachmentMark, CommentMark } from "./sync/types";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** The device-local calendar day of an instant, YYYY-MM-DD (null if unreadable). */
+/** A real calendar day written YYYY-MM-DD (2026-02-31 is not one: it round-trips to Mar 3). */
+function isBareDay(s: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = new Date(y, mo - 1, d, 12);
+  return at.getFullYear() === y && at.getMonth() === mo - 1 && at.getDate() === d;
+}
+
+/**
+ * The device-local calendar day of an instant, YYYY-MM-DD (null if unreadable).
+ * A bare day ("2026-11-10", what Mail's Today drop and date pickers pass) is
+ * already a local day and comes back as it is: `new Date("2026-11-10")` is UTC
+ * midnight, the day before west of UTC (HV-15 509-4).
+ */
 export function localDayOf(iso: string | null | undefined): string | null {
   if (!iso) return null;
+  if (isBareDay(iso)) return iso;
+  // Day-shaped but not a real day: unreadable, never rolled into the next month.
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/**
+ * The local day a task is due: the derived `dueOn`, else (a task made on this
+ * device whose create hasn't come back yet, or an older row) its `dueDate`'s
+ * local day. Never the instant's UTC day (`.slice(0, 10)`).
+ */
+export function taskDueDay(task: {
+  dueOn?: string | null;
+  dueDate?: string | null;
+}): string | null {
+  return task.dueOn ?? localDayOf(task.dueDate);
 }
 
 /**

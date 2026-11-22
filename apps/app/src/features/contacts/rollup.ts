@@ -11,6 +11,7 @@
 // linked task/payment keys, keeping this reducer a pure count.
 
 import type { EntityLink, EntityRecord, EntityRef } from "../../lib/entity-links";
+import { localDayOf } from "../../lib/task-rows";
 import { entityRefKey, type HubSection, otherEndpoint, rollupSections } from "../spine/rollup";
 import type { HubSnippetMeta } from "../spine/snippet-projectors";
 import type { ActivityEntry } from "../tasks/model";
@@ -152,7 +153,8 @@ export function timeAgo(iso: string, now: Date): string {
     const d = Math.floor(ms / DAY_MS);
     return `${d} ${d === 1 ? "day" : "days"} ago`;
   }
-  return `on ${iso.slice(0, 10)}`;
+  // The day on this device, not the instant's UTC day (HV-15 509-4).
+  return `on ${localDayOf(iso)}`;
 }
 
 /**
