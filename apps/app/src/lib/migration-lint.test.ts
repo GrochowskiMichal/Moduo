@@ -391,6 +391,28 @@ const CHECKS: Check[] = [
     bad: `DO $$ BEGIN RAISE SQLSTATE 'PGRST' USING MESSAGE = '{"code":"x"}', DETAIL = json_build_object('status', 403)::text; END $$;`,
     good: `DO $$ BEGIN RAISE SQLSTATE 'PGRST' USING MESSAGE = '{"code":"x"}', DETAIL = json_build_object('status', 403, 'headers', json_build_object())::text; END $$;`,
   },
+  {
+    id: "lock-table-in-transaction",
+    gotcha:
+      "a top-level LOCK TABLE errors outside a transaction block: Supabase wraps each migration, " +
+      "but CI's db-test applies each file with plain psql (NS-11, PR #751, 2026-10-28)",
+    fix: "open the file's own transaction with BEGIN; before the LOCK TABLE and end it with COMMIT;",
+    find: (m) => {
+      // Function bodies and DO blocks run inside their own statement, so only top level counts.
+      const top = m.sql.replace(/(\$\w*\$)[\s\S]*?\1/g, " ");
+      let open = false;
+      const hits: string[] = [];
+      for (const st of top.split(";").map((s) => s.trim())) {
+        if (/^(?:BEGIN|START\s+TRANSACTION)\b/i.test(st)) open = true;
+        else if (/^(?:COMMIT|END|ROLLBACK)\b/i.test(st)) open = false;
+        else if (/^LOCK\b/i.test(st) && !open) hits.push(st.replace(/\s+/g, " ").slice(0, 100));
+      }
+      return hits;
+    },
+    bad: `SET LOCAL lock_timeout = '5s'; LOCK TABLE public.notes IN ACCESS EXCLUSIVE MODE;`,
+    good: `BEGIN; SET LOCAL lock_timeout = '5s'; LOCK TABLE public.notes IN ACCESS EXCLUSIVE MODE;
+           DO $$ BEGIN PERFORM 1; END $$; COMMIT;`,
+  },
 ];
 
 describe("supabase/migrations: SQL-authoring checks", () => {

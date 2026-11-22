@@ -1,6 +1,6 @@
 # AGENTS.md
 
-The single source of truth for coding agents in Moduo. Claude Code loads it automatically (v2.1.277+; there is deliberately no `CLAUDE.md`). Area rules live in `.claude/rules/` and load when a session views a matching file (Read, Edit or a single-file `cat`/`sed -n`/`grep`/`head`): `supabase.md`, `ci-release.md` (`.github/`, `infra/`, `scripts/release/`), `desktop-rust.md` and `ui-primitives.md`. Don't add folder `AGENTS.md` files: they load only on Read. **Keep this file under 150 lines:** it is a table of contents. Procedures live in skills, area knowledge in `docs/decisions/` and `docs/gotchas/`, and anything that must hold every time lives in hooks, lint and CI.
+The single source of truth for coding agents in Moduo. Claude Code loads it automatically (v2.1.277+; there is deliberately no `CLAUDE.md`). Area rules live in `.claude/rules/` and load when a session views a matching file (Read, Edit or a single-file `cat`/`sed -n`/`grep`/`head`): `supabase.md`, `ci-release.md` (`.github/`, `infra/`, `scripts/release/`), `desktop-rust.md`, `ui-primitives.md` and `test-fixtures.md` (every test file). Don't add folder `AGENTS.md` files: they load only on Read. **Keep this file under 150 lines:** it is a table of contents. Procedures live in skills, area knowledge in `docs/decisions/` and `docs/gotchas/`, and anything that must hold every time lives in hooks, lint and CI.
 
 ## Must-hold rules
 
