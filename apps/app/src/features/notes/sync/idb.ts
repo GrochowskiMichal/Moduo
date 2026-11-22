@@ -65,9 +65,27 @@ export function parseDocDbName(
  */
 let signedIn: string | null | undefined;
 
-/** `undefined`: back to "not said yet" (tests). */
+/** People whose account was deleted on this device in this page life. */
+const erasedUsers = new Set<string>();
+
+/** `undefined`: back to "not said yet", erasures forgotten (tests). */
 export function setNotesSignedIn(userId: string | null | undefined): void {
   signedIn = userId;
+  if (userId === undefined) erasedUsers.clear();
+}
+
+/**
+ * The signed-in person's account is being deleted: nothing of theirs is kept
+ * from now on, not even by an engine that had stopped before (a lost session),
+ * which the erasing wipe never reaches.
+ */
+export function eraseSignedInUser(): void {
+  if (typeof signedIn === "string") erasedUsers.add(signedIn);
+}
+
+/** The owner's account or workspace is gone: anything that arrives late is dropped. */
+export function ownerErased(owner: NotesOwner): boolean {
+  return !!owner.erased || erasedUsers.has(owner.userId);
 }
 
 /** Whether anything may be written or sent for this person now. */
@@ -75,8 +93,17 @@ export function mayWrite(userId: string): boolean {
   return signedIn === undefined || signedIn === userId;
 }
 
-/** Whose caches an engine reads and writes. `stopped`: wiped, write nothing more. */
-export type NotesOwner = { userId: string; workspaceId: string; stopped?: boolean };
+/**
+ * Whose caches an engine reads and writes. `stopped`: wiped, write nothing
+ * more to the caches (what waits to sync is still kept for the person).
+ * `erased`: the account or the workspace is gone, so is anything that arrives late.
+ */
+export type NotesOwner = {
+  userId: string;
+  workspaceId: string;
+  stopped?: boolean;
+  erased?: boolean;
+};
 
 export function ownerOf(owner: NotesOwner): string {
   return ownerKey(owner.userId, owner.workspaceId);
@@ -135,6 +162,8 @@ export type MetaOutboxEntry = {
     | "setFavorite";
   args: Record<string, unknown>;
   queuedAt: number;
+  /** Which page life made it, and its place in that life's order (absent before MOD-569's follow-up). */
+  made?: { life: string; seq: number };
 };
 
 /** An outbox entry's owner key (null: from before Track C4, nobody's yet). */
@@ -382,17 +411,50 @@ export function writeNoteState(owner: NotesOwner, state: NoteSyncState): Promise
 
 /** Returns false when the entry could NOT be persisted (IndexedDB missing or
  * failing) — the caller must fall back to an in-memory queue, never assume
- * durability. */
+ * durability.
+ *
+ * An edit that reaches here after its engine stopped (typed as the person
+ * signed out, or as someone else signed in) is still kept for them, as a
+ * late meta op is (MOD-569): their outboxes stay on the device. Its seq is
+ * taken in the same step (the counter only: their cursor goes with their
+ * document cache), so no later edit on this device reuses it. An erased
+ * owner (account deleted, workspace left) keeps nothing. */
 export function enqueueDocUpdate(
   owner: NotesOwner,
   entry: Omit<DocOutboxEntry, "userId" | "workspaceId">,
 ): Promise<boolean> {
-  if (!ownerLive(owner)) return Promise.resolve(false);
+  if (ownerErased(owner)) return Promise.resolve(false);
+  if (!ownerLive(owner)) return keepLateDocUpdate(owner, entry);
   return withStore(
     "docOutbox",
     "readwrite",
     async (s) => {
       await req(s.add({ ...entry, userId: owner.userId, workspaceId: owner.workspaceId }));
+      return true;
+    },
+    false,
+  );
+}
+
+function keepLateDocUpdate(
+  owner: NotesOwner,
+  entry: Omit<DocOutboxEntry, "userId" | "workspaceId">,
+): Promise<boolean> {
+  return withStore(
+    ["noteState", "docOutbox"],
+    "readwrite",
+    async (_s, tx) => {
+      const state = tx.objectStore("noteState");
+      const row = ((await req(state.get(entry.noteId))) as NoteStateRow | undefined) ?? null;
+      const next = entry.clientSeq + 1;
+      if (!row || row.nextClientSeq < next) {
+        state.put({ ...row, noteId: entry.noteId, nextClientSeq: next });
+      }
+      await req(
+        tx
+          .objectStore("docOutbox")
+          .add({ ...entry, userId: owner.userId, workspaceId: owner.workspaceId }),
+      );
       return true;
     },
     false,
@@ -445,11 +507,18 @@ export function listDocOutboxNoteIds(owner: NotesOwner): Promise<string[]> {
 
 // ── metaOutbox ───────────────────────────────────────────────────────────────
 
+/**
+ * Keep a meta op for its person. Not gated on `ownerLive`: a sign-out or
+ * another person signing in keeps what waits to sync (`people.ts`), so an op
+ * whose live call fails after its engine stopped still waits here for them,
+ * as a late task check-off does (MOD-569). Only an erased owner (account
+ * deleted, workspace left) drops it.
+ */
 export function enqueueMetaOp(
   owner: NotesOwner,
   entry: Omit<MetaOutboxEntry, "userId" | "workspaceId">,
 ): Promise<void> {
-  if (!ownerLive(owner)) return Promise.resolve();
+  if (ownerErased(owner)) return Promise.resolve();
   return withStore(
     "metaOutbox",
     "readwrite",

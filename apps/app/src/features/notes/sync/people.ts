@@ -34,6 +34,7 @@ import {
   docDbName,
   type DocOutboxEntry,
   entryOwner,
+  eraseSignedInUser,
   type MetaOutboxEntry,
   type NoteStateRow,
   parseDocDbName,
@@ -150,7 +151,10 @@ async function dropOutboxes(owner: string): Promise<void> {
 
 const copies: OwnedCopies<never> = {
   keys: owners,
-  keepOnlyWaiting: (owner) => dropCaches(owner),
+  // Never "empty" (0): the lifecycle would then drop the owner's outboxes in a
+  // later step, taking an op that failed after its engine stopped and was kept
+  // for them meanwhile (MOD-569 variant). Their caches are gone already.
+  keepOnlyWaiting: async (owner) => (await dropCaches(owner)) || null,
   async deleteWhere(match) {
     for (const owner of await owners()) {
       if (!match(owner)) continue;
@@ -251,9 +255,9 @@ async function legacyDocNames(): Promise<string[]> {
   );
 }
 
-/** Stop engines now (before anything else of the switch runs). */
-function stopEngines(keep: (engine: NotesSyncEngineV2) => boolean): void {
-  notesEngines.disposeWhere((engine) => engine, keep, false);
+/** Stop engines now (before anything else of the switch runs; `erase`: late ops go too). */
+function stopEngines(keep: (engine: NotesSyncEngineV2) => boolean, erase = false): void {
+  notesEngines.disposeWhere((engine) => engine, keep, false, erase);
 }
 
 let attaching: Promise<void> = Promise.resolve();
@@ -285,8 +289,9 @@ export function attachNotesUser(userId: string | null): Promise<void> {
 
 /** Signed out: everyone's caches go, the outboxes stay (`keepWaiting: false`: they go too). */
 export function wipeNotesCopies(opts: { keepWaiting?: boolean } = {}): Promise<void> {
+  if (opts.keepWaiting === false) eraseSignedInUser();
   setNotesSignedIn(null);
-  stopEngines(() => false);
+  stopEngines(() => false, opts.keepWaiting === false);
   return chain(() => people.wipe(opts));
 }
 
