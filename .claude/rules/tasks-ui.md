@@ -1,7 +1,7 @@
 ---
 paths: ["apps/app/src/features/tasks/**"]
-incident: "Folding every group made the List and the page fight over the selection until React #185, and the project crashed on every open on every device (MOD-122, prod, 2026-10-14)"
-expires: 2027-01-31
+incident: "Folding every group made the List and the page fight over the selection until React #185, and the project crashed on every open on every device (MOD-122, prod, 2026-10-14); a rename, reorder or reopen reached the server ahead of the capture or drop still waiting for the same task (escape 822-1, fixed in PR #822, 2026-11-22)"
+expires: 2027-02-21
 ---
 
 # Tasks views: selection, place, List, Board, Timeline
@@ -26,6 +26,7 @@ Compiled from the UI gotchas (HV-14b). Data and commands: [docs/architecture.md]
 
 ## Writes from views
 - A bulk path's work function never throws (`runPool` runs under `Promise.all`): catch inside, collect refusals, settle with what saved, and record which op of a multi-op task saved.
+- A command that writes one task live first asks whether that task still has writes on their way, not only whether its id is `tmp-`: go through the Tasks store (`stillSaving` in `apps/app/src/features/tasks/commands/shared.ts`, then `chainTaskOp`), never a bare `opSetStatus`/`op*` call from a card or reference. A subtask under a queued parent queues behind it (`benchmarks/escapes/822-1-queue-bypass`).
 - A project write that waits for task moves joins the project's chain before it waits (`chainProjectOp(id, async () => { await movesDone; … })`), or an Undo overtakes it.
 
 ## The Timeline

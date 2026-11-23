@@ -312,4 +312,35 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet: "duration: 30_000",
     why: "Deliberate: A question, not an undo toast; it stays up long enough to answer.",
   },
+  // utc-day-slice: added by the weekly retro 2026-11-23 (escape 822-4).
+  {
+    rule: "utc-day-slice",
+    file: "apps/app/src/features/tasks/repeat.ts",
+    snippet: "o.until.toISOString().slice(0, 10)",
+    why: "Deliberate: UNTIL's digits are already the local wall clock (specToRrule), so the UTC-rendered day is the picked day.",
+  },
+  {
+    rule: "utc-day-slice",
+    file: "apps/app/src/features/tasks/templates/model.ts",
+    snippet: "at.toISOString().slice(0, 10)",
+    why: "Deliberate: `shiftDay` does calendar math on a bare day built with Date.UTC; no time zone is involved.",
+  },
+  {
+    rule: "utc-day-slice",
+    file: "apps/app/src/lib/functions-reconcile-core.ts",
+    snippet: "day.toISOString().slice(0, 10)",
+    why: "Risk: A developer report's deploy date in UTC; an evening deploy can read as the next day.",
+  },
+  {
+    rule: "utc-day-slice",
+    file: "apps/app/src/features/updater/manifest-notes.ts",
+    snippet: "day.toISOString().slice(0, 10)",
+    why: "Risk: A release's date in What's new shows in UTC, so an evening release can read as the next day.",
+  },
+  {
+    rule: "utc-day-slice",
+    file: "apps/app/src/features/updater/manifest-notes.ts",
+    snippet: "new Date().toISOString().slice(0, 10)",
+    why: "Risk: The undated-release fallback is today in UTC, a day off in the evening west of UTC.",
+  },
 ];

@@ -1,7 +1,7 @@
 ---
 paths: ["apps/app/src/features/notes/**", "apps/app/src/routes/pages/notes-page.tsx", "supabase/functions/moduo-mcp/modules/notes.ts", "supabase/functions/notes-public/**", "supabase/migrations/*notes*.sql"]
-incident: "Imported notes rendered blank on any other device (NOTE-FIX-1), a re-rooted shared sub-note went private (NR-1), and Settings' wipe left a previous person's notes on disk (SK-C4)"
-expires: 2027-01-31
+incident: "Imported notes rendered blank on any other device (NOTE-FIX-1), a re-rooted shared sub-note went private (NR-1), and Settings' wipe left a previous person's notes on disk (SK-C4); a rename made around sign-out was dropped and Duplicate copied a stale title (escape 822-2, fixed in PR #822, 2026-11-22)"
+expires: 2027-02-21
 ---
 
 # Notes data: docs, drafts, import, publish, agents
@@ -31,6 +31,7 @@ Compiled from the notes gotchas (HV-14b). Decisions: [docs/decisions/notes.md](.
 ## The page and device caches
 - A note created outside /notes and deep-linked at once races the page's cache-first paint and stale-id cleanup: create it in place instead of navigating.
 - Find a person's per-note databases from the records (`docDbName(owner, noteId)`), never only through `indexedDB.databases()` (`apps/app/src/features/notes/sync/people.ts`; `lint:ast` rule `idb-listing-wipe`).
+- A note op or edit that lands after the engine stopped is kept for its person and replayed in order (`enqueueMetaOp`/`enqueueDocUpdate`, `MetaOpChain` in `apps/app/src/features/notes/sync/meta-chain.ts`); drop it only when the account was erased. Anything that copies a note (Duplicate, export) waits for the source's queued ops and edits first (`runAfterQueued`), and a failed doc read defers that note, never imports it empty (`benchmarks/escapes/822-2-late-write-to-disposed-store`).
 - Only the sync owner registers the preferences push (`usePreferences({ syncOwner: true })`): a second instance unmounting must not drop it.
 
 ## Notion import

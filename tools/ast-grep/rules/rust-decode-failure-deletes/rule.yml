@@ -1,0 +1,62 @@
+id: rust-decode-failure-deletes
+language: rust
+severity: error
+message: A value this build can't decode is deleted, so a read destroys data another build or a partial write left behind.
+note: |
+  A read must never delete what it can't parse (PR #822, the mail follow-ups:
+  benchmarks/escapes/822-5-decode-failure-then-delete). Skip it (`continue`) or
+  return the decode error, and leave the stored value for the build that wrote it
+  or the person who clears it.
+files:
+  - apps/desktop/src-tauri/src/**/*.rs
+utils:
+  decode-call:
+    kind: call_expression
+    has:
+      field: function
+      stopBy: end
+      regex: (^|::|\.)(from_value|from_str|from_slice|from_reader|from_bytes|deserialize)$
+  has-decode:
+    any:
+      - matches: decode-call
+      - has:
+          stopBy: end
+          matches: decode-call
+  delete-call:
+    kind: call_expression
+    has:
+      field: function
+      regex: (^|::|\.)(kv_delete|delete|remove|remove_file|remove_dir_all)$
+rule:
+  any:
+    # let Ok(v) = serde_json::from_str(..) else { store.kv_delete(..)?; continue; };
+    - kind: let_declaration
+      all:
+        - has:
+            field: value
+            matches: has-decode
+        - has:
+            field: alternative
+            has:
+              stopBy: end
+              matches: delete-call
+    # match serde_json::from_str(..) { Ok(v) => .., Err(_) => store.kv_delete(..) }
+    - kind: match_arm
+      all:
+        - has:
+            field: pattern
+            regex: ^Err\b
+        - has:
+            field: value
+            any:
+              - matches: delete-call
+              - has:
+                  stopBy: end
+                  matches: delete-call
+        - inside:
+            kind: match_block
+            inside:
+              kind: match_expression
+              has:
+                field: value
+                matches: has-decode
