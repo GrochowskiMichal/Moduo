@@ -7,7 +7,7 @@
 > - **Open, load-bearing:** ★ C1 (the line, narrowed), ★ C3 (missed sessions), ★ C6 (writing to Outlook and iCloud), ★ C7 (invitations), ★ C13 (alerts), ★ C22 (several sessions per task), ★ C23 (focus time), ★ C26 (meeting prep), ★ C28 (scheduling from an email thread), ★ C30 (fresh with your Mac off; past meetings stay).
 > - **Open:** C2, C4, C5, C10–C12, C14–C21 (narrowed where Mike built part), C24, C25, C27, C29, C31, C32.
 > - **Research:** two new lanes landed: [current-state-2026-11.md](./research/current-state-2026-11.md) (what Mike's rethink shipped, read in code) and [morgen-amie-2026-11.md](./research/morgen-amie-2026-11.md) (the two benchmarks feature by feature, Nov 2026). The six October lanes stay as evidence; where they describe the pre-rethink module, current-state-2026-11 wins.
-> - **Baseline critique (/product-studio "criticise"):** blocked. The shared local database lost its API gateway on 20–21 Nov; the coordination session is fixing it with Maciej's OK. Until it runs, the last recorded scores are Mike's: built module 6.35 and his prototype 7.50 (blind jury, 28 Oct, before the 30 Oct review round).
+> - **Baseline critique (/product-studio "criticise"):** blocked. The gateway was fixed on 23 Nov, but the shared local database is five weeks behind the app: it was built on 15 Oct from a prod snapshot, and about 100 later repo migrations are missing or only partly in (all of Mike's rebuild among them). The lab's seed fails on the first Calendar call. Nothing was applied; a clean rebuild vs a rehearsed catch-up is Maciej's call (asked 23 Nov). Until it runs, the last recorded scores are Mike's: built module 6.35 and his prototype 7.50 (blind jury, 28 Oct, before the 30 Oct review round).
 > - **Prototype:** [`prototypes/round-1b.html`](./prototypes/round-1b.html) (frames 1–9, V cycles variants; the hard states in its state picker), published as https://claude.ai/artifact/Tjf14nEGtYC6N1AhmyvWpo. October's [`structure.html`](./prototypes/structure.html) is history.
 > - **Critic rounds on the round-1b prototype** (three blind critics each; overall = 0.375 usability + 0.3125 craft + 0.1875 platform + 0.125 character, speed not judged on a prototype):
 >   | Round | Overall | Usability | Craft | Platform | Character | Gates below 8 | Confirmed severity 3 |
@@ -970,7 +970,7 @@ The Email re-plan runs at the same time on `t/maciej/email-plan` (`.design/email
 ## 10. What happens next
 
 1. Maciej answers round 1b; answers are recorded under each call, in his words.
-2. The baseline critique runs as soon as the local database is back; its holes are folded in, and anything that changes a recommendation is re-asked.
+2. The baseline critique runs as soon as the local database is level with the app (Maciej's call, 23 Nov); its holes are folded in, and anything that changes a recommendation is re-asked.
 3. **Round 2a:** every view and state (Week, Day, Month, List, Details, Plan, the composer, offers, accounts), with frames for empty, loading, error, offline, long content, the densities, light and dark.
 4. **Round 2b:** the shared pieces (capture type, References, MCP tools, notifications, Home widget), then a gap audit by a separate agent.
 5. **Round 3:** in-flight work (§7).
