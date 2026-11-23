@@ -3,7 +3,7 @@
 > **Status (2026-11-21): round 1 sent, waiting for Maciej's answers.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html).
 > - **Open:** calls 1–46 (§8). ★ marks the load-bearing ones.
-> - **Blocked:** the live-app baseline score. 2026-11-23: with Maciej's OK, the shared stack was restarted with its data kept, and the gateway is back. But the local DB still sits at its 2026-10-15 snapshot and is missing the repo's later migrations, so the lab seed fails (`calendar_op_event_create` has the old signature). Catching up is not safe to do blind: the 10-15 → 11-04 range is half-applied, there is no migration ledger, and some files are one-shot or destructive. The Calendar session has put it to Maciej as one call: a clean rebuild from a fresh snapshot, a rehearsed catch-up on a copy, or leave both baselines pending. The baseline runs once he decides. Interim numbers: Mail as built scored 7.0 on 2026-11-07 (before "Mail, improved" landed), the improve prototype 7.7. The current build is unscored.
+> - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. That was possible after Maciej OK'd a fresh rebuild of the shared local database. Holes and how they map to calls: §1.5.
 > - **Next:** answers → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
 
@@ -63,6 +63,31 @@ The second shape: Mail was laid out before Tasks v3 set the app's rules, so it d
 The 3×3 layout with the bottom bar (48b) · the bottom-bar mode row with keys plus More (82b) · the right-panel view registry with its title dropdown and "← item" stack (SH-1) · References (RF-1): Mail defines the email chip, card, hover preview, "Private email" and "Deleted email" · capture with a type registry (⌘⇧K) · the three text levels, one interaction language, one date grammar, avatars (38–46a) · density applies to everything (44) · the state rules.
 
 ---
+
+### 1.5 Live baseline (2026-11-23)
+
+Lab run `.lab/20261123-1218-mail-v4-baseline-mail` (local only): the Mail screen plus its 9 journeys, WebKit, dark, three blind generalist critics. Uncalibrated estimate.
+
+- **Score 6.7.** Usability 6 (two critics) / 7 (one); Craft, Speed and Character 7 in all three; Platform 7 (two) / 6 (one). Gates: accessibility 10, states 10 (34 of 34), reliability 8.5, performance 7.4, system 9.9, platform 7 (web stand-in cap). On the prototype formula (no Speed) it is 6.6; round 1's prototype is 7.1. The 2026-11-07 7.0 predates "Mail, improved" and used a different journey set, so the two aren't comparable.
+- **The idea as the critics read it** (all three, nearly word for word): a keyboard-first triage desk where Done is the verb, everything undoes, and each email sits beside today's calendar and tasks. That matches §3's idea; what's missing is the depth behind it.
+- **Praised by all three:** Done → next with an Undo toast across 50 presses (keys equal the shortest path); the "Why this is in Notifications" rule ladder; bulk select with one undo; designed offline, outbox, first-sync, failed and web states; 32 ms p95 key-to-paint.
+
+Confirmed holes (raised by at least two critics, each citation checked), with the call or state that answers them:
+
+| # | Hole | Sev | Answered by |
+|---|---|---|---|
+| B1 | The inline reply opens below the fold: Send and the `;;` snippet picker are off screen | 3 | Calls 2 + 13 (composer rebuilt with its actions in the bottom bar); round 2a composer states |
+| B2 | Reply from the keyboard needs a click: the cursor doesn't land in the body | 3 | Round 2a keys; a build fix regardless of answers |
+| B3 | Dense density squeezes subjects to one character | 3 | Call 43 (a real Dense row layout) |
+| B4 | 180 ms of motion after every keyboard action; `transition: all` on 14 elements | 2 | Agent's choice: no motion on keyboard triage (§5) |
+| B5 | The Undo toast stays after Undo, and covers the panel toggle | 2 | Round 2a toast states |
+| B6 | Accessible names run together ("Personal417 unread") | 2 | Build fix |
+| B7 | A failed send shows only at the top of Drafts, in a different style from the other banners | 2 | Round 2a error states |
+| B8 | Selected-row actions sit on top of the preview text | 2 | Call 2 (actions move to the bottom bar) |
+| B9 | Faint hovers; two focus-ring styles; the skip link covers the workspace switcher | 1 | Build fix (house tokens) |
+| B10 | "Add as contact" offered for a bot sender; "Link… 1" chip truncated | 1 | Call 28 (link line replaces chips); round 2a panel |
+
+Single-critic candidates, verified on screen: the first-run provider buttons overlap their own text and the rail shows counts with no account connected (states/email/firstrun.png); the rail's Inbox 99+ disagrees with the tab's 417 (call 5); the keys sheet leaves out Send & Done; F6 stops on an empty reader; the `+1 •` overflow tab; "Create event from this email" still offered with three selected.
 
 ## 2. The benchmark in one table
 
@@ -130,6 +155,7 @@ Each with the rejected alternative. Product-visible effects are raised as calls 
 7. **The right panel moves to the app's view registry** (SH-1) with Mail's hand-picked views; the 1180 px strip goes (the panel follows its toggle and the app's narrow-window rule).
 8. **A failed list read shows an error state** with Retry and keeps the last rows on screen (state rule "partial"). This is a trust fix, built without a call.
 9. **Saved searches** get remove/rename and live updates. Folder create, rename and delete (C19–C23, answered yes, never built) get built. Trust fixes, no call.
+10. **Keyboard triage plays no motion.** Done, j/k, Undo and every other key-triggered move swap in the next frame; motion stays for pointer drags and panels opening. Transitions name their properties at the motion tokens (baseline B4). Rejected: a shorter animation (still paid 50 times a session).
 
 ## 6. For Mike: changes that need his systems
 
@@ -483,7 +509,7 @@ After r2: keyboard reaches panel rows and collapsed messages; first run's bar of
 ## 9. What happens next
 
 1. Maciej answers round 1 (by number).
-2. Round 2a: every surface, state by state (list, reader, composer, panel views, rail, search, settings), the bottom-bar rows in detail, keys, and the live-app baseline critique once the local stack is back. A gap audit by a separate agent.
+2. Round 2a: every surface, state by state (list, reader, composer, panel views, rail, search, settings), the bottom-bar rows in detail, keys, with the baseline's holes (§1.5) folded in. A gap audit by a separate agent.
 3. Round 2b: what 2a opens. Round 3: reconcile with anything in flight.
 4. Final prototype through /product-studio's critic loop (bar 8.0) → "Turn into spec" → `/s1` grills only the gaps → `specs/mail-v4.md`, Ready.
 5. Build phase after Maciej's go: one orchestrated run on one task branch, one PR into `maciej`.
