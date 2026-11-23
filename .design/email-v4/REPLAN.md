@@ -3,7 +3,7 @@
 > **Status (2026-11-21): round 1 sent, waiting for Maciej's answers.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html).
 > - **Open:** calls 1–46 (§8). ★ marks the load-bearing ones.
-> - **Blocked:** the live-app baseline score. The shared local stack lost its API gateway and needs a data-keeping restart, which needs Maciej's OK (AGENTS.md rule 13). Interim numbers: Mail as built scored 7.0 on 2026-11-07 (before "Mail, improved" landed), the improve prototype 7.7. The current build is unscored.
+> - **Blocked:** the live-app baseline score. 2026-11-23: with Maciej's OK, the shared stack was restarted with its data kept, and the gateway is back. But the local DB still sits at its 2026-10-15 snapshot and is missing the repo's later migrations, so the lab seed fails (`calendar_op_event_create` has the old signature). The Calendar session is applying the merged migrations one at a time; the baseline runs once that lands. Interim numbers: Mail as built scored 7.0 on 2026-11-07 (before "Mail, improved" landed), the improve prototype 7.7. The current build is unscored.
 > - **Next:** answers → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
 
