@@ -156,6 +156,7 @@ Each with the rejected alternative. Product-visible effects are raised as calls 
 8. **A failed list read shows an error state** with Retry and keeps the last rows on screen (state rule "partial"). This is a trust fix, built without a call.
 9. **Saved searches** get remove/rename and live updates. Folder create, rename and delete (C19–C23, answered yes, never built) get built. Trust fixes, no call.
 10. **Keyboard triage plays no motion.** Done, j/k, Undo and every other key-triggered move swap in the next frame; motion stays for pointer drags and panels opening. Transitions name their properties at the motion tokens (baseline B4). Rejected: a shorter animation (still paid 50 times a session).
+11. **Everything new that Mail v4 keeps on the Mac goes into the account-deletion erase.** Since Mike's MOD-555 (#825, 2026-11-22), deleting the account erases the Mac's mail store and its keychain secrets. v4's new local state (Set aside, the send-later queue, drafts in their own window) must live in that store or be added to the erase, so that call 39's "Mail stays on the Mac" still holds when someone leaves. This follows the same rule as Mike's 2026-11-22 reliability pass: a failed read never shows as empty, which matches item 8.
 
 ## 6. For Mike: changes that need his systems
 
