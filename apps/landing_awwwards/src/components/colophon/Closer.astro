@@ -1,0 +1,416 @@
+---
+// The colophon's story (DESIGN.md §19), one endless scene and one camera. The credit line stands
+// as a book sets its colophon. The scroll reads closer, to the d of Oudom and its stem; the stem
+// is cut at the foot too and is the one stroke; a second joins it (a window: a link; mod and duo;
+// the two of us), and a third makes the mark. Past three it's a chain: two more come in, the five
+// company pages, this one lit. They go, and the blank comes by the rule: the left steps aside
+// (two apart open nothing), the right lies on the middle and both cancel to an outline. The left
+// slides on and fills it (three in one place leave one), the stroke goes back into the d, and the
+// line is read again, which is where the scroll starts over. Everything is drawn in one SVG, in
+// the font's units: the line from Oudom's outlines, and the strokes in a group scaled so the first
+// one's width is the stem's. motion/colophon.ts moves the camera (the viewBox, so it stays sharp)
+// and the strokes from one scroll. Without motion: the line, and the story as a strip of small
+// figures, each with its words.
+import font from "../../data/typeface/font.json";
+import { families, pages } from "../../data/pages";
+import { colophon } from "../../data/site";
+import { flatten, type FontData, layout, mixOf, outlines, pathD, strokes } from "../../lib/typeface";
+import { CAP_X, STROKE, STROKE_PATH, chainWidth, chainX } from "../../lib/stroke";
+import Chain from "../Chain.astro";
+
+const F = font as unknown as FontData;
+const c = colophon.closer;
+const [one, two] = colophon.line;
+const fix = (v: number) => v.toFixed(2);
+const t = mixOf(500);
+const TRACK = -10;
+
+// The first sentence, one path per stroke, so its joins can show as the camera closes in.
+const L = layout(F, one, t);
+const parts = L.glyphs.flatMap((g, gi) => {
+  const cs = outlines(F, g.name, t, g.x + TRACK * gi, 0);
+  return strokes(cs).map((s, si) => ({ d: pathD([cs[s.outer], ...s.holes.map((h) => cs[h])]), g: gi, s: si }));
+});
+const width = L.width + TRACK * (L.glyphs.length - 1);
+
+// The d of Oudom, and its stem (its second stroke: the first is the bowl).
+const di = L.glyphs.findIndex((g) => g.char === "d");
+const dOut = outlines(F, L.glyphs[di].name, t, L.glyphs[di].x + TRACK * di, 0);
+const stemPts = flatten(dOut[strokes(dOut)[1].outer].pts, 6).map(([x, y]) => [x, -y]);
+const S = {
+  x0: Math.min(...stemPts.map(([x]) => x)),
+  x1: Math.max(...stemPts.map(([x]) => x)),
+  y0: Math.min(...stemPts.map(([, y]) => y)),
+  y1: Math.max(...stemPts.map(([, y]) => y)),
+};
+// The stem's top cut runs along x + y = C (SVG's y runs down).
+const C = Math.min(...stemPts.map(([x, y]) => x + y));
+
+// The world of strokes, in the mark's own units, placed so the first stroke's width is the
+// stem's and its top sits where the stem's does.
+const k = (S.x1 - S.x0) / STROKE.w;
+const tx = S.x0;
+// The stroke's top edge (x + y = 500.755 in its own units) laid exactly on the stem's cut and its
+// sides on the stem's sides: it lies inside the stem, hidden by it, until the rest falls away.
+const EDGE_TOP = 835 - STROKE.x0;
+const ty = C - tx - EDGE_TOP * k;
+const OFF = STROKE.offset;
+// The mark's three strokes (its left at -OFF, the middle, its right), then two more: the chain of
+// the company pages, one stroke a page. They arrive in the story's order: the middle, its right,
+// its left, then the two.
+const chain = [-1, 0, 1, 2, 3].map((n) => n * OFF);
+const company = families.company.map((slug) => ({ name: pages[slug].name, lit: slug === "colophon" }));
+const data = JSON.stringify({
+  view: { x: -40, y: -800, w: width + 80, h: 880 },
+  stem: S,
+  world: { tx, ty, k },
+  chain,
+});
+
+// The still story's figures, one per beat from the stroke on.
+const stillVB = (xs: number[]) => [-80, STROKE.top - 80, chainWidth(xs) + 160, STROKE.bottom - STROKE.top + 160].map(fix).join(" ");
+const stills: Record<string, number[]> = { one: [0], two: chainX([1]), three: chainX([1, 1]), more: chainX([1, 1, 1, 1]), blank: [0] };
+---
+
+<section class="cz" aria-labelledby="col-title" data-cz>
+  <div class="cz__stage">
+    <p class="cz__kicker t-xs">{c.kicker}</p>
+    <h1 class="cz__h1" id="col-title"><span class="cz__one">{one}</span></h1>
+    <p class="cz__two">{two}</p>
+    <svg
+      class="cz__type"
+      viewBox={`-40 -800 ${fix(width + 80)} 880`}
+      preserveAspectRatio="xMidYMid meet"
+      aria-hidden="true"
+      data-cz-svg
+      data-cz={data}
+    >
+      <path class="cz__guide" d={`M${fix(S.x0 - 160)} ${fix(C - S.x0 + 160)}L${fix(S.x1 + 300)} ${fix(C - S.x1 - 300)}`} />
+      <g class="cz__world" transform={`translate(${fix(tx)} ${fix(ty)}) scale(${k.toFixed(5)})`}>
+        <defs>
+          <clipPath id="cz-mid"><path d={STROKE_PATH} /></clipPath>
+          {/* The window's 45° sweep: the mark as drawn outside the band, turned inside out in it. */}
+          <clipPath id="cz-norm"><path data-cz-norm d="M-9000 -9000H9000V9000H-9000Z" /></clipPath>
+          <clipPath id="cz-turn"><path data-cz-turn d="" /></clipPath>
+        </defs>
+        <g clip-path="url(#cz-norm)">
+          <g class="cz__x">
+            {chain.map((_, i) => <path class="cz__st" d={STROKE_PATH} data-cz-st={i} opacity="0" />)}
+            <path class="cz__blank" d={STROKE_PATH} data-cz-blank />
+          </g>
+        </g>
+        {/* Inside out: the strokes as edges, and the two windows, the part nobody drew, solid. */}
+        <g class="cz__turn" clip-path="url(#cz-turn)">
+          {[0, 1, 2].map((i) => <path class="cz__edge" d={STROKE_PATH} data-cz-edge={i} />)}
+          <g class="cz__wins" clip-path="url(#cz-mid)">
+            <path d={STROKE_PATH} data-cz-win="0" />
+            <path d={STROKE_PATH} data-cz-win="2" />
+          </g>
+        </g>
+        <g class="cz__pages" data-cz-pages>
+          {
+            company.map((pg, i) => (
+              <text class:list={["cz__page", pg.lit && "is-lit"]} x={chain[i] + CAP_X} y={STROKE.top - 42} text-anchor="middle">
+                {pg.name}
+              </text>
+            ))
+          }
+        </g>
+      </g>
+      <g class="cz__line" data-cz-line>
+        {parts.map((p) => <path class:list={["cz__part", p.g === di && p.s === 1 && "is-stem"]} d={p.d} />)}
+      </g>
+    </svg>
+    <span class="cz__device" aria-hidden="true"><Chain id="cz-device" n={3} gaps={1} pad={8} /></span>
+    <ol class="cz__beats">
+      {
+        c.beats.map((b, i) => (
+          <li class="cz__beat" data-cz-beat={i}>
+            {stills[b.id] && (
+              <svg class="cz__still" viewBox={stillVB(stills[b.id])} aria-hidden="true">
+                {stills[b.id].map((x) => (
+                  <path class:list={["cz__still-st", b.id === "blank" && "is-blank"]} d={STROKE_PATH} transform={`translate(${fix(x)} 0)`} />
+                ))}
+              </svg>
+            )}
+            {b.id === "window" && (
+              <svg class="cz__still" viewBox={stillVB(stills.three)} aria-hidden="true">
+                <defs>
+                  <clipPath id="cz-still-mid">
+                    <path d={STROKE_PATH} transform={`translate(${fix(stills.three[1])} 0)`} />
+                  </clipPath>
+                </defs>
+                {stills.three.map((x) => (
+                  <path class="cz__edge" d={STROKE_PATH} transform={`translate(${fix(x)} 0)`} />
+                ))}
+                <g class="cz__wins" clip-path="url(#cz-still-mid)">
+                  <path d={STROKE_PATH} transform={`translate(${fix(stills.three[0])} 0)`} />
+                  <path d={STROKE_PATH} transform={`translate(${fix(stills.three[2])} 0)`} />
+                </g>
+              </svg>
+            )}
+            <p>
+              <b>{b.title}</b> {b.text}
+            </p>
+          </li>
+        ))
+      }
+    </ol>
+    <p class="cz__cue t-xs" aria-hidden="true" data-cz-cue>{c.cue}</p>
+  </div>
+</section>
+
+<style>
+  /* ── Still (no JS, reduced motion): a colophon page, then the story as a strip of figures. ── */
+  .cz {
+    padding: calc(var(--nav-h) + var(--u) * 12) 0 calc(var(--u) * 10);
+  }
+  .cz__stage {
+    position: relative;
+    display: grid;
+    /* One column the stage's width: an auto track would grow to the strip's widest line and run
+       off a phone. */
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    align-content: center;
+    min-height: 70svh;
+    text-align: center;
+  }
+  .cz__kicker {
+    color: var(--c-muted);
+    font-weight: var(--w-ui);
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+  .cz__h1 {
+    display: grid;
+    margin: 1.75rem 0 0;
+    padding: 0 var(--margin);
+    font-size: var(--t-m);
+    font-weight: var(--w-text);
+    line-height: 1.45;
+    letter-spacing: 0;
+  }
+  /* Its own width, and the drawing's tracking, so the drawing can lie exactly over it. */
+  .cz__one {
+    justify-self: center;
+    /* One line at every width: the drawing that takes over from it is one line. */
+    font-size: min(clamp(3.5rem, 1rem + 10vw, 12.5rem), 13.5vw);
+    white-space: nowrap;
+    font-weight: var(--w-ui);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .cz__two {
+    margin-top: 1.5rem;
+    padding: 0 var(--margin);
+    font-size: var(--t-m);
+    line-height: 1.45;
+    max-width: 30ch;
+    justify-self: center;
+    color: var(--c-muted);
+    text-wrap: balance;
+  }
+  .cz__type {
+    display: none;
+  }
+  .cz__device {
+    width: 2.75rem;
+    margin-top: calc(var(--u) * 5);
+  }
+  .cz__device :global(.chain) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .cz__cue {
+    display: none;
+  }
+  .cz__beats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: calc(var(--u) * 5) var(--gutter);
+    width: 100%;
+    max-width: 72rem;
+    margin: calc(var(--u) * 10) 0 0;
+    padding: 0 var(--margin);
+    list-style: none;
+    text-align: left;
+  }
+  .cz__beat {
+    color: var(--c-muted);
+  }
+  .cz__beat b {
+    color: var(--c-fg);
+    font-weight: var(--w-ui);
+  }
+  .cz__still {
+    display: block;
+    width: auto;
+    height: 4.5rem;
+    margin-bottom: 1rem;
+    isolation: isolate;
+  }
+  .cz__still-st {
+    fill: var(--c-fg);
+    mix-blend-mode: difference;
+  }
+  .cz__still-st.is-blank {
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 1.5px;
+    vector-effect: non-scaling-stroke;
+  }
+
+  /* The drawing's parts. */
+  .cz__part {
+    fill: var(--c-fg);
+  }
+  .cz__guide {
+    display: none;
+  }
+  .cz__x {
+    isolation: isolate;
+  }
+  .cz__st {
+    fill: var(--c-fg);
+    mix-blend-mode: difference;
+  }
+  .cz__blank,
+  .cz__turn,
+  .cz__pages {
+    display: none;
+  }
+
+  /* ── With motion: one held stage, one camera, the whole story. The h1 stays the line (for
+     readers and the first paint); the drawing lies exactly over its first sentence and takes
+     over as the scroll starts. ── */
+  :global(html.motion) .cz {
+    height: 1600svh;
+    padding: 0;
+  }
+  :global(html.motion) .cz__stage {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  :global(html.motion) .cz__type {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+  }
+  :global(html.motion) .cz__part {
+    stroke: var(--c-bg);
+    stroke-width: 1px;
+    stroke-opacity: var(--j, 0);
+    vector-effect: non-scaling-stroke;
+    paint-order: fill;
+  }
+  :global(html.motion) .cz__guide {
+    display: block;
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+    opacity: var(--g, 0);
+  }
+  /* The blank: the outline two strokes leave in one place, drawn by the same rule as they are. */
+  :global(html.motion) .cz__blank {
+    display: block;
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 1.5px;
+    vector-effect: non-scaling-stroke;
+    mix-blend-mode: difference;
+    opacity: var(--b, 0);
+  }
+  /* The window: a 45° band sweeps over the mark and turns it inside out, the strokes to their
+     edges and the windows, the part nobody drew, solid in Paper (each side stroke clipped by the
+     middle one is exactly its window); a second sweep turns it back. */
+  :global(html.motion) .cz__turn {
+    display: block;
+  }
+  .cz__edge {
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 1.5px;
+    vector-effect: non-scaling-stroke;
+  }
+  .cz__wins {
+    fill: var(--c-fg);
+  }
+  /* The company pages' chain: the strokes stay as they are, each page named small over its top
+     (clear of the words at the stage's foot, at any shape of screen), this one in Paper. */
+  :global(html.motion) .cz__pages {
+    display: block;
+    opacity: 0;
+  }
+  .cz__page {
+    fill: var(--c-quiet);
+    font-size: 21px;
+    font-weight: var(--w-ui);
+    letter-spacing: 0.02em;
+  }
+  .cz__page.is-lit {
+    fill: var(--c-fg);
+  }
+  /* On a phone the pages' names would be too small to read: the words name them. */
+  @media (max-width: 560px) {
+    .cz__page {
+      display: none;
+    }
+  }
+  /* One endless scene: the footer steps out of the flow (styles/base.css). */
+  :global(html.motion) .cz__beats {
+    display: grid;
+    grid-template-columns: 1fr;
+    position: absolute;
+    left: calc(var(--margin) - 1rem);
+    bottom: calc(var(--u) * 6);
+    width: min(28rem, calc(100% - 2 * var(--margin) + 2rem));
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+  /* The words sit in a band at the stage's foot that the drawing fades under, never a box over
+     it (a box sliced the strokes). */
+  :global(html.motion) .cz__stage::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 30%;
+    background: linear-gradient(transparent, var(--c-bg) 55%);
+    pointer-events: none;
+  }
+  :global(html.motion) .cz__beats {
+    z-index: 1;
+  }
+  :global(html.motion) .cz__beat {
+    grid-area: 1 / 1;
+    justify-self: start;
+    padding: 0 1rem;
+    opacity: 0;
+    visibility: hidden;
+  }
+  :global(html.motion) .cz__still {
+    display: none;
+  }
+  :global(html.motion) .cz__cue {
+    display: block;
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--u) * 6);
+    translate: -50% 0;
+    color: var(--c-muted);
+    letter-spacing: 0.08em;
+    z-index: 1;
+  }
+</style>

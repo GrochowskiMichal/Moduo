@@ -1,0 +1,562 @@
+---
+// Dusk, the home hero (DESIGN.md §13): one email, from before dawn to sunrise. A pinned split
+// stage: the words on black on the left, one chapter at a time (a line in Paper, a second thought
+// in grey), the chapter row under them; on the right a plate holding a live
+// sky (lib/dusk.ts, night to first light) and Moduo's Home (DuskWindow) leaning back in it, which
+// one camera glides through chapter by chapter (motion/dusk.ts). The scene (Scene.astro) holds
+// the hero on screen for its share of the scroll (lib/scene.ts HERO_LEAD) and then grows the mark
+// out of the window's own title bar: the box [data-light-mark] is where the driver says that mark
+// is. Without motion it is one designed screen: the first chapter, the window whole in a dawn.
+import DuskWindow from "./DuskWindow.astro";
+import { dusk, hero } from "../../data/site";
+
+const [opening, ...rest] = dusk.chapters;
+// Each line's words in spans of their own (motion/dusk-words.ts moves them one by one); the
+// spaces stay text, so the line reads as it did.
+const words = (line: string) => line.split(" ");
+// The hour under a chapter and its module, apart, so the hour can roll and the name can swap.
+const when = (c: (typeof rest)[number]) => ("when" in c ? c.when : "").split(" · ");
+const stroke = `<svg viewBox="0 0 22 8" aria-hidden="true"><path d="M8 0h14l-8 8H0z" fill="currentColor"/></svg>`;
+---
+
+<div class="dusk" data-dusk>
+  <div class="dusk__mark" data-light-mark aria-hidden="true"></div>
+  <div class="dusk__grid">
+    <div class="dusk__words">
+      <div class="dusk__story">
+        <div class="dusk__ch is-on" data-ch="0">
+          <h1 class="dusk__hl" id="hero-title">
+            {
+              opening.lines.map((group, g) =>
+                group.map((line) => (
+                  <span class="dusk__rise">
+                    <span class:list={["dusk__l", g > 0 && "is-grey"]}>
+                      {words(line).map((w, n) => (
+                        <>
+                          {n > 0 && " "}
+                          <span class="dusk__w">{w}</span>
+                        </>
+                      ))}
+                    </span>
+                  </span>
+                )),
+              )
+            }
+          </h1>
+          <p class="dusk__sub"><span class="dusk__s">{hero.sub[0]}</span> <span class="dusk__s">{hero.sub[1]}</span></p>
+        </div>
+        {
+          rest.map((c, i) => (
+            <div class="dusk__ch" data-ch={i + 1} aria-hidden="true">
+              <p class="dusk__hl">
+                {c.lines.map((group, g) =>
+                  group.map((line) => (
+                    <span class="dusk__rise">
+                      <span class:list={["dusk__l", g > 0 && "is-grey"]}>
+                        {words(line).map((w, n) => (
+                          <>
+                            {n > 0 && " "}
+                            <span class="dusk__w">{w}</span>
+                          </>
+                        ))}
+                      </span>
+                    </span>
+                  )),
+                )}
+              </p>
+              <p class="dusk__when">
+                <span class="dusk__time" data-time>{when(c)[0]}</span><span class="dusk__dot"> · </span><span class="dusk__clip"><span class="dusk__mod">{when(c)[1]}</span></span>
+              </p>
+            </div>
+          ))
+        }
+      </div>
+      <div class="dusk__ask">
+        <ol class="dusk__chapters" aria-label="The story, chapter by chapter">
+          {
+            dusk.chapters.map((c, i) => (
+              <li>
+                <button type="button" data-go={i} aria-label={c.label} aria-current={i === 0 ? "step" : undefined} set:html={stroke} />
+              </li>
+            ))
+          }
+          <li class="dusk__count" aria-hidden="true" data-count>{dusk.scrollHint}</li>
+        </ol>
+      </div>
+    </div>
+
+    <figure class="dusk__plate" data-plate>
+      <canvas class="dusk__sky" data-sky aria-hidden="true"></canvas>
+      <div class="dusk__space">
+        <div class="dusk__cam" data-cam>
+          <div class="dusk__float" data-float>
+            <span class="dusk__glow" aria-hidden="true"></span>
+            <div class="dusk__rim">
+              <DuskWindow />
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption class="sr-only">{dusk.windowLabel}</figcaption>
+    </figure>
+  </div>
+</div>
+
+<style>
+  .dusk {
+    --sun: 0;
+    position: relative;
+    height: 100%;
+    min-height: 100svh;
+    color: var(--c-fg);
+  }
+  /* The mark's box: the window's own mark in its bar, at the final pose (motion/dusk.ts sets it);
+     the scene grows the mark from it. */
+  .dusk__mark {
+    position: absolute;
+    aspect-ratio: 720 / 545.8;
+    pointer-events: none;
+  }
+  .dusk__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+    gap: clamp(1.5rem, 2.8vw, 3.25rem);
+    height: 100svh;
+    min-height: 600px;
+    padding-top: var(--nav-h);
+    padding-bottom: clamp(0.875rem, 1.6vw, 1.5rem);
+    padding-left: var(--margin);
+    padding-right: max(clamp(0.75rem, 1.6vw, 1.5rem), env(safe-area-inset-right, 0px));
+  }
+
+  /* ── The words ─────────────────────────────────────────────────────────────────── */
+  /* One stack, centred on the plate: the chapter's words, then the row a fixed step under the
+     block (the block keeps the first chapter's height, so the row never moves while the
+     chapters change). */
+  .dusk__words {
+    display: grid;
+    grid-template-rows: minmax(1rem, 1fr) auto auto minmax(1rem, 1.15fr);
+    min-width: 0;
+    container-type: inline-size;
+    padding: clamp(0.375rem, 0.8vw, 0.875rem) 0 clamp(0.5rem, 1vw, 1.125rem);
+  }
+  .dusk__story {
+    grid-row: 2;
+    display: grid;
+  }
+  /* Every chapter sits on the block's foot, a fixed step over the row: the first (the tallest,
+     with its two sentences) fills the block, the shorter ones keep the same distance to the row
+     instead of leaving a hole under them. */
+  .dusk__ch {
+    grid-area: 1 / 1;
+    align-self: end;
+    min-width: 0;
+  }
+  .dusk__hl {
+    margin: 0 0 0 -0.045em;
+    font-size: min(11.3cqi, 6.4rem);
+    font-weight: var(--w-ui);
+    line-height: 0.99;
+    letter-spacing: -0.042em;
+  }
+  /* The opening line alone, a size up from the story's lines: its widest line ("to think, dream",
+     6.43em) fills the column. */
+  .dusk__ch[data-ch="0"] .dusk__hl {
+    font-size: min(14.5cqi, 8rem);
+    line-height: 0.96;
+    letter-spacing: -0.048em;
+  }
+  /* Each line in its own clip, with room under the baseline for descenders; a line waiting or
+     gone sits well clear of that room, so no neighbour shows through it. */
+  .dusk__rise {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.16em;
+    margin-bottom: -0.16em;
+  }
+  /* A line is a row of words, each moved on its own by motion/dusk-words.ts: they rise out of
+     the line's clip one after another and leave the way the story moves. */
+  .dusk__l {
+    display: block;
+    white-space: nowrap;
+  }
+  .dusk__w {
+    display: inline-block;
+  }
+  /* The second thought: the reading grey, a step under the Paper line. */
+  .dusk__l.is-grey {
+    color: var(--c-quiet);
+    font-size: 0.9em;
+  }
+  .dusk__rise:has(.is-grey) {
+    margin-top: 0.14em;
+  }
+  .dusk__rise:has(.is-grey) + .dusk__rise:has(.is-grey) {
+    margin-top: 0;
+  }
+  /* What Moduo is, under the first chapter only. It paints with the HTML (the first screen's
+     largest text) while the line above is delivered. */
+  .dusk__sub {
+    margin: clamp(1rem, 2.6svh, 1.5rem) 0 0;
+    max-width: 30rem;
+    color: var(--c-muted);
+    font-size: clamp(1.0625rem, 0.95rem + 0.32vw, 1.25rem);
+    line-height: 1.5;
+    font-weight: var(--w-text);
+    text-wrap: balance;
+  }
+  .dusk__s {
+    display: block;
+  }
+  /* Under the other chapters' lines, the hour and the module: the sky is the clock, this is its
+     reading, in the slot the first chapter's sentences take. */
+  .dusk__when {
+    margin: clamp(0.875rem, 2.2svh, 1.25rem) 0 0;
+    color: var(--c-quiet);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    white-space: nowrap;
+  }
+  /* The hour's figures, each in a clip one line tall: a figure that changes rolls to the next,
+     like a clock's; the module's name swaps in a clip of its own. */
+  .dusk__when :global(.dusk__c),
+  .dusk__clip {
+    display: inline-block;
+    overflow: hidden;
+    height: 1.4em;
+    vertical-align: top;
+  }
+  .dusk__when :global(.dusk__ci),
+  .dusk__mod,
+  .dusk__dot {
+    display: inline-block;
+  }
+  .dusk__when :global(.dusk__ci > span) {
+    display: block;
+  }
+  .dusk__dot {
+    white-space: pre;
+  }
+  /* Before the driver takes them: the chapters waiting stay unseen, and on a first visit the
+     opening line waits for the window to stand up (the sentences under it paint with the HTML:
+     the first screen's largest text). */
+  :global(html.motion) .dusk__ch:not(.is-on) :is(.dusk__w, .dusk__s, .dusk__time, .dusk__dot, .dusk__mod) {
+    opacity: 0;
+  }
+  :global(html.intro) .dusk:not(.is-up) .dusk__w {
+    opacity: 0;
+  }
+
+  .dusk__ask {
+    grid-row: 3;
+    display: grid;
+    justify-items: start;
+    gap: clamp(1rem, 2vw, 1.5rem);
+    margin-top: clamp(1.75rem, 4svh, 2.75rem);
+  }
+  /* The chapter row: seven strokes, the current one in Paper and a step larger; the count after. */
+  .dusk__chapters {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 0 -5px;
+    padding: 0;
+    list-style: none;
+  }
+  .dusk__chapters button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-md);
+    background: none;
+    color: var(--c-line-strong);
+    cursor: pointer;
+    transition: color var(--d-hover) var(--ease);
+  }
+  .dusk__chapters button :global(svg) {
+    width: 20px;
+    height: 7px;
+    transition:
+      scale 0.2s var(--ease),
+      translate 0.2s var(--ease);
+  }
+  /* Under the pointer a stroke steps along its own axis, a little, the current one too, and the
+     count beside the row names the chapter (motion/dusk.ts). */
+  @media (hover: hover) {
+    .dusk__chapters button:hover {
+      color: var(--c-fg);
+    }
+    .dusk__chapters button:hover :global(svg) {
+      scale: 1.12;
+      translate: 4px 0;
+    }
+  }
+  .dusk__chapters button:focus-visible {
+    color: var(--c-fg);
+    outline: 2px solid var(--c-primary);
+    outline-offset: 1px;
+  }
+  .dusk__chapters button:focus-visible :global(svg) {
+    translate: 4px 0;
+  }
+  .dusk__chapters button[aria-current="step"] {
+    color: var(--c-fg);
+  }
+  .dusk__chapters button[aria-current="step"] :global(svg) {
+    scale: 1.25;
+  }
+  @media (hover: hover) {
+    .dusk__chapters button[aria-current="step"]:hover :global(svg) {
+      scale: 1.35;
+      translate: 4px 0;
+    }
+  }
+  .dusk__count {
+    margin-left: 0.75rem;
+    color: var(--c-muted);
+    font-size: var(--t-s);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+
+  /* ── The plate: the sky, and the window in its space ─────────────────────────────── */
+  .dusk__plate {
+    position: relative;
+    min-width: 0;
+    margin: 0;
+    border-radius: 22px;
+    overflow: hidden;
+    isolation: isolate;
+    container-type: inline-size;
+    /* Without the live waves (no WebGL, before the first draw): their colours, still (lib/waves.ts
+       renders light at the top, cobalt through the middle, a deep green at the foot). */
+    background: linear-gradient(180deg, #ece9f5 0%, #d9d6f2 30%, #5d86ee 58%, #2e5bdc 74%, #1c3a2c 90%, #162418 100%);
+  }
+  .dusk__plate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.08);
+    pointer-events: none;
+  }
+  .dusk__sky {
+    display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+  }
+  .dusk__plate.is-live .dusk__sky {
+    display: block;
+  }
+  /* The plate cuts the window cleanly at its edge (an edge fade read as a blur over the light
+     waves). */
+  .dusk__space {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    perspective: 2400px;
+    perspective-origin: 10% 10%;
+  }
+  /* The window, laid out larger than the plate and cut by its edge: the camera (motion/dusk.ts)
+     scales and moves this layer about its top-left corner. It is laid out --k times larger than
+     it is ever seen leaning (and the camera scales it down by as much), because Chrome rasters a
+     layer with 3D in its transform at its layout size: scaled up, the leaning window's text went
+     soft. --u is the plate's 1cqw at that size, for the rim and the glow round it. */
+  .dusk__plate {
+    --k: 1.6;
+  }
+  .dusk__cam {
+    --u: calc(1cqw * var(--k));
+    position: absolute;
+    left: 6%;
+    top: 10%;
+    width: calc(128 * var(--u));
+    transform-origin: 0 0;
+  }
+  :global(html.motion) .dusk__cam {
+    will-change: transform;
+  }
+  /* Safari (motion/dusk.ts sets .is-webkit): the plate gets a layer of its own, so its rounded
+     clip is applied by the compositor and not redrawn round the moving window every frame (it
+     flashed at the corners and edges), and the window's layer never shows its back face. */
+  .dusk.is-webkit .dusk__plate {
+    transform: translateZ(0);
+  }
+  .dusk.is-webkit .dusk__cam {
+    -webkit-backface-visibility: hidden;
+    backface-visibility: hidden;
+  }
+  /* Its own wrapper for the intro's rise, so it never shares a transform with the camera (the
+     idle breath is the camera's own, motion/dusk.ts). */
+  .dusk__float {
+    position: relative;
+    transform-origin: 50% 0%;
+  }
+  /* The sun's warmth behind the glass, once it is up (--sun, set by the driver). An opacity, not
+     a shadow: it changes on every frame of the last chapters. */
+  .dusk__glow {
+    position: absolute;
+    inset: calc(-12 * var(--u)) calc(-14 * var(--u)) calc(-18 * var(--u));
+    z-index: -1;
+    /* The gradient ends inside its box on every side, so the glow has no edge. */
+    background: radial-gradient(42% 36% at 66% 68%, rgb(200 214 255 / 0.4), transparent 68%);
+    opacity: var(--sun);
+    pointer-events: none;
+  }
+  /* The window's own edge and its shadow, nothing round it: the glass rim (a light border, a
+     gradient band and a lit ring) read as a second outline over the light waves. The shadow is
+     wide and soft, its blur well past its drop: a tight one peeked out under the rounded
+     corners as a thin grey crescent, a second outline on the curve. */
+  .dusk__rim {
+    position: relative;
+    border-radius: calc(1.15 * var(--u));
+    box-shadow: 0 calc(8 * var(--u)) calc(26 * var(--u)) calc(-8 * var(--u)) rgb(4 2 12 / 0.45);
+  }
+  .dusk__rim :global(.ap__win) {
+    border-radius: calc(1.15 * var(--u));
+  }
+
+  /* ── Intro (a first visit: html.intro is set before the first paint). The words and the row
+     under them wait unseen until the driver lifts them (.is-up) as the window stands up out of
+     the dark; the words are then delivered by motion/dusk-words.ts, and the row follows once
+     the line has been read. ── */
+  .dusk__ask {
+    transition:
+      opacity 0.9s var(--ease) 1.2s,
+      translate 0.9s var(--ease) 1.2s;
+  }
+  :global(html.intro) .dusk:not(.is-up) .dusk__ask {
+    opacity: 0;
+    translate: 0 10px;
+  }
+
+  /* ── Without motion: one screen, designed. The first chapter and the window, whole. ── */
+  :global(html:not(.motion)) .dusk__ch:not(.is-on) {
+    display: none;
+  }
+  :global(html:not(.motion)) .dusk__plate {
+    --k: 1;
+  }
+  /* The still stands the whole window in the middle of the plate, with the waves round it on
+     every side (at the top, it left an empty band of sky under it). */
+  :global(html:not(.motion)) .dusk__cam {
+    left: 4%;
+    top: 50%;
+    width: 92%;
+    translate: 0 -50%;
+  }
+  /* The window's props (cursors, the key, the flying task, the card) are the beats' own; the
+     still shows the morning done, without them. */
+  :global(html:not(.motion)) .dusk :global(.dk-prop) {
+    display: none;
+  }
+  /* The row stays: with JS the chapters are tabs that swap at once (motion/dusk.ts). */
+  :global(html:not(.js)) .dusk__chapters {
+    display: none;
+  }
+  :global(html:not(.motion)) .dusk__ask {
+    opacity: 1;
+    translate: none;
+  }
+
+  /* ── Narrow: the words over the plate, the window wider than the plate, one module at a time ── */
+  @media (max-width: 899px) {
+    .dusk__grid {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 1.125rem;
+      min-height: 0;
+      padding-right: var(--margin);
+      padding-top: calc(var(--nav-h) + 0.25rem);
+    }
+    .dusk__words {
+      grid-template-rows: auto auto;
+      padding: 0;
+    }
+    .dusk__story {
+      grid-row: 1;
+    }
+    /* On a phone the header steps away while the story runs, so the words keep the top of the
+       screen (on their foot they left a black band over them). */
+    .dusk__ch {
+      align-self: start;
+    }
+    .dusk__ask {
+      grid-row: 2;
+      gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .dusk__hl {
+      font-size: min(8.8cqi, 3.25rem);
+    }
+    .dusk__ch[data-ch="0"] .dusk__hl {
+      font-size: min(13.5cqi, 3.75rem);
+    }
+    .dusk__sub {
+      margin-top: 0.625rem;
+      max-width: 22rem;
+      font-size: 0.875rem;
+      line-height: 1.4;
+    }
+    .dusk__when {
+      margin-top: 0.625rem;
+      font-size: var(--t-xs);
+    }
+    .dusk__plate {
+      --k: 1.25;
+      border-radius: 18px;
+    }
+    .dusk__cam {
+      left: 5%;
+      top: 7%;
+      width: calc(210 * var(--u));
+    }
+    .dusk__space {
+      perspective-origin: 20% 10%;
+    }
+    :global(html:not(.motion)) .dusk__cam {
+      left: 3%;
+      top: 6%;
+      width: 180%;
+      translate: none;
+    }
+  }
+  @media (max-width: 560px) {
+    .dusk__cam {
+      left: 5%;
+      top: 6%;
+      width: calc(270 * var(--u));
+    }
+  }
+  /* Short screens: the first chapter's words step down, so the window keeps its room. */
+  @media (max-width: 899px) and (max-height: 700px) {
+    .dusk__hl {
+      font-size: min(8.6cqi, 3rem);
+    }
+    .dusk__ch[data-ch="0"] .dusk__hl {
+      font-size: min(11.5cqi, 3.25rem);
+    }
+    .dusk__sub {
+      display: none;
+    }
+  }
+  @media (min-width: 900px) and (max-height: 760px) {
+    .dusk__hl {
+      font-size: min(10cqi, 5rem);
+    }
+    .dusk__ch[data-ch="0"] .dusk__hl {
+      font-size: min(13cqi, 6.25rem);
+    }
+  }
+</style>

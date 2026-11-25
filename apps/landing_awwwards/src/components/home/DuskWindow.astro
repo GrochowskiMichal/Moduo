@@ -1,0 +1,164 @@
+---
+// Moduo's Home as the hero's stage (components/home/Dusk.astro): the app's chrome (frames/
+// Frame.astro) round a board of five widgets, each its own component (dusk/*Widget.astro) on
+// one measure: the board's padding, row height, header and radius are variables on `.dk`,
+// everything is in em, so the board scales as one piece under the camera. The story's beats
+// are state classes the driver (motion/dusk.ts) sets on the board, and each widget answers them
+// in its own file; the props (dusk/Props.astro) are placed by the driver in the board's pixels.
+// Content is the brand's cast, demo only.
+import Frame from "../frames/Frame.astro";
+import { dusk } from "../../data/site";
+import CalendarWidget from "./dusk/CalendarWidget.astro";
+import ChatWidget from "./dusk/ChatWidget.astro";
+import InboxWidget from "./dusk/InboxWidget.astro";
+import NoteWidget from "./dusk/NoteWidget.astro";
+import Props from "./dusk/Props.astro";
+import TasksWidget from "./dusk/TasksWidget.astro";
+---
+
+<Frame active="Home" home fixed timer={1452} label={dusk.windowLabel} class="dk-frame">
+  <div class="dk" data-dk aria-hidden="true">
+    <Props />
+    <InboxWidget />
+    <NoteWidget />
+    <TasksWidget />
+    <ChatWidget />
+    <CalendarWidget />
+  </div>
+</Frame>
+
+<style is:global>
+  /* The window's type scale: 1em is about 1.1 % of its width, the app's density at a wide
+     window. The glass shows the sky through the window and its panels: no blur behind it (a
+     backdrop blur on a window the camera moves in 3D costs the frame budget), the tint carries
+     it. */
+  .dk-frame .ap__win {
+    font-size: 1.1cqw;
+    background: rgb(5 5 9 / 0.84);
+    box-shadow: none;
+  }
+  /* The window's edge, drawn inside its own rounded clip, over its content: as a ring outside
+     the window it sat on a different curve from the glass's own anti-aliased edge, and over the
+     light sky the corners read as a second, offset outline. */
+  .dk-frame .ap__win::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    border-radius: inherit;
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.11),
+      inset 0 1px 0 rgb(255 255 255 / 0.08);
+    pointer-events: none;
+  }
+  .dk-frame .ap__bar {
+    height: 3.6em;
+    padding: 0 1.1em;
+  }
+  .dk-frame .ap__body {
+    padding: 0 0.8em;
+  }
+  .dk-frame .ap__foot {
+    height: 3em;
+    padding: 0 1.1em;
+  }
+  /* The board: one measure for every widget. */
+  .dk {
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+    /* A settle with the slightest give (it was a bounce, and the board's pops read as jumps). */
+    --spring: cubic-bezier(0.22, 1.18, 0.36, 1);
+    --pad: 1.1em;
+    --inset: 0.7em;
+    --row: 2.5em;
+    --head: 1.9em;
+    --head-gap: 0.9em;
+    --r: 1.1em;
+    position: relative;
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.96fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.8em;
+    padding-bottom: 0.2em;
+  }
+  /* Four columns: the inbox, the note and the calendar stand full height; Today and the channel
+     share the third. The calendar's day sets the board's height. */
+  .dk-mail {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+  .dk-note {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .dk-tasks {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .dk-chat {
+    grid-column: 3;
+    grid-row: 2;
+  }
+  .dk-cal {
+    grid-column: 4;
+    grid-row: 1 / span 2;
+  }
+  /* The reset carries no weight (:where), so every widget's own margins win: with `.dk p` here
+     the headers' gap, the note's paragraphs and headings, the composer's step and the slots'
+     line all collapsed to zero. */
+  :where(.dk) :where(p, ul) {
+    margin: 0;
+  }
+  .dk .ap-ref,
+  .dk .ap-tag {
+    max-width: 100%;
+    min-width: 0;
+  }
+  .dk .ap-ref {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Measuring the story's end state (motion/dusk.ts): the classes go on and off in one frame. */
+  .dk.is-measure,
+  .dk.is-measure * {
+    transition: none !important;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dk-w,
+    .dk-pop,
+    .dk-arrive > .dk-m,
+    .dk-mlist > *,
+    .dk-anna::after,
+    .dk-w::after,
+    .dk-born,
+    .dk-born > div,
+    .dk-sent,
+    .dk-sent > div,
+    .dk-ev,
+    .dk-offered,
+    .dk-react,
+    .dk-old,
+    .dk-whoname::after,
+    .dk-ring .fg {
+      transition: none !important;
+    }
+    .dk-dots i {
+      animation: none;
+    }
+    .dk-mlist > * {
+      translate: none !important;
+    }
+    /* What has not happened yet in the chapter is not there at all (no collapsed, unseen text). */
+    .dk:not(.m-new) .dk-arrive,
+    .dk:not(.t-made) .dk-born,
+    .dk:not(.c-you) .dk-s0,
+    .dk:not(.c-sent) .dk-s1,
+    .dk:not(.c-typing) .dk-typing,
+    .dk:not(.offers) .dk-offered,
+    .dk.c-you .dk-old {
+      display: none;
+    }
+  }
+</style>

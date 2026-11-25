@@ -1,0 +1,156 @@
+/* Design tokens. Values are the app's black shade (apps/app/src/styles/tokens.css, oklch →
+   sRGB) and the brand rules in .design/brand. Change a value here, never in a component. */
+
+/* Oudom ("Moduo Oudom" in the file) sets every word on the site: Moduo's own typeface, v1.3,
+   one variable file from Light 300 to Bold 700, every letter cut from one stroke of the mark
+   (source: docs/local/Moduo Joiner/nib). Geist Mono stays only for text copied from a terminal or
+   code: commit hashes and messages, branch names, inline code. */
+@font-face {
+  font-family: "Oudom";
+  src: url("/fonts/oudom-300_700.woff2") format("woff2");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/geist-mono-400_600-normal.woff2") format("woff2");
+  font-weight: 400 600;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* Metric-matched fallback for Oudom (Arial, scaled by the measured width ratio of 0.96), so the
+   swap shifts nothing. */
+@font-face {
+  font-family: "Oudom Fallback";
+  src: local("Arial");
+  size-adjust: 96%;
+  ascent-override: 99%;
+  descent-override: 27%;
+  line-gap-override: 0%;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Color: the neutral system, black shade. No brand hue. */
+  --c-bg: #000000; /* Canvas */
+  --c-fg: #fafafa; /* Paper */
+  --c-muted: #a4a4a4; /* Mist, neutral-400 */
+  --c-quiet: #7a7a7a; /* Ash, neutral-500: on Canvas and Card only (4.6:1 and up) */
+  --c-subtle: #8f8f8f; /* the app's subtle-foreground (Mist at 86%) on raised surfaces, 5.3:1 */
+  --c-dim: #555555; /* neutral-600: inactive figure parts, never text */
+  --c-line: #1b1b1b; /* neutral-800 hairline */
+  --c-line-strong: #333333; /* neutral-700 */
+  --c-card: #090909; /* neutral-900 */
+  --c-raised: #121212; /* neutral-850 */
+  --c-hover: #1b1b1b;
+  --c-primary: #eeeeee;
+  --c-primary-hover: #ffffff;
+  --c-primary-fg: #030303;
+  --c-curtain: #000000;
+  --c-stroke: var(--c-fg);
+  --c-stroke-off: #333333;
+
+  /* Inside product pictures only (brand decision 41). */
+  --c-success: #61c568;
+  --c-warning: #fcb442;
+  --c-info: #00ade4;
+  --c-tag-pink: #f862b3;
+  --c-tag-violet: #9e71fd;
+  --c-tag-blue: #0099f7;
+  --c-tag-green: #3fc168;
+  --c-tag-amber: #f9ad26;
+  --c-tag-teal: #00bcc5;
+
+  /* The spectrum the hero's glass stroke splits the sun into (First light): only ever light,
+     never a surface or a text color. */
+  --spec-1: #ff5d4d;
+  --spec-2: #ffb347;
+  --spec-3: #f3ee6a;
+  --spec-4: #6af0a2;
+  --spec-5: #4cc6ff;
+  --spec-6: #8f6bff;
+
+  /* Type: Oudom everywhere (see the faces above). */
+  --f-sans: "Oudom", "Oudom Fallback", system-ui, -apple-system, sans-serif;
+  --f-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  /* Weights: one per role, all on Oudom's axis (300 to 700). */
+  --w-light: 300; /* large quiet lines, 28 px and up */
+  --w-text: 400; /* reading, leads, statements */
+  --w-small: 450; /* text at 14 px and under: the axis lets it hold its color on black */
+  --w-ui: 500; /* controls, nav, labels, names */
+  --w-display: 600; /* headlines and titles */
+  --w-mark: 700; /* the wordmark, nothing else */
+
+  --t-mega: clamp(2.9rem, 0.55rem + 8.7vw, 9.75rem);
+  --t-xl: clamp(2.5rem, 1.05rem + 4.4vw, 6rem);
+  --t-l: clamp(1.75rem, 1.15rem + 1.9vw, 3.25rem);
+  --t-m: clamp(1.25rem, 1.08rem + 0.55vw, 1.625rem);
+  --t-body: 1.125rem;
+  --t-s: 0.875rem;
+  --t-xs: 0.8125rem; /* captions and labels: 13 px, the smallest size running text takes */
+  --t-2xs: 0.75rem;
+
+  --lh-mega: 0.9;
+  --lh-xl: 0.95;
+  --lh-l: 1.1;
+  --lh-m: 1.32;
+  --lh-body: 1.55;
+
+  /* Oudom is spaced for reading, so display sizes close up more as they grow; small sizes open a
+     touch. */
+  --tr-mega: -0.03em;
+  --tr-xl: -0.025em;
+  --tr-l: -0.015em;
+  --tr-m: -0.006em;
+  --tr-ui: 0em;
+  --tr-xs: 0.012em;
+
+  /* Space: one fluid unit. Section moods: tight 8u, normal 16u, airy 28u. */
+  --u: clamp(0.5rem, 0.38rem + 0.5vw, 0.875rem);
+  /* The page edge clears a phone's notch in landscape (the viewport is viewport-fit=cover). */
+  --margin: max(clamp(1rem, 4vw, 4rem), env(safe-area-inset-left), env(safe-area-inset-right));
+  --gutter: clamp(0.75rem, 1.6vw, 1.5rem);
+  --content-max: 1680px;
+  --measure: 38rem;
+  --nav-h: 4rem;
+
+  /* Shape (brand radius "soft") */
+  --r-sm: 4px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 9999px;
+
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+
+  /* Motion: the brand ease-out, and its in-out sibling for curtains. */
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-inout: cubic-bezier(0.7, 0, 0.2, 1);
+  --d-hover: 360ms;
+  --d-fade: 100ms;
+  --d-slow: 320ms;
+
+  /* Layers */
+  --z-content: 1;
+  --z-header: 50;
+  --z-dialog: 70;
+  --z-consent: 75;
+  --z-curtain: 90;
+}
+
+/* Long reading (legal, manifesto, changelog): Reading black, oklch(0.2 0 0). Tertiary text
+   steps up one notch so it keeps 4.5:1 on the lighter ground. */
+:root[data-tone="reading"] {
+  --c-bg: #161616;
+  --c-card: #1b1b1b;
+  --c-line: #262626;
+  --c-quiet: #8f8f8f;
+  --c-subtle: #9a9a9a;
+}

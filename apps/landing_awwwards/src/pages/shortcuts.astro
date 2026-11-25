@@ -1,0 +1,397 @@
+---
+// Every key Moduo answers to, beside a keyboard that lights what you press and names what it does
+// in the app (components/shortcuts, motion/pages/shortcuts.ts). The list is the reference: it is
+// complete in the HTML, and a row, pressed or tapped, plays its keys on the board.
+import Btn from "../components/Btn.astro";
+import Head from "../components/page/Head.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import Keyboard from "../components/shortcuts/Keyboard.astro";
+import { caps } from "../components/shortcuts/legend";
+import { shortcuts } from "../data/pages/shortcuts";
+import { waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs } from "../lib/seo";
+---
+
+<Base
+  title={shortcuts.title}
+  description={shortcuts.description}
+  image="/og/shortcuts.png"
+  jsonLd={[crumbs(["Help center", "/help"], [shortcuts.title, "/shortcuts"])]}
+>
+  <div data-pg="shortcuts" data-os="mac">
+    <PageHero
+      name={shortcuts.name}
+      line={shortcuts.line}
+      lead={shortcuts.lead}
+      family="resources"
+      compact
+      current="shortcuts"
+      up={{ href: "/help", label: "Help center" }}
+    >
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href="/download">Download Moduo</Btn>
+      </Fragment>
+    </PageHero>
+
+    <section class="sc pg" aria-labelledby="sc-title">
+      <div class="wrap">
+        <Head
+          id="sc-title"
+          title="Keys, by where they work."
+          text="Press any of them on your keyboard and watch the board answer. On a phone, tap a row."
+        />
+        <div class="sc__grid">
+          <div class="sc__board" data-reveal="frame">
+            <div class="sc__top">
+              <p class="sc__label t-s">{shortcuts.board.label}</p>
+              <div class="sc__os" role="group" data-one aria-label="Keyboard">
+                <Btn variant="ghost" size="sm" aria-pressed="true" data-os-pick="mac">{shortcuts.platforms.mac}</Btn>
+                <Btn variant="ghost" size="sm" aria-pressed="false" data-os-pick="win">{shortcuts.platforms.win}</Btn>
+              </div>
+            </div>
+            <Keyboard />
+            <div class="sc__read" aria-live="polite" data-sc-read>
+              <p class="sc__idle muted">
+                <span class="sc__fine">{shortcuts.board.idle}</span>
+                <span class="sc__touch">{shortcuts.board.idleTouch}</span>
+              </p>
+            </div>
+            <p class="sc__cap t-xs quiet">
+              <span class="os-mac">{shortcuts.board.caption.mac}</span>
+              <span class="os-win">{shortcuts.board.caption.win}</span>
+            </p>
+          </div>
+
+          <div class="sc__lists">
+            {
+              shortcuts.groups.map((g) => (
+                <section class="scg" aria-labelledby={`scg-${g.id}`} data-reveal>
+                  <h3 class="scg__name" id={`scg-${g.id}`}>
+                    {g.name}
+                  </h3>
+                  <p class="scg__where t-s quiet">{g.where}</p>
+                  <ul class="scg__list">
+                    {g.items.map((s, i) => (
+                      <li class:list={["only" in s && `is-${s.only}`]}>
+                        <button class="scr" type="button" data-sc={`${g.id}:${i}`}>
+                          <span class="scr__keys">
+                            {s.keys.map((chord, ci) => (
+                              <>
+                                {ci > 0 && "range" in s && <span class="scr__to">to</span>}
+                                {ci > 0 && "or" in s && <span class="scr__to">or</span>}
+                                <span class="scr__chord">
+                                  {caps(chord).map((c) => (
+                                    <kbd class="kbd scr__cap">
+                                      {c.mac === c.win ? (
+                                        <span aria-hidden={c.srMac ? "true" : undefined}>{c.mac}</span>
+                                      ) : (
+                                        <>
+                                          <span class:list={["os-mac", /^[⌘⇧⌥⌃]$/.test(c.mac) && "scr__sym"]} aria-hidden="true">
+                                            {c.mac}
+                                          </span>
+                                          <span class="os-win" aria-hidden="true">
+                                            {c.win}
+                                          </span>
+                                        </>
+                                      )}
+                                      {c.srMac && <span class="sr-only os-mac">{c.srMac} </span>}
+                                      {c.srWin && <span class="sr-only os-win">{c.srWin} </span>}
+                                    </kbd>
+                                  ))}
+                                </span>
+                              </>
+                            ))}
+                          </span>
+                          <span class="scr__does">{s.does}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              ))
+            }
+            <p class="sc__more t-s muted">{shortcuts.more}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <Related title="Keep reading." slugs={["help", "import", "ai"]} />
+  </div>
+</Base>
+
+<style>
+  [data-os="mac"] :global(.os-win),
+  [data-os="win"] :global(.os-mac),
+  [data-os="mac"] .is-win,
+  [data-os="win"] .is-mac {
+    display: none;
+  }
+  .sc__grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: start;
+  }
+  .sc__board {
+    grid-column: 1 / span 7;
+    position: sticky;
+    top: calc(var(--nav-h) + 1.5rem);
+    display: grid;
+    gap: 1rem;
+  }
+  .sc__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .sc__label {
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+  }
+  .sc__os {
+    display: flex;
+    gap: 0.375rem;
+  }
+  .sc__read {
+    display: flex;
+    align-items: center;
+    min-height: 5.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-line);
+  }
+  .sc__idle {
+    max-width: 34rem;
+  }
+  .sc__touch {
+    display: none;
+  }
+  @media (hover: none), (pointer: coarse) {
+    .sc__fine {
+      display: none;
+    }
+    .sc__touch {
+      display: inline;
+    }
+  }
+  /* What the driver writes: the chord, then what it does, and where. */
+  .sc__read :global(.rd) {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 1.25rem;
+    row-gap: 0.25rem;
+    width: 100%;
+  }
+  .sc__read :global(.rd__keys) {
+    grid-row: 1 / span 4;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--t-m);
+  }
+  .sc__read :global(.rd__keys .kbd) {
+    min-width: 2em;
+    height: 1.9em;
+    font-size: 0.8em;
+    background: var(--c-fg);
+    color: var(--c-bg);
+    border-color: var(--c-fg);
+  }
+  .sc__read :global(.rd__to) {
+    font-size: var(--t-s);
+    color: var(--c-quiet);
+  }
+  .sc__read :global(.rd__does) {
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+  }
+  .sc__read :global(.rd__where) {
+    color: var(--c-quiet);
+    font-size: var(--t-s);
+  }
+  .sc__read :global(.rd__none) {
+    color: var(--c-muted);
+  }
+  .sc__cap {
+    max-width: 40rem;
+  }
+
+  .sc__lists {
+    --sc-key: 11.75rem;
+    grid-column: 8 / -1;
+    display: grid;
+    gap: calc(var(--u) * 5);
+  }
+  .scg__name {
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-display);
+  }
+  .scg__where {
+    margin-top: 0.25rem;
+  }
+  /* One key column for every group, at least as wide as the widest chord on the page, so every
+     description starts level all the way down (a wider chord would widen only its own group). */
+  .scg__list {
+    display: grid;
+    grid-template-columns: minmax(max-content, var(--sc-key, 0)) minmax(0, 1fr);
+    column-gap: 1.5rem;
+    margin-top: 1rem;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .scg__list li {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .scr__sym {
+    font-size: 1.2em;
+    line-height: 1;
+  }
+  /* A row: its keys on the left, what they do beside them. Pressed or tapped, it plays its keys on
+     the board; under the pointer the keys it needs wait there, outlined. */
+  .scr {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: subgrid;
+    align-items: center;
+    min-height: 3rem;
+    padding: 0.5rem 0.625rem;
+    margin: 0 -0.625rem;
+    width: calc(100% + 1.25rem);
+    border-radius: var(--r-md);
+    text-align: left;
+    transition: background-color var(--d-hover) var(--ease);
+  }
+  .scr__keys {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .scr__chord {
+    display: inline-flex;
+    gap: 0.2rem;
+  }
+  .scr__to {
+    font-size: var(--t-xs);
+    color: var(--c-quiet);
+  }
+  .scr__cap {
+    font-size: var(--t-s);
+    min-width: 1.9em;
+    height: 1.75em;
+    transition:
+      background-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      border-color 0.18s var(--ease);
+  }
+  .scr__does {
+    color: var(--c-muted);
+    font-size: var(--t-body);
+    line-height: 1.4;
+    transition:
+      color var(--d-hover) var(--ease),
+      translate 0.5s var(--ease);
+  }
+  @media (hover: hover) {
+    .scr:hover {
+      background: var(--c-hover);
+    }
+    .scr:hover .scr__does {
+      color: var(--c-fg);
+      translate: 0.25em 0;
+    }
+  }
+  .scr:focus-visible .scr__does {
+    color: var(--c-fg);
+  }
+  .scr:global(.is-match) .scr__cap,
+  .scr:global(.is-playing) .scr__cap {
+    background: var(--c-fg);
+    color: var(--c-bg);
+    border-color: var(--c-fg);
+  }
+  .scr:global(.is-match) .scr__does,
+  .scr:global(.is-playing) .scr__does {
+    color: var(--c-fg);
+  }
+  /* The row the board is showing while you read: its words light, its keys stay as they are. */
+  .scr:global(.is-near) .scr__does {
+    color: var(--c-fg);
+  }
+  .sc__more {
+    max-width: 30rem;
+  }
+
+  @media (max-width: 1099px) {
+    .sc__board,
+    .sc__lists {
+      grid-column: 1 / -1;
+    }
+    /* The board stays in sight while you tap down the list, under the header, and moves up into
+       its place while the header steps aside. */
+    .sc__board {
+      top: var(--nav-h);
+      z-index: 2;
+      gap: 0.75rem;
+      padding: 0.75rem 0 1rem;
+      margin-bottom: calc(var(--u) * 4);
+      background: var(--c-bg);
+      box-shadow: 0 1px 0 var(--c-line);
+      transition: translate 0.6s var(--ease);
+    }
+    :global(html.hdr-away) .sc__board {
+      translate: 0 calc(-1 * var(--nav-h) + 0.25rem);
+    }
+    .sc__board :global(.kb__row--fn) {
+      display: none;
+    }
+    .sc__read {
+      min-height: 3.75rem;
+      padding: 0.625rem 0.875rem;
+    }
+    .sc__idle {
+      font-size: var(--t-s);
+    }
+    .sc__read :global(.rd__keys),
+    .sc__read :global(.rd__does) {
+      font-size: var(--t-body);
+    }
+    .sc__cap {
+      display: none;
+    }
+  }
+  @media (max-width: 560px) {
+    /* A phone keeps only the strip in sight: the keyboard would cover a third of the screen, so
+       the readout's keycaps carry the chord. */
+    .sc__board :global(.kbw) {
+      display: none;
+    }
+    .sc__top {
+      flex-wrap: wrap;
+    }
+    .sc__label {
+      display: none;
+    }
+    .scg__list {
+      grid-template-columns: fit-content(46%) minmax(0, 1fr);
+      column-gap: 1rem;
+    }
+    .scr__does {
+      font-size: 1rem;
+    }
+    .sc__read :global(.rd__where) {
+      display: none;
+    }
+  }
+</style>

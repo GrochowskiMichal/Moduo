@@ -1,0 +1,75 @@
+---
+// A chain of n strokes, drawn with the mark's rule: even strokes are layer A, odd strokes
+// layer B, and the page shows A XOR B (A and B in Paper, then A again in Canvas black clipped
+// by B, so every overlap is a window). Server-rendered at its resting state; motion modules
+// move it by rewriting the two layer paths and the viewBox.
+import { STROKE, chainLayers, chainWidth, chainX, uniformGaps } from "../lib/stroke";
+
+interface Props {
+  id: string;
+  n?: number;
+  gaps?: number | number[];
+  pad?: number;
+  outline?: boolean;
+  /** Override the fitted viewBox (the hero frames the chain with room for its labels). */
+  viewBox?: string;
+  class?: string;
+  label?: string;
+  [key: string]: unknown;
+}
+const { id, n = 6, gaps = 1, pad = 24, outline = false, viewBox, class: className, label, ...rest } = Astro.props;
+const gapList = Array.isArray(gaps) ? gaps : uniformGaps(n, gaps);
+const xs = chainX(gapList);
+const { a, b } = chainLayers(xs);
+const vb =
+  viewBox ??
+  [-pad, STROKE.top - pad, chainWidth(xs) + 2 * pad, STROKE.bottom - STROKE.top + 2 * pad]
+    .map((v) => Math.round(v * 100) / 100)
+    .join(" ");
+---
+
+<svg
+  class:list={["chain", outline && "chain--outline", className]}
+  viewBox={vb}
+  data-chain={id}
+  data-n={n}
+  role={label ? "img" : undefined}
+  aria-label={label}
+  aria-hidden={label ? undefined : "true"}
+  focusable="false"
+  {...rest}
+>
+  <defs>
+    <path id={`${id}-a`} d={a}></path>
+    <path id={`${id}-b`} d={b}></path>
+    <clipPath id={`${id}-cb`}>
+      <use href={`#${id}-b`}></use>
+    </clipPath>
+  </defs>
+  <g class="chain__cam">
+    <use class="chain__fill" href={`#${id}-a`}></use>
+    <use class="chain__fill" href={`#${id}-b`}></use>
+    {!outline && <use class="chain__cut" href={`#${id}-a`} clip-path={`url(#${id}-cb)`} />}
+  </g>
+</svg>
+
+<style>
+  .chain {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .chain__fill {
+    fill: var(--c-stroke);
+  }
+  .chain__cut {
+    fill: var(--c-bg);
+  }
+  .chain--outline .chain__fill {
+    fill: none;
+    stroke: var(--c-stroke);
+    stroke-width: 22;
+    stroke-linejoin: round;
+  }
+</style>

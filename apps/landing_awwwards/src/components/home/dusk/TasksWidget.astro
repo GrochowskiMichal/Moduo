@@ -1,0 +1,159 @@
+---
+// Tasks: Today, with the ring of what's done. The first row is the task Maciej's email becomes in
+// chapter 4 (.dk.t-made opens it; the flying task lands on it). Rows are one height: a status
+// circle, the title, a small chip for the thing the task came from (its icon; the title tells
+// the rest), the project's dot and the day.
+import Icon from "../../frames/Icon.astro";
+import Widget from "./Widget.astro";
+
+const today = [
+  { t: "Draft the 1.4.1 notes", ref: "Re: release notes", c: "teal", m: "Today" },
+  { t: "Check the Windows build", c: "amber", m: "Today" },
+  { t: "Pick the first wave", c: "violet", m: "Fri" },
+  { t: "Finish the Weight view", c: "blue", m: "Mon" },
+];
+---
+
+<Widget slug="tasks" icon="square-check-big" title="Today">
+  <span class="dk-right" slot="right">
+    <svg class="dk-ring" viewBox="0 0 24 24"><circle class="bg" cx="12" cy="12" r="10"></circle><circle class="fg" cx="12" cy="12" r="10" data-ring></circle></svg>
+    <span class="ap-meta" data-ringn>1 of 5</span>
+  </span>
+  <div class="dk-tlist">
+    <div class="dk-row dk-born" data-born>
+      <div>
+        <span class="ap-status"></span>
+        <span class="dk-t ap-ell">Review the alpha invite</span>
+        <span class="dk-tref" title="Open alpha invite"><Icon name="mail" /></span>
+        <span class="ap-dot ap-dot--sm" style="--c:var(--ap-violet)"></span>
+        <span class="ap-meta">Today</span>
+      </div>
+    </div>
+    {
+      today.map((t) => (
+        <p class="dk-row">
+          <span class="ap-status" />
+          <span class="dk-t ap-ell">{t.t}</span>
+          {t.ref && (
+            <span class="dk-tref" title={t.ref}>
+              <Icon name="mail" />
+            </span>
+          )}
+          <span class="ap-dot ap-dot--sm" style={`--c:var(--ap-${t.c})`} />
+          <span class="ap-meta">{t.m}</span>
+        </p>
+      ))
+    }
+    <p class="dk-row is-done"><span class="ap-check is-done"></span><span class="dk-t ap-ell">Ship the closed alpha</span></p>
+  </div>
+</Widget>
+
+<style is:global>
+  .dk-ring {
+    width: 1.5em;
+    height: 1.5em;
+    rotate: -90deg;
+  }
+  .dk-ring circle {
+    fill: none;
+    stroke-width: 3;
+  }
+  .dk-ring .bg {
+    stroke: rgb(255 255 255 / 0.1);
+  }
+  .dk-ring .fg {
+    stroke: var(--ap-fg);
+    stroke-linecap: round;
+    stroke-dasharray: 62.8;
+    stroke-dashoffset: 50.2;
+    transition: stroke-dashoffset 0.9s var(--ease);
+  }
+  /* Five rows tall, always: when Maciej's task is born at the top, the done one slips under the
+     fold, so the widget (and the board under it) never changes height. */
+  .dk-tlist {
+    flex: none;
+    /* A hair short of five rows: the fifth row's hairline is the panel's edge, not a sixth line. */
+    height: calc(5 * var(--row) - 1px);
+    overflow: hidden;
+  }
+  /* A row is --row tall in the board's em (its font size stays 1em so the measure holds; the
+     title is set a step smaller inside it). */
+  .dk-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65em;
+    min-height: var(--row);
+    box-shadow: inset 0 -1px 0 var(--ap-hairline);
+  }
+  .dk-row .ap-status,
+  .dk-row .ap-check {
+    flex: none;
+    width: 1em;
+    height: 1em;
+  }
+  .dk-t {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.93em;
+  }
+  /* The thing the task came from: its module's icon in a small chip. */
+  .dk-tref {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    width: 1.75em;
+    height: 1.75em;
+    border-radius: 0.5em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+  }
+  .dk-tref .ap-i {
+    width: 1em;
+    height: 1em;
+  }
+  .dk-row .ap-meta {
+    min-width: 2.6em;
+    text-align: right;
+  }
+  .dk-row.is-done {
+    box-shadow: none;
+  }
+  .dk-row.is-done .dk-t {
+    color: var(--ap-muted);
+    text-decoration: line-through;
+    text-decoration-color: rgb(164 164 164 / 0.5);
+  }
+  /* The task Maciej's email becomes: its row opens, then it fades up into place. */
+  .dk-born {
+    display: grid;
+    grid-template-rows: 0fr;
+    min-height: 0;
+    box-shadow: none;
+    transition:
+      grid-template-rows 0.7s var(--ease),
+      min-height 0.7s var(--ease);
+  }
+  .dk-born > div {
+    display: flex;
+    align-items: center;
+    gap: 0.65em;
+    min-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    translate: 0 -0.3em;
+    transition:
+      opacity 0.45s var(--ease),
+      translate 0.5s var(--ease);
+  }
+  .dk.t-made .dk-born {
+    grid-template-rows: 1fr;
+    min-height: var(--row);
+    box-shadow: inset 0 -1px 0 var(--ap-hairline);
+  }
+  .dk.t-made .dk-born > div {
+    min-height: var(--row);
+    opacity: 1;
+    translate: 0 0;
+    transition-delay: 0.3s;
+  }
+</style>

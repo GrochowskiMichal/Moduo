@@ -1,0 +1,120 @@
+---
+// The Contacts card's picture: Maciej's page tilted away like a sheet on a desk, everything linked
+// to him filling in row by row with how it links, and over it the link that suggests itself when
+// someone new writes from the moduo.app domain.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const rows = [
+  { cap: "Tasks", icon: "circle-check", t: "Review the invite", rel: "Created from" },
+  { cap: "Emails", icon: "mail", t: "Alpha invite", rel: "From" },
+  { cap: "Notes", icon: "file-text", t: "Invite copy", rel: "Mentions" },
+  { cap: "Events", icon: "calendar", t: "Invite review", rel: "Attendee" },
+] as const;
+---
+
+<div class="ap mini ctm" aria-hidden="true" data-mini="contacts">
+  <div class="ap-panel ctm-sheet">
+    <div class="ctm-head">
+      <span class="ap-av ap-av--n ap-av--40">MA</span>
+      <div>
+        <p class="ctm-name">Maciej Grzywacz</p>
+        <p class="ap-xs ap-muted ctm-sub">Co-founder · Moduo <span class="ap-dot" style="--c:var(--ap-success)"></span>Active</p>
+      </div>
+    </div>
+    {
+      rows.map((r) => (
+        <div class="ctm-row" data-row>
+          <span class="ap-eyebrow ctm-cap">{r.cap}</span>
+          <span class="ctm-item">
+            <Icon name={r.icon} class="ap-i--sm" />
+            <span class="grow ap-ell">{r.t}</span>
+            <span class="ctm-rel">{r.rel}</span>
+          </span>
+        </div>
+      ))
+    }
+  </div>
+  <div class="ctm-suggest" data-suggest>
+    <Icon name="folder-kanban" class="ap-i--sm ap-muted" />
+    <span class="grow ap-ell"><span class="ap-med">Link to Open alpha?</span> <span class="ap-muted">· in 3 threads</span></span>
+    <span class="ap-btn">Dismiss</span>
+    <span class="ap-btn ap-btn--primary">Link</span>
+  </div>
+</div>
+
+<style>
+  .ctm {
+    left: 8%;
+    top: 0.5em;
+    width: 96%;
+    perspective: 70em;
+  }
+  .ctm-sheet {
+    padding: 1.143em 1.286em 0.571em;
+    transform-origin: 30% 0;
+    transform: rotateX(28deg) rotateZ(-7deg) skewX(4deg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 3em 4em -2em rgb(0 0 0 / 0.9);
+  }
+  .ctm-head {
+    display: flex;
+    align-items: center;
+    gap: 0.857em;
+    padding-bottom: 0.857em;
+  }
+  .ctm-name {
+    font-size: 1.286em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .ctm-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .ctm-row {
+    display: grid;
+    grid-template-columns: 5.5em 1fr;
+    align-items: center;
+    min-height: 2.857em;
+    border-top: 1px solid var(--ap-line);
+  }
+  .ctm-cap {
+    padding-left: 0.1em;
+  }
+  .ctm-item {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-width: 0;
+    font-size: 0.929em;
+  }
+  .ctm-item :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .ctm-rel {
+    flex: none;
+    /* 4.5:1 on the panel (0.7 fell just short once the row showed whole). */
+    color: rgb(164 164 164 / 0.76);
+    font-size: 0.923em;
+  }
+  .ctm-suggest {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    width: 82%;
+    margin: -1.429em 0 0 6%;
+    padding: 0.357em 0.357em 0.357em 0.714em;
+    border-radius: 0.857em;
+    background: #111;
+    box-shadow:
+      inset 0 0 0 1px var(--ap-hairline),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 1.5em 2.5em -0.5em rgb(0 0 0 / 0.9);
+    font-size: 0.929em;
+  }
+</style>

@@ -1,0 +1,26 @@
+---
+import Faq from "../components/Faq.astro";
+import Plans from "../components/Plans.astro";
+import Ai from "../components/home/Ai.astro";
+import Board from "../components/home/Board.astro";
+import Makers from "../components/home/Makers.astro";
+import ModulesIndex from "../components/home/ModulesIndex.astro";
+import Refusals from "../components/home/Refusals.astro";
+import Scene from "../components/home/Scene.astro";
+import Yours from "../components/home/Yours.astro";
+import { faq, site } from "../data/site";
+import { app, faq as faqLd } from "../lib/seo";
+import Base from "../layouts/Base.astro";
+---
+
+<Base intro appFont jsonLd={[app(), faqLd(faq.items)]}>
+  <Scene />
+  <ModulesIndex />
+  <Ai />
+  <Board />
+  <Yours />
+  <Refusals />
+  <Plans />
+  <Makers />
+  <Faq size="xl" title={faq.title} text={faq.text} items={faq.items} email={site.email} />
+</Base>

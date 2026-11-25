@@ -1,0 +1,281 @@
+---
+// Every change carries a name: a task's activity as the app lists it, where the assistant's work
+// reads as the person it works for, through the app it came from ("Maciej Grzywacz · via
+// Claude Desktop"), in the same neutral style as anyone's (brand §8: no AI color, no sparkle), and its
+// comment reads as written by the app. Beside it, a note the assistant added to, with Undo.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import { ai } from "../../data/pages/ai";
+
+const n = ai.names;
+const via = "via Claude Desktop";
+const trail = [
+  { who: "You", av: "MI", c: "var(--ap-pink)", what: "created this from Maciej’s email", t: "9:13" },
+  { who: "Maciej Grzywacz", via, av: "MA", c: "var(--ap-violet)", what: "set the due date to Nov 16", t: "9:41" },
+  { who: "Maciej Grzywacz", via, av: "MA", c: "var(--ap-violet)", what: "linked Invite copy", t: "9:41" },
+  { who: "You", av: "MI", c: "var(--ap-pink)", what: "started a focus session", t: "10:02" },
+];
+---
+
+<section class="names pg" id="names" aria-labelledby="names-title">
+  <div class="wrap grid">
+    <div class="names__copy">
+      <h2 class="names__title t-l" id="names-title" data-split>{n.title}</h2>
+      <p class="muted" data-reveal>{n.text}</p>
+      <dl class="names__points">
+        {
+          n.points.map((p) => (
+            <div data-reveal>
+              <dt>{p.title}</dt>
+              <dd class="muted">{p.text}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+
+    <figure class="names__fig" data-reveal="frame">
+      <div class="ap names__pic" role="img" aria-label="A task's activity in Moduo: you created it from Maciej's email; Maciej Grzywacz, via Claude Desktop, set the due date to Friday and linked the invite copy note; Claude Desktop left a comment under its own name. Beside it, a note Maciej's assistant added a line to, with Undo.">
+        <div class="ap-panel names__task" aria-hidden="true">
+          <div class="names__head">
+            <span class="ap-proj grow ap-ell"><span class="ap-dot" style="--c:var(--ap-blue)"></span>Open alpha <Icon name="chevron-right" class="ap-i--xs" /> Invite</span>
+            <span class="ap-xs ap-subtle">MOD-12</span>
+          </div>
+          <p class="names__ttl"><span class="ap-check"></span><span>{n.task}</span></p>
+          <p class="ap-block">Activity</p>
+          <ol class="names__trail">
+            {
+              trail.map((row) => (
+                <li>
+                  <span class="ap-av ap-av--16" style={`--c:${row.c}`}>{row.av}</span>
+                  <span class="grow names__line">
+                    <span class="ap-med">{row.who}</span>
+                    {row.via && <span class="ap-muted"> · {row.via}</span>} <span class="ap-muted">{row.what}</span>
+                  </span>
+                  <span class="ap-meta">{row.t}</span>
+                </li>
+              ))
+            }
+          </ol>
+          <div class="names__comment">
+            <span class="names__appic"><Icon name="message-square" class="ap-i--xs" /></span>
+            <div class="grow">
+              <p class="names__line"><span class="ap-med">Claude Desktop</span> <span class="ap-xs ap-subtle">9:42</span></p>
+              <p class="ap-muted">The email asks for the invite on the 16th, so I set the due date to match.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="ap-panel names__note" aria-hidden="true">
+          <p class="names__nt">{n.note}</p>
+          <p class="names__p ap-muted">Agenda</p>
+          <ul class="names__ul">
+            <li>Invite copy, Maciej to sign off</li>
+            <li>First wave list from the waitlist</li>
+          </ul>
+          <p class="names__added">
+            <span>Send the invite on the 16th, as agreed by email.</span>
+          </p>
+          <div class="names__toast">
+            <span class="grow ap-ell"><span class="ap-muted">Added</span> <span class="ap-med">{via}</span></span>
+            <span class="names__undo">Undo</span>
+          </div>
+        </div>
+      </div>
+      <figcaption class="ap-note">Activity and a note, redrawn from the app. Its look is still changing.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<style>
+  .names__copy {
+    grid-column: 9 / span 4;
+    grid-row: 1;
+    align-self: center;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .names__title {
+    max-width: 12ch;
+  }
+  .names__points {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 0.75rem;
+  }
+  .names__points > div {
+    display: grid;
+    gap: 0.375rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .names__points dt {
+    font-weight: var(--w-ui);
+  }
+  .names__points dd {
+    margin: 0;
+    font-size: var(--t-s);
+    line-height: 1.5;
+  }
+  .names__fig {
+    grid-column: 1 / span 7;
+    grid-row: 1;
+    display: grid;
+    gap: 1rem;
+  }
+
+  /* The picture: two of the app's panels, the note laid over the task's lower right corner,
+     below its trail and beside its comment. */
+  .names__pic {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    font-size: clamp(11px, 0.98vw, 14px);
+  }
+  .names__task {
+    grid-column: 1 / span 11;
+    grid-row: 1;
+    padding: 1.143em 1.286em 1.286em;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2em 4em -2em rgb(0 0 0 / 0.9);
+  }
+  .names__note {
+    grid-column: 7 / -1;
+    grid-row: 2;
+    margin-top: -5.5em;
+    padding: 1.286em 1.286em 1em;
+    background: #0d0d0d;
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line-strong),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 2em 4em -1em rgb(0 0 0 / 0.95);
+  }
+  .names__head {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+  }
+  .names__ttl {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    margin: 0.857em 0 0.571em;
+    font-size: 1.286em;
+    font-weight: 600;
+  }
+  .names__ttl .ap-check {
+    width: 0.889em;
+    height: 0.889em;
+  }
+  .names__trail {
+    display: grid;
+    margin: 0.286em 0 0.857em;
+  }
+  .names__trail li {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.286em;
+    min-width: 0;
+    font-size: 0.929em;
+  }
+  .names__line {
+    min-width: 0;
+  }
+  .names__comment {
+    display: flex;
+    gap: 0.571em;
+    max-width: 46%;
+    margin-bottom: 3.5em;
+    padding: 0.714em 0.857em;
+    border-radius: 0.714em;
+    background: var(--ap-chip);
+    font-size: 0.929em;
+    line-height: 1.45;
+  }
+  .names__appic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 1.538em;
+    height: 1.538em;
+    border-radius: 0.385em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+  }
+  .names__nt {
+    font-size: 1.286em;
+    font-weight: 600;
+    margin-bottom: 0.571em;
+  }
+  .names__p {
+    font-size: 0.929em;
+  }
+  .names__ul {
+    display: grid;
+    gap: 0.286em;
+    margin: 0.429em 0 0.714em;
+    padding-left: 1.143em;
+    list-style: disc;
+    color: var(--ap-muted);
+  }
+  .names__added {
+    padding: 0.429em 0.714em;
+    margin: 0 -0.714em;
+    border-radius: 0.429em;
+    box-shadow: inset 2px 0 0 var(--ap-sel-edge);
+    background: var(--ap-sel);
+  }
+  .names__toast {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    margin-top: 1em;
+    padding: 0.571em 0.571em 0.571em 0.714em;
+    border-radius: 0.714em;
+    background: var(--ap-muted-bg);
+    box-shadow: inset 0 0 0 1px var(--ap-line-strong);
+    font-size: 0.929em;
+    min-width: 0;
+  }
+  .names__undo {
+    flex: none;
+    padding: 0.286em 0.643em;
+    border-radius: 0.429em;
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+    font-weight: 500;
+  }
+  .names__fig :global(.ap-note) {
+    margin-top: 1.5rem;
+  }
+  @media (max-width: 1100px) {
+    .names__copy {
+      grid-column: 1 / -1;
+      grid-row: 1;
+      max-width: 40rem;
+    }
+    .names__fig {
+      grid-column: 1 / -1;
+      grid-row: 2;
+      margin-top: 2.5rem;
+    }
+  }
+  @media (max-width: 640px) {
+    .names__pic {
+      font-size: 12px;
+    }
+    .names__task {
+      grid-column: 1 / -1;
+    }
+    .names__note {
+      grid-column: 2 / -1;
+      margin-top: -1.5em;
+    }
+    .names__comment {
+      max-width: none;
+      margin-bottom: 1.5em;
+    }
+  }
+</style>

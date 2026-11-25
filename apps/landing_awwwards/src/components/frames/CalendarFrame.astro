@@ -1,0 +1,374 @@
+---
+// Calendar: the working week (weekends hidden, a setting), events and task blocks on one grid. Thursday's block ran out with its task
+// still open: it turns dashed and offers later, longer or remove (done is its circle). Friday's
+// block is the open alpha invite. The rail: this month and the calendars.
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+const days = [
+  ["Mon", "2"],
+  ["Tue", "3"],
+  ["Wed", "4"],
+  ["Thu", "5"],
+  ["Fri", "6"],
+];
+const TODAY = 3;
+const FIRST = 9;
+const HOURS = 8;
+// day, start (hours after 9:00), length (hours), kind, title, time, hue (external calendars)
+const items = [
+  { d: 0, s: 0, l: 1.5, kind: "block", t: "Mail sync fixes", m: ["9:00", "10:30"] },
+  { d: 0, s: 5, l: 1, kind: "event", t: "Alpha check-in", m: ["14:00", "15:00"] },
+  { d: 1, s: 1, l: 0.75, kind: "event", t: "Design review", m: ["10:00", "10:45"] },
+  { d: 2, s: 2, l: 1, kind: "external", t: "Waitlist picks", m: ["11:00", "12:00"], c: "var(--ap-teal)" },
+  { d: 2, s: 4.5, l: 1.5, kind: "block", t: "Windows build", m: ["13:30", "15:00"] },
+  { d: 3, s: 0.5, l: 2, kind: "elapsed", t: "1.4.1 notes", m: ["9:30", "11:30"] },
+  { d: 3, s: 5, l: 1, kind: "event", t: "Invite review", m: ["14:00", "15:00"] },
+  { d: 4, s: 1, l: 1.5, kind: "block", t: "Wave one list", m: ["10:00", "11:30"] },
+  { d: 4, s: 5, l: 1, kind: "event", t: "Weekly review", m: ["14:00", "15:00"] },
+  { d: 1, s: 5.5, l: 1, kind: "external", t: "Busy", m: ["14:30", "15:30"], c: "var(--ap-violet)" },
+];
+// November 2026 starts on a Sunday: the grid opens on Monday 26 October (five rows, to the 29th).
+const month = Array.from({ length: 35 }, (_, i) => i - 5);
+const busy = new Set([2, 3, 4, 6, 9, 11]);
+---
+
+<Frame
+  active="Calendar"
+  shadow
+  label="A picture of Moduo's Calendar module: a week with events and task blocks; one block ran out with its task open and offers later, longer or remove."
+>
+  <nav class="ap-panel ap-panel--side cal-rail">
+    <div class="cal-mhead">
+      <span class="ap-sm ap-med grow">November 2026</span>
+      <span class="ap-ico"><Icon name="chevron-left" /></span>
+      <span class="ap-ico"><Icon name="chevron-right" /></span>
+    </div>
+    <div class="cal-month">
+      {["M", "T", "W", "T", "F", "S", "S"].map((d) => <span class="cal-wd">{d}</span>)}
+      {
+        month.map((n) => (
+          <span class:list={["cal-md", (n < 1 || n > 30) && "is-out", n === 5 && "is-today", n >= 2 && n <= 8 && "is-week"]}>
+            {n < 1 ? 31 + n : n > 30 ? n - 30 : n}
+            {busy.has(n) && <i />}
+          </span>
+        ))
+      }
+    </div>
+    <p class="ap-eyebrow cal-eb">Calendars</p>
+    <div class="cal-c"><span class="cal-cd" style="--c:var(--ap-primary)"></span><span class="grow">Moduo</span></div>
+    <div class="cal-c"><span class="cal-cd" style="--c:var(--ap-teal)"></span><span class="grow ap-ell">mike@moduo.app</span></div>
+    <div class="cal-c"><span class="cal-cd" style="--c:var(--ap-violet)"></span><span class="grow ap-ell">Personal</span></div>
+    <span class="ap-btn ap-btn--ghost ap-sm cal-connect"><Icon name="plus" />Connect calendar…</span>
+  </nav>
+
+  <div class="ap-panel ap-panel--main cal">
+    <div class="cal-bar">
+      <span class="ap-ico"><Icon name="chevron-left" /></span>
+      <span class="ap-ico"><Icon name="chevron-right" /></span>
+      <span class="ap-btn ap-btn--outline cal-today">Today</span>
+      <span class="ap-sm ap-med cal-range">Nov 2<i class="cal-to"></i>6</span>
+      <span class="grow"></span>
+      <span class="ap-2xs ap-muted cal-sync">Synced just now</span>
+      <span class="ap-ico cal-sync"><Icon name="refresh-cw" /></span>
+      <span class="ap-seg"><span>Day</span><span class="is-on">Week</span></span>
+    </div>
+    <div class="cal-grid" style={`--rows:${HOURS}`}>
+      <div class="cal-corner"></div>
+      {
+        days.map(([w, n], i) => (
+          <div class:list={["cal-day", i === TODAY && "is-today"]}>
+            {w} <span>{n}</span>
+          </div>
+        ))
+      }
+      <div class="cal-hours">
+        {Array.from({ length: HOURS }, (_, i) => <span>{String(FIRST + i).padStart(2, "0")}</span>)}
+      </div>
+      {
+        days.map((_, di) => (
+          <div class="cal-col">
+            {items
+              .filter((it) => it.d === di)
+              .map((it) => (
+                <div class={`cal-item is-${it.kind}`} style={`--s:${it.s};--l:${it.l}${it.c ? `;--c:${it.c}` : ""}`} data-t={it.t}>
+                  <span class="cal-t">
+                    {(it.kind === "block" || it.kind === "elapsed") && <span class="ap-check" />}
+                    <span class="ap-ell">{it.t}</span>
+                  </span>
+                  <span class="cal-m">
+                    {it.m[0]}
+                    <i class="cal-to" />
+                    {it.m[1]}
+                  </span>
+                  {it.kind === "elapsed" && (
+                    <span class="cal-triage">
+                      <span>Later</span>
+                      <span>Longer</span>
+                      <span>Remove</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            {di === TODAY && <span class="cal-now" />}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</Frame>
+
+<style>
+  .cal-rail {
+    display: flex;
+    flex-direction: column;
+  }
+  .cal-mhead {
+    display: flex;
+    align-items: center;
+    padding: 0.143em 0 0.286em 0.571em;
+  }
+  .cal-month {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    justify-items: center;
+    row-gap: 0.143em;
+    padding: 0 0.143em;
+  }
+  .cal-wd {
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    line-height: 2.2;
+  }
+  .cal-md {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 2em;
+    height: 2em;
+    border-radius: 0.571em;
+    font-size: 0.857em;
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-md.is-out {
+    color: var(--ap-subtle);
+    opacity: 0.55;
+  }
+  .cal-md.is-week {
+    background: var(--ap-hover);
+  }
+  .cal-md.is-today {
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+    font-weight: 600;
+  }
+  .cal-md i {
+    position: absolute;
+    bottom: 0.25em;
+    width: 0.25em;
+    height: 0.25em;
+    border-radius: 50%;
+    background: var(--ap-muted);
+  }
+  .cal-eb {
+    padding: 1.273em 0.727em 0.364em;
+  }
+  .cal-c {
+    display: flex;
+    align-items: center;
+    gap: 0.615em;
+    min-height: 2.462em;
+    padding: 0 0.615em;
+    font-size: 0.929em;
+  }
+  .cal-cd {
+    flex: none;
+    width: 0.769em;
+    height: 0.769em;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  .cal-connect {
+    margin-top: 0.286em;
+    color: var(--ap-muted);
+  }
+  .cal {
+    padding: 0.857em 1.143em 0.571em;
+  }
+  .cal-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.143em;
+    padding-bottom: 0.857em;
+  }
+  .cal-today {
+    margin-left: 0.286em;
+  }
+  .cal-range {
+    margin-left: 0.615em;
+  }
+  .cal-bar .ap-seg {
+    margin-left: 0.286em;
+  }
+  .cal-grid {
+    display: grid;
+    grid-template-columns: 3.714em repeat(5, 1fr);
+    grid-template-rows: auto calc(var(--rows) * 4em);
+  }
+  .cal-day {
+    padding: 0 0.615em 0.462em;
+    border-bottom: 1px solid var(--ap-line);
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    white-space: nowrap;
+  }
+  .cal-day span {
+    color: rgb(164 164 164 / 0.7);
+  }
+  .cal-day.is-today,
+  .cal-day.is-today span {
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .cal-corner {
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .cal-hours {
+    display: grid;
+    grid-template-rows: repeat(var(--rows), 1fr);
+    padding-right: 0.727em;
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .cal-hours span {
+    translate: 0 -0.6em;
+  }
+  .cal-col {
+    position: relative;
+    border-left: 1px solid var(--ap-line);
+    background-image: linear-gradient(var(--ap-line) 1px, transparent 1px);
+    background-size: 100% calc(100% / var(--rows));
+  }
+  .cal-item {
+    position: absolute;
+    left: 0.214em;
+    right: 0.214em;
+    top: calc(var(--s) * 100% / var(--rows) + 1px);
+    height: calc(var(--l) * 100% / var(--rows) - 2px);
+    display: flex;
+    flex-direction: column;
+    padding: 0.143em 0.429em;
+    border-radius: 0.571em;
+    border: 1px solid var(--ap-line);
+    overflow: hidden;
+    line-height: 1.35;
+  }
+  /* Moduo's own events wear the primary at a tenth; an external calendar's, its hue. */
+  .cal-item.is-event {
+    border-color: rgb(238 238 238 / 0.35);
+    background: rgb(238 238 238 / 0.1);
+  }
+  .cal-item.is-external {
+    border-color: color-mix(in oklab, var(--c) 60%, transparent);
+    background: color-mix(in oklab, var(--c) 18%, transparent);
+  }
+  .cal-item.is-block {
+    background: rgb(18 18 18 / 0.6);
+  }
+  .cal-item.is-elapsed {
+    border-style: dashed;
+    border-color: #3a3a3a;
+    background: rgb(18 18 18 / 0.3);
+  }
+  .cal-t {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+    min-width: 0;
+    font-size: 0.857em;
+  }
+  .cal-t :global(.ap-check) {
+    width: 1.333em;
+    height: 1.333em;
+  }
+  /* The app's range dash, drawn by CSS: it is part of the picture, not of the page's copy. */
+  .cal-to::before {
+    content: "\2013";
+    margin: 0 0.3em;
+    font-style: normal;
+  }
+  .cal-m {
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .is-block .cal-m,
+  .is-elapsed .cal-m {
+    padding-left: 1.571em;
+  }
+  .cal-triage {
+    display: flex;
+    gap: 0.5em;
+    margin-top: auto;
+    padding: 0 0 0.182em 0.182em;
+    color: var(--ap-muted);
+    font-size: 0.786em;
+  }
+  .cal-triage span:first-child {
+    color: var(--ap-fg);
+    text-decoration: underline;
+    text-decoration-color: rgb(250 250 250 / 0.35);
+    text-underline-offset: 0.2em;
+  }
+  .cal-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(3.33 * 100% / var(--rows));
+    height: 1px;
+    background: var(--ap-primary);
+  }
+  .cal-now::before {
+    content: "";
+    position: absolute;
+    left: -0.214em;
+    top: 50%;
+    width: 0.429em;
+    height: 0.429em;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    translate: 0 -50%;
+  }
+  @container (max-width: 640px) {
+    .cal-sync,
+    .cal-range {
+      display: none;
+    }
+    .cal-grid {
+      grid-template-columns: 2.4em repeat(5, 1fr);
+    }
+    .cal-day {
+      padding: 0 0.3em 0.462em;
+      font-size: 0.786em;
+    }
+    .cal-m,
+    .cal-triage {
+      display: none;
+    }
+  }
+  /* A phone's frame shows the middle of the week, today and its neighbours, at a width their
+     titles can be read in (Monday and Tuesday are the grid's first day cells and columns). */
+  @container (max-width: 480px) {
+    .cal-grid {
+      grid-template-columns: 2.4em repeat(3, 1fr);
+    }
+    .cal-day:nth-child(-n + 3),
+    .cal-col:nth-child(-n + 9) {
+      display: none;
+    }
+  }
+</style>

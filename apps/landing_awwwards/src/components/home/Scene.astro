@@ -1,0 +1,449 @@
+---
+// Hero + the interlock (the signature). One section: the hero holds over a sticky stage whose
+// canvas motion/interlock.ts drives. The hero is "Dusk" (components/home/Dusk.astro, motion/
+// dusk.ts, DESIGN.md §13): one email, from before dawn to sunrise, told chapter by chapter while a
+// camera glides through Moduo's Home in a live sky. The scene holds the first screen for the
+// hero's share of the scroll (lib/scene.ts HERO_LEAD); at its end the whole window stands in a
+// sunrise and the scene takes the mark from the window's own title bar on the same pixels and
+// grows out of it: its three strokes deal out into six apart, close pair by pair until five
+// windows open, stand as an annotated plate, then keep growing into a ribbon. Without JS or with
+// reduced motion it is a designed, static layout: the hero as one screen (the first chapter, the
+// window whole in a dawn), then the plate (chain, names, five annotated links).
+import Chain from "../Chain.astro";
+import Btn from "../Btn.astro";
+import Dusk from "./Dusk.astro";
+import LinkCard from "./LinkCard.astro";
+import { interlock, modules, moduleOrder, waitlist } from "../../data/site";
+import { NAME_ROOM, SCENE_HEIGHT_SVH } from "../../lib/scene";
+import { CAP_X, STROKE, STROKE_H, chainWidth, chainX, uniformGaps } from "../../lib/stroke";
+
+const fix = (v: number) => v.toFixed(2);
+const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
+
+// The static plate: the six-stroke chain with room above it for the names.
+const xs = chainX(uniformGaps(6, 1));
+const plateVB = { x: 0, y: STROKE.top - NAME_ROOM, w: chainWidth(xs), h: STROKE_H + NAME_ROOM };
+const plateBox = [plateVB.x, plateVB.y, plateVB.w, plateVB.h].map(fix).join(" ");
+const px = (x: number) => pct((x - plateVB.x) / plateVB.w);
+const nameX = xs.map((x) => px(x + CAP_X));
+const nameY = pct((STROKE.top - NAME_ROOM * 0.45 - plateVB.y) / plateVB.h);
+---
+
+<section class="scene" id="interlock" data-scene aria-labelledby="hero-title" style={`--scene-h:${SCENE_HEIGHT_SVH}svh`}>
+  <div class="hero" data-hero>
+    <Dusk />
+  </div>
+
+  <div class="scene__stage" data-stage>
+    <canvas class="scene__canvas" data-canvas aria-hidden="true"></canvas>
+    <div class="scene__beat wrap grid" data-beat>
+      <h2 class="scene__title t-l">{interlock.closing.title}</h2>
+      <p class="scene__text muted">{interlock.closing.text}</p>
+    </div>
+
+    <figure class="scene__fig">
+      <div class="scene__slot" data-slot="scene"></div>
+      <div class="scene__plate">
+        <Chain id="ilk" n={6} gaps={1} viewBox={plateBox} class="scene__chain" />
+        <ol class="scene__names" aria-hidden="true">
+          {moduleOrder.map((slug, i) => <li data-name style={`--x:${nameX[i]};--y:${nameY}`}>{modules[slug].name}</li>)}
+        </ol>
+      </div>
+      <figcaption class="sr-only">
+        Six strokes in a row, one for each module: email, tasks, notes, calendar, contacts and chat. Each
+        overlaps the next, and each overlap is a window: a link between two modules.
+      </figcaption>
+    </figure>
+
+    <ol class="scene__caps wrap">
+      {
+        interlock.links.map((l, k) => (
+          <li class="scene__cap" data-cap>
+            <a class="scene__card" href={`/${moduleOrder[k]}#overlaps`}>
+              <span class="sr-only">
+                {l.title}. {l.text}
+              </span>
+              <LinkCard {...interlock.cards[k]} />
+            </a>
+          </li>
+        ))
+      }
+    </ol>
+    <p class="scene__readout t-xs tabular" aria-hidden="true" data-readout></p>
+
+    <div class="scene__beat wrap grid" data-beat>
+      <h2 class="scene__title t-l">{interlock.done.title}</h2>
+      <p class="scene__text muted">{interlock.done.text}</p>
+    </div>
+    <div class="scene__beat wrap grid" data-beat>
+      <h2 class="scene__title scene__title--peak t-xl">{interlock.grown.title}</h2>
+      <div class="scene__text">
+        <p class="muted">{interlock.grown.text}</p>
+        <Btn class="scene__cta" data-wl-open="hero" arrow>{waitlist.button}</Btn>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* ── Static layout (no JS, reduced motion): a designed page, not a broken scene. ── */
+  .scene {
+    position: relative;
+  }
+  /* Dusk, one screen tall: the words on the left, the plate with the window on the right. */
+  .hero {
+    position: relative;
+    min-height: 100svh;
+    overflow: clip;
+  }
+
+  .scene__stage {
+    position: relative;
+    padding-block: calc(var(--u) * 14);
+  }
+  .scene__canvas {
+    display: none;
+  }
+  /* A beat: the line on the left, its words on the third hanging line (col 9), so the stage
+     keeps its height for the figure. The plate and the ribbon speak at display size. */
+  .scene__beat {
+    row-gap: 1rem;
+    align-items: end;
+  }
+  .scene__title {
+    grid-column: 1 / span 7;
+  }
+  .scene__title--peak {
+    grid-column: 1 / span 8;
+    max-width: none;
+  }
+  .scene__text {
+    grid-column: 9 / span 4;
+  }
+  .scene__cta {
+    margin-top: 1.25rem;
+  }
+  @media (max-width: 999px) {
+    .scene__title,
+    .scene__title--peak,
+    .scene__text {
+      grid-column: 1 / -1;
+    }
+  }
+  /* The still scene: a heading sits nearer what it heads than what came before it. */
+  .scene__beat + .scene__beat {
+    margin-top: calc(var(--u) * 10);
+  }
+  .scene__title {
+    max-width: 18ch;
+  }
+  .scene__text {
+    max-width: 34rem;
+  }
+  .scene__fig {
+    position: relative;
+    width: calc(100% - 2 * var(--margin));
+    max-width: var(--content-max);
+    margin: calc(var(--u) * 4) auto 0;
+  }
+  .scene__slot {
+    display: none;
+  }
+  .scene__plate {
+    position: relative;
+  }
+  .scene__plate :global(.scene__chain) {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .scene__names li {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    translate: -50% -50%;
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    color: var(--c-fg);
+    white-space: nowrap;
+    pointer-events: none;
+    transition: color 0.4s var(--ease);
+  }
+  /* The five links as one client's story: a card each, in a row under the plate, in the
+     order of their windows. Each card is a link to the module page that explains it; under the
+     pointer or focus it lifts, and its window in the chain opens wider (motion/interlock.ts). */
+  .scene__caps {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+    width: calc(100% - 2 * var(--margin));
+    max-width: var(--content-max);
+    margin: calc(var(--u) * 4) auto 0;
+    padding: 0;
+  }
+  .scene__cap {
+    position: relative;
+    min-width: 0;
+  }
+  .scene__card {
+    display: block;
+    border-radius: 1rem;
+    transition:
+      translate 0.5s var(--ease),
+      opacity 0.4s var(--ease);
+  }
+  .scene__card:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 3px;
+  }
+  @media (hover: hover) {
+    .scene__card:hover {
+      translate: 0 -3px;
+    }
+  }
+  .scene__card:is(:hover, :focus-visible) :global(.lc) {
+    box-shadow:
+      0 0 0 1px var(--ap-line-strong),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 1.25em 2.5em -1.25em rgb(0 0 0 / 0.9);
+  }
+  .scene__readout {
+    display: none;
+  }
+  .scene__beat:nth-last-of-type(2) {
+    margin-top: calc(var(--u) * 4);
+  }
+  @media (max-width: 999px) {
+    .scene__caps {
+      grid-template-columns: minmax(0, 22rem);
+      gap: 0.75rem;
+    }
+    /* A phone's chain is too narrow for a name over each stroke: the six stand in one row over
+       the chain, spread across its width in the strokes' order (the live plate sets them the
+       same way, motion/interlock.ts). */
+    .scene__names {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: calc(var(--t-xs) * -1.5);
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+    /* The still plate keeps the row nearer the strokes than the words above it. */
+    .scene__fig {
+      margin-top: calc(var(--u) * 6);
+    }
+    .scene__names li {
+      position: static;
+      translate: none;
+      font-size: var(--t-xs);
+    }
+  }
+  @media (max-width: 480px) {
+    .scene__caps {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* ── Live (motion allowed, JS on): the layout is in place before the first paint, keyed on
+     html.motion from the head script, so nothing shifts when the driver starts. The driver adds
+     .is-live once its canvas has drawn; until then the hero's own artwork stands in. ── */
+  /* One screen held, the hero's scroll (DUSK_SVH, in which its seven chapters play) and the
+     scene's own (SCENE_SVH): lib/scene.ts. */
+  :global(html.motion) .scene {
+    height: var(--scene-h);
+  }
+  /* The hero: held on screen by the interlock for its lead (translated against the scroll), then
+     faded where it stands while the mark grows out of its window. */
+  :global(html.motion) .hero {
+    --a: 1;
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 100svh;
+    min-height: 0;
+    z-index: 2;
+    pointer-events: none;
+    opacity: var(--a);
+  }
+  :global(html.motion) .hero :global(:is(form, a, button, input, label)) {
+    pointer-events: auto;
+  }
+  /* The stage sits over the hero, so the mark comes forward through it. Clicks pass through to
+     the hero; only the stage's own links and buttons take them. While the hero is still
+     there the stage inverts what it crosses, the strokes' own rule (motion/interlock.ts sets
+     .is-hero). */
+  :global(html.motion) .scene__stage {
+    position: sticky;
+    z-index: 3;
+    top: 0;
+    height: 100svh;
+    padding: 0;
+    overflow: clip;
+    pointer-events: none;
+  }
+  /* Once the stage lets go, the modules' section holds it at its last frame while it takes the
+     chain over (motion/modules.ts), then fades it. */
+  :global(html.motion) .scene:global(.is-held) .scene__stage {
+    position: fixed;
+    left: 0;
+    right: 0;
+  }
+  :global(html.motion) .scene:global(.is-hero) .scene__stage {
+    mix-blend-mode: difference;
+  }
+  :global(html.motion) .scene__canvas {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  :global(html.motion) .scene__fig {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    margin: 0;
+  }
+  :global(html.motion) .scene__slot {
+    display: block;
+    position: absolute;
+    left: var(--margin);
+    right: var(--margin);
+    top: 37svh;
+    height: 34svh;
+  }
+  :global(html.motion) .scene__plate {
+    position: absolute;
+    inset: 0;
+  }
+  :global(html.motion) .scene__plate :global(.scene__chain) {
+    display: none;
+  }
+  :global(html.motion) .scene__names {
+    position: static;
+    display: block;
+  }
+  :global(html.motion) .scene__names li {
+    position: absolute;
+    left: 0;
+    top: 0;
+    translate: none;
+    visibility: hidden;
+  }
+  :global(html.motion) .scene__names li:global(.is-dim) {
+    color: var(--c-quiet);
+  }
+  :global(html.motion) .scene__beat,
+  :global(html.motion) .scene__cap {
+    --a: 0;
+    opacity: var(--a);
+    translate: calc((1 - var(--a)) * -18px) 0;
+    will-change: opacity, translate;
+  }
+  :global(html.motion) .scene__beat {
+    pointer-events: auto;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--nav-h) + 4svh);
+    margin: 0 auto;
+  }
+  :global(html.motion) .scene__beat + .scene__beat {
+    margin-top: 0;
+  }
+  /* The cards: the driver places each one in its column under the chain (one at a time on a
+     phone). The lit link's card is at full strength; the others wait a step back. */
+  :global(html.motion) .scene__caps {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    pointer-events: none;
+  }
+  :global(html.motion) .scene__cap {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--cap-w, 15rem);
+  }
+  :global(html.motion) .scene__card {
+    opacity: 0.55;
+  }
+  :global(html.motion) .scene__cap:global(.is-on) .scene__card,
+  :global(html.motion) .scene__card:is(:hover, :focus-visible) {
+    opacity: 1;
+  }
+  /* The chip (the card before) steps in a beat after its card, as the window opens (--f). */
+  :global(html.motion) .scene__card :global([data-chip]) {
+    --f: 1;
+    translate: calc((1 - var(--f)) * -1.25em) 0;
+    opacity: var(--f);
+  }
+  :global(html.motion) .scene__readout {
+    display: flex;
+    gap: 0.75rem;
+    position: absolute;
+    right: var(--margin);
+    bottom: 4svh;
+    color: var(--c-muted);
+    opacity: var(--a, 0);
+  }
+  /* Short laptop screens: the beats and the legend step down a size so the plate fits. */
+  @media (min-width: 1000px) and (max-height: 820px) {
+    :global(html.motion) .scene__title {
+      font-size: calc(var(--t-m) * 1.3);
+    }
+    :global(html.motion) .scene__title--peak {
+      font-size: calc(var(--t-l) * 1.15);
+    }
+    :global(html.motion) .scene__text {
+      font-size: var(--t-s);
+    }
+    :global(html.motion) .scene__beat {
+      gap: 0.625rem;
+      top: calc(var(--nav-h) + 3svh);
+    }
+  }
+  /* Narrow: one caption at a time, its sentence with it, under the chain. */
+  @media (max-width: 999px) {
+    :global(html.motion) .scene__slot {
+      top: 45svh;
+      height: 20svh;
+    }
+    :global(html.motion) .scene__cap {
+      width: min(22rem, calc(100% - 2 * var(--margin)));
+    }
+    :global(html.motion) .scene__card {
+      opacity: 1;
+    }
+    :global(html.motion) .scene__readout {
+      bottom: 3svh;
+    }
+  }
+  /* Short phones (a small screen, or Safari with its bars out): the beats step down a size and
+     sit higher, so the chain and its links keep their room under them (motion/interlock.ts
+     places the chain under the tallest beat). */
+  @media (max-width: 999px) and (max-height: 740px) {
+    :global(html.motion) .scene__beat {
+      top: calc(var(--nav-h) + 1svh);
+      row-gap: 0.625rem;
+    }
+    :global(html.motion) .scene__title {
+      font-size: var(--t-m);
+    }
+    :global(html.motion) .scene__title--peak {
+      font-size: calc(var(--t-l) * 0.95);
+    }
+    :global(html.motion) .scene__text {
+      font-size: var(--t-s);
+    }
+    :global(html.motion) .scene__cta {
+      margin-top: 0.75rem;
+    }
+  }
+</style>

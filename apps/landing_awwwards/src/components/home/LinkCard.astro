@@ -1,0 +1,258 @@
+---
+// One link of the home scene's story, drawn as the thing it is in the app (frames.css): the
+// task, the invite note, the review, Maciej's page, the alpha channel, each in its module's own
+// anatomy. Its last row is the thing it came from, linked, with the relation named the way the
+// app names it ("Created from", "Attendee"); that row is the card before it, so the five read as
+// one morning of the open alpha, and it steps in as the card's window opens (motion/interlock.ts).
+// Decorative: its link says the same in words.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import type { IconName } from "../../lib/app-icons";
+
+type Link = { text: string; rel: string; icon?: IconName; initials?: string; task?: boolean };
+type Card =
+  | { kind: "task"; module: string; icon: IconName; title: string; project: string; due: string; link: Link }
+  | { kind: "note"; module: string; icon: IconName; title: string; line: string; link: Link }
+  | { kind: "event"; module: string; icon: IconName; title: string; when: string; guests: readonly string[]; link: Link }
+  | { kind: "person"; module: string; icon: IconName; title: string; initials: string; role: string; link: Link }
+  | {
+      kind: "channel";
+      module: string;
+      icon: IconName;
+      title: string;
+      message: { initials: string; name: string; text: string };
+      link: Link;
+    };
+
+const card = Astro.props as Card;
+const { link } = card;
+---
+
+<span class="lc-box" aria-hidden="true">
+<span class:list={["ap lc", `lc--${card.kind}`]}>
+  <span class="lc__mod"><Icon name={card.icon} class="ap-i--xs" />{card.module}</span>
+
+  {
+    card.kind === "task" && (
+      <span class="lc__body">
+        <span class="lc__row">
+          <span class="ap-status" />
+          <span class="lc__t">{card.title}</span>
+        </span>
+        <span class="lc__row lc__sub">
+          <span class="ap-dot" style="--c:var(--ap-blue)" />
+          <span class="grow ap-ell">{card.project}</span>
+          <span class="lc__due">{card.due}</span>
+        </span>
+      </span>
+    )
+  }
+  {
+    card.kind === "note" && (
+      <span class="lc__body">
+        <span class="lc__t lc__t--doc">{card.title}</span>
+        <span class="lc__sub ap-ell">{card.line}</span>
+      </span>
+    )
+  }
+  {
+    card.kind === "event" && (
+      <span class="lc__body lc__event">
+        <span class="lc__t">{card.title}</span>
+        <span class="lc__row lc__sub">
+          <span class="grow">{card.when}</span>
+          <span class="lc__guests">
+            {card.guests.map((g, i) => (
+              <span class="ap-av ap-av--16" style={`--c:${i === 0 ? "var(--ap-pink)" : "var(--ap-blue)"}`}>
+                {g}
+              </span>
+            ))}
+          </span>
+        </span>
+      </span>
+    )
+  }
+  {
+    card.kind === "person" && (
+      <span class="lc__body lc__row lc__person">
+        <span class="ap-av ap-av--n lc__av">{card.initials}</span>
+        <span class="grow lc__col">
+          <span class="lc__t">{card.title}</span>
+          <span class="lc__sub ap-ell">{card.role}</span>
+        </span>
+      </span>
+    )
+  }
+  {
+    card.kind === "channel" && (
+      <span class="lc__body">
+        <span class="lc__t">
+          <span class="lc__hash">#</span>
+          {card.title}
+        </span>
+        <span class="lc__row lc__msg">
+          <span class="ap-av ap-av--16" style="--c:var(--ap-teal)">
+            {card.message.initials}
+          </span>
+          <span class="grow ap-ell">
+            <span class="lc__who">{card.message.name}</span> <span class="lc__said">{card.message.text}</span>
+          </span>
+        </span>
+      </span>
+    )
+  }
+
+  <span class="lc__link" data-chip>
+    {link.task && <span class="ap-check" />}
+    {link.icon && <Icon name={link.icon} />}
+    {link.initials && <span class="ap-av ap-av--16" style="--c:var(--ap-pink)">{link.initials}</span>}
+    <span class="grow ap-ell lc__lt">{link.text}</span>
+    <span class="lc__rel">{link.rel}</span>
+  </span>
+</span>
+</span>
+
+<style>
+  .lc-box {
+    display: block;
+    container-type: inline-size;
+  }
+  .lc {
+    display: grid;
+    gap: 0.786em;
+    width: 100%;
+    padding: 0.929em 1em 1em;
+    border-radius: 1em;
+    background: var(--ap-card);
+    box-shadow:
+      0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.045),
+      0 1.25em 2.5em -1.25em rgb(0 0 0 / 0.9);
+    color: var(--ap-fg);
+    /* 13 px on a full card, a little less where the row is tight (the card is the container). */
+    font-size: clamp(11px, 5.2cqi, 13px);
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+    transition: box-shadow 0.4s var(--ease);
+  }
+  /* The module it sits in, as the app labels a section. */
+  .lc__mod {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    color: var(--ap-subtle);
+    font-size: 0.786em;
+    font-weight: 500;
+    letter-spacing: 0.025em;
+    text-transform: uppercase;
+  }
+  .lc__mod :global(.ap-i) {
+    width: 1.1em;
+    height: 1.1em;
+  }
+  .lc__body {
+    display: grid;
+    align-content: start;
+    gap: 0.286em;
+    min-width: 0;
+    min-height: 3.3em;
+  }
+  .lc__row {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-width: 0;
+  }
+  .lc__t {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.077em;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+  }
+  .lc__t--doc {
+    font-size: 1.231em;
+    letter-spacing: -0.015em;
+  }
+  .lc__sub {
+    color: var(--ap-muted);
+    font-size: 0.923em;
+  }
+  .lc--task .lc__sub {
+    padding-left: 1.6em;
+  }
+  .lc__due {
+    color: var(--ap-subtle);
+  }
+  /* An event: the block's edge in the calendar's ink. */
+  .lc__event {
+    padding-left: 0.786em;
+    box-shadow: inset 0.214em 0 0 var(--ap-fg);
+  }
+  .lc__guests {
+    display: inline-flex;
+  }
+  .lc__guests :global(.ap-av) {
+    box-shadow: 0 0 0 2px var(--ap-card);
+  }
+  .lc__guests :global(.ap-av + .ap-av) {
+    margin-left: -0.3em;
+  }
+  .lc__person {
+    gap: 0.714em;
+  }
+  .lc__av {
+    width: 2.571em;
+    height: 2.571em;
+    font-size: 0.857em;
+  }
+  .lc__col {
+    display: grid;
+    min-width: 0;
+  }
+  .lc__hash {
+    color: var(--ap-subtle);
+    font-weight: 500;
+    margin-right: 0.15em;
+  }
+  .lc__msg {
+    font-size: 0.923em;
+  }
+  .lc__who {
+    font-weight: 500;
+  }
+  .lc__said {
+    color: var(--ap-muted);
+  }
+  /* The thing it came from: a linked row, the relation named on its right. */
+  .lc__link {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-width: 0;
+    height: 2.286em;
+    padding: 0 0.5em 0 0.643em;
+    border-radius: 0.643em;
+    background: var(--ap-chip);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    font-size: 0.923em;
+    font-weight: 500;
+  }
+  .lc__link :global(.ap-i) {
+    width: 1.083em;
+    height: 1.083em;
+    color: var(--ap-muted);
+  }
+  .lc__rel {
+    flex: none;
+    padding: 0.1em 0.5em;
+    border-radius: 0.5em;
+    background: var(--ap-active);
+    color: var(--ap-muted);
+    font-size: 0.833em;
+    font-weight: 500;
+  }
+</style>

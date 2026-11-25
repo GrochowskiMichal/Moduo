@@ -1,0 +1,303 @@
+---
+// /integrations: everything Moduo connects to, reads in or writes out, as an index. Each group
+// is a side head on line 1 and its rows from line 5. A row is one link (its name's, stretched);
+// under the pointer or focus its two strokes close until their window opens and the name moves
+// one step along, the index rows' treatment: an integration is an overlap. The filter shows one
+// group at a time and the rows part in (motion/pages/integrations.ts); without JS every group
+// shows and the filter stays hidden.
+import Btn from "../components/Btn.astro";
+import Faq from "../components/Faq.astro";
+import StrokePair from "../components/StrokePair.astro";
+import Plate from "../components/integrations/Plate.astro";
+import Head from "../components/page/Head.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { integrations } from "../data/pages/integrations";
+import { waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs, faq } from "../lib/seo";
+
+const d = integrations;
+const total = d.groups.reduce((n, g) => n + g.items.length, 0);
+---
+
+<Base title={d.title} description={d.description} image="/og/integrations.png" jsonLd={[crumbs(["Integrations", "/integrations"]), faq(d.questions)]}>
+  <div data-pg="integrations">
+    <PageHero name={d.name} line={d.line} lead={d.lead} family="product" current="integrations">
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href={d.cta.href} arrow>{d.cta.label}</Btn>
+      </Fragment>
+    </PageHero>
+
+    <div data-ix>
+      <section class="pg ix-plate" aria-labelledby="ix-plate-title">
+        <div class="wrap">
+          <Head id="ix-plate-title" title={d.plate.title} text={d.plate.text} />
+          <div class="ix-filter" role="group" data-one aria-label={d.filter.label}>
+            <button class="btn btn--ghost btn--sm ix-filter__b" type="button" aria-pressed="true" data-ix-kind="all" data-sweep>
+              <span class="btn__label">{d.filter.all} <span class="ix-filter__n">{total}</span></span>
+              <span class="btn__sweep" aria-hidden="true"></span>
+            </button>
+            {
+              d.groups.map((g) => (
+                <button class="btn btn--ghost btn--sm ix-filter__b" type="button" aria-pressed="false" data-ix-kind={g.kind} data-sweep>
+                  <span class="btn__label">
+                    {g.name} <span class="ix-filter__n">{g.items.length}</span>
+                  </span>
+                  <span class="btn__sweep" aria-hidden="true" />
+                </button>
+              ))
+            }
+            <span class="sr-only" aria-live="polite" data-ix-status></span>
+          </div>
+          <div data-reveal="frame">
+            <Plate />
+          </div>
+        </div>
+      </section>
+
+      <section class="pg ix" aria-label="Every integration">
+        <div class="wrap">
+
+
+          {
+            d.groups.map((g) => (
+              <div class="ix-group grid pg-side" id={g.kind} data-ix-group={g.kind} aria-labelledby={`ix-${g.kind}`} role="region">
+                <div class="pg-side__head ix-group__head">
+                  <h2 class="t-l ix-group__name" id={`ix-${g.kind}`} data-split>
+                    {g.name}
+                  </h2>
+                  <p class="muted ix-group__text" data-reveal>
+                    {g.text}
+                  </p>
+                </div>
+                <ul class="pg-side__body ix-rows">
+                  {g.items.map((it) => (
+                    <li class="ix-row">
+                      <StrokePair class="ix-row__glyph" size="0.75rem" />
+                      <h3 class="ix-row__name t-m">
+                        <a class="ix-row__a" href={it.href}>
+                          <span class="ix-row__step">{it.name}</span>
+                        </a>
+                      </h3>
+                      <p class="ix-row__where t-xs">{it.where}</p>
+                      <p class="ix-row__text muted">{it.text}</p>
+                      <ul class="ix-row__how" aria-label="How it connects">
+                        {it.how.map((h) => (
+                          <li>{h}</li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))
+          }
+        </div>
+      </section>
+    </div>
+
+    <section class="pg ix-yet" aria-labelledby="ix-yet-title">
+      <div class="wrap grid pg-side">
+        <div class="pg-side__head">
+          <h2 class="t-l" id="ix-yet-title" data-split>{d.notYet.title}</h2>
+        </div>
+        <ul class="pg-side__body ix-yet__list">
+          {
+            d.notYet.items.map((it) => (
+              <li data-reveal>
+                <span class="ix-yet__name">{it.name}</span>
+                <span class="muted">{it.text}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <Faq id="integrations-faq" title="Questions about connecting." items={d.questions} />
+
+    <Related title="Read next." slugs={["import", "ai", "download"]} />
+  </div>
+</Base>
+
+<style>
+  .ix-plate {
+    padding-top: calc(var(--u) * 2);
+  }
+  .ix {
+    padding-top: calc(var(--u) * 8);
+  }
+  /* The filter: the site's buttons, the pressed one filled. It waits for JS, which it needs. */
+  .ix-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  :global(html:not(.js)) .ix-filter {
+    display: none;
+  }
+  .ix-filter__n {
+    margin-left: 0.25em;
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+  }
+  .ix-group {
+    padding: calc(var(--u) * 5) 0;
+    border-top: 1px solid var(--c-line);
+    scroll-margin-top: calc(var(--nav-h) + 4rem);
+  }
+  .ix-group[hidden] {
+    display: none;
+  }
+  .ix-group:last-of-type {
+    padding-bottom: 0;
+  }
+  .ix-group__name {
+    font-weight: var(--w-display);
+  }
+  .ix-group__text {
+    max-width: 30ch;
+    font-size: var(--t-s);
+    line-height: 1.55;
+  }
+  .ix-rows {
+    display: grid;
+  }
+  /* A row: the glyph and the name, where it runs on the right; the words under the name, and how
+     it connects under them. One link, stretched over the row. */
+  .ix-row {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+    column-gap: 0.75rem;
+    row-gap: 0.375rem;
+    align-items: baseline;
+    padding: 1.125rem 0.75rem 1.25rem;
+    margin-inline: -0.75rem;
+    border-radius: var(--r-md);
+    transition: background-color var(--d-hover) var(--ease);
+  }
+  /* The hairline keeps the content's edges; only the hover fill reaches past them. */
+  .ix-row::before {
+    content: "";
+    position: absolute;
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0;
+    height: 1px;
+    background: var(--c-line);
+  }
+  .ix-row :global(.ix-row__glyph) {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
+    color: var(--c-quiet);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .ix-row__name {
+    grid-column: 2;
+    font-weight: var(--w-ui);
+  }
+  .ix-row__step {
+    display: inline-block;
+    transition: translate 0.5s var(--ease);
+  }
+  .ix-row__a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .ix-row__a:focus-visible {
+    outline: none;
+  }
+  .ix-row__a:focus-visible::after {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .ix-row__where {
+    grid-column: 3;
+    grid-row: 1;
+    color: var(--c-quiet);
+    font-weight: var(--w-ui);
+    white-space: nowrap;
+  }
+  .ix-row__text {
+    grid-column: 2 / -1;
+    max-width: 52ch;
+    font-size: var(--t-body);
+    line-height: 1.5;
+  }
+  .ix-row__how {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+  }
+  .ix-row__how li {
+    padding: 0.2rem 0.55rem;
+    border-radius: var(--r-full);
+    border: 1px solid var(--c-line-strong);
+    color: var(--c-muted);
+    font-size: var(--t-xs);
+    font-weight: var(--w-small);
+    line-height: 1.4;
+  }
+  @media (hover: hover) {
+    .ix-row:hover {
+      background: var(--c-card);
+    }
+    .ix-row:hover .ix-row__step {
+      translate: 0.4em 0;
+    }
+    .ix-row:hover :global(.sp) {
+      --g: 1;
+      color: var(--c-fg);
+    }
+  }
+  .ix-row:has(.ix-row__a:focus-visible) .ix-row__step {
+    translate: 0.4em 0;
+  }
+  .ix-row:has(.ix-row__a:focus-visible) :global(.sp) {
+    --g: 1;
+    color: var(--c-fg);
+  }
+
+  .ix-yet {
+    padding-top: calc(var(--u) * 4);
+  }
+  .ix-yet__list {
+    display: grid;
+  }
+  .ix-yet__list li {
+    display: grid;
+    grid-template-columns: minmax(0, 14rem) minmax(0, 1fr);
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .ix-yet__name {
+    font-weight: var(--w-ui);
+  }
+  @media (max-width: 720px) {
+    .ix-yet__list li {
+      grid-template-columns: 1fr;
+      gap: 0.25rem;
+    }
+    .ix-row {
+      grid-template-columns: 2rem minmax(0, 1fr);
+    }
+    .ix-row__where {
+      grid-column: 2;
+      grid-row: 2;
+    }
+    .ix-row__text,
+    .ix-row__how {
+      grid-column: 2;
+    }
+  }
+</style>

@@ -1,0 +1,119 @@
+---
+// The keyboard card's picture: ⌘K open over the workspace, "maciej" typed, and what it finds across
+// the modules, grouped, the first one ready for ↵ (motion/bento.ts types the query and brings the
+// results in; the still picture is the result).
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const groups = [
+  { cap: "Contacts", rows: [{ icon: "contact", t: "Maciej Grzywacz", s: "Moduo", sel: true }] },
+  {
+    cap: "Email",
+    rows: [{ icon: "mail", t: "Open alpha invite", s: "Maciej Grzywacz · 9:12" }],
+  },
+  {
+    cap: "Tasks",
+    rows: [{ icon: "circle-check", t: "Review the open alpha invite", s: "Due today" }],
+  },
+  { cap: "Notes", rows: [{ icon: "file-text", t: "Invite copy", s: "Mentions Maciej" }] },
+] as const;
+---
+
+<div class="ap mini km" aria-hidden="true" data-mini="keys">
+  <div class="ap-panel km-pal">
+    <div class="km-field">
+      <Icon name="search" />
+      <span class="grow"><span data-typed>maciej</span><span class="ap-caret"></span></span>
+      <span class="ap-kbd">esc</span>
+    </div>
+    <div class="km-list">
+      {
+        groups.map((g) => (
+          <div class="km-group" data-group>
+            <p class="ap-eyebrow km-cap">{g.cap}</p>
+            {g.rows.map((r) => (
+              <p class:list={["km-row", "sel" in r && r.sel && "is-sel"]}>
+                <Icon name={r.icon} class="ap-i--sm" />
+                <span class="ap-med">{r.t}</span>
+                <span class="grow ap-muted ap-ell">· {r.s}</span>
+                {"sel" in r && r.sel && <span class="ap-kbd">↵</span>}
+              </p>
+            ))}
+          </div>
+        ))
+      }
+    </div>
+    <p class="km-foot ap-xs ap-muted">
+      <span><span class="ap-kbd">↑</span><span class="ap-kbd">↓</span> move</span>
+      <span><span class="ap-kbd">↵</span> open</span>
+      <span><span class="ap-kbd">⌘1</span> to <span class="ap-kbd">⌘6</span> modules</span>
+    </p>
+  </div>
+</div>
+
+<style>
+  .km {
+    left: 4%;
+    top: 0;
+    width: 92%;
+  }
+  /* The card keeps room for the whole palette, its key hints included, at every width. */
+  :global(.bcard__art:has(> [data-mini="keys"])) {
+    min-height: calc(var(--mini-fs) * 25.6);
+  }
+  .km-pal {
+    padding: 0;
+    background: var(--ap-muted-bg);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-hairline),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 2.5em 4em -1.5em rgb(0 0 0 / 0.95);
+  }
+  .km-field {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    height: 3.429em;
+    padding: 0 1.143em;
+    border-bottom: 1px solid var(--ap-line);
+    font-size: 1.071em;
+  }
+  .km-field :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .km-list {
+    display: grid;
+    gap: 0.286em;
+    padding: 0.429em;
+  }
+  .km-cap {
+    padding: 0.545em 0.727em 0.273em;
+  }
+  .km-row {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.429em;
+    padding: 0 0.571em;
+    border-radius: 0.571em;
+    font-size: 0.929em;
+  }
+  .km-row :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .km-row.is-sel {
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .km-foot {
+    display: flex;
+    gap: 1.143em;
+    padding: 0.714em 1.143em;
+    border-top: 1px solid var(--ap-line);
+  }
+  .km-foot > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+  }
+</style>

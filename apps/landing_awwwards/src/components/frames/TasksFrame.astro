@@ -1,0 +1,277 @@
+---
+// Tasks, in Focus: one task at a time with its timer running (the clock counts in the card and in
+// the bar, as the app's does), what's up next by project, and the task's details on the right,
+// with the email it came from among its links.
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+interface Props {
+  /** The type page shows this picture set in Oudom. */
+  specimen?: boolean;
+}
+const { specimen = false } = Astro.props;
+const TIMER = 1452;
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const projects = [
+  { n: "Open alpha", c: "var(--ap-blue)", k: 4 },
+  { n: "Design", c: "var(--ap-green)", k: 3 },
+  { n: "Mail", c: "var(--ap-amber)", k: 2 },
+];
+const next = [
+  { p: "Open alpha", c: "var(--ap-blue)", rows: ["Send the open alpha invite"] },
+  { p: "Design", c: "var(--ap-green)", rows: ["Review onboarding copy", "Oudom kerning pass"] },
+];
+---
+
+<Frame
+  active="Tasks"
+  shadow
+  specimen={specimen}
+  timer={TIMER}
+  label="A picture of Moduo's Tasks module in Focus: one task with its timer running, the tasks up next, and the task's details with the email it came from."
+>
+  <nav class="ap-panel ap-panel--side tf-side">
+    <div class="ap-nav"><Icon name="inbox" /><span class="grow">Inbox</span><span class="ap-meta">2</span></div>
+    <div class="ap-nav is-on"><Icon name="list-checks" /><span class="grow">Focus</span><span class="ap-meta">4</span></div>
+    <div class="ap-nav"><Icon name="calendar-days" /><span class="grow">Upcoming</span></div>
+    <div class="ap-nav"><Icon name="user-round" /><span class="grow">My tasks</span><span class="ap-meta">9</span></div>
+    <div class="ap-rule"></div>
+    <div class="ap-nav"><Icon name="layers" /><span class="grow">All</span><span class="ap-meta">12</span></div>
+    {
+      projects.map((p) => (
+        <div class="ap-nav">
+          <span class="ap-nav-slot">
+            <span class="ap-dot" style={`--c:${p.c}`} />
+          </span>
+          <span class="grow ap-ell">{p.n}</span>
+          <span class="ap-meta">{p.k}</span>
+        </div>
+      ))
+    }
+    <div class="ap-nav"><Icon name="plus" /><span class="grow">New project</span></div>
+    <div class="tf-foot">
+      <span class="ap-btn ap-sm"><Icon name="archive" />Archived</span>
+      <span class="ap-btn ap-sm"><Icon name="trash-2" />Recently deleted</span>
+    </div>
+  </nav>
+
+  <div class="ap-panel ap-panel--main tf-main">
+    <div class="ap-head">
+      <p class="ap-h1">Focus</p>
+      <span class="ap-ico"><Icon name="ellipsis" /></span>
+    </div>
+    <div class="tf-col">
+      <div class="tf-card">
+        <div class="tf-card-meta">
+          <span class="ap-proj grow"><span class="ap-dot" style="--c:var(--ap-blue)"></span>Open alpha · Due today</span>
+          <span class="tf-pill"><Icon name="pause" class="ap-i--xs" /><span data-clock={TIMER}>{mmss(TIMER)}</span> <span class="ap-muted">of ~45m</span></span>
+        </div>
+        <p class="tf-title">Prep the invite review</p>
+        <div class="tf-actions">
+          <span class="ap-btn ap-btn--primary">Done <span class="ap-kbd">⏎</span></span>
+          <span class="ap-btn ap-btn--secondary">Skip <span class="ap-kbd">S</span></span>
+          <span class="ap-btn">Hand off <span class="ap-kbd">W</span></span>
+        </div>
+      </div>
+      <p class="ap-sm tf-next"><span class="ap-med">Up next</span> <span class="ap-muted">· 3 · ~1h 50m</span></p>
+      {
+        next.map((g, gi) => (
+          <div class="tf-group">
+            <p class="tf-div">
+              <span class="ap-proj">
+                <span class="ap-dot" style={`--c:${g.c}`} />
+                {g.p}
+              </span>
+              <span class="grow tf-line" />
+            </p>
+            {g.rows.map((t, i) => (
+              <p class="tf-up ap-sm">
+                <span class="tf-n">{next.slice(0, gi).reduce((n, x) => n + x.rows.length, 0) + i + 1}</span>
+                <span class="grow ap-ell">{t}</span>
+              </p>
+            ))}
+          </div>
+        ))
+      }
+      <p class="ap-xs ap-muted tf-done">2 done · 1h 12m · Show</p>
+    </div>
+  </div>
+
+  <aside class="ap-panel ap-panel--right">
+    <div class="ap-rtitle">
+      <span class="ap-btn">Details<Icon name="chevron-down" class="ap-i--xs" /></span>
+    </div>
+    <div class="ap-rbody">
+      <div class="tf-dhead">
+        <span class="ap-proj grow ap-ell"><span class="ap-dot" style="--c:var(--ap-blue)"></span>Open alpha <Icon name="chevron-right" class="ap-i--xs" /> Invite</span>
+        <span class="ap-xs ap-subtle">MOD-14</span>
+      </div>
+      <div class="tf-dicons">
+        <span class="ap-ico"><Icon name="list-checks" /></span>
+        <span class="ap-ico"><Icon name="maximize-2" /></span>
+        <span class="ap-ico"><Icon name="ellipsis" /></span>
+      </div>
+      <p class="tf-dtitle"><span class="ap-check"></span><span>Prep the invite review</span></p>
+      <dl class="ap-props">
+        <dt>Status</dt><dd><span class="ap-status is-going"></span>In progress</dd>
+        <dt>Assignee</dt><dd><span class="ap-av ap-av--16" style="--c:var(--ap-pink)">MI</span>Me</dd>
+        <dt>Priority</dt><dd><svg class="ap-i tf-bars" viewBox="0 0 14 14" aria-hidden="true"><rect x="1.5" y="8" width="2.5" height="4.5" rx="0.6"></rect><rect x="5.75" y="5" width="2.5" height="7.5" rx="0.6"></rect><rect x="10" y="2" width="2.5" height="10.5" rx="0.6"></rect></svg>High</dd>
+        <dt>Due</dt><dd><Icon name="calendar" />Today</dd>
+        <dt>Estimate</dt><dd><Icon name="timer" />45m</dd>
+        <dt>Tags</dt><dd><span class="ap-tag"><span class="ap-dot" style="--c:var(--ap-pink)"></span>alpha</span></dd>
+      </dl>
+      <p class="ap-xs ap-muted tf-more"><Icon name="plus" class="ap-i--xs" />Energy · Scheduled · Reminder · Repeat · Waiting on</p>
+      <p class="ap-block">Subtasks <b>1/2</b><Icon name="plus" /></p>
+      <p class="ap-block">Linked <b>2</b><Icon name="plus" /></p>
+      <p class="tf-link"><Icon name="mail" class="ap-i--sm" /><span class="grow ap-ell">Open alpha invite</span><span class="tf-rel">Created from</span></p>
+      <p class="tf-link"><Icon name="file-text" class="ap-i--sm" /><span class="grow ap-ell">Invite copy</span><span class="tf-rel">Mentions</span></p>
+    </div>
+  </aside>
+</Frame>
+
+<style>
+  .tf-side {
+    display: flex;
+    flex-direction: column;
+  }
+  .tf-foot {
+    display: grid;
+    justify-items: start;
+    margin-top: auto;
+    padding-top: 0.857em;
+    color: var(--ap-muted);
+  }
+  .tf-foot :global(.ap-btn) {
+    color: var(--ap-muted);
+    font-weight: 400;
+  }
+  .tf-foot :global(.ap-i) {
+    width: 1em;
+    height: 1em;
+  }
+  .tf-col {
+    display: grid;
+    max-width: 48em;
+  }
+  .tf-card {
+    display: grid;
+    gap: 0.857em;
+    padding: 1.143em 1.429em;
+    border-radius: 0.857em;
+    border: 1px solid var(--ap-line);
+    background: var(--ap-card);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 1.143em 2.857em -1.429em rgb(0 0 0 / 0.8);
+  }
+  .tf-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+  }
+  .tf-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    height: 2.167em;
+    padding: 0 0.667em;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    font-size: 0.857em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .tf-title {
+    font-size: 1.714em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+  }
+  .tf-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+  }
+  .tf-next {
+    margin: 1.538em 0 0.308em;
+  }
+  .tf-div {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    height: 2em;
+  }
+  .tf-line {
+    height: 1px;
+    background: var(--ap-hairline);
+  }
+  .tf-up {
+    display: flex;
+    align-items: center;
+    height: 2.462em;
+  }
+  .tf-n {
+    width: 1.538em;
+    color: var(--ap-subtle);
+    font-size: 0.923em;
+    font-variant-numeric: tabular-nums;
+  }
+  .tf-done {
+    margin-top: 0.667em;
+  }
+  .tf-dhead {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    height: 2.286em;
+    padding: 0 0.429em;
+  }
+  .tf-dicons {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: -0.286em;
+  }
+  .tf-dtitle {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.571em;
+    margin: 0.286em 0 0.857em;
+    padding: 0 0.429em;
+    font-size: 1.286em;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.015em;
+  }
+  .tf-dtitle :global(.ap-check) {
+    width: 0.889em;
+    height: 0.889em;
+    margin-top: 0.2em;
+  }
+  .tf-bars rect {
+    fill: currentColor;
+  }
+  .tf-more {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0.5em 0 0.6em;
+    padding: 0 0.5em;
+  }
+  .tf-link {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.286em;
+    padding: 0 0.571em;
+    border-radius: 0.571em;
+    font-size: 0.929em;
+  }
+  .tf-link :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .tf-rel {
+    color: rgb(164 164 164 / 0.7);
+    font-size: 0.923em;
+    white-space: nowrap;
+  }
+</style>

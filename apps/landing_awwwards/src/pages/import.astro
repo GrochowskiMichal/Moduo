@@ -1,0 +1,258 @@
+---
+// /import: the import guide. The page's one moment is the move: a Notion export's files wired to
+// the notes they become (components/import/Move.astro). Then the task import's preview, which is
+// the promise (nothing is saved until you say so, and every run can be undone), and the steps for
+// each source, numbered because they are a sequence.
+import Btn from "../components/Btn.astro";
+import Faq from "../components/Faq.astro";
+import Move from "../components/import/Move.astro";
+import TaskPreview from "../components/import/TaskPreview.astro";
+import Head from "../components/page/Head.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { importGuide } from "../data/pages/import";
+import { waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs, faq, howTo } from "../lib/seo";
+
+const d = importGuide;
+const g = d.guides;
+const notes = g.items.find((i) => i.id === "notes")!;
+---
+
+<Base
+  title={d.title}
+  description={d.description}
+  image="/og/import.png"
+  appFont
+  jsonLd={[
+    crumbs(["Help center", "/help"], ["Import guide", "/import"]),
+    howTo("Import notes from Notion or Markdown into Moduo", notes.steps, notes.from),
+    faq(d.questions),
+  ]}
+>
+  <div data-pg="import">
+    <PageHero name={d.name} line={d.line} lead={d.lead} family="resources" compact current="import" up={{ href: "/help", label: "Help center" }}>
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href={d.cta.href} arrow>{d.cta.label}</Btn>
+      </Fragment>
+    </PageHero>
+
+    <section class="pg im-move" aria-labelledby="im-move-title">
+      <div class="wrap">
+        <Head id="im-move-title" title={d.move.title} text={d.move.text} size="l" />
+        <div data-reveal="frame">
+          <Move />
+        </div>
+      </div>
+    </section>
+
+    <section class="pg im-prev" aria-labelledby="im-prev-title">
+      <div class="wrap grid">
+        <div class="im-prev__head">
+          <h2 class="t-l" id="im-prev-title" data-split>{d.preview.title}</h2>
+          <p class="muted" data-reveal>{d.preview.text}</p>
+        </div>
+        <div class="im-prev__pic" data-reveal="frame">
+          <TaskPreview />
+        </div>
+      </div>
+    </section>
+
+    <section class="pg im-steps" aria-labelledby="im-steps-title">
+      <div class="wrap">
+        <Head id="im-steps-title" title={g.title} size="l">
+          <nav class="im-jump" aria-label="Sources">
+            {
+              g.items.map((it) => (
+                <a class="btn btn--ghost btn--sm" href={`#${it.id}`} data-sweep>
+                  <span class="btn__label">{it.name}</span>
+                  <span class="btn__sweep" aria-hidden="true" />
+                </a>
+              ))
+            }
+          </nav>
+        </Head>
+
+        {
+          g.items.map((it) => (
+            <article class="im-guide grid pg-side" id={it.id} aria-labelledby={`im-${it.id}`}>
+              <div class="pg-side__head">
+                <h3 class="t-l im-guide__name" id={`im-${it.id}`} data-split>
+                  {it.name}
+                </h3>
+                <p class="muted" data-reveal>
+                  {it.from}
+                </p>
+              </div>
+              <div class="pg-side__body">
+                <ol class="im-guide__steps">
+                  {it.steps.map((s, n) => (
+                    <li class="im-step" data-reveal>
+                      <span class="im-step__n" aria-hidden="true">
+                        {n + 1}
+                      </span>
+                      <span class="sr-only">
+                        {g.stepLabel} {n + 1}:
+                      </span>
+                      <p class="im-step__t">{s.title}</p>
+                      <p class="im-step__d muted">{s.text}</p>
+                    </li>
+                  ))}
+                </ol>
+                <div class="im-guide__know" data-reveal>
+                  <p class="im-guide__k t-xs">{g.noteLabel}</p>
+                  <ul>
+                    {it.notes.map((n) => (
+                      <li class="t-s muted">{n}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+
+    <Faq id="import-faq" title="Before you move." items={d.questions} />
+
+    <Related title="Read next." slugs={["integrations", "ai", "help"]} />
+  </div>
+</Base>
+
+<style>
+  .im-move {
+    padding-top: calc(var(--u) * 2);
+  }
+  .im-prev .grid {
+    align-items: center;
+    row-gap: 2.5rem;
+  }
+  .im-prev__head {
+    grid-column: 1 / span 5;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .im-prev__head .muted {
+    max-width: 30rem;
+  }
+  .im-prev__pic {
+    grid-column: 7 / -1;
+  }
+  /* The sources in one row, ending on the right edge (from line 9 the last one wrapped alone). */
+  .im-jump {
+    grid-column: 8 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    align-self: end;
+  }
+  .im-guide {
+    padding: calc(var(--u) * 6) 0;
+    border-top: 1px solid var(--c-line);
+    scroll-margin-top: var(--nav-h);
+  }
+  /* The section's own padding closes the last guide. */
+  .im-guide:last-child {
+    padding-bottom: 0;
+  }
+  .im-guide__name {
+    font-weight: var(--w-display);
+  }
+  /* The source stays in view while its steps scroll by. */
+  .im-guide > :global(.pg-side__head) {
+    position: sticky;
+    top: calc(var(--nav-h) + 1.5rem);
+    align-self: start;
+  }
+  .im-guide__steps {
+    display: grid;
+    counter-reset: none;
+  }
+  /* A step: its number on the left, as a sequence reads; the title, then what to do. */
+  .im-step {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    column-gap: 1rem;
+    row-gap: 0.375rem;
+    padding: 1.125rem 0;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .im-step:first-child {
+    padding-top: 0.25rem;
+  }
+  .im-step__n {
+    grid-row: 1 / span 2;
+    font-size: var(--t-m);
+    line-height: 1.2;
+    font-weight: var(--w-light);
+    color: var(--c-quiet);
+    font-variant-numeric: tabular-nums;
+  }
+  .im-step__t {
+    font-size: var(--t-m);
+    line-height: 1.25;
+    font-weight: var(--w-ui);
+  }
+  .im-step__d {
+    grid-column: 2;
+    max-width: 46ch;
+  }
+  .im-guide__know {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    column-gap: 1rem;
+    margin-top: 1.5rem;
+  }
+  .im-guide__k {
+    color: var(--c-quiet);
+    font-weight: var(--w-ui);
+    grid-column: 2;
+    margin-bottom: 0.5rem;
+  }
+  .im-guide__know ul {
+    grid-column: 2;
+    display: grid;
+    gap: 0.375rem;
+  }
+  .im-guide__know li {
+    position: relative;
+    padding-left: 1rem;
+    max-width: 52ch;
+  }
+  /* The site's list dot (Plans): a short rule here read as a dash before every line. */
+  .im-guide__know li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: calc(0.75em - 0.1875rem);
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: var(--c-quiet);
+  }
+  @media (max-width: 900px) {
+    .im-guide > :global(.pg-side__head) {
+      position: static;
+    }
+    .im-prev__head,
+    .im-prev__pic,
+    .im-jump {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+    .im-jump {
+      margin-top: 0.5rem;
+    }
+  }
+  @media (max-width: 560px) {
+    .im-step,
+    .im-guide__know {
+      grid-template-columns: 2rem minmax(0, 1fr);
+      column-gap: 0.75rem;
+    }
+  }
+</style>

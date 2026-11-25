@@ -1,0 +1,90 @@
+---
+// Analytics consent. Nothing loads and no cookie is set until the visitor accepts
+// (lib/consent.ts). A low card in the bottom-right corner, part of the frame: like the header it
+// steps aside while you read down and comes back when you head up, so it never sits on what you
+// are reading. Opened from Cookie settings, hovered or focused, it stays. Decline and Accept
+// carry equal weight. One low row, so it covers as little of the page as it can: the question, the
+// policy link and the two answers; the explanation is read out with the question and sits behind
+// the link.
+import { consent } from "../data/site";
+---
+
+<section class="consent" aria-labelledby="consent-title" hidden data-consent transition:persist="consent">
+  <p class="consent__text">
+    <strong id="consent-title">{consent.title}</strong>
+    <span class="sr-only">{consent.text}{" "}</span><a class="link" href="/privacy#cookies">{consent.more}</a>
+  </p>
+  <div class="consent__actions">
+    <button class="btn btn--ghost btn--sm" type="button" data-consent-choice="denied" data-sweep>
+      <span class="btn__label">{consent.decline}</span><span class="btn__sweep" aria-hidden="true"></span>
+    </button>
+    <button class="btn btn--ghost btn--sm" type="button" data-consent-choice="granted" data-sweep>
+      <span class="btn__label">{consent.accept}</span><span class="btn__sweep" aria-hidden="true"></span>
+    </button>
+  </div>
+</section>
+
+<style>
+  .consent {
+    --off: var(--margin);
+    position: fixed;
+    right: var(--off);
+    bottom: calc(var(--off) + env(safe-area-inset-bottom));
+    z-index: var(--z-consent);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    max-width: calc(100vw - 2 * var(--margin));
+    padding: 0.4375rem 0.4375rem 0.4375rem 0.875rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-lg);
+    background: var(--c-card);
+    box-shadow: var(--shadow-lg);
+    transition: transform 0.6s var(--ease);
+  }
+  .consent[hidden] {
+    display: none;
+  }
+  :global(html.hdr-away) .consent:not(.is-pinned, :hover, :focus-within) {
+    transform: translateY(calc(100% + var(--off) + 2px));
+  }
+  :global(html.menu-open) .consent {
+    visibility: hidden;
+  }
+  .consent.is-in {
+    animation: consent-in 0.6s var(--ease) backwards;
+  }
+  @keyframes consent-in {
+    from {
+      opacity: 0;
+      translate: -16px 0;
+    }
+  }
+  .consent__text {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 0.625rem;
+    font-size: var(--t-xs);
+    line-height: 1.45;
+    color: var(--c-muted);
+  }
+  .consent__text strong {
+    color: var(--c-fg);
+    font-weight: var(--w-display);
+  }
+  .consent__actions {
+    display: flex;
+    flex: none;
+    gap: 0.375rem;
+  }
+  @media (max-width: 620px) {
+    .consent {
+      --off: 0.75rem;
+      left: var(--off);
+      width: auto;
+      gap: 0.5rem;
+    }
+  }
+</style>

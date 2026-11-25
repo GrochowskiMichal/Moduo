@@ -1,0 +1,249 @@
+---
+// A keyboard drawn in the site's keycaps: the Mac's layout, or the bottom row a Windows keyboard
+// has (the page's [data-os] picks one). Every key carries its physical code, so the driver can
+// light what you press and what a shortcut needs. A lit key inverts, the site's rule for what two
+// things share. Decorative: the readout beside it says everything out loud.
+type K = { c: string; w?: number; t?: string; mac?: string; win?: string; sym?: string; side?: "l" | "r" };
+
+const fnRow: K[] = [
+  { c: "Escape", w: 1.5, t: "esc", side: "l" },
+  ...Array.from({ length: 12 }, (_, i) => ({ c: `F${i + 1}`, t: `F${i + 1}` })),
+  { c: "Power", t: "" },
+];
+const rows: K[][] = [
+  [
+    { c: "Backquote", t: "`" },
+    ...["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((d) => ({ c: `Digit${d}`, t: d })),
+    { c: "Minus", t: "-" },
+    { c: "Equal", t: "=" },
+    { c: "Backspace", w: 1.5, mac: "delete", win: "backspace", side: "r" },
+  ],
+  [
+    { c: "Tab", w: 1.5, t: "tab", side: "l" },
+    ..."QWERTYUIOP".split("").map((l) => ({ c: `Key${l}`, t: l })),
+    { c: "BracketLeft", t: "[" },
+    { c: "BracketRight", t: "]" },
+    { c: "Backslash", t: "\\" },
+  ],
+  [
+    { c: "CapsLock", w: 1.75, t: "caps lock", side: "l" },
+    ..."ASDFGHJKL".split("").map((l) => ({ c: `Key${l}`, t: l })),
+    { c: "Semicolon", t: ";" },
+    { c: "Quote", t: "'" },
+    { c: "Enter", w: 1.75, mac: "return", win: "enter", side: "r" },
+  ],
+  [
+    { c: "ShiftLeft", w: 2.25, t: "shift", sym: "⇧", side: "l" },
+    ..."ZXCVBNM".split("").map((l) => ({ c: `Key${l}`, t: l })),
+    { c: "Comma", t: "," },
+    { c: "Period", t: "." },
+    { c: "Slash", t: "/" },
+    { c: "ShiftRight", w: 2.25, t: "shift", sym: "⇧", side: "r" },
+  ],
+];
+const macBottom: K[] = [
+  { c: "Fn", t: "fn", side: "l" },
+  { c: "ControlLeft", t: "control", sym: "⌃", side: "l" },
+  { c: "AltLeft", t: "option", sym: "⌥", side: "l" },
+  { c: "MetaLeft", w: 1.25, t: "command", sym: "⌘", side: "l" },
+  { c: "Space", w: 5, t: "" },
+  { c: "MetaRight", w: 1.25, t: "command", sym: "⌘", side: "r" },
+  { c: "AltRight", t: "option", sym: "⌥", side: "r" },
+];
+const winBottom: K[] = [
+  { c: "ControlLeft", w: 1.25, t: "ctrl", side: "l" },
+  { c: "MetaLeft", w: 1.25, t: "win", side: "l" },
+  { c: "AltLeft", w: 1.25, t: "alt", side: "l" },
+  { c: "Space", w: 5.25, t: "" },
+  { c: "AltRight", w: 1.25, t: "alt", side: "r" },
+  { c: "ControlRight", w: 1.25, t: "ctrl", side: "r" },
+];
+const cols = (row: K[], extra = "") => row.map((k) => `${k.w ?? 1}fr`).join(" ") + extra;
+const wide = (k: K) => (k.w ?? 1) > 1 || k.c === "Fn" || /^(Control|Alt)/.test(k.c);
+---
+
+<div class="kbw" aria-hidden="true">
+<div class="kb">
+  <div class="kb__row kb__row--fn" style={`grid-template-columns: ${cols(fnRow)}`}>
+    {
+      fnRow.map((k) => (
+        <span class:list={["kb__k", k.side && `is-${k.side}`]} data-code={k.c}>
+          <span class="kb__t">{k.t}</span>
+        </span>
+      ))
+    }
+  </div>
+  {
+    rows.map((row) => (
+      <div class="kb__row" style={`grid-template-columns: ${cols(row)}`}>
+        {row.map((k) => (
+          <span class:list={["kb__k", wide(k) && "is-wide", k.side && `is-${k.side}`]} data-code={k.c}>
+            {k.sym && <span class="kb__sym">{k.sym}</span>}
+            {k.mac ? (
+              <span class="kb__t">
+                <span class="kb__mac">{k.mac}</span>
+                <span class="kb__win">{k.win}</span>
+              </span>
+            ) : (
+              <span class="kb__t">{k.t}</span>
+            )}
+          </span>
+        ))}
+      </div>
+    ))
+  }
+  {
+    [
+      ["mac", macBottom],
+      ["win", winBottom],
+    ].map(([os, row]) => (
+      <div class={`kb__row kb__row--${os}`} style={`grid-template-columns: ${cols(row as K[], " 3fr")}`}>
+        {(row as K[]).map((k) => (
+          <span class:list={["kb__k", wide(k) && "is-wide", k.side && `is-${k.side}`]} data-code={k.c}>
+            {k.sym && <span class="kb__sym">{k.sym}</span>}
+            <span class="kb__t">{k.t}</span>
+          </span>
+        ))}
+        <span class="kb__arrows">
+          <span class="kb__k is-half is-lr" data-code="ArrowLeft">
+            <span class="kb__t">←</span>
+          </span>
+          <span class="kb__ud">
+            <span class="kb__k is-half" data-code="ArrowUp">
+              <span class="kb__t">↑</span>
+            </span>
+            <span class="kb__k is-half" data-code="ArrowDown">
+              <span class="kb__t">↓</span>
+            </span>
+          </span>
+          <span class="kb__k is-half is-lr" data-code="ArrowRight">
+            <span class="kb__t">→</span>
+          </span>
+        </span>
+      </div>
+    ))
+  }
+</div>
+</div>
+
+<style>
+  .kbw {
+    container-type: inline-size;
+  }
+  .kb {
+    --gap: 0.55cqi;
+    --h: 6.1cqi;
+    display: grid;
+    gap: var(--gap);
+    padding: 1.6cqi;
+    border-radius: 2.4cqi;
+    background: #0a0a0a;
+    box-shadow:
+      inset 0 0 0 1px var(--c-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.05);
+    user-select: none;
+  }
+  .kb__row {
+    display: grid;
+    gap: var(--gap);
+    height: var(--h);
+  }
+  .kb__row--fn {
+    height: calc(var(--h) * 0.56);
+  }
+  :global([data-os="mac"]) .kb__row--win,
+  :global([data-os="win"]) .kb__row--mac {
+    display: none;
+  }
+  :global([data-os="mac"]) .kb__win,
+  :global([data-os="win"]) .kb__mac {
+    display: none;
+  }
+  .kb__k {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 0;
+    border-radius: 0.9cqi;
+    background: var(--c-raised);
+    box-shadow:
+      inset 0 0 0 1px var(--c-line-strong),
+      inset 0 1px 0 rgb(255 255 255 / 0.06);
+    color: var(--c-muted);
+    font-size: clamp(0.5rem, 1.9cqi, 1rem);
+    font-weight: var(--w-ui);
+    line-height: 1;
+    font-feature-settings: "case";
+    transition:
+      background-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      box-shadow 0.18s var(--ease),
+      translate 0.18s var(--ease);
+  }
+  .kb__row--fn .kb__k {
+    font-size: clamp(0.4375rem, 1.35cqi, 0.75rem);
+    color: var(--c-subtle);
+  }
+  /* A key with a word on it: the word sits in the corner nearest the hand, as on the keyboard. */
+  .kb__k.is-wide,
+  .kb__k.is-l,
+  .kb__k.is-r {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 0.4cqi;
+    padding: 0.8cqi 1cqi;
+    font-size: clamp(0.4375rem, 1.3cqi, 0.75rem);
+    letter-spacing: var(--tr-xs);
+  }
+  .kb__k.is-r {
+    align-items: flex-end;
+  }
+  .kb__row--fn .kb__k.is-l {
+    justify-content: center;
+  }
+  .kb__sym {
+    font-size: 1.35em;
+  }
+  .kb__arrows {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--gap);
+    align-items: end;
+  }
+  .kb__ud {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    gap: calc(var(--gap) * 0.6);
+    height: 100%;
+  }
+  .kb__k.is-lr {
+    height: calc((var(--h) - var(--gap) * 0.6) / 2);
+  }
+  .kb__k.is-half {
+    font-size: clamp(0.4375rem, 1.3cqi, 0.75rem);
+  }
+  /* A phone's keyboard is too small for the modifiers' words: their symbols say it. */
+  @container (max-width: 560px) {
+    .kb__k:has(.kb__sym) .kb__t {
+      display: none;
+    }
+    .kb__sym {
+      font-size: 1.6em;
+    }
+  }
+  /* Lit: the cap inverts and goes down a hair. */
+  .kb__k:global(.is-on) {
+    background: var(--c-fg);
+    color: var(--c-bg);
+    box-shadow: inset 0 0 0 1px var(--c-fg);
+    translate: 0 1px;
+  }
+  .kb__k:global(.is-hint) {
+    color: var(--c-fg);
+    box-shadow:
+      inset 0 0 0 1px var(--c-muted),
+      inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+</style>

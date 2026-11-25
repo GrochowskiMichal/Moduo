@@ -1,0 +1,5 @@
+dist/
+.astro/
+.shots*/
+node_modules/
+.og-build/

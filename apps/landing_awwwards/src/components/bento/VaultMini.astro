@@ -1,0 +1,94 @@
+---
+// No training: one stroke of the mark, lit from above like a vault door, a lock set into it, and
+// beside it the work as a model would see it: noise. The noise reshuffles now and then
+// (motion/bento.ts), the vault never moves.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import { STROKE, STROKE_H, STROKE_PATH } from "../../lib/stroke";
+
+const vb = `-6 ${STROKE.top - 6} ${STROKE.w + 12} ${STROKE_H + 12}`;
+const NOISE = "K#7:@?IB>/L{:Y![%T*;";
+---
+
+<div class="ap mini vm" aria-hidden="true" data-mini="vault">
+  <svg class="vm-stroke" viewBox={vb}>
+    <defs>
+      <linearGradient id="vm-face" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#2c2c2c"></stop>
+        <stop offset="0.55" stop-color="#0e0e0e"></stop>
+        <stop offset="1" stop-color="#050505"></stop>
+      </linearGradient>
+      <linearGradient id="vm-rim" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#fff" stop-opacity="0.32"></stop>
+        <stop offset="0.6" stop-color="#fff" stop-opacity="0.06"></stop>
+        <stop offset="1" stop-color="#fff" stop-opacity="0"></stop>
+      </linearGradient>
+    </defs>
+    <path d={STROKE_PATH} fill="url(#vm-face)" stroke="url(#vm-rim)" stroke-width="2.5"></path>
+  </svg>
+  <span class="vm-slot"></span>
+  <span class="vm-lock"><Icon name="lock" /></span>
+  <span class="vm-noise" data-noise>{NOISE}</span>
+</div>
+
+<style>
+  .vm {
+    inset: 0;
+    width: auto;
+  }
+  .vm-stroke {
+    position: absolute;
+    left: 50%;
+    top: 8%;
+    height: 118%;
+    translate: -50% 0;
+    overflow: visible;
+    filter: drop-shadow(0 2em 3em rgb(0 0 0 / 0.9));
+  }
+  /* The slot the door closes into: a dark band across the stroke, lit along its lower lip. */
+  .vm-slot {
+    position: absolute;
+    left: 18%;
+    right: 18%;
+    top: 60%;
+    height: 0.857em;
+    border-radius: 999px;
+    background: #000;
+    box-shadow:
+      inset 0 0.143em 0.286em rgb(0 0 0 / 0.9),
+      0 1px 0 rgb(255 255 255 / 0.12);
+  }
+  .vm-lock {
+    position: absolute;
+    left: 57%;
+    top: 40%;
+    display: grid;
+    place-items: center;
+    width: 4.286em;
+    height: 4.286em;
+    border-radius: 1em;
+    background: linear-gradient(#1d1d1d, #0b0b0b);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.12),
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      0 1.5em 2.5em rgb(0 0 0 / 0.8);
+    color: var(--ap-fg);
+  }
+  .vm-lock :global(.ap-i) {
+    width: 1.857em;
+    height: 1.857em;
+    stroke-width: 1.6;
+  }
+  .vm-noise {
+    position: absolute;
+    left: 12%;
+    top: 12%;
+    width: 4.6em;
+    color: var(--ap-muted);
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 0.857em;
+    line-height: 1.35;
+    letter-spacing: 0.35em;
+    word-break: break-all;
+  }
+</style>

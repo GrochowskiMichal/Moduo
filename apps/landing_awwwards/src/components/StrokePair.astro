@@ -1,0 +1,55 @@
+---
+// Two strokes of the mark as a small glyph. Apart, nothing opens between them; joined (the
+// parent toggles --g to 1 on hover, focus or [open]), their overlap cancels into a window.
+// The second stroke blends with `difference`, so the window is real XOR, not a drawn shape.
+import { STROKE_PATH, STROKE } from "../lib/stroke";
+
+interface Props {
+  class?: string;
+  size?: string;
+  [key: string]: unknown;
+}
+const { class: className, size = "0.75rem", ...rest } = Astro.props;
+const vb = `0 ${STROKE.top} ${STROKE.w} ${STROKE.bottom - STROKE.top}`;
+---
+
+<span class:list={["sp", className]} style={`--w:${size}`} aria-hidden="true" {...rest}>
+  <svg viewBox={vb}><path d={STROKE_PATH}></path></svg>
+  <svg viewBox={vb}><path d={STROKE_PATH}></path></svg>
+</span>
+
+<style>
+  .sp {
+    --g: 1.9;
+    --o: 0.5859; /* the mark's offset as a share of the stroke width */
+    position: relative;
+    display: inline-block;
+    flex: none;
+    isolation: isolate;
+    width: calc(var(--w) * (1 + var(--o) * 1.9));
+    height: calc(var(--w) * 1.6464);
+  }
+  .sp svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--w);
+    height: 100%;
+    fill: currentColor;
+    overflow: visible;
+  }
+  .sp svg + svg {
+    mix-blend-mode: difference;
+    translate: calc(var(--w) * var(--o) * var(--g)) 0;
+    transition: translate 0.5s var(--ease);
+  }
+  /* [data-join]: the pair closes once, when it scrolls into view (motion/widgets.ts). Without
+     motion it is shown joined. */
+  .sp[data-join] svg + svg {
+    transition-duration: 1.1s;
+  }
+  .sp[data-join]:global(.is-joined),
+  :global(html:not(.motion)) .sp[data-join] {
+    --g: 1;
+  }
+</style>

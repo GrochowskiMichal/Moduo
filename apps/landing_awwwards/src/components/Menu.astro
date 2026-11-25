@@ -1,0 +1,102 @@
+---
+// Phones and narrow windows: one "Menu" button opens this full-screen overlay. Large links that
+// arrive in the system's motion, focus kept inside, Escape closes (motion/menu.ts).
+import { footer, login, moduleOrder, nav, waitlist } from "../data/site";
+import Btn from "./Btn.astro";
+
+const path = Astro.url.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+const inModules = (moduleOrder as readonly string[]).includes(path.slice(1));
+const current = (href: string) =>
+  href === path ? "page" : inModules && href === "/#modules" ? "true" : undefined;
+const items = [...nav, { label: "Help", href: "/help" }, { label: "Changelog", href: "/changelog" }];
+---
+
+<div id="menu" class="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden data-menu>
+  <nav class="menu__in wrap" aria-label="Menu">
+    <ul class="menu__list">
+      {
+        items.map((item) => (
+          <li class="menu__item">
+            <a class="menu__link" href={item.href} aria-current={current(item.href)}>
+              {item.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+    <div class="menu__foot menu__item">
+      <div class="menu__acts">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href="/login">{login.link}</Btn>
+      </div>
+      <ul class="menu__legal">
+        {
+          footer.legal.map((l) => (
+            <li>
+              <a class="ulink t-s" href={l.href}>
+                {l.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </nav>
+</div>
+
+<style>
+  .menu {
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-header) - 1);
+    background: var(--c-bg);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .menu[hidden] {
+    display: none;
+  }
+  .menu__in {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 100%;
+    padding-top: calc(var(--nav-h) + 2rem);
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+  }
+  .menu__list {
+    display: grid;
+    gap: 0.25rem;
+  }
+  .menu__link {
+    display: inline-block;
+    font-size: clamp(2.5rem, 11vw, 4rem);
+    line-height: 1.05;
+    letter-spacing: var(--tr-xl);
+    font-weight: var(--w-display);
+    padding-block: 0.15rem;
+    color: var(--c-fg);
+  }
+  .menu__link[aria-current] {
+    color: var(--c-muted);
+  }
+  .menu__foot {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 3rem;
+  }
+  .menu__acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .menu__legal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+  }
+  .menu__legal a {
+    display: inline-block;
+    padding-block: 0.25rem;
+  }
+</style>

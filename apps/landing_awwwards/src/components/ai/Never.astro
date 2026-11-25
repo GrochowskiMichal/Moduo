@@ -1,0 +1,64 @@
+---
+// What no key reaches, as plain statements on hairlines, each with the reason on line 9.
+import { ai } from "../../data/pages/ai";
+
+const n = ai.never;
+---
+
+<section class="never pg" id="never" aria-labelledby="never-title">
+  <div class="wrap grid">
+    <h2 class="never__title t-xl" id="never-title" data-split>{n.title}</h2>
+    <ul class="never__list">
+      {
+        n.items.map((item) => (
+          <li class="never__item" data-reveal>
+            <p class="never__no t-l">{item.no}</p>
+            <p class="never__why muted">{item.why}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .never {
+    padding-top: calc(var(--u) * 6);
+  }
+  .never__title {
+    grid-column: 1 / span 8;
+    margin-left: -0.04em;
+    margin-bottom: calc(var(--u) * 5);
+  }
+  .never__list {
+    grid-column: 1 / -1;
+  }
+  .never__item {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: baseline;
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .never__item:last-child {
+    border-bottom: 1px solid var(--c-line-strong);
+  }
+  .never__no {
+    grid-column: 1 / span 7;
+  }
+  .never__why {
+    grid-column: 9 / span 4;
+    max-width: 30rem;
+  }
+  @media (max-width: 900px) {
+    .never__title,
+    .never__no,
+    .never__why {
+      grid-column: 1 / -1;
+    }
+    .never__why {
+      margin-top: 0.625rem;
+    }
+  }
+</style>

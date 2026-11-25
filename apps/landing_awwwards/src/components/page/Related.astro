@@ -1,0 +1,124 @@
+---
+// Where to go next: a row of pages as cards, each one link (the title's, stretched over the card).
+// The glyph is two strokes apart; under the pointer or focus they close until their window opens
+// and the name moves one step along, the index rows' treatment.
+import StrokePair from "../StrokePair.astro";
+import { pages, type PageSlug } from "../../data/pages";
+
+interface Props {
+  title: string;
+  slugs: PageSlug[];
+  id?: string;
+}
+const { title, slugs, id = "related" } = Astro.props;
+---
+
+<nav class="rel pg" aria-labelledby={`${id}-title`}>
+  <div class="wrap grid">
+    <h2 class="rel__title t-l" id={`${id}-title`} data-split>{title}</h2>
+    <ul class="rel__list" style={`--n:${slugs.length}`}>
+      {
+        slugs.map((slug) => (
+          <li class="rel__item" data-reveal>
+            <StrokePair class="rel__glyph" size="0.8rem" />
+            <h3 class="rel__name t-m">
+              <a class="rel__a" href={pages[slug].href}>
+                <span class="rel__step">{pages[slug].label ?? pages[slug].name}</span>
+              </a>
+            </h3>
+            <p class="rel__text muted">{pages[slug].short}</p>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</nav>
+
+<style>
+  .rel {
+    border-top: 1px solid var(--c-line);
+    padding-top: calc(var(--u) * 8);
+    padding-bottom: calc(var(--u) * 10);
+  }
+  .rel__title {
+    grid-column: 1 / span 4;
+  }
+  .rel__list {
+    grid-column: 5 / span 8;
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    gap: var(--gutter);
+  }
+  .rel__item {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    padding: 1.5rem;
+    border-radius: var(--r-lg);
+    background: var(--c-card);
+    border: 1px solid var(--c-line);
+    transition: border-color var(--d-hover) var(--ease);
+  }
+  .rel__item :global(.rel__glyph) {
+    color: var(--c-muted);
+  }
+  .rel__name {
+    font-weight: var(--w-ui);
+  }
+  .rel__step {
+    display: inline-block;
+    transition: translate 0.5s var(--ease);
+  }
+  .rel__a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  .rel__a:focus-visible {
+    outline: none;
+  }
+  .rel__a:focus-visible::after {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 3px;
+  }
+  .rel__text {
+    margin: 0;
+    font-size: var(--t-s);
+    line-height: 1.5;
+  }
+  @media (hover: hover) {
+    .rel__item:hover {
+      border-color: var(--c-line-strong);
+    }
+    .rel__item:hover .rel__step {
+      translate: 0.4em 0;
+    }
+    .rel__item:hover :global(.sp) {
+      --g: 1;
+      color: var(--c-fg);
+    }
+  }
+  .rel__item:has(.rel__a:focus-visible) .rel__step {
+    translate: 0.4em 0;
+  }
+  .rel__item:has(.rel__a:focus-visible) :global(.sp) {
+    --g: 1;
+    color: var(--c-fg);
+  }
+  @media (max-width: 1599px) {
+    .rel__title,
+    .rel__list {
+      grid-column: 1 / -1;
+    }
+    .rel__list {
+      margin-top: 2rem;
+    }
+  }
+  @media (max-width: 720px) {
+    .rel__list {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

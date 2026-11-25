@@ -1,0 +1,22 @@
+---
+// A section's head on the hanging lines: the title on line 1, its words on line 9 (or under it,
+// `stack`). The title's lines arrive one by one; the words follow.
+interface Props {
+  id: string;
+  title: string;
+  text?: string;
+  /** Display size for a chapter, statement size for a section inside one. */
+  size?: "xl" | "l";
+  stack?: boolean;
+  level?: "h2" | "h3";
+  class?: string;
+}
+const { id, title, text, size = "xl", stack = false, level = "h2", class: className } = Astro.props;
+const Heading = level;
+---
+
+<div class:list={["pg-head grid", stack && "pg-head--stack", className]}>
+  <Heading class:list={["pg-head__title", `t-${size}`]} id={id} data-split>{title}</Heading>
+  {text && <p class="pg-head__text t-m muted" data-reveal>{text}</p>}
+  <slot />
+</div>

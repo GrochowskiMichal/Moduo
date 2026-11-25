@@ -1,0 +1,29 @@
+// The product site on Cloudflare Workers static assets, the same hosting as apps/landing.
+// `bun run build` writes ./dist; html_handling serves pricing.html at /pricing, and a path with
+// no file gets 404.html with a real 404 status.
+//
+// moduo.app and staging.moduo.app serve this site through apps/landing (since 2026-11-25):
+// apps/landing/build.mjs builds it into apps/landing/dist, and that Worker (with its /book and
+// /static router) is what the workflows deploy. This config is only for a private hand preview
+// on workers.dev (after a `bun run build:preview`):
+//   bunx wrangler deploy --env preview
+{
+  "name": "moduo-site",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "observability": { "enabled": true },
+  "env": {
+    // A private preview on workers.dev, never indexed (see public/_headers note in README).
+    "preview": {
+      "name": "moduo-site-preview",
+      "workers_dev": true,
+      "preview_urls": true
+    }
+  }
+}

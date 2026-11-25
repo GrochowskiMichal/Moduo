@@ -1,0 +1,440 @@
+---
+// The compare page's signature: one client's morning in a stack of six apps, then in Moduo. Each
+// thing is one stroke of the mark. In the stack it sits in the app where it was made (Paper) and
+// again in every app it was copied to (Ash). Switched to Moduo, each copy slides onto its
+// original and cancels there (the strokes blend with `difference`, the mark's rule), then the six
+// originals rise into one row, the mark's offset apart, and every overlap opens a window: the
+// five links, each wired to its name on the stroke's angle (the home scene's leaders, which
+// invert what they cross). All the geometry is CSS on the figure's own width (container units),
+// read off one number the driver sets (motion/pages/compare.ts). Without JS, or with reduced
+// motion before a choice is made, the stack is what shows; a table says the same for screen
+// readers.
+import { STROKE, STROKE_PATH } from "../../lib/stroke";
+import { compare } from "../../data/pages/compare";
+
+const w = compare.where;
+const vb = `0 ${STROKE.top} ${STROKE.w} ${STROKE.bottom - STROKE.top}`;
+const copies = w.things.reduce((n, t) => n + t.copies.length, 0);
+const places = w.things.length + copies;
+---
+
+<div class="wt" data-wt>
+  <div class="wt__bar">
+    <div class="wt__pick" role="group" data-one aria-label="Show the morning in">
+      <button class="btn btn--ghost btn--sm" type="button" aria-pressed="true" data-sweep data-wt-pick="stack">
+        <span class="btn__label">{w.toggle.stack}</span><span class="btn__sweep" aria-hidden="true"></span>
+      </button>
+      <button class="btn btn--ghost btn--sm" type="button" aria-pressed="false" data-sweep data-wt-pick="moduo">
+        <span class="btn__label">{w.toggle.moduo}</span><span class="btn__sweep" aria-hidden="true"></span>
+      </button>
+    </div>
+    <p class="wt__count" aria-live="polite" data-wt-count>
+      <span class="wt__n is-stack">
+        <b>{places}</b>{" "}{w.stackCount.places} · <b>{copies}</b>{" "}{w.stackCount.copies}
+      </span>
+      <span class="wt__n is-moduo">
+        <b>{w.things.length}</b>{" "}{w.moduoCount.places} · <b>0</b>{" "}{w.moduoCount.copies} ·{" "}
+        <b>{w.links.length}</b>{" "}{w.moduoCount.links}
+      </span>
+    </p>
+  </div>
+
+  <div class="wt__box">
+    <div class="wt__fig" aria-hidden="true">
+      {
+        w.apps.map((app, c) => (
+          <span class="wt__app" style={`--c:${c}`}>
+            <span>{app}</span>
+          </span>
+        ))
+      }
+      {
+        w.things.map((t, r) => (
+          <span class="wt__row" style={`--r:${r}`}>
+            <span class="wt__name">{t.name}</span>
+          </span>
+        ))
+      }
+      {w.apps.map((_, c) => <span class="wt__col" style={`--c:${c}`} />)}
+      <span class="wt__plate">
+        {
+          w.things.flatMap((t, r) =>
+            t.copies.map((c) => (
+              <span class="wt__s is-copy" style={`--r:${r};--c:${c}`}>
+                <svg viewBox={vb}>
+                  <path d={STROKE_PATH} />
+                </svg>
+              </span>
+            )),
+          )
+        }
+        {
+          w.things.map((_, r) => (
+            <span class="wt__s is-orig" style={`--r:${r};--c:${r}`}>
+              <svg viewBox={vb}>
+                <path d={STROKE_PATH} />
+              </svg>
+            </span>
+          ))
+        }
+        {w.links.map((_, k) => <span class="wt__ld" style={`--k:${k}`} />)}
+      </span>
+      {
+        w.links.map((l, k) => (
+          <span class="wt__lk" style={`--k:${k}`}>
+            {l}
+          </span>
+        ))
+      }
+      {
+        w.modules.map((m, i) => (
+          <span class="wt__mod" style={`--r:${i}`}>
+            {m}
+          </span>
+        ))
+      }
+    </div>
+    <p class="wt__legend t-xs">
+      <span class="wt__key is-orig">Where it was made</span>
+      <span class="wt__key is-copy">A copy</span>
+    </p>
+  </div>
+
+  <div class="sr-only">
+    <table>
+      <caption>{w.title}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Thing</th>
+          <th scope="col">In the stack</th>
+          <th scope="col">In Moduo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {
+          w.things.map((t, r) => (
+            <tr>
+              <th scope="row">{t.name}</th>
+              <td>
+                Made in {w.apps[r]}, {t.why}
+              </td>
+              <td>Once, in {w.modules[r]}</td>
+            </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="wt__cap t-s muted">{w.caption}</p>
+</div>
+
+<style>
+  .wt {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .wt__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+  }
+  .wt__pick {
+    display: flex;
+    gap: 0.375rem;
+  }
+  .wt__count {
+    display: grid;
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    color: var(--c-muted);
+  }
+  .wt__count b {
+    color: var(--c-fg);
+    font-weight: var(--w-display);
+  }
+  /* Both counts share one cell; the state picks which shows. */
+  /* The shorter count ends where the longer one does, on the box's right edge (on a phone,
+     where the count drops under the switch, both start on the left). */
+  .wt__n {
+    grid-area: 1 / 1;
+    justify-self: end;
+    transition:
+      opacity 0.4s var(--ease),
+      translate 0.6s var(--ease);
+  }
+  .wt__n.is-moduo,
+  .wt.is-moduo .wt__n.is-stack {
+    opacity: 0;
+    translate: -0.5rem 0;
+    visibility: hidden;
+  }
+  .wt.is-moduo .wt__n.is-moduo {
+    opacity: 1;
+    translate: 0 0;
+    visibility: visible;
+  }
+  @media (max-width: 720px) {
+    .wt__n {
+      justify-self: start;
+    }
+  }
+
+  .wt__box {
+    container-type: inline-size;
+    border-radius: var(--r-xl);
+    background: #0a0a0a;
+    box-shadow:
+      inset 0 0 0 1px var(--c-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    padding: clamp(1rem, 2.4vw, 2rem);
+    overflow: hidden;
+  }
+  /* The geometry, all on the figure's width. Stack: a label column, six app columns, six rows.
+     Moduo: the originals at S times their size, a mark's offset apart, centred on the plate. */
+  .wt__fig {
+    --lw: 21cqi;
+    --cw: calc((100cqi - var(--lw)) / 6);
+    --hh: 5.5cqi;
+    --rh: 5.4cqi;
+    --sw: 2.6cqi;
+    --sh: calc(var(--sw) * 1.6464);
+    --S: 4.6;
+    --o: calc(var(--sw) * var(--S) * 0.5859);
+    --chain: calc(var(--sw) * var(--S) + 5 * var(--o));
+    --x0: calc(50cqi - var(--chain) / 2);
+    --y0: calc(var(--hh) + 3 * var(--rh) - var(--sh) * var(--S) / 2);
+    /* The windows' centres sit half way down the chain. */
+    --wy: calc(var(--y0) + var(--sh) * var(--S) / 2);
+    --gap: 0.75rem;
+    position: relative;
+    height: calc(var(--hh) + 6 * var(--rh));
+    isolation: isolate;
+  }
+  /* One number, --t, carries the figure from the stack (0) to Moduo (1): the reader's scroll
+     scrubs it, the buttons tween it (motion/pages/compare.ts). Each part reads its own stretch of
+     it (--p, eased where it travels), so any frame along the way is a frame of the same story:
+     the copies close onto their originals and cancel, the names step back, the originals rise
+     into the chain, then the modules and the links name themselves. */
+  .wt {
+    --t: 0;
+  }
+  .wt__app {
+    position: absolute;
+    left: calc(var(--lw) + var(--c) * var(--cw));
+    top: 0;
+    width: var(--cw);
+    height: var(--hh);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(0.75rem, 1cqi, 0.875rem);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    white-space: nowrap;
+    translate: 0 calc(var(--q) * -0.5rem);
+  }
+  /* The stack's names hold while the copies close, so you see where each went. */
+  .wt__app,
+  .wt__row,
+  .wt__col {
+    --q: clamp(0, (var(--t) - 0.26) / 0.14, 1);
+    opacity: calc(1 - var(--q));
+  }
+  .wt__row {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--hh) + var(--r) * var(--rh));
+    height: var(--rh);
+    display: flex;
+    align-items: center;
+    border-top: 1px solid var(--c-line);
+  }
+  .wt__name {
+    max-width: calc(var(--lw) - 1rem);
+    font-size: clamp(0.75rem, 1.15cqi, 1rem);
+    font-weight: var(--w-ui);
+    line-height: 1.3;
+  }
+  .wt__col {
+    position: absolute;
+    top: var(--hh);
+    bottom: 0;
+    left: calc(var(--lw) + var(--c) * var(--cw));
+    border-left: 1px solid var(--c-line);
+  }
+  .wt__plate {
+    position: absolute;
+    inset: 0;
+    isolation: isolate;
+  }
+  .wt__s {
+    position: absolute;
+    left: calc(var(--lw) + (var(--c) + 0.5) * var(--cw) - var(--sw) / 2);
+    top: calc(var(--hh) + (var(--r) + 0.5) * var(--rh) - var(--sh) / 2);
+    width: var(--sw);
+    height: var(--sh);
+    transform-origin: 0 0;
+    mix-blend-mode: difference;
+    /* Eased: smoothstep of the part's own progress. */
+    --e: calc(var(--p) * var(--p) * (3 - 2 * var(--p)));
+  }
+  .wt__s svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+  .wt__s.is-orig svg {
+    fill: var(--c-fg);
+  }
+  .wt__s.is-copy svg {
+    fill: var(--c-quiet);
+  }
+  /* A copy closes onto its original (cancelling as they cross) and goes. */
+  .wt__s.is-copy {
+    --p: clamp(0, var(--t) / 0.3, 1);
+    translate: calc(var(--e) * (var(--r) - var(--c)) * var(--cw)) 0;
+    opacity: calc(1 - clamp(0, (var(--t) - 0.24) / 0.08, 1));
+  }
+  /* The originals rise into the chain, one after another, at the mark's offset. */
+  .wt__s.is-orig {
+    --p: clamp(0, (var(--t) - 0.3 - var(--r) * 0.02) / 0.45, 1);
+    translate: calc(var(--e) * (var(--x0) + var(--r) * var(--o) - var(--lw) - (var(--r) + 0.5) * var(--cw) + var(--sw) / 2))
+      calc(var(--e) * (var(--y0) - var(--hh) - (var(--r) + 0.5) * var(--rh) + var(--sh) / 2));
+    scale: calc(1 + (var(--S) - 1) * var(--e));
+  }
+  .wt__mod {
+    --p: clamp(0, (var(--t) - 0.78 - var(--r) * 0.012) / 0.08, 1);
+    position: absolute;
+    left: calc(var(--x0) + var(--r) * var(--o) + var(--sw) * var(--S) * 0.32);
+    top: calc(var(--y0) + var(--sh) * var(--S) + 0.75rem);
+    font-size: clamp(0.75rem, 1cqi, 0.875rem);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    white-space: nowrap;
+    opacity: var(--p);
+    translate: 0 calc((1 - var(--p)) * 0.5rem);
+  }
+
+  /* The links: from each window a leader rises out of the chain (inverting the strokes it
+     crosses, inside the plate's blend) to the link's name, set on the stroke's 45°. They draw
+     once the chain stands. Window k is where stroke k and k + 1 overlap. */
+  .wt__ld,
+  .wt__lk {
+    --wx: calc(var(--x0) + var(--k) * var(--o) + 0.793 * var(--sw) * var(--S));
+  }
+  .wt__ld {
+    --p: clamp(0, (var(--t) - 0.85 - var(--k) * 0.012) / 0.06, 1);
+    position: absolute;
+    left: var(--wx);
+    top: calc(var(--y0) - var(--gap));
+    width: 1px;
+    height: calc(var(--wy) - var(--y0) + var(--gap));
+    background: var(--c-fg);
+    mix-blend-mode: difference;
+    transform-origin: 50% 100%;
+    scale: 1 var(--p);
+  }
+  .wt__ld::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 9px;
+    height: 9px;
+    border: 1px solid var(--c-fg);
+    border-radius: 50%;
+    translate: -50% 50%;
+  }
+  .wt__lk {
+    --p: clamp(0, (var(--t) - 0.88 - var(--k) * 0.012) / 0.06, 1);
+    position: absolute;
+    left: calc(var(--wx) - 0.2em);
+    bottom: calc(100% - var(--y0) + var(--gap) + 0.15em);
+    font-size: clamp(0.75rem, 1.05cqi, 0.8125rem);
+    font-weight: var(--w-ui);
+    line-height: 1;
+    color: var(--c-fg);
+    white-space: nowrap;
+    transform-origin: 0 100%;
+    rotate: -45deg;
+    opacity: var(--p);
+    translate: calc((1 - var(--p)) * -0.4rem) calc((1 - var(--p)) * 0.4rem);
+  }
+
+  /* The stack's key; in Moduo the windows name themselves. */
+  .wt__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 1rem;
+    color: var(--c-quiet);
+    opacity: calc(1 - clamp(0, (var(--t) - 0.2) / 0.1, 1));
+  }
+  .wt__key {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .wt__key::before {
+    content: "";
+    width: 0.5rem;
+    height: 0.82rem;
+    background: var(--c-fg);
+    clip-path: polygon(0 50%, 100% 0, 100% 50%, 0 100%);
+  }
+  .wt__key.is-copy::before {
+    background: var(--c-quiet);
+  }
+  .wt__cap {
+    max-width: 40rem;
+  }
+
+  /* A phone: names over two lines, the apps' names on the stroke's 45°. */
+  @container (max-width: 640px) {
+    .wt__fig {
+      --lw: 27cqi;
+      /* Room over the names for the box's rounded corner ("Team chat" ran into it). */
+      --hh: 20cqi;
+      --rh: 13.5cqi;
+      --sw: 4.6cqi;
+      --S: 3.9;
+    }
+    .wt__app,
+    .wt__mod {
+      font-size: 0.75rem;
+    }
+    .wt__app {
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding: 0 0 0.5rem calc(var(--cw) / 2 - 0.25rem);
+    }
+    .wt__app span {
+      rotate: -45deg;
+      transform-origin: 0 100%;
+    }
+    /* Too close together to stand level on a phone: each module's name hangs from its
+       stroke's foot on the stroke's angle, like the apps' names over the stack. */
+    .wt__mod {
+      left: calc(var(--x0) + var(--r) * var(--o) + var(--sw) * var(--S) * 0.2);
+      top: calc(var(--y0) + var(--sh) * var(--S) + 0.375rem);
+      transform-origin: 100% 0;
+      rotate: -45deg;
+      translate: -100% calc((1 - var(--p)) * 0.5rem);
+    }
+    .wt__lk {
+      font-size: 0.75rem;
+    }
+    .wt__name {
+      font-size: 0.75rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wt__n {
+      transition: none;
+    }
+  }
+</style>

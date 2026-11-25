@@ -1,0 +1,252 @@
+---
+// Where each one plugs in, drawn as the home page's plate: the six module strokes in a row with
+// their windows open, what feeds each one hanging above it on a wire to the stroke's top, and
+// under all six a bus for the assistants, which reach every module their key allows. A stroke
+// is lit when something feeds it; Chat stays grey (nothing to import, it fills as you talk)
+// until the AI group is picked. The filter on the page sets `data-kind`
+// (motion/pages/integrations.ts) and the plate lights only what that group touches.
+import { CAP_X, STROKE, chainWidth, chainX, strokePath, uniformGaps } from "../../lib/stroke";
+import { integrations } from "../../data/pages/integrations";
+import { modules } from "../../data/site";
+
+const plate = integrations.plate;
+const xs = chainX(uniformGaps(6, 1));
+const W = chainWidth(xs);
+const pad = 4;
+// The stroke's lowest point, from its left edge (the mark's own path).
+const FOOT_X = 378.877 - STROKE.x0;
+const busY = STROKE.bottom + 64;
+const dropY = busY + 56;
+const vbW = W + 2 * pad;
+const vbH = dropY - STROKE.top;
+const vb = `${-pad} ${STROKE.top} ${vbW} ${vbH}`;
+const pct = (x: number) => `${(((x + pad) / vbW) * 100).toFixed(3)}%`;
+const paths = xs.map((x) => strokePath(x));
+const feet = xs.map((x) => x + FOOT_X);
+const mid = (feet[0] + feet[feet.length - 1]) / 2;
+const kindsOf = (i: number) => plate.columns[i].kinds.map((k) => `k-${k}`);
+---
+
+<figure class="ixp" data-ixp data-kind="all" role="img" aria-label={plate.label}>
+  <div class="ixp__top" aria-hidden="true">
+    {
+      plate.columns.map((c, i) => (
+        <div class:list={["ixp__col", ...kindsOf(i), c.names.length === 0 && "is-empty"]} style={`--x:${pct(xs[i] + CAP_X)}`}>
+          <span class="ixp__mod">{modules[c.module].name}</span>
+          {c.names.map((n) => (
+            <span class="ixp__name">{n}</span>
+          ))}
+          {c.empty && <span class="ixp__name is-quiet">{c.empty}</span>}
+        </div>
+      ))
+    }
+  </div>
+  <svg class="ixp__svg" viewBox={vb} aria-hidden="true" focusable="false" style={`aspect-ratio:${vbW}/${vbH}`}>
+    <defs>
+      {
+        paths.map((d, i) => (
+          <clipPath id={`ixp-c${i}`}>
+            <path d={d} />
+          </clipPath>
+        ))
+      }
+    </defs>
+    {paths.map((d, i) => <path class:list={["ixp__s", ...kindsOf(i), plate.columns[i].names.length > 0 && "k-any"]} d={d} />)}
+    {
+      paths.slice(0, -1).map((d, k) => (
+        <g clip-path={`url(#ixp-c${k + 1})`}>
+          <path class="ixp__w" d={d} />
+        </g>
+      ))
+    }
+    <g class="ixp__bus">
+      {feet.map((x) => <path d={`M${x} ${STROKE.bottom - 2}V${busY}`} />)}
+      <path d={`M${feet[0]} ${busY}H${feet[feet.length - 1]}`} />
+      <path d={`M${mid} ${busY}V${dropY}`} />
+      {feet.map((x) => <circle cx={x} cy={busY} r="5" />)}
+    </g>
+  </svg>
+  <div class="ixp__ai" style={`--x:${pct(mid)}`} aria-hidden="true">
+    <span class="ixp__ai-names">{plate.ai.names.join(" · ")}</span>
+    <span class="ixp__ai-note">{plate.ai.note}</span>
+  </div>
+  <dl class="ixp__list" aria-hidden="true">
+    {
+      plate.columns.map((c, i) => (
+        <div class:list={["ixp__li", ...kindsOf(i)]}>
+          <dt>{modules[c.module].name}</dt>
+          <dd>{c.names.length ? c.names.join(", ") : c.empty}</dd>
+        </div>
+      ))
+    }
+    <div class="ixp__li k-ai">
+      <dt>All six</dt>
+      <dd>{plate.ai.names.join(", ")}</dd>
+    </div>
+  </dl>
+</figure>
+
+<style>
+  .ixp {
+    --off: var(--c-stroke-off);
+    position: relative;
+    margin: 0;
+    width: min(100%, 72rem);
+  }
+  /* What feeds each stroke, on a wire down to its top. */
+  .ixp__top {
+    position: relative;
+    height: 10.5rem;
+  }
+  .ixp__col {
+    position: absolute;
+    left: var(--x);
+    top: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--c-line-strong);
+    font-size: var(--t-s);
+    line-height: 1.45;
+    white-space: nowrap;
+    transition:
+      opacity var(--d-hover) var(--ease),
+      border-color var(--d-hover) var(--ease);
+  }
+  .ixp__col.is-empty {
+    border-left-color: transparent;
+  }
+  /* The last column may run into the page's margin (the plate's edge left it a word a line),
+     and wraps there, never past the window. */
+  .ixp__col:last-child {
+    right: calc(1rem - var(--margin));
+    white-space: normal;
+  }
+  .ixp__mod {
+    margin-bottom: 0.25rem;
+    font-weight: var(--w-ui);
+  }
+  .ixp__name {
+    color: var(--c-muted);
+    font-weight: var(--w-small);
+  }
+  .ixp__name.is-quiet {
+    color: var(--c-quiet);
+  }
+  .ixp__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .ixp__s {
+    fill: var(--off);
+    transition: fill 0.5s var(--ease);
+  }
+  .ixp__w {
+    fill: var(--c-bg);
+  }
+  .ixp__bus {
+    fill: var(--c-bg);
+    stroke: var(--c-line-strong);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    transition: stroke var(--d-hover) var(--ease);
+  }
+  .ixp__bus path,
+  .ixp__bus circle {
+    vector-effect: non-scaling-stroke;
+  }
+  .ixp__ai {
+    position: relative;
+    left: var(--x);
+    translate: -50% 0;
+    display: grid;
+    justify-items: center;
+    gap: 0.25rem;
+    width: max-content;
+    max-width: 100%;
+    margin-top: 0.75rem;
+    text-align: center;
+    transition: opacity var(--d-hover) var(--ease);
+  }
+  .ixp__ai-names {
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+  }
+  .ixp__ai-note {
+    font-size: var(--t-xs);
+    color: var(--c-quiet);
+  }
+  .ixp__list {
+    display: none;
+  }
+
+  /* At rest (all): every stroke something feeds is lit, and the bus reads. */
+  .ixp[data-kind="all"] .ixp__s.k-any,
+  .ixp[data-kind="ai"] .ixp__s,
+  .ixp[data-kind="email"] .ixp__s.k-email,
+  .ixp[data-kind="calendar"] .ixp__s.k-calendar,
+  .ixp[data-kind="import"] .ixp__s.k-import {
+    fill: var(--c-fg);
+  }
+  .ixp[data-kind="all"] .ixp__bus,
+  .ixp[data-kind="ai"] .ixp__bus {
+    stroke: var(--c-muted);
+  }
+  /* A group picked: what it doesn't touch steps back. */
+  .ixp:not([data-kind="all"]) .ixp__col,
+  .ixp:not([data-kind="all"]) .ixp__li,
+  .ixp:not([data-kind="all"], [data-kind="ai"]) .ixp__ai {
+    opacity: 0.32;
+  }
+  .ixp[data-kind="email"] :is(.ixp__col, .ixp__li).k-email,
+  .ixp[data-kind="calendar"] :is(.ixp__col, .ixp__li).k-calendar,
+  .ixp[data-kind="import"] :is(.ixp__col, .ixp__li).k-import,
+  .ixp[data-kind="ai"] .ixp__li.k-ai {
+    opacity: 1;
+  }
+  .ixp[data-kind="email"] .ixp__col.k-email,
+  .ixp[data-kind="calendar"] .ixp__col.k-calendar,
+  .ixp[data-kind="import"] .ixp__col.k-import {
+    border-left-color: var(--c-fg);
+  }
+
+  @media (max-width: 1100px) {
+    .ixp__col {
+      font-size: var(--t-xs);
+    }
+    .ixp__top {
+      height: 9rem;
+    }
+  }
+  /* A phone: the strokes and the bus stay; what feeds them reads as a list under them. */
+  @media (max-width: 720px) {
+    .ixp__top,
+    .ixp__ai {
+      display: none;
+    }
+    .ixp__list {
+      display: grid;
+      margin-top: 1.5rem;
+    }
+    .ixp__li {
+      display: grid;
+      grid-template-columns: 6.5rem minmax(0, 1fr);
+      gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--c-line);
+      font-size: var(--t-s);
+      transition: opacity var(--d-hover) var(--ease);
+    }
+    .ixp__li dt {
+      font-weight: var(--w-ui);
+    }
+    .ixp__li dd {
+      margin: 0;
+      color: var(--c-muted);
+    }
+  }
+</style>

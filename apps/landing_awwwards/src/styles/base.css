@@ -1,0 +1,620 @@
+/* Foundation: reset, type, grid, the shared controls and the engine hooks. Component looks
+   live in each component's <style>. Values come from tokens.css only. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  /* 100%, not none: rotating a phone keeps the size and a reader's own text zoom still works. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  scrollbar-color: var(--c-line-strong) var(--c-bg);
+}
+body {
+  min-height: 100dvh;
+  background: var(--c-bg);
+  font-family: var(--f-sans);
+  font-size: var(--t-body);
+  line-height: var(--lh-body);
+  font-weight: var(--w-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  /* Oudom has no italic and draws its own bolds: never fake either. */
+  font-synthesis: none;
+  overflow-x: clip;
+}
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+img {
+  height: auto;
+}
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 0;
+}
+a {
+  color: inherit;
+  text-decoration: none;
+}
+h1,
+h2,
+h3,
+h4 {
+  font-weight: inherit;
+  font-size: inherit;
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+::selection {
+  background: var(--c-fg);
+  color: var(--c-bg);
+}
+b,
+strong {
+  font-weight: var(--w-display);
+}
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Accessibility: the app's focus ring, 2px, offset by the canvas. */
+:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+#main:focus {
+  outline: none;
+}
+.skip-link {
+  position: fixed;
+  left: var(--margin);
+  top: 0.75rem;
+  z-index: calc(var(--z-curtain) + 1);
+  padding: 0.6rem 1rem;
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: var(--t-s);
+  font-weight: var(--w-ui);
+  translate: 0 -200%;
+}
+.skip-link:focus-visible {
+  translate: 0 0;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Grid: 12 columns, three hanging lines at 1, 5 and 9 (the mark's three strokes). */
+.wrap {
+  width: 100%;
+  max-width: calc(var(--content-max) + 2 * var(--margin));
+  margin-inline: auto;
+  padding-inline: var(--margin);
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  column-gap: var(--gutter);
+}
+
+/* Type */
+.t-mega {
+  font-size: var(--t-mega);
+  line-height: var(--lh-mega);
+  letter-spacing: var(--tr-mega);
+  font-weight: var(--w-display);
+}
+.t-xl {
+  font-size: var(--t-xl);
+  line-height: var(--lh-xl);
+  letter-spacing: var(--tr-xl);
+  font-weight: var(--w-display);
+}
+.t-l {
+  font-size: var(--t-l);
+  line-height: var(--lh-l);
+  letter-spacing: var(--tr-l);
+  font-weight: var(--w-text);
+}
+.t-m {
+  font-size: var(--t-m);
+  line-height: var(--lh-m);
+  letter-spacing: var(--tr-m);
+  font-weight: var(--w-text);
+}
+.t-s {
+  font-size: var(--t-s);
+  line-height: 1.5;
+  font-weight: var(--w-small);
+}
+.t-xs {
+  font-size: var(--t-xs);
+  line-height: 1.4;
+  letter-spacing: var(--tr-xs);
+  font-weight: var(--w-small);
+}
+.muted {
+  color: var(--c-muted);
+}
+.quiet {
+  color: var(--c-quiet);
+}
+.measure {
+  max-width: var(--measure);
+}
+
+/* Inline links in running text: a quiet underline at rest (WCAG 1.4.1); under the pointer a
+   Paper line draws across it, left to right, on every line the link wraps to. */
+.link {
+  padding-block: max(0.2em, 5px);
+  background-image:
+    linear-gradient(var(--c-fg), var(--c-fg)), linear-gradient(var(--c-quiet), var(--c-quiet));
+  background-repeat: no-repeat;
+  background-origin: content-box;
+  background-position:
+    0 100%,
+    0 100%;
+  background-size:
+    0% 1px,
+    100% 1px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition:
+    color var(--d-hover) var(--ease),
+    background-size var(--d-hover) var(--ease);
+}
+@media (hover: hover) {
+  .link:hover {
+    color: var(--c-fg);
+    background-size:
+      100% 1px,
+      100% 1px;
+  }
+}
+.link:focus-visible {
+  background-size:
+    100% 1px,
+    100% 1px;
+}
+/* "Back" links: the arrow travels the way it points and a Paper line draws back from it under
+   the words. */
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  font-size: var(--t-s);
+  color: var(--c-muted);
+  background: linear-gradient(var(--c-fg), var(--c-fg)) no-repeat 100% calc(50% + 0.8em) / 0% 1px;
+  transition:
+    color var(--d-hover) var(--ease),
+    background-size var(--d-hover) var(--ease);
+}
+.back svg {
+  transition: translate var(--d-hover) var(--ease);
+}
+@media (hover: hover) {
+  .back:hover {
+    color: var(--c-fg);
+    background-size: calc(100% - 14px - 0.5rem) 1px;
+  }
+  .back:hover svg {
+    translate: -6px 0;
+  }
+}
+.back:focus-visible {
+  color: var(--c-fg);
+  background-size: calc(100% - 14px - 0.5rem) 1px;
+}
+
+/* Index rows and "go" links (the long pages' rails, the 404's way home): under the pointer, and
+   on the row you are reading, a stroke of the mark slides in before the words and they step
+   aside for it, as the hero's index lights its stroke. The rails' rows are written by the legal
+   pages' own markup, so they join by selector. */
+.go,
+.longform__rail :is(.toc, .rail__list) a {
+  --go: 1.1em;
+  position: relative;
+  transition:
+    color var(--d-hover) var(--ease),
+    translate var(--d-hover) var(--ease);
+}
+.go::before,
+.longform__rail :is(.toc, .rail__list) a::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--go));
+  top: 50%;
+  width: 0.6em;
+  height: 0.99em;
+  background: var(--c-fg);
+  /* The stroke itself (lib/stroke.ts), at the mark's proportions. */
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 227.1 331.5 545.8'%3E%3Cpath d='M0 527.5C0 517.3 0 512.3 1.1 507.5C2.1 503.2 3.8 499.2 6.1 495.5C8.7 491.3 12.3 487.7 19.5 480.5L218.4 282.3C253.9 246.9 271.6 229.3 286.8 228.1C300 227.1 313 232.4 321.6 242.5C331.5 254.1 331.5 279.2 331.5 329.3V472.4C331.5 482.6 331.5 487.7 330.3 492.4C329.3 496.7 327.6 500.7 325.3 504.4C322.8 508.6 319.2 512.2 312 519.4L113 717.6C77.6 753 59.8 770.7 44.6 771.8C31.4 772.9 18.5 767.5 9.9 757.4C0 745.8 0 720.7 0 670.6Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 227.1 331.5 545.8'%3E%3Cpath d='M0 527.5C0 517.3 0 512.3 1.1 507.5C2.1 503.2 3.8 499.2 6.1 495.5C8.7 491.3 12.3 487.7 19.5 480.5L218.4 282.3C253.9 246.9 271.6 229.3 286.8 228.1C300 227.1 313 232.4 321.6 242.5C331.5 254.1 331.5 279.2 331.5 329.3V472.4C331.5 482.6 331.5 487.7 330.3 492.4C329.3 496.7 327.6 500.7 325.3 504.4C322.8 508.6 319.2 512.2 312 519.4L113 717.6C77.6 753 59.8 770.7 44.6 771.8C31.4 772.9 18.5 767.5 9.9 757.4C0 745.8 0 720.7 0 670.6Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  opacity: 0;
+  translate: -0.5em -50%;
+  transition:
+    opacity var(--d-hover) var(--ease),
+    translate var(--d-hover) var(--ease);
+}
+/* The pointer keeps the row while it steps aside. */
+.go::after,
+.longform__rail :is(.toc, .rail__list) a::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 calc(-1 * var(--go));
+}
+@media (hover: hover) {
+  .go:hover,
+  .longform__rail :is(.toc, .rail__list) a:hover {
+    translate: var(--go) 0;
+  }
+  .go:hover::before,
+  .longform__rail :is(.toc, .rail__list) a:hover::before {
+    opacity: 1;
+    translate: 0 -50%;
+  }
+}
+.go:focus-visible,
+.go[aria-current],
+.longform__rail :is(.toc, .rail__list) a:is(:focus-visible, [aria-current]) {
+  translate: var(--go) 0;
+}
+.go:is(:focus-visible, [aria-current])::before,
+.longform__rail :is(.toc, .rail__list) a:is(:focus-visible, [aria-current])::before {
+  opacity: 1;
+  translate: 0 -50%;
+}
+
+/* Utility links (legal, social, footer): color only. */
+.ulink {
+  color: var(--c-muted);
+  transition: color var(--d-hover) var(--ease);
+}
+@media (hover: hover) {
+  .ulink:hover {
+    color: var(--c-fg);
+  }
+}
+.ulink:focus-visible,
+.ulink[aria-current="page"] {
+  color: var(--c-fg);
+}
+
+/* Buttons. The hover is the XOR sweep: a Paper band with the stroke's 45° edge passes over
+   the button with a difference blend and leaves it inverted (motion/buttons.ts moves it).
+   Without JS, on touch and under reduced motion the inversion happens in place. */
+.btn {
+  --h: 2.75rem;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  height: var(--h);
+  padding: 0 1.25rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-primary);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: var(--t-s);
+  font-weight: var(--w-ui);
+  letter-spacing: var(--tr-ui);
+  line-height: 1;
+  white-space: nowrap;
+  overflow: clip;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn--ghost {
+  background: transparent;
+  color: var(--c-fg);
+  border-color: var(--c-line-strong);
+}
+.btn--sm {
+  --h: 2.25rem;
+  padding: 0 0.875rem;
+}
+/* A toggle that is on is a filled button. Its sweep runs in a dark grey, so under the pointer it
+   dims but still reads as on. */
+.btn--ghost[aria-pressed="true"] {
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  border-color: var(--c-primary);
+}
+.btn--ghost[aria-pressed="true"] .btn__sweep {
+  background: var(--c-line-strong);
+}
+/* One choice of several ([data-one]): the chosen one is where you are, so it doesn't answer the
+   pointer; pressing it again changes nothing. */
+[data-one] .btn--ghost[aria-pressed="true"] {
+  cursor: default;
+}
+[data-one] .btn--ghost[aria-pressed="true"] .btn__sweep {
+  display: none;
+}
+/* --s runs 0 (waiting left) → 1 (covering) → 2 (gone right); the band is 2 × --h wider than
+   the button so its 45° edges clear both ends. */
+.btn__sweep {
+  --s: 0;
+  display: block;
+  position: absolute;
+  inset: -1px auto -1px 0;
+  width: calc(100% + 2 * var(--h) + 2px);
+  background: var(--c-fg);
+  mix-blend-mode: difference;
+  clip-path: polygon(0 100%, var(--h) 0, 100% 0, calc(100% - var(--h)) 100%);
+  translate: calc(-100% - 2px + var(--s) * (100% - var(--h) + 2px)) 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.btn > :not(.btn__sweep) {
+  position: relative;
+}
+.btn:active .btn__sweep,
+html:not(.js) .btn:hover .btn__sweep {
+  --s: 1;
+}
+.btn .arrow {
+  transition: translate var(--d-hover) var(--ease);
+}
+@media (hover: hover) {
+  .btn:hover .arrow {
+    translate: 4px 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:hover .btn__sweep,
+  .btn:focus-visible .btn__sweep {
+    --s: 1;
+  }
+}
+
+/* Form fields */
+.field {
+  height: 2.75rem;
+  width: 100%;
+  padding: 0 0.875rem;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-dim);
+  background: var(--c-raised);
+  color: var(--c-fg);
+  font-size: var(--t-s);
+  transition: border-color var(--d-hover) var(--ease);
+}
+/* Under 16 px, iOS zooms the page into a focused field. */
+@media (pointer: coarse) {
+  .field {
+    font-size: max(var(--t-s), 1rem);
+  }
+}
+.field::placeholder {
+  color: var(--c-quiet);
+}
+.field:focus-visible {
+  outline: none;
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 1px var(--c-primary);
+}
+.field[aria-invalid="true"] {
+  border-color: var(--c-fg);
+}
+
+/* Sliders: a hairline track, the thumb a stroke of the mark standing up. */
+.range {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 2.75rem;
+  background: transparent;
+  cursor: pointer;
+}
+.range::-webkit-slider-runnable-track {
+  height: 1px;
+  background: var(--c-line-strong);
+}
+.range::-moz-range-track {
+  height: 1px;
+  background: var(--c-line-strong);
+}
+.range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 24px;
+  margin-top: -12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--c-fg);
+  clip-path: polygon(0 50%, 100% 0, 100% 50%, 0 100%);
+  transition: scale var(--d-hover) var(--ease);
+}
+.range::-moz-range-thumb {
+  width: 14px;
+  height: 24px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--c-fg);
+  clip-path: polygon(0 50%, 100% 0, 100% 50%, 0 100%);
+}
+.range:hover::-webkit-slider-thumb,
+.range:focus-visible::-webkit-slider-thumb {
+  scale: 1.15;
+}
+.range:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 2px;
+}
+
+/* Keycaps (keyboard hints) */
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75em;
+  height: 1.6em;
+  padding: 0 0.4em;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-line-strong);
+  background: var(--c-raised);
+  color: var(--c-fg);
+  /* Oudom draws the key legends (⌘ ⇧ ⌥ ⌃ ⌫ ↵ ⇥) at the figures' height. Named outright: a <kbd>
+     would otherwise take the browser's own monospace. */
+  font-family: var(--f-sans);
+  font-size: 0.78em;
+  font-weight: var(--w-ui);
+  font-feature-settings: "case";
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: 0.12em;
+}
+
+/* Lenis */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis:not(.lenis-autoToggle).lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+#main {
+  position: relative;
+  z-index: var(--z-content);
+}
+
+/* Hidden until it arrives (only when motion is allowed and JS runs). The failsafe animation
+   gives visibility back if the script never starts; GSAP's own opacity still rules. */
+.motion [data-split],
+.motion [data-reveal] {
+  visibility: hidden;
+  animation: arrive-failsafe 0s 3.5s forwards;
+}
+@keyframes arrive-failsafe {
+  to {
+    visibility: visible;
+  }
+}
+.split-line {
+  display: block;
+}
+
+/* Curtain: two Canvas panels with the stroke's 45° edge (engine/transition.ts moves them).
+   Each panel is wide enough that its diagonal clears any aspect ratio. */
+#curtain {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-curtain);
+  pointer-events: none;
+  visibility: hidden;
+  overflow: hidden;
+}
+.curtain__l,
+.curtain__r {
+  position: absolute;
+  top: 0;
+  left: -100vh;
+  width: calc(100vw + 200vh);
+  height: 100%;
+  background: var(--c-curtain);
+}
+.curtain__l {
+  clip-path: polygon(0 0, calc(50vw + 150vh + 1px) 0, calc(50vw + 50vh + 1px) 100%, 0 100%);
+}
+.curtain__r {
+  clip-path: polygon(
+    calc(50vw + 150vh - 1px) 0,
+    100% 0,
+    100% 100%,
+    calc(50vw + 50vh - 1px) 100%
+  );
+}
+/* The seam: one Paper hairline on each panel's diagonal. */
+.curtain__l::after,
+.curtain__r::after {
+  content: "";
+  position: absolute;
+  left: calc(100vh + 50vw);
+  top: 50%;
+  width: 1.5px;
+  height: 142vh;
+  background: var(--c-fg);
+  opacity: 0.55;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+/* An endless page (the colophon, the type page; Base's endless prop): with motion the scroll wraps,
+   so the footer leaves the flow. It stays in the tab order: tab past the header and it rises over
+   the stage from the foot, and goes again when focus leaves it. Without motion it ends the page
+   as on every other page. */
+html.motion[data-endless] .ft {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-dialog);
+  max-height: 100svh;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--c-line-strong);
+  translate: 0 100%;
+  transition: translate 0.6s var(--ease);
+}
+html.motion[data-endless] .ft:focus-within {
+  translate: 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -1,0 +1,464 @@
+---
+// The page's one live control: a key's reach. On the left the key as the app's API key settings
+// draw it (a level for each of the seven modules it can reach); on the right every tool the
+// connector offers, set as a field of names. The tools the key opens are lit; the rest wait in
+// Ash, dashed when they also need Edit on another module. Change a level and the field parts:
+// what opens slides in, what closes steps back (motion/pages/ai.ts). Without JS the field shows
+// the starting reach, and every tool's line is in the markup.
+import "../../styles/frames.css";
+import Head from "../page/Head.astro";
+import Icon from "../frames/Icon.astro";
+import { ai } from "../../data/pages/ai";
+import { keyModules, levels, opens, tools, type KeyModule } from "../../data/pages/mcp";
+
+const r = ai.reach;
+const start = r.start as Record<KeyModule, "none" | "view" | "edit">;
+const total = tools.length;
+const open = tools.filter((tool) => opens(tool, start)).length;
+const nameOf = (m: KeyModule) => keyModules.find((k) => k.id === m)!.name;
+const says = (m: KeyModule) => (start[m] === "none" ? r.none : r.says[m][start[m]]);
+const levelName = (m: KeyModule) => levels.find((l) => l.id === start[m])!.name;
+const status = `${open} ${r.countOf} ${total} ${r.countUnit}`;
+// What each level says, per module, for the driver to swap in.
+const sayings = Object.fromEntries(keyModules.map((m) => [m.id, { none: r.none, ...r.says[m.id] }]));
+---
+
+<section class="reach pg pg--chapter" id="reach" aria-labelledby="reach-title">
+  <div class="wrap">
+    <Head id="reach-title" title={r.title} text={r.text} />
+    <div class="reach__grid" data-reach data-total={total} data-says={JSON.stringify(sayings)}>
+      <div class="reach__side">
+        <form class="ap reach__key" aria-label="What this key can reach" data-reveal="frame">
+          <div class="reach__keyrow" aria-hidden="true">
+            <span class="reach__keyic"><Icon name="key-round" class="ap-i--sm" /></span>
+            <span class="reach__keyname">
+              <span class="ap-med">{r.keyName}</span>
+              <span class="ap-muted ap-xs">{r.keyMeta}</span>
+            </span>
+            <span class="ap-tag reach__live"><span class="ap-dot"></span>{r.status}</span>
+          </div>
+          {
+            keyModules.map((m) => (
+              <fieldset class="reach__row" data-module={m.id}>
+                <legend class="reach__rowname">{m.name}</legend>
+                <div class="ap-seg reach__seg">
+                  {levels.map((l) => (
+                    <label class="reach__opt">
+                      <input type="radio" name={`reach-${m.id}`} value={l.id} checked={start[m.id] === l.id} aria-label={`${m.name}: ${l.name}`} />
+                      <span>{l.name}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))
+          }
+        </form>
+        <div class="reach__status reach__status--wide" data-reach-status>
+          <p class="reach__count" aria-live="polite">
+            <span class="reach__n tabular" data-reach-n aria-hidden="true">{open}</span>
+            <span class="reach__of" aria-hidden="true">{r.countOf} {total} {r.countUnit}</span>
+            <span class="sr-only" data-reach-say>{status}</span>
+          </p>
+          <p class="reach__read t-s" data-reach-read aria-hidden="true">Point at a tool, or tab into the list, to read what it does.</p>
+        </div>
+      </div>
+
+      <div class="reach__status reach__status--narrow" aria-hidden="true" data-reach-status>
+        <p class="reach__count">
+          <span class="reach__n tabular" data-reach-n>{open}</span>
+          <span class="reach__of">{r.countOf} {total} {r.countUnit}</span>
+        </p>
+        <p class="reach__read t-xs" data-reach-read>Tap a tool to read what it does.</p>
+      </div>
+
+      <div class="reach__belt" data-reach-belt>
+        {
+          keyModules.map((m) => (
+            <section class="belt" data-belt={m.id} data-level={start[m.id]} aria-labelledby={`belt-${m.id}`}>
+              <header class="belt__head">
+                <h3 class="belt__name" id={`belt-${m.id}`}>
+                  {m.name}
+                  <span class="belt__lvl" data-belt-lvl>
+                    {levelName(m.id)}
+                  </span>
+                </h3>
+                <p class="belt__says muted" data-belt-says>
+                  {says(m.id)}
+                </p>
+              </header>
+              <ul class="belt__tools" role="list">
+                {tools
+                  .filter((tool) => tool.module === m.id)
+                  .map((tool) => {
+                    const on = opens(tool, start);
+                    const need = !on && !!tool.needs && opens({ ...tool, needs: undefined }, start);
+                    return (
+                      <li
+                        class:list={["chip", on && "is-on", need && "is-need"]}
+                        data-tool={tool.name}
+                        data-module={tool.module}
+                        data-access={tool.access}
+                        data-needs={tool.needs}
+                        data-does={tool.does}
+                        data-req={`${nameOf(tool.module)}: ${tool.access === "edit" ? "Edit" : "View"}${tool.needs ? ` and ${nameOf(tool.needs)}: Edit` : ""}`}
+                        tabindex="-1"
+                      >
+                        <code>{tool.name}</code>
+                        <span class="sr-only">
+                          : {tool.does}, with {nameOf(tool.module)}: {tool.access === "edit" ? "Edit" : "View"}
+                          {tool.needs ? ` and ${nameOf(tool.needs)}: Edit` : ""}.
+                        </span>
+                      </li>
+                    );
+                  })}
+              </ul>
+            </section>
+          ))
+        }
+        <ul class="reach__legend t-xs">
+          {
+            r.legend.map((l) => (
+              <li>
+                <span class:list={["chip chip--key", l.kind === "on" ? "is-on" : "is-need"]} aria-hidden="true" />
+                {l.text}
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .reach__grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: start;
+  }
+  .reach__side {
+    grid-column: 1 / span 4;
+    position: sticky;
+    top: calc(var(--nav-h) + 1.5rem);
+    display: grid;
+    gap: 1.75rem;
+  }
+  .reach__belt {
+    grid-column: 6 / -1;
+    min-width: 0;
+  }
+
+  /* The key, as Settings draws it. */
+  .reach__key {
+    display: grid;
+    padding: 0.286em 1em 0.571em;
+    border-radius: 1.143em;
+    background: var(--ap-card);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2em 4em -2em rgb(0 0 0 / 0.9);
+    font-size: 14px;
+  }
+  .reach__keyrow {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 3.714em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .reach__keyic {
+    display: grid;
+    place-items: center;
+    width: 2.143em;
+    height: 2.143em;
+    border-radius: 0.571em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+  }
+  .reach__keyname {
+    display: grid;
+    flex: 1;
+    line-height: 1.3;
+  }
+  .reach__live .ap-dot {
+    --c: var(--ap-success);
+  }
+  .reach__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    margin: 0;
+    padding: 0.5em 0;
+    border: 0;
+    border-bottom: 1px solid var(--ap-line);
+    min-width: 0;
+  }
+  .reach__row:last-child {
+    border-bottom: 0;
+  }
+  .reach__rowname {
+    float: left;
+    padding: 0;
+    font-weight: 500;
+  }
+  .reach__opt {
+    position: relative;
+    cursor: pointer;
+  }
+  .reach__opt input {
+    position: absolute;
+    inset: 0;
+    appearance: none;
+    margin: 0;
+    border: 0;
+    background: none;
+    border-radius: 0.429em;
+    cursor: pointer;
+  }
+  .reach__opt input:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .reach__opt span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.857em;
+    padding: 0 0.786em;
+    border-radius: 0.429em;
+    color: var(--ap-muted);
+    font-weight: 500;
+    transition:
+      background-color 0.2s var(--ease),
+      color 0.2s var(--ease);
+  }
+  .reach__opt input:checked + span {
+    background: var(--ap-raised);
+    color: var(--ap-fg);
+  }
+  @media (hover: hover) {
+    .reach__opt:hover span {
+      color: var(--ap-fg);
+    }
+  }
+
+  /* The count, and the line that reads a tool out. */
+  .reach__count {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  .reach__n {
+    font-size: var(--t-xl);
+    line-height: 0.9;
+    letter-spacing: var(--tr-xl);
+    font-weight: var(--w-display);
+    min-width: 2ch;
+  }
+  .reach__of {
+    color: var(--c-muted);
+  }
+  .reach__read {
+    min-height: 3em;
+    margin-top: 0.75rem;
+    color: var(--c-quiet);
+  }
+  .reach__read :global(code) {
+    font-family: var(--f-mono);
+    font-size: 0.92em;
+    color: var(--c-fg);
+  }
+  .reach__read :global(.reach__req) {
+    display: block;
+    color: var(--c-quiet);
+  }
+  .reach__read :global(.reach__does) {
+    color: var(--c-muted);
+  }
+  .reach__status--narrow {
+    display: none;
+  }
+
+  /* The field: one band per module. */
+  /* The belt's own seven columns follow the page's, so the chips start on line 9, under the
+     head's words. */
+  .belt {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    padding: 1.5rem 0;
+    border-top: 1px solid var(--c-line);
+  }
+  .belt:first-child {
+    border-top: 0;
+    padding-top: 0.25rem;
+  }
+  .belt__head {
+    grid-column: span 3;
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+  }
+  .belt__name {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+    font-size: var(--t-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-ui);
+  }
+  .belt__lvl {
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .belt[data-level="edit"] .belt__lvl,
+  .belt[data-level="view"] .belt__lvl {
+    color: var(--c-fg);
+  }
+  .belt__says {
+    font-size: var(--t-s);
+    line-height: 1.45;
+    max-width: 26ch;
+  }
+  .belt__tools {
+    grid-column: span 4;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: start;
+    gap: 0.375rem;
+  }
+
+  /* A tool's name. Lit when the key opens it; Ash when it doesn't; dashed when its own module
+     would let it, but it also needs Edit somewhere else. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.875rem;
+    padding: 0 0.5rem;
+    border-radius: var(--r-md);
+    border: 1px solid transparent;
+    color: var(--c-quiet);
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    line-height: 1;
+    cursor: default;
+    transition:
+      color var(--d-hover) var(--ease),
+      border-color var(--d-hover) var(--ease),
+      background-color var(--d-hover) var(--ease);
+  }
+  .chip code {
+    font: inherit;
+  }
+  .chip.is-on {
+    color: var(--c-fg);
+    border-color: var(--c-line-strong);
+    background: var(--c-card);
+  }
+  .chip.is-need {
+    border-style: dashed;
+    border-color: var(--c-line-strong);
+  }
+  .chip:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .chip.is-read {
+    border-color: var(--c-fg);
+  }
+  @media (hover: hover) {
+    .chip:hover {
+      border-color: var(--c-muted);
+    }
+  }
+  .reach__legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--c-line);
+    color: var(--c-quiet);
+  }
+  .reach__legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  .chip--key {
+    min-height: 0.875rem;
+    width: 1.5rem;
+    padding: 0;
+  }
+
+  @media (max-width: 1100px) {
+    .reach__side {
+      grid-column: 1 / span 5;
+    }
+    .reach__belt {
+      grid-column: 6 / -1;
+    }
+    .belt {
+      grid-template-columns: 1fr;
+      row-gap: 1rem;
+    }
+    .belt__head,
+    .belt__tools {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (max-width: 900px) {
+    .reach__side {
+      grid-column: 1 / -1;
+      position: static;
+    }
+    .reach__status--wide {
+      display: none;
+    }
+    .reach__status--narrow {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      grid-column: 1 / -1;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      margin: 1.5rem calc(-1 * var(--margin)) 0;
+      padding: 0.75rem var(--margin);
+      background: var(--c-bg);
+      box-shadow: 0 1px 0 var(--c-line);
+    }
+    .reach__status--narrow .reach__count {
+      flex: none;
+      gap: 0.5rem;
+    }
+    .reach__status--narrow .reach__n {
+      font-size: var(--t-l);
+    }
+    .reach__status--narrow .reach__of {
+      font-size: var(--t-xs);
+    }
+    .reach__status--narrow .reach__read {
+      min-height: 0;
+      margin: 0;
+      flex: 1;
+      min-width: 0;
+    }
+    .reach__belt {
+      grid-column: 1 / -1;
+      margin-top: 0.5rem;
+    }
+    .belt:first-child {
+      padding-top: 1.5rem;
+    }
+    .belt__says {
+      max-width: 36rem;
+    }
+    .reach__key {
+      font-size: 13px;
+    }
+  }
+</style>

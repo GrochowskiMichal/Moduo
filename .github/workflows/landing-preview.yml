@@ -1,19 +1,21 @@
 name: landing-preview
 
 # A preview of the landing for every PR that can change it (specs/platform-v2.md, PLAT-5, AC10):
-# the moduo.app build (index, legal pages, assets; noindex) is uploaded as a new version of the
+# the moduo.app build (the product site, apps/landing_awwwards; noindex) is uploaded as a version of the
 # staging landing Worker (apps/landing/wrangler.jsonc) with `wrangler versions upload`, which
 # never changes what staging serves. Its /book and /static/* go to the staging app Worker, so
 # booking can be tried on the preview host. The alias URL is posted as one PR comment.
 #
 # `versions upload` refuses a Worker that was never deployed: moduo-landing-staging was created
 # once by an earlier revision of this job (PR #456); a new environment needs one `landing-deploy`
-# run first. PRs from forks get no secrets and are skipped. Nothing here runs `bun install`.
+# run first. PRs from forks get no secrets and are skipped. `bun install` runs before any
+# step that holds the token (only the upload step has it).
 on:
   pull_request:
     branches: [develop, mike, maciej]
     paths:
       - apps/landing/**
+      - apps/landing_awwwards/**
       - apps/app/public/favicon*
       - apps/app/public/apple-touch-icon.png
       - scripts/smoke-hosting.ts
@@ -63,6 +65,10 @@ jobs:
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: .bun-version
+
+      # The pages are an Astro build (apps/landing_awwwards), so the landing needs dependencies.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build the landing
         run: node apps/landing/build.mjs --noindex
