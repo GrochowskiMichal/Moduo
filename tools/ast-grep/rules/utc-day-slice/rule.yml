@@ -1,0 +1,73 @@
+id: utc-day-slice
+language: typescript
+severity: error
+message: "`.toISOString().slice(0, 10)` is the UTC day, not the person's: after 4 PM in Los Angeles or before 1 AM in Warsaw it names the wrong day."
+note: |
+  A due chip, a repeat's end or "today" read this way lands a day off (PR #822,
+  benchmarks/escapes/822-4-stale-derived-field). Use `localDayOf` / `taskDueDay`
+  (apps/app/src/lib/task-rows.ts) or `dayInZone` (apps/app/src/lib/zoned-time.ts).
+  Shifting a bare day with Date.UTC math, or `toFloating(..)` first, is fine.
+files:
+  - apps/app/src/**/*.ts
+ignores:
+  - "**/*.test.ts"
+utils:
+  iso-call:
+    kind: call_expression
+    all:
+      - has:
+          field: function
+          kind: member_expression
+          all:
+            - has:
+                field: property
+                regex: ^(toISOString|toJSON)$
+            # toFloating(at, zone) already moved the wall clock into UTC digits.
+            - not:
+                has:
+                  field: object
+                  kind: call_expression
+                  has:
+                    field: function
+                    regex: (^|\.)toFloating$
+rule:
+  any:
+    # d.toISOString().slice(0, 10) / .substring(0, 10)
+    - kind: call_expression
+      all:
+        - has:
+            field: function
+            kind: member_expression
+            all:
+              - has:
+                  field: object
+                  matches: iso-call
+              - has:
+                  field: property
+                  regex: ^(slice|substring|substr)$
+        - has:
+            field: arguments
+            regex: ^\(\s*0\s*,\s*10\s*\)$
+    # d.toISOString().split("T")[0]
+    - kind: subscript_expression
+      all:
+        - has:
+            field: index
+            regex: ^0$
+        - has:
+            field: object
+            kind: call_expression
+            all:
+              - has:
+                  field: function
+                  kind: member_expression
+                  all:
+                    - has:
+                        field: object
+                        matches: iso-call
+                    - has:
+                        field: property
+                        regex: ^split$
+              - has:
+                  field: arguments
+                  regex: ^\(\s*["']T["']\s*\)$
