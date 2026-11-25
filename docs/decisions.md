@@ -337,6 +337,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Dashboard (Home) → [decisions/dashboard.md](decisions/dashboard.md)
 
+- 2026-11-25 · Home draws at once on a return: its layout and widget data live for the session, not the page
 - 2026-10-16 · A sideways swipe over a widget turns Home's page, and Home's widgets sit 8 px apart, the panels' gap
 - 2026-07-09 · Dashboard DB-8 (gallery + config popovers) landed — Wave 6 (Dashboard rebuild, DB-1…DB-8) COMPLETE
 - 2026-07-09 · Dashboard DB-6 (6 utility widgets + config-write mechanism) + DB-7 (habits) landed

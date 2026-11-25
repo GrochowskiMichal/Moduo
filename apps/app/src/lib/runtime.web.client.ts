@@ -9,6 +9,7 @@ import { clearIgnoredAuthLink, SUPABASE_AUTH_OPTIONS } from "./auth-url";
 import { readOnlyFetch } from "./min-build";
 import { publicConfig } from "./public-config";
 import { createRequestCache } from "./request-cache";
+import { createIdentityGate, sessionResources } from "./resource-cache";
 
 // ── Supabase client ────────────────────────────────────────────────────────────
 
@@ -43,9 +44,13 @@ export const AUTH_USER_KEY = "auth:user";
 // Drop the whole boot cache (user + profiles) on any identity transition. We keep
 // it through INITIAL_SESSION and TOKEN_REFRESHED (same user), so those never
 // re-trigger the storm — only a real sign-in/out / user-update clears it.
-supabaseClient.auth.onAuthStateChange((event) => {
+// What pages keep for the session (`sessionResources`) goes only when the person
+// changes: SIGNED_IN also fires for the same person on every tab refocus.
+const sessionIdentity = createIdentityGate(sessionResources);
+supabaseClient.auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN") clearIgnoredAuthLink();
   if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
     bootReads.clear();
   }
+  sessionIdentity(event, session?.user.id ?? null);
 });
