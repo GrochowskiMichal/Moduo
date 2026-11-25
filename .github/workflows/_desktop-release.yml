@@ -65,7 +65,9 @@ name: Desktop Release (shared)
 #   desktop-signing environment, read by build-mac and build-windows and baked into the app
 #   (apps/desktop/src-tauri/src/config.rs `oauth_client!`): MODUO_CALENDAR_GOOGLE_CLIENT_ID,
 #   MODUO_CALENDAR_GOOGLE_CLIENT_SECRET (Google's desktop client, not confidential by design),
-#   MODUO_CALENDAR_MICROSOFT_CLIENT_ID. Unset → that Connect says it isn't set up in this build.
+#   MODUO_CALENDAR_MICROSOFT_CLIENT_ID, and Mail's MODUO_EMAIL_GOOGLE_CLIENT_ID,
+#   MODUO_EMAIL_GOOGLE_CLIENT_SECRET (Gmail's own desktop client, in its own Google Cloud project).
+#   Unset → that Connect says it isn't set up in this build.
 #   Only installed-app clients go here: never a server app's secret (Zoom, Meet).
 #
 # Version: the built branch's VERSION file (scripts/release/version.mjs). Production ships it as is,
@@ -500,6 +502,11 @@ jobs:
               echo "::warning::$name is not set in the desktop-signing environment: Calendar Connect will fail in this build."
             fi
           done
+          for name in MODUO_EMAIL_GOOGLE_CLIENT_ID MODUO_EMAIL_GOOGLE_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::warning::$name is not set in the desktop-signing environment: Mail's Sign in with Google will fail in this build."
+            fi
+          done
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
@@ -526,6 +533,10 @@ jobs:
           MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
           MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
           MODUO_CALENDAR_MICROSOFT_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_MICROSOFT_CLIENT_ID }}
+          # Gmail's sign-in client, baked the same way. Optional: unset, Mail still connects with an
+          # app password or IMAP.
+          MODUO_EMAIL_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_EMAIL_GOOGLE_CLIENT_ID }}
+          MODUO_EMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_EMAIL_GOOGLE_CLIENT_SECRET }}
 
       # Stable filenames so download URLs don't change between versions. The macOS updater
       # installs the .app.tar.gz, not the .dmg: Moduo_aarch64 and Moduo_x64 for the manifest's
@@ -778,6 +789,11 @@ jobs:
               echo "::warning::$name is not set in the desktop-signing environment: Calendar Connect will fail in this build."
             fi
           done
+          for name in MODUO_EMAIL_GOOGLE_CLIENT_ID MODUO_EMAIL_GOOGLE_CLIENT_SECRET; do
+            if [ -z "${!name}" ]; then
+              echo "::warning::$name is not set in the desktop-signing environment: Mail's Sign in with Google will fail in this build."
+            fi
+          done
           KEY="$(bash .ci/scripts/ci-normalize-updater-key.sh)"
           echo "::add-mask::$KEY"
           export TAURI_SIGNING_PRIVATE_KEY="$KEY"
@@ -796,6 +812,10 @@ jobs:
           MODUO_CALENDAR_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_ID }}
           MODUO_CALENDAR_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_CALENDAR_GOOGLE_CLIENT_SECRET }}
           MODUO_CALENDAR_MICROSOFT_CLIENT_ID: ${{ secrets.MODUO_CALENDAR_MICROSOFT_CLIENT_ID }}
+          # Gmail's sign-in client, baked the same way. Optional: unset, Mail still connects with an
+          # app password or IMAP.
+          MODUO_EMAIL_GOOGLE_CLIENT_ID: ${{ secrets.MODUO_EMAIL_GOOGLE_CLIENT_ID }}
+          MODUO_EMAIL_GOOGLE_CLIENT_SECRET: ${{ secrets.MODUO_EMAIL_GOOGLE_CLIENT_SECRET }}
 
       # Git Bash's /tmp is not the path the upload action sees on Windows.
       - name: Stage artifacts

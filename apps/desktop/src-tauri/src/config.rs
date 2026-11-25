@@ -16,8 +16,8 @@ fn default_keychain_service() -> &'static str {
     }
 }
 
-/// A Calendar sign-in client (Google's desktop client, Microsoft's public
-/// client): the environment at launch when set (a dev run with `.env`), else the
+/// A Calendar or Mail sign-in client (Google's desktop clients, Microsoft's
+/// public client): the environment at launch when set (a dev run with `.env`), else the
 /// value the release build baked in. A shipped app opened from Finder, the Dock
 /// or the Start menu has no `MODUO_*` environment, so without the baked value
 /// Connect always failed. Installed-app clients ship inside the app by design;
@@ -47,6 +47,24 @@ fn google_calendar_client() -> (Option<String>, Option<String>) {
         (
             oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_ID"),
             oauth_client!("MODUO_CALENDAR_GOOGLE_CLIENT_SECRET"),
+        ),
+    )
+}
+
+/// Gmail's sign-in client, a Desktop client of its own (in its own Google Cloud
+/// project, so the restricted mail scope never touches Calendar's verification).
+/// Like Calendar's, it is baked into release builds: an app opened from Finder
+/// has no `MODUO_*` environment, so without it "Sign in with Google" in Mail
+/// always answered `google_oauth_not_configured`.
+fn google_mail_client() -> (Option<String>, Option<String>) {
+    pick_pair(
+        (
+            runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
+            runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
+        ),
+        (
+            oauth_client!("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
+            oauth_client!("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
         ),
     )
 }
@@ -88,6 +106,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn from_env() -> Self {
         let (calendar_google_client_id, calendar_google_client_secret) = google_calendar_client();
+        let (email_google_client_id, email_google_client_secret) = google_mail_client();
         Self {
             keychain_service: std::env::var("MODUO_KEYCHAIN_SERVICE")
                 .ok()
@@ -95,8 +114,8 @@ impl AppConfig {
                 .unwrap_or_else(|| default_keychain_service().to_string()),
             calendar_google_client_id,
             calendar_google_client_secret,
-            email_google_client_id: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
-            email_google_client_secret: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
+            email_google_client_id,
+            email_google_client_secret,
             calendar_microsoft_client_id: oauth_client!("MODUO_CALENDAR_MICROSOFT_CLIENT_ID"),
             zoom_client_id: runtime_setting("MODUO_ZOOM_CLIENT_ID"),
             zoom_client_secret: runtime_setting("MODUO_ZOOM_CLIENT_SECRET"),
