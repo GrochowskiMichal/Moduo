@@ -12,6 +12,11 @@ regexTarget = "match"
 regexes = ['''sb_publishable_[A-Za-z0-9_-]+''']
 
 [[allowlists]]
+description = "PostHog project tokens (phc_…) are public by design: the landing ships one to every browser to send events, and it can't read data. Personal API keys (phx_…) stay flagged."
+regexTarget = "match"
+regexes = ['''phc_[A-Za-z0-9]+''']
+
+[[allowlists]]
 description = "HV-16: the generated RLS matrix files (bun run db:matrix) write each fixture id as a '<uuid>'::uuid literal (md5('db-test:' || name)); next to words like api_keys they match generic-api-key. Only those literals, only in those files; regenerated, so per-commit fingerprints would go stale."
 condition = "AND"
 paths = ['''supabase/tests/rls_matrix_[a-z_]+\.test\.sql''']
