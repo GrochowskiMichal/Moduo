@@ -165,6 +165,5 @@ Captured during Phase 3 verification. Read [REVISION_DELTA.md](./REVISION_DELTA.
 - IA refactor (route renames, page merges).
 - Mobile / tablet layouts.
 - Lexical editor internals beyond the theme alignment task above.
-- XYFlow mindmap node visuals (their own design problem).
 - Marketing site, Tauri installer chrome, app icon.
 - E-paper mode (parked; token structure doesn't preclude adding it later).

@@ -120,7 +120,7 @@ Cut order if the wave overruns (designer Q8): NO-9 → cursors stretch (in NO-6)
 - `/embed-note` transclusion (cut — child pages + refs cover it), toggle blocks, inline text-anchored comments (quote-comments ship instead), live-cursor guarantee (stretch only).
 - Per-note permissions, guest accounts (post-alpha backlog; workspace-level permissions at alpha).
 - Full-offline web PWA (local-first "lite" roadmap), daily notes, note templates.
-- Mindmap module changes beyond the `/mindmap` rename (its rethink is a future wave).
+- Mindmap module changes beyond the `/mindmap` rename (the mindmap was removed from the product on 2026-10-21).
 - Dashboard rework (the widget targets the current grid).
 - Notion-API importer (md-zip import covers the alpha need).
 

@@ -1,6 +1,27 @@
 {
   "releases": [
     {
+      "version": "1.8.0",
+      "date": "2026-11-13",
+      "highlights": [
+        "Mail on desktop is rebuilt: new mail shows up on its own, every folder is there (Sent, Drafts, Archive and more), drafts are kept and sends retry until they go out."
+      ],
+      "items": [
+        {
+          "type": "new",
+          "text": "Mail on desktop is rebuilt: new mail shows up on its own, every folder is there (Sent, Drafts, Archive and more), drafts are kept and sends retry until they go out."
+        },
+        {
+          "type": "improved",
+          "text": "Triage in Mail is quicker: Undo brings back the thread you just cleared and opens it, failed sends say why, and the reader's buttons are grouped and labeled."
+        },
+        {
+          "type": "improved",
+          "text": "Mail is redesigned: each tab can tell you why a thread landed there, your rules now act on new mail, and Today sits beside the thread you're reading."
+        }
+      ]
+    },
+    {
       "version": "1.7.1",
       "date": "2026-11-03",
       "highlights": [
