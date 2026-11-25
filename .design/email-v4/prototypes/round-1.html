@@ -534,6 +534,15 @@ const GIVEN = {
   1: { opt: "x", note: "Split and Full both offered, the person chooses. Default leaning Full: it keeps the 3×3 grid. Drop c (in the panel)." },
   5: { opt: "a", note: "Tabs look the best. Asked: what does the community want most, and can we offer more views?" },
 };
+/* What Mike shipped up to v1.8.1 that bears on a call (checked 2026-11-26). */
+const NEWS = {
+  5: "Already live since 1.8.0: a tab can say why an email landed there, and your rules act on new mail. Both stay whichever layout wins.",
+  10: "New public page moduo.app/shortcuts lists Mail's keys (e “Archive”, m Move, # Delete…). It has no a, so either choice fits; the page changes with whatever you pick.",
+  21: "The same public shortcuts page would need a line per preset, or say presets exist.",
+  42: "The public shortcuts page calls e “Archive”; with a, it would say “Done”.",
+  45: "Chat already ships ⌥1 as “Details”. That favours a.",
+  3: "Today is the default you have now (since 1.8.0, “Today sits beside the email”). Picking a changes what people see first.",
+};
 const REPLIES = {
   5: "Nobody publishes a ranking, but the signals agree on <b>letting each person choose</b>. Spark brought back Classic inboxes after users asked. Superhuman and Shortwave make custom split tabs their headline, and Shortwave says “hide empty splits” is one of its most popular settings. So: Tabs open first, and Sections, Cards and Simple list are a Display choice (all four are drawn now). Your own splits (call 6) become tabs, and empty tabs hide. <b>Ok?</b>",
 };
@@ -962,6 +971,7 @@ function renderCalls(key) {
       <div class="opts">${opts}</div>
       ${see ? `<div class="seeline">Also see: ${see}</div>` : ""}
       ${c.why ? `<div class="why"><b>Why ${c.rec}:</b> ${c.why}</div>` : ""}
+      ${NEWS[c.n] ? `<div class="reply" style="border-left-color:var(--label-amber)"><span class="who">Since v1.8.1</span><span>${NEWS[c.n]}</span></div>` : ""}
       ${REPLIES[c.n] ? `<div class="reply"><span class="who">Your question, answered</span><span>${REPLIES[c.n]}</span></div>` : ""}
       <textarea data-note="${c.n}" placeholder="Note (optional)" aria-label="Note on call ${c.n}">${esc(a.note || "")}</textarea>
     </article>`;

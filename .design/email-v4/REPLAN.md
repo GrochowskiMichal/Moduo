@@ -168,6 +168,7 @@ These are raised to Maciej as numbered calls in product terms (17, 34, 38, 39, 4
 | A cloud copy of shared conversations | Teammates read and comment on a shared email | M: one table plus storage for the shared bodies; per-conversation, opt-in; RLS by workspace | 34 |
 | An agent-ops queue the Mac drains | An agent's snooze, Done, label and draft actually happen | S–M: a queue table written by MCP, applied by the engine on next sync | 38 |
 | Prefetch the next and previous bodies | Opening the next email is always instant | S: engine reads ahead around the selection | 40 |
+| Publish the Google sign-in screen out of Testing | Google mail accounts stop asking to reconnect every 7 days | XS, a console setting, no code (found in Mike's PR #837 for Calendar; it hits Mail's Google accounts the same way; #836 makes Mail show Reconnect when it happens) | none |
 
 ---
 
@@ -245,6 +246,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 #### B · The inbox
 
 **5 ★ · How the inbox is organised** · (c, re-decides MR B7 "tabs")
+- *Already shipped in 1.8.0:* each tab can say why a conversation landed there, and your rules act on new mail. v4 keeps both whichever layout wins; splits (call 6) are saved searches, rules still move mail.
 - **a. Tabs** (today): Personal · up to 3 custom · Notifications · Newsletters, one at a time.
 - **b. Sections** (Spark's Focused list): one scrolling list with **Pinned · People · Notifications · Newsletters (one row per sender) · Seen**, each section with a header, a count and its own "Done all" (`⇧E` on the header).
 - **c. Cards** (Spark's Unread cards): each section is a card showing its top 3 with "Show all".
@@ -279,6 +281,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Frame 7, variants a–b.
 
 **10 · Keys for the verbs**
+- *Since v1.8.1 (2026-11-26 check):* the public site now lists Mail's keys (moduo.app/shortcuts: j/k, Enter, r, e "Archive", t, s, m, p, #, /). It has no `a`, so either choice stays consistent with it, but whatever is picked here (and in 21, 42) means updating that page in the same build.
 - Proposed: `e` Done · `s` Snooze · `a` Set aside · `p` Pin · `w` Remind if no reply · `t` Task · `r` Reply · `⇧R` Reply all (today `a`) · `f` Forward · `⇧A` open Set aside.
 - Collision: today `a` is Reply all (Gmail and Superhuman use `a` too). Spark uses `G` for Set aside, which collides with Moduo's `g` chords.
 - **a.** This map (`a` = Set aside, `⇧R` = Reply all) · **b.** Keep `a` = Reply all and give Set aside `⇧S`.
@@ -465,6 +468,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - *Recommend a:* no collision with Chat, and "email" is what people call it.
 
 **42 · "Done" vs "Archive"**
+- *Since v1.8.1:* the new public shortcuts page calls `e` "Archive". With a (the verb is Done) the page should say "Done"; noted for the build.
 - The verb is **Done** everywhere; the place it goes is **Archive** (where you find done mail).
 - **a.** Keep both words in those roles (today) · **b.** Call the place "Done".
 - *Recommend a:* Archive matches the server folder people see in other clients.
@@ -482,6 +486,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 ---
 
 **45 · One name for the "what this email touches" view**
+- *Since v1.8.1:* Chat already ships ⌥1 as **Details** (⌥1 Details · ⌥2 reply chains · ⌥3 files, listed on the public shortcuts page). That strengthens a, and the ⌥-digit pattern for panel views matches call 3.
 - Calendar's plan calls its version **Details** (everything linked to an event). Mail's frames call it Links.
 - **a.** Details, app-wide · **b.** Links.
 - *Recommend a:* one name per concept across modules, and "Links" collides with the `l` Link verb.
