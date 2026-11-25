@@ -4,6 +4,7 @@
 
 import { isClosedTask } from "@contracts/vocabularies";
 
+import { localDayOf } from "../../lib/task-rows";
 import { dayOffset, formatDay, formatStamp, formatWhen } from "../../lib/time-format";
 import type {
   Bucket,
@@ -251,6 +252,9 @@ export function makeTask(fields: NewTaskFields): Task {
     title: fields.title,
     description: fields.description ?? "",
     dueDate: fields.dueDate ?? null,
+    // The derived local day (TV-D9), set with its source so `dueOn` readers see
+    // a new task before its create comes back (HV-15 509-4).
+    dueOn: localDayOf(fields.dueDate),
     scheduledAt: fields.scheduledAt ?? null,
     durationMinutes: fields.durationMinutes ?? null,
     ...(fields.estimateMinutes !== undefined ? { estimateMinutes: fields.estimateMinutes } : {}),

@@ -27,6 +27,11 @@ The regression tests stay next to the code they cover (they run in the normal su
 | [645-1](645-1-queue-bypass/README.md) | 509-2 | a Notes meta op jumps the queue (MOD-563): `apps/app/src/features/notes/sync/engine-v2.509-2.variant.test.ts` |
 | [645-2](645-2-queue-bypass/README.md) | 509-2 | a Chat edit or delete jumps its own send (MOD-562): `apps/app/src/features/chat/store/store.509-2.variant.test.ts` |
 | [645-3](645-3-error-as-empty/README.md) | 509-1 | a failed notes DB open reads as 0 to the Reset guard: `apps/app/src/features/notes/sync/idb-pending.test.ts` |
+| [822-1](822-1-queue-bypass/README.md) | 509-2 | task writes jump the capture, drop or check-off still waiting for the task: `complete-task.reopen.test.ts`, `task.509-2.test.ts`, `task-reorder.509-2.test.ts` |
+| [822-2](822-2-late-write-to-disposed-store/README.md) | 569 | a Notes op or edit landing after sign-out is dropped; Duplicate and the legacy import read too early: `engine-v2.569.test.ts`, `use-notes-module.645-1.test.ts`, `redb-import.644-1.test.ts` |
+| [822-3](822-3-error-read-as-empty/README.md) | 509-1 | failed prefs, uploads and profile reads read as empty; a user switch drops unsynced prefs (five tests) |
+| [822-4](822-4-stale-derived-field/README.md) | 509-4 | repeat ends and due days read in UTC: `repeat.509-4.test.ts`, `lens.509-4.test.ts` |
+| [822-5](822-5-decode-failure-then-delete/README.md) | 509-5 | an undecodable mail follow-up deleted on read: `reader/unreadable_followup.rs` |
 
 ## Adding an escape
 

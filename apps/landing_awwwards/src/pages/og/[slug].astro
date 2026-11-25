@@ -1,0 +1,308 @@
+---
+// Share images, 1200 × 630, one per page type. Built only for `bun run og` (OG=1), which
+// screenshots them into public/og/*.png; normal builds ship no /og pages.
+import Chain from "../../components/Chain.astro";
+import Lockup from "../../components/Lockup.astro";
+import { families, pages as pageRefs, type Family, type PageSlug } from "../../data/pages";
+import { hero, modules, moduleOrder, type ModuleSlug } from "../../data/site";
+import font from "../../data/typeface/font.json";
+import { lockup, lockupVars } from "../../lib/lockup";
+import { type FontData, layout, mixOf, outlines, pathD, strokes } from "../../lib/typeface";
+import { STROKE, chainWidth, chainX, strokePath, uniformGaps } from "../../lib/stroke";
+import "../../styles/tokens.css";
+import "../../styles/base.css";
+
+export function getStaticPaths() {
+  if (process.env.OG !== "1") return [];
+  const pages = [
+    // Home: the hero's lockup, the word set once at the height of both lines.
+    { slug: "home", title: [hero.line.first, hero.line.second], lit: null, word: hero.line.word + hero.line.end },
+    { slug: "pricing", title: ["Plans for one, two", "or a whole team."], lit: null },
+    { slug: "manifesto", title: ["Every app you need.", "None you don’t."], lit: null },
+    { slug: "colophon", title: ["Set in Oudom.", "One stroke, one rule."], lit: null },
+    { slug: "typeface", title: ["Oudom", "Our name read from the far end, and our own typeface."], lit: null, type: true },
+    { slug: "about", title: ["Mike and Maciej,", "according to our agent."], lit: null },
+    ...moduleOrder.map((m) => ({ slug: m, title: [modules[m].name, modules[m].line], lit: m })),
+    // The product pages: the name, the hero's line, and the family's chain with the page lit.
+    ...(
+      [
+        ["ai", "product", "Your assistant works in Moduo, on a key you hold."],
+        ["integrations", "product", "Bring what you use. Keep one window."],
+        ["security", "product", "Know where every piece of your work lives."],
+        ["download", "product", "Moduo for Mac, Windows and the web."],
+        ["compare", "product", "Your stack of apps, or one window."],
+        ["help", "resources", "Answers from the two people who build Moduo."],
+        ["import", "resources", "Bring the work over. Leave the apps."],
+        ["mcp", "resources", "Connect an assistant, and know what it can do."],
+        ["shortcuts", "resources", "Every key Moduo answers to, in one place."],
+        ["press", "company", "Everything you need to write about Moduo."],
+        ["freelancers", "for", "Every client, filed by who it’s for."],
+        ["founders", "for", "Two founders. One window for the company."],
+        ["teams", "for", "Shared work, without the shared mess."],
+      ] as [PageSlug, Family, string][]
+    ).map(([page, family, line]) => ({
+      slug: family === "for" ? `for-${page}` : page,
+      title: [pageRefs[page].label && family !== "for" ? pageRefs[page].label! : pageRefs[page].name, line],
+      lit: null,
+      chain: { n: families[family].length, lit: (families[family] as readonly PageSlug[]).indexOf(page) },
+    })),
+  ];
+  return pages.map((p) => ({ params: { slug: p.slug }, props: p }));
+}
+
+const { title, lit, type, chain, word } = Astro.props as {
+  title: string[];
+  lit: ModuleSlug | null;
+  type?: boolean;
+  chain?: { n: number; lit: number };
+  /** A word both lines share, set once beside them at their joint height. */
+  word?: string;
+};
+// A family's chain: n strokes at the mark's offset, the page's own lit.
+const fam = chain
+  ? (() => {
+      const fx = chainX(uniformGaps(chain.n, 1));
+      return {
+        paths: fx.map((x) => strokePath(x)),
+        vb: `-8 ${STROKE.top - 8} ${chainWidth(fx) + 16} ${STROKE.bottom - STROKE.top + 16}`,
+        w: (chainWidth(fx) + 16) / (chainWidth(chainX(uniformGaps(6, 1))) + 16),
+      };
+    })()
+  : null;
+// The typeface's card: its name drawn from its own outlines, every stroke edged so the joins show.
+const F = font as unknown as FontData;
+const typeWord = (() => {
+  if (!type) return null;
+  const t = mixOf(600);
+  const line = layout(F, "Oudom", t);
+  const track = -30;
+  const width = line.width + track * (line.glyphs.length - 1);
+  const parts = line.glyphs.flatMap((g, gi) => {
+    const cs = outlines(F, g.name, t, g.x + track * gi, 0);
+    return strokes(cs).map((st) => pathD([cs[st.outer], ...st.holes.map((h) => cs[h])]));
+  });
+  return { vb: `0 -780 ${width.toFixed(0)} 820`, parts };
+})();
+const xs = chainX(uniformGaps(6, 1));
+const paths = xs.map((x) => strokePath(x));
+const vb = `-8 ${STROKE.top - 8} ${chainWidth(xs) + 16} ${STROKE.bottom - STROKE.top + 16}`;
+// The hero's lockup, measured as the hero measures it (lib/lockup.ts).
+const lock = word ? lockup(title[0], title[1], word) : null;
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>OG {title[0]}</title>
+  </head>
+  <body>
+    <div class:list={["og", (lit || chain) && "is-module", typeWord && "is-type"]}>
+      <Lockup typed />
+      {
+        typeWord && (
+          <svg class="og__type" viewBox={typeWord.vb} aria-hidden="true">
+            {typeWord.parts.map((d) => (
+              <path d={d} />
+            ))}
+          </svg>
+        )
+      }
+      <h1 class:list={[word && "is-lock"]} style={lock ? lockupVars(lock) : undefined}>
+        {
+          word ? (
+            <>
+              <span class="og__pair">
+                {title.map((t) => (
+                  <span>{t}</span>
+                ))}
+              </span>
+              <span class="og__word">{word}</span>
+            </>
+          ) : (
+            title.map((t) => <span>{t}</span>)
+          )
+        }
+      </h1>
+      <div class="og__fig" style={fam ? `width:${(460 * fam.w).toFixed(0)}px` : undefined}>
+        {
+          fam && chain ? (
+            <svg viewBox={fam.vb}>
+              <defs>
+                {fam.paths.map((d, i) => (
+                  <clipPath id={`og-f${i}`}>
+                    <path d={d} />
+                  </clipPath>
+                ))}
+              </defs>
+              {fam.paths.map((d, i) => (
+                <path class:list={["og__s", i === chain.lit && "is-lit"]} d={d} />
+              ))}
+              {fam.paths.slice(0, -1).map((d, k) => (
+                <g clip-path={`url(#og-f${k + 1})`}>
+                  <path class="og__w" d={d} />
+                </g>
+              ))}
+            </svg>
+          ) : lit ? (
+            <svg viewBox={vb}>
+              <defs>
+                {paths.map((d, i) => (
+                  <clipPath id={`og-c${i}`}>
+                    <path d={d} />
+                  </clipPath>
+                ))}
+              </defs>
+              {moduleOrder.map((m, i) => (
+                <path class:list={["og__s", m === lit && "is-lit"]} d={paths[i]} />
+              ))}
+              {[0, 1, 2, 3, 4].map((k) => (
+                <g clip-path={`url(#og-c${k + 1})`}>
+                  <path class="og__w" d={paths[k]} />
+                </g>
+              ))}
+            </svg>
+          ) : (
+            <Chain id="og" n={6} gaps={1} pad={8} />
+          )
+        }
+      </div>
+      <p class="og__url">moduo.app</p>
+    </div>
+  </body>
+</html>
+
+<style is:global>
+  html,
+  body {
+    margin: 0;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+    background: #000;
+  }
+  .og {
+    position: relative;
+    width: 1200px;
+    height: 630px;
+    padding: 64px 72px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    color: var(--c-fg);
+  }
+  /* The typed lockup, as the header sets it, at the card's size. */
+  .og .lockup--typed {
+    --H: 30px;
+  }
+  .og h1 {
+    margin-top: auto;
+    font-size: 76px;
+    line-height: 0.95;
+    letter-spacing: -0.03em;
+    font-weight: var(--w-display);
+    max-width: 640px;
+  }
+  /* The lockup, as the hero sets it: the two lines one width (the second at --r), and the one
+     word at the height of both (--k). */
+  .og h1.is-lock {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    column-gap: 0.3em;
+    align-items: last baseline;
+    max-width: none;
+    font-weight: var(--w-ui);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
+  }
+  .og h1 .og__pair {
+    display: block;
+    color: var(--c-fg);
+  }
+  .og h1 .og__pair span {
+    display: block;
+    letter-spacing: -0.035em;
+  }
+  .og h1 .og__pair span + span {
+    font-size: calc(var(--r, 1) * 1em);
+  }
+  .og h1 .og__word {
+    display: block;
+    font-size: calc(var(--k, 2.3) * 1em);
+    font-weight: var(--w-light);
+    line-height: 1;
+    letter-spacing: -0.045em;
+    color: var(--c-fg);
+  }
+  /* The typeface's card: the drawn name fills the width; the title is its caption. */
+  .og.is-type .og__fig {
+    display: none;
+  }
+  .og__type {
+    margin-top: auto;
+    width: 1056px;
+    height: auto;
+    overflow: visible;
+  }
+  .og__type path {
+    fill: var(--c-fg);
+    stroke: #000;
+    stroke-width: 7;
+    paint-order: stroke;
+  }
+  .og.is-type h1 {
+    margin-top: 28px;
+    font-size: 30px;
+    letter-spacing: -0.006em;
+    max-width: none;
+  }
+  .og.is-type h1 span:first-child {
+    display: none;
+  }
+  .og.is-type h1 span + span {
+    color: var(--c-muted);
+    font-weight: var(--w-text);
+  }
+  .og h1 span {
+    display: block;
+  }
+  .og h1 span + span {
+    color: var(--c-muted);
+  }
+  .og.is-module h1 span + span {
+    font-size: 40px;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    font-weight: var(--w-text);
+    margin-top: 18px;
+    max-width: 520px;
+  }
+  .og__fig {
+    position: absolute;
+    right: 72px;
+    top: 168px;
+    width: 460px;
+  }
+  .og__fig svg {
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+  .og__s {
+    fill: var(--c-stroke-off);
+  }
+  .og__s.is-lit {
+    fill: var(--c-fg);
+  }
+  .og__w {
+    fill: #000;
+  }
+  .og__url {
+    position: absolute;
+    right: 72px;
+    bottom: 64px;
+    font-size: 20px;
+    color: var(--c-quiet);
+  }
+</style>

@@ -1,0 +1,111 @@
+---
+// Export: every module packed and ready, one row each, filling in turn (motion/bento.ts); the
+// still picture is the finished export.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const rows = [
+  { icon: "square-check-big", n: "Tasks", k: "212 tasks" },
+  { icon: "file-text", n: "Notes", k: "64 pages" },
+  { icon: "calendar", n: "Calendar", k: "380 events" },
+  { icon: "mail", n: "Email", k: "3 accounts" },
+  { icon: "contact", n: "Contacts", k: "148 people" },
+] as const;
+---
+
+<div class="ap mini xm" aria-hidden="true" data-mini="export">
+  <div class="ap-panel xm-panel">
+    <div class="xm-head">
+      <span class="ap-med">Export your workspace</span>
+      <span class="ap-xs ap-muted">Moduo</span>
+    </div>
+    {
+      rows.map((r) => (
+        <div class="xm-row" data-row>
+          <Icon name={r.icon} class="ap-i--sm" />
+          <span class="xm-n">{r.n}</span>
+          <span class="xm-bar">
+            <i data-fill />
+          </span>
+          <span class="ap-xs ap-muted xm-k">{r.k}</span>
+          <span class="xm-ok" data-ok>
+            <Icon name="check" class="ap-i--xs" />
+          </span>
+        </div>
+      ))
+    }
+    <div class="xm-foot">
+      <span class="ap-xs ap-muted">Ready, all yours</span>
+      <span class="ap-btn ap-btn--primary">Download</span>
+    </div>
+  </div>
+</div>
+
+<style>
+  .xm {
+    left: 50%;
+    top: 0;
+    width: min(88%, 24em);
+    translate: -50% 0;
+  }
+  .xm-panel {
+    padding: 0.857em 1em 0.857em;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2em 3em -1.5em rgb(0 0 0 / 0.9);
+  }
+  .xm-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 0.714em;
+  }
+  .xm-row {
+    display: grid;
+    grid-template-columns: auto 5em 1fr auto auto;
+    align-items: center;
+    gap: 0.643em;
+    min-height: 2.286em;
+    border-top: 1px solid var(--ap-line);
+    font-size: 0.929em;
+  }
+  .xm-row :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .xm-bar {
+    height: 0.286em;
+    border-radius: 999px;
+    background: var(--ap-line);
+    overflow: hidden;
+  }
+  .xm-bar i {
+    display: block;
+    height: 100%;
+    background: var(--ap-fg);
+    transform-origin: 0 50%;
+  }
+  .xm-k {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .xm-ok {
+    display: inline-grid;
+    place-items: center;
+    width: 1.385em;
+    height: 1.385em;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+  }
+  .xm-ok :global(.ap-i) {
+    color: var(--ap-primary-fg);
+    stroke-width: 3;
+  }
+  .xm-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 0.714em;
+    border-top: 1px solid var(--ap-line);
+  }
+</style>

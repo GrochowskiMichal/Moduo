@@ -1,0 +1,114 @@
+---
+// The waitlist form. Posts to the waitlist-join Edge Function (lib/waitlist.ts) with the
+// source the contract allows: nav, hero, close or footer.
+import { waitlist } from "../data/site";
+import Btn from "./Btn.astro";
+
+interface Props {
+  source: "nav" | "hero" | "close" | "footer";
+  id: string;
+  /** The line under the field, and the confirmation: each form says it its own way. */
+  note?: string;
+  done?: string;
+  class?: string;
+}
+const { source, id, note = waitlist.note, done = waitlist.doneText, class: className } = Astro.props;
+---
+
+<form class:list={["wl", className]} data-wl data-source={source} novalidate>
+  <div class="wl__row">
+    <label class="sr-only" for={`${id}-email`}>{waitlist.label}</label>
+    <input
+      class="field wl__input"
+      id={`${id}-email`}
+      type="email"
+      name="email"
+      autocomplete="email"
+      inputmode="email"
+      spellcheck="false"
+      placeholder={waitlist.placeholder}
+      aria-label={waitlist.label}
+      aria-describedby={`${id}-msg`}
+      required
+    />
+    <input class="wl__hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+    <Btn type="submit" class="wl__btn">{waitlist.button}</Btn>
+  </div>
+  <p class="wl__msg t-xs quiet" id={`${id}-msg`} aria-live="polite" data-note={note}>{note}</p>
+  <div class="wl__done" hidden>
+    <p class="wl__done-title"><span class="wl__tick" aria-hidden="true"></span>{waitlist.doneTitle}</p>
+    <p class="t-xs quiet">
+      {done}
+      <button type="button" class="wl__again link" data-wl-again>{waitlist.again}</button>
+    </p>
+  </div>
+</form>
+
+<style>
+  .wl {
+    width: 100%;
+    max-width: 30rem;
+  }
+  .wl__row {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .wl__input {
+    flex: 1;
+    min-width: 0;
+  }
+  .wl__hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+  .wl__msg {
+    margin-top: 0.625rem;
+    min-height: 1.4em;
+  }
+  .wl[data-state="error"] .wl__msg {
+    color: var(--c-fg);
+  }
+  .wl[data-state="done"] .wl__row,
+  .wl[data-state="done"] .wl__msg {
+    display: none;
+  }
+  .wl__done-title {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: var(--t-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-ui);
+  }
+  .wl__done p + p {
+    margin-top: 0.375rem;
+  }
+  /* The tick is two strokes that just met: one window. */
+  .wl__tick {
+    width: 0.875rem;
+    height: 1.125rem;
+    background: var(--c-fg);
+    clip-path: polygon(0 45%, 100% 0, 100% 55%, 0 100%);
+  }
+  .wl__again {
+    font-size: inherit;
+    color: var(--c-muted);
+  }
+  .wl__btn[aria-busy="true"] {
+    cursor: progress;
+  }
+  @media (max-width: 520px) {
+    .wl__row {
+      flex-direction: column;
+    }
+    .wl__input {
+      flex: none;
+    }
+    .wl__row :global(.btn) {
+      width: 100%;
+    }
+  }
+</style>

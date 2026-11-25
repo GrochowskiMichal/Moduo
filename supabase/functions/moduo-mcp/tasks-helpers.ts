@@ -324,3 +324,90 @@ export function recurrenceFromArg(value: unknown): Row | null {
   }
   throw new Error("repeat must be an RRULE like FREQ=WEEKLY;BYDAY=TU.");
 }
+
+// ── A repeat's end, as the app writes it (HV-15 509-4) ──────────────────────
+//
+// The app's engines (recurrence-engine.ts, SQL tasks__rrule_floating) read
+// UNTIL's digits as the wall clock of the person whose zone rolls the repeat
+// over (tasks__zone_of: the assignee, else the owner), and the picker writes
+// "Ends on Dec 15" as UNTIL=20261215T235959Z. An agent writes RFC 5545: an
+// UNTIL with a Z is a real UTC instant. So the connector rewrites it to that
+// person's wall clock (Z kept, the picker's convention); an UNTIL without a Z
+// is already local (Z added); a date alone means through that day (23:59:59).
+
+const UNTIL_PART = /(^|;)(\s*UNTIL\s*=\s*)([0-9]{8})(?:T([0-9]{6})(Z?))?(?=;|$)/i;
+
+/** The wall clock of `at` in `zone` as YYYYMMDDTHHMMSS (UTC for an unknown zone). */
+function wallDigits(at: Date, zone: string): string {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).formatToParts(at);
+  } catch {
+    return wallDigits(at, "UTC");
+  }
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "00";
+  return `${get("year").padStart(4, "0")}${get("month")}${get("day")}T${get("hour")}${get("minute")}${get("second")}`;
+}
+
+/** The rule with its UNTIL as `zone`'s wall clock, the form the app stores. */
+export function untilToWallClock(rrule: string, zone: string): string {
+  const m = rrule.match(UNTIL_PART);
+  if (!m) return rrule;
+  const [, lead = "", key = "", day = "", time, z] = m;
+  let digits: string;
+  if (!time) {
+    digits = `${day}T235959`;
+  } else if (z) {
+    const at = new Date(Date.UTC(
+      Number(day.slice(0, 4)), Number(day.slice(4, 6)) - 1, Number(day.slice(6, 8)),
+      Number(time.slice(0, 2)), Number(time.slice(2, 4)), Number(time.slice(4, 6)),
+    ));
+    if (Number.isNaN(at.getTime())) return rrule;
+    digits = wallDigits(at, zone);
+  } else {
+    digits = `${day}T${time}`;
+  }
+  return rrule.replace(UNTIL_PART, `${lead}${key}${digits}Z`);
+}
+
+/** The zone a person's repeats roll over in (SQL tasks__zone_of): Time & region's, else UTC. */
+export async function personZone(ctx: ToolContext, userId: string | null | undefined): Promise<string> {
+  if (!userId) return "UTC";
+  const { data, error } = await ctx.db.from("user_preferences").select("time_zone").eq("user_id", userId).maybeSingle();
+  if (error) throw new Error((error as { message?: string }).message ?? "Couldn't read the time zone.");
+  const zone = (data as Row | null)?.time_zone;
+  return typeof zone === "string" && zone.trim() !== "" ? zone : "UTC";
+}
+
+/** The UNTIL value of a rule as written (digits, T, Z), or null. */
+function untilText(rrule: unknown): string | null {
+  if (typeof rrule !== "string") return null;
+  const m = rrule.match(UNTIL_PART);
+  return m ? `${m[3]}${m[4] ? `T${m[4]}${m[5] ?? ""}` : ""}`.toUpperCase() : null;
+}
+
+/**
+ * A repeat from an agent with its UNTIL in `person`'s wall clock (the zone is
+ * read only when there is an UNTIL). `stored` is the task's current repeat: an
+ * UNTIL sent back exactly as the connector read it (already wall clock) stays.
+ */
+export async function recurrenceInZone(
+  ctx: ToolContext,
+  rec: Row | null,
+  person: string | null | undefined,
+  stored?: Row | null,
+): Promise<Row | null> {
+  if (!rec || typeof rec.rrule !== "string") return rec;
+  const until = untilText(rec.rrule);
+  if (!until || until === untilText(stored?.rrule)) return rec;
+  return { ...rec, rrule: untilToWallClock(rec.rrule, await personZone(ctx, person)) };
+}

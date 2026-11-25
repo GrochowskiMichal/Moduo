@@ -1,0 +1,40 @@
+{
+  "id": "822-1-queue-bypass",
+  "title": "Task writes go live past the capture, drop or check-off still waiting for the same task",
+  "mechanism": "queue-bypass",
+  "sites": [
+    "apps/app/src/features/spine/references/complete-task.ts",
+    "apps/app/src/features/tasks/commands/shared.ts",
+    "apps/app/src/features/tasks/commands/task.ts",
+    "apps/app/src/features/tasks/commands/bulk.ts",
+    "apps/app/src/features/tasks/commands/bulk-write.ts",
+    "apps/app/src/features/tasks/commands/queue.ts",
+    "apps/app/src/features/tasks/commands/tags.ts",
+    "apps/app/src/features/tasks/commands/activity.ts",
+    "apps/app/src/lib/sync/status-turns.ts",
+    "apps/app/src/lib/sync/store.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/spine/references/complete-task.reopen.test.ts",
+      "name": "ticking then unticking before the server answers leaves the task To do",
+      "run": "bun run --cwd apps/app test src/features/spine/references/complete-task.reopen.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/tasks/commands/task.509-2.test.ts",
+      "name": "renaming a task whose capture is still flushing never reaches the server ahead of it",
+      "run": "bun run --cwd apps/app test src/features/tasks/commands/task.509-2.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/tasks/commands/task-reorder.509-2.test.ts",
+      "name": "a reorder made while the card's drop into In progress waits its turn keeps its new place",
+      "run": "bun run --cwd apps/app test src/features/tasks/commands/task-reorder.509-2.test.ts"
+    }
+  ],
+  "pr": 822,
+  "fixCommit": "5116bc4d9cb7ce74febb341a477abd0a44a4793c",
+  "foundBy": "HV-15 nightly variant hunts 2026-10-29 → 2026-11-21 (draft PRs #755, #790, #802, #809, #811, #815, #817)"
+}

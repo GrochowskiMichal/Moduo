@@ -1,0 +1,120 @@
+---
+// Moduo's Home at the foot of the hero, leaning back a little like a screen on a desk, running on
+// under the fold where the hero fades it out. With the page's intro it stands up out of the dark
+// and a light runs out along its top edge (motion/hero.ts). The spectrum the hero's glass stroke
+// splits the sun into lands on that edge (motion/first-light.ts sets where: --fan, --fc, and how
+// strong: --sl) and the frame takes it in: its border lights where the light lands and a little
+// way round from there; the window's content stays clear.
+import HomeFrame from "../frames/HomeFrame.astro";
+---
+
+<div class="hwin" data-hwin>
+  <div class="hwin__view">
+    <div class="hwin__tilt">
+      <div class="hwin__rise" data-hwin-rise>
+        <HomeFrame />
+        <span class="hwin__rim" aria-hidden="true" data-hwin-rim></span>
+        <span class="hwin__prism" aria-hidden="true"><span class="hwin__ring"></span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .hwin {
+    position: relative;
+  }
+  .hwin__view {
+    perspective: 2400px;
+    perspective-origin: 50% 0%;
+  }
+  /* The lean, set once here; the driver stands the window up inside it (never this). */
+  .hwin__tilt {
+    transform-style: preserve-3d;
+    transform-origin: 50% 0%;
+    rotate: x 8deg;
+  }
+  .hwin__rise {
+    position: relative;
+    transform-origin: 50% 0%;
+  }
+  .hwin__rise :global(.ap__win) {
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.12),
+      inset 0 1px 0 rgb(255 255 255 / 0.1),
+      0 4em 10em -2em rgb(0 0 0 / 0.95);
+  }
+  /* The edge that catches the light: brightest in the middle, gone at the corners. */
+  .hwin__rim {
+    position: absolute;
+    left: 4%;
+    right: 4%;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.4) 50%, transparent);
+    pointer-events: none;
+  }
+  /* Where the spectrum lands, the frame takes it in: its border lights in the spectrum's colors
+     along the stretch of the top edge the light falls on (--fan, where motion/first-light.ts says),
+     glowing, and the light runs on a little way round the border from there, fading. Nothing
+     reaches the window's content: the light stops at its edge. The ring follows the frame's own
+     rounded corners (--win-r, measured from it). Nothing until the light arrives (--sl). */
+  .hwin {
+    --fan: none;
+    --fc: 40%;
+    --sl: 0;
+  }
+  .hwin__prism {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--win-r, 16px);
+    pointer-events: none;
+    /* at seven tenths of the light's strength: the frame glows, it doesn't shout */
+    opacity: calc(var(--sl) * 0.7);
+    mix-blend-mode: screen;
+    filter: drop-shadow(0 0 3px rgb(255 214 170 / 0.55)) drop-shadow(0 -2px 10px rgb(255 190 130 / 0.35));
+    -webkit-mask-image: radial-gradient(70% 160% at var(--fc) 0%, black, transparent 70%);
+    mask-image: radial-gradient(70% 160% at var(--fc) 0%, black, transparent 70%);
+  }
+  .hwin__ring {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1.5px;
+    background:
+      var(--fan),
+      conic-gradient(
+        from 90deg at var(--fc) 0%,
+        rgb(255 93 77 / 0.5),
+        rgb(255 179 71 / 0.5),
+        rgb(243 238 106 / 0.5),
+        rgb(106 240 162 / 0.5),
+        rgb(76 198 255 / 0.5),
+        rgb(143 107 255 / 0.5),
+        rgb(255 93 77 / 0.5)
+      );
+    /* the ring: the box minus its content box (the standard pair last, so it wins where both
+       exist) */
+    -webkit-mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(black 0 0) content-box,
+      linear-gradient(black 0 0);
+    mask-composite: exclude;
+  }
+  @media (max-width: 900px) {
+    .hwin__tilt {
+      rotate: x 5deg;
+    }
+  }
+  /* A phone's window is about two screens wide and cut by the screen's right edge
+     (components/home/Scene.astro): the eye looks at its left part, so the lean's vanishing
+     point stands over the screen's middle, not the window's. */
+  @media (max-width: 900px) and (orientation: portrait) {
+    .hwin__view {
+      perspective-origin: 22% 0%;
+    }
+  }
+</style>

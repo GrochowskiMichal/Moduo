@@ -56,11 +56,21 @@ export function clearAccountDeletedMarker(): void {
  * redirect can win and drop the notice.
  */
 export async function finishAccountDeletion(steps: {
-  forgetOnDevice: () => void;
+  /** Async work here finishes before sign-out: the desktop mail store is erased
+   *  for the session's person, so it needs the session (MOD-555). A failure is
+   *  logged and never keeps the person on a deleted account. */
+  forgetOnDevice: () => unknown;
   goToSignInWithNotice: () => Promise<unknown>;
   signOut: () => Promise<unknown>;
 }): Promise<void> {
-  steps.forgetOnDevice();
+  const erasing = steps.forgetOnDevice();
+  if (erasing instanceof Promise) {
+    try {
+      await erasing;
+    } catch (err) {
+      console.warn("[delete-account] erasing this device failed:", err);
+    }
+  }
   markAccountDeleted();
   try {
     await steps.goToSignInWithNotice();

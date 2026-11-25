@@ -1,0 +1,632 @@
+---
+// The finale on every page: the production landing's spec-sheet footer (apps/landing), carried
+// over and tidied. A row of six link cells, under it the way to reach us beside the extruded
+// mark, the wordmark plate ("moduo" set in Oudom as a clean outline on its metric lines; point
+// at a letter and it shows how it was built, and which word it belongs to), and the legal bar.
+// motion/footer.ts runs the plate and the mark's depth.
+import { consent, footer, moduleOrder, modules, site } from "../data/site";
+import type { FooterLink } from "../data/site";
+import font from "../data/typeface/font.json";
+import { MARK } from "../lib/brand";
+import type { FontData } from "../lib/typeface";
+import { PLATE, wordPlate } from "../lib/typeface-plate";
+
+// Built as files (astro.config), so home is /index.html: strip that too.
+const path =
+  Astro.url.pathname
+    .replace(/\.html$/, "")
+    .replace(/\/index$/, "")
+    .replace(/\/$/, "") || "/";
+const moduleLinks: FooterLink[] = moduleOrder.map((slug) => ({ label: modules[slug].name, href: `/${slug}` }));
+const current = (l: FooterLink) => (l.href === path ? "page" : undefined);
+// The wordmark plate: "moduo" set in Oudom Bold, as the header's lockup sets it, proofed.
+const plate = wordPlate(font as unknown as FontData);
+---
+
+<footer class="ft">
+  <svg class="ft-defs" aria-hidden="true">
+    <symbol id="ft-mark" viewBox={MARK.viewBox}>
+      <path d={MARK.d} fill-rule="evenodd" clip-rule="evenodd"></path>
+    </symbol>
+  </svg>
+  <div class="ft-frame">
+    <div class="ft-grid">
+      {
+        // Six lists, one a cell, in one row, every list one column: what Moduo is (Product,
+        // Modules, who it is for), then who makes it and where to read more (Company, Resources,
+        // Follow along).
+        [
+          { key: "pr", title: "Product", links: footer.product },
+          { key: "sw", title: "Modules", links: moduleLinks },
+          { key: "fo", title: "Moduo for", links: footer.for },
+          { key: "co", title: "Company", links: footer.company },
+          { key: "re", title: "Resources", links: footer.resources },
+          { key: "so", title: "Follow along", links: footer.follow },
+        ].map((col) => (
+          <nav class={`ft-cell ft-col ft-${col.key}`} aria-labelledby={`ft-k-${col.key}`}>
+            <p class="ft-k" id={`ft-k-${col.key}`}>
+              {col.title}
+            </p>
+            <ul>
+              {col.links.map((l) =>
+                !l.href ? (
+                  <li>
+                    <span class="ft-a is-soon" aria-disabled="true" title="Coming soon">
+                      {l.label}
+                    </span>
+                  </li>
+                ) : l.external ? (
+                  <li>
+                    <a class="ft-a" href={l.href} target="_blank" rel="me noopener">
+                      {l.label}
+                      <span class="sr-only"> (opens in a new tab)</span>
+                    </a>
+                  </li>
+                ) : (
+                  <li>
+                    <a class="ft-a" href={l.href} aria-current={current(l)}>
+                      {l.label}
+                    </a>
+                  </li>
+                ),
+              )}
+            </ul>
+          </nav>
+        ))
+      }
+
+      <div class="ft-cell ft-ct">
+        <p class="ft-k">Say hello</p>
+        <a class="ft-mail" href={`mailto:${site.email}`}>{site.email}</a>
+        <p class="ft-note">{footer.hello}</p>
+      </div>
+
+      <div class="ft-cell ft-logo">
+        <svg class="ft-ext" viewBox="0 0 1000 1000" role="img" aria-label="Moduo" data-ft-ext>
+          <g data-ft-layers></g>
+        </svg>
+        <p class="ft-logo-cap" aria-hidden="true"><span>The Moduo mark</span><span data-ft-depth>Depth 14</span></p>
+      </div>
+    </div>
+
+    <div class="ft-bar">
+      <p class="ft-copyr">{footer.copyright}</p>
+      <nav class="ft-legal" aria-label="Legal">
+        {
+          footer.legal.map((l) => (
+            <a class="ft-a" href={l.href} aria-current={l.href === path ? "page" : undefined}>
+              {l.label}
+            </a>
+          ))
+        }
+        <button type="button" class="ft-a" data-consent-open>{consent.settings}</button>
+        <button type="button" class="ft-a ft-top" data-ft-top>
+          Back to top
+          <svg class="ft-arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <!-- The wordmark, out of the box and across the whole width: "moduo" set in Oudom as a clean
+       outline. Point at a letter and it shows how it was built; the word sweeps mod, duo, both
+       once as it arrives. The drawing's note sits above it. -->
+  <div class="ft-plate" data-ft-plate>
+    <p class="ft-colophon">
+      {footer.colophon.set}{" "}
+      {
+        // The typeface's name opens its page; the sentence opens the colophon. On either page
+        // its own part is plain text, marked as the page you are on.
+        path === "/typeface" ? (
+          <span aria-current="page">{footer.colophon.name}</span>
+        ) : (
+          <a href="/typeface">{footer.colophon.name}</a>
+        )
+      }
+      .{" "}
+      {
+        // On the colophon the sentence is the page itself, so the line keeps its first sentence.
+        path !== "/colophon" && <a href="/colophon">{footer.colophon.rest}</a>
+      }
+    </p>
+    <svg class="ft-word" viewBox={`${plate.view.x} ${plate.view.y} ${plate.view.w} ${plate.view.h}`} role="img" aria-labelledby="ft-word-t">
+      <title id="ft-word-t">moduo, set in Oudom: mod and duo, sharing the d</title>
+      <g class="ft-br is-mod" aria-hidden="true">
+        <path d={`M${plate.brackets.mod[0]} ${plate.lines.asc - 24}V${plate.lines.asc - 42}H${plate.brackets.mod[1]}V${plate.lines.asc - 24}`} />
+        <path class="ft-br-tick" d={`M${(plate.brackets.mod[0] + plate.brackets.mod[1]) / 2} ${plate.lines.asc - 42}V${plate.lines.asc - 56}`} />
+        <text x={(plate.brackets.mod[0] + plate.brackets.mod[1]) / 2} y={plate.lines.asc - 70}>mod, as in modular</text>
+      </g>
+      <g class="ft-br is-duo" aria-hidden="true">
+        <path d={`M${plate.brackets.duo[0]} ${PLATE.base + 27}V${PLATE.base + 45}H${plate.brackets.duo[1]}V${PLATE.base + 27}`} />
+        <path class="ft-br-tick" d={`M${(plate.brackets.duo[0] + plate.brackets.duo[1]) / 2} ${PLATE.base + 45}V${PLATE.base + 59}`} />
+        <text x={(plate.brackets.duo[0] + plate.brackets.duo[1]) / 2} y={PLATE.base + 87}>duo, as in two</text>
+      </g>
+      {
+        // Each letter: its outline at rest (one path, filled to the paper, so only the outer
+        // line shows), and, pointed at, its build: every stroke on its own with the edges it
+        // was cut from, the cuts, a round's boxes, then the points and handles.
+        plate.letters.map((l, i) => (
+          <g class="ft-l" style={`--i: ${i}`} data-g={l.group}>
+            <rect class="ft-hit" x={l.hit.x} y="290" width={l.hit.w} height="410" />
+            <path class="ft-glyph" d={l.glyph} pathLength="1" />
+            <g class="ft-build" aria-hidden="true">
+              {l.parts.map((p) => (
+                <g class={`ft-part is-${p.kind}`}>
+                  {p.box && <path class="ft-box" d={p.box} />}
+                  {p.edges && <path class="ft-edge" d={p.edges} />}
+                  {p.cuts && <path class="ft-cut" d={p.cuts} />}
+                  <path class="ft-stroke" d={p.d} />
+                </g>
+              ))}
+            </g>
+            <g class="ft-nodes" aria-hidden="true">
+              <path class="ft-hdl" d={l.handles} />
+              <path class="ft-cn" d={l.corners} />
+              {l.smooth.map((p) => (
+                <circle class="ft-sn" cx={p.x} cy={p.y} r="5" />
+              ))}
+              {l.offs.map((p) => (
+                <circle class="ft-off" cx={p.x} cy={p.y} r="3.5" />
+              ))}
+            </g>
+          </g>
+        ))
+      }
+    </svg>
+  </div>
+</footer>
+
+<!-- Global: the mark's layers are created by script, so scoped classes would miss them. Every
+     selector is under the ft- prefix. -->
+<style is:global>
+  .ft {
+    --ft-pad: clamp(1rem, 1.6vw, 1.375rem);
+    position: relative;
+    z-index: var(--z-content);
+    /* The frame sits so its words land on the page's first line (the margin), never nearer the
+       screen's edge than a gutter. */
+    padding: 0 max(var(--gutter), calc(var(--margin) - var(--ft-pad))) var(--gutter);
+    background: var(--c-bg);
+  }
+  .ft-defs {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+  }
+  .ft-frame {
+    max-width: var(--content-max);
+    margin-inline: auto;
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    background: var(--c-line);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1px;
+  }
+  .ft-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-areas:
+      "pr pr sw sw fo fo co co re re so so"
+      "ct ct ct ct ct ct ct ct ct ct lg lg";
+    gap: 1px;
+  }
+  .ft-cell {
+    min-width: 0;
+    padding: var(--ft-pad);
+    background: var(--c-bg);
+  }
+  /* The way to reach us: a strip under the lists, the address left, its note beside it. */
+  .ft-ct {
+    grid-area: ct;
+    display: grid;
+    align-content: center;
+    justify-items: start;
+    gap: 0.75rem;
+    padding-block: calc(var(--ft-pad) * 1.5);
+  }
+  .ft-fo {
+    grid-area: fo;
+  }
+  .ft-pr {
+    grid-area: pr;
+  }
+  .ft-sw {
+    grid-area: sw;
+  }
+  .ft-co {
+    grid-area: co;
+  }
+  .ft-logo {
+    grid-area: lg;
+  }
+  .ft-re {
+    grid-area: re;
+  }
+  .ft-so {
+    grid-area: so;
+  }
+
+  .ft-k {
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .ft-col .ft-k {
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--c-line-strong);
+    letter-spacing: 0.01em;
+    color: var(--c-fg);
+  }
+  .ft ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .ft-col ul {
+    display: grid;
+    gap: 0.25rem;
+  }
+  /* Every link keeps a 24 px target, short labels included. */
+  .ft-col .ft-a {
+    min-width: 1.5rem;
+    min-height: 1.5rem;
+  }
+  .ft-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: var(--t-s);
+    color: var(--c-muted);
+    overflow-wrap: anywhere;
+    transition: color var(--d-fade) var(--ease);
+  }
+  .ft-a[aria-current="page"] {
+    color: var(--c-fg);
+  }
+  :is(a, button).ft-a:hover {
+    color: var(--c-fg);
+  }
+  .ft-a.is-soon {
+    color: var(--c-quiet);
+    white-space: nowrap;
+    cursor: default;
+  }
+  /* Coming, not broken: a small tag that's always there, on phones too */
+  .ft-a.is-soon::after {
+    content: "Soon";
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    height: 1.125rem;
+    padding-inline: 0.375rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-full);
+    font-size: var(--t-2xs);
+    line-height: 1;
+    color: var(--c-subtle);
+  }
+  /* The address is the strip's line: display size, the one bright thing in the row. */
+  .ft-mail {
+    margin-left: -0.03em;
+    font-size: var(--t-l);
+    font-weight: var(--w-display);
+    line-height: var(--lh-l);
+    letter-spacing: var(--tr-l);
+    color: var(--c-fg);
+    overflow-wrap: anywhere;
+    transition: color var(--d-fade) var(--ease);
+  }
+  .ft-mail:hover {
+    color: var(--c-muted);
+  }
+  .ft-note {
+    max-width: 46ch;
+    font-size: var(--t-s);
+    line-height: 1.5;
+    color: var(--c-quiet);
+  }
+
+  .ft-logo {
+    display: grid;
+    grid-template-rows: 1fr auto;
+    place-items: center;
+    gap: 0.75rem;
+  }
+  .ft-ext {
+    width: min(100%, 8.5rem);
+    aspect-ratio: 1;
+    overflow: visible;
+  }
+  .ft-ext use {
+    fill: var(--c-card);
+    stroke: color-mix(in oklab, var(--c-fg) 24%, transparent);
+    stroke-width: 3;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-ext use.is-back {
+    fill: var(--c-bg);
+    stroke: var(--c-muted);
+  }
+  .ft-ext use.is-front {
+    fill: var(--c-bg);
+    stroke: var(--c-fg);
+    stroke-width: 1.5;
+  }
+  .ft-logo-cap {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    font-size: var(--t-xs);
+    color: var(--c-quiet);
+  }
+  .ft-logo-cap [data-ft-depth] {
+    padding: 0.125rem 0.5rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-sm);
+    font-family: var(--f-mono);
+    font-size: var(--t-2xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--c-muted);
+  }
+
+  /* The wordmark: out of the box, the full width of the frame above it. */
+  .ft-plate {
+    position: relative;
+    max-width: var(--content-max);
+    margin-inline: auto;
+    padding: calc(var(--u) * 5) 0 calc(var(--u) * 2);
+  }
+  /* The awwwards colophon, kept as the plate's title block: the drawing's own note. */
+  .ft-colophon {
+    font-size: var(--t-xs);
+    color: var(--c-quiet);
+  }
+  /* The credit line opens its own page (/colophon): a quiet link, underlined at rest. */
+  .ft-colophon a {
+    display: inline-block;
+    padding-block: 0.25rem;
+    text-decoration: underline;
+    text-decoration-color: var(--c-line-strong);
+    text-underline-offset: 0.25em;
+    transition:
+      color var(--d-fade) var(--ease),
+      text-decoration-color var(--d-fade) var(--ease);
+  }
+  .ft-colophon a:hover {
+    color: var(--c-fg);
+    text-decoration-color: currentColor;
+  }
+
+  .ft-word {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin-top: calc(var(--u) * 2);
+    overflow: visible;
+    font-family: var(--f-sans);
+  }
+  .ft-hit {
+    fill: transparent;
+  }
+  /* The letter at rest: solid Paper. */
+  .ft-glyph {
+    fill: var(--c-fg);
+    stroke: var(--c-fg);
+    stroke-width: 1;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    transition:
+      fill 600ms var(--ease),
+      stroke 600ms var(--ease);
+  }
+  /* The build, pointed at: each stroke on its own (the overlaps show, tinted twice), the edges
+     it was cut from running on past the cuts, the cuts, a round's boxes and the lean of its
+     counter. */
+  .ft-build {
+    opacity: 0;
+    transition: opacity var(--d-slow) var(--ease);
+    pointer-events: none;
+  }
+  .ft-build path {
+    fill: none;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-stroke {
+    fill: color-mix(in oklab, var(--c-fg) 7%, transparent);
+    stroke: var(--c-fg);
+    stroke-width: 1.25;
+    stroke-linejoin: round;
+  }
+  .ft-edge {
+    stroke: var(--c-quiet);
+  }
+  .ft-cut {
+    stroke: var(--c-muted);
+    stroke-dasharray: 3 4;
+  }
+  .ft-box {
+    stroke: var(--c-line-strong);
+    stroke-dasharray: 3 5;
+  }
+  .ft-l.is-hot .ft-build {
+    opacity: 1;
+  }
+  .ft-l.is-hot .ft-glyph {
+    fill: transparent;
+    stroke: transparent;
+  }
+  .ft-nodes {
+    opacity: 0;
+    transition: opacity var(--d-slow) var(--ease);
+    pointer-events: none;
+  }
+  .ft-l.is-hot .ft-nodes {
+    opacity: 1;
+  }
+  .ft-hdl {
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-cn,
+  .ft-sn {
+    fill: var(--c-bg);
+    stroke: var(--c-fg);
+    stroke-width: 1.25;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-off {
+    fill: var(--c-bg);
+    stroke: var(--c-muted);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-br path {
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .ft-br text {
+    font-size: 21px;
+    font-weight: var(--w-ui);
+    text-anchor: middle;
+    fill: var(--c-fg);
+  }
+  .ft-br {
+    opacity: 0;
+    transform-box: fill-box;
+    transition:
+      opacity var(--d-slow) var(--ease),
+      transform var(--d-slow) var(--ease);
+  }
+  .ft-br.is-mod {
+    transform: translateY(6px);
+  }
+  .ft-br.is-duo {
+    transform: translateY(-6px);
+  }
+  .ft-plate[data-show="mod"] .ft-br.is-mod,
+  .ft-plate[data-show="duo"] .ft-br.is-duo,
+  .ft-plate[data-show="both"] .ft-br {
+    opacity: 1;
+    transform: none;
+  }
+  .ft-l {
+    cursor: default;
+  }
+  /* The sweep: one word lit, the other's letters step back to a shade; then both. The letter
+     pointed at shows its build instead. */
+  .ft-plate[data-show="mod"] .ft-l:not([data-g="mod"], [data-g="both"], .is-hot) .ft-glyph,
+  .ft-plate[data-show="duo"] .ft-l:not([data-g="duo"], [data-g="both"], .is-hot) .ft-glyph {
+    fill: color-mix(in oklab, var(--c-fg) 22%, var(--c-bg));
+    stroke: color-mix(in oklab, var(--c-fg) 22%, var(--c-bg));
+  }
+
+  /* With script and motion, the word starts undrawn: once in view each letter's outline draws
+     itself, then floods solid, letter after letter. */
+  .motion .ft-glyph {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 1;
+    fill-opacity: 0;
+  }
+  .ft-plate.is-drawn .ft-glyph {
+    stroke-dashoffset: 0;
+    fill-opacity: 1;
+    transition:
+      stroke-dashoffset 1.6s var(--ease) calc(300ms + var(--i) * 140ms),
+      fill-opacity 700ms var(--ease) calc(1.4s + var(--i) * 140ms),
+      fill 600ms var(--ease),
+      stroke 600ms var(--ease);
+  }
+
+  .ft-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    background: var(--c-bg);
+    font-size: var(--t-xs);
+    color: var(--c-subtle);
+  }
+  .ft-bar > * {
+    display: flex;
+    align-items: center;
+    padding: 0.875rem var(--ft-pad);
+  }
+  .ft-copyr {
+    flex: 1;
+  }
+  .ft-legal {
+    gap: 0;
+    padding: 0;
+  }
+  .ft-legal .ft-a {
+    align-self: stretch;
+    white-space: nowrap;
+    padding: 0.875rem var(--ft-pad);
+    border-left: 1px solid var(--c-line);
+    font-size: var(--t-xs);
+  }
+  .ft-arrow {
+    width: 0.875rem;
+    height: 0.875rem;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transform: rotate(-90deg);
+    transition: transform var(--d-slow) var(--ease);
+  }
+  .ft-top:hover .ft-arrow {
+    transform: rotate(-90deg) translateX(2px);
+  }
+
+  @media (max-width: 1279px) {
+    .ft-grid {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-areas:
+        "pr sw fo co re so"
+        "ct ct ct ct lg lg";
+    }
+  }
+  @media (max-width: 720px) {
+    .ft-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-areas:
+        "pr sw"
+        "fo co"
+        "re so"
+        "ct ct";
+    }
+    .ft-logo,
+    .ft-br {
+      display: none;
+    }
+    .ft-copyr {
+      flex-basis: 100%;
+    }
+    /* Phones: the legal links as a 2 × 3 grid of whole cells, on one inset. */
+    .ft-legal {
+      flex-basis: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+    .ft-legal .ft-a {
+      border-top: 1px solid var(--c-line);
+    }
+    .ft-legal .ft-a:nth-child(odd) {
+      border-left: 0;
+    }
+    .ft-legal .ft-top {
+      justify-content: space-between;
+    }
+  }
+</style>

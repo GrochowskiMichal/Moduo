@@ -2,6 +2,7 @@
 // tasks, notes and meetings from their spine links, and a linked task's facts
 // from the Tasks data. Pure, so the route hook stays a thin adapter.
 
+import { taskDueDay } from "../../../lib/task-rows";
 import { dayTime, shortDay } from "../reader/reader-format";
 import type { SpineLinkRow } from "../ui/mail-page-wiring";
 import type { MailContactDetail } from "./contact-view";
@@ -109,11 +110,6 @@ export function taskDetailFrom(
 
 /** Today's open tasks by their due date (dueOn since TV-D9; dueDate is an instant). */
 export function isDueOn(task: Pick<PanelTask, "dueOn" | "dueDate" | "status">, date: string) {
-  if (!OPEN(task.status)) return false;
-  if (task.dueOn) return task.dueOn === date;
-  const due = dueMs(task);
-  if (due === null) return false;
-  const d = new Date(due);
-  const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  return local === date;
+  // The shared local-day reading (HV-15 509-4): never the instant's UTC day.
+  return OPEN(task.status) && taskDueDay(task) === date;
 }

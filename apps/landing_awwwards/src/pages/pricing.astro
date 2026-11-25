@@ -1,0 +1,270 @@
+---
+import Faq from "../components/Faq.astro";
+import Plans from "../components/Plans.astro";
+import { pricing, site } from "../data/site";
+import Base from "../layouts/Base.astro";
+
+const fmt = (n: number) => `$${n.toFixed(2)}`;
+const stackTotal = pricing.stack.rows.reduce((sum, r) => sum + r.price, 0);
+const kept = stackTotal - pricing.stack.moduo.price;
+const offers = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "Moduo",
+  description: site.boilerplate,
+  brand: { "@type": "Brand", name: "Moduo" },
+  offers: pricing.plans.map((p) => ({
+    "@type": "Offer",
+    name: p.name,
+    price: p.yearly.replace("$", ""),
+    priceCurrency: "USD",
+    description: p.who,
+  })),
+};
+---
+
+<Base
+  title="Pricing"
+  description="Moduo pricing: Free for one person, Pro, Duo for exactly two people and Team per seat, with a founding price for early members of the private beta."
+  image="/og/pricing.png"
+  jsonLd={[offers]}
+>
+  <div class="pricing-top">
+    <Plans headingLevel="h1" idPrefix="pp" />
+  </div>
+
+  <section class="cmp" aria-labelledby="cmp-title">
+    <div class="wrap">
+      <h2 class="cmp__title t-l" id="cmp-title" data-split>{pricing.compare.title}</h2>
+      <fieldset class="cmp__pick" aria-label="Plan to show">
+        {
+          pricing.plans.map((p) => (
+            <label class="cmp__opt">
+              <input type="radio" name="cmp-plan" value={p.id} checked={p.id === "pro"} aria-label={p.name} />
+              <span>{p.name}</span>
+            </label>
+          ))
+        }
+      </fieldset>
+      <div class="cmp__scroll" tabindex="0" role="region" aria-labelledby="cmp-title">
+        <table class="cmp__table">
+          <thead>
+            <tr>{pricing.compare.head.map((h, i) => (i === 0 ? <td /> : <th scope="col">{h}</th>))}</tr>
+          </thead>
+          <tbody>
+            {
+              pricing.compare.rows.map((row) => (
+                <tr>
+                  <th scope="row">{row[0]}</th>
+                  {row.slice(1).map((cell) => (
+                    <td class:list={[cell === "No" && "is-no"]}>{cell}</td>
+                  ))}
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="stack" aria-labelledby="stack-title">
+    <div class="wrap grid">
+      <div class="stack__head">
+        <h2 class="stack__title t-l" id="stack-title" data-split>{pricing.stack.title}</h2>
+        <p class="muted" data-reveal>{pricing.stack.text}</p>
+      </div>
+      <div class="stack__bill" data-reveal>
+        <ul class="stack__rows">
+          {
+            pricing.stack.rows.map((r) => (
+              <li>
+                <span>{r.app}</span>
+                <span class="quiet">{r.does}</span>
+                <span class="tabular">{fmt(r.price)}</span>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="stack__sum">
+          <span>Five apps, none of them linked</span>
+          <span class="tabular">{fmt(stackTotal)}</span>
+        </p>
+        <p class="stack__moduo">
+          <span>{pricing.stack.moduo.app} <span class="quiet">{pricing.stack.moduo.does}</span></span>
+          <span class="tabular">{fmt(pricing.stack.moduo.price)}</span>
+        </p>
+        <p class="stack__kept t-m">You keep <span class="tabular">{fmt(kept)}</span> a month.</p>
+        <p class="t-xs quiet stack__src">{pricing.stack.source}</p>
+      </div>
+    </div>
+  </section>
+
+  <Faq id="pricing-faq" title="Billing questions." items={pricing.questions} />
+</Base>
+
+<style>
+  /* The page opens on the plans: less air above them than the home page's section has. */
+  .pricing-top :global(.plans) {
+    padding-top: calc(var(--nav-h) + clamp(2rem, 7svh, 4.5rem));
+  }
+  .cmp {
+    padding: calc(var(--u) * 6) 0;
+  }
+  .cmp__scroll {
+    margin-top: calc(var(--u) * 5);
+    overflow-x: auto;
+    border-radius: var(--r-sm);
+  }
+  /* Fixed layout: the feature column takes a third, the four plans share the rest equally. */
+  .cmp__table {
+    width: 100%;
+    min-width: 44rem;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: var(--t-s);
+  }
+  .cmp__table thead td:first-child {
+    width: 34%;
+  }
+  .cmp__table th,
+  .cmp__table td {
+    text-align: left;
+    padding: 0.875rem 1rem 0.875rem 0;
+    border-bottom: 1px solid var(--c-line);
+    font-weight: var(--w-small);
+  }
+  .cmp__table thead th {
+    font-size: var(--t-body);
+    font-weight: var(--w-display);
+    color: var(--c-fg);
+    border-bottom-color: var(--c-line-strong);
+  }
+  .cmp__table tbody th {
+    color: var(--c-muted);
+    width: 34%;
+  }
+  .cmp__table td.is-no {
+    color: var(--c-quiet);
+  }
+  /* Phones: one plan at a time beside the features, picked like the billing period. */
+  .cmp__pick {
+    display: none;
+    margin: calc(var(--u) * 4) 0 0;
+    padding: 0.25rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-md);
+  }
+  .cmp__opt {
+    position: relative;
+    flex: 1;
+    cursor: pointer;
+  }
+  .cmp__opt input {
+    position: absolute;
+    inset: 0;
+    appearance: none;
+    margin: 0;
+    border: 0;
+    background: none;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .cmp__opt input:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .cmp__opt span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 2.25rem;
+    border-radius: var(--r-sm);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    transition:
+      background-color 0.25s var(--ease),
+      color 0.25s var(--ease);
+  }
+  .cmp__opt input:checked + span {
+    background: var(--c-hover);
+    color: var(--c-fg);
+  }
+  @media (max-width: 720px) {
+    .cmp__pick {
+      display: flex;
+    }
+    .cmp__table {
+      min-width: 0;
+    }
+    /* Fixed layout sizes columns from the first row: the label column is set there. */
+    .cmp__table thead td:first-child {
+      width: 55%;
+    }
+    .cmp:has(input[value="free"]:checked) .cmp__table :is(th, td):is(:nth-child(3), :nth-child(4), :nth-child(5)),
+    .cmp:has(input[value="pro"]:checked) .cmp__table :is(th, td):is(:nth-child(2), :nth-child(4), :nth-child(5)),
+    .cmp:has(input[value="duo"]:checked) .cmp__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(5)),
+    .cmp:has(input[value="team"]:checked) .cmp__table :is(th, td):is(:nth-child(2), :nth-child(3), :nth-child(4)) {
+      display: none;
+    }
+  }
+  .stack {
+    padding: calc(var(--u) * 6) 0;
+  }
+  .stack__head {
+    grid-column: 1 / span 4;
+    display: grid;
+    gap: 1.25rem;
+    align-content: start;
+  }
+  .stack__bill {
+    grid-column: 5 / span 6;
+    padding: 1.75rem;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-line-strong);
+    background: var(--c-card);
+  }
+  .stack__rows li,
+  .stack__sum,
+  .stack__moduo {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 1rem;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .stack__rows li span:nth-child(2) {
+    text-align: right;
+  }
+  .stack__sum {
+    grid-template-columns: 1fr auto;
+    font-weight: var(--w-ui);
+    border-bottom-color: var(--c-line-strong);
+  }
+  .stack__sum span:last-child {
+    text-decoration: line-through;
+    text-decoration-color: var(--c-quiet);
+  }
+  .stack__moduo {
+    grid-template-columns: 1fr auto;
+    font-weight: var(--w-display);
+  }
+  .stack__kept {
+    margin-top: 1.25rem;
+    font-weight: var(--w-ui);
+  }
+  .stack__src {
+    margin-top: 1rem;
+  }
+  @media (max-width: 900px) {
+    .stack__head,
+    .stack__bill {
+      grid-column: 1 / -1;
+    }
+    .stack__bill {
+      margin-top: 2rem;
+      padding: 1.25rem;
+    }
+  }
+</style>

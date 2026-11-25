@@ -1,0 +1,333 @@
+---
+// Bring any AI, as two cards of the modules' family. On the left, the assistant answers a plain
+// question from your work; on the right, the key's reach per module is a real control (radio
+// groups, as the app's API key settings set it). Change one and the answer loses or regains what
+// that module would have told it (motion/widgets.ts).
+import "../../styles/frames.css";
+import "../../styles/bento.css";
+import Icon from "../frames/Icon.astro";
+import { ai } from "../../data/site";
+
+const answer = [
+  { module: "Tasks", text: "Two tasks are open: Review the open alpha invite (Thu) and Pick the first wave (Thu)." },
+  { module: "Notes", text: "The invite copy note says Maciej wants the first wave on the 16th." },
+  { module: "Email", text: "His last email asks you to check the invite links." },
+  { module: "Calendar", text: "The review is today at 14:00, with the invite copy attached." },
+];
+---
+
+<section class="ai" id="ai" aria-labelledby="ai-title">
+  <div class="wrap">
+    <div class="ai__head grid">
+      <h2 class="ai__title t-xl" id="ai-title" data-split>{ai.title}</h2>
+      <p class="ai__text t-m muted" data-reveal>{ai.text}</p>
+    </div>
+    <div class="bento ai__grid" data-ai data-reveal="frame">
+      <div class="bcard bcard--still ai__ask">
+        <div class="bcard__head">
+          <span class="bcard__title">{ai.askTitle}</span>
+          <span class="bcard__text">{ai.askText}</span>
+        </div>
+        <div class="bcard__art">
+          <span class="bfield"></span>
+          <div class="ap mini ai__mini">
+            <div class="ap-panel ai__prompt">
+              <span class="ai__q">{ai.prompt}<span class="ap-caret" aria-hidden="true"></span></span>
+              <span class="ai__chips" aria-hidden="true">
+                <span class="ap-tag"><Icon name="bot" class="ap-i--sm" />{ai.keyName}</span>
+                <span class="ap-tag">Over MCP</span>
+                <span class="ai__send"><Icon name="arrow-up" /></span>
+              </span>
+            </div>
+            <div class="ap-panel ai__answer">
+              <span class="ai__who"><Icon name="bot" class="ap-i--sm" /><span class="ap-med">{ai.keyName}</span><span class="ap-muted">answered from your workspace</span></span>
+              <ul class="ai__a" aria-live="polite">
+                {
+                  answer.map((a) => (
+                    <li data-needs={a.module}>
+                      <span class="ai__mod">{a.module}</span>
+                      <span class="ai__ok">{a.text}</span>
+                      <span class="ai__no">This key can’t see it.</span>
+                    </li>
+                  ))
+                }
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <form class="bcard bcard--still ai__rights" aria-label={`What the ${ai.keyName} key can do`}>
+        <div class="bcard__head">
+          <span class="bcard__title">{ai.rightsTitle}</span>
+          <span class="bcard__text">{ai.keyNote}</span>
+        </div>
+        <div class="ap ai__table">
+          <span class="ai__key" aria-hidden="true">
+            <span class="ai__keyic"><Icon name="key-round" class="ap-i--sm" /></span>
+            <span class="grow"><span class="ap-med">{ai.keyName}</span> <span class="ap-muted ap-xs">· Settings, AI keys</span></span>
+            <span class="ap-tag ai__live"><span class="ap-dot"></span>Connected</span>
+          </span>
+          {
+            ai.access.map((row) => (
+              <fieldset class="ai__row" data-module={row.module}>
+                <legend class="ai__rowname">{row.module}</legend>
+                <div class="ap-seg ai__seg">
+                  {ai.levels.map((lvl, i) => (
+                    <label class="ai__opt">
+                      <input
+                        type="radio"
+                        name={`ai-${row.module}`}
+                        value={lvl}
+                        checked={i === row.level}
+                        aria-label={`${row.module}: ${lvl}`}
+                      />
+                      <span>{lvl}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ))
+          }
+        </div>
+      </form>
+    </div>
+    <p class="ai__trust t-s quiet" data-reveal>
+      {ai.trust} <a class="link ai__more" href="/ai">How assistants connect, tool by tool</a>
+    </p>
+  </div>
+</section>
+
+<style>
+  .ai {
+    padding: calc(var(--u) * 12) 0 calc(var(--u) * 6);
+  }
+  .ai__head {
+    align-items: end;
+    row-gap: 1.25rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  .ai__title {
+    grid-column: 1 / span 7;
+    margin-left: -0.04em;
+    max-width: 13ch;
+  }
+  .ai__text {
+    grid-column: 9 / span 4;
+    max-width: 26rem;
+  }
+  .ai__ask {
+    grid-column: span 7;
+  }
+  .ai__rights {
+    grid-column: span 5;
+  }
+  .ai__trust {
+    max-width: 28rem;
+    margin-top: 1.5rem;
+  }
+  .ai__more {
+    color: var(--c-fg);
+  }
+
+  /* The question and its answer. */
+  .ai__mini {
+    left: 7%;
+    top: 0;
+    width: 88%;
+    display: grid;
+    gap: 0.857em;
+  }
+  .ai__prompt {
+    display: grid;
+    gap: 1em;
+    padding: 1em 1.143em 0.857em;
+    background: #0d0d0d;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 1.5em 3em -1.5em rgb(0 0 0 / 0.9);
+  }
+  .ai__q {
+    font-size: 1.143em;
+    line-height: 1.45;
+  }
+  .ai__chips {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+  }
+  .ai__chips :global(.ap-tag .ap-i) {
+    width: 1em;
+    height: 1em;
+    color: var(--ap-muted);
+  }
+  .ai__send {
+    display: grid;
+    place-items: center;
+    width: 2.286em;
+    height: 2.286em;
+    margin-left: auto;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+  }
+  .ai__send :global(.ap-i) {
+    width: 1.143em;
+    height: 1.143em;
+  }
+  .ai__answer {
+    display: grid;
+    gap: 0.714em;
+    padding: 1em 1.143em 1.143em;
+  }
+  .ai__who {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    font-size: 0.929em;
+  }
+  .ai__who :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .ai__a {
+    display: grid;
+    gap: 0.571em;
+  }
+  .ai__a li {
+    display: grid;
+    grid-template-columns: 5.5em 1fr;
+    gap: 0.857em;
+    font-size: 0.929em;
+    line-height: 1.5;
+  }
+  .ai__mod {
+    color: var(--ap-subtle);
+  }
+  .ai__ok {
+    color: var(--ap-fg);
+  }
+  .ai__no {
+    display: none;
+    color: var(--ap-subtle);
+  }
+  .ai__a li:global(.is-off) .ai__ok {
+    display: none;
+  }
+  .ai__a li:global(.is-off) .ai__no {
+    display: inline;
+  }
+
+  /* The key's reach: one row per module, None / View / Edit. */
+  .ai__table {
+    position: relative;
+    z-index: 2;
+    display: grid;
+    width: auto;
+    margin: clamp(1.25rem, 2.2vw, 2rem) clamp(1.25rem, 2.4vw, 2rem) clamp(1.25rem, 2.4vw, 2rem);
+    padding: 0.286em 0.857em;
+    border-radius: 0.857em;
+    background: var(--ap-card);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    font-size: clamp(12px, 3cqi, 14px);
+  }
+  .ai__key {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 3.429em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .ai__keyic {
+    display: grid;
+    place-items: center;
+    width: 2em;
+    height: 2em;
+    border-radius: 0.571em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+  }
+  .ai__live .ap-dot {
+    --c: var(--ap-success);
+  }
+  .ai__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    border: 0;
+    border-bottom: 1px solid var(--ap-line);
+    margin: 0;
+    padding: 0.5em 0;
+    min-width: 0;
+  }
+  .ai__row:last-child {
+    border-bottom: 0;
+  }
+  .ai__rowname {
+    float: left;
+    padding: 0;
+    font-size: 0.929em;
+    font-weight: 500;
+  }
+  .ai__opt {
+    position: relative;
+    cursor: pointer;
+  }
+  .ai__opt input {
+    position: absolute;
+    inset: 0;
+    appearance: none;
+    margin: 0;
+    border: 0;
+    background: none;
+    border-radius: 0.429em;
+    cursor: pointer;
+  }
+  .ai__opt input:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .ai__opt span {
+    display: inline-flex;
+    align-items: center;
+    height: 1.714em;
+    padding: 0 0.714em;
+    border-radius: 0.429em;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    font-weight: 500;
+    transition:
+      background-color 0.2s var(--ease),
+      color 0.2s var(--ease);
+  }
+  .ai__opt input:checked + span {
+    background: var(--ap-raised);
+    color: var(--ap-fg);
+  }
+  @media (hover: hover) {
+    .ai__opt:hover span {
+      color: var(--ap-fg);
+    }
+  }
+  @media (max-width: 900px) {
+    .ai__title,
+    .ai__text {
+      grid-column: 1 / -1;
+    }
+  }
+  /* Stacked, the answer is read whole: it is what the control changes. */
+  @media (max-width: 999px) {
+    .ai__ask .bcard__art {
+      height: auto;
+      padding-bottom: 1.25rem;
+    }
+    .ai__mini {
+      position: relative;
+      left: auto;
+      width: auto;
+      margin: 0 1.25rem;
+    }
+  }
+</style>

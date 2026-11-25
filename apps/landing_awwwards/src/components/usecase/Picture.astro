@@ -1,0 +1,1168 @@
+---
+// One moment of a "Moduo for" day, drawn in the app's own anatomy (frames.css: Geist, the app's
+// tokens, its panels, rows, chips and keys). Each kind is one screen the app really has, cut down
+// to the part the moment is about. Parts marked [data-a] arrive when the moment becomes the one in
+// view, and [data-key] goes down (motion/pages/usecase.ts); the still picture is the result, so
+// without JS or with reduced motion nothing is missing. Decorative: the moment's words say it.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import type { Pic } from "../../data/pages/usecase";
+
+interface Props {
+  pic: Pic;
+}
+const { pic } = Astro.props;
+
+// "{@Maciej Grzywacz}" in a line becomes the app's mention chip.
+const rich = (s: string) =>
+  s.split(/\{@([^}]+)\}/).map((part, i) => ({ mention: i % 2 === 1, text: part }));
+// The app's initials for the two of us are the first two letters of the first name (MA, MI),
+// since both full names give MG.
+const initials = (name: string) => name.split(" ")[0].slice(0, 2).toUpperCase();
+const hours = ["09", "10", "11", "12", "13", "14", "15", "16"];
+const LEVELS = ["None", "View", "Edit"];
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+---
+
+<div class:list={["ap uc-pic", `uc-pic--${pic.kind}`]} aria-hidden="true" data-pic={pic.kind}>
+  {
+    pic.kind === "mail" && (
+      <>
+        <div class="ap-panel uc-mail">
+          <div class="uc-mail__top">
+            <span class="ap-av ap-av--n ap-av--24">{pic.initials}</span>
+            <div class="grow">
+              <p class="ap-sm ap-med">{pic.from}</p>
+              <p class="ap-xs ap-muted">To: you · {pic.time}</p>
+            </div>
+            <span class="ap-btn uc-mail__to">
+              <Icon name="list-checks" />
+              To task <span class="ap-kbd" data-key>T</span>
+            </span>
+          </div>
+          <p class="uc-mail__subj">{pic.subject}</p>
+          <p class="uc-mail__body">{pic.body}</p>
+        </div>
+        <div class="ap-panel uc-made" data-a>
+          <p class="ap-group">
+            <Icon name="chevron-down" />
+            Inbox <span class="ap-meta">· 1 new</span>
+          </p>
+          <div class="ap-row is-sel">
+            <span class="ap-status" />
+            <span class="ap-row-t grow ap-ell">{pic.task}</span>
+            <span class="ap-meta">{pic.due}</span>
+          </div>
+          <p class="uc-made__from">
+            <Icon name="mail" class="ap-i--sm" />
+            {pic.subject} <span class="ap-muted">· Created from</span>
+          </p>
+        </div>
+      </>
+    )
+  }
+
+  {
+    pic.kind === "week" && (
+      <div class="ap-panel uc-week">
+        <div class="uc-week__bar">
+          <span class="ap-ico">
+            <Icon name="chevron-left" />
+          </span>
+          <span class="ap-ico">
+            <Icon name="chevron-right" />
+          </span>
+          <span class="ap-sm ap-med grow">{pic.day}</span>
+          <span class="ap-seg ap-xs">
+            <span class="is-on">Day</span>
+            <span>Week</span>
+          </span>
+        </div>
+        <div class="uc-week__grid" style={`--now:${pic.now}`}>
+          {hours.map((h) => (
+            <span class="uc-week__hr">
+              <i>{h}</i>
+            </span>
+          ))}
+          {pic.slots.map((s) => (
+            <div class:list={["uc-slot", `is-${s.kind}`]} style={`--at:${s.at};--len:${s.len}`} data-a={s.kind !== "event" ? "" : undefined}>
+              <p class="uc-slot__t">
+                {s.kind !== "event" && <span class="ap-check" />}
+                <span class="ap-ell">
+                  <b>{s.t}</b> <span class="ap-muted">{s.meta}</span>
+                </span>
+              </p>
+              {s.kind === "late" && (
+                <p class="uc-slot__ask">
+                  <span class="ap-btn ap-btn--secondary">Later</span>
+                  <span class="ap-btn ap-btn--outline">Longer</span>
+                  <span class="ap-btn">Remove</span>
+                </p>
+              )}
+            </div>
+          ))}
+          <span class="uc-week__now" />
+        </div>
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "focus" && (
+      <>
+        <div class="ap-panel uc-focus">
+          <p class="ap-eyebrow">
+            <span class="ap-status is-going" />
+            Focus
+          </p>
+          <p class="uc-focus__t">{pic.task}</p>
+          <p class="ap-xs ap-muted">{pic.project}</p>
+          <p class="uc-focus__clock">
+            <span data-clock={pic.clock}>{mmss(pic.clock)}</span>
+            <span class="uc-focus__est">{pic.est}</span>
+          </p>
+          <p class="uc-focus__ctl">
+            <span class="ap-btn ap-btn--secondary">
+              <Icon name="pause" />
+              Pause
+            </span>
+            <span class="ap-btn ap-btn--outline">
+              <Icon name="check" />
+              Done
+            </span>
+          </p>
+        </div>
+        <div class="ap-panel uc-kept" data-a>
+          <p class="uc-kept__h">
+            <Icon name="timer" class="ap-i--sm" />
+            Kept on this task
+            <span class="ap-meta grow">{pic.total}</span>
+          </p>
+          {pic.sessions.map(([d, m], i) => (
+            <p class:list={["uc-kept__row", i === pic.sessions.length - 1 && "is-now"]}>
+              <span class="uc-kept__d">{d}</span>
+              <span class="uc-kept__bar" style={`--w:${parseInt(m, 10) / 60}`} />
+              <span class="ap-meta">{m}</span>
+            </p>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  {
+    pic.kind === "booking" && (
+      <div class="ap-panel uc-book">
+        <p class="uc-book__url">
+          <Icon name="lock" class="ap-i--xs" />
+          {pic.url}
+        </p>
+        <div class="uc-book__in">
+          <p class="ap-xs ap-muted">{pic.host}</p>
+          <p class="uc-book__t">{pic.title}</p>
+          <p class="uc-book__meta ap-xs ap-muted">
+            <Icon name="clock-3" class="ap-i--xs" />
+            30 min
+            <Icon name="globe" class="ap-i--xs" />
+            Google Meet
+          </p>
+          <div class="uc-book__days">
+            {pic.days.map(([d, n], i) => (
+              <span class:list={["uc-book__day", i === pic.day && "is-on"]}>
+                <span class="ap-xs">{d}</span>
+                <b>{n}</b>
+              </span>
+            ))}
+          </div>
+          <div class="uc-book__times">
+            {pic.times.map((t, i) => (
+              <span class:list={["uc-book__time", i === pic.time && "is-on"]} data-key={i === pic.time ? "" : undefined}>
+                {t}
+              </span>
+            ))}
+          </div>
+          <p class="uc-book__done" data-a>
+            <span class="ap-check is-done" />
+            <span class="grow">
+              <span class="ap-med">Booked</span> <span class="ap-muted">· {pic.guest} · {pic.when}</span>
+            </span>
+          </p>
+        </div>
+        <p class="uc-book__foot ap-xs ap-muted">Scheduled with Moduo</p>
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "note" && (
+      <div class="ap-panel uc-note">
+        <p class="uc-note__crumb ap-xs ap-muted">
+          {pic.crumb[0]} <Icon name="chevron-right" class="ap-i--xs" /> {pic.crumb[1]}
+        </p>
+        <p class="uc-note__title">{pic.title}</p>
+        <p class="uc-note__p">
+          {rich(pic.text).map((p) =>
+            p.mention ? (
+              <span class="ap-ref">
+                <span class="ap-av ap-av--16" style="--c:var(--ap-teal)">
+                  {initials(p.text)}
+                </span>
+                {p.text}
+              </span>
+            ) : (
+              p.text
+            ),
+          )}
+        </p>
+        {pic.lines.map((l, i) => (
+          <div class:list={["uc-note__line", i === 0 && "is-new"]} data-a={i === 0 ? "" : undefined}>
+            {l.done ? <span class="ap-check is-done" /> : <span class:list={["uc-note__box", !l.due && "is-square"]} />}
+            <span class:list={["grow ap-ell", l.done && "ap-done-t"]}>{l.t}</span>
+            {l.due && <span class="uc-note__chip">Due {l.due}</span>}
+          </div>
+        ))}
+        <span class="uc-note__keys" data-a>
+          <span class="ap-kbd" data-key>
+            ⌘
+          </span>
+          <span class="ap-kbd" data-key>
+            ⇧
+          </span>
+          <span class="ap-kbd" data-key>
+            T
+          </span>
+        </span>
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "contact" && (
+      <div class="ap-panel uc-ct">
+        <div class="uc-ct__head">
+          <span class="ap-av ap-av--n ap-av--40">{pic.initials}</span>
+          <div>
+            <p class="uc-ct__name">{pic.name}</p>
+            <p class="ap-xs ap-muted">{pic.sub}</p>
+          </div>
+        </div>
+        {pic.rows.map((r) => (
+          <div class="uc-ct__row" data-a>
+            <span class="ap-eyebrow">{r.cap}</span>
+            <span class="uc-ct__item">
+              <Icon name={r.icon} class="ap-i--sm" />
+              <span class="grow ap-ell">{r.t}</span>
+              <span class="uc-ct__rel">{r.rel}</span>
+            </span>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "home" && (
+      <div class="uc-home">
+        <div class="ap-panel uc-home__w uc-home__tasks">
+          <p class="uc-home__h">Tasks</p>
+          {pic.tasks.map((t) => (
+            <p class="uc-home__row">
+              <span class="ap-status" />
+              <span class="grow ap-ell">{t.t}</span>
+              <span class="ap-dot ap-dot--sm" style={`--c:${t.c}`} />
+              <span class="ap-meta">{t.m}</span>
+            </p>
+          ))}
+        </div>
+        <div class="ap-panel uc-home__w uc-home__day">
+          <p class="uc-home__h">Today</p>
+          {pic.day.map((e) => (
+            <p class="uc-home__ev">
+              <b>{e.t}</b> <span class="ap-muted">{e.m}</span>
+            </p>
+          ))}
+        </div>
+        <div class="ap-panel uc-home__w uc-home__chat" data-a>
+          <p class="uc-home__h">
+            Catch up <span class="ap-muted">1</span>
+          </p>
+          <div class="uc-home__msg">
+            <span class="ap-av ap-av--24" style={`--c:${pic.catchup.c}`}>
+              {pic.catchup.initials}
+            </span>
+            <p class="grow">
+              <span class="ap-med">{pic.catchup.who}</span> <span class="ap-xs ap-subtle">{pic.catchup.time}</span>
+              <br />
+              <span class="ap-muted">{pic.catchup.text}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "assign" && (
+      <>
+        <div class="ap-panel uc-as">
+          <p class="uc-as__t">
+            <span class="ap-status" />
+            {pic.task}
+          </p>
+          <dl class="uc-as__props">
+            <dt>Project</dt>
+            <dd>
+              <span class="ap-dot ap-dot--sm" style="--c:var(--ap-blue)" />
+              {pic.project}
+            </dd>
+            <dt>Due</dt>
+            <dd>{pic.due}</dd>
+            <dt>Assignee</dt>
+            <dd data-a>
+              {pic.people
+                .filter((p) => p.on)
+                .map((p) => (
+                  <>
+                    <span class="ap-av ap-av--16" style={`--c:${p.c}`}>
+                      {p.initials}
+                    </span>
+                    {p.name}
+                  </>
+                ))}
+            </dd>
+          </dl>
+          <p class="ap-eyebrow uc-as__cap">Linked</p>
+          <p class="uc-as__link">
+            <Icon name={pic.from.icon} class="ap-i--sm" />
+            <span class="grow ap-ell">{pic.from.t}</span>
+            <span class="uc-ct__rel">{pic.from.rel}</span>
+          </p>
+        </div>
+        <div class="ap-panel uc-pick" data-a>
+          <p class="ap-field">
+            <Icon name="search" />
+            Assign to…
+          </p>
+          {pic.people.map((p) => (
+            <p class:list={["uc-pick__p", p.on && "is-on"]}>
+              <span class="ap-av ap-av--16" style={`--c:${p.c}`}>
+                {p.initials}
+              </span>
+              <span class="grow">{p.name}</span>
+              {p.on && <Icon name="check" class="ap-i--sm" />}
+            </p>
+          ))}
+        </div>
+      </>
+    )
+  }
+
+  {
+    pic.kind === "channel" && (
+      <div class="ap-panel uc-ch">
+        <div class="uc-ch__head">
+          <Icon name="message-circle" class="ap-muted" />
+          <span class="ap-med">{pic.name}</span>
+          <span class="ap-tag uc-ch__link">
+            <Icon name="building-2" class="ap-i--xs" />
+            {pic.linked}
+          </span>
+        </div>
+        {pic.wrapped && (
+          <p class="uc-ch__wrapped ap-sm" data-a>
+            <Icon name="check" class="ap-i--xs" />
+            <span class="ap-med">Wrapped up by you</span>
+            <span class="ap-muted">· {pic.wrapped}</span>
+          </p>
+        )}
+        {pic.msgs.map((m) => (
+          <div class:list={["uc-ch__msg", m.task && "is-hover"]} data-a={m.decision ? "" : undefined}>
+            <span class="ap-av" style={`--c:${m.c}`}>
+              {m.initials}
+            </span>
+            <div class="grow">
+              <p>
+                <span class="ap-strong">{m.who}</span> <span class="ap-xs ap-subtle">{m.time}</span>
+              </p>
+              <p class="uc-ch__body">{m.text}</p>
+              {m.decision && (
+                <p class="uc-ch__flag ap-xs">
+                  <Icon name="flag" class="ap-i--xs" />
+                  Decision
+                </p>
+              )}
+            </div>
+            {m.task && (
+              <span class="uc-ch__tools">
+                <span class="ap-ico">
+                  <Icon name="smile" />
+                </span>
+                <span class="ap-ico">
+                  <Icon name="reply" />
+                </span>
+                <span class="ap-btn ap-btn--secondary">
+                  <Icon name="list-checks" />
+                  Make task
+                  <span class="ap-kbd" data-key>
+                    T
+                  </span>
+                </span>
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "key" && (
+      <div class="ap-panel uc-key">
+        <div class="uc-key__head">
+          <span class="uc-key__ico">
+            <Icon name="key-round" />
+          </span>
+          <div class="grow">
+            <p class="ap-med">{pic.name}</p>
+            <p class="ap-xs ap-muted">
+              {pic.client} · expires in {pic.expires}
+            </p>
+          </div>
+        </div>
+        {pic.levels.map(([m, lv]) => (
+          <p class="uc-lv" data-a={lv > 0 ? "" : undefined}>
+            <span class="grow">{m}</span>
+            <span class="ap-seg ap-xs">
+              {LEVELS.map((l, i) => (
+                <span class:list={[i === lv && "is-on"]}>{l}</span>
+              ))}
+            </span>
+          </p>
+        ))}
+        <p class="uc-key__foot ap-xs ap-muted">
+          <Icon name="bot" class="ap-i--xs" />
+          Everything it changes is attributed to this key.
+        </p>
+      </div>
+    )
+  }
+
+  {
+    pic.kind === "roles" && (
+      <>
+        <div class="ap-panel uc-mem">
+          <p class="uc-mem__h">
+            Members <span class="ap-muted">{pic.members.length}</span>
+          </p>
+          {pic.members.map((p) => (
+            <p class:list={["uc-mem__p", p.on && "is-on"]}>
+              <span class="ap-av ap-av--24" style={`--c:${p.c}`}>
+                {p.initials}
+              </span>
+              <span class="grow ap-ell">{p.name}</span>
+              <span class="uc-mem__role">
+                {p.role}
+                <Icon name="chevron-down" class="ap-i--xs" />
+              </span>
+            </p>
+          ))}
+        </div>
+        <div class="ap-panel uc-role" data-a>
+          <p class="uc-mem__h">
+            {pic.members.find((p) => p.on)?.role} <span class="ap-muted">· custom role</span>
+          </p>
+          {pic.levels.map(([m, lv]) => (
+            <p class="uc-lv">
+              <span class="grow">{m}</span>
+              <span class="ap-seg ap-xs">
+                {LEVELS.map((l, i) => (
+                  <span class:list={[i === lv && "is-on"]}>{l}</span>
+                ))}
+              </span>
+            </p>
+          ))}
+        </div>
+      </>
+    )
+  }
+</div>
+
+<style>
+  /* The picture is laid out in em: 1em is the app's 14 px at the stage's full width, and the
+     picture scales down with its box to a phone's 12 px. */
+  .uc-pic {
+    position: relative;
+    width: min(100%, 34em);
+    margin-inline: auto;
+    font-size: clamp(11px, 3.2cqi, 17px);
+    color: var(--ap-fg);
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
+  }
+  .uc-pic :global(.ap-panel) {
+    font-size: 1em;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2em 4em -1.5em rgb(0 0 0 / 0.9);
+  }
+  .uc-pic p {
+    margin: 0;
+  }
+
+  /* Email: the reader, and the task sliding out from under it. */
+  .uc-mail {
+    padding: 1em 1.143em 2.857em;
+  }
+  .uc-mail__top {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+  }
+  .uc-mail__to {
+    background: var(--ap-hover);
+  }
+  .uc-mail__subj {
+    margin: 1em 0 0.429em !important;
+    font-size: 1.143em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .uc-mail__body {
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    line-height: 1.6;
+  }
+  .uc-made {
+    margin: -1.857em 0 0 14%;
+    width: 80%;
+    padding: 0.571em 0.571em 0.714em;
+    background: #0d0d0d;
+  }
+  .uc-made__from {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0.429em 0 0 0.571em !important;
+    font-size: 0.857em;
+  }
+  .uc-made__from :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+
+  /* A day: hours down the side, events filled, task blocks quieter, a late block dashed. */
+  .uc-week {
+    padding: 0.571em 0.857em 0.857em;
+  }
+  .uc-week__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.286em;
+    margin-bottom: 0.571em;
+  }
+  .uc-week__grid {
+    position: relative;
+    display: grid;
+    grid-template-rows: repeat(8, 2.571em);
+    margin-left: 2em;
+    border-left: 1px solid var(--ap-line);
+  }
+  .uc-week__hr {
+    position: relative;
+    border-top: 1px solid var(--ap-line);
+  }
+  .uc-week__hr i {
+    position: absolute;
+    right: calc(100% + 0.5em);
+    top: -0.6em;
+    color: var(--ap-muted);
+    font-size: 0.714em;
+    font-style: normal;
+  }
+  .uc-slot {
+    position: absolute;
+    left: 0.286em;
+    right: 0.286em;
+    top: calc(var(--at) * 2.571em + 1px);
+    height: calc(var(--len) * 2.571em - 2px);
+    padding: 0.286em 0.571em;
+    border-radius: 0.571em;
+    border: 1px solid var(--ap-line);
+    font-size: 0.857em;
+    overflow: hidden;
+  }
+  .uc-slot__t {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .uc-slot b {
+    font-weight: 500;
+  }
+  .uc-slot.is-event {
+    border-color: rgb(238 238 238 / 0.32);
+    background: rgb(238 238 238 / 0.1);
+  }
+  .uc-slot.is-block {
+    background: #121212;
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .uc-slot.is-late {
+    border: 1px dashed rgb(238 238 238 / 0.4);
+    background: rgb(18 18 18 / 0.85);
+  }
+  .uc-slot__ask {
+    display: flex;
+    gap: 0.286em;
+    margin-top: 0.571em !important;
+  }
+  .uc-week__now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--now) * 2.571em);
+    height: 1px;
+    background: rgb(238 238 238 / 0.5);
+  }
+  .uc-week__now::before {
+    content: "";
+    position: absolute;
+    left: -0.214em;
+    top: 50%;
+    width: 0.429em;
+    height: 0.429em;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    translate: 0 -50%;
+  }
+
+  /* Focus: the now card with its clock, and the time kept on the task. */
+  .uc-focus {
+    padding: 1.143em 1.286em 1.143em;
+  }
+  .uc-focus .ap-eyebrow {
+    margin-bottom: 0.857em;
+  }
+  .uc-focus__t {
+    font-size: 1.286em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .uc-focus__clock {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    margin: 0.571em 0 0.857em !important;
+    font-size: 2.857em;
+    font-weight: 300;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+  }
+  .uc-focus__est {
+    color: var(--ap-muted);
+    font-size: 0.35em;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .uc-focus__ctl {
+    display: flex;
+    gap: 0.429em;
+  }
+  .uc-kept {
+    margin: -0.571em 0 0 18%;
+    width: 78%;
+    padding: 0.857em 1em;
+    background: #0d0d0d;
+  }
+  .uc-kept__h {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-bottom: 0.571em !important;
+    font-size: 0.929em;
+    font-weight: 500;
+  }
+  .uc-kept__h .ap-meta {
+    text-align: right;
+    color: var(--ap-fg);
+  }
+  .uc-kept__row {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 1.857em;
+    font-size: 0.857em;
+  }
+  .uc-kept__d {
+    width: 3em;
+    color: var(--ap-muted);
+  }
+  .uc-kept__bar {
+    flex: 1;
+    height: 0.429em;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--ap-muted) calc(var(--w) * 100%), var(--ap-line) 0);
+  }
+  .uc-kept__row.is-now .uc-kept__bar {
+    background: linear-gradient(90deg, var(--ap-primary) calc(var(--w) * 100%), var(--ap-line) 0);
+  }
+
+  /* A booking page, as the guest sees it in a browser. */
+  .uc-book {
+    padding: 0;
+  }
+  .uc-book__url {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4em;
+    height: 2.286em;
+    border-bottom: 1px solid var(--ap-line);
+    background: #0d0d0d;
+    color: var(--ap-muted);
+    font-size: 0.786em;
+  }
+  .uc-book__in {
+    display: grid;
+    gap: 0.571em;
+    padding: 1.143em 1.286em 1em;
+  }
+  .uc-book__t {
+    font-size: 1.286em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .uc-book__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .uc-book__meta :global(.ap-i:not(:first-child)) {
+    margin-left: 0.6em;
+  }
+  .uc-book__days {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.429em;
+    margin-top: 0.286em;
+  }
+  .uc-book__day {
+    display: grid;
+    justify-items: center;
+    gap: 0.143em;
+    padding: 0.429em 0;
+    border-radius: 0.571em;
+    box-shadow: inset 0 0 0 1px var(--ap-line);
+    color: var(--ap-muted);
+  }
+  .uc-book__day b {
+    color: var(--ap-fg);
+    font-weight: 500;
+    font-size: 1.071em;
+  }
+  .uc-book__day.is-on {
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .uc-book__times {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.429em;
+  }
+  .uc-book__time {
+    display: grid;
+    place-items: center;
+    height: 2.143em;
+    border-radius: 0.571em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    font-size: 0.929em;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .uc-book__time.is-on {
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+    box-shadow: none;
+  }
+  .uc-book__done {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    margin-top: 0.286em !important;
+    padding: 0.571em 0.714em;
+    border-radius: 0.571em;
+    background: var(--ap-hover);
+    font-size: 0.929em;
+  }
+  .uc-book__foot {
+    padding: 0.571em 1.286em 0.714em;
+    border-top: 1px solid var(--ap-line);
+    text-align: center;
+  }
+
+  /* A note: the crumb, the title, a line with a mention, checkbox lines and task lines. */
+  .uc-note {
+    padding: 1.143em 1.429em 1.429em;
+    overflow: visible;
+  }
+  .uc-note__crumb {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+  }
+  .uc-note__title {
+    margin: 0.5em 0 0.4em !important;
+    font-size: 1.571em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .uc-note__p {
+    margin-bottom: 0.857em !important;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    line-height: 1.75;
+  }
+  .uc-note__line {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 2.143em;
+    font-size: 0.929em;
+  }
+  .uc-note__line.is-new {
+    margin: 0 -0.571em;
+    padding: 0 0.571em;
+    border-radius: 0.571em;
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .uc-note__box {
+    flex: none;
+    width: 1.231em;
+    height: 1.231em;
+    border-radius: 50%;
+    border: 1px solid rgb(164 164 164 / 0.55);
+  }
+  .uc-note__box.is-square {
+    border-radius: 0.25em;
+  }
+  .uc-note__chip {
+    padding: 0 0.5em;
+    border-radius: 0.333em;
+    background: rgb(0 0 0 / 0.8);
+    color: var(--ap-muted);
+    font-size: 0.923em;
+    white-space: nowrap;
+  }
+  .uc-note__keys {
+    position: absolute;
+    right: 5%;
+    bottom: -1.3em;
+    display: flex;
+    gap: 0.286em;
+    padding: 0.429em;
+    border-radius: 0.714em;
+    background: var(--ap-muted-bg);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-hairline),
+      0 1em 2em rgb(0 0 0 / 0.7);
+    font-size: 1.214em;
+  }
+  .uc-note__keys .ap-kbd {
+    min-width: 1.8em;
+    height: 1.8em;
+    color: var(--ap-fg);
+  }
+
+  /* A contact or company page: everything linked, with how it links. */
+  .uc-ct {
+    padding: 1.143em 1.286em 0.571em;
+  }
+  .uc-ct__head {
+    display: flex;
+    align-items: center;
+    gap: 0.857em;
+    margin-bottom: 0.857em;
+  }
+  .uc-ct__name {
+    font-size: 1.286em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .uc-ct__row {
+    display: grid;
+    gap: 0.286em;
+    padding: 0.571em 0;
+    border-top: 1px solid var(--ap-line);
+  }
+  .uc-ct__row .ap-eyebrow {
+    font-size: 0.714em;
+  }
+  .uc-ct__item,
+  .uc-as__link {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    font-size: 0.929em;
+  }
+  .uc-ct__item :global(.ap-i),
+  .uc-as__link :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .uc-ct__rel {
+    flex: none;
+    padding: 0.071em 0.5em;
+    border-radius: 0.333em;
+    background: var(--ap-chip);
+    color: var(--ap-muted);
+    font-size: 0.857em;
+  }
+
+  /* Home: three of the dashboard's widgets. */
+  .uc-home {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: 0.571em;
+  }
+  .uc-home__w {
+    padding: 0.714em 0.857em 0.857em;
+  }
+  .uc-home__tasks {
+    grid-row: span 2;
+  }
+  .uc-home__chat {
+    grid-column: 1 / -1;
+  }
+  .uc-home__h {
+    margin-bottom: 0.429em !important;
+    font-size: 0.929em;
+    font-weight: 500;
+  }
+  .uc-home__row {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.286em;
+    box-shadow: inset 0 -1px 0 var(--ap-line);
+    font-size: 0.929em;
+  }
+  .uc-home__row:last-child {
+    box-shadow: none;
+  }
+  .uc-home__ev {
+    margin-top: 0.429em !important;
+    padding: 0.286em 0.571em;
+    border-radius: 0.429em;
+    border: 1px solid rgb(238 238 238 / 0.3);
+    background: rgb(238 238 238 / 0.08);
+    font-size: 0.857em;
+  }
+  .uc-home__ev b {
+    font-weight: 500;
+  }
+  .uc-home__msg {
+    display: flex;
+    gap: 0.571em;
+    font-size: 0.929em;
+    line-height: 1.5;
+  }
+
+  /* A task's details with its assignee, and the picker that set it. */
+  .uc-as {
+    padding: 1.143em 1.286em 1em;
+    margin-right: 22%;
+  }
+  .uc-as__t {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    margin-bottom: 0.857em !important;
+    font-size: 1.143em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .uc-as__t .ap-status {
+    width: 1.1em;
+    height: 1.1em;
+  }
+  .uc-as__props {
+    display: grid;
+    grid-template-columns: 6em 1fr;
+    row-gap: 0.429em;
+    margin: 0 0 0.857em;
+    font-size: 0.929em;
+  }
+  .uc-as__props dt {
+    color: var(--ap-muted);
+  }
+  .uc-as__props dd {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0;
+  }
+  .uc-as__cap {
+    margin-bottom: 0.429em !important;
+    font-size: 0.714em;
+  }
+  .uc-pick {
+    position: absolute;
+    right: 0;
+    top: 38%;
+    width: 52%;
+    padding: 0.429em;
+    background: var(--ap-muted-bg);
+    border-color: var(--ap-line-strong);
+  }
+  .uc-pick .ap-field {
+    margin-bottom: 0.286em;
+    background: #0d0d0d;
+  }
+  .uc-pick__p {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.143em;
+    padding: 0 0.571em;
+    border-radius: 0.5em;
+    font-size: 0.929em;
+  }
+  .uc-pick__p.is-on {
+    background: var(--ap-active);
+  }
+
+  /* A channel: linked to its project, a message with its tools, a thread wrapped up. */
+  .uc-ch {
+    padding: 0.857em 1em 1em;
+  }
+  .uc-ch__head {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding-bottom: 0.714em;
+    margin-bottom: 0.571em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .uc-ch__link {
+    margin-left: auto;
+  }
+  .uc-ch__wrapped {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0 0 0.429em 2.9em !important;
+    padding: 0.286em 0.571em;
+    border-radius: 0.5em;
+    background: var(--ap-hover);
+    width: fit-content;
+  }
+  .uc-ch__msg {
+    position: relative;
+    display: flex;
+    gap: 0.714em;
+    padding: 0.571em 0.429em;
+    border-radius: 0.571em;
+  }
+  .uc-ch__msg.is-hover {
+    background: var(--ap-hover);
+  }
+  .uc-ch__body {
+    margin-top: 0.143em !important;
+    color: rgb(250 250 250 / 0.88);
+    font-size: 0.964em;
+    line-height: 1.5;
+  }
+  .uc-ch__flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    margin-top: 0.429em !important;
+    padding: 0.143em 0.5em;
+    border-radius: 0.333em;
+    background: var(--ap-chip);
+  }
+  .uc-ch__tools {
+    position: absolute;
+    right: 0.571em;
+    top: -1.143em;
+    display: flex;
+    align-items: center;
+    gap: 0.143em;
+    padding: 0.214em;
+    border-radius: 0.571em;
+    background: var(--ap-muted-bg);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-hairline),
+      0 0.6em 1.4em rgb(0 0 0 / 0.6);
+  }
+
+  /* A key's reach, and a role's: one row per module, None, View or Edit. */
+  .uc-key {
+    padding: 1em 1.143em 0.857em;
+  }
+  .uc-key__head,
+  .uc-mem__h {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    margin-bottom: 0.714em !important;
+  }
+  .uc-mem__h {
+    gap: 0.4em;
+    font-size: 0.929em;
+    font-weight: 500;
+  }
+  .uc-key__ico {
+    display: grid;
+    place-items: center;
+    width: 2.286em;
+    height: 2.286em;
+    border-radius: 0.571em;
+    background: var(--ap-muted-bg);
+    color: var(--ap-muted);
+  }
+  .uc-lv {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 2.286em;
+    border-top: 1px solid var(--ap-line);
+    font-size: 0.929em;
+  }
+  .uc-key__foot {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-top: 0.571em !important;
+  }
+  .uc-mem {
+    padding: 0.857em 1em;
+    margin-right: 18%;
+  }
+  .uc-mem__p {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 2.571em;
+    margin: 0 -0.429em;
+    padding: 0 0.429em;
+    border-radius: 0.571em;
+    font-size: 0.929em;
+  }
+  .uc-mem__p.is-on {
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .uc-mem__role {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+  }
+  .uc-role {
+    margin: -0.857em 0 0 30%;
+    width: 70%;
+    padding: 0.857em 1em 0.571em;
+    background: #0d0d0d;
+  }
+</style>

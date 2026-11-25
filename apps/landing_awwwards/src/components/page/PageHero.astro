@@ -1,0 +1,181 @@
+---
+// An inner page's first screen, in the module pages' grammar: the page's name on top at display
+// size, the line and the words bottom left, and the family's chain bottom right (each stroke a
+// page of the family, this one lit). The line and the lead paint with the HTML (the first screen's
+// largest text); the actions arrive with the intro. Slots: `cta` (the actions), `note` (a quiet
+// line under them), `aside` (replaces the chain). A reference page (the help center and its
+// guides) opens `compact`: the name at section size, the chain beside the words, so what you came
+// to look up starts on the first screen.
+import "../../styles/page.css";
+import ChainNav from "../ChainNav.astro";
+import { families, familyLabel, pages, type Family, type PageSlug } from "../../data/pages";
+
+interface Props {
+  /** The page's one word or two, set as the h1. */
+  name: string;
+  line: string;
+  lead?: string;
+  /** The chain of the page's family, with this page lit. */
+  family?: Family;
+  current?: PageSlug;
+  /** A way back up, set small above the name (guides under the help center). */
+  up?: { href: string; label: string };
+  compact?: boolean;
+  class?: string;
+}
+const { name, line, lead, family, current, up, compact, class: className } = Astro.props;
+const members = family ? families[family] : [];
+const items = members.map((slug) => ({ href: pages[slug].href, label: pages[slug].name, name: pages[slug].label ?? pages[slug].name }));
+const lit = current ? (members as readonly PageSlug[]).indexOf(current) : -1;
+---
+
+<section class:list={["ph", compact && "ph--compact", className]} aria-labelledby="ph-title">
+  <div class="ph__in wrap grid">
+    {
+      up && (
+        <a class="ph__up back" href={up.href}>
+          <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+            <path d="M12 7H2.5M6.5 3l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+          </svg>
+          {up.label}
+        </a>
+      )
+    }
+    <h1 class:list={["ph__name", compact ? "t-xl" : "t-mega"]} id="ph-title">{name}</h1>
+    <div class="ph__copy">
+      <p class="ph__line t-l">{line}</p>
+      {lead && <p class="ph__lead muted">{lead}</p>}
+      {
+        Astro.slots.has("cta") && (
+          <div class="ph__cta" data-reveal data-intro data-delay="0.3">
+            <slot name="cta" />
+          </div>
+        )
+      }
+      <slot name="note" />
+    </div>
+    {
+      Astro.slots.has("aside") ? (
+        <div class="ph__aside">
+          <slot name="aside" />
+        </div>
+      ) : (
+        family && (
+          <div class="ph__aside ph__chain" style={`--n:${items.length}`}>
+            <ChainNav id={`ph-${family}`} label={familyLabel[family]} items={items} current={lit} class="ph__nav" />
+          </div>
+        )
+      )
+    }
+  </div>
+</section>
+
+<style>
+  .ph__in {
+    grid-template-rows: auto auto auto;
+    row-gap: clamp(2rem, 6svh, 4rem);
+    padding-top: calc(var(--nav-h) + clamp(2rem, 7svh, 5.5rem));
+    padding-bottom: calc(var(--u) * 6);
+  }
+  .ph__up {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
+    margin-bottom: calc(-1 * clamp(1rem, 4svh, 2.5rem));
+  }
+  /* Without a way back up its row is empty, but the row gap would still push the name down. */
+  .ph__in:not(:has(.ph__up)) .ph__name {
+    margin-top: calc(-1 * clamp(2rem, 6svh, 4rem));
+  }
+  .ph__name {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    margin-left: -0.055em;
+    white-space: nowrap;
+  }
+  .ph__copy {
+    grid-column: 1 / span 5;
+    grid-row: 3;
+    align-self: end;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .ph__line {
+    font-weight: var(--w-text);
+    max-width: 22ch;
+  }
+  .ph__lead {
+    max-width: 34rem;
+  }
+  .ph__cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .ph__aside {
+    grid-column: 7 / -1;
+    grid-row: 3;
+    align-self: end;
+  }
+  /* A short family (three to five strokes) keeps the strokes the size six would have. */
+  .ph__chain :global(.ph__nav) {
+    width: calc(var(--n) / 6 * 100%);
+    margin-left: auto;
+  }
+  .ph--compact .ph__in {
+    row-gap: clamp(1.25rem, 3.5svh, 2.25rem);
+    padding-top: calc(var(--nav-h) + clamp(1.5rem, 5svh, 3.5rem));
+    padding-bottom: calc(var(--u) * 4);
+  }
+  .ph--compact .ph__up {
+    margin-bottom: calc(-1 * clamp(0.5rem, 2svh, 1.25rem));
+  }
+  .ph--compact .ph__name {
+    margin-left: -0.045em;
+  }
+  .ph--compact .ph__copy {
+    grid-column: 1 / span 6;
+  }
+  .ph--compact .ph__aside {
+    grid-column: 8 / -1;
+    grid-row: 2 / span 2;
+  }
+  @media (orientation: landscape) and (max-height: 500px) {
+    .ph__chain {
+      max-width: 120svh;
+    }
+  }
+  @media (max-width: 900px) {
+    .ph__in {
+      grid-template-rows: auto;
+    }
+    .ph__aside {
+      grid-row: 3;
+      grid-column: 1 / -1;
+    }
+    .ph__chain :global(.ph__nav) {
+      margin-left: 0;
+    }
+    .ph__copy {
+      grid-row: 4;
+      grid-column: 1 / -1;
+    }
+    .ph__name {
+      /* Twelve letters ("Integrations") still fit a 390 px phone. */
+      font-size: clamp(3.25rem, 15.5vw, 6rem);
+      white-space: normal;
+    }
+    /* Compact on a phone: the name, the words, then the chain, small, under them. */
+    .ph--compact .ph__name {
+      font-size: var(--t-xl);
+    }
+    .ph--compact .ph__aside {
+      grid-row: 4;
+      grid-column: 1 / -1;
+    }
+    .ph--compact .ph__copy {
+      grid-row: 3;
+      grid-column: 1 / -1;
+    }
+  }
+</style>

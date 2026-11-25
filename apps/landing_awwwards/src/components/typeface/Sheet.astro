@@ -1,0 +1,819 @@
+---
+// The type page (DESIGN.md §20): one specimen sheet, read by one camera, endless. The name stands
+// at the sheet's head as the h1 sets it; the scroll turns it over as metal type is cast (it reads
+// moduo), parts it into oud and dom at the d they share and runs its weight; then reads down the
+// sheet to the pangram and closes in on a kreska, along to the clock, down to the set, where
+// every character is drawn in turn with its points and handles, back until the whole sheet shows,
+// and into the name again, where the scroll starts over. Everything is drawn in one SVG, in the
+// font's units: the name one path per letter (motion/typeface.ts redraws them from the two
+// masters as the weight moves), the pangram with its marks apart, the clock from the tabular
+// figures and the raised colon, the glyphs as text in Oudom and the plate from their outlines.
+// Without motion: the h1, the sheet as a still figure under it, and the story as words.
+import font from "../../data/typeface/font.json";
+import { typeface } from "../../data/site";
+import { advance, flatten, type FontData, glyphName, layout, lerp, mixOf, outlines, pathD } from "../../lib/typeface";
+import { LOCKUP } from "../../lib/brand";
+import { glyphParts, PLATE, setChars } from "../../lib/typeface-glyph";
+
+const F = font as unknown as FontData;
+const c = typeface;
+const fix = (v: number) => v.toFixed(1);
+// The h1's weight and tracking (CSS below: --w-ui, -0.01em), so the drawing lies exactly over it.
+const T0 = mixOf(500);
+const TRACK = -10;
+const box = (cs: { pts: { x: number; y: number }[] }[], s = 1, ox = 0, oy = 0) => {
+  const pts = cs.flatMap((k) => flatten(k.pts as never, 6));
+  const xs = pts.map(([x]) => ox + x * s);
+  const ys = pts.map(([, y]) => oy - y * s);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+};
+
+// ── The head: oudom, a path per letter, and a second d for dom, lying on the first until the
+// name parts at it.
+const HEAD = "oudom";
+const xsAt = (t: number) => layout(F, HEAD, t).glyphs.map((g, i) => g.x + TRACK * i);
+const [xL, xB] = [xsAt(0), xsAt(1)];
+const head = layout(F, HEAD, T0).glyphs.map((g, i) => ({
+  g: g.name,
+  x: lerp(xL[i], xB[i], T0),
+  xL: xL[i],
+  xB: xB[i],
+  d: pathD(outlines(F, g.name, T0)),
+}));
+const HW = head[4].x + advance(F.glyphs[head[4].g], T0);
+const glyphOf = (n: string) => [n, { u: [], w: F.glyphs[n].w, c: F.glyphs[n].c, ...(F.glyphs[n].k ? { k: F.glyphs[n].k } : {}) }];
+// Oud and dom: the name parts at the d, each word keeping one (so the two move apart by a d and
+// a word space), and a gloss under each.
+const dEnd = head[2].x + advance(F.glyphs.d, T0);
+const PART = advance(F.glyphs.d, T0) + 480;
+const halvesX = [dEnd / 2 - PART / 2, (head[2].x + HW) / 2 + PART / 2];
+const HALF_Y = 360;
+
+// ── The sheet under the head: wider than the name, which stands centred over it.
+const SW = Math.round(HW * 1.4);
+const SX = -(SW - HW) / 2;
+const GAP = 560;
+let y = 20 + GAP;
+
+// The home page's line at five weights, 300 to 700, a row each, flush left, so their right ends
+// step out as the weight grows. The weights beat runs one live row down them, Light to Bold,
+// setting a row down at every hundred. Each glyph's place at Light and at Bold: kerning and
+// advances are straight mixes of the masters, so its place at any weight is one lerp away.
+const STEPS = [0, 0.25, 0.5, 0.75, 1];
+const lineAt = (t: number) => layout(F, c.line, t).glyphs.map((g, i) => ({ name: g.name, char: g.char, x: g.x + TRACK * i }));
+const [lineL, lineB] = [lineAt(0), lineAt(1)];
+const line = lineL.map((g, i) => ({ g: g.name, xL: g.x, xB: lineB[i].x })).filter((g, i) => lineL[i].char !== " ");
+const lineW = (t: number) => {
+  const L = layout(F, c.line, t);
+  return L.width + TRACK * (L.glyphs.length - 1);
+};
+const LGUT = 420;
+const sL = (SW - LGUT) / lineW(1);
+// Flush with the name's left edge; the weights hang in the margin left of it.
+const LX = 0;
+const LP = 980 * sL;
+const LY0 = y + 740 * sL;
+const lineD = (t: number, oy: number) =>
+  line.map((g) => pathD(outlines(F, g.g, t, lerp(g.xL, g.xB, t), 0), sL, LX, oy)).join("");
+const stack = STEPS.map((t, k) => ({ y: LY0 + k * LP, d: lineD(t, LY0 + k * LP), w: Math.round(300 + 400 * t) }));
+const stackBox = [LX - LGUT, y, LX + SW - LGUT, LY0 + 4 * LP + 210 * sL];
+const glyphs = Object.fromEntries([...new Set([...head.map((l) => l.g), ...line.map((g) => g.g)])].flatMap((n) => {
+  const base = (F.glyphs[n].k ?? []).map(([b]) => b);
+  return [n, ...base].map(glyphOf);
+}));
+const sepStack = [20 + GAP / 2, stackBox[3] + GAP * 0.4];
+y = stackBox[3] + GAP * 0.8;
+
+// The pangram, a path per letter, its marks (the kreskas, ogonki, the dot of ż and the stroke
+// through ł) apart from their letters so they can drop onto them. The ś is marked: the camera
+// closes in on it.
+const P = layout(F, c.pangram, T0);
+const PW = P.glyphs.reduce((w, g, i) => Math.max(w, g.x + TRACK * i + g.w), 0);
+const sP = SW / PW;
+type Contours = ReturnType<typeof outlines>;
+const pLetters: { base: Contours; mark: Contours; s: boolean }[] = [];
+P.glyphs.forEach((g, gi) => {
+  if (g.char === " ") return;
+  const cs = outlines(F, g.name, T0, g.x + TRACK * gi, 0);
+  const isMark = (k: (typeof cs)[number], ci: number) => k.from.endsWith("comb") || (g.name === "lslash" && ci === 1);
+  pLetters.push({ base: cs.filter((k, ci) => !isMark(k, ci)), mark: cs.filter(isMark), s: g.name === "sacute" });
+});
+const pAll = pLetters.flatMap((l) => [...l.base, ...l.mark]);
+const yP = y - box(pAll, sP)[1];
+const pBox = box(pAll, sP, SX, yP);
+let markAt = 0;
+const pangram = pLetters.map((l) => ({
+  base: pathD(l.base, sP, SX, yP),
+  mark: l.mark.length ? pathD(l.mark, sP, SX, yP) : "",
+  i: l.mark.length ? markAt++ : -1,
+  s: l.s,
+}));
+const sacute = box(pLetters.filter((l) => l.s).flatMap((l) => [...l.base, ...l.mark]), sP, SX, yP);
+y = pBox[3] + GAP * 0.8;
+
+// The clock: the time in tabular figures at Light, the colon raised to sit level with them, the
+// seconds small at the figures' top.
+const TC = 0;
+const FIG = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const figs = FIG.map((n) => pathD(outlines(F, `${n}.tf`, TC)));
+const colon = pathD(outlines(F, "colon.case", TC));
+const TF = advance(F.glyphs["zero.tf"], TC);
+const CW = advance(F.glyphs["colon.case"], TC);
+const FIG_H = box(outlines(F, "zero.tf", TC))[1];
+const sC = (SW * 0.42) / (4 * TF + CW);
+const yC = y - FIG_H * sC;
+const sS = sC * 0.34;
+const clockX = [0, TF, 2 * TF + CW, 3 * TF + CW].map((x) => SX + x * sC);
+const colonX = SX + 2 * TF * sC;
+const secX = [4 * TF + CW + 40, 4 * TF + CW + 40 + TF * 0.34].map((x) => SX + x * sC);
+const secY = y - FIG_H * sS;
+// The app's numbers beside it, from the seventh column.
+const NX = SX + SW * 0.6;
+const NS = 72;
+const numbers = c.numbers.map((n, i) => ({ text: n, y: y + NS * 0.9 + i * NS * 1.55 }));
+const clockBox = [SX, y, SX + SW, yC];
+const figsBox = [SX, y, secX[1] + TF * sS, yC];
+y = yC + GAP * 0.8;
+
+// The set: every character, in rows, in order of code point, left; the plate right, where the
+// last beat draws them one at a time with their points and handles (the g until it starts).
+const chars = setChars(F).map((c) => c.ch);
+const WW = SW * 0.55;
+const PER = 28;
+const cell = WW / PER;
+const WS = cell * 0.74;
+const rows = Array.from({ length: Math.ceil(chars.length / PER) }, (_, r) => chars.slice(r * PER, r * PER + PER));
+const wallY = y + WS * 0.75;
+const pitch = WS * 1.55;
+const xsRow = (n: number) => Array.from({ length: n }, (_, i) => fix(SX + cell * (i + 0.5))).join(" ");
+// The en and em dash are drawn, not typed: as text they'd read as dashes in the page's copy. Their
+// cells hold a no-break space, so the row keeps its places.
+const DRAWN = ["–", "—"];
+const drawn = rows.flatMap((r, ri) =>
+  r.flatMap((ch, ci) => {
+    if (!DRAWN.includes(ch)) return [];
+    const name = glyphName(F, ch)!;
+    const s = WS / 1000;
+    const x = SX + cell * (ci + 0.5) - (advance(F.glyphs[name], mixOf(400)) * s) / 2;
+    return [pathD(outlines(F, name, mixOf(400)), s, x, wallY + ri * pitch)];
+  }),
+);
+const wallBox = [SX, wallY - WS, SX + WW, wallY + (rows.length - 1) * pitch + WS * 0.3];
+const PLW = SW * 0.4;
+const sPl = PLW / PLATE.w;
+const plateX = SX + SW - PLW / 2;
+const plateY = wallBox[1] + PLATE.top * sPl;
+const lines = [F.metrics.asc, F.metrics.cap, F.metrics.xh, 0, F.metrics.desc];
+const first = glyphParts(F, "g", T0);
+const readY = PLATE.bot + 110;
+const plateBox = [plateX - PLW / 2, wallBox[1], plateX + PLW / 2, plateY + readY * sPl + 40];
+const glyphsBox = [SX, wallBox[1], SX + SW, Math.max(wallBox[3], plateBox[3])];
+const hex = (u: number) => `U+${u.toString(16).toUpperCase().padStart(4, "0")}`;
+const reading = (ch: string, parts: { strokes: number; adv: number }) =>
+  `${ch}   ${hex(ch.codePointAt(0)!)}   ${parts.strokes} ${parts.strokes === 1 ? "stroke" : "strokes"}   ${Math.round(parts.adv)} wide`;
+y = glyphsBox[3] + GAP * 0.8;
+const IS = 84;
+const imprintY = y + IS;
+
+// ── The poster: at the end the scene keeps three things and sets them as a poster, with no
+// rules: the name and, flush under it, the home page's line at five weights (their weights hung
+// in the margin), and the plate's glyph, three and a half times the size, standing at the right and still
+// drawn glyph after glyph with its points and handles. A head of facts in three columns over the
+// name; at the foot, the Moduo lockup and the imprint on the left, the glyph's reading on the
+// right. The pangram, the clock and the set step out.
+const PH = 88;
+const RIGHT = LX + SW - LGUT;
+const posterY = -760 - 560;
+const posterHead = c.poster.head.map((col, i) => ({
+  x: i === 0 ? LX : i === 1 ? LX + (RIGHT - LX) * 0.5 : RIGHT,
+  end: i === 2,
+  lines: col.map((t, j) => ({ t, y: posterY - (col.length - 1 - j) * PH * 1.3 })),
+}));
+const PS = 3.5;
+const posterPlate = { x: LX + (RIGHT - LX) * 0.68, y: stackBox[3] + GAP * 0.8 + F.metrics.asc * PS, k: PS };
+// The foot sits on the glyph's descender line.
+const footY = posterPlate.y - F.metrics.desc * PS;
+const lockH = 300;
+const [, , lvw, lvh] = LOCKUP.viewBox.split(" ").map(Number);
+const lockW = (lockH * lvw) / lvh;
+const lockY = footY - IS * 2.6 - lockH;
+const poster = [LX - 760, posterY - 2 * PH * 1.3 - PH - 520, RIGHT + 620, footY + 560];
+const sheet = poster;
+
+const data = JSON.stringify({
+  glyphs,
+  head: head.map(({ g, xL, xB }) => ({ g, xL, xB })),
+  t0: T0,
+  // The h1's box: CSS tracks after the last letter too.
+  boxW: HW + TRACK,
+  // Its line box's middle over the baseline (line-height 1, the font's own ascent and descent).
+  mid: -(F.metrics.lineAsc + F.metrics.lineDesc) / 2,
+  part: PART,
+  // The home page's line: each glyph at Light and at Bold, its scale, its rows.
+  line: { glyphs: line, s: sL, x: LX, y0: LY0, pitch: LP },
+  // The set's cells and the plate, for the lit cell and the glyph drawn.
+  wall: { x: SX, cell, y: wallY, pitch, per: PER, ws: WS },
+  plate: { readY, sheet: { x: plateX, y: plateY, k: sPl }, poster: posterPlate },
+  boxes: {
+    pangram: pBox,
+    sacute,
+    clock: clockBox,
+    figures: figsBox,
+    glyphs: glyphsBox,
+    plate: plateBox,
+    sheet,
+    halves: [-PART / 2 - 260, -760 - 120, HW + PART / 2 + 260, HALF_Y + 140],
+    stack: stackBox,
+  },
+});
+// Without motion the story is words, each over a small figure drawn from the same outlines
+// (the sheet above them has the figures, the pangram and every glyph).
+const set = (text: string, t: number, ox = 0, oy = 0) => {
+  const L = layout(F, text, t);
+  const d = L.glyphs.map((g, i) => pathD(outlines(F, g.name, t, g.x + TRACK * i, 0), 1, ox, oy)).join("");
+  return { d, w: L.width + TRACK * (L.glyphs.length - 1) };
+};
+const vb = (x: number, y0: number, w: number, h: number) => [x, y0, w, h].map(fix).join(" ");
+const turned = set("moduo", T0);
+const oud = set("oud", T0);
+const dom = set("dom", T0, oud.w + 480);
+const light = set(HEAD, 0);
+const bold = set(HEAD, 1, 0, 900);
+const sAlone = pathD(outlines(F, "sacute", T0));
+// The time as the clock sets it: tabular figures and the raised colon, at Light.
+const timeAt = [0, TF, 2 * TF, 2 * TF + CW, 3 * TF + CW];
+const time = ["zero.tf", "nine.tf", "colon.case", "one.tf", "two.tf"]
+  .map((n, i) => pathD(outlines(F, n, TC, timeAt[i], 0)))
+  .join("");
+const sample = set("Aa Ąą Łł Źź 0123", T0);
+const stills: Record<string, { vb: string; paths: string[] }> = {
+  turn: { vb: vb(-40, -800, turned.w + 80, 860), paths: [turned.d] },
+  rule: { vb: vb(-40, -800, oud.w + 480 + dom.w + 80, 860), paths: [oud.d, dom.d] },
+  weights: { vb: vb(-40, -800, Math.max(light.w, bold.w) + 80, 1760), paths: [light.d, bold.d] },
+  kreska: { vb: vb(-40, -820, advance(F.glyphs.sacute, T0) + 80, 880), paths: [sAlone] },
+  figures: { vb: vb(-40, -800, 4 * TF + CW + 80, 860), paths: [time] },
+  set: { vb: vb(-40, -800, sample.w + 80, 1060), paths: [sample.d] },
+};
+// A beat's words, with its link where it has one.
+const words = (b: (typeof c.beats)[number]) => {
+  if (!("link" in b)) return [{ text: b.text }];
+  const [before, after] = b.text.split(b.link.text);
+  return [{ text: before }, { text: b.link.text, href: b.link.href }, { text: after }];
+};
+// Without motion the h1 stands for the head: the still figure starts at the home page's line.
+const stillVB = [SX - 60, stackBox[1] - 120, SW + 120, imprintY + 120 - stackBox[1] + 120].map(fix).join(" ");
+const band = "M-9000 -9000H9000V9000H-9000Z";
+---
+
+<section class="tf" aria-labelledby="tf-title" data-tf>
+  <div class="tf__stage">
+    <h1 class="tf__h1" id="tf-title">
+      <span class="tf__kicker t-xs">{c.kicker}</span>
+      <span class="tf__one" style={`--box:${((HW + TRACK) / 1000).toFixed(4)}em`}>{c.name}</span>
+    </h1>
+    <p class="tf__lead">{c.lead}</p>
+    <p class="tf__spec t-xs tabular">
+      {
+        c.spec.map((item, i) => (
+          <>
+            {i > 0 && " · "}
+            <span>{item}</span>
+          </>
+        ))
+      }
+    </p>
+    <svg class="tf__sheet" viewBox={stillVB} preserveAspectRatio="xMidYMid meet" role="img" aria-label={c.still} data-tf-svg data-tf={data}>
+      <defs>
+        {figs.map((d, i) => <path id={`tf-fig-${i}`} d={d} />)}
+        <path id="tf-colon" d={colon} />
+        {/* The plate's two 45° edges, in its own units: what the next glyph has drawn in (in),
+            and what has been wiped for it (out). */}
+        {/* The slot the live row comes out of, under the row it was last set down at. */}
+        <clipPath id="tf-slot"><rect data-tf-slot x={fix(SX)} y="0" width={fix(SW + 200)} height="0" /></clipPath>
+        <clipPath id="tf-in"><path data-tf-in d={band} /></clipPath>
+        <clipPath id="tf-out"><path data-tf-out d={band} /></clipPath>
+      </defs>
+
+      <g class="tf__head" data-tf-head>
+        {
+          [...head, head[2]].map((l, i) => (
+            <g data-tf-l={i} transform={`translate(${fix(l.x)} 0)`}>
+              <path class="tf__part" d={l.d} />
+            </g>
+          ))
+        }
+        <g class="tf__halves" data-tf-halves>
+          {
+            c.halves.map((h, i) => (
+              <text class="tf__label" x={fix(halvesX[i])} y={HALF_Y} text-anchor="middle" data-tf-half={i}>
+                {h}
+              </text>
+            ))
+          }
+        </g>
+      </g>
+
+      {/* The home page's line, a row at every hundred, and the live row the weights beat runs. */}
+      <g class="tf__stack" data-tf-stack>
+        {
+          stack.map((r, k) => (
+            <g data-tf-step={k}>
+              <path class="tf__ink" d={r.d} />
+              <text class="tf__wt" x={fix(LX - 380)} y={fix(r.y)}>
+                {r.w}
+              </text>
+            </g>
+          ))
+        }
+        <g clip-path="url(#tf-slot)">
+          <path class="tf__ink tf__live" d={stack[0].d} data-tf-live />
+        </g>
+      </g>
+
+      {/* The poster's frame, drawn in at the end. */}
+      <g class="tf__poster" data-tf-poster>
+        <svg class="tf__lockup" x={fix(LX)} y={fix(lockY)} width={fix(lockW)} height={fix(lockH)} viewBox={LOCKUP.viewBox} aria-hidden="true">
+          <path d={LOCKUP.mark} fill-rule="evenodd" clip-rule="evenodd" />
+          <path d={LOCKUP.word} />
+        </svg>
+        <g class="tf__small tf__imprint tf__pfoot" font-size={IS}>
+          <text x={fix(LX)} y={fix(footY - IS * 1.3)}>{c.imprint[0]}</text>
+          <text x={fix(LX)} y={fix(footY)}>{c.imprint[1]}</text>
+          <text class="tf__pread" x={fix(RIGHT)} y={fix(footY)} text-anchor="end" data-tf-pread>{reading("g", first)}</text>
+        </g>
+        <g class="tf__phead" font-size={PH}>
+          {
+            posterHead.map((col) =>
+              col.lines.map((l) => (
+                <text x={fix(col.x)} y={fix(l.y)} text-anchor={col.end ? "end" : "start"}>
+                  {l.t}
+                </text>
+              )),
+            )
+          }
+        </g>
+      </g>
+
+      <g class="tf__rows" data-tf-rows>
+        <g data-tf-row="pangram">
+          {
+            pangram.map((l) => (
+              <g class="tf__ink" data-tf-letter={l.s ? "s" : ""}>
+                <path d={l.base} />
+                {l.mark && <path d={l.mark} data-tf-mark={l.i} />}
+              </g>
+            ))
+          }
+        </g>
+        <g data-tf-row="clock">
+          <g class="tf__ink">
+            {clockX.map((x, i) => <use href="#tf-fig-0" transform={`translate(${fix(x)} ${fix(yC)}) scale(${sC.toFixed(4)})`} data-tf-fig={i} />)}
+            <use href="#tf-colon" transform={`translate(${fix(colonX)} ${fix(yC)}) scale(${sC.toFixed(4)})`} />
+            {secX.map((x, i) => <use href="#tf-fig-0" transform={`translate(${fix(x)} ${fix(secY)}) scale(${sS.toFixed(4)})`} data-tf-sec={i} />)}
+          </g>
+          <g class="tf__small" font-size={NS}>
+            {
+              numbers.map((n) => (
+                <text x={fix(NX)} y={fix(n.y)}>
+                  {n.text}
+                </text>
+              ))
+            }
+          </g>
+        </g>
+        <g data-tf-row="glyphs">
+          <g class="tf__wall" font-size={fix(WS)} text-anchor="middle" data-tf-wall>
+            <rect class="tf__lit" x={fix(SX)} y={fix(wallY - WS * 0.95)} width={fix(cell)} height={fix(WS * 1.3)} data-tf-lit />
+            {
+              rows.map((r, i) => (
+                <text x={xsRow(r.length)} y={fix(wallY + i * pitch)}>
+                  {r.map((ch) => (DRAWN.includes(ch) ? " " : ch)).join("")}
+                </text>
+              ))
+            }
+            {drawn.map((d) => <path d={d} />)}
+            <text class="tf__litch" x={fix(SX + cell / 2)} y={fix(wallY)} data-tf-litch />
+          </g>
+          {/* The plate: the glyph at its weight on the metric lines, its advance, its strokes
+              filled with their outlines over them, and its points and handles. */}
+          <g class="tf__plate" transform={`translate(${fix(plateX)} ${fix(plateY)}) scale(${sPl.toFixed(4)})`} data-tf-plate>
+            <g data-tf-guides>
+              {lines.map((l) => <path class="tf__line" d={`M${-PLATE.w / 2} ${-l}H${PLATE.w / 2}`} />)}
+              {
+                lines.map((l) => (
+                  <text class="tf__num" x={-PLATE.w / 2 + 12} y={-l - 14}>
+                    {l}
+                  </text>
+                ))
+              }
+              <path class="tf__adv" d={`M${fix(first.ox)} ${-F.metrics.asc - 60}V${-F.metrics.desc + 60}M${fix(first.ox + first.adv)} ${-F.metrics.asc - 60}V${-F.metrics.desc + 60}`} data-tf-adv />
+              <text class="tf__read" x={-PLATE.w / 2} y={readY} data-tf-read>{reading("g", first)}</text>
+            </g>
+            <g clip-path="url(#tf-out)">
+              <path class="tf__wire" d={first.edge} pathLength="1" data-tf-wire />
+              <g clip-path="url(#tf-in)">
+                <path class="tf__fill" d={first.fill} data-tf-fill />
+                <path class="tf__seam" d={first.edge} data-tf-seam />
+              </g>
+              <path class="tf__hdl" d={first.handles} data-tf-hdl />
+              <path class="tf__off" d={first.offs} data-tf-off />
+              <path class="tf__on" d={first.ons} data-tf-on />
+            </g>
+          </g>
+        </g>
+        <g class="tf__small tf__imprint" font-size={IS} data-tf-row="imprint">
+          <text x={fix(SX)} y={fix(imprintY)}>{c.imprint[0]}</text>
+          <text x={fix(SX + SW)} y={fix(imprintY)} text-anchor="end">{c.imprint[1]}</text>
+        </g>
+      </g>
+    </svg>
+    <ol class="tf__beats">
+      {
+        c.beats.map((b, i) => (
+          <li class="tf__beat" data-tf-beat={i}>
+            {stills[b.id] && (
+              <svg class="tf__still" viewBox={stills[b.id].vb} aria-hidden="true">
+                {stills[b.id].paths.map((d) => (
+                  <path d={d} />
+                ))}
+              </svg>
+            )}
+            <p class="tf__n t-xs tabular" aria-hidden="true">
+              {i + 1} / {c.beats.length}
+              {b.id === "weights" && (
+                <>
+                  {" · weight "}
+                  <span data-tf-wght>500</span>
+                </>
+              )}
+            </p>
+            <h2 class="tf__bt">{b.title}</h2>{" "}
+            <p class="tf__bp">
+              {words(b).map((w) => ("href" in w ? <a class="link" href={w.href}>{w.text}</a> : w.text))}
+            </p>
+          </li>
+        ))
+      }
+    </ol>
+    <p class="tf__cue t-xs" aria-hidden="true" data-tf-cue>{c.cue}</p>
+  </div>
+</section>
+
+<style>
+  /* ── Still (no JS, reduced motion): the name as the h1 sets it, the sheet under it, then the
+     story as words. ── */
+  .tf {
+    padding: calc(var(--nav-h) + var(--u) * 12) 0 calc(var(--u) * 10);
+  }
+  .tf__stage {
+    position: relative;
+    display: grid;
+    /* One column the stage's width: an auto track would grow to the strip's widest line and run
+       off a phone. */
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    align-content: center;
+    min-height: 70svh;
+    text-align: center;
+  }
+  .tf__kicker {
+    justify-self: center;
+    margin-bottom: 1.25rem;
+    color: var(--c-muted);
+    font-weight: var(--w-ui);
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+  }
+  .tf__h1 {
+    display: grid;
+    margin: 0;
+    padding: 0 var(--margin);
+  }
+  /* The name as the drawing sets it: lowercase, as the wordmark sets moduo; its own width and the
+     drawing's tracking, so the drawing can lie exactly over it. */
+  .tf__one {
+    justify-self: center;
+    /* A box the width the name has at the h1's weight: as the weight breathes the word grows
+       from its left edge, which stays put. */
+    width: var(--box);
+    text-align: left;
+    /* As wide as the screen allows, and short enough on a short one that the page around it fits. */
+    font-size: min(24vw, 19rem, 30svh);
+    white-space: nowrap;
+    font-weight: var(--w-ui);
+    line-height: 1;
+    letter-spacing: -0.01em;
+    text-transform: lowercase;
+  }
+  .tf__lead {
+    margin-top: 1.5rem;
+    padding: 0 var(--margin);
+    font-size: var(--t-m);
+    line-height: 1.45;
+    max-width: 34ch;
+    justify-self: center;
+    color: var(--c-muted);
+    text-wrap: balance;
+  }
+  .tf__spec {
+    margin-top: 1.25rem;
+    padding: 0 var(--margin);
+    color: var(--c-muted);
+    letter-spacing: 0.02em;
+  }
+  /* Each fact stays whole when the line wraps. */
+  .tf__spec span {
+    white-space: nowrap;
+  }
+  .tf__cue {
+    display: none;
+  }
+  .tf__sheet {
+    display: block;
+    width: min(100% - 2 * var(--margin), 64rem);
+    height: auto;
+    margin-top: calc(var(--u) * 10);
+    overflow: visible;
+  }
+  .tf__beats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: calc(var(--u) * 5) var(--gutter);
+    width: 100%;
+    max-width: 72rem;
+    margin: calc(var(--u) * 10) 0 0;
+    padding: 0 var(--margin);
+    list-style: none;
+    text-align: left;
+  }
+  .tf__beat {
+    color: var(--c-muted);
+    text-wrap: pretty;
+  }
+  /* The beat's title runs into its words. */
+  .tf__bt {
+    display: inline;
+    margin: 0;
+    color: var(--c-fg);
+    font: inherit;
+    font-weight: var(--w-ui);
+    letter-spacing: inherit;
+  }
+  .tf__bp {
+    display: inline;
+  }
+  .tf__n {
+    display: none;
+  }
+  .tf__still {
+    display: block;
+    width: auto;
+    max-width: 100%;
+    height: 4.5rem;
+    margin-bottom: 1rem;
+    fill: var(--c-fg);
+    isolation: isolate;
+  }
+
+  /* The drawing's parts. */
+  .tf__part,
+  .tf__ink {
+    fill: var(--c-fg);
+  }
+  .tf__halves {
+    display: none;
+  }
+  .tf__label {
+    fill: var(--c-muted);
+    font-size: 80px;
+    font-weight: var(--w-ui);
+    letter-spacing: 0.02em;
+  }
+  /* On a phone the drawing is smaller on screen, so its labels are set larger in it. */
+  @media (max-width: 560px) {
+    .tf__label {
+      font-size: 150px;
+    }
+  }
+  .tf__small {
+    fill: var(--c-muted);
+    font-weight: var(--w-text);
+  }
+  .tf__imprint {
+    fill: var(--c-muted);
+  }
+  .tf__wall {
+    fill: var(--c-fg);
+    font-weight: var(--w-text);
+  }
+  /* The cell being drawn on the plate: Paper, its character in the ground. */
+  .tf__lit {
+    fill: var(--c-fg);
+  }
+  .tf__litch {
+    fill: var(--c-bg);
+  }
+  .tf__lit,
+  .tf__litch {
+    display: none;
+  }
+  .tf__line,
+  .tf__adv {
+    fill: none;
+    stroke: var(--c-line-strong);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  }
+  .tf__adv {
+    stroke-dasharray: 3 4;
+  }
+  .tf__num {
+    fill: var(--c-quiet);
+    font-size: 30px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tf__read {
+    fill: var(--c-muted);
+    font-size: 54px;
+    font-weight: var(--w-text);
+    font-variant-numeric: tabular-nums;
+    white-space: pre;
+  }
+  .tf__fill {
+    fill: var(--c-fg);
+  }
+  /* Every outline over the strokes, in the ground: where one stroke lies on another, it shows. */
+  .tf__seam {
+    fill: none;
+    stroke: var(--c-bg);
+    stroke-width: 1.25px;
+    vector-effect: non-scaling-stroke;
+  }
+  /* The outline as it's drawn in, before the strokes fill. */
+  .tf__wire {
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+    stroke-dasharray: 1;
+    stroke-dashoffset: var(--wire, 0);
+  }
+  .tf__hdl {
+    fill: none;
+    stroke: var(--c-quiet);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  }
+  .tf__off,
+  .tf__on {
+    fill: var(--c-bg);
+    stroke-width: 1px;
+    vector-effect: non-scaling-stroke;
+  }
+  .tf__off {
+    stroke: var(--c-quiet);
+  }
+  .tf__on {
+    stroke: var(--c-fg);
+    stroke-width: 1.25px;
+  }
+  /* On a phone the camera frames the plate alone, smaller on screen: its readout is set larger. */
+  @media (max-width: 560px) {
+    .tf__read {
+      font-size: 66px;
+    }
+  }
+  /* The poster's frame: hairlines, the metric lines' names, its head of facts. */
+  .tf__lockup {
+    fill: var(--c-fg);
+  }
+  .tf__pread {
+    font-variant-numeric: tabular-nums;
+    white-space: pre;
+  }
+  .tf__wt {
+    fill: var(--c-quiet);
+    font-size: 52px;
+    font-weight: var(--w-text);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-variant-numeric: tabular-nums;
+  }
+  .tf__phead {
+    fill: var(--c-fg);
+    font-weight: var(--w-text);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .tf__live,
+  .tf__poster {
+    display: none;
+  }
+  :global(html.motion) .tf__live,
+  :global(html.motion) .tf__poster {
+    display: block;
+  }
+  /* With motion the imprint stands at the poster's foot instead. */
+  :global(html.motion) [data-tf-row="imprint"] {
+    display: none;
+  }
+  /* Without motion the h1 is the head, and the band shows nothing. */
+  .tf__head {
+    display: none;
+  }
+
+  /* ── With motion: one held stage, one camera, the whole sheet. The h1 stays the name (for
+     readers and the first paint); the drawing lies exactly over it and takes over as the scroll
+     starts. ── */
+  :global(html.motion) .tf {
+    height: 1700svh;
+    padding: 0;
+  }
+  :global(html.motion) .tf__stage {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  :global(html.motion) .tf__sheet {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    pointer-events: none;
+    opacity: 0;
+  }
+  :global(html.motion) .tf__head,
+  :global(html.motion) .tf__halves,
+  :global(html.motion) .tf__lit,
+  :global(html.motion) .tf__litch {
+    display: block;
+  }
+  :global(html.motion) .tf__halves {
+    opacity: 0;
+  }
+  /* One endless scene: the footer steps out of the flow (styles/base.css). */
+  :global(html.motion) .tf__beats {
+    display: grid;
+    grid-template-columns: 1fr;
+    position: absolute;
+    left: calc(var(--margin) - 1rem);
+    bottom: calc(var(--u) * 6);
+    width: min(28rem, calc(100% - 2 * var(--margin) + 2rem));
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    z-index: 1;
+  }
+  /* The words sit in a band at the stage's foot that the drawing fades under. On a wide screen
+     the band is only as wide as the words, so the sheet beside them shows whole. */
+  :global(html.motion) .tf__stage::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 30%;
+    background: linear-gradient(transparent, var(--c-bg) 45%);
+    pointer-events: none;
+    /* Not over the name at the start and the end, where the page around it is the frame. */
+    opacity: var(--band, 0);
+  }
+  @media (min-aspect-ratio: 6 / 5) {
+    :global(html.motion) .tf__stage::after {
+      height: 36%;
+      background: linear-gradient(transparent, var(--c-bg) 40%);
+      right: auto;
+      width: min(100%, calc(var(--margin) + 36rem));
+      mask-image: linear-gradient(to right, #000 70%, transparent);
+    }
+  }
+  :global(html.motion) .tf__still {
+    display: none;
+  }
+  :global(html.motion) .tf__n {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--c-muted);
+    letter-spacing: 0.04em;
+  }
+  :global(html.motion) .tf__beat {
+    grid-area: 1 / 1;
+    justify-self: start;
+    padding: 0 1rem;
+    opacity: 0;
+    visibility: hidden;
+  }
+  :global(html.motion) .tf__cue {
+    display: block;
+    position: absolute;
+    left: 50%;
+    bottom: calc(var(--u) * 6);
+    translate: -50% 0;
+    color: var(--c-muted);
+    letter-spacing: 0.08em;
+    z-index: 1;
+  }
+</style>

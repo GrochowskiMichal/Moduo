@@ -1,0 +1,83 @@
+---
+// The Email card's picture: Maciej's message in the reader, the pointer's key on "To task", and the
+// task it turns into, sliding out from under the email with the email still attached
+// (motion/bento.ts plays the press; the still picture is the result).
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+---
+
+<div class="ap mini em" aria-hidden="true" data-mini="email">
+  <div class="ap-panel em-read">
+    <div class="em-top">
+      <span class="ap-av ap-av--n ap-av--24">MA</span>
+      <div class="grow">
+        <p class="ap-sm ap-med">Maciej Grzywacz</p>
+        <p class="ap-xs ap-muted">To: you · 9:12</p>
+      </div>
+      <span class="ap-btn ap-btn--ghost em-totask" data-press><Icon name="list-checks" />To task <span class="ap-kbd" data-key>T</span></span>
+    </div>
+    <p class="em-subj">Open alpha invite</p>
+    <p class="em-body">Final copy for the invite email is in the note. Can you check the links before our 14:00 review?</p>
+  </div>
+  <div class="ap-panel em-task" data-made>
+    <p class="ap-group"><Icon name="chevron-down" />Inbox <span class="ap-meta">· 1 new</span></p>
+    <div class="ap-row is-sel">
+      <span class="ap-status"></span>
+      <span class="ap-row-t grow ap-ell">Review the open alpha invite</span>
+      <span class="ap-meta">Today</span>
+    </div>
+    <p class="em-made" data-attach><Icon name="mail" class="ap-i--sm" />Open alpha invite <span class="ap-muted">· Created from</span></p>
+  </div>
+</div>
+
+<style>
+  .em {
+    left: 6%;
+    top: 0;
+    width: 90%;
+  }
+  .em-read {
+    padding: 1em 1.143em 2.857em;
+  }
+  .em-top {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+  }
+  .em-totask {
+    background: var(--ap-hover);
+  }
+  .em-subj {
+    margin: 1em 0 0.429em;
+    font-size: 1.143em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .em-body {
+    max-width: 36em;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    line-height: 1.6;
+  }
+  /* The task lands on the reader's lower edge, as if it slid out from under the email. */
+  .em-task {
+    position: relative;
+    margin: -1.857em 0 0 16%;
+    width: 76%;
+    padding: 0.571em 0.571em 0.714em;
+    background: #0d0d0d;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 1.5em 3em -1em rgb(0 0 0 / 0.9);
+  }
+  .em-made {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin: 0.429em 0 0 0.571em;
+    font-size: 0.857em;
+  }
+  .em-made :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+</style>

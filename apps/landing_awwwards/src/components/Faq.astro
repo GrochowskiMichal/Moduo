@@ -1,0 +1,142 @@
+---
+// Questions as native disclosure widgets. The marker is two strokes: apart while closed,
+// joined into a window when the answer opens.
+import StrokePair from "./StrokePair.astro";
+
+interface Props {
+  id?: string;
+  title: string;
+  text?: string;
+  items: readonly { q: string; a: string }[];
+  email?: string;
+  /** The home page's display size ("xl"); inner pages set their FAQ as a section ("l"). */
+  size?: "xl" | "l";
+}
+const { id = "faq", title, text, items, email, size = "l" } = Astro.props;
+const [before, after] = text && email ? text.split(email) : [text, undefined];
+---
+
+<section class:list={["faq", `faq--${size}`]} id={id} aria-labelledby={`${id}-title`}>
+  <div class="wrap grid">
+    <div class="faq__head">
+      <h2 class:list={["faq__title", `t-${size}`]} id={`${id}-title`} data-split>{title}</h2>
+      {
+        text && (
+          <p class="faq__text muted" data-reveal>
+            {before}
+            {email && after !== undefined && (
+              <>
+                <a class="link" href={`mailto:${email}`}>
+                  {email}
+                </a>
+                {after}
+              </>
+            )}
+          </p>
+        )
+      }
+    </div>
+    <div class="faq__list">
+      {
+        items.map((item) => (
+          <details class="faq__item">
+            <summary class="faq__q">
+              <span>{item.q}</span>
+              <StrokePair class="faq__mark" size="0.55rem" />
+            </summary>
+            <p class="faq__a muted">{item.a}</p>
+          </details>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .faq {
+    padding: calc(var(--u) * 6) 0;
+  }
+  .faq__head {
+    grid-column: 1 / span 4;
+    display: grid;
+    align-content: start;
+    gap: 1.25rem;
+  }
+  .faq__title {
+    margin-left: -0.04em;
+  }
+  .faq__text {
+    max-width: 24rem;
+  }
+  /* The list hangs on line 5, like every side list; a display-size title needs one column more. */
+  .faq__list {
+    grid-column: 5 / span 8;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .faq--xl .faq__list {
+    grid-column: 6 / span 7;
+  }
+  .faq__item {
+    border-bottom: 1px solid var(--c-line-strong);
+  }
+  .faq__q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.25rem 0;
+    cursor: pointer;
+    list-style: none;
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .faq__q::-webkit-details-marker {
+    display: none;
+  }
+  .faq__q > span:first-child {
+    transition: translate 0.5s var(--ease);
+  }
+  /* Under the pointer the question steps in and its pair closes; the pair stays on the row's
+     right edge (with `> span` it stepped too, past the rule). */
+  @media (hover: hover) {
+    .faq__q:hover > span:first-child {
+      translate: 0.4em 0;
+    }
+    .faq__q:hover :global(.sp) {
+      --g: 1;
+    }
+  }
+  .faq__q:focus-visible {
+    outline-offset: 4px;
+  }
+  .faq__item[open] .faq__q :global(.sp) {
+    --g: 1;
+  }
+  .faq__a {
+    padding: 0 0 1.5rem;
+    max-width: 38rem;
+  }
+  .faq__item[open] .faq__a {
+    animation: faq-in 0.5s var(--ease);
+  }
+  @keyframes faq-in {
+    from {
+      opacity: 0;
+      translate: -12px 0;
+    }
+  }
+  /* One column on a phone, the home page's display-size FAQ included (its list rule is more
+     specific, so it is named here too). */
+  @media (max-width: 900px) {
+    .faq__head,
+    .faq__list,
+    .faq--xl .faq__list {
+      grid-column: 1 / -1;
+    }
+    .faq__list {
+      margin-top: calc(var(--u) * 5);
+    }
+  }
+</style>

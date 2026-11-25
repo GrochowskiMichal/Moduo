@@ -220,6 +220,11 @@ export function readCalendarPrefs(userId: string): CalendarPrefs {
   }));
 }
 
+/** This person's stored copy, or null when the device holds none (prefs-sync parking). */
+export function readStoredCalendarPrefs(userId: string): CalendarPrefs | null {
+  return readStored<CalendarPrefs | null>(prefsKey(userId), sanitizeCalendarPrefs, () => null);
+}
+
 export function writeCalendarPrefs(userId: string, prefs: CalendarPrefs): void {
   writeStored(prefsKey(userId), sanitizeCalendarPrefs(prefs));
 }

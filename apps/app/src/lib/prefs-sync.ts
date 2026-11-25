@@ -108,6 +108,66 @@ export function setSyncMeta(domain: SyncDomain, meta: SyncMeta): void {
   }
 }
 
+// ── Parked changes (509-3 `teardown-drops-pending`) ───────────────────────────
+// The device holds ONE copy of each domain. When another person signs in while
+// it holds someone's unsynced (dirty) change, their copy replaces it, so that
+// change is parked here under its owner first and goes out when they sign back
+// in (the newer stamp wins, as everywhere). `{ [userId]: { value, updatedAt } }`.
+
+const parkedKey = (domain: SyncDomain) => `${META_KEY[domain]}.parked`;
+
+const parkedSchema = z.record(
+  z.string(),
+  z.object({ value: z.record(z.string(), z.unknown()), updatedAt: z.string() }),
+);
+type Parked = z.infer<typeof parkedSchema>;
+
+/** The parked changes, or "unreadable" (storage blocked, a corrupt entry): not "none". */
+function readParked(domain: SyncDomain): Parked | "unreadable" {
+  if (typeof localStorage === "undefined") return {};
+  let raw: string | null;
+  try {
+    raw = localStorage.getItem(parkedKey(domain));
+  } catch {
+    return "unreadable";
+  }
+  if (!raw) return {};
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    return "unreadable";
+  }
+  const parsed = parkedSchema.safeParse(json);
+  return parsed.success ? parsed.data : "unreadable";
+}
+
+function writeParked(domain: SyncDomain, parked: Parked): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    if (Object.keys(parked).length === 0) localStorage.removeItem(parkedKey(domain));
+    else localStorage.setItem(parkedKey(domain), JSON.stringify(parked));
+  } catch {
+    /* quota exceeded or storage disabled — non-fatal */
+  }
+}
+
+/**
+ * The localStorage keys holding preference changes that haven't reached their
+ * account: a dirty domain's sync meta and its `moduo.<domain>` mirror (calendar
+ * and email mirror outside the `moduo.` prefix), plus any parked changes. A cache
+ * reset keeps these; dropping them would lose the change (509-3).
+ */
+export function unsyncedPrefsKeys(): string[] {
+  const keys: string[] = [];
+  for (const domain of Object.keys(META_KEY) as SyncDomain[]) {
+    if (getSyncMeta(domain).dirty) keys.push(META_KEY[domain], `moduo.${domain}`);
+    const parked = readParked(domain);
+    if (parked === "unreadable" || Object.keys(parked).length > 0) keys.push(parkedKey(domain));
+  }
+  return keys;
+}
+
 // Dedupe the boot reads: the appearance / focus / calendar / email domains each
 // reconcile on mount and would otherwise issue a `preferences.get()` apiece for the
 // one shared row. They mount at slightly different ticks, so a pure in-flight memo
@@ -216,6 +276,10 @@ export async function reconcileDomain(opts: {
   domain: SyncDomain;
   userId: string;
   localValue: Json;
+  /** Domains that keep one copy per person on the device (calendar, email): that
+   * person's syncable copy, or null when the device holds none. Without it, the
+   * device has one shared copy and `localValue` is whoever used it last. */
+  localValueOf?: (userId: string) => Json | null;
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
   apply: (value: Json, userId: string) => void;
@@ -265,10 +329,74 @@ export function setDomainReconciledForTest(domain: SyncDomain, userId: string | 
   for (const listener of reconciledListeners) listener();
 }
 
+/**
+ * Local holds another person's unsynced change, which this person's copy is
+ * about to replace: park it under its owner so it isn't lost (509-3). It must be
+ * the owner's own copy: a per-person domain's `localValue` is already this
+ * person's, so it is read through `localValueOf(owner)` instead.
+ */
+function parkOthersChange(
+  domain: SyncDomain,
+  meta: SyncMeta,
+  userId: string | null,
+  local: { value?: Json; of?: (userId: string) => Json | null },
+) {
+  if (meta.userId === userId || meta.userId === null || !meta.dirty || !meta.updatedAt) return;
+  const value = local.of ? local.of(meta.userId) : local.value;
+  if (!value) return; // the device holds no copy of theirs: nothing here to lose
+  const before = readParked(domain);
+  // An unreadable entry can't be recovered (blocked storage fails this write too).
+  writeParked(domain, {
+    ...(before === "unreadable" ? {} : before),
+    [meta.userId]: { value, updatedAt: meta.updatedAt },
+  });
+}
+
+/** Account deleted: its parked changes have no account to go to (PRIV-2). */
+export function forgetParkedPrefs(userId: string): void {
+  for (const domain of Object.keys(META_KEY) as SyncDomain[]) {
+    const parked = readParked(domain);
+    if (parked === "unreadable" || !(userId in parked)) continue;
+    const rest = { ...parked };
+    delete rest[userId];
+    writeParked(domain, rest);
+  }
+}
+
+/** This person's parked change, if any, taken out of the parked set. */
+function takeParked(domain: SyncDomain, userId: string): Parked[string] | undefined {
+  const parked = readParked(domain);
+  if (parked === "unreadable") return undefined;
+  const mine = parked[userId];
+  if (!mine) return undefined;
+  const rest = { ...parked };
+  delete rest[userId];
+  writeParked(domain, rest);
+  return mine;
+}
+
+/** A parked change wins unless the account's copy (`hasCloud`) or this person's
+ * own on the device (`ownedBySelf`) is as new or newer. */
+function parkedIsNewest(
+  parkedAt: string,
+  other: {
+    hasCloud: boolean;
+    cloudAt: string | null;
+    ownedBySelf: boolean;
+    localAt: string | null;
+  },
+): boolean {
+  const stamp = toMillis(parkedAt);
+  const cloudNewer = other.hasCloud && toMillis(other.cloudAt) >= stamp;
+  const localNewer = other.ownedBySelf && toMillis(other.localAt) >= stamp;
+  return !cloudNewer && !localNewer;
+}
+
 async function reconcileOnce(opts: {
   domain: SyncDomain;
   userId: string;
   localValue: Json;
+  localValueOf?: (userId: string) => Json | null;
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
   apply: (value: Json, userId: string) => void;
@@ -299,6 +427,25 @@ async function reconcileOnce(opts: {
     else setSyncMeta(domain, { userId, updatedAt, dirty: res.kind === "failed" });
   };
   const seedFromLocal = (updatedAt: string) => push(localValue, updatedAt);
+
+  parkOthersChange(domain, meta, userId, { value: localValue, of: opts.localValueOf });
+
+  // This person has a change parked from before someone else used the device:
+  // unless the account or the device holds a newer copy, it is theirs now.
+  const mine = takeParked(domain, userId);
+  if (
+    mine &&
+    parkedIsNewest(mine.updatedAt, {
+      hasCloud,
+      cloudAt: cloudUpdatedAt,
+      ownedBySelf,
+      localAt: meta.updatedAt,
+    })
+  ) {
+    apply(sanitizeCloud(mine.value), userId);
+    await push(mine.value, mine.updatedAt);
+    return "ok";
+  }
 
   if (hasCloud) {
     if (ownedBySelf && toMillis(meta.updatedAt) > toMillis(cloudUpdatedAt)) {
@@ -333,6 +480,10 @@ export function useDomainSync(opts: {
   domain: SyncDomain;
   /** Current syncable subset, read live (from a ref) at reconcile time. */
   getLocalSyncable: () => Json;
+  /** Domains that keep one copy per person on the device (calendar, email): that
+   * person's syncable copy, or null when the device holds none. Without it, the
+   * device has one shared copy and `localValue` is whoever used it last. */
+  localValueOf?: (userId: string) => Json | null;
   /** Syncable subset of the domain defaults (used to reset a new user's row). */
   defaults: Json;
   sanitizeCloud: (raw: Json) => Json;
@@ -358,6 +509,7 @@ export function useDomainSync(opts: {
       domain: o.domain,
       userId,
       localValue: o.getLocalSyncable(),
+      localValueOf: o.localValueOf,
       defaults: o.defaults,
       sanitizeCloud: o.sanitizeCloud,
       apply: o.apply,
@@ -411,6 +563,10 @@ export function useDomainSync(opts: {
     const o = optsRef.current;
     const uid = userIdRef.current;
     const updatedAt = nowIso();
+    // The stamp below replaces another person's unsynced marker: park their
+    // change first (509-3). Only a per-person domain can: a shared copy already
+    // carries this edit, so it no longer holds their change alone.
+    parkOthersChange(o.domain, getSyncMeta(o.domain), uid, { of: o.localValueOf });
     // Stamp meta immediately so a concurrent reconcile sees local as newest.
     // When signed out, keep userId null: these are anonymous edits, adopted into
     // the account on next sign-in (if it has no cloud copy of its own).

@@ -1,0 +1,23 @@
+---
+// One of the app's icons (Lucide, lib/app-icons.ts), at the frame's icon size unless a class
+// says otherwise. Decorative: the picture's label speaks for it.
+import { ICONS, type IconName } from "../../lib/app-icons";
+
+interface Props {
+  name: IconName;
+  class?: string;
+}
+const { name, class: className } = Astro.props;
+---
+
+<svg
+  class:list={["ap-i", className]}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden="true"
+  set:html={ICONS[name]}
+/>

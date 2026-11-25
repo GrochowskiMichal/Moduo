@@ -1,0 +1,185 @@
+---
+// Six strokes as navigation: the current one is lit, the others are dimmed links, and the
+// windows between neighbors stay open. Module pages use it for the six modules; the manifesto
+// uses it for its six parts and lights the part you are reading (motion/rail.ts).
+import { STROKE, chainWidth, chainX, strokePath, uniformGaps } from "../lib/stroke";
+
+interface Props {
+  items: { href: string; label: string; name?: string }[];
+  /** Index of the lit stroke; -1 for none. */
+  current?: number;
+  id: string;
+  label: string;
+  class?: string;
+  /** Keep the current stroke a link too (in-page navigation). */
+  linkCurrent?: boolean;
+}
+const { items, current = -1, id, label, class: className, linkCurrent = false } = Astro.props;
+const xs = chainX(uniformGaps(items.length, 1));
+const pad = 8;
+const width = chainWidth(xs) + 2 * pad;
+const vb = `${-pad} ${STROKE.top - pad} ${width} ${STROKE.bottom - STROKE.top + 2 * pad}`;
+const paths = xs.map((x) => strokePath(x));
+const labelX = xs.map((x) => `${(((x + 18 + pad) / width) * 100).toFixed(2)}%`);
+---
+
+<nav class:list={["cnav", className]} aria-label={label} data-cnav={id}>
+  <svg class="cnav__svg" viewBox={vb} focusable="false">
+    <defs>
+      {
+        paths.map((d, i) => (
+          <clipPath id={`${id}-c${i}`}>
+            <path d={d} />
+          </clipPath>
+        ))
+      }
+    </defs>
+    {
+      items.map((item, i) =>
+        i === current && !linkCurrent ? (
+          <path class="cnav__s is-current" d={paths[i]} aria-hidden="true" />
+        ) : (
+          <a
+            class="cnav__a"
+            href={item.href}
+            aria-label={item.name ?? item.label}
+            aria-current={i === current ? "true" : undefined}
+            data-i={i}
+          >
+            <path class:list={["cnav__s", i === current && "is-current"]} d={paths[i]} />
+          </a>
+        ),
+      )
+    }
+    {
+      paths.slice(0, -1).map((d, k) => (
+        <g clip-path={`url(#${id}-c${k + 1})`} aria-hidden="true">
+          <path class="cnav__w" d={d} />
+        </g>
+      ))
+    }
+  </svg>
+  <ol class="cnav__labels" aria-hidden="true">
+    {
+      items.map((item, i) => (
+        <li class:list={[i === current && "is-current"]} style={`--x:${labelX[i]}`} data-i={i}>
+          {i === current && !linkCurrent ? (
+            item.label
+          ) : (
+            <a href={item.href} tabindex="-1">
+              {item.label}
+            </a>
+          )}
+        </li>
+      ))
+    }
+  </ol>
+</nav>
+
+<style>
+  .cnav {
+    position: relative;
+    padding-bottom: 1.75rem;
+  }
+  .cnav__svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .cnav__s {
+    fill: var(--c-stroke-off);
+    transition: fill var(--d-hover) var(--ease);
+  }
+  .cnav__s.is-current {
+    fill: var(--c-fg);
+  }
+  .cnav__w {
+    fill: var(--c-bg);
+    pointer-events: none;
+  }
+  /* Under the pointer a stroke lifts almost to the lit one, and its name lights up. */
+  @media (hover: hover) {
+    .cnav__a:hover .cnav__s:not(.is-current) {
+      fill: var(--c-primary);
+    }
+  }
+  .cnav__a:focus {
+    outline: none;
+  }
+  .cnav__a:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 4px;
+  }
+  .cnav__a:focus-visible .cnav__s:not(.is-current) {
+    fill: var(--c-primary);
+  }
+  .cnav__labels li {
+    position: absolute;
+    left: var(--x);
+    bottom: 0;
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+    white-space: nowrap;
+    transition: color var(--d-hover) var(--ease);
+  }
+  .cnav__labels li.is-current,
+  .cnav:has(.cnav__a[data-i="0"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="0"],
+  .cnav:has(.cnav__a[data-i="1"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="1"],
+  .cnav:has(.cnav__a[data-i="2"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="2"],
+  .cnav:has(.cnav__a[data-i="3"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="3"],
+  .cnav:has(.cnav__a[data-i="4"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="4"],
+  .cnav:has(.cnav__a[data-i="5"]:is(:hover, :focus-visible)) .cnav__labels li[data-i="5"] {
+    color: var(--c-fg);
+    opacity: 1;
+  }
+  /* Below a wide screen the strokes sit too close for every name: the current one stays, and a
+     stroke under the pointer or focus shows its own. */
+  @media (max-width: 1279px) {
+    .cnav__labels li:not(.is-current) {
+      opacity: 0;
+      pointer-events: none;
+    }
+  }
+  /* The names are the strokes' links again for the pointer (the strokes carry the names for
+     keyboards and screen readers, so this copy is out of the tab order and hidden from them). */
+  /* A 24 px hit area round a short name, without moving it. */
+  .cnav__labels a {
+    display: inline-block;
+    margin: -0.375rem;
+    padding: 0.375rem;
+    color: inherit;
+    transition: color var(--d-hover) var(--ease);
+  }
+  @media (hover: hover) {
+    .cnav__labels a:hover {
+      color: var(--c-fg);
+    }
+  }
+  /* A phone: the strokes are too close for names under them, so every name stands in one row
+     under the chain, the current one lit, each a tap target of its own. */
+  @media (max-width: 560px) {
+    .cnav {
+      padding-bottom: 0;
+    }
+    /* The row may run past a short chain, up to the page's margin, so five or six names keep
+       to one line. */
+    .cnav__labels {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0 0.875rem;
+      width: max-content;
+      max-width: calc(100vw - 2 * var(--margin));
+      margin-top: 0.5rem;
+    }
+    .cnav__labels li,
+    .cnav__labels li:not(.is-current) {
+      position: static;
+      padding-block: 0.375rem;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+  }
+</style>

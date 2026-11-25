@@ -48,7 +48,11 @@ function toRRule(
       const d = new Date(anchor);
       if (!Number.isNaN(d.getTime())) options.dtstart = toFloating(d, zone);
     }
-    if (options.until) options.until = toFloating(options.until, zone);
+    // UNTIL is already the zone's wall clock: the picker writes the local end
+    // day as `<day>T23:59:59` (repeat.ts `specToRrule`), Z or not, so it stays
+    // as written. Floating it again moved the end a day (west of UTC the last
+    // evening never came, east of UTC a day came back). Unlike provider rules
+    // (calendar/recurrence-expand.ts), where UNTIL is a real instant.
     return new RRule(options);
   } catch {
     return null;

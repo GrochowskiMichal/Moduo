@@ -1,7 +1,5 @@
 // Tags on tasks, through the shared workspace tag store (TV-T1).
 
-import { toast } from "sonner";
-
 import {
   createOrAttachByName,
   deleteTag as deleteWorkspaceTag,
@@ -9,19 +7,16 @@ import {
   toggleTag,
 } from "../../tags/store";
 import type { Task } from "../model";
-import { isTempId, type Shared, STILL_SAVING } from "./shared";
+import type { Shared } from "./shared";
 
 export function createTagOps(shared: Shared) {
-  const { tagContext } = shared;
+  const { savingBlocked, tagContext } = shared;
 
   /** Attach or detach an existing tag on a task. */
   const toggleTaskTag = (taskId: string, tagId: string) => {
     const ctx = tagContext();
     if (!ctx) return;
-    if (isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (savingBlocked(taskId)) return;
     toggleTag(ctx, { entityType: "task", entityId: taskId }, tagId);
   };
 
@@ -34,10 +29,7 @@ export function createTagOps(shared: Shared) {
   const createTagForTask = (name: string, taskId: string | PromiseLike<Task | null>) => {
     const ctx = tagContext();
     if (!ctx) return;
-    if (typeof taskId === "string" && isTempId(taskId)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (typeof taskId === "string" && savingBlocked(taskId)) return;
     createOrAttachByName(ctx, name, {
       entityType: "task",
       entityId:

@@ -5,8 +5,8 @@
 import { z } from "zod";
 
 import { parseOrStructured } from "./errors.ts";
-import { httpUrl, nonEmptyString, uuid } from "./primitives.ts";
-import { waitlistSourceSchema } from "./vocabularies.ts";
+import { httpUrl, nonEmptyString } from "./primitives.ts";
+import { integrationProviderSchema, waitlistSourceSchema } from "./vocabularies.ts";
 
 export const emailBodySchema = z.object({
   email: z.email(),
@@ -45,18 +45,29 @@ export const createCheckoutSessionBodySchema = z.object({
   cancelUrl: z.string().optional(),
 });
 
-export const manageIntegrationBodySchema = z.object({
-  user_id: uuid,
-  provider: nonEmptyString,
-  access_token_enc: nonEmptyString,
-  refresh_token_enc: z.union([z.string(), z.null()]).optional(),
-  token_expiry: z.union([z.string(), z.null()]).optional(),
-  updated_at: z.string().optional(),
+/**
+ * manage-integration (MOD-554): the desktop app hands over the OAuth tokens it
+ * just obtained, in plaintext over TLS, authenticated by the person's own
+ * session. The function encrypts them and takes the user from the verified
+ * JWT, never from the request. Only the providers the desktop connects.
+ */
+export const manageIntegrationProviderSchema = integrationProviderSchema.extract([
+  "zoom",
+  "google_meet",
+  "google_calendar",
+]);
+
+export const manageIntegrationBodySchema = z.strictObject({
+  provider: manageIntegrationProviderSchema,
+  access_token: nonEmptyString,
+  refresh_token: z.union([nonEmptyString, z.null()]).optional(),
+  /** Unix seconds at which the access token expires. */
+  expires_at: z.union([z.number().int().positive(), z.null()]).optional(),
 });
 
-export const manageIntegrationQuerySchema = z.object({
-  provider: nonEmptyString,
-  user_id: uuid,
+/** Disconnect: one meeting provider (Google Calendar disconnects per login elsewhere). */
+export const manageIntegrationQuerySchema = z.strictObject({
+  provider: integrationProviderSchema.extract(["zoom", "google_meet"]),
 });
 
 export const workspaceInviteWebhookBodySchema = z.object({

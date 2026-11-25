@@ -1,0 +1,230 @@
+---
+// Mail inbox, Moduo's own (DESIGN.md §15): Maciej's email about the open alpha invite at the top
+// (it arrives in chapter 2: .dk.m-new brings its row in, m-glow lights it, m-hover underlines
+// his name, c-id and t-key pop its two chips), then the week's mail. Every row is one block: an avatar on the first line, then name and time,
+// subject, snippet and tags. Rows divide with a hairline at the content's width; a lit row's
+// fill reaches past the content by the rows' inset, inside the panel's padding, rounded.
+import Icon from "../../frames/Icon.astro";
+import Widget from "./Widget.astro";
+
+const rows = [
+  { av: "WL", c: "amber", n: "Moduo waitlist", t: "Yesterday", s: "9 new sign-ups", p: "Nine people joined the waitlist. Wave one closes Friday.", tag: ["violet", "Open alpha"], unread: true },
+  { av: "MA", c: "violet", n: "Maciej Grzywacz", t: "Yesterday", s: "Re: the mark at 16 px", p: "Both versions attached, dark and light, as SVG.", tag: ["green", "Design"], unread: true, m: "3" },
+  { av: "AF", c: "blue", n: "Alpha feedback", t: "Tue", s: "Week view starts on Sunday", p: "A tester asks for Monday first in the week view.", tag: ["blue", "Calendar"] },
+  { av: "HO", c: "green", n: "Hosting", t: "Tue", s: "Invoice 0142 paid", p: "Payment received for the October plan.", tag: ["teal", "Finance"] },
+  { av: "DO", c: "pink", n: "moduo.app", t: "Mon", s: "Domain renews in 30 days", p: "Auto-renew is on. Nothing to do.", tag: ["amber", "Admin"] },
+  { av: "RE", c: "teal", n: "Moduo releases", t: "Oct 26", s: "1.4.0 is out", p: "Search in Notes finds what you wrote, and the line.", tag: ["teal", "Release"] },
+];
+---
+
+<Widget slug="mail" icon="inbox" title="Mail inbox">
+  <span class="ap-meta" slot="right" data-newn>3 new</span>
+  <div class="dk-mlist">
+    <div class="dk-arrive">
+      <div class="dk-m dk-anna" data-anna>
+        <span class="ap-av" style="--c:var(--ap-violet)">MA</span>
+        <div class="dk-mb">
+          <p class="dk-ml"><span class="dk-un"></span><span class="dk-mn ap-ell"><span class="dk-whoname" data-who>Maciej Grzywacz</span></span><span class="ap-meta">now</span></p>
+          <p class="dk-ms ap-ell">Open alpha invite</p>
+          <p class="dk-snip ap-ell">Final copy for the invite is in the note. Can you check the links today?</p>
+          <p class="dk-mrow"><span class="ap-ref dk-pop dk-c-chip"><Icon name="contact" />Moduo · Co-founder</span><span class="ap-ref dk-pop dk-t-chip"><Icon name="square-check-big" />Task</span></p>
+        </div>
+      </div>
+    </div>
+    {
+      rows.map((m) => (
+        <div class="dk-m" data-m={m.m}>
+          <span class="ap-av" style={`--c:var(--ap-${m.c})`}>{m.av}</span>
+          <div class="dk-mb">
+            <p class="dk-ml">
+              {m.unread && <span class="dk-un" />}
+              <span class:list={["dk-mn ap-ell", !m.unread && "ap-muted"]}>{m.n}</span>
+              <span class="ap-meta">{m.t}</span>
+            </p>
+            <p class="dk-ms ap-ell">{m.s}</p>
+            <p class="dk-snip ap-ell">{m.p}</p>
+            <p class="dk-mrow">
+              <span class="ap-tag">
+                <span class="ap-dot" style={`--c:var(--ap-${m.tag[0]})`} />
+                {m.tag[1]}
+              </span>
+            </p>
+          </div>
+        </div>
+      ))
+    }
+  </div>
+</Widget>
+
+<style is:global>
+  /* The list fills the panel; what runs past its foot fades out over the last rows. It is wider
+     than the panel's content by the rows' inset on each side, so a lit row's fill has that room
+     round its content (cut at the content's edge, the avatar and the time sat on the fill's
+     edges). */
+  .dk-mlist {
+    flex: 1 1 0;
+    min-height: 0;
+    margin: -0.6em calc(-1 * var(--inset)) 0;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 5em), transparent calc(100% - 0.5em));
+    mask-image: linear-gradient(180deg, #000 calc(100% - 5em), transparent calc(100% - 0.5em));
+  }
+  .dk-m {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.8em;
+    padding: 0.85em var(--inset);
+    border-radius: 0.75em;
+  }
+  /* His email arrives without a layout move: his row's place is always kept, and until it lands
+     the whole list sits that much higher, his row above it unseen. Landing, the list glides down
+     by his row's height (--anna-h, measured by motion/dusk.ts) and he fades in; only transforms
+     and opacity move, so the window never re-lays out under the camera. Going back, the same
+     move runs the other way. While his card is open, the rows under him step back. */
+  .dk-mlist > * {
+    transition:
+      translate 0.95s var(--ease),
+      opacity 0.6s var(--ease);
+  }
+  .dk:not(.m-new) .dk-mlist > * {
+    translate: 0 calc(-1 * var(--anna-h, 0px));
+  }
+  .dk.c-card .dk-mlist > .dk-m {
+    opacity: 0.2;
+  }
+  .dk-m .ap-av {
+    margin-top: 0.1em;
+  }
+  /* The hairline between rows, at the content's width. Over his row's top only once he is in,
+     and gone while his row is lit (its fill is the division then). */
+  .dk-m + .dk-m::before,
+  .dk-arrive + .dk-m::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--inset);
+    right: var(--inset);
+    height: 1px;
+    background: var(--ap-hairline);
+    transition: opacity 0.7s var(--ease);
+  }
+  .dk:not(.m-new) .dk-arrive + .dk-m::before,
+  .dk.m-glow .dk-arrive + .dk-m::before {
+    opacity: 0;
+  }
+  .dk-mb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.22em;
+  }
+  .dk-ml {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-height: 1.3em;
+    font-size: 0.95em;
+  }
+  .dk-mn {
+    flex: 1;
+    min-width: 0;
+    font-weight: 500;
+  }
+  .dk-ms {
+    font-size: 0.88em;
+  }
+  .dk-snip {
+    color: var(--ap-subtle);
+    font-size: 0.82em;
+  }
+  .dk-un {
+    flex: none;
+    width: 0.45em;
+    height: 0.45em;
+    border-radius: 50%;
+    background: var(--ap-fg);
+  }
+  .dk-mrow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4em;
+    margin-top: 0.3em;
+  }
+  /* Her row fades in once the list has made room. */
+  .dk-arrive > .dk-m {
+    opacity: 0;
+    transition: opacity 0.6s var(--ease);
+  }
+  .dk.m-new .dk-arrive > .dk-m {
+    opacity: 1;
+    transition-delay: 0.3s;
+  }
+  /* Lit: a soft fill a hair inside his row's height (clear of the hairlines above and below),
+     its whole width, rounded. An opacity, so it costs the window no repaint as it comes. */
+  .dk-anna::after {
+    content: "";
+    position: absolute;
+    inset: 0.2em 0;
+    z-index: -1;
+    border-radius: 0.75em;
+    background: rgb(255 255 255 / 0.065);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.09);
+    opacity: 0;
+    transition: opacity 0.9s var(--ease);
+    pointer-events: none;
+  }
+  .dk.m-glow .dk-anna::after {
+    opacity: 1;
+  }
+  .dk-whoname {
+    position: relative;
+  }
+  .dk-whoname::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -0.1em;
+    height: 1px;
+    background: var(--ap-fg);
+    scale: 0 1;
+    transform-origin: left;
+    transition: scale 0.6s var(--ease);
+  }
+  .dk.m-hover .dk-whoname::after {
+    scale: 1 1;
+  }
+  /* His chip row takes no room until a chip is in it. */
+  .dk-anna .dk-mrow {
+    max-height: 0;
+    margin-top: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition:
+      max-height 0.5s var(--ease),
+      margin-top 0.5s var(--ease),
+      opacity 0.4s var(--ease);
+  }
+  .dk.c-id .dk-anna .dk-mrow {
+    max-height: 2.4em;
+    margin-top: 0.4em;
+    opacity: 1;
+  }
+  .dk-pop {
+    scale: 0;
+    opacity: 0;
+    transform-origin: left center;
+    transition:
+      scale 0.6s var(--spring),
+      opacity 0.3s;
+  }
+  .dk.c-id .dk-c-chip,
+  .dk.t-key .dk-t-chip {
+    scale: 1;
+    opacity: 1;
+  }
+</style>

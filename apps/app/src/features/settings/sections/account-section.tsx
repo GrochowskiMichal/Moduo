@@ -8,6 +8,7 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { stopAnalyticsForDeletedAccount } from "../../../lib/analytics";
+import { forgetParkedPrefs } from "../../../lib/prefs-sync";
 import { SUPABASE_URL, supabaseClient } from "../../../lib/runtime.web.client";
 import { waitingSyncCount, wipeSyncCopies } from "../../../lib/sync/store";
 import { useAuth } from "../../../providers/auth-provider";
@@ -103,18 +104,27 @@ export function AccountSection() {
       // out locally (the order is explained in finishAccountDeletion). This device's
       // focus session for the account (task titles, unsaved time) is erased too.
       await finishAccountDeletion({
-        forgetOnDevice: () => {
+        forgetOnDevice: async () => {
           if (!userId) return;
+          // The desktop mail store (accounts, cached mail, keychain secrets): the
+          // engine erases the session's person, so this finishes before sign-out
+          // (MOD-555). Web has none.
+          const erasingMail = runtime?.email.forgetOnThisDevice?.().catch((err: unknown) => {
+            console.warn("[delete-account] mail on this device wasn't erased:", err);
+          });
           void stopAnalyticsForDeletedAccount(userId);
           forgetFocusUser(userId);
           forgetRunUser(userId);
           forgetCaptureDrafts(userId);
+          // Preference changes parked for this account (509-3): no account to send them to.
+          forgetParkedPrefs(userId);
           // The Tasks and Chat device copies (TV-D11a, CV-3): the account is gone,
           // so is its copy (what still waited to sync too: there is no account
           // to send it to).
           void wipeSyncCopies({ keepWaiting: false });
           void wipeChatCopies({ keepWaiting: false });
           void wipeNotesCopies({ keepWaiting: false });
+          await erasingMail;
         },
         goToSignInWithNotice: () => navigate({ to: "/auth", search: { deleted: 1 } }),
         signOut,

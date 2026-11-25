@@ -1,0 +1,815 @@
+---
+// About us. The hero is the day the two of us share, drawn in strokes. Under it, what the agent
+// wrote about each of us: two columns of plain lines mirrored on a centre line. Then the problem
+// we both had, and how Moduo started, told along the git history: a graph down the left margin,
+// Mike's lane from the first commit, a second lane from the night Maciej's begins.
+// motion/about.ts runs the day's sweep and "now", draws the centre line and the lanes as you
+// read, types the first commits and counts the silent days; without it every picture is already
+// in its final state.
+import Btn from "../components/Btn.astro";
+import StrokeChart from "../components/StrokeChart.astro";
+import { about, aboutBridge, aboutClose, aboutRead, aboutStory, makers, rhythm, site, waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+
+const hours = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
+const read = aboutRead;
+const story = aboutStory;
+
+// The night of 11 May, its commits in the order they landed.
+const clock = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const night = [
+  ...story.duo.mike.map(([m, msg]) => ({ m, msg, who: "mike" })),
+  ...story.duo.maciej.map(([m, msg]) => ({ m, msg, who: "maciej" })),
+].sort((a, b) => a.m - b.m);
+const days = Array.from({ length: story.gap.days });
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "AboutPage",
+    name: about.title,
+    description: about.description,
+    url: `${site.url}/about`,
+    about: { "@type": "Organization", name: site.name, url: site.url },
+    mainEntity: makers.people.map((p) => ({
+      "@type": "Person",
+      name: p.name,
+      jobTitle: p.role,
+      worksFor: { "@type": "Organization", name: site.name },
+    })),
+  },
+];
+---
+
+<Base title={about.title} description={about.description} image="/og/about.png" jsonLd={jsonLd}>
+  <article class="ab" aria-labelledby="ab-title" data-about>
+
+    <header class="ab__hero wrap grid">
+      <p class="ab__kicker t-xs">{about.title}</p>
+      <h1 class="ab__h1 t-xl" id="ab-title" data-split data-intro>{about.h1}</h1>
+      {/* The first screen's largest text on a phone: it paints with the HTML (LCP). */}
+      <p class="ab__lead muted">{about.lead}</p>
+      <div class="ab__day" data-reveal data-intro data-delay="0.3">
+        <StrokeChart
+          id="ab-hours"
+          rows={[
+            { label: "Mike", values: rhythm.hours.mike },
+            { label: "Maciej", values: rhythm.hours.maciej },
+          ]}
+          cols={hours}
+          ticks={[0, 3, 6, 9, 12, 15, 18, 21]}
+          peaks={[
+            { row: 0, col: 4 },
+            { row: 1, col: 17 },
+            { row: 1, col: 22 },
+          ]}
+          day
+          nowLabel={about.chart.now}
+          caption={`${about.chart.caption} ${rhythm.asOf}.`}
+        />
+      </div>
+    </header>
+
+    <!-- What it wrote: Mike's lines on the left, Maciej's on the right, mirrored on a centre line
+         that draws down as you read. Each person's lines are their own list. -->
+    <section class="wr wrap" aria-labelledby="wr-title" data-wr>
+      <div class="wr__head">
+        <h2 class="wr__title t-l" id="wr-title" data-split>{read.title}</h2>
+        <p class="wr__intro muted" data-reveal>{read.intro}</p>
+      </div>
+      <div class="wr__grid">
+        <span class="wr__spine" aria-hidden="true" data-wr-spine></span>
+        {
+          read.people.mike.read.map((_, i) => (
+            <span class="wr__node" style={`--row:${i + 2}`} aria-hidden="true" data-wr-node />
+          ))
+        }
+        {
+          (["mike", "maciej"] as const).map((k) => {
+            const person = read.people[k];
+            return (
+              <div class:list={["wr__person", `is-${k}`]}>
+                <h3 class="wr__name">
+                  <span class="t-l">{person.name}</span>
+                  <span class="wr__role t-xs">{person.role}</span>
+                </h3>
+                <ul class="wr__list" role="list">
+                  {person.read.map((r, i) => (
+                    <li class="wr__item" style={`--row:${i + 2}`} data-wr-item>
+                      <p class="wr__text">{r.text}</p>
+                      <p class="wr__proof t-xs">{r.proof}</p>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })
+        }
+      </div>
+    </section>
+
+    <!-- The bridge: opposite people, one problem. -->
+    <section class="br wrap" aria-label="The problem we both had">
+      <div class="br__body">
+      <figure class="br__quote">
+        <blockquote>
+          <p class="br__lead t-l"><span class="br__mark" aria-hidden="true">“</span><span data-split>{aboutBridge.lead}”</span></p>
+        </blockquote>
+        <figcaption class="t-s muted" data-reveal>{aboutBridge.by}</figcaption>
+      </figure>
+      <p class="br__text" data-reveal>{aboutBridge.quote}</p>
+      </div>
+    </section>
+
+    <!-- How it started, down a git graph: Mike's lane from the first commit. -->
+    <section class="st st--start wrap" aria-labelledby="st-start">
+      <div class="st__graph" aria-hidden="true">
+        <span class="st__lane is-a is-from" data-st-lane></span>
+        <span class="st__node is-a" data-st-node></span>
+        <span data-st-tag class="st__branch is-a t-xs">mike</span>
+      </div>
+      <div class="st__body">
+        <h2 class="st__kicker t-xs">{story.title}</h2>
+        <p class="st__stamp t-s tabular">{story.start.stamp}</p>
+        <h3 class="st__title t-l" id="st-start" data-split>{story.start.title}</h3>
+        {story.start.text.map((t) => <p class="st__text muted" data-reveal>{t}</p>)}
+      <ol class="st__log" aria-label="The first commits">
+          {
+            story.start.log.map(([hash, when, msg]) => (
+              <li class="st__commit" data-st-commit>
+                <span class="st__dot" data-st-dot aria-hidden="true" />
+                <code class="st__hash">{hash}</code>
+                <span class="st__when tabular">{when}</span>
+                <code class="st__msg" data-st-type>
+                  {msg}
+                </code>
+              </li>
+            ))
+          }
+      </ol>
+      </div>
+    </section>
+
+    <!-- 54 days: the lane goes to dashes, one a day, and they count as you scroll through them. -->
+    <section class="st st--gap wrap" aria-labelledby="st-gap" data-st-gap>
+      <div class="st__graph" aria-hidden="true">
+        <span class="st__days is-dim">{days.map(() => <i />)}</span>
+        <span class="st__days" data-st-days>{days.map(() => <i />)}</span>
+      </div>
+      <div class="st__body st__gap-body">
+        <h3 class="st__title t-l" id="st-gap">{story.gap.title}</h3>
+        <p class="st__count" aria-hidden="true">
+          <span class="st__count-n tabular" data-st-count>{story.gap.days}</span>
+          <span class="st__count-unit t-m muted">{story.gap.unit}</span>
+        </p>
+        <p class="sr-only">{story.gap.days} {story.gap.unit}.</p>
+        <p class="st__text muted" data-reveal>{story.gap.text}</p>
+      </div>
+    </section>
+
+    <!-- 11 May: one huge push, then Maciej's lane forks off Mike's, and the night's commits. -->
+    <section class="st st--duo wrap" aria-labelledby="st-duo">
+      <div class="st__graph" aria-hidden="true">
+        <span class="st__lane is-a is-quiet"></span>
+        <span class="st__lane is-a is-from" data-st-lane></span>
+        <span class="st__node is-a" data-st-node></span>
+        <svg class="st__fork" viewBox="0 0 40 40" preserveAspectRatio="none" data-st-path>
+          <path d="M0 0L40 40" pathLength="1"></path>
+        </svg>
+        <span class="st__lane is-b is-forked" data-st-lane></span>
+        <span class="st__node is-b is-forked" data-st-node></span>
+        <span data-st-tag class="st__branch is-b t-xs">maciej</span>
+      </div>
+      <div class="st__body">
+        <p class="st__stamp t-s tabular">{story.duo.stamp}</p>
+        <h3 class="st__title t-l" id="st-duo" data-split>{story.duo.title}</h3>
+        {story.duo.text.map((t) => <p class="st__text muted" data-reveal>{t}</p>)}
+      <div class="st__night-side">
+        <ol class="st__night" id="st-night" aria-label="Every commit on 11 May" tabindex="-1" data-st-night>
+          {
+            night.map((c) => (
+              <li class:list={["st__night-row", `is-${c.who}`]}>
+                <span class="st__when tabular">{clock(c.m)}</span>
+                <span class="st__who">{c.who}</span>
+                <code class="st__msg">{c.msg}</code>
+              </li>
+            ))
+          }
+        </ol>
+        <button class="st__more t-s" type="button" aria-expanded="false" aria-controls="st-night" data-st-more hidden>
+          Show all {night.length}
+        </button>
+      </div>
+      </div>
+    </section>
+
+    <!-- Since then: both lanes up to today, then dotted, into what isn't built yet. -->
+    <section class="st st--since wrap" aria-labelledby="st-since">
+      <div class="st__graph" aria-hidden="true">
+        <span class="st__lane is-a is-to-today" data-st-lane></span>
+        <span class="st__lane is-b is-to-today" data-st-lane></span>
+        <span class="st__lane is-a is-future"></span>
+        <span class="st__lane is-b is-future"></span>
+        <span class="st__node is-a is-today" data-st-node></span>
+        <span class="st__node is-b is-today" data-st-node></span>
+        <span data-st-tag class="st__branch is-today t-xs">{story.since.today}</span>
+      </div>
+      <div class="st__body">
+        <h3 class="st__title t-l" id="st-since" data-split>{story.since.title}</h3>
+        <p class="st__text muted" data-reveal>{story.since.text}</p>
+      </div>
+    </section>
+
+    <!-- Its one request. -->
+    <section class="cl wrap" aria-labelledby="cl-title">
+      <h2 class="cl__title t-xl" id="cl-title" data-split>{aboutClose.title}</h2>
+      <div class="cl__copy">
+        <p class="muted" data-reveal>{aboutClose.text}</p>
+        <div class="cl__actions" data-reveal>
+          <a class="link t-m" href={`mailto:${site.email}`}>{site.email}</a>
+          <Btn data-wl-open="footer" arrow>{waitlist.button}</Btn>
+        </div>
+      </div>
+    </section>
+  </article>
+</Base>
+
+<style>
+  /* ── Hero: who, the twist, and the day the two of us share, drawn in strokes. ── */
+  .ab__hero {
+    min-height: 100svh;
+    align-content: end;
+    row-gap: 1.5rem;
+    padding-top: calc(var(--nav-h) + calc(var(--u) * 6));
+    padding-bottom: calc(var(--u) * 6);
+  }
+  .ab__kicker {
+    grid-column: 1 / -1;
+    color: var(--c-muted);
+  }
+  .ab__h1 {
+    grid-column: 1 / span 8;
+    max-width: 16ch;
+    margin-left: -0.04em;
+  }
+  .ab__lead {
+    grid-column: 9 / span 4;
+    align-self: end;
+  }
+  .ab__day {
+    grid-column: 1 / -1;
+    margin-top: calc(var(--u) * 5);
+  }
+
+  /* ── What it wrote: two columns mirrored on a centre line. Mike's lines are set to the line
+     from the left, Maciej's from the right; a node on the line marks each row, a hairline joins
+     it to both. The two lists share the rows, so the lines sit level without being paired up. ── */
+  .wr {
+    display: grid;
+    justify-items: center;
+    row-gap: calc(var(--u) * 7);
+    padding-block: calc(var(--u) * 12) calc(var(--u) * 10);
+  }
+  .wr__head {
+    display: grid;
+    justify-items: center;
+    gap: 1.25rem;
+    max-width: 36rem;
+    text-align: center;
+  }
+  .wr__grid {
+    --spine: 4rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) var(--spine) minmax(0, 1fr);
+    grid-auto-rows: auto;
+    row-gap: 2.25rem;
+    width: min(100%, 62rem);
+  }
+  .wr__person,
+  .wr__list {
+    display: contents;
+  }
+  .wr__name {
+    grid-row: 1;
+    display: grid;
+    gap: 0.25rem;
+    margin-bottom: 0.5rem;
+    font-weight: var(--w-display);
+  }
+  .wr__role {
+    font-weight: var(--w-small);
+    color: var(--c-muted);
+  }
+  .wr__item {
+    position: relative;
+    grid-row: var(--row);
+    display: grid;
+    align-content: start;
+    gap: 0.4rem;
+    max-width: 27rem;
+  }
+  .wr__person.is-mike .wr__item {
+    justify-self: end;
+  }
+  .wr__person.is-mike :is(.wr__name, .wr__item) {
+    grid-column: 1;
+    text-align: right;
+  }
+  .wr__person.is-maciej :is(.wr__name, .wr__item) {
+    grid-column: 3;
+  }
+  .wr__text {
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    text-wrap: balance;
+  }
+  .wr__proof {
+    color: var(--c-muted);
+    text-wrap: balance;
+  }
+  /* The centre line, a node per row, and a hairline from each node to both lines of text. */
+  .wr__spine {
+    grid-column: 2;
+    grid-row: 2 / span 5;
+    justify-self: center;
+    width: 1px;
+    background: var(--c-line-strong);
+  }
+  .wr__node {
+    grid-column: 2;
+    grid-row: var(--row);
+    justify-self: center;
+    width: 9px;
+    height: 9px;
+    margin-top: 0.75rem;
+    translate: 0 -50%;
+    border: 1px solid var(--c-fg);
+    border-radius: var(--r-full);
+    background: var(--c-bg);
+  }
+  .wr__item::before {
+    content: "";
+    position: absolute;
+    top: 0.75rem;
+    width: calc(var(--spine) / 2 - 0.5rem);
+    height: 1px;
+    background: var(--c-line-strong);
+  }
+  .wr__person.is-mike .wr__item::before {
+    right: calc(var(--spine) / -2 + 0.25rem);
+  }
+  .wr__person.is-maciej .wr__item::before {
+    left: calc(var(--spine) / -2 + 0.25rem);
+  }
+
+  /* ── The bridge: our one line large, right of centre, and the account under it. ── */
+  .br {
+    --graph: 5.5rem;
+    display: grid;
+    grid-template-columns: var(--graph) minmax(0, 7fr) minmax(0, 4fr);
+    column-gap: var(--gutter);
+    padding-block: calc(var(--u) * 10) calc(var(--u) * 6);
+    border-top: 1px solid var(--c-line);
+  }
+  /* On the story's column, so the quote and the chapters under it share one left edge. */
+  .br__body {
+    grid-column: 2 / -1;
+    display: grid;
+    gap: 2rem;
+  }
+  .br__quote {
+    display: grid;
+    gap: 1.25rem;
+  }
+  .br__lead {
+    position: relative;
+    max-width: 22ch;
+  }
+  /* Only the opening mark hangs, into the gutter. */
+  .br__mark {
+    position: absolute;
+    right: 100%;
+  }
+  .br__text {
+    max-width: 38rem;
+    color: var(--c-muted);
+  }
+
+  /* ── How it started: a git graph in the left margin, the story beside it. ──
+     Lane A (Mike's) and lane B (Maciej's) sit one fork apart; forks cross at 45°, the angle of
+     the stroke's ends. The graph column runs through each chapter's padding, so the lanes are one
+     line down the page. */
+  .st {
+    --graph: 5.5rem;
+    --fork: 2.5rem;
+    --lane-a: 1.5rem;
+    --lane-b: calc(var(--lane-a) + var(--fork));
+    --pad: calc(var(--u) * 6);
+    /* Where a chapter's first node sits: level with its date stamp. */
+    --y0: calc(var(--pad) + 0.66rem);
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--graph) minmax(0, 7fr) minmax(0, 4fr);
+    column-gap: var(--gutter);
+    row-gap: 2rem;
+    padding-block: var(--pad);
+  }
+  .st__graph {
+    position: relative;
+    grid-column: 1;
+    grid-row: 1 / span 3;
+    margin-block: calc(-1 * var(--pad));
+  }
+  .st__body {
+    grid-column: 2;
+    grid-row: 1;
+    display: grid;
+    align-content: start;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+  .st__kicker {
+    margin-bottom: 0.25rem;
+    font-weight: var(--w-small);
+    color: var(--c-muted);
+  }
+  .st__title {
+    max-width: 18ch;
+    margin-left: -0.03em;
+  }
+  .st__text {
+    max-width: 38rem;
+  }
+  .st__stamp {
+    color: var(--c-fg);
+  }
+
+  .st__lane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    translate: -0.5px 0;
+    background: var(--c-fg);
+  }
+  .st__lane.is-a,
+  .st__node.is-a {
+    left: var(--lane-a);
+  }
+  .st__lane.is-b,
+  .st__node.is-b {
+    left: var(--lane-b);
+  }
+  .st__lane.is-from {
+    top: var(--y0);
+  }
+  /* The end of the quiet: dashes, a day apart, down to the next commit. */
+  .st__lane.is-quiet {
+    bottom: calc(100% - var(--y0));
+    background: repeating-linear-gradient(var(--c-fg) 0 6px, transparent 6px 26px);
+    opacity: 0.25;
+  }
+  .st__lane.is-forked {
+    top: calc(var(--y0) + var(--fork));
+  }
+  .st__node {
+    position: absolute;
+    top: var(--y0);
+    width: 11px;
+    height: 11px;
+    translate: -5.5px -5.5px;
+    border: 1px solid var(--c-fg);
+    border-radius: var(--r-full);
+    background: var(--c-bg);
+  }
+  .st__node.is-forked {
+    top: calc(var(--y0) + var(--fork));
+  }
+  .st__fork {
+    position: absolute;
+    top: var(--y0);
+    left: var(--lane-a);
+    width: var(--fork);
+    height: var(--fork);
+    overflow: visible;
+  }
+  .st__fork path {
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  :global(html.motion) .st__fork path {
+    stroke-dasharray: 1;
+  }
+  /* Branch names run up beside their lanes, as a graph prints them. */
+  .st__branch {
+    position: absolute;
+    top: calc(var(--y0) + 1.25rem);
+    font-family: var(--f-mono);
+    color: var(--c-muted);
+    writing-mode: vertical-rl;
+    rotate: 180deg;
+  }
+  .st__branch.is-a {
+    left: calc(var(--lane-a) - 1.35rem);
+  }
+  .st__branch.is-b {
+    top: calc(var(--y0) + var(--fork) + 1.25rem);
+    left: calc(var(--lane-b) + 0.5rem);
+  }
+
+  /* The first commits, as the log prints them, each dot on Mike's lane across the gutter. */
+  .st__log {
+    display: grid;
+    margin-top: 0.75rem;
+  }
+  /* Hash and time on one line, the message under them. */
+  .st__commit {
+    display: grid;
+    grid-template-columns: 4.75rem minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 0.75rem;
+    padding-block: 0.4rem;
+    font-size: var(--t-xs);
+  }
+  .st__commit .st__msg {
+    grid-column: 2;
+    font-size: var(--t-s);
+  }
+  /* A row's dot sits on Mike's lane: placed from the chapter's edge, at the row's first line. */
+  .st__dot {
+    position: absolute;
+    left: calc(var(--margin) + var(--lane-a));
+    margin-top: calc(0.4rem + 0.5lh);
+    width: 7px;
+    height: 7px;
+    translate: -3.5px -50%;
+    border-radius: var(--r-full);
+    background: var(--c-fg);
+  }
+  .st__hash {
+    font-family: var(--f-mono);
+    color: var(--c-muted);
+  }
+  .st__when {
+    color: var(--c-muted);
+  }
+  .st__msg {
+    font-family: var(--f-mono);
+    color: var(--c-fg);
+    overflow-wrap: anywhere;
+  }
+  /* The typing caret: on the last letter typed, gone when the typing stops. */
+  .st :global(.st__chr) {
+    position: relative;
+  }
+  .st :global(.st__chr.is-at::after) {
+    content: "";
+    position: absolute;
+    top: 0.05em;
+    left: 100%;
+    width: 0.55em;
+    height: 1.15em;
+    background: var(--c-fg);
+  }
+
+  /* The gap: 54 dashes down the lane, one a day; the number is the picture. */
+  .st--gap {
+    --pad: calc(var(--u) * 4);
+  }
+  :global(html.motion) .st--gap {
+    min-height: 170svh;
+  }
+  .st__days {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--lane-a);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding-block: 0.5rem;
+  }
+  .st__days i {
+    display: block;
+    width: 1px;
+    height: 6px;
+    translate: -0.5px 0;
+    background: var(--c-fg);
+  }
+  .st__days.is-dim {
+    opacity: 0.2;
+  }
+  :global(html.motion) .st__gap-body {
+    position: sticky;
+    top: 24svh;
+    align-self: start;
+  }
+  .st__count {
+    display: grid;
+    justify-items: start;
+    gap: 0.75rem;
+    margin-block: 0.5rem;
+  }
+  .st__count-n {
+    font-size: calc(var(--t-mega) * 2.8);
+    font-weight: var(--w-display);
+    line-height: var(--lh-mega);
+    letter-spacing: var(--tr-mega);
+  }
+
+  /* 11 May: the night's log beside the story. */
+  .st__night-side {
+    display: grid;
+    justify-items: start;
+    gap: 1rem;
+  }
+  .st__night {
+    width: 100%;
+    font-size: var(--t-xs);
+  }
+  :global(html.js) .st__night:not(.is-open) .st__night-row:nth-child(n + 9) {
+    display: none;
+  }
+  .st__night-row {
+    display: grid;
+    grid-template-columns: 3rem 3.5rem minmax(0, 1fr);
+    column-gap: 0.5rem;
+    padding-block: 0.3rem;
+    break-inside: avoid;
+  }
+  .st__who {
+    color: var(--c-muted);
+  }
+  .st__night-row.is-mike .st__who {
+    color: var(--c-fg);
+  }
+  .st__more {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+    padding-inline: 1.25rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-full);
+    transition:
+      background-color var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease);
+  }
+  .st__more:hover,
+  .st__more:focus-visible {
+    background: var(--c-fg);
+    color: var(--c-bg);
+  }
+  .st__more[hidden] {
+    display: none;
+  }
+
+  /* Since then: the lanes run to today, then on dotted, fading out. */
+  .st--since {
+    --pad: calc(var(--u) * 8);
+  }
+  .st__lane.is-to-today {
+    bottom: calc(100% - var(--y0));
+  }
+  .st__lane.is-future {
+    top: var(--y0);
+    bottom: 0;
+    background: repeating-linear-gradient(var(--c-fg) 0 2px, transparent 2px 9px);
+    mask-image: linear-gradient(black 30%, transparent);
+  }
+  .st__node.is-today {
+    background: var(--c-fg);
+  }
+  :global(html.motion) .st__node.is-today::after {
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border: 1px solid var(--c-fg);
+    border-radius: var(--r-full);
+    animation: st-live 2.4s var(--ease) infinite;
+  }
+  @keyframes st-live {
+    from {
+      opacity: 0.8;
+      scale: 0.6;
+    }
+    to {
+      opacity: 0;
+      scale: 1.6;
+    }
+  }
+  .st__branch.is-today {
+    top: calc(var(--y0) + 1rem);
+    left: calc(var(--lane-b) + 0.5rem);
+    color: var(--c-fg);
+  }
+
+  /* ── Its one request. ── */
+  .cl {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    row-gap: 2rem;
+    align-items: end;
+    padding-block: calc(var(--u) * 8) calc(var(--u) * 14);
+    border-top: 1px solid var(--c-line);
+  }
+  .cl__title {
+    grid-column: 1 / span 7;
+    max-width: 14ch;
+    margin-left: -0.04em;
+  }
+  .cl__copy {
+    grid-column: 9 / span 4;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .cl__actions {
+    display: grid;
+    justify-items: start;
+    gap: 1.25rem;
+  }
+
+  @media (max-width: 900px) {
+    .wr__person.is-mike .wr__item {
+      justify-self: start;
+    }
+    .ab__h1,
+    .ab__lead {
+      grid-column: 1 / -1;
+    }
+    .ab__hero {
+      min-height: 0;
+    }
+    /* What it wrote, on a phone: Mike's lines, then Maciej's, each under its name, each line on a
+       short tick; no centre line. */
+    .wr {
+      justify-items: stretch;
+    }
+    .wr__head {
+      justify-items: start;
+      text-align: left;
+    }
+    .wr__grid {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 1.5rem;
+    }
+    .wr__spine,
+    .wr__node {
+      display: none;
+    }
+    .wr__person.is-mike :is(.wr__name, .wr__item),
+    .wr__person.is-maciej :is(.wr__name, .wr__item) {
+      grid-column: 1;
+      grid-row: auto;
+      text-align: left;
+    }
+    .wr__item {
+      padding-left: 1.5rem;
+    }
+    .wr__person.is-maciej .wr__name {
+      margin-top: calc(var(--u) * 5);
+    }
+    .wr__person.is-mike .wr__item::before,
+    .wr__person.is-maciej .wr__item::before {
+      left: 0;
+      right: auto;
+      width: 0.875rem;
+    }
+    .wr__text {
+      font-size: var(--t-body);
+    }
+    .st {
+      --graph: 2.5rem;
+      --fork: 1.25rem;
+      --lane-a: 0.75rem;
+      grid-template-columns: var(--graph) minmax(0, 1fr);
+    }
+    .st__branch.is-a {
+      left: calc(var(--lane-a) + 0.35rem);
+    }
+    .st__branch.is-b,
+    .st__branch.is-today {
+      left: calc(var(--lane-a) + 0.3rem);
+      top: calc(var(--y0) + var(--fork) + 1rem);
+    }
+
+    .br {
+      --graph: 2.5rem;
+      grid-template-columns: var(--graph) minmax(0, 1fr);
+    }
+    .br__body {
+      grid-column: 2;
+    }
+    :global(html.motion) .st--gap {
+      min-height: 140svh;
+    }
+    .cl__title,
+    .cl__copy {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

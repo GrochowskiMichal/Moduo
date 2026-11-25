@@ -1,0 +1,194 @@
+---
+// Four requests in plain words, each read across like a line in a log: what you asked, the tools
+// your assistant called in order (a node per call on one hairline), and what changed in Moduo,
+// drawn in the app's own rows. Only what the tools do: email is threads, never message bodies.
+import "../../styles/frames.css";
+import Head from "../page/Head.astro";
+import Icon from "../frames/Icon.astro";
+import { ai } from "../../data/pages/ai";
+import type { IconName } from "../../lib/app-icons";
+
+const a = ai.asks;
+---
+
+<section class="asks pg" id="asks" aria-labelledby="asks-title">
+  <div class="wrap">
+    <Head id="asks-title" title={a.title} text={a.text} />
+    <div class="asks__cols t-xs quiet" aria-hidden="true">
+      <span class="asks__c1">You ask</span>
+      <span class="asks__c2">{a.calls}</span>
+      <span class="asks__c3">{a.result}</span>
+    </div>
+    <ol class="asks__list">
+      {
+        a.rows.map((row) => (
+          <li class="asks__row" data-reveal>
+            <p class="asks__say t-m">
+              <span class="sr-only">You ask: </span>“{row.say}”
+            </p>
+            <div class="asks__calls">
+              <p class="sr-only">{a.calls}:</p>
+              <ol class="asks__chain">
+                {row.calls.map((c) => (
+                  <li>
+                    <code>{c}</code>
+                  </li>
+                ))}
+              </ol>
+              <p class="asks__needs t-xs quiet">Needs {row.needs}</p>
+            </div>
+            <div class="ap asks__out">
+              <p class="sr-only">{a.result}:</p>
+              <ul class="asks__panel">
+                {row.result.map((r) => (
+                  <li>
+                    <Icon name={r.icon as IconName} class="ap-i--sm" />
+                    <span class="ap-ell">{r.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .asks__cols,
+  .asks__row {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+  }
+  .asks__cols {
+    padding-bottom: 0.875rem;
+    font-weight: var(--w-ui);
+  }
+  .asks__c1,
+  .asks__say {
+    grid-column: 1 / span 4;
+  }
+  .asks__c2,
+  .asks__calls {
+    grid-column: 5 / span 4;
+  }
+  .asks__c3,
+  .asks__out {
+    grid-column: 9 / span 4;
+  }
+  .asks__row {
+    align-items: start;
+    padding: 2rem 0;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .asks__row:last-child {
+    border-bottom: 1px solid var(--c-line-strong);
+  }
+  .asks__say {
+    max-width: 24ch;
+    padding-right: 1rem;
+    text-indent: -0.4em;
+  }
+  /* The calls in order: a node per call on one hairline, top to bottom. */
+  .asks__chain {
+    position: relative;
+    display: grid;
+    gap: 0.625rem;
+    padding-left: 1.25rem;
+  }
+  .asks__chain::before {
+    content: "";
+    position: absolute;
+    left: 0.25rem;
+    top: 0.65rem;
+    bottom: 0.65rem;
+    width: 1px;
+    background: var(--c-line-strong);
+  }
+  .asks__chain li {
+    position: relative;
+  }
+  .asks__chain li::before {
+    content: "";
+    position: absolute;
+    left: -1.25rem;
+    top: 50%;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: var(--c-bg);
+    box-shadow: inset 0 0 0 1px var(--c-muted);
+    translate: 0 -50%;
+  }
+  .asks__chain li:last-child::before {
+    background: var(--c-fg);
+    box-shadow: none;
+  }
+  .asks__chain code {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.75rem;
+    padding: 0 0.5rem;
+    border-radius: var(--r-md);
+    border: 1px solid var(--c-line-strong);
+    background: var(--c-card);
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+  }
+  .asks__needs {
+    margin-top: 0.875rem;
+    padding-left: 1.25rem;
+  }
+  /* What changed, as the app lists it. */
+  .asks__out {
+    font-size: 14px;
+  }
+  .asks__panel {
+    display: grid;
+    padding: 0.286em 0.857em;
+    border-radius: 0.857em;
+    background: var(--ap-card);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+  }
+  .asks__panel li {
+    display: flex;
+    align-items: center;
+    gap: 0.643em;
+    min-height: 2.571em;
+    min-width: 0;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .asks__panel li:last-child {
+    border-bottom: 0;
+  }
+  .asks__panel li:first-child {
+    color: var(--ap-fg);
+  }
+  .asks__panel li + li {
+    color: var(--ap-muted);
+  }
+  .asks__panel :global(.ap-i) {
+    flex: none;
+    color: var(--ap-muted);
+  }
+  @media (max-width: 900px) {
+    .asks__cols {
+      display: none;
+    }
+    .asks__row {
+      row-gap: 1.25rem;
+    }
+    .asks__say,
+    .asks__calls,
+    .asks__out {
+      grid-column: 1 / -1;
+    }
+    .asks__say {
+      max-width: none;
+    }
+  }
+</style>

@@ -1,0 +1,291 @@
+---
+// The frame's top edge: the lockup (top left), the nav, the one action (top right). It blends
+// with `difference`, so over a Paper stroke it inverts like everything else on the site.
+// It steps aside while you scroll down and comes back when you scroll up (motion/header.ts).
+// The action opens the waitlist (components/WaitlistDialog.astro) and, once you're on the list,
+// says so.
+import { login, moduleOrder, nav, waitlist } from "../data/site";
+import Btn from "./Btn.astro";
+import Lockup from "./Lockup.astro";
+
+const path = Astro.url.pathname.replace(/\.html$/, "").replace(/\/$/, "") || "/";
+const isCurrent = (href: string) => !href.includes("#") && href === path;
+// On a module page, "Modules" is where you are: the section, not the page ("true", not "page").
+const inModules = (moduleOrder as readonly string[]).includes(path.slice(1));
+// A page under a nav item marks that item as where you are: the MCP docs sit under AI.
+const under: Record<string, string> = { "/mcp": "/ai" };
+const current = (href: string) =>
+  isCurrent(href)
+    ? "page"
+    : (inModules && href === "/#modules") || under[path] === href
+      ? "true"
+      : undefined;
+---
+
+<header class="hdr" data-hdr>
+  <div class="hdr__in">
+    <a class="hdr__brand" href="/" aria-label="Moduo home">
+      <Lockup typed />
+    </a>
+    <nav class="hdr__nav" aria-label="Main">
+      <ul>
+        {
+          nav.map((item) => (
+            <li>
+              <a class="hdr__link" href={item.href} aria-current={current(item.href)}>
+                {item.label}
+              </a>
+            </li>
+          ))
+        }
+      </ul>
+      <span class="hdr__hl" aria-hidden="true"></span>
+    </nav>
+    <div class="hdr__end">
+      <a class="hdr__login" href="/login">{login.link}</a>
+      <Btn size="sm" class="hdr__cta" data-wl-open="nav" aria-haspopup="dialog">
+        <span class="hdr__cta-join">{waitlist.button}</span>
+        <span class="hdr__cta-on"><span class="hdr__tick" aria-hidden="true"></span>{waitlist.onList}</span>
+      </Btn>
+      <button class="hdr__menu" type="button" aria-expanded="false" aria-controls="menu" data-menu-open>
+        <span class="hdr__menu-label">Menu</span>
+        <span class="hdr__menu-glyph" aria-hidden="true"><i></i><i></i></span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<style>
+  .hdr {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: var(--z-header);
+    mix-blend-mode: difference;
+    color: var(--c-fg);
+    pointer-events: none;
+    transition:
+      translate 0.6s var(--ease),
+      background-color 0.3s var(--ease),
+      box-shadow 0.3s var(--ease);
+  }
+  :global(html.hdr-away) .hdr {
+    translate: 0 -110%;
+  }
+  /* Reading pages have no strokes to invert over, and home's hero is a picture (First light) whose
+     sky would tint an inverted bar: the bar stays plain there. */
+  :global(html[data-home]) .hdr {
+    mix-blend-mode: normal;
+  }
+  /* Reading pages have no strokes to invert over: the bar stays plain there. */
+  :global(html[data-tone="reading"]) .hdr {
+    mix-blend-mode: normal;
+  }
+  /* Past the top, the bar turns solid so it never sits on top of text; at the top it blends. */
+  :global(html.hdr-solid) .hdr {
+    mix-blend-mode: normal;
+    background: var(--c-bg);
+    box-shadow: 0 1px 0 var(--c-line);
+  }
+  /* Home lends the mark to its scene (motion/interlock.ts): once the page moves, the canvas
+     draws it on the header's own pixels and grows it out of the header, so the header's copy
+     steps out at once (the two are one picture) and the bar keeps inverting over the stroke as
+     it passes. The mark fades back in once the stroke has grown away. */
+  :global(html.mark-return) .hdr__brand :global(.lockup__mark) {
+    transition:
+      translate var(--d-hover) var(--ease),
+      opacity var(--d-hover) var(--ease);
+  }
+  :global(html.mark-lent) .hdr {
+    mix-blend-mode: difference;
+    background-color: transparent;
+    box-shadow: none;
+  }
+  :global(html.mark-lent:not(.menu-open)) .hdr__brand :global(.lockup__mark) {
+    opacity: 0;
+    transition: none;
+  }
+  .hdr__in {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    height: var(--nav-h);
+    padding-inline: var(--margin);
+    max-width: calc(var(--content-max) + 2 * var(--margin));
+    margin-inline: auto;
+  }
+  .hdr__in > * {
+    pointer-events: auto;
+  }
+  .hdr__brand {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    display: inline-flex;
+    padding: 0.5rem 0.375rem;
+    margin-inline: -0.375rem;
+    border-radius: var(--r-sm);
+  }
+  /* The lockup answers the pointer in the site's verb: the mark and the word part a little. */
+  .hdr__brand :global(:is(.lockup__mark, .lockup__word)) {
+    transition: translate var(--d-hover) var(--ease);
+  }
+  .hdr__brand:is(:hover, :focus-visible) :global(.lockup__mark) {
+    translate: -120px 0;
+  }
+  .hdr__brand:is(:hover, :focus-visible) :global(.lockup__word) {
+    translate: 180px 0;
+  }
+  /* typed lockup: the parts are CSS pixels, not viewBox units */
+  .hdr__brand:is(:hover, :focus-visible) :global(.lockup--typed .lockup__mark) {
+    translate: -2px 0;
+  }
+  .hdr__brand:is(:hover, :focus-visible) :global(.lockup--typed .lockup__word) {
+    translate: 3px 0;
+  }
+  .hdr__nav {
+    grid-column: 2;
+    grid-row: 1;
+    position: relative;
+  }
+  .hdr__nav ul {
+    display: flex;
+    gap: 0.25rem;
+  }
+  .hdr__link {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    border-radius: var(--r-md);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    letter-spacing: var(--tr-ui);
+    color: var(--c-muted);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .hdr__link[aria-current],
+  .hdr__link.is-hot {
+    color: var(--c-fg);
+  }
+  .hdr__link:focus-visible {
+    color: var(--c-fg);
+  }
+  /* The shared highlight: the app's hover fill, sliding to the item under the pointer. */
+  .hdr__hl {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 2.25rem;
+    width: 0;
+    border-radius: var(--r-md);
+    background: var(--c-hover);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .hdr__end {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  /* Log in: a quiet link beside the one action, the app's hover fill under it. */
+  .hdr__login {
+    display: inline-flex;
+    align-items: center;
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    border-radius: var(--r-md);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    letter-spacing: var(--tr-ui);
+    color: var(--c-muted);
+    transition:
+      color var(--d-hover) var(--ease),
+      background-color var(--d-hover) var(--ease);
+  }
+  .hdr__login:is(:hover, :focus-visible) {
+    color: var(--c-fg);
+    background: var(--c-hover);
+  }
+  /* On the list: the button says so, with the tick (two strokes that just met). */
+  .hdr__cta-on,
+  :global(html.wl-joined) .hdr__cta-join {
+    display: none;
+  }
+  :global(html.wl-joined) .hdr__cta {
+    background: transparent;
+    color: var(--c-fg);
+    border-color: var(--c-line-strong);
+  }
+  :global(html.wl-joined) .hdr__cta-on {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .hdr__tick {
+    width: 0.5rem;
+    height: 0.75rem;
+    background: currentColor;
+    clip-path: polygon(0 45%, 100% 0, 100% 55%, 0 100%);
+  }
+
+  .hdr__menu {
+    display: none;
+    align-items: center;
+    gap: 0.625rem;
+    height: 2.25rem;
+    padding: 0 0.25rem 0 0.75rem;
+    border-radius: var(--r-md);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+  }
+  .hdr__menu-glyph {
+    position: relative;
+    width: 1.375rem;
+    height: 1.375rem;
+  }
+  /* Two strokes: apart when closed, overlapping into a window when open. */
+  .hdr__menu-glyph i {
+    position: absolute;
+    top: 0.125rem;
+    width: 0.5rem;
+    height: 1.125rem;
+    background: currentColor;
+    clip-path: polygon(0 45%, 100% 0, 100% 55%, 0 100%);
+    transition: translate 0.4s var(--ease);
+  }
+  .hdr__menu-glyph i:first-child {
+    left: 0.125rem;
+  }
+  .hdr__menu-glyph i:last-child {
+    left: 0.75rem;
+    mix-blend-mode: difference;
+  }
+  .hdr__menu[aria-expanded="true"] .hdr__menu-glyph i:first-child {
+    translate: 0.1875rem 0;
+  }
+  .hdr__menu[aria-expanded="true"] .hdr__menu-glyph i:last-child {
+    translate: -0.1875rem 0;
+  }
+
+  @media (max-width: 900px) {
+    .hdr__in {
+      grid-template-columns: 1fr auto;
+    }
+    .hdr__end {
+      grid-column: 2;
+    }
+    .hdr__nav,
+    .hdr__login,
+    .hdr__cta {
+      display: none;
+    }
+    .hdr__menu {
+      display: inline-flex;
+    }
+  }
+</style>

@@ -100,6 +100,11 @@ export function readEmailPrefs(userId: string): EmailPrefs {
   }));
 }
 
+/** This person's stored copy, or null when the device holds none (prefs-sync parking). */
+export function readStoredEmailPrefs(userId: string): EmailPrefs | null {
+  return readStored<EmailPrefs | null>(prefsKey(userId), sanitizeEmailPrefs, () => null);
+}
+
 export function writeEmailPrefs(userId: string, prefs: EmailPrefs): void {
   writeStored(prefsKey(userId), sanitizeEmailPrefs(prefs));
 }

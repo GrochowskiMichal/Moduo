@@ -1,0 +1,541 @@
+---
+// Six kinds of work, spread over ten apps; six modules, one window (DESIGN.md §21 to §23). With
+// motion it is one held stage that takes the chain over from the scene above it
+// (components/home/Scene.astro): the scene's last frame stays, its words and the ribbon fade,
+// and the six strokes it leaves glide down into the title bar of one window that opens out of
+// them. The window holds the app itself (components/frames): each module comes through it in
+// turn, swept in behind a 45° edge, its tab lit in the app's bar; the camera closes in on the
+// module's one gesture, its key comes up and goes down, the app does what it does and says so.
+// The apps each module replaces are struck out over its name; the answer and the keys that reach
+// all six close it. One driver: motion/modules.ts. Without motion it is the same seven as a list,
+// each module's words beside its picture.
+import "../../styles/bento.css";
+import CalendarFrame from "../frames/CalendarFrame.astro";
+import ChatFrame from "../frames/ChatFrame.astro";
+import ContactFrame from "../frames/ContactFrame.astro";
+import EmailFrame from "../frames/EmailFrame.astro";
+import HomeFrame from "../frames/HomeFrame.astro";
+import Icon from "../frames/Icon.astro";
+import NotesFrame from "../frames/NotesFrame.astro";
+import TasksFrame from "../frames/TasksFrame.astro";
+import KeysMini from "../bento/KeysMini.astro";
+import { keys, moduleOrder, modules, modulesBento, modulesIntro } from "../../data/site";
+import type { IconName } from "../../lib/app-icons";
+import { STROKE, STROKE_PATH } from "../../lib/stroke";
+
+// The keycaps that light when pressed (motion/keys.ts); a browser keeps ⌘K and ⌘1 for itself.
+const live = new Set(["?"]);
+const frames = { email: EmailFrame, tasks: TasksFrame, notes: NotesFrame, calendar: CalendarFrame, contacts: ContactFrame, chat: ChatFrame };
+const items = moduleOrder.map((slug, i) => ({
+  slug,
+  i,
+  name: modules[slug].name,
+  text: modulesBento[slug],
+  Frame: frames[slug],
+  m: modulesIntro.moments[slug],
+}));
+const N = items.length;
+---
+
+<section class="mods" id="modules" aria-labelledby="mods-title" data-mods data-bento>
+  <div class="mods__stage" data-mods-stage>
+    <div class="mods__head wrap grid" data-mods-head>
+      <h2 class="mods__title t-l" id="mods-title">{modulesIntro.title}</h2>
+    </div>
+
+    {/* The one window: its bar holds the chain once it lands, and the name of what's open. */}
+    <div class="mods__win" aria-hidden="true" data-mods-win>
+      <div class="mods__bar">
+        <span class="mods__lights"><i></i><i></i><i></i></span>
+        <span class="mods__slot" data-mods-slot></span>
+        <span class="mods__where t-xs tabular" data-mods-where>{modulesIntro.tally(1)}</span>
+      </div>
+    </div>
+
+    <ol class="mods__list">
+      {
+        items.map(({ slug, i, name, text, Frame, m }) => (
+          <li class="mods__item" data-mods-item={i}>
+            <div class="mods__cap" data-mods-cap>
+              <p class="mods__n t-xs tabular" aria-hidden="true">
+                {i + 1} / {N}
+              </p>
+              <p class="mods__was t-s">
+                <span class="sr-only">Instead of </span>
+                {modulesIntro.was[slug].map((app, k) => (
+                  <>
+                    {k > 0 && <span class="mods__dot" aria-hidden="true"> · </span>}
+                    <s>{app}</s>
+                  </>
+                ))}
+              </p>
+              <h3 class="mods__name t-l">
+                <a href={`/${slug}`}>{name}</a>
+              </h3>
+              <p class="mods__line muted">{text}</p>
+              <a class="mods__go link t-s" href={`/${slug}`}>
+                Open {name}
+              </a>
+            </div>
+            <div class="mods__pane" data-mods-pane={slug}>
+              <div class="mods__cam" data-mods-cam>
+                <Frame />
+              </div>
+              <div class="mods__fx" aria-hidden="true">
+                {m.key && <kbd class="mods__key" data-mods-key>{m.key}</kbd>}
+                <div class="mods__toast" data-mods-toast>
+                  <Icon name={m.icon as IconName} />
+                  <span class="mods__toast-t">{m.title}</span>
+                  <span class="mods__toast-x">{m.text}</span>
+                  <span class="mods__toast-tag">{m.tag}</span>
+                </div>
+              </div>
+            </div>
+          </li>
+        ))
+      }
+      <li class="mods__item mods__item--keys" data-mods-item={N}>
+        <div class="mods__cap" data-mods-cap>
+          <p class="mods__n t-xs" aria-hidden="true">All {N}</p>
+          <h3 class="mods__name t-l" id="keys-title">{modulesIntro.answer}</h3>
+          <p class="mods__line muted mods__say">
+            {
+              keys.parts.map((part) =>
+                typeof part === "string" ? (
+                  part
+                ) : (
+                  <kbd class="kbd mods__cap-k" data-key={live.has(part.k) ? part.k : undefined}>
+                    {part.k}
+                  </kbd>
+                ),
+              )
+            }
+          </p>
+        </div>
+        <div class="mods__pane mods__pane--keys" data-mods-pane="keys">
+          <div class="mods__cam" data-mods-cam>
+            <HomeFrame />
+          </div>
+          <div class="mods__palette">
+            <KeysMini />
+          </div>
+        </div>
+      </li>
+    </ol>
+
+    {/* The six strokes: the scene's chain as it hands over, then the window's bar. */}
+    <svg class="mods__chain" aria-hidden="true" data-mods-chain>
+      <defs>
+        {items.map(({ i }) => (
+          <clipPath id={`mods-c${i}`}>
+            <path d={STROKE_PATH} data-mods-clip={i} />
+          </clipPath>
+        ))}
+      </defs>
+      {items.map(({ i }) => <path class="mods__s" d={STROKE_PATH} data-mods-s={i} />)}
+      {
+        items.slice(0, -1).map(({ i }) => (
+          <g clip-path={`url(#mods-c${i + 1})`}>
+            <path class="mods__w" d={STROKE_PATH} data-mods-w={i} />
+          </g>
+        ))
+      }
+      {/* The windows the scene's ribbon cut into each end, closing as the ribbon goes. */}
+      <g clip-path="url(#mods-c0)">
+        <path class="mods__w" d={STROKE_PATH} data-mods-edge="0" />
+      </g>
+      <g clip-path={`url(#mods-c${N - 1})`}>
+        <path class="mods__w" d={STROKE_PATH} data-mods-edge="1" />
+      </g>
+    </svg>
+  </div>
+</section>
+
+<style>
+  /* ── Still (no JS, reduced motion): the six as a list, the words beside each module's window. */
+  .mods {
+    padding: calc(var(--u) * 10) 0 calc(var(--u) * 8);
+  }
+  .mods__head {
+    align-items: end;
+    row-gap: 1.25rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  .mods__title {
+    grid-column: 1 / span 7;
+    margin-left: -0.04em;
+  }
+  .mods__win,
+  .mods__chain {
+    display: none;
+  }
+  .mods__list {
+    display: grid;
+    gap: calc(var(--u) * 6);
+    width: 100%;
+    max-width: calc(var(--content-max) + 2 * var(--margin));
+    margin: 0 auto;
+    padding: 0 var(--margin);
+    list-style: none;
+  }
+  .mods__item {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: center;
+  }
+  .mods__cap {
+    grid-column: 1 / span 4;
+    display: grid;
+    gap: 0.75rem;
+    align-content: center;
+  }
+  .mods__n {
+    color: var(--c-quiet);
+    letter-spacing: 0.04em;
+  }
+  .mods__name {
+    margin: 0;
+  }
+  /* The apps a module replaces, struck out: a Paper line drawn through each (the driver draws it
+     as the module comes in; still, it's drawn). */
+  .mods__was {
+    color: var(--c-quiet);
+  }
+  .mods__was s {
+    text-decoration: none;
+    background: linear-gradient(var(--c-muted), var(--c-muted)) no-repeat 0 55% / calc(var(--strike, 1) * 100%) 1px;
+  }
+  .mods__name a {
+    color: inherit;
+    text-decoration: none;
+  }
+  .mods__line {
+    max-width: 30ch;
+    text-wrap: pretty;
+  }
+  .mods__go {
+    justify-self: start;
+  }
+  /* The module's picture: the app itself, the words beside it. */
+  .mods__pane {
+    grid-column: 5 / -1;
+    position: relative;
+  }
+  .mods__fx {
+    display: none;
+  }
+  /* The keys: ⌘K open over Home. */
+  .mods__pane--keys .mods__palette {
+    position: absolute;
+    left: 50%;
+    top: 14%;
+    width: min(34rem, 70%);
+    translate: -50% 0;
+    container-type: inline-size;
+    --mini-fs: clamp(12px, 2.4cqi, 14px);
+  }
+  .mods__pane--keys .mods__palette :global(.mini) {
+    position: relative;
+    left: 0;
+    width: 100%;
+  }
+  .mods__pane--keys .mods__cam {
+    opacity: 0.35;
+  }
+  .mods__cap-k {
+    font-size: 0.85em;
+    vertical-align: 0.08em;
+    transition:
+      background-color 0.18s var(--ease),
+      color 0.18s var(--ease),
+      translate 0.18s var(--ease);
+  }
+  .mods__cap-k:global(.is-down) {
+    background: var(--c-fg);
+    color: var(--c-bg);
+    translate: 0 2px;
+  }
+  @media (max-width: 900px) {
+    .mods__title,
+    .mods__cap,
+    .mods__pane {
+      grid-column: 1 / -1;
+    }
+    .mods__item {
+      row-gap: 1.25rem;
+    }
+  }
+
+  /* ── With motion: one held stage over the scene's last frame. It starts where the scene's own
+     stage lets go (a screen higher), above it, and shows nothing until it takes over. ── */
+  :global(html.motion) .mods {
+    position: relative;
+    z-index: 4;
+    height: 750svh;
+    margin-top: -100svh;
+    padding: 0;
+    pointer-events: none;
+  }
+  :global(html.motion) .mods__stage {
+    /* The one window, as the driver and the panes inside it both read it. */
+    /* The window holds the app at its own proportions (0.62 of its width), as wide as the stage
+       right of the words allows and short enough to stand clear of the header. */
+    --bar: 2.5rem;
+    --ww: min(calc(64vw - var(--margin)), calc((100svh - var(--nav-h) - 10svh - var(--bar)) / 0.62));
+    --wh: calc(var(--bar) + var(--ww) * 0.62);
+    --wx: calc(100vw - var(--margin) - var(--ww));
+    --wy: calc(var(--nav-h) + (100svh - var(--nav-h) - var(--wh)) / 2);
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    overflow: clip;
+  }
+  :global(html.motion) .mods__head {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--nav-h) + 4svh);
+    margin: 0 auto;
+  }
+  /* Beside the window the title stands alone at the top left, its words under it. */
+  @media (min-aspect-ratio: 6 / 5) {
+    :global(html.motion) .mods__head {
+      max-width: none;
+      margin: 0;
+      padding: 0 var(--margin);
+      width: calc(var(--wx) - var(--margin));
+      display: block;
+    }
+  }
+  :global(html.motion) .mods__win {
+    display: block;
+    position: absolute;
+    left: var(--wx);
+    top: var(--wy);
+    width: var(--ww);
+    height: var(--wh);
+    border-radius: var(--r-xl);
+    background: #0a0a0a;
+    box-shadow:
+      inset 0 0 0 1px var(--c-line-strong),
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2rem 6rem -2rem rgb(0 0 0 / 0.9);
+  }
+  :global(html.motion) .mods__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: var(--bar);
+    padding: 0 1.25rem;
+    border-bottom: 1px solid var(--c-line);
+  }
+  :global(html.motion) .mods__lights {
+    display: flex;
+    gap: 0.45rem;
+    margin-right: 1rem;
+  }
+  :global(html.motion) .mods__lights i {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+    background: var(--c-line-strong);
+  }
+  :global(html.motion) .mods__bar {
+    justify-content: flex-start;
+  }
+  :global(html.motion) .mods__where {
+    margin-left: auto;
+  }
+  :global(html.motion) .mods__slot {
+    display: block;
+    width: 4.6rem;
+    height: 1.1rem;
+  }
+  :global(html.motion) .mods__where {
+    color: var(--c-quiet);
+    letter-spacing: 0.04em;
+  }
+  :global(html.motion) .mods__list {
+    display: block;
+    max-width: none;
+    padding: 0;
+  }
+  :global(html.motion) .mods__item {
+    display: block;
+  }
+  :global(html.motion) .mods__pane {
+    position: absolute;
+    left: var(--wx);
+    top: calc(var(--wy) + var(--bar));
+    width: var(--ww);
+    height: calc(var(--wh) - var(--bar));
+    border-radius: 0 0 var(--r-xl) var(--r-xl);
+    overflow: hidden;
+    visibility: hidden;
+  }
+  /* The camera: the app at the window's width, moved and scaled from its top left. */
+  :global(html.motion) .mods__cam {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    transform-origin: 0 0;
+  }
+  /* Inside the one window the app has no window of its own: no rim, no shadow, square on top,
+     and as tall as the window. */
+  :global(html.motion) .mods__cam :global(.ap__win) {
+    min-height: calc(var(--wh) - var(--bar));
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :global(html.motion) .mods__cam :global(.ap__body) {
+    flex: 1;
+  }
+  :global(html.motion) .mods__fx {
+    display: block;
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  /* The gesture's key: a real keycap, raised over the app where the gesture happens. */
+  .mods__key {
+    position: absolute;
+    left: 0;
+    top: 0;
+    display: grid;
+    place-items: center;
+    min-width: 3.25rem;
+    height: 3.25rem;
+    padding: 0 1rem;
+    border-radius: 0.85rem;
+    background: linear-gradient(#2a2a2a, #161616);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      inset 0 -3px 0 rgb(0 0 0 / 0.55),
+      0 0 0 1px rgb(255 255 255 / 0.08),
+      0 1.25rem 2.5rem -0.75rem rgb(0 0 0 / 0.95);
+    color: var(--c-fg);
+    font-family: "Geist", var(--f-sans);
+    font-size: 1.15rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    opacity: 0;
+  }
+  /* What the app says it did: its own toast, at the window's foot. */
+  .mods__toast {
+    position: absolute;
+    left: 50%;
+    bottom: 3.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 0.85rem 0.6rem 0.75rem;
+    border-radius: 0.75rem;
+    background: #121212;
+    box-shadow:
+      inset 0 0 0 1px rgb(250 250 250 / 0.1),
+      inset 0 1px 0 rgb(255 255 255 / 0.06),
+      0 1.5rem 3rem -1rem rgb(0 0 0 / 0.95);
+    color: var(--c-fg);
+    font-family: "Geist", var(--f-sans);
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    white-space: nowrap;
+    translate: -50% 0;
+    opacity: 0;
+  }
+  .mods__toast :global(svg) {
+    width: 1rem;
+    height: 1rem;
+    color: var(--c-fg);
+  }
+  .mods__toast-t {
+    font-weight: 600;
+  }
+  .mods__toast-x {
+    color: var(--c-muted);
+  }
+  /* What a control became, where it was. */
+  :global(.mods__made) {
+    position: absolute;
+    translate: 0 -50%;
+    padding: 0.2rem 0.55rem;
+    border-radius: 0.375rem;
+    background: rgb(250 250 250 / 0.09);
+    box-shadow: inset 0 0 0 1px rgb(250 250 250 / 0.12);
+    color: var(--c-fg);
+    font-family: "Geist", var(--f-sans);
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+  }
+  /* Done: the task's title is struck through as it goes. */
+  :global(html.motion) .mods__cam :global(.tf-title) {
+    display: inline-block;
+    background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0% 2px;
+  }
+  @media (max-aspect-ratio: 6 / 5) {
+    .mods__toast {
+      bottom: 1rem;
+      max-width: 92%;
+      white-space: normal;
+      flex-wrap: wrap;
+    }
+    .mods__key {
+      min-width: 2.75rem;
+      height: 2.75rem;
+      font-size: 1rem;
+    }
+  }
+  .mods__toast-tag {
+    padding: 0.15rem 0.45rem;
+    border-radius: 0.375rem;
+    background: rgb(250 250 250 / 0.07);
+    color: var(--c-muted);
+    font-size: 0.75rem;
+  }
+  :global(html.motion) .mods__cap {
+    position: absolute;
+    left: var(--margin);
+    bottom: 8svh;
+    width: min(26rem, calc(42vw - 2 * var(--margin)));
+    opacity: 0;
+    visibility: hidden;
+  }
+  :global(html.motion) .mods__cap a {
+    pointer-events: auto;
+  }
+  :global(html.motion) .mods__chain {
+    display: block;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    visibility: hidden;
+  }
+  .mods__s {
+    fill: var(--c-fg);
+  }
+  .mods__w {
+    fill: var(--c-bg);
+  }
+  /* A phone: the title over the window, the window across the screen, the words under it. */
+  @media (max-aspect-ratio: 6 / 5) {
+    :global(html.motion) .mods__stage {
+      --bar: 2.25rem;
+      --ww: calc(100vw - 2 * var(--margin));
+      --wh: 42svh;
+      --wx: var(--margin);
+      --wy: 24svh;
+    }
+    :global(html.motion) .mods__cap {
+      bottom: 4svh;
+      width: calc(100vw - 2 * var(--margin));
+      gap: 0.5rem;
+    }
+
+  }
+</style>

@@ -1,0 +1,121 @@
+---
+// The longer answers, one page each, as index rows: the name on line 5, what it holds on line 9.
+// Under the pointer or focus the row's two strokes close into a window and the name moves one
+// step along (the index rows' treatment).
+import StrokePair from "../StrokePair.astro";
+import { pages, type PageSlug } from "../../data/pages";
+import { help } from "../../data/pages/help";
+
+const rows = help.guides.slugs.map((slug) => pages[slug as PageSlug]);
+---
+
+<section class="hgd pg" aria-labelledby="hgd-title">
+  <div class="wrap grid">
+    <div class="hgd__head">
+      <h2 class="hgd__title t-l" id="hgd-title" data-split>{help.guides.title}</h2>
+      <p class="muted" data-reveal>{help.guides.text}</p>
+    </div>
+    <ul class="hgd__list">
+      {
+        rows.map((p) => (
+          <li class="hgd__row" data-reveal>
+            <a class="hgd__a" href={p.href}>
+              <StrokePair class="hgd__g" size="0.7rem" />
+              <span class="hgd__name t-m">{p.label ?? p.name}</span>
+              <span class="hgd__short muted">{p.short}</span>
+              <svg class="hgd__arrow" width="16" height="16" viewBox="0 0 14 14" aria-hidden="true">
+                <path d="M2 7h9.5M7.5 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+              </svg>
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</section>
+
+<style>
+  .hgd__head {
+    grid-column: 1 / span 3;
+    display: grid;
+    align-content: start;
+    gap: 1rem;
+  }
+  .hgd__list {
+    grid-column: 5 / span 8;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .hgd__row {
+    border-bottom: 1px solid var(--c-line-strong);
+  }
+  .hgd__a {
+    display: grid;
+    grid-template-columns: auto minmax(0, 15rem) minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 1.25rem;
+    padding: 1.375rem 0;
+    border-radius: 0;
+  }
+  .hgd__a :global(.hgd__g) {
+    color: var(--c-quiet);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .hgd__name {
+    font-weight: var(--w-ui);
+    transition: translate 0.5s var(--ease);
+  }
+  .hgd__short {
+    font-size: var(--t-s);
+    line-height: 1.5;
+  }
+  .hgd__arrow {
+    color: var(--c-quiet);
+    transition:
+      translate var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease);
+  }
+  .hgd__a:focus-visible {
+    outline-offset: -2px;
+  }
+  @media (hover: hover) {
+    .hgd__a:hover .hgd__name {
+      translate: 0.4em 0;
+    }
+    .hgd__a:hover :global(.sp) {
+      --g: 1;
+      color: var(--c-fg);
+    }
+    .hgd__a:hover .hgd__arrow {
+      translate: 4px 0;
+      color: var(--c-fg);
+    }
+  }
+  .hgd__a:focus-visible .hgd__name {
+    translate: 0.4em 0;
+  }
+  .hgd__a:focus-visible :global(.sp) {
+    --g: 1;
+    color: var(--c-fg);
+  }
+  @media (max-width: 900px) {
+    .hgd__head,
+    .hgd__list {
+      grid-column: 1 / -1;
+    }
+    .hgd__list {
+      margin-top: 1.5rem;
+    }
+    .hgd__a {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      row-gap: 0.375rem;
+    }
+    .hgd__short {
+      grid-column: 2;
+      grid-row: 2;
+    }
+    .hgd__arrow {
+      grid-column: 3;
+      grid-row: 1;
+    }
+  }
+</style>

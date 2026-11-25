@@ -1,0 +1,68 @@
+/* The inner pages' shared parts (components/page/*): a section's rhythm and its head. Each page's
+   own pictures keep their styles in their components. Values come from tokens.css only. */
+
+/* Section rhythm (DESIGN.md §5): about 160 px between sections, about 290 px before a chapter. */
+.pg {
+  padding: calc(var(--u) * 6) 0;
+}
+.pg--chapter {
+  padding-top: calc(var(--u) * 14);
+}
+.pg--tight {
+  padding: calc(var(--u) * 4) 0;
+}
+.pg[id] {
+  scroll-margin-top: var(--nav-h);
+}
+/* Right under a hero the first section starts close, so its head shows on the first screen and
+   the hero never ends on an empty band. */
+.ph + .pg,
+.ph + .longform {
+  padding-top: calc(var(--u) * 3);
+}
+
+/* A section's head: the title on line 1, its words on line 9, bottom aligned (the home page's
+   modules and AI heads). `pg-head--stack` sets the words under the title, on line 1 too. */
+.pg-head {
+  align-items: end;
+  row-gap: 1.25rem;
+  margin-bottom: calc(var(--u) * 6);
+}
+.pg-head__title {
+  grid-column: 1 / span 7;
+  margin-left: -0.04em;
+}
+.pg-head__title.t-xl {
+  max-width: 14ch;
+}
+.pg-head__text {
+  grid-column: 9 / span 4;
+  max-width: 26rem;
+}
+.pg-head--stack .pg-head__text {
+  grid-column: 1 / span 6;
+  max-width: 34rem;
+}
+/* A side head: the title on line 1, the section's body from line 5 (the module pages' lists). */
+.pg-side {
+  row-gap: 2rem;
+}
+.pg-side__head {
+  grid-column: 1 / span 4;
+  display: grid;
+  align-content: start;
+  gap: 1rem;
+}
+.pg-side__body {
+  grid-column: 5 / span 8;
+  min-width: 0;
+}
+@media (max-width: 900px) {
+  .pg-head__title,
+  .pg-head__text,
+  .pg-head--stack .pg-head__text,
+  .pg-side__head,
+  .pg-side__body {
+    grid-column: 1 / -1;
+  }
+}

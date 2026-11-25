@@ -1,0 +1,264 @@
+/* Bentos: cells that each hold one moment of the product, drawn in the app's own anatomy
+   (frames.css). Two families: the modules' cards (rounded, like the app's panels) and the
+   ledger (square hairlines, like a contract's clauses). The pictures inside bleed off a cell's
+   edges, as if the app ran on past it. */
+
+.bento,
+.ledger {
+  /* The pictures' type size, by their cell's width; a cell that must hold a whole moment sizes
+     its room from it (see TasksMini). */
+  --mini-fs: clamp(12px, 2.7cqi, 14px);
+}
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--gutter);
+}
+
+/* ── A module's card: a link to its page. ────────────────────────────────────────────── */
+.bcard {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(26rem, 34vw, 31rem);
+  border-radius: var(--r-xl);
+  background: #0a0a0a;
+  box-shadow:
+    inset 0 0 0 1px var(--c-line),
+    inset 0 1px 0 rgb(255 255 255 / 0.04);
+  overflow: hidden;
+  container-type: inline-size;
+  transition: box-shadow var(--d-hover) var(--ease);
+}
+.bcard::after {
+  /* The light that falls on a card under the pointer, from where the pointer is. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  background: radial-gradient(
+    28rem circle at var(--px, 50%) var(--py, -20%),
+    rgb(255 255 255 / 0.05),
+    transparent 60%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--d-hover) var(--ease);
+}
+.bcard__head {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 1.5rem;
+  row-gap: 0.625rem;
+  padding: clamp(1.25rem, 2.4vw, 2rem) clamp(1.25rem, 2.4vw, 2rem) 0;
+}
+.bcard__title {
+  font-size: clamp(1.25rem, 1.05rem + 0.6vw, 1.625rem);
+  font-weight: var(--w-display);
+  letter-spacing: var(--tr-l);
+  line-height: 1.15;
+}
+/* The line runs under the glyph (which sits beside the title only), so its measure is set by
+   34ch, not by the glyph's column: a narrow card keeps two lines instead of three. */
+.bcard__text {
+  grid-column: 1 / -1;
+  max-width: 34ch;
+  color: var(--c-muted);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+.bcard__head .clit.bcard__glyph {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: center;
+  width: 4.5rem;
+}
+.bcard .bcard__head .clit__s.is-lit {
+  fill: var(--c-muted);
+  transition: fill var(--d-hover) var(--ease);
+}
+.bcard__go {
+  position: absolute;
+  z-index: 2;
+  right: clamp(1.25rem, 2.4vw, 2rem);
+  bottom: clamp(1.25rem, 2.4vw, 2rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.25rem;
+  padding: 0 0.875rem;
+  border-radius: var(--r-md);
+  background: var(--c-primary);
+  color: var(--c-primary-fg);
+  font-size: var(--t-s);
+  font-weight: var(--w-ui);
+  opacity: 0;
+  translate: -0.5rem 0;
+  transition:
+    opacity var(--d-hover) var(--ease),
+    translate var(--d-hover) var(--ease);
+}
+/* A narrow card's Open button keeps only its arrow, so it never sits on the picture's words. */
+@container (max-width: 26rem) {
+  .bcard__go {
+    justify-content: center;
+    width: 2.25rem;
+    padding: 0;
+  }
+  .bcard__go-label {
+    display: none;
+  }
+}
+.bcard__art {
+  position: relative;
+  flex: 1;
+  min-height: 15rem;
+  margin-top: clamp(1.25rem, 2.2vw, 2rem);
+}
+/* A wide card: the words on the left, the picture on the right. */
+.bcard--wide {
+  flex-direction: row;
+  min-height: clamp(22rem, 28vw, 27rem);
+}
+.bcard--wide .bcard__head {
+  flex: 0 0 38%;
+  align-content: start;
+  grid-template-columns: 1fr;
+  padding-bottom: clamp(1.25rem, 2.4vw, 2rem);
+}
+.bcard--wide .bcard__art {
+  margin-top: clamp(1.25rem, 2.4vw, 2rem);
+}
+/* A picture inside a cell: the app's anatomy at a size its cell can carry. */
+.mini {
+  position: absolute;
+  z-index: 1;
+  font-size: var(--mini-fs);
+  transition: translate 0.7s var(--ease);
+}
+.mini .ap__win,
+.mini .ap-panel {
+  font-size: 1em;
+}
+.bcard:not(.bcard--still):is(:hover, :focus-visible)::after {
+  opacity: 1;
+}
+.bcard:not(.bcard--still):is(:hover, :focus-visible) {
+  box-shadow:
+    inset 0 0 0 1px var(--c-line-strong),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+.bcard:not(.bcard--still):is(:hover, :focus-visible) .bcard__go {
+  opacity: 1;
+  translate: 0 0;
+}
+.bcard:not(.bcard--still):is(:hover, :focus-visible) .bcard__head .clit__s.is-lit {
+  fill: var(--c-fg);
+}
+/* The picture parts from the card a little, the site's verb. */
+.bcard:not(.bcard--still):is(:hover, :focus-visible) .mini {
+  translate: -0.375rem -0.375rem;
+}
+.bcard:focus-visible {
+  outline: 2px solid var(--c-primary);
+  outline-offset: 3px;
+}
+
+/* A field of tiny strokes, fading out from its centre: the mark's grain, behind a picture. */
+.bfield {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12'%3E%3Cpath d='M4 5.2 6.4 2.8V7.4L4 9.8Z' fill='%23fff'/%3E%3C/svg%3E");
+  background-size: 12px 12px;
+  opacity: 0.16;
+  -webkit-mask-image: radial-gradient(closest-side, #000 0%, rgb(0 0 0 / 0.5) 45%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 0%, rgb(0 0 0 / 0.5) 45%, transparent 100%);
+}
+
+/* ── The ledger: square cells on hairlines, read like clauses. ───────────────────────── */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--c-line-strong);
+  box-shadow: 0 0 0 1px var(--c-line-strong);
+}
+.lcell {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(26rem, 33vw, 31rem);
+  background: var(--c-bg);
+  overflow: hidden;
+  container-type: inline-size;
+}
+.lcell__head {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 0.625rem;
+  padding: clamp(1.25rem, 2.6vw, 2.25rem) clamp(1.25rem, 2.6vw, 2.25rem) 0;
+}
+.lcell__head--foot {
+  order: 2;
+  padding-top: 0;
+  padding-bottom: clamp(1.25rem, 2.6vw, 2.25rem);
+}
+.lcell__title {
+  font-size: clamp(1.25rem, 1.05rem + 0.6vw, 1.625rem);
+  font-weight: var(--w-display);
+  letter-spacing: var(--tr-l);
+  line-height: 1.15;
+}
+.lcell__text {
+  max-width: 36ch;
+  color: var(--c-muted);
+  font-size: var(--t-body);
+  line-height: 1.5;
+}
+.lcell__art {
+  position: relative;
+  flex: 1;
+  min-height: 15rem;
+}
+
+@media (max-width: 999px) {
+  .bento > *,
+  .ledger > * {
+    grid-column: 1 / -1 !important;
+  }
+  .bcard,
+  .lcell {
+    min-height: 0;
+  }
+  /* A stacked cell sizes to its picture's own room (flex-basis would zero a column's height). */
+  .bcard__art,
+  .lcell__art {
+    flex: none;
+    min-height: 0;
+    height: clamp(17rem, 72vw, 22rem);
+  }
+  .bcard__go {
+    display: none;
+  }
+  .bcard--wide {
+    flex-direction: column;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mini,
+  .bcard__go {
+    transition: none;
+  }
+  .bcard:not(.bcard--still):is(:hover, :focus-visible) .mini {
+    translate: none;
+  }
+}

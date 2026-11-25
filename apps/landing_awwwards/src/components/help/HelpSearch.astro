@@ -1,0 +1,430 @@
+---
+// The help center's questions: one field that answers as you type, the topics as a rail of
+// buttons beside it, and every question in the HTML as a native disclosure, grouped. Typing
+// narrows the groups, marks the words that matched and, once only a few answers are left, opens
+// them (motion/pages/help.ts). Without JS the field and the rail step aside and every group shows.
+import StrokePair from "../StrokePair.astro";
+import { help } from "../../data/pages/help";
+
+const total = help.groups.reduce((n, g) => n + g.items.length, 0);
+const [one, many] = help.search.count;
+const [noneBefore, noneAfter] = help.search.none.text.split("hello@moduo.app");
+---
+
+<section class="hs pg" id="questions" aria-labelledby="hs-title">
+  <div class="wrap grid">
+    <div class="hs__rail">
+      <h2 class="hs__title t-l" id="hs-title" data-split>Questions, by topic</h2>
+      <div class="hs__cats" role="group" aria-label="Show a topic" data-help-cats>
+        <button class="hc" type="button" aria-pressed="true" data-cat="all">
+          <StrokePair class="hc__g" size="0.5rem" />
+          <span class="hc__t">{help.search.all}</span>
+          <span class="hc__n" data-n>{total}</span>
+        </button>
+        {
+          help.groups.map((g) => (
+            <button class="hc" type="button" aria-pressed="false" data-cat={g.id}>
+              <StrokePair class="hc__g" size="0.5rem" />
+              <span class="hc__t">{g.name}</span>
+              <span class="hc__n" data-n>
+                {g.items.length}
+              </span>
+            </button>
+          ))
+        }
+      </div>
+    </div>
+
+    <div class="hs__main">
+      <div class="hs__find" data-help-find>
+        <label class="hs__label t-s" for="help-q">{help.search.label}</label>
+        <div class="hs__box">
+          <svg class="hs__icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="11" cy="11" r="7"></circle>
+            <path d="m20 20-4-4"></path>
+          </svg>
+          <input
+            class="hs__field"
+            id="help-q"
+            type="search"
+            name="q"
+            autocomplete="off"
+            spellcheck="false"
+            enterkeyhint="search"
+            placeholder={help.search.placeholder}
+            aria-describedby="help-count"
+            aria-controls="help-results"
+            data-help-q
+          />
+          <kbd class="kbd hs__key" aria-hidden="true">/</kbd>
+        </div>
+        <p class="hs__count t-s quiet" id="help-count" aria-live="polite" data-help-count data-one={one} data-many={many}>
+          {total} {many}
+        </p>
+      </div>
+
+      <div class="hs__results" id="help-results" data-help-results>
+        {
+          help.groups.map((g) => (
+            <section class="hg" id={g.id} aria-labelledby={`hg-${g.id}`} data-group={g.id}>
+              <h3 class="hg__name" id={`hg-${g.id}`}>
+                {g.name}
+                <span class="hg__n quiet tabular" data-n>
+                  {g.items.length}
+                </span>
+              </h3>
+              <div class="hg__list">
+                {g.items.map((item) => (
+                  <details class="hq" data-item>
+                    <summary class="hq__q">
+                      <span class="hq__t" data-text>
+                        {item.q}
+                      </span>
+                      <StrokePair class="hq__mark" size="0.55rem" />
+                    </summary>
+                    <div class="hq__a">
+                      <p class="muted" data-text>
+                        {item.a}
+                      </p>
+                      {"link" in item && item.link && (
+                        <a class="link hq__more t-s" href={item.link.href}>
+                          {item.link.label}
+                        </a>
+                      )}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </section>
+          ))
+        }
+        <div class="hs__none" hidden data-help-none>
+          <p class="hs__none-t t-l">{help.search.none.title}</p>
+          <p class="muted">
+            {noneBefore}<a class="link" href="mailto:hello@moduo.app">hello@moduo.app</a>{noneAfter}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .hs {
+    padding-top: calc(var(--u) * 4);
+  }
+  .hs__rail {
+    grid-column: 1 / span 3;
+    align-self: start;
+    position: sticky;
+    top: calc(var(--nav-h) + 1.5rem);
+    display: grid;
+    gap: 1.75rem;
+  }
+  .hs__title {
+    max-width: 10ch;
+  }
+  .hs__cats {
+    display: grid;
+    justify-items: start;
+    gap: 0.125rem;
+    margin-left: -0.625rem;
+  }
+  /* A topic: two strokes apart; pressed, they close into a window and the row keeps the nav's
+     resting fill. Under the pointer the name moves one step along. */
+  .hc {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-height: 2.25rem;
+    padding: 0 0.625rem;
+    border-radius: var(--r-md);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    transition:
+      background-color var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease);
+  }
+  .hc :global(.hc__g) {
+    color: var(--c-quiet);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .hc__t {
+    transition: translate 0.5s var(--ease);
+  }
+  .hc__n {
+    font-size: var(--t-xs);
+    color: var(--c-subtle);
+  }
+  .hc[aria-pressed="true"] {
+    background: var(--c-hover);
+    color: var(--c-fg);
+  }
+  .hc[aria-pressed="true"] :global(.sp) {
+    --g: 1;
+    color: var(--c-fg);
+  }
+  .hc:global(.is-empty) {
+    color: var(--c-quiet);
+  }
+  @media (hover: hover) {
+    .hc:hover {
+      color: var(--c-fg);
+    }
+    .hc:hover .hc__t {
+      translate: 0.25em 0;
+    }
+  }
+  .hc:focus-visible {
+    color: var(--c-fg);
+  }
+
+  .hs__main {
+    grid-column: 5 / span 8;
+    min-width: 0;
+  }
+  .hs__find {
+    display: grid;
+    gap: 0.75rem;
+    margin-bottom: calc(var(--u) * 5);
+  }
+  .hs__label {
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+  }
+  .hs__box {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+  .hs__icon {
+    position: absolute;
+    left: 1.25rem;
+    width: 1.375rem;
+    height: 1.375rem;
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    pointer-events: none;
+  }
+  .hs__field {
+    width: 100%;
+    height: 4.25rem;
+    padding: 0 4rem 0 3.5rem;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-line-strong);
+    background: var(--c-card);
+    color: var(--c-fg);
+    font-size: var(--t-m);
+    letter-spacing: var(--tr-m);
+    transition:
+      border-color var(--d-hover) var(--ease),
+      box-shadow var(--d-hover) var(--ease);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .hs__field::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+  .hs__field::placeholder {
+    color: var(--c-quiet);
+  }
+  @media (hover: hover) {
+    .hs__field:hover {
+      border-color: var(--c-dim);
+    }
+  }
+  .hs__field:focus-visible {
+    outline: none;
+    border-color: var(--c-primary);
+    box-shadow: 0 0 0 1px var(--c-primary);
+  }
+  .hs__key {
+    position: absolute;
+    right: 1.25rem;
+    font-size: var(--t-s);
+    color: var(--c-muted);
+    transition: opacity var(--d-hover) var(--ease);
+  }
+  .hs__field:focus ~ .hs__key,
+  .hs__field:not(:placeholder-shown) ~ .hs__key {
+    opacity: 0;
+  }
+  .hs__count {
+    min-height: 1.5em;
+  }
+  :global(html:not(.js)) :is(.hs__find, .hs__cats) {
+    display: none;
+  }
+
+  .hg {
+    scroll-margin-top: calc(var(--nav-h) + 1rem);
+  }
+  .hg + .hg {
+    margin-top: calc(var(--u) * 5);
+  }
+  .hg[hidden] {
+    display: none;
+  }
+  .hg__name {
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--c-line-strong);
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-display);
+  }
+  .hg__n {
+    font-size: var(--t-s);
+    font-weight: var(--w-small);
+  }
+  .hq {
+    border-bottom: 1px solid var(--c-line);
+  }
+  .hq[hidden] {
+    display: none;
+  }
+  .hq__q {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.125rem 0;
+    cursor: pointer;
+    list-style: none;
+    font-size: clamp(1.0625rem, 1rem + 0.25vw, 1.25rem);
+    line-height: 1.4;
+    font-weight: var(--w-ui);
+  }
+  .hq__q::-webkit-details-marker {
+    display: none;
+  }
+  .hq__t {
+    transition: translate 0.5s var(--ease);
+  }
+  @media (hover: hover) {
+    .hq__q:hover .hq__t {
+      translate: 0.4em 0;
+    }
+  }
+  .hq__q:focus-visible {
+    outline-offset: 4px;
+  }
+  .hq[open] .hq__q :global(.sp) {
+    --g: 1;
+  }
+  .hq__a {
+    display: grid;
+    justify-items: start;
+    gap: 0.75rem;
+    padding: 0 0 1.375rem;
+    max-width: 40rem;
+  }
+  .hq[open] .hq__a {
+    animation: hq-in 0.5s var(--ease);
+  }
+  @keyframes hq-in {
+    from {
+      opacity: 0;
+      translate: -12px 0;
+    }
+  }
+  /* A match: the word inverts, the way the site's rule inverts what two strokes share. */
+  .hs :global(mark) {
+    padding: 0 0.06em;
+    margin: 0 -0.06em;
+    background: var(--c-fg);
+    color: var(--c-bg);
+    border-radius: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+  .hs__none {
+    display: grid;
+    gap: 0.75rem;
+    padding: calc(var(--u) * 4) 0;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .hs__none[hidden] {
+    display: none;
+  }
+  .hs__none-t {
+    font-weight: var(--w-text);
+  }
+
+  /* A phone: the title, then the field, then the topics, then the answers. */
+  @media (max-width: 900px) {
+    .hs .grid {
+      display: flex;
+      flex-direction: column;
+    }
+    .hs__rail,
+    .hs__main {
+      display: contents;
+    }
+    .hs__title {
+      order: 1;
+      max-width: none;
+      margin-bottom: 1.5rem;
+    }
+    .hs__find {
+      order: 2;
+      margin-bottom: 1rem;
+    }
+    /* The topics stay in reach while you read down the answers: one row under the header that
+       scrolls sideways, and moves up into its place while the header steps aside. */
+    .hs__cats {
+      order: 3;
+      position: sticky;
+      top: var(--nav-h);
+      z-index: 2;
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 0.375rem;
+      margin: 0 calc(-1 * var(--margin)) calc(var(--u) * 5);
+      padding: 0.625rem var(--margin);
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-width: none;
+      background: var(--c-bg);
+      box-shadow: 0 1px 0 var(--c-line);
+      transition: translate 0.6s var(--ease);
+    }
+    .hs__cats::-webkit-scrollbar {
+      display: none;
+    }
+    :global(html.hdr-away) .hs__cats {
+      translate: 0 calc(-1 * var(--nav-h));
+    }
+    .hs__results {
+      order: 4;
+      scroll-margin-top: calc(var(--nav-h) + 4rem);
+    }
+    .hc {
+      flex: none;
+      gap: 0.5rem;
+      min-height: 2.25rem;
+      padding: 0 0.75rem;
+      border: 1px solid var(--c-line-strong);
+    }
+    .hc :global(.hc__g) {
+      display: none;
+    }
+    .hc[aria-pressed="true"] {
+      border-color: var(--c-dim);
+    }
+    .hs__field {
+      height: 3.5rem;
+      font-size: max(var(--t-body), 1rem);
+      padding-right: 1rem;
+    }
+    .hs__key {
+      display: none;
+    }
+  }
+</style>

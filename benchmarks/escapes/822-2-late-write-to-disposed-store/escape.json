@@ -1,0 +1,36 @@
+{
+  "id": "822-2-late-write-to-disposed-store",
+  "title": "A Notes op or edit that lands after the engine stopped is dropped; Duplicate and the legacy import read too early",
+  "mechanism": "late-write-to-disposed-store",
+  "sites": [
+    "apps/app/src/features/notes/sync/idb.ts",
+    "apps/app/src/features/notes/sync/meta-chain.ts",
+    "apps/app/src/features/notes/sync/engine-v2.ts",
+    "apps/app/src/features/notes/sync/people.ts",
+    "apps/app/src/features/notes/sync/redb-import.ts",
+    "apps/app/src/features/notes/hooks/use-notes-module.ts"
+  ],
+  "tests": [
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/engine-v2.569.test.ts",
+      "name": "the rename waits on the device for the person, as a check-off does",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/engine-v2.569.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/hooks/use-notes-module.645-1.test.ts",
+      "name": "a note renamed offline, then duplicated once back online, is copied with its new title",
+      "run": "bun run --cwd apps/app test src/features/notes/hooks/use-notes-module.645-1.test.ts"
+    },
+    {
+      "lang": "ts",
+      "file": "apps/app/src/features/notes/sync/redb-import.644-1.test.ts",
+      "name": "never imports a note without its body because its doc read failed",
+      "run": "bun run --cwd apps/app test src/features/notes/sync/redb-import.644-1.test.ts"
+    }
+  ],
+  "pr": 822,
+  "fixCommit": "c5a5b111f3cd4879ce082f9ed9cbd2a79d7425a9",
+  "foundBy": "HV-15 nightly variant hunts 2026-10-28 → 2026-11-21 (draft PRs #694, #756, #773, #805, #821) and the fix session"
+}

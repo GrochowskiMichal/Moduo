@@ -1,0 +1,17 @@
+---
+// The colophon (DESIGN.md §19): one endless scene and nothing else (components/colophon/
+// Closer.astro). The footer's credit line, "Set in Oudom. Every shape on this site, the letters
+// included, is one stroke of the Moduo mark.", set as a book sets its colophon; read closer to the
+// d of Oudom; its stem is the stroke; two, three (the mark), a chain, the blank, back to one, and
+// into the line again, where the scroll starts it over. Without motion it is the line and the
+// story as a strip of figures, and the footer is there as on every page.
+import Closer from "../components/colophon/Closer.astro";
+import { colophon } from "../data/site";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title={colophon.title} description={colophon.description} image="/og/colophon.png" endless>
+  <article class="col" aria-labelledby="col-title">
+    <Closer />
+  </article>
+</Base>

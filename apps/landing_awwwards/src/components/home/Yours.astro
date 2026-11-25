@@ -1,0 +1,86 @@
+---
+// Five promises as a ledger: square cells on hairlines, read like the clauses of a contract, each
+// with a picture of the promise kept (components/bento). The top row reads head first, the bottom
+// row picture first, so the two rows meet in the middle.
+import "../../styles/bento.css";
+import ExportMini from "../bento/ExportMini.astro";
+import ImportMini from "../bento/ImportMini.astro";
+import LeaveMini from "../bento/LeaveMini.astro";
+import RevokeMini from "../bento/RevokeMini.astro";
+import VaultMini from "../bento/VaultMini.astro";
+import { yours } from "../../data/site";
+
+const by = Object.fromEntries(yours.items.map((i) => [i.word, i]));
+const cells = [
+  { word: "Export", span: 4, Mini: ExportMini, foot: false, field: false },
+  { word: "No training", span: 4, Mini: VaultMini, foot: false, field: true },
+  { word: "Revoke", span: 4, Mini: RevokeMini, foot: false, field: false },
+  { word: "Import", span: 6, Mini: ImportMini, foot: true, field: true },
+  { word: "Leave", span: 6, Mini: LeaveMini, foot: true, field: false },
+];
+---
+
+<section class="yours" id="yours" aria-labelledby="yours-title" data-bento>
+  <div class="wrap">
+    <div class="yours__head grid">
+      <h2 class="yours__title t-xl" id="yours-title" data-split>{yours.title}</h2>
+      <p class="yours__lead t-m muted" data-reveal>
+        {yours.lead} <a class="link yours__more" href="/security">Where your work is kept</a>
+      </p>
+    </div>
+    <div class="ledger yours__grid" data-reveal="frame">
+      {
+        cells.map(({ word, span, Mini, foot, field }) => (
+          <article class="lcell" style={`grid-column: span ${span}`} aria-labelledby={`yours-${word.replace(/\s/g, "-")}`}>
+            <div class:list={["lcell__head", foot && "lcell__head--foot"]}>
+              <h3 class="lcell__title" id={`yours-${word.replace(/\s/g, "-")}`}>
+                {word}
+              </h3>
+              <p class="lcell__text">{by[word].text}</p>
+            </div>
+            <div class:list={["lcell__art", foot && "is-top"]}>
+              {field && <span class="bfield" />}
+              <Mini />
+            </div>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .yours__more {
+    color: var(--c-fg);
+  }
+  .yours {
+    padding: calc(var(--u) * 10) 0 calc(var(--u) * 8);
+  }
+  .yours__head {
+    align-items: end;
+    row-gap: 1.25rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  .yours__title {
+    grid-column: 1 / span 6;
+    margin-left: -0.04em;
+    max-width: 12ch;
+  }
+  .yours__lead {
+    grid-column: 9 / span 4;
+    max-width: 26rem;
+  }
+  .yours__grid :global(.lcell__art) {
+    margin-top: clamp(1.25rem, 2.4vw, 2rem);
+  }
+  .yours__grid :global(.lcell__art.is-top) {
+    margin-top: clamp(1.75rem, 3vw, 2.75rem);
+    margin-bottom: clamp(1rem, 2vw, 1.75rem);
+  }
+  @media (max-width: 900px) {
+    .yours__title,
+    .yours__lead {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

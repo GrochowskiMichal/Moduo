@@ -1,0 +1,118 @@
+---
+// What not to do, shown once each and struck: six tiles, the mark misused in one way per tile,
+// a 45° hairline through it (the stroke's own angle), and the rule under it. The real mark
+// appears nowhere here except as the thing being misused.
+import { MARK } from "../../lib/brand";
+import { press } from "../../data/pages/press";
+
+const m = press.misuse;
+---
+
+<ul class="mis">
+  {
+    m.items.map((it) => (
+      <li class="mis__cell">
+        <div class:list={["mis__tile", `is-${it.id}`]} aria-hidden="true">
+          <span class="mis__frame">
+            <svg class="mis__mark" viewBox={MARK.tight}>
+              <path d={MARK.d} fill-rule="evenodd" clip-rule="evenodd" />
+            </svg>
+          </span>
+          <span class="mis__strike" />
+        </div>
+        <p class="mis__label">{it.label}</p>
+      </li>
+    ))
+  }
+</ul>
+<p class="mis__more muted">{m.more}</p>
+
+<style>
+  .mis {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: var(--gutter);
+  }
+  .mis__cell {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .mis__tile {
+    position: relative;
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-lg);
+    background: var(--c-card);
+    overflow: hidden;
+  }
+  .mis__frame {
+    display: grid;
+    place-items: center;
+    width: 46%;
+  }
+  .mis__mark {
+    width: 100%;
+    height: auto;
+    fill: var(--c-fg);
+    overflow: visible;
+  }
+  .is-stretch .mis__mark {
+    scale: 1.55 0.8;
+  }
+  .is-rotate .mis__mark {
+    rotate: -24deg;
+  }
+  .is-mirror .mis__mark {
+    scale: -1 1;
+  }
+  .is-outline .mis__mark path {
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 9;
+  }
+  .is-glow .mis__mark {
+    filter: drop-shadow(0 0 10px rgb(255 255 255 / 0.65)) drop-shadow(0 8px 6px rgb(255 255 255 / 0.25));
+  }
+  .is-circle .mis__frame {
+    width: 62%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    background: var(--c-line-strong);
+  }
+  .is-circle .mis__mark {
+    width: 62%;
+  }
+  /* The strike: one hairline at the stroke's 45°, corner to corner. */
+  .mis__strike {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 142%;
+    height: 1px;
+    background: var(--c-muted);
+    translate: -50% -50%;
+    rotate: -45deg;
+  }
+  .mis__label {
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    color: var(--c-fg);
+  }
+  .mis__more {
+    max-width: 44rem;
+    margin-top: 2rem;
+  }
+  @media (max-width: 999px) {
+    .mis {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      row-gap: 1.5rem;
+    }
+  }
+  @media (max-width: 480px) {
+    .mis {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

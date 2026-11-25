@@ -1,0 +1,168 @@
+---
+import { ClientRouter } from "astro:transitions";
+
+import Consent from "../components/Consent.astro";
+import Footer from "../components/Footer.astro";
+import Header from "../components/Header.astro";
+import Menu from "../components/Menu.astro";
+import WaitlistDialog from "../components/WaitlistDialog.astro";
+import { site } from "../data/site";
+import "../styles/tokens.css";
+import "../styles/base.css";
+
+interface Props {
+  /** The page's own title; the site name is appended. Omit on the home page. */
+  title?: string;
+  description?: string;
+  /** Root-relative share image, 1200 × 630. */
+  image?: string;
+  noindex?: boolean;
+  /** Home only: the hero opens on the mark and unfolds it into the chain on a first visit. */
+  intro?: boolean;
+  /** Long reading (legal, manifesto, changelog) sits on Reading black (brand decision 37). */
+  reading?: boolean;
+  /** A product picture opens the page: fetch the app's face (Geist) with the HTML. */
+  appFont?: boolean;
+  /** A page that is one task (log in): no header, menu or footer; it carries its own way home. */
+  bare?: boolean;
+  /** One endless scene (the colophon): with motion the scroll wraps round and the footer steps
+   *  out; without motion the page ends as every page does. */
+  endless?: boolean;
+  /** Images the first screen paints, fetched with the HTML (only where `media` matches). */
+  preload?: { href: string; media?: string }[];
+  jsonLd?: Record<string, unknown>[];
+}
+
+const {
+  title,
+  description = site.description,
+  image = "/og/home.png",
+  noindex = false,
+  intro = false,
+  reading = false,
+  appFont = false,
+  bare = false,
+  endless = false,
+  preload = [],
+  jsonLd = [],
+} = Astro.props;
+const fullTitle = title ? `${title} | ${site.name}` : `${site.name} | ${site.campaignLine}`;
+// Preview builds (PUBLIC_NOINDEX=1) are never indexed.
+const robotsOff = noindex || import.meta.env.PUBLIC_NOINDEX === "1";
+const path = Astro.url.pathname.replace(/\.html$/, "").replace(/\/index$/, "");
+const canonical = new URL(path === "/" ? "/" : path.replace(/\/$/, ""), site.url).href;
+const ogImage = new URL(image, site.url).href;
+
+const organization = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: site.name,
+  url: site.url,
+  logo: `${site.url}/icon-512.png`,
+  email: site.email,
+  description: site.boilerplate,
+  founder: [
+    { "@type": "Person", name: "Maciej Grzywacz" },
+    { "@type": "Person", name: "Mike Grochowski" },
+  ],
+  sameAs: site.socials.map((s) => s.href),
+};
+const graph = [organization, ...jsonLd];
+---
+
+<!doctype html>
+<html lang="en" transition:animate="none" data-home={intro ? "" : undefined} data-tone={reading ? "reading" : undefined} data-endless={endless ? "" : undefined}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    {!noindex && <link rel="canonical" href={canonical} />}
+    {robotsOff && <meta name="robots" content="noindex, nofollow" />}
+    <meta name="theme-color" content="#000000" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <link rel="alternate" type="application/rss+xml" title="Moduo changelog" href="/changelog.xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={site.name} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={`${site.name}: ${site.brandLine}`} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Moduo_App" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+    <link rel="preload" href="/fonts/oudom-300_700.woff2" as="font" type="font/woff2" crossorigin />
+    {appFont && <link rel="preload" href="/fonts/geist-100_900-normal.woff2" as="font" type="font/woff2" crossorigin />}
+    {preload.map((p) => <link rel="preload" href={p.href} as="image" type="image/webp" media={p.media} />)}
+    <script type="application/ld+json" set:html={JSON.stringify(graph.length === 1 ? graph[0] : graph)} />
+    <!--
+      Before first paint: flag JS and motion, and decide whether this is a first visit to the
+      home page (arrived from outside the site, not a reload, back or forward, or a #section
+      link). Nothing is stored in the browser for it (brand decision 55).
+    -->
+    <script is:inline>
+      (function () {
+        var h = document.documentElement;
+        var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        h.classList.add("js");
+        if (!reduce) h.classList.add("motion");
+        // Already on the waitlist (lib/waitlist.ts): the header's button says so from the first paint.
+        try {
+          if (localStorage.getItem("moduo:waitlist")) h.classList.add("wl-joined");
+        } catch (e) {}
+        if (window.__mIntro !== undefined) return;
+        var intro = false;
+        try {
+          if (!reduce && h.hasAttribute("data-home") && !location.hash) {
+            var nav = performance.getEntriesByType("navigation")[0];
+            var same = false;
+            try {
+              same = !!document.referrer && new URL(document.referrer).origin === location.origin;
+            } catch (e) {}
+            intro = (!nav || nav.type === "navigate") && !same;
+          }
+        } catch (e) {}
+        window.__mIntro = intro;
+        if (intro) h.classList.add("intro");
+      })();
+    </script>
+    <ClientRouter fallback="swap" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div id="curtain" transition:persist="curtain" aria-hidden="true">
+      <div class="curtain__l"></div>
+      <div class="curtain__r"></div>
+    </div>
+    {!bare && <Header />}
+    {!bare && <Menu />}
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    {!bare && <Footer />}
+    <WaitlistDialog />
+    <Consent />
+    <script>
+      import { start } from "../engine/astro";
+      import { setupMotion } from "../motion/setup";
+      start(setupMotion);
+    </script>
+    <script>
+      // TanStack Devtools (scroll, vitals, fonts panels): development only, and not under
+      // automation, so Playwright and axe runs never see the trigger button.
+      if (import.meta.env.DEV && !navigator.webdriver) {
+        import("../dev/devtools").then((m) => m.mountDevtools());
+      }
+    </script>
+  </body>
+</html>

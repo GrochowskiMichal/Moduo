@@ -10,7 +10,14 @@ import { uploadProfileAvatar } from "./upload-image";
 const inflight = new Map<string, Promise<string | null>>();
 
 async function settle(runtime: ModuoRuntime, userId: string): Promise<string | null> {
-  const { data } = await runtime.workspace.getProfile(userId);
+  const { data, error } = await runtime.workspace.getProfile(userId);
+  if (error) {
+    // A failed read says nothing about the account's picture (509-1): never upload
+    // the device's over it. Show the device's own picture meanwhile; the next
+    // call (a remount, the profile-updated event) reads again.
+    const local = await readStoredAvatar(runtime);
+    return local?.startsWith("data:image/") ? local : null;
+  }
   const remote = data?.avatar_url?.trim() || null;
   if (remote && !remote.startsWith("data:")) {
     await writeStoredAvatar(runtime, null);

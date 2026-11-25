@@ -1,0 +1,129 @@
+---
+// Notes: the open alpha plan, open at its agenda. A mention of Maciej in the first paragraph, a
+// checklist (one line done), what the closed alpha taught, the open question. Still through the story:
+// it is the ground the other widgets stand on.
+import Icon from "../../frames/Icon.astro";
+import Widget from "./Widget.astro";
+---
+
+<Widget slug="note" icon="file-text" title="Open alpha plan">
+  <span class="dk-right dk-faces" slot="right">
+    <span class="ap-av ap-av--16" style="--c:var(--ap-violet)">MA</span>
+    <span class="ap-av ap-av--16" style="--c:var(--ap-pink)">MI</span>
+  </span>
+  <div class="dk-doc">
+    <p class="dk-crumb">Notes · Moduo</p>
+    <p class="dk-np">Agenda for the review with <span class="dk-mention"><Icon name="contact" class="ap-i--xs" />Maciej Grzywacz</span>: the invite first, then the first wave and the date.</p>
+    <p class="dk-nh">Agenda</p>
+    <p class="dk-cl is-done"><span class="dk-box is-on"></span><span class="dk-txt">Recap the closed alpha</span></p>
+    <p class="dk-cl"><span class="dk-box"></span><span class="dk-txt">Walk through the invite email</span></p>
+    <p class="dk-cl"><span class="dk-box"></span><span class="dk-txt">Pick the first waitlist wave</span></p>
+    <p class="dk-cl"><span class="dk-box"></span><span class="dk-txt">Confirm 16 November</span></p>
+    <p class="dk-nh">From the closed alpha</p>
+    <ul class="dk-np dk-ul">
+      <li>Mail sync needs a fix on Windows first.</li>
+      <li>Table paste in Notes needs a fix.</li>
+      <li>Maciej signs off on anything public.</li>
+    </ul>
+    <p class="dk-nh">Open questions</p>
+    <p class="dk-np">Do we open Calls early, or keep them for the beta as planned? The release plan is in Notes.</p>
+    <p class="dk-nh">Next steps</p>
+    <p class="dk-cl"><span class="dk-box"></span><span class="dk-txt">Send Maciej the notes a day ahead</span></p>
+    <p class="dk-cl"><span class="dk-box"></span><span class="dk-txt">Book the 1.4.1 release slot</span></p>
+  </div>
+</Widget>
+
+<style is:global>
+  .dk-doc {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(180deg, #000 calc(100% - 3em), transparent calc(100% - 0.3em));
+    mask-image: linear-gradient(180deg, #000 calc(100% - 3em), transparent calc(100% - 0.3em));
+  }
+  .dk-crumb {
+    margin-bottom: 0.6em;
+    color: var(--ap-subtle);
+    font-size: 0.8em;
+  }
+  .dk-faces {
+    display: inline-flex;
+  }
+  .dk-faces .ap-av {
+    box-shadow: 0 0 0 2px #121217;
+  }
+  .dk-faces .ap-av + .ap-av {
+    margin-left: -0.45em;
+  }
+  .dk-np {
+    margin-bottom: 0.9em;
+    color: var(--ap-muted);
+    font-size: 0.88em;
+    line-height: 1.55;
+  }
+  .dk-ul {
+    padding-left: 1.1em;
+    list-style: disc;
+  }
+  .dk-ul li::marker {
+    color: var(--ap-subtle);
+  }
+  .dk-ul li + li {
+    margin-top: 0.15em;
+  }
+  .dk-nh {
+    margin: 0 0 0.45em;
+    font-size: 0.92em;
+    font-weight: 600;
+  }
+  .dk-cl + .dk-nh {
+    margin-top: 0.8em;
+  }
+  .dk-mention {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    padding: 0 0.4em;
+    border-radius: 0.45em;
+    background: rgb(255 255 255 / 0.07);
+    color: var(--ap-fg);
+    white-space: nowrap;
+  }
+  .dk-mention .ap-i {
+    color: var(--ap-muted);
+  }
+  .dk-cl {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    min-height: 2em;
+    font-size: 0.9em;
+  }
+  .dk-box {
+    position: relative;
+    flex: none;
+    width: 1em;
+    height: 1em;
+    border-radius: 0.28em;
+    border: 1.3px solid rgb(164 164 164 / 0.8);
+  }
+  .dk-box.is-on {
+    background: var(--ap-fg);
+    border-color: var(--ap-fg);
+  }
+  .dk-box.is-on::after {
+    content: "";
+    position: absolute;
+    left: 0.22em;
+    top: 0.12em;
+    width: 0.38em;
+    height: 0.2em;
+    border: solid #030303;
+    border-width: 0 0 2px 2px;
+    rotate: -45deg;
+  }
+  .dk-cl.is-done .dk-txt {
+    color: var(--ap-muted);
+    text-decoration: line-through;
+  }
+</style>

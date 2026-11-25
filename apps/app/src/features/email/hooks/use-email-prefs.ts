@@ -13,6 +13,7 @@ import {
   DEFAULT_EMAIL_PREFS,
   type EmailPrefs,
   readEmailPrefs,
+  readStoredEmailPrefs,
   sanitizeEmailPrefs,
   writeEmailPrefs,
 } from "../prefs";
@@ -41,6 +42,8 @@ export function useEmailPrefs(userId: string): {
   const { pushLocalChange } = useDomainSync({
     domain: "email",
     getLocalSyncable: () => prefsRef.current as unknown as Record<string, unknown>,
+    // One copy per person here: a parked change must be its owner's (509-3).
+    localValueOf: (id) => readStoredEmailPrefs(id) as unknown as Record<string, unknown> | null,
     defaults: DEFAULT_EMAIL_PREFS as unknown as Record<string, unknown>,
     sanitizeCloud: (raw) => sanitizeEmailPrefs(raw) as unknown as Record<string, unknown>,
     apply: (value) => {

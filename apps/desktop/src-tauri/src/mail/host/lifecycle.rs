@@ -3,6 +3,8 @@
 //! The network halves (login check, OAuth, keychain) live in
 //! `commands/mail_accounts.rs`; everything here is store-only and unit-tested.
 
+use std::path::Path;
+
 use rusqlite::params;
 
 use crate::mail::accounts::{AccountData, MailAccount};
@@ -125,6 +127,38 @@ pub fn stored_classify_items(store: &Store) -> StoreResult<Vec<SettingsItem>> {
         .into_iter()
         .filter_map(|r| serde_json::from_value(r).ok())
         .collect())
+}
+
+/// Erases one person's mail from this device after their account is deleted
+/// (MOD-555): every account's keychain secret, then their whole store folder
+/// (accounts, envelopes, bodies, attachments, drafts, outbox). The engine must
+/// be stopped for that person first. A secret that won't delete stops it before
+/// the folder goes, since the folder is the only list of the accounts (a retry
+/// finds them again). A store that won't open is removed anyway. A person with
+/// no folder here is a no-op that creates nothing. Returns the accounts erased.
+pub fn forget_user(
+    dir: &Path,
+    delete_secret: impl Fn(&str) -> Result<(), String>,
+) -> Result<usize, String> {
+    if !dir.exists() {
+        return Ok(0);
+    }
+    let ids: Vec<String> = match Store::open(dir)
+        .map_err(|e| e.to_string())
+        .and_then(|store| {
+            super::list_accounts(&store).map(|rows| rows.into_iter().map(|r| r.id).collect())
+        }) {
+        Ok(ids) => ids,
+        Err(e) => {
+            eprintln!("[mail] forget: store unreadable, removing it without its secrets: {e}");
+            Vec::new()
+        }
+    };
+    for id in &ids {
+        delete_secret(id)?;
+    }
+    std::fs::remove_dir_all(dir).map_err(|e| format!("mail_forget_failed:{e}"))?;
+    Ok(ids.len())
 }
 
 fn delete_kv_prefix(store: &Store, prefix: &str) -> StoreResult<()> {
@@ -284,6 +318,80 @@ mod tests {
         assert_eq!(secrets.load(&a.id).unwrap(), None);
         assert_eq!(st.unsent_outbox_count(&a.id).unwrap(), 0);
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn forget_user_erases_the_store_and_every_secret() {
+        // MOD-555: a deleted account's mail leaves this device: its folder
+        // (accounts, envelopes, bodies, outbox) and each account's keychain secret.
+        let root = std::env::temp_dir().join(format!("moduo-mail-forget-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let gone = Store::user_dir(&root, "user-a").unwrap();
+        let kept = Store::user_dir(&root, "user-b").unwrap();
+        let secrets = MemStore::default();
+        {
+            let st = Store::open(&gone).unwrap();
+            for a in [
+                oauth_account(Provider::Gmail, "a@gmail.com").unwrap(),
+                password_account(Provider::Icloud, "a@icloud.com", None).unwrap(),
+            ] {
+                register_account(&st, &a, "", Some(365)).unwrap();
+                secrets
+                    .save(
+                        &a.id,
+                        &Credential::Password {
+                            password: "p".into(),
+                        },
+                    )
+                    .unwrap();
+            }
+            let other = Store::open(&kept).unwrap();
+            register_account(
+                &other,
+                &password_account(Provider::Icloud, "b@icloud.com", None).unwrap(),
+                "",
+                Some(365),
+            )
+            .unwrap();
+        }
+        secrets
+            .save(
+                "icloud:b@icloud.com",
+                &Credential::Password {
+                    password: "q".into(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(forget_user(&gone, |id| secrets.delete(id)).unwrap(), 2);
+        assert!(!gone.exists(), "the person's mail folder is gone");
+        assert_eq!(secrets.load("gmail:a@gmail.com").unwrap(), None);
+        assert_eq!(secrets.load("icloud:a@icloud.com").unwrap(), None);
+        assert!(kept.exists(), "another person's mail stays");
+        assert!(secrets.load("icloud:b@icloud.com").unwrap().is_some());
+        // Nothing on this device for that person: nothing to do, and no folder made.
+        assert_eq!(forget_user(&gone, |id| secrets.delete(id)).unwrap(), 0);
+        assert!(!gone.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn forget_user_keeps_the_folder_when_a_secret_wont_delete() {
+        // The folder is the only list of the accounts: a locked keychain must
+        // leave it, so a retry still finds the secrets to delete.
+        let root =
+            std::env::temp_dir().join(format!("moduo-mail-forget-lock-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = Store::user_dir(&root, "user-a").unwrap();
+        {
+            let st = Store::open(&dir).unwrap();
+            let a = oauth_account(Provider::Gmail, "a@gmail.com").unwrap();
+            register_account(&st, &a, "", Some(365)).unwrap();
+        }
+        let err = forget_user(&dir, |_| Err("keychain_locked".into())).unwrap_err();
+        assert_eq!(err, "keychain_locked");
+        assert!(dir.exists());
+        let _ = std::fs::remove_dir_all(root);
     }
 
     #[test]

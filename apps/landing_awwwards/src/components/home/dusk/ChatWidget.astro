@@ -1,0 +1,275 @@
+---
+// Chat: #open-alpha, the two of us. Mike's 1.4.1 note from Wednesday stands when the story
+// opens; in chapter 6 the booking lands as Mike's message (.dk.c-you), Maciej types (c-typing,
+// c-gap) and answers (c-sent), and the answer gets its reaction (reacted). A message that arrives opens its row first
+// and fades up into it, so nothing is cut while it comes.
+import Icon from "../../frames/Icon.astro";
+import Widget from "./Widget.astro";
+---
+
+<Widget slug="chat" icon="message-square" title="# open-alpha">
+  <span class="ap-meta" slot="right">2 people</span>
+  <div class="dk-thread">
+    <p class="dk-day dk-old">Monday</p>
+    <div class="dk-msg dk-old">
+      <span class="ap-av" style="--c:var(--ap-violet)">MA</span>
+      <div class="dk-mg">
+        <p class="dk-mh"><span class="dk-mname">Maciej Grzywacz</span><span class="ap-meta">11:40</span></p>
+        <p class="dk-bub">Closed alpha is out. First notes in.</p>
+      </div>
+    </div>
+    <p class="dk-day dk-old">Wednesday</p>
+    <div class="dk-msg dk-old">
+      <span class="ap-av" style="--c:var(--ap-pink)">MI</span>
+      <div class="dk-mg">
+        <p class="dk-mh"><span class="dk-mname">Mike Grochowski</span><span class="ap-meta">16:10</span></p>
+        <p class="dk-bub">Mail sync fix goes in 1.4.1.</p>
+        <p class="dk-att"><span class="ap-ref"><Icon name="file-text" />1.4.1 release notes</span></p>
+      </div>
+    </div>
+    <div class="dk-sent dk-s0">
+      <div>
+        <p class="dk-day">Today</p>
+        <div class="dk-msg">
+          <span class="ap-av" style="--c:var(--ap-pink)">MI</span>
+          <div class="dk-mg">
+            <p class="dk-mh"><span class="dk-mname">Mike Grochowski</span><span class="ap-meta">6:20</span></p>
+            <p class="dk-bub">Invite review is booked. Thursday.</p>
+            <p class="dk-att"><span class="ap-ref"><Icon name="calendar" />Invite review · Thu 14:00</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dk-sent dk-s1">
+      <div>
+        <div class="dk-msg">
+          <span class="ap-av" style="--c:var(--ap-violet)">MA</span>
+          <div class="dk-mg">
+            <p class="dk-mh"><span class="dk-mname">Maciej Grzywacz</span><span class="ap-meta">now</span></p>
+            <p class="dk-bub">Great. I’ll bring the first wave. <span class="dk-react"><Icon name="check" class="ap-i--xs" />1</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dk-typing"><span class="dk-dots"><i></i><i></i><i></i></span><span class="dk-who-a">Maciej is typing</span><span class="dk-who-b">Maciej is typing</span></p>
+  </div>
+  <p class="dk-composer"><span class="dk-ph ap-ell">Message # open-alpha</span><Icon name="at-sign" class="ap-i--sm" /><Icon name="smile" class="ap-i--sm" /><span class="dk-send"><Icon name="send-horizontal" class="ap-i--sm" /></span></p>
+</Widget>
+
+<style is:global>
+  /* The thread fills from the bottom; what runs over the top goes under the header, as in a
+     scrolled thread, with a short fade at its edge. */
+  .dk-thread {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0.2em, #000 1.6em);
+    mask-image: linear-gradient(180deg, transparent 0.2em, #000 1.6em);
+  }
+  /* One step between the thread's parts. A message still to come takes no room, step included
+     (it carries its step inside, so a closed row leaves no gap). */
+  .dk-thread > * + * {
+    margin-top: 0.7em;
+  }
+  .dk-thread > .dk-sent {
+    margin-top: 0;
+  }
+  /* The week's messages step out once today's thread starts, as a thread scrolled to today
+     does: nothing half-cut is left under the header. */
+  .dk-old {
+    transition: opacity 0.5s var(--ease);
+  }
+  .dk.c-you .dk-old {
+    opacity: 0;
+  }
+  .dk-day {
+    display: flex;
+    align-items: center;
+    gap: 0.8em;
+    color: var(--ap-subtle);
+    font-size: 0.75em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .dk-day::before,
+  .dk-day::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--ap-hairline);
+  }
+  .dk-msg {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.7em;
+    font-size: 0.88em;
+    line-height: 1.45;
+  }
+  .dk-msg .ap-av {
+    margin-top: 0.1em;
+  }
+  .dk-mg {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15em;
+  }
+  .dk-mh {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+  }
+  .dk-mname {
+    font-weight: 500;
+  }
+  .dk-mh .ap-meta {
+    font-size: 0.86em;
+  }
+  .dk-bub {
+    color: var(--ap-muted);
+  }
+  .dk-att {
+    margin-top: 0.3em;
+  }
+  .dk-att .ap-ref {
+    max-width: 100%;
+  }
+  /* A message arrives: its row opens, then it fades up into it. */
+  .dk-sent {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.6s var(--ease);
+  }
+  .dk-sent > div {
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7em;
+    padding-top: 0;
+    opacity: 0;
+    translate: 0 0.4em;
+    transition:
+      padding-top 0.6s var(--ease),
+      opacity 0.45s var(--ease),
+      translate 0.5s var(--ease);
+  }
+  .dk.c-you .dk-s0,
+  .dk.c-sent .dk-s1 {
+    grid-template-rows: 1fr;
+  }
+  .dk.c-you .dk-s0 > div,
+  .dk.c-sent .dk-s1 > div {
+    padding-top: 0.7em;
+    opacity: 1;
+    translate: 0 0;
+    transition-delay: 0.3s;
+  }
+  .dk-typing {
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    min-height: 1.6em;
+    color: var(--ap-subtle);
+    font-size: 0.8em;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .dk.c-typing .dk-typing {
+    opacity: 1;
+  }
+  .dk.c-gap .dk-typing {
+    opacity: 0;
+  }
+  .dk-dots {
+    display: inline-flex;
+    gap: 0.22em;
+    padding: 0.45em 0.6em;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 0.07);
+  }
+  .dk-dots i {
+    width: 0.36em;
+    height: 0.36em;
+    border-radius: 50%;
+    background: var(--ap-fg);
+    opacity: 0.35;
+    animation: dk-hop 1.2s infinite var(--ease);
+  }
+  .dk-dots i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+  .dk-dots i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+  @keyframes dk-hop {
+    0%,
+    60%,
+    100% {
+      opacity: 0.3;
+      translate: 0 0;
+    }
+    30% {
+      opacity: 1;
+      translate: 0 -0.22em;
+    }
+  }
+  .dk-who-b {
+    display: none;
+  }
+  .dk.c-sent .dk-who-a {
+    display: none;
+  }
+  .dk.c-sent .dk-who-b {
+    display: inline;
+  }
+  .dk-react {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25em;
+    height: 1.6em;
+    margin-left: 0.3em;
+    padding: 0 0.5em;
+    border-radius: 99px;
+    background: rgb(255 255 255 / 0.08);
+    color: var(--ap-fg);
+    font-size: 0.82em;
+    vertical-align: middle;
+    scale: 0;
+    transition: scale 0.45s var(--spring);
+  }
+  .dk.reacted .dk-react {
+    scale: 1;
+  }
+  .dk-composer {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    margin-top: 0.7em;
+    height: 2.9em;
+    padding: 0 0.45em 0 1em;
+    border-radius: 0.8em;
+    background: rgb(255 255 255 / 0.04);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+    font-size: 0.88em;
+  }
+  .dk-ph {
+    flex: 1;
+    min-width: 0;
+  }
+  .dk-send {
+    display: inline-grid;
+    place-items: center;
+    width: 2.1em;
+    height: 2.1em;
+    border-radius: 0.55em;
+    background: rgb(255 255 255 / 0.1);
+    color: var(--ap-fg);
+  }
+</style>

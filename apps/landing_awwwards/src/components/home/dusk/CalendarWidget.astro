@@ -1,0 +1,214 @@
+---
+// Calendar: Thursday (the day Maciej asked for, so no now-line), 8 to 19, with the morning's
+// sync and the release-notes block. In chapter 5
+// the three offered slots appear (.dk.offers), Maciej takes 14:00 and the review lands (booked);
+// the line under the rail says what happened. Hours are rows of one height, so every event has
+// room for its lines; labels sit in their own gutter; nothing is cut.
+import Icon from "../../frames/Icon.astro";
+import Widget from "./Widget.astro";
+
+const hours = ["08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18"];
+---
+
+<Widget slug="cal" icon="calendar" title="Thu, Nov 5">
+  <span class="dk-right dk-navs" slot="right"><Icon name="chevron-left" class="ap-i--sm" /><Icon name="chevron-right" class="ap-i--sm" /></span>
+  <div class="dk-rail">
+    {
+      hours.map((h) => (
+        <span class="dk-hr">
+          <i>{h}</i>
+        </span>
+      ))
+    }
+    <span class="dk-ev is-event" style="--h:1;--l:0.75" data-ev="standup"><b class="ap-ell">Daily sync</b></span>
+    <span class="dk-ev is-block" style="--h:2.5;--l:1" data-ev="review"><b class="ap-ell">1.4.1 notes</b><span>10:30</span></span>
+    <span class="dk-ev is-offer" style="--h:4;--l:1;--d:0" data-offer="1"><b>12:00</b></span>
+    <span class="dk-ev is-offer" style="--h:6;--l:1;--d:1" data-offer="2"><b>14:00</b></span>
+    <span class="dk-ev is-offer" style="--h:8;--l:1;--d:2" data-offer="3"><b>16:00</b></span>
+    <span class="dk-ev is-kick" style="--h:6;--l:1"><span class="dk-evb"><b class="ap-ell">Invite review</b><span class="ap-ell">14:00 · Maciej Grzywacz</span></span><span class="dk-kf"><span class="ap-av ap-av--16" style="--c:var(--ap-violet)">MA</span><span class="ap-av ap-av--16" style="--c:var(--ap-pink)">MI</span></span></span>
+  </div>
+  <p class="dk-offered"><Icon name="calendar-plus" class="ap-i--sm" /><span class="dk-b1 ap-ell">You offered Maciej 3 times</span><span class="dk-b2 ap-ell">Maciej booked Thu 14:00</span></p>
+</Widget>
+
+<style is:global>
+  .dk-navs {
+    gap: 0.35em;
+  }
+  /* The rail: eleven hours of one height, a gutter for the labels on the left. An event's place is
+     --h hours down: the hour is in the rail's em, and an event keeps the rail's font size (its
+     text is sized inside it), so the two agree. */
+  .dk-rail {
+    --hour: 3em;
+    --gutter: 2.3em;
+    position: relative;
+    flex: none;
+    display: grid;
+    grid-template-rows: repeat(11, var(--hour));
+    margin: 0.35em 0 0 var(--gutter);
+  }
+  .dk-hr {
+    position: relative;
+    border-top: 1px solid var(--ap-hairline);
+  }
+  .dk-hr i {
+    position: absolute;
+    right: calc(100% + 0.6em);
+    top: -0.6em;
+    color: var(--ap-subtle);
+    font-size: 0.75em;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+  }
+  .dk-ev {
+    position: absolute;
+    left: 0.35em;
+    right: 0.1em;
+    top: calc(var(--h) * var(--hour) + 2px);
+    height: calc(var(--l) * var(--hour) - 4px);
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0 0.5em;
+    border-radius: 0.5em;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .dk-ev > * {
+    font-size: 0.8em;
+  }
+  .dk-ev b {
+    min-width: 0;
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .dk-ev > span {
+    color: var(--ap-muted);
+  }
+  /* A two-line event: the title over its time and person. */
+  .dk-evb {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1em;
+  }
+  .dk-evb > * {
+    font-size: inherit;
+  }
+  .dk-evb > span {
+    color: var(--ap-muted);
+  }
+  /* Events are solid: over a translucent fill the hour line under an event ran through its
+     title like a strike. The panel's own tone is under each tint. */
+  .dk-ev {
+    --under: rgb(27 26 32 / 0.9);
+  }
+  .dk-ev.is-event {
+    background: linear-gradient(rgb(255 255 255 / 0.11), rgb(255 255 255 / 0.11)), var(--under);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.16);
+  }
+  .dk-ev.is-block {
+    background: linear-gradient(rgb(255 255 255 / 0.04), rgb(255 255 255 / 0.04)), var(--under);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  }
+  .dk-ev.is-offer {
+    border: 1.5px dashed rgb(255 255 255 / 0.45);
+    background: rgb(255 255 255 / 0.03);
+    opacity: 0;
+    scale: 0.94;
+    transition:
+      opacity 0.6s var(--ease),
+      scale 0.7s var(--ease),
+      background 0.4s;
+    transition-delay: calc(var(--d) * 160ms);
+  }
+  .dk.offers .dk-ev.is-offer {
+    opacity: 1;
+    scale: 1;
+  }
+  .dk-ev.is-offer.is-hot {
+    background: rgb(158 113 253 / 0.18);
+    border-color: rgb(190 160 255 / 0.9);
+  }
+  .dk.booked .dk-ev.is-offer {
+    opacity: 0;
+    scale: 0.94;
+    transition-delay: 0ms;
+  }
+  .dk-ev.is-kick {
+    z-index: 2;
+    background: linear-gradient(180deg, rgb(158 113 253 / 0.42), rgb(158 113 253 / 0.22)), var(--under);
+    box-shadow:
+      inset 0 0 0 1px rgb(200 175 255 / 0.65),
+      0 0.8em 1.6em -0.6em rgb(40 10 90 / 0.8);
+    opacity: 0;
+    scale: 0.9;
+    transition:
+      opacity 0.5s var(--ease),
+      scale 0.8s var(--spring);
+  }
+  .dk-ev.is-kick .dk-evb > span {
+    color: rgb(240 232 255 / 0.85);
+  }
+  .dk.booked .dk-ev.is-kick {
+    opacity: 1;
+    scale: 1;
+  }
+  .dk-kf {
+    display: inline-flex;
+    flex: none;
+  }
+  .dk-kf .ap-av {
+    box-shadow: 0 0 0 2px #2a2040;
+  }
+  .dk-kf .ap-av + .ap-av {
+    margin-left: -0.12em;
+  }
+  /* Under the rail: what happened to the slots. It keeps its place before it has anything to say. */
+  .dk-offered {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    height: 2.3em;
+    margin-top: 0.8em;
+    padding: 0 0.7em;
+    border-radius: 0.6em;
+    background: rgb(255 255 255 / 0.05);
+    color: var(--ap-muted);
+    font-size: 0.8em;
+    opacity: 0;
+    translate: 0 0.3em;
+    transition:
+      opacity 0.6s var(--ease),
+      translate 0.7s var(--ease),
+      background 0.5s var(--ease),
+      box-shadow 0.5s var(--ease);
+  }
+  .dk-offered .ap-i {
+    flex: none;
+    color: var(--ap-fg);
+  }
+  .dk:not(.offers) .dk-offered {
+    visibility: hidden;
+  }
+  .dk.offers .dk-offered {
+    opacity: 1;
+    translate: 0 0;
+  }
+  .dk-b2 {
+    display: none;
+    color: var(--ap-fg);
+  }
+  .dk.booked .dk-b1 {
+    display: none;
+  }
+  .dk.booked .dk-b2 {
+    display: block;
+  }
+  .dk.booked .dk-offered {
+    background: rgb(158 113 253 / 0.2);
+    box-shadow: inset 0 0 0 1px rgb(200 175 255 / 0.5);
+  }
+</style>

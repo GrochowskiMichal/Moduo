@@ -1,0 +1,380 @@
+---
+// Every "Join the waitlist" that isn't a form opens this dialog (native <dialog>: focus stays
+// inside, Escape closes, focus returns to the opener). Between the words and the form, the one
+// email the list ever sends, as it will sit in your inbox in Moduo: from Moduo, the real
+// invite's subject (supabase/functions/_shared/email/templates/waitlist-invite.ts), and "To"
+// whatever you type, so you watch your invite being addressed. The two strokes after the address
+// close into a window once it reads as one; joined, the invite is marked queued and a light runs
+// along its top edge, as on the hero's window (lib/waitlist.ts).
+import "../styles/frames.css";
+import { MARK } from "../lib/brand";
+import { waitlist } from "../data/site";
+import Btn from "./Btn.astro";
+import StrokePair from "./StrokePair.astro";
+
+const inv = waitlist.invite;
+---
+
+<dialog id="wl-dialog" class="wld" aria-labelledby="wld-title" aria-describedby="wld-text" data-wld>
+  <div class="wld__in">
+    <div class="wld__top">
+      <h2 id="wld-title" class="wld__title">{waitlist.dialogTitle}</h2>
+      <button class="wld__close" type="button" data-wl-close>
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.5"></path>
+        </svg>
+        <span class="sr-only">{waitlist.close}</span>
+      </button>
+    </div>
+    <p id="wld-text" class="wld__text">{waitlist.dialogText}</p>
+
+    <figure class="wld__mail">
+      <figcaption class="sr-only">{inv.caption}</figcaption>
+      <div class="ap wld__row" aria-hidden="true">
+        <span class="wld__rim"></span>
+        <span class="wld__av">
+          <svg viewBox={MARK.tight}><path d={MARK.d} fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+        </span>
+        <span class="wld__lines">
+          <span class="wld__line">
+            <span class="wld__from">{inv.from}</span>
+            <span class="wld__when">{inv.when}</span>
+            <span class="wld__queued">{inv.queued}</span>
+          </span>
+          <span class="wld__subject">{inv.subject}</span>
+          <span class="wld__line wld__to-line">
+            <span class="wld__to-k">{inv.to}</span>
+            <span class="wld__to is-empty" data-wl-to>{waitlist.placeholder}</span>
+            <StrokePair class="wld__pair" size="0.4375rem" />
+          </span>
+        </span>
+      </div>
+    </figure>
+
+    <form class="wld__form" data-wl data-source="nav" novalidate>
+      <div class="wld__row-f">
+        <label class="sr-only" for="wld-email">{waitlist.label}</label>
+        <input
+          class="field wl__input wld__input"
+          id="wld-email"
+          type="email"
+          name="email"
+          autocomplete="email"
+          inputmode="email"
+          spellcheck="false"
+          enterkeyhint="send"
+          placeholder={waitlist.placeholder}
+          aria-describedby="wld-msg"
+          required
+        />
+        <input class="wl__hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <Btn type="submit" class="wl__btn wld__btn">{waitlist.button}</Btn>
+      </div>
+      <div class="wl__done wld__done" hidden>
+        <p class="wld__done-t">
+          <StrokePair class="wld__done-pair" size="0.5rem" />
+          {waitlist.doneTitle}
+        </p>
+        <button type="button" class="wl__again ulink t-s" data-wl-again>{waitlist.again}</button>
+      </div>
+      <p class="wld__foot t-xs">
+        <span class="wl__msg wld__msg" id="wld-msg" aria-live="polite" data-note=""></span>
+        <a class="ulink" href="/privacy#waitlist">{waitlist.privacy}</a>
+      </p>
+    </form>
+  </div>
+</dialog>
+
+<style>
+  .wld {
+    width: min(34rem, calc(100vw - 2rem));
+    max-width: none;
+    max-height: calc(100dvh - 2rem);
+    margin: auto;
+    padding: 0;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-xl);
+    background: var(--c-card);
+    color: var(--c-fg);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .wld::backdrop {
+    background: rgb(0 0 0 / 0.78);
+  }
+  /* It arrives as everything here does, a short slide along the stroke's axis; the invite lands
+     a beat later, from the other side, as mail does. */
+  .wld[open] {
+    animation: wld-in 0.5s var(--ease);
+  }
+  .wld[open]::backdrop {
+    animation: wld-fade 0.4s var(--ease);
+  }
+  .wld[open] .wld__row {
+    animation: wld-mail 0.8s var(--ease) 0.12s backwards;
+  }
+  @keyframes wld-in {
+    from {
+      opacity: 0;
+      translate: -14px 0;
+    }
+  }
+  @keyframes wld-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes wld-mail {
+    from {
+      opacity: 0;
+      translate: 20px 0;
+    }
+  }
+
+  .wld__in {
+    padding: clamp(1.5rem, 4vw, 2.25rem);
+  }
+  .wld__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+  .wld__title {
+    font-size: var(--t-l);
+    line-height: var(--lh-l);
+    letter-spacing: var(--tr-l);
+    font-weight: var(--w-display);
+    margin-left: -0.03em;
+  }
+  .wld__close {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    margin: -0.25rem -0.5rem 0 0;
+    border-radius: var(--r-md);
+    color: var(--c-muted);
+    transition:
+      color var(--d-hover) var(--ease),
+      background-color var(--d-hover) var(--ease),
+      rotate 0.5s var(--ease);
+  }
+  @media (hover: hover) {
+    .wld__close:hover {
+      color: var(--c-fg);
+      background: var(--c-hover);
+      rotate: 90deg;
+    }
+  }
+  .wld__close:focus-visible {
+    color: var(--c-fg);
+  }
+  .wld__text {
+    margin-top: 0.75rem;
+    max-width: 26rem;
+    color: var(--c-muted);
+    text-wrap: pretty;
+  }
+
+  /* The invite, as one row of Moduo's inbox (frames.css sizes). */
+  .wld__mail {
+    margin: 1.75rem 0 0;
+  }
+  .wld__row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.857em;
+    padding: 1em 1.143em;
+    border: 1px solid var(--ap-line);
+    border-radius: 1em;
+    background: var(--ap-bg);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 1.5em 3em -1.5em rgb(0 0 0 / 0.9);
+    font-size: 14px;
+    line-height: 1.45;
+    container-type: normal;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* The light that runs along the top edge once the invite is queued. */
+  .wld__rim {
+    position: absolute;
+    top: -1px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.85), transparent);
+    scale: 0 1;
+    opacity: 0;
+    transition:
+      scale 1.4s var(--ease-inout),
+      opacity 0.6s var(--ease);
+  }
+  .wld:global(.is-joined) .wld__rim {
+    scale: 1 1;
+    opacity: 1;
+  }
+  .wld__av {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 2.429em;
+    height: 2.429em;
+    border-radius: 50%;
+    background: var(--ap-fg);
+    color: var(--ap-bg);
+  }
+  .wld__av svg {
+    width: 58%;
+    height: auto;
+  }
+  .wld__lines {
+    flex: 1;
+    min-width: 0;
+    display: grid;
+  }
+  .wld__line {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .wld__from {
+    font-weight: 500;
+  }
+  .wld__when {
+    margin-left: auto;
+    color: var(--ap-subtle);
+    font-size: 0.857em;
+  }
+  .wld__subject {
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wld__to-line {
+    color: var(--ap-muted);
+    font-size: 0.929em;
+  }
+  .wld__to {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--ap-fg);
+  }
+  .wld__to.is-empty {
+    color: var(--ap-subtle);
+  }
+  .wld__pair {
+    color: var(--ap-subtle);
+    transition: color var(--d-hover) var(--ease);
+  }
+  .wld:global(.is-valid) .wld__pair,
+  .wld:global(.is-joined) .wld__pair {
+    --g: 1;
+    color: var(--ap-fg);
+  }
+  /* Queued: the time steps aside for the chip. */
+  .wld__queued {
+    display: none;
+    align-items: center;
+    height: 1.5em;
+    margin-left: auto;
+    padding: 0 0.5em;
+    border-radius: 0.5em;
+    background: var(--ap-active);
+    font-size: 0.786em;
+    font-weight: 500;
+  }
+  .wld:global(.is-joined) .wld__when {
+    display: none;
+  }
+  .wld:global(.is-joined) .wld__queued {
+    display: inline-flex;
+    animation: wld-in 0.5s var(--ease);
+  }
+
+  /* The form: one row, then one quiet line. */
+  .wld__form {
+    margin-top: 1.25rem;
+  }
+  .wld__row-f {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .wld__input {
+    flex: 1;
+    min-width: 0;
+  }
+  .wl__hp {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+  }
+  .wld__foot {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    margin-top: 0.875rem;
+  }
+  .wld__msg {
+    flex: 1;
+    min-width: 0;
+    color: var(--c-quiet);
+  }
+  .wld__form[data-state="error"] .wld__msg {
+    color: var(--c-fg);
+  }
+  .wld__form[data-state="done"] :is(.wld__row-f, .wld__msg) {
+    display: none;
+  }
+  .wld__form[data-state="done"] .wld__foot {
+    justify-content: flex-end;
+  }
+  .wld__done {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    min-height: 2.75rem;
+    animation: wld-in 0.6s var(--ease);
+  }
+  .wld__done[hidden] {
+    display: none;
+  }
+  .wld__done-t {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-ui);
+  }
+  .wld__done-pair {
+    --g: 1;
+  }
+
+  @media (max-width: 520px) {
+    .wld__row-f {
+      flex-direction: column;
+    }
+    .wld__input {
+      flex: none;
+    }
+    .wld__row-f :global(.btn) {
+      width: 100%;
+    }
+    .wld__row {
+      font-size: 13px;
+    }
+  }
+</style>

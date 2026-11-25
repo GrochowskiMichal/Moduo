@@ -1,0 +1,118 @@
+---
+// The Notes card's picture: the invite copy note's task lines, and the last checkbox line turning into
+// a real task under ⌘⇧T: its square becomes the task's circle and it learns its due day
+// (motion/bento.ts plays the turn; the still picture is the result).
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+---
+
+<div class="ap mini nm" aria-hidden="true" data-mini="notes">
+  <div class="ap-panel nm-paper">
+    <p class="nm-crumb ap-xs ap-muted">Open alpha <Icon name="chevron-right" class="ap-i--xs" /> Invite copy</p>
+    <p class="nm-title">Invite copy</p>
+    <p class="nm-p">
+      Talked to <span class="ap-ref"><span class="ap-av ap-av--16" style="--c:var(--ap-violet)">MA</span>Maciej Grzywacz</span>: first wave on the 16th.
+    </p>
+    <div class="nm-line">
+      <span class="ap-check is-done"></span>
+      <span class="grow ap-done-t ap-ell">Draft the invite copy</span>
+      <span class="nm-chip">Task</span>
+    </div>
+    <div class="nm-line">
+      <span class="ap-check"></span>
+      <span class="grow ap-ell">Review the alpha invite</span>
+      <span class="nm-chip">Due today</span>
+    </div>
+    <div class="nm-line is-new" data-turn>
+      <span class="nm-box" data-box></span>
+      <span class="grow ap-ell">Send to the first wave</span>
+      <span class="nm-chip" data-chip>Due Nov 16</span>
+    </div>
+  </div>
+  <span class="nm-keys" data-keys><span class="ap-kbd">⌘</span><span class="ap-kbd">⇧</span><span class="ap-kbd">T</span></span>
+</div>
+
+<style>
+  .nm {
+    left: 10%;
+    top: 0;
+    width: 84%;
+  }
+  .nm-paper {
+    padding: 1.143em 1.429em 1.429em;
+  }
+  .nm-crumb {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
+  }
+  .nm-title {
+    margin: 0.5em 0 0.4em;
+    font-size: 1.571em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+  .nm-p {
+    margin-bottom: 0.857em;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    line-height: 1.7;
+  }
+  .nm-line {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 2.143em;
+    font-size: 0.929em;
+  }
+  .nm-line.is-new {
+    margin: 0.143em -0.571em 0;
+    padding: 0 0.571em;
+    border-radius: 0.571em;
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  /* The checkbox line's square, which becomes the task's circle (16 px both). */
+  .nm-box {
+    flex: none;
+    width: 1.231em;
+    height: 1.231em;
+    border-radius: 50%;
+    border: 1px solid rgb(164 164 164 / 0.5);
+  }
+  .nm-box.is-square {
+    border-radius: 0.25em;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nm-box {
+      transition: border-radius 0.45s var(--ease);
+    }
+  }
+  .nm-chip {
+    padding: 0 0.5em;
+    border-radius: 0.333em;
+    background: rgb(0 0 0 / 0.8);
+    color: var(--ap-muted);
+    font-size: 0.923em;
+    white-space: nowrap;
+  }
+  .nm-keys {
+    position: absolute;
+    right: 4%;
+    bottom: -1.4em;
+    display: flex;
+    gap: 0.286em;
+    padding: 0.429em;
+    border-radius: 0.714em;
+    background: var(--ap-muted-bg);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-hairline),
+      0 1em 2em rgb(0 0 0 / 0.7);
+    font-size: 1.286em;
+  }
+  .nm-keys :global(.ap-kbd) {
+    min-width: 1.8em;
+    height: 1.8em;
+    color: var(--ap-fg);
+  }
+</style>

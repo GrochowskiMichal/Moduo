@@ -1,0 +1,90 @@
+---
+// Leave: the account's last screen. Typed and confirmed, each module goes, one after another, and
+// nothing asks why (motion/bento.ts strikes them through in turn; the still picture is done).
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const gone = ["Tasks", "Notes", "Email", "Calendar", "Contacts", "Chat", "AI keys"];
+---
+
+<div class="ap mini lm" aria-hidden="true" data-mini="leave">
+  <div class="ap-panel lm-panel">
+    <p class="ap-med">Delete account</p>
+    <p class="ap-xs ap-muted lm-sub">Your workspace and everything in it, for good.</p>
+    <div class="lm-field">
+      <span class="ap-xs ap-muted">Type the workspace name</span>
+      <span class="ap-field lm-typed">Moduo<span class="ap-caret"></span></span>
+    </div>
+    <ul class="lm-list">
+      {
+        gone.map((g) => (
+          <li data-gone>
+            <span class="lm-x">
+              <Icon name="check" class="ap-i--xs" />
+            </span>
+            <span class="lm-n">{g}</span>
+            <span class="ap-xs ap-muted">Deleted</span>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="ap-xs ap-muted lm-foot">No exit survey. You’re free to go.</p>
+  </div>
+</div>
+
+<style>
+  .lm {
+    left: 50%;
+    top: 0;
+    width: min(90%, 26em);
+    translate: -50% 0;
+  }
+  .lm-panel {
+    padding: 1em 1.143em 1em;
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2em 3em -1.5em rgb(0 0 0 / 0.9);
+  }
+  .lm-sub {
+    margin-top: 0.2em;
+  }
+  .lm-field {
+    display: grid;
+    gap: 0.429em;
+    margin: 0.857em 0;
+  }
+  .lm-typed {
+    color: var(--ap-fg);
+  }
+  .lm-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 1.143em;
+  }
+  .lm-list li {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-height: 2.143em;
+    border-top: 1px solid var(--ap-line);
+    font-size: 0.929em;
+  }
+  .lm-x {
+    display: grid;
+    place-items: center;
+    width: 1.231em;
+    height: 1.231em;
+    border-radius: 50%;
+    background: var(--ap-active);
+    color: var(--ap-muted);
+  }
+  .lm-n {
+    flex: 1;
+    color: var(--ap-muted);
+    text-decoration: line-through;
+    text-decoration-color: rgb(250 250 250 / 0.4);
+  }
+  .lm-foot {
+    margin-top: 0.857em;
+  }
+</style>

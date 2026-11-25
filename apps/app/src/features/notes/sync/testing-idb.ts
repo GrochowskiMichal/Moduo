@@ -2,8 +2,10 @@
  * A small in-memory IndexedDB for the Notes cache tests (jsdom has none).
  * It plays what `idb.ts` and `people.ts` use: databases with object stores
  * (in-line or auto-increment keys), `get`/`getAll`/`getAllKeys`/`put`/
- * `delete`/`clear`/`count`/`openCursor`, transactions that complete once the
- * microtask queue drains, `deleteDatabase` and (optionally) `databases()`.
+ * `delete`/`clear`/`count`/`openCursor`, indexes read by `IDBKeyRange.only`
+ * (jsdom has no `IDBKeyRange`: a minimal one is put in place), transactions
+ * that complete once the microtask queue drains, `deleteDatabase` and
+ * (optionally) `databases()`.
  * Writes apply when called, so a test can read the stores back directly.
  */
 
@@ -12,7 +14,25 @@ type Store = {
   autoIncrement: boolean;
   next: number;
   rows: Map<IDBValidKey, unknown>;
+  /** Index name to the key path it reads. */
+  indexes: Map<string, string>;
 };
+
+/** What `IDBKeyRange.only(v)` gives (the real one, or the stand-in below). */
+type OnlyRange = { lower: unknown; upper: unknown };
+
+function cursorOver(entries: [IDBValidKey, unknown][]): IDBRequest {
+  let at = 0;
+  const request: Request = {};
+  const step = () =>
+    queueMicrotask(() => {
+      const entry = entries[at++];
+      request.result = entry ? { value: entry[1], primaryKey: entry[0], continue: step } : null;
+      request.onsuccess?.();
+    });
+  step();
+  return request as unknown as IDBRequest;
+}
 type Db = { version: number; stores: Map<string, Store> };
 
 type Request = {
@@ -40,8 +60,26 @@ function storeApi(store: Store) {
     return store.next++;
   };
   const sorted = () => [...store.rows.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const inRange = (keyPath: string, range?: OnlyRange) => (value: unknown) =>
+    !range || (value as Record<string, unknown>)?.[keyPath] === range.lower;
   return {
-    createIndex: () => undefined,
+    createIndex: (name: string, keyPath: string) => {
+      store.indexes.set(name, keyPath);
+    },
+    index: (name: string) => {
+      const keyPath = store.indexes.get(name);
+      if (!keyPath) throw new Error(`No index ${name}`);
+      return {
+        getAll: (range?: OnlyRange) =>
+          settle(
+            sorted()
+              .filter(([, v]) => inRange(keyPath, range)(v))
+              .map(([, v]) => v),
+          ),
+        openCursor: (range?: OnlyRange) =>
+          cursorOver(sorted().filter(([, v]) => inRange(keyPath, range)(v))),
+      };
+    },
     get: (key: IDBValidKey) => settle(store.rows.get(key)),
     getAll: () => settle(sorted().map(([, v]) => v)),
     getAllKeys: () => settle(sorted().map(([k]) => k)),
@@ -64,25 +102,7 @@ function storeApi(store: Store) {
       store.rows.clear();
       return settle(undefined);
     },
-    openCursor: () => {
-      const entries = sorted();
-      let at = 0;
-      const request: Request = {};
-      const step = () =>
-        queueMicrotask(() => {
-          const entry = entries[at++];
-          request.result = entry
-            ? {
-                value: entry[1],
-                primaryKey: entry[0],
-                continue: step,
-              }
-            : null;
-          request.onsuccess?.();
-        });
-      step();
-      return request as unknown as IDBRequest;
-    },
+    openCursor: () => cursorOver(sorted()),
   };
 }
 
@@ -102,6 +122,8 @@ export type FakeIdb = {
 
 export function fakeIdb(): FakeIdb {
   const dbs = new Map<string, Db>();
+  const g = globalThis as { IDBKeyRange?: unknown };
+  g.IDBKeyRange ??= { only: (value: unknown): OnlyRange => ({ lower: value, upper: value }) };
 
   const databaseApi = (db: Db) => ({
     version: db.version,
@@ -112,6 +134,7 @@ export function fakeIdb(): FakeIdb {
         autoIncrement: !!o?.autoIncrement,
         next: 1,
         rows: new Map(),
+        indexes: new Map(),
       };
       db.stores.set(name, store);
       return storeApi(store);

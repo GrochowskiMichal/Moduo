@@ -19,12 +19,20 @@ import {
   queueMoves,
 } from "../queue";
 import type { NewTaskInput, TaskCommandsContext } from "./context";
-import { isTempId, NO_EDIT, NOT_CREATED, patchOf, type Shared, STILL_SAVING } from "./shared";
+import { NO_EDIT, NOT_CREATED, patchOf, type Shared, STILL_SAVING } from "./shared";
 
 export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
   const { store, runtime, workspaceId, userId, data, env } = ctx;
-  const { archivedBlocked, backlogToTodo, optimisticEntry, runQueueOp, sendNewTask, sendQueueOp } =
-    shared;
+  const {
+    archivedBlocked,
+    backlogToTodo,
+    optimisticEntry,
+    runQueueOp,
+    savingBlocked,
+    sendNewTask,
+    sendQueueOp,
+    stillSaving,
+  } = shared;
 
   /**
    * Add a task to my queue: the end, or the top (Calendar's "Start focus").
@@ -39,10 +47,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
       archivedBlocked(id);
       return;
     }
-    if (isTempId(id)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (savingBlocked(id)) return;
     if (task.status === "done" || task.status === "archived") {
       toast.error(
         task.status === "done" ? "Done tasks can't be queued." : "Archived tasks can't be queued.",
@@ -84,10 +89,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
   const removeFromQueue = (id: string) => {
     // The line-up as it is now: a drop's Undo calls this long after its render.
     if (!data().myQueueEntries.some((e) => e.taskId === id)) return;
-    if (isTempId(id)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (savingBlocked(id)) return;
     runQueueOp(
       (mine) => mine.filter((e) => e.taskId !== id),
       (rt, ws) => rt.tasks.opQueueRemove({ workspaceId: ws, taskId: id }),
@@ -123,10 +125,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
       toast.error(NO_EDIT);
       return false;
     }
-    if (isTempId(id)) {
-      toast.error(STILL_SAVING);
-      return false;
-    }
+    if (savingBlocked(id)) return false;
     const task = data().liveTasks.find((t) => t.id === id);
     const ref = focusRefOf(id);
     if (!task || !ref || isClosedTask(task)) return false;
@@ -138,10 +137,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
   /** Skip in Focus: the task goes to the end of my queue. Not a reschedule. */
   const moveQueuedToEnd = (id: string) => {
     if (!data().queuedTaskIds.has(id)) return;
-    if (isTempId(id)) {
-      toast.error(STILL_SAVING);
-      return;
-    }
+    if (savingBlocked(id)) return;
     runQueueOp(
       (mine) => {
         const rest = mine.filter((e) => e.taskId !== id);
@@ -165,7 +161,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
       orderedIds,
     );
     if (!move) return;
-    if (isTempId(move.taskId) || (move.afterTaskId && isTempId(move.afterTaskId))) {
+    if (stillSaving(move.taskId) || (move.afterTaskId && stillSaving(move.afterTaskId))) {
       toast.error(STILL_SAVING);
       return;
     }
@@ -205,7 +201,7 @@ export function createQueueOps(ctx: TaskCommandsContext, shared: Shared) {
       orderedIds,
     );
     if (moves.length === 0) return false;
-    if (moves.some((m) => isTempId(m.taskId) || (m.afterTaskId && isTempId(m.afterTaskId)))) {
+    if (moves.some((m) => stillSaving(m.taskId) || (m.afterTaskId && stillSaving(m.afterTaskId)))) {
       toast.error(STILL_SAVING);
       return false;
     }

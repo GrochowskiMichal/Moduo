@@ -1,0 +1,298 @@
+---
+// The MCP docs: everything a person or a script needs to connect an assistant to Moduo, set for
+// long reading (Reading black, a sticky rail on line 1 that lights the part you're in, the text
+// on line 5), ending in the full tool reference. Content: src/data/pages/mcp.ts.
+import "../styles/longform.css";
+import Btn from "../components/Btn.astro";
+import StrokePair from "../components/StrokePair.astro";
+import Tools from "../components/mcp/Tools.astro";
+import Code from "../components/page/Code.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { deprecated, doc, keyModules, mcp, tools } from "../data/pages/mcp";
+import { waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs, howTo } from "../lib/seo";
+
+// `code` → <code>, [words](/path) → a link; everything else is escaped.
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const md = (s: string) =>
+  esc(s)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+const parts = [doc.how, doc.url, doc.signin, doc.keys, doc.access, doc.recorded, doc.revoke, doc.transport, doc.tools, doc.old];
+const num = (id: string) => String(parts.findIndex((p) => p.id === id) + 1).padStart(2, "0");
+const needing = tools.filter((t) => t.needs);
+const nameOf = (id: string) => keyModules.find((k) => k.id === id)!.name;
+---
+
+<Base
+  title={mcp.title}
+  description={mcp.description}
+  image="/og/mcp.png"
+  reading
+  jsonLd={[crumbs(["Help center", "/help"], ["MCP docs", "/mcp"]), howTo("Connect an assistant to Moduo over MCP", mcp.howTo, mcp.description)]}
+>
+  <div data-pg="mcp">
+    <PageHero name={mcp.name} line={mcp.line} lead={mcp.lead} family="resources" compact current="mcp" up={{ href: "/help", label: "Help center" }}>
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href="/ai">How AI works in Moduo</Btn>
+      </Fragment>
+    </PageHero>
+
+    <article class="longform mcpd" aria-label="MCP docs">
+      <div class="wrap longform__grid">
+        <div class="longform__rail" data-spy>
+          <nav class="toc" aria-labelledby="mcpd-toc">
+            <p class="label" id="mcpd-toc">On this page</p>
+            <ol>
+              {
+                parts.map((p) => (
+                  <li>
+                    <a href={`#${p.id}`}>
+                      <span>{num(p.id)}</span>
+                      {p.title}
+                    </a>
+                  </li>
+                ))
+              }
+            </ol>
+          </nav>
+        </div>
+
+        <div class="longform__col">
+          <details class="otp">
+            <summary>
+              On this page
+              <StrokePair size="0.7rem" />
+            </summary>
+            <nav aria-label="On this page">
+              <ol>
+                {
+                  parts.map((p) => (
+                    <li>
+                      <a href={`#${p.id}`}>
+                        <span>{num(p.id)}</span>
+                        {p.title}
+                      </a>
+                    </li>
+                  ))
+                }
+              </ol>
+            </nav>
+          </details>
+
+          <section class="clause" id={doc.how.id} aria-labelledby="h-how">
+            <h2 id="h-how"><span class="num" aria-hidden="true">{num(doc.how.id)}</span>{doc.how.title}</h2>
+            {doc.how.text.map((t) => <p set:html={md(t)} />)}
+          </section>
+
+          <section class="clause" id={doc.url.id} aria-labelledby="h-url">
+            <h2 id="h-url"><span class="num" aria-hidden="true">{num(doc.url.id)}</span>{doc.url.title}</h2>
+            <Code label="Connector URL" code={mcp.url} inline class="mcpd__code" />
+            {doc.url.text.map((t) => <p set:html={md(t)} />)}
+          </section>
+
+          <section class="clause" id={doc.signin.id} aria-labelledby="h-signin">
+            <h2 id="h-signin"><span class="num" aria-hidden="true">{num(doc.signin.id)}</span>{doc.signin.title}</h2>
+            {doc.signin.text.map((t) => <p set:html={md(t)} />)}
+            <ol class="mcpd__steps">
+              {
+                mcp.howTo.map((s, i) => (
+                  <li>
+                    <span class="mcpd__n tabular" aria-hidden="true">{i + 1}</span>
+                    <span>
+                      <strong>{s.title}.</strong> {s.text}
+                    </span>
+                  </li>
+                ))
+              }
+            </ol>
+            <h3>Claude</h3>
+            <p set:html={md(doc.signin.claude)} />
+            <h3>Claude Code</h3>
+            <p set:html={md(doc.signin.code)} />
+            <Code label="Terminal" code={mcp.claudeCodeSignIn} class="mcpd__code" />
+            <p set:html={md(doc.signin.codeNote)} />
+            <p set:html={md(doc.signin.under)} />
+          </section>
+
+          <section class="clause" id={doc.keys.id} aria-labelledby="h-keys">
+            <h2 id="h-keys"><span class="num" aria-hidden="true">{num(doc.keys.id)}</span>{doc.keys.title}</h2>
+            {doc.keys.text.map((t) => <p set:html={md(t)} />)}
+            <Code label="Header" code={mcp.keyHeader} inline class="mcpd__code" />
+            <p set:html={md(doc.keys.json)} />
+            <Code label=".mcp.json" code={mcp.mcpJson} class="mcpd__code" />
+            <p set:html={md(doc.keys.cli)} />
+            <Code label="Terminal" code={mcp.claudeCodeKey} class="mcpd__code" />
+          </section>
+
+          <section class="clause" id={doc.access.id} aria-labelledby="h-access">
+            <h2 id="h-access"><span class="num" aria-hidden="true">{num(doc.access.id)}</span>{doc.access.title}</h2>
+            {doc.access.text.map((t) => <p set:html={md(t)} />)}
+            <dl class="specs mcpd__specs">
+              {
+                doc.access.levels.map((l) => (
+                  <div>
+                    <dt>{l.k}</dt>
+                    <dd>{l.v}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+            <p>{doc.access.modulesLead}</p>
+            <dl class="specs mcpd__specs">
+              {
+                keyModules.map((m) => (
+                  <div>
+                    <dt>{m.name}</dt>
+                    <dd>{m.touches}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+            <p>{doc.access.needsLead}</p>
+            <ul class="mcpd__needs">
+              {
+                needing.map((t) => (
+                  <li>
+                    <code>{t.name}</code>
+                    <span>
+                      {nameOf(t.module)} and {nameOf(t.needs!)}: Edit
+                    </span>
+                  </li>
+                ))
+              }
+            </ul>
+            {doc.access.ceiling.map((t) => <p set:html={md(t)} />)}
+          </section>
+
+          <section class="clause" id={doc.recorded.id} aria-labelledby="h-recorded">
+            <h2 id="h-recorded"><span class="num" aria-hidden="true">{num(doc.recorded.id)}</span>{doc.recorded.title}</h2>
+            {doc.recorded.text.map((t) => <p set:html={md(t)} />)}
+          </section>
+
+          <section class="clause" id={doc.revoke.id} aria-labelledby="h-revoke">
+            <h2 id="h-revoke"><span class="num" aria-hidden="true">{num(doc.revoke.id)}</span>{doc.revoke.title}</h2>
+            {doc.revoke.text.map((t) => <p set:html={md(t)} />)}
+          </section>
+
+          <section class="clause" id={doc.transport.id} aria-labelledby="h-transport">
+            <h2 id="h-transport"><span class="num" aria-hidden="true">{num(doc.transport.id)}</span>{doc.transport.title}</h2>
+            <dl class="specs mcpd__specs">
+              {
+                mcp.specs.map((s) => (
+                  <div>
+                    <dt>{s.k}</dt>
+                    <dd>{s.v}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          </section>
+
+          <section class="clause" id={doc.tools.id} aria-labelledby="h-tools">
+            <h2 id="h-tools"><span class="num" aria-hidden="true">{num(doc.tools.id)}</span>{doc.tools.title}</h2>
+            {doc.tools.text.map((t) => <p set:html={md(t)} />)}
+            <Tools />
+          </section>
+
+          <section class="clause" id={doc.old.id} aria-labelledby="h-old">
+            <h2 id="h-old"><span class="num" aria-hidden="true">{num(doc.old.id)}</span>{doc.old.title}</h2>
+            {doc.old.text.map((t) => <p set:html={md(t)} />)}
+            <ul class="mcpd__needs">
+              {
+                deprecated.map((d) => (
+                  <li>
+                    <code>{d.name}</code>
+                    <span>
+                      Use <code>{d.use}</code>
+                    </span>
+                  </li>
+                ))
+              }
+            </ul>
+          </section>
+        </div>
+      </div>
+    </article>
+
+    <Related title="Read next." slugs={["ai", "security", "import"]} />
+  </div>
+</Base>
+
+<style>
+  /* The hero opens the page, so the article starts without the long pages' own top air. */
+  .mcpd {
+    padding-top: calc(var(--u) * 4);
+  }
+  .mcpd :global(.mcpd__code) {
+    margin-top: 1rem;
+  }
+  /* Long reading pads inline code; a snippet's own lines stay plain. */
+  .mcpd :global(.code__pre code) {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    font-size: inherit;
+  }
+  .mcpd__steps {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    color: var(--c-muted);
+  }
+  .mcpd__steps li::before {
+    display: none;
+  }
+  .mcpd__steps li {
+    padding-left: 0;
+    display: grid;
+    grid-template-columns: 1.75rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: baseline;
+  }
+  .mcpd__n {
+    display: inline-grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 50%;
+    border: 1px solid var(--c-line-strong);
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-fg);
+    translate: 0 -0.1em;
+  }
+  .mcpd__specs {
+    margin-top: 1rem;
+  }
+  /* A table, so the column's width like the page's other tables, not a reading line's. */
+  .longform .mcpd__needs {
+    max-width: none;
+  }
+  .mcpd__needs {
+    display: grid;
+    gap: 0;
+    margin-top: 1rem;
+    border-top: 1px solid var(--c-line);
+  }
+  .mcpd__needs li {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--c-line);
+    font-size: var(--t-s);
+  }
+  .mcpd__needs li::before {
+    display: none;
+  }
+  .mcpd__needs span {
+    color: var(--c-muted);
+  }
+</style>

@@ -1,0 +1,70 @@
+---
+// The help center: every question in one place, a field that answers as you type, the guides,
+// and a person at the end of it (components/help, motion/pages/help.ts).
+import Btn from "../components/Btn.astro";
+import HelpGuides from "../components/help/HelpGuides.astro";
+import HelpSearch from "../components/help/HelpSearch.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { help } from "../data/pages/help";
+import { site, waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs, faq } from "../lib/seo";
+
+const all = help.groups.flatMap((g) => g.items);
+---
+
+<Base title={help.title} description={help.description} image="/og/help.png" jsonLd={[crumbs([help.title, "/help"]), faq(all)]}>
+  <div data-pg="help">
+    <PageHero name={help.name} line={help.line} lead={help.lead} family="resources" compact current="help">
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href={`mailto:${site.email}`}>{help.write}</Btn>
+      </Fragment>
+    </PageHero>
+
+    <HelpSearch />
+
+    <HelpGuides />
+
+    <section class="stuck pg pg--chapter" aria-labelledby="stuck-title">
+      <div class="wrap grid">
+        <h2 class="stuck__title t-xl" id="stuck-title" data-split>{help.stuck.title}</h2>
+        <div class="stuck__body">
+          <p class="t-m muted" data-reveal>{help.stuck.text}</p>
+          <p class="stuck__mail t-l" data-reveal>
+            <a class="link" href={`mailto:${site.email}`}>{site.email}</a>
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <Related title="Keep reading." slugs={["ai", "pricing", "compare"]} />
+  </div>
+</Base>
+
+<style>
+  .stuck__title {
+    grid-column: 1 / span 4;
+    margin-left: -0.04em;
+  }
+  .stuck__body {
+    grid-column: 5 / span 7;
+    display: grid;
+    align-content: end;
+    gap: 1.25rem;
+    max-width: 40rem;
+  }
+  .stuck__mail {
+    font-weight: var(--w-text);
+  }
+  @media (max-width: 900px) {
+    .stuck__title,
+    .stuck__body {
+      grid-column: 1 / -1;
+    }
+    .stuck__body {
+      margin-top: 1.5rem;
+    }
+  }
+</style>

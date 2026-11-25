@@ -153,6 +153,9 @@ export type EmailRuntime = {
   setClassifyItems?(
     items: Pick<EmailSettingsItem, "id" | "kind" | "position" | "value">[],
   ): Promise<void>;
+  /** After the account is deleted: erases the signed-in person's mail on this
+   *  Mac, its store folder and keychain secrets (desktop only, MOD-555). */
+  forgetOnThisDevice?(): Promise<void>;
   /** Per-account server escalation for the ⌘K "Search older mail" row (MR-13):
    *  Gmail X-GM-RAW / IMAP SEARCH with an honest status. */
   searchServer(input: { accountId: string; query: string; limit?: number }): Promise<{
