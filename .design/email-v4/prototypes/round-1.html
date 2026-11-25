@@ -305,18 +305,72 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .card .crow .grow { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .more { padding: 8px 12px; border-top: 1px solid var(--hairline); font-size: var(--text-xs); color: var(--muted-foreground); }
 .rel { position: relative; }
+
+/* ── Calls pane (prototype chrome, not app UI): the questions for what's on screen ── */
+.work { flex: 1; min-height: 0; display: flex; }
+.work .appwrap { flex: 1; min-width: 0; }
+.calls { width: 25rem; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--popover); border-left: 1px dashed color-mix(in oklab, var(--foreground) 26%, transparent); font-size: var(--text-sm); }
+.calls[hidden] { display: none; }
+.cl-head { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: repeating-linear-gradient(-45deg, var(--strip-a) 0 7px, var(--popover) 7px 14px); }
+.cl-head .r1 { display: flex; align-items: center; gap: 8px; }
+.cl-head h2 { font-size: var(--text-md); font-weight: 600; flex: 1; }
+.cl-head .sub { font-size: var(--text-xs); color: var(--muted-foreground); line-height: 1.45; }
+.meter { height: 4px; border-radius: 9999px; background: var(--state-active); overflow: hidden; }
+.meter i { display: block; height: 100%; background: var(--label-green); }
+.cl-list { overflow: auto; flex: 1; min-height: 0; padding: 10px 10px 24px; display: flex; flex-direction: column; gap: 10px; }
+.ccard { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.ccard.answered { border-color: color-mix(in oklab, var(--label-green) 45%, var(--border)); }
+.ccard .ct { display: flex; gap: 8px; align-items: baseline; }
+.ccard .no { font: 600 var(--text-xs)/1 var(--font-mono); color: var(--muted-foreground); min-width: 1.75rem; }
+.ccard .ttl { font-weight: 600; flex: 1; text-wrap: balance; }
+.ccard .ok { font-size: var(--text-2xs); font-weight: 600; color: var(--label-green); white-space: nowrap; }
+.ccard .q { color: var(--muted-foreground); line-height: 1.45; }
+.opts { display: flex; flex-direction: column; gap: 4px; }
+.opt { display: flex; gap: 8px; align-items: flex-start; text-align: left; padding: 6px 8px; border-radius: var(--radius-md); border: 1px solid var(--hairline); line-height: 1.4; width: 100%; }
+.opt:hover { background: var(--state-hover); }
+.opt.pick { border-color: var(--primary); background: var(--state-selected); }
+.opt .k { font: 600 var(--text-xs)/1.4 var(--font-mono); color: var(--muted-foreground); }
+.opt .l { flex: 1; min-width: 0; }
+.opt .rec { font-size: var(--text-2xs); font-weight: 600; color: var(--foreground); background: var(--state-active); border-radius: var(--radius-sm); padding: 0 5px; white-space: nowrap; }
+.opt .eye { font-size: var(--text-2xs); color: var(--muted-foreground); white-space: nowrap; text-decoration: underline; text-underline-offset: 2px; }
+.opt.showing .eye { color: var(--foreground); font-weight: 600; text-decoration: none; }
+.why { font-size: var(--text-xs); color: var(--muted-foreground); line-height: 1.45; }
+.why b { color: var(--foreground); font-weight: 600; }
+.seeline { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: var(--text-xs); color: var(--muted-foreground); }
+.seebtn { height: 22px; padding: 0 8px; border-radius: var(--radius-sm); background: var(--state-active); color: var(--foreground); font-size: var(--text-xs); }
+.seebtn:hover { background: color-mix(in oklab, var(--foreground) 13%, transparent); }
+.seebtn.on { background: var(--primary); color: var(--primary-foreground); }
+.nodraw { font-size: var(--text-xs); color: var(--muted-foreground); font-style: italic; }
+.ccard textarea { width: 100%; min-height: 2.25rem; resize: vertical; font: inherit; font-size: var(--text-sm); color: var(--foreground); background: var(--background); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 6px 8px; }
+.ccard textarea:focus-visible { outline: 2px solid var(--primary); outline-offset: -1px; }
+.reply { font-size: var(--text-xs); line-height: 1.5; color: var(--foreground); border-left: 2px solid var(--label-blue); padding: 4px 0 4px 10px; display: flex; flex-direction: column; gap: 4px; }
+.reply .who { font-weight: 600; color: var(--muted-foreground); }
+.cl-foot { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--border); }
+.cl-foot .msg2 { flex: 1; font-size: var(--text-xs); color: var(--muted-foreground); }
+.copybox { width: 100%; height: 6rem; font: var(--text-xs)/1.4 var(--font-mono); background: var(--background); color: var(--foreground); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 6px; }
+.frames-seg button .cnt { font-size: var(--text-2xs); color: var(--subtle-foreground); margin-left: 4px; font-variant-numeric: tabular-nums; }
+.frames-seg button .cnt.done { color: var(--label-green); }
+.keytbl { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px 12px; align-items: center; font-size: var(--text-sm); }
 </style>
 
 <div class="stage" id="stage">
   <div class="strip" id="strip" role="region" aria-label="Prototype controls (not part of Mail)">
     <span class="ptag">Mail v4 · round 1</span>
-    <div class="seg" id="frames" role="group" aria-label="Frames"></div>
+    <div class="seg frames-seg" id="frames" role="group" aria-label="Frames"></div>
     <div class="seg" id="variants" role="group" aria-label="Variants"></div>
     <div class="seg" id="themeSeg" role="group" aria-label="Theme"><button data-th="dark">Dark</button><button data-th="light">Light</button></div>
     <div class="seg" id="denSeg" role="group" aria-label="Density"><button data-den="comfortable">Comfortable</button><button data-den="compact">Compact</button><button data-den="dense">Dense</button></div>
+    <button class="seebtn" id="callsToggle" aria-pressed="true">Hide calls <span class="kbd">C</span></button>
     <div class="cap" id="cap"></div>
   </div>
-  <div class="appwrap"><div class="app" id="app"></div></div>
+  <div class="work">
+    <div class="appwrap"><div class="app" id="app"></div></div>
+    <aside class="calls" id="calls" aria-label="Calls for this frame (prototype notes, not part of Mail)">
+      <div class="cl-head"><div class="r1"><h2 id="clTitle">Calls</h2><span class="t2 num" id="clCount"></span></div><div class="meter"><i id="clMeter"></i></div><div class="sub" id="clSub"></div></div>
+      <div class="cl-list" id="clList"></div>
+      <div class="cl-foot"><span class="msg2" id="clMsg">Your picks stay in this browser. Copy them and paste into the chat.</span><button class="btn primary" id="copyBtn">Copy answers</button></div>
+    </aside>
+  </div>
 </div>
 
 <script>
@@ -404,16 +458,85 @@ const P_ = (id) => people[T.find((t) => t.id === id)?.p] || people.ana;
 
 /* ── state ── */
 const FRAMES = [
-  { k: "1", id: "layout", name: "Layout", calls: "1, 4", vars: [["a", "a · Split"], ["b", "b · Full"], ["c", "c · In the panel"]] },
-  { k: "2", id: "inbox", name: "Inbox", calls: "5, 6, 7", vars: [["a", "a · Tabs"], ["b", "b · Sections"], ["c", "c · Cards"]] },
-  { k: "3", id: "bar", name: "Bottom bar", calls: "2, 10, 17", vars: [["a", "a · Reading"], ["b", "b · 3 selected"], ["c", "c · Writing"]] },
-  { k: "4", id: "panel", name: "Right panel", calls: "3, 28", vars: [["a", "Person"], ["b", "Links"], ["c", "Today"], ["d", "Schedule"]] },
-  { k: "5", id: "links", name: "Links", calls: "26, 30, 31", vars: [["a", "a · Email + task"], ["b", "b · Invite + your day"], ["c", "c · Offer times"]] },
-  { k: "6", id: "team", name: "Team", calls: "34, 35, 36", vars: [["a", "a · Shared + comments"], ["b", "b · Discuss in chat"]] },
-  { k: "7", id: "aside", name: "Set aside", calls: "8, 9", vars: [["a", "a · Batch reply"], ["b", "b · Plain list"]] },
-  { k: "8", id: "states", name: "States", calls: "§5.8, 20", vars: [["a", "Inbox clear"], ["b", "Loading"], ["c", "Couldn't load"], ["d", "Offline"], ["e", "Long content"], ["f", "First run"]] },
-  { k: "9", id: "compose", name: "Compose", calls: "13–16, 24", vars: [["a", "a · Rich text"], ["b", "b · Template"]] },
+  { k: "1", id: "layout", name: "Layout", vars: [["a", "a · Split"], ["b", "b · Full"], ["c", "c · In the panel"]] },
+  { k: "2", id: "inbox", name: "Inbox", vars: [["a", "Tabs"], ["b", "Sections"], ["c", "Cards"], ["d", "Simple list"], ["e", "Tabs + splits"]] },
+  { k: "3", id: "bar", name: "Bottom bar", vars: [["a", "Reading"], ["b", "3 selected"], ["c", "Writing"], ["d", "More ▾ open"], ["e", "Keys"]] },
+  { k: "4", id: "panel", name: "Right panel", vars: [["a", "Contact"], ["b", "Links"], ["c", "Today"], ["d", "Schedule"]] },
+  { k: "5", id: "links", name: "Links", vars: [["a", "Email + task"], ["b", "Invite + your day"], ["c", "Offer times"]] },
+  { k: "6", id: "team", name: "Team", vars: [["a", "Shared + comments"], ["b", "Discuss in chat"]] },
+  { k: "7", id: "aside", name: "Set aside", vars: [["a", "Batch reply"], ["b", "Plain list"]] },
+  { k: "8", id: "states", name: "States", vars: [["a", "Inbox clear"], ["b", "Loading"], ["c", "Couldn't load"], ["d", "Offline"], ["e", "Long content"], ["f", "First run"]] },
+  { k: "9", id: "compose", name: "Compose", vars: [["a", "Rich text"], ["b", "Template"]] },
+  { k: "0", id: "text", name: "Not drawn", vars: [["a", "Background"]] },
 ];
+/* Round 1's 46 calls (REPLAN §8), grouped by the frame you look at to answer them.
+   o = options [key, label, variant to show or ""]; rec = recommended key; see = extra frames. */
+const CALLS = [
+  // 1 Layout
+  { n: 1, s: 1, f: "layout", t: "Where an email opens", q: "When you pick an email, where does it open?", o: [["a", "Split: list and email side by side in the centre", "layout-a"], ["b", "Full: the email takes the whole centre; Esc goes back", "layout-b"], ["c", "In the right panel, like a task's detail", "layout-c"], ["d", "Split by default, Full one key away (⇧Enter)", ""]], rec: "d", why: "Split keeps triage fast; Full is what you want for a long email." },
+  { n: 4, f: "layout", t: "The rail's order", q: "Which order do the places in the left rail take?", o: [["a", "Working places first (Inbox, Set aside, Snoozed…), folders folded under each account", "layout-a"], ["b", "Today's flat list of every place", ""], ["c", "You drag to reorder and hide rows", ""]], rec: "a", why: "a now, c in round 2: customising the rail adds a settings surface.", look: "Look at the left rail." },
+  { n: 11, f: "layout", t: "Finding what you just marked Done", q: "After Done, how do you get back to an email you just cleared?", o: [["a", "Recently seen (last 20 opened) plus a toggle that greys done mail in place", ""], ["b", "Recently seen only, in the rail's More", ""], ["c", "Neither: Undo and Archive cover it", ""]], rec: "b", why: "Cheap, and showing done mail inline fights inbox zero.", look: "Not drawn: Recently seen would sit under More in the rail." },
+  { n: 43, f: "layout", t: "A denser row size", q: "Add a third, Linear-level row size?", o: [["a", "Add Dense (one 28 px line, no avatar)", ""], ["b", "Keep Comfortable and Compact", ""]], rec: "a", why: "The densest setting should reach Linear and Notion.", look: "Try Comfortable · Compact · Dense in the strip above (or press D)." },
+  { n: 44, f: "layout", t: "Light theme gets the same care", q: "Is light mode tuned for Mail v4?", o: [["a", "Yes, in scope for Mail", ""], ["b", "No, out of scope as today", ""]], rec: "a", why: "Most HTML email is designed on white.", look: "Switch Dark · Light in the strip above (or press T)." },
+  { n: 46, f: "layout", t: "A narrow window", q: "Below 1200 px wide, what happens to the right panel?", o: [["a", "It hides; its bottom-bar button brings it back over the reader", ""], ["b", "It folds to an icon strip (today)", ""], ["c", "It never hides; the list narrows instead", ""]], rec: "a", why: "No edge strips (the 3×3 rule), and the email keeps its width. One rule for the whole app.", look: "Make the browser window narrower than 1200 px to see a." },
+  // 2 Inbox
+  { n: 5, s: 1, f: "inbox", t: "How the inbox is organised", q: "Which inbox layouts exist, and which one opens first?", o: [["a", "Tabs: one queue at a time", "inbox-a"], ["b", "Sections: one scrolling list with headers (Spark's Focused)", "inbox-b"], ["c", "Cards: each section shows its top three", "inbox-c"], ["d", "Simple list: everything by time, no grouping (Spark's Classic)", "inbox-d"]], rec: "a", why: "Updated after your answer: Tabs open first, and the other three stay as Display choices, so each person picks. Splits (call 6) add tabs.", reply: true },
+  { n: 6, f: "inbox", t: "Splits: any search becomes a tab", q: "Can you save any search (a client's domain, say) as its own tab?", o: [["a", "Yes, from search, up to 6 then “+N”", "inbox-e"], ["b", "Keep 3 custom tabs, set up in Settings", ""]], rec: "a", why: "One tab per client is how an agency works; Settings is too far from the moment you notice the pattern." },
+  { n: 7, f: "inbox", t: "Group a sender into one row", q: "Can any noisy sender (GitHub, Stripe) collapse to one row?", o: [["a", "Yes, by sender or whole domain", "inbox-e"], ["b", "By sender only", ""], ["c", "No, newsletters only (today)", ""]], rec: "a", why: "Notification senders are the noise agencies drown in." },
+  { n: 12, f: "inbox", t: "Priority for one conversation", q: "Besides Priority people, can a single conversation be priority?", o: [["a", "Yes, a key (i) floats it", ""], ["b", "No: Pin already floats a conversation", ""]], rec: "b", why: "Two “float this” verbs is one too many.", look: "Not drawn." },
+  { n: 23, f: "inbox", t: "Screening new senders", q: "Do new senders wait in “New senders” until you allow them?", o: [["a", "Off, but offered once at first run", "states-f"], ["b", "On for new accounts", ""], ["c", "Off, never offered", ""]], rec: "a", why: "Loved by people with public addresses, annoying for everyone else." },
+  // 3 Bottom bar
+  { n: 2, s: 1, f: "bar", t: "The bottom bar carries the email's actions", q: "Where do Done, Snooze, Reply and the rest live?", o: [["a", "In the bottom bar, with their keys", "bar-a"], ["b", "In a toolbar above the email (today)", ""], ["c", "Both", ""]], rec: "a", why: "One place for actions app-wide, more room for the email, and the keys are always in view." },
+  { n: 10, f: "bar", t: "Keys for the verbs", q: "Which key does Set aside get, and does `a` stay Reply all?", o: [["a", "a = Set aside, ⇧R = Reply all", ""], ["b", "a = Reply all (Gmail habit), ⇧S = Set aside", "bar-e"]], rec: "b", why: "`a` for Reply all is muscle memory for Gmail and Superhuman people." },
+  { n: 21, f: "bar", t: "Keyboard presets", q: "Can you switch Mail's keys to another app's map?", o: [["a", "Presets: Moduo · Superhuman/Gmail · Spark · Apple Mail", "bar-e"], ["b", "Presets plus rebinding any action", ""], ["c", "One fixed map", ""]], rec: "a", why: "Switchers bring muscle memory; full rebinding is an app-wide project." },
+  { n: 17, s: 1, f: "bar", t: "Send later", q: "Can you schedule an email?", o: [["a", "No (today)", ""], ["b", "Yes, from this Mac: late if the Mac was asleep, and it says so", "bar-c"], ["c", "Yes, always on time: a server sends it (Mike's call)", ""], ["d", "b now, c later", "bar-c"]], rec: "d", why: "b is honest and free; c is the real thing and a systems decision." },
+  { n: 18, f: "bar", t: "Print and Save as PDF", q: "Can you print an email (⌘P)?", o: [["a", "Yes, from More ▾", "bar-d"], ["b", "No", ""]], rec: "a", why: "Invoices and contracts get printed; it's small." },
+  // 4 Right panel
+  { n: 3, s: 1, f: "panel", t: "Which panel view opens first", q: "With an email open, what does the right panel show first?", o: [["a", "Contact: the sender, their company, open work, next meeting", "panel-a"], ["b", "Today: your day from Calendar (today's default)", "panel-c"], ["c", "Whichever you used last", ""]], rec: "a", why: "Who it's from is the context you use while reading; your day is one key away." },
+  { n: 28, f: "panel", t: "Links: a line plus a view", q: "How does an email show what it's linked to?", o: [["a", "One short line under the subject, the full list in the panel", "panel-b"], ["b", "Chips under the subject (today)", ""], ["c", "Only in the panel", ""]], rec: "a", why: "Chips grow until they push the email down." },
+  { n: 45, f: "panel", t: "The view's name", q: "What is the “everything this email touches” view called?", o: [["a", "Details, the same name in every module (Calendar uses it)", ""], ["b", "Links", "panel-b"]], rec: "a", why: "One name per idea across modules; “Links” collides with the Link key." },
+  { n: 27, f: "panel", t: "Link an email to a project", q: "Can a conversation belong to a client's project?", o: [["a", "Yes; replies stay linked, the project lists its emails", "panel-b"], ["b", "Tasks and contacts only (today)", ""]], rec: "a", why: "Agencies think in clients and projects, not inboxes.", look: "See Project in the Links view." },
+  { n: 29, f: "panel", t: "A note from an email", q: "What does `n` make?", o: [["a", "A real Moduo note, linked both ways (quotes your selection)", "panel-b"], ["b", "A private sticky note on the email (today)", ""]], rec: "a", why: "Meeting prep and client briefs start from an email.", look: "See Note in the Links view." },
+  // 5 Links
+  { n: 26, s: 1, f: "links", t: "An email and its task stay one piece", q: "After you make a task from an email, do they stay connected?", o: [["a", "Yes: the row shows the task, a reply shows on the task, finishing it offers Done", "links-a"], ["b", "No, just a link chip (today)", ""]], rec: "a", why: "The one thing Spark and Superhuman can't do." },
+  { n: 30, s: 1, f: "links", t: "Scheduling from an email", q: "Which scheduling tools does the composer get?", o: [["a", "All three: Offer times, Booking link, Schedule", "links-c"], ["b", "Booking link and Schedule only", ""]], rec: "a", why: "“When are you free?” is the most common email that turns into work.", see: [["panel-d", "Schedule panel"]] },
+  { n: 31, s: 1, f: "links", t: "Answer an invite with your day beside it", q: "When an invite arrives, what do you see?", o: [["a", "Accept · Maybe · Decline, with that day drawn beside it", "links-b"], ["b", "Today's invite card", ""]], rec: "a", why: "You can't answer an invite without seeing your day." },
+  { n: 32, f: "links", t: "Quick capture knows the email", q: "Does ⌘⇧K while reading pre-fill and link the email?", o: [["a", "Yes", ""], ["b", "No", ""]], rec: "a", why: "Small, and nothing in Mail uses it yet.", look: "Not drawn." },
+  { n: 33, f: "links", t: "Drag an email anywhere", q: "Can you drag an email onto a project, note, channel or contact?", o: [["a", "Yes, every target", ""], ["b", "Tasks and calendar days only (today)", ""]], rec: "a", why: "One gesture for every link.", look: "Not drawn." },
+  // 6 Team
+  { n: 34, s: 1, f: "team", t: "Share a conversation with the team", q: "Can teammates read and comment on one email you share?", o: [["a", "Yes, per conversation, opt-in", "team-a"], ["b", "Later", ""], ["c", "Only “Discuss in chat”", "team-b"]], rec: "a", why: "An agency's client emails are team work. Only shared conversations leave the Mac." },
+  { n: 35, f: "team", t: "Discuss in chat", q: "Can you post an email card into a chat channel?", o: [["a", "Yes", "team-b"], ["b", "No", ""]], rec: "a", why: "The cheap half of sharing; works without call 34." },
+  { n: 36, f: "team", t: "Hand an email to a teammate", q: "Can you assign an email (it becomes their task)?", o: [["a", "Yes", "team-a"], ["b", "No", ""]], rec: "a", why: "Delegation is the agency's daily move.", look: "See Assigned in the panel." },
+  { n: 37, f: "team", t: "Shared inboxes (hello@)", q: "Does v4 include team inboxes several people work from?", o: [["a", "In v4", ""], ["b", "Its own plan later", ""]], rec: "b", why: "That's a help desk, a different product.", look: "Not drawn." },
+  // 7 Set aside
+  { n: 8, s: 1, f: "aside", t: "Set aside", q: "Is there a dateless shelf for “I'll reply today”?", o: [["a", "Yes, its own place in the rail", "aside-a"], ["b", "No, use Pin", ""]], rec: "a", why: "Pin is noise in the inbox; Snooze needs a time." },
+  { n: 9, f: "aside", t: "Set aside's page", q: "What does opening Set aside show?", o: [["a", "Every email with its reply box open: answer them in one pass", "aside-a"], ["b", "An ordinary list", "aside-b"], ["c", "Both, as two places", ""]], rec: "a", why: "It turns the shelf into a routine." },
+  // 8 States
+  { n: 20, f: "states", t: "A quiet check-in line", q: "When you come back to Mail, what greets you?", o: [["a", "One summary line, plus check-in times you set", ""], ["b", "The line only", "states-a"], ["c", "Nothing", ""]], rec: "b", why: "Today's “while you were away” line already does half of it." },
+  // 9 Compose
+  { n: 13, s: 1, f: "compose", t: "Rich text with inline images", q: "How rich is writing?", o: [["a", "Toolbar on selection, inline images, Markdown shortcuts kept", "compose-a"], ["b", "Markdown only (today)", ""]], rec: "a", why: "The first gap a Spark user hits." },
+  { n: 14, f: "compose", t: "Templates with blanks", q: "Whole-email templates as well as snippets?", o: [["a", "Both", "compose-b"], ["b", "Snippets only", ""]], rec: "a", why: "Agencies send the same proposal and invoice-chase weekly." },
+  { n: 15, f: "compose", t: "Several signatures", q: "Can you switch signatures while writing?", o: [["a", "Yes, ← → in the composer", "compose-a"], ["b", "One per address (today)", ""]], rec: "a", why: "" },
+  { n: 16, f: "compose", t: "Composer extras", q: "Auto Cc/Bcc, groups as recipients, ⌘1–5 field jumps, Send again?", o: [["a", "All four", ""], ["b", "Some (say which)", ""]], rec: "a", why: "Each is small and each has a user who depends on it.", look: "Not drawn." },
+  { n: 24, f: "compose", t: "A draft in its own window", q: "Can a draft pop out so you keep triaging?", o: [["a", "Draft only (⌘⇧D)", ""], ["b", "Draft and conversation", ""], ["c", "No", ""]], rec: "a", why: "Long replies get written between other things.", look: "Not drawn." },
+  // Not drawn
+  { n: 19, f: "text", t: "Notifications per account", q: "Can each account have its own notification level?", o: [["a", "Yes: All · People · Priority people · None", ""], ["b", "One global setting (today)", ""]], rec: "a", why: "Work and personal accounts rarely want the same noise." },
+  { n: 22, f: "text", t: "Search with plain dates and file types", q: "“last week”, has:pdf, larger:5mb?", o: [["a", "Yes", ""], ["b", "No", ""]], rec: "a", why: "It's what people type." },
+  { n: 25, f: "text", t: "Out-of-office reply", q: "Set an automatic reply inside Moduo?", o: [["a", "Yes, where the provider supports it", ""], ["b", "No, use the provider's website", ""]], rec: "b", why: "Once a year, and half the accounts can't." },
+  { n: 38, s: 1, f: "text", t: "What agents can do with your mail", q: "Through MCP, what can an AI agent do?", o: [["a", "Triage for real (Done, snooze, link), write drafts, never send; reading bodies opt-in", ""], ["b", "Metadata only, and drop the snooze that doesn't work", ""]], rec: "a", why: "AI only through MCP means MCP has to be good; never-send keeps you in control." },
+  { n: 39, s: 1, f: "text", t: "Mail stays on the Mac", q: "Does your mail live only on your Mac?", o: [["a", "Yes for v4; sharing and on-time send later are the only opt-in exceptions", ""], ["b", "Plan a server copy for web and phone (a large change)", ""]], rec: "a", why: "Privacy is the top reason people leave Spark." },
+  { n: 40, f: "text", t: "Instant next email", q: "Read the next emails ahead so opening never waits?", o: [["a", "Yes", ""], ["b", "No", ""]], rec: "a", why: "" },
+  { n: 41, f: "text", t: "One name for an email exchange", q: "“Conversation” or “thread”?", o: [["a", "Conversation (Chat already uses thread)", ""], ["b", "Thread", ""]], rec: "a", why: "" },
+  { n: 42, f: "text", t: "Done vs Archive", q: "What's the verb, and what's the place?", o: [["a", "Verb Done, place Archive (today)", ""], ["b", "Call the place Done too", ""]], rec: "a", why: "Archive matches what other clients show." },
+];
+/* Answers already given in chat (2026-11-26), shown pre-filled. */
+const GIVEN = {
+  1: { opt: "x", note: "Split and Full both offered, the person chooses. Default leaning Full: it keeps the 3×3 grid. Drop c (in the panel)." },
+  5: { opt: "a", note: "Tabs look the best. Asked: what does the community want most, and can we offer more views?" },
+};
+const REPLIES = {
+  5: "Nobody publishes a ranking, but the signals agree on <b>letting each person choose</b>. Spark brought back Classic inboxes after users asked. Superhuman and Shortwave make custom split tabs their headline, and Shortwave says “hide empty splits” is one of its most popular settings. So: Tabs open first, and Sections, Cards and Simple list are a Display choice (all four are drawn now). Your own splits (call 6) become tabs, and empty tabs hide. <b>Ok?</b>",
+};
 const CAPS = {
   "layout-a": "<b>Call 1a/d · Split.</b> List and conversation side by side in the centre; the right panel is context (Person). The reader has no toolbar: its actions live in the bottom bar (call 2). The rail puts working places first (call 4).",
   "layout-b": "<b>Call 1b · Full.</b> Enter (or ⇧Enter from Split) opens the conversation full width; Esc goes back to the list. Best for long emails and newsletters.",
@@ -442,9 +565,14 @@ const CAPS = {
   "states-e": "<b>Long content:</b> a 200-character subject, a long name, a 12-message conversation.",
   "states-f": "<b>First run:</b> no account yet; one sentence and one action.",
   "compose-a": "<b>Call 13 · Rich text:</b> a toolbar on selection, an inline image, signature switcher (call 15).",
+  "inbox-d": "<b>Simple list</b> (Spark's Classic): every email by time, no grouping.",
+  "inbox-e": "<b>Tabs with your own splits:</b> Fjordline and Harbour Bank are saved searches shown as tabs (call 6); GitHub is grouped to one row (call 7).",
+  "bar-d": "<b>More ▾ open:</b> the verbs that don't fit in the bar, each with its call number.",
+  "bar-e": "<b>Keys sheet</b> (?): the map from call 10 b, and the preset switcher from call 21.",
+  "text-a": "<b>Not drawn:</b> these calls change behaviour you can't see in a frame. Answer them from the text.",
   "compose-b": "<b>Call 14 · Template</b> with blanks; ⌘⇧T opens the picker.",
 };
-let S = { f: "layout", v: "a", theme: "dark", den: "comfortable" };
+let S = { f: "layout", v: "a", theme: "dark", den: "comfortable", calls: !critic };
 try { const s = JSON.parse(localStorage.getItem("mailv4r1") || "null"); if (s && !critic) S = { ...S, ...s }; } catch (e) {}
 
 /* ── pieces ── */
@@ -523,7 +651,7 @@ function listCol(o = {}) {
   } else body = o.body || `<div class="rows" role="list" aria-label="Conversations">${listSections(o.sel || "t1", o)}</div>`;
   return `<section class="listcol ${o.full ? "full" : ""}" aria-label="Conversation list">
     <div class="listhead"><h2>${title}</h2>${o.count === "" ? `<span class="sk" style="width:4rem"></span>` : o.count != null ? `<span class="t3 num">${o.count}</span>` : `<span class="t3 num">7 unread</span>`}<span class="grow"></span>
-    <button class="btn">${I("layers")} Sections ${I("chev")}</button><button class="btn icon" aria-label="Search mail (/)">${I("search")}</button></div>
+    <button class="btn">${I("layers")} ${o.lay || "Sections"} ${I("chev")}</button><button class="btn icon" aria-label="Search mail (/)">${I("search")}</button></div>
     ${o.line || ""}${body}</section>`;
 }
 function msgCollapsed(pk, when, ex) { const p = people[pk]; return `<div class="msg coll" tabindex="0" role="button"><span class="ava sm ${p.c}">${p.i}</span><span class="nm">${esc(p.n)}</span><span class="ex">${esc(ex)}</span><span class="t3 num">${when}</span></div>`; }
@@ -656,9 +784,9 @@ function render() {
     case "layout-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read"); break;
     case "layout-b": html = topbar() + L + `<main class="centre">${readerT1({ after: "" }).replace('class="reader"', 'class="reader" style="flex:1"')}</main>` + R("person") + bar("read"); break;
     case "layout-c": cls = "wide-right"; html = topbar() + L + `<main class="centre">${listCol({ full: true })}</main>` + `<aside class="panel" aria-label="Right panel: Conversation"><div class="ptitle"><button class="dd">Conversation ${I("chev")}</button><span class="grow"></span><button class="btn icon" aria-label="Open full">${I("expand")}</button></div><div class="pbody" style="padding:0">${readerT1().replace('<section class="reader"', '<section class="reader" style="font-size: var(--text-sm)"')}</div></aside>` + bar("read"); break;
-    case "inbox-a": html = topbar() + L + `<main class="centre">${listCol({ mode: "tabs" })}${readerT1()}</main>` + R("person") + bar("read"); break;
+    case "inbox-a": html = topbar() + L + `<main class="centre">${listCol({ mode: "tabs", lay: "Tabs" })}${readerT1()}</main>` + R("person") + bar("read"); break;
     case "inbox-b": html = topbar() + L + `<main class="centre">${listCol({ full: true, sel: "t2" })}</main>` + R("person", { pk: "sam" }) + bar("list"); break;
-    case "inbox-c": html = topbar() + L + `<main class="centre">${listCol({ mode: "cards", full: true })}</main>` + R("today") + bar("list"); break;
+    case "inbox-c": html = topbar() + L + `<main class="centre">${listCol({ mode: "cards", full: true, lay: "Cards" })}</main>` + R("today") + bar("list"); break;
     case "bar-a": html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read"); break;
     case "bar-b": {
       const b = `<div class="rows" role="list" aria-label="Conversations">${grp("People", 6)}${T.filter((t) => t.sec === "people").map((t, i) => row(t, i >= 3, { picked: i >= 3 })).join("")}</div>`;
@@ -714,6 +842,38 @@ function render() {
       const b = `<div class="rows" role="list" aria-label="Set aside">${["t2", "t6", "t5"].map((id, i) => row(T.find((t) => t.id === id), i === 0)).join("")}</div>`;
       html = topbar() + rail({ place: "aside" }) + `<main class="centre">${listCol({ title: "Set aside", count: 3, body: b })}${(function () { const t2 = T.find((t) => t.id === "t2"); return `<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">${t2.sub}</h1>${msgOpen("sam", "10:15", ["Hi Maciej,", "We'd love an hour with you and Tomasz next week to walk through the first rebrand concepts. When works for you?", "Best, Sam"])}</div></div></section>`; })()}</main>` + R("person", { pk: "sam" }) + bar("read"); break;
     }
+    case "inbox-d": {
+      const order = ["t1", "n1", "t2", "t3", "n2", "t4", "n3", "r1", "t5", "t6", "n4"];
+      const b = `<div class="rows" role="list" aria-label="Conversations">${order.map((id) => row(T.find((t) => t.id === id), id === "t1")).join("")}</div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ body: b, lay: "Simple list" })}${readerT1()}</main>` + R("person") + bar("read"); break;
+    }
+    case "inbox-e": {
+      const gh = `<div role="listitem" class="row" tabindex="-1"><span class="ava pf">GH</span><div class="who"><span class="nm">GitHub <span class="t3" style="font-weight:400">· grouped</span></span><span class="udot"></span></div><span class="when">10:31</span><div class="sub">4 updates: deploy previews, 2 reviews, 1 failed check</div><div class="snip">[moduo-site] Deploy preview ready for #212, and 3 more</div><div class="flags"><span class="chip">${I("layers")}4 in group</span></div></div>`;
+      const tabs = `<div class="tabs" role="tablist" aria-label="Inbox tabs"><button role="tab">Personal <span class="n">2</span></button><button role="tab">Fjordline <span class="n">1</span></button><button role="tab">Harbour Bank <span class="n">1</span></button><button class="on" role="tab">Notifications <span class="n">3</span></button><button role="tab">Newsletters <span class="n">1</span></button><button role="tab" aria-label="New split from a search">${I("plus")}</button></div>`;
+      const b = `${tabs}<div class="rows" role="list" aria-label="Conversations">${gh}${["n2", "n3", "n4"].map((id, i) => row(T.find((t) => t.id === id), i === 0)).join("")}</div>`;
+      const rd = `<section class="reader"><div class="rscroll"><div class="rin"><div class="pnote"><b>Splits (call 6):</b> “Fjordline” is the search <code>from:@fjordline.example</code>, saved as a tab with “Save as split” in search. <b>Grouping (call 7):</b> GitHub's mail is one row; open it to see all four. From ⋯ on any sender: “Group mail from GitHub” or “…from github.example”.</div></div></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol({ body: b, lay: "Tabs" })}${rd}</main>` + R("today") + bar("list"); break;
+    }
+    case "bar-d": {
+      const mi = (ic, l, k, c) => `<button class="mi">${I(ic)}<span class="grow">${l}</span>${k ? K(k) : ""}<span class="t3" style="font-size:var(--text-2xs);margin-left:6px">${c}</span></button>`;
+      const menu = `<div class="menu" style="bottom:calc(var(--bar-h) + 6px);left:calc(50% + 6rem);width:20rem" role="group" aria-label="More actions">
+        ${mi("pin", "Pin", "p", "")}${mi("reply", "Remind me if no reply", "w", "")}${mi("folder", "Link to a project", "l", "27")}${mi("note", "New note from this email", "n", "29")}
+        <div class="sep"></div>${mi("chat", "Discuss in chat", "", "35")}${mi("users", "Share with the team", "", "34")}${mi("user", "Assign to a teammate", "", "36")}
+        <div class="sep"></div>${mi("layers", "Group mail from Ana Ruiz", "", "7")}${mi("file", "Print or Save as PDF", "⌘P", "18")}${mi("fwd", "Forward", "f", "")}</div>`;
+      html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + menu; break;
+    }
+    case "bar-e": {
+      const k = (key, l) => `${K(key)}<span>${l}</span>`;
+      const dlg = `<div class="overlay" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><div class="dialog" style="width:36rem"><div class="dh" style="display:flex;align-items:center;gap:8px">Keyboard shortcuts<span class="grow" style="flex:1"></span><span class="seg"><button class="on">Moduo</button><button>Superhuman / Gmail</button><button>Spark</button><button>Apple Mail</button></span></div>
+        <div class="db"><div class="keytbl">${k("e", "Done")}${k("r", "Reply")}${k("s", "Snooze")}${k("a", "Reply all")}${k("⇧S", "Set aside")}${k("f", "Forward")}${k("p", "Pin")}${k("t", "Make a task")}${k("w", "Remind if no reply")}${k("l", "Link to…")}${k("⇧A", "Open Set aside")}${k("n", "New note")}${k("j / k", "Next / previous")}${k("⌘↵", "Send")}${k("⇧Enter", "Open full width")}${k("⌘⇧↵", "Send & Done")}</div>
+        <div class="t3" style="font-size:var(--text-xs)">Picking a preset remaps Mail's keys only (call 21). The map shown is call 10 b.</div></div>
+        <div class="df"><button class="btn primary">Close ${K("Esc")}</button></div></div></div>`;
+      html = topbar() + L + `<main class="centre">${listCol()}${readerT1()}</main>` + R("person") + bar("read") + dlg; break;
+    }
+    case "text-a": {
+      const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Nothing to see for these calls</h3><p style="max-width:28rem">Notifications, search, out-of-office, agents, where mail is stored, speed and two words. Answer them in the list on the right.</p></div></section>`;
+      html = topbar() + L + `<main class="centre">${listCol()}${e}</main>` + R("person") + bar("read"); break;
+    }
     case "states-a": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Inbox clear</h3><p>Nothing waits for you. 3 set aside, 2 snoozed.</p>
       <div style="display:flex;flex-direction:column;gap:6px;min-width:20rem;text-align:left;margin-top:6px">
@@ -744,7 +904,7 @@ function render() {
     }
     case "states-f": {
       const e = `<section class="reader" style="flex:1"><div class="empty"><h3>Bring your email into Moduo</h3><p style="max-width:28rem">Your mail stays on this Mac. Connect an account and Moduo links emails to your tasks, calendar and contacts.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn primary">Google</button><button class="btn secondary">Microsoft</button><button class="btn secondary">iCloud</button><button class="btn secondary">Other (IMAP)</button></div></div></section>`;
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn primary">Google</button><button class="btn secondary">Microsoft</button><button class="btn secondary">iCloud</button><button class="btn secondary">Other (IMAP)</button></div><label style="display:flex;gap:8px;align-items:center;font-size:var(--text-sm)"><input type="checkbox"> Screen new senders: mail from people you haven't written to waits until you allow it</label><div class="pnote">Call 23 a: the one-time offer. Off unless ticked.</div></div></section>`;
       html = topbar() + rail({ first: true }) + `<main class="centre">${e}</main>` + R("today") + bar("first"); break;
     }
     case "compose-a": {
@@ -761,16 +921,71 @@ function render() {
   app$.innerHTML = html;
   app$.style.position = "relative";
   // strip
-  document.getElementById("frames").innerHTML = FRAMES.map((f) => `<button class="${f.id === S.f ? "on" : ""}" data-f="${f.id}" title="Calls ${f.calls}">${f.k} ${f.name}</button>`).join("");
+  document.getElementById("frames").innerHTML = FRAMES.map((f) => { const cs = CALLS.filter((c) => c.f === f.id); const done = cs.filter((c) => ans(c.n)).length; return `<button class="${f.id === S.f ? "on" : ""}" data-f="${f.id}" title="Calls ${cs.map((c) => c.n).join(", ")}">${f.k} ${f.name}<span class="cnt ${done === cs.length ? "done" : ""}">${done}/${cs.length}</span></button>`; }).join("");
   const F = FRAMES.find((f) => f.id === S.f);
-  document.getElementById("variants").innerHTML = F.vars.map(([v, l]) => `<button class="${v === S.v ? "on" : ""}" data-v="${v}">${l}</button>`).join("");
-  document.getElementById("cap").innerHTML = (CAPS[key] || "") + ` <span class="t3">Calls ${F.calls} · keys 1–9 frames · V variant · T theme · D density</span>`;
+  document.getElementById("variants").innerHTML = F.vars.length > 1 ? F.vars.map(([v, l]) => `<button class="${v === S.v ? "on" : ""}" data-v="${v}">${l}</button>`).join("") : "";
+  document.getElementById("cap").innerHTML = (CAPS[key] || "") + ` <span class="t3">Keys: 1–9, 0 frames · V variant · T theme · D density · C calls</span>`;
   document.querySelectorAll("#themeSeg button").forEach((b) => b.classList.toggle("on", b.dataset.th === S.theme));
   document.querySelectorAll("#denSeg button").forEach((b) => b.classList.toggle("on", b.dataset.den === S.den));
+  renderCalls(key);
   try { if (!critic) localStorage.setItem("mailv4r1", JSON.stringify(S)); } catch (e) {}
 }
+
+/* ── calls pane ── */
+let A = {};
+try { A = JSON.parse(localStorage.getItem("mailv4r1-answers") || "{}") || {}; } catch (e) { A = {}; }
+Object.entries(GIVEN).forEach(([n, g]) => { if (!A[n]) A[n] = { ...g }; });
+function ans(n) { return !!(A[n] && (A[n].opt || (A[n].note || "").trim())); }
+const saveA = () => { try { localStorage.setItem("mailv4r1-answers", JSON.stringify(A)); } catch (e) {} };
+function renderCalls(key) {
+  const pane = document.getElementById("calls"), tg = document.getElementById("callsToggle");
+  pane.hidden = !S.calls;
+  tg.innerHTML = `${S.calls ? "Hide" : "Show"} calls ${K("c")}`;
+  tg.setAttribute("aria-pressed", String(!!S.calls));
+  if (!S.calls) return;
+  const F = FRAMES.find((f) => f.id === S.f);
+  const cs = CALLS.filter((c) => c.f === S.f);
+  const total = CALLS.filter((c) => ans(c.n)).length;
+  document.getElementById("clTitle").textContent = S.f === "text" ? "Calls with nothing to draw" : `Calls for ${F.name}`;
+  document.getElementById("clCount").textContent = `${total} of ${CALLS.length} answered`;
+  document.getElementById("clMeter").style.width = `${(total / CALLS.length) * 100}%`;
+  document.getElementById("clSub").innerHTML = S.f === "text" ? "These change behaviour, not the screen." : `Calls ${cs.map((c) => c.n).join(", ")}. “See” switches the screen to that option. ★ = load-bearing.`;
+  document.getElementById("clList").innerHTML = cs.map((c) => {
+    const a = A[c.n] || {};
+    const opts = c.o.map(([k, l, v]) => `<button class="opt ${a.opt === k ? "pick" : ""} ${v && v === key ? "showing" : ""}" data-call="${c.n}" data-opt="${k}" ${v ? `data-show="${v}"` : ""} aria-pressed="${a.opt === k}"><span class="k">${k}</span><span class="l">${l}</span>${k === c.rec ? `<span class="rec">Recommended</span>` : ""}${v ? `<span class="eye">${v === key ? "on screen" : "see"}</span>` : ""}</button>`).join("")
+      + `<button class="opt ${a.opt === "x" ? "pick" : ""}" data-call="${c.n}" data-opt="x" aria-pressed="${a.opt === "x"}"><span class="k">✎</span><span class="l">Something else (write it below)</span></button>`;
+    const see = (c.see || []).map(([v, l]) => `<button class="seebtn ${v === key ? "on" : ""}" data-show="${v}">${l}</button>`).join("");
+    return `<article class="ccard ${ans(c.n) ? "answered" : ""}" aria-label="Call ${c.n}">
+      <div class="ct"><span class="no">${c.n}${c.s ? "★" : ""}</span><span class="ttl">${c.t}</span>${ans(c.n) ? `<span class="ok">✓ answered</span>` : ""}</div>
+      <div class="q">${c.q}</div>
+      ${c.look ? `<div class="nodraw">${c.look}</div>` : ""}
+      <div class="opts">${opts}</div>
+      ${see ? `<div class="seeline">Also see: ${see}</div>` : ""}
+      ${c.why ? `<div class="why"><b>Why ${c.rec}:</b> ${c.why}</div>` : ""}
+      ${REPLIES[c.n] ? `<div class="reply"><span class="who">Your question, answered</span><span>${REPLIES[c.n]}</span></div>` : ""}
+      <textarea data-note="${c.n}" placeholder="Note (optional)" aria-label="Note on call ${c.n}">${esc(a.note || "")}</textarea>
+    </article>`;
+  }).join("");
+}
+function answersText() {
+  return CALLS.slice().sort((x, y) => x.n - y.n).filter((c) => ans(c.n)).map((c) => { const a = A[c.n]; const o = a.opt === "x" ? "other" : a.opt || ""; const note = (a.note || "").trim(); return `${c.n}. ${o}${note ? (o ? " · " : "") + note : ""}`; }).join("\n");
+}
+document.addEventListener("input", (e) => {
+  const t = e.target.closest && e.target.closest("textarea[data-note]"); if (!t) return;
+  const n = t.dataset.note; A[n] = { ...(A[n] || {}), note: t.value }; saveA();
+  t.closest(".ccard").classList.toggle("answered", ans(n));
+});
 document.addEventListener("click", (e) => {
   const b = e.target.closest("button"); if (!b) return;
+  if (b.id === "copyBtn") { const txt = answersText(); const msg = document.getElementById("clMsg");
+    const fallback = () => { msg.innerHTML = `<textarea class="copybox" readonly>${esc(txt)}</textarea>`; const ta = msg.querySelector("textarea"); ta.focus(); ta.select(); };
+    try { navigator.clipboard.writeText(txt).then(() => { msg.textContent = `Copied ${txt.split("\n").filter(Boolean).length} answers. Paste them into the chat.`; }, fallback); } catch (err) { fallback(); } return; }
+  if (b.id === "callsToggle") { S.calls = !S.calls; render(); return; }
+  if (b.dataset.opt || b.dataset.show) {
+    const y = document.getElementById("clList").scrollTop;
+    if (b.dataset.opt) { const n = b.dataset.call; const cur = A[n] || {}; A[n] = { ...cur, opt: cur.opt === b.dataset.opt ? "" : b.dataset.opt }; saveA(); }
+    if (b.dataset.show) { const [f, v] = b.dataset.show.split("-"); S.f = f; S.v = v; }
+    render(); document.getElementById("clList").scrollTop = y; return; }
   if (b.dataset.f) { S.f = b.dataset.f; S.v = FRAMES.find((f) => f.id === S.f).vars[0][0]; render(); }
   else if (b.dataset.v) { S.v = b.dataset.v; render(); }
   else if (b.dataset.th) { S.theme = b.dataset.th; render(); }
@@ -778,6 +993,8 @@ document.addEventListener("click", (e) => {
 });
 document.addEventListener("keydown", (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target.closest && e.target.closest("textarea, input")) return;
+  if (e.key === "c" || e.key === "C") { S.calls = !S.calls; render(); return; }
   const f = FRAMES.find((x) => x.k === e.key);
   if (f) { S.f = f.id; S.v = f.vars[0][0]; render(); return; }
   const F = FRAMES.find((x) => x.id === S.f);
@@ -795,7 +1012,7 @@ window.studio = {
   set(id) {
     if (id === "dense-dark") { S = { f: "layout", v: "a", theme: "dark", den: "dense" }; }
     else if (id === "compact-light") { S = { f: "layout", v: "a", theme: "light", den: "compact" }; }
-    else { const [f, v] = id.split("-"); S = { f, v, theme: S.theme === "light" && critic ? "dark" : S.theme, den: "comfortable" }; if (critic) S.theme = "dark"; }
+    else { const [f, v] = id.split("-"); S = { ...S, f, v, den: "comfortable" }; if (critic) S.theme = "dark"; }
     render();
   },
 };

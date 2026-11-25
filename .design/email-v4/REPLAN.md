@@ -2,7 +2,7 @@
 
 > **Status (2026-11-21): round 1 sent, waiting for Maciej's answers.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html).
-> - **Open:** calls 1–46 (§8). ★ marks the load-bearing ones.
+> - **Open:** calls 2–4 and 6–46 (§8); 1 is answered (default still open) and 5 waits for his OK on the proposal. ★ marks the load-bearing ones. Since 2026-11-26 the prototype groups the calls by frame, beside the screen they're about.
 > - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. That was possible after Maciej OK'd a fresh rebuild of the shared local database. Holes and how they map to calls: §1.5.
 > - **Next:** answers → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
@@ -207,7 +207,7 @@ Mail owns how these look and behave inside Mail; Calendar owns the event model a
 
 ## 8. The calls
 
-Answer by number ("10. ok … 14. drop it"). Each call has the question, options, my recommendation and why. ★ = load-bearing. Frame pointers refer to [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–9 pick a frame, V cycles variants, T switches light/dark, D cycles density).
+Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-26 each frame lists its own calls beside it, with “see” on each option and a Copy answers button (Frame 0 holds the 8 calls with nothing to draw). Each call has the question, options, my recommendation and why. ★ = load-bearing. Frame pointers refer to [`prototypes/round-1.html`](./prototypes/round-1.html) (keys 1–9 pick a frame, V cycles variants, T switches light/dark, D cycles density).
 
 ### Round 1 (2026-11-21): the shape
 
@@ -220,6 +220,7 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 - **d. Split by default, Full one key away** (Spark has this as a setting; we make it a key, `⇧Enter` or a Display choice).
 - *Recommend d.* Split keeps triage fast (j/k with the reader following); Full is what you want for a long email or a newsletter. Anyone outside the target group (a freelancer on a 13" laptop) benefits most from Full.
 - Frame 1, variants a–c.
+- **Maciej (2026-11-26):** “I think the split view and full view should both be options for the users to choose. Not sure which one should be the default, leaning more towards full as it keeps the standard 3x3 grid structure. The panel option makes no sense to me in this form.” → Split and Full are both a person's choice, c is dropped; the default is open, leaning Full.
 
 **2 ★ · The bottom bar carries the conversation's actions** · (b, adopts 82b)
 - When a conversation is open, the bar's centre shows its most-used actions with keys: **Done `e` · Snooze `s` · Set aside `⇧S` · Reply `r` · Task `t` · More ▾** (exact list in round 2). Multi-select shows its own row; the composer shows **Send `⌘↵` · Send later · Template · Attach**.
@@ -250,6 +251,7 @@ Answer by number ("10. ok … 14. drop it"). Each call has the question, options
 - **d. b by default, a as a Display choice** (Layout: Sections · Tabs · Simple list).
 - *Recommend d.* Sections show everything at once, so nothing waits in a tab you forgot (Spark's Focused list; tell me if you use Spark's cards or Simple list instead); tabs stay for people who want one queue at a time (Superhuman users); Simple list for those who want neither.
 - Frame 2, variants a–c.
+- **Maciej (2026-11-26):** “Tabs look the best. What is requested most by the community? Can we squeeze more views to make it more customizable for the users? What makes most sense?” → Answered in the prototype: no published ranking exists, but Spark brought back Classic inboxes on request and Superhuman and Shortwave lead with custom split tabs, so the pattern is choice. Proposal awaiting his OK: Tabs open first; Sections, Cards and Simple list (now drawn as Frame 2 d) are Display choices; splits (call 6) become tabs and empty tabs hide.
 
 **6 · Splits: any saved search can become a section or tab** · (c, re-decides MR B8 "up to 3")
 - "Save as split" on any search (`from:@acme.com`, `to:me is:unread`); a split becomes a section (or tab) in the inbox with its own count. Up to 6, then "+N".
