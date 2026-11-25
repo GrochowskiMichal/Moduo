@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { Bot, Calendar, Check, Copy, Globe, Mail } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -8,9 +7,14 @@ import { Eyebrow } from "../../../components/ui/eyebrow";
 import { IconButton } from "../../../components/ui/icon-button";
 import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
-import { connectedLoginCount, groupRailAccounts } from "../../calendar/accounts";
+import {
+  calendarConnectionSummary,
+  groupRailAccounts,
+  loginNeedsReconnect,
+} from "../../calendar/accounts";
 import { cleanupCredentialsForRemoval } from "../../calendar/caldav-connect";
 import { connectErrorText } from "../../calendar/connect-error";
+import { connectCalendarOnDesktop } from "../../calendar/desktop-connect";
 import type { CalendarAccountModel } from "../../calendar/events";
 import {
   disconnectGoogleLogin,
@@ -42,13 +46,6 @@ import { SettingsSectionShell } from "./section-shell";
 
 /** CalDAV and ICS still use the desktop keychain. Google and Outlook work on the web too. */
 const IS_DESKTOP = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-type OAuthResult = {
-  accountId: string;
-  email: string;
-  displayName: string;
-  calendars: { id: string; name: string; color: string }[];
-};
 
 const CAL_PROVIDERS = [
   { key: "google" as const, label: "Google Calendar", command: "calendar_google_oauth_start" },
@@ -156,25 +153,12 @@ export function IntegrationsSection() {
     setCalBusy(provider);
     setCalError(null);
     try {
-      const result = await invoke<OAuthResult>(command);
-      // Register the account in Supabase so web + desktop both see it. The
-      // provider event sync (fetch → mirror) runs from the desktop engine. A
-      // login already added on the web (its id lowercased) keeps that one row,
-      // or every event would show twice; it syncs through the web sign-in.
-      const sameLogin = calAccounts.find(
-        (a) =>
-          a.provider === provider &&
-          !a.deletedAt &&
-          a.externalId.toLowerCase() === result.accountId.toLowerCase(),
-      );
-      await runtime.calendar.upsertAccount({
+      await connectCalendarOnDesktop({
+        runtime,
         workspaceId,
         provider,
-        externalId: sameLogin?.externalId ?? result.accountId,
-        displayLabel: result.email || result.displayName,
-        color: null,
-        status: "ok",
-        lastSyncAt: new Date().toISOString(),
+        command,
+        accounts: calAccounts,
       });
       await loadAccounts();
     } catch (e) {
@@ -374,7 +358,6 @@ export function IntegrationsSection() {
           {CAL_PROVIDERS.map(({ key, label, command }) => {
             const connected = calAccounts.filter((a) => a.provider === key);
             const logins = groupRailAccounts(connected);
-            const loginCount = connectedLoginCount(connected);
             return (
               <div key={key} className="rounded-md border border-border bg-muted/40 p-4">
                 <div className="flex items-center justify-between gap-4">
@@ -385,9 +368,7 @@ export function IntegrationsSection() {
                     <div className="flex flex-col">
                       <span className="text-sm font-medium text-foreground">{label}</span>
                       <span className="text-xs text-muted-foreground">
-                        {loginCount > 0
-                          ? `${loginCount} account${loginCount === 1 ? "" : "s"} connected`
-                          : "Not connected"}
+                        {calendarConnectionSummary(connected)}
                       </span>
                     </div>
                   </div>
@@ -408,6 +389,7 @@ export function IntegrationsSection() {
                       const rows = group.kind === "group" ? group.rows : [group.row];
                       const mailbox = group.kind === "group" ? group.detail : null;
                       const platform = group.kind === "group" ? group.header : label;
+                      const revoked = loginNeedsReconnect(rows.map((row) => row.account));
                       return (
                         <li
                           key={group.kind === "group" ? group.key : group.row.account.id}
@@ -419,7 +401,24 @@ export function IntegrationsSection() {
                               <p className="truncate text-sm text-foreground">
                                 {mailbox || rows[0].label}
                               </p>
+                              {revoked ? (
+                                <p className="text-xs text-warning">
+                                  {label.replace(/ Calendar$/, "")} stopped accepting Moduo's
+                                  access. Reconnect to sync again.
+                                </p>
+                              ) : null}
                             </div>
+                            {revoked ? (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleConnect(key, command)}
+                                disabled={calBusy === key}
+                              >
+                                {calBusy === key ? "Connecting…" : "Reconnect"}
+                              </Button>
+                            ) : null}
                             {group.kind === "group" &&
                             rows.some((row) => row.scope === "calendar") ? (
                               <Button

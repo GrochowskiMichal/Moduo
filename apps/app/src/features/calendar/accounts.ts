@@ -240,9 +240,42 @@ export function groupRailAccounts(accounts: CalendarAccountModel[]): RailGroup[]
   return out;
 }
 
-/** How many logins are connected. Several calendars in one mailbox count as one. */
-export function connectedLoginCount(accounts: CalendarAccountModel[]): number {
-  return groupRailAccounts(accounts).length;
+/**
+ * True when the provider stopped accepting a login's sign-in (`reauth`): only
+ * signing in again fixes it. A plain sync `error` heals by itself, so it isn't one.
+ */
+export function loginNeedsReconnect(rows: Pick<CalendarAccountModel, "status">[]): boolean {
+  return rows.some((row) => row.status === "reauth");
+}
+
+/** A login's live rows: the login itself (`google:<email>`) and the calendars picked under it. */
+export function loginRows(
+  accounts: CalendarAccountModel[],
+  provider: string,
+  loginId: string,
+): CalendarAccountModel[] {
+  const id = loginId.toLowerCase();
+  return accounts.filter((a) => {
+    if (a.provider !== provider || a.deletedAt) return false;
+    const ext = a.externalId.toLowerCase();
+    return ext === id || ext.startsWith(`${id}:`);
+  });
+}
+
+/** Settings' line under a provider: how many logins, and how many need signing in again. */
+export function calendarConnectionSummary(accounts: CalendarAccountModel[]): string {
+  const logins = groupRailAccounts(accounts).map((g) =>
+    g.kind === "group" ? g.rows.map((r) => r.account) : [g.row.account],
+  );
+  if (logins.length === 0) return "Not connected";
+  const broken = logins.filter(loginNeedsReconnect).length;
+  const plural = (n: number) => `${n} account${n === 1 ? "" : "s"}`;
+  if (broken === logins.length)
+    return `${plural(broken)} need${broken === 1 ? "s" : ""} reconnecting`;
+  const connected = `${plural(logins.length)} connected`;
+  return broken > 0
+    ? `${connected} · ${broken} need${broken === 1 ? "s" : ""} reconnecting`
+    : connected;
 }
 
 /** The freshest sync across accounts as a quiet age label, or null if none. */
