@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useWorkspace } from "@/features/workspaces/workspace-context";
+import { sessionResources } from "@/lib/resource-cache";
 import { getRuntime } from "@/lib/runtime";
+import { useAuth } from "@/providers/auth-provider";
 
-import { createLayoutRepo } from "../data/layout-repo";
+import { layoutRepoFor } from "../data/layout-repo";
 import { createDefaultLayout } from "../engine/default-layout";
 import {
   addPage as addPageOp,
@@ -65,51 +67,110 @@ export interface DashboardLayoutApi {
   removePage: (pageId: string) => void;
 }
 
+/** The layout last shown for a person and workspace, kept for the session. */
+function layoutKey(userId: string | null, workspaceId: string | null): string | null {
+  return userId && workspaceId ? `dashboard:layout:${userId}:${workspaceId}` : null;
+}
+
+/** When each layout was last checked against the cloud (ms); a return within the window skips the read. */
+const cloudCheckedAt = new Map<string, number>();
+const CLOUD_RECHECK_MS = 60_000;
+
+function sameLayout(a: DashboardLayout, b: DashboardLayout): boolean {
+  return a === b || JSON.stringify(a) === JSON.stringify(b);
+}
+
 /**
  * The dashboard layout state (DB-4): loads per user+workspace from the cache-first
  * repo, seeds the curated default for a fresh user, persists every change (local
  * immediate + debounced cloud), and owns the device-local active page + page CRUD.
  * The whole layout is one atomic composition — every mutation replaces it and
  * saves it whole (LWW).
+ *
+ * Home draws at once on a return: the layout shown last this session comes from
+ * the session cache on the first render, else the device's cached copy paints
+ * before the cloud answers; the cloud read runs behind it and replaces the layout
+ * only when it is newer and nothing was edited meanwhile. The skeleton shows only
+ * on a device with no copy at all.
  */
 export function useDashboardLayout(): DashboardLayoutApi {
   const { selectedWorkspaceId } = useWorkspace();
-  const repo = useMemo(() => {
-    const runtime = getRuntime();
-    return runtime ? createLayoutRepo(runtime) : null;
-  }, []);
-
-  const [layout, setLayout] = useState<DashboardLayout>(() =>
-    sanitizeLayout(createDefaultLayout()),
+  const { userId } = useAuth();
+  const runtime = getRuntime();
+  const repo = useMemo(
+    () => (runtime && userId ? layoutRepoFor(runtime, userId) : null),
+    [runtime, userId],
   );
-  const [loading, setLoading] = useState(true);
-  const [activePageId, setActivePageId] = useState<string>(() => layout.pages[0]?.id ?? "home");
+  const memKey = layoutKey(userId, selectedWorkspaceId);
+
+  const [initial] = useState(() => {
+    const warm = memKey ? sessionResources.peek<DashboardLayout>(memKey).data : undefined;
+    const shown = warm ?? sanitizeLayout(createDefaultLayout());
+    const page =
+      warm && selectedWorkspaceId
+        ? readActivePage(selectedWorkspaceId, warm)
+        : (shown.pages[0]?.id ?? "home");
+    return { shown, warm: !!warm, page };
+  });
+  const [layout, setLayout] = useState<DashboardLayout>(initial.shown);
+  const [loading, setLoading] = useState(!initial.warm);
+  const [activePageId, setActivePageId] = useState<string>(initial.page);
 
   const layoutRef = useRef(layout);
   const activePageIdRef = useRef(activePageId);
   const workspaceRef = useRef<string | null>(selectedWorkspaceId);
+  const memKeyRef = useRef(memKey);
+  /** Bumped by every local edit: a read that started before one never overwrites it. */
+  const editsRef = useRef(0);
   useEffect(() => {
     layoutRef.current = layout;
     activePageIdRef.current = activePageId;
     workspaceRef.current = selectedWorkspaceId;
+    memKeyRef.current = memKey;
   });
 
   // Load on workspace change — flush the previous workspace's pending save first.
   useEffect(() => {
     if (!repo || !selectedWorkspaceId) return;
+    const ws = selectedWorkspaceId;
     let cancelled = false;
-    setLoading(true);
-    void repo.flush().then(async () => {
-      const loaded = await repo.load(selectedWorkspaceId);
-      if (cancelled) return;
-      setLayout(loaded.layout);
-      setActivePageId(readActivePage(selectedWorkspaceId, loaded.layout));
+    let shownHere = false;
+    const editsAtStart = editsRef.current;
+    const adopt = (next: DashboardLayout) => {
+      if (cancelled || editsRef.current !== editsAtStart) return;
+      if (memKey) sessionResources.set(memKey, next);
+      if (!sameLayout(next, layoutRef.current)) {
+        setLayout(next);
+        layoutRef.current = next;
+      }
+      // The remembered page on the first paint here; later answers keep the page
+      // you're on (the validity effect below catches one that vanished).
+      if (!shownHere) setActivePageId(readActivePage(ws, next));
+      shownHere = true;
       setLoading(false);
-    });
+    };
+
+    const warm = memKey ? sessionResources.peek<DashboardLayout>(memKey).data : undefined;
+    if (warm) adopt(warm);
+    else setLoading(true);
+
+    void (async () => {
+      await repo.flush();
+      if (cancelled) return;
+      if (!warm) {
+        const local = await repo.readLocal(ws);
+        if (local) adopt(local);
+      }
+      const checked = memKey ? cloudCheckedAt.get(memKey) : undefined;
+      if (warm && checked !== undefined && Date.now() - checked < CLOUD_RECHECK_MS) return;
+      const loaded = await repo.load(ws);
+      if (memKey) cloudCheckedAt.set(memKey, Date.now());
+      adopt(loaded.layout);
+    })();
     return () => {
       cancelled = true;
     };
-  }, [repo, selectedWorkspaceId]);
+  }, [repo, selectedWorkspaceId, memKey]);
 
   // Flush pending saves when the tab hides / unloads / this surface unmounts.
   // Best-effort on pagehide (the browser won't await a dangling promise) — but the
@@ -134,8 +195,11 @@ export function useDashboardLayout(): DashboardLayoutApi {
 
   const persist = useCallback(
     (next: DashboardLayout) => {
+      editsRef.current += 1;
       setLayout(next);
       layoutRef.current = next;
+      const key = memKeyRef.current;
+      if (key) sessionResources.set(key, next);
       const ws = workspaceRef.current;
       if (repo && ws) void repo.save(ws, next);
     },

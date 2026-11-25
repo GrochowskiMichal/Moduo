@@ -4,8 +4,9 @@
 // reads, so Home reads no tasks of its own. Sources are presence-gated: a read only fires if
 // a widget that needs it is somewhere in the layout (no Email fetch on a
 // dashboard with no Email widget). Every source refetches on `moduo:data-refresh`
-// and on tab re-focus, and degrades to its empty value on any error (a widget
-// must never wall). Reads are direct-runtime (the CT-7/CAL-7/EM-11 widget
+// and on tab re-focus, and degrades to its last good (or empty) value on any
+// error (a widget must never wall). Values outlive the page for the session
+// (`lib/resource-cache.ts`), so a return to Home draws without waiting. Reads are direct-runtime (the CT-7/CAL-7/EM-11 widget
 // pattern) rather than the heavy module hooks, so Home never triggers e.g. an
 // IMAP sync just by being open.
 //
@@ -40,6 +41,7 @@ import type {
 import { reportRange } from "@/features/tasks/time-report";
 import { useToday } from "@/features/tasks/use-today";
 import { WorkspaceContext } from "@/features/workspaces/workspace-context";
+import { sessionResources, useResource } from "@/lib/resource-cache";
 import { getRuntime } from "@/lib/runtime";
 import type { EmailModuleBundle, HabitRow, ModuoRuntime } from "@/lib/runtime.types";
 import { useStoreSnapshot, useWorkspaceStore } from "@/lib/sync/react";
@@ -109,76 +111,52 @@ function idleSource<T>(data: T): WidgetSource<T> {
 }
 
 /**
- * One presence-gated, race-safe read. When `enabled` is false it stays idle
- * (never fetches). Refetches on mount, on `moduo:data-refresh`, and on tab
- * re-focus; the seq guard drops out-of-order responses; errors degrade to `empty`.
+ * One presence-gated, race-safe read, kept for the session: its last good value
+ * lives in the session cache (`lib/resource-cache.ts`), so coming back to Home
+ * draws it on the first render and the refresh runs behind it (`loading` is
+ * true only while there's no value yet). When `enabled` is false it stays idle
+ * (never fetches). Reads again on mount, on `moduo:data-refresh`, on tab
+ * re-focus and when `refreshKey` changes; the latest read wins; a failed read
+ * keeps the last good value (or `empty`) and sets `error`.
  */
 function useSource<T>(
+  name: string,
   enabled: boolean,
+  userId: string | null,
   workspaceId: string | null,
   empty: T,
   fetcher: (runtime: ModuoRuntime, workspaceId: string) => Promise<T>,
   /** Read again whenever this changes (a stamp of what the read depends on). */
   refreshKey: string | number = 0,
 ): WidgetSource<T> {
-  const [data, setData] = useState<T>(empty);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const seq = useRef(0);
+  const key =
+    enabled && userId && workspaceId ? `dashboard:${name}:${userId}:${workspaceId}` : null;
+  const snap = useResource<T>(key);
   const fetcherRef = useRef(fetcher);
-  const emptyRef = useRef(empty);
+  // The first `empty` stays: array sources pass a fresh `[]` per render, and a
+  // new identity each render would redraw every reader.
+  const [emptyValue] = useState(empty);
   useEffect(() => {
     fetcherRef.current = fetcher;
-    emptyRef.current = empty;
   });
 
-  const load = useCallback((): Promise<void> => {
-    // A retired source clears itself; the seq bump cancels any in-flight read.
-    if (!enabled || !workspaceId) {
-      seq.current += 1;
-      setData(emptyRef.current);
-      setLoading(false);
-      setError(false);
-      return Promise.resolve();
-    }
+  const read = useCallback((): Promise<void> => {
     const runtime = getRuntime();
-    if (!runtime) {
-      setLoading(false);
-      return Promise.resolve();
-    }
-    const mine = ++seq.current;
-    setLoading(true);
-    setError(false);
-    return fetcherRef
-      .current(runtime, workspaceId)
-      .then((result) => {
-        if (mine !== seq.current) return;
-        setData(result);
-        setError(false);
-      })
-      .catch(() => {
-        if (mine !== seq.current) return;
-        setData(emptyRef.current);
-        setError(true);
-      })
-      .finally(() => {
-        if (mine === seq.current) setLoading(false);
-      });
-    // `empty` arrives via emptyRef — array sources pass a fresh `[]` per render,
-    // so listing it as a dep would loop the fetch; the ref reads the latest.
-    // `refreshKey` is listed only so a new stamp reads again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshKey re-runs the read on purpose
-  }, [enabled, workspaceId, refreshKey]);
+    if (!key || !workspaceId || !runtime) return Promise.resolve();
+    return sessionResources.fetch(key, () => fetcherRef.current(runtime, workspaceId));
+  }, [key, workspaceId]);
+
+  // On mount and on a new stamp, always a fresh read (the latest wins): reusing
+  // one still out from an earlier visit could miss an edit made since.
+  useEffect(() => {
+    void read();
+  }, [read, refreshKey]);
 
   useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!enabled || typeof window === "undefined") return;
-    const onRefresh = () => load();
+    if (!key || typeof window === "undefined") return;
+    const onRefresh = () => void read();
     const onVisible = () => {
-      if (document.visibilityState === "visible") load();
+      if (document.visibilityState === "visible") void read();
     };
     window.addEventListener(DASHBOARD_DATA_REFRESH_EVENT, onRefresh);
     document.addEventListener("visibilitychange", onVisible);
@@ -186,9 +164,12 @@ function useSource<T>(
       window.removeEventListener(DASHBOARD_DATA_REFRESH_EVENT, onRefresh);
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [enabled, load]);
+  }, [key, read]);
 
-  return useMemo(() => ({ data, loading, error, reload: load }), [data, loading, error, load]);
+  const data = key && snap.data !== undefined ? snap.data : emptyValue;
+  const loading = !!key && snap.loading;
+  const error = !!key && snap.error;
+  return useMemo(() => ({ data, loading, error, reload: read }), [data, loading, error, read]);
 }
 
 const DEFAULT_DATA: DashboardData = {
@@ -307,7 +288,9 @@ export function DashboardDataProvider({
     return sum;
   }, [wantsTime, store, snap.bundle.tasks]);
   const timeReport = useSource<TimeReportRow[]>(
+    "time-report",
     wantsTime,
+    userId,
     workspaceId,
     [],
     async (rt, ws) => {
@@ -328,34 +311,58 @@ export function DashboardDataProvider({
     },
     `${trackedStamp}:${today}:${region.weekStartsOn}:${region.timeZone}`,
   );
-  const calendar = useSource(has("calendar"), workspaceId, EMPTY_CALENDAR, (rt, ws) =>
-    rt.calendar.listModule(ws),
+  const calendar = useSource(
+    "calendar",
+    has("calendar"),
+    userId,
+    workspaceId,
+    EMPTY_CALENDAR,
+    (rt, ws) => rt.calendar.listModule(ws),
   );
-  const email = useSource(has("email"), workspaceId, EMPTY_EMAIL, (rt, ws) =>
+  const email = useSource("email", has("email"), userId, workspaceId, EMPTY_EMAIL, (rt, ws) =>
     rt.email.listModule(ws),
   );
-  const recentNotes = useSource<RecentNoteRow[]>(has("notes"), workspaceId, [], (rt, ws) =>
-    rt.notesV2.recent({ workspaceId: ws, limit: 12 }),
+  const recentNotes = useSource<RecentNoteRow[]>(
+    "notes",
+    has("notes"),
+    userId,
+    workspaceId,
+    [],
+    (rt, ws) => rt.notesV2.recent({ workspaceId: ws, limit: 12 }),
   );
   const recentLinks = useSource<RecentLinkItem[]>(
+    "recent-links",
     has("recently-linked"),
+    userId,
     workspaceId,
     [],
     (rt, ws) => rt.spine.recentLinks({ workspaceId: ws, limit: 20 }),
   );
-  const notifications = useSource<NotificationItem[]>(has("activity"), workspaceId, [], (rt, ws) =>
-    rt.spine.listNotifications({ workspaceId: ws, limit: 40 }),
+  const notifications = useSource<NotificationItem[]>(
+    "notifications",
+    has("activity"),
+    userId,
+    workspaceId,
+    [],
+    (rt, ws) => rt.spine.listNotifications({ workspaceId: ws, limit: 40 }),
   );
   const needsAttention = useSource<NeedsAttentionItem[]>(
+    "needs-attention",
     has("needs-attention"),
+    userId,
     workspaceId,
     [],
     (rt, ws) => rt.contacts.needsAttention({ workspaceId: ws }),
   );
-  const reconnect = useSource<ReconnectItem[]>(has("reconnect"), workspaceId, [], (rt, ws) =>
-    rt.contacts.reconnect({ workspaceId: ws }),
+  const reconnect = useSource<ReconnectItem[]>(
+    "reconnect",
+    has("reconnect"),
+    userId,
+    workspaceId,
+    [],
+    (rt, ws) => rt.contacts.reconnect({ workspaceId: ws }),
   );
-  const habits = useSource<HabitRow[]>(has("habits"), workspaceId, [], (rt, ws) =>
+  const habits = useSource<HabitRow[]>("habits", has("habits"), userId, workspaceId, [], (rt, ws) =>
     rt.habits.list(ws),
   );
   // A task's finished files (AT-3's 📎 mark on the widget's rows), live.
