@@ -8,7 +8,7 @@
 > - **Open:** C2, C4, C5, C10–C12, C14–C21 (narrowed where Mike built part), C24, C25, C27, C29, C31, C32.
 > - **Research:** two new lanes landed: [current-state-2026-11.md](./research/current-state-2026-11.md) (what Mike's rethink shipped, read in code) and [morgen-amie-2026-11.md](./research/morgen-amie-2026-11.md) (the two benchmarks feature by feature, Nov 2026). The six October lanes stay as evidence; where they describe the pre-rethink module, current-state-2026-11 wins.
 > - **Baseline critique of today's Calendar (23 Nov):** **6.6** on the same studio formula as the prototype rounds (6.50 on the jury formula; U6 Cr7 S6 P7 Ch7). The arithmetic caps to 5.5 because three lab journeys failed, but all three are the lab's scripts lagging Mike's rebuild, not Calendar breaking. So the round-1b prototype (7.13) sits about half a point above today's build. There are 16 confirmed holes, one at severity 3 (titles cut to slivers in busy weeks, Month and at 1024). None changes a recommendation in C1–C32; they confirm C24, C26 and the consistency pass, and the rest become build fixes. Full card: [research/baseline-2026-11-23.md](./research/baseline-2026-11-23.md). The shared local database was rebuilt cleanly from a fresh prod snapshot first (Maciej's call, 23 Nov).
-> - **Prototype:** [`prototypes/round-1b.html`](./prototypes/round-1b.html) (frames 1–9, V cycles variants; the hard states in its state picker), published as https://claude.ai/artifact/Tjf14nEGtYC6N1AhmyvWpo. October's [`structure.html`](./prototypes/structure.html) is history.
+> - **Prototype:** [`prototypes/round-1b.html`](./prototypes/round-1b.html) (frames 1–9, V cycles variants; the hard states in its state picker; since 26 Nov a **Calls** panel beside each frame holds that frame's calls and saves answers, see §8 "Calls by what you can see"), published as https://claude.ai/artifact/Tjf14nEGtYC6N1AhmyvWpo. October's [`structure.html`](./prototypes/structure.html) is history.
 > - **Critic rounds on the round-1b prototype** (three blind critics each; overall = 0.375 usability + 0.3125 craft + 0.1875 platform + 0.125 character, speed not judged on a prototype):
 >   | Round | Overall | Usability | Craft | Platform | Character | Gates below 8 | Confirmed severity 3 |
 >   | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -361,6 +361,22 @@ Tasks v3 has shipped (released 2026-10-14), so October's "waits on" list is hist
 ---
 
 ## 8. The calls
+
+**Calls by what you can see (added 2026-11-26).** The prototype now has a **Calls** panel beside every frame. It holds that frame's calls with their options and recommendations, and each option's **See** button switches the picture to the variant that shows it. Answers save in the artifact as you pick them, and this session reads them back. Calls keep their numbers; only the order you meet them in changes:
+
+| Group | What you look at | Calls |
+| --- | --- | --- |
+| Start here | nothing to compare | ★ C1 (the line), C8 (settled, say if not) |
+| Frame 1 · The week | A as built · B · C · D Month | ★ C22, C24, C25, C2 (a views, b bottom bar), C4, C17 |
+| Frame 2 · Missed sessions and planning | A missed · B fit into today · C this week | ★ C3, C11, C15 |
+| Frame 3 · Focus time | A as built · B holds a project · C session property | ★ C23 (and its booking question) |
+| Frame 4 · A meeting, before and after | A prep in Details · B Prep view · C after | ★ C26, C27, C20, C12 |
+| Frame 5 · Invitations | A outlined · B plus the waiting line | ★ C7 |
+| Frame 6 · Alerts and the menu bar | A alert · B menu bar | ★ C13, C29, C21 |
+| Frame 7 · Scheduling from an email thread | A offer · B booked | ★ C28, C19, C9 |
+| Frame 8 · List and search | A List · B Search | C5 |
+| Frame 9 · Accounts and freshness | A as built · B fresh and editable | ★ C30, ★ C6, C16, C18 |
+| Without a picture | nothing to compare | C10, C14, C31, C32 |
 
 **How to answer:** call numbers with ok / no / notes, as for Tasks. Every call has a recommendation, the alternative I'd reject, and whether people outside the target roles would still want it (Tasks 48a).
 

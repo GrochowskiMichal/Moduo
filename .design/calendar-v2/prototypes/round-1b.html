@@ -493,6 +493,50 @@ mark { background: var(--state-selected-ring); color: var(--foreground); border-
 .actrow.tight { flex-wrap: nowrap; gap: 2px; }
 .actrow.tight .btn { padding: 0 0.5rem; }
 .moderow .kbd { margin: 0 2px; }
+/* ── Calls panel: each frame's calls beside it ─────────────────────── */
+.work { flex: 1; min-height: 0; display: flex; }
+.work .appwrap { min-width: 0; }
+.calls { width: 24rem; flex-shrink: 0; display: flex; flex-direction: column; min-height: 0; background: var(--popover); border-left: 1px dashed var(--timeline-outline); font-size: var(--text-sm); color: var(--foreground); }
+html[data-critic] .calls, html[data-critic] #callsToggle { display: none !important; }
+.calls .t3 { color: var(--muted-foreground); }
+.calls-head { padding: var(--pad-y) var(--pad-x); display: flex; flex-direction: column; gap: var(--pad-y-sm); border-bottom: 1px dashed var(--timeline-outline); }
+.calls-head p { margin: 0; font-size: var(--text-xs); line-height: 1.45; }
+.calls-head p b { color: var(--foreground); font-weight: var(--font-weight-medium); }
+.calls-title { display: flex; align-items: center; gap: var(--pad-x-sm); }
+.calls-title .grow { flex: 1; }
+.cbtn { min-height: var(--hit-min); padding: 0 var(--pad-x-sm); border-radius: var(--radius-sm); background: var(--background); color: var(--foreground); font-size: var(--text-xs); }
+.cbtn:hover { background: var(--state-hover); }
+.calls-body { flex: 1; min-height: 0; overflow: auto; padding: var(--pad-y-sm) 0 var(--pad-y); }
+.cgroup { border-bottom: 1px solid var(--border); }
+.cg-head { width: 100%; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name count" "ids count"; gap: 2px var(--pad-x-sm); align-items: center; text-align: left; padding: var(--pad-y) var(--pad-x); }
+.cg-head:hover { background: var(--state-hover); }
+.cg-name { grid-area: name; display: inline-flex; align-items: center; gap: var(--pad-y-sm); font-weight: var(--font-weight-medium); }
+.cg-head .t3 { grid-area: ids; font-size: var(--text-xs); }
+.cg-count { grid-area: count; font-size: var(--text-xs); color: var(--muted-foreground); padding: 0 var(--pad-y-sm); border-radius: var(--radius-sm); background: var(--background); }
+.cg-count.full { color: var(--foreground); }
+.cgroup.open .cg-head { background: var(--background); }
+.cg-sub { margin: 0; padding: var(--pad-y-sm) var(--pad-x) 0; font-size: var(--text-xs); }
+.call { margin: var(--pad-y) var(--pad-x); padding: var(--pad-y) var(--pad-x-sm); border-radius: var(--radius-md); background: var(--background); display: flex; flex-direction: column; gap: var(--pad-y-sm); }
+.call.done { outline: 1px solid var(--border); }
+.call h3 { margin: 0; font-size: var(--text-sm); font-weight: var(--font-weight-semibold); }
+.cq { margin: 0; line-height: 1.45; }
+.copts { display: flex; flex-direction: column; gap: 2px; }
+.copt { display: flex; align-items: flex-start; gap: var(--pad-y-sm); }
+.cpick { flex: 1; display: flex; align-items: flex-start; gap: var(--pad-y-sm); text-align: left; padding: var(--pad-y-sm); border-radius: var(--radius-sm); color: var(--foreground); line-height: 1.4; min-height: var(--hit-min); }
+.cpick:hover { background: var(--state-hover); }
+.cpick .rdot { flex-shrink: 0; width: 0.875rem; height: 0.875rem; margin-top: 0.125rem; border-radius: var(--radius-full); border: 1.5px solid var(--muted-foreground); }
+.cpick[aria-checked="true"] { background: var(--control-raised); }
+.cpick[aria-checked="true"] .rdot { border-color: var(--foreground); background: radial-gradient(circle, var(--foreground) 0 38%, transparent 42%); }
+.rec { display: inline-block; margin-left: 2px; padding: 0 var(--pad-y-sm); border-radius: var(--radius-sm); border: 1px solid var(--timeline-outline); color: var(--muted-foreground); font-size: var(--text-2xs); white-space: nowrap; }
+.csee { flex-shrink: 0; min-height: var(--hit-min); padding: 0 var(--pad-y-sm); border-radius: var(--radius-sm); color: var(--muted-foreground); font-size: var(--text-xs); white-space: nowrap; border: 1px solid var(--border); }
+.csee:hover { color: var(--foreground); background: var(--state-hover); }
+.csee.here { color: var(--foreground); border-color: var(--foreground); }
+.cwhy { margin: 0; font-size: var(--text-xs); line-height: 1.45; }
+.cnote { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-xs); }
+.cnote textarea { resize: vertical; padding: var(--pad-y-sm); border-radius: var(--radius-sm); background: var(--popover); color: var(--foreground); border: 1px solid var(--border); font: inherit; font-size: var(--text-sm); }
+.cnote textarea:focus-visible, .calls button:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
+.copybox { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; }
+@media (max-width: 900px) { .work { flex-direction: column; } .calls { width: auto; max-height: 55vh; border-left: 0; border-top: 1px dashed var(--timeline-outline); } }
 </style>
 </head>
 <body>
@@ -502,6 +546,7 @@ mark { background: var(--state-selected-ring); color: var(--foreground); border-
       <span class="tag">Calendar · round 1b</span>
       <span class="cap" id="capCalls"></span>
       <span class="grow"></span>
+      <button class="cbtn" id="callsToggle" aria-pressed="true">Calls panel</button>
       <span class="cap">Frame <span class="kbd">1</span>–<span class="kbd">9</span> · variant <span class="kbd">V</span> · event <span class="kbd">J</span> <span class="kbd">K</span> · open <span class="kbd">↵</span> · keys <span class="kbd">?</span></span>
     </div>
     <div class="row">
@@ -515,7 +560,7 @@ mark { background: var(--state-selected-ring); color: var(--foreground); border-
     </div>
     <div class="row"><span class="cap" id="capNote"></span></div>
   </div>
-  <div class="appwrap"><div class="appframe" id="app"></div></div>
+  <div class="work"><div class="appwrap"><div class="appframe" id="app"></div></div><aside class="calls" id="calls" aria-label="Calls for these frames"></aside></div>
 </div>
 <script>
 "use strict";
@@ -603,23 +648,23 @@ const DUE = { 0: ["Send Halden contract redlines"], 2: ["Update case study image
 
 /* ── Frames ───────────────────────────────────────────────────────── */
 const FR = {
-  1: { n: "The week", calls: "C2 · C4 · C24 · C25", v: { a: "As built today", b: "Sessions, Up next, due as chips and counts", c: "Sessions, Up next, due as counts only", d: "Month view" },
+  1: { n: "The week", calls: "C2 · C4 · C17 · C22 · C24 · C25", v: { a: "As built today", b: "Sessions, Up next, due as chips and counts", c: "Sessions, Up next, due as counts only", d: "Month view" },
        note: { a: "<b>A · as built:</b> the strip “3 unfinished from earlier”, due work only as “N due” counts, Plan without Up next, the global bottom bar.", b: "<b>B:</b> task work drawn as <b>sessions</b> (a task can have two), a quiet missed line, Plan gains <b>Up next</b>, due work as all-day chips <b>and</b> the header count, Calendar's own tools in the bottom bar.", c: "<b>C:</b> as B, but due work stays a header count only (chips show in Month).", d: "<b>D · call C24 option a:</b> Month: six weeks, multi-day bars and your due work under the date, timed events as one line, “+N more”, past days dimmed." } },
-  2: { n: "Missed sessions and planning", calls: "C3 · C11 · C22", v: { a: "A missed session and its fixes", b: "Review, then Fit 3 into today", c: "Plan 6 across this week" },
+  2: { n: "Missed sessions and planning", calls: "C3 · C11 · C15", v: { a: "A missed session and its fixes", b: "Review, then Fit 3 into today", c: "Plan 6 across this week" },
        note: { a: "<b>A:</b> Wednesday's session ran out with the task open: it stays where it was, muted, with one set of fixes.", b: "<b>B:</b> Review in Plan, then <b>Fit 3 into today</b>: drafts sized to each task's estimate, inside working hours, never after the due date; one that can't fit says so. ↵ places all, one Undo.", c: "<b>C:</b> the same arithmetic over the rest of the week." } },
   3: { n: "Focus time", calls: "C23", v: { a: "As built: a band holding one task", b: "Focus time that holds a project", c: "No item: focus is a session property" },
        note: { a: "<b>A · as built:</b> focus time is its own item; teammates see “Focus time”; booking links can book over it.", b: "<b>B:</b> repeating focus time (Tue and Fri) holds a project and lines its tasks up; ▶ starts Focus with that line-up.", c: "<b>C:</b> no separate item: a session marked Focus." } },
-  4: { n: "A meeting, before and after", calls: "C26 · C27 · C20", v: { a: "Before: prep inside Details", b: "Before: Prep as its own panel view", c: "After: one gesture each" },
+  4: { n: "A meeting, before and after", calls: "C12 · C20 · C26 · C27", v: { a: "Before: prep inside Details", b: "Before: Prep as its own panel view", c: "After: one gesture each" },
        note: { a: "<b>A:</b> the next client meeting's Details lead with what you know about its people, from Mail, Notes, Tasks and Chat.", b: "<b>B:</b> the same, as a <b>Prep</b> view in the panel's title dropdown.", c: "<b>C:</b> a past meeting: log the time, turn note lines into tasks, draft the follow-up, post to the channel." } },
   5: { n: "Invitations", calls: "C7", v: { a: "Outlined until you reply", b: "Plus a waiting line" },
        note: { a: "<b>A:</b> invitations are outlined on the grid until you answer; Yes · Maybe · No in Details, sent through Google. Mail's invite card is the Email session's.", b: "<b>B:</b> plus “2 invitations waiting · Review” above the grid, only when there are some." } },
   6: { n: "Alerts and the menu bar", calls: "C13 · C21 · C29", v: { a: "An alert before a meeting", b: "The menu bar" },
        note: { a: "<b>A:</b> a desktop alert 10 minutes before (Join · Snooze), and the alert row in Details. Now is 10:05 AM.", b: "<b>B:</b> the macOS menu bar: the next meeting with Join, the rest of today, New event." } },
-  7: { n: "Scheduling from an email thread", calls: "C28", v: { a: "Offer times from a thread", b: "Booked: everything linked" },
+  7: { n: "Scheduling from an email thread", calls: "C9 · C19 · C28", v: { a: "Offer times from a thread", b: "Booked: everything linked" },
        note: { a: "<b>A:</b> O opened from a Mail thread: its people prefilled, three times held, and the exact reply text it inserts. Mail's reply box itself is the Email session's to design.", b: "<b>B:</b> the booked meeting links back to the thread, the contact and the offer." } },
   8: { n: "List and search", calls: "C5", v: { a: "List view", b: "Search in Calendar" },
        note: { a: "<b>A:</b> the coming days as one list: events, sessions and due work under day headers.", b: "<b>B:</b> search inside Calendar: past and future, the same rows, the words highlighted." } },
-  9: { n: "Accounts and freshness", calls: "C6 · C30", v: { a: "As built", b: "Fresh with your Mac off, editable everywhere" },
+  9: { n: "Accounts and freshness", calls: "C6 · C16 · C18 · C30", v: { a: "As built", b: "Fresh with your Mac off, editable everywhere" },
        note: { a: "<b>A · as built:</b> “Synced 3 min ago” is the freshest account; Outlook and iCloud are view only and update only while Moduo runs.", b: "<b>B:</b> each account says when it updated, Moduo keeps it current on its servers, past meetings stay, Outlook and iCloud are editable." } },
 };
 const HARD = [["", "Normal"], ["empty", "Empty"], ["loading", "Loading"], ["error", "Error"], ["offline", "Offline"], ["long", "Long"], ["dense", "Dense"], ["narrow", "1024×700"]];
@@ -1156,10 +1201,275 @@ function strip() {
   document.getElementById("hardSeg").innerHTML = HARD.map(([k, n]) => `<button aria-pressed="${k === S.hard}" data-h="${k}">${n}</button>`).join("");
   document.getElementById("themeSeg").innerHTML = ["dark", "light"].map((k) => `<button aria-pressed="${k === S.theme}" data-t="${k}">${k[0].toUpperCase() + k.slice(1)}</button>`).join("");
   document.getElementById("densSeg").innerHTML = [["comfortable", "Comfortable"], ["compact", "Compact"], ["dense", "Dense"]].map(([k, n]) => `<button aria-pressed="${k === S.dens}" data-d="${k}">${n}</button>`).join("");
+  callsPanel();
 }
 
+/* ── The calls, grouped by what you can see (REPLAN §8) ───────────────
+   Each group is one frame; "see" switches the picture to that frame and variant ("1b" = frame 1, B).
+   Answers save to the artifact's own store (Claude reads them back), or to this browser if it has none. */
+const YES = (why, extra) => [{ k: "yes", l: "Yes" + (extra ? ", " + extra : "") }, { k: "no", l: "No: say why in your words" }];
+const GROUPS = [
+  { id: "start", n: "Start here", sub: "The line, and what's already decided", calls: [
+    { id: "C1", star: true, t: "The line: what Calendar does, and what it never does", parts: [{ k: "main",
+      q: "Calendar becomes a daily driver at Morgen/Amie level. In: writing to Outlook and iCloud, alerts, answering invitations, List and search, repeats that end or change from a date, a time zone per event. Out for good: rooms, delegation, out-of-office, meeting polls, free/busy across companies, sharing outside the workspace, in-app AI planning, bot recording. Out for now: a phone app, syncing with outside task apps. Is this the line?",
+      opts: [{ k: "yes", l: "Yes, this line" }, { k: "change", l: "Move something in or out (say what)" }], rec: "yes",
+      why: "Your brief: Morgen and Amie's level, then past them with links. Everything In is something both benchmarks have." }] },
+    { id: "C8", t: "Members' busy time and Find a time (settled)", parts: [{ k: "main",
+      q: "Built by Mike the way October recommended: members are opt-in lanes in the left panel, naming members in the new-event box shows their busy time, and ⇥ finds a time when you're all free.",
+      opts: [{ k: "ok", l: "OK, settled" }, { k: "no", l: "Not like this (say why)" }], rec: "ok", why: "Matches October's recommendation." }] },
+  ] },
+  { id: "f1", f: 1, calls: [
+    { id: "C22", star: true, t: "Several work sessions per task", parts: [{ k: "main",
+      q: "Today placing a task moves its one slot. Should every placement add a session instead, so a 5-hour task can be Tue 2h plus Thu 3h?",
+      opts: [{ k: "a", l: "Every placement adds a session; Plan shows \"2 sessions · 3h of 5h\"", see: "1b" }, { k: "b", l: "Keep one slot per task", see: "1a" }], rec: "a",
+      why: "Tasks v3 already decided it, and the data holds several sessions. Otherwise a long task needs fake subtasks." }] },
+    { id: "C24", t: "Due work on the grid", parts: [{ k: "main",
+      q: "How do tasks that are due (no set time) show on the calendar?",
+      opts: [{ k: "a", l: "\"2 due\" count in the Day and Week headers; chips in Month", see: "1c" }, { k: "b", l: "Chips in the all-day row too, plus the count", see: "1b" }, { k: "c", l: "The count only, everywhere" }], rec: "a",
+      why: "The count stopped due tasks burying the hours; Month is where due dates get read. Compare B with C and D." }] },
+    { id: "C25", t: "Up next at the top of Plan", parts: [{ k: "main",
+      q: "Plan (the right panel's task list) gains Up next, your Focus line-up, above From earlier, Due this week, Scheduled and No date.",
+      opts: [{ k: "a", l: "Add Up next", see: "1b" }, { k: "b", l: "Keep the four groups", see: "1a" }], rec: "a",
+      why: "What you mean to work on next is what you plan first." }] },
+    { id: "C2", t: "The panels and the bottom bar", parts: [
+      { k: "b", q: "Bottom bar: Calendar's own tools (◧ · Search · Today · New · ◨), as every rebuilt module has, instead of the global bar only?",
+        opts: [{ k: "a", l: "Calendar's own tools", see: "1b" }, { k: "b", l: "Keep the global bar", see: "1a" }], rec: "a", why: "Every rebuilt module follows this rule, and Calendar's search needs a home." },
+      { k: "a", q: "Right panel views: keep Details and Plan?",
+        opts: [{ k: "a", l: "Keep the two; add a Day list only if Month needs it" }, { k: "b", l: "Add Day now" }, { k: "c", l: "Add a Prep view (see C26)", see: "4b" }], rec: "a", why: "Meeting prep fits inside Details (C26)." }] },
+    { id: "C4", t: "Names", parts: [{ k: "main",
+      q: "\"Session\", never \"block\" · keep \"Plan\" and \"Workspace members\" · \"Details\" plural, as in Tasks.",
+      opts: [{ k: "yes", l: "Yes, these names" }, { k: "change", l: "Change one (say which)" }], rec: "yes", why: "One word per thing, app-wide." }] },
+    { id: "C17", t: "Repeats (no picture yet)", parts: [{ k: "main",
+      q: "One repeat picker shared with Tasks, \"This and following\", an end date or a number of times, and faint ghosts for future repeats of your tasks in Week and Month.",
+      opts: YES(), rec: "yes", why: "Two pickers would mean two ways of saying the same thing." }] },
+  ] },
+  { id: "f2", f: 2, calls: [
+    { id: "C3", star: true, t: "Missed sessions", parts: [{ k: "main",
+      q: "A session that ran out with the task open stays where it was, muted, with one set of fixes (Done · Move · Took longer · Unschedule) and a quiet \"2 missed sessions · Review\" line. The old strip, Move to today and the roll-forward MCP tool go; Plan's From earlier lists missed sessions and overdue due dates. Also fixes \"Took longer\" logging planned time as worked time.",
+      opts: [{ k: "yes", l: "Yes", see: "2a" }, { k: "no", l: "Keep today's strip and Move to today", see: "1a" }], rec: "yes",
+      why: "Tasks v3 (ratified) says a missed session stays put and nothing moves by itself." }] },
+    { id: "C11", t: "Planning several tasks at once", parts: [{ k: "main",
+      q: "Pick tasks, then place them: drafts appear dashed on the grid inside working hours and before due dates, a task that doesn't fit says so, and one Place ↵ commits with one Undo.",
+      opts: [{ k: "a", l: "\"Fit N into today\" only", see: "2b" }, { k: "b", l: "Today, and \"this week\" too", see: "2c" }], rec: "b",
+      why: "Agencies plan Monday for the week. Nothing moves without ↵." }] },
+    { id: "C15", t: "Home's Today widget (no picture)", parts: [{ k: "main",
+      q: "Home shows the same \"2 missed sessions · Review\" line instead of \"Move to today\".",
+      opts: YES(), rec: "yes", why: "Follows C3: one fix system everywhere." }] },
+  ] },
+  { id: "f3", f: 3, calls: [
+    { id: "C23", star: true, t: "Focus time", parts: [
+      { k: "main", q: "What is focus time on the calendar?",
+        opts: [{ k: "a", l: "Keep as built: holds one task", see: "3a" }, { k: "b", l: "It can also hold a project or tag; ▶ lines those tasks up in Focus", see: "3b" }, { k: "c", l: "No separate item: focus is a property of a session", see: "3c" }], rec: "b",
+        why: "Answers Morgen's Frames with what's built, minus their flaw (tasks left behind when moved)." },
+      { k: "booking", q: "Booking links: may they book over focus time?",
+        opts: [{ k: "keep", l: "Yes, unless a link ticks \"count focus time as busy\" (as built)" }, { k: "flip", l: "No, never" }], rec: "keep", why: "Each link already has the switch." }] },
+  ] },
+  { id: "f4", f: 4, calls: [
+    { id: "C26", star: true, t: "Before a meeting", parts: [{ k: "main",
+      q: "\"Before this meeting\", built only from links: last met, the latest email thread, open tasks between you, the last meeting's note, the latest chat decision, reminders for this meeting. Where does it live?",
+      opts: [{ k: "a", l: "A section in Details, shown only when it has something", see: "4a" }, { k: "b", l: "Its own Prep view in the panel", see: "4b" }, { k: "c", l: "Only in Day view's free width (as built)" }], rec: "a",
+      why: "Details is where the meeting already is. Day view's version stays too." }] },
+    { id: "C27", t: "After a meeting", parts: [{ k: "main",
+      q: "One quiet row on a past meeting: add the time, turn note lines into tasks, draft a follow-up email, post to the client's channel.",
+      opts: [{ k: "a", l: "All four", see: "4c" }, { k: "b", l: "Time and tasks only" }, { k: "c", l: "None; links stay manual" }], rec: "a",
+      why: "Amie does the follow-up with AI; Moduo does it with links, and you do the writing." }] },
+    { id: "C20", t: "A meeting becomes tracked time", parts: [{ k: "main",
+      q: "\"Add 45m to time\" on a past meeting linked to a task or project. Never automatic.",
+      opts: [{ k: "yes", l: "Yes", see: "4c" }, { k: "no", l: "No" }], rec: "yes", why: "Client work bills meetings." }] },
+    { id: "C12", t: "\"Remind me at my next meeting with Anna\"", parts: [{ k: "main",
+      q: "A reminder that fires at your next meeting with someone, for meetings only. It shows in Before this meeting.",
+      opts: YES(), rec: "yes", why: "No competitor does it, and Calendar owns the trigger." }] },
+  ] },
+  { id: "f5", f: 5, calls: [
+    { id: "C7", star: true, t: "Invitations", parts: [{ k: "main",
+      q: "An invitation is outlined on the grid until you reply; Yes · Maybe · No in Details, and Mail's invite card answers the same one. Naming a member in the new-event box invites them.",
+      opts: [{ k: "b", l: "Yes, with \"2 invitations waiting · Review\"", see: "5b" }, { k: "a", l: "Yes, without the waiting line", see: "5a" }, { k: "no", l: "No: answer invitations in Mail only" }], rec: "b",
+      why: "Calendar users would never see an invitation otherwise. The Email session agrees." }] },
+  ] },
+  { id: "f6", f: 6, calls: [
+    { id: "C13", star: true, t: "Alerts before events", parts: [{ k: "main",
+      q: "Each calendar has a default (10 minutes for timed events), changeable per event. An alert arrives on time or not at all, never late.",
+      opts: [{ k: "yes", l: "Yes", see: "6a" }, { k: "no", l: "No alerts" }], rec: "yes", why: "The gap every role names first." }] },
+    { id: "C29", t: "The menu bar", parts: [{ k: "main",
+      q: "Clicking the desktop menu-bar icon shows your next meeting with Join, the rest of today, and New event.",
+      opts: [{ k: "a", l: "Yes", see: "6b" }, { k: "b", l: "Join only" }, { k: "c", l: "Leave it" }], rec: "a", why: "Notion Calendar, Amie and Morgen all have one; Moduo already has the icon." }] },
+    { id: "C21", t: "Quiet hours (no picture)", parts: [{ k: "main",
+      q: "During quiet hours, alerts you set yourself still come through; anything from other people waits.",
+      opts: YES(), rec: "yes", why: "Otherwise the alert for a 7:00 flight arrives after it." }] },
+  ] },
+  { id: "f7", f: 7, calls: [
+    { id: "C28", star: true, t: "Scheduling from an email thread", parts: [{ k: "main",
+      q: "Offer times from a reply: the thread's people are filled in, the times are held on your week, \"Insert in reply\" adds them with a link, and the booked meeting links back to the thread and the contact.",
+      opts: [{ k: "a", l: "Offers and booking links from a reply, linked", see: "7a" }, { k: "b", l: "Booking links only" }, { k: "c", l: "Copy and paste" }], rec: "a",
+      why: "The links are the point. Inside Mail, Email's call 30 shows the same offer." }] },
+    { id: "C19", t: "Booking links for client work (no picture)", parts: [{ k: "main",
+      q: "(a) the guest reschedules · (b) several lengths on one link · (c) mark a no-show · (d) optional co-hosts.",
+      opts: [{ k: "ac", l: "a–c now, d in round 3" }, { k: "ad", l: "All four now" }, { k: "other", l: "Something else (say which)" }], rec: "ac", why: "d belongs with collective links, built but switched off." }] },
+    { id: "C9", t: "Booking links (mostly settled)", parts: [{ k: "main",
+      q: "Built: links in the left panel, edited in place, open times drawn on the week. Collective links (\"me and Tom\") are built but switched off and go to round 3's review of unfinished work.",
+      opts: [{ k: "ok", l: "OK" }, { k: "no", l: "Not like this (say why)" }], rec: "ok", why: "Built as October recommended." }] },
+  ] },
+  { id: "f8", f: 8, calls: [
+    { id: "C5", t: "List view, search, and a Display menu", parts: [{ k: "main",
+      q: "Add a List view (the coming days under day headers), search inside Calendar (results show as the List), and a Display menu (weekends, declined, 5 or 7 days, second zone).",
+      opts: [{ k: "yes", l: "Yes", see: "8a" }, { k: "no", l: "No" }], rec: "yes", why: "A week of meetings has no list anywhere in Moduo today." }] },
+  ] },
+  { id: "f9", f: 9, calls: [
+    { id: "C30", star: true, t: "Fresh with your Mac off; past meetings stay", parts: [{ k: "main",
+      q: "Today calendars update only while a Calendar page is open somewhere, and meetings older than 30 days are deleted with their links. Cost: about three blocks of Mike's area.",
+      opts: [{ k: "a", l: "Both, now", see: "9b" }, { k: "b", l: "Keep past meetings now; server updating later" }, { k: "c", l: "Neither", see: "9a" }], rec: "a",
+      why: "Alerts and booking links can't be trusted without it." }] },
+    { id: "C6", star: true, t: "Outlook and iCloud editable", parts: [{ k: "main",
+      q: "Move, change, delete and create events in Outlook and iCloud, as with Google. About two blocks each; Outlook users re-consent once, and Microsoft may require a registered company.",
+      opts: [{ k: "a", l: "Both, Outlook first", see: "9b" }, { k: "b", l: "Outlook only" }, { k: "c", l: "Stay view only", see: "9a" }], rec: "a",
+      why: "Agencies' clients live in Outlook; Morgen and Amie both write to it." }] },
+    { id: "C16", t: "Your plan outside Moduo (no picture)", parts: [{ k: "main",
+      q: "An opt-in switch: show your sessions as Busy on your work calendar, and your personal calendar as Busy on the work one.",
+      opts: YES(), rec: "yes", why: "People who book you elsewhere see real availability." }] },
+    { id: "C18", t: "What else can show (no picture)", parts: [{ k: "main",
+      q: "A project's dates, contacts' birthdays and public holidays, each a calendar you tick on in the left panel, all off by default.",
+      opts: YES(), rec: "yes", why: "Your grid stays your own work unless you add more." }] },
+  ] },
+  { id: "none", n: "Without a picture", sub: "Small calls no frame shows", calls: [
+    { id: "C10", t: "Quick capture as Event (⇧⌘K, then ⌘4)", parts: [
+      { k: "main", q: "How does the Event type in Quick capture behave?",
+        opts: [{ k: "a", l: "Exactly like the new-event box" }, { k: "b", l: "Its own small form" }], rec: "a", why: "Typing an event works the same from any page." },
+      { k: "task", q: "\"task …\" at the start of the line makes a work session for a new task.", opts: YES(), rec: "yes", why: "Mike's design; one box for both." }] },
+    { id: "C14", t: "A time zone per event", parts: [{ k: "main",
+      q: "\"9:00 London\" stays 9:00 London for a member in Warsaw (shown as 10:00). About half a block.",
+      opts: YES(), rec: "yes", why: "Otherwise repeats between zones drift an hour at each clock change." }] },
+    { id: "C31", t: "Travel time", parts: [{ k: "main",
+      q: "An event with a place can add travel time before and after it, counted as busy.",
+      opts: [{ k: "a", l: "Now" }, { k: "b", l: "Later" }, { k: "c", l: "Never" }], rec: "b", why: "Agencies mostly meet online; one small block when someone needs it." }] },
+    { id: "C32", t: "MCP tools", parts: [{ k: "main",
+      q: "Rename the tools to the new words, and add answering invitations, find a time, meeting prep and offering times from a thread.",
+      opts: YES(), rec: "yes", why: "Amie shipped an official MCP in July 2026; Morgen has none." }] },
+  ] },
+];
+const ALLCALLS = GROUPS.flatMap((g) => g.calls);
+const ANS = {}; // { C22: { picks: { main: "a" }, note: "" } }
+const CS = { open: null, hidden: false, store: "none", db: null, copied: false, scroll: 0, shown: null };
+const cesc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const answered = (c) => { const a = ANS[c.id]; return !!a && c.parts.every((p) => a.picks && a.picks[p.k]); };
+const groupName = (g) => (g.f ? `${g.f} · ${FR[g.f].n}` : g.n);
+const parseSee = (s) => ({ f: +s[0], v: s.slice(1) });
+
+function callsPanel() {
+  const el = document.getElementById("calls");
+  if (!el || S.critic) return;
+  const keep = el.querySelector(".calls-body");
+  if (keep) CS.scroll = keep.scrollTop;
+  el.hidden = CS.hidden;
+  document.getElementById("callsToggle").setAttribute("aria-pressed", String(!CS.hidden));
+  if (CS.hidden) return;
+  const open = CS.open || `f${S.f}`;
+  const done = ALLCALLS.filter(answered).length;
+  const saved = CS.store === "db" ? "Saved as you go; Claude reads them directly." : CS.store === "local" ? "Saved in this browser only: use Copy answers and paste them in chat." : "";
+  let h = `<div class="calls-head"><div class="calls-title"><b>Calls</b><span class="t3 num">${done} of ${ALLCALLS.length} answered</span><span class="grow"></span><button class="cbtn" data-cact="copy">${CS.copied ? "Copied" : "Copy answers"}</button><button class="cbtn" data-cact="hide" aria-label="Hide the calls panel">Hide</button></div><p class="t3">Each frame's calls sit under it. Pick an option; <b>See</b> switches the picture to the variant that shows it. ${saved}</p></div><div class="calls-body">`;
+  for (const g of GROUPS) {
+    const isOpen = g.id === open;
+    const n = g.calls.filter(answered).length;
+    h += `<section class="cgroup${isOpen ? " open" : ""}"><button class="cg-head" data-cgroup="${g.id}" aria-expanded="${isOpen}"><span class="cg-name">${g.f ? `<span class="kbd">${g.f}</span>${cesc(FR[g.f].n)}` : cesc(g.n)}</span><span class="t3 num">${g.calls.map((c) => c.id).join(" · ")}</span><span class="cg-count num${n === g.calls.length ? " full" : ""}">${n}/${g.calls.length}</span></button>`;
+    if (isOpen) {
+      if (g.sub) h += `<p class="t3 cg-sub">${cesc(g.sub)}</p>`;
+      for (const c of g.calls) {
+        const a = ANS[c.id] || { picks: {}, note: "" };
+        h += `<article class="call${answered(c) ? " done" : ""}" id="call-${c.id}"><h3>${c.star ? "★ " : ""}${c.id} · ${cesc(c.t)}</h3>`;
+        for (const p of c.parts) {
+          h += `<p class="cq">${cesc(p.q)}</p><div class="copts" role="radiogroup" aria-label="${c.id}${c.parts.length > 1 ? " " + p.k : ""}">`;
+          for (const o of p.opts) {
+            const on = a.picks && a.picks[p.k] === o.k;
+            const sv = o.see ? parseSee(o.see) : null;
+            const here = sv && sv.f === S.f && sv.v === S.v;
+            h += `<div class="copt"><button role="radio" aria-checked="${on}" class="cpick" data-cpick="${c.id}|${p.k}|${o.k}"><span class="rdot" aria-hidden="true"></span><span>${cesc(o.l)}${o.k === p.rec ? ' <span class="rec">Recommended</span>' : ""}</span></button>${sv ? `<button class="csee${here ? " here" : ""}" data-csee="${o.see}" aria-label="See frame ${sv.f} variant ${sv.v.toUpperCase()}">${here ? "Showing" : "See"} ${sv.f === g.f ? "" : sv.f}${sv.v.toUpperCase()}</button>` : ""}</div>`;
+          }
+          h += `</div><p class="cwhy t3">Why recommended: ${cesc(p.why)}</p>`;
+        }
+        h += `<label class="cnote"><span class="t3">Your words (optional)</span><textarea rows="2" data-cnote="${c.id}">${cesc(a.note || "")}</textarea></label></article>`;
+      }
+    }
+    h += `</section>`;
+  }
+  h += `</div>`;
+  el.innerHTML = h;
+  const body = el.querySelector(".calls-body");
+  if (body) {
+    // A newly opened group starts at its own heading; the same group keeps where you were.
+    const sec = body.querySelector(".cgroup.open");
+    if (CS.shown !== open && sec) body.scrollTop = Math.max(0, sec.offsetTop - body.offsetTop);
+    else body.scrollTop = CS.scroll;
+  }
+  CS.shown = open;
+}
+
+function answersText() {
+  const lines = ["Calendar round 1b answers"];
+  for (const g of GROUPS) {
+    lines.push("", `[${groupName(g)}]`);
+    for (const c of g.calls) {
+      const a = ANS[c.id] || { picks: {} };
+      const parts = c.parts.map((p) => { const k = a.picks && a.picks[p.k]; const o = p.opts.find((x) => x.k === k); return (c.parts.length > 1 ? p.k + ": " : "") + (o ? `${o.k} (${o.l})` : "—"); });
+      lines.push(`${c.id}: ${parts.join(" · ")}${a.note ? " — " + a.note : ""}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+async function saveAnswer(id) {
+  const a = ANS[id]; if (!a) return;
+  const body = { picks: a.picks || {}, note: a.note || "", at: new Date().toISOString() };
+  if (CS.db) { try { await CS.db.doc("answers/" + id).set(body); return; } catch (e) { CS.store = "local"; } }
+  try { localStorage.setItem("cal-1b-answers", JSON.stringify(ANS)); } catch (e) { /* no storage */ }
+}
+
+document.addEventListener("click", (ev) => {
+  const t = ev.target.closest("#calls button, #callsToggle"); if (!t) return;
+  ev.stopPropagation();
+  if (t.id === "callsToggle") { CS.hidden = !CS.hidden; render(); return; }
+  if (t.dataset.cact === "hide") { CS.hidden = true; render(); return; }
+  if (t.dataset.cact === "copy") {
+    const txt = answersText();
+    const done = () => { CS.copied = true; callsPanel(); setTimeout(() => { CS.copied = false; callsPanel(); }, 1600); };
+    try { navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt)); } catch (e) { fallbackCopy(txt); }
+    return;
+  }
+  if (t.dataset.cgroup) {
+    const g = GROUPS.find((x) => x.id === t.dataset.cgroup); const open = CS.open || `f${S.f}`;
+    if (g.id === open) { CS.open = "__none"; callsPanel(); return; }
+    if (g.f) { go(g.f); return; }
+    CS.open = g.id; callsPanel(); return;
+  }
+  if (t.dataset.csee) { const cur = CS.open || `f${S.f}`; const { f, v } = parseSee(t.dataset.csee); S.f = f; S.v = v; S.sel = null; S.dd = false; S.pop = null; CS.open = cur; render(); return; }
+  if (t.dataset.cpick) {
+    const [id, pk, ok] = t.dataset.cpick.split("|");
+    const a = (ANS[id] = ANS[id] || { picks: {}, note: "" });
+    a.picks = { ...a.picks, [pk]: ok };
+    callsPanel(); saveAnswer(id);
+  }
+}, true);
+function fallbackCopy(txt) {
+  const ta = document.createElement("textarea"); ta.value = txt; ta.className = "copybox"; document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); CS.copied = true; } catch (e) { /* leave it selected */ }
+  setTimeout(() => ta.remove(), 4000); callsPanel();
+}
+document.addEventListener("input", (ev) => { const id = ev.target.dataset && ev.target.dataset.cnote; if (!id) return; const a = (ANS[id] = ANS[id] || { picks: {}, note: "" }); a.note = ev.target.value; });
+document.addEventListener("change", (ev) => { const id = ev.target.dataset && ev.target.dataset.cnote; if (id) saveAnswer(id); });
+
+(async function loadAnswers() {
+  try { const raw = localStorage.getItem("cal-1b-answers"); if (raw) Object.assign(ANS, JSON.parse(raw)); CS.store = "local"; } catch (e) { CS.store = "local"; }
+  const use = window.claude && window.claude.use;
+  if (!use) { callsPanel(); return; }
+  let db = null; try { db = await window.claude.use("db"); } catch (e) { db = null; }
+  if (!db) { callsPanel(); return; }
+  CS.db = db; CS.store = "db";
+  db.collection("answers").onSnapshot((snap) => {
+    for (const d of snap.docs) { const b = d.data(); if (b) ANS[d.id] = { picks: { ...(b.picks || {}) }, note: typeof b.note === "string" ? b.note : "" }; }
+    if (!document.activeElement || !document.activeElement.dataset || !document.activeElement.dataset.cnote) callsPanel();
+  }, () => { CS.store = "local"; callsPanel(); });
+})();
+
 /* ── Interaction ──────────────────────────────────────────────────── */
-function go(f, v) { S.f = f; S.v = v || (f === 1 ? "b" : Object.keys(FR[f].v)[0]); S.sel = null; S.dd = false; S.pop = null; render(); }
+function go(f, v) { CS.open = null; S.f = f; S.v = v || (f === 1 ? "b" : Object.keys(FR[f].v)[0]); S.sel = null; S.dd = false; S.pop = null; render(); }
 document.addEventListener("click", (ev) => {
   const t = ev.target.closest("button"); if (!t) { if (S.dd || S.pop) { S.dd = false; S.pop = null; render(); } return; }
   if (t.dataset.f) return go(+t.dataset.f);
