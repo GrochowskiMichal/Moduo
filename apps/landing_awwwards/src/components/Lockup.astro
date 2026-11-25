@@ -1,0 +1,67 @@
+---
+// The lockup, as artwork (brand decision 18), or `typed`: the mark artwork beside "moduo" set in
+// Oudom (--f-sans), at the master lockup's proportions in units of the mark's height H (measured
+// on brand/exports/svg/lockup-current.svg): gap 0.36 H, x-height 0.44 H, ascender 0.63 H, the
+// baseline 0.79 H down from the mark's top. Set --H to size it. The header uses the typed one;
+// remove the prop to go back to the drawn wordmark.
+import { LOCKUP, MARK } from "../lib/brand";
+
+interface Props {
+  class?: string;
+  typed?: boolean;
+}
+const { class: className, typed = false } = Astro.props;
+---
+
+{
+  typed ? (
+    <span class:list={["lockup", "lockup--typed", className]} role="img" aria-label="Moduo">
+      <svg class="lockup__mark" viewBox={MARK.tight} aria-hidden="true">
+        <path d={MARK.d} fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
+      </svg>
+      <span class="lockup__word" aria-hidden="true">
+        moduo
+      </span>
+    </span>
+  ) : (
+    <svg class:list={["lockup", className]} viewBox={LOCKUP.viewBox} role="img" aria-label="Moduo">
+      <path class="lockup__mark" d={LOCKUP.mark} fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" />
+      <path class="lockup__word" d={LOCKUP.word} fill="currentColor" />
+    </svg>
+  )
+}
+
+<style>
+  .lockup {
+    display: block;
+    height: 1.375rem;
+    width: auto;
+    overflow: visible;
+  }
+  .lockup--typed {
+    --H: 1.5rem;
+    display: inline-flex;
+    align-items: flex-start;
+    gap: calc(var(--H) * 0.364);
+    height: var(--H);
+    line-height: 1;
+  }
+  /* The mark at its own bounds, so H is the mark's height, as in the master. */
+  .lockup--typed .lockup__mark {
+    display: block;
+    height: var(--H);
+    width: auto;
+    aspect-ratio: 720 / 544;
+    overflow: visible;
+  }
+  .lockup--typed .lockup__word {
+    display: block;
+    font-family: var(--f-sans);
+    font-weight: var(--w-mark);
+    /* Oudom's x-height is 0.52 em: 0.854 H puts it at the master's 0.44 H. */
+    font-size: calc(var(--H) * 0.854);
+    letter-spacing: -0.015em;
+    /* With line-height 1 the baseline sits 0.845 em down; the master wants 0.793 H. */
+    margin-top: calc(var(--H) * 0.0714);
+  }
+</style>

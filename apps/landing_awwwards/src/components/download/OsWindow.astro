@@ -1,0 +1,291 @@
+---
+// One window, three frames: Moduo's Home inside the frame each place draws around it. A Mac's
+// title bar (the three lights, the name centered), Windows' (the name on the left, its three
+// controls on the right) and a browser's (back, forward, reload and the address). The desktop app
+// keeps the system's own title bar (tauri.conf.json sets no custom decorations), so these are the
+// frames the app really sits in. The picker preselects the visitor's own system; switching sends
+// the site's 45° band across the window (difference blend, so it inverts what it passes) and the
+// new frame is drawn in behind it (motion/pages/download.ts). In the browser the Inbox widget
+// says where your email is, as the app's own widget does. Without JS the Mac frame shows.
+import HomeFrame from "../frames/HomeFrame.astro";
+import { download } from "../../data/pages/download";
+
+const f = download.frames;
+---
+
+<div class="dw" data-dw data-os="mac" data-inbox="mac" style={`--dw-web-inbox: "${f.webInbox}"`}>
+  <div class="dw__pick" role="group" data-one aria-label={f.pick} data-dw-pick>
+    {
+      f.os.map((o) => (
+        <button
+          class="btn btn--ghost btn--sm dw__opt"
+          type="button"
+          aria-pressed={o.id === "mac" ? "true" : "false"}
+          data-dw-os={o.id}
+          data-sweep
+        >
+          <span class="btn__label">{o.label}</span>
+          <span class="btn__sweep" aria-hidden="true" />
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="dw__stage" data-reveal="frame">
+    <div class="dw__win" data-dw-win>
+      <div class="dw__chrome" aria-hidden="true">
+        <div class="dw__bar is-mac" data-bar="mac">
+          <span class="dw__lights"><i></i><i></i><i></i></span>
+          <span class="dw__title">{f.window}</span>
+        </div>
+        <div class="dw__bar is-windows" data-bar="windows">
+          <span class="dw__app">
+            <svg viewBox="0 0 16 16"><rect x="0.5" y="0.5" width="15" height="15" rx="3.5" /></svg>
+            {f.window}
+          </span>
+          <span class="dw__ctl">
+            <svg viewBox="0 0 10 10"><path d="M0 5.5h10" /></svg>
+            <svg viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" /></svg>
+            <svg viewBox="0 0 10 10"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9" /></svg>
+          </span>
+        </div>
+        <div class="dw__bar is-web" data-bar="web">
+          <span class="dw__nav">
+            <svg viewBox="0 0 16 16"><path d="M10 3 5 8l5 5" /></svg>
+            <svg viewBox="0 0 16 16"><path d="m6 3 5 5-5 5" /></svg>
+            <svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 1 1-1.6-3.7M13 2.5v3h-3" /></svg>
+          </span>
+          <span class="dw__url">
+            <svg viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
+            {f.url}
+          </span>
+          <span class="dw__tabs"><i></i><i></i></span>
+        </div>
+      </div>
+      <div class="dw__app-frame">
+        <HomeFrame />
+      </div>
+      <span class="dw__band" aria-hidden="true" data-dw-band></span>
+    </div>
+  </div>
+
+  <p class="dw__cap t-s muted" aria-live="polite" data-dw-cap>{f.caption.mac}</p>
+  <script type="application/json" data-dw-captions set:html={JSON.stringify(f.caption)} />
+</div>
+
+<style>
+  .dw {
+    display: grid;
+    gap: 1.5rem;
+  }
+  .dw__pick {
+    display: flex;
+    gap: 0.5rem;
+    justify-self: start;
+  }
+  .dw__opt {
+    min-width: 6rem;
+  }
+  .dw__stage {
+    container-type: inline-size;
+  }
+  /* The window: the system's frame on top, the app under it. Sized in the app picture's em (14 px
+     when the window is 1040 px wide), so the bar keeps its proportion at any width. */
+  .dw__win {
+    position: relative;
+    isolation: isolate;
+    font-size: 1.346cqw;
+    border-radius: 0.857em;
+    background: #000;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.12),
+      inset 0 1px 0 rgb(255 255 255 / 0.1),
+      0 3em 8em -2em rgb(0 0 0 / 0.95);
+  }
+  .dw__chrome {
+    position: relative;
+    height: 2.4em;
+    background: #161616;
+    box-shadow: inset 0 -1px 0 rgb(255 255 255 / 0.07);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: #9a9a9a;
+  }
+  .dw__bar {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    padding: 0 0.9em;
+    font-size: 0.93em;
+    visibility: hidden;
+  }
+  .dw[data-os="mac"] .is-mac,
+  .dw[data-os="windows"] .is-windows,
+  .dw[data-os="web"] .is-web {
+    visibility: visible;
+  }
+  /* While the band passes, the new frame is drawn in behind it, over the old one. */
+  .dw__bar.is-to {
+    visibility: visible;
+    z-index: 1;
+    background: #161616;
+  }
+  .dw__bar svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  /* Mac: the three lights left, the name centered. */
+  .dw__lights {
+    display: flex;
+    gap: 0.57em;
+  }
+  .dw__lights i {
+    width: 0.86em;
+    height: 0.86em;
+    border-radius: 50%;
+    background: #ff5f57;
+  }
+  .dw__lights i:nth-child(2) {
+    background: #febc2e;
+  }
+  .dw__lights i:nth-child(3) {
+    background: #28c840;
+  }
+  .dw__title {
+    position: absolute;
+    left: 50%;
+    translate: -50% 0;
+    font-weight: 600;
+    color: #c8c8c8;
+  }
+  /* Windows: the app and its name left, minimize, maximize and close right. */
+  .is-windows {
+    justify-content: space-between;
+    padding-right: 0;
+  }
+  .dw__app {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    color: #c8c8c8;
+  }
+  .dw__app svg {
+    width: 1em;
+    height: 1em;
+    fill: #fafafa;
+    stroke: none;
+  }
+  .dw__ctl {
+    display: flex;
+    height: 100%;
+  }
+  .dw__ctl svg {
+    box-sizing: content-box;
+    width: 0.72em;
+    height: 0.72em;
+    padding: 0 1.25em;
+    align-self: center;
+    stroke-width: 1;
+  }
+  /* The browser: back, forward, reload; the address in the middle; two tabs' worth of room. */
+  .is-web {
+    gap: 1em;
+  }
+  .dw__nav {
+    display: flex;
+    gap: 0.7em;
+  }
+  .dw__nav svg {
+    width: 1em;
+    height: 1em;
+  }
+  .dw__url {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    flex: 0 1 26em;
+    margin: 0 auto;
+    height: 1.65em;
+    padding: 0 0.9em;
+    border-radius: 0.83em;
+    background: #0b0b0b;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.07);
+    color: #c8c8c8;
+  }
+  .dw__url svg {
+    width: 0.86em;
+    height: 0.86em;
+    color: #8f8f8f;
+  }
+  .dw__tabs {
+    display: flex;
+    gap: 0.35em;
+  }
+  .dw__tabs i {
+    width: 0.3em;
+    height: 0.3em;
+    border-radius: 50%;
+    background: #6a6a6a;
+  }
+  /* The app inside: the system draws the window's edge, so the picture's own goes. */
+  .dw__app-frame :global(.ap__win) {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  /* In the browser the Inbox widget mounts only where email runs: here it says where that is. */
+  .dw[data-inbox="web"] :global(.hf-inbox > :not(.hf-h)),
+  .dw[data-inbox="web"] :global(.hf-inbox .hf-h .ap-muted) {
+    visibility: hidden;
+  }
+  .dw :global(.hf-inbox::after) {
+    content: var(--dw-web-inbox);
+    position: absolute;
+    inset: 2.6em 1em 1em;
+    display: grid;
+    place-items: center;
+    text-align: center;
+    color: var(--ap-muted);
+    font-size: 0.857em;
+    line-height: 1.45;
+    opacity: 0;
+  }
+  .dw[data-inbox="web"] :global(.hf-inbox::after) {
+    opacity: 1;
+  }
+  /* The band: the stroke's 45° edges, Paper, inverting what it covers. Parked off the window. */
+  .dw__band {
+    position: absolute;
+    z-index: 5;
+    inset: 0;
+    background: #fafafa;
+    mix-blend-mode: difference;
+    clip-path: polygon(0 100%, 0 100%, 0 100%, 0 100%);
+    pointer-events: none;
+    visibility: hidden;
+  }
+  .dw__cap {
+    min-height: 1.5em;
+  }
+  /* A narrow window keeps the frame readable, as the app picture does. */
+  @container (max-width: 640px) {
+    .dw__win {
+      font-size: clamp(11px, 3.4cqw, 14px);
+    }
+    .dw__tabs {
+      display: none;
+    }
+  }
+  @media (max-width: 720px) {
+    .dw__pick {
+      justify-self: stretch;
+    }
+    .dw__opt {
+      flex: 1;
+      min-width: 0;
+    }
+  }
+</style>

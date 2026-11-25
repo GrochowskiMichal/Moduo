@@ -1,0 +1,34 @@
+---
+// Oudom, Moduo's typeface (DESIGN.md §20): one specimen sheet read by one camera, endless, and
+// nothing else (components/typeface/Sheet.astro). The name turns over as metal type is cast and
+// reads moduo, parts into oud and dom at its d and runs its weights; the camera reads down the
+// sheet to the pangram, a kreska, the clock and the set, where every character is drawn in turn
+// with its curves, then dives into the name again, where the scroll starts over. Without motion
+// it is the name, the sheet as a still figure and the story as words, and the footer is there
+// as on every page. Why it's called Oudom is DESIGN.md §16.
+import Sheet from "../components/typeface/Sheet.astro";
+import { typeface } from "../data/site";
+import Base from "../layouts/Base.astro";
+
+const jsonLd = [
+  {
+    "@context": "https://schema.org",
+    "@type": "CreativeWork",
+    name: "Oudom",
+    alternateName: "Moduo Oudom",
+    genre: "Typeface",
+    version: "1.3",
+    dateCreated: "2026-10-26",
+    dateModified: "2026-11-03",
+    description: typeface.description,
+    creator: { "@type": "Organization", name: "Moduo", url: "https://moduo.app" },
+    url: "https://moduo.app/typeface",
+  },
+];
+---
+
+<Base title={typeface.title} description={typeface.description} image="/og/typeface.png" jsonLd={jsonLd} endless>
+  <article class="typeface" data-typeface>
+    <Sheet />
+  </article>
+</Base>

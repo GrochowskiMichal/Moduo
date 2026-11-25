@@ -1,0 +1,194 @@
+---
+// The task import's preview, drawn as the app draws its dialog (tasks/importers/ui/
+// import-dialog.tsx): where the file came from, the count, each Trello list with the status it
+// becomes, the people in the file matched to people in the workspace, finished tasks included,
+// and the two actions. Under it, "Your imports": every run, an assistant's included, with its
+// own Undo.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import { importGuide } from "../../data/pages/import";
+
+const p = importGuide.preview;
+---
+
+<div class="tp-stage">
+  <div class="ap tp" role="img" aria-label={p.label}>
+    <div class="tp__dialog">
+      <div class="tp__top">
+        <p class="tp__title">{p.dialog}</p>
+        <span class="ap-ico tp__x"><Icon name="plus" /></span>
+      </div>
+      <p class="ap-muted tp__from">{p.from}</p>
+      <p class="tp__line">{p.line}</p>
+
+      <p class="ap-muted tp__k">{p.statuses}</p>
+      <ul class="tp__map">
+        {
+          p.lists.map(([list, status]) => (
+            <li>
+              <span class="ap-ell">{list}</span>
+              <span class="tp__sel">
+                {status}
+                <Icon name="chevron-down" class="ap-i--xs" />
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="ap-muted tp__k">{p.people}</p>
+      <ul class="tp__map">
+        {
+          p.who.map(([name, person, hue, initials]) => (
+            <li>
+              <span class="ap-ell">{name}</span>
+              <span class="tp__sel">
+                <span class="ap-av ap-av--16" style={`--c:${hue}`}>{initials}</span>
+                {person}
+                <Icon name="chevron-down" class="ap-i--xs" />
+              </span>
+            </li>
+          ))
+        }
+      </ul>
+
+      <p class="tp__check">
+        <span class="tp__box"><Icon name="check" class="ap-i--xs" /></span>
+        {p.finished}
+      </p>
+
+      <div class="tp__acts">
+        <span class="ap-btn">{p.back}</span>
+        <span class="ap-btn ap-btn--primary">{p.go}</span>
+      </div>
+
+      <div class="tp__runs">
+        <p class="ap-muted tp__k">{p.runs}</p>
+        {
+          p.history.map(([what, when]) => (
+            <p class="tp__run">
+              <span class="ap-ell grow">
+                {what} <span class="ap-muted">· {when}</span>
+              </span>
+              <span class="ap-btn ap-btn--hover tp__undo">{p.undo}</span>
+            </p>
+          ))
+        }
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .tp-stage {
+    container-type: inline-size;
+  }
+  .tp {
+    font-size: clamp(12px, 2.6cqw, 14px);
+    line-height: 1.45;
+    color: var(--ap-fg);
+  }
+  /* The app's dialog: 16 px corners, the popover surface, a hairline ring and a deep shadow. */
+  .tp__dialog {
+    display: grid;
+    gap: 0.571em;
+    padding: 1.429em 1.429em 1.143em;
+    border-radius: 1.143em;
+    background: var(--ap-muted-bg);
+    box-shadow:
+      0 0 0 1px var(--ap-hairline),
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2.5em 6em -2em rgb(0 0 0 / 0.95);
+  }
+  .tp__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .tp__title {
+    font-size: 1.214em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .tp__x :global(.ap-i) {
+    rotate: 45deg;
+  }
+  .tp__from {
+    margin-top: -0.286em;
+    font-size: 0.929em;
+  }
+  .tp__line {
+    margin-top: 0.286em;
+    font-size: 1.071em;
+    font-weight: 500;
+  }
+  .tp__k {
+    margin-top: 0.571em;
+    font-size: 0.857em;
+  }
+  .tp__map {
+    display: grid;
+    gap: 0.286em;
+  }
+  .tp__map li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 11em;
+    align-items: center;
+    gap: 0.857em;
+    font-size: 0.929em;
+  }
+  .tp__sel {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    height: 2.154em;
+    padding: 0 0.615em;
+    border-radius: 0.615em;
+    background: var(--ap-card);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    white-space: nowrap;
+  }
+  .tp__sel :global(.ap-i) {
+    margin-left: auto;
+    color: var(--ap-muted);
+  }
+  .tp__check {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    margin-top: 0.571em;
+    font-size: 0.929em;
+  }
+  .tp__box {
+    display: inline-grid;
+    place-items: center;
+    width: 1.143em;
+    height: 1.143em;
+    border-radius: 0.286em;
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+  }
+  .tp__acts {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.429em;
+    margin-top: 0.571em;
+  }
+  .tp__runs {
+    display: grid;
+    gap: 0.286em;
+    margin-top: 0.571em;
+    padding-top: 0.571em;
+    border-top: 1px solid var(--ap-hairline);
+  }
+  .tp__run {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-width: 0;
+    font-size: 0.929em;
+  }
+  .tp__undo {
+    flex: none;
+  }
+</style>

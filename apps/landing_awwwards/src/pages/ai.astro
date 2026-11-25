@@ -1,0 +1,36 @@
+---
+// AI and MCP: how an assistant works in Moduo. The signature is the key's reach (components/ai/
+// Reach.astro): set a level per module and watch the tools it opens. Then what four requests turn
+// into, the trail every change leaves, what no key reaches, and connecting in three steps.
+import Btn from "../components/Btn.astro";
+import Faq from "../components/Faq.astro";
+import Asks from "../components/ai/Asks.astro";
+import Connect from "../components/ai/Connect.astro";
+import Names from "../components/ai/Names.astro";
+import Never from "../components/ai/Never.astro";
+import Reach from "../components/ai/Reach.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { ai } from "../data/pages/ai";
+import { site, waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { crumbs, faq } from "../lib/seo";
+---
+
+<Base title={ai.title} description={ai.description} image="/og/ai.png" appFont jsonLd={[crumbs(["AI and MCP", "/ai"]), faq(ai.faq.items)]}>
+  <div data-pg="ai">
+    <PageHero name={ai.name} line={ai.line} lead={ai.lead} family="product" current="ai">
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href="/mcp">{ai.docs}</Btn>
+      </Fragment>
+    </PageHero>
+    <Reach />
+    <Asks />
+    <Names />
+    <Never />
+    <Connect />
+    <Faq id="ai-faq" title={ai.faq.title} items={ai.faq.items} text={`Something else? Write to ${site.email}. A person writes back.`} email={site.email} />
+    <Related title={ai.related} slugs={["mcp", "security", "integrations"]} />
+  </div>
+</Base>

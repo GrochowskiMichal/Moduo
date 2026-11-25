@@ -1,0 +1,302 @@
+---
+// The four plans. Each glyph counts people in strokes: one outlined for Free, one for Pro, two
+// joined for Duo (one window between you), four for Team. Monthly/yearly is a real radio group;
+// CSS swaps the prices, so it works without JS.
+import Btn from "./Btn.astro";
+import Chain from "./Chain.astro";
+import { pricing, waitlist } from "../data/site";
+
+interface Props {
+  headingLevel?: "h1" | "h2";
+  idPrefix?: string;
+}
+const { headingLevel = "h2", idPrefix = "plans" } = Astro.props;
+const Heading = headingLevel;
+const PlanHeading = headingLevel === "h1" ? "h2" : "h3";
+// As the page's opening, the title and lead paint with the HTML (the phone's largest text, LCP),
+// as module titles do; inside the home page they arrive like every other section.
+const reveal = headingLevel === "h1" ? undefined : "";
+---
+
+<section class="plans" id="pricing" aria-labelledby={`${idPrefix}-title`}>
+  <div class="wrap">
+    <div class="plans__head grid">
+      <Heading class="plans__title t-xl" id={`${idPrefix}-title`} data-split={reveal}>{pricing.title}</Heading>
+      <div class="plans__side">
+        <p class="t-m muted" data-reveal={reveal}>{pricing.text}</p>
+        <fieldset class="bill" aria-label="Billing period">
+          <label class="bill__opt">
+            <input type="radio" name={`${idPrefix}-bill`} value="monthly" aria-label="Monthly" />
+            <span>Monthly</span>
+          </label>
+          <label class="bill__opt">
+            <input type="radio" name={`${idPrefix}-bill`} value="yearly" checked aria-label={`Yearly, ${pricing.yearlySave.toLowerCase()}`} />
+            <span>Yearly <em>{pricing.yearlySave}</em></span>
+          </label>
+        </fieldset>
+      </div>
+    </div>
+
+    <ul class="plans__grid">
+      {
+        pricing.plans.map((plan) => (
+          <li class:list={["plan", plan.pick && "plan--pick"]} data-reveal>
+            <div class="plan__glyph">
+              <Chain
+                id={`${idPrefix}-g-${plan.id}`}
+                n={plan.strokes}
+                gaps={1}
+                pad={plan.outline ? 16 : 4}
+                outline={plan.outline}
+                label={plan.people}
+              />
+            </div>
+            <PlanHeading class="plan__name">{plan.name}</PlanHeading>
+            <p class="plan__who t-s muted">{plan.who}</p>
+            <p class="plan__price">
+              <span class="price price--y">{plan.yearly}</span>
+              <span class="price price--m">{plan.monthly}</span>
+              {plan.unit && <span class="plan__unit t-s muted">{plan.unit}</span>}
+            </p>
+            <p class="plan__billed t-xs quiet">
+              <span class="price--y">{plan.billedYearly}</span>
+              <span class="price--m">{plan.billedMonthly}</span>
+            </p>
+            <p class="plan__founding t-xs" aria-hidden={plan.founding ? undefined : "true"}>{plan.founding}</p>
+            <ul class="plan__features t-s">
+              {plan.features.map((f) => (
+                <li>{f}</li>
+              ))}
+            </ul>
+            <Btn
+              variant={plan.pick ? "primary" : "ghost"}
+              class="plan__cta"
+              data-wl-open="nav"
+            >
+              {waitlist.button}<span class="sr-only">{` for ${plan.name}`}</span>
+            </Btn>
+          </li>
+        ))
+      }
+    </ul>
+    <p class="plans__fine t-xs quiet">{pricing.fine}</p>
+  </div>
+</section>
+
+<style>
+  .plans {
+    padding: calc(var(--u) * 16) 0 calc(var(--u) * 6);
+  }
+  .plans__head {
+    align-items: end;
+    row-gap: 1.5rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  .plans__title {
+    grid-column: 1 / span 7;
+    margin-left: -0.04em;
+  }
+  .plans__side {
+    grid-column: 9 / span 4;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .bill {
+    display: inline-flex;
+    justify-self: start;
+    padding: 0.25rem;
+    margin: 0;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-md);
+  }
+  .bill__opt {
+    position: relative;
+    cursor: pointer;
+  }
+  .bill__opt input {
+    position: absolute;
+    inset: 0;
+    appearance: none;
+    margin: 0;
+    border: 0;
+    background: none;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .bill__opt input:focus-visible {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 2px;
+  }
+  .bill__opt span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    height: 2rem;
+    padding: 0 0.875rem;
+    border-radius: var(--r-sm);
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    transition:
+      background-color 0.25s var(--ease),
+      color 0.25s var(--ease);
+  }
+  .bill__opt em {
+    font-style: normal;
+    color: var(--c-subtle);
+    font-weight: var(--w-small);
+  }
+  .bill__opt input:checked + span {
+    background: var(--c-hover);
+    color: var(--c-fg);
+  }
+
+
+  .plans__grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .plan {
+    display: flex;
+    flex-direction: column;
+    padding: 2rem var(--gutter) 2rem 0;
+  }
+  .plan + .plan {
+    padding-left: var(--gutter);
+    border-left: 1px solid var(--c-line);
+  }
+  .plan--pick {
+    box-shadow: inset 0 2px 0 var(--c-fg);
+  }
+  .plan__glyph {
+    height: 3.25rem;
+    margin-bottom: 1.5rem;
+  }
+  .plan__glyph :global(.chain) {
+    width: auto;
+    height: 100%;
+  }
+  .plan__name {
+    font-size: var(--t-m);
+    font-weight: var(--w-display);
+    letter-spacing: var(--tr-m);
+  }
+  .plan__who {
+    margin-top: 0.25rem;
+    min-height: 3em;
+  }
+  .plan__price {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    margin-top: 1rem;
+  }
+  .price {
+    font-size: var(--t-xl);
+    line-height: 1;
+    letter-spacing: var(--tr-xl);
+    font-weight: var(--w-display);
+  }
+  .plan__billed {
+    margin-top: 0.625rem;
+  }
+  .plan__founding {
+    margin-top: 0.375rem;
+    color: var(--c-fg);
+  }
+  /* The shared row is as tall as the longest list: the shorter lists keep their own step at the
+     top instead of spreading their items over it. */
+  .plan__features {
+    display: grid;
+    align-content: start;
+    gap: 0.625rem;
+    margin: 1.5rem 0 2rem;
+    color: var(--c-muted);
+  }
+  .plan__features li {
+    padding-left: 1rem;
+    position: relative;
+  }
+  .plan__features li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background: var(--c-quiet);
+  }
+  .plan :global(.plan__cta) {
+    margin-top: auto;
+    align-self: flex-start;
+  }
+  /* Side by side, the plans share their rows (glyph, name, who, price, billing, founding price,
+     features, button), so every list and every button starts on one line. */
+  @media (min-width: 621px) {
+    .plan {
+      display: grid;
+      grid-row: span 8;
+      grid-template-rows: subgrid;
+      row-gap: 0;
+    }
+    .plan :global(.plan__cta) {
+      align-self: start;
+      justify-self: start;
+    }
+  }
+  .plans__fine {
+    margin-top: 1.5rem;
+  }
+
+  /* The billing switch, without JS. */
+  .price--m {
+    display: none;
+  }
+  .plans:has(input[value="monthly"]:checked) .price--m {
+    display: inline;
+  }
+  .plans:has(input[value="monthly"]:checked) .price--y {
+    display: none;
+  }
+
+  @media (max-width: 1100px) {
+    .plans__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .plan:nth-child(3) {
+      padding-left: 0;
+      border-left: 0;
+    }
+    .plan:nth-child(n + 3) {
+      border-top: 1px solid var(--c-line);
+    }
+  }
+  @media (max-width: 900px) {
+    .plans__title,
+    .plans__side {
+      grid-column: 1 / -1;
+    }
+  }
+  @media (max-width: 620px) {
+    .plans__grid {
+      grid-template-columns: 1fr;
+    }
+    .plan,
+    .plan + .plan {
+      padding-left: 0;
+      padding-right: 0;
+      border-left: 0;
+    }
+    .plan + .plan {
+      border-top: 1px solid var(--c-line);
+    }
+    .plan__who {
+      min-height: 0;
+    }
+    .plan__founding:empty {
+      display: none;
+    }
+  }
+</style>

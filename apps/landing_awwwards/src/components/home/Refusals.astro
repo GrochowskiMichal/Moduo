@@ -1,0 +1,86 @@
+---
+// What we won't build: a sticky title on the left, the refusals passing on the right. Each one
+// is struck through by a stroke, and what we do instead sits under it.
+import { refusals } from "../../data/site";
+---
+
+<section class="nope" aria-labelledby="nope-title">
+  <div class="wrap grid">
+    <div class="nope__side">
+      <h2 class="nope__title t-xl" id="nope-title" data-split>{refusals.title}</h2>
+      <p class="nope__text muted" data-reveal>{refusals.text}</p>
+    </div>
+    <ol class="nope__list">
+      {
+        refusals.items.map((item) => (
+          <li class="nope__item" data-reveal>
+            <p class="nope__no t-l">
+              <span class="sr-only">We won’t build: </span>
+              <s>{item.no}</s>
+            </p>
+            <p class="nope__instead">
+              <span class="sr-only">Instead: </span>
+              {item.instead}
+            </p>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .nope {
+    padding: calc(var(--u) * 6) 0;
+  }
+  .nope__side {
+    grid-column: 1 / span 4;
+    align-self: start;
+    position: sticky;
+    top: calc(var(--nav-h) + 2rem);
+    display: grid;
+    gap: 1.25rem;
+  }
+  .nope__title {
+    margin-left: -0.04em;
+  }
+  /* The side's words keep clear of the list on line 5. */
+  .nope__text {
+    max-width: 24ch;
+  }
+  .nope__list {
+    grid-column: 5 / span 8;
+    display: grid;
+    gap: calc(var(--u) * 8);
+    padding-top: 0.5rem;
+  }
+  .nope__item {
+    display: grid;
+    gap: 0.875rem;
+  }
+  .nope__no {
+    font-weight: var(--w-text);
+    color: var(--c-quiet);
+  }
+  .nope__no s {
+    text-decoration: line-through;
+    text-decoration-thickness: 0.06em;
+    text-decoration-color: var(--c-fg);
+  }
+  .nope__instead {
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    max-width: 30rem;
+  }
+  @media (max-width: 900px) {
+    .nope__side {
+      position: static;
+      grid-column: 1 / -1;
+    }
+    .nope__list {
+      grid-column: 1 / -1;
+      margin-top: calc(var(--u) * 6);
+    }
+  }
+</style>

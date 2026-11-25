@@ -1,0 +1,108 @@
+---
+// Text to copy: a snippet, a URL, a config file. Set in Geist Mono (the site keeps mono for text
+// copied into a terminal or a config), with a Copy button that confirms in place
+// (motion/copy.ts). Without JS the button stays hidden and the text is selectable.
+interface Props {
+  /** What it is, shown above it ("claude_desktop_config.json", "Connector URL"). */
+  label: string;
+  code: string;
+  /** One line that reads as a field (a URL) instead of a block. */
+  inline?: boolean;
+  class?: string;
+}
+const { label, code, inline = false, class: className } = Astro.props;
+---
+
+<figure class:list={["code", inline && "code--inline", className]}>
+  <figcaption class="code__bar">
+    <span class="code__label">{label}</span>
+    <button class="code__copy" type="button" data-copy hidden>
+      <span class="code__copy-t" data-copy-label>Copy</span>
+      <span class="sr-only" aria-live="polite" data-copy-status></span>
+    </button>
+  </figcaption>
+  <pre class="code__pre" tabindex="0"><code data-copy-source>{code}</code></pre>
+</figure>
+
+<style>
+  .code {
+    display: grid;
+    border-radius: var(--r-lg);
+    border: 1px solid var(--c-line-strong);
+    background: var(--c-card);
+    overflow: hidden;
+    min-width: 0;
+  }
+  .code__bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 2.75rem;
+    padding: 0 0.5rem 0 1rem;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .code__label {
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    letter-spacing: var(--tr-xs);
+    color: var(--c-quiet);
+  }
+  .code__copy {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.75rem;
+    border-radius: var(--r-md);
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-muted);
+    transition:
+      background-color var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease);
+  }
+  :global(html.js) .code__copy[hidden] {
+    display: inline-flex;
+  }
+  @media (hover: hover) {
+    .code__copy:hover {
+      background: var(--c-hover);
+      color: var(--c-fg);
+    }
+  }
+  .code__copy:global(.is-copied) {
+    color: var(--c-fg);
+  }
+  .code__pre {
+    margin: 0;
+    padding: 1rem 1.125rem 1.125rem;
+    overflow-x: auto;
+    font-family: var(--f-mono);
+    font-size: 0.8125rem;
+    line-height: 1.65;
+    color: var(--c-fg);
+    tab-size: 2;
+  }
+  /* Long reading styles inline code as a chip; a snippet's own lines stay plain. */
+  .code .code__pre code {
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+  }
+  .code__pre:focus-visible {
+    outline-offset: -2px;
+  }
+  .code--inline .code__pre {
+    white-space: nowrap;
+  }
+  /* A phone wraps long lines instead of hiding their ends past the edge. */
+  @media (max-width: 600px) {
+    .code__pre,
+    .code--inline .code__pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+</style>

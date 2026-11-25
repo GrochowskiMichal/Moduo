@@ -1,0 +1,397 @@
+---
+// What keeps your work where it is: eight clauses in the ledger family (square cells on hairlines,
+// like a contract's), each with a small figure of the thing itself, drawn in hairlines and dots,
+// Paper and grey (brand §12). The figures are still: they show the result, not a performance.
+import StrokePair from "../StrokePair.astro";
+import { STROKE, STROKE_PATH } from "../../lib/stroke";
+import { security } from "../../data/pages/security";
+
+const c = security.controls;
+const strokeVb = `0 ${STROKE.top} ${STROKE.w} ${STROKE.bottom - STROKE.top}`;
+// The access matrix: 9 kinds of people across, 11 tables down. A fixed pattern of allowed (filled)
+// and refused (open) cells; the lit column is one person checked against every table.
+const allowed = (r: number, col: number) => (r * 7 + col * 3 + ((r * col) % 5)) % 4 !== 0;
+---
+
+<div class="sctl">
+  {
+    c.items.map((item) => (
+      <article class="sctl__cell" aria-labelledby={`sctl-${item.id}`}>
+        <div class="sctl__fig" aria-hidden="true">
+          {item.id === "code" && (
+            <div class="f-code">
+              <span class="f-code__field">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <i class:list={["f-code__slot", i < 4 && "is-in"]} />
+                ))}
+                <span class="f-code__caret" />
+              </span>
+              <span class="f-code__time">
+                <span class="f-code__bar">
+                  <i />
+                </span>
+                <span class="f-t">10:00</span>
+              </span>
+            </div>
+          )}
+          {item.id === "rows" && (
+            <div class="f-rows">
+              <svg viewBox="0 0 92 112">
+                <rect class="f-rows__col" x="34.5" y="-1" width="11" height="114" rx="3" />
+                {Array.from({ length: 11 }, (_, r) =>
+                  Array.from({ length: 9 }, (_, col) => (
+                    <circle
+                      class:list={["f-rows__dot", allowed(r, col) ? "is-yes" : "is-no", col === 4 && "is-lit"]}
+                      cx={col * 10 + 5}
+                      cy={r * 10 + 6}
+                      r="1.9"
+                    />
+                  )),
+                )}
+              </svg>
+              <span class="f-t">9 kinds of people
+                <br />11 tables</span>
+            </div>
+          )}
+          {item.id === "keychain" && (
+            <ul class="f-keys">
+              {["Mail password", "Mail sign-in token", "Moduo session"].map((k) => (
+                <li>
+                  <svg viewBox="0 0 12 14">
+                    <path d="M3.5 6V4.2a2.5 2.5 0 0 1 5 0V6" />
+                    <rect x="1.5" y="6" width="9" height="6.5" rx="1.5" />
+                  </svg>
+                  <span class="f-t">{k}</span>
+                  <span class="f-keys__dots">••••••••</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {item.id === "sealed" && (
+            <div class="f-seal">
+              <span class="f-seal__row">
+                <span class="f-t">Token</span>
+                <code>a0Af·C7kQ·e2Lw…</code>
+              </span>
+              <span class="f-seal__rule" />
+              <span class="f-seal__row">
+                <span class="f-t">Stored</span>
+                <code class="is-seal">9f2c e1b0 77ad 0c3e 5a18…</code>
+              </span>
+              <span class="f-t f-seal__by">AES-256-GCM, a key for each person</span>
+            </div>
+          )}
+          {item.id === "hash" && (
+            <div class="f-seal">
+              <span class="f-seal__row">
+                <span class="f-t">You see once</span>
+                <code>moduo_sk_7c1e04a9…</code>
+              </span>
+              <span class="f-seal__rule" />
+              <span class="f-seal__row">
+                <span class="f-t">We keep</span>
+                <code class="is-seal">sha256 4b9f…e01a</code>
+              </span>
+            </div>
+          )}
+          {item.id === "signed" && (
+            <div class="f-signed">
+              <svg class="f-signed__s" viewBox={strokeVb}>
+                <path d={STROKE_PATH} />
+              </svg>
+              <span class="f-signed__t">
+                <span class="f-t">Developer ID</span>
+                <span class="f-t">Notarized by Apple</span>
+                <span class="f-t">Updates signed</span>
+              </span>
+            </div>
+          )}
+          {item.id === "two" && (
+            <div class="f-two">
+              <StrokePair size="2.1rem" data-join />
+            </div>
+          )}
+          {item.id === "review" && (
+            <div class="f-review">
+              <code class="f-review__l">
+                <span class="f-review__n">12</span> const key = <span class="f-review__hit">"moduo_sk_9d2f…"</span>
+              </code>
+              <span class="f-t f-review__say">Secret found. The check fails.</span>
+            </div>
+          )}
+        </div>
+        <h3 class="sctl__title" id={`sctl-${item.id}`}>
+          {item.title}
+        </h3>
+        <p class="sctl__text">{item.text}</p>
+      </article>
+    ))
+  }
+</div>
+
+<style>
+  .sctl {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--c-line-strong);
+    box-shadow: 0 0 0 1px var(--c-line-strong);
+  }
+  .sctl__cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.625rem;
+    min-width: 0;
+    padding: clamp(1.25rem, 2.2vw, 2rem);
+    background: var(--c-bg);
+  }
+  .sctl__fig {
+    display: flex;
+    align-items: center;
+    height: 7rem;
+    margin-bottom: 1.25rem;
+    color: var(--c-muted);
+  }
+  .sctl__title {
+    font-size: clamp(1.125rem, 1rem + 0.4vw, 1.375rem);
+    font-weight: var(--w-display);
+    letter-spacing: var(--tr-l);
+    line-height: 1.2;
+  }
+  .sctl__text {
+    color: var(--c-muted);
+    font-size: var(--t-s);
+    font-weight: var(--w-small);
+    line-height: 1.55;
+  }
+
+  /* Figure parts. Labels are small and quiet; code is Geist Mono, as text from a terminal is. */
+  .f-t {
+    font-size: var(--t-xs);
+    font-weight: var(--w-small);
+    letter-spacing: var(--tr-xs);
+    line-height: 1.4;
+    color: var(--c-quiet);
+  }
+  .sctl code {
+    font-family: var(--f-mono);
+    font-size: 0.75rem;
+    color: var(--c-muted);
+    white-space: nowrap;
+  }
+
+  .f-code {
+    display: grid;
+    gap: 0.75rem;
+  }
+  .f-code__field {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    height: 2.75rem;
+    padding: 0 0.75rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-md);
+    background: var(--c-raised);
+  }
+  .f-code__slot {
+    width: 0.875rem;
+    height: 1px;
+    margin-top: 0.9rem;
+    background: var(--c-dim);
+  }
+  .f-code__slot.is-in {
+    height: 0.4rem;
+    width: 0.4rem;
+    margin: 0 0.24rem;
+    border-radius: 50%;
+    background: var(--c-fg);
+  }
+  .f-code__caret {
+    width: 1px;
+    height: 1.1rem;
+    margin-left: -0.15rem;
+    background: var(--c-fg);
+  }
+  .f-code__time {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+  }
+  .f-code__bar {
+    position: relative;
+    width: 7rem;
+    height: 1px;
+    background: var(--c-line-strong);
+  }
+  .f-code__bar i {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 100%;
+    background: var(--c-fg);
+  }
+
+  .f-rows {
+    display: flex;
+    align-items: flex-end;
+    gap: 1rem;
+    height: 100%;
+  }
+  .f-rows svg {
+    height: 100%;
+    width: auto;
+    overflow: visible;
+  }
+  .f-rows__dot.is-yes {
+    fill: var(--c-dim);
+  }
+  .f-rows__dot.is-no {
+    fill: none;
+    stroke: var(--c-dim);
+    stroke-width: 0.8;
+  }
+  .f-rows__dot.is-lit.is-yes {
+    fill: var(--c-fg);
+  }
+  .f-rows__dot.is-lit.is-no {
+    stroke: var(--c-fg);
+  }
+  .f-rows__col {
+    fill: none;
+    stroke: var(--c-line-strong);
+    stroke-width: 0.8;
+  }
+
+  .f-keys {
+    display: grid;
+    width: 100%;
+    max-width: 15rem;
+  }
+  .f-keys li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.625rem;
+    height: 2.125rem;
+    border-bottom: 1px solid var(--c-line);
+  }
+  .f-keys li:first-child {
+    border-top: 1px solid var(--c-line);
+  }
+  .f-keys svg {
+    width: 0.75rem;
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1.1;
+  }
+  .f-keys__dots {
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    color: var(--c-dim);
+  }
+
+  .f-seal {
+    display: grid;
+    gap: 0.5rem;
+    width: 100%;
+  }
+  .f-seal__row {
+    display: grid;
+    grid-template-columns: 4.75rem minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.5rem;
+  }
+  .f-seal__row code {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .f-seal__row:first-child code {
+    color: var(--c-quiet);
+  }
+  .sctl code.is-seal {
+    color: var(--c-fg);
+  }
+  .f-seal__rule {
+    height: 1px;
+    margin-left: 5.25rem;
+    background: linear-gradient(90deg, var(--c-line-strong) 50%, transparent 0) 0 0 / 6px 1px;
+  }
+  .f-seal__by {
+    margin-left: 5.25rem;
+  }
+
+  .f-signed {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    height: 100%;
+  }
+  .f-signed__s {
+    height: 82%;
+    width: auto;
+    fill: none;
+    stroke: var(--c-fg);
+    stroke-width: 9;
+    overflow: visible;
+  }
+  .f-signed__t {
+    display: grid;
+    gap: 0.375rem;
+  }
+  .f-signed__t .f-t {
+    position: relative;
+    padding-left: 1.125rem;
+  }
+  .f-signed__t .f-t::before {
+    content: "";
+    position: absolute;
+    left: 0.125rem;
+    top: 0.3em;
+    width: 0.5rem;
+    height: 0.28rem;
+    border: solid var(--c-fg);
+    border-width: 0 0 1.2px 1.2px;
+    rotate: -45deg;
+  }
+
+  .f-two {
+    color: var(--c-fg);
+  }
+
+  .f-review {
+    display: grid;
+    gap: 0.75rem;
+    width: 100%;
+  }
+  .f-review__l {
+    display: block;
+    padding: 0.625rem 0.75rem;
+    border: 1px solid var(--c-line-strong);
+    border-radius: var(--r-md);
+    background: var(--c-raised);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .f-review__n {
+    margin-right: 0.625rem;
+    color: var(--c-subtle);
+  }
+  .f-review__hit {
+    color: var(--c-fg);
+    box-shadow: 0 1px 0 var(--c-fg);
+  }
+
+  @media (max-width: 1199px) {
+    .sctl {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 600px) {
+    .sctl {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .sctl__fig {
+      height: 6rem;
+    }
+  }
+</style>

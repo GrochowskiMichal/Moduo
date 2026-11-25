@@ -1,0 +1,120 @@
+---
+// Two strokes that don't touch: nothing opens between them, so nothing links here. Point at the
+// way home and they close until a window opens (motion/notfound.ts).
+import Chain from "../components/Chain.astro";
+import { modulesIndex, notFound } from "../data/site";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Page not found" description="This page doesn’t exist, or it moved. Head back to Moduo’s home page or open one of the modules." noindex>
+  <section class="lost" data-lost aria-labelledby="lost-title">
+    <div class="wrap grid">
+      <div class="lost__fig" aria-hidden="true">
+        <Chain id="lost" n={2} gaps={1.9} pad={40} viewBox="-10 200 760 600" />
+      </div>
+      <div class="lost__copy">
+        <p class="lost__code t-xs quiet tabular">404</p>
+        <h1 class="lost__title t-xl" id="lost-title" data-split data-intro>{notFound.title}</h1>
+        <p class="lost__text t-m muted">{notFound.text}</p>
+        <a class="lost__home go" href="/" data-lost-link data-reveal data-intro data-delay="0.3">
+          {notFound.home}
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M3 8h9.5M8.5 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5"></path>
+          </svg>
+        </a>
+        <ul class="lost__mods" aria-label="Modules and help">
+          {
+            modulesIndex.map((m) => (
+              <li>
+                <a class="ulink t-s" href={`/${m.slug}`}>
+                  {m.name}
+                </a>
+              </li>
+            ))
+          }
+          <li>
+            <a class="ulink t-s" href="/help">Help center</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .lost {
+    min-height: 100svh;
+    display: grid;
+    align-items: center;
+    padding: calc(var(--nav-h) + 2rem) 0 4rem;
+  }
+  .lost .grid {
+    align-items: center;
+    row-gap: 2rem;
+  }
+  .lost__fig {
+    grid-column: 1 / span 7;
+  }
+  .lost__copy {
+    grid-column: 9 / span 4;
+    display: grid;
+    gap: 1.25rem;
+    align-content: start;
+  }
+  .lost__title {
+    margin-left: -0.04em;
+  }
+  .lost__home {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    justify-self: start;
+    font-size: var(--t-m);
+    font-weight: var(--w-ui);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.25em;
+    text-decoration-color: var(--c-quiet);
+    transition:
+      text-decoration-color var(--d-hover) var(--ease),
+      translate var(--d-hover) var(--ease);
+  }
+  .lost__home svg {
+    transition: translate var(--d-hover) var(--ease);
+  }
+  @media (hover: hover) {
+    .lost__home:hover {
+      text-decoration-color: var(--c-fg);
+    }
+    .lost__home:hover svg {
+      translate: 4px 0;
+    }
+  }
+  .lost__mods {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    margin-top: 1rem;
+  }
+  .lost__mods a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    transition:
+      color var(--d-hover) var(--ease),
+      translate var(--d-hover) var(--ease);
+  }
+  @media (hover: hover) {
+    .lost__mods a:hover {
+      translate: 0 -2px;
+    }
+  }
+  @media (max-width: 900px) {
+    .lost__fig {
+      grid-column: 2 / span 10;
+    }
+    .lost__copy {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

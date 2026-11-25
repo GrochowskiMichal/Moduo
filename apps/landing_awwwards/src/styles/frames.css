@@ -1,0 +1,908 @@
+/* Product pictures: the app as it is, redrawn in HTML. Geist (the app's own face), the app's
+   tokens, its chrome (mark, workspace, module tabs with their Lucide icons, the bottom bar) and
+   each module's real anatomy, measured in the app's code and screens (latest `mike`,
+   2026-10-27; sizes are the "comfortable" density). Polished a step past the app: a glass
+   hairline round the window, a lip of light along the top of the window and of every panel.
+   Everything is in em so a frame scales with its container: 1em is 14 px, the app's body size,
+   when the frame is 1040 px wide (the app's narrowest window). */
+
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/geist-100_900-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/geist-100_900-normal-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+.ap {
+  /* The app's dark tokens (apps/app/src/styles/tokens.css), as sRGB. */
+  --ap-bg: #000000;
+  --ap-card: #090909; /* neutral-900: panels */
+  --ap-muted-bg: #121212; /* neutral-850: muted, inputs, popovers */
+  --ap-line: #1b1b1b; /* neutral-800: border */
+  --ap-line-strong: #333333; /* neutral-700 */
+  --ap-fg: #fafafa; /* neutral-50 */
+  --ap-muted: #a4a4a4; /* neutral-400: muted-foreground */
+  --ap-subtle: #8f8f8f; /* subtle-foreground: muted at 86% */
+  --ap-primary: #eeeeee; /* mono-base */
+  --ap-primary-fg: #030303;
+  /* State fills: translucent foreground, as the app lays them on any surface. */
+  --ap-hover: rgb(250 250 250 / 0.05);
+  --ap-active: rgb(250 250 250 / 0.09);
+  --ap-raised: rgb(250 250 250 / 0.14);
+  --ap-hairline: rgb(250 250 250 / 0.1);
+  --ap-chip: rgb(250 250 250 / 0.07);
+  --ap-sel: rgb(238 238 238 / 0.13);
+  --ap-sel-edge: rgb(238 238 238 / 0.32);
+  /* Label hues (tags, projects, people). */
+  --ap-blue: #0099f7;
+  --ap-green: #3fc168;
+  --ap-amber: #f9ad26;
+  --ap-pink: #f862b3;
+  --ap-violet: #9e71fd;
+  --ap-teal: #00bcc5;
+  --ap-success: #3fc168;
+  container-type: inline-size;
+  width: 100%;
+  font-family: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+}
+/* One place (the type page) shows the app set in Oudom instead: the picture is its specimen. */
+.ap--specimen {
+  font-family: var(--f-sans);
+}
+
+.ap__win {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  font-size: 1.346cqw;
+  border-radius: 1.143em;
+  background: var(--ap-bg);
+  color: var(--ap-fg);
+  overflow: hidden;
+  line-height: 1.4;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-feature-settings: normal;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  /* A glass hairline and a lip of light along the top edge: the window as an object. */
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.09),
+    inset 0 1px 0 rgb(255 255 255 / 0.08);
+}
+.ap--shadow .ap__win {
+  box-shadow:
+    0 0 0 1px rgb(255 255 255 / 0.09),
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 2.5em 6em -1.5em rgb(0 0 0 / 0.9),
+    0 0 8em -2em rgb(255 255 255 / 0.05);
+}
+/* The faintest light falls from above the bar, as on a screen in a dark room. */
+.ap__win::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 14em;
+  background: radial-gradient(60% 100% at 50% 0%, rgb(255 255 255 / 0.035), transparent 70%);
+  pointer-events: none;
+}
+
+/* Icons: 16 px by default (nav rows, bars), 14 px in buttons, tabs and chips, 12 px in meta. */
+.ap-i {
+  flex: none;
+  width: 1.143em;
+  height: 1.143em;
+}
+.ap-i--sm {
+  width: 1em;
+  height: 1em;
+}
+.ap-i--xs {
+  width: 0.857em;
+  height: 0.857em;
+}
+
+/* ── Chrome: the top bar (48 px) ──────────────────────────────────────────────────── */
+.ap__bar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 3.429em;
+  padding: 0 1.429em;
+}
+.ap__lead {
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+  min-width: 0;
+}
+.ap__mark {
+  flex: none;
+  width: 2.286em;
+  height: 1.25em;
+}
+.ap__ws {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.429em;
+  height: 2.286em;
+  padding: 0 0.571em;
+  border-radius: 0.571em;
+  font-size: 0.929em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap__ws-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 2.154em;
+  height: 2.154em;
+  border-radius: 0.615em;
+  border: 1px solid var(--ap-line);
+  background: var(--ap-muted-bg);
+  color: var(--ap-muted);
+  font-size: 0.923em;
+  font-weight: 500;
+}
+.ap__ws .ap-i {
+  width: 1.231em;
+  height: 1.231em;
+  color: var(--ap-muted);
+}
+.ap__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+}
+.ap__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.571em;
+  height: 2.286em;
+  padding: 0 0.857em;
+  border-radius: 0.571em;
+  color: var(--ap-muted);
+  font-size: 0.929em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap__tab .ap-i {
+  width: 1.077em;
+  height: 1.077em;
+}
+.ap__tab.is-on {
+  background: var(--ap-active);
+  color: var(--ap-fg);
+}
+.ap__end {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+  color: var(--ap-muted);
+}
+.ap__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 2.286em;
+  height: 2.286em;
+  border-radius: 0.571em;
+}
+.ap__btn .ap-i {
+  width: 1em;
+  height: 1em;
+}
+.ap__me {
+  display: inline-grid;
+  place-items: center;
+  width: 2.286em;
+  height: 2.286em;
+  margin-left: 0.286em;
+  border-radius: 50%;
+  border: 1px solid var(--ap-line);
+  background: var(--ap-muted-bg);
+  color: var(--ap-muted);
+  font-size: 0.857em;
+  font-weight: 500;
+}
+/* A running focus session sits in the bar, before help. */
+.ap__timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  height: 1.857em;
+  margin-right: 0.286em;
+  padding: 0 0.643em;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--ap-hairline);
+  color: var(--ap-fg);
+  font-size: 0.857em;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.ap__timer::before {
+  content: "";
+  width: 0.45em;
+  height: 0.45em;
+  border-radius: 50%;
+  background: var(--ap-fg);
+}
+
+/* ── Chrome: the panels (16 px apart from the edges, 8 px from each other) ───────────── */
+.ap__body {
+  position: relative;
+  display: flex;
+  gap: 0.571em;
+  padding: 0 1.143em;
+  min-height: 0;
+}
+.ap-panel {
+  position: relative;
+  min-width: 0;
+  border-radius: 1.143em;
+  background: var(--ap-card);
+  border: 1px solid var(--ap-line);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+  padding: 0.571em;
+  overflow: hidden;
+}
+.ap-panel--side {
+  flex: 0 0 17.143em;
+}
+.ap-panel--main {
+  flex: 1;
+  padding: 0.857em 1.143em 1.143em;
+}
+.ap-panel--right {
+  flex: 0 0 20em;
+}
+/* The right panel's title row: "Details ▾" when it has more than one view. */
+.ap-rtitle {
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+  min-height: 2.571em;
+}
+.ap-rtitle .ap-btn {
+  margin-right: auto;
+}
+.ap-rbody {
+  padding: 0 0.286em;
+}
+
+/* ── Chrome: the bottom bar (48 px) ──────────────────────────────────────────────── */
+.ap__foot {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 3.429em;
+  padding: 0 1.143em;
+  color: var(--ap-muted);
+}
+.ap__foot > .ap__btn:last-child {
+  justify-self: end;
+}
+.ap__foot .ap__btn .ap-i {
+  width: 1.143em;
+  height: 1.143em;
+}
+/* Home's page dots: the current page a short bar, the others dots. */
+.ap__dots {
+  display: flex;
+  align-items: center;
+  gap: 0.429em;
+}
+.ap__dots i {
+  width: 0.429em;
+  height: 0.429em;
+  border-radius: 999px;
+  background: rgb(164 164 164 / 0.4);
+}
+.ap__dots i.is-on {
+  width: 1.143em;
+  background: var(--ap-fg);
+}
+.ap-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.571em;
+}
+/* The mode row: what the keys do for what is selected. */
+.ap-hints {
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+  white-space: nowrap;
+}
+.ap-hints > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.429em;
+  height: 1.857em;
+  padding: 0 0.714em;
+  border-radius: 0.571em;
+  color: var(--ap-fg);
+  font-weight: 500;
+}
+.ap-hints > i {
+  color: var(--ap-subtle);
+  font-style: normal;
+}
+
+/* ── Type ─────────────────────────────────────────────────────────────────────────── */
+.ap-h1 {
+  font-size: 1.286em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+.ap-count {
+  margin-left: 0.5em;
+  color: var(--ap-muted);
+  font-size: 0.722em;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.ap-muted {
+  color: var(--ap-muted);
+}
+.ap-subtle {
+  color: var(--ap-subtle);
+}
+.ap-strong {
+  font-weight: 600;
+}
+.ap-med {
+  font-weight: 500;
+}
+.ap-sm {
+  font-size: 0.929em;
+}
+.ap-xs {
+  font-size: 0.857em;
+}
+.ap-2xs {
+  font-size: 0.786em;
+}
+.ap-meta {
+  flex: none;
+  color: var(--ap-muted);
+  font-size: 0.857em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.ap-ell {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Section headers: sentence case with a fold after the label ("Pinned ⌄"), and the one
+   uppercase style, the eyebrow ("ACCOUNTS"). */
+.ap-sec {
+  display: flex;
+  align-items: center;
+  gap: 0.308em;
+  height: 2.154em;
+  margin-top: 0.615em;
+  padding-left: 0.615em;
+  padding-right: 0.462em;
+  color: var(--ap-muted);
+  font-size: 0.929em;
+  font-weight: 500;
+}
+.ap-sec .ap-i {
+  width: 0.923em;
+  height: 0.923em;
+}
+.ap-sec .ap-meta {
+  margin-left: auto;
+  font-size: 0.923em;
+}
+.ap-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.545em;
+  color: var(--ap-muted);
+  font-size: 0.786em;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+}
+.ap-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.636em;
+  height: 1.636em;
+  padding: 0 0.4em;
+  border-radius: 0.545em;
+  background: var(--ap-active);
+  color: var(--ap-fg);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.ap-rule {
+  height: 1px;
+  margin: 0.429em 0.571em;
+  background: var(--ap-hairline);
+}
+
+/* ── Rows ─────────────────────────────────────────────────────────────────────────── */
+/* Sidebar rows (NavRow): 36 px, muted until current. */
+.ap-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.714em;
+  height: 2.571em;
+  padding: 0 0.429em 0 0.571em;
+  border-radius: 0.571em;
+  color: var(--ap-muted);
+  font-weight: 500;
+  min-width: 0;
+}
+.ap-nav + .ap-nav {
+  margin-top: 1px;
+}
+.ap-nav.is-on {
+  background: var(--ap-active);
+  color: var(--ap-fg);
+}
+.ap-nav.is-unread {
+  color: var(--ap-fg);
+  font-weight: 600;
+}
+.ap-nav .ap-meta {
+  margin-left: auto;
+  font-weight: 400;
+}
+.ap-nav-slot {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.143em;
+}
+/* List rows: 36 px, the title at 15 px; selected is a primary tint with a 1 px edge. */
+.ap-row {
+  display: flex;
+  align-items: center;
+  gap: 0.857em;
+  min-height: 2.571em;
+  padding: 0.143em 0.714em 0.143em 0.571em;
+  border-radius: 0.571em;
+  min-width: 0;
+}
+.ap-row.is-sel {
+  background: var(--ap-sel);
+  box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+}
+.ap-row-t {
+  font-size: 1.071em;
+  line-height: 1.35;
+}
+/* Group headers in a list: "⌄ Today · Fri, Oct 24 · 3". */
+.ap-group {
+  display: flex;
+  align-items: center;
+  gap: 0.462em;
+  height: 2.154em;
+  padding-left: 0.462em;
+  font-size: 0.929em;
+  font-weight: 500;
+}
+.ap-group .ap-i {
+  width: 0.923em;
+  height: 0.923em;
+  color: var(--ap-muted);
+}
+.ap-group .ap-meta {
+  color: var(--ap-subtle);
+  font-size: 0.923em;
+  font-weight: 400;
+}
+
+/* The task's circles: the status glyph in lists (14 px), the check toggle in details (16 px). */
+.ap-status {
+  flex: none;
+  width: 1em;
+  height: 1em;
+  margin: 0 0.071em;
+  border-radius: 50%;
+  border: 1.2px solid var(--ap-muted);
+}
+.ap-status.is-going {
+  background: linear-gradient(90deg, transparent 50%, var(--ap-muted) 50%);
+  background-clip: content-box;
+  padding: 0.12em;
+}
+.ap-check {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.143em;
+  height: 1.143em;
+  border-radius: 50%;
+  border: 1px solid rgb(164 164 164 / 0.5);
+}
+.ap-check.is-done {
+  border-color: var(--ap-primary);
+  background: var(--ap-primary);
+  color: var(--ap-primary-fg);
+}
+.ap-check.is-done::after {
+  content: "";
+  width: 0.45em;
+  height: 0.25em;
+  margin-top: -0.1em;
+  border: solid currentColor;
+  border-width: 0 0 2.5px 2.5px;
+  rotate: -45deg;
+}
+.ap-done-t {
+  color: var(--ap-muted);
+  text-decoration: line-through;
+}
+
+/* A project, an account or a calendar: a hue dot and, beside it, a quiet name. */
+.ap-dot {
+  flex: none;
+  width: 0.571em;
+  height: 0.571em;
+  border-radius: 50%;
+  background: var(--c, var(--ap-subtle));
+}
+.ap-dot--sm {
+  width: 0.429em;
+  height: 0.429em;
+}
+.ap-proj {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  color: var(--ap-muted);
+  font-size: 0.857em;
+  white-space: nowrap;
+}
+.ap-proj .ap-dot {
+  width: 0.5em;
+  height: 0.5em;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────────────── */
+.ap-head {
+  display: flex;
+  align-items: center;
+  gap: 0.286em;
+  min-height: 2.286em;
+  margin-bottom: 0.857em;
+}
+.ap-head .ap-h1 {
+  margin-right: auto;
+}
+.ap-vr {
+  width: 1px;
+  height: 1.143em;
+  margin: 0 0.286em;
+  background: var(--ap-hairline);
+}
+/* Buttons: sm 26 px, md 32 px; primary, secondary (9 % fill), outline, ghost. */
+.ap-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.429em;
+  height: 1.857em;
+  padding: 0 0.714em;
+  border-radius: 0.571em;
+  color: var(--ap-fg);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-btn .ap-i {
+  width: 1em;
+  height: 1em;
+}
+.ap-btn--primary {
+  background: var(--ap-primary);
+  color: var(--ap-primary-fg);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.6),
+    0 1px 2px rgb(0 0 0 / 0.4);
+}
+.ap-btn--secondary {
+  background: var(--ap-active);
+}
+.ap-btn--outline {
+  box-shadow: inset 0 0 0 1px var(--ap-hairline);
+}
+.ap-btn--ghost .ap-i {
+  color: var(--ap-muted);
+}
+.ap-btn--hover {
+  background: var(--ap-hover);
+}
+.ap-ico {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.857em;
+  height: 1.857em;
+  border-radius: 0.571em;
+  color: var(--ap-muted);
+}
+.ap-ico .ap-i {
+  width: 1em;
+  height: 1em;
+}
+.ap-seg {
+  display: inline-flex;
+  padding: 0.143em;
+  border-radius: 0.571em;
+  background: var(--ap-muted-bg);
+}
+.ap-seg > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.357em;
+  min-width: 1.714em;
+  height: 1.571em;
+  padding: 0 0.571em;
+  border-radius: 0.429em;
+  color: var(--ap-muted);
+  font-weight: 500;
+}
+.ap-seg > span .ap-i {
+  width: 1em;
+  height: 1em;
+}
+.ap-seg > span.is-on {
+  background: var(--ap-raised);
+  color: var(--ap-fg);
+}
+.ap-kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.636em;
+  height: 1.636em;
+  padding: 0 0.364em;
+  border-radius: 0.727em;
+  border: 1px solid var(--ap-line);
+  background: var(--ap-muted-bg);
+  color: var(--ap-muted);
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 0.786em;
+  font-weight: 400;
+  line-height: 1;
+}
+.ap-btn--primary .ap-kbd {
+  border-color: rgb(0 0 0 / 0.12);
+  background: rgb(0 0 0 / 0.07);
+  color: rgb(0 0 0 / 0.6);
+}
+.ap-field {
+  display: flex;
+  align-items: center;
+  gap: 0.571em;
+  height: 2.286em;
+  padding: 0 0.714em;
+  border-radius: 0.571em;
+  background: var(--ap-muted-bg);
+  color: var(--ap-muted);
+  font-size: 0.929em;
+}
+.ap-field .ap-i {
+  width: 0.923em;
+  height: 0.923em;
+}
+/* A tooltip, as the app floats one: the label and its key. */
+.ap-tip {
+  position: absolute;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2em;
+  padding: 0 0.571em;
+  border-radius: 0.571em;
+  background: var(--ap-muted-bg);
+  box-shadow:
+    inset 0 0 0 1px var(--ap-hairline),
+    0 0.571em 1.429em rgb(0 0 0 / 0.55);
+  color: var(--ap-fg);
+  font-size: 0.857em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-tip .ap-kbd {
+  background: transparent;
+  border: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+/* Chips: an entity reference (24 px, hairline ring), a tag (hue dot on a quiet fill). */
+.ap-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.308em;
+  height: 1.846em;
+  padding: 0 0.462em;
+  border-radius: 0.615em;
+  box-shadow: inset 0 0 0 1px var(--ap-hairline);
+  color: var(--ap-fg);
+  font-size: 0.929em;
+  font-weight: 500;
+  white-space: nowrap;
+  vertical-align: 0.05em;
+}
+.ap-ref .ap-i {
+  width: 1.077em;
+  height: 1.077em;
+  color: var(--ap-muted);
+}
+.ap-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  height: 1.571em;
+  padding: 0 0.5em 0 0.429em;
+  border-radius: 999px;
+  background: var(--ap-chip);
+  color: rgb(250 250 250 / 0.9);
+  font-size: 0.857em;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.ap-tag .ap-dot {
+  width: 0.5em;
+  height: 0.5em;
+}
+/* Avatars: hued for people in the stream and on tasks; neutral in the bar, the directory,
+   the contact page and the reader. */
+.ap-av {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.286em;
+  height: 2.286em;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--c, #6b6b6b) 48%, var(--ap-card));
+  color: var(--ap-fg);
+  font-size: 0.857em;
+  font-weight: 600;
+}
+.ap-av--n {
+  background: var(--ap-muted-bg);
+  color: var(--ap-muted);
+  font-weight: 500;
+}
+.ap-av--16 {
+  width: 1.778em;
+  height: 1.778em;
+  font-size: 0.643em;
+}
+.ap-av--24 {
+  width: 2.182em;
+  height: 2.182em;
+  font-size: 0.786em;
+}
+.ap-av--40 {
+  width: 3.077em;
+  height: 3.077em;
+  font-size: 0.929em;
+}
+
+/* Property rows: a 96 px label column, values as quiet buttons. */
+.ap-props {
+  display: grid;
+  grid-template-columns: 6.857em 1fr;
+  align-items: center;
+  row-gap: 1px;
+}
+.ap-props dt {
+  display: flex;
+  align-items: center;
+  gap: 0.462em;
+  color: var(--ap-muted);
+  font-size: 0.929em;
+}
+.ap-props dd {
+  display: flex;
+  align-items: center;
+  gap: 0.429em;
+  min-height: 2.143em;
+  margin: 0;
+  padding: 0 0.429em;
+  border-radius: 0.571em;
+  min-width: 0;
+  white-space: nowrap;
+}
+.ap-props dd .ap-i {
+  width: 1em;
+  height: 1em;
+  color: var(--ap-muted);
+}
+.ap-props .is-empty {
+  color: var(--ap-muted);
+}
+/* A count section of the details: "Linked 2", its plus on the right. */
+.ap-block {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  height: 2.286em;
+  font-size: 0.929em;
+  font-weight: 500;
+}
+.ap-block b {
+  color: var(--ap-muted);
+  font-weight: 400;
+}
+.ap-block .ap-i {
+  margin-left: auto;
+  width: 1.077em;
+  height: 1.077em;
+  color: var(--ap-muted);
+}
+
+.ap-note {
+  font-size: var(--t-xs);
+  color: var(--c-subtle);
+  margin-top: 0.875rem;
+}
+
+/* A text caret, where the picture is mid-sentence. */
+.ap-caret {
+  display: inline-block;
+  width: 1.5px;
+  height: 1.15em;
+  margin-left: 1px;
+  vertical-align: -0.2em;
+  background: var(--ap-fg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ap-caret {
+    animation: ap-blink 1.1s steps(1) infinite;
+  }
+}
+@keyframes ap-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Phones: the side panels go (the app makes them sheets below 900 px) and the type grows, so the
+   picture stays readable. */
+@container (max-width: 640px) {
+  :where(.ap:not(.ap--fixed)) .ap__win {
+    font-size: clamp(11px, 3.4cqw, 14px);
+  }
+  /* (Important: a module lays its own side panel out as a column, and that rule is scoped.) */
+  :where(.ap:not(.ap--fixed))
+    :is(.ap-panel--side, .ap-panel--right, .ap__tab:not(.is-on), .ap__ws, .ap__end > .ap__btn, .ap__foot) {
+    display: none !important;
+  }
+}

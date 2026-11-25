@@ -1,0 +1,224 @@
+---
+// The story's props, over the widgets in the board's own pixels: your cursor, the contact card
+// it opens on Maciej's name, the T key with its label, the task that flies from the inbox into
+// Today, and Maciej's cursor on the calendar. The driver (motion/dusk.ts) places and shows them;
+// here they are hidden, and opaque, so nothing under them shows through.
+import Icon from "../../frames/Icon.astro";
+---
+
+<div class="dk-prop dk-fly" data-prop="fly"><span class="ap-status"></span><span class="dk-fly-t">Review the alpha invite</span></div>
+<div class="dk-prop dk-keyset" data-prop="keyset"><span class="dk-key" data-prop="key">T</span><span class="dk-keylbl">Make task</span></div>
+<svg class="dk-prop dk-cur" data-prop="cur" viewBox="0 0 24 24"><path d="M5 2.5 19.5 13l-6.6 1.2L9.6 21z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"></path></svg>
+<div class="dk-prop dk-card" data-prop="card">
+  <p class="dk-lbl"><Icon name="contact" class="ap-i--xs" />Contact · matched from the email</p>
+  <div class="dk-who"><span class="ap-av ap-av--40" style="--c:var(--ap-violet)">MA</span><div class="dk-whob"><p class="dk-cname ap-ell">Maciej Grzywacz</p><p class="dk-crole ap-ell">Co-founder, design · Moduo</p></div></div>
+  <div class="dk-chips"><span class="ap-tag"><span class="ap-dot" style="--c:var(--ap-pink)"></span>Team</span><span class="ap-tag"><span class="ap-dot" style="--c:var(--ap-violet)"></span>Open alpha</span><span class="ap-ref"><Icon name="mail" />moduo.app</span></div>
+  <div class="dk-stats"><p class="dk-stat"><b data-n="48">48</b><span>emails</span></p><p class="dk-stat"><b data-n="9">9</b><span>calls</span></p><p class="dk-stat"><b data-n="12">12</b><span>notes</span></p></div>
+  <p class="dk-next"><Icon name="calendar" class="ap-i--sm" /><span class="ap-ell">Last call Nov 2 · Closed alpha go</span></p>
+  <div class="dk-acts"><span class="dk-act"><Icon name="mail" class="ap-i--sm" />Email</span><span class="dk-act"><Icon name="message-square" class="ap-i--sm" />Message</span><span class="dk-act"><Icon name="calendar-plus" class="ap-i--sm" />Offer times</span></div>
+</div>
+<div class="dk-prop dk-acur" data-prop="acur"><svg viewBox="0 0 24 24"><path d="M5 2.5 19.5 13l-6.6 1.2L9.6 21z" fill="#9e71fd" stroke="#fff" stroke-width="1.3" stroke-linejoin="round"></path></svg><span>Maciej</span></div>
+
+<style is:global>
+  .dk-prop {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 6;
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+  }
+  .dk-fly {
+    display: flex;
+    align-items: center;
+    gap: 0.65em;
+    height: var(--row);
+    padding: 0 0.8em;
+    border-radius: 0.7em;
+    background: rgb(40 36 54);
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.35),
+      0 1.4em 2.6em -0.6em rgb(0 0 0 / 0.8),
+      0 0 2.4em rgb(190 170 255 / 0.3);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .dk-fly .ap-status {
+    width: 1em;
+    height: 1em;
+  }
+  .dk-fly-t {
+    font-size: 0.93em;
+  }
+  .dk-keyset {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+  }
+  .dk-key {
+    display: grid;
+    place-items: center;
+    width: 2.6em;
+    height: 2.6em;
+    border-radius: 0.6em;
+    background: linear-gradient(180deg, #2c2c33, #1a1a20);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.18),
+      inset 0 -0.18em 0 rgb(0 0 0 / 0.5),
+      0 0.8em 1.6em -0.4em rgb(0 0 0 / 0.8);
+    font-weight: 600;
+    font-size: 1.05em;
+  }
+  .dk-keylbl {
+    padding: 0.4em 0.65em;
+    border-radius: 0.5em;
+    background: var(--ap-fg);
+    color: #050505;
+    font-size: 0.8em;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .dk-cur {
+    width: 1.5em;
+    height: 1.5em;
+    filter: drop-shadow(0 0.2em 0.35em rgb(0 0 0 / 0.6));
+  }
+  .dk-acur {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.1em;
+  }
+  .dk-acur svg {
+    width: 1.5em;
+    height: 1.5em;
+    filter: drop-shadow(0 0.2em 0.35em rgb(0 0 0 / 0.6));
+  }
+  .dk-acur span {
+    margin-top: 1.1em;
+    padding: 0.25em 0.55em;
+    border-radius: 0.45em;
+    background: var(--ap-violet);
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 0.4em 1em -0.3em rgb(0 0 0 / 0.6);
+  }
+
+  /* The contact card: opaque, over the inbox, its arrow on Maciej's name. */
+  .dk-card {
+    width: 24em;
+    padding: 1.2em;
+    border-radius: 1.15em;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9em;
+    background: linear-gradient(180deg, rgb(34 31 44), rgb(20 18 28));
+    box-shadow:
+      inset 0 0 0 1px rgb(255 255 255 / 0.16),
+      inset 0 1px 0 rgb(255 255 255 / 0.12),
+      0 2.4em 4.4em -1.2em rgb(0 0 0 / 0.9),
+      0 0 4em -1em rgb(170 140 255 / 0.3);
+    transform-origin: var(--arrow, 1.4em) -0.6em;
+  }
+  .dk-card::before {
+    content: "";
+    position: absolute;
+    left: var(--arrow, 1.6em);
+    top: -0.45em;
+    width: 0.9em;
+    height: 0.9em;
+    rotate: 45deg;
+    background: rgb(34 31 44);
+    box-shadow: -1px -1px 0 rgb(255 255 255 / 0.16);
+  }
+  .dk-lbl {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    color: var(--ap-subtle);
+    font-size: 0.74em;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .dk-who {
+    display: flex;
+    align-items: center;
+    gap: 0.85em;
+  }
+  .dk-whob {
+    flex: 1;
+    min-width: 0;
+  }
+  .dk-cname {
+    font-size: 1.15em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+  .dk-crole {
+    margin-top: 0.15em;
+    color: var(--ap-muted);
+    font-size: 0.84em;
+  }
+  .dk-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4em;
+  }
+  .dk-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5em;
+  }
+  .dk-stat {
+    padding: 0.55em 0.7em;
+    border-radius: 0.7em;
+    background: rgb(255 255 255 / 0.035);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+  }
+  .dk-stat b {
+    display: block;
+    font-size: 1.2em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .dk-stat span {
+    color: var(--ap-subtle);
+    font-size: 0.74em;
+  }
+  .dk-next {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    height: 2.5em;
+    padding: 0 0.75em;
+    border-radius: 0.7em;
+    background: rgb(255 255 255 / 0.04);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+    font-size: 0.84em;
+  }
+  .dk-next .ap-i {
+    flex: none;
+  }
+  .dk-acts {
+    display: flex;
+    gap: 0.45em;
+  }
+  .dk-act {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    height: 2.2em;
+    padding: 0 0.8em;
+    border-radius: 0.6em;
+    background: rgb(255 255 255 / 0.06);
+    font-size: 0.8em;
+    white-space: nowrap;
+  }
+  .dk-act .ap-i {
+    color: var(--ap-muted);
+  }
+</style>

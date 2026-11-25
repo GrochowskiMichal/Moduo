@@ -1,0 +1,232 @@
+---
+// Log in. One task, so no header or footer: the specimen on the left (components/login/
+// Specimen.astro), the app's own sign-in words on the right. The session lives on app.moduo.app
+// (the app never takes one from a URL, apps/app/src/lib/auth-url.ts), so the form hands the
+// address over there, where the code is sent; without script it is a plain GET to the same place.
+// A valid address squares the specimen up to face you (motion/pages/login.ts). The specimen is the
+// mark, so no lockup repeats it; the way home is the first link at the foot.
+import Btn from "../components/Btn.astro";
+import Icon from "../components/frames/Icon.astro";
+import Specimen from "../components/login/Specimen.astro";
+import { login, site, waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+---
+
+<Base title="Log in" description={login.description} bare>
+  <div class="li" data-pg="login">
+    <Specimen />
+
+    <div class="li__top">
+      <div class="li__ask">
+        <span class="li__ask-q t-xs">{login.ask}</span>
+        <Btn variant="ghost" size="sm" class="li__wl" data-wl-open="nav" aria-haspopup="dialog">
+          <span class="li__wl-join">{waitlist.button}</span>
+          <span class="li__wl-on"><span class="li__tick" aria-hidden="true"></span>{waitlist.onList}</span>
+        </Btn>
+      </div>
+    </div>
+
+    <section class="li__main" aria-labelledby="li-title">
+      <h1 class="li__title" id="li-title" data-split data-intro>{login.title}</h1>
+      <p class="li__sub">{login.sub}</p>
+      <form
+        class="li__form"
+        action={`${site.appUrl}/auth`}
+        method="get"
+        novalidate
+        data-li-form
+      >
+        <label class="li__label t-xs" for="li-email">{login.label}</label>
+        <div class="li__field">
+          <Icon name="mail" class="li__mail" />
+          <input
+            class="field li__input"
+            id="li-email"
+            type="email"
+            name="email"
+            autocomplete="email"
+            inputmode="email"
+            spellcheck="false"
+            enterkeyhint="go"
+            placeholder={login.placeholder}
+            aria-describedby="li-msg"
+            required
+          />
+        </div>
+        <Btn type="submit" class="li__btn" arrow>{login.button}</Btn>
+        <p class="li__msg t-xs" id="li-msg" aria-live="polite" data-note={login.note}>{login.note}</p>
+      </form>
+    </section>
+
+    <ul class="li__legal" aria-label="Legal and help">
+      {
+        login.legal.map((l) => (
+          <li>
+            <a class="ulink t-xs" href={l.href}>
+              {l.label}
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</Base>
+
+<style>
+  /* Two columns on a wide screen: the specimen holds the left, the task the right. */
+  .li {
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "spec top"
+      "spec main"
+      "spec legal";
+    column-gap: clamp(1.5rem, 4vw, 4rem);
+    min-height: 100svh;
+    padding: 0.75rem 0.75rem 0.75rem;
+  }
+  .li > :global(.spec) {
+    grid-area: spec;
+    min-height: max(34rem, calc(100svh - 1.5rem));
+  }
+  .li__top {
+    grid-area: top;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    min-height: 3.5rem;
+    padding-right: 0;
+  }
+  .li__ask {
+    display: flex;
+    align-items: center;
+    gap: 0.875rem;
+  }
+  .li__ask-q {
+    color: var(--c-quiet);
+  }
+  /* On the list: the question goes, the button says so with the tick, as in the header. */
+  .li__wl-on,
+  :global(html.wl-joined) :is(.li__wl-join, .li__ask-q) {
+    display: none;
+  }
+  :global(html.wl-joined) .li__wl-on {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .li__tick {
+    width: 0.5rem;
+    height: 0.75rem;
+    background: currentColor;
+    clip-path: polygon(0 45%, 100% 0, 100% 55%, 0 100%);
+  }
+
+  .li__main {
+    grid-area: main;
+    align-self: center;
+    width: 100%;
+    max-width: 25rem;
+    margin-inline: auto;
+    padding-block: 3rem;
+  }
+  .li__title {
+    font-size: var(--t-l);
+    line-height: var(--lh-l);
+    letter-spacing: var(--tr-l);
+    font-weight: var(--w-display);
+    margin-left: -0.03em;
+    text-wrap: balance;
+  }
+  .li__sub {
+    margin-top: 0.875rem;
+    color: var(--c-muted);
+    text-wrap: pretty;
+  }
+  .li__form {
+    display: grid;
+    margin-top: 2.25rem;
+  }
+  .li__label {
+    color: var(--c-muted);
+    font-weight: var(--w-ui);
+    margin-bottom: 0.5rem;
+  }
+  .li__field {
+    position: relative;
+  }
+  .li__field :global(.li__mail) {
+    position: absolute;
+    left: 0.875rem;
+    top: 50%;
+    width: 1rem;
+    height: 1rem;
+    translate: 0 -50%;
+    color: var(--c-quiet);
+    pointer-events: none;
+    transition: color var(--d-hover) var(--ease);
+  }
+  .li__field:focus-within :global(.li__mail) {
+    color: var(--c-fg);
+  }
+  .li__input {
+    height: 3rem;
+    padding-left: 2.5rem;
+    font-size: var(--t-body);
+  }
+  .li__form :global(.li__btn) {
+    width: 100%;
+    height: 3rem;
+    margin-top: 0.75rem;
+  }
+  /* Two lines held, so a shorter message never moves the form. */
+  .li__msg {
+    min-height: 3em;
+    margin-top: 1rem;
+    color: var(--c-quiet);
+    text-wrap: pretty;
+  }
+  .li__form[data-state="error"] .li__msg {
+    color: var(--c-fg);
+  }
+
+  .li__legal {
+    grid-area: legal;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem 1.5rem;
+    padding: 1rem 0 0.75rem;
+  }
+  .li__legal :global(.ulink) {
+    display: inline-block;
+    padding-block: 0.3125rem;
+  }
+
+  /* Narrow: one column, the waitlist on top, the specimen as a band, then the task. */
+  @media (max-width: 860px) {
+    .li {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: auto auto auto auto;
+      grid-template-areas:
+        "top"
+        "spec"
+        "main"
+        "legal";
+      padding: 0.5rem 0.5rem 0.75rem;
+    }
+    .li > :global(.spec) {
+      min-height: 0;
+      height: clamp(17rem, 44svh, 26rem);
+    }
+    .li__top {
+      padding: 0 0.5rem;
+    }
+    .li__main {
+      max-width: 30rem;
+      padding: 2rem 0.5rem 1.5rem;
+    }
+  }
+</style>

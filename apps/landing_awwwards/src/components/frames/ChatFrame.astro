@@ -1,0 +1,237 @@
+---
+// Chat: a channel linked to a project, a reply chain wrapped up, the message that settled it marked
+// as the decision, and the channel's details with what it is linked to.
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+---
+
+<Frame
+  active="Chat"
+  shadow
+  label="A picture of a Moduo chat channel linked to the Open alpha project, with a wrapped-up reply chain and the decision it reached."
+>
+  <nav class="ap-panel ap-panel--side">
+    <div class="ap-nav is-unread"><Icon name="inbox" /><span class="grow">Catch up</span><span class="ap-meta">2</span></div>
+    <div class="ap-rule"></div>
+    <p class="ap-sec">Pinned<Icon name="chevron-down" /></p>
+    <div class="ap-nav is-on"><Icon name="message-circle" /><span class="grow ap-ell">open-alpha</span></div>
+    <p class="ap-sec">Channels<Icon name="chevron-down" /></p>
+    <div class="ap-nav"><Icon name="message-circle" /><span class="grow ap-ell">design</span></div>
+    <div class="ap-nav is-unread"><Icon name="message-circle" /><span class="grow ap-ell">releases</span><span class="ap-meta">1</span></div>
+    <div class="ap-nav"><Icon name="lock" /><span class="grow ap-ell">founders</span></div>
+    <p class="ap-sec">Direct messages<Icon name="chevron-down" /></p>
+    <div class="ap-nav is-unread"><span class="ap-nav-slot chf-dm"><span class="ap-av ap-av--16" style="--c:var(--ap-violet)">MA</span><i></i></span><span class="grow ap-ell">Maciej Grzywacz</span><span class="ap-meta">1</span></div>
+    <div class="ap-nav"><span class="ap-nav-slot chf-dm"><span class="ap-av ap-av--16" style="--c:var(--ap-pink)">MI</span><i></i></span><span class="grow ap-ell">Mike Grochowski (you)</span></div>
+    <div class="ap-nav"><Icon name="plus" /><span class="grow">New conversation</span></div>
+  </nav>
+
+  <div class="ap-panel ap-panel--main chf">
+    <div class="chf-head">
+      <Icon name="message-circle" class="ap-muted" />
+      <span class="ap-h1">open-alpha</span>
+      <span class="ap-sm ap-subtle">2 people</span>
+      <span class="chf-icons"><span class="ap-ico"><Icon name="search" /></span><span class="ap-ico"><Icon name="ellipsis" /></span></span>
+    </div>
+    <div class="chf-stream">
+      <p class="chf-day"><span>Today</span></p>
+      <div class="chf-msg">
+        <span class="ap-av" style="--c:var(--ap-violet)">MA</span>
+        <div class="grow">
+          <p><span class="chf-who">Maciej Grzywacz</span> <span class="ap-xs ap-subtle">9:24</span></p>
+          <p class="chf-body">Invite copy is final. Everyone on the 16th, or a first wave?</p>
+          <p class="chf-wrapped ap-sm"><Icon name="check" class="ap-i--xs" /><span class="ap-med chf-fg">Wrapped up by you:</span><span class="ap-ell">Maciej “Links are all checked”</span><span>· 3 replies ›</span></p>
+        </div>
+      </div>
+      <div class="chf-msg">
+        <span class="ap-av" style="--c:var(--ap-pink)">MI</span>
+        <div class="grow">
+          <p><span class="chf-who">You</span> <span class="ap-xs ap-subtle">9:31</span></p>
+          <p class="chf-body">First wave on the 16th, the rest a week later.</p>
+          <p class="chf-decision ap-xs"><Icon name="flag" class="ap-i--xs" />Decision</p>
+          <p class="chf-reacts"><span class="is-mine">👍 2</span><span>✅ 1</span></p>
+        </div>
+      </div>
+    </div>
+    <div class="chf-compose">
+      <span class="ap-ico"><Icon name="plus" /></span>
+      <span class="grow ap-subtle">Message open-alpha</span>
+      <span class="ap-ico"><Icon name="at-sign" /></span>
+      <span class="ap-ico"><Icon name="smile" /></span>
+      <span class="ap-ico"><Icon name="send-horizontal" /></span>
+    </div>
+  </div>
+
+  <aside class="ap-panel ap-panel--right">
+    <div class="ap-rtitle">
+      <span class="ap-btn">Details<Icon name="chevron-down" class="ap-i--xs" /></span>
+    </div>
+    <div class="ap-rbody chf-details">
+      <p class="ap-eyebrow">Linked <span class="ap-badge">2</span></p>
+      <p class="chf-link ap-sm"><span class="ap-av ap-av--n ap-av--24">MA</span><span class="grow ap-ell">Maciej Grzywacz</span><span class="chf-rel">Owner</span></p>
+      <p class="chf-link ap-sm"><Icon name="folder-kanban" class="ap-i--sm ap-muted" /><span class="grow ap-ell">Open alpha</span><span class="chf-rel">Project</span></p>
+      <p class="ap-eyebrow chf-gap">People <span class="ap-badge">2</span></p>
+      <p class="chf-faces">
+        <span class="ap-av ap-av--24" style="--c:var(--ap-pink)">MI</span>
+        <span class="ap-av ap-av--24" style="--c:var(--ap-violet)">MA</span>
+      </p>
+    </div>
+  </aside>
+</Frame>
+
+<style>
+  .chf-dm {
+    position: relative;
+  }
+  .chf-dm i {
+    position: absolute;
+    right: -0.143em;
+    bottom: -0.143em;
+    width: 0.571em;
+    height: 0.571em;
+    border-radius: 50%;
+    background: var(--ap-success);
+    box-shadow: 0 0 0 2px var(--ap-card);
+  }
+  .chf {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+  .chf-head {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    padding: 0.857em 0.857em 0.571em 1.143em;
+  }
+  .chf-icons {
+    display: flex;
+    margin-left: auto;
+  }
+  .chf-stream {
+    padding: 0 0.571em;
+  }
+  .chf-day {
+    display: flex;
+    align-items: center;
+    gap: 0.857em;
+    height: 2.333em;
+    margin-top: 0.333em;
+    padding: 0 0.667em;
+    color: var(--ap-muted);
+    font-size: 0.857em;
+    font-weight: 500;
+  }
+  .chf-day::before,
+  .chf-day::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--ap-hairline);
+  }
+  .chf-msg {
+    display: flex;
+    gap: 0.857em;
+    padding: 0.286em 0.857em;
+    border-radius: 0.571em;
+  }
+  .chf-msg + .chf-msg {
+    margin-top: 1.143em;
+  }
+  .chf-who {
+    font-size: 1.071em;
+    font-weight: 600;
+  }
+  .chf-body {
+    font-size: 1.071em;
+    line-height: 1.5;
+  }
+  .chf-fg {
+    color: var(--ap-fg);
+  }
+  .chf-wrapped {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.462em;
+    max-width: 100%;
+    height: 2em;
+    margin: 0.462em 0 0 -0.308em;
+    padding: 0 0.462em;
+    border-radius: 0.615em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+    white-space: nowrap;
+  }
+  .chf-wrapped > span:last-child {
+    flex: none;
+  }
+  .chf-decision {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin-top: 0.167em;
+    color: var(--ap-muted);
+  }
+  .chf-reacts {
+    display: flex;
+    gap: 0.286em;
+    margin-top: 0.429em;
+  }
+  .chf-reacts span {
+    display: inline-flex;
+    align-items: center;
+    height: 1.714em;
+    padding: 0 0.5em;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+    font-size: 0.857em;
+  }
+  .chf-reacts .is-mine {
+    background: var(--ap-active);
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .chf-compose {
+    display: flex;
+    align-items: center;
+    gap: 0.143em;
+    min-height: 2.857em;
+    margin: auto 0.857em 0.857em;
+    padding: 0.286em 0.429em;
+    border-radius: 0.857em;
+    background: var(--ap-hover);
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+  }
+  .chf-compose .grow {
+    padding-left: 0.286em;
+  }
+  .chf-details {
+    display: grid;
+    gap: 0.286em;
+    padding: 0.286em 0.571em;
+  }
+  .chf-gap {
+    margin-top: 0.909em;
+  }
+  .chf-link {
+    display: flex;
+    align-items: center;
+    gap: 0.615em;
+    min-height: 2.462em;
+  }
+  .chf-rel {
+    flex: none;
+    color: rgb(164 164 164 / 0.7);
+    font-size: 0.923em;
+  }
+  .chf-faces {
+    display: flex;
+    margin-top: 0.286em;
+  }
+  .chf-faces :global(.ap-av) {
+    box-shadow: 0 0 0 2px var(--ap-card);
+  }
+  .chf-faces :global(.ap-av + .ap-av) {
+    margin-left: -0.25em;
+  }
+</style>

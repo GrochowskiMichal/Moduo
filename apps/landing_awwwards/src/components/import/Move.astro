@@ -1,0 +1,254 @@
+---
+// The move: a Notion export on the left as its files sit in the .zip, Moduo's note tree on the
+// right as the import lays it out, and between them a hairline from each file to the note it
+// becomes, run at the stroke's 45° where it has to change rows. The two folders become parent
+// notes; the CSV table and the image are skipped, as the import skips them, and counted in the
+// line under the tree. In view, the wires draw across one after another and each note arrives
+// as its wire lands (motion/pages/import.ts). The still picture is the finished move.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import { importGuide } from "../../data/pages/import";
+
+const m = importGuide.move;
+// Rows are 2.571em (the app's 36 px row); the wires' column is 14em wide.
+const R = 2.571;
+const G = 14;
+const wires = m.from
+  .map(([, , , to], i) => ({ i, to }))
+  .filter((w) => w.to >= 0)
+  .map(({ i, to }) => {
+    const y0 = (i + 0.5) * R;
+    const y1 = (to + 0.5) * R;
+    const dy = Math.abs(y1 - y0);
+    const x1 = (G - dy) / 2;
+    return {
+      d: `M0 ${y0.toFixed(3)}H${x1.toFixed(3)}L${(x1 + dy).toFixed(3)} ${y1.toFixed(3)}H${G}`,
+      y0,
+      y1,
+      to,
+    };
+  });
+const H = m.from.length * R;
+---
+
+<div class="mv-stage">
+  <div class="ap mv" role="img" aria-label={m.label} data-mv>
+    <div class="mv__panel mv__from">
+      <p class="mv__head">
+        <Icon name="archive" class="mv__hi" />
+        <span class="ap-ell">{m.file}</span>
+        <span class="mv__cap">{m.exportLabel}</span>
+      </p>
+      <ul class="mv__list">
+        {
+          m.from.map(([depth, kind, name, to]) => (
+            <li class:list={["mv__row", to < 0 && "is-skipped"]} style={`--d:${depth}`}>
+              {kind === "folder" ? (
+                <svg class="ap-i mv__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+                </svg>
+              ) : kind === "image" ? (
+                <svg class="ap-i mv__ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect width="18" height="18" x="3" y="3" rx="2" />
+                  <circle cx="9" cy="9" r="2" />
+                  <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+              ) : (
+                <Icon name={kind === "sheet" ? "sheet" : "file-text"} class="mv__ic" />
+              )}
+              <span class="grow ap-ell">{name}</span>
+              {to < 0 && <span class="mv__skip" data-mv-skip>{m.skipped}</span>}
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <svg class="mv__wires" viewBox={`0 0 ${G} ${H.toFixed(3)}`} aria-hidden="true">
+      {
+        wires.map((w) => (
+          <g class="mv__wire" data-mv-wire={w.to}>
+            <path d={w.d} pathLength="1" />
+            <circle cx="0" cy={w.y0.toFixed(3)} r="0.17" />
+            <circle cx={G} cy={w.y1.toFixed(3)} r="0.17" />
+          </g>
+        ))
+      }
+    </svg>
+
+    <p class="mv__then" aria-hidden="true">
+      <svg viewBox="0 0 12 28"><path d="M6 0v26M1.5 21.5 6 26l4.5-4.5" /></svg>
+      {m.becomes}
+    </p>
+
+    <div class="mv__panel mv__to">
+      <p class="mv__head">
+        <Icon name="file-text" class="mv__hi" />
+        <span class="ap-ell">{m.notesLabel}</span>
+      </p>
+      <ul class="mv__list">
+        {
+          m.to.map(([depth, name, parent], j) => (
+            <li class="ap-nav mv__note" style={`--d:${depth}`} data-mv-note={j}>
+              <Icon name={parent ? "chevron-down" : "chevron-right"} class:list={["ap-i--xs mv__fold", !parent && "is-hidden"]} />
+              <Icon name="file-text" class="ap-i--sm mv__ic" />
+              <span class="grow ap-ell">{name}</span>
+            </li>
+          ))
+        }
+      </ul>
+      <p class="mv__foot">
+        <span class="ap-muted">{m.summary}</span>
+        <span class="ap-btn ap-btn--primary">{m.button}</span>
+      </p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .mv-stage {
+    container-type: inline-size;
+  }
+  .mv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 14em minmax(0, 1fr);
+    align-items: start;
+    font-size: clamp(12px, 1.25cqw, 15px);
+    line-height: 1.4;
+    color: var(--ap-fg);
+  }
+  .mv__panel {
+    border-radius: 1.143em;
+    background: var(--ap-card);
+    border: 1px solid var(--ap-line);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 2em 5em -2em rgb(0 0 0 / 0.9);
+    padding: 0 0.571em 0.571em;
+    min-width: 0;
+  }
+  .mv__head {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    height: 3.429em;
+    padding: 0 0.429em 0 0.571em;
+    border-bottom: 1px solid var(--ap-line);
+    margin: 0 -0.571em;
+    padding-inline: 1.143em;
+    font-weight: 500;
+  }
+  .mv__head :global(.mv__hi) {
+    color: var(--ap-muted);
+  }
+  .mv__cap {
+    margin-left: auto;
+    color: var(--ap-subtle);
+    font-size: 0.857em;
+    font-weight: 400;
+    white-space: nowrap;
+  }
+  .mv__list {
+    display: grid;
+    padding-top: 0.571em;
+  }
+  /* Both lists start at the same height and keep the app's 36 px rows, so the wires land. */
+  .mv__row,
+  .mv__note {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    height: 2.571em;
+    padding-left: calc(0.571em + var(--d) * 1.429em);
+    padding-right: 0.571em;
+    border-radius: 0.571em;
+    min-width: 0;
+  }
+  .mv__note.ap-nav + .ap-nav {
+    margin-top: 0;
+  }
+  .mv__row :global(.mv__ic),
+  .mv__note :global(.mv__ic) {
+    flex: none;
+    color: var(--ap-muted);
+  }
+  .mv__row.is-skipped {
+    color: var(--ap-subtle);
+  }
+  .mv__skip {
+    flex: none;
+    padding: 0.143em 0.5em;
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px var(--ap-line-strong);
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    font-weight: 500;
+  }
+  .mv__note {
+    color: var(--ap-fg);
+  }
+  .mv__note :global(.mv__fold) {
+    flex: none;
+    color: var(--ap-muted);
+  }
+  .mv__note :global(.mv__fold.is-hidden) {
+    visibility: hidden;
+  }
+  .mv__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    margin-top: 0.857em;
+    padding: 0.857em 0.571em 0.286em;
+    border-top: 1px solid var(--ap-line);
+    font-size: 0.929em;
+  }
+  /* The wires sit level with the lists: under each panel's head and the list's top padding. */
+  .mv__wires {
+    width: 14em;
+    height: auto;
+    margin-top: calc(3.429em + 0.571em + 1px);
+    overflow: visible;
+  }
+  /* In the wires' own units (1 = 1em), so pathLength keeps the draw-in exact. */
+  .mv__wire path {
+    fill: none;
+    stroke: var(--ap-muted);
+    stroke-width: 0.075;
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+  .mv__wire circle {
+    fill: var(--ap-fg);
+  }
+  .mv__then {
+    display: none;
+  }
+  /* A narrow picture: the export over the notes, a line between them saying what happens. */
+  @container (max-width: 640px) {
+    .mv {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: 0.75em;
+      font-size: 13px;
+    }
+    .mv__wires {
+      display: none;
+    }
+    .mv__then {
+      display: flex;
+      align-items: center;
+      gap: 0.75em;
+      padding-left: 1.5em;
+      color: var(--ap-muted);
+      font-size: 0.929em;
+    }
+    .mv__then svg {
+      width: 0.857em;
+      height: 2em;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.2;
+    }
+  }
+</style>

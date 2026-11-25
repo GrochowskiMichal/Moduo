@@ -1,0 +1,320 @@
+---
+// Email: every inbox in one list, Maciej's message open in the reader, and the pointer on "To task"
+// with its key, T (the module's one great moment: the email becomes a task and stays attached).
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+const personal = [
+  { n: "Maciej Grzywacz", s: "Open alpha invite", p: "Copy is final, one small change on top…", t: "9:12", c: "var(--ap-blue)", k: 3, sel: true, unread: true },
+  { n: "Alpha feedback", s: "Bug: paste in a table", p: "Pasting two rows into a table drops one.", t: "8:40", c: "var(--ap-blue)", unread: true },
+  { n: "Moduo waitlist", s: "9 new sign-ups today", p: "The first wave list is ready to review.", t: "8:02", c: "var(--ap-blue)", unread: true },
+  { n: "Hosting", s: "Invoice for October", p: "Paid by card, the receipt is attached.", t: "Mon", c: "var(--ap-teal)" },
+  { n: "Maciej Grzywacz", s: "Onboarding copy", p: "Second pass on the first-run screens.", t: "Mon", c: "var(--ap-blue)", k: 2 },
+];
+const notifications = [{ n: "Calendar", s: "Accepted: Invite review", p: "Maciej will attend on Thursday.", t: "Wed", c: "var(--ap-blue)" }];
+---
+
+<Frame
+  active="Email"
+  shadow
+  label="A picture of Moduo's Email module: every inbox in one list, Maciej Grzywacz's email open, and the button that turns it into a task, key T."
+>
+  <nav class="ap-panel ap-panel--side">
+    <div class="ef-r is-on"><Icon name="inbox" class="ap-i--sm" /><span class="grow">All inboxes</span><span class="ap-2xs ap-muted">3</span></div>
+    <p class="ap-eyebrow ef-eb">Accounts</p>
+    <div class="ef-r"><span class="ef-acc" style="--c:var(--ap-blue)"></span><span class="grow ap-ell">mike@moduo.app</span><span class="ap-2xs ap-muted">3</span></div>
+    <div class="ef-r"><span class="ef-acc" style="--c:var(--ap-teal)"></span><span class="grow ap-ell">hello@moduo.app</span></div>
+    <div class="ef-r is-sm ef-gap"><Icon name="clock-3" class="ap-i--sm" /><span class="grow">Snoozed</span><span class="ap-2xs ap-muted">2</span></div>
+    <div class="ef-r is-sm"><Icon name="corner-up-left" class="ap-i--sm" /><span class="grow">Follow-ups</span><span class="ap-2xs ap-muted">1</span></div>
+    <span class="ap-btn ap-btn--ghost ap-sm ef-connect"><Icon name="plus" />Connect account</span>
+  </nav>
+
+  <div class="ap-panel ap-panel--main ef-centre">
+    <div class="ef-strip">
+      <span class="ap-field grow"><Icon name="search" />Search mail…</span>
+      <span class="ap-ico"><Icon name="refresh-cw" /></span>
+      <span class="ap-btn ap-btn--primary"><Icon name="square-pen" />New message</span>
+    </div>
+    <div class="ef-list">
+      <p class="ap-eyebrow ef-sec">Personal <span class="ap-subtle">5</span></p>
+      {
+        personal.map((t) => (
+          <div class:list={["ef-thread", t.sel && "is-sel"]}>
+            <span class:list={["ef-unread", t.unread && "is-on"]} />
+            <div class="grow">
+              <p class="ef-line">
+                <span class="ap-dot" style={`--c:${t.c}`} />
+                <span class:list={["ef-from grow ap-ell", t.unread && "is-unread"]}>{t.n}</span>
+                <span class="ef-time">{t.t}</span>
+              </p>
+              <p class="ef-line">
+                <span class:list={["ef-subj grow ap-ell", t.unread && "is-unread"]}>{t.s}</span>
+                {t.k && <span class="ef-k">{t.k}</span>}
+              </p>
+              <p class="ef-snip ap-ell">{t.p}</p>
+            </div>
+          </div>
+        ))
+      }
+      <p class="ap-eyebrow ef-sec">Notifications <span class="ap-subtle">1</span></p>
+      {
+        notifications.map((t) => (
+          <div class="ef-thread">
+            <span class="ef-unread" />
+            <div class="grow">
+              <p class="ef-line">
+                <span class="ap-dot" style={`--c:${t.c}`} />
+                <span class="ef-from grow ap-ell">{t.n}</span>
+                <span class="ef-time">{t.t}</span>
+              </p>
+              <p class="ef-line">
+                <span class="ef-subj grow ap-ell">{t.s}</span>
+              </p>
+              <p class="ef-snip ap-ell">{t.p}</p>
+            </div>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+
+  <aside class="ap-panel ap-panel--right ef-reader">
+    <div class="ap-rtitle">
+      <span class="ap-btn">Reader<Icon name="chevron-down" class="ap-i--xs" /></span>
+      <span class="ap-ico"><Icon name="ellipsis" /></span>
+    </div>
+    <div class="ap-rbody">
+      <p class="ef-subject">Open alpha invite</p>
+      <div class="ef-acts">
+        <span class="ap-btn ap-btn--ghost"><Icon name="reply" />Reply</span>
+        <span class="ap-btn ap-btn--ghost"><Icon name="reply-all" />All</span>
+        <span class="ap-btn ap-btn--ghost ef-totask"><Icon name="list-checks" />To task<span class="ap-tip ef-tip">Make a task <span class="ap-kbd">T</span></span></span>
+      </div>
+      <div class="ef-msg">
+        <div class="ef-mhead">
+          <span class="ap-av ap-av--24" style="--c:var(--ap-pink)">MI</span>
+          <div class="grow">
+            <p class="ef-line"><span class="grow ap-sm ap-med">You</span><span class="ef-time">Wed</span></p>
+            <p class="ef-snip ap-ell">Here’s a first pass at the invite copy…</p>
+          </div>
+          <Icon name="chevron-down" class="ap-i--xs ap-muted" />
+        </div>
+      </div>
+      <div class="ef-msg">
+        <div class="ef-mhead">
+          <span class="ap-av ap-av--n ap-av--24">MA</span>
+          <div class="grow">
+            <p class="ef-line"><span class="grow ap-sm ap-med">Maciej Grzywacz</span><span class="ef-time">9:12</span></p>
+            <p class="ef-snip">To: you</p>
+          </div>
+          <Icon name="chevron-up" class="ap-i--xs ap-muted" />
+        </div>
+        <div class="ef-body">
+          <p>Hi,</p>
+          <p>Copy is final, I only changed the first line. Can you check the links today? It goes to the first wave on the 16th.</p>
+          <p>Thanks, Maciej</p>
+        </div>
+      </div>
+    </div>
+  </aside>
+</Frame>
+
+<style>
+  .ef-r {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.571em;
+    padding: 0 0.571em;
+    border-radius: 0.571em;
+    color: var(--ap-muted);
+    font-size: 0.929em;
+  }
+  .ef-r.is-sm {
+    min-height: 2em;
+  }
+  .ef-r.is-on {
+    background: var(--ap-active);
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .ef-r :global(.ap-i) {
+    width: 1.077em;
+    height: 1.077em;
+  }
+  .ef-acc {
+    flex: none;
+    width: 0.769em;
+    height: 0.769em;
+    margin: 0 0.154em;
+    border-radius: 50%;
+    background: var(--c);
+  }
+  .ef-eb {
+    padding: 1.091em 0.727em 0.364em;
+  }
+  .ef-gap {
+    margin-top: 0.615em;
+  }
+  .ef-connect {
+    margin-top: 0.571em;
+    color: var(--ap-muted);
+  }
+  .ef-centre {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+  }
+  .ef-strip {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+    padding: 0.429em 0.571em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .ef-list {
+    display: grid;
+    gap: 0.143em;
+    padding: 0.286em;
+  }
+  .ef-sec {
+    padding: 0.727em 0.909em 0.273em;
+  }
+  .ef-thread {
+    display: flex;
+    gap: 0.714em;
+    padding: 0.571em 0.714em;
+    border-radius: 0.571em;
+  }
+  .ef-thread.is-sel {
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .ef-unread {
+    flex: none;
+    width: 0.571em;
+    height: 0.571em;
+    margin-top: 0.4em;
+    border-radius: 50%;
+  }
+  .ef-unread.is-on {
+    background: var(--ap-primary);
+  }
+  .ef-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-width: 0;
+  }
+  .ef-from,
+  .ef-subj {
+    font-size: 0.929em;
+  }
+  .ef-from {
+    color: var(--ap-muted);
+  }
+  .ef-subj {
+    color: rgb(250 250 250 / 0.9);
+  }
+  .ef-from.is-unread,
+  .ef-subj.is-unread {
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .ef-time {
+    flex: none;
+    color: rgb(164 164 164 / 0.8);
+    font-size: 0.786em;
+    font-variant-numeric: tabular-nums;
+  }
+  .ef-k {
+    flex: none;
+    display: inline-grid;
+    place-items: center;
+    min-width: 1.636em;
+    height: 1.455em;
+    padding: 0 0.545em;
+    border-radius: 999px;
+    background: var(--ap-muted-bg);
+    color: var(--ap-muted);
+    font-size: 0.786em;
+  }
+  .ef-snip {
+    color: var(--ap-muted);
+    font-size: 0.857em;
+  }
+  .ef-subject {
+    padding: 0.286em 0.429em 0;
+    font-size: 1.071em;
+    font-weight: 500;
+  }
+  .ef-acts {
+    display: flex;
+    gap: 0.143em;
+    margin: 0.571em 0 0.857em;
+  }
+  .ef-totask {
+    position: relative;
+    background: var(--ap-hover);
+  }
+  .ef-tip {
+    left: 50%;
+    top: calc(100% + 0.5em);
+    translate: -50% 0;
+  }
+  .ef-msg {
+    border-radius: 0.857em;
+    border: 1px solid var(--ap-line);
+    background: var(--ap-card);
+  }
+  .ef-msg + .ef-msg {
+    margin-top: 0.571em;
+  }
+  .ef-mhead {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    padding: 0.714em 0.857em;
+  }
+  .ef-body {
+    display: grid;
+    gap: 0.769em;
+    padding: 0.857em;
+    border-top: 1px solid var(--ap-line);
+    font-size: 0.929em;
+    line-height: 1.65;
+  }
+  /* The T key goes down every few seconds: the one gesture the page is about. */
+  @media (prefers-reduced-motion: no-preference) {
+    .ef-tip :global(.ap-kbd) {
+      animation: ef-key 5.2s var(--ease) 1.6s infinite;
+    }
+    .ef-totask {
+      animation: ef-press 5.2s var(--ease) 1.6s infinite;
+    }
+  }
+  @keyframes ef-key {
+    0%,
+    78%,
+    90%,
+    100% {
+      translate: 0 0;
+      color: var(--ap-muted);
+    }
+    82% {
+      translate: 0 0.1em;
+      color: var(--ap-fg);
+    }
+  }
+  @keyframes ef-press {
+    0%,
+    78%,
+    92%,
+    100% {
+      background: var(--ap-hover);
+    }
+    83% {
+      background: var(--ap-raised);
+    }
+  }
+</style>

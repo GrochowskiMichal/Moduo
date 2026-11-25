@@ -1,0 +1,227 @@
+---
+// The Calendar card's picture: a morning of the working week, events and task blocks on one grid,
+// the now line on Thursday, and the block that ran out with its task still open, asking later,
+// longer or remove.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const days = [
+  ["Mon", "2"],
+  ["Tue", "3"],
+  ["Wed", "4"],
+  ["Thu", "5"],
+  ["Fri", "6"],
+];
+const TODAY = 3;
+const HOURS = 4;
+const items = [
+  { d: 0, s: 0, l: 1.5, kind: "block", t: "Invite copy", m: ["9:00", "10:30"] },
+  { d: 0, s: 2.5, l: 1, kind: "event", t: "Monday sync", m: ["11:30", "12:30"] },
+  { d: 1, s: 1, l: 1, kind: "event", t: "Design review", m: ["10:00", "11:00"] },
+  { d: 2, s: 0.5, l: 1, kind: "external", t: "Alpha call", m: ["9:30", "10:30"], c: "var(--ap-teal)" },
+  { d: 2, s: 2, l: 1.5, kind: "block", t: "Mark review", m: ["11:00", "12:30"] },
+  { d: 3, s: 0.25, l: 1.75, kind: "elapsed", t: "Windows build", m: ["9:15", "11:00"] },
+  { d: 4, s: 1, l: 1.5, kind: "block", t: "Changelog", m: ["10:00", "11:30"] },
+];
+---
+
+<div class="ap mini cm" aria-hidden="true" data-mini="calendar">
+  <div class="ap-panel cm-panel">
+    <div class="cm-bar">
+      <span class="ap-ico"><Icon name="chevron-left" /></span>
+      <span class="ap-ico"><Icon name="chevron-right" /></span>
+      <span class="ap-sm ap-med cm-range">Nov 2<i class="cm-to"></i>6</span>
+      <span class="grow"></span>
+      <span class="ap-seg"><span>Day</span><span class="is-on">Week</span></span>
+    </div>
+    <div class="cm-grid" style={`--rows:${HOURS}`}>
+      <div></div>
+      {
+        days.map(([w, n], i) => (
+          <div class:list={["cm-day", i === TODAY && "is-today"]}>
+            {w} <span>{n}</span>
+          </div>
+        ))
+      }
+      <div class="cm-hours">
+        {Array.from({ length: HOURS }, (_, i) => <span>{String(9 + i).padStart(2, "0")}</span>)}
+      </div>
+      {
+        days.map((_, di) => (
+          <div class="cm-col">
+            {items
+              .filter((it) => it.d === di)
+              .map((it) => (
+                <div class={`cm-item is-${it.kind}`} style={`--s:${it.s};--l:${it.l}${it.c ? `;--c:${it.c}` : ""}`} data-item>
+                  <span class="cm-t">
+                    {(it.kind === "block" || it.kind === "elapsed") && <span class="ap-check" />}
+                    <span class="ap-ell">{it.t}</span>
+                  </span>
+                  <span class="cm-m">
+                    {it.m[0]}
+                    <i class="cm-to" />
+                    {it.m[1]}
+                  </span>
+                  {it.kind === "elapsed" && (
+                    <span class="cm-triage" data-triage>
+                      <span>Later</span>
+                      <span>Longer</span>
+                      <span>Remove</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            {di === TODAY && <span class="cm-now" data-now />}
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</div>
+
+<style>
+  .cm {
+    left: 5%;
+    top: 0;
+    width: 100%;
+  }
+  .cm-panel {
+    padding: 0.857em 1.143em 0;
+    border-bottom-right-radius: 0;
+    border-top-right-radius: 0;
+  }
+  .cm-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.143em;
+    padding-bottom: 0.857em;
+  }
+  .cm-range {
+    margin-left: 0.429em;
+  }
+  .cm-to::before {
+    content: "\2013";
+    margin: 0 0.3em;
+    font-style: normal;
+  }
+  .cm-grid {
+    display: grid;
+    grid-template-columns: 3em repeat(5, 1fr);
+    grid-template-rows: auto calc(var(--rows) * 4em);
+  }
+  .cm-day {
+    padding: 0 0.571em 0.429em;
+    border-bottom: 1px solid var(--ap-line);
+    color: var(--ap-muted);
+    font-size: 0.929em;
+    white-space: nowrap;
+  }
+  .cm-day span {
+    color: rgb(164 164 164 / 0.7);
+  }
+  .cm-day.is-today,
+  .cm-day.is-today span {
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .cm-hours {
+    display: grid;
+    grid-template-rows: repeat(var(--rows), 1fr);
+    padding-right: 0.571em;
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    text-align: right;
+  }
+  .cm-hours span {
+    translate: 0 -0.6em;
+  }
+  .cm-col {
+    position: relative;
+    border-left: 1px solid var(--ap-line);
+    background-image: linear-gradient(var(--ap-line) 1px, transparent 1px);
+    background-size: 100% calc(100% / var(--rows));
+  }
+  .cm-item {
+    position: absolute;
+    left: 0.214em;
+    right: 0.214em;
+    top: calc(var(--s) * 100% / var(--rows) + 1px);
+    height: calc(var(--l) * 100% / var(--rows) - 2px);
+    display: flex;
+    flex-direction: column;
+    padding: 0.214em 0.5em;
+    border-radius: 0.571em;
+    border: 1px solid var(--ap-line);
+    overflow: hidden;
+    line-height: 1.35;
+  }
+  .cm-item.is-event {
+    border-color: rgb(238 238 238 / 0.35);
+    background: rgb(238 238 238 / 0.1);
+  }
+  .cm-item.is-external {
+    border-color: color-mix(in oklab, var(--c) 60%, transparent);
+    background: color-mix(in oklab, var(--c) 18%, transparent);
+  }
+  .cm-item.is-block {
+    background: rgb(18 18 18 / 0.7);
+  }
+  .cm-item.is-elapsed {
+    border: 1px dashed #4a4a4a;
+    background: rgb(18 18 18 / 0.35);
+  }
+  .cm-t {
+    display: flex;
+    align-items: center;
+    gap: 0.429em;
+    min-width: 0;
+    font-size: 0.857em;
+  }
+  .cm-t :global(.ap-check) {
+    width: 1.25em;
+    height: 1.25em;
+  }
+  .cm-m {
+    color: var(--ap-muted);
+    font-size: 0.786em;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .is-block .cm-m,
+  .is-elapsed .cm-m {
+    padding-left: 1.6em;
+  }
+  .cm-triage {
+    display: flex;
+    gap: 0.6em;
+    margin-top: auto;
+    padding: 0 0 0.25em 0.2em;
+    color: var(--ap-muted);
+    font-size: 0.786em;
+  }
+  .cm-triage span:first-child {
+    color: var(--ap-fg);
+    text-decoration: underline;
+    text-decoration-color: rgb(250 250 250 / 0.35);
+    text-underline-offset: 0.2em;
+  }
+  .cm-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(2.6 * 100% / var(--rows));
+    height: 1px;
+    background: var(--ap-primary);
+  }
+  .cm-now::before {
+    content: "";
+    position: absolute;
+    left: -0.214em;
+    top: 50%;
+    width: 0.429em;
+    height: 0.429em;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    translate: 0 -50%;
+  }
+</style>

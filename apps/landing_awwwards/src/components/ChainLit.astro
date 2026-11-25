@@ -1,0 +1,54 @@
+---
+// The six module strokes as a picture (no links): one stroke lit, the windows open. Used where
+// the chain names a module inside a larger link, such as "Next module".
+import { STROKE, chainWidth, chainX, strokePath, uniformGaps } from "../lib/stroke";
+
+interface Props {
+  lit: number;
+  id: string;
+  class?: string;
+}
+const { lit, id, class: className } = Astro.props;
+const xs = chainX(uniformGaps(6, 1));
+const vb = `-4 ${STROKE.top - 4} ${chainWidth(xs) + 8} ${STROKE.bottom - STROKE.top + 8}`;
+const paths = xs.map((x) => strokePath(x));
+---
+
+<svg class:list={["clit", className]} viewBox={vb} aria-hidden="true" focusable="false">
+  <defs>
+    {
+      paths.map((d, i) => (
+        <clipPath id={`${id}-c${i}`}>
+          <path d={d} />
+        </clipPath>
+      ))
+    }
+  </defs>
+  {paths.map((d, i) => <path class:list={["clit__s", i === lit && "is-lit"]} d={d} />)}
+  {
+    paths.slice(0, -1).map((d, k) => (
+      <g clip-path={`url(#${id}-c${k + 1})`}>
+        <path class="clit__w" d={d} />
+      </g>
+    ))
+  }
+</svg>
+
+<style>
+  .clit {
+    display: block;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .clit__s {
+    fill: var(--c-stroke-off);
+    transition: fill 0.5s var(--ease);
+  }
+  .clit__s.is-lit {
+    fill: var(--c-fg);
+  }
+  .clit__w {
+    fill: var(--c-bg);
+  }
+</style>

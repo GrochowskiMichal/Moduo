@@ -1,0 +1,403 @@
+---
+// The logo, measured: the press kit's signature, in the footer plate's grammar (plus marks at the
+// corners, a ruler, hairline guides with their names). The lockup sits in its clear space, one
+// "o" on every side, and an outline of its own last o stands in each margin as the unit; beside
+// it the mark in its quarter-height room; under both, the smallest sizes at actual size. With
+// motion the room opens outward from the artwork and the guides draw (motion/pages/press.ts).
+import { LOCKUP, MARK } from "../../lib/brand";
+import { press } from "../../data/pages/press";
+
+const t = press.plate;
+
+// The lockup artwork's box (brand/exports/svg/lockup-current.svg).
+const [lx, ly, lw, lh] = LOCKUP.viewBox.split(/\s+/).map(Number);
+// The wordmark's letters as subpaths; the last two are the final o (outer, counter).
+const subs = LOCKUP.word.split(/(?=M)/);
+const oPath = subs.slice(-2).join("");
+const nums = (d: string) => {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  let cx = 0;
+  let cy = 0;
+  for (const m of d.matchAll(/([MLCHVZ])([^MLCHVZ]*)/gi)) {
+    const c = m[1].toUpperCase();
+    const a = (m[2].match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(Number);
+    if (c === "Z") continue;
+    if (c === "H" || c === "V") {
+      for (const v of a) {
+        if (c === "H") cx = v;
+        else cy = v;
+        xs.push(cx);
+        ys.push(cy);
+      }
+      continue;
+    }
+    for (let i = 0; i + 1 < a.length; i += 2) {
+      cx = a[i];
+      cy = a[i + 1];
+      xs.push(cx);
+      ys.push(cy);
+    }
+  }
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+};
+const o = nums(subs[subs.length - 2]);
+const O = o.y1 - o.y0; // one o: the clear space
+const xh = o.y0; // x-height line (top of the o)
+const base = o.y1; // baseline (foot of the o, overshoot included)
+const r2 = (n: number) => Math.round(n * 10) / 10;
+const room = { x: lx - O, y: ly - O, w: lw + 2 * O, h: lh + 2 * O };
+const pad = { l: 150, r: 760, t: 210, b: 210 };
+const vb = `${r2(room.x - pad.l)} ${r2(room.y - pad.t)} ${r2(room.w + pad.l + pad.r)} ${r2(room.h + pad.t + pad.b)}`;
+const gx0 = room.x - pad.l + 40;
+const gx1 = room.x + room.w + pad.r - 40;
+const labelX = room.x + room.w + 60;
+// An o outline placed with its box's top-left at (x, y).
+const oAt = (x: number, y: number) => `translate(${r2(x - o.x0)} ${r2(y - o.y0)})`;
+const oW = o.x1 - o.x0;
+const mk = nums(LOCKUP.mark);
+const markMid = (mk.x0 + mk.x1) / 2;
+
+// The mark alone, in its tight box, with a quarter of its height around it.
+const [mx, my, mw, mh] = MARK.tight.split(/\s+/).map(Number);
+const Q = mh / 4;
+const mroom = { x: mx - Q, y: my - Q, w: mw + 2 * Q, h: mh + 2 * Q };
+const mvb = `${r2(mroom.x - 70)} ${r2(mroom.y - 150)} ${r2(mroom.w + 140)} ${r2(mroom.h + 300)}`;
+---
+
+<div class="plate" data-plate>
+  <div class="plate__sheet plate__sheet--lockup">
+    <span class="plate__plus is-tl" aria-hidden="true"></span>
+    <span class="plate__plus is-tr" aria-hidden="true"></span>
+    <span class="plate__plus is-bl" aria-hidden="true"></span>
+    <span class="plate__plus is-br" aria-hidden="true"></span>
+    <span class="plate__ruler" aria-hidden="true"></span>
+    <svg class="plate__svg" viewBox={vb} role="img" aria-labelledby="plate-l-t">
+      <title id="plate-l-t">The Moduo lockup inside its clear space: one height of its letter o on every side.</title>
+      <g class="plate__guides" aria-hidden="true">
+        {
+          [
+            [ly, t.guides.top],
+            [xh, t.guides.xh],
+            [base, t.guides.base],
+            [ly + lh, t.guides.foot],
+          ].map(([y, label]) => (
+            <g>
+              <path class="plate__gl" d={`M${r2(gx0)} ${r2(y as number)}H${r2(gx1)}`} pathLength="1" />
+              <text class="plate__gt" x={r2(labelX)} y={r2((y as number) - 16)}>
+                {label}
+              </text>
+            </g>
+          ))
+        }
+      </g>
+      <rect class="plate__box" x={r2(lx)} y={r2(ly)} width={r2(lw)} height={r2(lh)} aria-hidden="true" />
+      <rect
+        class="plate__room"
+        x={r2(room.x)}
+        y={r2(room.y)}
+        width={r2(room.w)}
+        height={r2(room.h)}
+        rx="4"
+        data-room={`${r2(lx)} ${r2(ly)} ${r2(lw)} ${r2(lh)}`}
+        aria-hidden="true"
+      />
+      <g class="plate__os" aria-hidden="true">
+        <path class="plate__o" d={oPath} transform={oAt(room.x, ly + (lh - O) / 2)} />
+        <path class="plate__o" d={oPath} transform={oAt(lx + lw, ly + (lh - O) / 2)} />
+        <path class="plate__o" d={oPath} transform={oAt(markMid - oW / 2, room.y)} />
+        <path class="plate__o" d={oPath} transform={oAt(markMid - oW / 2, ly + lh)} />
+      </g>
+      <g class="plate__art">
+        <path d={LOCKUP.mark} fill-rule="evenodd" clip-rule="evenodd" />
+        <path d={LOCKUP.word} />
+      </g>
+      <g class="plate__dim" aria-hidden="true">
+        <path d={`M${r2(room.x)} ${r2(ly + lh + O / 2)}H${r2(lx)}M${r2(room.x)} ${r2(ly + lh + O / 2 - 18)}v36M${r2(lx)} ${r2(ly + lh + O / 2 - 18)}v36`} />
+        <text x={r2(room.x + O / 2)} y={r2(ly + lh + O / 2 + 70)} text-anchor="middle">o</text>
+      </g>
+    </svg>
+    <p class="plate__cap">
+      <span>{t.lockup}</span>
+      <span class="plate__q">{t.space.lockup}</span>
+    </p>
+  </div>
+
+  <div class="plate__sheet plate__sheet--mark">
+    <span class="plate__plus is-tl" aria-hidden="true"></span>
+    <span class="plate__plus is-tr" aria-hidden="true"></span>
+    <span class="plate__plus is-bl" aria-hidden="true"></span>
+    <span class="plate__plus is-br" aria-hidden="true"></span>
+    <svg class="plate__svg" viewBox={mvb} role="img" aria-labelledby="plate-m-t">
+      <title id="plate-m-t">The Moduo mark inside its clear space: a quarter of its height on every side.</title>
+      <rect class="plate__box" x={mx} y={my} width={mw} height={mh} aria-hidden="true" />
+      <rect
+        class="plate__room"
+        x={r2(mroom.x)}
+        y={r2(mroom.y)}
+        width={r2(mroom.w)}
+        height={r2(mroom.h)}
+        rx="4"
+        data-room={`${mx} ${my} ${mw} ${mh}`}
+        aria-hidden="true"
+      />
+      <g class="plate__dim" aria-hidden="true">
+        <path d={`M${r2(mroom.x)} ${r2(my + mh / 2)}H${mx}M${r2(mroom.x)} ${r2(my + mh / 2 - 14)}v28M${mx} ${r2(my + mh / 2 - 14)}v28`} />
+        <path d={`M${r2(mx + mw + 40)} ${my}V${my + mh}M${r2(mx + mw + 26)} ${my}h28M${r2(mx + mw + 26)} ${my + mh}h28`} />
+      </g>
+      <g class="plate__art">
+        <path d={MARK.d} fill-rule="evenodd" clip-rule="evenodd" />
+      </g>
+    </svg>
+    <p class="plate__cap">
+      <span>{t.mark}</span>
+      <span class="plate__q">{t.space.mark}</span>
+    </p>
+  </div>
+
+  <div class="plate__min">
+    <p class="plate__min-k">{t.min.title}</p>
+    <div class="plate__min-row">
+      <figure class="plate__min-item">
+        <svg class="plate__min-lockup" viewBox={LOCKUP.viewBox} role="img" aria-label="The Moduo lockup at 72 pixels wide">
+          <path d={LOCKUP.mark} fill-rule="evenodd" clip-rule="evenodd" />
+          <path d={LOCKUP.word} />
+        </svg>
+        <figcaption>
+          <span>{t.min.lockup.screen}</span>
+          <span class="plate__q">{t.min.lockup.print}</span>
+        </figcaption>
+      </figure>
+      <figure class="plate__min-item">
+        <svg class="plate__min-mark" viewBox={MARK.viewBox} role="img" aria-label="The Moduo mark at 16 pixels">
+          <path d={MARK.d} fill-rule="evenodd" clip-rule="evenodd" />
+        </svg>
+        <figcaption>
+          <span>{t.min.mark.screen}</span>
+          <span class="plate__q">{t.min.mark.print}</span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</div>
+
+<style>
+  .plate {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--c-line);
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+  }
+  .plate__sheet {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: clamp(1.25rem, 2.4vw, 2rem);
+    background: var(--c-bg);
+  }
+  .plate__sheet--lockup {
+    grid-column: span 8;
+  }
+  .plate__sheet--mark {
+    grid-column: span 4;
+  }
+  .plate__svg {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+  .plate__sheet--mark .plate__svg {
+    max-width: 22rem;
+    margin-inline: auto;
+  }
+  .plate__art {
+    fill: var(--c-fg);
+  }
+  .plate__box {
+    fill: none;
+    stroke: var(--c-line-strong);
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+  }
+  .plate__room {
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+    vector-effect: non-scaling-stroke;
+  }
+  .plate__o {
+    fill: none;
+    stroke: var(--c-quiet);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    fill-rule: evenodd;
+  }
+  .plate__gl {
+    stroke: var(--c-line-strong);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+    fill: none;
+  }
+  .plate__gt,
+  .plate__dim text {
+    fill: var(--c-quiet);
+    font-family: var(--f-sans);
+    font-size: 50px;
+    font-weight: var(--w-small);
+  }
+  .plate__sheet--mark .plate__dim text {
+    font-size: 30px;
+  }
+  .plate__dim path {
+    fill: none;
+    stroke: var(--c-muted);
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+  }
+  .plate__dim text {
+    fill: var(--c-muted);
+    font-size: 56px;
+  }
+
+  /* The footer plate's corners and ruler. */
+  .plate__plus {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    pointer-events: none;
+  }
+  .plate__plus::before,
+  .plate__plus::after {
+    content: "";
+    position: absolute;
+    background: var(--c-dim);
+  }
+  .plate__plus::before {
+    left: 5px;
+    top: 0;
+    width: 1px;
+    height: 11px;
+  }
+  .plate__plus::after {
+    left: 0;
+    top: 5px;
+    width: 11px;
+    height: 1px;
+  }
+  .plate__plus.is-tl {
+    left: 0.75rem;
+    top: 0.75rem;
+  }
+  .plate__plus.is-tr {
+    right: 0.75rem;
+    top: 0.75rem;
+  }
+  .plate__plus.is-bl {
+    left: 0.75rem;
+    bottom: 0.75rem;
+  }
+  .plate__plus.is-br {
+    right: 0.75rem;
+    bottom: 0.75rem;
+  }
+  .plate__ruler {
+    position: absolute;
+    left: 2.25rem;
+    right: 2.25rem;
+    top: 1rem;
+    height: 5px;
+    background: repeating-linear-gradient(90deg, var(--c-line-strong) 0 1px, transparent 1px 12px);
+    pointer-events: none;
+  }
+
+  .plate__cap {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.25rem 1rem;
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    letter-spacing: var(--tr-xs);
+    color: var(--c-fg);
+  }
+  .plate__q {
+    color: var(--c-quiet);
+    font-weight: var(--w-small);
+  }
+
+  /* The smallest sizes, at actual size. */
+  .plate__min {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem 2rem;
+    padding: 1.5rem clamp(1.25rem, 2.4vw, 2rem);
+    background: var(--c-bg);
+  }
+  .plate__min-k {
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .plate__min-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 3.5rem;
+  }
+  .plate__min-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 0;
+  }
+  .plate__min-item svg {
+    fill: var(--c-fg);
+    flex: none;
+  }
+  .plate__min-lockup {
+    width: 72px;
+    height: auto;
+  }
+  .plate__min-mark {
+    width: 16px;
+    height: 16px;
+  }
+  .plate__min-item figcaption {
+    display: grid;
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    line-height: 1.4;
+  }
+
+  /* Small, the guides keep their lines and drop their names, which would be too small to read,
+     and the drawing grows into the margin the names used, so the lockup stays large. */
+  @media (max-width: 700px) {
+    .plate__gt {
+      display: none;
+    }
+    .plate__sheet--lockup {
+      overflow: hidden;
+    }
+    .plate__sheet--lockup .plate__svg {
+      width: 124%;
+      max-width: none;
+    }
+  }
+  @media (max-width: 999px) {
+    .plate__sheet--lockup,
+    .plate__sheet--mark {
+      grid-column: 1 / -1;
+    }
+    .plate__sheet--mark .plate__svg {
+      max-width: 16rem;
+    }
+  }
+</style>

@@ -1,0 +1,127 @@
+---
+// The window every product picture lives in, drawn as the app draws its own chrome
+// (components/app/app-chrome.tsx): the mark and the workspace on the left, the module tabs with
+// their icons in the middle (the current one lit), help, notifications and you on the right; the
+// panels in the slot; and the bottom bar, with the panel toggles at its ends and in the middle the
+// app's tools (search, quick capture, new) or, in a mode, the keys for what is selected (`hints`).
+import "../../styles/frames.css";
+import { MARK } from "../../lib/brand";
+import type { IconName } from "../../lib/app-icons";
+import Icon from "./Icon.astro";
+
+type Module = "Home" | "Notes" | "Tasks" | "Calendar" | "Email" | "Contacts" | "Chat";
+
+interface Props {
+  active: Module;
+  label: string;
+  shadow?: boolean;
+  class?: string;
+  /** A bottom-bar mode: the keys for what is selected, e.g. [["Accept", "1"], ["Snooze", "H"]]. */
+  hints?: readonly (readonly [string, string])[];
+  /** A focus session running: its clock (seconds) shows in the bar and counts. */
+  timer?: number;
+  /** Set the picture in Oudom instead of the app's Geist (the type page's specimen only). */
+  specimen?: boolean;
+  /** Home's bottom bar: the dashboard's page dots on the left and its edit pencil on the right. */
+  home?: boolean;
+  /** Keep the wide layout at any size: a picture that scales as one piece (the hero's). */
+  fixed?: boolean;
+}
+const {
+  active,
+  label,
+  shadow = false,
+  class: className,
+  hints,
+  timer,
+  specimen = false,
+  home = false,
+  fixed = false,
+} = Astro.props;
+// The app's order and icons (components/app/app-chrome).
+const tabs: [Module, IconName][] = [
+  ["Home", "house"],
+  ["Notes", "file-text"],
+  ["Tasks", "square-check-big"],
+  ["Calendar", "calendar"],
+  ["Email", "mail"],
+  ["Contacts", "contact"],
+  ["Chat", "message-square"],
+];
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+---
+
+<figure class:list={["ap", shadow && "ap--shadow", specimen && "ap--specimen", fixed && "ap--fixed", className]}>
+  <div class="ap__win" role="img" aria-label={label}>
+    <div class="ap__bar" aria-hidden="true">
+      <div class="ap__lead">
+        <svg class="ap__mark" viewBox={MARK.tight}>
+          <path d={MARK.d} fill="currentColor" fill-rule="evenodd"></path>
+        </svg>
+        <span class="ap__ws"><span class="ap__ws-badge">M</span>Moduo<Icon name="chevron-down" /></span>
+      </div>
+      <div class="ap__tabs">
+        {
+          tabs.map(([t, icon]) => (
+            <span class:list={["ap__tab", t === active && "is-on"]}>
+              <Icon name={icon} />
+              {t}
+            </span>
+          ))
+        }
+      </div>
+      <div class="ap__end">
+        {timer !== undefined && <span class="ap__timer" data-clock={timer}>{mmss(timer)}</span>}
+        <span class="ap__btn"><Icon name="circle-question-mark" /></span>
+        <span class="ap__btn"><Icon name="bell" /></span>
+        <span class="ap__me">MI</span>
+      </div>
+    </div>
+    <div class="ap__body" aria-hidden="true">
+      <slot />
+    </div>
+    <div class="ap__foot" aria-hidden="true">
+      {
+        home ? (
+          <span class="ap__dots">
+            <i class="is-on" />
+            <i />
+            <i />
+          </span>
+        ) : (
+          <span class="ap__btn">
+            <Icon name="chevrons-left" />
+          </span>
+        )
+      }
+      {
+        hints ? (
+          <span class="ap-hints">
+            {hints.map(([what, key], i) => (
+              <>
+                {i > 0 && <i>·</i>}
+                <span>
+                  {what} <span class="ap-kbd">{key}</span>
+                </span>
+              </>
+            ))}
+          </span>
+        ) : (
+          <span class="ap-tools">
+            <span class="ap__btn">
+              <Icon name="search" />
+            </span>
+            <span class="ap__btn">
+              <Icon name="square-pen" />
+            </span>
+            <span class="ap__btn">
+              <Icon name="plus" />
+            </span>
+          </span>
+        )
+      }
+      <span class="ap__btn"><Icon name={home ? "pencil" : "chevrons-right"} /></span>
+    </div>
+  </div>
+  <slot name="caption" />
+</figure>

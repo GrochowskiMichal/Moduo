@@ -1,0 +1,188 @@
+---
+// The tool reference: one table per module (the key card's order), each tool with the level it
+// needs and what it does. On a phone a row stacks: the name, its line, the level under them.
+import { keyModules, tools, type KeyModule } from "../../data/pages/mcp";
+
+const nameOf = (m: KeyModule) => keyModules.find((k) => k.id === m)!.name;
+const groups = keyModules.map((m) => ({ ...m, tools: tools.filter((t) => t.module === m.id) }));
+---
+
+<nav class="tl-jump" aria-label="Tools by module">
+  {
+    groups.map((g) => (
+      <a href={`#tools-${g.id}`}>
+        {g.name} <span class="tabular">{g.tools.length}</span>
+      </a>
+    ))
+  }
+</nav>
+{
+  groups.map((g) => (
+    <div class="tl-group">
+      <h3 id={`tools-${g.id}`}>
+        {g.name} <span class="tl-count tabular">{g.tools.length} tools</span>
+      </h3>
+      <table class="tl">
+        <caption class="sr-only">{g.name} tools, the level each needs, and what it does</caption>
+        <thead>
+          <tr>
+            <th scope="col">Tool</th>
+            <th scope="col">Needs</th>
+            <th scope="col">What it does</th>
+          </tr>
+        </thead>
+        <tbody>
+          {g.tools.map((t) => (
+            <tr>
+              <th scope="row">
+                <code>{t.name}</code>
+              </th>
+              <td class:list={["tl-lvl", t.access === "edit" && "is-edit"]}>
+                {t.access === "edit" ? "Edit" : "View"}
+                {t.needs && <span class="tl-also">and {nameOf(t.needs)}: Edit</span>}
+              </td>
+              <td class="tl-does">{t.does}.</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ))
+}
+
+<style>
+  .tl-jump {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.25rem;
+  }
+  :global(.longform__col) .tl-jump a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.25rem;
+    padding: 0 0.75rem;
+    border-radius: var(--r-md);
+    border: 1px solid var(--c-line-strong);
+    background: none;
+    font-size: var(--t-s);
+    color: var(--c-fg);
+    transition: border-color var(--d-hover) var(--ease);
+  }
+  .tl-jump a span {
+    color: var(--c-quiet);
+  }
+  @media (hover: hover) {
+    :global(.longform__col) .tl-jump a:hover {
+      border-color: var(--c-muted);
+    }
+  }
+  .tl-group {
+    margin-top: 2.5rem;
+  }
+  .tl-group h3 {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    scroll-margin-top: calc(var(--nav-h) + 1rem);
+    font-size: var(--t-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-display);
+    margin: 0 0 0.75rem;
+  }
+  .tl-count {
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .tl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--t-s);
+  }
+  .tl thead th {
+    padding: 0 1rem 0.625rem 0;
+    border-bottom: 1px solid var(--c-line-strong);
+    text-align: left;
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .tl tbody th,
+  .tl td {
+    padding: 0.625rem 1rem 0.625rem 0;
+    border-bottom: 1px solid var(--c-line);
+    text-align: left;
+    vertical-align: baseline;
+    font-weight: var(--w-small);
+  }
+  .tl tbody th {
+    width: 15.5rem;
+  }
+  .tl code {
+    padding: 0;
+    background: none;
+    font-size: 0.8125rem;
+    white-space: nowrap;
+  }
+  .tl-lvl {
+    width: 6.5rem;
+    color: var(--c-muted);
+  }
+  .tl-lvl.is-edit {
+    color: var(--c-fg);
+  }
+  .tl-also {
+    display: block;
+    font-size: var(--t-xs);
+    color: var(--c-quiet);
+  }
+  .tl-does {
+    color: var(--c-muted);
+    padding-right: 0;
+  }
+  @media (max-width: 640px) {
+    .tl thead {
+      display: none;
+    }
+    .tl,
+    .tl tbody,
+    .tl tr {
+      display: block;
+    }
+    .tl tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--c-line);
+    }
+    .tl tbody th,
+    .tl td {
+      display: block;
+      width: auto;
+      padding: 0;
+      border: 0;
+    }
+    .tl tbody th {
+      grid-column: 1;
+      grid-row: 1;
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .tl code {
+      white-space: normal;
+    }
+    .tl .tl-lvl {
+      grid-column: 2;
+      grid-row: 1;
+      text-align: right;
+      font-size: var(--t-xs);
+    }
+    .tl-does {
+      grid-column: 1 / -1;
+      margin-top: 0.25rem;
+    }
+  }
+</style>

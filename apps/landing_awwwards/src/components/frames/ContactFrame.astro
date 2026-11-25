@@ -1,0 +1,252 @@
+---
+// Maciej Grzywacz's page: the roll-up that fills itself in (the Contacts "one great moment"), grouped
+// by kind, each row with how it links to him, and a suggested link waiting for a yes. The
+// directory on the left, as the app sets it: people and companies, A to Z.
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+interface Props {
+  shadow?: boolean;
+  class?: string;
+}
+const { shadow = true, class: className } = Astro.props;
+const people = [
+  { l: "A", rows: [{ i: "AF", n: "Alpha feedback", r: "Feedback form", c: "var(--ap-blue)" }] },
+  { l: "H", rows: [{ i: "HO", n: "Hosting", r: "Supplier", c: "var(--ap-amber)" }] },
+  {
+    l: "M",
+    rows: [
+      { i: "MA", n: "Maciej Grzywacz", r: "Moduo", c: "var(--ap-violet)", sel: true, star: true },
+      { i: "MI", n: "Mike Grochowski", r: "Moduo", c: "var(--ap-pink)" },
+      { i: "MR", n: "Moduo releases", r: "Release notes", c: "var(--ap-blue)" },
+      { i: "MW", n: "Moduo waitlist", r: "Sign-up notices", c: "var(--ap-blue)" },
+    ],
+  },
+];
+const sections = [
+  {
+    cap: "Tasks",
+    rows: [
+      { icon: "circle-check", t: "Send the open alpha invite", s: "Due Fri", rel: "Created from" },
+      { icon: "circle-check", t: "Prep the invite review", s: "Due today", rel: "Follow-up" },
+    ],
+  },
+  { cap: "Notes", rows: [{ icon: "file-text", t: "Invite copy", s: "Open alpha", rel: "Mentions" }] },
+  { cap: "Emails", rows: [{ icon: "mail", t: "Open alpha invite", s: "Copy is final, one small change…", rel: "" }] },
+  { cap: "Events", rows: [{ icon: "calendar", t: "Invite review", s: "Thu 14:00", rel: "" }] },
+] as const;
+---
+
+<Frame
+  active="Contacts"
+  shadow={shadow}
+  class={className}
+  label="A picture of Maciej Grzywacz's contact page in Moduo: his open tasks, a note, an email and a call, all linked to him."
+>
+  <nav class="ap-panel ap-panel--side cf-dir">
+    <div class="cf-top">
+      <span class="ap-seg grow"><span class="is-on grow">People <span class="ap-muted">48</span></span><span class="grow">Companies <span class="ap-muted">12</span></span></span>
+      <span class="ap-ico"><Icon name="plus" /></span>
+    </div>
+    <div class="ap-field"><Icon name="search" />Search people</div>
+    {
+      people.map((g) => (
+        <>
+          <p class="ap-eyebrow cf-l">{g.l}</p>
+          {g.rows.map((p) => (
+            <div class:list={["cf-row", "sel" in p && p.sel && "is-sel"]}>
+              <span class="ap-av ap-av--n ap-av--24">{p.i}</span>
+              <span class="grow">
+                <span class="cf-n ap-ell">{p.n}</span>
+                <span class="cf-r ap-ell">{p.r}</span>
+              </span>
+              {"star" in p && <Icon name="star" class="ap-i--xs cf-star" />}
+              <span class="ap-dot" style={`--c:${p.c}`} />
+            </div>
+          ))}
+        </>
+      ))
+    }
+  </nav>
+
+  <div class="ap-panel ap-panel--main cf-main">
+    <div class="cf-hub">
+      <div class="cf-head">
+        <span class="ap-av ap-av--n ap-av--40">MA</span>
+        <div class="grow">
+          <p class="cf-name">Maciej Grzywacz</p>
+          <p class="cf-sub ap-sm">
+            <span>Co-founder, product and design</span>
+            <span class="cf-co"><Icon name="building-2" class="ap-i--xs" />Moduo</span>
+            <span class="cf-co"><span class="ap-dot" style="--c:var(--ap-success)"></span>Active</span>
+          </p>
+          <p class="cf-tags"><span class="ap-tag"><span class="ap-dot" style="--c:var(--ap-pink)"></span>team</span></p>
+        </div>
+        <span class="cf-icons"><span class="ap-ico"><Icon name="star" /></span><span class="ap-ico"><Icon name="pencil" /></span><span class="ap-ico"><Icon name="ellipsis" /></span></span>
+      </div>
+      <div class="cf-actions">
+        <span class="ap-btn ap-btn--secondary"><Icon name="mail" />Email</span>
+        <span class="ap-btn ap-btn--secondary"><Icon name="calendar-plus" />Add task</span>
+        <span class="ap-btn ap-btn--secondary"><Icon name="plus" />Note</span>
+        <span class="ap-btn ap-btn--secondary"><Icon name="link-2" />Link</span>
+      </div>
+      <p class="ap-sm ap-muted">Last touch: emailed you today · 2 open tasks</p>
+      <div class="cf-suggest ap-sm">
+        <Icon name="building-2" class="ap-i--sm ap-muted" />
+        <span class="grow ap-ell"><span class="ap-med">Link to Open alpha?</span> <span class="ap-muted">· named in 3 threads</span></span>
+        <span class="ap-btn">Dismiss</span>
+        <span class="ap-btn ap-btn--primary">Link</span>
+      </div>
+      {
+        sections.map((s) => (
+          <section>
+            <p class="ap-eyebrow cf-cap">
+              {s.cap} <span class="ap-badge">{s.rows.length}</span>
+            </p>
+            {s.rows.map((r) => (
+              <p class="cf-item ap-sm">
+                <Icon name={r.icon} class="ap-i--sm" />
+                <span class="grow ap-ell">
+                  {r.t} <span class="ap-muted">· {r.s}</span>
+                </span>
+                {r.rel && <span class="cf-rel">{r.rel}</span>}
+              </p>
+            ))}
+          </section>
+        ))
+      }
+    </div>
+  </div>
+</Frame>
+
+<style>
+  .cf-dir {
+    display: flex;
+    flex-direction: column;
+    gap: 0.143em;
+  }
+  .cf-top {
+    display: flex;
+    align-items: center;
+    gap: 0.286em;
+    margin-bottom: 0.429em;
+  }
+  .cf-top .ap-seg {
+    font-size: 0.929em;
+  }
+  .cf-l {
+    padding: 0.727em 0.727em 0.182em;
+  }
+  .cf-row {
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    padding: 0.429em 0.571em;
+    border-radius: 0.571em;
+  }
+  .cf-row.is-sel {
+    background: var(--ap-sel);
+    box-shadow: inset 0 0 0 1px var(--ap-sel-edge);
+  }
+  .cf-n,
+  .cf-r {
+    display: block;
+  }
+  .cf-n {
+    font-size: 0.929em;
+  }
+  .cf-r {
+    color: var(--ap-muted);
+    font-size: 0.857em;
+  }
+  .cf-dir :global(.cf-star) {
+    color: var(--ap-amber);
+    fill: var(--ap-amber);
+  }
+  .cf-main {
+    padding: 0;
+  }
+  .cf-hub {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.143em;
+    max-width: 48em;
+    padding: 1.714em;
+  }
+  .cf-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 1em;
+  }
+  .cf-name {
+    font-size: 1.714em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .cf-sub {
+    display: flex;
+    align-items: center;
+    gap: 0.769em;
+    margin-top: 0.231em;
+    color: var(--ap-muted);
+  }
+  .cf-co {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.385em;
+  }
+  .cf-tags {
+    margin-top: 0.571em;
+  }
+  .cf-icons {
+    display: flex;
+  }
+  .cf-actions {
+    display: flex;
+    gap: 0.429em;
+    margin-top: -0.286em;
+  }
+  .cf-suggest {
+    display: flex;
+    align-items: center;
+    gap: 0.615em;
+    padding: 0.308em 0.308em 0.308em 0.769em;
+    border-radius: 0.923em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    background: var(--ap-hover);
+  }
+  .cf-suggest :global(.ap-btn) {
+    font-size: 1.077em;
+  }
+  .cf-cap {
+    margin-bottom: 0.364em;
+  }
+  .cf-item {
+    display: flex;
+    align-items: center;
+    gap: 0.615em;
+    min-height: 2.462em;
+    padding: 0.154em 0.615em;
+    margin: 0 -0.615em;
+    border-radius: 0.615em;
+  }
+  .cf-item :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .cf-rel {
+    flex: none;
+    color: rgb(164 164 164 / 0.7);
+    font-size: 0.923em;
+  }
+  @container (max-width: 640px) {
+    .cf-hub {
+      padding: 1.143em;
+    }
+    .cf-actions,
+    .cf-icons,
+    .cf-rel {
+      display: none;
+    }
+  }
+</style>

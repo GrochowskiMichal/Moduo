@@ -1,0 +1,186 @@
+---
+// Every release, newest first, from release-notes/releases.json: the same words as the app's
+// What's new, ordered by apps/landing's own changelog logic.
+import "../styles/longform.css";
+import releasesJson from "../../../../release-notes/releases.json";
+import { changelogReleases } from "../../../landing/changelog.mjs";
+import StrokePair from "../components/StrokePair.astro";
+import Base from "../layouts/Base.astro";
+
+const SECURITY = "Security and reliability improvements.";
+// For display: typographer's quotes and the site's US spelling (the notes keep their own words
+// for the app's What's new).
+const US: [RegExp, string][] = [
+  [/\bcolour/g, "color"],
+  [/\bcentred\b/g, "centered"],
+];
+const smart = (s: string) =>
+  US.reduce((t, [re, to]) => t.replace(re, to), s)
+    .replace(/"([^"]*)"/g, "“$1”")
+    .replace(/'/g, "’");
+// A release whose only note is a reliability line reads as one quiet row, not a full section.
+const QUIET = /^(security and )?reliability improvements\.?$/i;
+const GROUPS = [
+  ["new", "New"],
+  ["improved", "Improved"],
+  ["fixed", "Fixed"],
+] as const;
+
+const releases = changelogReleases(releasesJson).map((r) => {
+  const by: Record<string, string[]> = { new: [], improved: [], fixed: [] };
+  let security = false;
+  for (const item of r.items ?? []) {
+    if (!item?.text?.trim()) continue;
+    if (item.type === "security") security = true;
+    else by[item.type]?.push(smart(item.text.trim()));
+  }
+  if (security) by.fixed.push(SECURITY);
+  const [y, m, d] = r.date.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const short = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const groups = GROUPS.filter(([k]) => by[k].length).map(([k, label]) => ({ label, items: by[k] }));
+  const all = groups.flatMap((g) => g.items);
+  return {
+    ...r,
+    id: `v${r.version.replace(/[^0-9a-z]+/gi, "-")}`,
+    date,
+    short,
+    groups,
+    quiet: all.length === 0 || (all.length === 1 && QUIET.test(all[0])),
+  };
+});
+---
+
+<Base title="Changelog" description="What’s new in Moduo: every release, newest first, in the same words as the app’s What’s new." reading>
+  <article class="longform" aria-labelledby="cl-title">
+    <div class="wrap longform__grid">
+      {
+        releases.length > 0 && (
+          <nav class="longform__rail" data-spy aria-label="Releases">
+            <p class="rail__label">Releases</p>
+            <ol class="rail__list">
+              {releases.map((r) => (
+                <li>
+                  <a href={`#${r.id}`}>
+                    <span>{r.version}</span>
+                    {r.short}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </nav>
+        )
+      }
+      <div class="longform__col">
+        <p class="eyebrow">Changelog</p>
+        <h1 id="cl-title" data-split data-intro>What’s new in Moduo</h1>
+        <p class="lede">Every release, newest first. The Mac and Windows apps update themselves, and the web app picks up a release when you reload.</p>
+        {
+          releases.length > 0 && (
+            <details class="otp">
+              <summary>
+                Releases
+                <StrokePair size="0.7rem" />
+              </summary>
+              <nav aria-label="Releases">
+                <ol>
+                  {releases.map((r) => (
+                    <li>
+                      <a href={`#${r.id}`}>
+                        <span>{r.version}</span>
+                        {r.short}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            </details>
+          )
+        }
+        {
+          releases.length === 0 && <p class="lede">The first release notes will appear here with the next update.</p>
+        }
+        {
+          releases.map((r) =>
+            r.quiet ? (
+              <section class="clause cl cl--quiet" id={r.id} aria-labelledby={`h-${r.id}`}>
+                <h2 id={`h-${r.id}`}>Moduo {r.version}</h2>
+                <p class="cl__row">
+                  <span class="updated">{r.date}</span>
+                  <span>Reliability improvements.</span>
+                </p>
+              </section>
+            ) : (
+            <section class="clause cl" id={r.id} aria-labelledby={`h-${r.id}`}>
+              <h2 id={`h-${r.id}`}>Moduo {r.version}</h2>
+              <p class="updated">{r.date}</p>
+              {r.groups.length ? (
+                r.groups.map((g) => (
+                  <>
+                    <h3>{g.label}</h3>
+                    <ul>
+                      {g.items.map((t) => (
+                        <li>{t}</li>
+                      ))}
+                    </ul>
+                  </>
+                ))
+              ) : (
+                <p>Reliability improvements.</p>
+              )}
+            </section>
+            ),
+          )
+        }
+      </div>
+      <div class="longform__next">
+        <a class="back" href="/"
+          ><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"
+            ><path d="M12 7H2.5M6.5 3l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg
+          >Back to the home page</a
+        >
+      </div>
+    </div>
+  </article>
+</Base>
+
+<style>
+  .cl .updated {
+    margin-top: -0.5rem;
+  }
+  /* The newest release stands a section's step under the lede (longform.css starts the first
+     clause level with the rail, which here put it hard under the lede's last line). */
+  @media (min-width: 901px) {
+    .longform .otp + .cl {
+      margin-top: calc(var(--u) * 6);
+    }
+  }
+  /* A reliability-only release: one row under its name, closer to its neighbors. */
+  .longform .cl--quiet {
+    margin-top: calc(var(--u) * 4);
+  }
+  .longform .cl--quiet h2 {
+    font-size: var(--t-body);
+    font-weight: var(--w-ui);
+  }
+  .longform .cl__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.25rem 1rem;
+    margin-top: 0.25rem;
+    color: var(--c-muted);
+  }
+  .longform .cl__row .updated {
+    margin: 0;
+  }
+</style>

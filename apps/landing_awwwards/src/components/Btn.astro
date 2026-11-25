@@ -1,0 +1,43 @@
+---
+// The one button. Primary (Paper fill) or ghost (hairline); the hover is the XOR sweep
+// (base.css + motion/buttons.ts). Renders a link with `href`, a button otherwise.
+interface Props {
+  href?: string;
+  variant?: "primary" | "ghost";
+  size?: "md" | "sm";
+  arrow?: boolean;
+  type?: "button" | "submit";
+  class?: string;
+  [key: string]: unknown;
+}
+const { href, variant = "primary", size = "md", arrow = false, type, class: className, ...rest } = Astro.props;
+const classes = ["btn", variant === "ghost" && "btn--ghost", size === "sm" && "btn--sm", className];
+---
+
+{
+  href ? (
+    <a class:list={classes} href={href} data-sweep {...rest}>
+      <span class="btn__label">
+        <slot />
+      </span>
+      {arrow && (
+        <svg class="arrow" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M2 7h9.5M7.5 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      )}
+      <span class="btn__sweep" aria-hidden="true" />
+    </a>
+  ) : (
+    <button class:list={classes} type={type ?? "button"} data-sweep {...rest}>
+      <span class="btn__label">
+        <slot />
+      </span>
+      {arrow && (
+        <svg class="arrow" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+          <path d="M2 7h9.5M7.5 3l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
+      )}
+      <span class="btn__sweep" aria-hidden="true" />
+    </button>
+  )
+}

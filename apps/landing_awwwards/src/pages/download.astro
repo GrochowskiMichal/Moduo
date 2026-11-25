@@ -1,0 +1,286 @@
+---
+// /download: where Moduo runs. The picture is the page's one moment: the same Home in a Mac's,
+// Windows' and a browser's frame (components/download/OsWindow.astro). Then the three doors with
+// what each needs, what runs where, and the questions people ask before installing.
+import Btn from "../components/Btn.astro";
+import Faq from "../components/Faq.astro";
+import OsWindow from "../components/download/OsWindow.astro";
+import Head from "../components/page/Head.astro";
+import PageHero from "../components/page/PageHero.astro";
+import Related from "../components/page/Related.astro";
+import { download } from "../data/pages/download";
+import { waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+import { app, crumbs, faq } from "../lib/seo";
+
+const d = download;
+---
+
+<Base
+  title={d.title}
+  description={d.description}
+  image="/og/download.png"
+  appFont
+  jsonLd={[app(), crumbs(["Download", "/download"]), faq(d.questions)]}
+>
+  <div data-pg="download">
+    <PageHero name={d.name} line={d.line} lead={d.lead} family="product" current="download">
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href={d.web.href} arrow>{d.web.label}</Btn>
+      </Fragment>
+      <p slot="note" class="t-s quiet">{d.invite}</p>
+    </PageHero>
+
+    <section class="pg dl-frames" aria-labelledby="dl-frames-title">
+      <div class="wrap">
+        <Head id="dl-frames-title" title={d.frames.title} text={d.frames.text} />
+        <OsWindow />
+      </div>
+    </section>
+
+    <section class="pg dl-doors" id="get" aria-labelledby="dl-doors-title">
+      <div class="wrap">
+        <Head id="dl-doors-title" title={d.platforms.title} size="l" stack />
+        <ul class="dl-doors__list">
+          {
+            d.platforms.items.map((p) => (
+              <li class="dl-door" data-id={p.id}>
+                <h3 class="dl-door__name t-l">
+                  {p.name}
+                  <span class="dl-door__mine t-xs">Your system</span>
+                </h3>
+                <p class="dl-door__need t-m">{p.need}</p>
+                <ul class="dl-door__facts">
+                  {p.facts.map((f) => (
+                    <li class="muted">{f}</li>
+                  ))}
+                </ul>
+                <div class="dl-door__go">
+                  <Btn variant="ghost" href={p.button.href} arrow class="dl-door__btn">
+                    {p.button.label}
+                  </Btn>
+                  {p.id !== "web" && <p class="t-xs quiet dl-door__file">{p.file}</p>}
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="dl-doors__note t-s quiet" data-reveal>{d.platforms.note}</p>
+      </div>
+    </section>
+
+    <section class="pg dl-where" id="where" aria-labelledby="dl-where-title">
+      <div class="wrap">
+        <Head id="dl-where-title" title={d.where.title} text={d.where.text} size="l" stack />
+        <div class="dl-where__scroll" tabindex="0" role="region" aria-label={d.where.table}>
+          <table class="dl-where__table">
+            <thead>
+              <tr>{d.where.head.map((h, i) => (i === 0 ? <td /> : <th scope="col">{h}</th>))}</tr>
+            </thead>
+            <tbody>
+              {
+                d.where.rows.map((row) => (
+                  <tr>
+                    <th scope="row">{row[0]}</th>
+                    {row.slice(1).map((cell, i) => (
+                      <td class:list={[cell === "No" && "is-no", cell !== "Yes" && cell !== "No" && "is-part"]} data-col={d.where.head[i + 1]}>
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="dl-phones grid">
+          <h3 class="dl-phones__title t-m" data-reveal>{d.phones.title}</h3>
+          <p class="dl-phones__text muted" data-reveal>{d.phones.text}</p>
+        </div>
+      </div>
+    </section>
+
+    <Faq id="download-faq" title="Before you install." items={d.questions} />
+
+    <Related title="Read next." slugs={["integrations", "security", "import"]} />
+  </div>
+</Base>
+
+<style>
+  .dl-frames {
+    padding-top: calc(var(--u) * 2);
+  }
+  .dl-doors__list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--gutter);
+  }
+  /* A door: a hairline on top that turns Paper on the visitor's own system (motion/pages/download.ts
+     names it), the words, and its one action at the foot. */
+  .dl-door {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .dl-door__name {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    font-weight: var(--w-display);
+  }
+  .dl-door__mine {
+    color: var(--c-quiet);
+    font-weight: var(--w-ui);
+    visibility: hidden;
+  }
+  .dl-door__need {
+    font-weight: var(--w-ui);
+  }
+  .dl-door__facts {
+    display: grid;
+    flex: 1;
+    align-content: start;
+  }
+  .dl-door__facts li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--c-line);
+    font-size: var(--t-s);
+    line-height: 1.5;
+  }
+  .dl-door__go {
+    display: grid;
+    justify-items: start;
+    gap: 0.625rem;
+    margin-top: 0.5rem;
+  }
+  /* Side by side, the doors share their rows (name, need, facts, action), so the lists and the
+     buttons start level whatever each door says. */
+  @media (min-width: 1000px) {
+    .dl-doors__list {
+      row-gap: 1rem;
+    }
+    .dl-door {
+      display: grid;
+      grid-row: span 4;
+      grid-template-rows: subgrid;
+    }
+  }
+  :global([data-mine="mac"]) .dl-door[data-id="mac"],
+  :global([data-mine="windows"]) .dl-door[data-id="windows"],
+  :global([data-mine="web"]) .dl-door[data-id="web"] {
+    border-top-color: var(--c-fg);
+  }
+  :global([data-mine="mac"]) .dl-door[data-id="mac"] .dl-door__mine,
+  :global([data-mine="windows"]) .dl-door[data-id="windows"] .dl-door__mine,
+  :global([data-mine="web"]) .dl-door[data-id="web"] .dl-door__mine {
+    visibility: visible;
+  }
+  /* The visitor's own door gets the filled button. */
+  :global([data-mine="mac"]) .dl-door[data-id="mac"] :global(.dl-door__btn),
+  :global([data-mine="windows"]) .dl-door[data-id="windows"] :global(.dl-door__btn),
+  :global([data-mine="web"]) .dl-door[data-id="web"] :global(.dl-door__btn) {
+    background: var(--c-primary);
+    border-color: var(--c-primary);
+    color: var(--c-primary-fg);
+  }
+
+  .dl-doors__note {
+    margin-top: calc(var(--u) * 4);
+  }
+  .dl-where__scroll {
+    overflow-x: auto;
+    border-radius: var(--r-sm);
+  }
+  .dl-where__table {
+    width: 100%;
+    min-width: 40rem;
+    table-layout: fixed;
+    border-collapse: collapse;
+    font-size: var(--t-s);
+  }
+  .dl-where__table thead td:first-child {
+    width: 34%;
+  }
+  .dl-where__table th,
+  .dl-where__table td {
+    text-align: left;
+    padding: 0.875rem 1rem 0.875rem 0;
+    border-bottom: 1px solid var(--c-line);
+    font-weight: var(--w-small);
+    vertical-align: top;
+  }
+  .dl-where__table thead th {
+    font-size: var(--t-body);
+    font-weight: var(--w-display);
+  }
+  .dl-where__table tbody th {
+    color: var(--c-muted);
+  }
+  .dl-where__table td.is-no {
+    color: var(--c-quiet);
+  }
+  .dl-where__table td.is-part {
+    color: var(--c-muted);
+  }
+  .dl-phones {
+    margin-top: calc(var(--u) * 8);
+    row-gap: 0.75rem;
+    align-items: baseline;
+  }
+  .dl-phones__title {
+    grid-column: 1 / span 4;
+    font-weight: var(--w-ui);
+  }
+  .dl-phones__text {
+    grid-column: 5 / span 6;
+    max-width: 36rem;
+  }
+  /* A phone reads each row as its own line: the thing, then the three places under it. */
+  @media (max-width: 720px) {
+    .dl-where__table {
+      min-width: 0;
+    }
+    .dl-where__table thead {
+      display: none;
+    }
+    .dl-where__table tr {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      column-gap: 0.75rem;
+      padding: 0.875rem 0;
+      border-bottom: 1px solid var(--c-line);
+    }
+    .dl-where__table th,
+    .dl-where__table td {
+      padding: 0;
+      border: 0;
+    }
+    .dl-where__table tbody th {
+      grid-column: 1 / -1;
+      margin-bottom: 0.5rem;
+      color: var(--c-fg);
+    }
+    .dl-where__table td::before {
+      content: attr(data-col);
+      display: block;
+      color: var(--c-quiet);
+      font-size: var(--t-xs);
+    }
+  }
+  @media (max-width: 999px) {
+    .dl-doors__list {
+      grid-template-columns: 1fr;
+      gap: calc(var(--u) * 5);
+    }
+  }
+  @media (max-width: 900px) {
+    .dl-phones__title,
+    .dl-phones__text {
+      grid-column: 1 / -1;
+    }
+  }
+</style>

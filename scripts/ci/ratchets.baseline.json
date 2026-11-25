@@ -40,6 +40,7 @@
     "apps/app/src/routes/pages/contacts-page.tsx": 33011,
     "apps/desktop/src-tauri/src/commands/caldav.rs": 33474,
     "apps/desktop/src-tauri/src/store_redb/mod.rs": 46031,
+    "apps/landing_awwwards/src/data/site.ts": 61573,
     "supabase/functions/_shared/account-erasure.test.ts": 40575,
     "supabase/functions/_shared/contracts/vocabularies.test.ts": 34466,
     "supabase/functions/_shared/description-markdown.ts": 35789,
@@ -924,6 +925,48 @@
     "apps/app/src/styles/css-blocks.ts": {
       "cssBlocks": 26,
       "stripComments": 18
+    },
+    "apps/landing_awwwards/scripts/typeface-data.mjs": {
+      "plist>value": 18
+    },
+    "apps/landing_awwwards/src/dev/devtools.ts": {
+      "render>draw#3": 18
+    },
+    "apps/landing_awwwards/src/lib/specimen.ts": {
+      "cast": 46
+    },
+    "apps/landing_awwwards/src/lib/typeface-plate.ts": {
+      "wordPlate>line.glyphs.map(cb)": 18
+    },
+    "apps/landing_awwwards/src/lib/typeface.ts": {
+      "kerning": 24
+    },
+    "apps/landing_awwwards/src/motion/bento.ts": {
+      "startBento>onPage(cb)": 17
+    },
+    "apps/landing_awwwards/src/motion/colophon.ts": {
+      "story>strokeAt": 19
+    },
+    "apps/landing_awwwards/src/motion/dusk-words.ts": {
+      "makeWords>show": 25
+    },
+    "apps/landing_awwwards/src/motion/first-light.ts": {
+      "mount": 17,
+      "mount>tick": 23
+    },
+    "apps/landing_awwwards/src/motion/interlock.ts": {
+      "startInterlock>onPage(cb)>apply": 62,
+      "startInterlock>onPage(cb)>apply>caps.forEach(cb)": 16,
+      "startInterlock>onPage(cb)>tick": 20
+    },
+    "apps/landing_awwwards/src/motion/modules.ts": {
+      "startModules>onPage(cb)>draw": 19
+    },
+    "apps/landing_awwwards/src/motion/pages/help.ts": {
+      "startHelp>onPage(cb)>run": 43
+    },
+    "apps/landing_awwwards/src/motion/pages/login.ts": {
+      "startLogin>onPage(cb)>draw": 27
     },
     "infra/turbo-cache/src/index.ts": {
       "handle": 38

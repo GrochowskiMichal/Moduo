@@ -212,6 +212,10 @@ jobs:
         with:
           bun-version-file: .bun-version
 
+      # The pages are an Astro build (apps/landing_awwwards), so the landing needs dependencies.
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
       - name: Build the landing
         run: node apps/landing/build.mjs
 

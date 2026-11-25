@@ -1,0 +1,42 @@
+---
+// A legal page: the article ported from apps/landing (lib/legal.ts), set for long reading.
+import "../styles/longform.css";
+import Btn from "./Btn.astro";
+import StrokePair from "./StrokePair.astro";
+import { legalPage, type LegalSlug } from "../lib/legal";
+import Base from "../layouts/Base.astro";
+
+interface Props {
+  slug: LegalSlug;
+  next: { href: string; label: string };
+}
+const { slug, next } = Astro.props;
+const page = legalPage(slug);
+---
+
+<Base title={page.title} description={page.description} image="/og/home.png" reading>
+  <article class="longform" aria-labelledby="legal-title">
+    <div class="wrap longform__grid">
+      {page.toc && <div class="longform__rail" data-spy set:html={page.toc} />}
+      <div class="longform__col">
+        <Fragment set:html={page.head} />
+        {
+          page.tocList && (
+            <details class="otp">
+              <summary>
+                On this page
+                <StrokePair size="0.7rem" />
+              </summary>
+              <nav aria-label="On this page" set:html={page.tocList} />
+            </details>
+          )
+        }
+        <Fragment set:html={page.rest} />
+      </div>
+      <nav class="longform__col longform__next" aria-label="Next">
+        <Btn variant="ghost" href={next.href} arrow>{next.label}</Btn>
+        <a class="back" href="/"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M12 7H2.5M6.5 3l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>Back to the home page</a>
+      </nav>
+    </div>
+  </article>
+</Base>

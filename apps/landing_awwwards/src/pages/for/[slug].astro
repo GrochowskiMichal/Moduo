@@ -1,0 +1,481 @@
+---
+// "Moduo for": one page per kind of work (freelancers, founders, small teams). The hero in the
+// module pages' grammar, then the signature: one working day as a chain of six moments, each
+// joined to the one before by the gesture that links them (two strokes that close into a window
+// as they pass), beside a sticky picture of the moment in view (motion/pages/usecase.ts). Then
+// what it replaces, the plan that fits, questions, and where to read next.
+import Btn from "../../components/Btn.astro";
+import Chain from "../../components/Chain.astro";
+import ChainLit from "../../components/ChainLit.astro";
+import Faq from "../../components/Faq.astro";
+import StrokePair from "../../components/StrokePair.astro";
+import Head from "../../components/page/Head.astro";
+import PageHero from "../../components/page/PageHero.astro";
+import Related from "../../components/page/Related.astro";
+import Picture from "../../components/usecase/Picture.astro";
+import { usecases, type UseCase } from "../../data/pages/usecase";
+import { pages } from "../../data/pages";
+import { pricing, waitlist } from "../../data/site";
+import Base from "../../layouts/Base.astro";
+import { crumbs, faq } from "../../lib/seo";
+import "../../styles/bento.css";
+
+export function getStaticPaths() {
+  return usecases.map((u) => ({ params: { slug: u.slug }, props: { u } }));
+}
+
+const { u } = Astro.props as { u: UseCase };
+const plan = pricing.plans.find((p) => p.id === u.plan)!;
+const moments = u.day.moments;
+// "[⌘ ⇧ T]" in a moment's words is a keycap.
+const keyed = (s: string) => s.split(/\[([^\]]+)\]/).map((text, i) => ({ key: i % 2 === 1, text }));
+---
+
+<Base title={u.title} description={u.description} image={`/og/for-${u.slug}.png`} appFont jsonLd={[crumbs([u.crumb, pages[u.page].href]), faq(u.questions)]}>
+  <div class="uc" data-pg="usecase">
+    <PageHero name={u.name} line={u.line} lead={u.lead} family="for" current={u.page}>
+      <Fragment slot="cta">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <Btn variant="ghost" href="/pricing">See {plan.name}</Btn>
+      </Fragment>
+      <p slot="note" class="t-s quiet">{u.planNote}</p>
+    </PageHero>
+
+    <section class="ud pg" aria-labelledby="ud-title">
+      <div class="wrap">
+        <Head id="ud-title" title={u.day.title} text={u.day.text} />
+        <div class="ud__body" data-ud>
+          <ol class="ud__list">
+            {
+              moments.map((m, i) => (
+                <li class:list={["ud__m", i === 0 && "is-on"]} data-ud-m={i}>
+                  {m.joint && (
+                    <p class="ud__j">
+                      <StrokePair class="ud__glyph" size="0.95rem" data-join />
+                      <kbd class="kbd ud__key">{m.joint.key}</kbd>
+                      <span class="ud__jt">{m.joint.text}</span>
+                    </p>
+                  )}
+                  <div class="ud__text">
+                    <p class="ud__time t-s">
+                      <span class="tabular">{m.time}</span>
+                      <span class="ud__where">{m.where}</span>
+                    </p>
+                    <h3 class="ud__t t-m">{m.title}</h3>
+                    <p class="ud__d muted">{keyed(m.text).map((part) => (part.key ? <kbd class="kbd">{part.text}</kbd> : part.text))}</p>
+                  </div>
+                  <div class="ud__pic" data-ud-pic data-ud-time={m.time} data-ud-where={m.where}>
+                    <span class="bfield" />
+                    <Picture pic={m.pic} />
+                  </div>
+                </li>
+              ))
+            }
+          </ol>
+          <div class="ud__stage" aria-hidden="true">
+            <div class="ud__card">
+              <span class="bfield"></span>
+              <div class="ud__slot" data-ud-slot></div>
+              <p class="ud__cap t-xs">
+                <span class="tabular" data-ud-cap-time>{moments[0].time}</span>
+                <span data-ud-cap-where>{moments[0].where}</span>
+              </p>
+              <ChainLit id={`ud-${u.slug}`} lit={0} class="ud__chain" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="uj pg" aria-labelledby="uj-title">
+      <div class="wrap grid pg-side">
+        <div class="pg-side__head">
+          <h2 class="t-l" id="uj-title" data-split>{u.juggle.title}</h2>
+          <p class="muted" data-reveal>{u.juggle.text}</p>
+        </div>
+        <ul class="pg-side__body uj__list">
+          {
+            u.juggle.rows.map((r) => (
+              <li class="uj__row" data-reveal>
+                <span class="uj__was">{r.was}</span>
+                <span class="uj__now muted">{r.now}</span>
+              </li>
+            ))
+          }
+        </ul>
+      </div>
+    </section>
+
+    <section class="uf pg pg--chapter" aria-labelledby="uf-title">
+      <div class="wrap grid pg-side">
+        <div class="pg-side__head">
+          <h2 class="t-l" id="uf-title" data-split>{u.fit.title}</h2>
+          <p class="muted" data-reveal>{u.fit.text}</p>
+        </div>
+        <div class="pg-side__body">
+          <div class="uf__card" data-reveal="frame">
+            <div class="uf__glyph">
+              <Chain id={`uf-${u.slug}`} n={plan.strokes} gaps={1} pad={4} label={plan.people} />
+            </div>
+            <div class="uf__main">
+              <h3 class="uf__name">{plan.name}</h3>
+              <p class="t-s muted">{plan.who}</p>
+              <p class="uf__price">
+                <span class="uf__amt">{plan.yearly}</span>
+                <span class="t-s muted">{plan.unit}</span>
+              </p>
+              <p class="t-s quiet">
+                {plan.billedYearly}, or {plan.monthly}
+                {plan.unit} billed monthly.
+              </p>
+              {plan.founding && <p class="uf__founding t-s">{plan.founding}</p>}
+            </div>
+            <ul class="uf__list">
+              {
+                plan.features.map((f) => (
+                  <li>
+                    <StrokePair size="0.5rem" class="uf__tick" />
+                    {f}
+                  </li>
+                ))
+              }
+            </ul>
+            <div class="uf__cta">
+              <Btn data-wl-open="nav">{waitlist.button}</Btn>
+              <Btn variant="ghost" href="/pricing" arrow>Compare every plan</Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <Faq id="uc-faq" title={u.slug === "freelancers" ? "Questions from freelancers." : u.slug === "founders" ? "Questions founders ask." : "Questions from teams."} items={u.questions} />
+
+    <Related title={u.related.title} slugs={u.related.slugs} />
+  </div>
+</Base>
+
+<style>
+  /* ── The day ─────────────────────────────────────────────────────────────────────────────
+     Still (no JS, reduced motion, phones): each moment is its words beside its own picture.
+     Live (motion/pages/usecase.ts on a wide screen): the pictures move into one sticky stage
+     on the right and swap as the moment in view changes; the words keep the left. */
+  .ud__list {
+    display: grid;
+    counter-reset: m;
+  }
+  .ud__m {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: start;
+    padding-bottom: calc(var(--u) * 6);
+  }
+  /* The chain's spine: a hairline down the left, a node at each moment's time. */
+  .ud__m::before {
+    content: "";
+    position: absolute;
+    left: 0.475rem;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--c-line-strong);
+  }
+  .ud__m:first-child::before {
+    top: 0.75rem;
+  }
+  /* The last moment's own padding would double the section's: the day ends where its picture does. */
+  .ud__body:not(:global(.is-live)) .ud__m:last-child {
+    padding-bottom: 0;
+  }
+  .ud__m:last-child::before {
+    bottom: auto;
+    height: 3.5rem;
+    background: linear-gradient(var(--c-line-strong), transparent);
+  }
+  .ud__j {
+    grid-column: 1 / -1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0 calc(var(--u) * 4);
+    color: var(--c-muted);
+    font-size: var(--t-s);
+  }
+  /* The joint sits on the spine: its two strokes, a little apart until they pass by. */
+  .ud__j :global(.ud__glyph) {
+    position: relative;
+    margin-left: calc(0.475rem - 0.95rem * 0.78);
+    padding: 0.25rem 0;
+    background: var(--c-bg);
+    color: var(--c-fg);
+  }
+  .ud__key {
+    font-size: var(--t-s);
+  }
+  .ud__text {
+    grid-column: 1 / span 5;
+    display: grid;
+    gap: 0.625rem;
+    padding-left: 2rem;
+  }
+  .ud__time {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: 0.625rem;
+    color: var(--c-fg);
+    font-weight: var(--w-ui);
+  }
+  .ud__time::before {
+    content: "";
+    position: absolute;
+    left: calc(-2rem + 0.475rem - 4px);
+    top: 0.5em;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--c-bg);
+    box-shadow: inset 0 0 0 1px var(--c-fg);
+  }
+  .ud__where {
+    color: var(--c-quiet);
+    font-weight: var(--w-small);
+  }
+  .ud__t {
+    font-weight: var(--w-ui);
+  }
+  .ud__d {
+    max-width: 30rem;
+  }
+  .ud__pic {
+    grid-column: 7 / -1;
+    position: relative;
+    display: grid;
+    align-items: center;
+    min-height: 26rem;
+    padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 2.5vw, 2rem);
+    border-radius: var(--r-xl);
+    background: #0a0a0a;
+    box-shadow:
+      inset 0 0 0 1px var(--c-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    container-type: inline-size;
+    overflow: hidden;
+  }
+  .ud__pic > :global(.uc-pic) {
+    position: relative;
+    z-index: 1;
+  }
+  .ud__stage {
+    display: none;
+  }
+
+  /* Live: the words on the left, one sticky stage on the right. */
+  .ud__body:global(.is-live) {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+  }
+  .ud__body:global(.is-live) .ud__list {
+    grid-column: 1 / span 5;
+  }
+  .ud__body:global(.is-live) .ud__m {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: min(54svh, 32rem);
+    padding-bottom: calc(var(--u) * 4);
+  }
+  .ud__body:global(.is-live) .ud__text {
+    grid-column: 1;
+  }
+  .ud__body:global(.is-live) .ud__pic {
+    display: none;
+  }
+  .ud__body:global(.is-live) .ud__stage {
+    display: block;
+    grid-column: 7 / -1;
+    grid-row: 1;
+    position: relative;
+  }
+  .ud__card {
+    position: sticky;
+    top: calc(var(--nav-h) + max(1.5rem, (100svh - var(--nav-h) - min(74svh, 44rem)) / 2));
+    height: min(74svh, 44rem);
+    border-radius: var(--r-xl);
+    background: #0a0a0a;
+    box-shadow:
+      inset 0 0 0 1px var(--c-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    overflow: hidden;
+  }
+  /* The pictures share one cell, centred by the grid: GSAP owns their transform (x as they part
+     and arrive), so no translate of their own can be folded into it. */
+  .ud__slot {
+    position: absolute;
+    inset: 3.5rem clamp(1.5rem, 3vw, 3rem) 4rem;
+    display: grid;
+    place-items: center;
+    container-type: inline-size;
+  }
+  .ud__slot > :global(.uc-pic) {
+    grid-area: 1 / 1;
+    font-size: clamp(11px, 2.7cqi, 15px);
+  }
+  .ud__cap {
+    position: absolute;
+    left: clamp(1.25rem, 2.4vw, 2rem);
+    top: clamp(1.25rem, 2.4vw, 1.75rem);
+    display: flex;
+    gap: 0.625rem;
+    color: var(--c-quiet);
+    font-weight: var(--w-ui);
+  }
+  .ud__cap [data-ud-cap-time] {
+    color: var(--c-fg);
+  }
+  .ud__card :global(.ud__chain) {
+    position: absolute;
+    right: clamp(1.25rem, 2.4vw, 2rem);
+    bottom: clamp(1.25rem, 2.4vw, 1.75rem);
+    width: 5.5rem;
+  }
+  /* The moment in view lights; the rest step back, the plate's captions' treatment. */
+  .ud__body:global(.is-live) .ud__m :is(.ud__t, .ud__d, .ud__time) {
+    transition: color 0.5s var(--ease);
+  }
+  .ud__body:global(.is-live) .ud__m:not(:global(.is-on)) :is(.ud__t, .ud__time) {
+    color: var(--c-quiet);
+  }
+  .ud__body:global(.is-live) .ud__m:not(:global(.is-on)) .ud__d {
+    color: var(--c-quiet);
+  }
+  .ud__body:global(.is-live) .ud__m .ud__time::before {
+    transition:
+      background-color 0.5s var(--ease),
+      box-shadow 0.5s var(--ease);
+  }
+  .ud__body:global(.is-live) .ud__m:global(.is-on) .ud__time::before {
+    background: var(--c-fg);
+  }
+  .ud__body:global(.is-live) .ud__m:not(:global(.is-on)) .ud__time::before {
+    box-shadow: inset 0 0 0 1px var(--c-quiet);
+  }
+
+  @media (max-width: 999px) {
+    .ud__text,
+    .ud__pic {
+      grid-column: 1 / -1;
+    }
+    .ud__pic {
+      min-height: 0;
+      margin: 1.5rem 0 0 2rem;
+    }
+  }
+  @media (max-width: 560px) {
+    .ud__pic {
+      padding: 1.25rem 0.5rem;
+    }
+  }
+
+  /* ── What it replaces: a ledger of rows, the old app and its job here. ──────────────────── */
+  .uj__list {
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .uj__row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    padding: 1.25rem 0;
+    border-bottom: 1px solid var(--c-line-strong);
+  }
+  .uj__was {
+    font-size: var(--t-m);
+    line-height: var(--lh-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-ui);
+  }
+  .uj__now {
+    padding-top: 0.2em;
+  }
+  @media (max-width: 720px) {
+    .uj__row {
+      grid-template-columns: 1fr;
+      row-gap: 0.375rem;
+    }
+  }
+
+  /* ── The plan that fits: one plan, as the pricing page sets it. ─────────────────────────── */
+  .uf__card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 2rem var(--gutter);
+    padding: clamp(1.5rem, 3vw, 2.5rem);
+    border-radius: var(--r-xl);
+    background: var(--c-card);
+    box-shadow:
+      inset 0 0 0 1px var(--c-line-strong),
+      inset 0 2px 0 var(--c-fg);
+  }
+  .uf__glyph {
+    grid-column: 1 / -1;
+    height: 3.25rem;
+  }
+  .uf__glyph :global(.chain) {
+    width: auto;
+    height: 100%;
+  }
+  .uf__main {
+    display: grid;
+    align-content: start;
+    gap: 0.375rem;
+  }
+  .uf__name {
+    font-size: var(--t-m);
+    font-weight: var(--w-display);
+    letter-spacing: var(--tr-m);
+  }
+  .uf__price {
+    display: flex;
+    align-items: baseline;
+    gap: 0.375rem;
+    margin-top: 0.75rem;
+  }
+  .uf__amt {
+    font-size: var(--t-xl);
+    line-height: 1;
+    letter-spacing: var(--tr-xl);
+    font-weight: var(--w-display);
+  }
+  .uf__founding {
+    margin-top: 0.5rem;
+    color: var(--c-fg);
+  }
+  .uf__list {
+    display: grid;
+    align-content: start;
+    gap: 0.75rem;
+    padding-top: 0.25rem;
+  }
+  .uf__list li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  .uf__list :global(.uf__tick) {
+    --g: 1;
+    color: var(--c-muted);
+  }
+  .uf__cta {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  @media (max-width: 720px) {
+    .uf__card {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

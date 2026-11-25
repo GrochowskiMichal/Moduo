@@ -1,0 +1,350 @@
+---
+// Numbers drawn as the mark's stroke. One row per series, one column per value; each value is a
+// stroke whose size follows the value (by area, so a stroke twice as big reads as twice as
+// much). Neighbors that are both large overlap, and the overlap follows the mark's rule: even
+// columns are layer A, odd ones layer B, and A is painted again in Canvas black clipped by B,
+// so a busy stretch interlocks into a chain with windows. Static SVG; motion/about.ts adds the
+// readout under the pointer, the reveal and, for a day, the "now" line.
+import { STROKE, STROKE_PATH } from "../lib/stroke";
+
+interface Props {
+  id: string;
+  rows: { label: string; values: readonly number[] }[];
+  /** One label per column (the readout uses them all; the axis shows `ticks`). */
+  cols: readonly string[];
+  /** Column indexes labeled on the axis. */
+  ticks?: number[];
+  /** Marks a 24-column day: the driver draws where "now" is. */
+  day?: boolean;
+  /** Values named on the chart, with a hairline to their stroke: the first row's above it, the
+   *  others' below. */
+  peaks?: { row: number; col: number }[];
+  nowLabel?: string;
+  caption: string;
+  class?: string;
+}
+const {
+  id,
+  rows,
+  cols,
+  ticks = cols.map((_, i) => i),
+  day = false,
+  peaks = [],
+  nowLabel = "now",
+  caption,
+  class: className,
+} = Astro.props;
+
+const CW = 100;
+const W = STROKE.w;
+const H = STROKE.bottom - STROKE.top;
+const S_MAX = (CW * 1.12) / W;
+const S_MIN = 0.07;
+const RH = H * S_MAX + 30;
+const n = cols.length;
+const max = Math.max(...rows.flatMap((r) => r.values));
+const scale = (v: number) => S_MIN + (S_MAX - S_MIN) * Math.sqrt(v / max);
+const fix = (v: number) => v.toFixed(2);
+const place = (i: number, r: number, v: number) => {
+  const s = scale(v);
+  const cx = (i + 0.5) * CW;
+  const cy = r * RH + RH / 2;
+  return `translate(${fix(cx - (s * W) / 2)} ${fix(cy - s * (STROKE.top + H / 2))}) scale(${s.toFixed(4)})`;
+};
+const vb = `0 0 ${n * CW} ${rows.length * RH}`;
+const pct = (v: number) => `${(v * 100).toFixed(3)}%`;
+// Where a named value sits: its column, and the edge of its stroke facing the label.
+const peakAt = (row: number, col: number) => {
+  const v = rows[row].values[col];
+  const half = (scale(v) * H) / 2;
+  const cy = row * RH + RH / 2;
+  const up = row === 0;
+  return {
+    x: pct((col + 0.5) / n),
+    y: pct((up ? cy - half : cy + half) / (rows.length * RH)),
+    up,
+    end: (col + 0.5) / n > 0.85,
+    text: `${cols[col]} · ${v}`,
+  };
+};
+const sid = `${id}-s`;
+---
+
+<figure
+  class:list={["sc", day && "sc--day", className]}
+  data-sc
+  data-cols={JSON.stringify(cols)}
+  data-rows={JSON.stringify(rows.map((r) => ({ label: r.label, values: r.values })))}
+  data-day={day ? "" : undefined}
+>
+  <div class="sc__plot">
+    <div class="sc__labels" aria-hidden="true">
+      {rows.map((r) => <span>{r.label}</span>)}
+    </div>
+    <div class="sc__area" data-sc-area>
+      <svg viewBox={vb} aria-hidden="true" focusable="false">
+        <defs>
+          <path id={sid} d={STROKE_PATH}></path>
+          {
+            rows.map((r, ri) => (
+              <clipPath id={`${id}-b${ri}`}>
+                {r.values.map((v, i) => (i % 2 === 1 ? <use href={`#${sid}`} transform={place(i, ri, v)} /> : null))}
+              </clipPath>
+            ))
+          }
+        </defs>
+        {
+          rows.map((r, ri) => (
+            <g class="sc__row">
+              <g class="sc__fill">
+                {r.values.map((v, i) => (
+                  <use href={`#${sid}`} transform={place(i, ri, v)} />
+                ))}
+              </g>
+              <g class="sc__cut" clip-path={`url(#${id}-b${ri})`}>
+                {r.values.map((v, i) => (i % 2 === 0 ? <use href={`#${sid}`} transform={place(i, ri, v)} /> : null))}
+              </g>
+            </g>
+          ))
+        }
+      </svg>
+      <span class="sc__hot" data-sc-hot aria-hidden="true"></span>
+      {
+        peaks.map(({ row, col }) => {
+          const pk = peakAt(row, col);
+          return (
+            <span class:list={["sc__peak t-xs tabular", pk.up ? "is-up" : "is-down", pk.end && "is-end"]} style={`--x:${pk.x};--y:${pk.y}`} aria-hidden="true">
+              {pk.text}
+            </span>
+          );
+        })
+      }
+      {
+        day && (
+          <span class="sc__now" data-sc-now aria-hidden="true">
+            <span class="t-xs">{nowLabel}</span>
+          </span>
+        )
+      }
+    </div>
+  </div>
+  <div class="sc__axis t-xs tabular" aria-hidden="true">
+    {ticks.map((i) => <span style={`--x:${(((i + 0.5) / n) * 100).toFixed(3)}%`}>{cols[i]}</span>)}
+  </div>
+  <figcaption class="sc__cap t-xs">
+    <span class="sc__read tabular" data-sc-read aria-hidden="true"></span>
+    <span>{caption}</span>
+  </figcaption>
+  {/* Wrapped: a table can't be squeezed to the 1 px box, and would widen a phone's page. */}
+  <div class="sr-only">
+  <table>
+    <caption>{caption}</caption>
+    <thead>
+      <tr>
+        <th scope="col"></th>
+        {rows.map((r) => <th scope="col">{r.label}</th>)}
+      </tr>
+    </thead>
+    <tbody>
+      {
+        cols.map((c, i) => (
+          <tr>
+            <th scope="row">{c}</th>
+            {rows.map((r) => (
+              <td>{r.values[i]}</td>
+            ))}
+          </tr>
+        ))
+      }
+    </tbody>
+  </table>
+  </div>
+</figure>
+
+<style>
+  .sc {
+    --label-w: 4.5rem;
+    position: relative;
+  }
+  .sc__plot {
+    display: grid;
+    grid-template-columns: var(--label-w) minmax(0, 1fr);
+    align-items: stretch;
+  }
+  .sc__labels {
+    display: grid;
+    align-items: center;
+    font-size: var(--t-s);
+    font-weight: var(--w-ui);
+  }
+  .sc__area {
+    position: relative;
+  }
+  .sc__area svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: var(--ar, auto);
+    overflow: visible;
+  }
+  .sc__fill {
+    fill: var(--c-stroke);
+  }
+  .sc__cut {
+    fill: var(--c-bg);
+  }
+  /* The column under the pointer, and where "now" is on the day. */
+  .sc__hot {
+    position: absolute;
+    top: -0.5rem;
+    bottom: -0.5rem;
+    left: 0;
+    width: 1px;
+    background: var(--c-fg);
+    mix-blend-mode: difference;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--d-slow) var(--ease);
+  }
+  .sc:global(.is-reading) .sc__hot {
+    opacity: 1;
+  }
+  .sc__now {
+    position: absolute;
+    top: -1.75rem;
+    bottom: -0.5rem;
+    left: 0;
+    width: 1px;
+    background: var(--c-line-strong);
+    mix-blend-mode: difference;
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* "Now" is live: a node at its head breathes, slowly (motion allowed only). */
+  .sc__now::before {
+    content: "";
+    position: absolute;
+    top: -3px;
+    left: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: var(--r-full);
+    background: var(--c-fg);
+  }
+  :global(html.motion) .sc__now::before {
+    animation: sc-live 2.4s var(--ease) infinite alternate;
+  }
+  @keyframes sc-live {
+    from {
+      opacity: 1;
+      scale: 1;
+    }
+    to {
+      opacity: 0.35;
+      scale: 0.6;
+    }
+  }
+  .sc__now span {
+    position: absolute;
+    top: 0;
+    left: 0.4rem;
+    color: var(--c-muted);
+    white-space: nowrap;
+  }
+  /* Late in the day the label hangs on the line's other side, inside the page. */
+  .sc__now.is-late span {
+    left: auto;
+    right: 0.4rem;
+  }
+  /* A named value hangs off its stroke on a hairline, the plate's leader. */
+  .sc__peak {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    padding-left: 0.4rem;
+    color: var(--c-fg);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .sc__peak::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    width: 1px;
+    height: 1.25rem;
+    background: var(--c-fg);
+  }
+  .sc__peak.is-up {
+    translate: 0 calc(-100% - 1.25rem);
+  }
+  .sc__peak.is-up::before {
+    top: 100%;
+  }
+  .sc__peak.is-down {
+    translate: 0 1.25rem;
+  }
+  .sc__peak.is-down::before {
+    bottom: 100%;
+  }
+  /* Near the right edge a label hangs to the left of its hairline, inside the chart. */
+  .sc__peak.is-end {
+    padding-left: 0;
+    padding-right: 0.4rem;
+  }
+  .sc__peak.is-end::before {
+    left: auto;
+    right: 0;
+  }
+  .sc__peak.is-end.is-up {
+    translate: -100% calc(-100% - 1.25rem);
+  }
+  .sc__peak.is-end.is-down {
+    translate: -100% 1.25rem;
+  }
+  .sc__axis {
+    position: relative;
+    height: 1.5rem;
+    margin-top: 2.25rem;
+    margin-left: var(--label-w);
+    color: var(--c-muted);
+  }
+  .sc__axis span {
+    position: absolute;
+    top: 0;
+    left: var(--x);
+    translate: -50% 0;
+  }
+  .sc__cap {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 2rem;
+    margin-top: 0.5rem;
+    margin-left: var(--label-w);
+    font-size: var(--t-s);
+    color: var(--c-muted);
+  }
+  .sc__read {
+    min-height: 1.2em;
+    color: var(--c-fg);
+  }
+  @media (max-width: 700px) {
+    .sc {
+      --label-w: 3.5rem;
+    }
+    /* A phone names only the first row's value: there's no room for labels on both sides. */
+    .sc__peak.is-down {
+      display: none;
+    }
+    /* A phone's day keeps every other tick, so the hours never run into each other. */
+    .sc--day .sc__axis span:nth-child(even) {
+      display: none;
+    }
+    .sc__labels {
+      font-size: var(--t-xs);
+    }
+    .sc__cap {
+      margin-left: 0;
+    }
+  }
+</style>

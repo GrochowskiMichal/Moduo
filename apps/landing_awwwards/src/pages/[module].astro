@@ -1,0 +1,469 @@
+---
+// One page per module. The chain at the top is the navigation: this module's stroke is lit, and
+// the windows to its neighbors are the links this page explains.
+import Btn from "../components/Btn.astro";
+import ChainLit from "../components/ChainLit.astro";
+import ChainNav from "../components/ChainNav.astro";
+import StrokePair from "../components/StrokePair.astro";
+import CalendarFrame from "../components/frames/CalendarFrame.astro";
+import ChatFrame from "../components/frames/ChatFrame.astro";
+import ContactFrame from "../components/frames/ContactFrame.astro";
+import EmailFrame from "../components/frames/EmailFrame.astro";
+import NotesFrame from "../components/frames/NotesFrame.astro";
+import TasksFrame from "../components/frames/TasksFrame.astro";
+import { interlock, moduleOrder, modules, site, waitlist, type ModuleSlug } from "../data/site";
+import Base from "../layouts/Base.astro";
+
+export function getStaticPaths() {
+  return moduleOrder.map((slug) => ({ params: { module: slug } }));
+}
+
+const slug = Astro.params.module as ModuleSlug;
+const m = modules[slug];
+const i = moduleOrder.indexOf(slug);
+const next = modules[moduleOrder[(i + 1) % moduleOrder.length]];
+const frames = {
+  email: EmailFrame,
+  tasks: TasksFrame,
+  notes: NotesFrame,
+  calendar: CalendarFrame,
+  contacts: ContactFrame,
+  chat: ChatFrame,
+} as const;
+const Picture = frames[slug];
+
+// The windows on either side of this module's stroke; each card opens the module on the
+// other side of its window.
+const links = [i - 1, i]
+  .filter((k) => k >= 0 && k < interlock.links.length)
+  .map((k) => {
+    const other = moduleOrder[k] === slug ? moduleOrder[k + 1] : moduleOrder[k];
+    return {
+      n: k + 1,
+      ...interlock.links[k],
+      pair: [modules[moduleOrder[k]].name, modules[moduleOrder[k + 1]].name],
+      href: `/${other}#overlaps`,
+    };
+  });
+
+const crumbs = {
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Moduo", item: site.url },
+    { "@type": "ListItem", position: 2, name: m.name, item: `${site.url}/${slug}` },
+  ],
+};
+---
+
+<Base title={`${m.name}: ${m.line.replace(/\.$/, "")}`} description={m.description} image={`/og/${slug}.png`} appFont jsonLd={[crumbs]}>
+  <section class="mh" aria-labelledby="mh-title">
+    <div class="mh__in wrap grid">
+      <h1 class="mh__name t-mega" id="mh-title">{m.name}</h1>
+      <div class="mh__copy">
+        {/* The line and lead paint with the HTML: the first screen's largest text (LCP). */}
+        <p class="mh__line t-l">{m.line}</p>
+        <p class="mh__lead muted">{m.lead}</p>
+        <div class="mh__cta" data-reveal data-intro data-delay="0.3">
+          <Btn data-wl-open="nav">{waitlist.button}</Btn>
+          <Btn variant="ghost" href="/pricing">See pricing</Btn>
+        </div>
+        {m.plan && <p class="t-s quiet">{m.plan}</p>}
+      </div>
+      <ChainNav
+        id="mods"
+        label="Modules"
+        items={moduleOrder.map((m) => ({ href: `/${m}`, label: modules[m].name }))}
+        current={i}
+        class="mh__nav"
+      />
+    </div>
+  </section>
+
+  <section class="mf" aria-label={`${m.name} in Moduo`}>
+    <div class="wrap" data-reveal="frame">
+      <Picture />
+      <p class="ap-note">{m.name}, redrawn from the app. Its look is still changing.</p>
+    </div>
+  </section>
+
+  <section class="mm" aria-labelledby="mm-title">
+    <div class="wrap grid">
+      <h2 class="mm__title t-xl" id="mm-title" data-split>{m.moment.title}</h2>
+      <p class="mm__text t-m muted" data-reveal>{m.moment.text}</p>
+    </div>
+  </section>
+
+  <section class="mfe" aria-labelledby="mfe-title">
+    <div class="wrap grid">
+      <h2 class="mfe__title t-xs quiet" id="mfe-title">What {m.name} does</h2>
+      <dl class="mfe__list">
+        {
+          m.features.map((f) => (
+            <div class="mfe__item" data-reveal>
+              <dt class="mfe__t">{f.title}</dt>
+              <dd class="mfe__d muted">{f.text}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </div>
+  </section>
+
+  <section class="ml" id="overlaps" aria-labelledby="ml-title">
+    <div class="wrap grid">
+      <h2 class="ml__title t-l" id="ml-title" data-split>Where {m.name} overlaps.</h2>
+      <ul class="ml__list" style={`--n:${links.length + 1}`}>
+        {
+          links.map((l) => (
+            <li class="ml__item" data-reveal>
+              <p class="ml__pair t-s">
+                <StrokePair class="ml__glyph" size="0.7rem" data-join />
+                {l.pair[0]} and {l.pair[1]}
+              </p>
+              <h3 class="ml__t t-m">
+                <a class="ml__a" href={l.href}>
+                  <span class="ml__step">{l.title}</span>
+                </a>
+              </h3>
+              <p class="ml__d muted">{l.text}</p>
+            </li>
+          ))
+        }
+        <li class="ml__item ml__item--rest" data-reveal>
+          <p class="ml__pair t-s">
+            <StrokePair class="ml__glyph" size="0.7rem" data-join />
+            {m.name} and the rest
+          </p>
+          <h3 class="ml__t t-m">Everything else</h3>
+          <p class="ml__d muted">Drag one thing onto another, or type @ or / anywhere you write, and the link is made.</p>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="mk" aria-labelledby="mk-title">
+    <div class="wrap grid">
+      <h2 class="mk__title t-xs quiet" id="mk-title">Keys</h2>
+      <ul class="mk__list">
+        {
+          m.keys.map((k) => (
+            <li>
+              <kbd class="kbd">{k.k}</kbd>
+              <span>{k.does}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <nav class="mn" aria-label="Next module">
+    <div class="wrap">
+      <a class="mn__link" href={`/${next.slug}`}>
+        <span class="mn__text">
+          <span class="mn__label t-xs quiet">Next module</span>
+          <span class="mn__name t-xl">
+            {next.name}
+            <StrokePair class="mn__glyph" size="clamp(0.9rem, 1.6vw, 1.5rem)" />
+          </span>
+          <span class="mn__line muted">{next.line}</span>
+        </span>
+        <ChainLit id="mn-chain" lit={moduleOrder.indexOf(next.slug)} class="mn__chain" />
+      </a>
+    </div>
+  </nav>
+</Base>
+
+<style>
+  /* The home hero's grammar: the name on top, the words bottom left, this module's lit
+     stroke in the chain bottom right. No forced full height: the product picture starts on the
+     first screen instead of an empty band. */
+  .mh__in {
+    grid-template-rows: auto auto;
+    row-gap: clamp(2rem, 6svh, 4rem);
+    padding-top: calc(var(--nav-h) + clamp(2rem, 7svh, 5.5rem));
+    padding-bottom: calc(var(--u) * 10);
+  }
+  .mh__name {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    margin-left: -0.055em;
+    white-space: nowrap;
+  }
+  .mh__copy {
+    grid-column: 1 / span 5;
+    grid-row: 2;
+    align-self: end;
+    display: grid;
+    gap: 1.25rem;
+  }
+  .mh :global(.mh__nav) {
+    grid-column: 7 / -1;
+    grid-row: 2;
+    align-self: end;
+  }
+  .mh__line {
+    font-weight: var(--w-text);
+  }
+  .mh__cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .mf {
+    padding-bottom: calc(var(--u) * 6);
+  }
+  .mm {
+    padding: calc(var(--u) * 10) 0 calc(var(--u) * 6);
+  }
+  .mm__title {
+    grid-column: 1 / span 8;
+    margin-left: -0.04em;
+  }
+  .mm__text {
+    grid-column: 5 / span 6;
+    margin-top: 2rem;
+    max-width: 36rem;
+  }
+  .mfe {
+    padding: calc(var(--u) * 6) 0;
+  }
+  /* The label sits on the first feature's line (first baselines), not above it. */
+  .mfe__title {
+    grid-column: 1 / span 3;
+    align-self: baseline;
+    font-weight: var(--w-ui);
+  }
+  .mfe__list {
+    grid-column: 5 / span 8;
+    align-self: baseline;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    row-gap: calc(var(--u) * 5);
+  }
+  .mfe__item {
+    display: grid;
+    align-content: start;
+    gap: 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--c-line-strong);
+  }
+  .mfe__t {
+    font-size: var(--t-m);
+    letter-spacing: var(--tr-m);
+    font-weight: var(--w-ui);
+  }
+  .mfe__d {
+    margin: 0;
+  }
+  .mfe__item:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+  .mfe__item:last-child:nth-child(odd) .mfe__d {
+    max-width: 36rem;
+  }
+  .ml {
+    padding: calc(var(--u) * 6) 0 calc(var(--u) * 4);
+    scroll-margin-top: var(--nav-h);
+  }
+  .ml__title {
+    grid-column: 1 / span 4;
+  }
+  .ml__list {
+    grid-column: 5 / span 8;
+    display: grid;
+    grid-template-columns: repeat(var(--n), minmax(0, 1fr));
+    gap: var(--gutter);
+  }
+  /* A card whose two strokes join as it arrives. The card is one link (the title's, stretched);
+     under the pointer the window opens wider and the title moves one step along. */
+  .ml__item {
+    position: relative;
+    display: grid;
+    align-content: start;
+    gap: 0.625rem;
+    padding: 1.5rem;
+    border-radius: var(--r-lg);
+    background: var(--c-card);
+    border: 1px solid var(--c-line);
+    transition: border-color var(--d-hover) var(--ease);
+  }
+  .ml__item--rest {
+    background: none;
+    border-style: dashed;
+    border-color: var(--c-line-strong);
+  }
+  .ml__pair {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    color: var(--c-muted);
+  }
+  .ml__t {
+    font-weight: var(--w-ui);
+  }
+  .ml__step {
+    display: inline-block;
+    transition: translate 0.5s var(--ease);
+  }
+  .ml__a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+  }
+  /* Focus rings the whole card: the link's own click area. */
+  .ml__a:focus-visible {
+    outline: none;
+  }
+  .ml__a:focus-visible::after {
+    outline: 2px solid var(--c-primary);
+    outline-offset: 3px;
+  }
+  @media (hover: hover) {
+    .ml__item:has(.ml__a):hover {
+      border-color: var(--c-line-strong);
+    }
+    .ml__item:hover .ml__step {
+      translate: 0.4em 0;
+    }
+    .ml__item:has(.ml__a):hover :global(.sp) {
+      --g: 0.7;
+    }
+  }
+  .ml__item:has(.ml__a:focus-visible) .ml__step {
+    translate: 0.4em 0;
+  }
+  .ml__item:has(.ml__a:focus-visible) :global(.sp) {
+    --g: 0.7;
+  }
+  .ml__item:is(:hover, :has(.ml__a:focus-visible)) :global(.sp svg + svg) {
+    transition-duration: 0.5s;
+  }
+  /* Three cards in eight columns run to four-line bodies, so below a very wide screen the title
+     sits above and the cards take the whole width. */
+  @media (max-width: 1599px) {
+    .ml__title,
+    .ml__list {
+      grid-column: 1 / -1;
+    }
+    .ml__list {
+      margin-top: 2rem;
+    }
+  }
+  .mk {
+    padding: calc(var(--u) * 4) 0 calc(var(--u) * 10);
+  }
+  .mk__title {
+    grid-column: 1 / span 3;
+    font-weight: var(--w-ui);
+  }
+  .mk__list {
+    grid-column: 5 / span 8;
+    display: grid;
+    gap: 0.75rem;
+  }
+  .mk__list li {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+  }
+  .mk__list .kbd {
+    font-size: var(--t-s);
+    min-width: 3.5rem;
+  }
+  .mn {
+    border-top: 1px solid var(--c-line);
+  }
+  .mn__link {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: var(--gutter);
+    align-items: center;
+    padding: calc(var(--u) * 12) 0;
+    border-radius: 0;
+  }
+  .mn__text {
+    grid-column: 1 / span 6;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .mn__link :global(.mn__chain) {
+    grid-column: 8 / -1;
+  }
+  @media (max-width: 900px) {
+    .mn__text {
+      grid-column: 1 / -1;
+    }
+    .mn__link :global(.mn__chain) {
+      grid-column: 1 / -1;
+      margin-top: 2rem;
+    }
+  }
+  .mn__name {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-left: -0.04em;
+    transition: translate 0.5s var(--ease);
+  }
+  .mn__link:focus-visible {
+    outline-offset: -2px;
+  }
+  @media (hover: hover) {
+    .mn__link:hover .mn__name {
+      translate: 0.4em 0;
+    }
+    .mn__link:hover :global(.sp) {
+      --g: 1;
+    }
+  }
+  .mn__link:focus-visible :global(.sp) {
+    --g: 1;
+  }
+  /* A phone on its side: the chain sizes by height, so the name and the words still fit. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    .mh :global(.mh__nav) {
+      max-width: 120svh;
+    }
+  }
+  @media (max-width: 900px) {
+    .mh__in {
+      grid-template-rows: auto;
+    }
+    .mh :global(.mh__nav) {
+      grid-row: 2;
+    }
+    .mh__copy {
+      grid-row: 3;
+    }
+    .mh :global(.mh__nav),
+    .mh__copy,
+    .mm__title,
+    .mm__text,
+    .mfe__title,
+    .mfe__list,
+    .ml__title,
+    .ml__list,
+    .mk__title,
+    .mk__list {
+      grid-column: 1 / -1;
+    }
+    .mfe__list,
+    .ml__list {
+      grid-template-columns: 1fr;
+      margin-top: 1.5rem;
+    }
+    .mk__list {
+      margin-top: 1rem;
+    }
+    .mh__in {
+      min-height: 0;
+    }
+    .mh__name {
+      font-size: clamp(3.25rem, 17vw, 6rem);
+    }
+  }
+</style>

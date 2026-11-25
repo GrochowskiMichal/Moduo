@@ -1,0 +1,135 @@
+---
+// The Chat card's picture: a question in the open alpha channel, its three replies folding into one
+// "Wrapped up" line, and the answer flagged as the decision (motion/bento.ts plays the fold; the
+// still picture is the result).
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+
+const replies = [
+  { i: "MA", n: "Maciej", t: "Both versions are in the note.", c: "var(--ap-violet)" },
+  { i: "MI", n: "You", t: "The new one matches the app.", c: "var(--ap-pink)" },
+  { i: "MA", n: "Maciej", t: "New one, then.", c: "var(--ap-violet)" },
+];
+---
+
+<div class="ap mini chm" aria-hidden="true" data-mini="chat">
+  <div class="ap-panel chm-panel">
+    <div class="chm-head">
+      <Icon name="message-circle" class="ap-muted" />
+      <span class="ap-med">open-alpha</span>
+      <span class="ap-xs ap-subtle">2 people</span>
+      <span class="ap-tag chm-link"><span class="ap-av ap-av--16" style="--c:var(--ap-pink)">MW</span>Moduo waitlist</span>
+    </div>
+    <div class="chm-msg">
+      <span class="ap-av" style="--c:var(--ap-violet)">MA</span>
+      <div class="grow">
+        <p><span class="ap-strong">Maciej Grzywacz</span> <span class="ap-xs ap-subtle">9:24</span></p>
+        <p class="chm-body">Invite copy is final. Old mark or new in the header?</p>
+        <div class="chm-chain">
+          <p class="chm-wrapped ap-sm" data-wrapped><Icon name="check" class="ap-i--xs" /><span class="ap-med chm-fg">Wrapped up by you</span><span>· 3 replies</span><Icon name="chevron-right" class="ap-i--xs" /></p>
+          <div class="chm-replies" data-replies>
+            {
+              replies.map((r) => (
+                <p class="chm-reply ap-sm">
+                  <span class="ap-av ap-av--16" style={`--c:${r.c}`}>
+                    {r.i}
+                  </span>
+                  <span class="ap-med">{r.n}</span>
+                  <span class="ap-muted ap-ell">{r.t}</span>
+                </p>
+              ))
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="chm-msg" data-decision>
+      <span class="ap-av" style="--c:var(--ap-pink)">MI</span>
+      <div class="grow">
+        <p><span class="ap-strong">You</span> <span class="ap-xs ap-subtle">9:31</span></p>
+        <p class="chm-body">We send it on the 16th, with the new mark.</p>
+        <p class="chm-flag ap-xs" data-flag><Icon name="flag" class="ap-i--xs" />Decision</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .chm {
+    left: 6%;
+    top: 0;
+    width: 90%;
+  }
+  .chm-panel {
+    padding: 0.857em 1.143em 1.429em;
+  }
+  .chm-head {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding-bottom: 0.857em;
+    margin-bottom: 0.857em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .chm-link {
+    margin-left: auto;
+  }
+  .chm-msg {
+    display: flex;
+    gap: 0.857em;
+  }
+  .chm-msg + .chm-msg {
+    margin-top: 1.143em;
+  }
+  .chm-body {
+    font-size: 1.071em;
+    line-height: 1.5;
+  }
+  /* The chain's replies, laid over where the wrap-up line and the answer will be: the driver
+     shows them first and folds them away (still picture: folded). */
+  .chm-chain {
+    position: relative;
+  }
+  .chm-replies {
+    position: absolute;
+    z-index: 1;
+    left: -0.429em;
+    right: 0;
+    top: 0.429em;
+    display: grid;
+    gap: 0.429em;
+    padding: 0.571em;
+    border-radius: 0.714em;
+    background: #0d0d0d;
+    box-shadow: inset 0 0 0 1px var(--ap-line);
+    display: none;
+  }
+  .chm-reply {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    min-width: 0;
+  }
+  .chm-wrapped {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.462em;
+    height: 2em;
+    margin: 0.462em 0 0 -0.308em;
+    padding: 0 0.462em;
+    border-radius: 0.615em;
+    box-shadow: inset 0 0 0 1px var(--ap-hairline);
+    color: var(--ap-muted);
+    white-space: nowrap;
+  }
+  .chm-fg {
+    color: var(--ap-fg);
+  }
+  .chm-flag {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin-top: 0.167em;
+    color: var(--ap-muted);
+  }
+</style>

@@ -1,0 +1,371 @@
+---
+// Home: the dashboard, every module's widget on one page (the app's grid of 8 columns, 8 px apart,
+// no side panels): today's tasks, the day's calendar, the inbox, what was linked lately and what
+// the team said, on a morning when Maciej's email has already become a task (it carries the
+// email) and the prep task already has its slot at 13:00. The hero's window
+// (components/home/HeroWindow.astro), with a focus session running in the bar. On a narrow
+// window Home is one column, the inbox over Tasks, as the app lays it out.
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+const tasks = [
+  { t: "Send the open alpha invite", c: "var(--ap-blue)", m: "Nov 16", ref: ["mail", "Open alpha invite"] },
+  { t: "Prep the invite review", c: "var(--ap-blue)", m: "Today", going: true, ref: ["calendar", "13:00"] },
+  { t: "Review onboarding copy", c: "var(--ap-green)", m: "Today" },
+  { t: "Oudom kerning pass", c: "var(--ap-green)", m: "Tue" },
+  { t: "Fix Mail sync on large folders", c: "var(--ap-amber)", m: "Wed" },
+];
+const day = [
+  { h: 0, l: 0.75, t: "Daily check-in", m: "9:00", kind: "event" },
+  { h: 1.5, l: 1.25, t: "1.4.1 notes", m: "10:30", kind: "block" },
+  { h: 4, l: 0.85, t: "Prep the invite review", m: "13:00", kind: "block" },
+  { h: 5, l: 1, t: "Invite review", m: "14:00 · Maciej Grzywacz", kind: "event" },
+];
+const mail = [
+  { n: "Maciej Grzywacz", s: "Open alpha invite", t: "9:12", unread: true },
+  { n: "Alpha feedback", s: "Bug: paste in a table", t: "8:40", unread: true },
+  { n: "Moduo waitlist", s: "9 new sign-ups today", t: "8:02" },
+];
+---
+
+<Frame
+  active="Home"
+  home
+  shadow
+  timer={1452}
+  label="Moduo's Home: today's tasks, one made from Maciej's email and one placed on the calendar at 13:00, beside the day, the inbox, recent links and the team's messages."
+>
+  <div class="hf">
+    <section class="hf-w hf-tasks">
+      <p class="hf-h">Tasks</p>
+      <p class="ap-eyebrow hf-eb">Today <span class="ap-subtle">5</span></p>
+      <div class="hf-list">
+        {
+          tasks.map((t) => (
+            <p class="hf-row">
+              <span class:list={["ap-status", t.going && "is-going"]} />
+              <span class="grow ap-ell">{t.t}</span>
+              {t.ref && (
+                <span class="ap-ref hf-ref">
+                  <Icon name={t.ref[0] as "mail" | "calendar"} />
+                  {t.ref[1]}
+                </span>
+              )}
+              <span class="ap-dot ap-dot--sm" style={`--c:${t.c}`} />
+              <span class="ap-meta">{t.m}</span>
+            </p>
+          ))
+        }
+        <p class="hf-row is-done">
+          <span class="ap-check is-done"></span>
+          <span class="grow ap-ell ap-done-t">Share the mark files</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="hf-w hf-today">
+      <p class="hf-h">Today <span class="ap-muted hf-date">Thu, Nov 5</span></p>
+      <div class="hf-rail">
+        {
+          ["09", "10", "11", "12", "13", "14", "15"].map((h) => (
+            <span class="hf-hr">
+              <i>{h}</i>
+            </span>
+          ))
+        }
+        {
+          day.map((e) => (
+            <span class={`hf-ev is-${e.kind}`} style={`--h:${e.h};--l:${e.l}`}>
+              {e.kind === "block" && <span class="ap-check" />}
+              <span class="ap-ell">
+                <b>{e.t}</b> {e.m}
+              </span>
+            </span>
+          ))
+        }
+        <span class="hf-now"></span>
+      </div>
+    </section>
+
+    <section class="hf-w hf-inbox">
+      <p class="hf-h">Inbox <span class="ap-muted">3</span></p>
+      {
+        mail.map((m) => (
+          <div class="hf-mail">
+            <span class:list={["hf-unread", m.unread && "is-on"]} />
+            <div class="grow">
+              <p class="hf-line">
+                <span class:list={["grow ap-ell", m.unread ? "ap-med" : "ap-muted"]}>{m.n}</span>
+                <span class="ap-meta">{m.t}</span>
+              </p>
+              <p class="ap-ell ap-xs ap-muted">{m.s}</p>
+            </div>
+          </div>
+        ))
+      }
+    </section>
+
+    <section class="hf-w hf-linked">
+      <p class="hf-h">Recently linked</p>
+      <div class="hf-list">
+        <p class="hf-link">
+          <Icon name="mail" class="ap-i--sm" /><span class="ap-ell">Open alpha invite</span>
+          <Icon name="arrow-right" class="ap-i--xs hf-to" />
+          <Icon name="circle-check" class="ap-i--sm" /><span class="grow ap-ell">Send the open alpha invite</span>
+          <span class="hf-rel">Created from</span>
+        </p>
+        <p class="hf-link">
+          <Icon name="file-text" class="ap-i--sm" /><span class="ap-ell">Invite copy</span>
+          <Icon name="arrow-right" class="ap-i--xs hf-to" />
+          <Icon name="calendar" class="ap-i--sm" /><span class="grow ap-ell">Invite review</span>
+          <span class="hf-rel">References</span>
+        </p>
+      </div>
+    </section>
+
+    <section class="hf-w hf-chat">
+      <p class="hf-h">Catch up <span class="ap-muted">2</span></p>
+      <div class="hf-msg">
+        <span class="ap-av ap-av--24" style="--c:var(--ap-violet)">MA</span>
+        <p class="grow"><span class="ap-med">Maciej Grzywacz</span> <span class="ap-xs ap-subtle">9:24</span><br /><span class="ap-muted hf-say">Old mark or new in the invite?</span></p>
+      </div>
+    </section>
+
+  </div>
+</Frame>
+
+<style>
+  .hf {
+    position: relative;
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    grid-template-rows: repeat(3, 8.571em);
+    gap: 0.571em;
+    padding-bottom: 0.286em;
+  }
+  .hf-w {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.143em;
+    min-width: 0;
+    padding: 0.571em 0.857em 0.714em;
+    border-radius: 0.857em;
+    border: 1px solid var(--ap-line);
+    background: var(--ap-card);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035);
+    overflow: hidden;
+  }
+  .hf-h {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    margin-bottom: 0.286em;
+    font-size: 0.929em;
+    font-weight: 500;
+  }
+  .hf-date {
+    font-size: 0.923em;
+    font-weight: 400;
+  }
+  .hf-tasks {
+    grid-column: 1 / span 3;
+    grid-row: 1 / span 3;
+  }
+  .hf-eb {
+    padding: 0.364em 0 0.364em;
+  }
+  .hf-list {
+    display: flex;
+    flex-direction: column;
+  }
+  .hf-row {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    min-height: 2.286em;
+    margin: 0 -0.429em;
+    padding: 0 0.429em;
+    border-radius: 0.429em;
+    box-shadow: inset 0 -1px 0 var(--ap-line);
+    font-size: 0.929em;
+  }
+  .hf-row.is-done {
+    box-shadow: none;
+  }
+  .hf-row :global(.ap-check) {
+    width: 1em;
+    height: 1em;
+  }
+  .hf-ref {
+    font-size: 0.846em;
+  }
+  .hf-today {
+    grid-column: 4 / span 3;
+    grid-row: 1 / span 2;
+  }
+  .hf-rail {
+    position: relative;
+    flex: 1;
+    display: grid;
+    grid-template-rows: repeat(7, 1fr);
+    margin-left: 1.857em;
+    border-left: 1px solid var(--ap-line);
+  }
+  .hf-hr {
+    position: relative;
+    border-top: 1px solid var(--ap-line);
+  }
+  .hf-hr:first-child {
+    border-top-color: transparent;
+  }
+  .hf-hr i {
+    position: absolute;
+    right: calc(100% + 0.5em);
+    top: -0.6em;
+    color: var(--ap-muted);
+    font-size: 0.714em;
+    font-style: normal;
+    line-height: 1.2;
+  }
+  .hf-ev {
+    position: absolute;
+    left: 0.286em;
+    right: 0.286em;
+    top: calc(var(--h) * 100% / 7 + 1px);
+    height: calc(var(--l) * 100% / 7 - 2px);
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4em;
+    padding: 0.143em 0.429em;
+    border-radius: 0.429em;
+    border: 1px solid var(--ap-line);
+    font-size: 0.786em;
+    line-height: 1.35;
+    color: var(--ap-muted);
+    overflow: hidden;
+  }
+  .hf-ev b {
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .hf-ev.is-event {
+    border-color: rgb(238 238 238 / 0.35);
+    background: rgb(238 238 238 / 0.1);
+  }
+  .hf-ev.is-block {
+    background: rgb(18 18 18 / 0.7);
+  }
+  .hf-ev :global(.ap-check) {
+    width: 1.1em;
+    height: 1.1em;
+    margin-top: 0.1em;
+  }
+  .hf-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(3.33 * 100% / 7);
+    height: 1px;
+    background: rgb(238 238 238 / 0.5);
+  }
+  .hf-now::before {
+    content: "";
+    position: absolute;
+    left: -0.214em;
+    top: 50%;
+    width: 0.429em;
+    height: 0.429em;
+    border-radius: 50%;
+    background: var(--ap-primary);
+    translate: 0 -50%;
+  }
+  .hf-inbox {
+    grid-column: 7 / span 2;
+    grid-row: 1 / span 2;
+  }
+  .hf-mail {
+    display: flex;
+    gap: 0.429em;
+    margin: 0 -0.429em;
+    padding: 0.357em 0.429em;
+    border-radius: 0.429em;
+    box-shadow: inset 0 -1px 0 var(--ap-line);
+    font-size: 0.929em;
+  }
+  .hf-mail:last-child {
+    box-shadow: none;
+  }
+  .hf-unread {
+    flex: none;
+    width: 0.429em;
+    height: 0.429em;
+    margin-top: 0.5em;
+    border-radius: 50%;
+  }
+  .hf-unread.is-on {
+    background: var(--ap-primary);
+  }
+  .hf-line {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+  }
+  .hf-linked {
+    grid-column: 4 / span 3;
+    grid-row: 3;
+  }
+  .hf-link {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    min-height: 2.143em;
+    font-size: 0.857em;
+    min-width: 0;
+  }
+  .hf-link :global(.ap-i) {
+    color: var(--ap-muted);
+  }
+  .hf-link :global(.hf-to) {
+    color: var(--ap-subtle);
+  }
+  .hf-rel {
+    flex: none;
+    color: rgb(164 164 164 / 0.7);
+    font-size: 0.917em;
+  }
+  .hf-chat {
+    grid-column: 7 / span 2;
+    grid-row: 3;
+  }
+  .hf-msg {
+    display: flex;
+    gap: 0.571em;
+    font-size: 0.857em;
+    line-height: 1.45;
+  }
+  .hf-say {
+    display: block;
+  }
+
+  /* A narrow window: one column, the inbox over Tasks, as the app lays Home out on a phone. */
+  @container (max-width: 640px) {
+    .hf {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-rows: none;
+    }
+    .hf-w {
+      grid-column: 1 !important;
+      grid-row: auto !important;
+    }
+    .hf-inbox {
+      order: -1;
+    }
+    .hf-today,
+    .hf-linked,
+    .hf-chat {
+      display: none;
+    }
+  }
+</style>

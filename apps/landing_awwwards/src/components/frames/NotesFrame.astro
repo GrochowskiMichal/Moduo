@@ -1,0 +1,224 @@
+---
+// Notes: the invite copy note, with a mention of Maciej, task lines that are real tasks (one done, one
+// due Friday), a link to today's call, and the pointer on a plain checkbox line, which offers
+// "Make task" (⌘⇧T makes it a real task, the module's one great moment).
+import Frame from "./Frame.astro";
+import Icon from "./Icon.astro";
+
+---
+
+<Frame
+  active="Notes"
+  shadow
+  label="A picture of Moduo's Notes module: the invite copy note mentions Maciej Grzywacz, its task lines are real tasks, and it links to a call."
+>
+  <nav class="ap-panel ap-panel--side nf-side">
+    <div class="ap-nav"><Icon name="search" /><span class="grow">Search</span></div>
+    <p class="ap-sec">Favorites</p>
+    <div class="ap-nav"><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">Writing rules</span></div>
+    <p class="ap-sec">Inbox<span class="ap-meta">2</span></p>
+    <div class="ap-nav"><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">Call notes, Maciej</span></div>
+    <div class="ap-nav"><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell nf-untitled">Untitled</span></div>
+    <p class="ap-sec">Pages</p>
+    <div class="ap-nav"><Icon name="chevron-down" class="ap-i--xs nf-fold" /><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">Open alpha</span></div>
+    <div class="ap-nav is-on nf-in"><Icon name="chevron-right" class="ap-i--xs nf-fold is-hidden" /><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">Invite copy</span></div>
+    <div class="ap-nav nf-in"><Icon name="chevron-right" class="ap-i--xs nf-fold is-hidden" /><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">First wave list</span></div>
+    <div class="ap-nav"><Icon name="chevron-right" class="ap-i--xs nf-fold" /><Icon name="file-text" class="ap-i--sm nf-ic" /><span class="grow ap-ell">Design</span></div>
+    <div class="nf-foot">
+      <span class="ap-ico"><Icon name="globe" /></span>
+      <span class="ap-ico"><Icon name="archive" /></span>
+      <span class="ap-ico"><Icon name="trash-2" /></span>
+      <span class="ap-ico"><Icon name="import" /></span>
+    </div>
+  </nav>
+
+  <article class="ap-panel ap-panel--main nf-main">
+    <div class="nf-top">
+      <p class="nf-crumbs ap-sm">
+        <span class="ap-muted">Open alpha</span><Icon name="chevron-right" class="ap-i--xs ap-muted" /><span>Invite copy</span>
+      </p>
+      <span class="nf-people">
+        <span class="ap-av ap-av--24" style="--c:var(--ap-violet)">MA</span>
+      </span>
+      <span class="nf-sync"></span>
+    </div>
+    <div class="nf-doc">
+      <p class="nf-title">Invite copy</p>
+      <p class="nf-meta ap-sm">
+        <span>Mike Grochowski</span><span>Invite review</span><span>2 comments</span><span>Edited 2 min ago</span>
+      </p>
+      <p class="nf-p">
+        Talked to <span class="ap-ref"><span class="ap-av ap-av--16" style="--c:var(--ap-violet)">MA</span>Maciej Grzywacz</span> today.
+        He wants the first wave on the 16th, the rest a week later.
+      </p>
+      <p class="nf-h2">Next steps</p>
+      <div class="nf-task">
+        <span class="ap-check is-done"></span>
+        <span class="grow ap-done-t">Draft the invite copy</span>
+        <span class="nf-chip">Task</span>
+      </div>
+      <div class="nf-task">
+        <span class="ap-check"></span>
+        <span class="grow">Send the open alpha invite</span>
+        <span class="nf-chip">Due Nov 16</span>
+      </div>
+      <div class="nf-task">
+        <span class="ap-check"></span>
+        <span class="grow">Prep the invite review</span>
+        <span class="nf-chip">Due today</span>
+      </div>
+      <div class="nf-task is-plain">
+        <span class="nf-box"></span>
+        <span class="grow">Test the invite links<span class="ap-caret"></span></span>
+        <span class="ap-btn ap-btn--outline nf-make"><Icon name="circle-check" />Make task <span class="ap-kbd">⌘⇧T</span></span>
+      </div>
+      <p class="nf-p">
+        We go through it on <span class="ap-ref"><Icon name="calendar" />Invite review <span class="ap-muted">· Thu 14:00</span></span>.
+      </p>
+    </div>
+  </article>
+</Frame>
+
+<style>
+  .nf-side {
+    display: flex;
+    flex-direction: column;
+  }
+  .nf-side :global(.nf-ic) {
+    color: var(--ap-muted);
+  }
+  .nf-side :global(.nf-fold) {
+    margin-right: -0.429em;
+    color: var(--ap-muted);
+  }
+  .nf-side :global(.nf-fold.is-hidden) {
+    visibility: hidden;
+  }
+  .nf-in {
+    padding-left: 1.571em;
+  }
+  .nf-untitled {
+    font-style: italic;
+  }
+  .nf-foot {
+    display: flex;
+    gap: 0.143em;
+    margin-top: auto;
+    padding-top: 0.857em;
+  }
+  .nf-main {
+    padding: 0;
+  }
+  .nf-top {
+    display: flex;
+    align-items: center;
+    gap: 0.571em;
+    height: 3.429em;
+    padding: 0 1.143em 0 1em;
+  }
+  .nf-crumbs {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    margin-right: auto;
+  }
+  .nf-people {
+    display: flex;
+  }
+  .nf-people :global(.ap-av) {
+    box-shadow: 0 0 0 2px var(--ap-card);
+  }
+  .nf-people :global(.ap-av + .ap-av) {
+    margin-left: -0.3em;
+  }
+  .nf-sync {
+    width: 0.429em;
+    height: 0.429em;
+    border-radius: 50%;
+    background: var(--ap-success);
+  }
+  .nf-doc {
+    max-width: 41.143em;
+    margin: 0 auto;
+    padding: 1.714em 1.714em 1.714em;
+    line-height: 1.65;
+  }
+  .nf-title {
+    font-size: 2.143em;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .nf-meta {
+    display: flex;
+    margin: 0.462em 0 1.231em;
+    color: var(--ap-muted);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .nf-meta span + span::before {
+    content: "·";
+    margin: 0 0.5em;
+  }
+  .nf-p {
+    margin-bottom: 0.714em;
+  }
+  .nf-h2 {
+    margin: 1.2em 0 0.4em;
+    font-size: 1.429em;
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+  }
+  .nf-task {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.714em;
+    min-height: 2em;
+  }
+  .nf-chip {
+    padding: 0 0.5em;
+    border-radius: 0.333em;
+    background: rgb(0 0 0 / 0.8);
+    color: var(--ap-muted);
+    font-size: 0.857em;
+    white-space: nowrap;
+  }
+  .nf-task.is-plain {
+    margin: 0.143em -0.571em 0.857em;
+    padding: 0.286em 0.286em 0.286em 0.571em;
+    border-radius: 0.571em;
+    background: var(--ap-hover);
+  }
+  .nf-box {
+    flex: none;
+    width: 1.143em;
+    height: 1.143em;
+    border-radius: 0.286em;
+    border: 1px solid rgb(164 164 164 / 0.5);
+  }
+  .nf-make {
+    height: 1.714em;
+    padding: 0 0.5em;
+    font-size: 0.857em;
+    background: var(--ap-card);
+  }
+  @container (max-width: 640px) {
+    .nf-top {
+      display: none;
+    }
+    .nf-doc {
+      padding: 1.5em 1.25em;
+    }
+    .nf-make .ap-kbd {
+      display: none;
+    }
+  }
+  /* A phone's frame keeps the meta line whole: who, which call, the comments. */
+  @container (max-width: 480px) {
+    .nf-meta span:last-child {
+      display: none;
+    }
+  }
+</style>

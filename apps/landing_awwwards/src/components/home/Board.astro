@@ -1,0 +1,1454 @@
+---
+// Home, the page you arrange: a live board of widgets in the app's own anatomy, taken a step past
+// the app (Mike, 28 October: "a high-end futuristic version of what we will have"). The app's Home
+// is an 8 × 4 grid with four sizes (features/dashboard/engine/types.ts); here any span from 2 × 1
+// up snaps to the grid, and a widget tells more as it gets more room (container queries: a line,
+// a glance, the full list), the app's own rule (widget-density.ts: a small cell is a glance, a
+// tall cell a list). Widgets move by their name and resize by their corner; the others part to
+// make room and settle back (motion/board.ts). Three layouts set the whole board at once. The
+// still picture is the Monday layout, placed by CSS alone, so no JS and reduced motion lose only
+// the hands-on part.
+import "../../styles/frames.css";
+import Icon from "../frames/Icon.astro";
+import type { IconName } from "../../lib/app-icons";
+import { board } from "../../data/site";
+
+type Spot = readonly [id: string, x: number, y: number, w: number, h: number];
+type Preset = { d: readonly Spot[]; m: readonly Spot[] };
+// d: the 8-column desktop board, 6 rows; m: the 4-column phone board.
+const layouts: Record<string, Preset> = {
+  monday: {
+    d: [
+      ["today", 0, 0, 3, 2],
+      ["tasks", 3, 0, 3, 2],
+      ["focus", 6, 0, 2, 2],
+      ["inbox", 0, 2, 3, 2],
+      ["linked", 3, 2, 3, 2],
+      ["clock", 6, 2, 2, 1],
+      ["countdown", 6, 3, 2, 1],
+      ["notes", 0, 4, 2, 2],
+      ["chat", 2, 4, 4, 2],
+    ],
+    m: [
+      ["today", 0, 0, 4, 2],
+      ["focus", 0, 2, 2, 2],
+      ["clock", 2, 2, 2, 1],
+      ["countdown", 2, 3, 2, 1],
+      ["tasks", 0, 4, 4, 2],
+      ["linked", 0, 6, 4, 2],
+    ],
+  },
+  focus: {
+    d: [
+      ["focus", 0, 0, 4, 3],
+      ["tasks", 4, 0, 4, 3],
+      ["capture", 0, 3, 4, 1],
+      ["clock", 4, 3, 2, 1],
+      ["countdown", 6, 3, 2, 1],
+      ["today", 0, 4, 4, 2],
+      ["time", 4, 4, 4, 2],
+    ],
+    m: [
+      ["focus", 0, 0, 4, 3],
+      ["tasks", 0, 3, 4, 2],
+      ["capture", 0, 5, 4, 1],
+      ["clock", 0, 6, 2, 1],
+      ["countdown", 2, 6, 2, 1],
+      ["time", 0, 7, 4, 2],
+    ],
+  },
+  client: {
+    d: [
+      ["today", 0, 0, 2, 2],
+      ["inbox", 2, 0, 3, 2],
+      ["chat", 5, 0, 3, 3],
+      ["linked", 0, 2, 5, 2],
+      ["tasks", 5, 3, 3, 3],
+      ["notes", 0, 4, 3, 2],
+      ["reconnect", 3, 4, 2, 2],
+    ],
+    m: [
+      ["chat", 0, 0, 4, 3],
+      ["today", 0, 3, 2, 2],
+      ["reconnect", 2, 3, 2, 2],
+      ["inbox", 0, 5, 4, 2],
+      ["linked", 0, 7, 4, 2],
+    ],
+  },
+};
+
+type Widget = { id: string; name: string; icon: IconName; href?: string; desc: string; size: [number, number] };
+// The app's catalog names (features/dashboard/registry/catalog.ts). size: its span when added.
+const widgets: Widget[] = [
+  { id: "today", name: "Today", icon: "calendar-days", href: "/calendar", desc: "The day's events and blocks", size: [3, 2] },
+  { id: "tasks", name: "Tasks", icon: "list-checks", href: "/tasks", desc: "What's on for today", size: [3, 2] },
+  { id: "focus", name: "Focus", icon: "timer", href: "/tasks", desc: "A timer on the task in hand", size: [2, 2] },
+  { id: "inbox", name: "Inbox", icon: "inbox", href: "/email", desc: "New mail, newest first", size: [3, 2] },
+  { id: "linked", name: "Recently linked", icon: "link-2", desc: "What you joined today", size: [3, 2] },
+  { id: "clock", name: "Clock", icon: "globe", desc: "Your time and one more city", size: [2, 1] },
+  { id: "countdown", name: "Countdown", icon: "flag", desc: "Days left before a date", size: [2, 1] },
+  { id: "notes", name: "Pinned", icon: "file-text", href: "/notes", desc: "A note you keep at hand", size: [2, 2] },
+  { id: "chat", name: "Catch up", icon: "message-circle", href: "/chat", desc: "Threads you haven't read", size: [3, 2] },
+  { id: "capture", name: "Quick capture", icon: "plus", desc: "A task, a note or an event", size: [3, 1] },
+  { id: "habits", name: "Habits", icon: "circle-check", desc: "This week's streaks", size: [2, 1] },
+  { id: "time", name: "Time", icon: "clock-3", desc: "Focused time this week", size: [2, 2] },
+  { id: "reconnect", name: "Reconnect", icon: "user-round", href: "/contacts", desc: "People you haven't heard from", size: [2, 2] },
+];
+
+const start = layouts.monday;
+const spot = (list: readonly Spot[], id: string) => list.find((s) => s[0] === id);
+const area = (s?: Spot) => (s ? `${s[2] + 1} / ${s[1] + 1} / span ${s[4]} / span ${s[3]}` : "auto");
+const rows = (list: readonly Spot[]) => Math.max(...list.map((s) => s[2] + s[4]));
+const config = JSON.stringify({
+  layouts,
+  sizes: Object.fromEntries(widgets.map((w) => [w.id, w.size])),
+  names: Object.fromEntries(widgets.map((w) => [w.id, w.name])),
+});
+const habits = [
+  { name: "Inbox zero", days: [1, 1, 1, 1, 0] },
+  { name: "Read feedback", days: [1, 0, 1, 1, 0] },
+  { name: "Write the changelog", days: [1, 1, 0, 1, 0] },
+];
+const week = [
+  { d: "M", h: 3.1 },
+  { d: "T", h: 4.4 },
+  { d: "W", h: 2.6 },
+  { d: "T", h: 4.2, today: true },
+  { d: "F", h: 2.6 },
+];
+---
+
+<section class="hb" id="home-board" aria-labelledby="hb-title" data-board>
+  <div class="wrap">
+    <div class="hb__head grid">
+      <h2 class="hb__title t-xl" id="hb-title" data-split>{board.title}</h2>
+      <p class="hb__text t-m muted" data-reveal>{board.text}</p>
+    </div>
+
+    <div class="hb__win ap" data-reveal="frame">
+      <div class="hb__bar">
+        <p class="hb__name"><Icon name="house" class="ap-i--sm" />Home</p>
+        <div class="hb__presets" role="group" aria-label="Layouts">
+          {
+            board.presets.map((p, i) => (
+              <button type="button" class="hb__preset" data-preset={p.id} aria-pressed={i === 0 ? "true" : "false"}>
+                {p.name}
+              </button>
+            ))
+          }
+        </div>
+        <p class="hb__size" aria-hidden="true" data-board-size>8 × 6</p>
+      </div>
+
+      <div class="hb__body">
+        <div
+          class="hb__board"
+          role="group"
+          aria-label={board.label}
+          aria-describedby="hb-keys"
+          data-board-grid
+          data-config={config}
+          style={`--rows-d:${rows(start.d)};--rows-m:${rows(start.m)}`}
+        >
+          <svg class="hb__marks" aria-hidden="true" data-board-marks></svg>
+          <svg class="hb__marks hb__marks--lit" aria-hidden="true" data-board-marks></svg>
+          <div class="hb__slot" aria-hidden="true" data-board-slot><span class="hb__readout" data-board-readout></span></div>
+          {
+            widgets.map((w) => {
+              const d = spot(start.d, w.id);
+              const m = spot(start.m, w.id);
+              return (
+                <article
+                  class:list={["wg", !d && "is-off-d", !m && "is-off-m"]}
+                  data-wg={w.id}
+                  tabindex="0"
+                  aria-roledescription="widget"
+                  aria-label={w.name}
+                  style={`--d:${area(d)};--m:${area(m)}`}
+                >
+                  <div class="wg__in">
+                    <header class="wg__head" data-wg-grab>
+                      <Icon name={w.icon} class="ap-i--sm wg__ic" />
+                      <span class="wg__name ap-ell">{w.name}</span>
+                      {w.id === "today" && <span class="wg__meta">Thu 5</span>}
+                      {w.id === "tasks" && <span class="wg__meta">5 today</span>}
+                      {w.id === "inbox" && <span class="wg__meta">3 new</span>}
+                      {w.id === "chat" && <span class="wg__meta">#open-alpha</span>}
+                      {w.id === "habits" && <span class="wg__meta">This week</span>}
+                      {w.id === "time" && <span class="wg__meta">This week</span>}
+                      {w.id === "capture" && <span class="ap-kbd wg__meta">⇧⌘K</span>}
+                      <span class="grow" />
+                      {w.href && (
+                        <a class="wg__btn" href={w.href} tabindex="-1" data-wg-open aria-label={`Open ${w.name}`}>
+                          <Icon name="chevron-right" class="ap-i--xs" />
+                        </a>
+                      )}
+                      <button type="button" class="wg__btn" tabindex="-1" data-wg-remove aria-label={`Remove ${w.name}`}>
+                        <svg class="ap-i ap-i--xs" viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                        </svg>
+                      </button>
+                    </header>
+
+                    <div class="wg__body">
+                      {w.id === "today" && (
+                        <>
+                          <p class="wg-line">
+                            <span class="td-bar" /> <b>Invite review</b> <span class="ap-muted">14:00</span>
+                          </p>
+                          <div class="wg-sum">
+                            <p class="wg-big">14:00</p>
+                            <p class="ap-ell"><b>Invite review</b></p>
+                            <p class="ap-muted ap-ell">with Maciej Grzywacz</p>
+                          </div>
+                          <ol class="wg-full wg-rows">
+                            <li class="td-row is-past"><span class="td-t">9:00</span><span class="td-bar" /><span class="grow ap-ell">Morning sync</span></li>
+                            <li class="td-row is-past"><span class="td-t">10:30</span><span class="td-bar is-block" /><span class="grow ap-ell">Read alpha feedback</span><span class="wg-x ap-muted">Block</span></li>
+                            <li class="td-row is-now"><span class="td-t">12:20</span><span class="td-now" /><span class="grow ap-muted">Now</span></li>
+                            <li class="td-row is-next"><span class="td-t">14:00</span><span class="td-bar" /><span class="grow ap-ell"><b>Invite review</b></span><span class="wg-x wg-chip"><Icon name="file-text" class="ap-i--xs" />Invite copy</span></li>
+                            <li class="td-row"><span class="td-t">16:00</span><span class="td-bar is-block" /><span class="grow ap-ell">Fix the Windows build</span><span class="wg-x ap-muted">Block</span></li>
+                            <li class="td-row"><span class="td-t">17:30</span><span class="td-bar" /><span class="grow ap-ell">Plan tomorrow</span></li>
+                          </ol>
+                        </>
+                      )}
+
+                      {w.id === "tasks" && (
+                        <>
+                          <p class="wg-line"><b>5</b> <span class="ap-muted">today · next:</span> <span class="ap-ell">Fix the Mail sync bug</span></p>
+                          <div class="wg-sum">
+                            <p class="wg-big">5</p>
+                            <p class="ap-muted">left today</p>
+                            <p class="ap-ell">Fix the Mail sync bug</p>
+                          </div>
+                          <ul class="wg-full wg-rows">
+                            <li class="tk-row"><span class="ap-check" /><span class="grow ap-ell">Fix the Mail sync bug</span><span class="wg-x ap-muted">Today</span></li>
+                            <li class="tk-row"><span class="ap-check" /><span class="grow ap-ell">Review the alpha invite</span><span class="wg-x wg-chip"><Icon name="mail" class="ap-i--xs" />Open alpha invite</span></li>
+                            <li class="tk-row"><span class="ap-check" /><span class="grow ap-ell">Pick the first wave</span><span class="wg-x ap-muted">Today</span></li>
+                            <li class="tk-row"><span class="ap-check" /><span class="grow ap-ell">Fix the Windows build</span><span class="wg-x ap-muted">Fri</span></li>
+                            <li class="tk-row"><span class="ap-check" /><span class="grow ap-ell">Write the 1.4.1 release notes</span><span class="wg-x ap-muted">Mon</span></li>
+                            <li class="tk-row is-done"><span class="ap-check is-done" /><span class="grow ap-ell ap-done-t">Read alpha feedback</span><span class="wg-x ap-muted">1h</span></li>
+                          </ul>
+                        </>
+                      )}
+
+                      {w.id === "focus" && (
+                        <div class="fc">
+                          <svg class="fc__ring" viewBox="0 0 40 40" aria-hidden="true">
+                            <circle cx="20" cy="20" r="17" />
+                            <circle class="fc__arc" cx="20" cy="20" r="17" pathLength="100" data-focus-arc style="--p:72" />
+                          </svg>
+                          <div class="fc__txt">
+                            <p class="fc__time"><span data-focus-time>18:02</span> <span class="ap-muted fc__of">of 25:00</span></p>
+                            <p class="fc__task ap-ell">Fix the Mail sync bug</p>
+                            <p class="fc__acts">
+                              <span class="ap-btn ap-btn--secondary"><Icon name="pause" class="ap-i--xs" />Pause</span>
+                              <span class="ap-btn ap-btn--primary">Done <span class="ap-kbd">⏎</span></span>
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      {w.id === "inbox" && (
+                        <>
+                          <p class="wg-line"><b>3</b> <span class="ap-muted">new ·</span> <span class="ap-ell">Maciej Grzywacz: Open alpha invite</span></p>
+                          <div class="wg-sum">
+                            <p class="wg-big">3</p>
+                            <p class="ap-muted">new</p>
+                            <p class="ap-ell">Maciej Grzywacz</p>
+                          </div>
+                          <ul class="wg-full wg-rows">
+                            <li class="ib-row"><span class="ap-av" style="--c:var(--ap-violet)">MA</span><span class="ib-t"><b class="ap-ell">Maciej Grzywacz</b><span class="ap-ell ap-muted">Open alpha invite</span></span><span class="wg-x ap-muted">9:12</span></li>
+                            <li class="ib-row"><span class="ap-av" style="--c:var(--ap-violet)">MW</span><span class="ib-t"><b class="ap-ell">Moduo waitlist</b><span class="ap-ell ap-muted">9 new sign-ups today</span></span><span class="wg-x ap-muted">8:40</span></li>
+                            <li class="ib-row"><span class="ap-av" style="--c:var(--ap-amber)">AF</span><span class="ib-t"><b class="ap-ell">Alpha feedback</b><span class="ap-ell ap-muted">Mail sync stalls on wake</span></span><span class="wg-x ap-muted">8:02</span></li>
+                          </ul>
+                        </>
+                      )}
+
+                      {w.id === "linked" && (
+                        <>
+                          <p class="wg-line"><b>3</b> <span class="ap-muted">links today</span></p>
+                          <div class="wg-sum">
+                            <p class="wg-big">3</p>
+                            <p class="ap-muted">links today</p>
+                          </div>
+                          <ul class="wg-full wg-rows">
+                            <li class="lk-row">
+                              <span class="lk-a"><Icon name="mail" class="ap-i--xs" /><span class="ap-ell">Open alpha invite</span></span>
+                              <span class="lk-join" aria-hidden="true"><i /><i /></span>
+                              <span class="lk-a"><Icon name="square-check-big" class="ap-i--xs" /><span class="ap-ell">Review the open alpha invite</span></span>
+                              <span class="wg-x ap-muted">Created from</span>
+                            </li>
+                            <li class="lk-row">
+                              <span class="lk-a"><Icon name="file-text" class="ap-i--xs" /><span class="ap-ell">Invite copy</span></span>
+                              <span class="lk-join" aria-hidden="true"><i /><i /></span>
+                              <span class="lk-a"><Icon name="calendar" class="ap-i--xs" /><span class="ap-ell">Invite review</span></span>
+                              <span class="wg-x ap-muted">Linked</span>
+                            </li>
+                            <li class="lk-row">
+                              <span class="lk-a"><Icon name="message-circle" class="ap-i--xs" /><span class="ap-ell">#open-alpha</span></span>
+                              <span class="lk-join" aria-hidden="true"><i /><i /></span>
+                              <span class="lk-a"><Icon name="user-round" class="ap-i--xs" /><span class="ap-ell">Moduo waitlist</span></span>
+                              <span class="wg-x ap-muted">Conversation</span>
+                            </li>
+                          </ul>
+                        </>
+                      )}
+
+                      {w.id === "clock" && (
+                        <div class="ck">
+                          <p class="ck__here"><span class="wg-big" data-clock-here>12:20</span><span class="ap-muted ck__lbl">Your time</span></p>
+                          <p class="ck__there"><span data-clock-there>20:20</span><span class="ap-muted">Tokyo</span></p>
+                        </div>
+                      )}
+
+                      {w.id === "countdown" && (
+                        <div class="cd">
+                          <p class="cd__n"><span class="wg-big">11</span><span class="ap-muted">days</span></p>
+                          <p class="cd__to"><span class="ap-ell">Open alpha</span><span class="ap-muted cd__date">Mon 16</span></p>
+                        </div>
+                      )}
+
+                      {w.id === "notes" && (
+                        <div class="nt">
+                          <p class="nt__t">Invite copy</p>
+                          <p class="nt__p ap-muted">Talked to Maciej Grzywacz. The invite goes out when open alpha opens: first wave on the 16th.</p>
+                          <ul class="nt__list">
+                            <li><span class="ap-check is-done" /><span class="ap-done-t ap-ell">Draft the invite copy</span></li>
+                            <li><span class="ap-check" /><span class="ap-ell">Review the open alpha invite</span></li>
+                            <li><span class="ap-check" /><span class="ap-ell">Send to the first wave</span></li>
+                          </ul>
+                        </div>
+                      )}
+
+                      {w.id === "chat" && (
+                        <>
+                          <p class="wg-line"><b>3</b> <span class="ap-muted">new · Maciej Grzywacz:</span> <span class="ap-ell">Old mark or new?</span></p>
+                          <div class="wg-sum">
+                            <p class="wg-big">3</p>
+                            <p class="ap-muted">new</p>
+                            <p class="ap-ell">Maciej Grzywacz</p>
+                          </div>
+                          <ul class="wg-full ch">
+                            <li class="ch-m"><span class="ap-av" style="--c:var(--ap-violet)">MA</span><span class="ch-t"><b>Maciej Grzywacz <span class="ap-muted">9:24</span></b><span>Invite copy is final. Old mark or new in the header?</span></span></li>
+                            <li class="ch-m"><span class="ap-av" style="--c:var(--ap-pink)">MI</span><span class="ch-t"><b>You <span class="ap-muted">9:31</span></b><span>We send it on the 16th, with the new mark.</span></span></li>
+                            <li class="ch-m ch-typing"><span class="ap-av" style="--c:var(--ap-violet)">MA</span><span class="ch-t"><span class="ap-muted">Maciej is typing <span class="ch-dots" data-typing><i /><i /><i /></span></span></span></li>
+                          </ul>
+                        </>
+                      )}
+
+                      {w.id === "capture" && (
+                        <div class="cp">
+                          <p class="cp__field"><span class="ap-muted">Add a task, a note, an event</span><span class="cp__caret" data-caret /></p>
+                          <p class="cp__kinds"><span class="wg-chip is-on">Task</span><span class="wg-chip">Note</span><span class="wg-chip">Event</span></p>
+                        </div>
+                      )}
+
+                      {w.id === "habits" && (
+                        <ul class="hb-hab">
+                          {habits.map((h) => (
+                            <li>
+                              <span class="ap-ell">{h.name}</span>
+                              <span class="hb-days" aria-hidden="true">
+                                {h.days.map((d) => (
+                                  <i class:list={[d && "is-on"]} />
+                                ))}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {w.id === "time" && (
+                        <div class="tm">
+                          <p class="tm__sum"><span class="wg-big">16h 54m</span><span class="ap-muted">focused</span></p>
+                          <p class="tm__bars" aria-hidden="true">
+                            {week.map((d) => (
+                              <span class:list={["tm__b", d.today && "is-today"]} style={`--h:${d.h / 4.4}`}>
+                                <i />
+                                {d.d}
+                              </span>
+                            ))}
+                          </p>
+                        </div>
+                      )}
+
+                      {w.id === "reconnect" && (
+                        <ul class="wg-rows rc">
+                          <li class="rc-row"><span class="ap-av" style="--c:var(--ap-violet)">MR</span><span class="ib-t"><b class="ap-ell">Moduo releases</b><span class="ap-muted ap-ell">Release notes</span></span><span class="wg-x ap-muted">1 week</span></li>
+                          <li class="rc-row"><span class="ap-av" style="--c:var(--ap-green)">HO</span><span class="ib-t"><b class="ap-ell">Hosting</b><span class="ap-muted ap-ell">Invoices</span></span><span class="wg-x ap-muted">3 weeks</span></li>
+                          <li class="rc-row"><span class="ap-av" style="--c:var(--ap-amber)">MO</span><span class="ib-t"><b class="ap-ell">moduo.app</b><span class="ap-muted ap-ell">Domain renewal</span></span><span class="wg-x ap-muted">5 weeks</span></li>
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                  <span class="wg__corner" data-wg-size aria-hidden="true"><i /><i /></span>
+                </article>
+              );
+            })
+          }
+        </div>
+
+        <aside class="hb__shelf" aria-labelledby="hb-shelf">
+          <p class="hb__shelf-t" id="hb-shelf">{board.shelf}</p>
+          <ul class="hb__shelf-list" data-board-shelf>
+            {
+              widgets.map((w) => (
+                <li class:list={["hb__shelf-i", spot(start.d, w.id) && "is-on-d", spot(start.m, w.id) && "is-on-m"]} data-shelf={w.id}>
+                  <button type="button" class="hb__add" data-add={w.id}>
+                    <Icon name={w.icon} class="ap-i--sm" />
+                    <span class="hb__add-t">
+                      <span class="hb__add-n">{w.name}</span>
+                      <span class="hb__add-d ap-muted">{w.desc}</span>
+                    </span>
+                    <Icon name="plus" class="ap-i--xs hb__add-plus" />
+                  </button>
+                </li>
+              ))
+            }
+          </ul>
+          <p class="hb__shelf-empty ap-muted" hidden data-board-empty>{board.shelfEmpty}</p>
+        </aside>
+      </div>
+      <svg class="hb__hand" viewBox="0 0 24 24" aria-hidden="true" data-board-hand>
+        <path d="M4 2.5v16.2l4.3-4.1 2.8 6.4 2.9-1.3-2.8-6.3h6z" />
+      </svg>
+    </div>
+
+    <p class="hb__foot t-s quiet" id="hb-keys">
+      <span class="hb__hint-fine">{board.hintFine}</span>
+      <span class="hb__hint-touch">{board.hintTouch}</span>
+      <span class="hb__note">{board.note}</span>
+    </p>
+    <p class="sr-only" aria-live="polite" data-board-live></p>
+  </div>
+</section>
+
+<style>
+  .hb {
+    padding: calc(var(--u) * 12) 0 calc(var(--u) * 6);
+  }
+  .hb__head {
+    align-items: end;
+    row-gap: 1.25rem;
+    margin-bottom: calc(var(--u) * 6);
+  }
+  .hb__title {
+    grid-column: 1 / span 7;
+    margin-left: -0.04em;
+    max-width: 13ch;
+  }
+  .hb__text {
+    grid-column: 9 / span 4;
+    max-width: 26rem;
+  }
+  @media (max-width: 900px) {
+    .hb__title,
+    .hb__text {
+      grid-column: 1 / -1;
+    }
+  }
+
+  /* ── The window: Home, in edit mode. ───────────────────────────────────────────────── */
+  .hb__win {
+    --gap: clamp(0.5rem, 0.8vw, 0.75rem);
+    position: relative;
+    border-radius: 1.143rem;
+    background: #040404;
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 2.5rem 6rem -3rem rgb(0 0 0 / 0.9);
+    font-size: clamp(12px, 0.95vw, 13.5px);
+    color: var(--ap-fg);
+    overflow: clip;
+  }
+  .hb__bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 1em;
+    min-height: 3.6em;
+    padding: 0 1.15em;
+    border-bottom: 1px solid var(--ap-line);
+  }
+  .hb__name {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    font-weight: 500;
+  }
+  .hb__presets {
+    display: flex;
+    gap: 0.15em;
+    padding: 0.2em;
+    border-radius: 0.75em;
+    background: var(--ap-muted-bg);
+    box-shadow: inset 0 0 0 1px var(--ap-line);
+  }
+  .hb__preset {
+    min-height: 2.2em;
+    padding: 0 0.95em;
+    border-radius: 0.6em;
+    color: var(--ap-muted);
+    font-weight: 500;
+    transition:
+      background-color var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease),
+      scale 0.15s var(--ease);
+  }
+  /* A layout not in use answers the pointer as the app's segmented control does: the segment
+     fills a step toward the pressed one (a colour change alone read as dead). */
+  .hb__preset:hover {
+    background: rgb(250 250 250 / 0.07);
+    color: var(--ap-fg);
+  }
+  .hb__preset[aria-pressed="true"] {
+    background: var(--ap-raised);
+    color: var(--ap-fg);
+  }
+  .hb__preset[aria-pressed="true"]:hover {
+    background: rgb(250 250 250 / 0.2);
+  }
+  .hb__preset:active {
+    scale: 0.97;
+  }
+  .hb__preset:focus-visible,
+  .hb__add:focus-visible,
+  .wg__btn:focus-visible {
+    outline: 2px solid var(--ap-primary);
+    outline-offset: 2px;
+  }
+  .hb__size {
+    justify-self: end;
+    color: var(--ap-subtle);
+    font-size: 0.857em;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+  .hb__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 15.5em;
+  }
+
+  /* ── The board: an 8-column grid of cells, its corners marked like a drawing. ─────────── */
+  .hb__board {
+    --cols: 8;
+    --rows: var(--rows-d);
+    --rowh: clamp(5.25rem, 7.2vw, 6.75rem);
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+    grid-template-rows: repeat(var(--rows), var(--rowh));
+    gap: var(--gap);
+    padding: 1.15em;
+  }
+  .hb__marks {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    color: var(--ap-fg);
+    opacity: 0.16;
+    pointer-events: none;
+  }
+  /* Under the pointer the grid wakes: a brighter copy of the marks, lit around the hand. */
+  .hb__marks--lit {
+    opacity: 0;
+    -webkit-mask-image: radial-gradient(11rem circle at var(--mx, -20rem) var(--my, -20rem), #000, transparent 70%);
+    mask-image: radial-gradient(11rem circle at var(--mx, -20rem) var(--my, -20rem), #000, transparent 70%);
+    transition: opacity 0.4s var(--ease);
+  }
+  .hb__board:hover .hb__marks--lit {
+    opacity: 0.55;
+  }
+  .hb__board:global(.is-editing) .hb__marks--lit {
+    opacity: 0.9;
+  }
+  .hb__board:global(.is-editing) .hb__marks:not(.hb__marks--lit) {
+    opacity: 0.3;
+  }
+  /* Where the widget will land: a dashed cell area and its size. */
+  .hb__slot {
+    position: relative;
+    z-index: 0;
+    border-radius: 12px;
+    border: 1px dashed var(--ap-sel-edge);
+    background: rgb(250 250 250 / 0.025);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s var(--ease);
+  }
+  .hb__board:global(.is-editing) .hb__slot {
+    opacity: 1;
+  }
+  .hb__readout {
+    position: absolute;
+    right: 0.6em;
+    bottom: 0.6em;
+    padding: 0.2em 0.5em;
+    border-radius: 0.4em;
+    background: var(--ap-primary);
+    color: var(--ap-primary-fg);
+    font-size: 0.786em;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .hb__hand {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 6;
+    width: 1.6rem;
+    height: 1.6rem;
+    fill: var(--ap-fg);
+    stroke: #000;
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0.25rem 0.5rem rgb(0 0 0 / 0.6));
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* ── A widget: the app's card. Its head is the handle; its corner resizes it. ──────────── */
+  .wg {
+    position: relative;
+    z-index: 1;
+    grid-area: var(--d);
+    min-width: 0;
+    min-height: 0;
+    border-radius: 12px;
+    background: var(--ap-card);
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line),
+      inset 0 1px 0 rgb(255 255 255 / 0.04);
+    overflow: hidden;
+    transform-origin: 0 0;
+    container: wg / size;
+    transition: box-shadow var(--d-hover) var(--ease);
+  }
+  .wg.is-off-d {
+    display: none;
+  }
+  .wg[hidden] {
+    display: none;
+  }
+  .wg:hover,
+  .wg:focus-visible {
+    box-shadow:
+      inset 0 0 0 1px var(--ap-line-strong),
+      inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+  .wg:focus-visible {
+    outline: 2px solid var(--ap-primary);
+    outline-offset: 2px;
+  }
+  .wg:global(.is-active) {
+    z-index: 5;
+    box-shadow:
+      inset 0 0 0 1px var(--ap-sel-edge),
+      inset 0 1px 0 rgb(255 255 255 / 0.08),
+      0 1.5rem 3rem -1rem rgb(0 0 0 / 0.9);
+  }
+  .wg__in {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: 100%;
+    height: 100%;
+    transform-origin: 0 0;
+  }
+  .wg__head {
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    min-width: 0;
+    height: 2.75em;
+    padding: 0 0.5em 0 0.9em;
+    color: var(--ap-muted);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .wg__head :global(.wg__ic) {
+    flex: none;
+    color: var(--ap-subtle);
+  }
+  .wg__name {
+    flex: 0 1 auto;
+    color: var(--ap-fg);
+    font-weight: 500;
+  }
+  .wg__meta {
+    flex: none;
+    color: var(--ap-subtle);
+    font-size: 0.929em;
+  }
+  .wg__btn {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    width: max(1.85em, 24px);
+    height: max(1.85em, 24px);
+    border-radius: 0.5em;
+    color: var(--ap-subtle);
+    opacity: 0;
+    transition:
+      opacity var(--d-hover) var(--ease),
+      background-color var(--d-hover) var(--ease),
+      color var(--d-hover) var(--ease);
+  }
+  .wg:is(:hover, :focus-within) .wg__btn {
+    opacity: 1;
+  }
+  .wg__btn:hover {
+    background: var(--ap-hover);
+    color: var(--ap-fg);
+  }
+  .wg__body {
+    position: relative;
+    min-height: 0;
+    padding: 0 0.9em 0.9em;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(#000 calc(100% - 1.25em), transparent);
+    mask-image: linear-gradient(#000 calc(100% - 1.25em), transparent);
+  }
+  .wg__corner {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    display: grid;
+    place-items: center;
+    width: 1.75em;
+    height: 1.75em;
+    cursor: nwse-resize;
+    touch-action: none;
+    opacity: 0.35;
+    transition: opacity var(--d-hover) var(--ease);
+  }
+  .wg__corner i {
+    position: absolute;
+    right: 0.45em;
+    bottom: 0.45em;
+    width: 0.7em;
+    height: 1px;
+    background: var(--ap-fg);
+    rotate: -45deg;
+    transform-origin: 100% 50%;
+  }
+  .wg__corner i + i {
+    width: 0.35em;
+  }
+  .wg:is(:hover, :focus-visible, :global(.is-active)) .wg__corner {
+    opacity: 1;
+  }
+
+  /* ── What a widget says at each size: a line, a glance, the full list. ──────────────── */
+  .wg-line,
+  .wg-sum {
+    display: none;
+  }
+  .wg-line {
+    align-items: center;
+    gap: 0.4em;
+    min-width: 0;
+    white-space: nowrap;
+  }
+  .wg-sum {
+    align-content: end;
+    gap: 0.15em;
+    height: 100%;
+  }
+  .wg-full {
+    display: grid;
+    align-content: start;
+  }
+  .wg-big {
+    font-size: 2.4em;
+    font-weight: 600;
+    letter-spacing: -0.03em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .wg-sum .wg-big {
+    margin-bottom: 0.2em;
+  }
+  .wg-rows > li {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    min-width: 0;
+    min-height: 2.25em;
+    border-top: 1px solid var(--ap-line);
+  }
+  .wg-rows > li:first-child {
+    border-top: 0;
+  }
+  .wg-x {
+    flex: none;
+    display: none;
+    font-size: 0.929em;
+  }
+  .wg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    height: 1.7em;
+    padding: 0 0.5em;
+    border-radius: 0.5em;
+    background: var(--ap-chip);
+    color: var(--ap-fg);
+    font-size: 0.857em;
+  }
+  .wg-x.wg-chip {
+    display: none;
+  }
+  @container wg (min-width: 22rem) {
+    .wg-x,
+    .wg-x.wg-chip {
+      display: inline-flex;
+    }
+  }
+  @container wg (max-width: 30rem) {
+    .lk-row .wg-x {
+      display: none;
+    }
+  }
+  @container wg (max-width: 13.5rem) {
+    .wg__meta {
+      display: none;
+    }
+  }
+  @container wg (max-height: 7.5rem) {
+    .wg-line {
+      display: flex;
+    }
+    .wg-full,
+    .wg-sum {
+      display: none;
+    }
+  }
+  @container wg (min-height: 7.51rem) and (max-width: 17rem) {
+    .wg-sum {
+      display: grid;
+    }
+    .wg-full {
+      display: none;
+    }
+  }
+
+  /* Today */
+  .td-row .td-t {
+    flex: none;
+    width: 2.9em;
+    color: var(--ap-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .td-bar {
+    flex: none;
+    width: 3px;
+    height: 1.25em;
+    border-radius: 2px;
+    background: var(--ap-fg);
+  }
+  .td-bar.is-block {
+    background: none;
+    box-shadow: inset 0 0 0 1px var(--ap-muted);
+  }
+  .td-row.is-past {
+    color: var(--ap-muted);
+  }
+  .td-row.is-past .td-bar {
+    opacity: 0.45;
+  }
+  .td-row.is-now {
+    min-height: 1.6em;
+    color: var(--ap-fg);
+  }
+  .td-now {
+    position: relative;
+    flex: 1 0 1.5em;
+    max-width: 40%;
+    height: 1px;
+    background: var(--ap-primary);
+  }
+  .td-now::before {
+    content: "";
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ap-primary);
+  }
+  .td-row.is-next {
+    color: var(--ap-fg);
+  }
+  .wg-line .td-bar {
+    height: 1em;
+  }
+
+  /* Tasks */
+  .tk-row .ap-check {
+    width: 1.15em;
+    height: 1.15em;
+  }
+
+  /* Focus: the ring runs on the session; the words take what room there is. */
+  .fc {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.9em;
+    height: 100%;
+  }
+  .fc__ring {
+    width: min(9em, 42cqh);
+    aspect-ratio: 1;
+    rotate: -90deg;
+    fill: none;
+    stroke-width: 2.4;
+  }
+  .fc__ring circle {
+    stroke: var(--ap-line-strong);
+  }
+  .fc__ring .fc__arc {
+    stroke: var(--ap-fg);
+    stroke-linecap: round;
+    stroke-dasharray: var(--p) 100;
+  }
+  .fc__txt {
+    display: grid;
+    gap: 0.35em;
+    min-width: 0;
+  }
+  .fc__time {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    font-size: 1.6em;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .fc__of {
+    font-size: 0.55em;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+  .fc__acts {
+    display: none;
+    gap: 0.4em;
+    margin-top: 0.4em;
+  }
+  @container wg (max-width: 17rem) {
+    .fc {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      align-content: center;
+      text-align: center;
+    }
+    .fc__ring {
+      width: min(6.5em, 46cqh);
+    }
+    .fc__task,
+    .fc__of {
+      display: none;
+    }
+    .fc__time {
+      font-size: 1.35em;
+    }
+  }
+  @container wg (min-width: 22rem) and (min-height: 13rem) {
+    .fc__acts {
+      display: flex;
+    }
+    .fc__time {
+      font-size: 2.6em;
+    }
+    .fc__ring {
+      width: min(13em, 60cqh);
+    }
+  }
+  @container wg (max-height: 7.5rem) {
+    .fc {
+      grid-template-columns: auto minmax(0, 1fr);
+      justify-items: start;
+      text-align: left;
+    }
+    .fc__ring {
+      width: 2.4em;
+    }
+    .fc__time {
+      font-size: 1.25em;
+    }
+    .fc__task {
+      display: none;
+    }
+  }
+
+  /* Inbox, reconnect */
+  .wg-rows > :is(.ib-row, .rc-row) {
+    min-height: 2.9em;
+  }
+  .ib-row .ap-av,
+  .rc-row .ap-av,
+  .ch-m .ap-av {
+    width: 2em;
+    height: 2em;
+    font-size: 0.75em;
+  }
+  .ib-t {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.3;
+  }
+  .ib-t b {
+    font-weight: 500;
+  }
+
+  /* Recently linked: two items, joined by two strokes, and how. */
+  .wg-rows > .lk-row {
+    min-height: 2.6em;
+  }
+  .lk-a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4em;
+    min-width: 0;
+    max-width: 42%;
+  }
+  .lk-a :global(.ap-i) {
+    flex: none;
+    color: var(--ap-subtle);
+  }
+  .lk-join {
+    position: relative;
+    flex: none;
+    width: 1.1em;
+    height: 0.9em;
+  }
+  .lk-join i {
+    position: absolute;
+    top: 0;
+    width: 0.45em;
+    height: 0.9em;
+    background: var(--ap-fg);
+    clip-path: polygon(0 100%, 0 45%, 100% 0, 100% 55%);
+  }
+  .lk-join i + i {
+    left: 0.45em;
+    mix-blend-mode: difference;
+  }
+  .lk-join i:first-child {
+    left: 0.2em;
+  }
+  .lk-row .wg-x {
+    margin-left: auto;
+  }
+
+  /* Clock and countdown */
+  .ck,
+  .cd {
+    display: grid;
+    align-content: end;
+    gap: 0.25em;
+    height: 100%;
+  }
+  .ck__here,
+  .cd__n {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+  }
+  .ck__there,
+  .cd__to {
+    display: flex;
+    gap: 0.5em;
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .ck__there,
+  .cd__date {
+    display: none;
+  }
+  @container wg (min-width: 22rem) {
+    .ck__there,
+    .cd__date {
+      display: flex;
+    }
+    .ck {
+      grid-template-columns: auto auto;
+      justify-content: space-between;
+      align-items: end;
+    }
+  }
+  @container wg (max-height: 7.5rem) {
+    .ck,
+    .cd {
+      align-content: center;
+    }
+    .ck .wg-big,
+    .cd .wg-big {
+      font-size: 1.9em;
+    }
+    .cd {
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: baseline;
+      column-gap: 0.75em;
+    }
+  }
+  @container wg (min-height: 13rem) {
+    .ck .wg-big,
+    .cd .wg-big {
+      font-size: 4em;
+    }
+  }
+
+  /* Pinned note */
+  .nt {
+    display: grid;
+    align-content: start;
+    gap: 0.5em;
+  }
+  .nt__t {
+    font-size: 1.15em;
+    font-weight: 600;
+  }
+  .nt__p {
+    line-height: 1.45;
+  }
+  .nt__list {
+    display: grid;
+    gap: 0.45em;
+    margin-top: 0.25em;
+  }
+  .nt__list li {
+    display: flex;
+    align-items: center;
+    gap: 0.55em;
+    min-width: 0;
+  }
+  @container wg (max-height: 7.5rem) {
+    .nt__p {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /* Catch up */
+  .ch {
+    gap: 0.75em;
+  }
+  .ch-m {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6em;
+  }
+  .ch-t {
+    display: grid;
+    gap: 0.15em;
+    min-width: 0;
+    line-height: 1.4;
+  }
+  .ch-t b {
+    font-weight: 500;
+  }
+  .ch-typing {
+    align-items: center;
+  }
+  .ch-dots {
+    display: inline-flex;
+    gap: 0.2em;
+    margin-left: 0.2em;
+    vertical-align: middle;
+  }
+  .ch-dots i {
+    width: 0.3em;
+    height: 0.3em;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* Quick capture */
+  .cp {
+    display: grid;
+    align-content: center;
+    gap: 0.6em;
+    height: 100%;
+  }
+  .cp__field {
+    display: flex;
+    align-items: center;
+    min-height: 2.5em;
+    padding: 0 0.75em;
+    border-radius: 0.6em;
+    background: var(--ap-muted-bg);
+    box-shadow: inset 0 0 0 1px var(--ap-line);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .cp__caret {
+    flex: none;
+    width: 1px;
+    height: 1.15em;
+    margin-left: 1px;
+    background: var(--ap-fg);
+  }
+  .cp__kinds {
+    display: none;
+    gap: 0.35em;
+  }
+  .wg-chip.is-on {
+    background: var(--ap-raised);
+  }
+  @container wg (min-height: 9rem) {
+    .cp__kinds {
+      display: flex;
+    }
+  }
+
+  /* Habits */
+  .hb-hab {
+    display: grid;
+    gap: 0.55em;
+  }
+  .hb-hab li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75em;
+    min-width: 0;
+  }
+  .hb-days {
+    display: flex;
+    flex: none;
+    gap: 0.3em;
+  }
+  .hb-days i {
+    width: 0.8em;
+    height: 0.8em;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--ap-line-strong);
+  }
+  .hb-days i.is-on {
+    background: var(--ap-fg);
+    box-shadow: none;
+  }
+
+  /* Time */
+  .tm {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.6em;
+    height: 100%;
+  }
+  .tm__sum {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+  }
+  .tm__sum .wg-big {
+    font-size: 1.9em;
+  }
+  .tm__bars {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: end;
+    gap: 0.45em;
+    min-height: 0;
+  }
+  .tm__b {
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 0.3em;
+    height: 100%;
+    color: var(--ap-subtle);
+    font-size: 0.857em;
+    text-align: center;
+  }
+  .tm__b i {
+    align-self: end;
+    height: calc(var(--h) * 100%);
+    border-radius: 0.3em;
+    background: var(--ap-line-strong);
+  }
+  .tm__b.is-today {
+    color: var(--ap-fg);
+  }
+  .tm__b.is-today i {
+    background: var(--ap-fg);
+  }
+  @container wg (max-height: 7.5rem) {
+    .tm__bars {
+      display: none;
+    }
+  }
+
+  /* ── The shelf: widgets not on the board, each a button that adds it. ───────────────── */
+  .hb__shelf {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+    padding: 1.15em 1.15em 1.15em 0.15em;
+  }
+  .hb__shelf-t {
+    color: var(--ap-subtle);
+    font-size: 0.857em;
+    font-weight: 500;
+  }
+  .hb__shelf-list {
+    display: grid;
+    gap: 0.4em;
+  }
+  .hb__shelf-i.is-on-d,
+  .hb__shelf-i[hidden] {
+    display: none;
+  }
+  .hb__add {
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    width: 100%;
+    padding: 0.7em 0.75em;
+    border-radius: 0.75em;
+    text-align: left;
+    box-shadow: inset 0 0 0 1px var(--ap-line);
+    background: var(--ap-card);
+    color: var(--ap-fg);
+    transition:
+      box-shadow var(--d-hover) var(--ease),
+      background-color var(--d-hover) var(--ease);
+  }
+  .hb__add :global(.ap-i) {
+    flex: none;
+    color: var(--ap-subtle);
+  }
+  .hb__add-t {
+    display: grid;
+    flex: 1;
+    min-width: 0;
+    line-height: 1.35;
+  }
+  .hb__add-n {
+    font-weight: 500;
+  }
+  .hb__add-d {
+    font-size: 0.857em;
+  }
+  .hb__add :global(.hb__add-plus) {
+    opacity: 0.5;
+    transition:
+      opacity var(--d-hover) var(--ease),
+      translate var(--d-hover) var(--ease);
+  }
+  .hb__add:hover {
+    box-shadow: inset 0 0 0 1px var(--ap-line-strong);
+    background: var(--ap-muted-bg);
+  }
+  .hb__add:hover :global(.hb__add-plus) {
+    opacity: 1;
+    translate: -0.15em 0;
+  }
+  .hb__add:active {
+    background: var(--ap-active);
+  }
+  .hb__shelf-empty {
+    font-size: 0.929em;
+  }
+
+  .hb__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.5rem 2rem;
+    margin-top: 1rem;
+  }
+  .hb__hint-fine,
+  .hb__hint-touch {
+    max-width: 44rem;
+  }
+  .hb__hint-touch {
+    display: none;
+  }
+  @media (hover: none), (pointer: coarse) {
+    .hb__hint-fine {
+      display: none;
+    }
+    .hb__hint-touch {
+      display: inline;
+    }
+    .wg__btn,
+    .wg__corner {
+      opacity: 1;
+    }
+    .wg__corner {
+      width: 2.25em;
+      height: 2.25em;
+    }
+  }
+
+  /* ── A phone: four columns, the shelf under the board. ───────────────────────────── */
+  @media (max-width: 999px) {
+    .hb__body {
+      grid-template-columns: 1fr;
+    }
+    .hb__board {
+      --cols: 4;
+      --rows: var(--rows-m);
+      /* Square cells: the window (.ap) is the container. */
+      --rowh: calc((100cqi - 1.8em - 3 * var(--gap)) / 4);
+      padding: 0.9em;
+    }
+    .wg {
+      grid-area: var(--m);
+    }
+    .wg.is-off-d {
+      display: block;
+    }
+    .wg.is-off-m {
+      display: none;
+    }
+    .hb__shelf {
+      padding: 0 0.9em 1em;
+    }
+    .hb__shelf-list {
+      grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    }
+    .hb__shelf-i.is-on-d {
+      display: block;
+    }
+    .hb__shelf-i.is-on-m {
+      display: none;
+    }
+    .hb__add-d {
+      display: none;
+    }
+    .hb__bar {
+      grid-template-columns: 1fr auto;
+      padding: 0.6em 0.9em;
+    }
+    .hb__size {
+      display: none;
+    }
+  }
+  @media (max-width: 560px) {
+    .hb__bar {
+      grid-template-columns: 1fr;
+      justify-items: start;
+    }
+    .hb__name {
+      display: none;
+    }
+    .hb__presets {
+      width: 100%;
+    }
+    .hb__preset {
+      flex: 1;
+      padding: 0 0.5em;
+    }
+  }
+</style>

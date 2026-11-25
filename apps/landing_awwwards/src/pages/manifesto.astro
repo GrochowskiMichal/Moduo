@@ -1,0 +1,117 @@
+---
+// The founders' manifesto. Six numbered parts (a real sequence) and, in the rail, six strokes:
+// the stroke of the part you are reading is lit (motion/rail.ts), and each one jumps to its part.
+import "../styles/longform.css";
+import Btn from "../components/Btn.astro";
+import ChainNav from "../components/ChainNav.astro";
+import StrokePair from "../components/StrokePair.astro";
+import { manifesto, waitlist } from "../data/site";
+import Base from "../layouts/Base.astro";
+
+const pad = (n: number) => String(n).padStart(2, "0");
+---
+
+<Base
+  title="Manifesto"
+  description="Every app you need, none you don’t. Why Moduo is one modular workspace where links happen while you work and you leave with everything."
+  image="/og/manifesto.png"
+  reading
+>
+  <article class="longform mf" aria-labelledby="mf-title">
+    <div class="wrap longform__grid">
+      <div class="longform__rail mf__rail" data-spy>
+        <ChainNav
+          id="mfr"
+          label="Parts of the manifesto"
+          items={manifesto.sections.map((sec, i) => ({ href: `#part-${i + 1}`, label: pad(i + 1), name: sec.title }))}
+          current={0}
+          linkCurrent
+        />
+      </div>
+      <div class="longform__col">
+        <p class="eyebrow">Manifesto</p>
+        <h1 id="mf-title" data-split data-intro>{manifesto.title}</h1>
+        {/* The intro paints with the HTML: it is the first screen's largest text (LCP). */}
+        {manifesto.intro.map((p) => <p class="mf__intro t-m">{p}</p>)}
+        {/* Part 1 shares the first screen with the intro, so it paints with the HTML too. */}
+        <ol class="mf__parts">
+          {
+            manifesto.sections.map((s, i) => (
+              <li class="mf__part" id={`part-${i + 1}`} data-reveal={i === 0 ? undefined : ""}>
+                <p class="mf__n tabular" aria-hidden="true">
+                  <StrokePair class="mf__glyph" size="0.5rem" />
+                  {pad(i + 1)}
+                </p>
+                <h2 class="mf__t">{s.title}</h2>
+                {s.text.map((t) => (
+                  <p class="mf__p muted">{t}</p>
+                ))}
+              </li>
+            ))
+          }
+        </ol>
+        <p class="mf__end t-l" data-split>{manifesto.end}</p>
+      </div>
+      <div class="longform__col longform__next mf__next">
+        <Btn data-wl-open="nav">{waitlist.button}</Btn>
+        <a class="back" href="/"
+          ><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"
+            ><path d="M12 7H2.5M6.5 3l-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5"></path></svg
+          >Back to the home page</a
+        >
+      </div>
+    </div>
+  </article>
+</Base>
+
+<style>
+  .mf__intro {
+    margin-top: 1.5rem;
+    color: var(--c-fg);
+  }
+  .mf__intro + .mf__intro {
+    margin-top: 1rem;
+    color: var(--c-muted);
+  }
+  .mf__parts {
+    margin-top: calc(var(--u) * 10);
+    display: grid;
+    gap: calc(var(--u) * 8);
+  }
+  .mf__part {
+    display: grid;
+    gap: 0.875rem;
+    scroll-margin-top: calc(var(--nav-h) + 2rem);
+  }
+  .mf__rail {
+    padding-top: 0.25rem;
+  }
+  .mf__n {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: var(--t-xs);
+    font-weight: var(--w-ui);
+    color: var(--c-quiet);
+  }
+  .mf__part :global(.mf__glyph) {
+    --g: 1;
+  }
+  .mf__t {
+    font-size: var(--t-l);
+    line-height: var(--lh-l);
+    letter-spacing: var(--tr-l);
+    font-weight: var(--w-ui);
+  }
+  .mf__p {
+    max-width: 36rem;
+  }
+  /* The last line and its action read as one close. */
+  .mf__next {
+    margin-top: calc(var(--u) * 4);
+  }
+  .mf__end {
+    margin-top: calc(var(--u) * 12);
+    font-weight: var(--w-ui);
+  }
+</style>

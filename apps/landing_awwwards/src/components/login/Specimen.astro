@@ -1,0 +1,133 @@
+---
+// The login page's left panel: Moduo's mark as a solid, turning in front of a camera and read
+// out as a grid of type, like a specimen under an instrument (motion/pages/login.ts draws it,
+// lib/specimen.ts does the math). Lit cells are boxes with a letter cut out, dim ones small
+// marks. The corners carry the instrument's live readout: the cycle and what it is doing (a
+// slow sway, a spin, your drag, locked), the frame of the cycle, the light threshold, the share
+// of cells that changed, the grid and the pose. Drag turns it; a valid email squares it up to
+// face you. Without script, the mark itself stands in.
+import { login } from "../../data/site";
+import { MARK } from "../../lib/brand";
+import { readout, THR } from "../../lib/specimen";
+
+const first = readout({ phase: "sway", at: 0, thr: THR, move: 0, cols: 84, rows: 80, yaw: 0, pitch: 0.08 });
+---
+
+<div class="spec" role="img" aria-label={login.specimen} data-spec>
+  <canvas class="spec__cv" aria-hidden="true"></canvas>
+  <svg class="spec__still" viewBox={MARK.tight} aria-hidden="true">
+    <path d={MARK.d} fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"></path>
+  </svg>
+  <div class="spec__hud spec__hud--tl" aria-hidden="true">
+    <p><span data-hud="cycle">{first.cycle}</span>{"  "}<b data-hud="what">{first.what}</b></p>
+    <p data-hud="frame">{first.frame}</p>
+    <p data-hud="thr">{first.thr}</p>
+  </div>
+  <div class="spec__hud spec__hud--tr" aria-hidden="true">
+    <p>MODUO / MARK 01</p>
+    <p data-hud="grid">{first.grid}</p>
+    <p class="spec__pose" data-hud="pose">{first.pose}</p>
+  </div>
+  <div class="spec__hud spec__hud--bl" aria-hidden="true">
+    <p>VISIBLE = (L ∪ R) XOR M</p>
+  </div>
+  <div class="spec__hud spec__hud--br" aria-hidden="true">
+    <p>DRAG TO TURN</p>
+  </div>
+</div>
+
+<style>
+  .spec {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--c-line);
+    border-radius: var(--r-xl);
+    background:
+      radial-gradient(90% 55% at 50% 108%, var(--c-hover), transparent 70%),
+      linear-gradient(180deg, var(--c-bg) 30%, var(--c-card));
+    color: var(--c-fg);
+    cursor: grab;
+    touch-action: pan-y;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .spec.is-dragging {
+    cursor: grabbing;
+  }
+  .spec__cv {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  /* No script: the mark itself, quiet, where the solid would turn. */
+  .spec__still {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 52%;
+    height: auto;
+    translate: -50% -50%;
+    color: var(--c-dim);
+  }
+  :global(html.js) .spec__still,
+  :global(html:not(.js)) .spec__hud--br {
+    display: none;
+  }
+
+  .spec__hud {
+    position: absolute;
+    z-index: 1;
+    font-family: var(--f-mono);
+    font-size: var(--t-2xs);
+    line-height: 1.6;
+    letter-spacing: 0.04em;
+    color: var(--c-muted);
+    white-space: pre;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  .spec__hud b {
+    font-weight: 500;
+    color: var(--c-fg);
+  }
+  .spec__hud--tl {
+    top: 1.125rem;
+    left: 1.25rem;
+  }
+  .spec__hud--tr {
+    top: 1.125rem;
+    right: 1.25rem;
+    text-align: right;
+  }
+  .spec__hud--bl,
+  .spec__hud--br {
+    bottom: 1rem;
+    color: var(--c-quiet);
+  }
+  .spec__hud--bl {
+    left: 1.25rem;
+  }
+  .spec__hud--br {
+    right: 1.25rem;
+  }
+
+  @media (max-width: 560px) {
+    .spec__hud--tl {
+      top: 0.875rem;
+      left: 0.875rem;
+    }
+    .spec__hud--tr {
+      top: 0.875rem;
+      right: 0.875rem;
+    }
+    .spec__pose,
+    .spec__hud--bl {
+      display: none;
+    }
+    .spec__hud--br {
+      right: 0.875rem;
+      bottom: 0.75rem;
+    }
+  }
+</style>
