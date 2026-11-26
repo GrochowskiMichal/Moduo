@@ -2,7 +2,7 @@
 
 > Raw research report from the Chat re-plan, 2026-10-13. Nothing here is decided.
 
-**What this is.** Chat v1 was built by Mike on 2026-10-06 from one ask ("end to end … production ready … world-class UI/UX"), with no grilling round ([`specs/chat.md:5`](../../../specs/chat.md)). Every product call in it was an agent's assumption. Since then, Tasks v3 decided rules for the whole app that every rebuilt module adopts ([`docs/agents/module-replan.md:33-48`](../../../docs/agents/module-replan.md)). This file checks each early Chat decision against users, competitors and those rules, and says keep, adjust or reverse.
+**What this is.** Chat v1 was built by Mike on 2026-10-06 from one ask ("end to end … production ready … world-class UI/UX"), with no grilling round (`specs/chat.md:5`). Every product call in it was an agent's assumption. Since then, Tasks v3 decided rules for the whole app that every rebuilt module adopts ([`docs/agents/module-replan.md:33-48`](../../../docs/agents/module-replan.md)). This file checks each early Chat decision against users, competitors and those rules, and says keep, adjust or reverse.
 
 **How each item reads.**
 - **v1:** what was built, with `path:line`.
@@ -37,7 +37,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D1 · Chat is the 7th tab, ⌘7 (assumption 1)
 
 - **v1:** Chat sits after Contacts in the top bar ([`src/components/app/app-chrome-constants.ts:13-26`](../../../src/components/app/app-chrome-constants.ts)); ⌘1–7 go to the Nth *visible* tab ([`src/lib/shortcuts.ts:138-158`](../../../src/lib/shortcuts.ts)).
-- **For:** nobody's ⌘1–6 moved. Tasks 90b then built on it: inside the capture, ⌘7 switches the type to **Message** ([`.design/tasks-v3/REPLAN.md:2546-2553`](../../tasks-v3/REPLAN.md), [`specs/tasks-v3.md:110`](../../../specs/tasks-v3.md)). The numbers follow the same filtered list in both places, so a person who can't see Notes has Chat on ⌘6 in both ([`app-chrome-constants.ts:28-42`](../../../src/components/app/app-chrome-constants.ts)).
+- **For:** nobody's ⌘1–6 moved. Tasks 90b then built on it: inside the capture, ⌘7 switches the type to **Message** ([`.design/tasks-v3/REPLAN.md:2546-2553`](../../tasks-v3/REPLAN.md), `specs/tasks-v3.md:110`). The numbers follow the same filtered list in both places, so a person who can't see Notes has Chat on ⌘6 in both ([`app-chrome-constants.ts:28-42`](../../../src/components/app/app-chrome-constants.ts)).
 - **Against:** "next to Email" (the spec's alternative) would move Contacts' number and break 90b's "⌘7 a message".
 - **Gap to close:** Chat registers no capture type yet, so ⌘7 in the capture does nothing ([`src/lib/capture-registry.ts:3-10`](../../../src/lib/capture-registry.ts)). The Message type is a block of this plan.
 - **Verdict: Keep.** **Binds:** Tasks 90b. **Who:** already decided; record it.
@@ -55,8 +55,8 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 
 ### D3 · Everyone in the workspace can chat, viewers included (assumption 3)
 
-- **v1 spec:** "Everyone in the workspace can chat, including `viewer` role" ([`specs/chat.md:48`](../../../specs/chat.md)).
-- **Already reversed:** on 2026-10-06 the designer answered "Viewers **cannot** post in chat by default" ([`specs/permissions.md:255`](../../../specs/permissions.md); grid at `:185`). PERM-7 seeded `workspace_chat_caps` with viewer `post = false` ([`supabase/migrations/20261006210000_perm_sharing.sql:415-445`](../../../supabase/migrations/20261006210000_perm_sharing.sql)), the message guard refuses it (`:979`), and `chat_caps_set` won't let anyone switch it on for viewers (`:1178-1181`). So it's not "off by default" but "never" for viewers, which is stricter than the grid's ☐.
+- **v1 spec:** "Everyone in the workspace can chat, including `viewer` role" (`specs/chat.md:48`).
+- **Already reversed:** on 2026-10-06 the designer answered "Viewers **cannot** post in chat by default" (`specs/permissions.md:255`; grid at `:185`). PERM-7 seeded `workspace_chat_caps` with viewer `post = false` ([`supabase/migrations/20261006210000_perm_sharing.sql:415-445`](../../../supabase/migrations/20261006210000_perm_sharing.sql)), the message guard refuses it (`:979`), and `chat_caps_set` won't let anyone switch it on for viewers (`:1178-1181`). So it's not "off by default" but "never" for viewers, which is stricter than the grid's ☐.
 - **Open edge (for the hackathon plan, not here):** a judge or organizer given the Viewer role could read but never post, not even in a Q&A channel. If they need to post, they need Member, or a custom role later.
 - **Verdict: Reverse (done in the database; `specs/chat.md:48` is stale).** **Binds:** permissions answer 5. **Who:** already decided; record it and fix the wording.
 
@@ -65,7 +65,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 - **v1:** `chat_op_add_members` lets anyone who can read the channel add workspace members ([`supabase/migrations/20261006150000_chat_module.sql:394-413`](../../../supabase/migrations/20261006150000_chat_module.sql)); rename, archive and remove check `created_by` or the owner/admin role (`:329`, `:357`, `:422-426`).
 - **For:** Slack's default lets any member invite into channels; at 2–5 people, gatekeeping adds friction.
 - **Against:**
-  - PERM-7 introduced **channel managers** and a "Manage any channel" capability ([`specs/permissions.md:182-188`](../../../specs/permissions.md)), but these ops never read either: they still check the creator or the role ([`chat_module.sql:329, 357, 424`](../../../supabase/migrations/20261006150000_chat_module.sql)); no later migration redefines them. Two rules for one question.
+  - PERM-7 introduced **channel managers** and a "Manage any channel" capability (`specs/permissions.md:182-188`), but these ops never read either: they still check the creator or the role ([`chat_module.sql:329, 357, 424`](../../../supabase/migrations/20261006150000_chat_module.sql)); no later migration redefines them. Two rules for one question.
   - For a private channel, "anyone inside can pull anyone in" is the riskier half; Slack lets admins restrict it.
 - **Recommendation:** public channels: anyone adds (keep). Private channels: managers add (the creator by default, more can be named). Rename, archive and remove: channel managers plus whoever holds "Manage any channel". One rule, read in one place.
 - **Verdict: Adjust.** **Binds:** PERM-7 (the managers concept). **Who:** Designer (the private-channel rule); the wiring is technical.
@@ -102,7 +102,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 - **v1:** a `<textarea>` with `**bold**`-style markup and three autocompletes ([`src/features/chat/ui/composer.tsx:1-9, 466`](../../../src/features/chat/ui/composer.tsx)); the stored body is a token grammar ([`src/features/chat/markup.ts:3-12`](../../../src/features/chat/markup.ts)).
 - **For:** fast, pastes cleanly, what you see is what's stored. RF-1 also kept task comments a text box (RF-1-7, [`docs/decisions/tasks.md:479-483`](../../../docs/decisions/tasks.md)).
 - **Against:**
-  - RF-1's default for chat is "a chip in the text" ([`specs/tasks-v3.md:118`](../../../specs/tasks-v3.md)). A textarea can't show a chip while you type, so a picked item reads as raw words until sent.
+  - RF-1's default for chat is "a chip in the text" (`specs/tasks-v3.md:118`). A textarea can't show a chip while you type, so a picked item reads as raw words until sent.
   - TV-U14 already built the shared answer: a one-line Lexical editor with RF-1's three menus (`@ # /`), chips at text size and date words marked as you type (U14-2, [`docs/decisions/tasks.md:74-78`](../../../docs/decisions/tasks.md)). Notes is Lexical too. A third editor for chat is a second grammar implementation, which U14-2 rejected.
   - Email compose tried a lighter editor once and was moved back to Lexical at the designer's direction ([`docs/decisions/email.md:29`](../../../docs/decisions/email.md), EM-7).
 - **Recommendation:** the composer is the shared Lexical editor (multi-line), with RF-1's menus and markdown shortcuts as input rules (`**`, `` ` ``, `>`), so markup typists lose nothing. Store references as `{type, id}` only (D11).
@@ -114,7 +114,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 
 ### D9 · Channel-first structure (the Slack shape) vs conversations anchored to the work
 
-- **v1:** free-standing channels and DMs, grouped Starred · Channels · Direct messages ([`src/features/chat/ui/chat-sidebar.tsx:1-3, 209-231`](../../../src/features/chat/ui/chat-sidebar.tsx)). A channel knows nothing about a project or client; "Discussed in #channel" was left for later ([`specs/chat.md:72`](../../../specs/chat.md)).
+- **v1:** free-standing channels and DMs, grouped Starred · Channels · Direct messages ([`src/features/chat/ui/chat-sidebar.tsx:1-3, 209-231`](../../../src/features/chat/ui/chat-sidebar.tsx)). A channel knows nothing about a project or client; "Discussed in #channel" was left for later (`specs/chat.md:72`).
 - **For channels:** the shape every Slack, Discord and Teams user already knows; the hackathon (one workspace per team) needs only a few channels; the 2026-10-02 decision says chat should "compete with Slack on features" ([`docs/decisions/product.md:17`](../../../docs/decisions/product.md)).
 - **For anchoring:** Moduo's moat is the spine ([`docs/PRODUCT_BRIEF.md:47-55`](../../../docs/PRODUCT_BRIEF.md)). Basecamp gives every project its own chat (Campfire), so the conversation sits next to the work; an agency's client channel that also shows on the client's hub is exactly the "only place these connect" pitch. Slack's own answer to scattered context is channel-per-project by convention, which nobody maintains.
 - **Against anchoring every project:** a channel per project multiplies channels at 2–5 people (more unread rows, more muting), and the boundary Maciej set says a discussion *about an item* lives on the item, not in chat ([`.design/chat-v2/REPLAN.md:73`](../REPLAN.md)).
@@ -124,7 +124,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D10 · `#` inserts any Moduo item into a message
 
 - **v1:** `@` lists people (plus @channel), `#` lists tasks, notes, contacts, events…, `:` lists emoji ([`src/features/chat/ui/composer.tsx:5-7, 159-217`](../../../src/features/chat/ui/composer.tsx)). The locked explainer teaches it ([`chat-locked.tsx:24`](../../../src/features/chat/ui/chat-locked.tsx)).
-- **Against (binding):** the app-wide grammar is `@` people first, then things; `#` tags; `/` commands and date chips (Tasks 33, 33a, 55; [`specs/tasks-v3.md:112, 118`](../../../specs/tasks-v3.md); RF-1-8, [`docs/decisions/tasks.md:484-488`](../../../docs/decisions/tasks.md)). "Check the `@ # /` grammar before proposing any token" ([`docs/agents/module-replan.md:117`](../../../docs/agents/module-replan.md)). Under v1, `#launch` in chat means a task and in a task title means a tag.
+- **Against (binding):** the app-wide grammar is `@` people first, then things; `#` tags; `/` commands and date chips (Tasks 33, 33a, 55; `specs/tasks-v3.md:112, 118`; RF-1-8, [`docs/decisions/tasks.md:484-488`](../../../docs/decisions/tasks.md)). "Check the `@ # /` grammar before proposing any token" ([`docs/agents/module-replan.md:117`](../../../docs/agents/module-replan.md)). Under v1, `#launch` in chat means a task and in a task title means a tag.
 - **What changes:** `@` opens people first, then things (tasks, projects, notes, contacts, events, emails, conversations); `#` applies or links a tag; `/today`, `/tomorrow`, `/next week`, `/date` insert a date chip (33a); `/` may also hold chat commands (D32's `@channel` alternative, a future `/remind`). `:` for emoji stays (it's not part of the grammar and doesn't collide).
 - **Verdict: Reverse.** **Binds:** Tasks 33, 33a, 55, RF-1-8. **Who:** Technical. Rejected: keeping `#` for items in chat only.
 
@@ -147,7 +147,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D13 · Free emoji reactions, up to 20 per message
 
 - **v1:** any emoji (≤ 32 characters), up to 20 different ones per message ([`chat_module.sql:588-622`](../../../supabase/migrations/20261006150000_chat_module.sql), the cap at `:609`), with a full picker ([`src/features/chat/ui/emoji-picker.tsx`](../../../src/features/chat/ui/emoji-picker.tsx), [`src/features/chat/emoji.ts`](../../../src/features/chat/emoji.ts)).
-- **Against:** Tasks 88 decided six fixed reactions on comments, 👍 ✅ 👀 🙏 ❤️ 😄, "Nobody picks or adds their own (the same rule as icons)" ([`.design/tasks-v3/REPLAN.md:2496-2505`](../../tasks-v3/REPLAN.md); [`specs/tasks-v3.md:103`](../../../specs/tasks-v3.md)). One interaction language (39) argues for one reaction component across comments and chat.
+- **Against:** Tasks 88 decided six fixed reactions on comments, 👍 ✅ 👀 🙏 ❤️ 😄, "Nobody picks or adds their own (the same rule as icons)" ([`.design/tasks-v3/REPLAN.md:2496-2505`](../../tasks-v3/REPLAN.md); `specs/tasks-v3.md:103`). One interaction language (39) argues for one reaction component across comments and chat.
 - **For keeping free emoji:** chat is not task comments. Slack and Discord users react with whatever fits; a hackathon team will miss 🎉 and 🚀. Six may read as Moduo being stingy in the one place that is social.
 - **Recommendation:** one reaction component everywhere. In chat, the six are the one-click row; "More" opens the full picker. Comments keep only the six (88 unchanged). If the designer wants strict sameness, chat gets the six only.
 - **Verdict: Adjust.** **Binds:** Tasks 88 (for comments; extending it to chat is the call). **Who:** Designer.
@@ -155,7 +155,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D14 · Reactions never notify
 
 - **v1:** `chat_op_react` writes no activity row ([`chat_module.sql:588-622`](../../../supabase/migrations/20261006150000_chat_module.sql)); nobody hears about a reaction.
-- **Evidence:** Tasks 88 and the notification table say the same for comments: "A reaction · Nobody" ([`specs/tasks-v3.md:140`](../../../specs/tasks-v3.md)).
+- **Evidence:** Tasks 88 and the notification table say the same for comments: "A reaction · Nobody" (`specs/tasks-v3.md:140`).
 - **Verdict: Keep.** **Binds:** Tasks 88, 80. **Who:** Technical.
 
 ### D15 · An agent's post shows a bot glyph and an "App" badge, attributed to the key
@@ -163,14 +163,14 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 - **v1:** an agent's message has no author; it stores `author_kind = 'api_key'` and the key's name ([`supabase/migrations/20261006160000_chat_agent_access.sql:6-10`](../../../supabase/migrations/20261006160000_chat_agent_access.sql)) and renders a bot avatar plus an "App" pill ([`message-item.tsx:203-204, 245-251, 270-274`](../../../src/features/chat/ui/message-item.tsx)).
 - **Against (binding):**
   - Brand 40a: "No AI dot, no AI colour. Assistant actions are shown by name in the normal neutral style" ([`.design/brand/DECISIONS.md:59`](../../brand/DECISIONS.md)); brief §7 ([`docs/PRODUCT_BRIEF.md:95`](../../../docs/PRODUCT_BRIEF.md)).
-  - Tasks 52: every agent write is attributed "Alex · via <key name>", the person first, the key as the channel; the plain key name was the rejected alternative ([`.design/tasks-v3/REPLAN.md:1324-1345`](../../tasks-v3/REPLAN.md); [`specs/tasks-v3.md:122`](../../../specs/tasks-v3.md)).
-  - Keys already act as their creator for permission checks ([`specs/permissions.md:225`](../../../specs/permissions.md)); since 20261008124000 even chat's own post check uses the creator ([`supabase/migrations/20261008124000_chat_agent_post_checks_creator.sql:1-17`](../../../supabase/migrations/20261008124000_chat_agent_post_checks_creator.sql)). The author shown is the only part still "the app".
+  - Tasks 52: every agent write is attributed "Alex · via <key name>", the person first, the key as the channel; the plain key name was the rejected alternative ([`.design/tasks-v3/REPLAN.md:1324-1345`](../../tasks-v3/REPLAN.md); `specs/tasks-v3.md:122`).
+  - Keys already act as their creator for permission checks (`specs/permissions.md:225`); since 20261008124000 even chat's own post check uses the creator ([`supabase/migrations/20261008124000_chat_agent_post_checks_creator.sql:1-17`](../../../supabase/migrations/20261008124000_chat_agent_post_checks_creator.sql)). The author shown is the only part still "the app".
 - **What changes:** the message's author is the key's creator, with "via <key name>" beside the name; the creator's normal avatar; no glyph, no pill. Mentions by an agent still notify like a person's.
 - **Verdict: Reverse.** **Binds:** Tasks 52, brand 40a. **Who:** Technical. Rejected: "App" badge (v1), a neutral "Assistant" label.
 
 ### D16 · Agents see public channels only, through their own Chat scope
 
-- **v1:** whatever a key's scope, it never sees DMs or private channels ([`chat_agent_access.sql:1-12, 69-72`](../../../supabase/migrations/20261006160000_chat_agent_access.sql); Settings copy "Public channels only, never DMs or private channels", [`src/features/settings/api-keys.ts:38`](../../../src/features/settings/api-keys.ts)). KEYS-1 later folded the scope into the None / View / Edit grid ([`specs/BUILD_LOG.md:182`](../../../specs/BUILD_LOG.md)); Chat defaults to None (`api-keys.ts:60`).
+- **v1:** whatever a key's scope, it never sees DMs or private channels ([`chat_agent_access.sql:1-12, 69-72`](../../../supabase/migrations/20261006160000_chat_agent_access.sql); Settings copy "Public channels only, never DMs or private channels", [`src/features/settings/api-keys.ts:38`](../../../src/features/settings/api-keys.ts)). KEYS-1 later folded the scope into the None / View / Edit grid (`specs/BUILD_LOG.md:182`); Chat defaults to None (`api-keys.ts:60`).
 - **For:** the other people in a DM or private channel never agreed to an AI reading it; the safe default.
 - **Against:** Tasks 52 treats agents as delegates acting as their creator, and KEYS-1's rule is "a key never gets more than its creator", not "less than". A hackathon team's build bot posting into the team's private channel, or "summarise what I missed in #launch-private", can't work.
 - **Recommendation:** DMs stay invisible to every key. Private channels: opt-in per key ("Include private channels I'm in"), off by default, and the channel shows "An app of Alex's can read this" in its details so members know.
@@ -180,13 +180,13 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 
 - **v1:** one-level threads: "Reply in thread", a facepile and "Last reply …" under the parent, the thread in the right panel ([`message-item.tsx:148-151, 374-400`](../../../src/features/chat/ui/message-item.tsx); [`src/features/chat/ui/side-panels.tsx:39-55`](../../../src/features/chat/ui/side-panels.tsx)); thread replies notify the parent's author and earlier repliers ([`chat_module.sql:510-516`](../../../supabase/migrations/20261006150000_chat_module.sql)).
 - **For:** busy channels (hackathon Q&A, an agency's client channel) need a question and its answers kept together; Slack, Discord, Teams and Zulip (topics) all have a form of it.
-- **Against:** Tasks decided "no threads" on comments ([`specs/tasks-v3.md:103`](../../../specs/tasks-v3.md)) because a task is already the thread. Slack threads are a known complaint (replies missed, "also send to channel" confusion); Basecamp's Campfire has none.
+- **Against:** Tasks decided "no threads" on comments (`specs/tasks-v3.md:103`) because a task is already the thread. Slack threads are a known complaint (replies missed, "also send to channel" confusion); Basecamp's Campfire has none.
 - **Recommendation:** keep one-level threads in chat. The comments rule doesn't carry over: a task is already the thread its comments hang on, while a channel holds many topics at once. The thread opens in the right panel as an item ("← Thread", SH-1's stack, D20), not as a panel mode. Who hears a reply stays as v1 (the parent's author, earlier repliers, anyone mentioned), plus "Stop following" on the thread.
 - **Verdict: Adjust.** **Binds:** SH-1 (where it opens). **Who:** Designer (keep threads; who hears a reply).
 
 ### D18 · Where a discussion about an item lives (the boundary with comments and Notes)
 
-- **v1:** nothing ties a conversation to the items it discusses. A message that references a task leaves no trace on the task; "Discussed in #channel" was a "Next" item ([`specs/chat.md:72`](../../../specs/chat.md)).
+- **v1:** nothing ties a conversation to the items it discusses. A message that references a task leaves no trace on the task; "Discussed in #channel" was a "Next" item (`specs/chat.md:72`).
 - **The boundary Maciej set:** a discussion *about an item* lives on the item (comments, with reactions); chat owns conversations; both link items through RF-1 references ([`.design/chat-v2/REPLAN.md:73`](../REPLAN.md)).
 - **Evidence:** the References research already specifies the backlink: "Mentioned in Weekly sync — Oct 12" under Linked, only for viewers who can see the mentioning item ([`.design/tasks-v3/research/capture-references-teams.md:226`](../../tasks-v3/research/capture-references-teams.md)). Linear does the same for issue mentions; Slack's lack of it is why decisions get lost in channels.
 - **Recommendation (a proposal for Maciej, touching Notes and Tasks):**
@@ -200,7 +200,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 - **v1:** a search icon in the conversation header opens a Search panel on the right ("Every conversation you can see"), a substring match over message bodies ([`src/features/chat/ui/side-panels.tsx:269-330`](../../../src/features/chat/ui/side-panels.tsx); [`src/features/chat/ui/conversation-header.tsx:179-180`](../../../src/features/chat/ui/conversation-header.tsx); [`src/lib/runtime.chat.web.ts:139`](../../../src/lib/runtime.chat.web.ts)).
 - **Against (binding):**
   - The toolbar grammar every module copies is `title + count … Search · Filter · Display | view switch | one primary` ([`.design/tasks-v3/REPLAN.md:372`](../../tasks-v3/REPLAN.md)).
-  - The app's search lives in the bottom bar's centre ("Search · Quick capture · New", [`specs/tasks-v3.md:166`](../../../specs/tasks-v3.md)).
+  - The app's search lives in the bottom bar's centre ("Search · Quick capture · New", `specs/tasks-v3.md:166`).
   - The right panel is context about what's selected (48b), so results that you then open in the centre fight the layout.
 - **Recommendation:** "Search" in the conversation's toolbar finds inside this conversation (results highlight in place, ↑↓ to step). Searching every conversation is the app's search, filtered to Messages, with results opening the conversation at the message (`/chat?c=…&m=…` already exists, [`src/features/chat/search.ts:6-13`](../../../src/features/chat/search.ts)). Filters (from, in, has a link, date) use the FilterBar.
 - **Verdict: Adjust.** **Binds:** the toolbar grammar (§5 kit), 48b, Tasks §18 (bottom bar). **Who:** Technical. Rejected: a Search panel mode (v1).
@@ -270,7 +270,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D28 · Edits: your own messages, any time, "(edited)", never notifying
 
 - **v1:** only the author edits ([`chat_module.sql:544-546`](../../../supabase/migrations/20261006150000_chat_module.sql)); edits never notify, and edited mentions are scoped like sends ([`supabase/migrations/20261006151000_chat_edit_mention_scope.sql:1-3`](../../../supabase/migrations/20261006151000_chat_edit_mention_scope.sql)); ↑ edits the last one.
-- **Evidence:** matches Slack and Discord; matches Tasks' comments ("comments editable and deletable", [`specs/tasks-v3.md:103`](../../../specs/tasks-v3.md)) and the quiet bar.
+- **Evidence:** matches Slack and Discord; matches Tasks' comments ("comments editable and deletable", `specs/tasks-v3.md:103`) and the quiet bar.
 - **Small gap:** someone `@`-mentioned for the first time in an edit never hears about it (Slack behaves the same). Keep; note it in the notification table.
 - **Verdict: Keep.** **Binds:** Tasks 80 (record the row). **Who:** Technical.
 
@@ -322,7 +322,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D34 · The Home "Conversations" widget
 
 - **v1:** S/M/L sizes; what needs you first (DM unread, mentions, "every message" channels with unread), then the most recent; muted and archived never show ([`src/features/chat/widget.ts:1-4`](../../../src/features/chat/widget.ts)); below Duo it says "Chat comes with the Duo and Team plans." ([`src/features/dashboard/ui/widgets/chat-widget.tsx:136`](../../../src/features/dashboard/ui/widgets/chat-widget.tsx)).
-- **For:** "what needs you first" is the right job for a Home widget and matches the Tasks widget's "Focus, or Open when empty" idea ([`specs/tasks-v3.md:165`](../../../specs/tasks-v3.md)). The module contract requires a widget.
+- **For:** "what needs you first" is the right job for a Home widget and matches the Tasks widget's "Focus, or Open when empty" idea (`specs/tasks-v3.md:165`). The module contract requires a widget.
 - **Adjust only the surface:** rows use the kit's row and count language (D30); a workspace without chat doesn't offer the widget in the gallery instead of showing an upsell line (D2).
 - **Verdict: Keep.** **Binds:** the module contract; Tasks §18 ("other widgets: their own round"). **Who:** Technical.
 
@@ -337,7 +337,7 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 ### D36 · PERM-7: the role × capability grid, channel managers, "Only managers can post"
 
 - **v1:** seven switches per role (create public, create private, manage any channel, delete others' messages, mention everyone, post, start calls) in Settings → Members and access ([`src/features/sharing/chat-caps-panel.tsx:11-19`](../../../src/features/sharing/chat-caps-panel.tsx); [`perm_sharing.sql:415-445, 1170-1191`](../../../supabase/migrations/20261006210000_perm_sharing.sql)); a channel's creator becomes its manager (`:447-463`, `:951-967`); "Only managers can post" can be set when creating a channel ([`chat-dialogs.tsx:166-173`](../../../src/features/chat/ui/chat-dialogs.tsx); [`use-chat-module.ts:810-815`](../../../src/features/chat/hooks/use-chat-module.ts)).
-- **For:** the designer asked for "a board like Discord, but small" ([`specs/permissions.md:174-189`](../../../specs/permissions.md)). Announcement channels are what hackathon organizers need.
+- **For:** the designer asked for "a board like Discord, but small" (`specs/permissions.md:174-189`). Announcement channels are what hackathon organizers need.
 - **Against, in what was built:**
   - the dialog promises "You can still add managers later", but nothing adds a manager: no op, no screen (the only writes are the creator at creation and the hand-over when an account is erased);
   - the announcement switch exists only in the create dialog; no screen turns it on or off later;
@@ -357,8 +357,8 @@ Items are numbered **D1…** (decisions). Contradictions are numbered **A1…** 
 
 ### D38 · No files in messages
 
-- **v1:** attachments were left out ([`specs/chat.md:20, 70`](../../../specs/chat.md)).
-- **Since then:** the attachment pipeline exists (AT-1 live 2026-10-08, [`specs/attachments.md:3`](../../../specs/attachments.md)).
+- **v1:** attachments were left out (`specs/chat.md:20, 70`).
+- **Since then:** the attachment pipeline exists (AT-1 live 2026-10-08, `specs/attachments.md:3`).
 - **Against leaving it out:** every role's week in chat includes a screenshot, a PDF or a logo; for a hackathon team it's daily. Without it, teams keep WhatsApp or Discord open next to Moduo, the weakest-leg trap ([`docs/PRODUCT_BRIEF.md:72`](../../../docs/PRODUCT_BRIEF.md)).
 - **Recommendation:** files in messages (paste, drop, the + button) through AT-1's pipeline, images previewed inline; whether it's in the hackathon MVP is the designer's call.
 - **Verdict: Adjust.** **Binds:** AT-1 (the pipeline), brief §6 (weakest leg). **Who:** Designer (scope and MVP cut).
@@ -408,7 +408,7 @@ Places where v1 contradicts a binding Tasks v3 (or other ratified) rule, or cont
 
 | # | One part says | Another part does | Item |
 | --- | --- | --- | --- |
-| A19 | "Everyone in the workspace can chat, including viewer" ([`specs/chat.md:48`](../../../specs/chat.md)) | Viewers can never post: designer's answer 5 and the database ([`specs/permissions.md:255`](../../../specs/permissions.md); [`perm_sharing.sql:415-445, 979, 1178-1181`](../../../supabase/migrations/20261006210000_perm_sharing.sql)) | D3 |
+| A19 | "Everyone in the workspace can chat, including viewer" (`specs/chat.md:48`) | Viewers can never post: designer's answer 5 and the database (`specs/permissions.md:255`; [`perm_sharing.sql:415-445, 979, 1178-1181`](../../../supabase/migrations/20261006210000_perm_sharing.sql)) | D3 |
 | A20 | "Admins can delete anyone's" (assumption 7); PERM-7 "Delete others' messages" | The message menu offers Delete only on your own ([`message-item.tsx:173-181`](../../../src/features/chat/ui/message-item.tsx)) | D7 |
 | A21 | PERM-7: channel managers and "Manage any channel" decide rename, archive, members | The ops check the creator or the owner/admin role and never read either ([`chat_module.sql:329, 357, 424`](../../../supabase/migrations/20261006150000_chat_module.sql)) | D4, D36 |
 | A22 | "You can still add managers later" ([`chat-dialogs.tsx:168`](../../../src/features/chat/ui/chat-dialogs.tsx)) | No op or screen adds a manager; the announcement switch exists only in the create dialog | D36 |
@@ -416,8 +416,8 @@ Places where v1 contradicts a binding Tasks v3 (or other ratified) rule, or cont
 | A24 | "Mention everyone" is checked on the `@channel` flag ([`perm_sharing.sql:1750`](../../../supabase/migrations/20261006210000_perm_sharing.sql)) | …and again by scanning the raw text for the words, which refuses a plain sentence that contains them ([`20261008124000_chat_agent_post_checks_creator.sql:40`](../../../supabase/migrations/20261008124000_chat_agent_post_checks_creator.sql)) | D32 |
 | A25 | "the tab shows a dot" ([`use-chat-badge.ts:1-5`](../../../src/features/chat/hooks/use-chat-badge.ts)) | The tab shows a number ([`app-chrome.tsx:518-524`](../../../src/components/app/app-chrome.tsx)) | D31 |
 | A26 | A "Start calls" capability per role ([`chat-caps-panel.tsx:18`](../../../src/features/sharing/chat-caps-panel.tsx)) | Calls don't exist (Moduo Meet is planned, [`docs/decisions/meet.md:5`](../../../docs/decisions/meet.md)) | D36 |
-| A27 | Agent scope "No chat / Read public channels / Read + post" ([`specs/chat.md:57`](../../../specs/chat.md)) | KEYS-1's None / View / Edit grid ([`src/features/settings/api-keys.ts:38, 60`](../../../src/features/settings/api-keys.ts)) | D16 (stale doc) |
-| A28 | 2026-10-02: "Spec later, no build now — `/s1` first; no ledger blocks until that spec passes the DoR gate" ([`docs/decisions/product.md:17`](../../../docs/decisions/product.md) point b); ROADMAP still says "planned, not yet specced" ([`docs/ROADMAP.md:90-91`](../../../docs/ROADMAP.md)) | v1 was built on 2026-10-06 without `/s1` ([`specs/chat.md:5`](../../../specs/chat.md)) and is live | process; this re-plan closes it |
+| A27 | Agent scope "No chat / Read public channels / Read + post" (`specs/chat.md:57`) | KEYS-1's None / View / Edit grid ([`src/features/settings/api-keys.ts:38, 60`](../../../src/features/settings/api-keys.ts)) | D16 (stale doc) |
+| A28 | 2026-10-02: "Spec later, no build now — `/s1` first; no ledger blocks until that spec passes the DoR gate" ([`docs/decisions/product.md:17`](../../../docs/decisions/product.md) point b); ROADMAP still says "planned, not yet specced" ([`docs/ROADMAP.md:90-91`](../../../docs/ROADMAP.md)) | v1 was built on 2026-10-06 without `/s1` (`specs/chat.md:5`) and is live | process; this re-plan closes it |
 
 ---
 

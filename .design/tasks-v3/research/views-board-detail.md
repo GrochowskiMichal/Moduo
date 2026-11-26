@@ -221,7 +221,7 @@ Every value opens one picker recipe: a popover anchored to the value, with type-
 | **Loading** | Renders at once from the device copy. The feed and Linked load behind three static lines, and selection changes wait about 150 ms (today, holding j floods requests) |
 | **A deleted task** | "Deleted task" (55) · "Mike deleted this · 2m ago" · Restore, if you can edit |
 | **No permission** | "Private item" and "Ask someone in its project to share it with you." No title, no project, never "Inbox" (P0 #10) |
-| **A read-only viewer** | Plain values; the title, status and "+" lines are inert. The composer stays, because view access includes commenting ([permissions](../../../specs/permissions.md) §2) |
+| **A read-only viewer** | Plain values; the title, status and "+" lines are inert. The composer stays, because view access includes commenting (permissions §2) |
 | **Done or Won't do** | A line under the title: "Done Oct 9 by Alex" (77), or "Won't do · Reopen" (P0 #4) |
 
 ---

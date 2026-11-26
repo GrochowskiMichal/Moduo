@@ -1,6 +1,6 @@
 # Tasks — research round: who it's for, what to show, what to add
 
-> **Status: research and proposals. Calls 1–8, 11 and 12 were answered on 2026-10-09 (marked under each); 9 and 10 are open.** A deeper re-plan (structure, views, visuals, roles) started the same day: [../tasks-v3/REPLAN.md](../tasks-v3/REPLAN.md). [`specs/tasks-v2.md`](../../specs/tasks-v2.md) stays the source of truth until Maciej answers the ❓ calls in §7. Answered calls go to `/s1`, which updates the spec, BUILD_ORDER and `docs/decisions/tasks.md`.
+> **Status: research and proposals. Calls 1–8, 11 and 12 were answered on 2026-10-09 (marked under each); 9 and 10 are open.** A deeper re-plan (structure, views, visuals, roles) started the same day: [../tasks-v3/REPLAN.md](../tasks-v3/REPLAN.md). `specs/tasks-v2.md` stays the source of truth until Maciej answers the ❓ calls in §7. Answered calls go to `/s1`, which updates the spec, BUILD_ORDER and `docs/decisions/tasks.md`.
 >
 > _2026-10-09 · five research lanes run in parallel (competitors, ADHD and productivity science, AI agents and MCP, audience segments, a code inventory) plus a live click-through of [gr8r](https://gr8r-taskmanagement.vercel.app/). Raw reports with every source: [`research-2026-10/`](./research-2026-10/). Based on `maciej` @ `95d988b0`._
 
