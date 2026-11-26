@@ -83,7 +83,7 @@ task branch  →  personal branch  →  develop  →  vX.Y.Z tag
 Each merge tier has a stricter testing bar. The PR author is responsible for
 running the gate; the reviewer verifies before approving.
 
-> **Lean mode (pre-alpha):** the gates below are the target for beta. Today a change lands on `bun run verify`, plus three raced drafts and one advisory `validator` pass on Tier 2 diffs (the tier comes from `scripts/ci/tier.ts`); see [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
+> **Lean mode (pre-alpha):** the gates below are the target for beta. Today a change lands on `bun run verify`, plus three raced drafts and one advisory `validator` pass on Tier 2 diffs (the tier comes from `scripts/ci/tier.ts`); see [docs/agents/models-and-review.md](./docs/agents/models-and-review.md).
 
 ### Task → personal (you alone)
 

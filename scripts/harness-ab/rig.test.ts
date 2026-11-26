@@ -14,6 +14,8 @@ import {
   loadArm,
   loadSet,
   missingPlugins,
+  overlayProblems,
+  OVERLAYS_DIR,
   plan,
   pluginsNotLoaded,
   type Row,
@@ -515,6 +517,49 @@ describe("experiment arms (AC37)", () => {
         control,
       ),
     ).toEqual(["same: identical to control"]);
+  });
+
+  it("the diet arm lays a short AGENTS.md, and what moved out of it, over the task's commit", () => {
+    const diet = loadArm("diet");
+    expect(experiment("diet").map((a) => a.id)).toEqual(["diet"]);
+    expect(Object.keys(diet.overlay ?? {})).toContain("AGENTS.md");
+    expect(arms.flatMap((a) => overlayProblems(a))).toEqual([]);
+    const text = readFileSync(path.join(OVERLAYS_DIR, "diet/AGENTS.md"), "utf8");
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(6144);
+    // Older commits have no docs:find and no block briefs: the overlay must not send an agent to them.
+    expect(text).not.toMatch(/docs:find|brief per block/);
+  });
+
+  // The task commits are only there in a full clone (CI's is shallow), as for the commit checks below.
+  const shallowClone =
+    run_("git", ["rev-parse", "--is-shallow-repository"], { cwd: ROOT }).stdout.trim() === "true";
+
+  it.skipIf(shallowClone)(
+    "the diet arm's AGENTS.md is a map, not a cut: every file it links to is there",
+    () => {
+      // In the overlay or at every task's commit, or the arm would measure "detail deleted"
+      // against control, not "detail moved".
+      const diet = loadArm("diet");
+      const text = readFileSync(path.join(OVERLAYS_DIR, "diet/AGENTS.md"), "utf8");
+      const links = [...text.matchAll(/\]\(\.\/([^)#\s]+)\)/g)].map((m) => m[1] ?? "");
+      expect(links.length).toBeGreaterThan(8);
+      const at = (base: string, file: string) =>
+        run_("git", ["cat-file", "-e", `${base}:${file}`], { cwd: ROOT }).status === 0;
+      const missing = links
+        .filter((l) => !(l in (diet.overlay ?? {})))
+        .flatMap((l) => core.tasks.filter((t) => !at(t.base, l)).map((t) => `${l} at ${t.id}`));
+      expect(missing).toEqual([]);
+    },
+  );
+
+  it("refuses an overlay that leaves the workspace, reaches into .git or names no file", () => {
+    const bad = (overlay: Record<string, string>) => overlayProblems(arm({ id: "x", overlay }));
+    expect(bad({ "../x": "diet/AGENTS.md" })).toHaveLength(1);
+    expect(bad({ "/etc/x": "diet/AGENTS.md" })).toHaveLength(1);
+    expect(bad({ ".git/hooks/post-commit": "diet/AGENTS.md" })).toHaveLength(1);
+    expect(bad({ "AGENTS.md": "../../../etc/passwd" })).toHaveLength(1);
+    expect(bad({ "AGENTS.md": "diet/NOPE.md" })).toHaveLength(1);
+    expect(bad({ "AGENTS.md": "diet/AGENTS.md" })).toEqual([]);
   });
 
   it("effort is medium against control's high", () => {

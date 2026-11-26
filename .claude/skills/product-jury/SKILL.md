@@ -1,6 +1,6 @@
 ---
 name: product-jury
-description: The blind product jury, an engine of /product-studio (not a command of its own). Fresh critics that never see the code read a lab or prototype dossier and score Usability, Craft, Speed and feel, Platform and keyboard, and Character; code-computed gates cap the scores and a ranked fix list comes back. Read it when /product-studio scores a module or a prototype. To ask for a critique, use /product-studio criticise <module>.
+description: The blind product jury, an engine of /product-studio (not a command of its own). Read it when /product-studio scores a module or a prototype; to ask for a critique, use /product-studio criticise <module>. Fresh critics that never see the code read a lab or prototype dossier and score Usability, Craft, Speed and feel, Platform and keyboard, and Character; code-computed gates cap the scores and a ranked fix list comes back.
 user-invocable: false
 ---
 

@@ -21,6 +21,17 @@ bun run ab report .harness-ab/results/<batch>-core.jsonl            # pass rate,
    The workspace isn't a trusted folder, so Claude Code ignores the project's `permissions.allow` (bypass mode allows everything anyway); its deny rules and hooks still apply.
 5. **Row.** Appended to `.harness-ab/results/<batch>-<set>.jsonl`; the transcript, prompt, diff and logs go to `.harness-ab/runs/<runId>/` (gitignored). The workspace is deleted unless `--keep`.
 
+## An arm that changes a committed file
+
+A task runs at its own past commit, so a harness change made today isn't in its workspace. An arm's `overlay` copies files over the workspace before the agent starts (workspace path → a file under `overlays/`), and the copy is committed with the fixtures. The `diet` arm does this with the 6 KB AGENTS.md of the 2026-11-26 context diet, and caps skill descriptions through `settings`:
+
+```bash
+bun run ab run --set core --arms control,diet --dry-run     # 7 tasks × 2 arms × 3 repeats = 42 planned runs
+bun run ab run --set core --arms control,diet               # the real sweep: plan the usage first
+```
+
+Read it on cost, time and turns first (`ab report`): a correctness difference of ten points needs about 120 tasks to show, and `core` has 7.
+
 ## Safety refusals
 
 A run never touches the shared local Supabase stack, production (the app, its Supabase project, `mcp.moduo.app`) or a git remote. `safety.ts` holds the one list; the rig refuses (exit 3) before anything starts when a task, an arm or `--source` names any of them.

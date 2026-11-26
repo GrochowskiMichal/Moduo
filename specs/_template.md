@@ -63,13 +63,32 @@
   its slice of behavior, its acceptance criteria, and its tests. Sequence with dependencies.
   This is what the user "presses play" on, one block at a time. Vertical slices preferred
   (see the brief-to-tasks convention). Keep blocks recoverable: a fresh session must be able
-  to read this spec + docs/decisions.md and resume a block from scratch.
+  to read the block's brief below and resume the block from scratch.
 -->
 
 | # | Block | Delivers | Covers ACs | Depends on |
 | --- | --- | --- | --- | --- |
 | 1 | … | … | AC1 | — |
 | 2 | … | … | AC2 | 1 |
+
+## Block briefs
+
+<!--
+  One brief per block, under a `### <ID> · <name>` heading, at most 3 KB each. /s2 reads the
+  block's brief and no other part of this spec unless the brief sends it there, so a brief
+  stands alone: copy what the block needs into it, never "see above". A spec can pass 100 KB;
+  the brief is what a build session can afford to carry.
+-->
+
+### <ID> · <block name>
+
+- **Goal:** what exists when this block is done, in two lines.
+- **Acceptance criteria:** this block's ACs, copied in full.
+- **Tests:** the rows of *Tests that prove them* this block owns (file · name).
+- **Start here:** the files and patterns to reuse, as `path:line`, from the /s1 recon.
+- **Decisions that apply:** the date and title of each, with `docs/decisions/<area>.md:<line>`.
+- **Traps:** the path rules or gotchas that bite here, one line each.
+- **Not in this block:** what a later block does, or nobody.
 
 ## Out of scope
 
@@ -87,6 +106,7 @@
 - [ ] **Data model is named and Supabase-first** (or a deliberate exception is recorded). New tables/columns/migrations are identified.
 - [ ] For a **module feature**: spine wiring is enumerated (links / attach / drag / @mention / notifications / activity / tags), MCP tools are listed, and the dashboard widget is defined — per `docs/moduo-module-contract.md`.
 - [ ] **Execution blocks** are decomposed, sequenced, and each is context-sized and self-contained.
+- [ ] **Every block has a brief** of at most 3 KB that stands alone (*Block briefs*).
 - [ ] **Design constraints acknowledged**: tokens-only (no hardcoded visual values), shadcn-wrapped primitives, and the relevant `docs/DESIGN_RULES.md` rules for any UI.
 - [ ] **Manual-test surfaces identified** for the PR body's "Test this" (lean `/s3`).
 

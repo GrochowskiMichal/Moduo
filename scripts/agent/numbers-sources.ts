@@ -2,9 +2,14 @@
  * The facts `numbers.ts` computes from (HV-21): GitHub through `gh`, git history of the shared
  * branches, and this machine's Entire checkpoint metadata. Read only: it fetches the shared
  * branches and never pushes, deletes or rewrites anything (`refs/entire/*` included). Only each
- * checkpoint's metadata.json is read, never a transcript or prompt.
+ * checkpoint's metadata.json is read, never a transcript or prompt. The session-context numbers
+ * come from Claude Code's own local transcripts, of which only token counts and tool names are kept
+ * (context-stats.ts).
  */
 
+import path from "node:path";
+
+import { readSessions } from "./context-stats";
 import type { Facts, Pr, Ratchet, Run, Session, Window } from "./numbers";
 
 const DAY = 86_400_000;
@@ -302,6 +307,16 @@ export function entireSessions(): Session[] | null {
 
 // ── Everything ───────────────────────────────────────────────────────────
 
+/** The repository's sessions on this machine: the main checkout's folder name prefixes its worktrees'. */
+function sessionContexts(w: Window) {
+  try {
+    const common = sh("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim();
+    return readSessions(path.dirname(common), w.start);
+  } catch {
+    return [];
+  }
+}
+
 export function gatherFacts(w: Window): Facts {
   const refs = sharedRefs();
   const prs = githubPrs(w);
@@ -320,5 +335,6 @@ export function gatherFacts(w: Window): Facts {
     knowledgeAfter: knowledgeBytes(after),
     reviewThreads: reviewThreads(prs, w),
     sessions: entireSessions(),
+    context: sessionContexts(w),
   };
 }

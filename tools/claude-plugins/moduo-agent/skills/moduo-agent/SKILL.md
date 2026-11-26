@@ -1,6 +1,6 @@
 ---
 name: moduo-agent
-description: Track your build work in Moduo through the moduo connector — pick up a block's task (the queue's, in Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, and hand off to another person as a task comment. GitHub events move the task's stage; you never do. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
+description: Track your build work in Moduo through the moduo connector. /s2 and /s3 call it; use it directly to report status or hand work over to another person. Every step is skipped quietly when the connector or its key is missing. Pick up a block's task (the queue's, in Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, and hand off to another person as a task comment. GitHub events move the task's stage; you never do.
 ---
 
 # moduo-agent: your build work, mirrored in Moduo
@@ -47,7 +47,7 @@ A block task's **status** says where the work is in its life; GitHub events move
 `rm -f .claude/MODUO_TASK`. The merge moves the task to Awaiting release and the release tag to Shipped. A block that stays open (built, not landed; blocked) keeps its task open and its last report.
 
 ## Hand off to the other person
-When work needs the other founder (a review, a design call, a piece in their lane), it goes as a comment on the Moduo task (AGENTS.md §Agent tooling):
+When work needs the other founder (a review, a design call, a piece in their lane), it goes as a comment on the Moduo task (`docs/agents/tooling.md`):
 1. Find their member id with `tasks_list_assignees`.
 2. `comments_add {entity_type: "task", entity_id: "<handle>", body, mentioned_user_ids: ["<their id>"]}`. Write the body to the person: what is done, what you need from them, the PR or branch, and where the context lives. Never write it as an instruction to their agent ("MaciuśAI, do …"), and never message their sessions any other way.
 3. If the task now waits on them, `tasks_handoff {task_id, person_id: "<their id>"}`; it clears itself when they comment.

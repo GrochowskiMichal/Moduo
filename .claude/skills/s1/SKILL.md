@@ -1,6 +1,6 @@
 ---
 name: s1
-description: Stage 1 — Plan. Moduo planning session — grill the designer exhaustively on product/UX/edge-cases, research the technical layer yourself (read-only explore/recon subagents + web, never ask the designer how), fill specs/_template.md, decompose into context-sized execution blocks, and end at the Definition-of-Ready gate. Read-only, writes no code. Use before building any feature; run in your tool's read-only/plan mode if it has one. Not for building (that is /s2) or wrap-up (that is /s3).
+description: Stage 1 — Plan a Moduo feature. Use before building anything that needs a spec. Grill the designer on product, UX and edge cases, research the technical layer yourself, and write a ready spec cut into blocks. Read-only, writes no code. Not for building (that is /s2) or wrap-up (that is /s3). Fills specs/_template.md with a brief per block, sizes each block to one execution's context, never asks the designer how, and ends at the Definition-of-Ready gate; run in your tool's read-only/plan mode if it has one.
 effort: high
 ---
 
@@ -11,8 +11,8 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 **Write no code. This is read-only research + questioning until the spec is approved.** Run in your tool's read-only/plan mode if it has one.
 
 ## 1. Orient (read first, silently)
-- Set the session title as soon as the topic is known: `[<Module>] <short title> plan` (AGENTS.md §Session start, item 4).
-- `AGENTS.md` → "Working posture" + "Knowledge map"; the indexes `docs/decisions.md` and `docs/gotchas.md`, then the area files (`docs/decisions/<area>.md`, `docs/gotchas/<area>.md`) for the module you're planning.
+- Set the session title as soon as the topic is known: `[<Module>] <short title> plan` (AGENTS.md §Session start).
+- `AGENTS.md` → "Working posture" + "Where things are". For the module you're planning: `bun run docs:current <area> --titles` lists its current decisions in one line each, `bun run docs:find <area> <words>` returns the ones on a subject, and `docs/gotchas/<area>.md` maps its traps. Never read `docs/decisions.md` or an area file whole (some pass 500 KB): send a `scout` when you need a wide sweep.
 - The north-star docs (`docs/PRODUCT_BRIEF.md`, `docs/ROADMAP.md`, `docs/data-layers.md`) and, if it's a known module, its `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md` and `docs/moduo-module-contract.md`.
 - Codebase recon belongs **here**, not in execution: use read-only explore/recon subagents to map existing patterns, data shapes, and reuse opportunities. Spawn parallel explores for breadth.
 
@@ -26,13 +26,14 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 
 ## 3. Fill the spec
 - Copy `specs/_template.md` → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` with its `status:` line (then `bun run docs:index` regenerates the index).
+- **Write a brief for every block** under *Block briefs* (the template has the shape): the goal, the block's acceptance criteria and tests copied in full, where to start as `path:line` from your recon, the decisions that apply with their file and line, the traps, and what is not in the block. At most 3 KB each. `/s2` reads the brief and no other part of the spec, so whatever the builder needs has to be in it.
 - For a UI feature, **reference** the `.design/<module>` briefs and the module contract — don't restate them.
 - For a redesign of an existing surface, take a baseline first: `/product-studio criticise <module>` (read-only: lab plus blind critics on seeded local data). Cite its holes and gates in the spec's problem statement, and name the journeys and states the blocks must add to `e2e/lab/lab.config.ts`.
 - **A draft from `/product-studio`** ("Turn into spec") arrives with an artifact link and most sections filled. Treat the artifact as the agreed design: grill only its *Open questions* and what a prototype can't answer (data, permissions, sync, existing content), then re-cut the blocks and run the gate.
 
 ## 4. Decompose into execution blocks
 - Cut tracer-bullet blocks with explicit blocking edges and write them where [docs/agents/issue-tracker.md](../../../docs/agents/issue-tracker.md) says (the spec's *Execution blocks* table, with the dependencies in its last column), then put them in the Moduo queue with `bun run queue:import specs/<feature>.md`.
-- Block-sizing is **your** responsibility: size each block to complete within one execution's context budget, vertical-slice where possible, sequence with dependencies, each self-contained (its behavior + acceptance criteria + tests). Make blocks recoverable — a fresh session must be able to read the spec + `docs/decisions.md` and resume.
+- Block-sizing is **your** responsibility: size each block to complete within one execution's context budget, vertical-slice where possible, sequence with dependencies, each self-contained (its behavior + acceptance criteria + tests). Make blocks recoverable — a fresh session must be able to read the block's brief and resume.
 
 ## 5. Definition-of-Ready gate
 - Walk the DoR checklist at the bottom of the spec. If anything fails, return to grilling/research. When all boxes pass, state **"Ready to execute."** and list the blocks in order.

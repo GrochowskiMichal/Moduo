@@ -1,131 +1,94 @@
 # AGENTS.md
 
-The single source of truth for coding agents in Moduo. Claude Code loads it automatically (v2.1.277+; there is deliberately no `CLAUDE.md`). Area rules live in `.claude/rules/` and load when a session views a matching file (Read, Edit or a single-file `cat`/`sed -n`/`grep`/`head`): `supabase.md`, `ci-release.md` (`.github/`, `infra/`, `scripts/release/`), `desktop-rust.md` and `ui-primitives.md`. Don't add folder `AGENTS.md` files: they load only on Read. **Keep this file under 150 lines:** it is a table of contents. Procedures live in skills, area knowledge in `docs/decisions/` and `docs/gotchas/`, and anything that must hold every time lives in hooks, lint and CI.
+The map for coding agents in Moduo. It loads in every session, so it stays under 6 KB (`lint:rules`).
+Procedures live in skills, area rules in `.claude/rules/` (each loads when you open a matching file), knowledge in `docs/`.
+What must hold every time lives in hooks, lint and CI. No `CLAUDE.md`, no folder `AGENTS.md` files.
 
 ## Must-hold rules
 
-Marked rules are enforced in code; the rest you hold yourself.
+⛔ = a hook or CI blocks it. In full, with what enforces each: [rules.md](./docs/agents/rules.md).
 
-1. **Branch before editing.** Work on `t/<owner>/<kebab>` cut off the latest personal branch (`mike` or `maciej`), never `develop`. *(Hook `guard-git.sh` blocks direct pushes to `develop`, deleting or force-pushing `develop`/`mike`/`maciej`, and bare force-pushes; GitHub rulesets hold the same server-side.)*
-2. **The repo is public: everything committed is published.** No secrets, tokens, session files or customer data in git; keys go in env vars, private notes in `docs/local/`. *(Hook `guard-secrets.sh` runs gitleaks on every commit; CI scans each push.)*
-3. **Tokens only in UI.** No raw hex, no arbitrary Tailwind values for color/spacing/radius/font, no inline-style design properties; primitives wrap shadcn. *(Hook `guard-design-tokens.sh` re-runs `lint:tw` + `lint:css` after UI edits; CI gates both.)* Full rules: [docs/DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md), relational rules R1–R10: [docs/DESIGN_RULES.md](./docs/DESIGN_RULES.md).
-4. **Closed vocabularies live once** in `supabase/functions/_shared/contracts/` (`@contracts/*`), with a matching Postgres CHECK. *(Drift-gate tests.)* See §Domain contracts.
-5. **Applied migrations are history.** Never edit one; add a new migration. See `.claude/rules/supabase.md`.
-6. **Always `getRuntime()`**, never a bare `{ runtime }` import. redb is paused: never make it load-bearing for a new feature.
-7. **No new top-level routes and no IA refactors** without the designer's explicit ask (converging from 23 routes to 5–7).
-8. **Production ships only from a `vX.Y.Z` tag cut by `/ship`** (there is no `main` or mirror branch). Never merge or close unrelated PRs. Force-push only your own task branch, with `--force-with-lease`. *(Hook `guard-release.sh` blocks tag pushes and prod workflow runs without `/ship`'s marker.)*
-9. **Never commit `docs/local/`. Never push `refs/entire/*`** (session transcripts stay local; the guard blocks it) and never wipe local Entire data.
-10. **Never read a teammate's private Moduo data** (private tasks, queue, focus runs, agent sessions, notes) through the admin/service-role Supabase connection. Read through your own permissions, or ask them.
-11. **Supabase writes ask first.** *(Hook `guard-prod-db.sh` asks before any Supabase MCP `apply_migration`, `execute_sql` or `deploy_edge_function` and before `supabase db push`, `db query --linked` and `functions deploy`. A developer may lift that for their own sessions with `MODUO_SUPABASE_NO_PROMPT=1` in their gitignored `.claude/settings.local.json`; their own allow rules then decide, and teammates are still asked.)*
-12. **Stage explicit paths.** Another session may share the checkout: never `git add -A` or `git add <dir>`.
-13. **The local Supabase stack is shared** by every session and agent on this Mac. Never wipe or stop it (`local:reset`, `local:down`, `supabase db reset`, `supabase stop --no-backup`) unless the user confirms no other session needs it, and never clean up rows or migrations another session left there. Test a migration by applying it on top with `psql … -1 -f <file>`. *(`scripts/local/stack.sh` refuses reset/down without `MODUO_SHARED_STACK_OK=1`; `.claude/settings.json` denies the raw commands.)*
+1. ⛔ Branch before editing: `t/<owner>/<kebab>` off the latest personal branch (`mike`, `maciej`), never `develop`.
+2. ⛔ The repo is public. No secrets, tokens, session files or customer data in git; private notes go in `docs/local/`.
+3. ⛔ Tokens only in UI: no raw hex, arbitrary Tailwind values or inline-style design properties; primitives wrap shadcn.
+4. ⛔ Closed vocabularies live once, in `supabase/functions/_shared/contracts/`, with a matching Postgres CHECK.
+5. Applied migrations are history: never edit one, add a new one.
+6. Always `getRuntime()`, never a bare `{ runtime }` import. redb is paused: nothing new depends on it.
+7. No new top-level routes and no IA refactors without the designer's explicit ask.
+8. ⛔ Production ships only from a `vX.Y.Z` tag cut by `/ship`. Never merge or close unrelated PRs.
+9. ⛔ Never commit `docs/local/`, never push `refs/entire/*`, never wipe local Entire data.
+10. Never read a teammate's private Moduo data through the admin or service-role connection.
+11. ⛔ Supabase writes ask first: migrations, SQL and function deploys.
+12. Stage explicit paths, never `git add -A` or `git add <dir>`: another session may share the checkout.
+13. ⛔ The local Supabase stack is shared: never reset or stop it, never clean up another session's rows.
 
 ## Session start
 
-1. **Base check.** The SessionStart hook prints whether you are behind the personal branch; reconcile before editing. Note whether `origin/develop` moved.
-2. **Read two short files and the queue:** [docs/decisions.md](./docs/decisions.md) (one-line index of every current decision), [docs/gotchas.md](./docs/gotchas.md) (areas of traps) and the Focus plus the ready blocks from `bun run queue` (the queue is in Moduo). **Before working in an area, open its `docs/gotchas/<area>.md`** and any `docs/decisions/<area>.md` you need. For why code exists, `entire search` / `entire why` are faster.
-3. **Read `docs/local/` if it exists** (the gitignored personal layer); never require it.
-4. **Title the session** the moment its purpose is clear: write one line to `.claude/SESSION_TITLE` (gitignored; a SessionStart hook applies it). Planning: `[<Module>] <short title>`. Building: `[<Module> <BLOCK-ID>] <block name>`.
+- The SessionStart hook says whether you are behind the personal branch. Reconcile before editing, and note whether `origin/develop` moved.
+- Title the session once its purpose is clear: one line in `.claude/SESSION_TITLE`,
+  `[<Module>] <title>` when planning or `[<Module> <BLOCK-ID>] <block>` when building.
+- One task per session; `/clear` or a fresh session for an unrelated one.
 
 ## Working posture
 
-The user is a **product designer, not an engineer**: authoritative on product, UX, edge cases, scope and priorities; not on infrastructure, data models or testing. (Mike, the CTO, may run sessions in engineer mode: technical calls are yours, assumptions go under ❓ Needs you.) Before planning or building UI, read [docs/agents/designer-brief.md](./docs/agents/designer-brief.md): who decides what, how the designer likes to work, the process that worked for Tasks v3 and the lessons of past rebuilds.
+The designer (Maciej) decides product, UX, edge cases, scope and priorities. Infrastructure, data models,
+libraries and tests are yours: research, decide and record the assumption; never ask him those.
+Mike (CTO) may run engineer mode: technical calls are yours, assumptions go under ❓ Needs you.
+Before planning or building UI, read the [designer brief](./docs/agents/designer-brief.md).
 
-**Two lanes.** A prompt hook (`scripts/agent/router.ts`) suggests the lane; you decide.
-- **Fast lane:** a change that fits one sentence needs no spec, block or Moduo task. Branch, edit, run the checks it touches, PR with a short Test-this, merge into the personal branch on green (`/s2` §Fast lane, `/s3` step 3). A bug fix still starts with a failing test (`/s2` §Bug lane).
-- **Block lane:** everything else goes `/s1` → a spec → blocks in the Moduo queue → `/s2` → `/s3`.
+**Two lanes.** The router hook suggests one; you decide.
+- **Fast lane:** a change that fits one sentence. Branch, edit, run the checks it touches, open a PR with a
+  short Test-this, merge into the personal branch on green. A bug fix starts with a failing test.
+- **Block lane:** everything else. `/s1` plans (read-only) and writes a spec with a brief per block,
+  `/s2` builds one block, `/s3` lands it. Blocks are tasks in Moduo (the queue is in Moduo): `bun run queue`.
 
-- **Plan (`/s1`, read-only):** grill exhaustively on product behavior (50–100 questions up front, each with a recommended answer). **Never ask implementation, infra, data-model or library questions**: research and decide them, and record decision + assumption in the spec. Surface a technical choice only when the user would feel it, in product terms, with a recommendation. End at the Definition-of-Ready gate in [specs/_template.md](./specs/_template.md).
-- **Execute (`/s2`, autonomous):** stay silent between tool calls; report once and short: a **Status** line, then **Changed · Test this**, plus **❓ Needs you / ⚠ Broke** only when they apply. One block per session; never leave unlanded work only in the worktree. Contract tests come first and are frozen (`.claude/settings.implement.json` blocks edits to them); three failed attempts at one problem escalate instead of looping. A block is done when `bun run verify` passes and its acceptance criteria are shown met by a test or a live check. The only acceptable mid-run interruption is a hard blocker research can't resolve.
-- **Wrap (`/s3`):** a short "Test this" in the PR body (no separate checklist file); non-obvious decisions + gotchas appended; commit, PR, merge into the personal branch; sync to `develop` in batches, not per block.
+Report once, at the end, short: **Status**, **Changed · Test this**, and
+**❓ Needs you / ⚠ Broke** only when they apply.
 
-## Models (Anthropic only, Claude Max plan, October 2026)
+## Where things are
 
-No other model providers. Pick by role, not "strongest everywhere"; raise effort only where a measured gain justifies it.
+- **Decisions:** `bun run docs:find <area> <words>` prints the current decisions that match. Run it before
+  you change behaviour in an area. Area files run to 600 KB: search them, never read one whole.
+- **Traps:** `docs/gotchas/<area>.md` maps each trap to the check or path rule that holds it.
+- **Product direction** (before designing a module, not before a fix): [brief](./docs/PRODUCT_BRIEF.md),
+  [roadmap](./docs/ROADMAP.md), [data layers](./docs/data-layers.md), `.design/<module>/BRIEF.md`,
+  [module contract](./docs/moduo-module-contract.md).
+- **Code layout, stack, commands in full:** [architecture.md](./docs/architecture.md). App code is `apps/app/src/`.
+  To change a visual value, edit `apps/app/src/styles/tokens.css`, never a component
+  ([DESIGN_SYSTEM.md](./docs/DESIGN_SYSTEM.md), [DESIGN_RULES.md](./docs/DESIGN_RULES.md)).
+- **Models, review tiers, CI:** [models-and-review.md](./docs/agents/models-and-review.md). Models are Anthropic only.
+- **Skills, subagents, hooks, routines, MCP, Entire, the context budget:** [tooling.md](./docs/agents/tooling.md).
+  Setup per machine: [agent-setup.md](./docs/agent-setup.md).
+- **Git and PRs:** [CONTRIBUTING.md](./CONTRIBUTING.md). **Release** (`/ship` only): [release.md](./docs/release.md).
+  **Local stack:** [local-dev.md](./docs/local-dev.md).
+- **Personal notes:** `docs/local/`. Read it if present.
 
-| Role | Model | Effort |
-| --- | --- | --- |
-| Main session, `/s1` planning, `/s2` building | Opus 5.5 (`opus`, the default) | `high` (set by the skills); `medium` for chat |
-| Advisor during `/s2` (Max only) | Fable 5.1, via `/advisor fable` | n/a |
-| The hardest plan syntheses (Max only) | Fable 5.1, via `/model fable` | `high` |
-| `validator` subagent | Opus 5.5 | `high` |
-| AI review on PRs into develop (`ai-review.yml`) | Sonnet 5 (`claude-sonnet-5`: the one model whose `/code-review medium` votes on findings) | `medium` |
-| Read-only recon | `scout` subagent (`.claude/agents/scout.md`) | Haiku 5.5 |
-| Lane router (keyword rules; Haiku opt-in), risk hook in shadow, routines | Haiku 5.5 | n/a |
-| `/goal` evaluator | Haiku 5.5 (automatic) | n/a |
+## Commands
 
-On Max, Fable counts against at most half the weekly limit. On Pro it bills usage credits, so Pro users skip the advisor. `xhigh`/`max` only for long infra or migration work where you saw it help. Fast typed decision models (e.g. Jev) are not adopted: the product brief keeps AI MCP-only.
-
-## Review gates (lean mode: pre-alpha, no external users)
-
-The tier comes from code, not judgment: `scripts/ci/tier.ts`; details are in `/s2` step 6. **Re-tighten everything in the "paused" line before the first external alpha/beta.**
-
-- **Tier 0/1, everything else:** `bun run verify` and the hooks. No validator, no `/code-review` in the session.
-- **Tier 2, risky paths** (`TIER2` in `scripts/ci/tier.ts`; run `bun scripts/ci/tier.ts origin/<personal-branch>`; `pr-tier.yml` labels every PR `tier-0/1/2`): `/s2` races three drafts from the frozen contract commit and keeps one with `bun run drafts`, then the `validator` subagent runs once, advisory; each BLOCKER/MAJOR is fixed or answered in the report.
-- **CI on PRs into `develop`** (full suite once, plus the push after merging): SQL/RLS tests with the generated RLS matrix and policy mutants (`bun run db:matrix`, `db:mutants`), Rust gates and an e2e smoke, each only on its paths; ratchets and the test-weakening detector; one advisory AI review (`ai-review.yml`, Sonnet 5, inline comments, never required; [REVIEW.md](./REVIEW.md) says what it flags); on Tier 2, catching tests written against the parent commit.
-- **Paused until beta:** `/code-review ultra`, the `/claude-security` diff scan, `/code-review high` on every PR, per-block manual-test checklist files, hand-written next-session prompts, and Tier 3's designer pass. The floor that stays: gitleaks (hook + CI), `guard-git.sh`, `guard-prod-db.sh`, `static-checks` required on `develop`.
-
-## Product north star (read before designing any module)
-
-[docs/PRODUCT_BRIEF.md](./docs/PRODUCT_BRIEF.md) (what Moduo is, the connective-tissue spine, non-goals: no Notion-style databases, no abstract graph UI, one-gesture links, MCP-only AI, quiet notifications) · [docs/ROADMAP.md](./docs/ROADMAP.md) (waves, scored backlog, numbered open questions; check `§Open Questions & Risks` before anything marked ⚠) · [docs/data-layers.md](./docs/data-layers.md) (runtimes, Supabase-first, the spine). Edit these **before** code when direction changes. Module briefs: `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md`. A module is done only when it wires into the spine, ships its MCP tools and its dashboard widget ([module contract](./docs/moduo-module-contract.md)).
-
-## Knowledge map
-
-- **Architecture:** [docs/architecture.md](./docs/architecture.md) (code layout) · [docs/data-layers.md](./docs/data-layers.md) · [docs/moduo-module-contract.md](./docs/moduo-module-contract.md) · vocabulary: [docs/moduo-architecture-vocabulary.md](./docs/moduo-architecture-vocabulary.md).
-- **Decisions:** index [docs/decisions.md](./docs/decisions.md) (generated, current entries only), full entries in `docs/decisions/<area>.md`; `bun run docs:current <area>` prints an area without its superseded entries. Add a decision at the top of its area file with a `status:` line (a replacement names what it `supersedes:`), then `bun run docs:index`.
-- **Path rules:** `.claude/rules/<area>.md`, frontmatter `paths:` (globs), `incident:` (what went wrong) and `expires:` (review date; `lint:rules` warns once it passes). Short must-know lines for that area only; detail stays in gotchas and decisions. Audit the set with `/doctor prompt-audit` in a session.
-- **Gotchas:** index [docs/gotchas.md](./docs/gotchas.md); the area files are now maps, because the traps were compiled into checks: the ast-grep pack (`tools/ast-grep/rules/`, `bun run lint:ast`), `scripts/ci/config-traps.test.ts`, migration lint and path rules. A new trap goes into its area file; one that bites twice becomes a hook, lint rule or test (with the fix in its error message).
-- **Learn loop:** escapes in `benchmarks/escapes/` feed `variant-hunt`; the A/B rig and its arms (`bun run ab`, `scripts/harness-ab/`), the MCP agent-experience eval (`bun run mcp-eval`) and the docs eval (`bun run eval:docs`) measure harness changes before they land; `bun run numbers` writes the weekly outcome note to Moduo.
-- **The queue:** `bun run queue` (Moduo's block tasks + spec dependency tables + open PRs; claim a block with a draft PR before building it); new blocks go in with `bun run queue:import specs/<feature>.md`; [specs/BUILD_ORDER.md](./specs/BUILD_ORDER.md) is only a pointer.
-- **Agent setup:** [docs/agent-setup.md](./docs/agent-setup.md) · **Entire:** [docs/entire.md](./docs/entire.md).
-
-## Stack
-
-Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, Storybook 10 for components (with its MCP server), Rstest + Playwright for tests, `bun check` for types, `bun fmt` for formatting, `bun lint` for JS lint (a pinned canary build).
-
-## Build / dev
-
-- `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
-- **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), test a migration by applying it on top (`psql … -1 -f <file>`, rule 13; `bun run local:reset` only with the user's OK), `bun run env:cloud` to go back. **Releasing to prod is `/ship` only** (release PR + `vX.Y.Z` tag; `guard-release.sh` blocks tags and prod workflows started any other way; the app Worker rolls out as a canary with automatic rollback, `scripts/release/canary.ts`); migrations and Edge Functions stay manual and `/ship` stops until they are applied: [docs/release.md](./docs/release.md). See [docs/local-dev.md](./docs/local-dev.md).
-- `bun run verify` = typecheck (`bun check`) + `bun lint` + `bun fmt --check` + lint:tw + lint:boundaries (only `lib/runtime*` talks to Supabase; `lib` never imports `features`) + lint:ast + lint:css + lint:notes + lint:ratchets + lint:decisions + lint:rules (rule frontmatter, dead file/script references, this file ≤150 lines) + size + tests (the `verify` script in `package.json` is the list), run through Turborepo across every workspace: **the block-done gate**. It covers no Rust: see `.claude/rules/desktop-rust.md`.
-- `bun run test` (all suites) · `bun run --cwd apps/app test <path>` (one app test) · `bun run e2e`
-- **Workspaces** (Bun + Turborepo; run every root script from the root): `apps/app` (`@moduo/app`, the Rsbuild SPA) · `apps/desktop` (`@moduo/desktop`, Tauri: `src-tauri/` inside, the CLI runs from `apps/desktop`) · `apps/landing` · `apps/storybook` · `supabase/` (`@moduo/backend`, function and contract tests) · `e2e/` (`@moduo/e2e`, Playwright). `scripts/` and `tools/` are root tooling.
-
-## Repo layout (short)
-
-App code lives in `apps/app/src/` (paths before 2026-10-17 say `src/`): `apps/app/src/app/` composition and router · `apps/app/src/routes/pages/` thin page adapters · `apps/app/src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `apps/app/src/components/ui/` shadcn primitives (story required) · `apps/app/src/components/app/` shell · `apps/app/src/lib/` runtimes and platform services · `apps/app/src/lib/sync/` the offline-sync kernel and stores (Tasks reads go through `features/tasks/tasks-context.tsx` hooks, writes through `features/tasks/commands/`: [docs/architecture.md](./docs/architecture.md) §Tasks data and commands) · `apps/app/src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `apps/desktop/src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs (blocks and dependencies; the queue itself is in Moduo) · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.
+- `bun run dev:web` · `bun run dev:desktop`
+- `bun run local:up` starts the local Supabase stack and points `.env.local` at it; `bun run env:cloud` goes back.
+- `bun run verify` is the done gate: types, lint, format, tokens, boundaries, size and tests. It prints
+  failures and the path of the full log. It covers no Rust: `.claude/rules/desktop-rust.md`.
+- One app test: `bun run --cwd apps/app test <path>`. E2E: `scripts/agent/e2e.sh <playwright args>`.
+- `bun scripts/ci/tier.ts origin/<personal-branch>` prints the diff's review tier. Tier 2 gets the `validator` subagent.
+- Run root scripts from the root.
 
 ## Git
 
-Concise present-tense imperative subjects, single line preferred, Co-Authored-By trailer for agent-authored commits. Full contract: [CONTRIBUTING.md](./CONTRIBUTING.md).
+- Present-tense imperative subjects, one line, with a Co-Authored-By trailer on agent commits.
+- `mike` and `maciej` are hot: integrate with merge commits, never fast-forward.
+  Force-push only your own task branch, with `--force-with-lease`.
+- Standing authorization: after a bigger chunk lands on the personal branch, merge personal → `develop`
+  yourself, in batches (`/s3`), unless the designer said to keep it on the task branch or the
+  duplication guard finds overlap.
 
-- GitHub's default branch is `develop`. **Standing authorization:** after a bigger chunk lands on the personal branch, merge personal → `develop` yourself (`/s3` step 5b), unless the designer said to keep it on the task branch or the duplication guard finds overlap.
-- `maciej` and `mike` are hot: integrate with merge commits, never fast-forward.
+## Sessions and tools
 
-## Entire.io
-
-Entire captures Claude Code sessions and links them to commits. Because the repo is public, checkpoints stay **local** (`push_sessions: false` in `.entire/settings.json`). Use it for your own work: `entire search "…"`, `entire why <file>:<line>`, `entire checkpoint explain`. Playbook: [docs/entire.md](./docs/entire.md).
-
-## Domain contracts (Zod + enums)
-
-Closed vocabularies (plan tier, task status, roles, link origins, …) live in `supabase/functions/_shared/contracts/` (`vocabularies.ts`, `primitives.ts`, `errors.ts`); app code imports `@contracts/*`, Edge Functions import relatively. To add or change a value: (1) const array + Zod schema + type in `vocabularies.ts`; (2) keep `parse*` (strict, writes), `normalize*` (lax, reads) and `is*` in lockstep; (3) migrate the Postgres CHECK/enum in the same change; (4) when a value dies, remove it everywhere, no zombie unions. Leave **open** strings alone (polymorphic entity types, renamable contact statuses, IMAP folders, Stripe events, opaque prefs). Never invent a parallel union in `apps/app/src/features/*/model.ts`.
-
-## Agent tooling (Claude Code)
-
-- **Skills** (`.claude/skills/`): `/s1` plan · `/s2` build one block (inside `/goal`) · `/s3` wrap and land · `/ship` release to prod (`/ship vX.Y.Z` finishes a handed-off release) · `moduo-design-quality` (design audit/polish/build; the house rules the next three read) · `/product-studio` (criticise, improve or rethink a module; the output is always one Claude Artifact, an interactive prototype with its rationale and blind-critic score, never code; "Turn into spec" hands it to `/s1`; its engines `product-lab` (evidence in gitignored `.lab/`, `e2e/lab/lab.config.ts`, `delta.mjs` for PR deltas) and `product-jury` (blind critics) are not commands of their own) · `moduo-agent` (mirrors your block into Moduo: take the task, post status, hand off; `/s2` and `/s3` call it) · `libraries-dev` (third-party Libraries.dev UI effects: `libraries review`/`apply`; new packages need the designer's OK, token rules still win) · `variant-hunt` (one fix commit or `benchmarks/escapes/<id>` in, sibling bugs out, each proven by a parked failing test; never fixes). Plugins add the grilling, TDD and debugging skills `/s1`–`/s3` call, language servers (Rust diagnostics, TypeScript navigation), security scanning and Supabase rules; they are enabled for the project in `.claude/settings.json`.
-- **Subagents** (`.claude/agents/`): `validator`, the skeptical staff review that gates Tier 2 diffs; `scout`, read-only recon on Haiku (files, symbols, decisions, rules as `path:line`).
-- **Routines** (`.claude/routines/`, `bun run routine list`): the nightly variant hunt, weekly retro and daily prod watch (Haiku, read-only, digest to Moduo chat) run as cloud routines; the weekly numbers as a scheduled task on Mike's Mac. Setup: [docs/agent-setup.md](./docs/agent-setup.md) §Routines.
-- **Hooks** (`.claude/hooks/`): session preflight + title, notifications, Entire capture, and the guards (`guard-git`, `guard-secrets`, `guard-design-tokens`, `guard-ast`, `guard-glob`, `guard-lane`, `guard-prod-db`, `guard-release`), which fail closed. From `scripts/agent/`: the lane router (`router.ts`) and the Haiku risk hook (`risk-hook.ts`, shadow only: it logs, never blocks; `--summary` reads the log).
-- **Modes:** interactive sessions run in **auto mode** (`bun run agent:auto-mode` once per machine); bypass only in unattended lanes inside `srt` (`scripts/agent/lane.sh`).
-- **MCP:** `supabase` in `.mcp.json` (`claude mcp login supabase` once per machine). `moduo`, our own connector and the **one Moduo connection** (`https://mcp.moduo.app`), mirrors `/s2`–`/s3` into the dogfood workspace with your agent's key from `MODUO_MCP_KEY` (skipped without it; setup in [docs/agent-setup.md](./docs/agent-setup.md)); the local stack's connector under test is `moduo-local`. GitHub work goes through the `gh` CLI; Cloudflare through `wrangler` in the workflows ([docs/release.md](./docs/release.md)).
-- **Parallel work:** one block per session, each in its own worktree, claimed with a draft PR. Run them as Claude Code desktop sessions (the normal way) or background lanes via `claude agents`. An orchestrating session merges its sessions' PRs only when the user says so.
-- **Task stages in Moduo** (block tasks live in the milestone projects **Closed alpha** (2 Nov), **Open alpha** (16 Nov) and **Beta & later**, one section per theme; the `Moduo` project holds undated bugs and ideas; a block's task is found by its ID in the title): Backlog → To do → Building → In review → Awaiting release → Shipped (plus Won't do). GitHub events move each hop (`moduo-sync.yml`: draft PR → Building, ready → In review, merged → Awaiting release, release tag → Shipped), never an agent; dependencies are "blocks" edges. Rules and tool calls: the `moduo-agent` skill.
-- **Cross-dev hand-offs** go as a comment on the relevant Moduo task, addressed to the person (agents read task comments via `moduo-mcp`; the `moduo-agent` skill). Never instruct another person's agent to act. Audits and migrations across many files run as dynamic workflows (`ultracode`). Agent teams stay off.
-
-## Personal layer
-
-`docs/local/` (gitignored) holds personal, project-specific notes. Read it if present, never fail if absent, never commit it. Machine-global personal rules go in `~/.claude/CLAUDE.md`.
+- Interactive sessions run in auto mode.
+- MCP: `supabase`, and `moduo`, our own connector and the one Moduo connection.
+- A hand-off to the other founder is a comment on the Moduo task. Never instruct another person's agent.
 
 ## Out of scope right now
 
-Mobile/tablet layouts (desktop only, min window 1024×700) · light-mode visual tuning · visuals of the non-anchor pages · route renames and page merges.
+Mobile and tablet layouts (desktop only, min 1024×700) · light-mode tuning · visuals of
+non-anchor pages · route renames and page merges.

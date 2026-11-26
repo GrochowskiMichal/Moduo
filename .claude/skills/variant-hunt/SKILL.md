@@ -1,6 +1,6 @@
 ---
 name: variant-hunt
-description: Seeded variant hunt — take one fix commit (or a benchmarks/escapes/<id> folder), name the mechanism of the bug it fixed, search the sibling sites (grep + the TypeScript/Rust LSP) across apps/app/src/lib, feature storage/sync code, prefs sync, auth and apps/desktop/src-tauri stores, and report a candidate only when a failing test proves it. Use after a data-loss or sync fix lands, for each new escape, and in the nightly hunt routine. Never fixes anything; confirmed bugs go to the normal Tier 2 path.
+description: Seeded variant hunt — find the sibling bugs of one fix. Use after a data-loss or sync fix lands, for each new escape, and in the nightly hunt routine. Never fixes anything; confirmed bugs go to the normal Tier 2 path. Takes one fix commit (or a benchmarks/escapes/<id> folder), names the mechanism of the bug it fixed, searches the sibling sites (grep + the TypeScript/Rust LSP) across apps/app/src/lib, feature storage/sync code, prefs sync, auth and apps/desktop/src-tauri stores, and reports a candidate only when a failing test proves it.
 effort: high
 ---
 

@@ -5,12 +5,18 @@ import { fileURLToPath } from "node:url";
 import { deadSymbols, readFrom } from "./rule-symbols.ts";
 
 // HV-10 (specs/harness-v3.md AC28, AC31): path rules live in .claude/rules/,
-// each with `paths:`, `incident:` and `expires:` frontmatter; root AGENTS.md
-// stays a map of at most 150 lines; and no rule or agent doc names a file or
-// `bun run` script that doesn't exist. `bun run lint:rules` (part of verify)
+// each with `paths:`, `incident:` and `expires:` frontmatter; and no rule or
+// agent doc names a file or `bun run` script that doesn't exist. What loads
+// without being asked for is budgeted in bytes (the 2026-11-26 context diet):
+// root AGENTS.md, which every session carries, and each path rule, which
+// loads whenever a matching file is opened. `bun run lint:rules` (part of verify)
 // runs the check; rules.test.ts covers the parts.
 
-export const AGENTS_MAX_LINES = 150;
+/** AGENTS.md is in every session's context: 6 KB, about 1,500 tokens. */
+export const AGENTS_MAX_BYTES = 6144;
+/** A new path rule's limit. An older, larger rule may not grow past its size in rule-budget.json. */
+export const RULE_MAX_BYTES = 2500;
+const BUDGET_FILE = "scripts/agent/rule-budget.json";
 
 /** Agent-facing docs whose references are checked, besides every rule. */
 export const CHECKED_DOCS = [
@@ -24,6 +30,10 @@ export const CHECKED_DOCS = [
   ".claude/routines/retro.md",
   ".claude/routines/prod-watch.md",
   ".claude/routines/numbers.md",
+  // What moved out of AGENTS.md (2026-11-26).
+  "docs/agents/rules.md",
+  "docs/agents/models-and-review.md",
+  "docs/agents/tooling.md",
   // Compiled gotcha areas (HV-14c): pointers to where each trap lives now.
   "docs/gotchas/build-ci.md",
   "docs/gotchas/workflow.md",
@@ -272,6 +282,39 @@ export const trackedFiles = (root: string) => {
   return r.stdout.toString().split("\n").filter(Boolean);
 };
 
+/** The recorded sizes of the rules that were over the limit when the budget began. */
+export function loadBudget(root: string): Record<string, number> {
+  const file = path.join(root, BUDGET_FILE);
+  return existsSync(file) ? (JSON.parse(readFileSync(file, "utf8")) as Record<string, number>) : {};
+}
+
+const bytes = (text: string) => Buffer.byteLength(text, "utf8");
+
+/** AGENTS.md over its budget, and each rule over its own (a recorded size, or the limit for new rules). */
+export function sizeProblems(
+  rules: Rule[],
+  agents: string,
+  budget: Record<string, number>,
+): Problem[] {
+  const problems: Problem[] = [];
+  if (bytes(agents) > AGENTS_MAX_BYTES)
+    problems.push({
+      file: "AGENTS.md",
+      line: 1,
+      reason: `${bytes(agents)} bytes; every session carries it, so keep it under ${AGENTS_MAX_BYTES} (move detail into a skill, a path rule or docs/)`,
+    });
+  for (const r of rules) {
+    const limit = Math.max(RULE_MAX_BYTES, budget[r.file] ?? 0);
+    if (bytes(r.text) > limit)
+      problems.push({
+        file: r.file,
+        line: 1,
+        reason: `${bytes(r.text)} bytes, over its ${limit}; a rule loads whenever a matching file is opened, so cut a line a check already holds, move detail to docs/ or split it by path (${BUDGET_FILE} records the older rules' sizes: lower them, never raise them)`,
+      });
+  }
+  return problems;
+}
+
 /** Every problem in the repo's rules and checked docs. */
 export function check(root: string): Problem[] {
   const repo = repoAt(root);
@@ -286,15 +329,9 @@ export function check(root: string): Problem[] {
     if (existsSync(path.join(root, doc)))
       problems.push(...deadRefs(doc, readFileSync(path.join(root, doc), "utf8"), repo));
   }
-  const agentsLines = readFileSync(path.join(root, "AGENTS.md"), "utf8")
-    .trimEnd()
-    .split("\n").length;
-  if (agentsLines > AGENTS_MAX_LINES)
-    problems.push({
-      file: "AGENTS.md",
-      line: AGENTS_MAX_LINES + 1,
-      reason: `${agentsLines} lines; keep it a map of at most ${AGENTS_MAX_LINES} (move detail into a rule, skill or docs/)`,
-    });
+  problems.push(
+    ...sizeProblems(rules, readFileSync(path.join(root, "AGENTS.md"), "utf8"), loadBudget(root)),
+  );
   return problems;
 }
 

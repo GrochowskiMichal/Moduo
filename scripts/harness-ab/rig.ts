@@ -33,6 +33,8 @@ import {
   loadArm,
   loadSet,
   missingPlugins,
+  overlayProblems,
+  OVERLAYS_DIR,
   plan,
   plannedRow,
   type PlannedRun,
@@ -98,7 +100,13 @@ const timed = <T>(fn: () => T): [T, number] => {
 };
 
 /** A clone of the local repository at `sha`, with its remote removed: nothing to push to. */
-function makeWorkspace(sha: string, dir: string, fixtures?: string, hide: string[] = []) {
+function makeWorkspace(
+  sha: string,
+  dir: string,
+  fixtures?: string,
+  hide: string[] = [],
+  overlay: Record<string, string> = {},
+) {
   git(SOURCE, "cat-file", "-e", `${sha}^{commit}`);
   git(tmpdir(), "clone", "--quiet", "--shared", "--no-checkout", SOURCE, dir);
   git(dir, "remote", "remove", "origin");
@@ -107,6 +115,11 @@ function makeWorkspace(sha: string, dir: string, fixtures?: string, hide: string
   git(dir, "config", "user.email", "harness-ab@localhost");
   if (fixtures) cpSync(fixtures, dir, { recursive: true });
   for (const p of hide) rmSync(path.join(dir, p), { recursive: true, force: true });
+  // An arm's overlay goes on last, so it is part of the tree the agent starts from.
+  for (const [dest, src] of Object.entries(overlay)) {
+    mkdirSync(path.dirname(path.join(dir, dest)), { recursive: true });
+    cpSync(path.join(OVERLAYS_DIR, src), path.join(dir, dest));
+  }
   git(dir, "add", "--all");
   if (sh("git", ["diff", "--cached", "--quiet"], { cwd: dir }).status !== 0)
     git(dir, "commit", "--quiet", "--no-verify", "-m", "harness-ab fixtures");
@@ -269,7 +282,9 @@ function execute(
   try {
     const fixtures = run.task.fixtures ? path.join(opts.setDir, run.task.fixtures) : undefined;
     const [setup, setupMs] = timed(() => {
-      const w = makeWorkspace(run.task.base, ws, fixtures, run.task.hide);
+      const bad = overlayProblems(run.arm);
+      if (bad.length) throw new Error(bad.join("; "));
+      const w = makeWorkspace(run.task.base, ws, fixtures, run.task.hide, run.arm.overlay);
       const p = writeProfiles(run, ws, dir);
       const exit = install(run.task, ws, p.checkProfile, dir);
       if (exit !== 0)
