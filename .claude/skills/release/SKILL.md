@@ -1,11 +1,13 @@
 ---
-name: ship
-description: Release Moduo to production, the only way to release. Use when the person types `/ship` (prepare the next version from develop) or `/ship vX.Y.Z` (finish an open release PR, a hand-off). Not for landing blocks (that is /s3). `/ship` prepares notes, version, risk and manual prerequisites, then asks one question, ship it yourself now or hand it to the other founder. guard-release.sh blocks release tags and prod workflows started any other way.
+name: release
+description: Release Moduo to production, the only way to release. Use when the person types `/release` (prepare the next version from develop) or `/release vX.Y.Z` (finish an open release PR, a hand-off). Not for landing blocks (that is /s3). `/release` prepares notes, version, risk and manual prerequisites, then asks one question, ship it yourself now or hand it to the other founder. guard-release.sh blocks release tags and prod workflows started any other way.
 effort: high
 disable-model-invocation: true
 ---
 
-# /ship: release develop to production
+# /release: release develop to production
+
+This skill was `/ship` until 2026-11-26. Claude Code now has a built-in `/ship` (commit, push and open a pull request), and a built-in command wins over a project skill of the same name, so a typed `/ship` no longer reached this file.
 
 One release = one `release/vX.Y.Z → develop` PR (VERSION, `release-notes/releases.json`, `CHANGELOG.md`, consumed `.changes/` removed), merged with a merge commit, and an annotated tag `vX.Y.Z` on that merge commit. The tag starts `release.yml`, which ships web, landing and (when needed) desktop from that commit. Why: specs/release-v2.md; runbook: [docs/release.md](../../../docs/release.md).
 
@@ -22,7 +24,7 @@ One release = one `release/vX.Y.Z → develop` PR (VERSION, `release-notes/relea
 ## 1. Preflight (read-only)
 1. `git fetch origin --tags --prune`. Note `origin/develop`'s commit; everything below is about it.
 2. **Open release?** `gh pr list --state open --base develop --json number,title,headRefName,assignees,url` and keep heads starting `release/v`.
-   - With `/ship vX.Y.Z`: it must be `release/vX.Y.Z`; go to **§5 Resume**.
+   - With `/release vX.Y.Z`: it must be `release/vX.Y.Z`; go to **§5 Resume**.
    - Without an argument and one is open: show it (version, who it's assigned to, link) and ask "Continue Release X.Y.Z, or stop?" Continue = §5. Never open a second one.
    - **Merged but never tagged?** `gh pr list --state merged --base develop --search "Release in:title" -L 5 --json number,headRefName,mergeCommit` and `git ls-remote --tags origin 'v*'`: a merged `release/vX.Y.Z` with no `vX.Y.Z` tag (a run that died between merge and tag) → say so and offer to tag it (§4a.3–7) before anything else; otherwise its notes would never reach anyone.
 3. **Release running?** `gh run list --workflow release.yml -L 5 --json status,headBranch,url`: any status other than `completed` → stop and report it.
@@ -47,10 +49,10 @@ In the scratch worktree:
 1. `git switch -c release/vX.Y.Z`
 2. `bun scripts/release/changes.ts prepare` (add `--reliability` or `--version X.Y.Z` when decided above). Check the diff: `VERSION`, `release-notes/releases.json`, `CHANGELOG.md`, deleted `.changes/*.md` (never `README.md`), nothing else.
 3. `bun run lint:notes`, then commit those paths explicitly: `Release X.Y.Z` + the Co-Authored-By trailer.
-4. `git push -u origin release/vX.Y.Z` and `gh pr create --base develop --head release/vX.Y.Z --title "Release X.Y.Z" --body-file <scratchpad>/release-body.md` with the body: the summary from §2 (notes as they'll read, risk + why, prerequisites + "confirmed applied by <login>", desktop yes/no, contents) and a **Ship** line: "Merge with a merge commit, then tag the merge commit: run `/ship vX.Y.Z`."
+4. `git push -u origin release/vX.Y.Z` and `gh pr create --base develop --head release/vX.Y.Z --title "Release X.Y.Z" --body-file <scratchpad>/release-body.md` with the body: the summary from §2 (notes as they'll read, risk + why, prerequisites + "confirmed applied by <login>", desktop yes/no, contents) and a **Ship** line: "Merge with a merge commit, then tag the merge commit: run `/release vX.Y.Z`."
 
 ## 4a. Ship now
-1. `gh pr checks <n> --watch --required` (run it in the background if it may take over 2 minutes). Failing → **stop**: report the failing check and the PR link, leave the PR open, no tag. The fix lands through a normal PR into develop; then `/ship vX.Y.Z` after rebasing the release branch, or close the PR and start over.
+1. `gh pr checks <n> --watch --required` (run it in the background if it may take over 2 minutes). Failing → **stop**: report the failing check and the PR link, leave the PR open, no tag. The fix lands through a normal PR into develop; then `/release vX.Y.Z` after rebasing the release branch, or close the PR and start over.
 2. Say "Merging Release X.Y.Z into develop", then `gh pr merge <n> --merge` (GitHub deletes `release/vX.Y.Z` on merge; don't delete it yourself). Get the commit: `gh pr view <n> --json mergeCommit -q .mergeCommit.oid`.
 3. `git fetch origin develop --tags` and `git tag -a vX.Y.Z -m "Moduo X.Y.Z" <merge sha>` (verify `git show <merge sha>:VERSION` is X.Y.Z first).
 4. **Marker, in its own Bash call from the session's checkout:** `d="$(git rev-parse --show-toplevel)/.claude/release-approved"; mkdir -p "$d" && date -u > "$d/X.Y.Z"`. It is valid for 60 minutes and one command.
@@ -65,9 +67,9 @@ In the scratch worktree:
 8. **Moduo:** nothing to move by hand. Once `release.yml` succeeds, the sync (`moduo-sync.yml`) moves every block task whose `[ID]` PR merged since the previous tag to **Shipped**. Check that its run moved them; if it missed the tag, start it on `develop`: `gh workflow run moduo-sync.yml --ref develop -f tag=vX.Y.Z`.
 
 ## 4b. Hand off
-Leave the PR open. `gh pr edit <n> --add-assignee <other login>`. The PR body is the summary; post nothing else. Report the PR link and that `/ship vX.Y.Z` (theirs or yours) finishes it.
+Leave the PR open. `gh pr edit <n> --add-assignee <other login>`. The PR body is the summary; post nothing else. Report the PR link and that `/release vX.Y.Z` (theirs or yours) finishes it.
 
-## 5. Resume (`/ship vX.Y.Z`)
+## 5. Resume (`/release vX.Y.Z`)
 1. Find the open PR with head `release/vX.Y.Z` (none → say so; maybe it merged: check for the tag and offer to tag it via §4a.3–7 if `develop` has the commit but no tag exists).
 2. Re-run §1 steps 3, 4, 5, 7 and 8 against `origin/develop` (new migrations or functions since the hand-off need confirming too). If develop moved past the release branch's base, that's fine: the release ships the merge commit, which includes them; list what's new in the summary.
 3. Show the PR body's summary, then ask "Ship Release X.Y.Z now?" (Ship now / Leave it open). Ship now → §4a.

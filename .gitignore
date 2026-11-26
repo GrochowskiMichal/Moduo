@@ -79,7 +79,7 @@ ds-bundle/
 .claude/SESSION_TITLE
 # The Moduo task this worktree's agent claimed (moduo-agent skill, moduo-report.sh)
 .claude/MODUO_TASK
-# /ship's one-time release approvals (guard-release.sh), never committed
+# /release's one-time release approvals (guard-release.sh), never committed
 .claude/release-approved/
 
 # Email live-test credentials (EM-1 imap_live harness — MODUO_TEST_IMAP_CREDS_PATH)
