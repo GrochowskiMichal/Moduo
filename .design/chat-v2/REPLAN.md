@@ -2,7 +2,7 @@
 
 > **Released 2026-10-16** (CV-0…CV-22; CV-23 open). Release record: `specs/BUILD_LOG.md` "Chat v2 release". The status below is the planning record.
 >
-> **Status (2026-10-14): the spec is written ([`specs/chat-v2.md`](../../specs/chat-v2.md), 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14 and the confirmation pass found no blocker or major. **Ready to execute**: CV-0 first.**
+> **Status (2026-10-14): the spec is written (`specs/chat-v2.md`, 29 block rows CV-0…CV-23 with a/b/c splits, on Fable 5.1); BUILD_ORDER has the Chat v2 section; decision entries in `docs/decisions/chat.md`; `specs/chat.md` carries the supersession banner. The validator's findings (1 blocker, 7 major, 26 minor) were applied on 2026-10-14 and the confirmation pass found no blocker or major. **Ready to execute**: CV-0 first.**
 >
 > - **Group N decided (2026-10-14):** huddles and the Google Meet replacement are designed together in a Calls re-plan (start prompt: [`calls-replan-prompt.md`](./calls-replan-prompt.md)); Chat reserves five seams (spec §18) and builds nothing for calls; the hackathon is on site.
 > - **Decided:** CH1–CH78. CH24 stays parked; CH20/CH21 are facts.
@@ -16,7 +16,7 @@
 >
 > **Numbering:** Chat calls are **CH1, CH2, …**, numbered once and never renumbered. Tasks v3 calls are cited as "Tasks 64", "Tasks default r"; Calendar's as "Calendar C7". The decisions audit's contradiction list uses its own "A1…"; here those are cited as "audit A1".
 >
-> Branch `t/maciej/chat-replan` (cut from `t/maciej/tasks-v3-build` @ b33922a6). Local build mode (BUILD_ORDER's 🟠 box): local Supabase is prod, no pushes to `maciej`/`develop`, no PRs until Maciej says "release"; backing up this branch to origin is fine. Process: [`docs/agents/module-replan.md`](../../docs/agents/module-replan.md) (on `t/maciej/tasks-v3-build`). North star: [`specs/tasks-v3.md`](../../specs/tasks-v3.md), [`.design/tasks-v3/REPLAN.md`](../tasks-v3/REPLAN.md).
+> Branch `t/maciej/chat-replan` (cut from `t/maciej/tasks-v3-build` @ b33922a6). Local build mode (BUILD_ORDER's 🟠 box): local Supabase is prod, no pushes to `maciej`/`develop`, no PRs until Maciej says "release"; backing up this branch to origin is fine. Process: [`docs/agents/module-replan.md`](../../docs/agents/module-replan.md) (on `t/maciej/tasks-v3-build`). North star: `specs/tasks-v3.md`, [`.design/tasks-v3/REPLAN.md`](../tasks-v3/REPLAN.md).
 
 ## 0. How to read this
 
@@ -36,7 +36,7 @@
 
 **Known inputs:**
 - **The hackathon.** Moduo may help organize a hackathon soon: every team gets a prepared Moduo workspace (the organizers' info as notes, the milestones as tasks, a place to collaborate). Its date sets an explicit MVP cut inside this plan.
-- **Chat v1 is built** (Mike, 2026-10-06, `t/mike/chat`, [`specs/chat.md`](../../specs/chat.md)) without a grilling round. Every product call in it was an agent's assumption. It's audited like Tasks: keep what's strong, reverse what's weak, record what changes so Mike can follow.
+- **Chat v1 is built** (Mike, 2026-10-06, `t/mike/chat`, `specs/chat.md`) without a grilling round. Every product call in it was an agent's assumption. It's audited like Tasks: keep what's strong, reverse what's weak, record what changes so Mike can follow.
 - **Notes is being re-planned in parallel** (`t/maciej/notes-replan`). The boundary is in §1.5.
 
 **Constraints:** desktop and web only (mobile gets its own plan later); calls (Moduo Meet) are out of scope; chat stays inside PRODUCT_BRIEF §7's quiet-notification bar; the hackathon MVP cut is explicit in the spec's blocks; no new top-level routes or IA refactors without Maciej's ask; AI only through MCP.
@@ -47,7 +47,7 @@
 
 ### 1.1 The root cause
 
-Chat v1 was built in one session on 2026-10-06 from one ask: "Slack/Discord-class messaging… end to end… production ready" ([`specs/chat.md`](../../specs/chat.md)). It came before Tasks v3 decided how the whole app works. So it is **a Slack built beside Moduo instead of inside it.**
+Chat v1 was built in one session on 2026-10-06 from one ask: "Slack/Discord-class messaging… end to end… production ready" (`specs/chat.md`). It came before Tasks v3 decided how the whole app works. So it is **a Slack built beside Moduo instead of inside it.**
 
 Every reversal the [decisions audit](./research/early-decisions-audit.md) found has that one shape: **v1 rebuilt, Slack's way, a piece Moduo now has once for the whole app.**
 
@@ -144,7 +144,7 @@ Every reversal the [decisions audit](./research/early-decisions-audit.md) found 
 - **Notes** (re-planned in parallel; the boundary Maciej set): a discussion *about an item* lives on the item (comments, plus reactions as Tasks' TV-U13 builds them); **chat owns conversations**; both link items through RF-1 references; "Create task from message" goes through Tasks v3's capture (TV-U14). Any cross-module rule beyond that is recorded here as a **proposal for Maciej**, never decided for Notes.
 - **The hackathon readiness plan** (its own session, `t/maciej/hackathon-plan`, output `specs/hackathon.md`) owns the cross-module layer: web access, invites at scale, a template workspace copied into one workspace per team, organizer and judge access, plan gates (including chat's Duo gate) and what happens to the data after the event. Chat's calls decide how chat behaves inside that layer; where Chat needs something from it (e.g. announcements reaching every team), the need is recorded here as a proposal for that plan and for Maciej. For the hackathon, Notes and Chat are next; Email, Contacts and Calendar are out.
 - **Calendar** (re-planned in parallel, `t/maciej/calendar-replan`, paused for the hackathon): Calendar provides the event preview (title · time · people) and its chip; chat links events like any item.
-- **Moduo Meet** (calls) is a separate track ([`specs/moduo-meet.md`](../../specs/moduo-meet.md)); chat only keeps the door open (`startCall({ source: "chat" })` exists in that spec).
+- **Moduo Meet** (calls) is a separate track (`specs/moduo-meet.md`); chat only keeps the door open (`startCall({ source: "chat" })` exists in that spec).
 
 ---
 
@@ -201,7 +201,7 @@ From [research/role-journeys.md](./research/role-journeys.md) (a normal week per
 
 ## 4. The views — today and their target
 
-Written as the spec: [`specs/chat-v2.md`](../../specs/chat-v2.md) §Product behavior (one subsection per surface, each citing its round-5 frame) and §Edge cases (every state). Today's views are in [research/current-state.md](./research/current-state.md); the targets are round 5's nine frames.
+Written as the spec: `specs/chat-v2.md` §Product behavior (one subsection per surface, each citing its round-5 frame) and §Edge cases (every state). Today's views are in [research/current-state.md](./research/current-state.md); the targets are round 5's nine frames.
 
 ## 5. The visual north star, applied to Chat
 

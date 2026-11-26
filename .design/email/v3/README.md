@@ -1,7 +1,7 @@
 # Mail v3: the agreed prototype
 
 These are the sources of the "Mail, rethought" artifact (version 3.1, 2026-11-06), the
-design that [specs/mail-v3.md](../../../specs/mail-v3.md) builds. The published,
+design that specs/mail-v3.md builds. The published,
 interactive version is https://claude.ai/artifact/CvUks2CuUUcm1Cdp4mNM6F. It is private:
 ask Mike for access.
 

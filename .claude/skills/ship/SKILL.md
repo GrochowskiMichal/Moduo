@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # /ship: release develop to production
 
-One release = one `release/vX.Y.Z → develop` PR (VERSION, `release-notes/releases.json`, `CHANGELOG.md`, consumed `.changes/` removed), merged with a merge commit, and an annotated tag `vX.Y.Z` on that merge commit. The tag starts `release.yml`, which ships web, landing and (when needed) desktop from that commit. Why: [specs/release-v2.md](../../../specs/release-v2.md); runbook: [docs/release.md](../../../docs/release.md).
+One release = one `release/vX.Y.Z → develop` PR (VERSION, `release-notes/releases.json`, `CHANGELOG.md`, consumed `.changes/` removed), merged with a merge commit, and an annotated tag `vX.Y.Z` on that merge commit. The tag starts `release.yml`, which ships web, landing and (when needed) desktop from that commit. Why: specs/release-v2.md; runbook: [docs/release.md](../../../docs/release.md).
 
 ## Rules
 - **Nothing outward-facing before the person answers the ship question** (AC3): no branch push, no PR, no comment. Reading (`git fetch`, `gh pr list`, `gh run list`, `curl`) is fine.

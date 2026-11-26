@@ -2,7 +2,7 @@
 
 > **Status: round 2b answers recorded (2026-10-10); open calls are listed in §8's round 2b table.** Earlier: **round 2a of the re-plan (2026-10-10).** Calls 1–60 are answered (✅ under each; 58 is parked and 60 dropped). Round 2a adds the follow-ups 53a, 53b and 59a, and group J in §8: Focus, the Timeline, the right panel and the gaps nobody had named. Mike's research is evaluated separately in §10.
 > - The calls are numbered from 13, continuing calls 1–12 in [RESEARCH-2026-10.md](../tasks-dogfood/RESEARCH-2026-10.md); 9 and 10 keep their numbers.
-> - [`specs/tasks-v2.md`](../../specs/tasks-v2.md) stays the plan of record for code until this re-plan's spec lands.
+> - `specs/tasks-v2.md` stays the plan of record for code until this re-plan's spec lands.
 > - The running Tasks sessions are paused.
 >
 > **Evidence:**
