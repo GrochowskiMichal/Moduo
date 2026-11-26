@@ -1,6 +1,6 @@
 # Contacts — redesign reference (v2)
 
-Design-facing companion to the build contract [`specs/contacts-v2.md`](../../specs/contacts-v2.md). Distilled from a 2026-06-28 research round across iOS Contacts/Cardhop, Folk/Attio/Notion/HubSpot/Google Contacts, and Monica/Dex/Clay.
+Design-facing companion to the build contract `specs/contacts-v2.md`. Distilled from a 2026-06-28 research round across iOS Contacts/Cardhop, Folk/Attio/Notion/HubSpot/Google Contacts, and Monica/Dex/Clay.
 
 ## The one insight
 

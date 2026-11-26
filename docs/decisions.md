@@ -4,13 +4,14 @@
 
 The current decisions, one line each, grouped by area, in each area file's order (newest first). Superseded and dropped entries are left out. The full entry lives in the area file linked in each heading; `bun run docs:current <area>` prints an area's current entries in full.
 
-**Adding a decision:** write the full entry at the top of `docs/decisions/<area>.md` (one bold title sentence, then the why and a pointer to the authoritative doc) with `  - status: current` (two spaces in) as its first sub-bullet (a `##` entry takes `status: current` as its first paragraph). When it replaces an earlier entry, add `· supersedes: <area> <date> "<title start>"` to its status line and mark the old one `status: superseded · by: <area> <date> "<title start>"` (when only part of it changes, it stays `current` and takes the same `· by:`). `bun run lint:decisions` checks both ends. Then run `bun run docs:index`. If no area fits, use `product`.
+**Adding a decision:** write the full entry at the top of `docs/decisions/<area>.md` (one bold title sentence, then the why and a pointer to the authoritative doc) with `  - status: current` (two spaces in) as its first sub-bullet (a `##` entry takes `status: current` as its first paragraph). When it replaces an earlier entry, add `· supersedes: <area> <date> "<title start>"` to its status line and mark the old one `status: superseded · by: <area> <date> "<title start>"` (when only part of it changes, it stays `current` and takes the same `· by:`). `bun run lint:decisions` checks both ends. A superseded entry is then deleted with `bun run docs:prune` (git history keeps it; a partly superseded one stays). Then run `bun run docs:index`. If no area fits, use `product`.
 
 > Migration-status clauses inside older entries ("deploy-ready but unapplied") describe the day they were written, not today. Probe the database before treating one as a task. See [decisions/data.md](decisions/data.md).
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
 - 2026-11-26 · Claude Ship: the Claude GitHub App is on Moduo with Review on, Steward and Approve off; `ai-review.yml` stays.
+- 2026-11-26 · Diet, second pass: the path rules were audited line by line, the router speaks only for the bug and block lanes, superseded decisions and unreferenced shipped specs are deleted.
 - 2026-11-26 · The context diet: what a session carries without asking is budgeted in bytes, and knowledge is opened in slices.
 - 2026-10-27 · HV-30: Harness v3 is closed out; work runs in two lanes, and AGENTS.md maps what landed rather than what was planned.
 - 2026-10-27 · HV-22: the hunt, retro and prod watch are Claude cloud routines and the weekly numbers a desktop scheduled task on Mike's Mac; each routine's deterministic half is `bun run routine <command>`, and the agent only judges and writes.
@@ -67,8 +68,6 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-11 · Onboarding handoff + backend-refactor decision memo written (`docs/onboarding/`), for Mike picking the project back up.
 - 2026-07-02 · Session naming convention + title hook.
 - 2026-06-25 · Claude Code workflow upgrade.
-
-2 superseded or dropped entries are left out; they stay in the area file.
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
@@ -160,8 +159,6 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-29 · Compiler-codegen violations fixed app-wide; heavy routes code-split.
 - 2026-07-28 · React Compiler v1.0 enabled — automatic memoization across the app.
 
-3 superseded or dropped entries are left out; they stay in the area file.
-
 ## Email and import of mail → [decisions/email.md](decisions/email.md)
 
 - 2026-11-08 · MI (built): Mail, improved closes the 17 holes as a polish pass, no migration and no contract change ([specs/mail-improve.md](../../specs/mail-improve.md), PR GrochowskiMichal/Moduo#804).
@@ -205,8 +202,6 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-29 · IM-2a: the email store reads by key prefix and writes per chunk — and the order index stays timestamp-keyed on purpose.
 - 2026-07-30 · IM-2b: email history depth is a per-device FLOOR, and the depth state machine keys off the UID generation.
 - 2026-07-30 · IM-2c-a: the depth picker ships without progress/cancel, and AC9's transport is amended from Tauri events to a cursor-backed status read.
-
-1 superseded or dropped entry is left out; they stay in the area file.
 
 ## MCP connector → [decisions/mcp.md](decisions/mcp.md)
 

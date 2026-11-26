@@ -26,11 +26,10 @@ The mechanical traps are checked by `apps/app/src/lib/migration-lint.test.ts` (g
 - In `RETURNS TABLE(...)` whose out-columns share names with a table it reads (`id`, `workspace_id`), table-qualify every column or prefix the out-params `o_`.
 - A plpgsql function returning a composite returns an all-NULL row after a `SELECT … INTO` that finds nothing: `IF v_row.id IS NULL THEN RETURN NULL; END IF;`. `row IS NOT NULL` is true only when every field is non-null; test a key field.
 - A function's `SET statement_timeout` doesn't bound a psql caller (PostgREST applies it per call): assert it through `pg_proc.proconfig`, not by timing.
-- A plpgsql query joining an id array (`unnest(v_ids)`) to a table is driven from the array and reads every listed row (the planner guesses 100), and after five calls a generic plan can make it 3× slower: match the text first in a `MATERIALIZED` CTE, join the array second, and `SET plan_cache_mode = 'force_custom_plan'` (`notes__search`).
+- A plpgsql query joining an id array (`unnest(v_ids)`) to a table: match the text first in a `MATERIALIZED` CTE, join the array second, and `SET plan_cache_mode = 'force_custom_plan'` (`notes__search`).
 - A function's own `SET` of an extension setting (`pg_trgm.word_similarity_threshold`) needs a superuser on Supabase: call the extension once to load it, then `set_config(…, true)` around the one query and restore the old value (`notes__search`).
 - `module_activity_log` returns void (insert directly when you need the row id) and raises "No actor context" without an actor: system notices go through `tasks__notice`. `chat__activity` mirrors its attribution: change one, change the other.
 - When a loop needs a step cap, hitting the cap is its own outcome (raise or "unknown"), never the same value as a real end.
-- `RAISE SQLSTATE 'PGRST'` needs DETAIL with both `status` and `headers` (`json_build_object('status', 403, 'headers', json_build_object())`), or PostgREST answers 500 `PGRST121`.
 
 ## Triggers and CHECKs
 - BEFORE triggers of one timing fire in name order, and before CHECKs: `perm_enforce_write` checks what it sees on its turn, so change checked columns (`bucket_id`) in the op before the write. A probe the trigger refuses reads the trigger's SQLSTATE, not the CHECK's.
@@ -39,7 +38,7 @@ The mechanical traps are checked by `apps/app/src/lib/migration-lint.test.ts` (g
 - A partial unique index used as an `ON CONFLICT` arbiter needs its predicate in the clause (`ON CONFLICT (user_id, chain_root_id) WHERE reason = 'reply' AND done_at IS NULL`).
 - A CHECK passes on NULL: write `x IS NULL OR coalesce(<chain>, false)`, `x IS NOT NULL AND x BETWEEN …` inside an OR, and test NULL and missing keys.
 - Don't UPDATE the same row inside its own AFTER INSERT trigger ("tuple already modified").
-- A BEFORE DELETE row trigger must not write another row of the same table (nor fire a trigger that does): when the same DELETE reaches that row later it fails ("tuple to be updated was already modified by an operation triggered by the current command"). Write other tables, and change the row on the key's own SET NULL write (`notes__freeze_children`).
+- A BEFORE DELETE row trigger must not write another row of its own table (nor fire a trigger that does): write other tables, and change the row on the key's own SET NULL write (`notes__freeze_children`).
 - An AFTER DELETE trigger that inserts a row referencing the deleted row's parent breaks cascading workspace and account deletes (23503): return early when the parent is gone, and delete a workspace and an account in its test (`sync_feed.test.sql`).
 - A trigger on `workspace_members` DELETE also fires on account deletion: read the profile to tell the two apart, never the cascade order (`share_member_removed`).
 - `pg_trigger_depth() > 1` is reachable from a client write: exempt only the exact system write, or mark it with `share.bypass` from a definer function.

@@ -8,7 +8,7 @@ expires: 2027-01-31
 
 Most traps are commented at their code. Deploys and hook setup: [docs/email-runbook.md](../../docs/email-runbook.md). Rust also follows `.claude/rules/desktop-rust.md`.
 
-- **The rebuilt engine is `src-tauri/src/mail/` (SQLite, specs/mail-rebuild.md).** Never import `commands::email`, `email_sync` or `mailparse` from it, never add redb mail tables; the legacy engine is deleted and `scripts/ci/legacy-email.test.ts` keeps it out. The redb mail tables live only in `store_redb/legacy_mail.rs`, outside `ALL_TABLES`, for the cutover to read and drop. The first-launch cutover is `mail::migrate::run` (account ids carried verbatim so keychain entries match).
+- **The rebuilt engine is `src-tauri/src/mail/` (SQLite, specs/mail-rebuild.md).** Never add redb mail tables: the old ones live only in `store_redb/legacy_mail.rs`, outside `ALL_TABLES`, for `mail::migrate::run` (ids verbatim, keychain entries match) to read and drop.
 
 - **The follow-up guard is half-patched.** `email_op_clear_follow_up` leaves `follow_up_notified_at` set, though `20260704180000`'s comment says both ops reset it. Harmless while the due-check reads `follow_up_cleared_at`; fix it with a forward migration if that changes.
 - **A retention rule on a queue table must not count from `created_at`:** `email_outbox__purge()` keeps `queued`/`sending` rows and counts from `coalesce(sent_at, last_attempt_at, created_at)`.

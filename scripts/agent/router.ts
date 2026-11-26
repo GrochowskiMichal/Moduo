@@ -1,7 +1,10 @@
 // The intent router (Harness v3, HV-23: AC3). A UserPromptSubmit command hook
-// that adds one hidden line of context to every prompt: the lane (answer,
-// fast, bug, block), the risk areas it touches and any block or task IDs it
-// names. It only advises: it never blocks, never asks, and any failure (bad
+// that classifies every prompt: the lane (answer, fast, bug, block), the risk
+// areas it touches and any block or task IDs it names. It adds its one hidden
+// line only for the lanes that change how to work (bug: a failing test first;
+// block: a spec and the queue); answer and fast are logged and add nothing,
+// because a note on every prompt was noise and often wrong (2026-11-26).
+// It only advises: it never blocks, never asks, and any failure (bad
 // input, model error, timeout) ends in exit 0, with the rules' answer or none.
 //
 //   MODUO_ROUTER=rules   (default) keyword rules, a few milliseconds
@@ -208,8 +211,11 @@ export function contextLine(r: Route): string {
   const parts = [`lane=${r.lane}`, `areas=${r.areas.length ? r.areas.join(",") : "none"}`];
   if (r.ids.length) parts.push(`ids=${r.ids.join(",")}`);
   if (r.override) parts.push("override=the person's own words");
-  return `Router (HV-23, advisory, ${r.source}): ${parts.join(" · ")}. The person can override in words ("treat this as a block", "fast lane"); when the lane looks wrong, follow the request, not this note.`;
+  return `Router (advisory, ${r.source}): ${parts.join(" · ")}. When the lane looks wrong, follow the request, not this note.`;
 }
+
+/** The lanes worth a line of context: the ones with a procedure of their own. */
+export const speaks = (r: Route) => r.lane === "bug" || r.lane === "block";
 
 /** A task notification or another event Claude Code feeds in as a prompt: no one's request. */
 export function isEvent(prompt: string): boolean {
@@ -239,6 +245,7 @@ async function main() {
   const budgetMs = Number(process.env.MODUO_ROUTER_BUDGET_MS) || 1800;
   const r = await classify(input.prompt, { mode, budgetMs });
   log(r, input.session_id, Math.round(performance.now() - started));
+  if (!speaks(r)) return;
   process.stdout.write(
     JSON.stringify({
       hookSpecificOutput: { hookEventName: "UserPromptSubmit", additionalContext: contextLine(r) },

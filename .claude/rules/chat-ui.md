@@ -22,12 +22,9 @@ Compiled from the UI and notes gotchas (HV-14b). Editor (Lexical) rules: `.claud
 - Lexical command priority decides who gets ⏎: the shared menus take ⏎ / Tab at HIGH with no IME check, so the chat's CRITICAL ⏎ handler swallows a composing ⏎ (`isComposing`, and WebKit's `keyCode` 229) first (`apps/app/src/features/chat/markup-v2/enter.ts`).
 - An edit's "unchanged" check compares with the re-exported body, not the stored string.
 - A reference inline needs a real uuid: `serializeBlocks` drops a malformed one.
-- `useComposerFiles` and `useMessageFiles` return their store snapshot (the RF-1 trap; only the e2e caught it). The attachment viewer finds a preview by path, not file id.
-- `ExportBundle.entries` are text or bytes: `String(…)` before `JSON.parse` in a test.
+- The attachment viewer finds a preview by path, not file id.
 
 ## Notices
 - The stale-answer check compares this client's clock with the server's `created_at`: a skewed clock (±8 s) can miss or double-ring.
 - `chat_catchup` has the default replica identity: a Realtime DELETE carries only `id`.
-- A chat notice rings even while a Moduo window is focused (the tab may be elsewhere).
 - The web build aliases `@tauri-apps/plugin-notification` to `apps/app/src/lib/tauri-plugin-notification-stub.ts`, which calls `window.Notification` as the plugin does; tests record OS notices by replacing it. Headless Chromium answers `Notification.permission === "denied"` up front, and the ask's e2e needs `PUBLIC_VAPID_PUBLIC_KEY` in the build.
-- A chat person missing from both member lists is a former member (`composerLine`).

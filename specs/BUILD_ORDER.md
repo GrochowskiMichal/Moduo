@@ -7,4 +7,5 @@ Since HV-8 (2026-10-26, [specs/harness-v3.md](./harness-v3.md)) this file is onl
 - **New blocks:** write them in the spec's *Execution blocks* table, then `bun run queue:import specs/<feature>.md` (idempotent: a re-run updates, never duplicates).
 - **Stages move by themselves** from GitHub: draft PR `[ID] …` → Building, ready → In review, merged → Awaiting release, closed unmerged → To do, release tag → Shipped (`.github/workflows/moduo-sync.yml`).
 - **Focus** (the designer's current focus area) is the note titled "Focus" in Moduo (a top-level note). Edit it there, or `bun run queue:import --focus "<text>"`.
+- **Shipped specs are removed** once no live spec cites them (2026-11-26: contacts, contacts-v2, contacts-v3-fixpack, tasks-timeline, dashboard-rebuild, universal-inbox, df-19f-notification-toggles). Read one with `git show 62c56acdc:specs/<name>.md`; a comment or doc that names one means that version.
 - **History:** finished blocks are in git and in each spec; the old ledger is `git show 5a1234c8c:specs/BUILD_ORDER.md`, the build log `git show 5a1234c8c:specs/BUILD_LOG.md`.

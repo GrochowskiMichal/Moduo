@@ -67,6 +67,7 @@
     "queue:import": "bun scripts/agent/queue-import.ts",
     "docs:find": "bun scripts/docs/decisions.ts find",
     "docs:current": "bun scripts/docs/decisions.ts current",
+    "docs:prune": "bun scripts/docs/decisions.ts prune",
     "docs:index": "bun scripts/docs/decisions.ts index",
     "build:notes-doc": "bun ./scripts/build-notes-doc.ts",
     "format": "bun fmt",

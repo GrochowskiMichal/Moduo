@@ -9,9 +9,9 @@ expires: 2027-01-31
 Compiled from the notes gotchas (HV-14b). `lint:ast` fails the mechanical forms: `lexical-update-in-command`, `lexical-history-in-collab`, `lexical-dom-lookup-in-state-read`.
 
 ## Updates, commands and reads
-- A command handler already runs inside an update: do the `$` work in it and decide synchronously; a nested `editor.update` is queued. A menu's pick returns the edit to run (`MentionMenuPlugin`'s `onPick`).
+- A menu's pick returns the edit to run (`MentionMenuPlugin`'s `onPick`), not a nested `editor.update`.
 - Commands registered once see first-render props: route actions through a ref refreshed each render.
-- `editor.read()` is read-only: building nodes there throws. DOM-to-node lookups need `editor.read`, not `editorState.read`.
+- `editor.read()` is read-only: building nodes there throws.
 - A node object goes stale the moment the node is written: read positions (`getIndexWithinParent()`, `getNextSiblings()`) before changing anything, and compare with `.is()`.
 - Removing a list's last item removes the list: insert replacements first, then remove.
 - `registerRootListener`: define DOM handlers per effect run outside the callback, and remove them from `editor.getRootElement()` in cleanup.
