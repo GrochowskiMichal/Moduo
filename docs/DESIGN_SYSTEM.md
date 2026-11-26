@@ -296,7 +296,7 @@ Three layers enforce the contract:
 2. **`bun run lint:tw`** (`scripts/check-arbitrary-tw.ts`) — scans `.ts/.tsx` for arbitrary Tailwind + inline-style hardcodes: raw hex / color-functions across every color utility, arbitrary font-size / radius / spacing / shadow, the motion-token bypass (`duration-200` / `duration-[180ms]`), and static `style={{ color: "#…" }}`. The sanctioned `[var(--token)]` escape hatch and one-off *geometry* (`top-` / `h-` / `w-` / `translate-[…]`) are allowed. A curated ignore list quarantines the pre-foundation legacy backlog; remove an entry when its feature brief lands.
 3. **Review by eye** — for what a regex can't see: the relational rules in `DESIGN_RULES.md` (R1–R10), contrast, interaction states, overflow/clipping. Check them on the rendered screen before shipping (the `moduo-design-quality` skill that did this was removed on 2026-11-26).
 
-Both lint gates run in CI (`.github/workflows/checks.yml`). The concentric-radius rule (R3) and the other relational rules are skill/review-enforced, not lint-enforced.
+Both lint gates run in CI (`.github/workflows/checks.yml`). The concentric-radius rule (R3) and the other relational rules are review-enforced, not lint-enforced.
 
 ## Control / type / icon ladders + primitives (Session 11)
 

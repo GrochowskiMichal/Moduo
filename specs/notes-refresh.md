@@ -420,7 +420,7 @@ The core (NR-1–NR-7, NR-12) never cuts.
   - An empty workspace shows the existing welcome seed.
   - A read failure keeps the cached data and shows one quiet sync dot; a mutation failure gets an honest toast.
   - View-only hides create, drag, publish and trash.
-- **Design:** tokens only, existing primitives (`ContextMenu`, `DropdownMenu`, `AlertDialog`, `Skeleton`, `Tooltip`), R5 selection, and R1–R10 per [docs/DESIGN_RULES.md](../docs/DESIGN_RULES.md). Run `moduo-design-quality` audit mode before landing.
+- **Design:** tokens only, existing primitives (`ContextMenu`, `DropdownMenu`, `AlertDialog`, `Skeleton`, `Tooltip`), R5 selection, and R1–R10 per [docs/DESIGN_RULES.md](../docs/DESIGN_RULES.md). Check the rendered screen against those rules before landing (`lint:tw` and `lint:css` hold the mechanical part).
 - **Oracle:**
   - `experience.test.ts`, `draft-note.test.ts`, `tree-keyboard.test.ts`, `drop-intent.test.ts`, `breadcrumb.test.ts` and `notes-sidebar.test.tsx`;
   - the stories;
