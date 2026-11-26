@@ -7,7 +7,7 @@ Release notes are written by agents as blocks land and are published **with no h
 `/s3` writes one note per landed block:
 
 - **The block changes something people can notice** (a new ability, something better, a fixed bug): a public note.
-- **Everything else** (refactors, tests, tooling, CI, docs, infra, migrations with no visible change): a note with `internal: true`. It is never shown, but it tells `/ship` the block was considered.
+- **Everything else** (refactors, tests, tooling, CI, docs, infra, migrations with no visible change): a note with `internal: true`. It is never shown, but it tells `/release` the block was considered.
 
 One block, one file. A block that does two visible things may write two files.
 
@@ -64,6 +64,6 @@ A PR that adds only a note still runs the check in CI: `.changes/`, `release-not
 
 ## What happens at release
 
-`/ship` runs `bun scripts/release/changes.ts prepare`: it computes the version (any public `new` note → minor, otherwise patch), adds the release to `release-notes/releases.json` (newest first, public items grouped New, Improved, Fixed, Security, all security notes collapsed into the one line, at most two highlights: marked ones, else the first `new` items, else the first improved and fixed items), rewrites `CHANGELOG.md` from it and deletes the consumed note files. With only internal notes pending it refuses, unless `--reliability` ships a patch with the one item "Reliability improvements." `releases.json` is the source of truth; never edit `CHANGELOG.md` by hand (a test checks it matches).
+`/release` runs `bun scripts/release/changes.ts prepare`: it computes the version (any public `new` note → minor, otherwise patch), adds the release to `release-notes/releases.json` (newest first, public items grouped New, Improved, Fixed, Security, all security notes collapsed into the one line, at most two highlights: marked ones, else the first `new` items, else the first improved and fixed items), rewrites `CHANGELOG.md` from it and deletes the consumed note files. With only internal notes pending it refuses, unless `--reliability` ships a patch with the one item "Reliability improvements." `releases.json` is the source of truth; never edit `CHANGELOG.md` by hand (a test checks it matches).
 
 Other commands: `status` (pending notes and the next version), `notes <X.Y.Z>` (the updater Markdown for a release), `coming-next` (the staging updater Markdown for pending notes), `changelog` (rewrite `CHANGELOG.md`).

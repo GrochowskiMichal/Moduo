@@ -10,6 +10,10 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - status: current
   → [REVIEW.md](../../REVIEW.md) · [docs/agents/models-and-review.md](../agents/models-and-review.md)
 
+- **2026-11-26 · The release command is `/release`, because Claude Code's own `/ship` took the name.** A newer Claude Code ships a built-in `/ship` (commit, push, open a pull request, then watch it), and a built-in command wins over a project skill of the same name: typing `/ship` ran the built-in, which reviewed the branch and released nothing. The skill moved to `.claude/skills/release/` unchanged; the guard, the marker (`.claude/release-approved/<X.Y.Z>`) and the workflows are as they were, and the docs say `/release`. `ship` and `steward` joined the names a project skill may not take (`scripts/ci/config-traps.test.ts`). The comments inside `.github/workflows/` still say `/ship`: they were left alone on the day of a release.
+  - status: current
+  → `.claude/skills/release/SKILL.md` · [docs/release.md](../release.md)
+
 - **2026-11-26 · Every spec is removed from the repository; a new feature still gets one, and it is deleted when its blocks ship.** Mike's call, after the first pass kept the specs that work in progress still cites. All 31 files under `specs/` are gone (1.1 MB), shipped or not, including the ones with open blocks (calendar-rethink, permissions, notes-refresh, github, moduo-meet, transactional-email and others); the template moved to `.claude/skills/s1/spec-template.md`. `bun run queue` works without a `specs/` folder: dependencies then come from Moduo's "blocks" edges alone. `/s2` reads a removed spec's block from git (`git show 467d41c34:specs/<name>.md`) and stops with a question when it is not there. Links to specs in other docs became plain text; code comments and Moduo tasks that name a spec mean the version at that commit. `docs/data-layers.md` was rewritten the same day and no longer cites any.
   - status: current · supersedes: 2026-11-26 "Diet, second pass"
   → [docs/agents/tooling.md](../agents/tooling.md) §Knowledge map · `.claude/skills/s1/spec-template.md`

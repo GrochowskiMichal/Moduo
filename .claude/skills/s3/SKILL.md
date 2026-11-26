@@ -1,6 +1,6 @@
 ---
 name: s3
-description: Stage 3 — Wrap. Use at the end of a session to land its work — the PR body with a short Test-this, commit, push the task branch, PR + merge into the personal branch, and a develop sync in batches (standing authorization). Never a release (the person types /ship for that). Lean mode, so only worthwhile decisions/gotchas are recorded. Names the next ready block IDs.
+description: Stage 3 — Wrap. Use at the end of a session to land its work — the PR body with a short Test-this, commit, push the task branch, PR + merge into the personal branch, and a develop sync in batches (standing authorization). Never a release (the person types /release for that). Lean mode, so only worthwhile decisions/gotchas are recorded. Names the next ready block IDs.
 effort: medium
 ---
 
@@ -9,7 +9,7 @@ effort: medium
 Close out the session so nothing is lost and the next one picks up cleanly. **The designer runs this at the end of almost every session; never make them retype the steps.**
 
 ## Rules that always hold
-- **Never push a release tag or run a prod workflow**: releasing is the person's `/ship`. Never push directly to `develop`; it changes only through PRs. The `guard-git.sh` hook blocks direct pushes.
+- **Never push a release tag or run a prod workflow**: releasing is the person's `/release`. Never push directly to `develop`; it changes only through PRs. The `guard-git.sh` hook blocks direct pushes.
 - **Merging into the personal branch (`mike`/`maciej`) is pre-authorized** (standing, 2026-06-27), with a merge commit, never a fast-forward.
 - **Merging personal → `develop` is pre-authorized, in batches** (standing, 2026-08-17): a finished feature, end of day, or when the other person needs it. Not after every block.
 - **The duplication guard gates every auto-merge.** If a competing open PR touches the same migration, DB object or block, stop and surface it.
@@ -17,7 +17,7 @@ Close out the session so nothing is lost and the next one picks up cleanly. **Th
 - Force-push only your own task branch, only with `--force-with-lease`.
 - **Moduo mirrors the hand-back** through the [moduo-agent](../moduo-agent/SKILL.md) skill (`tools/claude-plugins/moduo-agent/skills/moduo-agent/SKILL.md`), and skips quietly without the `moduo` connector or its key. Anything that needs the other founder goes as a comment on the block's Moduo task (`comments_add`, addressed to them), never as an instruction to their agent.
 
-Shipping to prod is not part of `/s3`: the person types `/ship` for that ([docs/release.md](../../../docs/release.md)).
+Shipping to prod is not part of `/s3`: the person types `/release` for that ([docs/release.md](../../../docs/release.md)).
 
 ## Steps
 1. **PR body.** Call `mattpocock-skills:pr` to write it. Include a Test-this of 3 to 5 steps (step → expected → surface), live-verified where you can, and any review finding from `/s2` left open with its reason. No separate checklist file.

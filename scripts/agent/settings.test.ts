@@ -64,9 +64,9 @@ describe("guards fail closed", () => {
   });
 });
 
-describe("/ship", () => {
+describe("/release", () => {
   it("can only be started by a person typing it", () => {
-    const frontmatter = read(".claude/skills/ship/SKILL.md").split("---")[1];
+    const frontmatter = read(".claude/skills/release/SKILL.md").split("---")[1];
     expect(frontmatter).toMatch(/^disable-model-invocation: true$/m);
   });
 });

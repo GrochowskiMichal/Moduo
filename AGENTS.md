@@ -15,7 +15,7 @@ What must hold every time lives in hooks, lint and CI. No `CLAUDE.md`, no folder
 5. Applied migrations are history: never edit one, add a new one.
 6. Always `getRuntime()`, never a bare `{ runtime }` import. redb is paused: nothing new depends on it.
 7. No new top-level routes and no IA refactors without the designer's explicit ask.
-8. ⛔ Production ships only from a `vX.Y.Z` tag cut by `/ship`. Never merge or close unrelated PRs.
+8. ⛔ Production ships only from a `vX.Y.Z` tag cut by `/release`. Never merge or close unrelated PRs.
 9. ⛔ Never commit `docs/local/`, never push `refs/entire/*`, never wipe local Entire data.
 10. Never read a teammate's private Moduo data through the admin or service-role connection.
 11. ⛔ Supabase writes ask first: migrations, SQL and function deploys.
@@ -59,7 +59,7 @@ Report once, at the end, short: **Status**, **Changed · Test this**, and
 - **Models, review tiers, CI:** [models-and-review.md](./docs/agents/models-and-review.md). Models are Anthropic only.
 - **Skills, subagents, hooks, routines, MCP, Entire, the context budget:** [tooling.md](./docs/agents/tooling.md).
   Setup per machine: [agent-setup.md](./docs/agent-setup.md).
-- **Git and PRs:** [CONTRIBUTING.md](./CONTRIBUTING.md). **Release** (`/ship` only): [release.md](./docs/release.md).
+- **Git and PRs:** [CONTRIBUTING.md](./CONTRIBUTING.md). **Release** (`/release` only): [release.md](./docs/release.md).
   **Local stack:** [local-dev.md](./docs/local-dev.md).
 - **Personal notes:** `docs/local/`. Read it if present.
 
