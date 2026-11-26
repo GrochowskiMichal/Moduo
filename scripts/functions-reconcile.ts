@@ -30,7 +30,6 @@
  * Usage: bun run functions:reconcile [--project-ref <ref>] [--fixture <file.json>]
  */
 
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -98,34 +97,37 @@ async function fromManagementApi(projectRef: string): Promise<unknown> {
 }
 
 function fromCli(projectRef: string): unknown {
-  const run = spawnSync(
-    "supabase",
-    ["functions", "list", "--project-ref", projectRef, "-o", "json"],
-    {
-      cwd: ROOT,
-      encoding: "utf8",
-      timeout: 60_000,
-      // Skips the CLI's update check: a network call this read doesn't need, and a write to
-      // supabase/.temp/cli-latest (untracked since #252, but still a write into the repo).
-      env: { ...process.env, SUPABASE_NO_UPDATE_NOTIFIER: "1" },
-    },
-  );
-  if (run.error) {
+  let run: ReturnType<typeof Bun.spawnSync>;
+  try {
+    run = Bun.spawnSync(
+      ["supabase", "functions", "list", "--project-ref", projectRef, "-o", "json"],
+      {
+        cwd: ROOT,
+        timeout: 60_000,
+        // Skips the CLI's update check: a network call this read doesn't need, and a write to
+        // supabase/.temp/cli-latest (untracked since #252, but still a write into the repo).
+        env: { ...process.env, SUPABASE_NO_UPDATE_NOTIFIER: "1" },
+      },
+    );
+  } catch (error) {
     cannotCheck(
-      (run.error as NodeJS.ErrnoException).code === "ENOENT"
+      (error as NodeJS.ErrnoException).code === "ENOENT"
         ? "SUPABASE_ACCESS_TOKEN is not set and the supabase CLI is not on PATH. Set the token, or install the CLI and run `supabase login`."
-        : `could not run the supabase CLI: ${run.error.message}`,
+        : `could not run the supabase CLI: ${errorText(error)}`,
     );
   }
-  if (run.status !== 0) {
-    const stderr = run.stderr.trim().split("\n").slice(-5).join("\n");
-    cannotCheck(`\`supabase functions list\` exited with ${run.status}:\n${stderr}`);
+  if (run.exitedDueToTimeout)
+    cannotCheck("could not run the supabase CLI: spawnSync supabase ETIMEDOUT");
+  const stdout = run.stdout?.toString() ?? "";
+  if (run.exitCode !== 0) {
+    const stderr = (run.stderr?.toString() ?? "").trim().split("\n").slice(-5).join("\n");
+    cannotCheck(`\`supabase functions list\` exited with ${run.exitCode}:\n${stderr}`);
   }
   try {
-    return JSON.parse(run.stdout);
+    return JSON.parse(stdout);
   } catch {
     cannotCheck(
-      `\`supabase functions list\` printed something other than JSON: ${run.stdout.slice(0, 200)}`,
+      `\`supabase functions list\` printed something other than JSON: ${stdout.slice(0, 200)}`,
     );
   }
 }
@@ -147,11 +149,16 @@ async function loadDeployed(
 
 /** What this branch has committed under supabase/functions/, so an uncommitted folder can't hide an orphan. */
 function committedFunctionPaths(): string[] {
-  const git = spawnSync("git", [...COMMITTED_FUNCTIONS_GIT_ARGS], { cwd: ROOT, encoding: "utf8" });
-  if (git.error || git.status !== 0) {
-    cannotCheck(`\`git ls-tree\` failed: ${git.error?.message ?? git.stderr.trim()}`);
+  let git: ReturnType<typeof Bun.spawnSync>;
+  try {
+    git = Bun.spawnSync(["git", ...COMMITTED_FUNCTIONS_GIT_ARGS], { cwd: ROOT });
+  } catch (error) {
+    cannotCheck(`\`git ls-tree\` failed: ${errorText(error)}`);
   }
-  return git.stdout.split("\0").filter(Boolean);
+  if (git.exitCode !== 0) {
+    cannotCheck(`\`git ls-tree\` failed: ${(git.stderr?.toString() ?? "").trim()}`);
+  }
+  return (git.stdout?.toString() ?? "").split("\0").filter(Boolean);
 }
 
 async function main(): Promise<void> {

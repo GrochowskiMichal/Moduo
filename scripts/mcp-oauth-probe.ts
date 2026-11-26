@@ -16,7 +16,6 @@
  * connection rows and their notices, the grant and the client.
  */
 
-import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -24,12 +23,11 @@ import { resolve } from "node:path";
 const ROOT = resolve(import.meta.dir, "..");
 
 // `supabase status` runs outside the repo: the CLI reads the repo's bunfig.toml.
-const status = spawnSync("supabase", ["status", "-o", "env", "--workdir", ROOT], {
+const status = Bun.spawnSync(["supabase", "status", "-o", "env", "--workdir", ROOT], {
   cwd: tmpdir(),
-  encoding: "utf8",
 });
 const env: Record<string, string> = {};
-for (const line of status.stdout.split("\n")) {
+for (const line of status.stdout.toString().split("\n")) {
   const m = /^([A-Z_]+)="?(.*?)"?$/.exec(line.trim());
   if (m) env[m[1]] = m[2];
 }

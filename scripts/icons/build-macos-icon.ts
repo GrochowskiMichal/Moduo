@@ -11,7 +11,6 @@
  *   bun scripts/icons/build-macos-icon.ts
  */
 
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -37,7 +36,7 @@ function write(path: string, buf: Buffer): void {
 
 const workDir = mkdtempSync(join(tmpdir(), "moduo-icon-"));
 const iconsetDir = join(workDir, "icon.iconset");
-spawnSync("mkdir", ["-p", iconsetDir]);
+Bun.spawnSync(["mkdir", "-p", iconsetDir]);
 
 console.log("rendering iconset PNGs");
 
@@ -60,10 +59,10 @@ for (const { name, px } of entries) {
 }
 
 console.log("packaging icon.icns");
-const pack = spawnSync("iconutil", ["-c", "icns", iconsetDir, "-o", icnsOut], {
-  stdio: "inherit",
+const pack = Bun.spawnSync(["iconutil", "-c", "icns", iconsetDir, "-o", icnsOut], {
+  stdio: ["inherit", "inherit", "inherit"],
 });
-if (pack.status !== 0) {
+if (pack.exitCode !== 0) {
   console.error("iconutil failed");
   process.exit(1);
 }

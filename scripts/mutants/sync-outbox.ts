@@ -18,7 +18,6 @@
  * `prefs-sync.ts`, `task-rows.ts` or `features/tasks/write-plan.ts` while it runs.
  */
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -280,9 +279,9 @@ function apply(m: Mutant): void {
 
 function harness(): { killed: boolean; ms: number; why: string } {
   const started = Date.now();
-  const res = spawnSync(
-    "bun",
+  const res = Bun.spawnSync(
     [
+      "bun",
       "x",
       "rstest",
       "run",
@@ -291,15 +290,14 @@ function harness(): { killed: boolean; ms: number; why: string } {
     ],
     {
       cwd: path.join(root, "apps/app"),
-      encoding: "utf8",
       env: { ...process.env, CI: "1" },
     },
   );
   const out = `${res.stdout}\n${res.stderr}`;
   const why =
     out.match(/Got (?:AssertionError|error|Error): ([^\n\\]*)/)?.[1]?.slice(0, 110) ??
-    (res.status === 0 ? "" : "failed");
-  return { killed: res.status !== 0, ms: Date.now() - started, why };
+    (res.exitCode === 0 ? "" : "failed");
+  return { killed: res.exitCode !== 0, ms: Date.now() - started, why };
 }
 
 function main() {

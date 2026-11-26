@@ -24,7 +24,6 @@
  * Run with bun (extensionless imports, like numbers.ts).
  */
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
@@ -196,7 +195,9 @@ export function pickSeed(escapes: readonly Escape[], now: Date): Escape | null {
 }
 
 function git(args: string[]): string {
-  return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 64 << 20 });
+  const r = Bun.spawnSync(["git", ...args], { cwd: ROOT });
+  if (!r.success) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`);
+  return r.stdout.toString();
 }
 
 export function listEscapes(root = ROOT): Escape[] {

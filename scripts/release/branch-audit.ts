@@ -14,7 +14,6 @@
 //             deleted only on a yes)
 //   merged    fully merged into develop and no open PR uses it as head or base: safe as a group
 //   unmerged  everything else, with its last commit date, author, commits ahead and any open PR
-import { spawnSync } from "node:child_process";
 
 export const KEPT = ["develop", "mike", "maciej"] as const;
 export const MIRRORS = [
@@ -92,9 +91,10 @@ export function renderText(rows: AuditRow[], base: string): string {
 }
 
 function sh(cmd: string, args: string[]): string {
-  const run = spawnSync(cmd, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  if (run.status !== 0) throw new Error(`${cmd} ${args.join(" ")} failed: ${run.stderr.trim()}`);
-  return run.stdout;
+  const run = Bun.spawnSync([cmd, ...args], { maxBuffer: 64 * 1024 * 1024 });
+  if (run.exitCode !== 0)
+    throw new Error(`${cmd} ${args.join(" ")} failed: ${run.stderr.toString().trim()}`);
+  return run.stdout.toString();
 }
 
 function readBranches(base: string): RemoteBranch[] {

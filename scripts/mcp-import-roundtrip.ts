@@ -25,7 +25,6 @@
  * (docs/testing/t-maciej-tv-d16-mcp.md).
  */
 
-import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 const URL_ = process.env.MODUO_MCP_URL ?? "http://127.0.0.1:54321/functions/v1/moduo-mcp";
@@ -42,11 +41,20 @@ if (
 type Json = Record<string, any>;
 
 function sql(text: string): string {
-  const run = spawnSync("psql", [DB_URL, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1", "-c", text], {
-    encoding: "utf8",
-  });
-  if (run.status !== 0) throw new Error(`psql: ${run.stderr || run.stdout}`);
-  return run.stdout.trim();
+  const run = Bun.spawnSync([
+    "psql",
+    DB_URL,
+    "-X",
+    "-q",
+    "-At",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    text,
+  ]);
+  const stdout = run.stdout.toString();
+  if (run.exitCode !== 0) throw new Error(`psql: ${run.stderr.toString() || stdout}`);
+  return stdout.trim();
 }
 const lit = (v: string) => `'${v.replace(/'/g, "''")}'`;
 

@@ -30,7 +30,6 @@
  *      `bun scripts/agent/risk-hook.ts --summary` prints the log's counts.
  */
 
-import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -310,39 +309,40 @@ export function parseVerdict(text: string): Verdict | null {
 /** Asks Haiku through the person's own `claude` (their Max login), with no tools and no project hooks. */
 export function askHaiku(prompt: string): string {
   const bin = process.env.MODUO_RISK_HOOK_CLAUDE || "claude";
-  const run = spawnSync(
-    bin,
-    [
-      "-p",
-      "--model",
-      MODEL,
-      "--tools",
-      "",
-      "--setting-sources",
-      "user",
-      "--settings",
-      '{"disableAllHooks":true}',
-      "--strict-mcp-config",
-      "--no-session-persistence",
-      "--output-format",
-      "text",
-    ],
-    {
-      input: prompt,
-      encoding: "utf8",
-      timeout: TIMEOUT_MS,
-      // Outside the repo and without auto-memory, so the reviewer sees only the call,
-      // never project memory or personal notes (which would also leak into `reason`).
-      cwd: tmpdir(),
-      env: { ...process.env, MODUO_RISK_HOOK_CHILD: "1", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" },
-    },
-  );
-  if (run.error)
-    throw new Error(
-      `claude did not run: ${(run.error as NodeJS.ErrnoException).code ?? run.error.message}`,
+  let run: ReturnType<typeof Bun.spawnSync>;
+  try {
+    run = Bun.spawnSync(
+      [
+        bin,
+        "-p",
+        "--model",
+        MODEL,
+        "--tools",
+        "",
+        "--setting-sources",
+        "user",
+        "--settings",
+        '{"disableAllHooks":true}',
+        "--strict-mcp-config",
+        "--no-session-persistence",
+        "--output-format",
+        "text",
+      ],
+      {
+        stdin: Buffer.from(prompt),
+        timeout: TIMEOUT_MS,
+        // Outside the repo and without auto-memory, so the reviewer sees only the call,
+        // never project memory or personal notes (which would also leak into `reason`).
+        cwd: tmpdir(),
+        env: { ...process.env, MODUO_RISK_HOOK_CHILD: "1", CLAUDE_CODE_DISABLE_AUTO_MEMORY: "1" },
+      },
     );
-  if (run.status !== 0) throw new Error(`claude exited ${run.status ?? run.signal}`);
-  return run.stdout;
+  } catch (error) {
+    const err = error as NodeJS.ErrnoException;
+    throw new Error(`claude did not run: ${err.code ?? err.message}`);
+  }
+  if (run.exitCode !== 0) throw new Error(`claude exited ${run.exitCode ?? run.signalCode}`);
+  return run.stdout?.toString() ?? "";
 }
 
 // ── the log ────────────────────────────────────────────────────────────────────
@@ -350,12 +350,15 @@ export function askHaiku(prompt: string): string {
 /** The log file, or null outside a git repo (then nothing is logged rather than a stray `.git/`). */
 export function defaultLogPath(cwd = process.cwd()): string | null {
   if (process.env.MODUO_RISK_LOG) return process.env.MODUO_RISK_LOG;
-  const git = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-    cwd: process.env.CLAUDE_PROJECT_DIR || cwd,
-    encoding: "utf8",
-  });
-  if (git.status !== 0 || !git.stdout.trim()) return null;
-  return path.join(git.stdout.trim(), "moduo", "risk-decisions.jsonl");
+  let out = "";
+  try {
+    const git = Bun.spawnSync(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], {
+      cwd: process.env.CLAUDE_PROJECT_DIR || cwd,
+    });
+    if (git.exitCode === 0) out = git.stdout.toString().trim();
+  } catch {}
+  if (!out) return null;
+  return path.join(out, "moduo", "risk-decisions.jsonl");
 }
 
 export function appendDecision(file: string, row: RiskDecision): void {

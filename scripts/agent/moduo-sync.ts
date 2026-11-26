@@ -21,7 +21,6 @@
 // MODUO_MCP_URL (default https://mcp.moduo.app), GITHUB_TOKEN + GITHUB_REPOSITORY
 // (the open-PR lookup for a closed PR). Erasable TypeScript only: node and bun run it.
 
-import { execFileSync } from "node:child_process";
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -125,10 +124,20 @@ export function planRelease(tag: string, ids: readonly string[]): Move[] {
 
 const RELEASE_TAG = /^v\d+\.\d+\.\d+$/;
 
+function gitTagsAt(sha: string): string {
+  const r = Bun.spawnSync(["git", "tag", "--points-at", sha, "--list", "v*", "--sort=-v:refname"]);
+  if (!r.success) throw new Error(`git tag --points-at ${sha} failed: ${r.stderr.toString()}`);
+  return r.stdout.toString();
+}
+
 /** The commit messages between the previous v* tag and `tag` (all history for the first one). */
 export function releaseLog(tag: string, cwd?: string): string {
   if (!RELEASE_TAG.test(tag)) throw new Error(`Not a release tag: ${tag}`);
-  const git = (...args: string[]) => execFileSync("git", args, { cwd, encoding: "utf8" });
+  const git = (...args: string[]) => {
+    const r = Bun.spawnSync(["git", ...args], { cwd });
+    if (!r.success) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`);
+    return r.stdout.toString();
+  };
   let range = tag;
   try {
     const prev = git("describe", "--tags", "--abbrev=0", "--match", "v*", `${tag}^`).trim();
@@ -367,12 +376,7 @@ async function main(argv: string[]): Promise<void> {
     openPrs: () =>
       githubOpenPrs(process.env.GITHUB_REPOSITORY ?? "", process.env.GITHUB_TOKEN ?? ""),
     log: (tag) => releaseLog(tag),
-    tagsAt: (sha) =>
-      execFileSync("git", ["tag", "--points-at", sha, "--list", "v*", "--sort=-v:refname"], {
-        encoding: "utf8",
-      })
-        .split("\n")
-        .filter(Boolean),
+    tagsAt: (sha) => gitTagsAt(sha).split("\n").filter(Boolean),
   });
   // For the workflow's plan job: the apply job (the one with the key) runs only when there is a move.
   if (process.env.GITHUB_OUTPUT)

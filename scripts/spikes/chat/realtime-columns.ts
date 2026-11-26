@@ -11,14 +11,23 @@
 // removed at the end.
 //
 //   bun scripts/spikes/chat/realtime-columns.ts
-import { execFileSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+const run = (cmd: string[], opts: Parameters<typeof Bun.spawnSync>[1] = {}) => {
+  const r = Bun.spawnSync(cmd, opts);
+  if (!r.success)
+    throw Object.assign(
+      new Error(`Command failed: ${cmd.join(" ")}\n${r.stderr?.toString() ?? ""}`),
+      { stdout: r.stdout?.toString(), stderr: r.stderr?.toString() },
+    );
+  return r.stdout.toString();
+};
+const psqlSync = (args: string[], input: string) =>
+  run(["psql", ...args], { stdin: Buffer.from(input) });
 const status = JSON.parse(
-  execFileSync("supabase", ["status", "-o", "json"], {
-    encoding: "utf8",
+  run(["supabase", "status", "-o", "json"], {
     stdio: ["ignore", "pipe", "ignore"],
     env: { ...process.env, DOCKER_CONTEXT: process.env.DOCKER_CONTEXT ?? "orbstack" },
   }),
@@ -28,10 +37,7 @@ if (!API?.startsWith("http://127.0.0.1:")) throw new Error(`Local stack only; go
 const ANON = status.PUBLISHABLE_KEY ?? status.ANON_KEY;
 const DB = "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
 const psql = (sql: string) =>
-  execFileSync("psql", [DB, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], {
-    input: sql,
-    encoding: "utf8",
-  }).trim();
+  psqlSync([DB, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], sql).trim();
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString("base64url");
 const mint = (sub: string) => {
   const t = Math.floor(Date.now() / 1000);

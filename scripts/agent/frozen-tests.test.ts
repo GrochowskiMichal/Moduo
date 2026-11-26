@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -67,7 +66,7 @@ describe("test edits denied during implement", () => {
 });
 
 describe("scripts/agent/lane.sh --implement", () => {
-  const jq = spawnSync("sh", ["-c", "command -v jq"], { encoding: "utf8" }).stdout.trim();
+  const jq = Bun.spawnSync(["sh", "-c", "command -v jq"]).stdout.toString().trim();
   let bin: string;
   beforeEach(() => {
     bin = mkdtempSync(path.join(tmpdir(), "lane-bin-"));
@@ -82,12 +81,11 @@ describe("scripts/agent/lane.sh --implement", () => {
   });
   afterEach(() => rmSync(bin, { recursive: true, force: true }));
   const lane = (...args: string[]) => {
-    const run = spawnSync("bash", [path.join(ROOT, "scripts/agent/lane.sh"), ...args], {
+    const run = Bun.spawnSync(["bash", path.join(ROOT, "scripts/agent/lane.sh"), ...args], {
       cwd: ROOT,
-      encoding: "utf8",
       env: { HOME: process.env.HOME ?? "/tmp", PATH: `${bin}:${path.dirname(jq)}:/usr/bin:/bin` },
     });
-    expect(run.status).toBe(0);
+    expect(run.exitCode).toBe(0);
     const [profile, settings] = readFileSync(path.join(bin, "srt.out"), "utf8").split("\n---\n");
     return { profile: JSON.parse(profile), settings: JSON.parse(settings) };
   };
@@ -117,7 +115,7 @@ describe("scripts/agent/lane.sh --implement", () => {
 });
 
 // The real sandbox, on a scratch tree: srt applies write globs on macOS only (lanes run on the Mac).
-const haveSrt = spawnSync("sh", ["-c", "command -v srt"]).status === 0;
+const haveSrt = Bun.spawnSync(["sh", "-c", "command -v srt"]).exitCode === 0;
 describe.skipIf(process.platform !== "darwin" || !haveSrt)("srt with the implement profile", () => {
   it("blocks shell writes to tests and allows them to code", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "frozen-"));
@@ -135,11 +133,12 @@ describe.skipIf(process.platform !== "darwin" || !haveSrt)("srt with the impleme
         },
       };
       writeFileSync(path.join(dir, "profile.json"), JSON.stringify(profile));
-      const sh = (cmd: string) =>
-        spawnSync("srt", ["--settings", path.join(dir, "profile.json"), "-c", cmd], {
+      const sh = (cmd: string) => {
+        const r = Bun.spawnSync(["srt", "--settings", path.join(dir, "profile.json"), "-c", cmd], {
           cwd: dir,
-          encoding: "utf8",
         });
+        return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+      };
       for (const cmd of [
         "echo x >> src/a.test.ts",
         "sed -i '' s/keep/gone/ src/a.test.ts",

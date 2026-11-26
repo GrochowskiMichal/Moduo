@@ -2,7 +2,6 @@
 // the eval stack's DB only), and a plain JSON-RPC client for the connector, used to seed each task,
 // to run its reference solution and to read back the result for the oracle.
 
-import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { RefusedError, refuseMcpTarget } from "../safety";
@@ -36,11 +35,9 @@ export const EVAL_SCOPES = {
 function psql(dbUrl: string, query: string): string {
   if (!/@127\.0\.0\.1:(\d+)\//.test(dbUrl) || /:5432\d\//.test(dbUrl))
     throw new RefusedError([{ where: "mcp-eval db", reason: `${dbUrl} is not the eval stack's` }]);
-  const r = spawnSync("psql", [dbUrl, "-v", "ON_ERROR_STOP=1", "-qtAX", "-c", query], {
-    encoding: "utf8",
-  });
-  if (r.status !== 0) throw new Error(`psql: ${r.stderr.trim()}`);
-  return r.stdout.trim();
+  const r = Bun.spawnSync(["psql", dbUrl, "-v", "ON_ERROR_STOP=1", "-qtAX", "-c", query]);
+  if (r.exitCode !== 0) throw new Error(`psql: ${r.stderr.toString().trim()}`);
+  return r.stdout.toString().trim();
 }
 
 export const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;

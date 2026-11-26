@@ -5,19 +5,16 @@
  * checkpoint's metadata.json is read, never a transcript or prompt.
  */
 
-import { execFileSync, spawnSync } from "node:child_process";
-
 import type { Facts, Pr, Ratchet, Run, Session, Window } from "./numbers";
 
 const DAY = 86_400_000;
 const SHARED = ["develop", "mike", "maciej"] as const;
 
 function sh(cmd: string, args: readonly string[]): string {
-  return execFileSync(cmd, args, {
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  const r = Bun.spawnSync([cmd, ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  if (!r.success)
+    throw new Error(`Command failed: ${cmd} ${args.join(" ")}\n${r.stderr.toString()}`);
+  return r.stdout.toString();
 }
 
 function lines(out: string): string[] {
@@ -244,11 +241,10 @@ export function knowledgeBytes(rev: string | null): number {
 /** `git cat-file --batch` over many `<ref>:<path>` names; missing ones come back undefined. */
 export function catFiles(names: readonly string[]): (string | undefined)[] {
   if (names.length === 0) return [];
-  const res = spawnSync("git", ["cat-file", "--batch"], {
-    input: names.join("\n") + "\n",
-    maxBuffer: 1024 * 1024 * 1024,
+  const res = Bun.spawnSync(["git", "cat-file", "--batch"], {
+    stdin: Buffer.from(names.join("\n") + "\n"),
   });
-  if (res.status !== 0) throw new Error(`git cat-file: ${res.stderr.toString().slice(0, 200)}`);
+  if (res.exitCode !== 0) throw new Error(`git cat-file: ${res.stderr.toString().slice(0, 200)}`);
   return parseBatch(res.stdout, names.length);
 }
 

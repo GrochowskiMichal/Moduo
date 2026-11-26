@@ -17,7 +17,6 @@
 // The base is --base, else $MODUO_OWNER, else the owner in the current branch
 // (t/<owner>/… or the personal branch itself).
 
-import { spawnSync } from "node:child_process";
 import {
   copyFileSync,
   existsSync,
@@ -148,8 +147,8 @@ export function launchConfigFor(port: number, existing?: string): string {
 
 type Run = { ok: boolean; out: string; err: string };
 function git(cwd: string, ...args: string[]): Run {
-  const r = spawnSync("git", args, { cwd, encoding: "utf8" });
-  return { ok: r.status === 0, out: (r.stdout ?? "").trim(), err: (r.stderr ?? "").trim() };
+  const r = Bun.spawnSync(["git", ...args], { cwd });
+  return { ok: r.exitCode === 0, out: r.stdout.toString().trim(), err: r.stderr.toString().trim() };
 }
 function must(r: Run, what: string): string {
   if (!r.ok) throw new Error(`${what}: ${r.err || r.out}`);
@@ -218,12 +217,13 @@ export function createWorktree(o: CreateOpts): { path: string; branch: string; p
   if (o.install !== false) {
     const t = Date.now();
     // Bun's global cache makes this a link step on a warm machine.
-    const r = spawnSync("bun", ["install", "--frozen-lockfile", "--prefer-offline"], {
+    const r = Bun.spawnSync(["bun", "install", "--frozen-lockfile", "--prefer-offline"], {
       cwd: dir,
-      encoding: "utf8",
     });
-    if (r.status !== 0)
-      throw new Error(`bun install failed:\n${(r.stderr || r.stdout).slice(-2000)}`);
+    if (r.exitCode !== 0)
+      throw new Error(
+        `bun install failed:\n${(r.stderr.toString() || r.stdout.toString()).slice(-2000)}`,
+      );
     log(`bun install ${((Date.now() - t) / 1000).toFixed(1)}s`);
   }
   return { path: dir, branch, port };
@@ -232,24 +232,32 @@ export function createWorktree(o: CreateOpts): { path: string; branch: string; p
 export type MergedPr = { headRefName: string; headRefOid: string };
 
 export function mergedPrsFromGh(cwd: string): MergedPr[] {
-  const r = spawnSync(
-    "gh",
-    ["pr", "list", "--state", "merged", "--limit", "1000", "--json", "headRefName,headRefOid"],
-    { cwd, encoding: "utf8" },
+  const r = Bun.spawnSync(
+    [
+      "gh",
+      "pr",
+      "list",
+      "--state",
+      "merged",
+      "--limit",
+      "1000",
+      "--json",
+      "headRefName,headRefOid",
+    ],
+    { cwd },
   );
-  if (r.status !== 0) throw new Error(`gh pr list failed (is gh signed in?): ${r.stderr.trim()}`);
-  return JSON.parse(r.stdout) as MergedPr[];
+  if (r.exitCode !== 0)
+    throw new Error(`gh pr list failed (is gh signed in?): ${r.stderr.toString().trim()}`);
+  return JSON.parse(r.stdout.toString()) as MergedPr[];
 }
 
 /** Every running process's working directory this user can see (macOS and Linux `lsof`). */
 export function busyPathsFromLsof(): string[] {
-  const r = spawnSync("lsof", ["-a", "-d", "cwd", "-Fn"], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const r = Bun.spawnSync(["lsof", "-a", "-d", "cwd", "-Fn"]);
+  const out = r.stdout?.toString() ?? "";
   // lsof exits 1 when some processes can't be read; the rest of its output still holds.
-  if (!r.stdout) throw new Error("lsof listed no processes; refusing to prune blind");
-  return r.stdout
+  if (!out) throw new Error("lsof listed no processes; refusing to prune blind");
+  return out
     .split("\n")
     .filter((l) => l.startsWith("n/"))
     .map((l) => l.slice(1));

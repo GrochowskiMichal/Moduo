@@ -21,7 +21,6 @@
  * In GitHub Actions each finding is also printed as a workflow annotation.
  */
 
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export type FindingKind = "deleted-assertions" | "skip" | "only" | "sync-mock";
@@ -176,22 +175,24 @@ function gitDiff(argv: string[]): string {
     target = [range];
   } else {
     const base = argv.find((a) => !a.startsWith("--")) ?? "origin/develop";
-    target = [execFileSync("git", ["merge-base", base, "HEAD"], { encoding: "utf8" }).trim()];
+    target = [git(["merge-base", base, "HEAD"]).trim()];
   }
-  return execFileSync(
-    "git",
-    [
-      "-c",
-      "core.quotePath=false",
-      "diff",
-      "--no-color",
-      "--no-ext-diff",
-      "-M",
-      "--unified=0",
-      ...target,
-    ],
-    { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 },
-  );
+  return git([
+    "-c",
+    "core.quotePath=false",
+    "diff",
+    "--no-color",
+    "--no-ext-diff",
+    "-M",
+    "--unified=0",
+    ...target,
+  ]);
+}
+
+function git(args: string[]): string {
+  const r = Bun.spawnSync(["git", ...args]);
+  if (!r.success) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`);
+  return r.stdout.toString();
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

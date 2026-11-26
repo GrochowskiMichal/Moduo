@@ -24,7 +24,6 @@
 // 200 connections, 100 events/s, 100 joins/s, 100 channels per client), so
 // what trips here is what would trip on Free. Run it with nothing else using
 // the local stack's Realtime: other sockets count against the same caps.
-import { execFileSync } from "node:child_process";
 import { createHmac, randomUUID } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,9 +56,19 @@ const TEAMS = Number(opt("teams", "25")); // hackathon: workspaces of 4
 
 // ── the local stack ─────────────────────────────────────────────────────────
 const ENV = { ...process.env, DOCKER_CONTEXT: process.env.DOCKER_CONTEXT ?? "orbstack" };
+const runSync = (cmd: string[], opts: Parameters<typeof Bun.spawnSync>[1] = {}) => {
+  const r = Bun.spawnSync(cmd, opts);
+  if (!r.success)
+    throw Object.assign(
+      new Error(`Command failed: ${cmd.join(" ")}\n${r.stderr?.toString() ?? ""}`),
+      { stdout: r.stdout?.toString(), stderr: r.stderr?.toString() },
+    );
+  return r.stdout.toString();
+};
+const psqlSync = (args: string[], input: string) =>
+  runSync(["psql", ...args], { stdin: Buffer.from(input) });
 const status = JSON.parse(
-  execFileSync("supabase", ["status", "-o", "json"], {
-    encoding: "utf8",
+  runSync(["supabase", "status", "-o", "json"], {
     stdio: ["ignore", "pipe", "ignore"],
     env: ENV,
   }),
@@ -71,10 +80,7 @@ const SERVICE = status.SECRET_KEY ?? status.SERVICE_ROLE_KEY;
 const JWT_SECRET = status.JWT_SECRET;
 const DB = "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
 const psql = (sql: string) =>
-  execFileSync("psql", [DB, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], {
-    input: sql,
-    encoding: "utf8",
-  }).trim();
+  psqlSync([DB, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], sql).trim();
 const admin = createClient(API, SERVICE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
@@ -519,13 +525,9 @@ const pgDelta = (a: ReturnType<typeof pgStat>, b: ReturnType<typeof pgStat>) =>
 
 function realtimeLog(sinceIso: string): string[] {
   try {
-    const out = execFileSync(
-      "docker",
-      ["--context", "orbstack", "logs", "--since", sinceIso, "supabase_realtime_moduo"],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
+    const out = runSync(
+      ["docker", "--context", "orbstack", "logs", "--since", sinceIso, "supabase_realtime_moduo"],
+      { stdio: ["ignore", "pipe", "pipe"] },
     );
     return out.split("\n");
   } catch (e) {
@@ -768,9 +770,7 @@ function latencyFor(
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
-const before = execFileSync("psql", [DB, "-X", "-At", "-f", join(HERE, "row-counts.sql")], {
-  encoding: "utf8",
-});
+const before = runSync(["psql", DB, "-X", "-At", "-f", join(HERE, "row-counts.sql")]);
 const startedIso = new Date().toISOString();
 let browser: import("playwright-core").Browser | null = null;
 const browsers: Br[] = [];
@@ -1569,9 +1569,7 @@ try {
       'auth.audit_log_entries', (select count(*) from auth.audit_log_entries where payload::text like '%${RUN}-%'));`);
     log("this run's leftovers", results.leftovers);
   }
-  const after = execFileSync("psql", [DB, "-X", "-At", "-f", join(HERE, "row-counts.sql")], {
-    encoding: "utf8",
-  });
+  const after = runSync(["psql", DB, "-X", "-At", "-f", join(HERE, "row-counts.sql")]);
   const b0 = new Map(
     before
       .trim()

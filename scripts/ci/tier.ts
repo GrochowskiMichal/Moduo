@@ -20,7 +20,6 @@
  * Add `--json` for `{ tier, matches }`.
  */
 
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export type Tier = 0 | 1 | 2;
@@ -136,7 +135,10 @@ export function classify(paths: readonly string[]): TierResult {
 }
 
 function git(args: string[]): string[] {
-  return execFileSync("git", args, { encoding: "utf8" })
+  const r = Bun.spawnSync(["git", ...args]);
+  if (!r.success) throw new Error(`git ${args.join(" ")} failed: ${r.stderr.toString()}`);
+  return r.stdout
+    .toString()
     .split("\n")
     .map((l) => l.trim())
     .filter(Boolean);

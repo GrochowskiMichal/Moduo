@@ -14,7 +14,6 @@
 //   bun run db:test                 every test
 //   bun run db:test tasks_ops       just supabase/tests/tasks_ops.test.sql
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -104,9 +103,10 @@ function main() {
   let failed = 0;
   let knownCount = 0;
   for (const file of files) {
-    const run = spawnSync(
-      "psql",
-      [
+    let run: ReturnType<typeof Bun.spawnSync>;
+    try {
+      run = Bun.spawnSync([
+        "psql",
         DB_URL,
         "-X",
         "-q",
@@ -118,20 +118,20 @@ function main() {
         join(DIR, file),
         "-f",
         join(DIR, "_finish.sql"),
-      ],
-      { encoding: "utf8" },
-    );
-    if (run.error) {
-      console.error(`psql couldn't run (${run.error.message}). Install it: brew install libpq.`);
+      ]);
+    } catch (error) {
+      console.error(
+        `psql couldn't run (${(error as Error).message}). Install it: brew install libpq.`,
+      );
       process.exit(1);
     }
     const output = `${run.stdout}\n${run.stderr}`;
     const lines = output.split("\n");
     const passes = lines.filter((l) => /NOTICE: {2}PASS: (?!all)/.test(l)).length;
-    const verdict = judge(run.status === 0 ? [] : failuresOf(output), knownAll.get(file) ?? []);
+    const verdict = judge(run.exitCode === 0 ? [] : failuresOf(output), knownAll.get(file) ?? []);
     // A non-zero exit with nothing to name (a crash, a test with no checks) is a failure too.
-    const unexplained = run.status !== 0 && verdict.unknown.length + verdict.known.length === 0;
-    if (run.status === 0 && verdict.stale.length === 0) {
+    const unexplained = run.exitCode !== 0 && verdict.unknown.length + verdict.known.length === 0;
+    if (run.exitCode === 0 && verdict.stale.length === 0) {
       console.log(`✓ ${file} — ${passes} checks`);
       continue;
     }
