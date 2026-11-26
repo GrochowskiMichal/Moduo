@@ -107,6 +107,14 @@ on:
         required: false
         type: string
         default: ""
+      wait_for_web:
+        description: >-
+          release.yml builds desktop alongside its web job: publish waits for this run's web jobs
+          ("web / app" and "web / landing") and publishes nothing unless both succeeded, and
+          mac-watchdog lets web finish before it cancels a run whose Mac never started.
+        required: false
+        type: boolean
+        default: false
     outputs:
       published:
         description: "true once the update server offers this build (a failed Windows build still turns the run red)"
@@ -276,13 +284,15 @@ jobs:
     needs: [version, pick-runner]
     if: needs.pick-runner.outputs.self_hosted == 'true' && github.run_attempt == '1'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    # 6 for the Mac, plus up to 40 for web to finish first when wait_for_web.
+    timeout-minutes: 50
     permissions:
       actions: write
     steps:
       - name: Wait for moduo-mac to start build-mac
         env:
           GH_TOKEN: ${{ github.token }}
+          WAIT_FOR_WEB: ${{ inputs.wait_for_web }}
         run: |
           for _ in $(seq 1 36); do
             status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$GITHUB_RUN_ATTEMPT/jobs?per_page=100" \
@@ -292,6 +302,17 @@ jobs:
             esac
             sleep 10
           done
+          # Built alongside web (wait_for_web): cancelling the run now would cancel the web canary too,
+          # so let web finish first; desktop then simply fails and a re-run builds on GitHub's Mac.
+          if [ "$WAIT_FOR_WEB" = true ]; then
+            for _ in $(seq 1 120); do
+              web="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
+                --jq '[.jobs[] | select(.name | startswith("web / ")) | .status]' || echo '[]')"
+              if jq -e 'length >= 2 and all(.[]; . == "completed")' <<< "$web" > /dev/null; then break; fi
+              echo "moduo-mac hasn't started build-mac; waiting for web to finish before cancelling."
+              sleep 20
+            done
+          fi
           echo "::error::moduo-mac didn't start build-mac within 6 minutes (asleep or busy). Cancelling; use Re-run failed jobs and it builds on GitHub's Mac (on a release run, Re-run all jobs would deploy web again)."
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY"
           exit 1
@@ -822,7 +843,12 @@ jobs:
       needs.build-mac.result == 'success' &&
       (needs.notarize-mac.result == 'success' || needs.notarize-mac.result == 'skipped')
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 to publish, plus up to 40 waiting for web when wait_for_web (its canary soak).
+    timeout-minutes: 55
+    # actions: read lists this run's web jobs (wait_for_web); callers grant actions: write.
+    permissions:
+      contents: read
+      actions: read
     # Only develop, mike and v* tags may use this environment.
     environment: cloudflare-deploy
     outputs:
@@ -834,6 +860,34 @@ jobs:
       MODUO_BUILD: ${{ needs.version.outputs.build }}
 
     steps:
+      # Nothing is offered to installed apps before the web release it belongs to went out: a canary
+      # that rolls back fails a web job, and this step then fails publish (desktop built, not shipped).
+      - name: Wait for the web release
+        if: inputs.wait_for_web
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          deadline=$(( $(date +%s) + 40 * 60 ))
+          while :; do
+            # filter=latest: each job's newest attempt, so "Re-run failed jobs" sees a web job that passed before.
+            web="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=latest&per_page=100" \
+              --jq '[.jobs[] | select(.name | startswith("web / ")) | {name, status, conclusion}]')"
+            # Both jobs: GitHub creates web / landing only once web / app has finished.
+            if jq -e 'any(.[]; .name == "web / app") and any(.[]; .name == "web / landing") and all(.[]; .status == "completed")' <<< "$web" > /dev/null; then
+              if jq -e 'all(.[]; .conclusion == "success")' <<< "$web" > /dev/null; then
+                echo "Web shipped ($(jq -r 'map(.name) | join(", ")' <<< "$web")); publishing desktop."
+                break
+              fi
+              echo "::error::Web did not ship ($(jq -r 'map("\(.name): \(.conclusion)") | join(", ")' <<< "$web")); desktop is not published."
+              exit 1
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Web hasn't finished after 40 minutes; desktop is not published. Re-run failed jobs once web is done."
+              exit 1
+            fi
+            sleep 20
+          done
+
       - name: Checkout CI scripts
         uses: actions/checkout@v7
         with:
