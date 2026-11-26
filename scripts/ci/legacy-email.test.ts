@@ -1,7 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 // AC39 "no legacy email engine paths" (specs/mail-rebuild.md decision 24, MR-16).
 // LEGACY lists every path of the old mail engine and UI. PENDING_REMOVAL was the

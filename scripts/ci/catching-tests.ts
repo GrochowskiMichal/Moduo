@@ -35,18 +35,24 @@ export interface Proposal {
 
 export interface Suite {
   name: "app" | "backend" | "scripts";
-  /** Directory rstest runs from, relative to the repo root. */
+  /** rstest for the app and backend suites; `bun test` for scripts/. */
+  runner: "rstest" | "bun";
+  /** Directory the runner starts in, relative to the repo root. */
   cwd: string;
-  /** Extra rstest arguments before the file filter. */
+  /** Extra runner arguments before the file filter. */
   args: string[];
 }
 
 /** Where a proposed test file runs, from its path; null if no suite can collect it. */
 export function suiteFor(file: string): Suite | null {
-  if (file.startsWith("apps/app/")) return { name: "app", cwd: "apps/app", args: [] };
-  if (file.startsWith("supabase/")) return { name: "backend", cwd: "supabase", args: [] };
+  if (file.startsWith("apps/app/")) {
+    return { name: "app", runner: "rstest", cwd: "apps/app", args: [] };
+  }
+  if (file.startsWith("supabase/")) {
+    return { name: "backend", runner: "rstest", cwd: "supabase", args: [] };
+  }
   if (file.startsWith("scripts/")) {
-    return { name: "scripts", cwd: ".", args: ["-c", "scripts/rstest.config.ts"] };
+    return { name: "scripts", runner: "bun", cwd: ".", args: ["--timeout=30000"] };
   }
   return null;
 }
@@ -110,6 +116,27 @@ export function parseRun(exitCode: number | null, stdout: string, timedOut = fal
   const message = failed
     ? `${failed.fullName ?? ""}: ${failed.errors?.[0]?.message ?? "failed"}`
     : (fileError?.message ?? (summary.tests ? `exit ${exitCode}` : "the file has no tests"));
+  return { status: "fail", message: message.trim().slice(0, MAX_MESSAGE) };
+}
+
+/** One `bun test` run's outcome from its exit code and its summary lines (it has no JSON reporter). */
+export function parseBunRun(exitCode: number | null, output: string, timedOut = false): RunResult {
+  if (timedOut) return { status: "error", message: "timed out" };
+  const count = (re: RegExp) => Number(output.match(re)?.[1] ?? 0);
+  const files = count(/across (\d+) files?/);
+  if (!files) {
+    return /had no matches|No tests found/i.test(output)
+      ? { status: "not-collected", message: "no suite collected it" }
+      : { status: "error", message: `no bun test summary (exit ${exitCode})` };
+  }
+  const passed = count(/^\s*(\d+) pass/m);
+  const failed = count(/^\s*(\d+) fail/m);
+  if (exitCode === 0 && passed > 0 && !failed) return { status: "pass", message: "" };
+  const name = output.match(/^\(fail\) (.+?)(?: \[[\d.]+m?s\])?$/m)?.[1];
+  const error = output.match(/^error: (.+)$/m)?.[1];
+  const message =
+    [name, error].filter(Boolean).join(": ") ||
+    (passed ? `exit ${exitCode}` : "the file has no tests");
   return { status: "fail", message: message.trim().slice(0, MAX_MESSAGE) };
 }
 
@@ -201,13 +228,32 @@ export function runIn(root: string, p: Proposal): RunResult {
   try {
     const cwd = path.join(root, suite.cwd);
     const filter = path.relative(cwd, file);
-    const res = spawnSync(
-      "bunx",
-      ["rstest", "run", ...suite.args, filter, "--reporter", "json", "--passWithNoTests=false"],
-      { cwd, encoding: "utf8", timeout: RUN_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 },
-    );
+    const opts = {
+      cwd,
+      encoding: "utf8",
+      timeout: RUN_TIMEOUT_MS,
+      maxBuffer: 64 * 1024 * 1024,
+    } as const;
+    const res =
+      suite.runner === "bun"
+        ? spawnSync("bun", ["test", ...suite.args, `./${filter}`], opts)
+        : spawnSync(
+            "bunx",
+            [
+              "rstest",
+              "run",
+              ...suite.args,
+              filter,
+              "--reporter",
+              "json",
+              "--passWithNoTests=false",
+            ],
+            opts,
+          );
     const timedOut = (res.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
-    return parseRun(res.status, res.stdout ?? "", timedOut);
+    return suite.runner === "bun"
+      ? parseBunRun(res.status, `${res.stdout ?? ""}${res.stderr ?? ""}`, timedOut)
+      : parseRun(res.status, res.stdout ?? "", timedOut);
   } finally {
     fs.rmSync(file, { force: true });
   }

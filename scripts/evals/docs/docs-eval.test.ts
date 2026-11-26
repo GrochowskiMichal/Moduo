@@ -1,9 +1,8 @@
+import { afterAll, describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { afterAll, describe, expect, it } from "@rstest/core";
 
 import { loadSet, plan, type Row, taskProblems } from "../../harness-ab/model";
 import { refuseTask } from "../../harness-ab/safety";

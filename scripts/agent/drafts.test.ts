@@ -1,9 +1,8 @@
+import { describe, expect, it } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 import {
   addedLines,
@@ -115,7 +114,7 @@ describe("frozen paths", () => {
     ).toBe(
       "bun run --cwd apps/app test src/lib/a.test.ts src/lib/b.test.ts && " +
         "bun run --cwd supabase test functions/_shared/contracts/v.test.ts && " +
-        "bunx rstest -c scripts/rstest.config.ts scripts/agent/drafts.test.ts",
+        "bun test --timeout=30000 ./scripts/agent/drafts.test.ts",
     );
     expect(testCommand(["supabase/tests/x.test.sql"])).toBeNull();
   });

@@ -208,7 +208,7 @@ export function testCommand(files: readonly string[]): string | null {
   return [...groups]
     .map(([cwd, fs]) =>
       cwd === "."
-        ? `bunx rstest -c scripts/rstest.config.ts ${fs.join(" ")}`
+        ? `bun test --timeout=30000 ${fs.map((f) => `./${f}`).join(" ")}`
         : `bun run --cwd ${cwd} test ${fs.join(" ")}`,
     )
     .join(" && ");

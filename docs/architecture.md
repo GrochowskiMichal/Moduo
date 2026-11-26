@@ -16,7 +16,7 @@ Since PLAT-2 (2026-10-17) the repo is a Bun workspace run by Turborepo (`turbo.j
 - `apps/storybook` (`@moduo/storybook`): Storybook for the app's stories (`.storybook/`).
 - `supabase/` (`@moduo/backend`): migrations and Edge Functions, plus their Rstest suite (`supabase/rstest.config.ts`). It stays at the root because the Supabase CLI expects it there.
 - `e2e/` (`@moduo/e2e`): Playwright configs and specs (`e2e/tests`, `e2e/billing`, …).
-- Root tooling: `scripts/` (with its own `scripts/rstest.config.ts`), `tools/`, `tsconfig.base.json` (shared compiler options).
+- Root tooling: `scripts/` (its tests run on `bun test`, not Rstest), `tools/`, `tsconfig.base.json` (shared compiler options).
 
 Paths in docs written before 2026-10-17 are pre-move: `src/` is now `apps/app/src/`, `src-tauri/` is `apps/desktop/src-tauri/`, `tests/` is `e2e/tests/`.
 

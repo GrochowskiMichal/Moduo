@@ -1,8 +1,7 @@
+import { describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 import { checkFixtures, compare, type Match, scan, snippetOf } from "./lint";
 
