@@ -579,6 +579,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Brand → [decisions/brand.md](decisions/brand.md)
 
+- 2026-11-26 · The app's top bar has no Moduo mark; the workspace switcher leads it
 - 2026-10-08 · BRAND-4: the landing uses the lockup artwork, and the mark reveals itself in the nav on a first visit
 - 2026-10-08 · BRAND-1: every brand file is generated from `brand/masters/` by `bun run brand:export`
 - 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option
