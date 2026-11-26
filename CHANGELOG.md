@@ -5,6 +5,19 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.8.2 · 2026-11-26
+
+### Improved
+
+- Notes shows the right key for a new note in the browser, and its small labels read more cleanly.
+- Late tasks say “late” beside their date in the List and on the Board. When Tasks can't load, it says so instead of showing an empty view.
+
+### Fixed
+
+- A calendar login that stopped working now shows in Settings with a Reconnect button, and reconnecting in the desktop app repairs it.
+- Signing in to a Gmail account in Mail now works in the installed desktop app.
+- A mail account whose sign-in has ended now asks you to reconnect, where it used to go quietly offline.
+
 ## 1.8.1 · 2026-11-25
 
 ### Improved
