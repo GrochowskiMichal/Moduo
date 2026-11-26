@@ -1,8 +1,8 @@
 # Mail v4: the rethink
 
-> **Status (2026-11-26): rounds 1 and the bottom bar (1–51) answered; eight follow-ups open.** Phase 1 (design, with Maciej). No product code, no migrations.
+> **Status (2026-11-26): rounds 1 and the bottom bar (1–51) answered; four checks open (5, 17, 21, 30).** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html), published at https://claude.ai/artifact/57jvvKBZKYGE1fwQA5V5VJ.
-> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). **Open:** explanations he asked for on 16, 24, 29, 36; checks on 5 (Display choices), 17 (no Send later at all?), 21 (presets only?), 30 (does the offer answer change b?). The prototype shows each beside its frame.
+> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). 16 b, 24 a, 29 a, 36 a after the explanations. **Open:** checks on 5 (Display choices), 17 (no Send later at all?), 21 (presets only?), 30 (does the offer answer change b?). The prototype shows each beside its frame.
 > - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. Holes and how they map to calls: §1.5.
 > - **Next:** the follow-ups → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
@@ -337,6 +337,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** All four · **b.** Pick some.
 - *Recommend a:* each is small and each has a user who depends on it.
 - **Maciej (2026-11-26, answers sheet):** other, “All sound good but I need an explanation on what it means and how it would look like.” → Open: explained and drawn in the prototype (Compose → Extras).
+- **Maciej (2026-11-26, after the explanation):** b, “command and numbers switches between modules - it would conflict with existing shortcuts”. → Auto Cc/Bcc per account, groups as recipients and Send again; no ⌘1–⌘5 field keys. Agent's reading, revisitable: he objected only to the keys, so the other three stay.
 
 **17 ★ · Send later** · (c, re-decides MR X9 "no")
 - **a.** No (today).
@@ -390,6 +391,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Draft only · **b.** Draft and conversation · **c.** No (today).
 - *Recommend a:* long replies get written between other things; a separate conversation window adds little next to Full (call 1).
 - **Maciej (2026-11-26, answers sheet):** other, “I need a better explanation on what you mean, I don't understand” → Open: explained and drawn in the prototype (Compose → Popped out).
+- **Maciej (2026-11-26, after the explanation):** a. → ⌘⇧D pops the draft into its own window and puts it back; conversations don't get their own window.
 
 **25 · Out-of-office reply** · (c, re-decides MR X14 "no")
 - Set an automatic reply with dates from Settings → Mail, through the provider (Gmail and Microsoft have it; plain IMAP accounts don't).
@@ -424,6 +426,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes · **b.** Keep the private note only.
 - *Recommend a:* meeting prep and client briefs start from an email; a private sticky note is a smaller job.
 - **Maciej (2026-11-26, answers sheet):** “I don't know, tell me more” → Open: explained in the prototype.
+- **Maciej (2026-11-26, after the explanation):** a. → `n` makes a Moduo note linked both ways (subject as title, selected text quoted); the private sticky note becomes "Add a note to this email" in the Details view (45 a).
 
 **30 ★ · Scheduling from an email** · (b; Calendar owns the event model, §7)
 - **Offer times:** in the composer, "Offer times" (`⌘⇧O`) opens Schedule in the right panel: your week, drag to pick slots; it inserts them as a short list plus a booking link limited to those slots, and holds them as tentative until booked or released.
@@ -474,6 +477,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes · **b.** No.
 - *Recommend a:* delegation is the agency's daily move; through Tasks it costs no new concept.
 - **Maciej (2026-11-26, answers sheet):** other, “How would that work?” → Open: explained in its smaller form (with 34 c the teammate gets a task and an excerpt, never the email itself).
+- **Maciej (2026-11-26, after the explanation):** a. → Assign makes a task for the teammate with a note, a due date and the excerpt you choose; they reply from their own account; the email shows when the task is done. No shared email (34 c).
 
 **37 · Shared inboxes (hello@, support@)**
 - A team inbox several people work from, with assignment and "who's replying" (Front, Missive).
