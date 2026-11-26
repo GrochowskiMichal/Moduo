@@ -267,6 +267,18 @@ button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--primar
 .btn.primary .kbd, .act.prim .kbd { color: var(--primary-foreground); border-color: color-mix(in oklab, var(--primary-foreground) 30%, transparent); }
 .bb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
 .selcount { font-size: var(--text-sm); font-weight: 600; padding: 0 8px; }
+.bstrips { flex: 1; min-width: 0; overflow: auto; padding: 16px 24px 32px; display: flex; flex-direction: column; gap: 12px; }
+.bstrips h3 { font-size: var(--text-md); font-weight: 600; margin: 12px 0 0; }
+.bstrips .lede { font-size: var(--text-sm); color: var(--muted-foreground); max-width: 46rem; margin: 0; }
+.bs { display: flex; flex-direction: column; gap: 4px; }
+.bs-h { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: var(--text-sm); }
+.bs-h .t3 { font-size: var(--text-xs); }
+.bs .bottombar { grid-column: auto; grid-template-columns: 3.5rem 1fr 3.5rem !important; height: var(--bar-h); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--background); }
+.bs .tag { font-size: var(--text-2xs); font-weight: 600; padding: 1px 6px; border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--muted-foreground); }
+.popwin { position: absolute; right: calc(20rem + 24px); bottom: calc(var(--bar-h) + 16px); width: 30rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--card); box-shadow: 0 16px 40px color-mix(in oklab, black 35%, transparent); overflow: hidden; z-index: 5; }
+.popwin .wbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); color: var(--muted-foreground); }
+.popwin .wbar i { width: 10px; height: 10px; border-radius: 9999px; background: var(--hairline); display: inline-block; }
+.popwin .composer { border: 0; border-radius: 0; }
 
 /* overlays */
 .overlay { position: absolute; inset: 0; background: var(--scrim); display: grid; place-items: center; z-index: 20; }
@@ -460,13 +472,13 @@ const P_ = (id) => people[T.find((t) => t.id === id)?.p] || people.ana;
 const FRAMES = [
   { k: "1", id: "layout", name: "Layout", vars: [["a", "a · Split"], ["b", "b · Full"], ["c", "c · In the panel"]] },
   { k: "2", id: "inbox", name: "Inbox", vars: [["a", "Tabs"], ["b", "Sections"], ["c", "Cards"], ["d", "Simple list"], ["e", "Tabs + splits"]] },
-  { k: "3", id: "bar", name: "Bottom bar", vars: [["a", "Reading"], ["b", "3 selected"], ["c", "Writing"], ["d", "More ▾ open"], ["e", "Keys"]] },
+  { k: "3", id: "bar", name: "Bottom bar", vars: [["f", "Every module"], ["a", "Reading"], ["b", "3 selected"], ["c", "Writing"], ["d", "More ▾ open"], ["e", "Keys"]] },
   { k: "4", id: "panel", name: "Right panel", vars: [["a", "Contact"], ["b", "Links"], ["c", "Today"], ["d", "Schedule"]] },
   { k: "5", id: "links", name: "Links", vars: [["a", "Email + task"], ["b", "Invite + your day"], ["c", "Offer times"]] },
   { k: "6", id: "team", name: "Team", vars: [["a", "Shared + comments"], ["b", "Discuss in chat"]] },
   { k: "7", id: "aside", name: "Set aside", vars: [["a", "Batch reply"], ["b", "Plain list"]] },
   { k: "8", id: "states", name: "States", vars: [["a", "Inbox clear"], ["b", "Loading"], ["c", "Couldn't load"], ["d", "Offline"], ["e", "Long content"], ["f", "First run"]] },
-  { k: "9", id: "compose", name: "Compose", vars: [["a", "Rich text"], ["b", "Template"]] },
+  { k: "9", id: "compose", name: "Compose", vars: [["a", "Rich text"], ["b", "Template"], ["c", "Extras"], ["d", "Popped out"]] },
   { k: "0", id: "text", name: "Not drawn", vars: [["a", "Background"]] },
 ];
 /* Round 1's 46 calls (REPLAN §8), grouped by the frame you look at to answer them.
@@ -491,6 +503,11 @@ const CALLS = [
   { n: 21, f: "bar", t: "Keyboard presets", q: "Can you switch Mail's keys to another app's map?", o: [["a", "Presets: Moduo · Superhuman/Gmail · Spark · Apple Mail", "bar-e"], ["b", "Presets plus rebinding any action", ""], ["c", "One fixed map", ""]], rec: "a", why: "Switchers bring muscle memory; full rebinding is an app-wide project." },
   { n: 17, s: 1, f: "bar", t: "Send later", q: "Can you schedule an email?", o: [["a", "No (today)", ""], ["b", "Yes, from this Mac: late if the Mac was asleep, and it says so", "bar-c"], ["c", "Yes, always on time: a server sends it (Mike's call)", ""], ["d", "b now, c later", "bar-c"]], rec: "d", why: "b is honest and free; c is the real thing and a systems decision." },
   { n: 18, f: "bar", t: "Print and Save as PDF", q: "Can you print an email (⌘P)?", o: [["a", "Yes, from More ▾", "bar-d"], ["b", "No", ""]], rec: "a", why: "Invoices and contracts get printed; it's small." },
+  { n: 47, s: 1, f: "bar", t: "When the bar's centre changes, in every module", q: "What makes the bottom bar swap Search · Quick capture · New for a row of actions?", o: [["a", "Only a mode: several items selected, or a place with its own triage verbs (Tasks' Inbox, Chat's Catch up, Mail's Set aside). An open item keeps its actions on itself", "bar-f"], ["b", "Also whenever one item is open (an email, a task, a note): its actions move to the bar", "bar-a"], ["c", "Never: the bar never changes; selections get a floating row", ""]], rec: "a", why: "It's the rule Tasks and Chat already follow, written down; it matches your 2 b; and Search, Capture and New stay where you expect them." },
+  { n: 48, f: "bar", t: "Mail's modes", q: "Under 47 a, which Mail moments change the bar?", o: [["a", "Several conversations selected, and Set aside's answer-in-one-pass page", "bar-b"], ["b", "Also the Inbox with one email selected, like Tasks' Inbox", "bar-a"], ["c", "Only several selected", ""]], rec: "a", why: "Done, Snooze and Reply work on any email in any place, so they belong on the email (your 2 b). Tasks' Inbox is different: Accept, Decline and Duplicate exist only there." },
+  { n: 49, f: "bar", t: "The bar's normal centre", q: "With no mode on, is the centre the same in every module?", o: [["a", "The same three everywhere, each about this module: Search searches it, New makes its item; ⌘K stays app-wide", "bar-f"], ["b", "The three plus up to two of the module's own tools (Calendar's plan wants Today)", ""], ["c", "Each module picks its own", ""]], rec: "a", why: "One bar you never re-learn. A module's own tools (Calendar's Today) go in its toolbar. Today, Search opens ⌘K in modules that have no search of their own." },
+  { n: 50, f: "bar", t: "Where Send lives while you write", q: "With a reply open, are Send and the rest in the composer or in the bar?", o: [["a", "In the composer, like Chat; the bar keeps its tools", "compose-a"], ["b", "In the bar", "bar-c"]], rec: "a", why: "Under 47 a, writing isn't a mode. Chat's composer already works this way, and the bar would otherwise change whenever a draft is open." },
+  { n: 51, f: "bar", t: "Finding a mode", q: "You couldn't find where the bar changes. Should queues show their row at once?", o: [["a", "Yes: a queue (Tasks' Inbox, Chat's Catch up, Mail's Set aside) opens with its first item selected, so its row is already there", ""], ["b", "No: the row appears once you select something (today)", ""]], rec: "a", why: "A mode you have to stumble into isn't a tool. Selecting several stays a deliberate act, so it needs no hint." },
   // 4 Right panel
   { n: 3, s: 1, f: "panel", t: "Which panel view opens first", q: "With an email open, what does the right panel show first?", o: [["a", "Contact: the sender, their company, open work, next meeting", "panel-a"], ["b", "Today: your day from Calendar (today's default)", "panel-c"], ["c", "Whichever you used last", ""]], rec: "a", why: "Who it's from is the context you use while reading; your day is one key away." },
   { n: 28, f: "panel", t: "Links: a line plus a view", q: "How does an email show what it's linked to?", o: [["a", "One short line under the subject, the full list in the panel", "panel-b"], ["b", "Chips under the subject (today)", ""], ["c", "Only in the panel", ""]], rec: "a", why: "Chips grow until they push the email down." },
@@ -517,8 +534,8 @@ const CALLS = [
   { n: 13, s: 1, f: "compose", t: "Rich text with inline images", q: "How rich is writing?", o: [["a", "Toolbar on selection, inline images, Markdown shortcuts kept", "compose-a"], ["b", "Markdown only (today)", ""]], rec: "a", why: "The first gap a Spark user hits." },
   { n: 14, f: "compose", t: "Templates with blanks", q: "Whole-email templates as well as snippets?", o: [["a", "Both", "compose-b"], ["b", "Snippets only", ""]], rec: "a", why: "Agencies send the same proposal and invoice-chase weekly." },
   { n: 15, f: "compose", t: "Several signatures", q: "Can you switch signatures while writing?", o: [["a", "Yes, ← → in the composer", "compose-a"], ["b", "One per address (today)", ""]], rec: "a", why: "" },
-  { n: 16, f: "compose", t: "Composer extras", q: "Auto Cc/Bcc, groups as recipients, ⌘1–5 field jumps, Send again?", o: [["a", "All four", ""], ["b", "Some (say which)", ""]], rec: "a", why: "Each is small and each has a user who depends on it.", look: "Not drawn." },
-  { n: 24, f: "compose", t: "A draft in its own window", q: "Can a draft pop out so you keep triaging?", o: [["a", "Draft only (⌘⇧D)", ""], ["b", "Draft and conversation", ""], ["c", "No", ""]], rec: "a", why: "Long replies get written between other things.", look: "Not drawn." },
+  { n: 16, f: "compose", t: "Composer extras", q: "Auto Cc/Bcc, groups as recipients, ⌘1–5 field jumps, Send again?", o: [["a", "All four", "compose-c"], ["b", "Some (say which)", ""]], rec: "a", why: "Each is small and each has a user who depends on it.", look: "Drawn: Compose → Extras." },
+  { n: 24, f: "compose", t: "A draft in its own window", q: "Can a draft pop out so you keep triaging?", o: [["a", "Draft only (⌘⇧D)", "compose-d"], ["b", "Draft and conversation", ""], ["c", "No", ""]], rec: "a", why: "Long replies get written between other things." },
   // Not drawn
   { n: 19, f: "text", t: "Notifications per account", q: "Can each account have its own notification level?", o: [["a", "Yes: All · People · Priority people · None", ""], ["b", "One global setting (today)", ""]], rec: "a", why: "Work and personal accounts rarely want the same noise." },
   { n: 22, f: "text", t: "Search with plain dates and file types", q: "“last week”, has:pdf, larger:5mb?", o: [["a", "Yes", ""], ["b", "No", ""]], rec: "a", why: "It's what people type." },
@@ -530,10 +547,8 @@ const CALLS = [
   { n: 42, f: "text", t: "Done vs Archive", q: "What's the verb, and what's the place?", o: [["a", "Verb Done, place Archive (today)", ""], ["b", "Call the place Done too", ""]], rec: "a", why: "Archive matches what other clients show." },
 ];
 /* Answers already given in chat (2026-11-26), shown pre-filled. */
-const GIVEN = {
-  1: { opt: "x", note: "Split and Full both offered, the person chooses. Default leaning Full: it keeps the 3×3 grid. Drop c (in the panel)." },
-  5: { opt: "a", note: "Tabs look the best. Asked: what does the community want most, and can we offer more views?" },
-};
+/* Your answers, sent in chat 2026-11-26; pre-filled where this browser has none. */
+const GIVEN = { "1": { "opt": "x", "note": "Split and Full both offered, the person chooses. Default leaning Full: it keeps the 3×3 grid. Drop c (in the panel)." }, "2": { "opt": "b" }, "3": { "opt": "a" }, "4": { "opt": "a" }, "5": { "opt": "a", "note": "Tabs look the best. Asked: what does the community want most, and can we offer more views?" }, "6": { "opt": "a", "note": "Yes, but we should add an \"x\" icon to remove them quickly without confirmation." }, "7": { "opt": "a" }, "8": { "opt": "a" }, "9": { "opt": "a" }, "10": { "opt": "b" }, "11": { "opt": "b" }, "12": { "opt": "b" }, "13": { "opt": "a" }, "14": { "opt": "a" }, "15": { "opt": "b", "note": "Tempting to go with multiple, but I don't want to overcomplicate this from the start. If there's no market need for that feature I think we can keep one per address." }, "16": { "opt": "x", "note": "All sound good but I need an explanation on what it means and how it would look like." }, "17": { "opt": "a" }, "18": { "opt": "a" }, "19": { "opt": "a" }, "20": { "opt": "b" }, "21": { "opt": "a", "note": "a, but it should be changed in settings. It's where keyboard shortcuts should be edited for all modules. The keyboard shortcut sheet should have a link to that place in settings." }, "22": { "opt": "a" }, "23": { "opt": "a" }, "24": { "opt": "x", "note": "I need a better explanation on what you mean, I don't understand" }, "25": { "opt": "b" }, "26": { "opt": "a" }, "27": { "opt": "a" }, "28": { "opt": "a" }, "29": { "opt": "x", "note": "I don't know, tell me more" }, "30": { "opt": "b", "note": "Selected b only because I'm concerned about this part of \"offer times\": Isn't \"offer times\" going to add a step to the process that is hard to resolve automatically? Scheduling and booking link resolve this instantly and an event can be added. If I offer times and the other person just replies \"march 2 works\", do I manually add that into the calendar then?" }, "31": { "opt": "a" }, "32": { "opt": "a", "note": "Yes, but as an offer. Better to make the user click once than automatically link something unrelated." }, "33": { "opt": "a" }, "34": { "opt": "c" }, "35": { "opt": "a" }, "36": { "opt": "x", "note": "How would that work?" }, "37": { "opt": "b" }, "38": { "opt": "a" }, "39": { "opt": "a", "note": "No plans for a server copy for now, and probably not in years. Also Windows of course." }, "40": { "opt": "a" }, "41": { "opt": "a" }, "42": { "opt": "a" }, "43": { "opt": "a" }, "44": { "opt": "a" }, "45": { "opt": "a" }, "46": { "opt": "a" } };
 /* What Mike shipped up to v1.8.1 that bears on a call (checked 2026-11-26). */
 const NEWS = {
   5: "Already live since 1.8.0: a tab can say why an email landed there, and your rules act on new mail. Both stay whichever layout wins.",
@@ -545,6 +560,14 @@ const NEWS = {
 };
 const REPLIES = {
   5: "Nobody publishes a ranking, but the signals agree on <b>letting each person choose</b>. Spark brought back Classic inboxes after users asked. Superhuman and Shortwave make custom split tabs their headline, and Shortwave says “hide empty splits” is one of its most popular settings. So: Tabs open first, and Sections, Cards and Simple list are a Display choice (all four are drawn now). Your own splits (call 6) become tabs, and empty tabs hide. <b>Ok?</b>",
+  2: "Recorded as b. Your bottom-bar question reopens it for the whole app, so calls 47–51 below settle the rule first; “Every module” shows every bar there is today.",
+  16: "Four small things, drawn in Compose → Extras. <b>Auto Cc/Bcc:</b> an address added to every email from one account, for example your CRM's logging address, so every client email is filed there; it shows in the Bcc line, and you can remove it from one email. <b>Groups as recipients:</b> type “Fjordline team” in To and everyone with that tag in Contacts is added. <b>⌘1–⌘5:</b> jump between From, To, Cc, Subject and the text without the mouse. <b>Send again:</b> on an email you sent, opens a copy as a new draft (the monthly invoice reminder, or resending to someone who lost it). Pick a, or name the ones you want.",
+  24: "While you write a long reply, ⌘⇧D lifts the draft into its own small window (drawn in Compose → Popped out). The main window goes back to the inbox, so you keep reading and clearing email while the draft stays on top; ⌘⇧D again puts it back under its email. b also lets a whole conversation open in its own window. c: a draft stays inside its email, as today.",
+  29: "Today <b>n</b> writes a private sticky note that shows only on that email. With a, <b>n</b> makes a real note in Notes: titled with the subject, quoting the text you selected, and linked both ways, so the email shows “Note · Call prep” and the note shows the email. It's for meeting prep, a client brief or minutes that start from an email. The sticky note stays: it becomes “Add a note to this email” in the Details view. b keeps only the sticky note.",
+  30: "Your worry is right, and it's how Calendar's offers already work: the times you offer are held, and the other person books by clicking one on a page limited to those times; the event is made and the other holds are let go. If they only reply “March 2 works”, nothing books itself: the holds wait until they expire (48 hours) or you book it. Mail could make that one click (“Book Mon 2 Mar, 10:00” on their reply, since it answers your offer), but it's a second path to build. With b you can still offer times from Calendar and paste them. <b>Does that change your b?</b>",
+  36: "With your 34 c (no shared conversations), Assign means: pick a teammate and they get a task made from the email, with the subject and an excerpt you choose, like the chat card in 35. The email itself stays on your computer: they can't open it or reply from it, so they write to the client from their own mail, or you forward it. <b>Still a, in this smaller form?</b>",
+  17: "<b>Check:</b> a means no Send later at all, including b, which sends from your own computer and needs no server. Spark and Superhuman users schedule weekly. <b>Did you mean a, or b?</b>",
+  21: "Recorded: keys are changed in Settings, one place for every module, and the shortcut sheet links there. <b>One check:</b> does Settings offer only the four presets (a), or also changing any single key (b)? Presets are small; changing any key is an app-wide project.",
 };
 const CAPS = {
   "layout-a": "<b>Call 1a/d · Split.</b> List and conversation side by side in the centre; the right panel is context (Person). The reader has no toolbar: its actions live in the bottom bar (call 2). The rail puts working places first (call 4).",
@@ -580,6 +603,9 @@ const CAPS = {
   "bar-e": "<b>Keys sheet</b> (?): the map from call 10 b, and the preset switcher from call 21.",
   "text-a": "<b>Not drawn:</b> these calls change behaviour you can't see in a frame. Answer them from the text.",
   "compose-b": "<b>Call 14 · Template</b> with blanks; ⌘⇧T opens the picker.",
+  "compose-c": "<b>Call 16 · Composer extras:</b> the Bcc your account adds by itself, a Contacts group as a recipient, ⌘1–⌘5 on each field, and Send again on a sent email.",
+  "compose-d": "<b>Call 24 · A popped-out draft:</b> ⌘⇧D lifts the draft into its own window; the main window is free to keep triaging.",
+  "bar-f": "<b>Calls 47–51 · Every bottom bar in the app today</b>, read from the code (not checked live), then what Mail would add under 47 a.",
 };
 let S = { f: "layout", v: "a", theme: "dark", den: "comfortable", calls: !critic };
 try { const s = JSON.parse(localStorage.getItem("mailv4r1") || "null"); if (s && !critic) S = { ...S, ...s }; } catch (e) {}
@@ -757,6 +783,7 @@ function bar(mode, o = {}) {
   else if (mode === "multi") c = `<span class="selcount">3 selected</span><span class="bb-sep"></span>${a("Done", "e", true)}${a("Snooze", "s")}${a("Set aside", "⇧S")}${a("Make tasks", "t")}${a("Move", "m")}<button class="act">More ${I("chev")}</button><span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">Esc</span>`;
   else if (mode === "write") c = `${a("Send", "⌘↵", true)}${a("Send & Done", "⌘⇧↵")}<span class="rel"><button class="act" aria-expanded="true" id="slbtn">Send later ${I("chev")}</button></span>${a("Template", "⌘⇧T")}${a("Attach", "⌘⇧A")}<button class="act">More ${I("chev")}</button>`;
   else if (mode === "first") c = `${a("Connect an account", "", true)}${a("Quick capture", "⌘⇧K")}`;
+  else if (mode === "plain") c = `<button class="act">${I("search")} Search ${K("⌘K")}</button><button class="act">${I("zap")} Quick capture ${K("⌘⇧K")}</button><button class="act">${I("plus")} New ${K("N")}</button>`;
   else if (mode === "list") c = `${a("New message", "c")}${a("Search", "/")}${a("Quick capture", "⌘⇧K")}`;
   else if (mode === "aside") c = `${a("Send & next", "⌘↵", true)}${a("Skip", "j")}${a("Done", "e")}${a("Snooze", "s")}<button class="act">More ${I("chev")}</button>`;
   return `<footer class="bottombar" aria-label="Bottom bar"><div class="bb-l"><button class="btn icon on" aria-label="Hide the rail (⌥[)">${I("panelL")}</button></div><div class="bb-c" role="toolbar" aria-label="Conversation actions">${c}</div><div class="bb-r"><button class="btn icon ${o.noright ? "" : "on"}" aria-label="Hide the right panel (⌥0)">${I("panelR")}</button></div></footer>`;
@@ -924,6 +951,49 @@ function render() {
       const body = `Hi <span class="chip" style="color:var(--foreground)">Dana</span>,<br><br>Thanks for your questions on the <span class="chip" style="color:var(--foreground)">Q1 retainer</span>. Here's how phase 2 works:<br><br><span class="chip" style="border:1px dashed var(--muted-foreground);background:transparent">answer: rate if scope grows</span><br><br>Happy to set up a call: <span class="chip" style="color:var(--foreground)">booking link</span><span class='caret'></span>`;
       const pick = `<div class="menu" style="left:calc(15rem + 24rem + 40px);top:7rem;width:20rem" role="group" aria-label="Templates"><div style="padding:4px 6px"><div class="input">Templates · type to filter</div></div><button class="mi on">${I("file")}<span class="grow">Answer: proposal questions</span><span class="t3" style="font-size: var(--text-xs)">3 blanks</span></button><button class="mi">${I("file")}<span class="grow">Invoice reminder</span><span class="t3" style="font-size: var(--text-xs)">2 blanks</span></button><button class="mi">${I("file")}<span class="grow">New client onboarding</span><span class="t3" style="font-size: var(--text-xs)">+2 files</span></button><div class="sep"></div><button class="mi"><span class="grow t2">Save this email as a template</span></button></div>`;
       html = topbar() + L + `<main class="centre">${listCol({ sel: "t4" })}<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">Re: Proposal for Q1 retainer</h1>${composerReply({ to: "Dana Whitfield", body })}<div class="pnote">Tab moves to the next blank (dashed). Snippets (;;) stay for short pieces.</div></div></div></section></main>` + R("person", { pk: "dana" }) + bar("write") + pick; break;
+    }
+    case "bar-f": {
+      const a = (l, k, prim) => `<button class="act ${prim ? "prim" : ""}">${l}${k ? " " + K(k) : ""}</button>`;
+      const tools = `<button class="act">${I("search")} Search ${K("⌘K")}</button><button class="act">${I("zap")} Quick capture ${K("⌘⇧K")}</button><button class="act">${I("plus")} New ${K("N")}</button>`;
+      const more = `<button class="act">More ${I("chev")}</button>`;
+      const note = (t) => `<span class="bb-sep"></span><span class="t3" style="font-size: var(--text-xs)">${t}</span>`;
+      const strip = (title, where, centre, o = {}) => `<div class="bs"><div class="bs-h"><b>${title}</b>${o.tag ? `<span class="tag">${o.tag}</span>` : ""}<span class="t3">${where}</span></div><div class="bottombar"><div class="bb-l">${o.left || `<button class="btn icon on" aria-label="Left panel">${I("panelL")}</button>`}</div><div class="bb-c">${centre}</div><div class="bb-r">${o.right || `<button class="btn icon on" aria-label="Right panel">${I("panelR")}</button>`}</div></div></div>`;
+      const dots = `<span style="display:flex;gap:5px;padding-left:6px"><span class="dot" style="background:var(--foreground)"></span><span class="dot" style="background:var(--hairline)"></span></span>`;
+      const body = `<div class="bstrips">
+        <p class="lede">The bar has three parts: the left panel's toggle, a centre, and the right panel's toggle. The centre normally holds Search · Quick capture · New. A <b>mode</b> swaps the centre for its own actions with their keys, then More ▾, and Esc ends it. One mode at a time.</p>
+        <h3>Today, in the app</h3>
+        ${strip("Normal", "Every module, nothing selected. Search opens the module's own search in Chat and Notes, ⌘K elsewhere.", tools)}
+        ${strip("Home", "The panel toggles give their places to the page dots and Edit.", tools, { left: dots, right: `<button class="act">Edit</button>` })}
+        ${strip("Tasks · Inbox triage", "Tasks → Inbox, click one task that has no parent. Only in the Inbox.", a("Accept", "1") + a("Decline", "2") + a("Duplicate", "3") + a("Snooze", "H"), { tag: "mode" })}
+        ${strip("Tasks · several selected", "Any Tasks list: ⇧-click or ⌘-click a second task.", a("Complete", "Space") + a("Focus", "Q") + a("Assign", "@") + a("Tag", "#") + a("Date", "D") + a("Delete", "⌫") + more + note("4 selected · Esc"), { tag: "mode" })}
+        ${strip("Chat · messages picked", "In a conversation, select messages (⇧-click).", a("Move", "M") + a("Task", "T") + a("Delete", "⌫") + note("2 selected · Esc"), { tag: "mode" })}
+        ${strip("Chat · Catch up", "Chat → Catch up, while anything is left to catch up on.", a("Reply", "R") + a("Done", "Space") + a("Task", "T") + a("Later", "H") + a("Open", "⏎") + more + note("5 left · Esc"), { tag: "mode" })}
+        ${strip("Mail on the web", "Mail lives on your computer, so the web hides Quick capture and New there.", `<button class="act">${I("search")} Search ${K("⌘K")}</button>`)}
+        <h3>Proposed elsewhere</h3>
+        ${strip("Calendar (its plan, call C2b, open)", "Calendar's plan wants a tool of its own in the centre. Call 49 decides.", `<button class="act">${I("search")} Search</button><button class="act">Today ${K("T")}</button><button class="act">${I("plus")} New ${K("N")}</button>`)}
+        <h3>Mail under 47 a</h3>
+        ${strip("Reading an email", "Unchanged bar: Done, Snooze and Reply stay in the email's own toolbar (your 2 b).", tools)}
+        ${strip("Several conversations selected", "⇧-click or ⌘-click a second conversation (call 48).", a("Done", "e", true) + a("Snooze", "s") + a("Set aside", "⇧S") + a("Make tasks", "t") + a("Move", "m") + more + note("3 selected · Esc"), { tag: "mode" })}
+        ${strip("Set aside, answering in one pass", "Opening Set aside (calls 8, 9). With 51 a, it opens on the first email.", a("Send & next", "⌘↵", true) + a("Skip", "j") + a("Done", "e") + a("Snooze", "s") + more + note("4 left · Esc"), { tag: "mode" })}
+        ${strip("Writing a reply", "Unchanged bar: Send lives in the composer, as in Chat (call 50).", tools)}
+      </div>`;
+      html = topbar() + `<main class="centre" style="grid-column: 1 / -1">${body}</main>` + bar("plain"); break;
+    }
+    case "compose-c": {
+      const c = `<section class="composer" aria-label="New email">
+        <div class="cfield">From <span class="v">maciej@northwind.studio</span><span style="flex:1"></span>${K("⌘1")}</div>
+        <div class="cfield">To <span class="chip" style="color:var(--foreground)">${I("users")}Fjordline team · 3</span><span class="t3" style="font-size:var(--text-xs)">Ana Ruiz, Jonas Berg, Mia Holm</span><span style="flex:1"></span>${K("⌘2")}</div>
+        <div class="cfield">Cc <span class="v">Tomasz Nowak</span><span style="flex:1"></span>${K("⌘3")}</div>
+        <div class="cfield">Bcc <span class="chip" style="color:var(--foreground)">log@crm.example<button class="btn icon" style="height:16px;width:16px" aria-label="Remove from this email">×</button></span><span class="t3" style="font-size:var(--text-xs)">added by this account</span></div>
+        <div class="cfield">Subject <span class="v">Spring campaign: final files</span><span style="flex:1"></span>${K("⌘4")}</div>
+        <div class="cbody">Hi all,<br><br>The final files are in the shared folder<span class='caret'></span><span style="float:right">${K("⌘5")}</span></div></section>`;
+      const notes = `<div class="pnote"><b>Groups:</b> “Fjordline team” is everyone tagged Fjordline in Contacts. <b>Auto Bcc:</b> set once per account in Settings → Mail; × removes it from this email only. <b>⌘1–⌘5</b> jump to each field.</div>
+        <div class="pnote"><b>Send again</b> sits on emails you sent: <span class="chip" style="color:var(--foreground)">${I("send")}Send again</span> opens a copy as a new draft, for the monthly invoice reminder.</div>`;
+      html = topbar() + L + `<main class="centre">${listCol()}<section class="reader"><div class="rscroll"><div class="rin"><h1 class="subj">New email</h1>${c}${notes}</div></div></section></main>` + R("person") + bar("plain"); break;
+    }
+    case "compose-d": {
+      const win = `<div class="popwin" role="dialog" aria-label="Draft window"><div class="wbar"><i></i><i></i><i></i><span style="flex:1;text-align:center">Re: Spring campaign: hero photos · draft</span>${K("⌘⇧D")}</div>${composerReply({ cc: "Tomasz Nowak", body: "Hi Ana,<br><br>Two crops attached: square for social, wide for the terminal screens. On the print colours, I'd keep the warmer version because<span class='caret'></span>" })}<div style="display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--border)"><button class="btn primary">Send ${K("⌘↵")}</button><span style="flex:1"></span><button class="btn">Put back ${K("⌘⇧D")}</button></div></div>`;
+      html = topbar() + L + `<main class="centre">${listCol({ sel: "t2" })}<section class="reader"><div class="rscroll"><div class="rin"><div class="pnote">The main window is free again: you keep reading and clearing the inbox. The draft is its own small window on top; ⌘⇧D puts it back under its email.</div></div></div></section></main>` + R("person", { pk: "sam" }) + bar("plain") + win; break;
     }
   }
   app$.className = "app " + cls;

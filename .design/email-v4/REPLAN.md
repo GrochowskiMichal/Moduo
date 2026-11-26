@@ -1,10 +1,10 @@
 # Mail v4: the rethink
 
-> **Status (2026-11-21): round 1 sent, waiting for Maciej's answers.** Phase 1 (design, with Maciej). No product code, no migrations.
-> - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html).
-> - **Open:** calls 2–4 and 6–46 (§8); 1 is answered (default still open) and 5 waits for his OK on the proposal. ★ marks the load-bearing ones. Since 2026-11-26 the prototype groups the calls by frame, beside the screen they're about.
-> - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. That was possible after Maciej OK'd a fresh rebuild of the shared local database. Holes and how they map to calls: §1.5.
-> - **Next:** answers → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
+> **Status (2026-11-26): round 1 answered; a bottom-bar round (47–51) and eight follow-ups open.** Phase 1 (design, with Maciej). No product code, no migrations.
+> - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html), published at https://claude.ai/artifact/57jvvKBZKYGE1fwQA5V5VJ.
+> - **Answered 2026-11-26:** all 46 (his words under each call, §8). **Open:** 47–51 (§8 J, the bottom bar in every module, which 2 waits on); explanations he asked for on 16, 24, 29, 36; checks on 5 (Display choices), 17 (no Send later at all?), 21 (presets only?), 30 (does the offer answer change b?). The prototype shows each beside its frame.
+> - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. Holes and how they map to calls: §1.5.
+> - **Next:** 47–51 and the follow-ups → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
 
 ## 0. How to read this
@@ -115,13 +115,14 @@ Full inventories: [research/spark.md](./research/spark.md), [research/superhuman
 
 **Idea, one sentence:** *Spark's inbox at Superhuman's speed, where every email can become, or join, the work it's about.*
 
-- **Layout (calls 1–4):** the centre is the list and the open conversation side by side; a Full layout swaps to a full-width conversation (one key). The right panel is a switchable view (Person by default). The bottom bar carries the conversation's actions with their keys, so the reader loses its toolbar.
-- **Inbox (5–7):** Spark's sectioned Smart Inbox by default (Pinned, People, Notifications, Newsletters, Seen), each section clearable with one key; tabs stay as a Display choice. Splits (saved searches) can be pinned.
-- **Verbs (8–12):** Done, Snooze, Set aside, Pin, Remind if no reply, Task. Set aside is Spark's dateless shelf, and its page is a batch-reply page (HEY's Focus & Reply).
-- **Compose (13–18):** rich text on the editor Moduo already uses, inline images, templates with blanks, several signatures, send later, print.
-- **Links (26–33):** an email and its task stay connected; scheduling happens inside the email (offer times, booking link, invite RSVP with your day beside it); a Links view shows everything an email touches; Quick capture knows where it came from.
-- **Team (34–36):** share one conversation with the team (opt-in, per conversation) so teammates read and comment on it in Moduo; "Discuss in chat" posts it to a channel.
-- **Agents (38):** MCP gets real triage the Mac honours, opt-in body read, and drafts. Never send.
+- **Layout (calls 1–4):** Split (list and conversation side by side) and Full (the conversation alone) are both the person's choice; the default leans Full. The right panel is a switchable view, Contact first. The email keeps its own toolbar (2 b) while the bottom bar's rule for every module is settled (47–51).
+- **Inbox (5–7):** Tabs open first; your own saved searches become tabs (up to 6, each removable with ×); any sender or domain can group to one row. Other layouts as Display choices await his OK.
+- **Verbs (8–12):** Done, Snooze, Set aside (`⇧S`), Pin, Remind if no reply, Task. Set aside is Spark's dateless shelf, and its page is a batch-reply page (HEY's Focus & Reply).
+- **Compose (13–18):** rich text on the editor Moduo already uses, inline images, templates with blanks, one signature per address, print. No Send later (one check open).
+- **Links (26–33):** an email and its task stay connected; scheduling inside the email through a booking link or Schedule (Offer times parked, one check open); invite RSVP with your day beside it; a Details view shows everything an email touches; Quick capture offers the email as a link.
+- **Team (34–36):** Discuss in chat posts an email card to a channel; no shared conversations in v4.
+- **Agents (38):** MCP gets real triage the computer honours, opt-in body read, and drafts. Never send.
+- **Where mail lives (39):** on the person's computer, Mac and Windows; no server copy planned.
 
 The prototype's frame 1 shows this shape; the other frames show each call's variants.
 
@@ -164,10 +165,11 @@ These are raised to Maciej as numbered calls in product terms (17, 34, 38, 39, 4
 
 | Need | Product effect | Cost (agent's estimate) | Call |
 | --- | --- | --- | --- |
-| A small cloud scheduler for outgoing mail | Send later and reminders fire when the Mac is asleep | M–L: a server holds a ready-to-send copy until its time; an SMTP/Graph send from an Edge Function; credentials or a send token leave the Mac | 17 |
-| A cloud copy of shared conversations | Teammates read and comment on a shared email | M: one table plus storage for the shared bodies; per-conversation, opt-in; RLS by workspace | 34 |
+| ~~A small cloud scheduler for outgoing mail~~ (dropped by 17 a, one check open) | Send later and reminders fire when the Mac is asleep | M–L: a server holds a ready-to-send copy until its time; an SMTP/Graph send from an Edge Function; credentials or a send token leave the Mac | 17 |
+| ~~A cloud copy of shared conversations~~ (dropped by 34 c) | Teammates read and comment on a shared email | M: one table plus storage for the shared bodies; per-conversation, opt-in; RLS by workspace | 34 |
 | An agent-ops queue the Mac drains | An agent's snooze, Done, label and draft actually happen | S–M: a queue table written by MCP, applied by the engine on next sync | 38 |
 | Prefetch the next and previous bodies | Opening the next email is always instant | S: engine reads ahead around the selection | 40 |
+| Mail on Windows (39: “Also Windows of course”) | Mail's engine runs where the desktop app runs, not only on macOS | Mike's to size: the engine is Rust, so mostly packaging and keychain | 39 |
 | Publish the Google sign-in screen out of Testing | Google mail accounts stop asking to reconnect every 7 days | XS, a console setting, no code (found in Mike's PR #837 for Calendar; it hits Mail's Google accounts the same way; #836 makes Mail show Reconnect when it happens) | none |
 
 ---
@@ -179,7 +181,7 @@ These are raised to Maciej as numbered calls in product terms (17, 34, 38, 39, 4
 Mail owns how these look and behave inside Mail; Calendar owns the event model and its own screens.
 
 1. **Invite RSVP:** an API to accept / maybe / decline an iTIP invite into the right calendar, return the event id, and report conflicts with the person's day (for the "your day" strip beside the invite). Today `R/invite.rs` parses iTIP and "Add to Moduo calendar" writes an event; the RSVP reply goes by mail.
-2. **Offer times:** a read of the person's free slots for a date range with working hours and buffers applied (MCP already has `calendar_offer_times` / `calendar_release_offer`), and a "hold" concept so offered slots show as tentative until booked or released.
+2. **Offer times** (parked by call 30 b, pending one check): a read of the person's free slots for a date range with working hours and buffers applied (MCP already has `calendar_offer_times` / `calendar_release_offer`), and a "hold" concept so offered slots show as tentative until booked or released.
 3. **Booking links:** list the person's booking links with a short URL each, so the composer can insert one; and a booking made from a link Mail sent should link the event to that email.
 4. **Event from an email:** create an event with the email's participants as guests, the subject as title, and a spine link event ↔ email.
 5. **The Today view:** Mail's right panel shows Calendar's day (events, focus blocks, free gaps). Mail needs the component or a read of the day, and Calendar decides how a day looks.
@@ -190,11 +192,13 @@ Mail owns how these look and behave inside Mail; Calendar owns the event model a
 | Calendar's ask | Mail's answer |
 | --- | --- |
 | 1. The invite card answers the same invitation Calendar shows, through the event's provider, and shows a reply already given in Calendar (C7) | Yes: call 31's bar uses Calendar's RSVP state and writes through it |
-| 2. A button in Mail's reply opens Calendar's offer with the thread's people and takes back the inserted text and link (C28) | Yes: call 30's Schedule view is Calendar's offer, hosted in Mail's right panel; Calendar owns the slot model, Mail owns the panel and the insert |
+| 2. A button in Mail's reply opens Calendar's offer with the thread's people and takes back the inserted text and link (C28) | Parked by Maciej's 30 b (2026-11-26, one check open); was: yes, call 30's Schedule view is Calendar's offer, hosted in Mail's right panel; Calendar owns the slot model, Mail owns the panel and the insert |
 | 3. A follow-up draft from a past meeting, with the guests, the thread and the meeting note linked (C27) | Yes: Mail's composer accepts "new message from event" (to = guests, links = event, note, thread) |
 | 4. A booking or offer made from a thread becomes an event the thread shows as a reference | Yes: call 26/28's Links view and the link line under the subject |
 
 **One difference to settle:** Calendar wants booking emails to read as ordinary mail; my ask 6 below wants them to open their event. Proposed middle: ordinary mail, plus the event as the first item in the link line. Not a conflict worth a message yet; I'll raise it in round 2 if Maciej's answers to 30–31 make it matter.
+
+9. **The bottom bar (C2b):** Mail's call 49 asks one rule for every module's bar. With 49 a, Calendar's Today goes in its own toolbar, not the bar's centre; 47 (when the bar changes) applies to Calendar's multi-select too.
 
 ### To Tasks
 
@@ -229,12 +233,14 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes, the bar · **b.** Keep the reader toolbar (today) · **c.** Both.
 - *Recommend a:* one place for actions app-wide, more room for the email, and the keys are always in view, which teaches them.
 - Frame 3, variants a–c.
+- **Maciej (2026-11-26, answers sheet):** b. → Recorded, and reopened by his bottom-bar question the same day: calls 47–51 settle the bar's rule for every module first. Hanging off it: 18's Print (in the email's ⋯ under b), the composer's buttons (50), and where 10's keys are shown.
 
 **3 ★ · The right panel's views, and which one opens first**
 - Hand-picked views, keys as today plus one: **Today** `⌥1` (your day from Calendar) · **Contact** `⌥2` (the sender: contact, company, open work, recent mail, next meeting; today's view, richer) · **Task** `⌥3` (opens after `t`, or when you open a linked task, with "← email") · **Links** `⌥4` (everything this email touches; its name is call 45) · **Schedule** (Calendar's offer, hosted here when you offer times; call 30).
 - Default: **a.** Contact · **b.** Today (today's default) · **c.** remember the last one.
 - *Recommend a, Contact:* when you read an email, who it's from and what you're doing with them is the context you use; your day is one key away. Superhuman's sidebar is the sender for the same reason.
 - Frame 4, variants Contact / Links / Today / Schedule.
+- **Maciej (2026-11-26, answers sheet):** a. → Contact opens first. Today is what people see now (since 1.8.0), so this is a visible change.
 
 **4 · The rail**
 - Order: **Inbox** (unified) · **Set aside** · **Snoozed** · **Follow-ups** · **Drafts** · **Sent** · then **Accounts** (each with its folders, collapsed) · **Saved searches** · **More** (Archive, Trash, Spam, Subscriptions, Attachments, Recently seen, New senders).
@@ -242,6 +248,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** This order · **b.** Keep today's flat list · **c.** You reorder (drag) and hide rows.
 - *Recommend a, with c later:* the places you work in first, the archive-like places folded. Customising the rail is a known want (customization is a product value) but adds a settings surface; round 2 can add it.
 - Frame 1 (rail).
+- **Maciej (2026-11-26, answers sheet):** a.
 
 #### B · The inbox
 
@@ -254,16 +261,19 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - *Recommend d.* Sections show everything at once, so nothing waits in a tab you forgot (Spark's Focused list; tell me if you use Spark's cards or Simple list instead); tabs stay for people who want one queue at a time (Superhuman users); Simple list for those who want neither.
 - Frame 2, variants a–c.
 - **Maciej (2026-11-26):** “Tabs look the best. What is requested most by the community? Can we squeeze more views to make it more customizable for the users? What makes most sense?” → Answered in the prototype: no published ranking exists, but Spark brought back Classic inboxes on request and Superhuman and Shortwave lead with custom split tabs, so the pattern is choice. Proposal awaiting his OK: Tabs open first; Sections, Cards and Simple list (now drawn as Frame 2 d) are Display choices; splits (call 6) become tabs and empty tabs hide.
+- **Maciej (2026-11-26, answers sheet):** a, with the note above. → Tabs open first. The proposal in the prototype (Sections, Cards and Simple list as Display choices; splits become tabs; empty tabs hide) still waits for his OK.
 
 **6 · Splits: any saved search can become a section or tab** · (c, re-decides MR B8 "up to 3")
 - "Save as split" on any search (`from:@acme.com`, `to:me is:unread`); a split becomes a section (or tab) in the inbox with its own count. Up to 6, then "+N".
 - **a.** Yes, up to 6 · **b.** Keep 3 custom tabs defined in Settings.
 - *Recommend a:* the agency user wants one split per client; Settings-only creation is too far from the moment you notice the pattern.
+- **Maciej (2026-11-26, answers sheet):** a, “Yes, but we should add an "x" icon to remove them quickly without confirmation.” → Splits, up to 6, and each split tab has an × that removes it at once without asking (agent's choice: an Undo in the toast, like every other removal).
 
 **7 · Group by sender anywhere**
 - Any sender (or whole domain) can be grouped to one row, like the Newsletters section does today ("Group mail from Linear"). From the ⋯ menu or the Person view.
 - **a.** Yes, sender and domain · **b.** Sender only · **c.** No.
 - *Recommend a:* notification-heavy senders (GitHub, Stripe, Linear) are the noise agencies drown in. Spark charges for domain grouping.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 #### C · The verbs
 
@@ -272,6 +282,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes, its own place in the rail · **b.** No; use Pin.
 - *Recommend a.* Pin keeps it in the inbox (noise) and Snooze needs a time (friction). This is the verb Spark users miss on day one.
 - Frame 7.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **9 · Set aside's page is a batch-reply page** · (b)
 - Opening Set aside shows every set-aside email stacked, each with its reply box open, so you answer them in one pass (HEY's Focus & Reply). `⌘↵` sends and moves to the next.
@@ -279,6 +290,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Batch-reply page · **b.** Ordinary list · **c.** Both, as two places (HEY's split).
 - *Recommend a:* it turns the shelf into a routine ("answer time"), and nobody else combines Spark's shelf with HEY's batch. If a looks too heavy, b with a "Reply to all of these" mode.
 - Frame 7, variants a–b.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **10 · Keys for the verbs**
 - *Since v1.8.1 (2026-11-26 check):* the public site now lists Mail's keys (moduo.app/shortcuts: j/k, Enter, r, e "Archive", t, s, m, p, #, /). It has no `a`, so either choice stays consistent with it, but whatever is picked here (and in 21, 42) means updating that page in the same build.
@@ -286,16 +298,19 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Collision: today `a` is Reply all (Gmail and Superhuman use `a` too). Spark uses `G` for Set aside, which collides with Moduo's `g` chords.
 - **a.** This map (`a` = Set aside, `⇧R` = Reply all) · **b.** Keep `a` = Reply all and give Set aside `⇧S`.
 - *Recommend b:* `a` for Reply all is muscle memory from Gmail and Superhuman for many people, while `⇧S` reads as "set aside" next to `s` snooze. (Presets in call 21 can remap.)
+- **Maciej (2026-11-26, answers sheet):** b. → `a` stays Reply all; Set aside is `⇧S`.
 
 **11 · Done shows where it went, and Recently seen**
 - After Done, "Recently seen" (last 20 opened) in the rail's More lets you find what you just cleared; a Display toggle "Show done in the inbox" greys them in place until you leave (Spark).
 - **a.** Both · **b.** Recently seen only · **c.** Neither (Undo and Archive cover it).
 - *Recommend b:* cheap, and it covers "where did that go"; showing done mail inline fights inbox zero.
+- **Maciej (2026-11-26, answers sheet):** b.
 
 **12 · Priority** · (a, extends MR X2 "Priority people")
 - Spark marks a sender **or a single conversation** as priority (floats to the top, priority notifications). Moduo has Priority people only.
 - **a.** Add per-conversation priority (`i`) · **b.** Keep people only.
 - *Recommend b:* Pin already floats a conversation; two "float this" verbs is one too many.
+- **Maciej (2026-11-26, answers sheet):** b.
 
 #### D · Writing
 
@@ -303,21 +318,25 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Toolbar on selection (bold, italic, link, lists, quote, headings), markdown shortcuts kept, pasted or dropped images inline (resizable), tables later.
 - **a.** Yes · **b.** Markdown only (today).
 - *Recommend a:* it's the first gap a Spark user hits, and replies with a screenshot are everyday mail. Built on the editor Notes uses.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **14 · Templates: whole emails with blanks** · (b)
 - A template is subject + recipients + body + attachments, with blanks (`{first name}`, `{date}`, and fill-ins you type) and a picker (`⌘⇧T`). Snippets (`;;`) stay for short pieces.
 - **a.** Yes, both · **b.** Snippets only.
 - *Recommend a:* agencies send the same proposal, invoice-chase and onboarding emails weekly.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **15 · Several signatures, switched in the composer** · (a, extends one-per-alias)
 - Any number of signatures, a default per account and alias, ← → to switch in the composer, "none" for one email.
 - **a.** Yes · **b.** One per alias (today).
 - *Recommend a.*
+- **Maciej (2026-11-26, answers sheet):** b, “Tempting to go with multiple, but I don't want to overcomplicate this from the start. If there's no market need for that feature I think we can keep one per address.” → One signature per address, as today. Revisit only if people ask for it.
 
 **16 · Composer extras from Spark**
 - Auto Cc/Bcc per account (a CRM's BCC address), contact groups as recipients (from Contacts' tags), `⌘1–⌘5` jumps to From/To/Cc/Subject/Body, "Send again" on a sent email.
 - **a.** All four · **b.** Pick some.
 - *Recommend a:* each is small and each has a user who depends on it.
+- **Maciej (2026-11-26, answers sheet):** other, “All sound good but I need an explanation on what it means and how it would look like.” → Open: explained and drawn in the prototype (Compose → Extras).
 
 **17 ★ · Send later** · (c, re-decides MR X9 "no")
 - **a.** No (today).
@@ -326,11 +345,13 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **d.** b now, c later as Mike's call.
 - *Recommend d:* Spark users schedule weekly; b is honest and costs nothing on the server; c is the real thing and is a systems decision. Reminders ("Remind if no reply", snooze returns) have the same limit today; c would fix them too.
 - Frame 3 variant c (the composer's Send later).
+- **Maciej (2026-11-26, answers sheet):** a. → No Send later. Checked once in the prototype, because a also drops b, which sends from the person's own computer and needs no server. Until he confirms, §6's scheduler row is dropped.
 
 **18 · Print and Save as PDF** · (c, re-decides MR X28 "no")
 - `⌘P` prints the conversation (or one message); the macOS dialog gives Save as PDF.
 - **a.** Yes · **b.** No.
 - *Recommend a:* invoices, contracts and tickets get printed; it's small.
+- **Maciej (2026-11-26, answers sheet):** a. → With 2 b, Print sits in the email's ⋯ menu.
 
 #### E · Notifications and keys
 
@@ -338,36 +359,43 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Each account: **All · People** (the Personal/People section only; default) **· Priority people · None**, and the Dock badge follows the same choice.
 - **a.** Yes · **b.** Keep the global setting.
 - *Recommend a:* a work account and a personal account rarely want the same noise. Quiet stays the default.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **20 · A quiet check-in summary** · (b)
 - When you open Mail after a while (or at times you set, like 9:00, 13:00, 17:00), the inbox opens with one line: "Since 9:00: 4 from people, 12 notifications, 2 follow-ups due" with a key to start. No pop-up, no separate home screen.
 - **a.** Yes, the line plus optional check-in times · **b.** The line only · **c.** No.
 - *Recommend b:* today's "came back while you were away" line already does half of this; check-in times are a habit feature for round 2 if wanted. Spark's Home Screen is paid and separate; we keep it a line.
+- **Maciej (2026-11-26, answers sheet):** b.
 
 **21 · Keyboard presets** · (b)
 - Settings → Keyboard: **Moduo** (default) · **Superhuman / Gmail** · **Spark** · **Apple Mail**, each remapping the Mail keys only.
 - **a.** Presets · **b.** Presets plus rebinding any action · **c.** One fixed map.
 - *Recommend a:* the people switching to Moduo come with muscle memory from one of these four; full rebinding is an app-wide settings project, not a Mail one.
+- **Maciej (2026-11-26, answers sheet):** a, “a, but it should be changed in settings. It's where keyboard shortcuts should be edited for all modules. The keyboard shortcut sheet should have a link to that place in settings.” → Presets, chosen in Settings → Keyboard, the one place where every module's keys are changed; the shortcut sheet links there. Open: presets only, or also changing any single key (asked in the prototype).
 
 **22 · Search understands plain dates and file types**
 - ⌘K mail search adds "last week", "this month", "since Monday", `has:pdf`, `has:image`, `larger:5mb`. Today it takes exact dates only.
 - **a.** Yes · **b.** No.
 - *Recommend a:* Spark's search works like this and it's what people type.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **23 · The Screener's default** · (a, MR X1 "off by default")
 - New senders wait in "New senders" until you allow them (HEY, Spark's Gatekeeper). Today it's off by default, a Settings toggle.
 - **a.** Keep off, and offer it once at first run ("Screen new senders?") · **b.** On for new accounts · **c.** Keep off, no offer.
 - *Recommend a:* screening is loved by people with public addresses and annoying for everyone else; one honest offer lets each choose.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **24 · A draft in its own window** · (c, re-decides MR X27 "no")
 - `⌘⇧D` pops the draft you're writing into its own small window so you keep triaging, and brings it back (Superhuman's pop-out). Opening a conversation in its own window too.
 - **a.** Draft only · **b.** Draft and conversation · **c.** No (today).
 - *Recommend a:* long replies get written between other things; a separate conversation window adds little next to Full (call 1).
+- **Maciej (2026-11-26, answers sheet):** other, “I need a better explanation on what you mean, I don't understand” → Open: explained and drawn in the prototype (Compose → Popped out).
 
 **25 · Out-of-office reply** · (c, re-decides MR X14 "no")
 - Set an automatic reply with dates from Settings → Mail, through the provider (Gmail and Microsoft have it; plain IMAP accounts don't).
 - **a.** Yes, where the provider supports it · **b.** No; use the provider's website.
 - *Recommend b:* it's a once-a-year setting, the provider's page does it, and half the accounts can't.
+- **Maciej (2026-11-26, answers sheet):** b.
 
 #### F · Moduo's links
 
@@ -376,22 +404,26 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes · **b.** Keep them separate after creating (today: a link chip only).
 - *Recommend a:* this is the single thing Spark and Superhuman can't do, and the connective-tissue spine's best demo. People outside the agency case (students, freelancers) use email-as-task the most.
 - Frame 5 variant a.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **27 · Link an email to a project** · (b)
 - From the Links view or `l`, link a conversation to a project; replies to that conversation stay linked; the project's page lists its emails (a project view, owned by Tasks). For agencies, "client mail" per project.
 - **a.** Yes · **b.** Link to tasks and contacts only (today).
 - *Recommend a:* agencies think in clients and projects, not inboxes.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **28 · The Links view replaces the chip row** · (a)
 - Today an email's links are chips under the subject. v4 keeps one short line under the subject ("Task · Hero photos · 2 more") and puts the full list, with add and remove, in the right panel's Links view.
 - **a.** Line + Links view · **b.** Chips only (today) · **c.** Links view only.
 - *Recommend a:* chips grow until they push the email down; one line plus a view scales.
 - Frame 4 variant Links.
+- **Maciej (2026-11-26, answers sheet):** a. → With 45 a, the view is called Details.
 
 **29 · Note from an email**
 - `n` today makes a *private note* on the email. v4: `n` creates a **Moduo note** linked both ways (title = subject, quoting the selected text), and the private note becomes "Add a note to this email" inside the Links view.
 - **a.** Yes · **b.** Keep the private note only.
 - *Recommend a:* meeting prep and client briefs start from an email; a private sticky note is a smaller job.
+- **Maciej (2026-11-26, answers sheet):** “I don't know, tell me more” → Open: explained in the prototype.
 
 **30 ★ · Scheduling from an email** · (b; Calendar owns the event model, §7)
 - **Offer times:** in the composer, "Offer times" (`⌘⇧O`) opens Schedule in the right panel: your week, drag to pick slots; it inserts them as a short list plus a booking link limited to those slots, and holds them as tentative until booked or released.
@@ -400,22 +432,26 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** All three · **b.** Booking link and Schedule only.
 - *Recommend a:* "when are you free?" is the most common email that turns into work, and Moduo has the calendar right there. Superhuman's version is its most loved feature.
 - Frame 5 variant c.
+- **Maciej (2026-11-26, answers sheet):** b, “Selected b only because I'm concerned about this part of "offer times": Isn't "offer times" going to add a step to the process that is hard to resolve automatically? Scheduling and booking link resolve this instantly and an event can be added. If I offer times and the other person just replies "march 2 works", do I manually add that into the calendar then?” → Booking link and Schedule; Offer times leaves the composer and the Schedule view leaves call 3's list. His question is answered in the prototype (an offer books itself only when the other person clicks a time; a reply in words leaves you to book it), with one check: does that change b? §7 ask 2 is parked meanwhile.
 
 **31 ★ · Invites: answer with your day beside it** · (a, extends the invite card)
 - An invite shows a bar: **Accept `y`… · Maybe · Decline** (keys in round 2), and the right panel switches to Today on that date with the invite drawn as a ghost among your events, conflicts marked.
 - **a.** Yes · **b.** Keep today's card.
 - *Recommend a:* you can't answer an invite without seeing your day. Gmail and Apple Mail do the bar; nobody puts the day beside it.
 - Frame 5 variant b.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **32 · Quick capture from Mail knows its source** · (a)
 - ⌘⇧K while reading an email pre-fills "From: <subject>" and links the new task, note or event to the email.
 - **a.** Yes · **b.** No.
 - *Recommend a:* the capture source type already exists and nothing in Mail uses it.
+- **Maciej (2026-11-26, answers sheet):** a, “Yes, but as an offer. Better to make the user click once than automatically link something unrelated.” → Quick capture shows the email as a one-click suggestion (“Link to: <subject>”), not a link made for you.
 
 **33 · Drag an email anywhere** · (a, extends drag to a task or day)
 - Drag an email onto a project, a note, a chat channel or a contact to link it there (today: tasks and calendar days).
 - **a.** Yes · **b.** Keep today's targets.
 - *Recommend a:* one gesture for every link, which is the spine's rule ("link by default, easy to remove").
+- **Maciej (2026-11-26, answers sheet):** a.
 
 #### G · Teams (the first user is a 2–5 person agency)
 
@@ -424,22 +460,26 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes · **b.** Later (today's answer) · **c.** Only "Discuss in chat" (call 35).
 - *Recommend a:* an agency's client emails are team work; Spark Teams and Missive are built around this. It needs a cloud copy of the shared conversations only (Mike, §6, cost M). People outside agencies (solo) never see it.
 - Frame 6 variant a.
+- **Maciej (2026-11-26, answers sheet):** c. → No shared conversations; Discuss in chat only. §6's cloud-copy row is dropped.
 
 **35 · Discuss in chat** · (b)
 - From an email, "Discuss in chat" posts an email card (subject, sender, excerpt, link) into a channel or DM, with your message. Teammates without access see the card and the excerpt you chose.
 - **a.** Yes · **b.** No.
 - *Recommend a:* the cheap half of sharing; works without call 34.
 - Frame 6 variant b.
+- **Maciej (2026-11-26, answers sheet):** a. → The only team-sharing path in v4 (with 34 c).
 
 **36 · Hand an email to a teammate**
 - "Assign" makes a task for a teammate from the email (call 26's link included) and, if the conversation is shared (34), they can reply from their own account with the history in view.
 - **a.** Yes · **b.** No.
 - *Recommend a:* delegation is the agency's daily move; through Tasks it costs no new concept.
+- **Maciej (2026-11-26, answers sheet):** other, “How would that work?” → Open: explained in its smaller form (with 34 c the teammate gets a task and an excerpt, never the email itself).
 
 **37 · Shared inboxes (hello@, support@)**
 - A team inbox several people work from, with assignment and "who's replying" (Front, Missive).
 - **a.** In v4 · **b.** Its own plan later.
 - *Recommend b:* it's a different product (a help desk); v4 makes personal mail team-aware first.
+- **Maciej (2026-11-26, answers sheet):** b.
 
 #### H · Agents and where Mail lives
 
@@ -448,17 +488,20 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Agents' triage really happens (Done, snooze, label, pin, link) through a queue the Mac applies; reading a body is opt-in per account; agents can write **drafts** that wait in your Drafts; agents **never send**.
 - **b.** Keep metadata only and remove the snooze tools that don't work.
 - *Recommend a:* "AI only through MCP" means MCP has to be good; drafts-never-send keeps you in control. Needs Mike (§6, cost S–M).
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **39 ★ · Mail stays on the Mac** · (c, re-opens "the inbox never leaves the machine")
 - Spark and Superhuman run on servers, which gives them phones, web and on-time sending. Moduo keeps your mail on the Mac only.
 - **a.** Keep it Mac-only for v4; sharing (34) and send later (17c) are the only, opt-in exceptions.
 - **b.** Plan a server copy so Mail works on the web and, later, the phone. Needs Mike: a large change.
 - *Recommend a:* privacy is the top reason people leave Spark, and it's Moduo's edge; revisit with mobile, which is its own plan.
+- **Maciej (2026-11-26, answers sheet):** a, “No plans for a server copy for now, and probably not in years. Also Windows of course.” → Mail stays on the person's computer: Mac and Windows. “On the Mac” wording becomes “on your computer” everywhere. With 17 a and 34 c, no mail content leaves the computer; only links (as today) and 38's agent queue touch the server.
 
 **40 · Instant next email (for Mike)** · (b)
 - The engine reads the next and previous emails' bodies ahead of time, so opening the next email never shows "downloading". Cost S.
 - **a.** Yes · **b.** No.
 - *Recommend a.*
+- **Maciej (2026-11-26, answers sheet):** a.
 
 #### I · Vocabulary and principles
 
@@ -466,22 +509,26 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Chat already uses "thread" for replies. Mail today mixes "thread" and "conversation".
 - **a.** "Conversation" in the list and reader; a link chip says "Email" with the subject. · **b.** "Thread".
 - *Recommend a:* no collision with Chat, and "email" is what people call it.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **42 · "Done" vs "Archive"**
 - *Since v1.8.1:* the new public shortcuts page calls `e` "Archive". With a (the verb is Done) the page should say "Done"; noted for the build.
 - The verb is **Done** everywhere; the place it goes is **Archive** (where you find done mail).
 - **a.** Keep both words in those roles (today) · **b.** Call the place "Done".
 - *Recommend a:* Archive matches the server folder people see in other clients.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **43 · Densities reach Linear level**
 - Comfortable (two lines), Compact (one 32 px line), and a new **Dense** (one 28 px line, smaller avatars, no snippet).
 - **a.** Add Dense · **b.** Keep two densities.
 - *Recommend a:* the densest setting should reach Linear and Notion (customization rule). Frame 9.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 **44 · Light theme gets the same care as dark**
 - Every frame in this plan ships in light and dark (T in the prototype). Light-mode tuning was out of scope in AGENTS.md; Mail's reading surface is where light matters most (email bodies are designed light).
 - **a.** In scope for Mail v4 · **b.** Out, as today.
 - *Recommend a:* most HTML email is designed on white, and readers often read in light.
+- **Maciej (2026-11-26, answers sheet):** a.
 
 ---
 
@@ -490,11 +537,60 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - Calendar's plan calls its version **Details** (everything linked to an event). Mail's frames call it Links.
 - **a.** Details, app-wide · **b.** Links.
 - *Recommend a:* one name per concept across modules, and "Links" collides with the `l` Link verb.
+- **Maciej (2026-11-26, answers sheet):** a. → Details, app-wide: the Links view is renamed in round 2's frames.
 
 **46 · What the right panel does in a narrow window** · (c, re-decides MI's "folds to a 40 px strip below 1180 px")
 - The critics found the reader squeezed to a sliver at 1024 px with the panel open. Calendar's 30 Oct review stopped its panels folding at all.
 - **a.** Below 1200 px the panel hides; its bottom-bar toggle brings it back over the reader · **b.** Keep the icon strip (today) · **c.** Never hide; the list narrows instead.
 - *Recommend a:* no edge strips (the 3×3 rule) and the reader keeps its width. It should be one app-wide rule; I'll match whatever you pick for Calendar. The prototype draws a.
+- **Maciej (2026-11-26, answers sheet):** a.
+
+#### J · The bottom bar, in every module (added 2026-11-26, after his answers)
+
+His words: *“It made sense with specific places in tasks … because none of the options on the bottom bar (search, new, qc) made sense then. I can't even find the situation in which that bottom bar changed now. We should be consistent with this, and need to talk in-depth about what it means for all modules.”*
+
+**What the app does today** (read from `apps/app/src/components/app/bottom-bar-mode.ts` and its users on `origin/maciej`; not checked live). The bar is the left panel's toggle, a centre, and the right panel's toggle. The centre holds **Search · Quick capture · New** (Search opens the module's own search in Chat and Notes, ⌘K elsewhere). A *mode* swaps the centre for its own actions with keys, then More ▾, and Esc ends it (Tasks 82b, one mode at a time). Every place it happens:
+
+| Where | How you get there | The row |
+| --- | --- | --- |
+| Tasks · Inbox triage | Tasks → Inbox, click one task that has no parent | Accept 1 · Decline 2 · Duplicate 3 · Snooze H |
+| Tasks · several selected | Any Tasks list, ⇧-click or ⌘-click a second task | Complete Space · Focus Q · Assign @ · Tag # · Date D · Delete ⌫ · More ▾ · “4 selected · Esc” |
+| Chat · messages picked | Select messages in a conversation | Move M · Task T · Delete ⌫ · “2 selected · Esc” |
+| Chat · Catch up | Chat → Catch up, while anything is left | Reply R · Done Space · Task T · Later H · Open ⏎ · More ▾ · “5 left · Esc” |
+| Home | Always | The panel toggles' places hold the page dots and Edit |
+| Mail on the web | Always | Quick capture and New hidden (no compose on the web) |
+
+Calendar's plan (its call C2b, open) proposes a tool of its own in the centre: Search · Today · New.
+
+**The pattern under what he liked:** every mode today has verbs that exist *only in that moment* (Accept/Decline/Duplicate only in the Inbox; Later and Done only in Catch up; acting on several at once only in a selection). An open task, note or message never changes the bar: its actions stay on it. Mail's 2a broke that, because Done, Snooze and Reply work on any email anywhere. The prototype's Bottom bar → “Every module” draws every row above and what Mail would add.
+
+**47 ★ · When the bar's centre changes, in every module** · (a, writes down 82b's rule)
+- **a.** Only for a mode: several items selected, or a place with its own triage verbs (Tasks' Inbox, Chat's Catch up, Mail's Set aside). An open item keeps its actions on itself.
+- **b.** Also whenever one item is open (an email, a task, a note): its actions move to the bar.
+- **c.** Never: the bar never changes; a selection gets a floating row.
+- *Recommend a:* it's what Tasks and Chat already do, it matches his 2 b, and Search, Capture and New stay where you expect them.
+
+**48 · Mail's modes** · (b)
+- **a.** Several conversations selected, and Set aside's answer-in-one-pass page.
+- **b.** Also the Inbox with one email selected, like Tasks' Inbox.
+- **c.** Only several selected.
+- *Recommend a:* Done, Snooze and Reply work on any email anywhere, so they belong on the email; Set aside's Send & next and Skip exist only on that page.
+
+**49 · The bar's normal centre** · (c for Calendar's C2b)
+- **a.** The same three everywhere, each about this module: Search searches it, New makes its item; ⌘K stays app-wide.
+- **b.** The three plus up to two of the module's own tools (Calendar's Today).
+- **c.** Each module picks its own.
+- *Recommend a:* one bar you never re-learn; a module's own tools go in its toolbar. Today Search falls back to ⌘K in modules without their own search; a would give each module one.
+
+**50 · Where Send lives while you write** · (b)
+- **a.** In the composer, like Chat; the bar keeps its tools.
+- **b.** In the bar (round 1's Writing frame).
+- *Recommend a:* under 47 a writing isn't a mode, and Chat's composer already works this way.
+
+**51 · Finding a mode** · (c, changes how Tasks' Inbox and Chat's Catch up open)
+- **a.** A queue (Tasks' Inbox, Chat's Catch up, Mail's Set aside) opens with its first item selected, so its row is already there.
+- **b.** The row appears once you select something (today).
+- *Recommend a:* a mode you have to stumble into isn't a tool. Selecting several stays deliberate and needs no hint.
 
 ### Round 1 prototype: blind critics
 
