@@ -3,11 +3,13 @@ name: release
 # A release is a vX.Y.Z tag (specs/release-v2.md, REL-2). /ship (REL-3) bumps VERSION and the notes
 # in a release PR, merges it into develop and tags the merge commit; this workflow then ships that
 # one commit everywhere:
-#   resolve  the tag's commit is on develop, `checks` passed on a push of it (waits for a run still
+#   resolve  the tag's commit is on develop, `checks` passed on a push of it or on the release PR's head
+#            when the merge changed nothing (check-tag.sh; waits for a run still
 #            going) and VERSION equals the tag; anything else is refused (AC7)
 #   web      app.moduo.app, then moduo.app (_deploy-web.yml), with the smoke tests
 #   mcp      mcp.moduo.app, the MCP connector's address (_deploy-mcp-proxy.yml), with its smoke test
-#   desktop  the production desktop build of the checked commit (_desktop-release.yml), only when
+#   desktop  the production desktop build of the checked commit (_desktop-release.yml), built alongside
+#            web and published only once web succeeded, only when
 #            something the desktop bundle is built from changed since the last tag that shipped
 #            desktop (desktop bundles the UI; the list is in "Does desktop need a build?"). First
 #            tag release: always.
@@ -119,7 +121,9 @@ jobs:
       label: ${{ github.ref_name }}
 
   desktop:
-    needs: [resolve, web]
+    # Alongside web, not after it: the builds take 8–12 minutes, and publish waits for web's jobs
+    # (wait_for_web) so a rolled-back canary still ships no desktop update.
+    needs: resolve
     if: needs.resolve.outputs.desktop == 'true'
     # Shared with Desktop Release (production): never two production builds at once.
     concurrency:
@@ -142,6 +146,7 @@ jobs:
       prerelease: false
       web_origin: "https://app.moduo.app"
       desktop_channel: "production"
+      wait_for_web: true
 
   notes:
     needs: [resolve, web, desktop]
