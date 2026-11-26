@@ -36,6 +36,7 @@ import {
   useFocusSession,
 } from "./engine";
 import type { FocusSession, FocusTaskRef } from "./engine-core";
+import { forgetOwed, oweEnd, oweGiveBack, paidEnd, paidGiveBack, readOwed } from "./owed";
 import {
   type FocusRun,
   type FocusRunReading,
@@ -315,14 +316,21 @@ type GiveBack = Parameters<FocusRunRuntime["giveBackTime"]>[0];
 /** Give time back (keyed: a resend never counts twice). A failed request is
  *  sent again on the next look; a refusal isn't. */
 function sendGiveBack(back: GiveBack): void {
-  if (!rt) return;
+  if (!rt || !user) return;
   const runtime = rt;
+  const who = user;
   queue(async () => {
     try {
       await runtime.giveBackTime(back);
+      paidGiveBack(who, back.key);
     } catch (error) {
       const code = (error as { code?: unknown }).code;
-      if (code !== "42501" && code !== "22023") giveBacksOwed.push(back);
+      if (code === "42501" || code === "22023") paidGiveBack(who, back.key);
+      else {
+        // Kept on the device too: sign-out and reload drop memory (MOD-718).
+        if (!giveBacksOwed.some((b) => b.key === back.key)) giveBacksOwed.push(back);
+        oweGiveBack(who, back);
+      }
       throw error;
     }
   });
@@ -776,18 +784,53 @@ function finishEnd(): void {
   queue(async () => {
     const id = serverIds.get(run.id) ?? run.id;
     if (id.startsWith("local-")) return;
-    await runtime.endRun({
-      runId: id,
-      deviceId,
-      state: {
-        mode: run.mode,
-        focusedSeconds: ended.focusedSeconds,
-        blocksCompleted: ended.blocksCompleted,
-        doneTaskIds: run.doneTaskIds,
-        nowTaskId: run.nowTaskId,
-      },
-    });
+    await runtime.endRun({ runId: id, deviceId, state: endState(run, ended) });
   });
+}
+
+/** What an end sends: the run's final numbers. */
+function endState(run: FocusRun, final: Pick<FocusRun, "focusedSeconds" | "blocksCompleted">) {
+  return {
+    mode: run.mode,
+    focusedSeconds: final.focusedSeconds,
+    blocksCompleted: final.blocksCompleted,
+    doneTaskIds: run.doneTaskIds,
+    nowTaskId: run.nowTaskId,
+  };
+}
+
+/** Signing out inside a Stop's Undo window: the end is kept on the device and
+ *  sent when this person is back, with the final numbers (MOD-719). */
+function owePendingEnd(): void {
+  const held = pendingEnd;
+  if (!held || !user) return;
+  const id = serverIds.get(held.run.id) ?? held.run.id;
+  if (id.startsWith("local-")) return;
+  oweEnd(user, {
+    runId: id,
+    state: endState(held.run, {
+      focusedSeconds: held.snap?.focusedSeconds ?? held.run.focusedSeconds,
+      blocksCompleted: held.snap?.blocksCompleted ?? held.run.blocksCompleted,
+    }),
+  });
+}
+
+/** Send what this person still owed from an earlier sign-in on this device. */
+function payOwed(userId: string): void {
+  if (!rt) return;
+  const runtime = rt;
+  const owed = readOwed(userId);
+  for (const end of owed.ends) {
+    endedHere.add(end.runId);
+    queue(async () => {
+      await runtime.endRun({ runId: end.runId, deviceId, state: end.state });
+      paidEnd(userId, end.runId);
+    });
+  }
+  for (const back of owed.giveBacks) {
+    if (!giveBacksOwed.some((b) => b.key === back.key)) giveBacksOwed.push(back);
+  }
+  retryGiveBacks();
 }
 
 function heartbeat(): void {
@@ -879,6 +922,7 @@ export function attachRunUser(
 ): void {
   const nextRt = runtime?.focus ?? null;
   if (userId === user && nextRt === rt) return;
+  owePendingEnd();
   resetMemory();
   user = userId;
   rt = nextRt;
@@ -913,6 +957,7 @@ export function attachRunUser(
       );
     }
     retryStart();
+    payOwed(userId);
     void refreshRun();
   } else {
     reconcile();
@@ -921,6 +966,7 @@ export function attachRunUser(
 
 /** Erase a person's run record from this device (account deletion). */
 export function forgetRunUser(userId: string): void {
+  forgetOwed(userId);
   try {
     storage()?.removeItem(runKey(userId));
   } catch {
