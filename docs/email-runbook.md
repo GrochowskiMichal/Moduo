@@ -1,6 +1,6 @@
 # Email runbook
 
-How Moduo's own emails are switched on, checked and rolled back. The build plan is [specs/transactional-email.md](../specs/transactional-email.md); every TX block adds its section here. Never paste a secret into a chat or a doc: set it in your own terminal.
+How Moduo's own emails are switched on, checked and rolled back. The build plan is specs/transactional-email.md; every TX block adds its section here. Never paste a secret into a chat or a doc: set it in your own terminal.
 
 ## Pieces
 

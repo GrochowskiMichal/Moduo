@@ -1,5 +1,5 @@
 <!--
-  SPEC TEMPLATE — copy to specs/<feature>.md and fill every section.
+  SPEC TEMPLATE (.claude/skills/s1/spec-template.md) — copy to specs/<feature>.md and fill every section.
   Produced by /s1; consumed by /s2. The user is a product designer, not an
   engineer: this captures PRODUCT intent in plain language, and the agent fills the
   technical layer (Assumptions, Tests, Execution blocks) by research, not by asking.

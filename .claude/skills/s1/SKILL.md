@@ -1,6 +1,6 @@
 ---
 name: s1
-description: Stage 1 — Plan a Moduo feature. Use before building anything that needs a spec. Grill the designer on product, UX and edge cases, research the technical layer yourself, and write a ready spec cut into blocks. Read-only, writes no code. Not for building (that is /s2) or wrap-up (that is /s3). Fills specs/_template.md with a brief per block, sizes each block to one execution's context, never asks the designer how, and ends at the Definition-of-Ready gate; run in your tool's read-only/plan mode if it has one.
+description: Stage 1 — Plan a Moduo feature. Use before building anything that needs a spec. Grill the designer on product, UX and edge cases, research the technical layer yourself, and write a ready spec cut into blocks. Read-only, writes no code. Not for building (that is /s2) or wrap-up (that is /s3). Fills the spec template with a brief per block, sizes each block to one execution's context, never asks the designer how, and ends at the Definition-of-Ready gate; run in your tool's read-only/plan mode if it has one.
 effort: high
 ---
 
@@ -25,7 +25,7 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 - If you don't know something, research it deeply before proceeding. Never guess silently; never stall waiting on the designer for something you can find out yourself.
 
 ## 3. Fill the spec
-- Copy `specs/_template.md` → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` with its `status:` line (then `bun run docs:index` regenerates the index).
+- Copy [spec-template.md](spec-template.md) (beside this file) → `specs/<feature>.md` and fill every section. **You** author *Tests that prove them* from the acceptance criteria, each with its one-line plain-English note. Record every technical call under *Assumptions & technical decisions*; durable ones also become a full entry in `docs/decisions/<area>.md` with its `status:` line (then `bun run docs:index` regenerates the index).
 - **Write a brief for every block** under *Block briefs* (the template has the shape): the goal, the block's acceptance criteria and tests copied in full, where to start as `path:line` from your recon, the decisions that apply with their file and line, the traps, and what is not in the block. At most 3 KB each. `/s2` reads the brief and no other part of the spec, so whatever the builder needs has to be in it.
 - For a UI feature, **reference** the `.design/<module>` briefs and the module contract — don't restate them.
 

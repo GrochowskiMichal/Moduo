@@ -18,7 +18,6 @@ const SINGLE = [
   "docs/agent-setup.md",
   "docs/agents/issue-tracker.md",
   "docs/release.md",
-  "specs/_template.md",
 ];
 const TREES = [".claude/skills", ".claude/agents", ".claude/rules", "tools/claude-plugins"];
 

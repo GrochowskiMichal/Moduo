@@ -72,7 +72,7 @@ E2E_BASE_URL=http://127.0.0.1:8131 bun run perf   # seeds (or keeps) the fixture
 
 ## Apps signing in (OAuth server, MCPO)
 
-`supabase/config.toml` turns Supabase Auth's OAuth 2.1 server on (`[auth.oauth_server]`, consent at `/oauth/consent`, dynamic registration on), so apps like Claude sign in locally as they will on prod ([specs/mcp-oauth.md](../specs/mcp-oauth.md)). The stack picks that up on its next restart. Until then, and whenever a restart would cut off other sessions, run a second Auth with it on, against the same database:
+`supabase/config.toml` turns Supabase Auth's OAuth 2.1 server on (`[auth.oauth_server]`, consent at `/oauth/consent`, dynamic registration on), so apps like Claude sign in locally as they will on prod (specs/mcp-oauth.md). The stack picks that up on its next restart. Until then, and whenever a restart would cut off other sessions, run a second Auth with it on, against the same database:
 
 ```bash
 scripts/local/oauth-auth.sh up      # http://127.0.0.1:54399; `down` removes it

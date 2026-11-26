@@ -59,7 +59,7 @@ cross-row invariant is an op: queue membership + ordering, counters, computed
 state transitions, recurrence pointer moves. Plain single-field edits (title,
 description, priority, …) may remain raw `upsert` writes for now — they carry
 no invariants and stay covered by RLS. As of Tasks v3 (2026-10-10,
-[`specs/tasks-v3.md`](../specs/tasks-v3.md) §Assumptions #1) every create and
+`specs/tasks-v3.md` §Assumptions #1) every create and
 every field edit in Tasks is an op (`tasks_op_create` / `tasks_op_update`) and
 the raw write grants are revoked at TV-D7; other modules follow when they are
 rebuilt. The long-term direction is ops for
@@ -184,7 +184,7 @@ static, typed manifest — onboarding module N+1 is additive:
 - [ ] every op writes an attributed `module_activity` row;
 - [ ] the activity trail renders in the module's detail surface;
 - [ ] the module has a manifest entry in the registry;
-- [ ] the module answers `<module>__search(ws, query, limit)` with `SearchHit` rows, its own visibility applied before the limit and the actor read from the request, and `search_all` calls it (global search, [specs/global-search.md](../specs/global-search.md) Assumptions 1, 2, 7; until then the `registry__search` adapter covers its type).
+- [ ] the module answers `<module>__search(ws, query, limit)` with `SearchHit` rows, its own visibility applied before the limit and the actor read from the request, and `search_all` calls it (global search, specs/global-search.md Assumptions 1, 2, 7; until then the `registry__search` adapter covers its type).
 
 ---
 

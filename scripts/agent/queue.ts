@@ -19,7 +19,7 @@
 // (queue-import.ts). Env: MODUO_MCP_KEY (your agent's key, the one .mcp.json
 // sends), MODUO_MCP_URL (default https://mcp.moduo.app).
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -132,6 +132,8 @@ function depsOf(
 export function readSpecBlocks(root = ROOT): Map<string, SpecBlock> {
   const map = new Map<string, SpecBlock>();
   const dir = path.join(root, "specs");
+  // No spec in the repository (all were removed on 2026-11-26): dependencies come from Moduo's "blocks" edges alone.
+  if (!existsSync(dir)) return map;
   for (const f of readdirSync(dir).sort()) {
     if (!f.endsWith(".md") || f.startsWith("_")) continue;
     for (const b of parseExecutionBlocks(readFileSync(path.join(dir, f), "utf8"), `specs/${f}`))
