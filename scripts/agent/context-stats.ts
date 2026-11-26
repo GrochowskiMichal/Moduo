@@ -7,7 +7,7 @@
  * `bun run numbers` reports the weekly medians; `bun scripts/agent/context-stats.ts [days]`
  * prints them for the last N days (default 7) on this machine.
  */
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
@@ -180,16 +180,28 @@ function sessionsIn(dir: string, since: Date): SessionContext[] {
     return out;
   }
   for (const f of files) {
-    try {
-      const file = path.join(dir, f);
-      if (statSync(file).mtimeMs < since.getTime()) continue;
-      const s = sessionContext(readFileSync(file, "utf8").split("\n"));
-      if (s) out.push(s);
-    } catch {
-      // Claude Code may be rotating it.
-    }
+    const text = readIfChangedSince(path.join(dir, f), since);
+    const s = text === null ? null : sessionContext(text.split("\n"));
+    if (s) out.push(s);
   }
   return out;
+}
+
+/** The file's text when it changed since `since`. One open, so the check and the read see the same file. */
+function readIfChangedSince(file: string, since: Date): string | null {
+  let fd: number;
+  try {
+    fd = openSync(file, "r");
+  } catch {
+    return null; // gone, or Claude Code is rotating it
+  }
+  try {
+    return fstatSync(fd).mtimeMs < since.getTime() ? null : readFileSync(fd, "utf8");
+  } catch {
+    return null;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 if (import.meta.main) {
