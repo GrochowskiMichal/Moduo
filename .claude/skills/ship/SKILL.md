@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Release Moduo to production. `/ship` prepares the next version from develop (notes, version, risk, manual prerequisites), then asks one question: ship it yourself now, or hand it to the other founder. `/ship vX.Y.Z` finishes an open release PR (a hand-off). The only way to release; guard-release.sh blocks release tags and prod workflows started any other way. Not for landing blocks (that is /s3).
+description: Release Moduo to production, the only way to release. Use when the person types `/ship` (prepare the next version from develop) or `/ship vX.Y.Z` (finish an open release PR, a hand-off). Not for landing blocks (that is /s3). `/ship` prepares notes, version, risk and manual prerequisites, then asks one question, ship it yourself now or hand it to the other founder. guard-release.sh blocks release tags and prod workflows started any other way.
 effort: high
 disable-model-invocation: true
 ---

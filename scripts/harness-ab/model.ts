@@ -81,11 +81,13 @@ export type Arm = ArmLike & {
 };
 
 const escapes = (p: string) => path.isAbsolute(p) || p.split(/[\\/]/).includes("..") || p === "";
+/** A target inside .git/ could plant a hook that runs on the host when the rig commits. */
+const inGit = (p: string) => p.split(/[\\/]/)[0] === ".git";
 
 /** An overlay that would write outside the workspace, read outside overlays/, or names a missing file. */
 export function overlayProblems(arm: Arm, root = OVERLAYS_DIR): string[] {
   return Object.entries(arm.overlay ?? {}).flatMap(([dest, src]) => {
-    if (escapes(dest))
+    if (escapes(dest) || inGit(dest))
       return [`${arm.id}: overlay target "${dest}" must be a path inside the workspace`];
     if (escapes(src)) return [`${arm.id}: overlay source "${src}" must be a path inside overlays/`];
     if (!existsSync(path.join(root, src)))

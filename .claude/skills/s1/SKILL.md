@@ -1,6 +1,6 @@
 ---
 name: s1
-description: Stage 1 — Plan. Moduo planning session — grill the designer exhaustively on product/UX/edge-cases, research the technical layer yourself (read-only explore/recon subagents + web, never ask the designer how), fill specs/_template.md, decompose into context-sized execution blocks, and end at the Definition-of-Ready gate. Read-only, writes no code. Use before building any feature; run in your tool's read-only/plan mode if it has one. Not for building (that is /s2) or wrap-up (that is /s3).
+description: Stage 1 — Plan a Moduo feature. Use before building anything that needs a spec. Grill the designer on product, UX and edge cases, research the technical layer yourself, and write a ready spec cut into blocks. Read-only, writes no code. Not for building (that is /s2) or wrap-up (that is /s3). Fills specs/_template.md with a brief per block, sizes each block to one execution's context, never asks the designer how, and ends at the Definition-of-Ready gate; run in your tool's read-only/plan mode if it has one.
 effort: high
 ---
 

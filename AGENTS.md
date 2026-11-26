@@ -2,7 +2,7 @@
 
 The map for coding agents in Moduo. It loads in every session, so it stays under 6 KB (`lint:rules`).
 Procedures live in skills, area rules in `.claude/rules/` (each loads when you open a matching file), knowledge in `docs/`.
-What must hold every time lives in hooks, lint and CI. Don't add a `CLAUDE.md` or folder `AGENTS.md` files.
+What must hold every time lives in hooks, lint and CI. No `CLAUDE.md`, no folder `AGENTS.md` files.
 
 ## Must-hold rules
 
@@ -10,7 +10,7 @@ What must hold every time lives in hooks, lint and CI. Don't add a `CLAUDE.md` o
 
 1. ⛔ Branch before editing: `t/<owner>/<kebab>` off the latest personal branch (`mike`, `maciej`), never `develop`.
 2. ⛔ The repo is public. No secrets, tokens, session files or customer data in git; private notes go in `docs/local/`.
-3. ⛔ Tokens only in UI: no raw hex, arbitrary Tailwind values or inline-style design properties.
+3. ⛔ Tokens only in UI: no raw hex, arbitrary Tailwind values or inline-style design properties; primitives wrap shadcn.
 4. ⛔ Closed vocabularies live once, in `supabase/functions/_shared/contracts/`, with a matching Postgres CHECK.
 5. Applied migrations are history: never edit one, add a new one.
 6. Always `getRuntime()`, never a bare `{ runtime }` import. redb is paused: nothing new depends on it.
@@ -24,10 +24,10 @@ What must hold every time lives in hooks, lint and CI. Don't add a `CLAUDE.md` o
 
 ## Session start
 
-- The SessionStart hook says whether you are behind the personal branch. Reconcile before editing.
+- The SessionStart hook says whether you are behind the personal branch. Reconcile before editing, and note whether `origin/develop` moved.
 - Title the session once its purpose is clear: one line in `.claude/SESSION_TITLE`,
   `[<Module>] <title>` when planning or `[<Module> <BLOCK-ID>] <block>` when building.
-- One task per session. Use a fresh session or `/clear` for an unrelated task.
+- One task per session; `/clear` or a fresh session for an unrelated one.
 
 ## Working posture
 
@@ -42,14 +42,14 @@ Before planning or building UI, read the [designer brief](./docs/agents/designer
 - **Block lane:** everything else. `/s1` plans (read-only) and writes a spec with a brief per block,
   `/s2` builds one block, `/s3` lands it. Blocks are tasks in Moduo (the queue is in Moduo): `bun run queue`.
 
-Report once, at the end, and short: a **Status** line, **Changed · Test this**, and
+Report once, at the end, short: **Status**, **Changed · Test this**, and
 **❓ Needs you / ⚠ Broke** only when they apply.
 
 ## Where things are
 
 - **Decisions:** `bun run docs:find <area> <words>` prints the current decisions that match. Run it before
   you change behaviour in an area. Area files run to 600 KB: search them, never read one whole.
-- **Traps:** `docs/gotchas/<area>.md`, a short map to the checks and path rules that hold each trap.
+- **Traps:** `docs/gotchas/<area>.md` maps each trap to the check or path rule that holds it.
 - **Product direction** (before designing a module, not before a fix): [brief](./docs/PRODUCT_BRIEF.md),
   [roadmap](./docs/ROADMAP.md), [data layers](./docs/data-layers.md), `.design/<module>/BRIEF.md`,
   [module contract](./docs/moduo-module-contract.md).
@@ -65,7 +65,7 @@ Report once, at the end, and short: a **Status** line, **Changed · Test this**,
 
 ## Commands
 
-- `bun run dev:web` · `bun run dev:desktop` · `bun run storybook`
+- `bun run dev:web` · `bun run dev:desktop`
 - `bun run local:up` starts the local Supabase stack and points `.env.local` at it; `bun run env:cloud` goes back.
 - `bun run verify` is the done gate: types, lint, format, tokens, boundaries, size and tests. It prints
   failures and the path of the full log. It covers no Rust: `.claude/rules/desktop-rust.md`.
@@ -79,12 +79,13 @@ Report once, at the end, and short: a **Status** line, **Changed · Test this**,
 - `mike` and `maciej` are hot: integrate with merge commits, never fast-forward.
   Force-push only your own task branch, with `--force-with-lease`.
 - Standing authorization: after a bigger chunk lands on the personal branch, merge personal → `develop`
-  yourself, in batches (`/s3`).
+  yourself, in batches (`/s3`), unless the designer said to keep it on the task branch or the
+  duplication guard finds overlap.
 
 ## Sessions and tools
 
-- Interactive sessions run in auto mode (`bun run agent:auto-mode` once per machine).
-- MCP: `supabase`, and `moduo`, our own connector and the one Moduo connection (`https://mcp.moduo.app`).
+- Interactive sessions run in auto mode.
+- MCP: `supabase`, and `moduo`, our own connector and the one Moduo connection.
 - A hand-off to the other founder is a comment on the Moduo task. Never instruct another person's agent.
 
 ## Out of scope right now

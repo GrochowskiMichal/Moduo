@@ -1,6 +1,6 @@
 ---
 name: s2
-description: Stage 2 — Execute (build one block). Builds one approved execution block from a Moduo spec autonomously (auto-selecting and claiming the next ready block from the Moduo queue, `bun run queue next`, when none is named) — quietly, with subagents for noisy work, test-first, ending with the verify gate (bun run verify), a spec review and, for Tier 2 paths only, one advisory validator pass, then reporting once, briefly. Also holds the fast-lane and bug-lane rules. Use after /s1 when the designer approves a block and presses play, ideally inside /goal. Not for planning (that is /s1) or wrap-up/commit/merge (that is /s3).
+description: Stage 2 — Execute (build one block). Use after /s1 when the designer approves a block and presses play, ideally inside /goal; also holds the fast-lane and bug-lane rules. Not for planning (that is /s1) or wrap-up/commit/merge (that is /s3). Builds one approved execution block from a Moduo spec autonomously (auto-selecting and claiming the next ready block from the Moduo queue, `bun run queue next`, when none is named) — quietly, with subagents for noisy work, test-first, ending with the verify gate (bun run verify), a spec review and, for Tier 2 paths only, one advisory validator pass, then reporting once, briefly.
 effort: high
 ---
 

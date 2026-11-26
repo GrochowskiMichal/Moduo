@@ -119,6 +119,8 @@ describe("projectSlug", () => {
   it("matches Claude Code's folder name for a checkout and its worktrees", () => {
     const root = projectSlug("/Users/me/Documents/moduo_latest");
     expect(root).toBe("-Users-me-Documents-moduo-latest");
+    // readSessions takes the folder itself or "<slug>--…", so a sibling checkout stays out.
+    expect(projectSlug("/Users/me/Documents/moduo_latest_old").startsWith(`${root}--`)).toBe(false);
     expect(
       projectSlug("/Users/me/Documents/moduo_latest/.claude/worktrees/x").startsWith(root),
     ).toBe(true);

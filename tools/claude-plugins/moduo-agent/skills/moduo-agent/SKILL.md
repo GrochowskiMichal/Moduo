@@ -1,6 +1,6 @@
 ---
 name: moduo-agent
-description: Track your build work in Moduo through the moduo connector — pick up a block's task (the queue's, in Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, and hand off to another person as a task comment. GitHub events move the task's stage; you never do. /s2 and /s3 call it; use it directly to report status or hand work over. Every step is skipped quietly when the connector or its key is missing.
+description: Track your build work in Moduo through the moduo connector. /s2 and /s3 call it; use it directly to report status or hand work over to another person. Every step is skipped quietly when the connector or its key is missing. Pick up a block's task (the queue's, in Closed alpha, Open alpha or Beta & later), post status (working · needs_you · ready · failed) with step n of m and the PR link, and hand off to another person as a task comment. GitHub events move the task's stage; you never do.
 ---
 
 # moduo-agent: your build work, mirrored in Moduo

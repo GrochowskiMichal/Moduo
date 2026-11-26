@@ -1,6 +1,6 @@
 # Review instructions (Moduo)
 
-> **Lean mode (pre-alpha):** every PR into `develop` gets one advisory AI review (`/code-review medium --comment`, [ai-review.yml](./.github/workflows/ai-review.yml)); it never blocks a merge. Task PRs into the personal branches get none, `/code-review ultra` and the security scan stay paused until beta, and only Tier 2 diffs get the `validator`. See [AGENTS.md §Review gates](./AGENTS.md#review-gates-lean-mode-pre-alpha-no-external-users).
+> **Lean mode (pre-alpha):** every PR into `develop` gets one advisory AI review (`/code-review medium --comment`, [ai-review.yml](./.github/workflows/ai-review.yml)); it never blocks a merge. Task PRs into the personal branches get none, `/code-review ultra` and the security scan stay paused until beta, and only Tier 2 diffs get the `validator`. See [docs/agents/models-and-review.md](./docs/agents/models-and-review.md).
 
 Read by the AI review on PRs into `develop`, the `validator` subagent, and any `/code-review` run in a session. Keep it short: every line here changes what a review reports.
 

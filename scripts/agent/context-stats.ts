@@ -162,19 +162,31 @@ export function readSessions(
   const slug = projectSlug(repoRoot);
   const out: SessionContext[] = [];
   for (const dir of readdirSync(projectsDir)) {
-    if (!dir.startsWith(slug)) continue;
-    const abs = path.join(projectsDir, dir);
-    let files: string[];
+    // The checkout's own folder, or a worktree under it ("…/.claude/worktrees/x" → "…--claude-worktrees-x"):
+    // a sibling such as moduo_latest_old shares the prefix and isn't this repository.
+    if (dir !== slug && !dir.startsWith(`${slug}--`)) continue;
+    out.push(...sessionsIn(path.join(projectsDir, dir), since));
+  }
+  return out;
+}
+
+/** One folder's sessions; a file that vanished or can't be read is skipped, not fatal. */
+function sessionsIn(dir: string, since: Date): SessionContext[] {
+  const out: SessionContext[] = [];
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+  } catch {
+    return out;
+  }
+  for (const f of files) {
     try {
-      files = readdirSync(abs).filter((f) => f.endsWith(".jsonl"));
-    } catch {
-      continue;
-    }
-    for (const f of files) {
-      const file = path.join(abs, f);
+      const file = path.join(dir, f);
       if (statSync(file).mtimeMs < since.getTime()) continue;
       const s = sessionContext(readFileSync(file, "utf8").split("\n"));
       if (s) out.push(s);
+    } catch {
+      // Claude Code may be rotating it.
     }
   }
   return out;

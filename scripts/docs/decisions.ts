@@ -391,7 +391,8 @@ export function renderFound(found: Found, words: string[], opts: { full?: boolea
   const out = found.hits.map((e) => {
     const where = `docs/decisions/${e.area}.md:${e.line}`;
     if (opts.full) return `<!-- ${where} -->\n${e.lines.join("\n")}`;
-    const tag = e.status && e.status !== "current" ? ` [${e.status}]` : "";
+    const partly = e.status === "current" && e.by.length > 0 ? " [partly superseded]" : "";
+    const tag = e.status && e.status !== "current" ? ` [${e.status}]` : partly;
     const head = `${e.date ? `${e.date} · ` : ""}${plain(e.title).slice(0, 160)}${tag}`;
     return `${where}\n  ${head}\n  ${snippet(e, needles)}`;
   });

@@ -1,6 +1,6 @@
 {
   "id": "diet",
-  "description": "Control with the 2026-11-26 context diet laid over the task's commit: the 6 KB AGENTS.md (overlays/diet/AGENTS.md, without the commands older commits lack), skill descriptions capped at 300 characters, and the unused project plugins off.",
+  "description": "Control with the 2026-11-26 context diet laid over the task's commit: the 6 KB AGENTS.md (overlays/diet/, without the commands older commits lack) with what moved out of it as docs/agents/ files, skill descriptions capped at 300 characters, and the unused project plugins off.",
   "experiment": {
     "name": "diet",
     "baseline": "control"
@@ -8,7 +8,11 @@
   "model": "opus",
   "effort": "high",
   "overlay": {
-    "AGENTS.md": "diet/AGENTS.md"
+    "AGENTS.md": "diet/AGENTS.md",
+    "docs/agents/rules.md": "diet/docs/agents/rules.md",
+    "docs/agents/models-and-review.md": "diet/docs/agents/models-and-review.md",
+    "docs/agents/tooling.md": "diet/docs/agents/tooling.md",
+    "docs/agents/reference.md": "diet/docs/agents/reference.md"
   },
   "settings": {
     "skillListingMaxDescChars": 300,

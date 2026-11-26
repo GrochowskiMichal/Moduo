@@ -1,6 +1,6 @@
 ---
 name: s3
-description: Stage 3 — Wrap. End-of-session wrap-up for Moduo, in lean mode: the PR body with a short Test-this, only worthwhile decisions/gotchas, commit, push the task branch, PR + merge into the personal branch, and a develop sync in batches (standing authorization). Never a release (the person types /ship for that). Names the next ready block IDs.
+description: Stage 3 — Wrap. Use at the end of a session to land its work — the PR body with a short Test-this, commit, push the task branch, PR + merge into the personal branch, and a develop sync in batches (standing authorization). Never a release (the person types /ship for that). Lean mode, so only worthwhile decisions/gotchas are recorded. Names the next ready block IDs.
 effort: medium
 ---
 
