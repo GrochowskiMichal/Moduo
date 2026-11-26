@@ -22,7 +22,7 @@ use serde::Serialize;
 use super::accounts::MailAccount as AccountEndpoints;
 use super::actor::{AccountActor, CheckoutError, Connector};
 use super::auth::{
-    google, microsoft, AuthError, Credential, CredentialStore, HttpRefresher, KeychainStore, LoginMethod, RefreshError, RefreshedToken, TokenRefresher,
+    google, microsoft, Credential, CredentialStore, HttpRefresher, KeychainStore, LoginMethod, RefreshError, RefreshedToken, TokenRefresher,
 };
 use super::contracts::{Provider, SyncState};
 use super::migrate;
@@ -421,6 +421,13 @@ impl MailHost {
     }
 }
 
+/// Whether a worker stops for good after this error, leaving the account in
+/// `Reconnect` (the actor already marked it). Only the user can fix it, so the
+/// worker must not write `offline` over that mark and keep retrying.
+fn parks(err: &CheckoutError) -> bool {
+    matches!(err, CheckoutError::Auth(e) if e.is_terminal())
+}
+
 struct Worker {
     account_id: String,
     user_id: String,
@@ -489,7 +496,7 @@ impl Worker {
             .register(&self.account_id, actor.clone(), sync.clone());
         while !self.stop.load(Ordering::SeqCst) {
             match self.session_life(&actor, &sync).await {
-                Err(CheckoutError::Auth(AuthError::Reconnect)) => {
+                Err(e) if parks(&e) => {
                     // Parked until the user reconnects (a new start re-reads it).
                     return;
                 }
@@ -658,9 +665,26 @@ impl Worker {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mail::auth::AuthError;
     use crate::mail::contracts::{MailboxRole, OpKind, TabKind};
     use crate::mail::ops::{OpError, OpRequest, OpServer, ResolvedStep};
     use crate::mail::store::{AccountInput, Address, MailboxInput, MessageInput, TabRef};
+
+    #[test]
+    fn a_terminal_auth_error_parks_the_worker_in_reconnect() {
+        // A missing keychain secret or a refused admin consent can't heal by
+        // retrying: before this, the worker wrote `offline` over the actor's
+        // `reconnect` mark, so the app hid the Reconnect prompt for good.
+        for e in [
+            AuthError::Reconnect,
+            AuthError::MissingSecret,
+            AuthError::AdminConsentRequired { provider_code: "AADSTS65001".into() },
+        ] {
+            assert!(parks(&CheckoutError::Auth(e.clone())), "{e:?} must park");
+        }
+        assert!(!parks(&CheckoutError::Auth(AuthError::Transient("timeout".into()))));
+        assert!(!parks(&CheckoutError::Connect("refused".into())));
+    }
 
     fn store(tag: &str) -> Store {
         let d = std::env::temp_dir().join(format!(

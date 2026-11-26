@@ -12,4 +12,3 @@ Design-system primitives with no domain knowledge. Read [docs/DESIGN_RULES.md](.
 - **Every new primitive ships a Storybook story** next to it: `<name>.stories.tsx`.
 - **Tokens only.** Values come from `apps/app/src/styles/tokens.css` through Tailwind utilities or `var(--token)`. To change a value, edit the token, never the component. No raw hex, no arbitrary Tailwind values for color, spacing, radius or font, no inline-style design properties. The `guard-design-tokens.sh` hook and CI enforce this.
 - **Every interactive element** has default, hover, focus, active, disabled, loading and error states, and an accessible label.
-- Run the `moduo-design-quality` skill (`audit` or `polish`) on changed primitives before reporting done.

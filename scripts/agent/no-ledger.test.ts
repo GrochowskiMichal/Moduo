@@ -3,12 +3,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 // specs/harness-v3.md AC13 · "no ledger instructions": the ledgers are gone,
-// specs/BUILD_ORDER.md is a short pointer to the Moduo queue, and no skill or
+// specs/BUILD_ORDER.md went too on 2026-11-26 (the queue is in Moduo), and no skill or
 // agent-facing doc tells an agent to tick, flip or move ledger lines.
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
-const DELETED = ["specs/BUILD_LOG.md", "docs/build-log.md", "docs/testing"];
+const DELETED = ["specs/BUILD_LOG.md", "specs/BUILD_ORDER.md", "docs/build-log.md", "docs/testing"];
 
 /** The files agents follow as instructions (closed runbooks under docs/agents/ are records). */
 const SINGLE = [
@@ -18,7 +18,6 @@ const SINGLE = [
   "docs/agent-setup.md",
   "docs/agents/issue-tracker.md",
   "docs/release.md",
-  "specs/_template.md",
 ];
 const TREES = [".claude/skills", ".claude/agents", ".claude/rules", "tools/claude-plugins"];
 
@@ -42,13 +41,6 @@ const EDIT = /\btick|\bflip|\bmove[sd]?\b.*\blines?\b|\[x\]|\[ \]|\[~\]|add (?:a
 describe("no ledger", () => {
   it("the build log, docs/build-log.md and docs/testing/ are deleted", () => {
     expect(DELETED.filter((p) => existsSync(path.join(ROOT, p)))).toEqual([]);
-  });
-
-  it("specs/BUILD_ORDER.md is a short pointer with no block lines", () => {
-    const text = readFileSync(path.join(ROOT, "specs/BUILD_ORDER.md"), "utf8");
-    expect(text.length).toBeLessThan(3000);
-    expect(text).toMatch(/bun run queue/);
-    expect(text.split("\n").filter((l) => /^\s*- \[[ x~]\]/.test(l))).toEqual([]);
   });
 
   it("scans the agent-facing files", () => {

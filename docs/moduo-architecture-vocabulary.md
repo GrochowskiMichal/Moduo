@@ -46,7 +46,7 @@ A self-contained glance surface in the Dashboard module, aggregating data from o
 A capability inside a module that doesn't warrant its own module (e.g. project management within Tasks). Rule of thumb: meaningful without the parent → module; needs the parent's data → sub-feature.
 
 ### Project, Area, Section (Tasks v3)
-The structure of the Tasks module ([specs/tasks-v3.md](../specs/tasks-v3.md)): Inbox · optional **Areas** → **Projects** → optional **Sections** → Tasks → Subtasks (one level).
+The structure of the Tasks module (specs/tasks-v3.md): Inbox · optional **Areas** → **Projects** → optional **Sections** → Tasks → Subtasks (one level).
 - **Project:** where a task lives (description, status, start/target, colour, client, optional lead). Stored in the `buckets` table until TV-D7.
 - **Area:** an optional sidebar group of projects (no permissions, no page, no tasks).
 - **Section:** an ordered part of one project; a section never spans projects.

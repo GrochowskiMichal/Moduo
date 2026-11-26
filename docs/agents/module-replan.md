@@ -14,7 +14,7 @@ SETUP
 - Title the session "[<Module>] rebuild plan".
 
 READ FIRST
-- AGENTS.md, docs/PRODUCT_BRIEF.md, docs/ROADMAP.md, docs/data-layers.md, docs/moduo-module-contract.md.
+- AGENTS.md, docs/PRODUCT_BRIEF.md, docs/data-layers.md, docs/moduo-module-contract.md.
 - .design/<module>/BRIEF.md and DESIGN_BRIEF.md, the module's specs in specs/, docs/decisions/<area>.md, docs/gotchas/<area>.md.
 - The Tasks v3 north star:
   - specs/tasks-v3.md
@@ -90,7 +90,7 @@ RULES OF THE CONVERSATION
    - Run a gap audit by a separate agent: it walks every role's week and every view in every state, and reports only what's unaddressed, contradictory or too thin.
    - Fold the audit's findings into calls, and fix contradictions in place.
 5. **Round 3: reconcile in-flight work** (open PRs, half-built blocks): keep, re-scope, close and salvage, or mark superseded, each with effort and order.
-6. **The spec** (switch to Fable 5.1, high), `specs/<module>-v2.md` from `specs/_template.md`:
+6. **The spec** (switch to Fable 5.1, high), `specs/<module>-v2.md` from `.claude/skills/s1/spec-template.md`:
    - **How to write it:** section by section into the file, never in one message.
    - **Inside the spec:**
      - acceptance criteria written as one normal week per role;
@@ -101,7 +101,7 @@ RULES OF THE CONVERSATION
    - **Blocks:**
      - continue the module's id lanes;
      - list dependencies on Tasks v3 blocks (e.g. DS-6, SH-1, RF-1, TV-D11a the shared store);
-     - get their own section in BUILD_ORDER, under LOCAL BUILD MODE.
+     - go into the Moduo queue (`bun run queue:import`).
    - **Then, in order:**
      1. the decision entries (4 lines each: who · what · why · rejected) in `docs/decisions/<area>.md` and the index;
      2. a supersession banner on the old spec;

@@ -23,10 +23,10 @@ Read this before planning or building any UI in Moduo. It collects what Maciej (
 
 ## The process that worked (Tasks v3, then Chat v2)
 
-1. **Design phase, with Maciej.** Research and evidence, then rounds of numbered calls, each round with an artifact of frames and variants. The plan lives in one `REPLAN.md` with a status block at the top. The rules are in [module-replan.md](./module-replan.md); Mike's `/product-studio` adds a lab on the live app and blind critics that score the prototype.
+1. **Design phase, with Maciej.** Research and evidence, then rounds of numbered calls, each round with an artifact of frames and variants. The plan lives in one `REPLAN.md` with a status block at the top. The rules are in [module-replan.md](./module-replan.md).
 2. **Spec.** The spec cites a prototype frame for every UI section, then `/s1` grills only the gaps and cuts the blocks.
 3. **Build phase, unattended.** After the spec is Ready, the build runs without Maciej: one orchestrated run, blocks built by waves of subagents on one task branch (the execution mode `specs/mail-rebuild.md` uses), or an orchestrator with up to three builders ([chat-v2-build.md](./chat-v2-build.md)). Never stop to ask mid-run; record agent's choices in the block's record instead. After a usage limit, resume at the reset.
-4. **Close the loop.** Run `/product-studio` `criticise` on the built module and compare its score with the prototype's.
+4. **Close the loop.** Compare the built module with the prototype, frame by frame.
 
 ## What Tasks v3 taught about prototypes and builds
 

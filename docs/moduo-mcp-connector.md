@@ -49,7 +49,7 @@ This is a living spec. When a decision changes, update this file first, then cod
 ## Connecting by sign-in (OAuth)
 
 How an app such as Claude connects with only the URL
-([specs/mcp-oauth.md](../specs/mcp-oauth.md), decisions in
+(specs/mcp-oauth.md, decisions in
 [decisions/mcp.md](decisions/mcp.md)):
 
 1. The app calls the connector with no credentials and gets 401 with

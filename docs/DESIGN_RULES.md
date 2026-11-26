@@ -1,6 +1,6 @@
 # Design rules
 
-> **Status: Ratified 2026-06-25.** These are product/design decisions, confirmed by the designer and distilled from the live `apps/app/src/styles/tokens.css` + `DESIGN_SYSTEM.md`. The `moduo-design-quality` skill enforces this file; change a rule here before changing component behaviour.
+> **Status: Ratified 2026-06-25.** These are product/design decisions, confirmed by the designer and distilled from the live `apps/app/src/styles/tokens.css` + `DESIGN_SYSTEM.md`. Change a rule here before changing component behaviour.
 
 `tokens.css` holds the **values**; this file holds the **relationships between them** — the "these scale together / this is reserved for that / this never pairs with that" rules a flat token list can't express. Each rule is tagged **[lint]** (a script can catch violations), **[review]** (only a human/skill reading the diff can), or **[lint+review]**.
 

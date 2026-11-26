@@ -12,8 +12,11 @@ import {
 import { REMOVE_CONSEQUENCES, removeCalendarLogin } from "./account-removal";
 import {
   accountSourceLabel,
+  calendarConnectionSummary,
   groupRailAccounts,
   hiddenIdsForSet,
+  loginNeedsReconnect,
+  loginRows,
   providerLabel,
   resolveAccountHues,
   syncAgeLabel,
@@ -590,5 +593,39 @@ describe("accounts, picker and remove with undo", () => {
     expect(writableEvent({ sourceAccountId: "fam", externalEventId: "e1" }, [writable], "u")).toBe(
       "google",
     );
+  });
+});
+
+describe("calendar connection summary (Settings › Integrations)", () => {
+  const cal = (id: string, email: string, status: CalendarAccountModel["status"] = "ok") =>
+    account({ id, externalId: `google:${email}:${id}@group`, status });
+
+  it("never calls a login Google stopped accepting connected", () => {
+    const revoked = [cal("c1", "me@gmail.com", "reauth"), cal("c2", "me@gmail.com")];
+    expect(loginNeedsReconnect(revoked)).toBe(true);
+    expect(calendarConnectionSummary(revoked)).toBe("1 account needs reconnecting");
+  });
+
+  it("counts healthy and revoked logins apart", () => {
+    const rows = [cal("c1", "me@gmail.com"), cal("c2", "work@x.com", "reauth")];
+    expect(calendarConnectionSummary(rows)).toBe("2 accounts connected · 1 needs reconnecting");
+    expect(calendarConnectionSummary([cal("c1", "me@gmail.com")])).toBe("1 account connected");
+    expect(calendarConnectionSummary([])).toBe("Not connected");
+  });
+
+  it("leaves a quiet sync error to the row, not the login", () => {
+    expect(loginNeedsReconnect([cal("c1", "me@gmail.com", "error")])).toBe(false);
+  });
+});
+
+describe("loginRows (a desktop sign-in finding its login's rows)", () => {
+  it("finds the login row and the calendars picked under it, not another login's", () => {
+    const rows = [
+      account({ id: "l", externalId: "google:Me@gmail.com" }),
+      account({ id: "c", externalId: "google:me@gmail.com:primary" }),
+      account({ id: "x", externalId: "google:me@gmail.community:primary" }),
+      account({ id: "o", provider: "microsoft", externalId: "google:me@gmail.com" }),
+    ];
+    expect(loginRows(rows, "google", "google:me@gmail.com").map((a) => a.id)).toEqual(["l", "c"]);
   });
 });

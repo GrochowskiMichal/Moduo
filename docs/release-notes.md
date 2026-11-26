@@ -1,6 +1,6 @@
 # Release notes: how to write them
 
-Release notes are written by agents as blocks land and are published **with no human review**: in the app's What's new, the desktop update toast, `moduo.app/changelog`, `CHANGELOG.md` and the updater manifest. The automated leak check is the only gate. Spec: [specs/release-v2.md](../specs/release-v2.md).
+Release notes are written by agents as blocks land and are published **with no human review**: in the app's What's new, the desktop update toast, `moduo.app/changelog`, `CHANGELOG.md` and the updater manifest. The automated leak check is the only gate. Spec: specs/release-v2.md.
 
 ## When to write one
 

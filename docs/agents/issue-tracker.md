@@ -2,7 +2,7 @@
 
 Moduo does not track work in GitHub Issues. Blocks are specced in the repo and queued in Moduo:
 
-- **A feature's tickets** are the execution blocks in its spec, `specs/<feature>.md` (section *Execution blocks*): ID, name, scope, acceptance criteria, tests, and the blocks each depends on (last column). Specs follow [specs/_template.md](../../specs/_template.md).
+- **A feature's tickets** are the execution blocks in its spec, `specs/<feature>.md` (section *Execution blocks*): ID, name, scope, acceptance criteria, tests, and the blocks each depends on (last column). Specs follow the template at `.claude/skills/s1/spec-template.md`.
 - **The queue** is Moduo: one task per open block, titled `<ID> — <name>`, tagged `block`, in the milestone projects (Closed alpha, Open alpha, Beta & later), with a "blocks" edge from each dependency. `bun run queue` lists the ready, claimed and waiting blocks; `bun run queue next` is the one `/s2 next` takes. A session claims a block by opening a **draft PR** into the personal branch titled `[<ID>] <name>` before building.
 - **Finished blocks** need no record: GitHub events move their task to Awaiting release and Shipped, and git keeps the rest.
 

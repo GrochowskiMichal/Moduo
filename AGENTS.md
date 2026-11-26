@@ -51,7 +51,7 @@ Report once, at the end, short: **Status**, **Changed · Test this**, and
   you change behaviour in an area. Area files run to 600 KB: search them, never read one whole.
 - **Traps:** `docs/gotchas/<area>.md` maps each trap to the check or path rule that holds it.
 - **Product direction** (before designing a module, not before a fix): [brief](./docs/PRODUCT_BRIEF.md),
-  [roadmap](./docs/ROADMAP.md), [data layers](./docs/data-layers.md), `.design/<module>/BRIEF.md`,
+  [data layers](./docs/data-layers.md), `.design/<module>/BRIEF.md`,
   [module contract](./docs/moduo-module-contract.md).
 - **Code layout, stack, commands in full:** [architecture.md](./docs/architecture.md). App code is `apps/app/src/`.
   To change a visual value, edit `apps/app/src/styles/tokens.css`, never a component
