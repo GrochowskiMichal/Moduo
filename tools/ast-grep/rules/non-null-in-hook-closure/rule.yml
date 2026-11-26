@@ -1,0 +1,62 @@
+id: non-null-in-hook-closure
+language: tsx
+severity: error
+message: "`x!.prop` in a closure handed to a hook: the React Compiler reads the closure's dependencies during render, unguarded, so a null `x` crashes the production build while every rstest run passes."
+note: |
+  Pull the value out first and guard inside the closure:
+  `const accountId = active?.accountId ?? null` then `() => (accountId ? port.sizeLimit(accountId) : …)`.
+  MV-12 shipped `useRead(active ? key : null, () => port.sizeLimit(active!.accountId))`,
+  which threw "null is not an object" on every Mail load with no compose open
+  (docs/gotchas/email.md). Only a production build (the lab, `rsbuild preview`) shows it.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: member_expression
+  has:
+    field: object
+    kind: non_null_expression
+    has:
+      kind: identifier
+  inside:
+    stopBy: end
+    kind: arrow_function
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^use[A-Z]\w*$
+---
+# The same rule for .ts files (ast-grep parses .ts and .tsx as two languages; ids must differ).
+id: non-null-in-hook-closure-ts
+language: typescript
+severity: error
+message: "`x!.prop` in a closure handed to a hook: the React Compiler reads the closure's dependencies during render, unguarded, so a null `x` crashes the production build while every rstest run passes."
+note: |
+  Pull the value out first and guard inside the closure:
+  `const accountId = active?.accountId ?? null` then `() => (accountId ? port.sizeLimit(accountId) : …)`.
+  MV-12 shipped `useRead(active ? key : null, () => port.sizeLimit(active!.accountId))`,
+  which threw "null is not an object" on every Mail load with no compose open
+  (docs/gotchas/email.md). Only a production build (the lab, `rsbuild preview`) shows it.
+files:
+  - apps/app/src/**/*.ts
+  - apps/app/src/**/*.tsx
+rule:
+  kind: member_expression
+  has:
+    field: object
+    kind: non_null_expression
+    has:
+      kind: identifier
+  inside:
+    stopBy: end
+    kind: arrow_function
+    inside:
+      kind: arguments
+      inside:
+        kind: call_expression
+        has:
+          field: function
+          regex: ^use[A-Z]\w*$

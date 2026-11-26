@@ -312,4 +312,58 @@ export const BASELINE: readonly BaselineEntry[] = [
     snippet: "duration: 30_000",
     why: "Deliberate: A question, not an undo toast; it stays up long enough to answer.",
   },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/notes/hooks/use-notes-module.ts",
+    snippet: "runtime!.notesV2",
+    why: "Risk: Behind an early `if (!ready) return`, so the compiler keeps `runtime` (not `runtime.notesV2`) as the dependency today; a refactor that drops the guard crashes on a null runtime.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/notes/hooks/use-notes-module.ts",
+    snippet: "runtime!.notesV2",
+    why: "Risk: Behind an early `if (!ready) return`, so the compiler keeps `runtime` (not `runtime.notesV2`) as the dependency today; a refactor that drops the guard crashes on a null runtime.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/notes/hooks/use-notes-module.ts",
+    snippet: "runtime!.notesV2",
+    why: "Risk: Behind an early `if (!ready) return`, so the compiler keeps `runtime` (not `runtime.notesV2`) as the dependency today; a refactor that drops the guard crashes on a null runtime.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/notes/hooks/use-notes-module.ts",
+    snippet: "runtime!.notesV2",
+    why: "Risk: Behind an early `if (!ready) return`, so the compiler keeps `runtime` (not `runtime.notesV2`) as the dependency today; a refactor that drops the guard crashes on a null runtime.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/notes/hooks/use-notes-module.ts",
+    snippet: "runtime!.notesV2",
+    why: "Risk: Behind an early `if (!ready) return`, so the compiler keeps `runtime` (not `runtime.notesV2`) as the dependency today; a refactor that drops the guard crashes on a null runtime.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/tasks/hooks/use-view-ops.ts",
+    snippet: "runtime!.tasks",
+    why: "Risk: A closure handed to `run`, which refuses while `blocked` (null runtime); untested under the compiler, so pull `runtime` out and guard instead when this file is next touched.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/tasks/hooks/use-view-ops.ts",
+    snippet: "runtime!.tasks",
+    why: "Risk: A closure handed to `run`, which refuses while `blocked` (null runtime); untested under the compiler, so pull `runtime` out and guard instead when this file is next touched.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/tasks/hooks/use-view-ops.ts",
+    snippet: "runtime!.tasks",
+    why: "Risk: A closure handed to `run`, which refuses while `blocked` (null runtime); untested under the compiler, so pull `runtime` out and guard instead when this file is next touched.",
+  },
+  {
+    rule: "non-null-in-hook-closure-ts",
+    file: "apps/app/src/features/tasks/hooks/use-view-ops.ts",
+    snippet: "runtime!.tasks",
+    why: "Risk: A closure handed to `run`, which refuses while `blocked` (null runtime); untested under the compiler, so pull `runtime` out and guard instead when this file is next touched.",
+  },
 ];
