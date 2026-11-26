@@ -28,7 +28,7 @@ What a session carries before it reads any code is budgeted, because a larger st
 
 ## Product north star (read before designing any module)
 
-[docs/PRODUCT_BRIEF.md](../PRODUCT_BRIEF.md) (what Moduo is, the connective-tissue spine, non-goals: no Notion-style databases, no abstract graph UI, one-gesture links, MCP-only AI, quiet notifications) · [docs/ROADMAP.md](../ROADMAP.md) (waves, scored backlog, numbered open questions; check `§Open Questions & Risks` before anything marked ⚠) · [docs/data-layers.md](../data-layers.md) (runtimes, Supabase-first, the spine). Edit these **before** code when direction changes. Module briefs: `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md`. A module is done only when it wires into the spine, ships its MCP tools and its dashboard widget ([module contract](../moduo-module-contract.md)).
+[docs/PRODUCT_BRIEF.md](../PRODUCT_BRIEF.md) (what Moduo is, the connective-tissue spine, non-goals: no Notion-style databases, no abstract graph UI, one-gesture links, MCP-only AI, quiet notifications) · [docs/data-layers.md](../data-layers.md) (runtimes, Supabase-first, the spine). Edit these **before** code when direction changes. Module briefs: `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md`. A module is done only when it wires into the spine, ships its MCP tools and its dashboard widget ([module contract](../moduo-module-contract.md)).
 
 ## Knowledge map
 
@@ -37,7 +37,8 @@ What a session carries before it reads any code is budgeted, because a larger st
 - **Path rules:** `.claude/rules/<area>.md`, frontmatter `paths:` (globs), `incident:` (what went wrong) and `expires:` (review date; `lint:rules` warns once it passes). Short must-know lines for that area only; detail stays in gotchas and decisions. Audit the set with `/doctor prompt-audit` in a session.
 - **Gotchas:** index [docs/gotchas.md](../gotchas.md); the area files are now maps, because the traps were compiled into checks: the ast-grep pack (`tools/ast-grep/rules/`, `bun run lint:ast`), `scripts/ci/config-traps.test.ts`, migration lint and path rules. A new trap goes into its area file; one that bites twice becomes a hook, lint rule or test (with the fix in its error message).
 - **Learn loop:** escapes in `benchmarks/escapes/` feed `variant-hunt`; the A/B rig and its arms (`bun run ab`, `scripts/harness-ab/`), the MCP agent-experience eval (`bun run mcp-eval`) and the docs eval (`bun run eval:docs`) measure harness changes before they land; `bun run numbers` writes the weekly outcome note to Moduo.
-- **The queue:** `bun run queue` (Moduo's block tasks + spec dependency tables + open PRs; claim a block with a draft PR before building it); new blocks go in with `bun run queue:import specs/<feature>.md`; [specs/BUILD_ORDER.md](../../specs/BUILD_ORDER.md) is only a pointer.
+- **The queue:** `bun run queue` (Moduo's block tasks + spec dependency tables + open PRs; claim a block with a draft PR before building it); new blocks go in with `bun run queue:import specs/<feature>.md`. What to build and in what order lives only there: the roadmap and the build-order file were removed on 2026-11-26 (in git history at commit 246138366, under docs and specs).
+- **Shipped specs are removed** once no live spec cites them (2026-11-26: contacts, contacts-v2, contacts-v3-fixpack, tasks-timeline, dashboard-rebuild, universal-inbox, df-19f-notification-toggles). Read one with `git show 62c56acdc:specs/<name>.md`; a comment or doc that names one means that version.
 - **Agent setup:** [docs/agent-setup.md](../agent-setup.md) · **Entire:** [docs/entire.md](../entire.md).
 
 ## Entire.io

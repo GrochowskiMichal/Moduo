@@ -10,6 +10,10 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - status: current
   → [REVIEW.md](../../REVIEW.md) · [docs/agents/models-and-review.md](../agents/models-and-review.md)
 
+- **2026-11-26 · `docs/ROADMAP.md` and `specs/BUILD_ORDER.md` are removed; what to build and in what order lives only in the Moduo queue.** Mike's call. The roadmap (37 KB of waves, a scored backlog and open questions) described the plan as it stood months ago and was opened before the first edit in 3 of 51 sessions; the build-order file had been a pointer to the queue since HV-8. AGENTS.md, `/s1`, the product brief and the data-layers doc no longer name them, links to them elsewhere became plain text, and the note on reading a removed spec from git moved to `docs/agents/tooling.md`. Both are in git history (`git show 246138366:docs/ROADMAP.md`).
+  - status: current
+  → [docs/agents/tooling.md](../agents/tooling.md) §Knowledge map
+
 - **2026-11-26 · Six project skills and the product lab are removed.** Mike marked them legacy from a list with each skill's use since early October: `moduo-design-quality` (2 sessions), `product-studio` (2) with its engines `product-lab` and `product-jury`, `libraries-dev` (0) and the vendored `security-audit` (0). `e2e/lab/` (the lab's config, seeds and journeys) went with the engine that ran it. `/s1` no longer takes a studio baseline or draft, `/s2` has no lab pass for UI blocks, and the design rules are checked by `lint:tw`, `lint:css` and by eye. The Tier 2 path and the ratchet exclusion for the vendored skill are gone with it. Everything is in git history (`git show 57ba8ea7e:.claude/skills/<name>/SKILL.md`).
   - status: current
   → [docs/agents/tooling.md](../agents/tooling.md)

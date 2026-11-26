@@ -1,7 +1,7 @@
 # Dogfood-fix plan (from the whole-app critique, 2026-07-09)
 
 > **Status: RATIFIED 2026-07-10** (designer quiz round) — blocks mirrored into `specs/BUILD_ORDER.md` §"Dogfood fixes (DF)". Source: [whole-app-critique-2026-07.md](./whole-app-critique-2026-07.md) (all finding IDs below refer to it).
-> **⚠ This file is the DF wave's *spec* (scope, ratified calls, ACs) — [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) is the status of record.** The checkboxes below are a convenience mirror of the ledger; if the two ever disagree, the ledger wins.
+> **⚠ This file is the DF wave's *spec* (scope, ratified calls, ACs) — `specs/BUILD_ORDER.md` is the status of record.** The checkboxes below are a convenience mirror of the ledger; if the two ever disagree, the ledger wins.
 > **Progress (reconciled 2026-08-14, DOC-1):** **23 of 24 DF blocks shipped.** Only **DF-15** (Home first-run composition) remains — and it is gated on the designer's look-approval of the draft layout, not on engineering. *(DF-18 landed the same day this reconcile ran; the count went 22 → 23 mid-session.)*
 > **Ledger context (as of 2026-07-10, now superseded):** at ratification time every feature block in BUILD_ORDER was `[x]` except MCP-1 and DESKTOP-1, and the Mindmap rethink existed only in ROADMAP prose. **Both facts have since changed:** Wave 6 (Dashboard, DB-1…DB-8) and Wave D (OPS/IM/NOTE-FIX/SCALE/DOC blocks) were added to the ledger after this, and the **Mindmap rethink was removed from alpha entirely** (designer call 2026-07-29) — MCP-1 no longer waits on it.
 > **Shape:** three waves. Wave A = trust-killers before dogfood day 1. Wave B = making the moat *felt*. Wave C = one-product cohesion + the pulled-forward spine features. Each block is sized for one `/s2` session, ends at `bun run verify` + validator, and names its lane so parallel sessions don't collide.
@@ -84,7 +84,7 @@
 - **Booking links, day-fullness, one-tap reflow** — already spec-deferred in `specs/calendar.md` (§4.3).
 - ~~**Mindmap rethink proper** — its own /s1 planning round (ROADMAP already sequences it); DF-4 hides it meanwhile.~~ → **Superseded 2026-07-29: the Mindmap is OUT of alpha entirely** (designer call). It stays hidden from nav but URL-reachable, and **MCP-1 no longer waits on it.**
 - **MCP-1** stays the pre-alpha gate after the DF waves; **DESKTOP-1** (updater) is now unblocked by the dashboard landing — schedule at will.
-- **What came after this plan:** the DF wave is no longer the whole remaining backlog. **Wave D** (added 2026-07-29 — OPS-1/OPS-2 schema work, the IM import lane, NOTE-FIX-1, SCALE-1, DOC-1, and the alpha lane) sits alongside DF-15/DF-18 in [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md). Read the ledger, not this file, for what to build next.
+- **What came after this plan:** the DF wave is no longer the whole remaining backlog. **Wave D** (added 2026-07-29 — OPS-1/OPS-2 schema work, the IM import lane, NOTE-FIX-1, SCALE-1, DOC-1, and the alpha lane) sits alongside DF-15/DF-18 in `specs/BUILD_ORDER.md`. Read the ledger, not this file, for what to build next.
 
 ## Suggested parallel-session assignment
 

@@ -1,7 +1,7 @@
 # Spec: Import & migration — Notion notes + email history depth
 
-> Status: **In progress** — IM-1, IM-2a, IM-2b and **IM-2c-a** (depth picker) shipped 2026-07-29 → 2026-07-30. ~~**Next: IM-2c-b**~~ **superseded by [specs/mail-rebuild.md](./mail-rebuild.md)** (decision 27: backfill progress and cancel are MR-3's). Email: **AC7 + AC9 partial**, see Open questions. **The email half (IM-2a/b/c, AC6–AC12) is superseded by [mail-rebuild.md](./mail-rebuild.md):** the redb engine it was built on was deleted in MR-16. Notes: AC1–AC5 done. IM-3/IM-4 are deferred post-alpha. **[`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) is the status of record.** · Owner: maciej · Block ids: **IM-1 … IM-4** (Wave D, dogfood lane)
-> Supersedes the placeholder `/s1 IMPORT` line in [`specs/BUILD_ORDER.md`](./BUILD_ORDER.md) Wave D.
+> Status: **In progress** — IM-1, IM-2a, IM-2b and **IM-2c-a** (depth picker) shipped 2026-07-29 → 2026-07-30. ~~**Next: IM-2c-b**~~ **superseded by [specs/mail-rebuild.md](./mail-rebuild.md)** (decision 27: backfill progress and cancel are MR-3's). Email: **AC7 + AC9 partial**, see Open questions. **The email half (IM-2a/b/c, AC6–AC12) is superseded by [mail-rebuild.md](./mail-rebuild.md):** the redb engine it was built on was deleted in MR-16. Notes: AC1–AC5 done. IM-3/IM-4 are deferred post-alpha. **`specs/BUILD_ORDER.md` is the status of record.** · Owner: maciej · Block ids: **IM-1 … IM-4** (Wave D, dogfood lane)
+> Supersedes the placeholder `/s1 IMPORT` line in `specs/BUILD_ORDER.md` Wave D.
 
 ## Scope
 
