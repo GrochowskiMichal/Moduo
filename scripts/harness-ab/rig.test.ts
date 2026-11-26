@@ -14,6 +14,8 @@ import {
   loadArm,
   loadSet,
   missingPlugins,
+  overlayProblems,
+  OVERLAYS_DIR,
   plan,
   pluginsNotLoaded,
   type Row,
@@ -515,6 +517,23 @@ describe("experiment arms (AC37)", () => {
         control,
       ),
     ).toEqual(["same: identical to control"]);
+  });
+
+  it("the diet arm lays a short AGENTS.md over the task's commit and changes nothing else", () => {
+    const diet = loadArm("diet");
+    expect(experiment("diet").map((a) => a.id)).toEqual(["diet"]);
+    expect(diet.overlay).toEqual({ "AGENTS.md": "diet/AGENTS.md" });
+    expect(arms.flatMap((a) => overlayProblems(a))).toEqual([]);
+    const text = readFileSync(path.join(OVERLAYS_DIR, "diet/AGENTS.md"), "utf8");
+    expect(Buffer.byteLength(text)).toBeLessThanOrEqual(6144);
+    // Older commits have no docs:find and no block briefs: the overlay must not send an agent to them.
+    expect(text).not.toMatch(/docs:find|brief per block/);
+    expect(
+      overlayProblems(arm({ id: "out", overlay: { "../x": "diet/AGENTS.md" } })).concat(
+        overlayProblems(arm({ id: "in", overlay: { "AGENTS.md": "../../../etc/passwd" } })),
+        overlayProblems(arm({ id: "gone", overlay: { "AGENTS.md": "diet/NOPE.md" } })),
+      ),
+    ).toHaveLength(3);
   });
 
   it("effort is medium against control's high", () => {

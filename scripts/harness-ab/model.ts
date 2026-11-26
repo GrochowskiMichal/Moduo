@@ -15,6 +15,8 @@ import {
 export const RIG_DIR = path.dirname(new URL(import.meta.url).pathname);
 export const TASKS_DIR = path.join(RIG_DIR, "tasks");
 export const ARMS_DIR = path.join(RIG_DIR, "arms");
+/** Files an arm may lay over the workspace (an arm's `overlay`), kept apart from the arm files. */
+export const OVERLAYS_DIR = path.join(RIG_DIR, "overlays");
 
 /** One command run outside the agent, in the workspace, after it finishes. */
 export type Check = {
@@ -71,12 +73,32 @@ export type Arm = ArmLike & {
   settingSources?: string;
   /** The experiment this arm belongs to and the arm it is compared with (HV-25, AC37). */
   experiment?: { name: Experiment; baseline: string };
+  /**
+   * Files copied over the workspace before the agent starts: workspace path → file under
+   * scripts/harness-ab/overlays/. For an arm that changes a committed harness file (AGENTS.md).
+   */
+  overlay?: Record<string, string>;
 };
+
+const escapes = (p: string) => path.isAbsolute(p) || p.split(/[\\/]/).includes("..") || p === "";
+
+/** An overlay that would write outside the workspace, read outside overlays/, or names a missing file. */
+export function overlayProblems(arm: Arm, root = OVERLAYS_DIR): string[] {
+  return Object.entries(arm.overlay ?? {}).flatMap(([dest, src]) => {
+    if (escapes(dest))
+      return [`${arm.id}: overlay target "${dest}" must be a path inside the workspace`];
+    if (escapes(src)) return [`${arm.id}: overlay source "${src}" must be a path inside overlays/`];
+    if (!existsSync(path.join(root, src)))
+      return [`${arm.id}: overlay source overlays/${src} is missing`];
+    return [];
+  });
+}
 
 /** The fields an arm may change against its baseline, per experiment (rig.test.ts holds them). */
 export const EXPERIMENTS = {
   effort: ["effort"],
   ponytail: ["settings"],
+  diet: ["overlay", "settings"],
   "test-prompt": ["promptPrefix", "promptSuffix", "appendSystemPrompt"],
 } as const satisfies Record<string, readonly (keyof Arm)[]>;
 export type Experiment = keyof typeof EXPERIMENTS;

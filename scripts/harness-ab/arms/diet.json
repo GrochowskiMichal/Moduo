@@ -1,0 +1,20 @@
+{
+  "id": "diet",
+  "description": "Control with the 2026-11-26 context diet laid over the task's commit: the 6 KB AGENTS.md (overlays/diet/AGENTS.md, without the commands older commits lack), skill descriptions capped at 300 characters, and the unused project plugins off.",
+  "experiment": {
+    "name": "diet",
+    "baseline": "control"
+  },
+  "model": "opus",
+  "effort": "high",
+  "overlay": {
+    "AGENTS.md": "diet/AGENTS.md"
+  },
+  "settings": {
+    "skillListingMaxDescChars": 300,
+    "enabledPlugins": {
+      "claude-security@claude-plugins-official": false,
+      "skill-creator@claude-plugins-official": false
+    }
+  }
+}
