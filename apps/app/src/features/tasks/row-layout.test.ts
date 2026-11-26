@@ -9,6 +9,7 @@ import { isLate, type Task } from "./model";
 import {
   columnWidths,
   DEFAULT_ROW_PROPERTIES,
+  dueLabel,
   fitColumns,
   formatShortDate,
   handleLabel,
@@ -174,6 +175,24 @@ describe("rowDate (U1-1: one date column)", () => {
     expect(scheduledFirst?.kind).toBe("scheduled");
     const sameDay = rowDate(task("a", { scheduledAt: at(12, 10), dueDate: at(12) }), now);
     expect(sameDay?.kind).toBe("scheduled");
+  });
+
+  it("says a passed due date is late, in words, on an open task only (REPLAN 23)", () => {
+    expect(rowDate(task("a", { dueDate: at(7) }), now)?.label).toMatch(/ · late$/);
+    expect(dueLabel(task("a", { dueDate: at(7) }), now)).toMatch(/ · late$/);
+    // Today and later aren't late; a finished task never is.
+    expect(rowDate(task("a", { dueDate: at(9) }), now)?.label).not.toMatch(/late/);
+    expect(rowDate(task("a", { dueDate: at(12) }), now)?.label).not.toMatch(/late/);
+    expect(
+      rowDate(task("a", { dueDate: at(7), status: "done", statusCategory: "done" }), now)?.label,
+    ).not.toMatch(/late/);
+    expect(
+      dueLabel(task("a", { dueDate: at(7), status: "done", statusCategory: "done" }), now),
+    ).not.toMatch(/late/);
+    // A session shown first keeps its own words.
+    expect(rowDate(task("a", { scheduledAt: at(6, 10), dueDate: at(7) }), now)?.label).not.toMatch(
+      /late/,
+    );
   });
 
   it("describes both dates, the shown one first (the cell's name matches its editor)", () => {

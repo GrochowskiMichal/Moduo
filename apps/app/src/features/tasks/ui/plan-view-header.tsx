@@ -13,7 +13,7 @@ export type PlanView = TaskLayout;
 
 /** The page-owned toolbar pieces every view shows the same way (TV-U2). */
 export type PlanHeaderControls = {
-  /** Open tasks in the scope, after the title. */
+  /** Open tasks in the scope, after the title; nothing at 0. */
   count?: number;
   /** Search (`/`). */
   search?: ReactNode;
@@ -102,7 +102,7 @@ export function PlanViewHeader({
           ) : (
             <h1 className="truncate font-display text-lg text-foreground">{title}</h1>
           )}
-          {count !== undefined ? (
+          {count ? (
             <span className="shrink-0 font-sans text-sm tabular-nums text-muted-foreground">
               {count}
             </span>

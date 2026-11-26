@@ -297,7 +297,9 @@ describe("tasks are points (AC9.2, AC2.3)", () => {
       input({ scope: { kind: "project", projectId: "north" }, tasks, subtasks: "nested" }),
     );
     expect(shape(nested.rows)).toEqual(["project:north", "task:parent", "task:kid"]);
-    expect(taskRow(nested.rows, "kid").depth).toBe(1);
+    // With no sections the tasks sit a level in, on the project name's line.
+    expect(taskRow(nested.rows, "parent").depth).toBe(1);
+    expect(taskRow(nested.rows, "kid").depth).toBe(2);
     // A parent with no row (undated): its subtask sits at its level, not under the row above.
     const orphan = buildTimelineRows(
       input({
@@ -311,7 +313,7 @@ describe("tasks are points (AC9.2, AC2.3)", () => {
       }),
     );
     expect(shape(orphan.rows)).toEqual(["project:north", "task:before", "task:kid"]);
-    expect(taskRow(orphan.rows, "kid").depth).toBe(0);
+    expect(taskRow(orphan.rows, "kid").depth).toBe(1);
   });
 
   it("Show sessions lists a task's other sessions as ticks", () => {

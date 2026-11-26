@@ -403,6 +403,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-11-26 · A polish pass on Tasks: late in words everywhere, nothing at 0, a failed load claims nothing
 - 2026-10-20 · The plan view is a controller and a layout (PV-B3)
 - 2026-10-20 · One state machine decides what an `?id=` in the address bar is (PV-B2, DF-1, MOD-28)
 - 2026-10-20 · The plan view's place lives in the address bar (PV-B1, DF-1)

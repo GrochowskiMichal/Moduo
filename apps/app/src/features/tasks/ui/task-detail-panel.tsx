@@ -644,21 +644,25 @@ function DetailEmptyState({
   return (
     <EmptyState
       title="Select a task"
-      description="↑↓ to move · ⏎ to open"
       hint={
-        canEdit ? (
-          <>
-            Press <Kbd>c</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
-            <button
-              type="button"
-              onClick={() => onRequestCapture()}
-              className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-            >
-              capture
-            </button>{" "}
-            a new one.
-          </>
-        ) : undefined
+        <span className="grid justify-items-center gap-1.5">
+          <span>
+            <Kbd>↑</Kbd> <Kbd>↓</Kbd> to move · <Kbd>⏎</Kbd> to open
+          </span>
+          {canEdit ? (
+            <span>
+              <Kbd>C</Kbd> to {/* A link inside the sentence: a Button would break the line. */}
+              <button
+                type="button"
+                onClick={() => onRequestCapture()}
+                className="rounded-sm underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                capture
+              </button>{" "}
+              a new one
+            </span>
+          ) : null}
+        </span>
       }
     />
   );

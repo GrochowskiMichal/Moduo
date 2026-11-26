@@ -2,6 +2,33 @@
 
 Full entries for this area, newest first. The one-line index of every area, [docs/decisions.md](../decisions.md), is generated: add new entries at the top here, each with a status line (see the index), then run `bun run docs:index`. `bun run docs:current <area>` hides superseded entries.
 
+## 2026-11-26 · A polish pass on Tasks: late in words everywhere, nothing at 0, a failed load claims nothing
+
+status: current
+
+An audit of the rendered module (the `/unslop` pass, local stack, default look) found no styling slop and a short list of rough edges. No migration, no token or kit change.
+
+- **A passed due date says "· late" wherever a row or card shows it** → `row-layout.ts` (`rowDate`, `dueLabel`; `row-layout.test.ts`)
+  - Who: Mike, 2026-11-26; for Maciej to confirm.
+  - Decision: the List's date column, Detailed's Due cell and a Board card read "Nov 24 · late" for an open task whose due day has passed, the words Upcoming already uses (U15-2). Still the muted date colour: call 23 holds (a word, never a colour).
+  - Why: outside Upcoming a date three days gone looked the same as one three days ahead.
+  - Rejected: the primary text colour on late dates. It was the pass's first proposal and Mike approved it, but it reverses call 23 ("muted, never red"), so it waits for Maciej.
+- **A count of 0 isn't drawn** → `plan-view-header.tsx` (the title's count), `task-detail-collections.tsx` (Subtasks, Waiting on, Blocked by, Linked), `board-parts.tsx` (a column's and a lane's header)
+  - Who: Mike, 2026-11-26; for Maciej to confirm.
+  - Decision: "Inbox", "Subtasks", "In progress", never "Inbox 0", "Subtasks 0", "In progress 0". A folded Board column keeps its number, which is all it shows.
+  - Why: the kit's `MetaCount` and the rail's `NavRow` already say nothing at 0; three zeros sat on every task's details (the 2026-10-20 audit).
+- **A failed load says "Couldn’t load tasks" and shows no empty state under it** → `ui/plan/plan-body.tsx`
+  - Who: agent, 2026-11-26.
+  - Decision: the banner drops the server's message (kept as its hover title, for a bug report), and while the error stands a view with no rows draws nothing instead of "No projects yet" or "Inbox is clear".
+  - Why: both were untrue on a failed read; the raw message was the driver's words.
+- **In a project's Timeline with no sections, tasks sit a level in** → `timeline-rows.ts` (`buildTimelineRows`; `timeline-rows.test.ts`)
+  - Who: agent, 2026-11-26.
+  - Decision: sections and people stay headers at the project's own level; with neither, the tasks start on the project name's line, as they do under a project in All. Before, they started 16 px left of their own project.
+- **One key, one keycap, said once** → `inbox-view.tsx`, `task-detail-panel.tsx` (`DetailEmptyState`), `view-empty-states.tsx`, `task-view-states.tsx`, `focus-empty-state.tsx`, `task-feed.tsx`
+  - Who: Mike, 2026-11-26; the strings are Maciej's to change.
+  - Decision: the empty Inbox carries its capture key on the button ("Capture a task ⌘⇧K") and loses the line that said it again; "Select a task" puts ↑ ↓ ⏎ and C in keycaps on two lines; a letter key is a capital in a keycap (C, as Q and ⇧F already were); Focus's headline has no full stop; the comment box's placeholder is "Leave a comment…" (the longer one wrapped to two lines in a 280 px panel; the @ button stays beside it).
+- **Considered and left as they are:** the rail's 1 px row gap (every module's rail uses it), the Board's fixed column width that puts a third column off a 1440 px window (default o: the board never reflows), "due Today" inside Upcoming's days (U15-2), "No comments yet." with its full stop (MOD-157, shared with Notes), a property value wrapping to a second line (calls 41, 89), and "Drop tasks here" at the title level (call 38, the kit's `EmptyState`).
+
 ## 2026-10-20 · The plan view is a controller and a layout (PV-B3)
 
 status: current

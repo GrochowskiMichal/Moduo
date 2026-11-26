@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * the count is the tertiary level, as the frames draw it (round-2b
  * `.shead .num`, `--text-3`). 4 px sit between the header and the rows under
  * it, so it reads as their header rather than one more row (MOD-152); only
- * when rows follow, so an empty collection ("Linked 0") ends at its header.
+ * when rows follow, so an empty collection ("Linked") ends at its header.
  * That rule is a `:has()` selector, so a caller's plain `mb-*` loses to it
  * while rows follow; space the rows instead if a caller ever needs more.
  */

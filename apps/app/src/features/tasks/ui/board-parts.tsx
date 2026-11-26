@@ -128,7 +128,8 @@ export function BoardColumnHeader({
     <GroupHeader
       data-board-header={label}
       label={label}
-      count={count}
+      // Nothing at 0, as the kit's counts do (MetaCount): an empty column says so itself.
+      count={count || undefined}
       leading={<BoardMarkView mark={mark} ctx={markCtx} />}
       actions={
         <DropdownMenu modal={false}>
@@ -232,7 +233,8 @@ export function BoardLaneHeader({
     <GroupHeader
       data-board-lane={label}
       label={label}
-      count={count}
+      // Nothing at 0, as the kit's counts do (MetaCount): an empty column says so itself.
+      count={count || undefined}
       leading={<BoardMarkView mark={mark} ctx={markCtx} />}
       onToggle={onToggle}
       collapsed={collapsed}

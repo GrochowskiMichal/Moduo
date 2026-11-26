@@ -25,8 +25,8 @@ import {
   formatTime,
   formatWhen,
 } from "../../lib/time-format";
-import { formatTimestamp, isUnfinished } from "./helpers";
-import { estimateOf, isDrifted, type Task } from "./model";
+import { formatTimestamp, isUnfinished, todayStr } from "./helpers";
+import { estimateOf, isDrifted, isLate, type Task } from "./model";
 
 /** The row properties Display can switch on and off, in column order. */
 export const ROW_PROPERTIES = ["priority", "energy", "date", "assignee"] as const;
@@ -369,9 +369,26 @@ export function projectLabel(project: string, section: string | null): string {
   return section ? `${project} › ${section}` : project;
 }
 
-/** Detailed's Due cell: "Today", "Fri", "Oct 16". */
-export function dueLabel(task: Pick<Task, "dueDate">, now: Date = new Date()): string | null {
-  return task.dueDate ? formatShortDate(task.dueDate, now) || null : null;
+/** What a passed due date on an open task adds to its day (REPLAN 23: a word, never a colour). */
+const LATE_WORDS = " · late";
+
+/** A due day as a row says it: "Fri", or "Oct 8 · late" once it has passed on an open task. */
+function dueWords(
+  task: Pick<Task, "dueDate" | "dueOn" | "status" | "statusCategory">,
+  now: Date,
+): string | null {
+  if (!task.dueDate) return null;
+  const day = formatShortDate(task.dueDate, now);
+  if (!day) return null;
+  return isLate(task, todayStr(now)) ? `${day}${LATE_WORDS}` : day;
+}
+
+/** Detailed's Due cell: "Today", "Fri", "Oct 16", "Oct 8 · late". */
+export function dueLabel(
+  task: Pick<Task, "dueDate" | "dueOn" | "status" | "statusCategory">,
+  now: Date = new Date(),
+): string | null {
+  return dueWords(task, now);
 }
 
 /** Detailed's Next session cell: "3:00 PM" today, else "Fri, 9:00 AM". */
@@ -427,10 +444,10 @@ export function formatShortDate(iso: string, now: Date = new Date()): string {
  * The date a row's column shows: the scheduled time or the due date, whichever
  * comes first by day (the next date that matters). On the same day the
  * scheduled time wins, since it says more. A time scheduled for today shows as
- * the time.
+ * the time, and a passed due date says "late" as Upcoming does.
  */
 export function rowDate(
-  task: Pick<Task, "scheduledAt" | "dueDate" | "status">,
+  task: Pick<Task, "scheduledAt" | "dueDate" | "dueOn" | "status" | "statusCategory">,
   now: Date = new Date(),
 ): RowDate | null {
   const scheduled = validDate(task.scheduledAt);
@@ -443,7 +460,12 @@ export function rowDate(
   if (due) parts[useDue ? "unshift" : "push"](`Due ${formatDate(due, now)}`);
   const description = parts.join(" · ");
   if (useDue && task.dueDate) {
-    return { kind: "due", label: formatShortDate(task.dueDate, now), drifted: false, description };
+    return {
+      kind: "due",
+      label: dueWords(task, now) ?? formatShortDate(task.dueDate, now),
+      drifted: false,
+      description,
+    };
   }
   const at = scheduled as Date;
   return {

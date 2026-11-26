@@ -23,6 +23,33 @@ import { TaskListView } from "../task-list-view";
 import { TaskTimelineView } from "../task-timeline-view";
 import type { PlanController } from "./use-tasks-plan-controller";
 
+/** The failed-load line over the centre: what happened, in plain words, and Retry. */
+function LoadErrorBanner({
+  error,
+  loading,
+  onRetry,
+}: {
+  error: string;
+  loading: boolean;
+  onRetry: () => void;
+}) {
+  // The hosted Supabase project may not have the tasks tables yet (web only).
+  const notMigrated = /schema cache|could not find the table|does not exist/i.test(error);
+  return (
+    <div className="mb-3 flex shrink-0 items-start justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
+      {/* The server's own words stay a hover away, for a bug report. */}
+      <span className="min-w-0 flex-1 font-sans text-muted-foreground" title={error}>
+        {notMigrated
+          ? "Tasks aren’t set up on this database yet — apply the Supabase migrations, or use the desktop app."
+          : "Couldn’t load tasks"}
+      </span>
+      <Button size="sm" variant="outline" disabled={loading} onClick={onRetry}>
+        {loading ? "Retrying…" : "Retry"}
+      </Button>
+    </div>
+  );
+}
+
 export function PlanBody({ c }: { c: PlanController }) {
   const {
     workspaceId,
@@ -177,25 +204,17 @@ export function PlanBody({ c }: { c: PlanController }) {
         onShowsNothing={setListShowsNothing}
         {...listExtras}
         {...viewExtras}
+        // A failed load isn't an empty view: the banner says what happened, and
+        // "No projects yet" or "Inbox is clear" under it would be untrue.
+        {...(error ? { emptyState: <></> } : null)}
         onViewKey={onViewKey}
       />
     );
 
-  // The hosted Supabase project may not have the tasks tables yet (web only).
-  const notMigrated = /schema cache|could not find the table|does not exist/i.test(error ?? "");
   const center = (
     <div className="flex h-full min-h-0 flex-col">
       {error ? (
-        <div className="mb-3 flex shrink-0 items-start justify-between gap-3 rounded-md border border-border bg-muted px-3 py-2 text-sm">
-          <span className="min-w-0 flex-1 font-sans text-muted-foreground">
-            {notMigrated
-              ? "Tasks aren’t set up on this database yet — apply the Supabase migrations, or use the desktop app."
-              : `Couldn’t load tasks: ${error}`}
-          </span>
-          <Button size="sm" variant="outline" disabled={loading} onClick={() => void reload()}>
-            {loading ? "Retrying…" : "Retry"}
-          </Button>
-        </div>
+        <LoadErrorBanner error={error} loading={loading} onRetry={() => void reload()} />
       ) : null}
       {archivedProject ? (
         <ArchivedProjectBanner

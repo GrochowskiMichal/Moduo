@@ -169,7 +169,7 @@ export function TasksEmptyScope({
       hint={
         canEdit ? (
           <>
-            or press <Kbd>c</Kbd> to capture
+            or press <Kbd>C</Kbd> to capture
           </>
         ) : undefined
       }

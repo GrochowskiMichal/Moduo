@@ -115,7 +115,7 @@ export function SubtasksSection({
     <div>
       <CollectionHeader
         label="Subtasks"
-        count={progress && progress.total > 0 ? `${progress.done}/${progress.total}` : 0}
+        count={progress && progress.total > 0 ? `${progress.done}/${progress.total}` : undefined}
         action={
           canEdit ? (
             <IconButton icon={Plus} label="Add subtask" onClick={() => setAdding(true)} />
@@ -297,7 +297,7 @@ export function WaitingSection({
     <div>
       <CollectionHeader
         label="Waiting on"
-        count={entries.length}
+        count={entries.length || undefined}
         action={
           canEdit ? (
             <Popover open={open} onOpenChange={setOpen}>
@@ -412,7 +412,7 @@ export function BlockedBySection({
     <div>
       <CollectionHeader
         label="Blocked by"
-        count={blockers.length}
+        count={blockers.length || undefined}
         action={canEdit ? <BlockerPicker task={task} /> : null}
       />
       {blockers.map((blocker) => (
@@ -572,7 +572,7 @@ export function LinkedSection({
     <div>
       <CollectionHeader
         label="Linked"
-        count={rows.length}
+        count={rows.length || undefined}
         action={
           canEdit && runtime && workspaceId ? (
             <EntityLinkPicker
