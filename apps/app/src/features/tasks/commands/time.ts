@@ -12,7 +12,7 @@ import { isTempId, NO_EDIT, patchOf, type Shared, STILL_SAVING } from "./shared"
 
 export function createTimeOps(ctx: TaskCommandsContext, shared: Shared) {
   const { store, runtime, workspaceId, data, env } = ctx;
-  const { failed } = shared;
+  const { failed, stillSaving } = shared;
 
   /** Each task's time writes in flight, chained (see `writeTime`). */
   const timeChains = new Map<string, Promise<void>>();
@@ -62,7 +62,9 @@ export function createTimeOps(ctx: TaskCommandsContext, shared: Shared) {
   /** Why a time write can't be sent right now, or null. */
   const timeWriteBlocked = (id: string): string | null => {
     if (!runtime || !workspaceId || !env().canEdit) return NO_EDIT;
-    if (isTempId(id)) return STILL_SAVING;
+    // A capture still queued (online) or unsaved: a time write sent now reaches a
+    // server without the task, comes back "gone" and the time silently goes back.
+    if (stillSaving(id)) return STILL_SAVING;
     if (store?.isOffline()) return "You're offline — time saves once you're back.";
     return null;
   };
