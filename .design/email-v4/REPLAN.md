@@ -1,10 +1,10 @@
 # Mail v4: the rethink
 
-> **Status (2026-11-26): round 1 answered; a bottom-bar round (47–51) and eight follow-ups open.** Phase 1 (design, with Maciej). No product code, no migrations.
+> **Status (2026-11-26): rounds 1 and the bottom bar (1–51) answered; eight follow-ups open.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html), published at https://claude.ai/artifact/57jvvKBZKYGE1fwQA5V5VJ.
-> - **Answered 2026-11-26:** all 46 (his words under each call, §8). **Open:** 47–51 (§8 J, the bottom bar in every module, which 2 waits on); explanations he asked for on 16, 24, 29, 36; checks on 5 (Display choices), 17 (no Send later at all?), 21 (presets only?), 30 (does the offer answer change b?). The prototype shows each beside its frame.
+> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). **Open:** explanations he asked for on 16, 24, 29, 36; checks on 5 (Display choices), 17 (no Send later at all?), 21 (presets only?), 30 (does the offer answer change b?). The prototype shows each beside its frame.
 > - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. Holes and how they map to calls: §1.5.
-> - **Next:** 47–51 and the follow-ups → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
+> - **Next:** the follow-ups → round 2a (every surface, state by state, plus the live baseline critique) → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
 
 ## 0. How to read this
@@ -115,7 +115,7 @@ Full inventories: [research/spark.md](./research/spark.md), [research/superhuman
 
 **Idea, one sentence:** *Spark's inbox at Superhuman's speed, where every email can become, or join, the work it's about.*
 
-- **Layout (calls 1–4):** Split (list and conversation side by side) and Full (the conversation alone) are both the person's choice; the default leans Full. The right panel is a switchable view, Contact first. The email keeps its own toolbar (2 b) while the bottom bar's rule for every module is settled (47–51).
+- **Layout (calls 1–4):** Split (list and conversation side by side) and Full (the conversation alone) are both the person's choice; the default leans Full. The right panel is a switchable view, Contact first. The email keeps its own toolbar (2 b). The bottom bar follows one rule in every module (47 a–51 b): Search · Quick capture · New, changing only for a mode (several selected, or Set aside's page); Send stays in the composer.
 - **Inbox (5–7):** Tabs open first; your own saved searches become tabs (up to 6, each removable with ×); any sender or domain can group to one row. Other layouts as Display choices await his OK.
 - **Verbs (8–12):** Done, Snooze, Set aside (`⇧S`), Pin, Remind if no reply, Task. Set aside is Spark's dateless shelf, and its page is a batch-reply page (HEY's Focus & Reply).
 - **Compose (13–18):** rich text on the editor Moduo already uses, inline images, templates with blanks, one signature per address, print. No Send later (one check open).
@@ -198,7 +198,7 @@ Mail owns how these look and behave inside Mail; Calendar owns the event model a
 
 **One difference to settle:** Calendar wants booking emails to read as ordinary mail; my ask 6 below wants them to open their event. Proposed middle: ordinary mail, plus the event as the first item in the link line. Not a conflict worth a message yet; I'll raise it in round 2 if Maciej's answers to 30–31 make it matter.
 
-9. **The bottom bar (C2b):** Mail's call 49 asks one rule for every module's bar. With 49 a, Calendar's Today goes in its own toolbar, not the bar's centre; 47 (when the bar changes) applies to Calendar's multi-select too.
+9. **The bottom bar (C2b):** settled for every module by Mail's 47 a and 49 a (Maciej, 2026-11-26). Calendar's Today goes in its own toolbar, not the bar's centre, so C2b's Search · Today · New becomes Search · Quick capture · New; the bar changes only for Calendar's multi-select.
 
 ### To Tasks
 
@@ -233,7 +233,7 @@ Answer by number ("10. ok … 14. drop it"), or in the prototype: since 2026-11-
 - **a.** Yes, the bar · **b.** Keep the reader toolbar (today) · **c.** Both.
 - *Recommend a:* one place for actions app-wide, more room for the email, and the keys are always in view, which teaches them.
 - Frame 3, variants a–c.
-- **Maciej (2026-11-26, answers sheet):** b. → Recorded, and reopened by his bottom-bar question the same day: calls 47–51 settle the bar's rule for every module first. Hanging off it: 18's Print (in the email's ⋯ under b), the composer's buttons (50), and where 10's keys are shown.
+- **Maciej (2026-11-26, answers sheet):** b. → Recorded, and reopened by his bottom-bar question the same day: calls 47–51 settle the bar's rule for every module first. Settled the same day (47 a): b stands. Hanging off it: 18's Print (in the email's ⋯ under b), the composer's buttons (50), and where 10's keys are shown.
 
 **3 ★ · The right panel's views, and which one opens first**
 - Hand-picked views, keys as today plus one: **Today** `⌥1` (your day from Calendar) · **Contact** `⌥2` (the sender: contact, company, open work, recent mail, next meeting; today's view, richer) · **Task** `⌥3` (opens after `t`, or when you open a linked task, with "← email") · **Links** `⌥4` (everything this email touches; its name is call 45) · **Schedule** (Calendar's offer, hosted here when you offer times; call 30).
@@ -569,28 +569,33 @@ Calendar's plan (its call C2b, open) proposes a tool of its own in the centre: S
 - **b.** Also whenever one item is open (an email, a task, a note): its actions move to the bar.
 - **c.** Never: the bar never changes; a selection gets a floating row.
 - *Recommend a:* it's what Tasks and Chat already do, it matches his 2 b, and Search, Capture and New stay where you expect them.
+- **Maciej (2026-11-26):** a. → The rule for every module: the bar's centre changes only for a mode (several selected, or a place with its own triage verbs). An open item keeps its actions on itself.
 
 **48 · Mail's modes** · (b)
 - **a.** Several conversations selected, and Set aside's answer-in-one-pass page.
 - **b.** Also the Inbox with one email selected, like Tasks' Inbox.
 - **c.** Only several selected.
 - *Recommend a:* Done, Snooze and Reply work on any email anywhere, so they belong on the email; Set aside's Send & next and Skip exist only on that page.
+- **Maciej (2026-11-26):** a. → Mail has two modes: several conversations selected, and Set aside's page. An open or selected email never changes the bar; 2 b stands.
 
 **49 · The bar's normal centre** · (c for Calendar's C2b)
 - **a.** The same three everywhere, each about this module: Search searches it, New makes its item; ⌘K stays app-wide.
 - **b.** The three plus up to two of the module's own tools (Calendar's Today).
 - **c.** Each module picks its own.
 - *Recommend a:* one bar you never re-learn; a module's own tools go in its toolbar. Today Search falls back to ⌘K in modules without their own search; a would give each module one.
+- **Maciej (2026-11-26):** a. → Search · Quick capture · New in every module, each about the module you're in; ⌘K stays app-wide. Calendar's Today goes in its own toolbar (§7 item 9). Modules without their own search get one.
 
 **50 · Where Send lives while you write** · (b)
 - **a.** In the composer, like Chat; the bar keeps its tools.
 - **b.** In the bar (round 1's Writing frame).
 - *Recommend a:* under 47 a writing isn't a mode, and Chat's composer already works this way.
+- **Maciej (2026-11-26):** a. → Send, Schedule and the rest live in the composer; the bar keeps its tools while you write.
 
 **51 · Finding a mode** · (c, changes how Tasks' Inbox and Chat's Catch up open)
 - **a.** A queue (Tasks' Inbox, Chat's Catch up, Mail's Set aside) opens with its first item selected, so its row is already there.
 - **b.** The row appears once you select something (today).
 - *Recommend a:* a mode you have to stumble into isn't a tool. Selecting several stays deliberate and needs no hint.
+- **Maciej (2026-11-26):** b. → Queues keep today's behaviour: the row appears once you select something. Tasks' Inbox and Chat's Catch up don't change; Set aside works the same way.
 
 ### Round 1 prototype: blind critics
 
