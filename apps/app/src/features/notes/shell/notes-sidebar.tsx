@@ -374,7 +374,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                         drag.headerHover === "pages" && DROP_TARGET,
                       )}
                     >
-                      Drag a note here to file it.
+                      Drag a note here to file it
                     </p>
                   ) : (
                     <TreeNodes nodes={sections.pages} section="pages" depth={0} ctx={ctx} />

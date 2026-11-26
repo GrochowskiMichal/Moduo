@@ -9,8 +9,10 @@ import { MessageSquare } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import type { EntityRef } from "@/lib/entity-links";
 import type { ModuoRuntime } from "@/lib/runtime.types";
+import { formatShortcut, SHORTCUTS } from "@/lib/shortcuts";
 
 import { useNoteAnchors } from "../comments/anchor-store";
 import type { NotesEditorBridge } from "../editor/notes-editor-bridge";
@@ -25,6 +27,9 @@ import { META_CHIP, NoteMetaLineView } from "./note-meta-line";
 import { SubpagesList } from "./subpages-list";
 import { useAgentEdit } from "./use-agent-edit";
 import { useNoteLinks } from "./use-note-links";
+
+/** The key a fresh note answers to here (⌘N in the app, ⌥N in a browser). */
+const newItemShortcut = SHORTCUTS.find((s) => s.id === "new-item");
 
 export function NoteView({
   topBar,
@@ -167,7 +172,12 @@ export function NoteView({
           <>
             <p className="font-display text-lg text-foreground">Write something down</p>
             <p className="text-sm">
-              Pick a note on the left{canEdit ? ", or press ⌘N for a fresh one" : ""}.
+              Pick a note on the left
+              {canEdit && newItemShortcut ? (
+                <>
+                  , or press <Kbd>{formatShortcut(newItemShortcut)}</Kbd> for a fresh one
+                </>
+              ) : null}
             </p>
           </>
         )}
