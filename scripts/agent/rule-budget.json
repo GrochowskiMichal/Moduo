@@ -1,0 +1,20 @@
+{
+  ".claude/rules/app-shell.md": 3290,
+  ".claude/rules/calendar.md": 2722,
+  ".claude/rules/chat-ui.md": 3118,
+  ".claude/rules/ci-release.md": 12402,
+  ".claude/rules/e2e.md": 3924,
+  ".claude/rules/email.md": 3127,
+  ".claude/rules/notes-data.md": 4374,
+  ".claude/rules/notes-editor.md": 6099,
+  ".claude/rules/supabase-access.md": 6008,
+  ".claude/rules/supabase-sql.md": 10110,
+  ".claude/rules/supabase-tests.md": 2696,
+  ".claude/rules/supabase.md": 3540,
+  ".claude/rules/tasks-ui.md": 4015,
+  ".claude/rules/tests-dom.md": 3258,
+  ".claude/rules/ui-css.md": 6079,
+  ".claude/rules/ui-drag.md": 4578,
+  ".claude/rules/ui-radix.md": 7021,
+  ".claude/rules/ui-react.md": 5259
+}

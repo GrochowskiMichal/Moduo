@@ -95,3 +95,19 @@ Reference: https://www.typescriptlang.org/docs/handbook/project-references.html
 Components and hooks should keep rendering pure. Move non-rendering work into effects, event handlers, pure helpers, or feature model modules so React can reason about component output predictably.
 
 Reference: https://react.dev/reference/rules/components-and-hooks-must-be-pure
+
+## Stack
+
+Tauri 2 + React 19 + Rsbuild + TanStack Router + Tailwind CSS v4, TypeScript 7, Bun. Supabase is the source of truth (cloud-first) on web and desktop; redb persists only the not-yet-migrated desktop modules. Lexical for rich text, Yjs for collaboration, Storybook 10 for components (with its MCP server), Rstest + Playwright for tests, `bun check` for types, `bun fmt` for formatting, `bun lint` for JS lint (a pinned canary build).
+
+## Build and dev commands
+
+- `bun run dev:web` (http://127.0.0.1:8081) · `bun run dev:desktop` · `bun run build:web` / `build:desktop` · `bun run storybook` (port 6006)
+- **Local stack first:** `bun run local:up` (Supabase + functions + Mailpit on this Mac, `.env.local` switched to it), test a migration by applying it on top (`psql … -1 -f <file>`, rule 13; `bun run local:reset` only with the user's OK), `bun run env:cloud` to go back. **Releasing to prod is `/ship` only** (release PR + `vX.Y.Z` tag; `guard-release.sh` blocks tags and prod workflows started any other way; the app Worker rolls out as a canary with automatic rollback, `scripts/release/canary.ts`); migrations and Edge Functions stay manual and `/ship` stops until they are applied: [docs/release.md](./release.md). See [docs/local-dev.md](./local-dev.md).
+- `bun run verify` = typecheck (`bun check`) + `bun lint` + `bun fmt --check` + lint:tw + lint:boundaries (only `lib/runtime*` talks to Supabase; `lib` never imports `features`) + lint:ast + lint:css + lint:notes + lint:ratchets + lint:decisions + lint:rules (rule frontmatter, dead file/script references, AGENTS.md under 6 KB, path rules within their size budget) + size + tests (the `verify` script in `package.json` is the list), run through Turborepo across every workspace: **the block-done gate**. It covers no Rust: see `.claude/rules/desktop-rust.md`.
+- `bun run test` (all suites) · `bun run --cwd apps/app test <path>` (one app test) · `bun run e2e`
+- **Workspaces** (Bun + Turborepo; run every root script from the root): `apps/app` (`@moduo/app`, the Rsbuild SPA) · `apps/desktop` (`@moduo/desktop`, Tauri: `src-tauri/` inside, the CLI runs from `apps/desktop`) · `apps/landing` · `apps/storybook` · `supabase/` (`@moduo/backend`, function and contract tests) · `e2e/` (`@moduo/e2e`, Playwright). `scripts/` and `tools/` are root tooling.
+
+## Repo layout (short)
+
+App code lives in `apps/app/src/` (paths before 2026-10-17 say `src/`): `apps/app/src/app/` composition and router · `apps/app/src/routes/pages/` thin page adapters · `apps/app/src/features/<feature>/` vertical slices (`ui`, `model`, `hooks`, `storage`/`sync`, `utils`) · `apps/app/src/components/ui/` shadcn primitives (story required) · `apps/app/src/components/app/` shell · `apps/app/src/lib/` runtimes and platform services · `apps/app/src/lib/sync/` the offline-sync kernel and stores (Tasks reads go through `features/tasks/tasks-context.tsx` hooks, writes through `features/tasks/commands/`: [docs/architecture.md](./architecture.md) §Tasks data and commands) · `apps/app/src/styles/tokens.css` tokens (**edit the token, never a component, to change a value**) · `apps/desktop/src-tauri/` Rust · `supabase/` migrations + Edge Functions · `docs/` knowledge · `specs/` specs (blocks and dependencies; the queue itself is in Moduo) · `.design/` design briefs · `.claude/` skills, agents, hooks, settings.

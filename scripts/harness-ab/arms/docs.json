@@ -1,6 +1,6 @@
 {
   "id": "docs",
-  "description": "Docs questions (HV-13): the harness as committed at the base, on the default model at chat effort (AGENTS.md §Models).",
+  "description": "Docs questions (HV-13): the harness as committed at the base, on the default model at chat effort (docs/agents/models-and-review.md).",
   "model": "opus",
   "effort": "medium"
 }

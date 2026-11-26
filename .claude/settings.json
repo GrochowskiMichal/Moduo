@@ -198,6 +198,9 @@
     "allow": [
       "Bash(bun run verify)",
       "Bash(bun run verify *)",
+      "Bash(bun run verify:full)",
+      "Bash(bun run docs:find *)",
+      "Bash(bun run docs:current *)",
       "Bash(bun run db:test)",
       "Bash(bun run db:test *)",
       "Bash(bun run lint:notes)",
@@ -240,11 +243,12 @@
       "Bash(az deployment sub create*)"
     ]
   },
+  "skillListingMaxDescChars": 300,
   "enabledPlugins": {
     "rust-analyzer-lsp@claude-plugins-official": true,
-    "claude-security@claude-plugins-official": true,
+    "claude-security@claude-plugins-official": false,
     "security-guidance@claude-plugins-official": true,
-    "skill-creator@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": false,
     "mattpocock-skills@claude-plugins-official": true,
     "postgres-best-practices@supabase-agent-skills": true,
     "supabase@supabase-agent-skills": true,

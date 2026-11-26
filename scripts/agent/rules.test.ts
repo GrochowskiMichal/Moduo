@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
-  AGENTS_MAX_LINES,
+  AGENTS_MAX_BYTES,
   check,
   deadRefs,
   expired,
@@ -13,12 +13,14 @@ import {
   parseFrontmatter,
   type Repo,
   type Rule,
+  RULE_MAX_BYTES,
   ruleProblems,
+  sizeProblems,
 } from "./rules.ts";
 
 // HV-10 (specs/harness-v3.md AC28, AC31): path rules carry paths, an incident
 // and an expiry; no rule or agent doc names a missing file or script; root
-// AGENTS.md stays a map of at most 150 lines.
+// AGENTS.md and each path rule stay inside a byte budget.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const fakeRepo = (files: string[], scripts: string[] = [], ignored: string[] = []): Repo => ({
@@ -166,6 +168,34 @@ describe("dead references (AC31)", () => {
   });
 });
 
+describe("size budgets", () => {
+  const sized = (file: string, n: number): Rule => ({ file, paths: ["x/**"], text: "x".repeat(n) });
+
+  it("fails an AGENTS.md over its budget and passes one at it", () => {
+    expect(sizeProblems([], "x".repeat(AGENTS_MAX_BYTES), {})).toEqual([]);
+    const [p] = sizeProblems([], "x".repeat(AGENTS_MAX_BYTES + 1), {});
+    expect(p?.file).toBe("AGENTS.md");
+    expect(p?.reason).toMatch(/every session carries it/);
+  });
+
+  it("counts bytes, not characters", () => {
+    expect(sizeProblems([], "⛔".repeat(AGENTS_MAX_BYTES / 3 + 1), {})).toHaveLength(1);
+  });
+
+  it("holds a new rule to the limit and an older one to its recorded size", () => {
+    const rules = [
+      sized(".claude/rules/new.md", RULE_MAX_BYTES + 1),
+      sized(".claude/rules/old.md", 6000),
+      sized(".claude/rules/grown.md", 6001),
+    ];
+    const budget = { ".claude/rules/old.md": 6000, ".claude/rules/grown.md": 6000 };
+    expect(sizeProblems(rules, "", budget).map((p) => p.file)).toEqual([
+      ".claude/rules/new.md",
+      ".claude/rules/grown.md",
+    ]);
+  });
+});
+
 describe("this repo", () => {
   it("has its folder rules as path rules, not folder AGENTS.md files", () => {
     const rules = loadRules(ROOT).map((r) => r.file);
@@ -186,7 +216,7 @@ describe("this repo", () => {
       expect(existsSync(path.join(ROOT, dir, "AGENTS.md"))).toBe(false);
   });
 
-  it(`keeps every rule valid, every reference alive and AGENTS.md at most ${AGENTS_MAX_LINES} lines`, () => {
+  it(`keeps every rule valid, every reference alive, AGENTS.md under ${AGENTS_MAX_BYTES} bytes and each rule in its budget`, () => {
     expect(check(ROOT)).toEqual([]);
   });
 
