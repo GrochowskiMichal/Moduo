@@ -1,8 +1,7 @@
+import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { describe, expect, it } from "@rstest/core";
 
 import { refuseMcpTarget } from "../safety";
 import { addDays, connector, nextWeekday } from "./client";

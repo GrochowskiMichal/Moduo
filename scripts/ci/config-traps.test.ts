@@ -1,8 +1,7 @@
+import { describe, expect, it } from "bun:test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 // Build, CI and agent-tooling traps that used to be gotcha entries (HV-14c, AC30): each one bit
 // once, and each check is the line a careless edit would change. Text checks, like
@@ -145,10 +144,14 @@ describe("workspaces", () => {
       .split("\n")
       .filter(Boolean);
     expect(configs.length).toBeGreaterThan(0);
+    // scripts/ runs on `bun test` (no config file); it needs the same flag on the command line.
+    expect(JSON.parse(read("package.json")).scripts["test:scripts"]).toContain(
+      "--pass-with-no-tests",
+    );
     for (const config of configs) {
       const dir = path.dirname(config);
       const tests = filesUnder(dir, /\.test\.tsx?$/).length;
-      if (tests >= 3 && dir !== "scripts") continue;
+      if (tests >= 3) continue;
       expect({ config, passWithNoTests: /passWithNoTests:\s*true/.test(read(config)) }).toEqual({
         config,
         passWithNoTests: true,

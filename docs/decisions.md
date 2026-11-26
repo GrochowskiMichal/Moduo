@@ -130,6 +130,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-11-26 · The `scripts/` and `tools/ast-grep` tests run on `bun test`, not Rstest; the app, backend and infra suites stay on Rstest.
 - 2026-10-22 · Biome is gone: `bun lint` (a pinned canary) lints, `bun fmt` formats.
 - 2026-10-22 · Bun 1.4.4: `bun check` type-checks, `bun fmt` formats, Biome only lints (MOD-517). *(partly superseded)*
 - 2026-10-20 · `optimization.moduleIds: 'compact-hashed'` is not added: Rsbuild 2 already sets it in production.
