@@ -232,6 +232,22 @@ describe("project skills", () => {
     expect(dangling).toEqual([]);
   });
 
+  it("say when to use them inside the listing's 300-character cap", () => {
+    // .claude/settings.json caps each description at skillListingMaxDescChars in the listing a
+    // session carries, so a trigger clause past the cap is never seen. Third-party copies (they
+    // carry a LICENSE) keep their upstream text.
+    const cap = JSON.parse(read(".claude/settings.json")).skillListingMaxDescChars as number;
+    expect(cap).toBe(300);
+    const blind = skills
+      .map((e) => e.name)
+      .filter((n) => !exists(`.claude/skills/${n}/LICENSE`))
+      .filter((n) => {
+        const desc = /^description: (.*)$/m.exec(read(`.claude/skills/${n}/SKILL.md`))?.[1] ?? "";
+        return !/\b(use|read it) (when|after|before|for|at|it)\b/i.test(desc.slice(0, cap));
+      });
+    expect(blind).toEqual([]);
+  });
+
   it("never take a built-in command's name", () => {
     // A built-in slash command wins over a same-named skill, so `/plan` never reached ours.
     const reserved = new Set([

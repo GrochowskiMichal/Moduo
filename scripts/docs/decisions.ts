@@ -18,6 +18,7 @@
  * sits outside a dated heading (an undated heading such as "Earlier entries"
  * only groups bullet entries). Bullets inside a dated heading are its parts.
  *
+ *   bun run docs:find <area|all> <words…> [--all] [--full]   the matching current entries, in about 2 KB
  *   bun run docs:current <area> [--titles] [--all]   the current view of one area
  *   bun run docs:index                              regenerate docs/decisions.md
  *   bun run lint:decisions                          statuses, references, index freshness
@@ -327,6 +328,103 @@ export function renderCurrent(area: Area, opts: { titles?: boolean; all?: boolea
   return `${head}\n\n${body}\n`;
 }
 
+/** The most a find prints: an area file can pass 500 KB, and the answer goes into an agent's context. */
+export const FIND_MAX_HITS = 6;
+const SNIPPET = 220;
+
+const plain = (s: string) =>
+  s
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** The text around the first word that isn't in the title (or the entry's opening), cut to a few lines. */
+function snippet(e: Entry, words: string[]): string {
+  const body = plain(e.lines.filter((_, i) => i !== e.statusAt).join(" "));
+  const low = body.toLowerCase();
+  const title = plain(e.title).toLowerCase();
+  const word = words.find((w) => !title.includes(w)) ?? words[0] ?? "";
+  const at = Math.max(0, low.indexOf(word, title.length));
+  const from = Math.max(0, at - 80);
+  const cut = body.slice(from, from + SNIPPET);
+  return `${from > 0 ? "…" : ""}${cut}${from + SNIPPET < body.length ? "…" : ""}`;
+}
+
+export type Found = { hits: Entry[]; more: number; hidden: number };
+
+/**
+ * Entries of one area (or every area, for "all") that contain every word, case-insensitive.
+ * Title matches come first, then newest first; superseded and dropped entries are counted, not
+ * shown, unless `all`.
+ */
+export function findEntries(
+  areas: Area[],
+  areaName: string,
+  words: string[],
+  opts: { all?: boolean } = {},
+): Found {
+  const needles = words.map((w) => w.toLowerCase()).filter(Boolean);
+  const pool = areas.filter((a) => areaName === "all" || a.name === areaName);
+  const matches = pool
+    .flatMap((a) => a.entries)
+    .filter((e) => {
+      const text = plain(e.lines.join(" ")).toLowerCase();
+      return needles.every((w) => text.includes(w));
+    });
+  const live = (e: Entry) => e.status === "current" || e.status === null;
+  const shown = opts.all ? matches : matches.filter(live);
+  const inTitle = (e: Entry) => {
+    const t = plain(e.title).toLowerCase();
+    return needles.filter((w) => t.includes(w)).length;
+  };
+  shown.sort((a, b) => inTitle(b) - inTitle(a) || (b.date ?? "").localeCompare(a.date ?? ""));
+  return {
+    hits: shown.slice(0, FIND_MAX_HITS),
+    more: Math.max(0, shown.length - FIND_MAX_HITS),
+    hidden: matches.length - shown.length,
+  };
+}
+
+export function renderFound(found: Found, words: string[], opts: { full?: boolean } = {}): string {
+  const needles = words.map((w) => w.toLowerCase());
+  const out = found.hits.map((e) => {
+    const where = `docs/decisions/${e.area}.md:${e.line}`;
+    if (opts.full) return `<!-- ${where} -->\n${e.lines.join("\n")}`;
+    const partly = e.status === "current" && e.by.length > 0 ? " [partly superseded]" : "";
+    const tag = e.status && e.status !== "current" ? ` [${e.status}]` : partly;
+    const head = `${e.date ? `${e.date} · ` : ""}${plain(e.title).slice(0, 160)}${tag}`;
+    return `${where}\n  ${head}\n  ${snippet(e, needles)}`;
+  });
+  if (found.hits.length === 0) out.push("No current decision matches every word. Try fewer words.");
+  if (found.more > 0) out.push(`${found.more} more match: add a word to narrow it.`);
+  if (found.hidden > 0)
+    out.push(
+      `${found.hidden} superseded or dropped ${found.hidden === 1 ? "match is" : "matches are"} hidden (--all shows them).`,
+    );
+  if (!opts.full && found.hits.length > 0)
+    out.push("Read one in full with sed -n '<line>,+12p' <file>, or add --full.");
+  return `${out.join("\n\n")}\n`;
+}
+
+/** `find <area|all> <words…> [--all] [--full]`: the text to print. */
+function findCommand(areas: Area[], rest: string[]): string {
+  const [name, ...words] = rest.filter((a) => !a.startsWith("--"));
+  const known = name === "all" || areas.some((a) => a.name === name);
+  if (!name || words.length === 0 || !known)
+    throw new DecisionsError(
+      `usage: bun run docs:find <area|all> <words…> [--all] [--full]\nareas: ${areas.map((a) => a.name).join(", ")}`,
+    );
+  const full = rest.includes("--full");
+  const found = findEntries(areas, name, words, { all: rest.includes("--all") });
+  // --full prints whole entries, so it shows fewer of them.
+  if (full) {
+    found.more += Math.max(0, found.hits.length - 3);
+    found.hits = found.hits.slice(0, 3);
+  }
+  return renderFound(found, words, { full });
+}
+
 function main(argv: string[]): void {
   const [cmd, ...rest] = argv;
   const areas = readAreas();
@@ -348,6 +446,9 @@ function main(argv: string[]): void {
       );
       return;
     }
+    case "find":
+      process.stdout.write(findCommand(areas, rest));
+      return;
     case "index": {
       fs.writeFileSync(INDEX, renderIndex(areas));
       console.log(
@@ -367,7 +468,7 @@ function main(argv: string[]): void {
     }
     default:
       throw new DecisionsError(
-        "usage: decisions.ts current <area> [--titles] [--all] | index | check",
+        "usage: decisions.ts find <area|all> <words…> | current <area> [--titles] [--all] | index | check",
       );
   }
 }

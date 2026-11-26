@@ -9,9 +9,11 @@
  *   erosion         ratchet baseline drift, knowledge-file growth, ledger churn, and AI-review
  *                   threads left unresolved on merged Tier 2 PRs into develop
  *   usage           Entire token usage per block (sessions, API calls, tokens), plus skill calls
+ *   context         what a session carried at its first call, first edit and peak (token counts
+ *                   from this machine's Claude Code transcripts; scripts/agent/context-stats.ts)
  *
- * Only numbers, PR numbers and the (already public) PR titles go into the note: no transcript,
- * prompt or branch without a PR is ever read into it, and `assertPublishable` refuses a body that
+ * Only numbers, PR numbers and the (already public) PR titles go into the note: no transcript
+ * text, prompt or branch without a PR is ever read into it, and `assertPublishable` refuses a body that
  * looks like it carries a secret. Entire is read only (`git cat-file` on the checkpoint refs'
  * metadata.json blobs); nothing here pushes or deletes `refs/entire/*`.
  *
@@ -27,6 +29,7 @@
  */
 
 import { isDocsOnly } from "../ci/tier";
+import { type ContextSummary, type SessionContext, summarize } from "./context-stats";
 import { blockIdFromTitle, type Rpc } from "./moduo-sync";
 
 const DAY = 86_400_000;
@@ -91,6 +94,8 @@ export interface Facts {
   reviewThreads: Record<number, number>;
   /** null when this machine has no Entire checkpoints (a cloud routine). */
   sessions: Session[] | null;
+  /** This machine's Claude Code sessions of the repository; absent or empty where there are none. */
+  context?: SessionContext[];
 }
 
 export interface Window {
@@ -447,6 +452,8 @@ export interface Numbers {
     unresolvedReview: { prs: number; threads: number };
   };
   usage: { blocks: Usage[]; skills: Record<string, number> } | null;
+  /** Medians of what the week's sessions carried; null when this machine ran none. */
+  context: ContextSummary | null;
 }
 
 function tierMix(prs: readonly Pr[]): Record<string, number> {
@@ -486,6 +493,7 @@ export function compute(f: Facts): Numbers {
     usage: f.sessions
       ? { blocks: usageByBlock(f.sessions, f.prs, w), skills: skillCalls(f.sessions, w) }
       : null,
+    context: summarize(f.context ?? [], w.start, w.end),
   };
 }
 
@@ -571,6 +579,17 @@ function usageTable(n: Numbers): string[] {
   ];
 }
 
+function contextLines(n: Numbers): string[] {
+  const c = n.context;
+  if (!c) return [];
+  return [
+    "",
+    "### Session context (this machine's Claude Code sessions)",
+    "",
+    `${c.sessions} sessions, medians: ${tokens(c.entrance)} tokens at the first model call · ${tokens(c.atFirstEdit)} at the first edit, after ${c.callsToFirstEdit} calls · ${tokens(c.peak)} at the peak.`,
+  ];
+}
+
 const DEFINITIONS = [
   "",
   "### How these are counted",
@@ -580,6 +599,7 @@ const DEFINITIONS = [
   "- **Follow-up fix**: a PR whose title leads with Fix (or whose branch is a fix branch) that changed code (not docs, lockfiles or bookkeeping) a task PR had changed in the 7 days before it. A heuristic: the pairs are listed so a person can judge them.",
   "- **Escapes**: `benchmarks/escapes/*/escape.json` added this week. **Ratchet drift**: entries of `scripts/ci/ratchets.baseline.json` added or raised (erosion) vs lowered or removed. **Knowledge files**: `docs/decisions*`, `docs/gotchas*` and `.claude/rules/` on mike.",
   "- **Usage**: token counts from the Entire checkpoint metadata on the machine that ran this (other people's sessions aren't in it), grouped by the PR of the session's branch. Written by `bun run numbers` (scripts/agent/numbers.ts).",
+  "- **Session context**: the input tokens (fresh, cache writes and cache reads) of a session's first model call, of the call that made its first edit, and of its largest call; subagents left out. The budget is 45k at the first call (docs/agents/tooling.md §Context budget).",
 ];
 
 export function renderNote(n: Numbers): string {
@@ -603,6 +623,7 @@ export function renderNote(n: Numbers): string {
     ...prList("Reverts", rv),
     ...prList("New escapes", es),
     ...usageTable(n),
+    ...contextLines(n),
     ...DEFINITIONS,
     "",
   ].join("\n");

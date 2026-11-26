@@ -1,6 +1,6 @@
 ---
 name: product-lab
-description: The product lab, an engine of /product-studio (not a command of its own). Drives the running app through declared screens, states (empty, loading, error, offline, dense, long content, first run), keyboard and pointer journeys and overlays, or renders a studio prototype (scripts/prototype.mjs), and writes an evidence dossier with gate scores computed by code for accessibility, performance and feel, state coverage, reliability, platform and design-token conformance. Read it when /product-studio, /s1 or /s2 calls for a lab run or a measured before/after delta. It measures; it never judges taste.
+description: The product lab, an engine of /product-studio (not a command of its own). Read it when /product-studio, /s1 or /s2 calls for a lab run or a measured before/after delta. It measures; it never judges taste. Drives the running app through declared screens, states (empty, loading, error, offline, dense, long content, first run), keyboard and pointer journeys and overlays, or renders a studio prototype (scripts/prototype.mjs), and writes an evidence dossier with gate scores computed by code for accessibility, performance and feel, state coverage, reliability, platform and design-token conformance.
 user-invocable: false
 ---
 
