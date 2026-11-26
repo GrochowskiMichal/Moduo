@@ -45,6 +45,8 @@
     "env:cloud": "bun scripts/local/env.ts cloud",
     "drafts": "bun scripts/agent/drafts.ts",
     "wt": "bun scripts/agent/wt.ts",
+    "agent:login": "bun scripts/agent/look.ts login",
+    "agent:look": "bun scripts/agent/look.ts look",
     "wt:prune": "bun scripts/agent/wt.ts prune",
     "numbers": "bun scripts/agent/numbers.ts",
     "routine": "bun scripts/agent/routines.ts",

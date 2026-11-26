@@ -126,3 +126,5 @@ storybook-static/
 
 # Mail integration harness data (scripts/mail/test-server.sh)
 .mail-it/
+# The agent's local session and screenshots (scripts/agent/look.ts).
+/.auth/
