@@ -1,6 +1,6 @@
 # Moduo — Notes Brief
 
-> **Status:** Shipped in Wave 3 (full rebuild on the spine primitives). Refresh in progress: [specs/notes-refresh.md](../../specs/notes-refresh.md).
+> **Status:** Shipped in Wave 3 (full rebuild on the spine primitives). Refresh in progress: specs/notes-refresh.md.
 > **Pairs with:** Tasks (real schedulable checkboxes), Contacts/Calendar/Email/Finance (via `/refs` + `@mentions`), and the spine itself. Siblings: [PRODUCT_BRIEF.md](../../docs/PRODUCT_BRIEF.md) · [ROADMAP.md](../../docs/ROADMAP.md) · [data-layers.md](../../docs/data-layers.md).
 
 ---
