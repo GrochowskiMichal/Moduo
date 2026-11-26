@@ -10,7 +10,7 @@ name: Deploy web (shared)
 # files stay deployed (PLAT-4), so open tabs keep loading their chunks until they reload.
 #
 # The app goes out as a canary (HV-28, scripts/release/canary.ts): the new version is uploaded,
-# smoke-tested at 0% through a version override, serves 10% for 15 minutes while probes and the
+# smoke-tested at 0% through a version override, serves 10% for a soak (CANARY_SOAK_MINUTES, 3 in lean mode) while probes and the
 # Workers analytics watch its errors, then 100%. An error spike puts the old version back at 100%
 # by itself and fails the job, so the landing, desktop and the release notes don't ship.
 #
@@ -48,7 +48,7 @@ jobs:
   app:
     if: inputs.target != 'landing'
     runs-on: ubuntu-latest
-    # Build ~5 min + the canary's 15-minute soak + smoke.
+    # Build ~5 min + the canary's soak (up to 15 minutes before beta) + smoke.
     timeout-minutes: 45
     # Only develop, mike and v* tags may use this environment.
     environment: cloudflare-deploy
@@ -115,8 +115,12 @@ jobs:
           [ -n "$id" ] || { echo "::error::no version id in the wrangler output"; exit 1; }
           echo "version=$id" >> "$GITHUB_OUTPUT"
 
-      - name: Canary (0% smoke, 10% for 15 minutes, then 100%)
+      # The soak's length is the repo variable CANARY_SOAK_MINUTES, 3 by default in lean mode
+      # (pre-alpha: 10% of almost no traffic never reaches the analytics' 20-request floor, so only
+      # the probes judge). Set it to 15 before the first external alpha (models-and-review.md).
+      - name: Canary (0% smoke, 10% soak, then 100%)
         env:
+          SOAK_MINUTES: ${{ vars.CANARY_SOAK_MINUTES || '3' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           VERSION_ID: ${{ steps.upload.outputs.version }}
@@ -125,7 +129,7 @@ jobs:
           [ -s "$RUNNER_TEMP/web-builds/previous-static.txt" ] && old=(--old "$RUNNER_TEMP/web-builds/previous-static.txt")
           set +e
           bun scripts/release/canary.ts run --worker moduo-app-production --version "$VERSION_ID" \
-            --url https://app.moduo.app --build "${SHA::7}" --state "$RUNNER_TEMP/canary.json" "${old[@]}" \
+            --url https://app.moduo.app --build "${SHA::7}" --state "$RUNNER_TEMP/canary.json" --minutes "$SOAK_MINUTES" "${old[@]}" \
             > "$RUNNER_TEMP/canary.md"
           code=$?
           set -e

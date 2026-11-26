@@ -11,7 +11,7 @@
 //              chunks. Without it a split breaks pages; the run then skips the soak and promotes
 //              as a plain deploy would (--without-affinity promote, the default), or soaks anyway
 //              (soak, the staging rehearsal).
-//   3. soak    15 minutes. Every 30 s a probe round hits the new version (the shell, a deep link,
+//   3. soak    --minutes (15 by default; releases pass CANARY_SOAK_MINUTES). Every 30 s a probe round hits the new version (the shell, a deep link,
 //              /config.json naming the build); every minute the Workers analytics compare its
 //              error rate with the old version's. Two failed probe rounds in a row, or an error
 //              rate over max(2%, 2× the old version's) on at least 20 requests, is a spike.
@@ -723,7 +723,7 @@ if (import.meta.main) {
   console.log(result.report.join("\n"));
   if (result.outcome === "promoted-without-soak")
     console.error(
-      "::warning title=Canary skipped::No version affinity on this host, so the new version went to 100% without the 15-minute soak. Add the Transform Rule (docs/release.md §4).",
+      "::warning title=Canary skipped::No version affinity on this host, so the new version went to 100% without the soak. Add the Transform Rule (docs/release.md §4).",
     );
   if (expectRollback) process.exit(result.outcome === "rolled-back-soak" ? 0 : 1);
   process.exit(

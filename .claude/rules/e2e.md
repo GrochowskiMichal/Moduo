@@ -28,7 +28,7 @@ Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). Run e2e through `scr
 - A perf harness drives real input and starts its clock at the input's first event in the page.
 
 ## Running specs and the product lab
-- Run e2e on the shared local stack only through `scripts/agent/e2e.sh`, never a bare `bunx playwright test`: it takes the machine-wide lock, adds `--project=e2e`, refuses a cloud `.env.local`, and the config starts this worktree's own server.
+- Run e2e only through `scripts/agent/e2e.sh`, never a bare `bunx playwright test`: it adds `--project=e2e` and refuses a cloud `.env.local`.
 - The `e2e` project runs `workers: 1`: specs share one workspace and read each other's rows. Rerun a red parallel run with `--workers=1` before chasing it. A suite that finds zero tests passes, so check `playwright test --list`.
 - A bare `bun run e2e` also runs the visual project and writes a baseline for every screenshot without one: delete those, never commit them unreviewed.
 - Playwright can want a newer browser build than this Mac has ("Executable doesn't exist … chromium_headless_shell-<n>"). Don't download mid-block: use a local, uncommitted config with `use.channel: "chrome"`.

@@ -14,7 +14,7 @@ Compiled from the UI gotchas (HV-14b). Data and commands: [docs/architecture.md]
 - The selection has two owners that fall back on their own (`usePlanCursor` and the List): any new fallback must settle with the other. With nothing to show the List leaves the page's choice alone; the page's pick must be a row the List shows; the selection is never cleared to show the project. `task-list-view.fold-all.test.tsx` fails on a loop.
 - The Timeline (like Focus) may keep "nothing selected": a new view that wants that opts out of the backstop in `usePlanCursor`.
 - A saved view's selection `view:<id>` isn't a place: everything about the centre reads `place` (`viewPlace(view)`); only the sidebar highlight, `lastBucket`, the URL and fold keys read `selection`.
-- Done, Won't do and Backlog tasks load after the open ones: "not in the list" isn't "gone" until `restLoaded` (`store.whenRest()` outside React). Links resolve against archived projects and tasks too (`linkable` in `apps/app/src/features/tasks/ui/tasks-plan-view.tsx`).
+- "Not in the list" isn't "gone" until `restLoaded` (`store.whenRest()` outside React). `linkable` (`use-plan-cursor.tsx`) holds archived projects and tasks.
 - A deep link into a grouped List can land and then be folded away: the collapse reset keeps the selected task's group open.
 - A new workspace's Inbox doesn't exist until Tasks first opens: anything writing into it on a first open waits for `api.inbox`.
 
@@ -29,7 +29,7 @@ Compiled from the UI gotchas (HV-14b). Data and commands: [docs/architecture.md]
 - A project write that waits for task moves joins the project's chain before it waits (`chainProjectOp(id, async () => { await movesDone; … })`), or an Undo overtakes it.
 
 ## The Timeline
-- A `VirtualStack` under a sticky header in the same scroller needs `scrollMargin`. TanStack Virtual's ancestor scroller is attached after the children's layout effects; `VirtualStack` renders once more after mount.
+- A `VirtualStack` under a sticky header in the same scroller needs `scrollMargin`.
 - A Timeline row spans the canvas: the deep-link reveal finds the mark (`data-task-id`), not the row, or `scrollIntoView` jumps sideways.
 - The canvas starts a drag only under `[data-timeline-track]` and handles keys only when the scroller contains the target: portaled pickers bubble through the React tree.
 

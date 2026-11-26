@@ -175,6 +175,19 @@ describe("the hook script", () => {
     expect(r.stdout).toBe("");
   });
 
+  it("logs the fast and answer lanes and adds nothing for them", () => {
+    for (const prompt of ["Rename the Notes empty-state copy", "What does the sync kernel do?"]) {
+      const r = run(hookInput(prompt));
+      expect(r.status).toBe(0);
+      expect(r.stdout).toBe("");
+    }
+    const rows = readFileSync(path.join(dir, ".claude/logs/router.jsonl"), "utf8")
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l) as { lane: string });
+    expect(rows.slice(-2).map((x) => x.lane)).toEqual(["fast", "answer"]);
+  });
+
   it("adds nothing when switched off", () => {
     const r = run(hookInput("fix the bug"), { MODUO_ROUTER: "off" });
     expect(r.status).toBe(0);

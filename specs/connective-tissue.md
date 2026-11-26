@@ -115,7 +115,7 @@ Each block is sized to complete within one `/execute` context budget, is a verti
 - **User-defined `relation_kind`** (closed set at alpha).
 - **Cmd-K Search mode, NL Capture mode, the dedicated Universal Inbox screen, and global cross-module search as a destination** — deferred to their first consumer / Wave 5 (Assumption 9); Wave 0 routes unrouted captures to the Tasks Inbox bucket.
 - **A separate `attachments` table** (attachments are `entity_links`); **per-type chip colors**; a **saved-search query DSL**; **real-time co-editing / live cursors / chat**; a **built-in LLM or AI-styled suggestion UI** (MCP-only; plain strip).
-- **Contacts hub *content*** (people/companies model, auto-rollup specifics) — that is [`specs/contacts.md`](./contacts.md); this spec defines the reusable `EntityHub` it consumes.
+- **Contacts hub *content*** (people/companies model, auto-rollup specifics) — that is `specs/contacts.md`; this spec defines the reusable `EntityHub` it consumes.
 - **Notes cloud-sync (Yjs↔Postgres)** — Wave 3. **`email_refs` desktop→Supabase sync** is a Wave 1/2 prerequisite specced in data-layers §6, not here; until it lands, email rows render the "syncing…" placeholder.
 
 ## Design constraints (R1–R10)

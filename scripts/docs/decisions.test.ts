@@ -8,6 +8,7 @@ import {
   FIND_MAX_HITS,
   findEntries,
   parseArea,
+  pruneArea,
   readAreas,
   renderCurrent,
   renderFound,
@@ -191,6 +192,28 @@ describe("the current view", () => {
     expect(index).toContain("- 2026-10-05 · A rule partly replaced. *(partly superseded)*");
     expect(index).not.toContain("Old rule");
     expect(index).toContain("2 superseded or dropped entries are left out");
+  });
+});
+
+describe("prune", () => {
+  it("deletes superseded entries and the links to them, and leaves a valid log", () => {
+    const areas = [parseArea("things", FLAT), parseArea("sections", SECTIONS)];
+    const gone = new Set(areas.flatMap((a) => a.entries.filter((e) => e.status === "superseded")));
+    expect([...gone].map((e) => e.title)).toEqual(["Old rule."]);
+    const things = pruneArea(areas, areas[0]!, FLAT, gone);
+    expect(things).not.toContain("Old rule.");
+    // The successor no longer names what was removed; a partly superseded entry keeps its link.
+    expect(things).toContain(
+      "- **2026-10-20 · New rule wins.** Replaces the old one.\n  - status: current\n",
+    );
+    expect(things).toContain('  - status: current · by: sections 2026-10-20 "A heading entry"');
+    expect(things).not.toMatch(/\n\n\n/);
+    const after = [
+      parseArea("things", things),
+      parseArea("sections", pruneArea(areas, areas[1]!, SECTIONS, gone)),
+    ];
+    expect(validate(after)).toEqual([]);
+    expect(after[0]?.entries).toHaveLength(areas[0]!.entries.length - 1);
   });
 });
 
