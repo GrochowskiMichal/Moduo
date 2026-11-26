@@ -17,7 +17,6 @@
 // per workspace. Every mutated file is put back after each run, also on Ctrl-C.
 // Exit 1 when no draft is eligible. Tests: scripts/agent/drafts.test.ts.
 
-import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -179,13 +178,17 @@ export function table(drafts: readonly Draft[]): string {
 // ── Running ──────────────────────────────────────────────────────────────────
 
 function git(cwd: string, args: string[]): { ok: boolean; out: string } {
-  const r = spawnSync("git", args, { cwd, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
-  return { ok: r.status === 0, out: r.stdout ?? "" };
+  const r = Bun.spawnSync(["git", ...args], { cwd });
+  return { ok: r.exitCode === 0, out: r.stdout.toString() };
 }
 
 function sh(cwd: string, cmd: string, timeoutMs?: number): boolean {
-  const r = spawnSync("sh", ["-c", cmd], { cwd, stdio: "ignore", timeout: timeoutMs });
-  return r.status === 0;
+  const r = Bun.spawnSync(["sh", "-c", cmd], {
+    cwd,
+    stdio: ["ignore", "ignore", "ignore"],
+    timeout: timeoutMs,
+  });
+  return r.exitCode === 0;
 }
 
 /** One test command per workspace for the given test files. Null when a file has no runner here. */

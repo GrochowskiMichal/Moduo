@@ -18,7 +18,6 @@
 // (gitignored, no prompt text) as the rig's data; an override in words
 // ("treat this as a block", "fast lane") is logged as a label.
 
-import { spawn } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -144,10 +143,11 @@ export function modelPrompt(prompt: string): string {
 
 /** Asks Haiku through the logged-in CLI, hooks off, no tools; rejects past the budget. */
 export function askHaiku(prompt: string, budgetMs: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      "claude",
+  let child: ReturnType<typeof Bun.spawn>;
+  try {
+    child = Bun.spawn(
       [
+        "claude",
         "-p",
         "--model",
         "haiku",
@@ -167,23 +167,26 @@ export function askHaiku(prompt: string, budgetMs: number): Promise<string> {
         stdio: ["ignore", "pipe", "ignore"],
       },
     );
-    let out = "";
+  } catch (error) {
+    return Promise.reject(error);
+  }
+  const proc = child;
+  return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
+      proc.kill("SIGKILL");
       reject(new Error("router: model over budget"));
     }, budgetMs);
-    child.stdout.on("data", (chunk) => {
-      out += chunk;
-    });
-    child.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code === 0) resolve(out);
-      else reject(new Error(`router: model exited ${code}`));
-    });
+    Promise.all([new Response(proc.stdout as ReadableStream).text(), proc.exited]).then(
+      ([out, code]) => {
+        clearTimeout(timer);
+        if (code === 0) resolve(out);
+        else reject(new Error(`router: model exited ${code}`));
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
 }
 

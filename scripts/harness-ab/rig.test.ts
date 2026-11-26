@@ -1,5 +1,4 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -33,6 +32,15 @@ import {
 import { ANCHOR, closeStackPorts, STACK_PORTS } from "./srt-offline.mjs";
 import { summarize } from "./stream";
 
+const run_ = (
+  cmd: string,
+  args: string[],
+  opts: { cwd?: string; env?: Record<string, string | undefined> } = {},
+) => {
+  const r = Bun.spawnSync([cmd, ...args], { cwd: opts.cwd, env: opts.env });
+  return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+};
+
 // The A/B rig (specs/harness-v3.md, AC33, AC37): a dry run plans one row per task × arm × repeat, and
 // nothing that points at the shared Supabase stack, production or a remote gets past the checks.
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -63,9 +71,8 @@ describe("dry run", () => {
   });
   afterEach(() => rmSync(out, { recursive: true, force: true }));
   const cli = (...args: string[]) =>
-    spawnSync("bun", [RIG, ...args], {
+    run_("bun", [RIG, ...args], {
       cwd: ROOT,
-      encoding: "utf8",
       env: { ...process.env, HARNESS_AB_OUT: out },
     });
 
@@ -90,7 +97,7 @@ describe("dry run", () => {
   });
 
   it("clones every task at --base when given (a before/after run)", () => {
-    const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" });
+    const head = run_("git", ["rev-parse", "HEAD"], { cwd: ROOT });
     const run = cli("run", "--set", "core", "--repeats", "1", "--base", "HEAD", "--dry-run");
     expect(run.status).toBe(0);
     const [file] = readdirSync(path.join(out, "results"));
@@ -296,8 +303,8 @@ describe("sandbox and environment", () => {
     const bin = mkdtempSync(path.join(tmpdir(), "harness-ab-bin-"));
     const ws = mkdtempSync(path.join(tmpdir(), "harness-ab-ws-"));
     try {
-      spawnSync("git", ["init", "-q", ws]);
-      const jq = spawnSync("sh", ["-c", "command -v jq"], { encoding: "utf8" }).stdout.trim();
+      run_("git", ["init", "-q", ws]);
+      const jq = run_("sh", ["-c", "command -v jq"], {}).stdout.trim();
       writeFileSync(path.join(bin, "claude"), "#!/bin/sh\necho outside\n");
       writeFileSync(
         path.join(bin, "srt"),
@@ -307,9 +314,8 @@ describe("sandbox and environment", () => {
       chmodSync(path.join(bin, "srt"), 0o755);
       const rigFile = path.join(bin, "rig.srt.json");
       writeFileSync(rigFile, JSON.stringify(profile));
-      const run = spawnSync("bash", [path.join(ROOT, "scripts/agent/lane.sh"), "go"], {
+      const run = run_("bash", [path.join(ROOT, "scripts/agent/lane.sh"), "go"], {
         cwd: ws,
-        encoding: "utf8",
         env: {
           HOME: process.env.HOME ?? "/tmp",
           PATH: `${bin}:${path.dirname(jq)}:/usr/bin:/bin`,
@@ -342,8 +348,7 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
   });
 
   const hasSrt =
-    process.platform === "darwin" &&
-    spawnSync("sh", ["-c", "command -v srt"], { encoding: "utf8" }).status === 0;
+    process.platform === "darwin" && run_("sh", ["-c", "command -v srt"], {}).status === 0;
   it.skipIf(!hasSrt)(
     "live: a stack port is refused, any other local port and a bind work",
     async () => {
@@ -382,12 +387,10 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
         const probe = (port: number) =>
           `nc -z -w 2 127.0.0.1 ${port} >/dev/null 2>&1 && echo ${port}=open || echo ${port}=closed`;
         const cmd = [stackPort ? probe(stackPort) : "true", probe(otherPort)].join("; ");
-        const run = spawnSync(
+        const run = run_(
           path.join(ROOT, "scripts/harness-ab/srt-offline.mjs"),
           ["--settings", file, "-c", cmd],
-          {
-            encoding: "utf8",
-          },
+          {},
         );
         expect(run.status).toBe(0);
         if (stackPort) expect(run.stdout).toContain(`${stackPort}=closed`);
@@ -401,8 +404,7 @@ describe("srt-offline: the stack's ports stay closed with local binding on", () 
   );
 });
 
-const realpath = (p: string) =>
-  spawnSync("sh", ["-c", `cd "${p}" && pwd -P`], { encoding: "utf8" }).stdout.trim();
+const realpath = (p: string) => run_("sh", ["-c", `cd "${p}" && pwd -P`], {}).stdout.trim();
 
 describe("rows", () => {
   const stream = [
@@ -483,9 +485,8 @@ describe("experiment arms (AC37)", () => {
   });
   // An empty HOME: no plugin is installed, so a real run of the Ponytail arm stops before it starts.
   const cli = (...args: string[]) =>
-    spawnSync("bun", [RIG, ...args], {
+    run_("bun", [RIG, ...args], {
       cwd: ROOT,
-      encoding: "utf8",
       env: { ...process.env, HARNESS_AB_OUT: out, HOME: home },
     });
 
@@ -600,9 +601,8 @@ describe("experiment arms (AC37)", () => {
 
 describe("the core task set", () => {
   const shallow =
-    spawnSync("git", ["rev-parse", "--is-shallow-repository"], {
+    run_("git", ["rev-parse", "--is-shallow-repository"], {
       cwd: ROOT,
-      encoding: "utf8",
     }).stdout.trim() === "true";
 
   it("has 5 past fixes, #509 and the impossible spec, all well formed", () => {
@@ -619,13 +619,9 @@ describe("the core task set", () => {
     () => {
       for (const t of core.tasks) {
         for (const sha of [t.base, t.fix].filter(Boolean))
-          expect(
-            spawnSync("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: ROOT }).status,
-          ).toBe(0);
+          expect(run_("git", ["cat-file", "-e", `${sha}^{commit}`], { cwd: ROOT }).status).toBe(0);
         for (const f of t.oracle.files ?? [])
-          expect(spawnSync("git", ["cat-file", "-e", `${t.fix}:${f}`], { cwd: ROOT }).status).toBe(
-            0,
-          );
+          expect(run_("git", ["cat-file", "-e", `${t.fix}:${f}`], { cwd: ROOT }).status).toBe(0);
       }
     },
   );

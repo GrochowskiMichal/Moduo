@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -404,9 +403,8 @@ describe("releaseLog", () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), "moduo-sync-"));
     try {
       const git = (...args: string[]) =>
-        spawnSync("git", args, {
+        Bun.spawnSync(["git", ...args], {
           cwd: dir,
-          encoding: "utf8",
           env: {
             ...process.env,
             GIT_AUTHOR_NAME: "t",

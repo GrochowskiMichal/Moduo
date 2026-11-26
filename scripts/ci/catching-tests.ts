@@ -16,7 +16,6 @@
  * Written in erasable TypeScript only, so `node` (type stripping) and `bun` both run it.
  */
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -228,18 +227,13 @@ export function runIn(root: string, p: Proposal): RunResult {
   try {
     const cwd = path.join(root, suite.cwd);
     const filter = path.relative(cwd, file);
-    const opts = {
-      cwd,
-      encoding: "utf8",
-      timeout: RUN_TIMEOUT_MS,
-      maxBuffer: 64 * 1024 * 1024,
-    } as const;
+    const opts = { cwd, timeout: RUN_TIMEOUT_MS };
     const res =
       suite.runner === "bun"
-        ? spawnSync("bun", ["test", ...suite.args, `./${filter}`], opts)
-        : spawnSync(
-            "bunx",
+        ? Bun.spawnSync(["bun", "test", ...suite.args, `./${filter}`], opts)
+        : Bun.spawnSync(
             [
+              "bunx",
               "rstest",
               "run",
               ...suite.args,
@@ -250,10 +244,11 @@ export function runIn(root: string, p: Proposal): RunResult {
             ],
             opts,
           );
-    const timedOut = (res.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+    const timedOut = res.exitedDueToTimeout === true;
+    const stdout = res.stdout.toString();
     return suite.runner === "bun"
-      ? parseBunRun(res.status, `${res.stdout ?? ""}${res.stderr ?? ""}`, timedOut)
-      : parseRun(res.status, res.stdout ?? "", timedOut);
+      ? parseBunRun(res.exitCode, `${stdout}${res.stderr.toString()}`, timedOut)
+      : parseRun(res.exitCode, stdout, timedOut);
   } finally {
     fs.rmSync(file, { force: true });
   }

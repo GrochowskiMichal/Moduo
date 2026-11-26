@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -119,8 +118,8 @@ describe("Workers", () => {
   it("export only handlers from their entry module", () => {
     // wrangler refuses a main module that exports a constant ("not of type 'function or
     // ExportedHandler'") though tsc and the tests pass. Logic and constants go in another module.
-    const entries = execFileSync("git", ["ls-files", "*wrangler.jsonc"], { cwd: root })
-      .toString()
+    const entries = Bun.spawnSync(["git", ...["ls-files", "*wrangler.jsonc"]], { cwd: root })
+      .stdout.toString()
       .split("\n")
       .filter(Boolean)
       .map((config) => {
@@ -139,8 +138,8 @@ describe("Workers", () => {
 describe("workspaces", () => {
   it("lets a sparse suite pass an empty CI shard", () => {
     // CI runs every suite as --shard N/3, and rstest fails a shard that gets no files.
-    const configs = execFileSync("git", ["ls-files", "*rstest.config.ts"], { cwd: root })
-      .toString()
+    const configs = Bun.spawnSync(["git", ...["ls-files", "*rstest.config.ts"]], { cwd: root })
+      .stdout.toString()
       .split("\n")
       .filter(Boolean);
     expect(configs.length).toBeGreaterThan(0);
@@ -215,8 +214,8 @@ describe("project skills", () => {
     // `npx skills add` symlinks into .claude/skills/ from a local .agents/ folder; committed,
     // every other clone gets dead links. A link to a committed plugin skill is fine.
     const tracked = new Set(
-      execFileSync("git", ["ls-files", "tools/claude-plugins"], { cwd: root })
-        .toString()
+      Bun.spawnSync(["git", ...["ls-files", "tools/claude-plugins"]], { cwd: root })
+        .stdout.toString()
         .split("\n")
         .map((f) => path.dirname(f)),
     );
@@ -254,5 +253,27 @@ describe("project skills", () => {
       "goal",
     ]);
     expect(skills.map((e) => e.name).filter((n) => reserved.has(n))).toEqual([]);
+  });
+});
+
+describe("Bun process APIs", () => {
+  it("keeps node:child_process out of Bun-run tooling", () => {
+    // Bun scripts use Bun.spawnSync, Bun.spawn or Bun.$. Only Node-run files may import it:
+    // Playwright specs (e2e/) and plain Node .mjs scripts.
+    const nodeRun = new Set([
+      "scripts/harness-ab/srt-offline.mjs",
+      "apps/landing_awwwards/scripts/typeface-data.mjs",
+    ]);
+    const res = Bun.spawnSync(
+      ["git", "grep", "-l", "-E", "child_process", "--", "scripts", "tools", "apps/*/scripts"],
+      { cwd: root },
+    );
+    const offenders = res.stdout
+      .toString()
+      .split("\n")
+      .filter(
+        (f) => /\.(m?[jt]s)$/.test(f) && !nodeRun.has(f) && f !== "scripts/ci/config-traps.test.ts",
+      );
+    expect(offenders).toEqual([]);
   });
 });

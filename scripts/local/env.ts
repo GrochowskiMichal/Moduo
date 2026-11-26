@@ -3,7 +3,6 @@
 // Cloud values are parked in .env.cloud.local (gitignored by `.env*.local`)
 // the first time you switch to local, and restored from there.
 
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const KEYS = [
@@ -12,6 +11,13 @@ const KEYS = [
   "MODUO_SUPABASE_URL",
   "MODUO_SUPABASE_PUBLISHABLE_KEY",
 ] as const;
+function statusJson(): string {
+  const r = Bun.spawnSync(["supabase", "status", "-o", "json"], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  if (!r.success) throw new Error(`Command failed: supabase status -o json`);
+  return r.stdout.toString();
+}
 const ENV = ".env.local";
 const PARKED = ".env.cloud.local";
 const LOCAL_URL = "http://127.0.0.1:54321";
@@ -36,7 +42,7 @@ if (mode === "which") {
   }
   // Read-only, safe while other sessions use the stack. The "Stopped services: […]" it prints
   // lists services the stack runs without; nothing was stopped.
-  const status = JSON.parse(execSync("supabase status -o json", { encoding: "utf8" }));
+  const status = JSON.parse(statusJson());
   const key: string = status.PUBLISHABLE_KEY ?? status.ANON_KEY;
   for (const k of KEYS) env = set(env, k, k.endsWith("_URL") ? LOCAL_URL : key);
   writeFileSync(ENV, env);

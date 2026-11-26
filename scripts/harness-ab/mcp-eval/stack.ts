@@ -6,7 +6,6 @@
 //
 //   bun scripts/harness-ab/mcp-eval/stack.ts up | status | down
 
-import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
@@ -61,8 +60,8 @@ export function evalConfig(toml: string): string {
 }
 
 const run = (cmd: string, args: string[], cwd = SOURCE) => {
-  const r = spawnSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-  return { status: r.status, out: (r.stdout ?? "") + (r.stderr ?? "") };
+  const r = Bun.spawnSync([cmd, ...args], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+  return { status: r.exitCode, out: r.stdout.toString() + r.stderr.toString() };
 };
 
 /** The workdir's config must be the eval's before any start or stop names it. */

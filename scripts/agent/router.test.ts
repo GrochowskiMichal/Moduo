@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -129,7 +128,7 @@ describe("the hook script", () => {
   // A fake `claude` on PATH: the model is stubbed, the timing is real.
   const stubClaude = (body: string) => {
     const bin = path.join(dir, "bin");
-    spawnSync("mkdir", ["-p", bin]);
+    Bun.spawnSync(["mkdir", "-p", bin]);
     writeFileSync(path.join(bin, "claude"), `#!/bin/sh\n${body}\n`);
     chmodSync(path.join(bin, "claude"), 0o755);
     return `${bin}:${process.env.PATH}`;
@@ -137,12 +136,16 @@ describe("the hook script", () => {
 
   const run = (input: string, env: Record<string, string> = {}) => {
     const started = Date.now();
-    const result = spawnSync("bun", [SCRIPT], {
-      input,
-      encoding: "utf8",
+    const r = Bun.spawnSync(["bun", SCRIPT], {
+      stdin: Buffer.from(input),
       env: { ...process.env, MODUO_ROUTER: "", CLAUDE_PROJECT_DIR: dir, ...env },
     });
-    return { ...result, ms: Date.now() - started };
+    return {
+      status: r.exitCode,
+      stdout: r.stdout.toString(),
+      stderr: r.stderr.toString(),
+      ms: Date.now() - started,
+    };
   };
   const hookInput = (prompt: string) =>
     JSON.stringify({ hook_event_name: "UserPromptSubmit", session_id: "s1", prompt });

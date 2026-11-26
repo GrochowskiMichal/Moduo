@@ -7,7 +7,6 @@
 // Run from this folder after changing the scene or the photograph:  bun scripts/first-light-poster.ts
 // Needs cwebp (brew install webp). For a new clip, run scripts/first-light-video.ts and update PHOTO
 // (its size, the sun, the desk's back edge) first.
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -83,7 +82,13 @@ for (const name of Object.keys(PLACES) as (keyof typeof PLACES)[]) {
   const png = path.join(out, `first-light-${name}.png`);
   fs.writeFileSync(png, Buffer.from(String(url).split(",")[1], "base64"));
   const webp = path.join(out, `first-light-${name}.webp`);
-  execFileSync("cwebp", ["-quiet", "-q", "80", "-m", "6", "-sharp_yuv", png, "-o", webp]);
+  const cwebp = Bun.spawnSync(
+    ["cwebp", "-quiet", "-q", "80", "-m", "6", "-sharp_yuv", png, "-o", webp],
+    {
+      stderr: "inherit",
+    },
+  );
+  if (!cwebp.success) throw new Error(`Command failed: cwebp ${png}`);
   fs.rmSync(png);
   console.log(`first-light-${name}.webp ${(fs.statSync(webp).size / 1024).toFixed(0)} KB`);
   await tab.close();

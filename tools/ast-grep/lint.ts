@@ -17,7 +17,6 @@
  * so the list only shrinks.
  */
 
-import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -72,13 +71,10 @@ export function snippetOf(text: string): string {
 }
 
 function run(args: string[]): SgMatch[] {
-  const out = spawnSync(binary(), [...args, "--json=stream"], {
-    cwd: ROOT,
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const out = Bun.spawnSync([binary(), ...args, "--json=stream"], { cwd: ROOT });
   // ast-grep exits 1 when an error-level rule matches; anything else is a crash.
-  if (out.status !== 0 && out.status !== 1) {
-    throw new Error(`ast-grep ${args.join(" ")} failed:\n${String(out.stderr ?? out.error)}`);
+  if (out.exitCode !== 0 && out.exitCode !== 1) {
+    throw new Error(`ast-grep ${args.join(" ")} failed:\n${out.stderr.toString()}`);
   }
   return out.stdout
     .toString()

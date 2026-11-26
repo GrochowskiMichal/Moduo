@@ -1,5 +1,4 @@
 import { describe, expect, it } from "bun:test";
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -235,16 +234,15 @@ describe("the CLI", () => {
       const rejected = { ...proposal, path: "scripts/ci/limit.ts" };
       fs.writeFileSync(tests, JSON.stringify({ tests: [proposal, rejected], note: "" }));
       const out = path.join(tmp, "out");
-      const stdout = execFileSync(
+      const res = Bun.spawnSync([
         "bun",
-        [
-          path.join(root, "scripts/ci/catching-tests.ts"),
-          ...["--tests", tests, "--out", out],
-          ...["--parent", path.join(tmp, "parent"), "--head", path.join(tmp, "head")],
-          ...["--parent-sha", "a".repeat(40), "--head-sha", "b".repeat(40)],
-        ],
-        { encoding: "utf8" },
-      );
+        path.join(root, "scripts/ci/catching-tests.ts"),
+        ...["--tests", tests, "--out", out],
+        ...["--parent", path.join(tmp, "parent"), "--head", path.join(tmp, "head")],
+        ...["--parent-sha", "a".repeat(40), "--head-sha", "b".repeat(40)],
+      ]);
+      if (!res.success) throw new Error(`catching-tests failed: ${res.stderr.toString()}`);
+      const stdout = res.stdout.toString();
       expect(stdout.trim()).toBe("caught=1");
       expect(fs.readdirSync(path.join(out, "comments"))).toEqual(["1.md"]);
       const body = fs.readFileSync(path.join(out, "comments/1.md"), "utf8");

@@ -5,7 +5,6 @@
 // The app runs under its own identifier (com.moduo.spike-s1), so it never
 // opens the installed app's data; S1_CARGO_TARGET_DIR reuses a cargo target.
 
-import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -42,9 +41,9 @@ const config = {
 };
 console.log(`[tauri] ${devUrl}`);
 
-const child = spawn(
-  "node",
+const child = Bun.spawn(
   [
+    "node",
     "./node_modules/@tauri-apps/cli/tauri.js",
     "dev",
     "--no-watch",

@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,9 +37,9 @@ describe(".claude/hooks", () => {
   });
 
   it.each(scripts)("%s passes", (script) => {
-    const run = spawnSync("bash", [path.join(HOOKS, script)], { encoding: "utf8", env });
+    const run = Bun.spawnSync(["bash", path.join(HOOKS, script)], { env });
     const name = script.replace(/\.test\.sh$/, "");
-    expect(run.stdout + run.stderr).toContain(`${name}: all passed`);
-    expect(run.status).toBe(0);
+    expect(run.stdout.toString() + run.stderr.toString()).toContain(`${name}: all passed`);
+    expect(run.exitCode).toBe(0);
   });
 });

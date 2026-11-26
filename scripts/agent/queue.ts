@@ -19,7 +19,6 @@
 // (queue-import.ts). Env: MODUO_MCP_KEY (your agent's key, the one .mcp.json
 // sends), MODUO_MCP_URL (default https://mcp.moduo.app).
 
-import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -255,22 +254,19 @@ export interface Pr {
 
 /** The repo's open PRs (gh). */
 export function openPrs(): Pr[] {
-  const out = execFileSync(
-    "gh",
-    ["pr", "list", "--state", "open", "--limit", "300", "--json", "number,title,isDraft,url"],
-    { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 30_000 },
+  const r = Bun.spawnSync(
+    ["gh", "pr", "list", "--state", "open", "--limit", "300", "--json", "number,title,isDraft,url"],
+    { cwd: ROOT, stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: 30_000 },
   );
-  return JSON.parse(out) as Pr[];
+  if (!r.success) throw new Error(`gh pr list failed (exit ${r.exitCode ?? r.signalCode})`);
+  return JSON.parse(r.stdout.toString()) as Pr[];
 }
 
 /** Every block-like ID a commit message on HEAD mentions (the fallback's "done"). */
 export function idsInHistory(cwd = ROOT): Set<string> {
-  const log = execFileSync("git", ["log", "HEAD", "--format=%s%n%b"], {
-    cwd,
-    encoding: "utf8",
-    maxBuffer: 1 << 30,
-  });
-  return new Set(log.match(ID_ANY) ?? []);
+  const r = Bun.spawnSync(["git", "log", "HEAD", "--format=%s%n%b"], { cwd });
+  if (!r.success) throw new Error(`git log failed: ${r.stderr.toString()}`);
+  return new Set(r.stdout.toString().match(ID_ANY) ?? []);
 }
 
 // ── The join ─────────────────────────────────────────────────────────────

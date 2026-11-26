@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -23,9 +22,8 @@ import {
 } from "./wt";
 
 function sh(cwd: string, ...args: string[]): string {
-  const r = spawnSync("git", args, {
+  const r = Bun.spawnSync(["git", ...args], {
     cwd,
-    encoding: "utf8",
     env: {
       ...process.env,
       GIT_AUTHOR_NAME: "t",
@@ -34,8 +32,8 @@ function sh(cwd: string, ...args: string[]): string {
       GIT_COMMITTER_EMAIL: "t@t",
     },
   });
-  if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
-  return r.stdout.trim();
+  if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.toString()}`);
+  return r.stdout.toString().trim();
 }
 
 const wt = (over: Partial<Worktree> = {}): Worktree => ({
@@ -162,7 +160,7 @@ describe("pool hands out and prunes", () => {
     const launch = JSON.parse(readFileSync(path.join(made.path, ".claude/launch.json"), "utf8"));
     expect(launch.configurations[0]).toMatchObject({ name: "web", port: made.port });
     expect(
-      spawnSync("git", ["rev-parse", "--abbrev-ref", "@{u}"], { cwd: made.path }).status,
+      Bun.spawnSync(["git", "rev-parse", "--abbrev-ref", "@{u}"], { cwd: made.path }).exitCode,
     ).not.toBe(0);
     expect(() =>
       createWorktree({ name: "alpha", base: "mike", mainRoot: main, install: false }),
@@ -211,8 +209,8 @@ describe("pool hands out and prunes", () => {
     expect(why.mike).toBe("main checkout");
     expect(existsSync(merged.path)).toBe(false);
     expect(
-      spawnSync("git", ["rev-parse", "--verify", `refs/heads/${merged.branch}`], { cwd: main })
-        .status,
+      Bun.spawnSync(["git", "rev-parse", "--verify", `refs/heads/${merged.branch}`], { cwd: main })
+        .exitCode,
     ).not.toBe(0);
     for (const w of [dirty, open, fresh, live]) expect(existsSync(w.path)).toBe(true);
   });

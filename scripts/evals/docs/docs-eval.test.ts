@@ -1,5 +1,4 @@
 import { afterAll, describe, expect, it } from "bun:test";
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -92,10 +91,9 @@ describe("the rig task set", () => {
 
 describe("grade.ts", () => {
   const cli = (args: string[], env: Record<string, string> = {}) =>
-    spawnSync("bun", [path.join(EVAL_DIR, "grade.ts"), ...args], {
-      encoding: "utf8",
+    Bun.spawnSync(["bun", path.join(EVAL_DIR, "grade.ts"), ...args], {
       env: { ...process.env, ...env },
-    }).status;
+    }).exitCode;
   const q = questions[0];
 
   it("exits 0 for a passing answer and 1 for a failing or missing one", () => {
