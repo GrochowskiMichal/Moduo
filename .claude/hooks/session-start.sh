@@ -4,7 +4,8 @@
 # ever prints and exits 0, so it can never prevent a session from starting.
 # Its job: make the stale-base failure mode visible at second zero, and warn when the session
 # works in the shared main checkout or runs bypass outside the lane sandbox (HV-1, AC1, AC6).
-# No reading list: path rules and the indexes load when the work needs them.
+# No reading list and no lane reminder: path rules load when the work needs them, AGENTS.md has
+# the lanes. One line when all is well, two per warning (2026-11-26).
 # Tests: .claude/hooks/session-start.test.sh.
 input=""
 [ -t 0 ] || input=$(cat 2>/dev/null)
@@ -36,38 +37,26 @@ elif git rev-parse --verify --quiet "$owner" >/dev/null 2>&1; then
   base="$owner"
 fi
 
-echo "## Moduo session preflight"
-echo
 if [ -n "$base" ]; then
   behind=$(git rev-list --count "HEAD..$base" 2>/dev/null || echo "")
   ahead=$(git rev-list --count "$base..HEAD" 2>/dev/null || echo "")
   if [ -n "$behind" ] && [ "$behind" != "0" ]; then
-    echo "⚠️ STALE BASE — this branch is $behind commit(s) behind $base (${ahead:-?} ahead)."
-    echo "   AGENTS.md, specs and tokens.css may be outdated. Reconcile with $base before"
-    echo "   editing. Cut task branches off the latest personal branch, never develop;"
-    echo "   integrate with a merge commit, never a fast-forward."
+    echo "⚠️ STALE BASE — this branch is $behind commit(s) behind $base (${ahead:-?} ahead): AGENTS.md, specs and"
+    echo "   tokens may be outdated. Reconcile with $base before editing (a merge commit, never develop)."
   else
     echo "✓ Base current with $base (${ahead:-0} ahead, 0 behind)."
   fi
 else
-  echo "• No personal base branch found to compare against — confirm this branch is cut"
-  echo "  off mike or maciej, not develop."
+  echo "• No personal base branch to compare against: confirm this branch is cut off mike or maciej, not develop."
 fi
 gitdir=$(git rev-parse --path-format=absolute --git-dir 2>/dev/null)
 common=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)
 if [ -n "$gitdir" ] && [ "$gitdir" = "$common" ]; then
-  echo
-  echo "⚠️ MAIN CHECKOUT — this session works in the shared main checkout ($(git rev-parse --show-toplevel 2>/dev/null))."
-  echo "   Another session can switch its branch under you. Work in your own worktree:"
-  echo "   bun run wt <name> (or git worktree add). guard-git.sh blocks branch switches here"
-  echo "   while other Claude sessions work in it."
+  echo "⚠️ MAIN CHECKOUT — this session works in the shared main checkout, where another session can switch"
+  echo "   the branch under you. Work in your own worktree: bun run wt <name>."
 fi
 if [ "$mode" = "bypassPermissions" ] && [ "${MODUO_LANE_SANDBOX:-}" != "1" ] && [ "${MODUO_ALLOW_BYPASS:-}" != "1" ]; then
-  echo
-  echo "⚠️ BYPASS OUTSIDE THE SANDBOX — interactive sessions use auto mode (Shift+Tab or the app's"
-  echo "   mode picker; make it your default with bun run agent:auto-mode). guard-lane.sh stops every"
-  echo "   tool call until then. Unattended lanes: bash scripts/agent/lane.sh \"<prompt>\"."
+  echo "⚠️ BYPASS OUTSIDE THE SANDBOX — guard-lane.sh stops every tool call until you switch to auto mode"
+  echo "   (Shift+Tab; bun run agent:auto-mode makes it the default). Unattended: bash scripts/agent/lane.sh \"<prompt>\"."
 fi
-echo
-echo "Build → /s2 (claims the next ready block) · plan → /s1 · finish → /s3."
 exit 0

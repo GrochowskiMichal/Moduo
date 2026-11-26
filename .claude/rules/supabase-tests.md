@@ -13,7 +13,6 @@ Harness traps (one `now()` per transaction, the `test` schema under other roles,
 - Under RLS a refused UPDATE/DELETE matches no rows (`ok 0`; PostgREST: empty, or PGRST116 with `.single()`), not 42501. Prove a trigger's refusal past RLS with `test.as_op`, and assert the message, not just the SQLSTATE.
 - `execute_sql` runs as the service role (`auth.uid()` NULL): set `request.jwt.claims` with a `sub` and `role: authenticated` before a caller-keyed write, and wrap a probe in `DO $$ … RAISE EXCEPTION 'ROLLBACK_OK' $$`.
 - `workspace_members.perms` comes from `role` by trigger (`perm_members_resolve`): insert `role = 'admin'`; to take a permission away by hand use `SET LOCAL session_replication_role = replica` (then `origin`). Prefer that over `ALTER TABLE … DISABLE TRIGGER` for big fixtures, which locks the shared table.
-- A bucket inserted directly isn't in `entities`: register it before a mention, decision or "Mentioned in" line depends on it.
 - `resource_grants` refuses `'company'`: to share a company, give a workspace-shared contact its `company_id` (`project_client.test.sql`). Read `areas` as the user (`test.value_as`).
 - `pg_policies.qual` prints `auth.uid()` as `uid()` on the local stack.
 - `storage.objects` refuses a direct DELETE in SQL ("use the Storage API"): a "nobody deletes" check expects that error.

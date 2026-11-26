@@ -36,16 +36,14 @@ Compiled from the UI gotchas (HV-14b). Token rules themselves are in [docs/DESIG
 - In Tailwind v4 `aria-*:` and `data-*:` variants come after `hover:`, so the current state wins over hover.
 - A full-strength hover edge outshines the 32 % selection ring: drop it below (`hover:border-foreground/30`).
 - A scoped `data-accent` wrapper defeats theme-compound rules keyed on `<html>`: write both `[data-theme="light"][data-accent="mono"]` and `[data-theme="light"] [data-accent="mono"]`. A wrapper that sets `--primary` some other way leaves the derived tokens on the outer value; add the attribute instead (`apps/app/src/styles/tokens.css` §5b).
-- Small caps are for fixed chrome: `<Eyebrow>{expr}</Eyebrow>` fails `lint:tw` unless the expression is on `SMALL_CAPS_CHROME` (`scripts/check-text-rules.ts`), so pass literal text or list it with where the words come from. Names a person typed go in `GroupHeader`. `command.tsx` keeps its eyebrow recipe in sync by hand. The same check fails the word `capitalize` anywhere in quotes or spaces, so name a helper differently.
+- Small caps (`<Eyebrow>`) are for fixed chrome; the `lint:tw` error names the fix. `command.tsx` keeps its eyebrow recipe in sync by hand.
 
 ## Motion
 - Pick the motion token by what you animate: `--motion-fade` stays on under reduced motion (opacity and colour only); movement uses the zeroed `--motion-*` tokens.
 - A decorative loop with a hard-coded duration needs a `:root[data-motion="reduced"]` companion and `:root:not([data-motion="full"])` on its reduce media query, or the in-app motion setting misses it (`apps/app/src/global.css`).
 - Translate a whole pane with an inline transform and a token CSS transition, so the end state is always committed (a JS tween froze mid-slide in a frame-starved tab).
-- `.motion-pop` lists both tooltip states (`delayed-open`, `instant-open`).
 
 ## Measuring in a browser
 - `getComputedStyle` can report a transitioned property's old value indefinitely after a token or theme flip: disable transitions (`*{transition:none!important}`) and reflow, or trust the element's resolved custom property and a screenshot.
 - Custom properties read back minified from the dev build (`.1s`, `0s`): parse to ms before comparing. Computed colours come back as `oklch(…)`.
-- jsdom resolves no custom properties and lays nothing out: token scoping tests read the stylesheet (`apps/app/src/styles/tokens.test.ts`); sizes are measured in a browser.
 - "The app looks huge on web" was browser zoom: check it before chasing density.

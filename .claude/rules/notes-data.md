@@ -15,7 +15,6 @@ Compiled from the notes gotchas (HV-14b). Decisions: [docs/decisions/notes.md](.
 - `apps/app/src/features/notes/editor/materialize.ts` builds docs headless with the live editor's node set and transformers; never let the two drift.
 
 ## Agent writes and the live channel
-- Edge Functions can't import the notes editor: `moduo-mcp` loads a prebuilt bundle (`bun run build:notes-doc`); its test fails until you rebuild after any change under the editor.
 - Push only an edit's own `update` events (`Y.mergeUpdates`): an update encoded against a state vector carries the doc's whole delete set.
 - `Y.UndoManager` knows "already undone" only in its own session: the agent Undo keeps one step and clears on any remote change; a new non-local origin goes into `isForeignOrigin`.
 - Never trust "who wrote this" from a broadcast, and never put note content in a Realtime message (`realtime.messages` outlives erasure): announce "note X changed" and let clients pull through the access-checked read.
@@ -26,13 +25,8 @@ Compiled from the notes gotchas (HV-14b). Decisions: [docs/decisions/notes.md](.
 - `notes_op_import` refuses a parent outside the workspace and the batch (22023, NS-2), but checks no access to it: a caller passing an external parent still checks the caller can reach it.
 - Archiving unpublishes the whole subtree; unarchive never re-publishes.
 - Edge Functions can't serve HTML (the platform rewrites `text/html` to `text/plain`): public pages render client-side from JSON. Untrusted Markdown to HTML escapes raw HTML and allow-lists link schemes (`http(s):`, `mailto:`); react-markdown shows HTML comments as text (`stripTaskIdComments`).
-- Each module's api-key lane is its own module id (`permissionKey` in `apps/app/src/features/notes/ops-manifest.ts`).
 
 ## The page and device caches
 - A note created outside /notes and deep-linked at once races the page's cache-first paint and stale-id cleanup: create it in place instead of navigating.
-- Find a person's per-note databases from the records (`docDbName(owner, noteId)`), never only through `indexedDB.databases()` (`apps/app/src/features/notes/sync/people.ts`; `lint:ast` rule `idb-listing-wipe`).
 - Only the sync owner registers the preferences push (`usePreferences({ syncOwner: true })`): a second instance unmounting must not drop it.
 
-## Notion import
-- A Notion export is a zip inside a zip (with Part-2, Part-3): unwrap recursively but bounded, and drop the nested zip's name from paths (`apps/app/src/features/notes/import-zip.ts` `stripExportWrapper`, matched per entry, never "the longest common prefix").
-- Seed import ids on Notion's page id and guarantee distinctness across the plan (`apps/app/src/features/notes/import.ts` `assignImportIds`): the server skips a duplicate id, and the page vanishes.

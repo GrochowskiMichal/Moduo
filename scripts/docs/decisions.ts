@@ -20,6 +20,7 @@
  *
  *   bun run docs:find <area|all> <words…> [--all] [--full]   the matching current entries, in about 2 KB
  *   bun run docs:current <area> [--titles] [--all]   the current view of one area
+ *   bun run docs:prune                              delete superseded entries and the links to them
  *   bun run docs:index                              regenerate docs/decisions.md
  *   bun run lint:decisions                          statuses, references, index freshness
  */
@@ -307,7 +308,7 @@ export function renderIndex(areas: Area[]): string {
 
 The current decisions, one line each, grouped by area, in each area file's order (newest first). Superseded and dropped entries are left out. The full entry lives in the area file linked in each heading; \`bun run docs:current <area>\` prints an area's current entries in full.
 
-**Adding a decision:** write the full entry at the top of \`docs/decisions/<area>.md\` (one bold title sentence, then the why and a pointer to the authoritative doc) with \`  - status: current\` (two spaces in) as its first sub-bullet (a \`##\` entry takes \`status: current\` as its first paragraph). When it replaces an earlier entry, add \`· supersedes: <area> <date> "<title start>"\` to its status line and mark the old one \`status: superseded · by: <area> <date> "<title start>"\` (when only part of it changes, it stays \`current\` and takes the same \`· by:\`). \`bun run lint:decisions\` checks both ends. Then run \`bun run docs:index\`. If no area fits, use \`product\`.
+**Adding a decision:** write the full entry at the top of \`docs/decisions/<area>.md\` (one bold title sentence, then the why and a pointer to the authoritative doc) with \`  - status: current\` (two spaces in) as its first sub-bullet (a \`##\` entry takes \`status: current\` as its first paragraph). When it replaces an earlier entry, add \`· supersedes: <area> <date> "<title start>"\` to its status line and mark the old one \`status: superseded · by: <area> <date> "<title start>"\` (when only part of it changes, it stays \`current\` and takes the same \`· by:\`). \`bun run lint:decisions\` checks both ends. A superseded entry is then deleted with \`bun run docs:prune\` (git history keeps it; a partly superseded one stays). Then run \`bun run docs:index\`. If no area fits, use \`product\`.
 
 > Migration-status clauses inside older entries ("deploy-ready but unapplied") describe the day they were written, not today. Probe the database before treating one as a task. See [decisions/data.md](decisions/data.md).
 
@@ -407,6 +408,65 @@ export function renderFound(found: Found, words: string[], opts: { full?: boolea
   return `${out.join("\n\n")}\n`;
 }
 
+const refText = (ref: Ref) =>
+  `${ref.area ? `${ref.area} ` : ""}${ref.date ? `${ref.date} ` : ""}"${ref.prefix}"`;
+
+/** The status line of `e` without its references to entries in `gone`, or null when none point there. */
+function statusWithout(areas: Area[], e: Entry, gone: Set<Entry>): string | null {
+  if (e.statusAt < 0) return null;
+  const keep = (refs: Ref[]) =>
+    refs.filter((r) => !resolveRef(areas, e, r).some((hit) => gone.has(hit)));
+  const supersedes = keep(e.supersedes);
+  const by = keep(e.by);
+  if (supersedes.length === e.supersedes.length && by.length === e.by.length) return null;
+  const lead = /^ {2}- /.test(e.lines[e.statusAt] ?? "") ? "  - " : "";
+  const field = (name: string, refs: Ref[]) =>
+    refs.length ? ` · ${name}: ${refs.map(refText).join(", ")}` : "";
+  return `${lead}status: ${e.status}${field("supersedes", supersedes)}${field("by", by)}`;
+}
+
+/**
+ * One area's text without its superseded entries, and with every remaining status line cleared of
+ * links to a removed entry (in any area). Git history keeps what was removed.
+ */
+export function pruneArea(areas: Area[], area: Area, text: string, gone: Set<Entry>): string {
+  const src = text.split("\n");
+  const drop = new Set<number>();
+  for (const e of area.entries) {
+    const at = e.line - 1;
+    if (gone.has(e)) {
+      for (let i = at; i < at + e.lines.length; i++) drop.add(i);
+      // The blank line that separated it from the next entry goes with it.
+      if ((src[at + e.lines.length] ?? "x").trim() === "") drop.add(at + e.lines.length);
+      continue;
+    }
+    const status = statusWithout(areas, e, gone);
+    if (status !== null) src[at + e.statusAt] = status;
+  }
+  return src.filter((_, i) => !drop.has(i)).join("\n");
+}
+
+/** Deletes every superseded entry from the area files. Returns what it removed. */
+function pruneCommand(areas: Area[]): Entry[] {
+  const gone = new Set(areas.flatMap((a) => a.entries.filter((e) => e.status === "superseded")));
+  if (gone.size === 0) return [];
+  for (const area of areas) {
+    const file = path.join(DIR, `${area.name}.md`);
+    const before = fs.readFileSync(file, "utf8");
+    const after = pruneArea(areas, area, before, gone);
+    if (after !== before) fs.writeFileSync(file, after);
+  }
+  return [...gone];
+}
+
+const pruneReport = (removed: Entry[]) =>
+  removed.length === 0
+    ? "No superseded entries."
+    : [
+        ...removed.map((e) => `removed docs/decisions/${e.area}.md: ${label(e)}`),
+        `${removed.length} superseded ${removed.length === 1 ? "entry" : "entries"} removed (git history keeps them). Now run: bun run docs:index`,
+      ].join("\n");
+
 /** `find <area|all> <words…> [--all] [--full]`: the text to print. */
 function findCommand(areas: Area[], rest: string[]): string {
   const [name, ...words] = rest.filter((a) => !a.startsWith("--"));
@@ -449,6 +509,9 @@ function main(argv: string[]): void {
     case "find":
       process.stdout.write(findCommand(areas, rest));
       return;
+    case "prune":
+      console.log(pruneReport(pruneCommand(areas)));
+      return;
     case "index": {
       fs.writeFileSync(INDEX, renderIndex(areas));
       console.log(
@@ -468,7 +531,7 @@ function main(argv: string[]): void {
     }
     default:
       throw new DecisionsError(
-        "usage: decisions.ts find <area|all> <words…> | current <area> [--titles] [--all] | index | check",
+        "usage: decisions.ts find <area|all> <words…> | current <area> [--titles] [--all] | prune | index | check",
       );
   }
 }
