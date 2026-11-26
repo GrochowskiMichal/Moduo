@@ -12,9 +12,10 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 - 2026-11-26 · Releases take about 8–15 minutes, not 35 (up to 25 when desktop builds on GitHub's Mac): the canary soaks 3 minutes in lean mode, desktop builds alongside web, and the release PR's checks count for its merge commit.
 - 2026-11-26 · Claude Ship: the Claude GitHub App is on Moduo with Review on, Steward and Approve off; `ai-review.yml` stays.
+- 2026-11-26 · Every spec is removed from the repository; a new feature still gets one, and it is deleted when its blocks ship.
 - 2026-11-26 · `docs/ROADMAP.md` and `specs/BUILD_ORDER.md` are removed; what to build and in what order lives only in the Moduo queue.
 - 2026-11-26 · Six project skills and the product lab are removed.
-- 2026-11-26 · Diet, second pass: the path rules were audited line by line, the router speaks only for the bug and block lanes, superseded decisions and unreferenced shipped specs are deleted.
+- 2026-11-26 · Diet, second pass: the path rules were audited line by line, the router speaks only for the bug and block lanes, superseded decisions and unreferenced shipped specs are deleted. *(partly superseded)*
 - 2026-11-26 · The context diet: what a session carries without asking is budgeted in bytes, and knowledge is opened in slices.
 - 2026-10-27 · HV-30: Harness v3 is closed out; work runs in two lanes, and AGENTS.md maps what landed rather than what was planned.
 - 2026-10-27 · HV-22: the hunt, retro and prod watch are Claude cloud routines and the weekly numbers a desktop scheduled task on Mike's Mac; each routine's deterministic half is `bun run routine <command>`, and the agent only judges and writes.

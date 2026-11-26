@@ -10,6 +10,10 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - status: current
   → [REVIEW.md](../../REVIEW.md) · [docs/agents/models-and-review.md](../agents/models-and-review.md)
 
+- **2026-11-26 · Every spec is removed from the repository; a new feature still gets one, and it is deleted when its blocks ship.** Mike's call, after the first pass kept the specs that work in progress still cites. All 31 files under `specs/` are gone (1.1 MB), shipped or not, including the ones with open blocks (calendar-rethink, permissions, notes-refresh, github, moduo-meet, transactional-email and others); the template moved to `.claude/skills/s1/spec-template.md`. `bun run queue` works without a `specs/` folder: dependencies then come from Moduo's "blocks" edges alone. `/s2` reads a removed spec's block from git (`git show 467d41c34:specs/<name>.md`) and stops with a question when it is not there. Links to specs in other docs became plain text; code comments and Moduo tasks that name a spec mean the version at that commit. `docs/data-layers.md` was rewritten the same day and no longer cites any.
+  - status: current · supersedes: 2026-11-26 "Diet, second pass"
+  → [docs/agents/tooling.md](../agents/tooling.md) §Knowledge map · `.claude/skills/s1/spec-template.md`
+
 - **2026-11-26 · `docs/ROADMAP.md` and `specs/BUILD_ORDER.md` are removed; what to build and in what order lives only in the Moduo queue.** Mike's call. The roadmap (37 KB of waves, a scored backlog and open questions) described the plan as it stood months ago and was opened before the first edit in 3 of 51 sessions; the build-order file had been a pointer to the queue since HV-8. AGENTS.md, `/s1`, the product brief and the data-layers doc no longer name them, links to them elsewhere became plain text, and the note on reading a removed spec from git moved to `docs/agents/tooling.md`. Both are in git history (`git show 246138366:docs/ROADMAP.md`).
   - status: current
   → [docs/agents/tooling.md](../agents/tooling.md) §Knowledge map
@@ -19,7 +23,7 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   → [docs/agents/tooling.md](../agents/tooling.md)
 
 - **2026-11-26 · Diet, second pass: the path rules were audited line by line, the router speaks only for the bug and block lanes, superseded decisions and unreferenced shipped specs are deleted.** One read-only agent per rule over 2.5 KB (18 files, about 350 bullets) had to cite the check that already fails on the wrong code before a bullet could go. Result: 21 bullets cut and 35 shortened, 91.6 KB to 82.4 KB, so about a tenth, not the half guessed beforehand: most bullets are traps no check holds. Two proposed cuts were refused because the lint covers only part of the trap (`getSnapshot` fresh values, the primitives' size variants). `scripts/agent/rule-budget.json` was lowered to the new sizes.
-  - status: current
+  - status: current · by: 2026-11-26 "Every spec is removed"
   - *Router:* it still classifies and logs every prompt (`.claude/logs/router.jsonl`), but adds its line only for `bug` and `block`, the lanes with a procedure of their own. A note on every prompt was noise and often wrong. The preflight prints one line when the base is current, and two per warning.
   - *Decisions:* `bun run docs:prune` deletes entries marked superseded and the links to them (git history keeps them; a partly superseded entry stays). It removed 6 entries, 7 KB of 1.57 MB: the area files are large because of current entries, not dead ones.
   - *Specs:* a shipped spec is deleted once no live spec cites it (seven on this day, 133 KB; `specs/BUILD_ORDER.md` lists them and how to read one from git). Kept although shipped: `notes`, `email`, `calendar`, `chat`, `settings-overhaul`, `connective-tissue` (live specs cite them), `tasks-v3` and `chat-v2` (each still has an open block), `harness-v3` (open items, and tests cite its acceptance criteria).

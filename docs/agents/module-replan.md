@@ -90,7 +90,7 @@ RULES OF THE CONVERSATION
    - Run a gap audit by a separate agent: it walks every role's week and every view in every state, and reports only what's unaddressed, contradictory or too thin.
    - Fold the audit's findings into calls, and fix contradictions in place.
 5. **Round 3: reconcile in-flight work** (open PRs, half-built blocks): keep, re-scope, close and salvage, or mark superseded, each with effort and order.
-6. **The spec** (switch to Fable 5.1, high), `specs/<module>-v2.md` from `specs/_template.md`:
+6. **The spec** (switch to Fable 5.1, high), `specs/<module>-v2.md` from `.claude/skills/s1/spec-template.md`:
    - **How to write it:** section by section into the file, never in one message.
    - **Inside the spec:**
      - acceptance criteria written as one normal week per role;
