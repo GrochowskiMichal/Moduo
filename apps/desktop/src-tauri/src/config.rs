@@ -16,8 +16,8 @@ fn default_keychain_service() -> &'static str {
     }
 }
 
-/// A Calendar or Mail sign-in client (Google's desktop clients, Microsoft's
-/// public client): the environment at launch when set (a dev run with `.env`), else the
+/// A Calendar sign-in client (Google's desktop client, Microsoft's public
+/// client): the environment at launch when set (a dev run with `.env`), else the
 /// value the release build baked in. A shipped app opened from Finder, the Dock
 /// or the Start menu has no `MODUO_*` environment, so without the baked value
 /// Connect always failed. Installed-app clients ship inside the app by design;
@@ -51,22 +51,27 @@ fn google_calendar_client() -> (Option<String>, Option<String>) {
     )
 }
 
-/// Gmail's sign-in client, a Desktop client of its own (in its own Google Cloud
-/// project, so the restricted mail scope never touches Calendar's verification).
-/// Like Calendar's, it is baked into release builds: an app opened from Finder
-/// has no `MODUO_*` environment, so without it "Sign in with Google" in Mail
-/// always answered `google_oauth_not_configured`.
+/// Gmail's sign-in client. Moduo has one Google Cloud project for everything, so
+/// Mail signs in with the same Desktop client as Calendar (already baked into
+/// release builds); a dev `.env` may name a mail client of its own. Reading only
+/// the launch environment, an app opened from Finder never had one, and "Sign in
+/// with Google" in Mail always answered `google_oauth_not_configured`.
 fn google_mail_client() -> (Option<String>, Option<String>) {
-    pick_pair(
+    mail_or_shared(
         (
             runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
             runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
         ),
-        (
-            oauth_client!("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
-            oauth_client!("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
-        ),
+        google_calendar_client(),
     )
+}
+
+/// A mail client of its own when one is named, else the shared one; as a pair.
+fn mail_or_shared(
+    mail: (Option<String>, Option<String>),
+    shared: (Option<String>, Option<String>),
+) -> (Option<String>, Option<String>) {
+    pick_pair(mail, shared)
 }
 
 fn pick_pair(
@@ -148,6 +153,17 @@ mod tests {
         assert_eq!(pick_setting(Some("  ".into()), Some("built")), Some("built".into()));
         assert_eq!(pick_setting(Some(String::new()), Some("")), None);
         assert_eq!(pick_setting(None, None), None);
+    }
+
+    #[test]
+    fn mail_signs_in_with_moduos_one_google_client_unless_given_its_own() {
+        let some = |v: &str| Some(v.to_string());
+        let calendar = (some("moduo-id"), some("moduo-secret"));
+        // One Google Cloud project for everything: no mail client set, use Moduo's.
+        assert_eq!(mail_or_shared((None, None), calendar.clone()), calendar);
+        // A mail client of its own (a dev `.env`) still wins, as a pair.
+        let own = (some("mail-id"), some("mail-secret"));
+        assert_eq!(mail_or_shared(own.clone(), calendar.clone()), own);
     }
 
     #[test]
