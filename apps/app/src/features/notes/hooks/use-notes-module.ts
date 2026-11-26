@@ -286,7 +286,7 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     const id = crypto.randomUUID();
     const ws = workspaceId;
     void runtime!.notesV2
-      .create({ workspaceId: ws, id, title: WELCOME_TITLE, icon: "👋", position: endPosition([]) })
+      .create({ workspaceId: ws, id, title: WELCOME_TITLE, icon: null, position: endPosition([]) })
       .then(() => repairNote(runtime!, ws, id, WELCOME_MARKDOWN, { storeBodies: true }))
       .then(async (outcome) => {
         if (outcome === "seeded") return load();
