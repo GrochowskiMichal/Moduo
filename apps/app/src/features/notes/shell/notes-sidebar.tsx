@@ -12,7 +12,7 @@
  */
 
 import { DragOverlay } from "@dnd-kit/core";
-import { Archive, FileText, Globe, Import, type LucideIcon, Search, Trash2 } from "lucide-react";
+import { Archive, FileText, Globe, Import, type LucideIcon, Trash2 } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -25,7 +25,7 @@ import {
 
 import { SidebarFooter } from "@/components/app/sidebar-footer";
 import { DragOverlaySurface, DROP_TARGET } from "@/components/ui/drag-visuals";
-import { NavRow, NavSectionHeader } from "@/components/ui/nav-row";
+import { NavSectionHeader } from "@/components/ui/nav-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -305,16 +305,8 @@ export function NotesSidebar(props: NotesSidebarProps) {
         />
       ) : (
         <>
-          <div className="px-1 pb-2">
-            <NavRow
-              label="Search"
-              icon={<Search />}
-              onSelect={() => {
-                setView(null);
-                props.search.onOpenChange(true);
-              }}
-            />
-          </div>
+          {/* No Search row here: the bottom bar's Search (and its key) opens
+              Notes' own search in the tree's place (notes-shell.tsx claims it). */}
           <div
             ref={scrollerRef}
             className="pane-scroll scrollbar-thin min-h-0 flex-1 overflow-y-auto px-1 pb-4"
@@ -382,7 +374,7 @@ export function NotesSidebar(props: NotesSidebarProps) {
                         drag.headerHover === "pages" && DROP_TARGET,
                       )}
                     >
-                      Drag a note here to file it.
+                      Drag a note here to file it
                     </p>
                   ) : (
                     <TreeNodes nodes={sections.pages} section="pages" depth={0} ctx={ctx} />

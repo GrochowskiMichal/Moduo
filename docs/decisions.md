@@ -130,6 +130,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Toolchain and libraries → [decisions/toolchain.md](decisions/toolchain.md)
 
+- 2026-11-26 · The `scripts/` and `tools/ast-grep` tests run on `bun test`, not Rstest; the app, backend and infra suites stay on Rstest.
 - 2026-10-22 · Biome is gone: `bun lint` (a pinned canary) lints, `bun fmt` formats.
 - 2026-10-22 · Bun 1.4.4: `bun check` type-checks, `bun fmt` formats, Biome only lints (MOD-517). *(partly superseded)*
 - 2026-10-20 · `optimization.moduleIds: 'compact-hashed'` is not added: Rsbuild 2 already sets it in production.
@@ -290,6 +291,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-28 · NS-6: every Notes op checks its level once, through `notes__require`, `notes__require_module` or `notes__require_parent`
 - 2026-10-28 · NS-3: deleting a parent freezes its inherit children by trigger, without writing their rows
 - 2026-10-28 · Notes schema hardening planned: client grants read-only, one tree per workspace by key, deleting a parent never takes access away, trash purged on the server, one guard per op, reads and writes checked once, legacy out, content split into `note_bodies`
+- 2026-11-26 · Notes' sidebar has no Search row; the bottom bar's Search is the one way in
 - 2026-10-23 · The Impeccable pass on Notes: search is back in the sidebar, publish names what goes public, every note action has a key, and the spine leads the slash menu.
 - 2026-10-24 · NR-12 flipped early: the new Notes is the only Notes; NR-5, NR-10 and NR-11 follow it.
 - 2026-10-22 · New Notes retires in-body page rows (MOD-81 follow-up).
@@ -337,6 +339,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Dashboard (Home) → [decisions/dashboard.md](decisions/dashboard.md)
 
+- 2026-11-25 · Home draws at once on a return: its layout and widget data live for the session, not the page
 - 2026-10-16 · A sideways swipe over a widget turns Home's page, and Home's widgets sit 8 px apart, the panels' gap
 - 2026-07-09 · Dashboard DB-8 (gallery + config popovers) landed — Wave 6 (Dashboard rebuild, DB-1…DB-8) COMPLETE
 - 2026-07-09 · Dashboard DB-6 (6 utility widgets + config-write mechanism) + DB-7 (habits) landed
@@ -402,6 +405,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Tasks and Timeline → [decisions/tasks.md](decisions/tasks.md)
 
+- 2026-11-26 · A polish pass on Tasks: late in words everywhere, nothing at 0, a failed load claims nothing
 - 2026-10-20 · The plan view is a controller and a layout (PV-B3)
 - 2026-10-20 · One state machine decides what an `?id=` in the address bar is (PV-B2, DF-1, MOD-28)
 - 2026-10-20 · The plan view's place lives in the address bar (PV-B1, DF-1)
@@ -576,6 +580,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Brand → [decisions/brand.md](decisions/brand.md)
 
+- 2026-11-26 · The app's top bar has no Moduo mark; the workspace switcher leads it
 - 2026-10-08 · BRAND-4: the landing uses the lockup artwork, and the mark reveals itself in the nav on a first visit
 - 2026-10-08 · BRAND-1: every brand file is generated from `brand/masters/` by `bun run brand:export`
 - 2026-10-08 · Pink is not Moduo's accent and there is no "AI disc"; pink stays only as one ordinary accent/tag option

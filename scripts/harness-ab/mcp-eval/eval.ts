@@ -9,7 +9,6 @@
 //   bun run mcp-eval report <results.jsonl> [--out RESULTS.md]
 //   bun run mcp-eval down                    # stop and delete the eval stack
 
-import { spawn } from "node:child_process";
 import {
   appendFileSync,
   mkdirSync,
@@ -191,21 +190,19 @@ function runClaude(
   args: string[],
   cwd: string,
 ): Promise<{ status: number | null; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn("claude", args, {
-      cwd,
-      env: agentEnv(process.env),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (d) => (stdout += d));
-    child.stderr.on("data", (d) => (stderr += d));
-    const timer = setTimeout(() => child.kill("SIGTERM"), AGENT_TIMEOUT_MS);
-    child.on("close", (status) => {
-      clearTimeout(timer);
-      resolve({ status, stdout, stderr });
-    });
+  const child = Bun.spawn(["claude", ...args], {
+    cwd,
+    env: agentEnv(process.env),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const timer = setTimeout(() => child.kill("SIGTERM"), AGENT_TIMEOUT_MS);
+  return Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]).then(([stdout, stderr]) => {
+    clearTimeout(timer);
+    return { status: child.signalCode ? null : child.exitCode, stdout, stderr };
   });
 }
 

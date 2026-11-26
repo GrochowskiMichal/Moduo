@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -12,6 +11,19 @@ import {
   type RiskDecision,
   runShadow,
 } from "./risk-hook";
+
+function spawnText(
+  cmd: string[],
+  o: { input?: string; env?: Record<string, string | undefined>; cwd?: string; timeout?: number },
+) {
+  const r = Bun.spawnSync(cmd, {
+    stdin: o.input === undefined ? undefined : Buffer.from(o.input),
+    env: o.env,
+    cwd: o.cwd,
+    timeout: o.timeout,
+  });
+  return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+}
 
 // The Haiku risk hook in shadow (HV-24, specs/harness-v3.md AC36): it logs a decision
 // for prod-touching commands and risky edits and never returns a block.
@@ -297,7 +309,7 @@ describe("the hook process", () => {
     delete env.MODUO_RISK_HOOK_CHILD;
     delete env.MODUO_RISK_HOOK;
     Object.assign(env, extra);
-    return spawnSync("bun", [HOOK], { input, encoding: "utf8", env, timeout: 30_000 });
+    return spawnText(["bun", HOOK], { input, env, timeout: 30_000 });
   };
   const logRows = () => readDecisions(path.join(dir, "log", "risk.jsonl"));
 
@@ -343,9 +355,8 @@ describe("the hook process", () => {
     ])
       delete env[k];
     const input = JSON.stringify({ ...bash("git push --tags"), cwd: dir });
-    const out = spawnSync("bun", [HOOK], {
+    const out = spawnText(["bun", HOOK], {
       input,
-      encoding: "utf8",
       env,
       cwd: dir,
       timeout: 30_000,
@@ -356,9 +367,7 @@ describe("the hook process", () => {
 
   it("writes the log owner-only", () => {
     run(JSON.stringify(bash("git push --tags")), fakeClaude(`echo '{"decision":"allow"}'`));
-    const mode = spawnSync("stat", ["-f", "%Lp", path.join(dir, "log", "risk.jsonl")], {
-      encoding: "utf8",
-    });
+    const mode = spawnText(["stat", "-f", "%Lp", path.join(dir, "log", "risk.jsonl")], {});
     if (mode.status === 0) expect(mode.stdout.trim()).toBe("600");
     else expect(readFileSync(path.join(dir, "log", "risk.jsonl"), "utf8")).toContain('"v":1');
   });

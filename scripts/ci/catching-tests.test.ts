@@ -1,15 +1,14 @@
-import { execFileSync } from "node:child_process";
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 import {
   commentBody,
   fence,
   judge,
   MARKER,
+  parseBunRun,
   parseRun,
   plain,
   type Proposal,
@@ -23,7 +22,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const ok = (p: Partial<Proposal> = {}): Proposal => ({
   path: "scripts/ci/tier.catching.test.ts",
   behavior: "The parent puts scripts/ci on Tier 2; the PR drops it.",
-  code: 'import { it } from "@rstest/core";\nit("x", () => {});\n',
+  code: 'import { it } from "bun:test";\nit("x", () => {});\n',
   ...p,
 });
 const never = () => false;
@@ -34,8 +33,9 @@ describe("suiteFor", () => {
     expect(suiteFor("supabase/functions/_shared/a.catching.test.ts")?.cwd).toBe("supabase");
     expect(suiteFor("scripts/ci/a.catching.test.ts")).toEqual({
       name: "scripts",
+      runner: "bun",
       cwd: ".",
-      args: ["-c", "scripts/rstest.config.ts"],
+      args: ["--timeout=30000"],
     });
     expect(suiteFor("apps/desktop/src/a.catching.test.ts")).toBeNull();
     expect(suiteFor("tools/ast-grep/a.catching.test.ts")).toBeNull();
@@ -78,6 +78,25 @@ describe("rejectReason", () => {
 
 const report = (over: object) =>
   JSON.stringify({ summary: { testFiles: 1, tests: 1, failedTests: 0, passedTests: 1 }, ...over });
+
+describe("parseBunRun", () => {
+  it("reads bun test's summary lines", () => {
+    const ok = " 1 pass\n 0 fail\n 1 expect() calls\nRan 1 test across 1 file. [12.00ms]\n";
+    expect(parseBunRun(0, ok).status).toBe("pass");
+    const bad =
+      "(fail) limit > allows five [0.40ms]\nerror: expect(received).toBe(expected)\n 0 pass\n 1 fail\nRan 1 test across 1 file. [9.00ms]\n";
+    expect(parseBunRun(1, bad)).toEqual({
+      status: "fail",
+      message: "limit > allows five: expect(received).toBe(expected)",
+    });
+    expect(parseBunRun(0, " 0 pass\n 0 fail\nRan 0 tests across 1 file.\n").status).toBe("fail");
+    expect(parseBunRun(1, 'error: Test filter "./x.test.ts" had no matches').status).toBe(
+      "not-collected",
+    );
+    expect(parseBunRun(null, "", true).status).toBe("error");
+    expect(parseBunRun(1, "SyntaxError somewhere").status).toBe("error");
+  });
+});
 
 describe("parseRun", () => {
   it("passes only on exit 0 with at least one test and no failures", () => {
@@ -184,24 +203,10 @@ describe("comment", () => {
 });
 
 // End to end on two tiny trees: the same test passes on the parent, fails on the head, and the
-// CLI writes one comment for it. Uses the repo's own rstest through a node_modules link.
+// CLI writes one comment for it. scripts/ runs on `bun test`, which needs no config or node_modules.
 describe("the CLI", () => {
-  function nodeModules(): string {
-    for (let dir = root; dir !== path.dirname(dir); dir = path.dirname(dir)) {
-      const candidate = path.join(dir, "node_modules");
-      if (fs.existsSync(path.join(candidate, "@rstest/core"))) return candidate;
-    }
-    throw new Error("no node_modules with @rstest/core");
-  }
-
   function tree(dir: string, threshold: number): void {
     fs.mkdirSync(path.join(dir, "scripts/ci"), { recursive: true });
-    fs.symlinkSync(nodeModules(), path.join(dir, "node_modules"));
-    fs.writeFileSync(
-      path.join(dir, "scripts/rstest.config.ts"),
-      'import { defineConfig } from "@rstest/core";\n' +
-        'export default defineConfig({ root: new URL("..", import.meta.url).pathname, include: ["scripts/ci/*.test.ts"] });\n',
-    );
     fs.writeFileSync(
       path.join(dir, "scripts/ci/limit.ts"),
       `export const allowed = (n: number) => n <= ${threshold};\n`,
@@ -212,7 +217,7 @@ describe("the CLI", () => {
     path: "scripts/ci/limit.catching.test.ts",
     behavior: "The parent allows 5; the PR stops at 4.",
     code:
-      'import { expect, it } from "@rstest/core";\nimport { allowed } from "./limit.ts";\n' +
+      'import { expect, it } from "bun:test";\nimport { allowed } from "./limit.ts";\n' +
       'it("allows five", () => { expect(allowed(5)).toBe(true); });\n',
   };
 
@@ -229,20 +234,19 @@ describe("the CLI", () => {
       const rejected = { ...proposal, path: "scripts/ci/limit.ts" };
       fs.writeFileSync(tests, JSON.stringify({ tests: [proposal, rejected], note: "" }));
       const out = path.join(tmp, "out");
-      const stdout = execFileSync(
+      const res = Bun.spawnSync([
         "bun",
-        [
-          path.join(root, "scripts/ci/catching-tests.ts"),
-          ...["--tests", tests, "--out", out],
-          ...["--parent", path.join(tmp, "parent"), "--head", path.join(tmp, "head")],
-          ...["--parent-sha", "a".repeat(40), "--head-sha", "b".repeat(40)],
-        ],
-        { encoding: "utf8" },
-      );
+        path.join(root, "scripts/ci/catching-tests.ts"),
+        ...["--tests", tests, "--out", out],
+        ...["--parent", path.join(tmp, "parent"), "--head", path.join(tmp, "head")],
+        ...["--parent-sha", "a".repeat(40), "--head-sha", "b".repeat(40)],
+      ]);
+      if (!res.success) throw new Error(`catching-tests failed: ${res.stderr.toString()}`);
+      const stdout = res.stdout.toString();
       expect(stdout.trim()).toBe("caught=1");
       expect(fs.readdirSync(path.join(out, "comments"))).toEqual(["1.md"]);
       const body = fs.readFileSync(path.join(out, "comments/1.md"), "utf8");
-      expect(body).toContain("allows five: expected false to be true");
+      expect(body).toContain("allows five: expect(received).toBe(expected)");
       const sum = fs.readFileSync(path.join(out, "summary.md"), "utf8");
       expect(sum).toContain("**caught** · parent pass · head fail");
       expect(sum).toContain("rejected: name must end in .catching.test.ts(x)");

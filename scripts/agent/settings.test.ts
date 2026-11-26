@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,16 +50,17 @@ describe("settings.json", () => {
 
 describe("guards fail closed", () => {
   it.each(GUARDS)("%s exits non-zero (not a silent allow) when jq is missing", (guard) => {
-    const run = spawnSync("/bin/bash", [path.join(ROOT, `.claude/hooks/${guard}.sh`)], {
-      encoding: "utf8",
-      input: JSON.stringify({
-        tool_name: "Bash",
-        tool_input: { command: "git push origin develop" },
-      }),
+    const run = Bun.spawnSync(["/bin/bash", path.join(ROOT, `.claude/hooks/${guard}.sh`)], {
+      stdin: Buffer.from(
+        JSON.stringify({
+          tool_name: "Bash",
+          tool_input: { command: "git push origin develop" },
+        }),
+      ),
       env: { PATH: "/nonexistent" },
     });
-    expect(run.status).not.toBe(0);
-    expect(run.stderr).toContain("jq is missing");
+    expect(run.exitCode).not.toBe(0);
+    expect(run.stderr.toString()).toContain("jq is missing");
   });
 });
 
@@ -125,7 +125,7 @@ describe("lane profile", () => {
 });
 
 describe("scripts/agent/lane.sh", () => {
-  const jq = spawnSync("sh", ["-c", "command -v jq"], { encoding: "utf8" }).stdout.trim();
+  const jq = Bun.spawnSync(["sh", "-c", "command -v jq"]).stdout.toString().trim();
   let bin: string;
   beforeEach(() => {
     bin = mkdtempSync(path.join(tmpdir(), "lane-bin-"));
@@ -133,16 +133,17 @@ describe("scripts/agent/lane.sh", () => {
     chmodSync(path.join(bin, "claude"), 0o755);
   });
   afterEach(() => rmSync(bin, { recursive: true, force: true }));
-  const lane = (extraEnv: Record<string, string>) =>
-    spawnSync("bash", [path.join(ROOT, "scripts/agent/lane.sh"), "build HV-1"], {
+  const lane = (extraEnv: Record<string, string>) => {
+    const r = Bun.spawnSync(["bash", path.join(ROOT, "scripts/agent/lane.sh"), "build HV-1"], {
       cwd: ROOT,
-      encoding: "utf8",
       env: {
         HOME: process.env.HOME ?? "/tmp",
         PATH: `${bin}:${path.dirname(jq)}:/usr/bin:/bin`,
         ...extraEnv,
       },
     });
+    return { status: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
+  };
 
   it("refuses to start without srt and never runs claude", () => {
     const run = lane({});
@@ -170,10 +171,14 @@ describe("scripts/agent/lane.sh", () => {
     expect(profile.network.allowedDomains).toContain("cache.example.workers.dev");
     expect(profile.filesystem.allowWrite).toContain(ROOT);
     expect(profile.filesystem.denyWrite).toContain(path.join(ROOT, ".claude/hooks"));
-    const gitDir = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      cwd: ROOT,
-      encoding: "utf8",
-    }).stdout.trim();
+    const gitDir = Bun.spawnSync(
+      ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+      {
+        cwd: ROOT,
+      },
+    )
+      .stdout.toString()
+      .trim();
     expect(profile.filesystem.allowWrite).toContain(gitDir);
     expect(profile.filesystem.denyWrite).toEqual(
       expect.arrayContaining([`${gitDir}/hooks`, `${gitDir}/config`, path.join(ROOT, ".mcp.json")]),

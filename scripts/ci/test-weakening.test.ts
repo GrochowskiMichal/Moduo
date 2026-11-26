@@ -1,20 +1,20 @@
-import { execFileSync } from "node:child_process";
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 import { detect, parseDiff } from "./test-weakening";
 
 // Real `git diff -M --unified=0` output from a throwaway repo, so the parser sees what CI sees.
 function diffOf(before: Record<string, string>, after: Record<string, string>): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weakening-"));
-  const git = (...args: string[]) =>
-    execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], {
+  const git = (...args: string[]) => {
+    const r = Bun.spawnSync(["git", "-c", "user.name=t", "-c", "user.email=t@t", ...args], {
       cwd: dir,
-      encoding: "utf8",
     });
+    if (!r.success) throw new Error(`git ${args.join(" ")}: ${r.stderr.toString()}`);
+    return r.stdout.toString();
+  };
   const write = (files: Record<string, string>) => {
     for (const [file, text] of Object.entries(files)) {
       fs.mkdirSync(path.join(dir, path.dirname(file)), { recursive: true });

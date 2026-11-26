@@ -512,25 +512,21 @@ export function useInboxView({
           <Button variant="secondary" size="sm" onClick={() => dispatchOpenCapture()}>
             <Plus aria-hidden />
             Capture a task
+            <Kbd className="bg-transparent">{captureHint}</Kbd>
           </Button>
         ) : undefined
       }
       hint={
-        <span className="grid justify-items-center gap-1.5">
-          <span>
-            <Kbd>{captureHint}</Kbd> captures from anywhere in Moduo
-          </span>
-          {split.snoozed.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground tabular-nums"
-              onClick={() => setShowSnoozed(true)}
-            >
-              {split.snoozed.length} snoozed · show
-            </Button>
-          ) : null}
-        </span>
+        split.snoozed.length > 0 ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground tabular-nums"
+            onClick={() => setShowSnoozed(true)}
+          >
+            {split.snoozed.length} snoozed · show
+          </Button>
+        ) : undefined
       }
     />
   );

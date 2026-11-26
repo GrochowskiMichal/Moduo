@@ -9,7 +9,6 @@
 //                                            applies the current keys to its answers; --record makes it the baseline
 //   bun run eval:docs sync [--check]         regenerate scripts/harness-ab/tasks/docs/ from questions.jsonl
 
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -92,7 +91,8 @@ function sync(check: boolean) {
   mkdirSync(SET_DIR, { recursive: true });
   for (const [f, body] of d.write) writeFileSync(path.join(SET_DIR, f), json(body));
   for (const f of d.remove) rmSync(path.join(SET_DIR, f));
-  if (n) spawnSync("bun", ["fmt", SET_DIR], { cwd: ROOT, stdio: "ignore" });
+  if (n)
+    Bun.spawnSync(["bun", "fmt", SET_DIR], { cwd: ROOT, stdio: ["ignore", "ignore", "ignore"] });
   console.log(`${n} file(s) changed in ${path.relative(ROOT, SET_DIR)}`);
   return 0;
 }
@@ -235,11 +235,11 @@ function run(argv: string[]) {
   );
   const before = new Set(existsSync(results) ? readdirSync(results) : []);
   const args = ["run", "--set", SET, "--arms", ARM, "--repeats", "1", "--no-verify", ...argv];
-  const r = spawnSync("bun", [path.join(ROOT, "scripts/harness-ab/rig.ts"), ...args], {
+  const r = Bun.spawnSync(["bun", path.join(ROOT, "scripts/harness-ab/rig.ts"), ...args], {
     cwd: ROOT,
-    stdio: "inherit",
+    stdio: ["inherit", "inherit", "inherit"],
   });
-  if (r.status !== 0) return r.status ?? 1;
+  if (r.exitCode !== 0) return r.exitCode ?? 1;
   if (argv.includes("--dry-run")) return 0;
   const file = readdirSync(results).find((f) => !before.has(f) && f.endsWith(`-${SET}.jsonl`));
   if (!file) throw new Error("the rig wrote no results file");

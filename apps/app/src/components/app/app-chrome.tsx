@@ -62,7 +62,6 @@ import { TrialBanner } from "../trial-banner";
 import { Button } from "../ui/button";
 import { Icon } from "../ui/icon";
 import { IconButton } from "../ui/icon-button";
-import { ModuoMark } from "../ui/moduo-mark";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { WorkspaceSwitcher } from "../workspace-switcher";
 import { AnalyticsConsentPrompt } from "./analytics-consent-prompt";
@@ -528,8 +527,9 @@ export function AppChrome({ profileInitial }: { profileInitial: string }) {
             gridTemplateColumns: "1fr auto 1fr",
           }}
         >
+          {/* The workspace leads the bar; the Moduo mark stays on sign-in, the
+              app icon and the favicon (decisions/brand.md, 2026-11-26). */}
           <div className="flex flex-row items-center justify-start gap-1">
-            <ModuoMark className="h-8 w-8 shrink-0 text-foreground" />
             <WorkspaceSwitcher
               onOpenSettings={() => dispatchOpenSettings({ section: "workspace" })}
             />

@@ -9,7 +9,6 @@
 //   bun run ab check-tasks --set core [--tasks a,b] [--base <rev>]   (no model: the oracle fails at base, passes at fix)
 //   bun run ab report <results.jsonl>
 
-import { spawnSync } from "node:child_process";
 import {
   appendFileSync,
   cpSync,
@@ -72,17 +71,17 @@ function sh(
   args: string[],
   opts: { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number } = {},
 ): Sh {
-  const r = spawnSync(cmd, args, {
-    cwd: opts.cwd,
-    env: opts.env,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    timeout: opts.timeout,
-  });
+  let r: ReturnType<typeof Bun.spawnSync>;
+  try {
+    r = Bun.spawnSync([cmd, ...args], { cwd: opts.cwd, env: opts.env, timeout: opts.timeout });
+  } catch (error) {
+    return { status: null, stdout: "", stderr: String(error) };
+  }
   return {
-    status: r.status,
-    stdout: r.stdout ?? "",
-    stderr: (r.stderr ?? "") + (r.error ? String(r.error) : ""),
+    status: r.exitCode,
+    stdout: r.stdout?.toString() ?? "",
+    stderr:
+      (r.stderr?.toString() ?? "") + (r.exitedDueToTimeout ? "Error: spawnSync ETIMEDOUT" : ""),
   };
 }
 

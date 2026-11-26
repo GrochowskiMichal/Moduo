@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -224,8 +223,15 @@ function missingPath(file: string, ref: string, repo: Repo): string | undefined 
 }
 
 export function repoAt(root: string): Repo {
-  const git = (args: string[], input?: string) =>
-    execFileSync("git", args, { cwd: root, encoding: "utf8", input });
+  const git = (args: string[], input?: string) => {
+    const r = Bun.spawnSync(["git", ...args], {
+      cwd: root,
+      stdin: input === undefined ? undefined : Buffer.from(input),
+    });
+    if (!r.success)
+      throw new Error(`Command failed: git ${args.join(" ")}\n${r.stderr.toString()}`);
+    return r.stdout.toString();
+  };
   const files = git(["ls-files", "--cached", "--others", "--exclude-standard"])
     .split("\n")
     .filter(Boolean);
@@ -258,13 +264,13 @@ export function repoAt(root: string): Repo {
   };
 }
 
-export const trackedFiles = (root: string) =>
-  execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+export const trackedFiles = (root: string) => {
+  const r = Bun.spawnSync(["git", "ls-files", "--cached", "--others", "--exclude-standard"], {
     cwd: root,
-    encoding: "utf8",
-  })
-    .split("\n")
-    .filter(Boolean);
+  });
+  if (!r.success) throw new Error(`Command failed: git ls-files\n${r.stderr.toString()}`);
+  return r.stdout.toString().split("\n").filter(Boolean);
+};
 
 /** Every problem in the repo's rules and checked docs. */
 export function check(root: string): Problem[] {

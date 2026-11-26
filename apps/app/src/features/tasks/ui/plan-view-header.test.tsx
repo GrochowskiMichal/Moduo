@@ -25,6 +25,32 @@ describe("SortedOrderLine", () => {
   });
 });
 
+describe("the title's count", () => {
+  const header = (count: number) =>
+    render(
+      <TooltipProvider>
+        <PlanViewHeader
+          title="Inbox"
+          view="list"
+          onViewChange={() => {}}
+          controls={{ count }}
+          canEdit
+          onRequestCapture={() => {}}
+        />
+      </TooltipProvider>,
+    );
+  const titleText = () =>
+    (document.querySelector("[data-slot=plan-title]") as HTMLElement).textContent;
+
+  it("follows the title, and says nothing at 0 (as the kit's counts do)", () => {
+    header(7);
+    expect(titleText()).toBe("Inbox7");
+    cleanup();
+    header(0);
+    expect(titleText()).toBe("Inbox");
+  });
+});
+
 describe("a project's title (MOD-95, round-2b; MOD-150)", () => {
   const header = (project?: { onOpenDetails: () => void }) =>
     render(

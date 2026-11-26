@@ -6,7 +6,6 @@
 // Writes public/hero/osaka-office{,-720}.{webm,mp4}, public/hero/osaka-office.webp and
 // src/data/first-light-sun.json. Then run scripts/first-light-poster.ts for the stills.
 // Needs ffmpeg and cwebp (brew install ffmpeg webp).
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -18,6 +17,11 @@ if (!src || !fs.existsSync(src)) {
 }
 const out = path.resolve("public/hero");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "first-light-"));
+const execFileSync = (cmd: string, args: string[]) => {
+  const r = Bun.spawnSync([cmd, ...args], { stderr: "inherit" });
+  if (!r.success) throw new Error(`Command failed: ${cmd} ${args.join(" ")}`);
+  return r.stdout;
+};
 const ff = (...args: string[]) => execFileSync("ffmpeg", ["-v", "error", "-y", ...args]);
 // The clip's length, whole seconds (20 for the first clip, 30 for the sunset), and its frame
 // rate (the sunset is 24; the web copies keep it, no frames made up).

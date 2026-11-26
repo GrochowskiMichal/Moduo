@@ -1,4 +1,4 @@
-import { describe, expect, it } from "@rstest/core";
+import { describe, expect, it } from "bun:test";
 
 import { classify, globToRegExp, TIER2, tierOf } from "./tier";
 

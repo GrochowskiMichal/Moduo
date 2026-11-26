@@ -21,7 +21,6 @@
  * builds still work.
  */
 
-import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -40,8 +39,8 @@ if (!existsSync(iconSource)) {
   process.exit(1);
 }
 
-const actool = spawnSync("xcrun", ["--find", "actool"], { encoding: "utf8" });
-if (actool.status !== 0) {
+const actool = Bun.spawnSync(["xcrun", "--find", "actool"]);
+if (actool.exitCode !== 0) {
   console.error(
     "actool not found. Install full Xcode (the Command Line Tools alone do " +
       "not ship actool), then: sudo xcode-select -s /Applications/Xcode.app",
@@ -52,9 +51,9 @@ if (actool.status !== 0) {
 const workDir = mkdtempSync(join(tmpdir(), "moduo-liquid-icon-"));
 
 console.log(`compiling ${ICON_NAME}.icon → Assets.car (actool)`);
-const compile = spawnSync(
-  "xcrun",
+const compile = Bun.spawnSync(
   [
+    "xcrun",
     "actool",
     iconSource,
     "--compile",
@@ -80,10 +79,10 @@ const compile = spawnSync(
     "--development-region",
     "en",
   ],
-  { stdio: "inherit" },
+  { stdio: ["inherit", "inherit", "inherit"] },
 );
 
-if (compile.status !== 0) {
+if (compile.exitCode !== 0) {
   rmSync(workDir, { recursive: true, force: true });
   console.error("actool failed");
   process.exit(1);

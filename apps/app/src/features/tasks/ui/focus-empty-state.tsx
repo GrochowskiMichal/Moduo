@@ -85,7 +85,7 @@ export function FocusEmptyState({
     >
       <div className="flex flex-col gap-1">
         <p className="font-display text-lg text-foreground">
-          Line up what you’ll do next, then press Start.
+          Line up what you’ll do next, then press Start
         </p>
         {/* First use (call 66, TV-U17 builds on this): what Focus is, in one line. */}
         <p className="font-sans text-sm text-muted-foreground">{FOCUS_WHAT_IT_IS}</p>

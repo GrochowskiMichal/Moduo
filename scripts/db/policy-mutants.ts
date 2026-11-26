@@ -24,7 +24,6 @@
 //   bun run db:mutants tasks notes  just these
 //   bun run db:mutants --list       print the mutants, run nothing
 
-import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -174,14 +173,16 @@ const DB_URL =
   process.env.MODUO_DB_URL ?? "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
 
 function psql(args: string[]) {
-  const run = spawnSync("psql", [DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", ...args], {
-    encoding: "utf8",
-  });
-  if (run.error) {
-    console.error(`psql couldn't run (${run.error.message}). Install it: brew install libpq.`);
+  let run: ReturnType<typeof Bun.spawnSync>;
+  try {
+    run = Bun.spawnSync(["psql", DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", ...args]);
+  } catch (error) {
+    console.error(
+      `psql couldn't run (${(error as Error).message}). Install it: brew install libpq.`,
+    );
     process.exit(1);
   }
-  return { status: run.status, output: `${run.stdout}\n${run.stderr}` };
+  return { status: run.exitCode, output: `${run.stdout}\n${run.stderr}` };
 }
 
 function query<T>(sql: string): T {

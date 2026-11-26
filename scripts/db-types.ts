@@ -14,7 +14,6 @@
 // argument). Each `Args` member therefore gets `| null`, so the types match what
 // the database accepts and call sites keep their exact behaviour.
 
-import { spawnSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 const OUT = "apps/app/src/types/supabase.ts";
@@ -74,17 +73,19 @@ export function nullableRpcArgs(src: string): string {
 if (import.meta.main) {
   const local = process.argv.includes("--local");
   const source = local ? ["--local"] : ["--project-id", PROD_REF];
-  const gen = spawnSync(
-    "supabase",
-    ["gen", "types", "typescript", ...source, "--schema", "public"],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+  const gen = Bun.spawnSync(
+    ["supabase", "gen", "types", "typescript", ...source, "--schema", "public"],
+    {
+      stdio: ["ignore", "pipe", "inherit"],
+    },
   );
-  if (gen.status !== 0 || !gen.stdout.includes("export type Database")) {
+  const stdout = gen.stdout?.toString() ?? "";
+  if (gen.exitCode !== 0 || !stdout.includes("export type Database")) {
     console.error(
       `✗ supabase gen types failed (${local ? "is the local stack up? bun run local:up" : "run `supabase login` first"}).`,
     );
     process.exit(1);
   }
-  writeFileSync(OUT, nullableRpcArgs(gen.stdout));
+  writeFileSync(OUT, nullableRpcArgs(stdout));
   console.log(`✓ ${OUT} regenerated from ${local ? "the local stack" : "prod"}.`);
 }

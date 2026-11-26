@@ -312,7 +312,7 @@ export function EntityFeed({
     <CommentComposer
       people={people.mentionable}
       aria-label={commentLabel}
-      placeholder="Leave a comment…  @ to mention · / for dates"
+      placeholder="Leave a comment…"
       references={referenceSearch}
       teams={teams}
       onSubmit={(body, mentionedUserIds, mentionedTeamIds) =>

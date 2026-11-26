@@ -23,7 +23,6 @@
  *                                         re-freeze is a CTO call, visible in the diff)
  */
 
-import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -453,15 +452,15 @@ function serialize(b: Baseline): string {
 
 function repoFiles(): { path: string; source: string }[] {
   // Tracked plus new, not ignored, files: a new oversized file fails before it is committed.
-  const list = execFileSync(
-    "git",
-    ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+  const res = Bun.spawnSync(
+    ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
     {
       cwd: ROOT,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
     },
-  )
+  );
+  if (!res.success) throw new Error(`git ls-files failed: ${res.stderr.toString()}`);
+  const list = res.stdout
+    .toString()
     .split("\0")
     .filter((f) => f && (sizeChecked(f) || complexityChecked(f)));
   return [...new Set(list)].flatMap((f) => {

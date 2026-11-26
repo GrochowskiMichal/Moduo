@@ -32,6 +32,8 @@ export interface LoadedLayout {
 }
 
 export interface LayoutRepo {
+  /** The device's cached layout alone (no cloud read), legal-grid; null when none. Paints Home at once. */
+  readLocal(workspaceId: string): Promise<DashboardLayout | null>;
   /** Cache-first load, cloud-newer replaces, seeds the default on a fresh user (a placeholder when the cloud read fails). Never throws. */
   load(workspaceId: string): Promise<LoadedLayout>;
   /** Persist a new layout: immediate local write + 1s-debounced cloud upsert. */
@@ -84,6 +86,8 @@ export function createLayoutRepo(
   // cache, or only one still at the placeholder stamp, so what shows is a placeholder. Their saves stay local and carry the
   // placeholder stamp, so the account's real layout wins at the next good read.
   const unconfirmed = new Set<string>();
+  /** Saves per workspace: a load that started before one never writes its older answer over it. */
+  const writes = new Map<string, number>();
 
   async function readCache(workspaceId: string): Promise<StoredDashboardLayout | null> {
     try {
@@ -122,6 +126,7 @@ export function createLayoutRepo(
   }
 
   async function load(workspaceId: string): Promise<LoadedLayout> {
+    const writesAtStart = writes.get(workspaceId) ?? 0;
     const cache = await readCache(workspaceId);
     let cloud: StoredDashboardLayout | null = null;
     try {
@@ -131,7 +136,7 @@ export function createLayoutRepo(
       // offline / signed-out / not-deployed → local-only mode. A failed read says
       // nothing about the cloud row, so with no cache this is a placeholder, not a
       // seed. A cache still carrying the placeholder stamp is an edit of one made
-      // by an earlier mount (the hook makes a new repo per mount): still unconfirmed.
+      // by an earlier session (or a repo made before `layoutRepoFor`): still unconfirmed.
       if (!cache || cache.updatedAt === PLACEHOLDER_STAMP) {
         unconfirmed.add(workspaceId);
         return resolveLoad(cache, null, PLACEHOLDER_STAMP);
@@ -142,8 +147,12 @@ export function createLayoutRepo(
     // a normal local layout, so the epoch stamp only ever means "unconfirmed".
     if (resolved.updatedAt === PLACEHOLDER_STAMP) resolved.updatedAt = now();
     // Reflect the resolved truth back into the cache so a cloud adoption or a
-    // fresh seed survives the next offline paint.
-    await writeCache(workspaceId, { layout: resolved.layout, updatedAt: resolved.updatedAt });
+    // fresh seed survives the next offline paint. Not when an edit was saved while
+    // this read was out (Home is editable during it): the cache holds that edit,
+    // and offline it is the only copy.
+    if ((writes.get(workspaceId) ?? 0) === writesAtStart) {
+      await writeCache(workspaceId, { layout: resolved.layout, updatedAt: resolved.updatedAt });
+    }
     // NOTE (DF-12): `load` is a READ and must never issue a cloud write — the old
     // "reconcile a cache-wins load UP to the cloud" here made every boot that
     // resolved to the local cache POST a `dashboard_layouts` upsert (the write-on-
@@ -153,11 +162,12 @@ export function createLayoutRepo(
     return resolved;
   }
 
-  // `pending` holds ONE workspace's save. Callers must keep this single-
-  // workspace-at-a-time (the hook flushes before switching + gates edits behind
-  // `loading`), so a cross-workspace clobber of `pending` can't occur; the
-  // immediate cache write also lands regardless, so a dropped push is stale-not-lost.
+  // `pending` holds ONE workspace's save: it is set before any await (so a flush
+  // on a workspace switch always sees it), and a save for another workspace
+  // sends the waiting one first. The cache write lands regardless, so a dropped
+  // push is stale-not-lost.
   async function save(workspaceId: string, layout: DashboardLayout): Promise<void> {
+    writes.set(workspaceId, (writes.get(workspaceId) ?? 0) + 1);
     if (unconfirmed.has(workspaceId)) {
       // An edit of the placeholder: keep it on this device only, stamped so the
       // real layout (if the account has one) wins at the next good read.
@@ -165,9 +175,10 @@ export function createLayoutRepo(
       return;
     }
     const updatedAt = now();
-    await writeCache(workspaceId, { layout, updatedAt }); // immediate local truth
+    if (pending && pending.workspaceId !== workspaceId) void flush();
     pending = { workspaceId, layout, updatedAt };
     if (timer) clearTimeout(timer);
+    await writeCache(workspaceId, { layout, updatedAt }); // immediate local truth
     if (debounceMs <= 0) {
       await flush();
       return;
@@ -177,5 +188,32 @@ export function createLayoutRepo(
     }, debounceMs);
   }
 
-  return { load, save, flush };
+  async function readLocal(workspaceId: string): Promise<DashboardLayout | null> {
+    const cache = await readCache(workspaceId);
+    return cache ? fitAllowedSizes(sanitizeLayout(cache.layout), allowedSizesFor) : null;
+  }
+
+  return { readLocal, load, save, flush };
+}
+
+const sessionRepos = new WeakMap<ModuoRuntime, Map<string, LayoutRepo>>();
+
+/**
+ * The person's one layout repo for the session (not one per mount): a save
+ * still waiting for its debounce and the placeholder bookkeeping survive
+ * leaving Home and coming back. Per person, so one person's "unconfirmed"
+ * workspaces never reach the next one signed in on the same tab.
+ */
+export function layoutRepoFor(runtime: ModuoRuntime, userId: string): LayoutRepo {
+  let byUser = sessionRepos.get(runtime);
+  if (!byUser) {
+    byUser = new Map();
+    sessionRepos.set(runtime, byUser);
+  }
+  let repo = byUser.get(userId);
+  if (!repo) {
+    repo = createLayoutRepo(runtime);
+    byUser.set(userId, repo);
+  }
+  return repo;
 }

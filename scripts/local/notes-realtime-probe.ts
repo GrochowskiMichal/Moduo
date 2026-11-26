@@ -11,13 +11,19 @@
 // that nobody can send on a live topic. Everything it made is deleted at the
 // end. Local only: it refuses any non-local URL.
 
-import { execSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 
+function supabaseStatusEnv(): string {
+  const r = Bun.spawnSync(["supabase", "status", "-o", "env"], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  if (!r.success) throw new Error("Command failed: supabase status -o env");
+  return r.stdout.toString();
+}
 const env = Object.fromEntries(
-  execSync("supabase status -o env", { encoding: "utf8" })
+  supabaseStatusEnv()
     .split("\n")
     .map((l) => /^([A-Z_]+)="?(.*?)"?$/.exec(l))
     .filter((m): m is RegExpExecArray => !!m)
@@ -29,7 +35,14 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost):/.test(URL_ ?? "")) {
   process.exit(1);
 }
 const DB = "postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres";
-const psql = (sql: string) => execSync(`psql "${DB}" -X -q -v ON_ERROR_STOP=1`, { input: sql });
+const psql = (sql: string) => {
+  const r = Bun.spawnSync(["psql", DB, "-X", "-q", "-v", "ON_ERROR_STOP=1"], {
+    stdin: Buffer.from(sql),
+    stderr: "inherit",
+  });
+  if (!r.success) throw new Error(`Command failed: psql "${DB}" -X -q -v ON_ERROR_STOP=1`);
+  return r.stdout;
+};
 
 const admin = createClient(URL_, env.SECRET_KEY, { auth: { persistSession: false } });
 const run = randomBytes(4).toString("hex");

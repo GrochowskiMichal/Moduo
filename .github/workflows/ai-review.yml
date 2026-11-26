@@ -14,7 +14,7 @@ name: ai-review
 # environment, never at repo level. Without it the job says so and passes. Forks never get it, and
 # the job skips their PRs anyway. What the review flags and skips: REVIEW.md.
 #
-# Catching tests (HV-27, AC22), Tier 2 PRs only: Claude proposes rstest files that pass on the
+# Catching tests (HV-27, AC22), Tier 2 PRs only: Claude proposes test files that pass on the
 # parent and fail on the PR head, as structured output, without running anything. A job with no
 # secrets runs them on both commits (scripts/ci/catching-tests.ts), and a job that runs no repo
 # code posts each catch as a PR comment. Advisory like the review: never a required check.
@@ -193,8 +193,8 @@ jobs:
             A catching test pins a behaviour the parent has and the PR changes: it passes on the parent and fails on the head, so the founder merging the PR sees exactly what it alters. You can't run anything. CI runs each test on both commits and posts only those that pass on the parent and fail on the head.
 
             1. Read the diff and pick at most 5 changed behaviours in TypeScript code that a unit test can reach with no network, database or real browser (jsdom is there). Prefer the Tier 2 paths listed in `scripts/ci/tier.ts` and changes that look unintended or risky.
-            2. For each, read the parent's version (`git show ${{ needs.tier.outputs.parent }}:<file>`) and write one rstest file (`import { describe, expect, it } from "@rstest/core"`) asserting the parent's behaviour exactly where the PR changes it. Import the code under test by a path that exists in both commits.
-            3. Name it `<folder of the code>/<name>.catching.test.ts` (`.tsx` for React), a path that exists in neither commit, inside a suite: `apps/app/src/` or `apps/app/edge/` (rules in `apps/app/rstest.config.ts`), the folders in `supabase/rstest.config.ts`, or those in `scripts/rstest.config.ts`. Read that config and a neighbouring test first, and mock the way they do.
+            2. For each, read the parent's version (`git show ${{ needs.tier.outputs.parent }}:<file>`) and write one test file (`import { describe, expect, it } from "@rstest/core"` under `apps/app/` or `supabase/`; `from "bun:test"` under `scripts/`, which runs on `bun test`) asserting the parent's behaviour exactly where the PR changes it. Import the code under test by a path that exists in both commits.
+            3. Name it `<folder of the code>/<name>.catching.test.ts` (`.tsx` for React), a path that exists in neither commit, inside a suite: `apps/app/src/` or `apps/app/edge/` (rules in `apps/app/rstest.config.ts`), the folders in `supabase/rstest.config.ts`, or anywhere under `scripts/` (`bun test`). Read that config and a neighbouring test first, and mock the way they do.
 
             Write only tests you are confident pass on the parent. Return no tests when nothing is unit-testable (migrations, SQL, workflows, Rust, config), and say why in `note`. `behavior` is one or two plain sentences for the founder: what the parent does and what the PR does instead. Never push, comment or edit files.
           claude_args: |

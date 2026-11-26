@@ -1,9 +1,8 @@
+import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-import { describe, expect, it } from "@rstest/core";
 
 import {
   findProblems,

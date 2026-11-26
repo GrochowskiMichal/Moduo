@@ -1,9 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 import {
   addedLines,
@@ -115,7 +113,7 @@ describe("frozen paths", () => {
     ).toBe(
       "bun run --cwd apps/app test src/lib/a.test.ts src/lib/b.test.ts && " +
         "bun run --cwd supabase test functions/_shared/contracts/v.test.ts && " +
-        "bunx rstest -c scripts/rstest.config.ts scripts/agent/drafts.test.ts",
+        "bun test --timeout=30000 ./scripts/agent/drafts.test.ts",
     );
     expect(testCommand(["supabase/tests/x.test.sql"])).toBeNull();
   });
@@ -160,9 +158,9 @@ describe("pick", () => {
 // code the contract tests don't pin, one is the plain fix.
 describe("three drafts in separate worktrees (AC18)", () => {
   const run = (cwd: string, ...args: string[]) => {
-    const r = spawnSync("git", args, { cwd, encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr}`);
-    return r.stdout.trim();
+    const r = Bun.spawnSync(["git", ...args], { cwd });
+    if (r.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.toString()}`);
+    return r.stdout.toString().trim();
   };
   const commit = (cwd: string, files: Record<string, string>, message: string) => {
     for (const [file, text] of Object.entries(files)) {

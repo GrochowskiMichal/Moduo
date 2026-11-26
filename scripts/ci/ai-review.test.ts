@@ -1,7 +1,6 @@
+import { describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import path from "node:path";
-
-import { describe, expect, it } from "@rstest/core";
 
 // The AI review's contract (HV-6, AC21): PRs into develop only, same-repo, advisory, never a
 // required check, comment-only, token only in its environment. Text checks: the repo has no YAML

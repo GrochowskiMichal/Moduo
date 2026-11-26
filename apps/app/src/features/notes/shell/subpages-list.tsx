@@ -33,9 +33,9 @@ export function SubpagesList({
   return (
     <section aria-label="Subpages" className="mt-10 border-t border-hairline pt-4 pb-6">
       <h2 className="mb-2 font-sans text-2xs text-muted-foreground">
-        Subpages <span className="tabular-nums">({subpages.length})</span>
+        Subpages <span className="ml-1 tabular-nums">{subpages.length}</span>
       </h2>
-      <ul className="flex flex-wrap gap-1.5">
+      <ul className="flex flex-wrap gap-2">
         {shown.map((page) => (
           <li key={page.id} className="min-w-0">
             <button

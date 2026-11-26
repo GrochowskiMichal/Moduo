@@ -17,8 +17,6 @@
 //   bun run perf:seed            seed (or keep) the fixture
 //   bun run perf:seed --force    seed it again from scratch
 
-import { execFileSync, spawnSync } from "node:child_process";
-
 export const PERF_USER = { email: "perf@moduo.local", password: "localperf-10k" };
 export const PERF_WORKSPACE = "Perf 10k";
 export const PERF_TASKS = 10_000;
@@ -33,27 +31,33 @@ export type Status = {
 };
 
 export function stack(): Status {
-  const status = JSON.parse(
-    execFileSync("supabase", ["status", "-o", "json"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }),
-  ) as Status;
+  const status = JSON.parse(supabaseStatusJson()) as Status;
   if (!status.API_URL?.includes("127.0.0.1") || !status.DB_URL?.includes("127.0.0.1")) {
     throw new Error("The perf fixture is for the local stack only (bun run local:up).");
   }
   return status;
 }
 
-export function psql(dbUrl: string, sql: string): string {
-  const run = spawnSync("psql", [dbUrl, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], {
-    input: sql,
-    encoding: "utf8",
-    maxBuffer: 16 * 1024 * 1024,
+function supabaseStatusJson(): string {
+  const r = Bun.spawnSync(["supabase", "status", "-o", "json"], {
+    stdio: ["ignore", "pipe", "ignore"],
   });
-  if (run.error) throw new Error(`psql couldn't run (${run.error.message}). brew install libpq.`);
-  if (run.status !== 0) throw new Error(`psql failed:\n${run.stderr}`);
-  return run.stdout.trim();
+  if (!r.success) throw new Error("Command failed: supabase status -o json");
+  return r.stdout.toString();
+}
+
+export function psql(dbUrl: string, sql: string): string {
+  let run: ReturnType<typeof Bun.spawnSync>;
+  try {
+    run = Bun.spawnSync(["psql", dbUrl, "-X", "-q", "-At", "-v", "ON_ERROR_STOP=1"], {
+      stdin: Buffer.from(sql),
+      maxBuffer: 16 * 1024 * 1024,
+    });
+  } catch (error) {
+    throw new Error(`psql couldn't run (${(error as Error).message}). brew install libpq.`);
+  }
+  if (run.exitCode !== 0) throw new Error(`psql failed:\n${run.stderr}`);
+  return run.stdout.toString().trim();
 }
 
 /** The perf person (made once through the Auth admin API), password set after. */
