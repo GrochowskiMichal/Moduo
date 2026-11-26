@@ -118,6 +118,20 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
     });
   };
 
+  /**
+   * Whether an edit that isn't a lone status change must wait ("Still saving").
+   * A capture still saving: any such write would reach the server first. And a
+   * status change riding with other fields goes live as one field-level save;
+   * past an older check-off still on its way, that older one would land last and
+   * win (MOD-724). A status on its own waits behind it (`applyOp` queues it).
+   */
+  const mixedWriteBlocked = (id: string, changesStatus: boolean): boolean => {
+    if (savingBlocked(id)) return true;
+    if (!changesStatus || !store || store.isOffline() || !store.statusMustWait(id)) return false;
+    toast.error(STILL_SAVING);
+    return true;
+  };
+
   /** Say why a planned write can't start (a deleted task's is quiet). */
   const sayRefused = (plan: Extract<WritePlan, { kind: "refused" }>) => {
     if (plan.reason === "no-edit") toast.error(NO_EDIT);
@@ -151,7 +165,9 @@ export function createTaskOps(ctx: TaskCommandsContext, shared: Shared, peers: T
       Object.keys(plan.fields).length === 0 &&
       plan.scheduledAt === undefined &&
       plan.assigneeId === undefined;
-    if (!statusOnly && savingBlocked(id)) return { kind: "refused", reason: "still-saving" };
+    if (!statusOnly && mixedWriteBlocked(id, !!plan.status)) {
+      return { kind: "refused", reason: "still-saving" };
+    }
     const { followUps } = plan;
     if (plan.status && followUps.restoreReminders) {
       peers.offerReminderRestore(existing, plan.status.category);
