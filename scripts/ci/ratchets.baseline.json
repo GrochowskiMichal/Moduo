@@ -2,7 +2,6 @@
   "sizeLimit": 32768,
   "complexityLimit": 15,
   "size": {
-    ".claude/skills/product-lab/scripts/lab.mjs": 40059,
     "apps/app/src/features/calendar/ui/booking-link-dialog.tsx": 33840,
     "apps/app/src/features/calendar/ui/calendar-grid.tsx": 42404,
     "apps/app/src/features/chat/files/files.test.ts": 32872,
@@ -50,24 +49,6 @@
     "supabase/functions/moduo-mcp/tasks-v3.test.ts": 64176
   },
   "complexity": {
-    ".claude/skills/product-lab/scripts/lab.mjs": {
-      "easingClass": 17,
-      "step": 33
-    },
-    ".claude/skills/product-lab/scripts/lib/probe.mjs": {
-      "inventory>map(cb)": 24,
-      "pageInfo": 24
-    },
-    ".claude/skills/product-lab/scripts/lib/report.mjs": {
-      "gates": 31,
-      "measurementsMd": 18
-    },
-    ".claude/skills/product-lab/scripts/lib/tokens.mjs": {
-      "harvest": 42,
-      "resolveTokens": 24,
-      "score": 33,
-      "score>classify": 78
-    },
     "apps/app/public/push-display.js": {
       "<anonymous>>pushDisplay": 17
     },

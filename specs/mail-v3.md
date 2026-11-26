@@ -516,7 +516,7 @@ This runs as a single refactor:
    - Compaction is expected. A fresh context resumes from this spec, `git log`, and the PR body's checklist.
 5. MV-0 sets the contract: the port types and the fixture. Those test files are frozen after MV-0's commit.
 6. Tier: TS plus Rust under `src/mail/` (not on the Tier 2 list) and `tokens.css`. No contracts or migrations change, so Tier 1 is expected. If `bun scripts/ci/tier.ts origin/mike` says Tier 2, run the validator once before the PR is marked ready.
-7. When the last block passes, mark the PR ready, merge into `mike` on green, then run `/product-studio criticise email` for the new baseline against 7.7.
+7. When the last block passes, mark the PR ready, merge into `mike` on green.
 
 ## Execution blocks
 

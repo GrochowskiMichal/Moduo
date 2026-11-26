@@ -231,7 +231,7 @@ A single refactor, like MV:
 3. Run `/s2` once inside `/goal`: "build MI-0 through MI-7 in order on this branch". Per block: tests first, build, `bun run verify` (plus `cargo test -p moduo mail::` for MI-1), commit `MI-n: <name>`.
 4. Three failed attempts at one problem → ❓ in the PR body, move to the next independent block. A fresh context resumes from this spec, `git log` and the PR checklist.
 5. MI-0's test files are frozen after its commit.
-6. When MI-7 passes: mark ready, merge into `mike` on green, then `/product-studio criticise email` for the new baseline against 7.7.
+6. When MI-7 passes: mark ready, merge into `mike` on green.
 
 ## Execution blocks
 

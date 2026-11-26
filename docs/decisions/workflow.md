@@ -10,6 +10,10 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - status: current
   → [REVIEW.md](../../REVIEW.md) · [docs/agents/models-and-review.md](../agents/models-and-review.md)
 
+- **2026-11-26 · Six project skills and the product lab are removed.** Mike marked them legacy from a list with each skill's use since early October: `moduo-design-quality` (2 sessions), `product-studio` (2) with its engines `product-lab` and `product-jury`, `libraries-dev` (0) and the vendored `security-audit` (0). `e2e/lab/` (the lab's config, seeds and journeys) went with the engine that ran it. `/s1` no longer takes a studio baseline or draft, `/s2` has no lab pass for UI blocks, and the design rules are checked by `lint:tw`, `lint:css` and by eye. The Tier 2 path and the ratchet exclusion for the vendored skill are gone with it. Everything is in git history (`git show 57ba8ea7e:.claude/skills/<name>/SKILL.md`).
+  - status: current
+  → [docs/agents/tooling.md](../agents/tooling.md)
+
 - **2026-11-26 · Diet, second pass: the path rules were audited line by line, the router speaks only for the bug and block lanes, superseded decisions and unreferenced shipped specs are deleted.** One read-only agent per rule over 2.5 KB (18 files, about 350 bullets) had to cite the check that already fails on the wrong code before a bullet could go. Result: 21 bullets cut and 35 shortened, 91.6 KB to 82.4 KB, so about a tenth, not the half guessed beforehand: most bullets are traps no check holds. Two proposed cuts were refused because the lint covers only part of the trap (`getSnapshot` fresh values, the primitives' size variants). `scripts/agent/rule-budget.json` was lowered to the new sizes.
   - status: current
   - *Router:* it still classifies and logs every prompt (`.claude/logs/router.jsonl`), but adds its line only for `bug` and `block`, the lanes with a procedure of their own. A note on every prompt was noise and often wrong. The preflight prints one line when the base is current, and two per warning.
