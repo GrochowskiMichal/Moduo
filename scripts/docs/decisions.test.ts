@@ -5,9 +5,12 @@ import { fileURLToPath } from "node:url";
 
 import {
   DecisionsError,
+  FIND_MAX_HITS,
+  findEntries,
   parseArea,
   readAreas,
   renderCurrent,
+  renderFound,
   renderIndex,
   validate,
 } from "./decisions.ts";
@@ -188,6 +191,46 @@ describe("the current view", () => {
     expect(index).toContain("- 2026-10-05 · A rule partly replaced. *(partly superseded)*");
     expect(index).not.toContain("Old rule");
     expect(index).toContain("2 superseded or dropped entries are left out");
+  });
+});
+
+describe("find", () => {
+  const areas = [parseArea("things", FLAT), parseArea("sections", SECTIONS)];
+
+  it("returns current entries holding every word, title matches first", () => {
+    const found = findEntries(areas, "things", ["rule", "true"]);
+    expect(found.hits.map((e) => e.title)).toEqual([
+      "A rule partly replaced.",
+      "A rule nobody touched.",
+    ]);
+    expect(found.hidden).toBe(0);
+  });
+
+  it("counts superseded and dropped matches without showing them, unless asked", () => {
+    const found = findEntries(areas, "things", ["old"]);
+    expect(found.hits.map((e) => e.title)).toEqual(["New rule wins."]);
+    expect(found.hidden).toBe(1);
+    expect(findEntries(areas, "things", ["old"], { all: true }).hits).toHaveLength(2);
+  });
+
+  it("searches every area for 'all' and names the file and line of each hit", () => {
+    const found = findEntries(areas, "all", ["heading"]);
+    const text = renderFound(found, ["heading"]);
+    expect(text).toMatch(/^docs\/decisions\/sections\.md:\d+\n/);
+    expect(text).toContain("A heading entry");
+  });
+
+  it("says so when nothing matches", () => {
+    expect(renderFound(findEntries(areas, "things", ["zebra"]), ["zebra"])).toMatch(
+      /No current decision/,
+    );
+  });
+
+  it("stays small on the largest real area", () => {
+    const real = readAreas();
+    const found = findEntries(real, "tasks", ["late"]);
+    expect(found.hits.length).toBeLessThanOrEqual(FIND_MAX_HITS);
+    expect(renderFound(found, ["late"]).length).toBeLessThan(5000);
   });
 });
 

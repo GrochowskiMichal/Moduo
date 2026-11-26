@@ -18,8 +18,10 @@ if [ "$code" -eq 0 ]; then
   grep -E -i "(tests?|files?|specs?)[^|]{0,40}passed|passed \(|[0-9]+ passed" "$log" | tail -n 3
 else
   echo "✗ ${label} failed (exit ${code}) in ${secs}s · full log: ${log}"
-  grep -n -E "error TS[0-9]+|✗|×|FAIL|✘|Error:|AssertionError|Expected|Received|Found [0-9]+ error|failed|ERR!" "$log" | head -n 60
+  # Lint warnings are a burn-down budget, not the failure: leave them in the log. Long lines are cut.
+  grep -n -E "error TS[0-9]+|✗|×|FAIL|✘|Error:|AssertionError|Expected|Received|Found [0-9]+ error|failed|ERR!|needs formatting|: error|ERROR" "$log" \
+    | grep -v -E ": warning |failedTests\": 0|failedFiles\": 0" | cut -c1-300 | head -n 60
   echo "--- last 25 lines"
-  tail -n 25 "$log"
+  tail -n 25 "$log" | cut -c1-300
 fi
 exit "$code"
