@@ -10,6 +10,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Agent workflow, branching, Entire, docs → [decisions/workflow.md](decisions/workflow.md)
 
+- 2026-11-26 · Claude Ship: the Claude GitHub App is on Moduo with Review on, Steward and Approve off; `ai-review.yml` stays.
 - 2026-11-26 · The context diet: what a session carries without asking is budgeted in bytes, and knowledge is opened in slices.
 - 2026-10-27 · HV-30: Harness v3 is closed out; work runs in two lanes, and AGENTS.md maps what landed rather than what was planned.
 - 2026-10-27 · HV-22: the hunt, retro and prod watch are Claude cloud routines and the weekly numbers a desktop scheduled task on Mike's Mac; each routine's deterministic half is `bun run routine <command>`, and the agent only judges and writes.
