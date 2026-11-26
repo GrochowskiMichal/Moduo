@@ -13,7 +13,7 @@ You are planning a Moduo feature with a **product designer, not an engineer**. Y
 ## 1. Orient (read first, silently)
 - Set the session title as soon as the topic is known: `[<Module>] <short title> plan` (AGENTS.md §Session start).
 - `AGENTS.md` → "Working posture" + "Where things are". For the module you're planning: `bun run docs:current <area> --titles` lists its current decisions in one line each, `bun run docs:find <area> <words>` returns the ones on a subject, and `docs/gotchas/<area>.md` maps its traps. Never read `docs/decisions.md` or an area file whole (some pass 500 KB): send a `scout` when you need a wide sweep.
-- The north-star docs (`docs/PRODUCT_BRIEF.md`, `docs/ROADMAP.md`, `docs/data-layers.md`) and, if it's a known module, its `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md` and `docs/moduo-module-contract.md`.
+- The north-star docs (`docs/PRODUCT_BRIEF.md`, `docs/data-layers.md`) and, if it's a known module, its `.design/<module>/BRIEF.md` + `DESIGN_BRIEF.md` and `docs/moduo-module-contract.md`.
 - Codebase recon belongs **here**, not in execution: use read-only explore/recon subagents to map existing patterns, data shapes, and reuse opportunities. Spawn parallel explores for breadth.
 
 ## 2. Grill the designer relentlessly

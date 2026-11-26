@@ -1,7 +1,7 @@
 # Moduo — Product Brief
 
 > **Status:** Canonical product definition. Written 2026-06-24, informed by a market/user research sweep (Reddit, YouTube, G2/Capterra, HN, ProductHunt) with adversarial fact-checking. Supersedes the scope assumptions in the 2026-06 *Moduo Briefing* Notion note (see §12 for the deltas).
-> **Pairs with:** [ROADMAP.md](./ROADMAP.md) (what to build, in what order), [data-layers.md](./data-layers.md) (how it's wired), [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md) (terminology).
+> **Pairs with:** [data-layers.md](./data-layers.md) (how it's wired), [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md) (terminology).
 > **For agents:** this is the "why" and the guardrails. Read it before designing any module. When a decision here changes, edit this file first, then code.
 
 ---
@@ -73,7 +73,7 @@ The existential risk (see §11) is the **weakest-leg trap**: if one module is me
 
 | Module | Depth ceiling ("as good as, no further") | The "one great moment" |
 | --- | --- | --- |
-| **Tasks** | Linear-light + focus mode *(built, 5/5)* | Focus/Execute mode; the schedule-to-completion loop (§ROADMAP) |
+| **Tasks** | Linear-light + focus mode *(built, 5/5)* | Focus/Execute mode; the schedule-to-completion loop  |
 | **Notes** | Notion-ease minus databases / Obsidian-minus-local-first (markdown, embeds, `/task` `/note` refs) | Note checkboxes that are real, schedulable tasks |
 | **Calendar** | Morgen-lite (time-blocking + drag-to-schedule) + Calendly-like booking links | **Close the loop**: complete a task from inside its time-block; done/push/shrink/drop when a block elapses |
 | **Contacts** | Folk-lite (people/companies as hubs) | Click a contact → see *everything* linked (auto-rolled-up, zero logging) |
@@ -111,7 +111,7 @@ Carried from the original brief, sharpened by research:
 - **No Notion-style databases / relation schemas.** "Nothing to over-engineer" is a feature.
 - **No abstract "generic entity" / graph view** the user must learn. (Anytype trap.)
 - **No zero-based / envelope budgeting, no guilt-coded red "overspent" states.** Be the retrospective-clarity tool, not the discipline enforcer. (YNAB's red is "soul-crushing.")
-- **"No chat module, keep Slack" — reversed 2026-10-02 (Maciej + Mike).** A communication module (chat + calls) is planned for the Duo (2 seats) and Team (3+ seats) plans, built to solve Slack/Discord's problems and to compete with Slack on features. Chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md)); calls are being re-planned from Moduo Meet ([ROADMAP](./ROADMAP.md), Q14). What still holds: coordination *on the work* stays async — comments + @mentions + notifications + ambient state. *(Tension, kept on purpose: the 2026-06-24 alpha strategy said async-only multiplayer; chat/calls is the deliberate real-time exception, for its spec to reconcile.)*
+- **"No chat module, keep Slack" — reversed 2026-10-02 (Maciej + Mike).** A communication module (chat + calls) is planned for the Duo (2 seats) and Team (3+ seats) plans, built to solve Slack/Discord's problems and to compete with Slack on features. Chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md)); calls are being re-planned from Moduo Meet (ROADMAP, Q14). What still holds: coordination *on the work* stays async — comments + @mentions + notifications + ambient state. *(Tension, kept on purpose: the 2026-06-24 alpha strategy said async-only multiplayer; chat/calls is the deliberate real-time exception, for its spec to reconcile.)*
 - **No AI-everywhere sparkle.** MCP-only.
 - **No auto-seizing scheduler.** If scheduling assistance ships, it's suggestion-based, reversible, and reason-annotated ("moved because your 2pm ran over") — "we schedule *with* you, not *at* you." (Motion's opaque auto-reshuffle is its #1 churn cause.)
 - **No fake integration.** Email/calendar are first-class in-app panes, never iframes or "opens in a new tab" (Notion's current failure), never oversold one-way sync marketed as two-way (Akiflow complaint).
@@ -132,7 +132,7 @@ That intersection is Moduo's territory.
 
 ---
 
-## 11. Top risks (full list + mitigations in [ROADMAP.md §Open Questions & Risks](./ROADMAP.md))
+## 11. Top risks
 
 - **Weakest-leg trap** — one mediocre module sinks the thesis. *Mitigation: per-module quality bar + the "one great moment"; harden the weakest leg before adding the next; lean on tissue + lossless export so value is "the only place these connect," not "best notes app."*
 - **Re-creating the maintenance tax** — too many empty configurable surfaces. *Mitigation: opinionated defaults, seeded entities, pre-populated dashboard, progressive disclosure.*

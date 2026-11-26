@@ -14,7 +14,7 @@ SETUP
 - Title the session "[<Module>] rebuild plan".
 
 READ FIRST
-- AGENTS.md, docs/PRODUCT_BRIEF.md, docs/ROADMAP.md, docs/data-layers.md, docs/moduo-module-contract.md.
+- AGENTS.md, docs/PRODUCT_BRIEF.md, docs/data-layers.md, docs/moduo-module-contract.md.
 - .design/<module>/BRIEF.md and DESIGN_BRIEF.md, the module's specs in specs/, docs/decisions/<area>.md, docs/gotchas/<area>.md.
 - The Tasks v3 north star:
   - specs/tasks-v3.md
@@ -101,7 +101,7 @@ RULES OF THE CONVERSATION
    - **Blocks:**
      - continue the module's id lanes;
      - list dependencies on Tasks v3 blocks (e.g. DS-6, SH-1, RF-1, TV-D11a the shared store);
-     - get their own section in BUILD_ORDER, under LOCAL BUILD MODE.
+     - go into the Moduo queue (`bun run queue:import`).
    - **Then, in order:**
      1. the decision entries (4 lines each: who · what · why · rejected) in `docs/decisions/<area>.md` and the index;
      2. a supersession banner on the old spec;

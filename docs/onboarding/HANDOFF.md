@@ -6,15 +6,15 @@
 
 > This doc is a **map**, not a replacement for the source-of-truth docs. Where it points you at `docs/…`, read that — it's more detailed and kept current per-block. There is a companion memo, [backend-refactor-memo.md](./backend-refactor-memo.md), specifically for the "should we change the backend?" question.
 >
-> **⚠ Authority:** the block queue in Moduo (`bun run queue`; [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) points to it since 2026-10-26) is the **status of record** — what is done, what is next, what is blocked. This file is a narrative snapshot that goes stale between reconciles; where the two disagree, **the queue wins**. (It has drifted before: between 2026-07-11 and 2026-08-14 it listed ~14 already-shipped blocks as "ready" or "blocked".)
+> **⚠ Authority:** the block queue in Moduo (`bun run queue`; `specs/BUILD_ORDER.md` points to it since 2026-10-26) is the **status of record** — what is done, what is next, what is blocked. This file is a narrative snapshot that goes stale between reconciles; where the two disagree, **the queue wins**. (It has drifted before: between 2026-07-11 and 2026-08-14 it listed ~14 already-shipped blocks as "ready" or "blocked".)
 
 ---
 
 ## 0. Read-these-first (in order)
 
 1. [`docs/PRODUCT_BRIEF.md`](../PRODUCT_BRIEF.md) — what Moduo is and the "spine is the moat" thesis.
-2. [`docs/ROADMAP.md`](../ROADMAP.md) — waves, scored backlog, open questions/risks.
-3. [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) — **the live status ledger.** What's done, what's next.
+2. `docs/ROADMAP.md` — waves, scored backlog, open questions/risks.
+3. `specs/BUILD_ORDER.md` — **the live status ledger.** What's done, what's next.
 4. [`docs/architecture.md`](../architecture.md) + [`docs/moduo-module-contract.md`](../moduo-module-contract.md) — code layout + how a module is built (the 4-pillar contract).
 5. [`docs/data-layers.md`](../data-layers.md) + [`docs/moduo-architecture-vocabulary.md`](../moduo-architecture-vocabulary.md) — the two-runtime data model, the spine, the vocabulary. **⚠ its status table is stale — read it for the *why*, not current status (see §11).**
 6. [`CONTRIBUTING.md`](../../CONTRIBUTING.md) + [`docs/gotchas.md`](../gotchas.md) — branching model + the footguns that will bite you.
@@ -32,7 +32,7 @@ Roughly **eight feature waves** landed since you were last involved. Everything 
 
 ## 2. What changed since you last touched it (the delta)
 
-Framed by **feature wave**, newest-first. Each is fully shipped unless noted. (Per-wave detail: [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md); rationale: [`docs/decisions.md`](../decisions.md).)
+Framed by **feature wave**, newest-first. Each is fully shipped unless noted. (Per-wave detail: `specs/BUILD_ORDER.md`; rationale: [`docs/decisions.md`](../decisions.md).)
 
 | Wave | What landed | Blocks |
 |---|---|---|
@@ -187,7 +187,7 @@ Full list: [`docs/gotchas.md`](../gotchas.md). The sharp edges:
 
 ## 10. What's left — the future backlog
 
-**The authoritative backlog is [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) + [`docs/ROADMAP.md`](../ROADMAP.md).** This project tracks future work in the ledger/roadmap, **not** in code comments (a full `TODO/FIXME` sweep of `src/` + `src-tauri/` returns exactly one benign marker) — so grepping for TODOs understates the backlog by design. Summary:
+**The authoritative backlog is `specs/BUILD_ORDER.md` + `docs/ROADMAP.md`.** This project tracks future work in the ledger/roadmap, **not** in code comments (a full `TODO/FIXME` sweep of `src/` + `src-tauri/` returns exactly one benign marker) — so grepping for TODOs understates the backlog by design. Summary:
 
 ### The DF wave is done — 23 of 24
 Everything the 2026-07-11 version of this file listed as "ready now" or "blocked on a sibling" — **except DF-15** — has shipped: DF-2, DF-7, DF-8, DF-9, DF-10, DF-11, DF-12, DF-16, DF-17, DF-19 (a…i, the full Settings overhaul), DF-20, DF-21 (Universal Inbox), DF-22 (cross-pane drag), DF-23, DF-24 between 2026-07-10 and 07-27, then **DF-18** (eyebrow / detail-title / toolbar standardization) on 2026-08-14. Spec + per-block ✅ markers: [`docs/reviews/whole-app-critique-2026-07-plan.md`](../reviews/whole-app-critique-2026-07-plan.md).
@@ -198,7 +198,7 @@ Everything the 2026-07-11 version of this file listed as "ready now" or "blocked
 DF-18 is worth knowing about as a *constraint*, not just a completed block: there is now one `Eyebrow` primitive, one `DetailTitle` scale and a `Toolbar` with real roving-tabindex keyboard nav, and **a unit test fails the build on any hand-rolled `uppercase` class outside the primitive** — including an on-recipe copy. `lint:tw` also now rejects named Tailwind palette utilities (`text-red-400`). Write new chrome through the primitives.
 
 ### Pre-alpha, in progress — Wave D (added 2026-07-29)
-The designer's two goals decomposed: **(1) move my real data in and use Moduo daily**, **(2) send it to friends for a real alpha**. Full detail + checkboxes in [`specs/BUILD_ORDER.md`](../../specs/BUILD_ORDER.md) §Wave D.
+The designer's two goals decomposed: **(1) move my real data in and use Moduo daily**, **(2) send it to friends for a real alpha**. Full detail + checkboxes in `specs/BUILD_ORDER.md` §Wave D.
 
 - ✅ **OPS-1 / OPS-2** — applied every pending migration, de-duplicated migration timestamps, reconciled prod schema against the files, and closed a real anon-EXECUTE hole (§7).
 - ✅ **IM-1** Notion export hardening · ✅ **IM-2a/2b/2c-a** email store path, backward backfill engine, sync-depth picker · ✅ **NOTE-FIX-1** (imported notes rendered blank after reload) · ✅ **SCALE-1** (the silent 1000-row PostgREST truncation).
@@ -233,7 +233,7 @@ Nearly every shipped block has a `docs/testing/<block>.md` checklist (80 files) 
 **The general rule: the block queue in Moduo (`bun run queue`) is the only status-of-record. Every other doc here — including this one — is narrative that goes stale between reconciles.** Specific known offsets:
 
 - **[`docs/data-layers.md`](../data-layers.md) is stale on *status*** (dated 2026-06-24; describes "~16 migrations, only Tasks cloud-first, spine aspirational"). Reality: 43 migrations, 7+ modules cloud-first, spine built, MCP exposes 6 modules. It carries its own ⚠ banner saying so. Read it for **intent/philosophy**, not current status — where doc and code disagree, the code wins.
-- **[`docs/ROADMAP.md`](../ROADMAP.md) is a *direction* doc, not a status doc** — reconciled 2026-08-14, but most of its wave sections describe the plan as conceived 2026-06-24. The DF wave, Wave 6 (Dashboard) and Wave D were added after it was written; short back-filled sections now cover them, but the ledger is the authority on their contents.
+- **`docs/ROADMAP.md` is a *direction* doc, not a status doc** — reconciled 2026-08-14, but most of its wave sections describe the plan as conceived 2026-06-24. The DF wave, Wave 6 (Dashboard) and Wave D were added after it was written; short back-filled sections now cover them, but the ledger is the authority on their contents.
 - **[`docs/improvement-plan.md`](../improvement-plan.md) and [`docs/build-log.md`](../build-log.md) are the *completed* Tasks-era logs** — history, not the live plan.
 - **Migration-status wording anywhere is history, not state.** "Deploy-ready but unapplied", "deploy-gated", "post-deploy" and friends appear on **~115 lines** across `docs/` and `specs/` — roughly 25 of them completed-block notes in `BUILD_ORDER.md`/`decisions.md`, the rest testing-checklist rows. Essentially all of it predates OPS-1/OPS-2 (§7), and DOC-1 chose to neutralize it with banners rather than rewrite the history. **The one real exception: edge-function deploys.** "Redeploy `moduo-mcp`" is genuinely outstanding. Probe the database, not the docs.
 - *(Resolved since 2026-07-11: ROADMAP §B Q5's trigger-based-validation lean now carries its resolution inline, and `specs/contacts-v2.md` reads "Done" — both caveats this section used to carry are closed.)*

@@ -1,7 +1,7 @@
 # Moduo — Architecture & Data Layers
 
 > **Status:** Living architecture reference. Written 2026-06-24 alongside the alpha planning round.
-> **Pairs with:** [architecture.md](./architecture.md) (frontend / Tauri code layout), [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) (what & why), [ROADMAP.md](./ROADMAP.md) (build sequence), [moduo-module-contract.md](./moduo-module-contract.md) (per-module AI-readiness contract), [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md) (terminology).
+> **Pairs with:** [architecture.md](./architecture.md) (frontend / Tauri code layout), [PRODUCT_BRIEF.md](./PRODUCT_BRIEF.md) (what & why), ROADMAP.md (build sequence), [moduo-module-contract.md](./moduo-module-contract.md) (per-module AI-readiness contract), [moduo-architecture-vocabulary.md](./moduo-architecture-vocabulary.md) (terminology).
 >
 > This doc answers: **where does each kind of data live, who is the source of truth, and what is the target shape every new module must adopt** — especially the *connective-tissue spine* that is Moduo's actual moat. Read it before adding a new module or a new data store.
 
@@ -154,7 +154,7 @@ A full multi-account Spark replacement on a cloud-first web app would mean build
 
 - **Shared-workspace *async* multiplayer**, NOT real-time collaborative editing. Built on Supabase RLS + `workspace_members`; changes appear on refresh/poll. Enough to build Moduo with a partner. No live cursors / simultaneous block-editing at alpha (that is the expensive trap).
 - Consequence: **every new module is Supabase-first**, and **Notes must move to Supabase** (cloud-sync) — notes are the one kept module still local-CRDT, and shared design notes require it. The Notes rebuild is where this lands.
-- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md): Supabase rows + Realtime, a device store in IndexedDB); calls are being re-planned from Moduo Meet ([ROADMAP](./ROADMAP.md)). Coordination on entities stays comments + @mentions + notifications.
+- In-app chat was **out of scope** (keep Slack) — **reversed 2026-10-02:** chat v2 shipped 2026-10-16 ([specs/chat-v2.md](../specs/chat-v2.md): Supabase rows + Realtime, a device store in IndexedDB); calls are being re-planned from Moduo Meet (ROADMAP). Coordination on entities stays comments + @mentions + notifications.
 - **The client side of sync (2026-10-20).** Tasks, Chat and Notes sync through one kernel (`apps/app/src/lib/sync/kernel/`): an IndexedDB device copy per person and workspace, delta reads by server stamp, Realtime as a latency layer that lands only newer rows, an outbox, and write overlays. Under the Tasks store, every table is an in-memory **TanStack DB** collection fed by that kernel (`lib/sync/tanstack/`, `supabaseCollectionOptions()`); the device copy stays the persistence. Live queries are used only for narrow, indexed reads: whole-workspace queries measured too slow at 10k rows. Moving Chat, writes and other modules onto collections, and SQLite persistence, are paused. Why and when to re-test: [specs/tanstack-spine.md](../specs/tanstack-spine.md).
 
 ---
