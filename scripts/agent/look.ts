@@ -17,11 +17,10 @@
 // data (AGENTS.md rule 10). The password is local-only: stackKeys refuses
 // anything but 127.0.0.1. Never point this at the cloud.
 
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { chromium } from "@playwright/test";
+import { type Browser, chromium, type Page } from "@playwright/test";
 
 import {
   markWelcomeSeen,
@@ -140,60 +139,81 @@ async function up(url: string): Promise<boolean> {
   }
 }
 
+/** This worktree's dev server, started when nothing answers at `base`; returns how to stop it. */
+async function ensureServer(base: string, explicit: boolean): Promise<() => void> {
+  if (await up(base)) return () => {};
+  if (explicit) throw new Error(`nothing answers at ${base}`);
+  const port = new URL(base).port;
+  console.log(`look: starting the dev server on ${port}...`);
+  const server = Bun.spawn(
+    [path.join(e2eRoot, "node_modules/.bin/rsbuild"), "dev", "--host", "127.0.0.1", "--port", port],
+    {
+      cwd: path.join(e2eRoot, "apps/app"),
+      env: { ...process.env, MODUO_TARGET: "web" },
+      stdout: "ignore",
+      stderr: "ignore",
+    },
+  );
+  const until = Date.now() + 120_000;
+  while (!(await up(base))) {
+    if (Date.now() > until) {
+      server.kill();
+      throw new Error("the dev server didn't come up in 120 s");
+    }
+    await Bun.sleep(500);
+  }
+  return () => server.kill();
+}
+
+/** Console errors, page errors and failed requests, minus the dev server's devtools pipe. */
+function watchProblems(page: Page): string[] {
+  const problems: string[] = [];
+  const push = (line: string) => {
+    if (!line.includes("/__tsd/")) problems.push(line);
+  };
+  page.on("console", (m) => {
+    if (m.type() === "error" && !/status of 404/.test(m.text())) push(`console: ${m.text()}`);
+  });
+  page.on("pageerror", (e) => push(`pageerror: ${e.message}`));
+  page.on("requestfailed", (r) => push(`failed: ${r.method()} ${r.url()}`));
+  page.on("response", (r) => {
+    if (r.status() >= 400) push(`${r.status()}: ${r.request().method()} ${r.url()}`);
+  });
+  return problems;
+}
+
+async function signedInPage(
+  browser: Browser,
+  saved: Saved,
+  opts: Record<string, string>,
+): Promise<Page> {
+  const page = await browser.newPage({
+    viewport: { width: Number(opts.width ?? 1440), height: Number(opts.height ?? 900) },
+  });
+  const host = new URL(stackKeys().url).hostname.split(".")[0];
+  const { session: s, workspaceId } = saved;
+  const pairs: Array<[string, string]> = [
+    [`sb-${host}-auth-token`, JSON.stringify(s)],
+    [`moduo:selected-workspace:${s.user.id}`, workspaceId],
+  ];
+  await page.addInitScript((kv) => {
+    for (const [k, v] of kv) window.localStorage.setItem(k, v);
+  }, pairs);
+  return page;
+}
+
 async function look(routes: string[], opts: Record<string, string>): Promise<void> {
   const saved = await current();
   const base = opts.url ?? e2eAppUrl;
-  let server: ReturnType<typeof spawn> | null = null;
-  if (!(await up(base))) {
-    if (opts.url) throw new Error(`nothing answers at ${base}`);
-    const port = new URL(base).port;
-    console.log(`look: starting the dev server on ${port}...`);
-    server = spawn(
-      path.join(e2eRoot, "node_modules/.bin/rsbuild"),
-      ["dev", "--host", "127.0.0.1", "--port", port],
-      {
-        cwd: path.join(e2eRoot, "apps/app"),
-        env: { ...process.env, MODUO_TARGET: "web" },
-        stdio: "ignore",
-      },
-    );
-    const until = Date.now() + 120_000;
-    while (!(await up(base))) {
-      if (Date.now() > until) throw new Error("the dev server didn't come up in 120 s");
-      await Bun.sleep(500);
-    }
-  }
+  const stop = await ensureServer(base, Boolean(opts.url));
   const out = opts.out ?? path.join(AUTH_DIR, "shots");
   mkdirSync(out, { recursive: true });
   const browser = await chromium.launch();
   try {
-    const page = await browser.newPage({
-      viewport: { width: Number(opts.width ?? 1440), height: Number(opts.height ?? 900) },
-    });
-    const host = new URL(stackKeys().url).hostname.split(".")[0];
-    const { session: s, workspaceId } = saved;
-    const pairs: Array<[string, string]> = [
-      [`sb-${host}-auth-token`, JSON.stringify(s)],
-      [`moduo:selected-workspace:${s.user.id}`, workspaceId],
-    ];
-    await page.addInitScript((kv) => {
-      for (const [k, v] of kv) window.localStorage.setItem(k, v);
-    }, pairs);
-    const problems: string[] = [];
-    let noise = 0;
-    // The dev server's devtools pipe (/__tsd/) 404s outside its own setup; it isn't the app.
-    const push = (line: string) => (line.includes("/__tsd/") ? noise++ : problems.push(line));
-    page.on("console", (m) => {
-      if (m.type() === "error" && !/status of 404/.test(m.text())) push(`console: ${m.text()}`);
-    });
-    page.on("pageerror", (e) => push(`pageerror: ${e.message}`));
-    page.on("requestfailed", (r) => push(`failed: ${r.method()} ${r.url()}`));
-    page.on("response", (r) => {
-      if (r.status() >= 400) push(`${r.status()}: ${r.request().method()} ${r.url()}`);
-    });
+    const page = await signedInPage(browser, saved, opts);
+    const problems = watchProblems(page);
     for (const route of routes.length ? routes : ["/"]) {
       problems.length = 0;
-      noise = 0;
       await page
         .goto(new URL(route, base).toString(), { waitUntil: "networkidle" })
         .catch(() => {});
@@ -207,7 +227,7 @@ async function look(routes: string[], opts: Record<string, string>): Promise<voi
     }
   } finally {
     await browser.close();
-    server?.kill();
+    stop();
   }
 }
 
