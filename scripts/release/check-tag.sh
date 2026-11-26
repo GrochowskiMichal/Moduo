@@ -11,7 +11,10 @@
 #     (the updater manifest and the release page are rendered from it)
 #   - `checks` passed on a push of that commit. With --wait-checks, a run still going is waited
 #     for up to that many minutes (/ship tags the release PR's merge commit while develop's checks
-#     run on it); without, it must have passed already.
+#     run on it); without, it must have passed already. Or the commit is the merge of a release PR
+#     that changed nothing on the way in (its tree is the PR head's, which contains its first
+#     parent) and `checks` passed on that PR's head: the same tree, already tested, so the push run
+#     isn't waited for (it would test the same diff again).
 # Needs GH_TOKEN (actions: read). Writes sha= and version= to $GITHUB_OUTPUT when set.
 set -euo pipefail
 
@@ -48,8 +51,17 @@ git show "$sha:release-notes/releases.json" 2>/dev/null \
 
 # No point waiting for checks on a commit that is refused anyway.
 [ "${#problems[@]}" -eq 0 ] || wait_minutes=0
+
+pr_checked=""
+if [ "${#problems[@]}" -eq 0 ] \
+  && head="$(git rev-parse --verify --quiet "$sha^2")" \
+  && [ "$(git rev-parse "$sha^{tree}")" = "$(git rev-parse "$head^{tree}")" ] \
+  && git merge-base --is-ancestor "$sha^1" "$head"; then
+  pr_runs="$(gh run list --workflow checks.yml --commit "$head" --event pull_request --limit 20 --json conclusion,headBranch,url)"
+  pr_checked="$(jq -r 'map(select(.conclusion == "success" and (.headBranch | startswith("release/v")))) | .[0].url // empty' <<< "$pr_runs")"
+fi
 deadline=$(( $(date +%s) + wait_minutes * 60 ))
-while :; do
+while [ -z "$pr_checked" ]; do
   runs="$(gh run list --workflow checks.yml --commit "$sha" --event push --limit 20 --json status,conclusion,url)"
   if jq -e 'any(.[]; .conclusion == "success")' <<< "$runs" > /dev/null; then break; fi
   # A run still going, or none yet (a push's run can take a moment to appear): wait, if allowed.
@@ -68,7 +80,11 @@ done
 
 [ "${#problems[@]}" -eq 0 ] || refuse "${problems[@]}"
 
-echo "$tag → ${sha::7} ($(git log -1 --format=%s "$sha")): on develop, checks passed, VERSION $version."
+if [ -n "$pr_checked" ]; then
+  echo "$tag → ${sha::7} ($(git log -1 --format=%s "$sha")): on develop, checks passed on the release PR's head with the same tree ($pr_checked), VERSION $version."
+else
+  echo "$tag → ${sha::7} ($(git log -1 --format=%s "$sha")): on develop, checks passed, VERSION $version."
+fi
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   echo "sha=$sha" >> "$GITHUB_OUTPUT"
   echo "version=$version" >> "$GITHUB_OUTPUT"
