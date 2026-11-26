@@ -1,24 +1,24 @@
 # Release runbook
 
-How a change gets from `develop` to prod. **`/ship` is the only way to release** (since REL-3, 2026-10-19): it prepares the release, asks one question and does the rest; this file is what it runs and what to do by hand when something breaks. Why it works this way: [decisions/workflow.md](./decisions/workflow.md) (2026-10-19, 2026-10-17, 2026-10-14). Traps: [gotchas/supabase.md](./gotchas/supabase.md), [gotchas/build-ci.md](./gotchas/build-ci.md).
+How a change gets from `develop` to prod. **`/release` is the only way to release** (since REL-3, 2026-10-19): it prepares the release, asks one question and does the rest; this file is what it runs and what to do by hand when something breaks. Why it works this way: [decisions/workflow.md](./decisions/workflow.md) (2026-10-19, 2026-10-17, 2026-10-14). Traps: [gotchas/supabase.md](./gotchas/supabase.md), [gotchas/build-ci.md](./gotchas/build-ci.md).
 
-Every prod database or function action asks a human first (`guard-prod-db.sh`). Every release tag and prod workflow run needs `/ship`'s approval (`guard-release.sh`).
+Every prod database or function action asks a human first (`guard-prod-db.sh`). Every release tag and prod workflow run needs `/release`'s approval (`guard-release.sh`).
 
-## 1. Releasing: `/ship`
+## 1. Releasing: `/release`
 
-Blocks land on the personal branch with a release note (`.changes/`, written by `/s3`), then sync to `develop` in batches. When `develop` has something worth shipping, either founder runs **`/ship`** in Claude ([.claude/skills/ship/SKILL.md](../.claude/skills/ship/SKILL.md)):
+Blocks land on the personal branch with a release note (`.changes/`, written by `/s3`), then sync to `develop` in batches. When `develop` has something worth shipping, either founder runs **`/release`** in Claude ([.claude/skills/release/SKILL.md](../.claude/skills/release/SKILL.md)):
 
 1. **Preflight** (read-only): no other release PR open and no release running; the notes since the last `vX.Y.Z` tag (`changes.ts status` and the leak check `lint:notes`); a release PR merged without its tag (it offers to tag it) and the next version (any `new` note → minor, else patch); the risk label (**Higher** when the release touches migrations, RLS/policies, auth, billing, account deletion, `moduo-mcp`, the updater or signing; else **Normal**); whether desktop will build (§5).
-2. **Manual prerequisites:** `git diff --name-only <last tag>..origin/develop -- supabase/migrations supabase/functions`. Anything listed stops `/ship` until you confirm it's applied to prod by §2–3. `/ship` never applies it.
+2. **Manual prerequisites:** `git diff --name-only <last tag>..origin/develop -- supabase/migrations supabase/functions`. Anything listed stops `/release` until you confirm it's applied to prod by §2–3. `/release` never applies it.
 3. **One question:** ship it yourself now, or hand it to the other founder (Mike `GrochowskiMichal` ↔ Maciej `En5hi`). Higher risk recommends the hand-off; nothing is forced.
 4. **Either way** it opens the PR **Release X.Y.Z** (`release/vX.Y.Z → develop`): `changes.ts prepare` bumps `VERSION`, adds the release to `release-notes/releases.json`, rewrites `CHANGELOG.md` and removes the consumed notes. The PR body is the release summary and the record of the release.
    - **Ship now:** it waits for the PR's checks (failing → it stops, no tag), merges with a merge commit, writes the one-time marker `.claude/release-approved/X.Y.Z` (gitignored), pushes the annotated tag `vX.Y.Z` on the merge commit, watches `release.yml` (§4) and reports what's live (§6).
-   - **Hand off:** the PR stays open, assigned to the other founder. `/ship vX.Y.Z` (from either of you) finishes it.
-5. **Nothing user-facing** since the last tag: `/ship` asks whether to ship a patch with "Reliability improvements." or not ship.
+   - **Hand off:** the PR stays open, assigned to the other founder. `/release vX.Y.Z` (from either of you) finishes it.
+5. **Nothing user-facing** since the last tag: `/release` asks whether to ship a patch with "Reliability improvements." or not ship.
 
 **Risky releases ship small.** Anything Higher-risk ships on its own, not bundled into a large release, and a fix a real user is blocked by goes out the same day.
 
-**By hand** (only if `/ship` can't run): a person runs the same steps in a terminal; `guard-release.sh` only sees Claude's commands, so nothing blocks a person. An agent never writes the marker itself: only `/ship` does, after the person answers "Ship now" (or "Ship Release X.Y.Z now?" on a resume). The marker works once, for 60 minutes.
+**By hand** (only if `/release` can't run): a person runs the same steps in a terminal; `guard-release.sh` only sees Claude's commands, so nothing blocks a person. An agent never writes the marker itself: only `/release` does, after the person answers "Ship now" (or "Ship Release X.Y.Z now?" on a resume). The marker works once, for 60 minutes.
 
 ## 2. Database migrations
 
@@ -83,9 +83,9 @@ Every PR that touches the app or the landing also gets a preview URL comment on 
 3. `desktop` builds the production desktop app from the tag's commit (§5) alongside `web` and publishes it only after both `web` jobs succeeded (a Mac that never starts is cancelled only once web is done), but only when `apps/app`, `apps/desktop`, `packages`, `supabase/functions/_shared`, `assets`, `bun.lock`, `package.json`, `tsconfig.base.json` or `.bun-version` changed since the tag of the version production desktop runs now (`updates.moduo.app/desktop/production/latest.json`). Otherwise the summary says "Desktop: skipped" and why. With no tag for that version (the first tag release), it always builds.
 4. `notes` creates the GitHub release `vX.Y.Z` on **GrochowskiMichal/moduo-releases** with that version's notes from `releases.json`.
 
-`/ship` (§1) makes the release PR, merges it and pushes the tag. Releases run one at a time (`release-production`); GitHub keeps only one waiting, so a third tag cancels the waiting one, and `/ship` refuses to start while a release runs.
+`/release` (§1) makes the release PR, merges it and pushes the tag. Releases run one at a time (`release-production`); GitHub keeps only one waiting, so a third tag cancels the waiting one, and `/release` refuses to start while a release runs.
 
-**Re-runs:** a failed job → **Re-run failed jobs** on the release run. To redeploy web from a tag (after a rollback, or one target alone), run **deploy-prod** (owner only) with `tag` and `target`; it runs the same check and the same deploy. From Claude, `gh workflow run` of deploy-prod or Desktop Release (production) is blocked unless `/ship` approved that version; a person can run them from the Actions tab or a terminal. There are no mirror branches (REL-6 retired `prod-app`, `staging-app`, `prod-landing`, `staging-landing` and `main`): what's live is the newest `vX.Y.Z` tag that `release.yml` finished.
+**Re-runs:** a failed job → **Re-run failed jobs** on the release run. To redeploy web from a tag (after a rollback, or one target alone), run **deploy-prod** (owner only) with `tag` and `target`; it runs the same check and the same deploy. From Claude, `gh workflow run` of deploy-prod or Desktop Release (production) is blocked unless `/release` approved that version; a person can run them from the Actions tab or a terminal. There are no mirror branches (REL-6 retired `prod-app`, `staging-app`, `prod-landing`, `staging-landing` and `main`): what's live is the newest `vX.Y.Z` tag that `release.yml` finished.
 
 **The canary** (HV-28, `scripts/release/canary.ts`). The app Worker is not deployed in one go: the job uploads the build as a version (`wrangler versions upload`), then
 
@@ -150,7 +150,7 @@ An installed desktop app takes an update when the manifest it fetches offers a h
 - `RELEASES_REPO_TOKEN` is read in two places: `_desktop-release.yml`'s `publish-github` job (environment chosen by channel; it runs only until the channel's bridge is frozen, so today it is always skipped) and `release.yml`'s `notes` job (`releases-production`). A fine-grained PAT can't be narrower than one repository, so the staging copy could still write `prod-latest`; that is acceptable because only the founders can push `develop` and `mike`. A separate token (or a separate releases repo) for staging closes it fully.
 - **Desktop Release (production)** dispatched from a branch can't use `releases-production`. That's fine while the production bridge is frozen (its `publish-github` is skipped); if a bridge ever has to be re-issued, start it from the tag (*Use workflow from* → Tags → `vX.Y.Z`, a tag cut after MOD-552: an older tag's workflow reads the token in `publish`, where it is empty once the repo secret is gone).
 - **Builds made after their channel's bridge no longer list GitHub as an endpoint** (MOD-552). The frozen manifest never offered them anything newer, so the third endpoint was only a route around the update server's rollout and kill switch. Builds still list it while their channel has no frozen bridge (the build may become it).
-- **The tag is the gate.** `releases-production`, `desktop-signing` and `cloudflare-deploy` all trust any `v*` tag, and a tag push runs the tagged commit's own workflow file. A tag ruleset on `v*` (create and update limited to the founders, no deletion, no force-update) keeps that to `/ship`.
+- **The tag is the gate.** `releases-production`, `desktop-signing` and `cloudflare-deploy` all trust any `v*` tag, and a tag push runs the tagged commit's own workflow file. A tag ruleset on `v*` (create and update limited to the founders, no deletion, no force-update) keeps that to `/release`.
 
 **Signing keys: one per channel.** Today staging and production share one minisign keypair (public key id `A61FF79D41AB1E26`, `TAURI_SIGNING_PRIVATE_KEY` in `desktop-signing`), so every staging rc is a validly signed update for production installs, and a rewritten manifest could hand one to them. The change:
 

@@ -54,7 +54,7 @@ Single-sourced from the rest of the repo at build time, so nothing is copied by 
 moduo.app is this site. `apps/landing/build.mjs` builds it into `apps/landing/dist`, and the
 landing Worker there (with the `/book` router) is what ships: PR previews (`landing-preview.yml`),
 staging after `checks` on develop (`landing-deploy.yml`, home at `/landing`), and production from a
-`/ship` release tag (`_deploy-web.yml`).
+`/release` release tag (`_deploy-web.yml`).
 
 ## Waitlist and analytics
 

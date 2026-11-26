@@ -10,7 +10,7 @@
 #   - VERSION at that commit is X.Y.Z, and release-notes/releases.json there has an X.Y.Z entry
 #     (the updater manifest and the release page are rendered from it)
 #   - `checks` passed on a push of that commit. With --wait-checks, a run still going is waited
-#     for up to that many minutes (/ship tags the release PR's merge commit while develop's checks
+#     for up to that many minutes (/release tags the release PR's merge commit while develop's checks
 #     run on it); without, it must have passed already. Or the commit is the merge of a release PR
 #     that changed nothing on the way in (its tree is the PR head's, which contains its first
 #     parent) and `checks` passed on that PR's head: the same tree, already tested, so the push run
@@ -39,7 +39,7 @@ version="${tag#v}"
 
 problems=()
 [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-  || problems+=("$tag is not a release tag: release tags are vX.Y.Z (tag the release commit with /ship).")
+  || problems+=("$tag is not a release tag: release tags are vX.Y.Z (tag the release commit with /release).")
 git merge-base --is-ancestor "$sha" origin/develop \
   || problems+=("$tag points at ${sha::7}, which is not on develop. Release only commits merged into develop.")
 file_version="$(git show "$sha:VERSION" 2>/dev/null | tr -d '[:space:]' || true)"

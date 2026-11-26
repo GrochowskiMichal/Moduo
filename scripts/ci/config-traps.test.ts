@@ -253,6 +253,9 @@ describe("project skills", () => {
     const reserved = new Set([
       "plan",
       "review",
+      // Claude Code's own /ship (commit, push, open a PR) took the release skill's name on 2026-11-26.
+      "ship",
+      "steward",
       "simplify",
       "verify",
       "loop",

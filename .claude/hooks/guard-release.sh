@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# PreToolUse (Bash): a production release starts only through /ship (specs/release-v2.md, REL-3,
-# AC6). Fails closed. Blocks, unless /ship wrote the one-time marker .claude/release-approved/<X.Y.Z>:
+# PreToolUse (Bash): a production release starts only through /release (specs/release-v2.md, REL-3,
+# AC6). Fails closed. Blocks, unless /release wrote the one-time marker .claude/release-approved/<X.Y.Z>:
 #   - `git … push` of a vX.Y… tag (by name, tags/…, refs/tags/…, src:dst)
 #   - `gh … workflow run` of release, deploy-prod or Desktop Release (production), by file, name
 #     or numeric ID, keyed by -f tag=vX.Y.Z
@@ -21,7 +21,7 @@ roots=()
 top=$(git -C "${cwd:-.}" rev-parse --show-toplevel 2>/dev/null) && roots+=("$top")
 
 block() {
-  echo "Blocked: $1 A production release starts only through /ship, after the person answers its ship-now-or-hand-off question. Don't write the release marker yourself: ask the person to run /ship (or /ship vX.Y.Z for an open release PR). docs/release.md §1." >&2
+  echo "Blocked: $1 A production release starts only through /release, after the person answers its ship-now-or-hand-off question. Don't write the release marker yourself: ask the person to run /release (or /release vX.Y.Z for an open release PR). docs/release.md §1." >&2
   exit 2
 }
 
@@ -41,7 +41,7 @@ marker_for() {
 consume=()
 need() { # need <version> <what>
   local m
-  m=$(marker_for "$1") || block "$2 has no /ship approval for $1."
+  m=$(marker_for "$1") || block "$2 has no /release approval for $1."
   consume+=("$m")
 }
 

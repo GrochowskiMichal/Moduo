@@ -4,7 +4,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
 
 ## What the repo provides (committed)
 
-- **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `/ship`, `variant-hunt`, `moduo-agent` (a link into `tools/claude-plugins/moduo-agent/`; see §Moduo connector).
+- **Skills** (`.claude/skills/`): `/s1` plan, `/s2` build one block, `/s3` wrap and land, `/release`, `variant-hunt`, `moduo-agent` (a link into `tools/claude-plugins/moduo-agent/`; see §Moduo connector).
 - **Subagents** (`.claude/agents/`): `validator.md`, the skeptical staff review, runs on Tier 2 diffs only (see [agents/models-and-review.md](./agents/models-and-review.md)); `scout.md`, read-only recon on Haiku that returns files, symbols, current decisions and rules with line numbers.
 - **Router** (`scripts/agent/router.ts`, a UserPromptSubmit hook): adds the lane and risk areas to each prompt as hidden context; never blocks. `MODUO_ROUTER=off` silences it, `haiku` asks Haiku within a budget.
 - **Risk hook** (`scripts/agent/risk-hook.ts`, an async PreToolUse hook, shadow only): asks Haiku how risky each Bash, MCP and edit call is and logs the answer to `<git common dir>/moduo/risk-decisions.jsonl`; it never blocks. `bun scripts/agent/risk-hook.ts --summary` counts the log, `MODUO_RISK_HOOK=off` turns it off.
@@ -22,7 +22,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - `guard-git.sh`: blocks direct pushes to `develop`, deleting or force-pushing `develop`/`mike`/`maciej`, bare force-pushes, and branch switches in the main checkout while another Claude session works in it (tests: `guard-git.test.sh`).
   - `guard-glob.sh`: blocks a command with an unquoted glob that matches nothing (zsh would stop it with "no matches found", e.g. `--include=*.md`) and prints the quoted command.
   - `guard-lane.sh`: stops a session running bypass outside the lane sandbox, and in lanes denies production deploys and pushes to prod.
-  - `guard-release.sh`: blocks release tag pushes and prod workflow runs without `/ship`'s one-time marker.
+  - `guard-release.sh`: blocks release tag pushes and prod workflow runs without `/release`'s one-time marker.
   - `guard-secrets.sh`: gitleaks scan of staged changes on every commit.
   - `guard-prod-db.sh`: asks before any Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`.
   - `guard-design-tokens.sh`: re-runs `lint:tw` + `lint:css` after UI edits, and wakes Claude only on a violation.
@@ -31,7 +31,7 @@ How to run the agent workflow ([AGENTS.md](../AGENTS.md)) unsupervised. Moduo is
   - Entire capture hooks.
   - Every guard fails closed (`onFailure: "block"` with a timeout): a guard that crashes, times out or can't find `jq` blocks the command it guards. All hook tests run in `verify` through `scripts/agent/hooks.test.ts`; the settings contract is `scripts/agent/settings.test.ts`.
 - **Permission modes:** interactive sessions use **auto mode**. Claude Code ignores `defaultMode: "auto"` in project settings, so run `bun run agent:auto-mode` once per machine (writes it to `~/.claude/settings.json`) and pick Auto in the desktop app. Bypass runs only in unattended lanes inside the `srt` sandbox: `bash scripts/agent/lane.sh "<prompt>"` (needs `npm install -g @anthropic-ai/sandbox-runtime`, tested with 0.0.81; profile `.claude/sandbox/lane.srt.json`, lane rules `.claude/settings.lane.json`). **Frozen tests (implement phase):** `bash scripts/agent/lane.sh --implement "<prompt>"` adds `.claude/settings.implement.json` (Edit denied on `**/*.test.*`, `**/*.spec.*`, `supabase/tests/**`, `benchmarks/**`) and `.claude/sandbox/implement.srt.json` (shell writes denied there, macOS only), so the agent can't edit a test while it implements; an interactive session gets the file-tool half with `claude --settings .claude/settings.implement.json`. A one-machine stopgap while you switch: `"env": {"MODUO_ALLOW_BYPASS": "1"}` in your own `.claude/settings.local.json`.
-- **`/ship` is user-only** (`disable-model-invocation`): only a person typing it starts a release.
+- **`/release` is user-only** (`disable-model-invocation`): only a person typing it starts a release.
 - **Permissions:** `.env` files can't be read, and production deploys and migrations (`supabase db push`, `supabase db query --linked`, `supabase functions deploy`, `az deployment … create`, Supabase MCP `apply_migration` / `execute_sql` / `deploy_edge_function`) always ask first.
 - **MCP servers** (`.mcp.json`): `supabase` (scoped to the Moduo project) and `moduo`, our own connector at `https://mcp.moduo.app` (see §Moduo connector). A session should see exactly these two; `scripts/agent/mcp-config.test.ts` holds the file to that, and §One Moduo, one Supabase removes the copies that come from elsewhere. Vercel's was removed with Vercel (PLAT-8); Cloudflare is driven by `wrangler` in CI. There is no GitHub MCP: GitHub's server rejects Claude Code's sign-in (no dynamic client registration), and agents use the `gh` CLI for everything GitHub.
 - **Review rules** ([REVIEW.md](../REVIEW.md)) and the risk tiers in `scripts/ci/tier.ts` (the Tier 2 steps are `/s2` step 6).
