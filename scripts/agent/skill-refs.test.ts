@@ -92,7 +92,6 @@ describe("skill-refs scanner", () => {
 
 describe("project skills (AC15)", () => {
   it("skip vendored third-party skills (UPSTREAM.md beside SKILL.md) but still know them by name", () => {
-    expect(skills.get("security-audit")?.vendored).toBe(true);
     const vendored = { ...doc("s2", "A `research` agent reads the code."), vendored: true };
     expect(findProblems([vendored], skills)).toEqual([]);
     expect(findProblems([{ ...vendored, vendored: false }], skills)).toHaveLength(1);

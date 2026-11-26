@@ -1,5 +1,5 @@
 ---
-paths: ["e2e/**", "scripts/agent/e2e.sh", "scripts/agent/e2e-env.ts", ".claude/skills/product-lab/**"]
+paths: ["e2e/**", "scripts/agent/e2e.sh", "scripts/agent/e2e-env.ts"]
 incident: "Specs failed on the shared dev workspace's leftovers: a second workspace opened instead of the pinned one (TV-U4), a 40-project menu cut off its items (TV-U2), and parallel Focus runs collided (TV-F7)"
 expires: 2027-01-31
 ---
@@ -27,10 +27,9 @@ Compiled from the UI and build-ci gotchas (HV-14b, HV-14c). Run e2e through `scr
 - Measure insets with scrollbars on (`ignoreDefaultArgs: ["--hide-scrollbars"]`); headless can't show trackpad swipe chaining.
 - A perf harness drives real input and starts its clock at the input's first event in the page.
 
-## Running specs and the product lab
+## Running specs
 - Run e2e only through `scripts/agent/e2e.sh`, never a bare `bunx playwright test`: it adds `--project=e2e` and refuses a cloud `.env.local`.
 - The `e2e` project runs `workers: 1`: specs share one workspace and read each other's rows. Rerun a red parallel run with `--workers=1` before chasing it. A suite that finds zero tests passes, so check `playwright test --list`.
 - A bare `bun run e2e` also runs the visual project and writes a baseline for every screenshot without one: delete those, never commit them unreviewed.
 - Playwright can want a newer browser build than this Mac has ("Executable doesn't exist … chromium_headless_shell-<n>"). Don't download mid-block: use a local, uncommitted config with `use.channel: "chrome"`.
 - The perf spec needs the local stack and its 10,000-task fixture (`bun run perf`); CI runs neither, and medians compare only on one machine.
-- Run one product-lab run (`lab.mjs`) at a time per Mac: each run re-seeds the `lab*@moduo.local` people and soft-deletes their previous workspaces. Its preview server takes `LAB_PORT` when two lanes need the build.

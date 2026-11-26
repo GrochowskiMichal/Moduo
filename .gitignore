@@ -119,7 +119,7 @@ storybook-static/
 # Deno writes a lock wherever it runs; the real one is supabase/functions/deno.lock.
 /deno.lock
 
-# Product lab dossiers (/product-lab, /product-jury): screenshots of seeded data, never source.
+# Dossiers of the product lab (removed 2026-11-26): old local screenshots of seeded data, never source.
 .lab/
 # A/B rig results, transcripts and diffs (scripts/harness-ab/)
 .harness-ab/

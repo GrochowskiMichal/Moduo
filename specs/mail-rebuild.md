@@ -1,5 +1,7 @@
 # Spec: Mail rebuild (engine, store, screens, power features)
 
+> The product lab (`e2e/lab`, its journeys and states) was removed on 2026-11-26. Where this spec names a lab journey or state as proof, prove it with an e2e spec or a live check instead.
+
 > Status: **Draft, awaiting approval** · Owner: mike · Planned 2026-11-03 (`/s1`, three recon passes over `origin/mike` 725a482fc) · Milestone: **Open alpha** (16 Nov)
 > Related: [.design/email/BRIEF.md](../.design/email/BRIEF.md) (JTBD, spine wiring, still authoritative) · [.design/email/DESIGN_BRIEF.md](../.design/email/DESIGN_BRIEF.md) (triage model §2, great moment §4; **this spec supersedes its §3 layout, §6 search and §8 provider list**) · [specs/email.md](./email.md) (EM-1…EM-11, the module this replaces) · [specs/global-search.md](./global-search.md) (GS-9, the ⌘K Email group this feeds) · [specs/import.md](./import.md) (IM-2 history depth; IM-2c-b is absorbed here) · [docs/data-layers.md §6](../docs/data-layers.md)
 >
