@@ -90,7 +90,10 @@ export async function fetchGoogleWebEvents(input: {
   timeMax: string;
 }): Promise<Record<string, unknown>[]> {
   const payload = await invoke({ action: "events", ...input });
-  return Array.isArray(payload.events) ? (payload.events as Record<string, unknown>[]) : [];
+  // An answer without an events list (a captive portal's HTML page, a damaged body) is a
+  // failure, never "no events": read as empty, the sync would tombstone the mirror.
+  if (!Array.isArray(payload.events)) throw new Error("google_no_events");
+  return payload.events as Record<string, unknown>[];
 }
 
 export async function pushGoogleWebEvent(input: {
