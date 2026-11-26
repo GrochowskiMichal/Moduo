@@ -104,6 +104,13 @@ Full entries for this area, newest first. The one-line index of every area, [doc
   - Why: prod is clean today (0 violations of every new constraint), so the invariants can be enforced now, before data makes them expensive. Each fix replaces a convention that had already been missed once (re-root freeze, limit-then-filter, the guard mirror).
   - Rejected: rewriting `can_access` (the key makes it unnecessary); dropping legacy tables before the erasure re-cut; `.select()` per call instead of a lean return type; bytea for documents.
 
+- **2026-11-26 · Notes' sidebar has no Search row; the bottom bar's Search is the one way in** → `shell/notes-sidebar.tsx`
+  - status: current
+  - Replaces only the Search row of the 2026-10-23 Impeccable pass below (the rest of that entry stands); NR-10's "sidebar search row → palette" is dropped with it.
+  - Who: Mike, 2026-11-26.
+  - Decision: the row atop the tree goes. The bottom bar's Search (and its key) still opens Notes' own search in the tree's place, because `notes-shell.tsx` claims the press (`onSearchRequest`, as Chat does); outside Notes it opens ⌘K.
+  - Why: one search entry in every module, in the bar people already use for it, searching the module that is open first. The row duplicated it and took the tree's first line.
+
 - **2026-10-23 · The Impeccable pass on Notes: search is back in the sidebar, publish names what goes public, every note action has a key, and the spine leads the slash menu.** An Impeccable critique (26/40) and audit (14/20) of the live Notes found, among others: body text unsearchable, sub-pages published without a word, note actions and comments mouse-only on a Mac, an empty list left by ⌘⇧T. Mike asked for all of it. What changed, and what it rests on:
   - status: current
   - **Search (interim until NR-10):** the bottom bar's Search, and a Search row atop the sidebar, open Notes' own search in the tree's place (the spec's "the sidebar keeps its full-text search" until ⌘K takes it over). Titles match at once on this device (`find.ts`, case and accents aside), what notes say comes from `notesV2.search` (the `search_tsv` index) a beat later, with the line it was found in; a failed text search says so and keeps the titles. ⌘K is unchanged; NR-10 stays open.
