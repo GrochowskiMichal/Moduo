@@ -51,6 +51,29 @@ fn google_calendar_client() -> (Option<String>, Option<String>) {
     )
 }
 
+/// Gmail's sign-in client. Moduo has one Google Cloud project for everything, so
+/// Mail signs in with the same Desktop client as Calendar (already baked into
+/// release builds); a dev `.env` may name a mail client of its own. Reading only
+/// the launch environment, an app opened from Finder never had one, and "Sign in
+/// with Google" in Mail always answered `google_oauth_not_configured`.
+fn google_mail_client() -> (Option<String>, Option<String>) {
+    mail_or_shared(
+        (
+            runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
+            runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
+        ),
+        google_calendar_client(),
+    )
+}
+
+/// A mail client of its own when one is named, else the shared one; as a pair.
+fn mail_or_shared(
+    mail: (Option<String>, Option<String>),
+    shared: (Option<String>, Option<String>),
+) -> (Option<String>, Option<String>) {
+    pick_pair(mail, shared)
+}
+
 fn pick_pair(
     runtime: (Option<String>, Option<String>),
     built: (Option<String>, Option<String>),
@@ -88,6 +111,7 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn from_env() -> Self {
         let (calendar_google_client_id, calendar_google_client_secret) = google_calendar_client();
+        let (email_google_client_id, email_google_client_secret) = google_mail_client();
         Self {
             keychain_service: std::env::var("MODUO_KEYCHAIN_SERVICE")
                 .ok()
@@ -95,8 +119,8 @@ impl AppConfig {
                 .unwrap_or_else(|| default_keychain_service().to_string()),
             calendar_google_client_id,
             calendar_google_client_secret,
-            email_google_client_id: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_ID"),
-            email_google_client_secret: runtime_setting("MODUO_EMAIL_GOOGLE_CLIENT_SECRET"),
+            email_google_client_id,
+            email_google_client_secret,
             calendar_microsoft_client_id: oauth_client!("MODUO_CALENDAR_MICROSOFT_CLIENT_ID"),
             zoom_client_id: runtime_setting("MODUO_ZOOM_CLIENT_ID"),
             zoom_client_secret: runtime_setting("MODUO_ZOOM_CLIENT_SECRET"),
@@ -129,6 +153,17 @@ mod tests {
         assert_eq!(pick_setting(Some("  ".into()), Some("built")), Some("built".into()));
         assert_eq!(pick_setting(Some(String::new()), Some("")), None);
         assert_eq!(pick_setting(None, None), None);
+    }
+
+    #[test]
+    fn mail_signs_in_with_moduos_one_google_client_unless_given_its_own() {
+        let some = |v: &str| Some(v.to_string());
+        let calendar = (some("moduo-id"), some("moduo-secret"));
+        // One Google Cloud project for everything: no mail client set, use Moduo's.
+        assert_eq!(mail_or_shared((None, None), calendar.clone()), calendar);
+        // A mail client of its own (a dev `.env`) still wins, as a pair.
+        let own = (some("mail-id"), some("mail-secret"));
+        assert_eq!(mail_or_shared(own.clone(), calendar.clone()), own);
     }
 
     #[test]
