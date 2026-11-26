@@ -55,7 +55,7 @@ export function MyTasksEmpty({ canEdit, onAdd }: { canEdit: boolean; onAdd: () =
       hint={
         canEdit ? (
           <>
-            or press <Kbd>c</Kbd>; <Kbd>@</Kbd> in a task’s name assigns it
+            or press <Kbd>C</Kbd>; <Kbd>@</Kbd> in a task’s name assigns it
           </>
         ) : undefined
       }

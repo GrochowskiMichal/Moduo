@@ -394,7 +394,7 @@ describe("Focus: the empty state teaches three ways in (AC8.9, call 66)", () => 
     });
     const onSelectTask = rs.fn();
     await renderView(fx, { onSelectTask });
-    expect(screen.getByText("Line up what you’ll do next, then press Start.")).toBeTruthy();
+    expect(screen.getByText("Line up what you’ll do next, then press Start")).toBeTruthy();
     expect(screen.getByText(/on any task to add it here/)).toBeTruthy();
     expect(screen.getByText(/on a task to focus on it alone/)).toBeTruthy();
     const rows = within(screen.getByRole("list", { name: "Scheduled today" })).getAllByRole(

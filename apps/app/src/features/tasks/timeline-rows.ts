@@ -633,7 +633,9 @@ export function buildTimelineRows(input: TimelineRowsInput): TimelineRowsResult 
     const project = input.projects.find((p) => p.id === scope.projectId);
     if (project) rows.push(projectRow(ctx, project, 0, false));
     const group = input.group === "assignee" || input.group === "none" ? input.group : "section";
-    rows.push(...projectBody(ctx, scope.projectId, 0, group));
+    rows.push(
+      ...projectBody(ctx, scope.projectId, projectScopeDepth(ctx, scope.projectId, group), group),
+    );
   } else {
     rows.push(...taskScopeRows(ctx));
   }
@@ -648,6 +650,18 @@ export function buildTimelineRows(input: TimelineRowsInput): TimelineRowsResult 
     if (!point && !parentInScope(ctx, task)) undated += 1;
   }
   return { rows, extent: ctx.extent, dueDays: ctx.dueDays, undated, hasMarks: ctx.hasMarks };
+}
+
+/**
+ * Where a project's own rows start inside its Timeline. Sections and people
+ * are headers at the project's level, their tasks a level in. With neither,
+ * the tasks themselves go a level in, so they start on the project name's
+ * line rather than left of it.
+ */
+function projectScopeDepth(ctx: Ctx, projectId: string, group: TimelineGroup): number {
+  if (group === "assignee") return 0;
+  const sections = ctx.sectionsByProject.get(projectId) ?? [];
+  return group === "section" && sections.length > 0 ? 0 : 1;
 }
 
 function workspaceRows(ctx: Ctx): TimelineRow[] {
