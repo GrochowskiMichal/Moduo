@@ -2,7 +2,7 @@
 
 > **Status (2026-11-27): round 2a drawn; calls 52–62 open.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html), published at https://claude.ai/artifact/57jvvKBZKYGE1fwQA5V5VJ.
-> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). 16 b, 24 a, 29 a, 36 a after the explanations; checks settled 2026-11-27: 5 ok, 17 b, 21 a, 30 b. **Open:** 52–62 (§8, Round 2a: every surface state by state, the key map, and the calls it opens). Prototype: `prototypes/round-2a.html`.
+> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). 16 b, 24 a, 29 a, 36 a after the explanations; checks settled 2026-11-27: 5 ok, 17 b, 21 a, 30 b. **Open:** 52–62 (§8, Round 2a: every surface state by state, the key map, and the calls it opens). Prototype: `prototypes/round-2a.html`, published at https://claude.ai/artifact/F1YoYXLo4nemRhraqsaeEp.
 > - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. Holes and how they map to calls: §1.5.
 > - **Next:** answers to 52–62 → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
