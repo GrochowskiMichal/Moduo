@@ -76,6 +76,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-11-27 · `manage-integration` takes only a desktop Google Calendar token and has no disconnect; the desktop has no Zoom/Meet sign-in (EB-1, Mike's engineer-mode call).
 - 2026-11-22 · Stored OAuth tokens are written only for the signed-in person, and the token encryption secret stays on the server; a CalDAV password goes only to its server's own domain (MOD-554, MOD-551, Mike's engineer-mode call).
 - 2026-10-26 · A new link needs Edit on at least one of its two items; `exposed_notes` takes no writes (MOD-593, MOD-594, Mike's call).
 - 2026-10-24 · Four item checks closed (MOD-553, MOD-572, MOD-549, MOD-573): a note's new parent needs Edit and putting a note on the web by moving it needs ws.publish and Full; contact ops check the contact; removing a task dependency through its link needs Edit on the waiting task; member exceptions are checked as stored and when a role change would switch them on.

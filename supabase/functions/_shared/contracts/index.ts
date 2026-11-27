@@ -47,7 +47,6 @@ export {
   emailBodySchema,
   issueFounderCouponBodySchema,
   manageIntegrationBodySchema,
-  manageIntegrationQuerySchema,
   notesPublicTokenSchema,
   waitlistJoinBodySchema,
   workspaceInviteWebhookBodySchema,

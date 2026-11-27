@@ -1,7 +1,9 @@
 /**
- * manage-integration (MOD-554): the desktop app stores or removes the person's
- * own Zoom / Google Meet / Google Calendar tokens on `user_integrations`, so
- * booking links can create meetings while the app is closed.
+ * manage-integration (MOD-554): the desktop app stores the person's own Google
+ * Calendar tokens on `user_integrations`, so booking links can create events
+ * and Meet links while the app is closed. Zoom and Meet connect through booking
+ * links on every platform, so the function takes no other provider and has no
+ * disconnect (EB-1); a Google login disconnects per login elsewhere.
  *
  * Who: the person's Supabase session (Authorization: Bearer), verified with
  * getUser(); the user is the token's, never one named in the request. An app
@@ -13,16 +15,11 @@
  * with the user_id taken from the body: anyone holding it could write or
  * delete any person's integration.)
  *
- * POST   { provider, access_token, refresh_token?, expires_at? } → { success }
- * DELETE ?provider=zoom|google_meet                               → { success }
+ * POST { provider: "google_calendar", access_token, refresh_token?, expires_at? } → { success }
  */
 
 import { APP_TOKEN_REFUSAL, type UserVerifier, verifiedPerson } from "../_shared/app-token.ts";
-import {
-  manageIntegrationBodySchema,
-  manageIntegrationQuerySchema,
-  parseJsonBody,
-} from "../_shared/contracts/http-bodies.ts";
+import { manageIntegrationBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
 
 type DbResult<T> = PromiseLike<{ data: T | null; error: { message: string } | null }>;
@@ -32,7 +29,6 @@ export interface IntegrationsDb {
   findId(userId: string, provider: string, accountKey: string): DbResult<{ id: string }>;
   insert(row: IntegrationRow): DbResult<unknown>;
   update(id: string, row: IntegrationRow): DbResult<unknown>;
-  remove(userId: string, provider: string): DbResult<unknown>;
 }
 
 export interface IntegrationRow {
@@ -65,27 +61,13 @@ export async function handleManageIntegration(
   req: Request,
   deps: ManageIntegrationDeps,
 ): Promise<Response> {
-  if (req.method !== "POST" && req.method !== "DELETE") {
+  if (req.method !== "POST") {
     return json({ error: "method not allowed" }, 405);
   }
   const caller = await verifiedPerson(deps.auth, req.headers.get("Authorization"));
   if (caller.kind === "app") return json(APP_TOKEN_REFUSAL, 403);
   if (caller.kind !== "person") return json({ error: "unauthorized" }, 401);
-  return req.method === "DELETE"
-    ? disconnect(req, caller.user.id, deps)
-    : save(req, caller.user.id, deps);
-}
-
-async function disconnect(req: Request, uid: string, deps: ManageIntegrationDeps): Promise<Response> {
-  const url = new URL(req.url);
-  // Exactly one `provider` and nothing else: a smuggled second parameter is
-  // refused, not silently resolved.
-  const keys = [...url.searchParams.keys()];
-  const query = parseJsonBody(manageIntegrationQuerySchema, Object.fromEntries(url.searchParams));
-  if (keys.length !== 1 || !query.success) return json({ error: "invalid provider" }, 400);
-  const { error } = await deps.db.remove(uid, query.data.provider);
-  if (error) console.error("[manage-integration] delete failed:", error.message);
-  return error ? json({ error: "delete_failed" }, 500) : json({ success: true });
+  return save(req, caller.user.id, deps);
 }
 
 async function readBody(req: Request) {
@@ -104,19 +86,15 @@ async function save(req: Request, uid: string, deps: ManageIntegrationDeps): Pro
   const body = parsed.data;
 
   // One row per Google login (account_key = its email, as booking-google-connect
-  // stores it); Zoom and Meet are one row each with an empty key. The email
-  // comes from Google, not from the request. No email, no save: an unkeyed
-  // row would sit beside the login's keyed one.
-  let accountKey = "";
-  if (body.provider === "google_calendar") {
-    accountKey = ((await deps.googleEmail(body.access_token)) ?? "").trim().toLowerCase();
-    if (!accountKey) return json({ error: "google_email_unknown" }, 502);
-  }
+  // stores it). The email comes from Google, not from the request. No email, no
+  // save: an unkeyed row would sit beside the login's keyed one.
+  const accountKey = ((await deps.googleEmail(body.access_token)) ?? "").trim().toLowerCase();
+  if (!accountKey) return json({ error: "google_email_unknown" }, 502);
   const row = await encryptedRow(uid, body, accountKey, deps);
 
   let existing = await deps.db.findId(uid, body.provider, accountKey);
   // A Google row saved before account keys existed has an empty key: adopt it.
-  if (!existing.data && !existing.error && accountKey) {
+  if (!existing.data && !existing.error) {
     existing = await deps.db.findId(uid, body.provider, "");
   }
   const saved = existing.error
