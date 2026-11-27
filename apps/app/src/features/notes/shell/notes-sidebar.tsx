@@ -70,7 +70,6 @@ export type NotesSidebarProps = {
   onUnfavorite: (id: string, opts?: { undoable?: boolean }) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
-  onImport?: () => void;
   /** Notes' own search, shown in the tree's place while open. */
   search: {
     open: boolean;
@@ -395,9 +394,6 @@ export function NotesSidebar(props: NotesSidebarProps) {
           // "Deleted": three labels fit the rail only short (its view is
           // still titled Recently deleted).
           footerItem("trash", Trash2, "Deleted"),
-          ...(props.onImport
-            ? [{ icon: Import, label: "Import notes", onSelect: props.onImport, iconOnly: true }]
-            : []),
         ]}
       />
       {/* What follows the pointer. pointer-events-none is load-bearing: the

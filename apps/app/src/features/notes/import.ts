@@ -434,3 +434,6 @@ export function describeSkips(counts: Record<ImportSkipKind, number>): string {
     .map((kind) => `${counts[kind]} ${label[kind][counts[kind] === 1 ? 0 : 1]}`);
   return parts.length ? parts.join(" · ") : "nothing";
 }
+
+/** Fired after an import lands, so a mounted Notes page reloads its tree. */
+export const NOTES_IMPORTED_EVENT = "moduo:notes-imported";
