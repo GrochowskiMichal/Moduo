@@ -56,6 +56,11 @@ export type WritePlanContext = {
   statuses: readonly ProjectStatus[];
   /** Live subtasks by parent, done and Won't do ones too (`childrenByParentOf`). */
   subtasksByParent: ReadonlyMap<string, readonly Task[]>;
+  /**
+   * A task the server doesn't have yet (its capture still saving, the
+   * commands' `stillSaving`). Without it, only a `tmp-` id counts.
+   */
+  stillSaving?: (id: string) => boolean;
   /** Every queue row I can see, anyone's (TV-D2), and my own line-up. */
   queueRows: readonly TaskQueueEntry[];
   myQueueEntries: readonly TaskQueueEntry[];
@@ -236,11 +241,25 @@ const pickStatus = (t: Task): Pick<Task, "status" | "statusId" | "statusCategory
   statusCategory: taskCategoryOf(t),
 });
 
-/** Why `before` can't be written now, or null. */
-function refusalOf(before: Task, ctx: WritePlanContext): WritePlan | null {
+/**
+ * Moving a task carries its subtasks in the same server call (TV-D8), but
+ * one whose capture is still saving isn't on the server to carry: sent now,
+ * the move lands first and the capture then lands in the old project, apart
+ * from its parent (MOD-733). The move waits instead.
+ */
+function movesUnsavedSubtask(before: Task, patch: WritePatch, ctx: WritePlanContext): boolean {
+  if (patch.bucketId === undefined || patch.bucketId === before.bucketId) return false;
+  const stillSaving = ctx.stillSaving ?? isTempId;
+  return (ctx.subtasksByParent.get(before.id) ?? []).some((t) => !t.deletedAt && stillSaving(t.id));
+}
+
+/** Why `before` can't be written now (with `patch`), or null. */
+function refusalOf(before: Task, patch: WritePatch, ctx: WritePlanContext): WritePlan | null {
   if (!ctx.canEdit) return { kind: "refused", reason: "no-edit" };
   if (before.deletedAt) return { kind: "refused", reason: "deleted" };
-  if (isTempId(before.id)) return { kind: "refused", reason: "still-saving" };
+  if (isTempId(before.id) || movesUnsavedSubtask(before, patch, ctx)) {
+    return { kind: "refused", reason: "still-saving" };
+  }
   if (ctx.archivedTaskIds.has(before.id)) {
     return {
       kind: "refused",
@@ -296,7 +315,7 @@ function omit(fields: TaskFieldPatch, keys: readonly (keyof TaskFieldPatch)[]): 
  * shows at once and sends.
  */
 export function planTaskWrite(before: Task, patch: WritePatch, ctx: WritePlanContext): WritePlan {
-  const refusal = refusalOf(before, ctx);
+  const refusal = refusalOf(before, patch, ctx);
   if (refusal) return refusal;
 
   // A new due date shows its day at once too (TV-D9).
@@ -416,7 +435,7 @@ export function planTaskWrite(before: Task, patch: WritePatch, ctx: WritePlanCon
 
   // Moving a parent takes its subtasks along (TV-P0): shown at once for
   // every subtask, then settled by the server, which carries the ones you
-  // can edit (TV-D8). One still saving isn't on the server to carry.
+  // can edit (TV-D8). One still saving holds the move (`refusalOf`, MOD-733).
   const moving = change.bucketId !== undefined && change.bucketId !== before.bucketId;
   const movedChildIds = moving
     ? (ctx.subtasksByParent.get(before.id) ?? [])
