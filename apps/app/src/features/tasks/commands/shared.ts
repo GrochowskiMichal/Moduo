@@ -205,6 +205,7 @@ export function createShared(ctx: TaskCommandsContext) {
       bucketsById: byIdOf(d.allBuckets),
       statuses: d.statuses,
       subtasksByParent: childrenByParentOf(d.liveTasks),
+      stillSaving,
       queueRows: d.allQueueRows,
       myQueueEntries: d.myQueueEntries,
       now: new Date(),

@@ -464,7 +464,6 @@ describe("planTaskWrite: subtasks follow a move (TV-P0, TV-D8)", () => {
     task("c-open", { parentId: "p" }),
     task("c-done", { parentId: "p", status: "done", statusCategory: "done" }),
     task("c-wont", { parentId: "p", status: "archived", statusCategory: "wont_do" }),
-    task("tmp-c", { parentId: "p" }),
     task("c-there", { parentId: "p", bucketId: "p2" }),
     task("other", { parentId: "x" }),
   ];
@@ -472,7 +471,7 @@ describe("planTaskWrite: subtasks follow a move (TV-P0, TV-D8)", () => {
   it("moving a parent shows its subtasks there too, done and Won't do ones as well", () => {
     const plan = written(planTaskWrite(parent, { bucketId: "p2" }, ctxOf({}, live)));
     expect(plan.moving).toBe(true);
-    // Not one still saving (the server can't carry it), nor one already there.
+    // Not one already there.
     expect(plan.movedChildIds).toEqual(["c-open", "c-done", "c-wont"]);
     expect(plan.overlay.slice(1)).toEqual(
       ["c-open", "c-done", "c-wont"].map((id) => ({
@@ -481,6 +480,19 @@ describe("planTaskWrite: subtasks follow a move (TV-P0, TV-D8)", () => {
       })),
     );
     expect(plan.fields).toEqual({ bucketId: "p2" });
+  });
+
+  it("a subtask still saving holds the move: Still saving (MOD-733)", () => {
+    const saving = [...live, task("tmp-c", { parentId: "p" })];
+    expect(planTaskWrite(parent, { bucketId: "p2" }, ctxOf({}, saving))).toEqual({
+      kind: "refused",
+      reason: "still-saving",
+    });
+    // A queued capture under a real id, as the commands' `stillSaving` says.
+    const queued = { ...ctxOf({}, live), stillSaving: (id: string) => id === "c-open" };
+    expect(planTaskWrite(parent, { bucketId: "p2" }, queued).kind).toBe("refused");
+    // An edit that doesn't move it isn't held.
+    expect(planTaskWrite(parent, { title: "x" }, ctxOf({}, saving)).kind).toBe("write");
   });
 
   it("an edit that stays in the project takes nothing along", () => {
