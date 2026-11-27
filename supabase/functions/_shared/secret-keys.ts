@@ -22,8 +22,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Parse the SUPABASE_SECRET_KEYS value and return the `default` secret key. */
-export function parseSecretKeys(raw: string | null): string {
+/**
+ * Parse the SUPABASE_SECRET_KEYS value and return the `default` secret key.
+ * Takes `undefined` too: that is what `Deno.env.get` returns for an unset var.
+ */
+export function parseSecretKeys(raw: string | null | undefined): string {
   if (!raw) {
     throw new SecretKeyConfigError(
       'is not set. Add it to Edge Function secrets as the JSON object of secret keys, e.g. {"default":"sb_secret_..."}.',
