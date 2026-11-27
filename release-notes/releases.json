@@ -1,6 +1,35 @@
 {
   "releases": [
     {
+      "version": "1.8.2",
+      "date": "2026-11-26",
+      "highlights": [
+        "Signing in to a Gmail account in Mail now works in the installed desktop app."
+      ],
+      "items": [
+        {
+          "type": "improved",
+          "text": "Notes shows the right key for a new note in the browser, and its small labels read more cleanly."
+        },
+        {
+          "type": "improved",
+          "text": "Late tasks say “late” beside their date in the List and on the Board. When Tasks can't load, it says so instead of showing an empty view."
+        },
+        {
+          "type": "fixed",
+          "text": "A calendar login that stopped working now shows in Settings with a Reconnect button, and reconnecting in the desktop app repairs it."
+        },
+        {
+          "type": "fixed",
+          "text": "Signing in to a Gmail account in Mail now works in the installed desktop app."
+        },
+        {
+          "type": "fixed",
+          "text": "A mail account whose sign-in has ended now asks you to reconnect, where it used to go quietly offline."
+        }
+      ]
+    },
+    {
       "version": "1.8.1",
       "date": "2026-11-25",
       "highlights": [
