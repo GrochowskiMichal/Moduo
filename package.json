@@ -18,6 +18,8 @@
     "preview:landing": "bun scripts/preview-landing.ts",
     "dev:desktop": "zsh -lc 'set -a; [[ -f .env.local ]] && source .env.local; set +a; (cd apps/app && export MODUO_TARGET=desktop && exec ../../node_modules/.bin/rsbuild dev --host 127.0.0.1 --port 8081) & WEB_PID=$!; trap \"kill $WEB_PID\" EXIT INT TERM; cd apps/desktop && node ../../node_modules/@tauri-apps/cli/tauri.js dev'",
     "dev:desktop:signed": "bun run build:desktop:signed:debug && open ./apps/desktop/src-tauri/target/debug/bundle/macos/moduo.app",
+    "native:dev": "cargo run --manifest-path apps/native/Cargo.toml -p moduo-app",
+    "native:check": "cd apps/native && cargo fmt --all --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked",
     "build:web": "bun run --cwd apps/app build",
     "build:desktop:web": "bun run --cwd apps/app build:desktop",
     "build:desktop": "bun run --cwd apps/desktop build",
