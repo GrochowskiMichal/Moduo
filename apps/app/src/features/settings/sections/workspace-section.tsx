@@ -21,6 +21,7 @@ import { useAuth } from "../../../providers/auth-provider";
 import { useWorkspace } from "../../../providers/workspace-provider";
 import { normalizeWorkspaceIcon } from "../../branding/image-asset";
 import { clearWorkspaceLogo, uploadWorkspaceLogo } from "../../branding/upload-image";
+import { NotesImportGroup } from "../../notes/ui/notes-import-group";
 import { departureLines } from "../../tasks/project-overview";
 import { WorkspaceMark, WorkspaceMarkPicker } from "../../workspaces/ui/workspace-mark";
 import { useDepartureSummary } from "../access/departure";
@@ -56,6 +57,7 @@ export function WorkspaceSection() {
     createWorkspace,
     selectWorkspace,
     refreshAccessData,
+    modulePermissions,
   } = useWorkspace();
 
   const { allowed: canAddWorkspace } = useEntitlement("unlimited_workspaces");
@@ -320,6 +322,12 @@ export function WorkspaceSection() {
               onSave={(key) => setTaskKey(selectedWorkspace.id, key)}
             />
           </WsGroup>
+
+          {modulePermissions.notes === "edit" ? (
+            <WsGroup label="Import">
+              <NotesImportGroup workspaceId={selectedWorkspace.id} />
+            </WsGroup>
+          ) : null}
 
           {/* People, roles and invites moved to Members and access (PERM-2). */}
           <WsGroup label="People">

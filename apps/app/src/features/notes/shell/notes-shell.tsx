@@ -32,7 +32,6 @@ import type { Note } from "../model";
 import { noteEditorName } from "../note-meta";
 import { isPublished } from "../publish";
 import { displayTitle } from "../title";
-import { NoteImportDialog } from "../ui/note-import-dialog";
 import { NotePublishControl } from "../ui/note-publish-control";
 import { buildBreadcrumb, type CrumbSection } from "./breadcrumb";
 import { createLinkedNote } from "./create-linked-note";
@@ -69,7 +68,6 @@ function NotesShellBody() {
   const { runtime, userId, workspace, workspaceId, module, selectedId, selectedNote, draft } =
     shell;
   const { notes, favorites, engine, canEdit, degraded, loading } = module;
-  const [importOpen, setImportOpen] = useState(false);
   const [footerView, setFooterView] = useState<FooterView | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -405,7 +403,6 @@ function NotesShellBody() {
                 void module.purgeNote(id);
                 if (selectedId === id) shell.select(null, true);
               }}
-              onImport={canEdit && !degraded ? () => setImportOpen(true) : undefined}
               search={{
                 open: searchOpen,
                 query: searchQuery,
@@ -488,16 +485,6 @@ function NotesShellBody() {
           }
         />
       </DndContext>
-      <NoteImportDialog
-        runtime={runtime}
-        workspaceId={workspaceId}
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        onImported={module.refresh}
-        existingRootPositions={notes
-          .filter((n) => !n.parentId && !n.deletedAt)
-          .map((n) => n.position)}
-      />
       <MoveToDialog
         note={actions.moveTarget}
         sections={shell.sections}

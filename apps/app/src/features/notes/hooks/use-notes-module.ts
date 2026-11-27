@@ -13,6 +13,7 @@ import type { ModuoRuntime } from "../../../lib/runtime.types";
 import { undoToast } from "../../../lib/undo-toast";
 import { endPosition } from "../../tasks/helpers";
 import type { Draft } from "../draft-note";
+import { NOTES_IMPORTED_EVENT } from "../import";
 import type { Note, NoteFavorite } from "../model";
 import { repairNote, repairUnmaterializedNotes } from "../repair";
 import { NotesSyncEngineV2, type NotesSyncStatusV2 } from "../sync/engine-v2";
@@ -129,6 +130,10 @@ export function useNotesModule(runtime: ModuoRuntime | null, params: Params) {
     }
   }, [ready, runtime, userId, workspaceId, withFavorites]);
   refreshRef.current = () => void load();
+  useEffect(() => {
+    window.addEventListener(NOTES_IMPORTED_EVENT, fireRefresh);
+    return () => window.removeEventListener(NOTES_IMPORTED_EVENT, fireRefresh);
+  }, [fireRefresh]);
 
   // ── background refresh ─────────────────────────────────────────────────────
   // There is no live feed for the note list (the live channel carries only the
