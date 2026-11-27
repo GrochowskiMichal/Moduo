@@ -1,10 +1,10 @@
 # Mail v4: the rethink
 
-> **Status (2026-11-27): round 2a drawn; calls 52–59 open.** Phase 1 (design, with Maciej). No product code, no migrations.
+> **Status (2026-11-27): round 2a drawn; calls 52–62 open.** Phase 1 (design, with Maciej). No product code, no migrations.
 > - Branch `t/maciej/email-plan` (from `origin/maciej` @ e566e71ef). Research: [`research/`](./research/) (Spark, Superhuman and others, Mail as built). Round-1 prototype: [`prototypes/round-1.html`](./prototypes/round-1.html), published at https://claude.ai/artifact/57jvvKBZKYGE1fwQA5V5VJ.
-> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). 16 b, 24 a, 29 a, 36 a after the explanations; checks settled 2026-11-27: 5 ok, 17 b, 21 a, 30 b. **Open:** 52–59 (§8, Round 2a: every surface state by state, the key map, and the calls it opens). Prototype: `prototypes/round-2a.html`.
+> - **Answered 2026-11-26:** all 51 (his words under each call, §8; 47–51 = the bottom bar in every module, §8 J). 16 b, 24 a, 29 a, 36 a after the explanations; checks settled 2026-11-27: 5 ok, 17 b, 21 a, 30 b. **Open:** 52–62 (§8, Round 2a: every surface state by state, the key map, and the calls it opens). Prototype: `prototypes/round-2a.html`.
 > - **Baseline scored (2026-11-23):** Mail as built today scores **6.7** in the blind jury (Usability 6 · Craft 7 · Speed 7 · Platform 7 · Character 7; no caps, no hard fails), or 6.6 on the prototype scale, against round 1's 7.1. Holes and how they map to calls: §1.5.
-> - **Next:** answers to 52–59 → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
+> - **Next:** answers to 52–62 → 2b → reconcile → final prototype through the critic loop → `specs/mail-v4.md` → Ready.
 > - **Re-entry point for a fresh session:** this status block, then §8.
 
 ## 0. How to read this
@@ -622,19 +622,28 @@ Cells: number = settled by that call · **A** = agent's choice (one line why, in
 | **Rail** | 4 a (Inbox · Set aside · Snoozed · Follow-ups · Drafts · Sent · Accounts · Saved searches · More); Outbox appears while it holds mail (A) | First run: only "Connect an account" (A, round 1 critics) | Counts as skeletons, places usable (A) | Per-account "Couldn't sync · Retry" under the account (A) | Accounts dimmed with "Offline" (A) | 43 a (rows 28 px) | Six splits + many folders: folders fold, splits show "+N" (6 a) | Account menu (A) |
 | **List: Tabs** | 5 ok: Personal · splits · Notifications · Newsletters; × on splits (6 a); empty tabs hide; 20 b check-in line on return | "{Tab} is clear" once (A); first sync shows progress, not "clear" (A) | Skeleton rows (A) | **A: new** "Couldn't load this list · Retry" (today a failed read looks like "clear") | Cached rows + "Offline · showing what's on this computer" (A) | 43 a Dense (28 px, no snippet) | 300+ conversations, 120-character subjects, 40-person threads (A) | Hover actions **54**; right-click menu (A); Group by sender 7 a |
 | **List: Sections · Cards · Simple list** | 5 ok, one frame each | Same as Tabs (A) | Same (A) | Same (A) | Same (A) | Dense applies to Sections and Simple list; Cards keep 3 rows (A) | Sections fold past 50 (A) | — |
-| **Reader** | Split or Full **52**; toolbar on the email (2 b: Done · Snooze · Set aside · Reply · Task · ⋯ with Print 18 a); summary line under the subject (28 a, "Task · Hero photos · 2 more") | Nothing open: a quiet "Nothing open · j/k to move" (A) | Body pending: header now, body skeleton (A); 40 a reads ahead | "Couldn't download this email · Retry" (A) | Body not on this computer yet: "Comes in when you're online" (A) | — | 30-message thread: older messages folded to "12 earlier" (A); huge newsletter scrolls inside (A) | Invite bar 31 a; tracker and unsubscribe bars (kept); "Why here?" sheet (kept) |
-| **Composer (inline)** | Docked so Send is always on screen **53**; 13 a rich text; 16 b Bcc chip + groups; one signature per address (15 b); `;;` snippets; ⌘⇧T templates 14 a | — | Attachments uploading with progress (A) | Failed send: one banner style across Mail, on the draft and in Outbox (A, closes B7) | Send goes to Outbox: "Sends when you're back online" (A) | — | Long reply: the thread shrinks, the composer keeps its Send row (53) | Send later picker 17 b; template picker; snippet picker kept in view (closes B1's second half) |
+| **Reader** | Split or Full **52**; toolbar on the email (2 b: Done · Snooze · Set aside · Reply · Task · ⋯ with Print ⌘P 18 a; Schedule ⇧C 30 b; Discuss in chat ⇧D 35 a); summary line under the subject (28 a, "Task · Hero photos · 2 more") | Nothing open: a quiet "Nothing open · j/k to move" (A) | Body pending: header now, body skeleton (A); 40 a reads ahead | "Couldn't download this email · Retry" (A) | Body not on this computer yet: "Comes in when you're online" (A) | — | 30-message thread: older messages folded to "12 earlier" (A); huge newsletter scrolls inside (A) | Invite bar 31 a (states below); tracker and unsubscribe bars (kept); "Why here?" sheet (kept) |
+| **Composer (inline)** | Send, Send later and the snippet picker always on screen **53**; `/book` inserts a booking link (30 b, A); 13 a rich text; 16 b Bcc chip + groups; one signature per address (15 b); `;;` snippets; ⌘⇧T templates 14 a | — | Attachments uploading with progress (A) | Failed send: one banner style across Mail, on the draft and in Outbox (A, closes B7) | Send goes to Outbox: "Sends when you're back online" (A) | — | Long reply: Send stays in view (53) | Send later picker 17 b; template picker; snippet picker kept in view (closes B1's second half) |
 | **Popped-out draft** | 24 a: its own small window, Put back ⌘⇧D | — | — | Same failed-send banner (A) | Same Outbox line (A) | — | Scrolls inside its window (A) | Closing the window keeps the draft in Drafts (A) |
 | **Send later and Outbox** | 17 b: picker (Tonight 18:00 · Tomorrow 9:00 · Monday 9:00 · Pick a time); scheduled emails wait in Outbox as "Sends Mon 9:00" **55** | Outbox hidden when empty (A) | — | Scheduled send failed: same banner, "Retry now" (A) | Scheduled time passes offline: sends when back, marked late (17 b) | — | — | "Sent 40 min late · your computer was asleep" note on the sent email and in Sent (17 b, A for wording); quitting with mail due **55** |
 | **Set aside page** | 9 a: each email with its reply open; ⌘↵ Send & next; bar row after a selection (48 a, 51 b) | "Nothing set aside" (A) | Skeleton cards (A) | Per-card failed send (A) | Replies queue in Outbox (A) | Cards shrink to the first 3 lines (A) | 25 emails: one card at a time scrolls (A) | — |
 | **Right panel** | 3 a: Contact first · Today · Task · Details (45 a) · keys **56**; Note view after `n` **57** | Contact for an unknown sender: "Add as contact", never for a bot (A, closes B10) | Skeleton (kept from round 1) | "Couldn't load · Retry" (A) | Contact and Today show what's on this computer (A) | — | Contact with 40 open tasks: top 5 + "Show all" (A) | 46 a: below 1200 px hidden, the bar toggle brings it back over the reader |
 | **Task and handoff** | 26 a: row shows "Task · due Fri"; new reply flags the task; completing offers "Also Done the email". 36 a Assign → **58** | — | — | Task couldn't be created: toast with Retry (A) | Task queued until online (A) | — | — | Assign sheet: teammate, note, due date, excerpt (36 a) |
 | **Search** | Mail's own search (`/`, and the bar's Search in Mail, 49 a); 22 a plain dates and file types; Save as split (6 a) | "No results · try 'last month' or has:pdf" (A) | Results stream in (A) | — | Searches what's on this computer, says so (A) | — | 2,000 results: grouped by month (A) | Operator suggestions (A) |
-| **Bottom bar** | 49 a: Search · Quick capture · New; Quick capture offers "Link to: <subject>" (32 a) | First run: only Connect (round 1 fix) | — | — | — | — | — | Several selected (48 a, 47 a row); Set aside after a selection (48 a); **web 59** |
+| **Bottom bar** | 49 a: Search · Quick capture · New; Quick capture offers "Link to: <subject>" (32 a) | First run: the same three; New opens Connect (A, keeps 47 a and 49 a) | — | — | — | — | — | Several selected (48 a, 47 a row); Set aside after a selection (48 a); **web 59** |
 | **Toasts and notices** | One toast at a time above the bar, clear of the panel toggles; it leaves after Undo (A, closes B5) | — | — | Failed action: "Couldn't move 3 · Retry" (A) | — | — | — | — |
-| **Settings → Mail** | Accounts · per-account notifications (19 a) · signatures (15 b) · auto Cc/Bcc (16 b) · Screener offered once (23 a) · templates (14 a) · Display layout (5 ok) and density (43 a) | No accounts: Connect | — | Account needs reconnecting (A) | — | — | — | Out-of-office: link to the provider (25 b) |
+| **Settings → Mail** | Accounts and aliases · per-account notifications (19 a) · signatures (15 b) · auto Cc/Bcc (16 b) · Screener (23 a) · templates (14 a) and snippets · rules · priority people · blocked senders · grouped senders (7 a) · history depth and storage · default mail app (Mac and Windows) · agents reading bodies (38 a) · Display layout (5 ok) and density (43 a) | No accounts: Connect | — | Account needs reconnecting (A) | — | — | — | Out-of-office: link to the provider (25 b) |
 | **Settings → Keyboard** | 21 a: presets Moduo · Superhuman/Gmail · Spark · Apple Mail, for every module's keys; the shortcut sheet links here | — | — | — | — | — | — | Shortcut sheet (?) with "Change in Settings" (21 a) |
 | **First run** | Connect an account (Gmail · Microsoft · iCloud · Other); Screener offer once (23 a); first sync progress (A) | — | First sync: "Bringing in the last 90 days · 2,140 of 6,800" (A) | Sign-in failed: provider's reason + Try again (A) | "Connect when you're online" (A) | — | — | — |
+| **Invites** | 31 a: Accept `y` · Maybe `⇧Y` · Decline `⇧N`, Today on that date beside it (A for keys) | No calendar connected: "Connect a calendar to answer here" (A) | — | Answer couldn't be sent · Retry (A) | Answer queued until online (A) | — | A recurring invite asks "This one or all" (A) | Already answered, updated, cancelled and past invites each read differently (A) |
+| **Other places** | Snoozed, Follow-ups (with the due reminder), Drafts, Sent (Send again 16 b), Trash, Spam, folders, Subscriptions, Attachments (Space previews), New senders (`y`/`b` only there, A), Recently seen (11 b): each a list in the same row style (A) | Each has its own empty line (A) | Same as the list (A) | Same as the list (A) | Same as the list (A) | Same as the list | Load more history and backfill progress at the end of an account's list (A) | Move and Labels dialogs (`m`) (A) |
+| **Group by sender** | 7 a: one row per grouped sender or domain with a count; opening it lists theirs; Done all; Ungroup in ⋯; the grouped list in Settings → Mail (A) | — | — | — | — | — | 300 from one sender: one row (A) | — |
+| **Several selected** | 48 a: the bar row is the actions; the reader shows only who and how many, no second set of buttons (A) | — | — | Failed action toast (A) | — | — | 200 selected: "200 selected" (A) | — |
+| **Sheets** | Discuss in chat (35 a): channel or person, your message, an excerpt you pick (empty until you pick) · Assign (36 a) · Undo send countdown in the toast, also after Send & next and from the popped-out window (A) | — | — | Post failed · Retry (A) | Queued until online (A) | — | — | — |
+| **Drag** | 33 a: a drag preview with a count, targets light up, "Linked to Hero photos · Undo" (A); dropping on a chat channel **61** | — | — | — | — | — | — | — |
+| **Notifications** | 19 a per account; a click opens that conversation in Mail; Windows uses the taskbar badge (A) | — | — | — | — | — | — | — |
+| **Agents** | **60** (what an agent's drafts and triage look like) | — | — | — | — | — | — | Settings → Mail: "Agents can read email bodies" per account, off (38 a) |
+| **Accounts** | Several accounts: a small account mark on rows; the From picker; a reply goes from the address the email was sent to, with that address's signature (A) | — | — | — | — | — | — | — |
 | **Windows** | 39 a: same layout; keys shown as Ctrl (A); the popped-out draft is an ordinary window (A); window buttons on the right (A) | | | | | | | |
 
 **Keys** (checked 2026-11-27 against the app's registry, `lib/hotkeys/registry.ts`, and every module's own keys; agent's choices unless a call is named):
@@ -653,10 +662,17 @@ Cells: number = settled by that call · **A** = agent's choice (one line why, in
 | ⌘⇧D | Pop the draft out / put it back (24 a) | free everywhere |
 | ⌘⇧L | Send later (17 b) | free everywhere |
 | `;;` · ⌘; | Snippet · template picker (14 a) | **not ⌘⇧T:** the Notes editor uses it for "make a task", and the composer is built on that editor (13 a) |
-| ⌥1–⌥4 · ⌥0 | Panel views (56) · show or hide the panel | today's ⌥ pattern |
+| ⌥1–⌥5 · ⌥0 | Panel views (56; ⌥5 Note) · show or hide the panel | today's ⌥ pattern; Mail's ⌥ keys move onto the panel's own binding (build note: both bind them today) |
+| y · ⇧Y · ⇧N | Invite: Accept · Maybe · Decline (31 a) | `y`/`b` allow and block only in New senders |
+| ⇧C · ⇧D · ⌘P | Schedule (30 b) · Discuss in chat (35 a) · Print (18 a) | free in Mail |
+| g h · g r | Go to Set aside · Recently seen | next to today's `g` chords |
+| [ ] | Previous / next tab, or section in Sections and Cards | today for tabs |
+| Esc | Clears, in order: selection → composer → panel → back out of Full | four jobs, one order |
 | / | Mail's search (also the bar's Search, 49 a) | today |
 | ? | Mail's keys, with "Change in Settings → Keyboard" (21 a) | today Mail's own sheet; the app sheet has no Mail section yet |
 | ⌘1–⌘7 | Switch module | why 16's field keys were dropped |
+
+Today's other Mail keys stay as they are (m u x o z # ⌫ ⇧J ⇧K ⌘A F6, the `g` chords). Snooze is `s` here but H in Tasks' Inbox and Chat's Catch up: noted for the presets (21 a). Build notes: the app's copy still says "this Mac" in a few places; it becomes "your computer" (39 a). `l`'s label adds projects (27 a).
 
 On Windows every ⌘ reads Ctrl (the registry already maps it). The desktop app has no clashes; the browser ones (Ctrl+⇧D, Ctrl+L and others) only matter on the web, where Mail can't write anyway (59). Presets (21 a) need a remapping layer the app doesn't have yet; it's new work, app-wide, and goes to the build plan.
 
@@ -675,24 +691,36 @@ On Windows every ⌘ reads Ctrl (the registry already maps it). The desktop app 
 - *Recommend a:* Spark and Gmail work this way, the text is never covered, and it costs no width.
 
 **55 · Scheduled mail when you quit** · (follows 17 b)
-- Scheduled emails wait in Outbox as "Sends Mon 9:00". **a.** Quitting Moduo with an email due in the next 24 hours asks once: "1 email is scheduled for 9:00 tomorrow. It sends when you next open Moduo." Quit · Keep open. **b.** No question; the late note after sending is enough. **c.** a, plus a "Scheduled" place in the rail.
+- Scheduled emails wait in Outbox as "Sends Mon 9:00". **a.** Quitting Moduo with an email due in the next 24 hours asks once: "1 email is scheduled for 9:00 tomorrow. It sends when you next open Moduo." Quit · Keep open. **b.** No question; the late note after sending is enough. **c.** a, plus a scheduled count on Outbox in the rail.
 - *Recommend a:* the only way 17 b can surprise you is quitting the night before, and one question at quit time prevents it.
 
 **56 · Keys for the right panel's views** · (follows 3 a and 45 a)
-- Chat ships ⌥1 Details · ⌥2 reply chains · ⌥3 files. Mail today: ⌥1 Today. **a.** ⌥1 is always the view a module opens with: Mail ⌥1 Contact · ⌥2 Today · ⌥3 Task · ⌥4 Details (Chat already fits). **b.** Details is ⌥1 in every module: Mail ⌥1 Details · ⌥2 Contact · ⌥3 Today · ⌥4 Task. **c.** Keep Mail's today (⌥1 Today).
+- Chat ships ⌥1 Details · ⌥2 reply chains · ⌥3 files. Mail today: ⌥1 Today. **a.** ⌥1 is always the view a module opens with: Mail ⌥1 Contact · ⌥2 Today · ⌥3 Task · ⌥4 Details · ⌥5 Note (Chat and Calendar already fit; with no task, ⌥3 offers "Make a task"). **b.** Details is ⌥1 in every module: Mail ⌥1 Details · ⌥2 Contact · ⌥3 Today · ⌥4 Task · ⌥5 Note (Calendar's ⌥3 Plan and Chat's order would move too). **c.** Keep Mail's today (⌥1 Today).
 - *Recommend a:* ⌥1 always gets you back to where the panel started, and the order matches the switcher's list.
 
 **57 · Where a note made from an email opens** · (follows 29 a)
 - **a.** In the right panel as a Note view with "← email", like a task after `t`. **b.** In Notes (you leave Mail). **c.** Quietly, with a toast "Note made · Open".
 - *Recommend a:* you keep the email beside the note you're writing, and it matches `t`.
 
-**58 · When a teammate finishes a task you assigned from an email** · (follows 36 a)
+**58 · When a teammate finishes a task you assigned from an email** · (follows 36 a; agent's choice a, answer only to change it)
 - **a.** The email shows "Anna finished this" with one-click Done, like 26's "Also Done the email". **b.** The email is Done automatically. **c.** Nothing on the email; you see it in Tasks.
-- *Recommend a:* you still decide what leaves your inbox, and it reads the same as your own tasks.
+- *Recommend a:* you still decide what leaves your inbox, and it reads the same as your own tasks (26 a). 36 a already implies it, so a is drawn as decided.
 
 **59 · The bottom bar in Mail on the web** · (follows 49 a)
 - Mail lives on your computer (39). On the web, Mail today lists only the conversations linked to your work (subject, sender, the task or note they belong to) and hides Quick capture and New. **a.** Keep the three tools: Search searches those linked conversations, Quick capture works as anywhere, New explains that writing happens on your computer. **b.** Search and Quick capture; New hides. **c.** No tools (today).
 - *Recommend b:* both really work on the web, and a button that only explains itself is noise. New is the one honest exception to 49 a.
+
+**60 ★ · What an agent's work looks like in Mail** · (follows 38 a)
+- Agents can Done, snooze, label, pin and link (applied by your computer, even if it was off when they asked) and write drafts, never send. **a.** A quiet line at the top of the inbox, "Claude did 12 things since 9:00 · Review · Undo all", and an "Agent draft" mark on drafts they wrote. **b.** Every agent action waits for your OK in a review list. **c.** No line; each email's history says who did what.
+- *Recommend a:* you see it happened and can take it back in one click, without approving each step.
+
+**61 · Dropping an email on a chat channel** · (33 a meets 35 a)
+- **a.** The drop opens the Discuss in chat sheet, so you choose the message and the excerpt before anything is posted. **b.** The drop only links the email to the channel; nothing is posted.
+- *Recommend a:* a teammate never sees an excerpt you didn't pick, and it's the same sheet as `⇧D`.
+
+**62 · Saved searches and tabs** · (4 a meets 5 ok and 6 a)
+- The rail you approved has a Saved searches section; splits turn saved searches into tabs. **a.** One thing: every saved search is a tab (up to 6); the rail section goes. **b.** Two things: saved searches live in the rail, and "Make a tab" promotes one (up to 6 tabs).
+- *Recommend b:* a search you run weekly isn't a queue you triage, and six tabs fill fast.
 
 ### Round 1 prototype: blind critics
 
