@@ -54,7 +54,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-10-17 · PLAT-8: cutover. moduo.app's DNS is a Cloudflare zone; every host is a Worker custom domain declared in its `wrangler.jsonc`; production ships through the owner-only `deploy-prod.yml`, which rebuilds a staging-tested develop commit with the prod version.
 - 2026-10-17 · PLAT-7: desktop Mac builds run on Mike's Mac (`moduo-mac`) when it's online and idle, else on GitHub's `macos-latest`; the Mac's own hook, not just the workflow, decides which jobs it accepts.
 - 2026-10-17 · PLAT-5: the landing is its own static-assets Worker that hands `/book*` and `/static/*` to the app Worker through a service binding; no zone routes, also after cutover.
-- 2026-10-17 · PLAT-4: the web app on Cloudflare: the Worker serves the SPA shell itself (`not_found_handling: "none"`), config is injected per environment, previews are versions of the staging Worker, no preview redirect allowlist.
+- 2026-10-17 · PLAT-4: the web app on Cloudflare: the Worker serves the SPA shell itself (`not_found_handling: "none"`), config is injected per environment, previews are versions of the staging Worker, no preview redirect allowlist. *(partly superseded)*
 - 2026-10-17 · PLAT-3: CI skips work through the Turborepo cache, not `--affected`; PR runs read the cache with the signing key but can't write.
 - 2026-10-17 · The workspace layout as built in PLAT-2 (agent's choices inside the approved spec).
 - 2026-10-19 · Release v2: a release is `/ship` → a `vX.Y.Z` tag → one workflow for web, landing and desktop; agent-written release notes behind a leak check; mirror branches retired.
@@ -76,6 +76,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
+- 2026-11-27 · The signed-in Edge Functions answer only Moduo's own origins; public ones keep `*` (MOD-75, Mike's engineer-mode call).
 - 2026-11-27 · `manage-integration` takes only a desktop Google Calendar token and has no disconnect; the desktop has no Zoom/Meet sign-in (EB-1, Mike's engineer-mode call).
 - 2026-11-22 · Stored OAuth tokens are written only for the signed-in person, and the token encryption secret stays on the server; a CalDAV password goes only to its server's own domain (MOD-554, MOD-551, Mike's engineer-mode call). *(partly superseded)*
 - 2026-10-26 · A new link needs Edit on at least one of its two items; `exposed_notes` takes no writes (MOD-593, MOD-594, Mike's call).
