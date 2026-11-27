@@ -14,7 +14,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno
 
 import {
   authenticate,
-  CORS_HEADERS,
+  BILLING_CORS,
   formatStripeErr,
   json,
   makeStripe,
@@ -22,13 +22,13 @@ import {
   TRIAL_DAYS_WITH_CARD,
 } from "../_shared/billing.ts";
 import { APP_TOKEN_REFUSAL } from "../_shared/app-token.ts";
+import { withAppCors } from "../_shared/cors.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = makeStripe();
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: CORS_HEADERS });
+Deno.serve(withAppCors(BILLING_CORS, async (req: Request) => {
+  if (req.method !== "POST") return new Response("Method not allowed", { status: 405 });
 
   try {
     const keyErr = stripeSecretKeyConfigError();
@@ -63,4 +63,4 @@ Deno.serve(async (req: Request) => {
     console.error("[extend-trial]", err);
     return json({ error: formatStripeErr(err) }, { status: 500 });
   }
-});
+}));

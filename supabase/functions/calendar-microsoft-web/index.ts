@@ -46,6 +46,7 @@ import {
 } from "../_shared/oauth-connect.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
+import { withAppCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
@@ -56,18 +57,14 @@ const CLIENT: MicrosoftClient = {
 };
 const PROVIDER = "microsoft_calendar";
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const CORS = { methods: "POST, GET, OPTIONS", headers: "authorization, x-client-info, apikey, content-type" };
 
 type TokenRow = MicrosoftTokenRow & { account_key: string };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8" },
   });
 }
 
@@ -218,8 +215,7 @@ async function readBody(req: Request): Promise<Record<string, unknown>> {
   }
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+Deno.serve(withAppCors(CORS, async (req: Request) => {
   if (!ENC || !CLIENT.id || !CLIENT.secret) return json({ error: "outlook_not_configured" }, 503);
   if (req.method === "GET") return await callback(req);
   if (req.method !== "POST") return json({ error: "method" }, 405);
@@ -234,4 +230,4 @@ Deno.serve(async (req: Request) => {
   const action = Object.hasOwn(ACTIONS, name) ? ACTIONS[name] : undefined;
   if (!action) return json({ error: "unknown_action" }, 400);
   return await action(db, caller.user.id, body);
-});
+}));

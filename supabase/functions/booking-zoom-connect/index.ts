@@ -35,21 +35,18 @@ import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
 import { exchangeZoomCode, zoomConfigured } from "../_shared/zoom.ts";
+import { withAppCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
 const ENC = Deno.env.get("MODUO_TOKEN_ENCRYPTION_SECRET") ?? "";
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const CORS = { methods: "POST, GET, OPTIONS", headers: "authorization, x-client-info, apikey, content-type" };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8" },
   });
 }
 
@@ -57,8 +54,7 @@ function redirectUri(): string {
   return `${SUPABASE_URL.replace(/\/$/, "")}/functions/v1/booking-zoom-connect`;
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+Deno.serve(withAppCors(CORS, async (req: Request) => {
   const app = zoomConfigured();
   const db = createClient(SUPABASE_URL, SECRET, { auth: { persistSession: false } });
 
@@ -156,4 +152,4 @@ Deno.serve(async (req: Request) => {
     ? await db.from("user_integrations").update(row).eq("id", existing.data.id)
     : await db.from("user_integrations").insert(row);
   return saved.error ? json({ error: "save_failed" }, 500) : json({ ok: true });
-});
+}));

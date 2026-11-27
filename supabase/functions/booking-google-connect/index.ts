@@ -37,6 +37,7 @@ import {
 } from "../_shared/oauth-connect.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 import { encryptToken } from "../_shared/token-cipher.ts";
+import { withAppCors } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SECRET = getDefaultSecretKey();
@@ -52,16 +53,12 @@ const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
 ].join(" ");
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const CORS = { methods: "POST, GET, OPTIONS", headers: "authorization, x-client-info, apikey, content-type" };
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8" },
   });
 }
 
@@ -127,8 +124,7 @@ async function saveTokens(
   return json({ ok: true });
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+Deno.serve(withAppCors(CORS, async (req: Request) => {
   if (!ENC || !GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
     return json({ error: "google_not_configured" }, 503);
   }
@@ -183,4 +179,4 @@ Deno.serve(async (req: Request) => {
   auth.searchParams.set("prompt", "consent");
   auth.searchParams.set("include_granted_scopes", "true");
   return json({ url: auth.toString() });
-});
+}));

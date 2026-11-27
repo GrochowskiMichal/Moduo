@@ -41,19 +41,14 @@ import {
 import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { makeStripe, stripeSecretKeyConfigError } from "../_shared/billing.ts";
 import { postHogEraserFromEnv } from "../_shared/posthog-erasure.ts";
+import { withAppCors } from "../_shared/cors.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const CORS = { methods: "POST, OPTIONS", headers: "authorization, content-type" };
 
-const json = (body: unknown, init?: ResponseInit) =>
-  Response.json(body, { ...init, headers: { ...CORS, ...(init?.headers ?? {}) } });
+const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+Deno.serve(withAppCors(CORS, async (req: Request) => {
   if (req.method !== "POST") return json({ error: "Method not allowed" }, { status: 405 });
 
   try {
@@ -101,4 +96,4 @@ Deno.serve(async (req: Request) => {
     }
     return json({ error: err instanceof Error ? err.message : "Internal error" }, { status: 500 });
   }
-});
+}));
