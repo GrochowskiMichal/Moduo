@@ -16,6 +16,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2?target=deno
 import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { createPortalSessionBodySchema, parseJsonBody } from "../_shared/contracts/http-bodies.ts";
 import { safeRedirect } from "../_shared/billing.ts";
+import { withAppCors } from "../_shared/cors.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
@@ -23,14 +24,9 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") ?? "", {
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
+const CORS = { methods: "POST, OPTIONS", headers: "authorization, content-type" };
 
-const json = (body: unknown, init?: ResponseInit) =>
-  Response.json(body, { ...init, headers: { ...CORS, ...(init?.headers ?? {}) } });
+const json = (body: unknown, init?: ResponseInit) => Response.json(body, init);
 
 /** Stripe server calls must use sk_… or rk_… — never pk_… */
 function stripeSecretKeyConfigError(): string | null {
@@ -45,8 +41,7 @@ function stripeSecretKeyConfigError(): string | null {
   return null;
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+Deno.serve(withAppCors(CORS, async (req: Request) => {
 
   try {
     const keyErr = stripeSecretKeyConfigError();
@@ -108,4 +103,4 @@ Deno.serve(async (req: Request) => {
       { status: 500 }
     );
   }
-});
+}));

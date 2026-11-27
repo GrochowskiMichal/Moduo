@@ -37,6 +37,7 @@ import {
 import { APP_TOKEN_REFUSAL, verifiedPerson } from "../_shared/app-token.ts";
 import { googleAccessOutcome, googleClients } from "../_shared/google-token.ts";
 import { getDefaultSecretKey } from "../_shared/secret-keys.ts";
+import { withAppCors } from "../_shared/cors.ts";
 import { recordGoogleAccess, type StatusCalendar, statusCalendars } from "./accounts.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -44,11 +45,7 @@ const SECRET = getDefaultSecretKey();
 const ENC = Deno.env.get("MODUO_TOKEN_ENCRYPTION_SECRET") ?? "";
 const GOOGLE_CLIENTS = googleClients((name) => Deno.env.get(name));
 
-const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const CORS = { methods: "POST, OPTIONS", headers: "authorization, x-client-info, apikey, content-type" };
 
 type TokenRow = {
   id: string;
@@ -61,7 +58,7 @@ type TokenRow = {
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS, "content-type": "application/json; charset=utf-8" },
+    headers: { "content-type": "application/json; charset=utf-8" },
   });
 }
 
@@ -373,8 +370,24 @@ async function writeAction(
   return json({ event: { ...saved, calendarId: `google:${email}:${target}` } });
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+async function disconnectAction(
+  db: SupabaseClient,
+  userId: string,
+  body: Record<string, unknown>,
+): Promise<Response> {
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email) return json({ error: "bad_account" }, 400);
+  const removed = await db
+    .from("user_integrations")
+    .delete()
+    .eq("user_id", userId)
+    .eq("provider", "google_calendar")
+    .eq("account_key", email);
+  if (removed.error) return json({ error: "disconnect_failed" }, 500);
+  return json({ ok: true });
+}
+
+Deno.serve(withAppCors(CORS, async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
   if (!ENC) return json({ error: "google_not_configured" }, 503);
 
@@ -394,18 +407,7 @@ Deno.serve(async (req: Request) => {
 
   if (action === "status") return statusAction(db, userId);
 
-  if (action === "disconnect") {
-    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
-    if (!email) return json({ error: "bad_account" }, 400);
-    const removed = await db
-      .from("user_integrations")
-      .delete()
-      .eq("user_id", userId)
-      .eq("provider", "google_calendar")
-      .eq("account_key", email);
-    if (removed.error) return json({ error: "disconnect_failed" }, 500);
-    return json({ ok: true });
-  }
+  if (action === "disconnect") return disconnectAction(db, userId, body);
 
   const externalAccountId = typeof body.externalAccountId === "string" ? body.externalAccountId : "";
   if (!externalAccountId.startsWith("google:")) return json({ error: "bad_account" }, 400);
@@ -424,4 +426,4 @@ Deno.serve(async (req: Request) => {
   if (action === "get") return getAction(ctx);
   if (action === "update" || action === "delete") return writeAction(action, ctx);
   return json({ error: "unknown_action" }, 400);
-});
+}));

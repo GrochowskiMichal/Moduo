@@ -21,14 +21,11 @@ export type PaidPlan = (typeof PAID_PLANS)[number];
 export const TEAM_MIN_SEATS = 3;
 export const TEAM_MAX_SEATS = 500;
 
-export const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-};
+/** CORS for the billing functions; they run through _shared/cors.ts withAppCors (MOD-75). */
+export const BILLING_CORS = { methods: "POST, GET, OPTIONS", headers: "authorization, content-type" };
 
 export function json(body: unknown, init?: ResponseInit): Response {
-  return Response.json(body, { ...init, headers: { ...CORS_HEADERS, ...(init?.headers ?? {}) } });
+  return Response.json(body, init);
 }
 
 export function makeStripe(): Stripe {

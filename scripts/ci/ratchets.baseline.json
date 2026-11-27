@@ -1038,26 +1038,20 @@
       "planEmails": 26
     },
     "supabase/functions/booking-google-connect/index.ts": {
-      "Deno.serve(cb)": 26
+      "withAppCors(cb)": 22
     },
     "supabase/functions/booking-public/index.ts": {
       "busyIntervals": 26,
       "Deno.serve(cb)": 154
     },
     "supabase/functions/booking-zoom-connect/index.ts": {
-      "Deno.serve(cb)": 29
+      "withAppCors(cb)": 25
     },
     "supabase/functions/calendar-google-web/index.ts": {
-      "Deno.serve(cb)": 25
+      "withAppCors(cb)": 20
     },
     "supabase/functions/create-checkout-session/index.ts": {
-      "Deno.serve(cb)": 45
-    },
-    "supabase/functions/create-portal-session/index.ts": {
-      "Deno.serve(cb)": 18
-    },
-    "supabase/functions/delete-account/index.ts": {
-      "Deno.serve(cb)": 17
+      "withAppCors(cb)": 24
     },
     "supabase/functions/manage-integration/index.ts": {
       "Deno.serve(cb)": 23
