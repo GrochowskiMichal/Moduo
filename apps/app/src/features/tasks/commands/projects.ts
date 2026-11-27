@@ -159,6 +159,25 @@ export function createProjectOps(ctx: TaskCommandsContext, shared: Shared, peers
     editProject(id, { archived: false }, { archivedAt: null });
 
   /**
+   * Move sends each open task's move live (MOD-732): a task whose capture or
+   * edit still waits in the outbox would be refused, or overtaken, and the
+   * close would stop halfway. Say Still saving instead, before anything moves.
+   */
+  const moveMustWait = (id: string, openTasks: ArchiveOpenTasks) => {
+    if (openTasks.kind !== "move" || !store) return false;
+    const d = data();
+    const topIds = new Set(projectOpenWork(d.liveTasks, id).tops.map((t) => t.id));
+    const waiting = d.liveTasks.some(
+      (t) =>
+        t.bucketId === id &&
+        (topIds.has(t.id) || (!!t.parentId && topIds.has(t.parentId))) &&
+        (isTempId(t.id) || store.hasOutboxEntries(t.id)),
+    );
+    if (waiting) toast.error("Still saving a task in this project — try again in a moment.");
+    return waiting;
+  };
+
+  /**
    * What closing a project does to its open work (REPLAN 78: "n open tasks —
    * Won't do · Move · Keep"), shared by Archive and Done (TV-U16): Won't do
    * marks each open task, Move sends the open tops (their subtasks follow) to
@@ -247,6 +266,7 @@ export function createProjectOps(ctx: TaskCommandsContext, shared: Shared, peers
     const d = data();
     const existing = d.liveBuckets.find((b) => b.id === id);
     if (!existing || existing.isSystem) return;
+    if (moveMustWait(id, openTasks)) return;
     // Move goes first and the archive waits for it: archiving takes what's
     // still in the project out of every queue, so a task the archive beat
     // would lose its place in queues.
@@ -326,6 +346,7 @@ export function createProjectOps(ctx: TaskCommandsContext, shared: Shared, peers
       toast.error("Still saving that project — try again in a moment.");
       return;
     }
+    if (moveMustWait(id, openTasks)) return;
     // Shown at once, and queued on the project's chain right now (the moves
     // go first, like Archive's), so an Undo queues after it, never before.
     const { movesDone, revert, note } = closeOpenWork(id, openTasks);
