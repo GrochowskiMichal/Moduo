@@ -5,6 +5,16 @@ https://moduo.app/changelog.
 
 <!-- Generated from release-notes/releases.json by scripts/release/changes.ts. Don't edit by hand. -->
 
+## 1.8.3 · 2026-11-27
+
+### Fixed
+
+- Archiving or finishing a project and moving its open tasks no longer stops halfway when one of them is still saving.
+
+### Security
+
+- Security and reliability improvements.
+
 ## 1.8.2 · 2026-11-26
 
 ### Improved
