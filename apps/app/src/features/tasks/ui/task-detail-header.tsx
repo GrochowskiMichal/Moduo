@@ -65,7 +65,7 @@ import { WorkspaceContext } from "../../workspaces/workspace-context";
 import { branchName } from "../detail-properties";
 import { duplicateFields } from "../duplicate";
 import { isUnfinished } from "../helpers";
-import { importedFromLine } from "../importers/plan";
+import { importedFromLine } from "../importers/sources";
 import { type Bucket, PRIVATE_PROJECT_LABEL, type Task } from "../model";
 import { alsoInLabel, claimLabel } from "../queue";
 import { bucketDotColor } from "../sidebar";
