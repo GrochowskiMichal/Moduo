@@ -2,6 +2,8 @@
 // secret (also the AES master key), and the desktop disconnect built its query
 // string unencoded, so `provider=zoom&user_id=<victim>` deleted someone else's
 // integration. Now the user comes only from the verified session.
+// EB-1: the desktop Zoom/Meet sign-in is gone, so the function stores only a
+// desktop Google Calendar token and has no disconnect path at all.
 
 import { describe, expect, it } from "@rstest/core";
 
@@ -76,6 +78,8 @@ function del(query: string, auth: string | null = `Bearer ${jwt()}`): Request {
   });
 }
 
+const GOOGLE = { provider: "google_calendar", access_token: "acc", refresh_token: "ref" };
+
 function victimRow(provider = "zoom"): Row {
   return {
     id: "victim-1",
@@ -91,62 +95,72 @@ function victimRow(provider = "zoom"): Row {
 
 describe("manage-integration auth (MOD-554)", () => {
   it("refuses a request without a person's session, even with the old shared secret", async () => {
-    const db = memoryDb([victimRow()]);
-    const old = new Request(`${URL_BASE}?provider=zoom&user_id=${VICTIM}`, {
-      method: "DELETE",
-      headers: { "X-Moduo-Secret": SECRET },
+    const db = memoryDb();
+    const old = new Request(URL_BASE, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Moduo-Secret": SECRET },
+      body: JSON.stringify({ ...GOOGLE, user_id: VICTIM }),
     });
     expect((await handleManageIntegration(old, deps(db))).status).toBe(401);
-    expect((await handleManageIntegration(del("provider=zoom", "Bearer nope"), deps(db))).status).toBe(401);
-    expect(db.rows).toHaveLength(1);
+    expect((await handleManageIntegration(post(GOOGLE, "Bearer nope"), deps(db))).status).toBe(401);
+    expect(db.rows).toHaveLength(0);
   });
 
   it("refuses an app's OAuth token", async () => {
+    const db = memoryDb();
     const res = await handleManageIntegration(
-      del("provider=zoom", `Bearer ${jwt({ client_id: "claude" })}`),
-      deps(memoryDb()),
+      post(GOOGLE, `Bearer ${jwt({ client_id: "claude" })}`),
+      deps(db),
     );
     expect(res.status).toBe(403);
-  });
-
-  it("a smuggled user_id in the disconnect query never reaches another person's row", async () => {
-    const db = memoryDb([victimRow()]);
-    const res = await handleManageIntegration(del(`provider=zoom&user_id=${VICTIM}`), deps(db));
-    expect(res.status).toBe(400);
-    expect(db.rows).toHaveLength(1);
-  });
-
-  it("disconnect deletes only the caller's own row for an allowed provider", async () => {
-    const mine = { ...victimRow(), id: "mine", user_id: ME };
-    const db = memoryDb([victimRow(), mine]);
-    expect((await handleManageIntegration(del("provider=zoom"), deps(db))).status).toBe(200);
-    expect(db.rows.map((r) => r.id)).toEqual(["victim-1"]);
-    expect((await handleManageIntegration(del("provider=google_calendar"), deps(db))).status).toBe(400);
-    expect((await handleManageIntegration(del("provider=evil"), deps(db))).status).toBe(400);
+    expect(db.rows).toHaveLength(0);
   });
 
   it("a body naming another user is refused, not obeyed", async () => {
     const db = memoryDb();
-    const res = await handleManageIntegration(
-      post({ provider: "zoom", access_token: "a", user_id: VICTIM }),
-      deps(db),
-    );
+    const res = await handleManageIntegration(post({ ...GOOGLE, user_id: VICTIM }), deps(db));
     expect(res.status).toBe(400);
     expect(db.rows).toHaveLength(0);
   });
 });
 
-describe("manage-integration save", () => {
-  it("encrypts the tokens server-side for the session's user", async () => {
+describe("manage-integration providers (EB-1)", () => {
+  it("refuses zoom and google_meet", async () => {
     const db = memoryDb();
-    const res = await handleManageIntegration(
-      post({ provider: "zoom", access_token: "acc", refresh_token: "ref", expires_at: 1_790_000_000 }),
-      deps(db),
-    );
+    for (const provider of ["zoom", "google_meet"]) {
+      const res = await handleManageIntegration(post({ provider, access_token: "a" }), deps(db));
+      expect(res.status).toBe(400);
+    }
+    expect(db.rows).toHaveLength(0);
+  });
+
+  it("has no disconnect: a DELETE is refused and removes nothing", async () => {
+    const mine = { ...victimRow(), id: "mine", user_id: ME };
+    const db = memoryDb([victimRow(), mine]);
+    for (const query of ["provider=zoom", "provider=google_meet", `provider=zoom&user_id=${VICTIM}`]) {
+      expect((await handleManageIntegration(del(query), deps(db))).status).toBe(405);
+    }
+    expect(db.rows.map((r) => r.id)).toEqual(["victim-1", "mine"]);
+  });
+
+  it("refuses providers the desktop doesn't connect", async () => {
+    const db = memoryDb();
+    for (const provider of ["microsoft_calendar", "evil", ""]) {
+      const res = await handleManageIntegration(post({ provider, access_token: "a" }), deps(db));
+      expect(res.status).toBe(400);
+    }
+    expect(db.rows).toHaveLength(0);
+  });
+});
+
+describe("manage-integration save", () => {
+  it("stores google_calendar, encrypted server-side for the session's user", async () => {
+    const db = memoryDb();
+    const res = await handleManageIntegration(post({ ...GOOGLE, expires_at: 1_790_000_000 }), deps(db));
     expect(res.status).toBe(200);
     expect(db.rows).toHaveLength(1);
     const row = db.rows[0];
-    expect(row).toMatchObject({ user_id: ME, provider: "zoom", account_key: "" });
+    expect(row).toMatchObject({ user_id: ME, provider: "google_calendar", account_key: "me@gmail.com" });
     expect(await decryptToken(row.access_token_enc, SECRET, ME)).toBe("acc");
     expect(await decryptToken(row.refresh_token_enc ?? "", SECRET, ME)).toBe("ref");
     expect(row.token_expiry).toBe(new Date(1_790_000_000 * 1000).toISOString());
@@ -154,8 +168,8 @@ describe("manage-integration save", () => {
 
   it("updates the existing row instead of inserting a second one", async () => {
     const db = memoryDb();
-    await handleManageIntegration(post({ provider: "google_meet", access_token: "a1" }), deps(db));
-    await handleManageIntegration(post({ provider: "google_meet", access_token: "a2" }), deps(db));
+    await handleManageIntegration(post({ ...GOOGLE, access_token: "a1" }), deps(db));
+    await handleManageIntegration(post({ ...GOOGLE, access_token: "a2" }), deps(db));
     expect(db.rows).toHaveLength(1);
     expect(await decryptToken(db.rows[0].access_token_enc, SECRET, ME)).toBe("a2");
   });
@@ -163,10 +177,7 @@ describe("manage-integration save", () => {
   it("keys a Google Calendar token by the login's email from Google, adopting a legacy unkeyed row", async () => {
     const legacy = { ...victimRow("google_calendar"), id: "legacy", user_id: ME };
     const db = memoryDb([legacy]);
-    const res = await handleManageIntegration(
-      post({ provider: "google_calendar", access_token: "g", refresh_token: "r" }),
-      deps(db),
-    );
+    const res = await handleManageIntegration(post(GOOGLE), deps(db));
     expect(res.status).toBe(200);
     expect(db.rows).toHaveLength(1);
     expect(db.rows[0]).toMatchObject({ id: "legacy", account_key: "me@gmail.com" });
@@ -174,26 +185,14 @@ describe("manage-integration save", () => {
 
   it("refuses to save a Google Calendar token whose login Google won't name", async () => {
     const db = memoryDb();
-    const res = await handleManageIntegration(
-      post({ provider: "google_calendar", access_token: "stale", refresh_token: "r" }),
-      deps(db, null),
-    );
+    const res = await handleManageIntegration(post({ ...GOOGLE, access_token: "stale" }), deps(db, null));
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: "google_email_unknown" });
     expect(db.rows).toHaveLength(0);
   });
 
-  it("refuses providers the desktop doesn't connect", async () => {
-    const db = memoryDb();
-    for (const provider of ["microsoft_calendar", "evil"]) {
-      const res = await handleManageIntegration(post({ provider, access_token: "a" }), deps(db));
-      expect(res.status).toBe(400);
-    }
-    expect(db.rows).toHaveLength(0);
-  });
-
   it("answers 503 when the encryption secret isn't configured", async () => {
-    const res = await handleManageIntegration(post({ provider: "zoom", access_token: "a" }), {
+    const res = await handleManageIntegration(post(GOOGLE), {
       ...deps(memoryDb()),
       encryptionSecret: "",
     });
