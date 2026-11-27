@@ -1,6 +1,23 @@
 {
   "releases": [
     {
+      "version": "1.8.3",
+      "date": "2026-11-27",
+      "highlights": [
+        "Archiving or finishing a project and moving its open tasks no longer stops halfway when one of them is still saving."
+      ],
+      "items": [
+        {
+          "type": "fixed",
+          "text": "Archiving or finishing a project and moving its open tasks no longer stops halfway when one of them is still saving."
+        },
+        {
+          "type": "security",
+          "text": "Security and reliability improvements."
+        }
+      ]
+    },
+    {
       "version": "1.8.2",
       "date": "2026-11-26",
       "highlights": [
