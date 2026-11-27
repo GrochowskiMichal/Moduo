@@ -11,7 +11,6 @@ export type {
   AuthChangeEvent,
   AuthListener,
   AuthMnemonic,
-  IntegrationStatusItem,
   LocalAuthState,
   ModuoRuntime,
   OtpSendError,

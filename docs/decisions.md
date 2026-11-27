@@ -76,7 +76,8 @@ The current decisions, one line each, grouped by area, in each area file's order
 
 ## Permissions, sharing, privacy and erasure → [decisions/permissions.md](decisions/permissions.md)
 
-- 2026-11-22 · Stored OAuth tokens are written only for the signed-in person, and the token encryption secret stays on the server; a CalDAV password goes only to its server's own domain (MOD-554, MOD-551, Mike's engineer-mode call).
+- 2026-11-27 · `manage-integration` takes only a desktop Google Calendar token and has no disconnect; the desktop has no Zoom/Meet sign-in (EB-1, Mike's engineer-mode call).
+- 2026-11-22 · Stored OAuth tokens are written only for the signed-in person, and the token encryption secret stays on the server; a CalDAV password goes only to its server's own domain (MOD-554, MOD-551, Mike's engineer-mode call). *(partly superseded)*
 - 2026-10-26 · A new link needs Edit on at least one of its two items; `exposed_notes` takes no writes (MOD-593, MOD-594, Mike's call).
 - 2026-10-24 · Four item checks closed (MOD-553, MOD-572, MOD-549, MOD-573): a note's new parent needs Edit and putting a note on the web by moving it needs ws.publish and Full; contact ops check the contact; removing a task dependency through its link needs Edit on the waiting task; member exceptions are checked as stored and when a role change would switch them on.
 - 2026-10-14 · Chat v1 per-person sending and typing limits: at most 10 messages in 10 s and 30 in 60 s per person per workspace (a workspace's apps share one budget of the same size), and one "typing" broadcast per 2.5 s per person and conversation.
@@ -605,7 +606,7 @@ The current decisions, one line each, grouped by area, in each area file's order
 - 2026-07-12 · DF-19e (Settings → Workspace: management inlined; standalone modal retired) landed
 - 2026-07-12 · DF-19h (Settings → Account: delete account) landed
 - 2026-07-12 · DF-7 (Rollup snippets + CompanyHub last-touch) landed
-- 2026-07-12 · DF-19i (Settings: About cloud-first + Integrations cleanup) landed
+- 2026-07-12 · DF-19i (Settings: About cloud-first + Integrations cleanup) landed *(partly superseded)*
 - 2026-07-12 · DF-19g (Settings → Advanced: data export · reset-cache · diagnostics) landed
 - 2026-07-11 · DF-19b/c/d (Settings: Appearance grouping · Account identity+password · API-keys section) landed
 - 2026-07-11 · DF-19a (Settings grouped-nav backbone) landed

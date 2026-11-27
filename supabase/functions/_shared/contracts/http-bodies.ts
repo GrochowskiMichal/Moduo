@@ -46,16 +46,13 @@ export const createCheckoutSessionBodySchema = z.object({
 });
 
 /**
- * manage-integration (MOD-554): the desktop app hands over the OAuth tokens it
- * just obtained, in plaintext over TLS, authenticated by the person's own
- * session. The function encrypts them and takes the user from the verified
- * JWT, never from the request. Only the providers the desktop connects.
+ * manage-integration (MOD-554): the desktop app hands over a Google Calendar
+ * login's OAuth tokens, in plaintext over TLS, authenticated by the person's
+ * own session. The function encrypts them and takes the user from the verified
+ * JWT, never from the request. Only Google Calendar: Zoom and Meet connect
+ * through booking links on every platform (EB-1).
  */
-export const manageIntegrationProviderSchema = integrationProviderSchema.extract([
-  "zoom",
-  "google_meet",
-  "google_calendar",
-]);
+export const manageIntegrationProviderSchema = integrationProviderSchema.extract(["google_calendar"]);
 
 export const manageIntegrationBodySchema = z.strictObject({
   provider: manageIntegrationProviderSchema,
@@ -63,11 +60,6 @@ export const manageIntegrationBodySchema = z.strictObject({
   refresh_token: z.union([nonEmptyString, z.null()]).optional(),
   /** Unix seconds at which the access token expires. */
   expires_at: z.union([z.number().int().positive(), z.null()]).optional(),
-});
-
-/** Disconnect: one meeting provider (Google Calendar disconnects per login elsewhere). */
-export const manageIntegrationQuerySchema = z.strictObject({
-  provider: integrationProviderSchema.extract(["zoom", "google_meet"]),
 });
 
 export const workspaceInviteWebhookBodySchema = z.object({
