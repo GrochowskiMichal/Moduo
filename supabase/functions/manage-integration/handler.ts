@@ -3,7 +3,8 @@
  * Calendar tokens on `user_integrations`, so booking links can create events
  * and Meet links while the app is closed. Zoom and Meet connect through booking
  * links on every platform, so the function takes no other provider and has no
- * disconnect (EB-1); a Google login disconnects per login elsewhere.
+ * disconnect (EB-1); a Google login disconnects per login through
+ * `calendar-google-web` (action "disconnect").
  *
  * Who: the person's Supabase session (Authorization: Bearer), verified with
  * getUser(); the user is the token's, never one named in the request. An app

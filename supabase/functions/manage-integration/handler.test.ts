@@ -39,12 +39,6 @@ function memoryDb(rows: Row[] = []): IntegrationsDb & { rows: Row[] } {
       rows[i] = { ...row, id };
       return ok(null);
     },
-    remove(u, p) {
-      for (let i = rows.length - 1; i >= 0; i--) {
-        if (rows[i].user_id === u && rows[i].provider === p) rows.splice(i, 1);
-      }
-      return ok(null);
-    },
   };
 }
 
