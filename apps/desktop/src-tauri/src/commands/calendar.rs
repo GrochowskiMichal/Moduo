@@ -664,7 +664,7 @@ pub async fn calendar_google_publish_booking_token(
     state: State<'_, AppState>,
     account_id: String,
 ) -> Result<(), String> {
-    let (user_id, access_jwt) = crate::commands::integrations::signed_in(&state)
+    let (user_id, access_jwt) = crate::commands::manage_integration::signed_in(&state)
         .map_err(|_| "sign_in_required".to_string())?;
     // A fresh access token: manage-integration asks Google for the login's
     // email with it (the row's account_key), and booking-public uses it until
@@ -684,11 +684,11 @@ pub async fn calendar_google_publish_booking_token(
         .filter(|token| !token.is_empty())
         .ok_or_else(|| "google_calendar_needs_reconnect".to_string())?;
     let expires_at = stored.expires_at;
-    crate::commands::integrations::upsert_integration_in_supabase(
+    crate::commands::manage_integration::upsert_integration_in_supabase(
         &state.config.supabase_url,
         &access_jwt,
         "google_calendar",
-        &crate::commands::integrations::IntegrationTokens {
+        &crate::commands::manage_integration::IntegrationTokens {
             access_token,
             refresh_token: Some(refresh),
             expires_at,

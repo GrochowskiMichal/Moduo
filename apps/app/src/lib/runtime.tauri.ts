@@ -4,7 +4,7 @@
  * Cloud-first composition (improvement-plan Session 2): auth, workspaces and
  * tasks reuse the Supabase-backed web runtime — the exact same code path as
  * the web app. Everything else (notes, email, time-tracking, calendar OAuth,
- * integrations, graph) stays on Tauri `invoke()` to the Rust core; those
+ * graph) stays on Tauri `invoke()` to the Rust core; those
  * modules have no Supabase path yet.
  *
  * The future free/offline "lite" version re-introduces a local-first runtime
@@ -19,12 +19,7 @@ import { createTauriMailAccounts } from "./runtime.tauri.mail-accounts";
 import { createTauriMailCompose } from "./runtime.tauri.mail-compose";
 import { createTauriMailEngine } from "./runtime.tauri.mail-engine";
 import { createTauriMailSettings } from "./runtime.tauri.mail-settings";
-import type {
-  IntegrationStatusItem,
-  ModuoRuntime,
-  RuntimeCapabilities,
-  RuntimeSession,
-} from "./runtime.types";
+import type { ModuoRuntime, RuntimeCapabilities, RuntimeSession } from "./runtime.types";
 import { webRuntime } from "./runtime.web";
 
 // ── Cloud session → Rust core ─────────────────────────────────────────────────
@@ -185,21 +180,6 @@ export const tauriRuntime: ModuoRuntime = {
     followUpDue: webRuntime.email.followUpDue,
     removeRef: webRuntime.email.removeRef,
     linkThread: webRuntime.email.linkThread,
-  },
-
-  integrations: {
-    async getStatus() {
-      return invoke<IntegrationStatusItem[]>("integration_get_status");
-    },
-    async connectZoom() {
-      return invoke<IntegrationStatusItem>("integration_connect_zoom");
-    },
-    async connectGoogleMeet() {
-      return invoke<IntegrationStatusItem>("integration_connect_google_meet");
-    },
-    async disconnect(provider: string) {
-      return invoke<void>("integration_disconnect", { provider });
-    },
   },
 
   calendar: {

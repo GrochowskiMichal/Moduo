@@ -45,11 +45,6 @@ export type RuntimeCapabilities = {
   hasOfflineMode: boolean;
 };
 
-export type IntegrationStatusItem = {
-  provider: string;
-  connected: boolean;
-};
-
 export type ModuoRuntime = {
   capabilities: RuntimeCapabilities;
   auth: AuthRuntime;
@@ -111,12 +106,6 @@ export type ModuoRuntime = {
   };
   timetracking: TimetrackingRuntime;
   email: EmailRuntime;
-  integrations: {
-    getStatus(): Promise<IntegrationStatusItem[]>;
-    connectZoom(): Promise<IntegrationStatusItem>;
-    connectGoogleMeet(): Promise<IntegrationStatusItem>;
-    disconnect(provider: string): Promise<void>;
-  };
   calendar: CalendarRuntime;
   /**
    * Tasks module v1 — buckets / tasks / tags. Desktop reads/writes the

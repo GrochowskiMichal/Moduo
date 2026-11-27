@@ -27,8 +27,6 @@ const db: IntegrationsDb = {
       .maybeSingle(),
   insert: (row) => supabase.from("user_integrations").insert(row),
   update: (id, row) => supabase.from("user_integrations").update(row).eq("id", id),
-  remove: (userId, provider) =>
-    supabase.from("user_integrations").delete().eq("user_id", userId).eq("provider", provider),
 };
 
 Deno.serve(async (req: Request) => {

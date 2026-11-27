@@ -10,7 +10,7 @@
 
 import { webChatRuntime } from "./runtime.chat.web";
 import { webFocusRuntime } from "./runtime.focus.web";
-import type { IntegrationStatusItem, ModuoRuntime, RuntimeCapabilities } from "./runtime.types";
+import type { ModuoRuntime, RuntimeCapabilities } from "./runtime.types";
 import { webAttachments } from "./runtime.web.attachments";
 import { webAuth } from "./runtime.web.auth";
 import { webCalendar } from "./runtime.web.calendar";
@@ -93,20 +93,6 @@ export const webRuntime: ModuoRuntime = {
   },
   timetracking: webTimetracking,
   email: webEmail,
-  integrations: {
-    async getStatus(): Promise<IntegrationStatusItem[]> {
-      return [];
-    },
-    async connectZoom(): Promise<IntegrationStatusItem> {
-      throw new Error(desktopOnly().message);
-    },
-    async connectGoogleMeet(): Promise<IntegrationStatusItem> {
-      throw new Error(desktopOnly().message);
-    },
-    async disconnect(): Promise<void> {
-      throw new Error(desktopOnly().message);
-    },
-  },
   calendar: webCalendar,
   tasks: webTasks,
   spine: webSpine,
