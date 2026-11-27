@@ -118,7 +118,6 @@ function Harness({
           onTrash={fn()}
           onRestore={fn()}
           onPurge={fn()}
-          onImport={fn()}
           search={{
             open: searchOpen,
             query,
@@ -171,7 +170,7 @@ export const EmptyInbox: Story = {
 export const NoFavorites: Story = { args: { favorites: [] } };
 
 /** A view-only member: no create, no drag, a reading menu. */
-export const ViewOnly: Story = { args: { canEdit: false, onImport: undefined } };
+export const ViewOnly: Story = { args: { canEdit: false } };
 
 /** First paint with nothing cached: skeleton rows. */
 export const Loading: Story = { args: { loading: true, notes: [], favorites: [] } };
