@@ -56,6 +56,12 @@ pub fn open_window<V: Render>(
     gpui_kit::open_window(options, cx, build)
 }
 
+/// The fill and text colour of a strip that must not be missed (the cloud warning).
+pub fn alert_colors(cx: &App) -> (Hsla, Hsla) {
+    let theme = cx.theme();
+    (theme.danger, theme.danger_foreground)
+}
+
 /// The window's fill and its text colour.
 pub fn window_colors(cx: &App) -> (Hsla, Hsla) {
     let theme = cx.theme();
