@@ -124,7 +124,9 @@ fn is_open(cx: &mut TestAppContext, h: AnyWindowHandle, id: &str) -> bool {
     let id = id.to_owned();
     cx.update_window(h, move |_, window, cx| {
         window.render_frame(cx);
-        window.try_find(id.as_str()).is_some_and(|s| s.visible())
+        window
+            .try_find(gpui::ElementId::Name(id.into()))
+            .is_some_and(|s| s.visible())
     })
     .unwrap()
 }
@@ -133,7 +135,7 @@ fn highlighted(cx: &mut TestAppContext, h: AnyWindowHandle, id: &str) -> bool {
     let id = id.to_owned();
     cx.update_window(h, move |_, window, cx| {
         window.render_frame(cx);
-        window.find(id.as_str()).selected() == Some(true)
+        window.find(gpui::ElementId::Name(id.into())).selected() == Some(true)
     })
     .unwrap()
 }
@@ -144,13 +146,19 @@ fn arrows_typeahead_submenu_esc_returns_focus(cx: &mut TestAppContext) {
     act(cx, h, |w, cx| w.click("more-btn", cx));
     assert!(is_open(cx, h, "more-menu"), "the trigger opens the menu");
     press(cx, h, "down");
-    assert!(highlighted(cx, h, "rename"), "Down highlights the first item, past the label");
+    assert!(
+        highlighted(cx, h, "rename"),
+        "Down highlights the first item, past the label"
+    );
     press(cx, h, "down");
     assert!(highlighted(cx, h, "dup"));
     press(cx, h, "up");
     assert!(highlighted(cx, h, "rename"));
     press(cx, h, "m");
-    assert!(highlighted(cx, h, "move"), "typing jumps to the item starting with that letter");
+    assert!(
+        highlighted(cx, h, "move"),
+        "typing jumps to the item starting with that letter"
+    );
     press(cx, h, "right");
     assert!(is_open(cx, h, "move-sub"), "Right opens the submenu");
     assert!(highlighted(cx, h, "inbox"), "and highlights its first item");
@@ -207,7 +215,10 @@ fn an_action_that_opens_a_dialog_runs_after_the_menu_has_closed(cx: &mut TestApp
     let focused = cx
         .update_window(h, |_, window, cx| {
             window.render_frame(cx);
-            (window.find("dialog").focused(), window.find("more-btn").focused())
+            (
+                window.find("dialog").focused(),
+                window.find("more-btn").focused(),
+            )
         })
         .unwrap();
     assert_eq!(
@@ -227,8 +238,14 @@ fn a_long_menu_scrolls_and_fades_its_lower_edge(cx: &mut TestAppContext) {
             (window.find("long-menu").bounds(), window.viewport_size())
         })
         .unwrap();
-    assert!(menu.bottom() <= viewport.height, "{menu:?} runs past the window");
-    assert!(is_open(cx, h, "long-menu-fade"), "more waits below: the foot fades");
+    assert!(
+        menu.bottom() <= viewport.height,
+        "{menu:?} runs past the window"
+    );
+    assert!(
+        is_open(cx, h, "long-menu-fade"),
+        "more waits below: the foot fades"
+    );
     press(cx, h, "end");
     assert!(highlighted(cx, h, "row-59"), "End reaches the last item");
     let last = cx
@@ -237,7 +254,10 @@ fn a_long_menu_scrolls_and_fades_its_lower_edge(cx: &mut TestAppContext) {
             window.find("row-59").bounds()
         })
         .unwrap();
-    assert!(last.bottom() <= menu.bottom() + px(1.), "the highlight scrolls into view");
+    assert!(
+        last.bottom() <= menu.bottom() + px(1.),
+        "the highlight scrolls into view"
+    );
     assert!(!is_open(cx, h, "long-menu-fade"), "nothing below: no fade");
 }
 
@@ -254,7 +274,9 @@ fn a_context_menu_opens_at_the_pointer(cx: &mut TestAppContext) {
     act(cx, h, |w, cx| {
         w.click_with_options(
             "area",
-            ClickOptions::new().with_button(MouseButton::Right).with_offset(at),
+            ClickOptions::new()
+                .with_button(MouseButton::Right)
+                .with_offset(at),
             cx,
         )
     });
@@ -277,7 +299,9 @@ fn a_context_menu_opens_at_the_pointer(cx: &mut TestAppContext) {
     act(cx, h, |w, cx| {
         w.click_with_options(
             "area",
-            ClickOptions::new().with_button(MouseButton::Right).with_offset(corner),
+            ClickOptions::new()
+                .with_button(MouseButton::Right)
+                .with_offset(corner),
             cx,
         )
     });
