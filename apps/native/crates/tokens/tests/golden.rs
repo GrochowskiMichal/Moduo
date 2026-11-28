@@ -28,8 +28,11 @@ fn appearance(golden: &Json, entry: &Json) -> Appearance {
 fn is_font_relative(text: &str) -> bool {
     let bytes = text.as_bytes();
     ["em", "ch", "lh", "%"].iter().any(|unit| {
-        text.match_indices(unit)
-            .any(|(i, _)| i > 0 && (bytes[i - 1].is_ascii_digit() || bytes[i - 1] == b'.') && !text[..i].ends_with('r'))
+        text.match_indices(unit).any(|(i, _)| {
+            i > 0
+                && (bytes[i - 1].is_ascii_digit() || bytes[i - 1] == b'.')
+                && !text[..i].ends_with('r')
+        })
     })
 }
 
@@ -53,8 +56,18 @@ fn chrome_shadow(text: &str) -> ([f32; 4], [f32; 4]) {
         .map(|s| s.trim_end_matches("px").parse().unwrap())
         .collect();
     (
-        [channels[0] / 255.0, channels[1] / 255.0, channels[2] / 255.0, a],
-        [lengths[0], lengths[1], lengths[2], lengths.get(3).copied().unwrap_or(0.0)],
+        [
+            channels[0] / 255.0,
+            channels[1] / 255.0,
+            channels[2] / 255.0,
+            a,
+        ],
+        [
+            lengths[0],
+            lengths[1],
+            lengths[2],
+            lengths.get(3).copied().unwrap_or(0.0),
+        ],
     )
 }
 
@@ -72,7 +85,12 @@ fn resolved_tokens_match_the_browser_for_six_appearances() {
         for (token, probe) in golden["tokens"][name].as_object().unwrap() {
             let mut fail = |what: String| failures.push(format!("{name} --{token}: {what}"));
             if let Some(c) = probe.get("color") {
-                let want: Vec<f32> = c.as_array().unwrap().iter().map(|v| v.as_f64().unwrap() as f32).collect();
+                let want: Vec<f32> = c
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|v| v.as_f64().unwrap() as f32)
+                    .collect();
                 let want = clamp([want[0], want[1], want[2], want[3]]);
                 match resolved.color(token) {
                     Some(Rgba { r, g, b, a }) => {
@@ -118,8 +136,14 @@ fn resolved_tokens_match_the_browser_for_six_appearances() {
                         let c = shadow.color;
                         let got_color = clamp([c.r, c.g, c.b, c.a]);
                         let got_len = [shadow.x, shadow.y, shadow.blur, shadow.spread];
-                        let off = got_color.iter().zip(want_color).any(|(g, w)| (g - w).abs() > CHANNEL)
-                            || got_len.iter().zip(want_len).any(|(g, w)| (g - w).abs() > 0.01);
+                        let off = got_color
+                            .iter()
+                            .zip(want_color)
+                            .any(|(g, w)| (g - w).abs() > CHANNEL)
+                            || got_len
+                                .iter()
+                                .zip(want_len)
+                                .any(|(g, w)| (g - w).abs() > 0.01);
                         if off {
                             fail(format!("shadow {shadow:?}, browser {text}"));
                         }
@@ -131,9 +155,17 @@ fn resolved_tokens_match_the_browser_for_six_appearances() {
         }
     }
 
-    assert!(failures.is_empty(), "{} mismatches:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} mismatches:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     // Lengths in ch, em or lh need the font of the element that uses them; a handful at most.
-    assert!(font_relative.len() <= 12, "too many font-relative lengths: {font_relative:?}");
+    assert!(
+        font_relative.len() <= 12,
+        "too many font-relative lengths: {font_relative:?}"
+    );
     assert!(checked > 1000, "only {checked} values checked");
 }
 

@@ -34,28 +34,44 @@ export const APPEARANCES: { name: string; attrs: Record<string, string> }[] = [
   { name: "dark-reduced-motion", attrs: { ...DEFAULTS, motion: "reduced" } },
 ];
 
-type Probe = { text: string; color?: number[]; px?: number; ms?: number; number?: number; shadow?: string };
+type Probe = {
+  text: string;
+  color?: number[];
+  px?: number;
+  ms?: number;
+  number?: number;
+  shadow?: string;
+};
 
 const root = join(import.meta.dir, "../..");
 const css = readFileSync(join(root, TOKENS_CSS), "utf8");
 const names = [
   ...new Set(
-    (JSON.parse(readFileSync(join(root, TOKENS_JSON), "utf8")) as {
-      layers: { set: Record<string, unknown> }[];
-    }).layers.flatMap((l) => Object.keys(l.set)),
+    (
+      JSON.parse(readFileSync(join(root, TOKENS_JSON), "utf8")) as {
+        layers: { set: Record<string, unknown> }[];
+      }
+    ).layers.flatMap((l) => Object.keys(l.set)),
   ),
 ].sort();
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: VIEWPORT, reducedMotion: "no-preference", colorScheme: "dark" });
-await page.setContent(`<!doctype html><html><head><style>${css}</style></head><body><div id="p"></div></body></html>`);
+const page = await browser.newPage({
+  viewport: VIEWPORT,
+  reducedMotion: "no-preference",
+  colorScheme: "dark",
+});
+await page.setContent(
+  `<!doctype html><html><head><style>${css}</style></head><body><div id="p"></div></body></html>`,
+);
 
 const out: Record<string, Record<string, Probe>> = {};
 for (const appearance of APPEARANCES) {
   out[appearance.name] = await page.evaluate(
     ({ attrs, names }) => {
       const html = document.documentElement;
-      for (const a of [...html.attributes]) if (a.name.startsWith("data-")) html.removeAttribute(a.name);
+      for (const a of Array.from(html.attributes))
+        if (a.name.startsWith("data-")) html.removeAttribute(a.name);
       for (const [k, v] of Object.entries(attrs)) html.setAttribute(`data-${k}`, v);
       const register = (name: string, syntax: string, initialValue: string) => {
         try {
@@ -73,7 +89,10 @@ for (const appearance of APPEARANCES) {
       for (const name of names) {
         const text = getComputedStyle(html).getPropertyValue(`--${name}`).trim();
         p.style.cssText = "";
-        p.style.setProperty("--probe-color", `color-mix(in srgb, var(--${name}) 100%, transparent)`);
+        p.style.setProperty(
+          "--probe-color",
+          `color-mix(in srgb, var(--${name}) 100%, transparent)`,
+        );
         p.style.setProperty("--probe-length", `var(--${name})`);
         p.style.setProperty("--probe-time", `var(--${name})`);
         p.style.setProperty("--probe-number", `var(--${name})`);
@@ -82,11 +101,20 @@ for (const appearance of APPEARANCES) {
         const probe: Probe = { text };
         const color = cs.getPropertyValue("--probe-color").trim();
         const m = /^color\(srgb ([-\d.e]+) ([-\d.e]+) ([-\d.e]+)(?: \/ ([-\d.e]+))?\)$/.exec(color);
-        if (m) probe.color = [Number(m[1]), Number(m[2]), Number(m[3]), m[4] === undefined ? 1 : Number(m[4])];
+        if (m)
+          probe.color = [
+            Number(m[1]),
+            Number(m[2]),
+            Number(m[3]),
+            m[4] === undefined ? 1 : Number(m[4]),
+          ];
         const length = cs.getPropertyValue("--probe-length").trim();
         if (length !== "-12345px" && length.endsWith("px")) probe.px = Number(length.slice(0, -2));
         const time = cs.getPropertyValue("--probe-time").trim();
-        if (time !== "-12345s") probe.ms = time.endsWith("ms") ? Number(time.slice(0, -2)) : Number(time.slice(0, -1)) * 1000;
+        if (time !== "-12345s")
+          probe.ms = time.endsWith("ms")
+            ? Number(time.slice(0, -2))
+            : Number(time.slice(0, -1)) * 1000;
         const number = cs.getPropertyValue("--probe-number").trim();
         if (number !== "-12345") probe.number = Number(number);
         const shadow = cs.boxShadow;

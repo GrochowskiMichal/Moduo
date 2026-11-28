@@ -24,7 +24,10 @@ fn each_axis_overrides_only_its_own_tokens() {
         let allowed = tokens.affected_by(axis);
         assert!(!differ.is_empty(), "{axis}={value} changed nothing");
         let stray: Vec<_> = differ.iter().filter(|n| !allowed.contains(**n)).collect();
-        assert!(stray.is_empty(), "{axis}={value} changed tokens it doesn't own: {stray:?}");
+        assert!(
+            stray.is_empty(),
+            "{axis}={value} changed tokens it doesn't own: {stray:?}"
+        );
     }
 }
 
@@ -42,9 +45,18 @@ fn a_var_cycle_is_an_error_not_a_hang() {
     let started = Instant::now();
     let resolved = tokens.resolve(&Appearance::default());
     assert!(started.elapsed().as_millis() < 100);
-    assert_eq!(resolved.get("a"), Some(&Value::Unresolved(Unresolved::Cycle)));
-    assert_eq!(resolved.get("b"), Some(&Value::Unresolved(Unresolved::Cycle)));
-    assert_eq!(resolved.get("c"), Some(&Value::Unresolved(Unresolved::Missing)));
+    assert_eq!(
+        resolved.get("a"),
+        Some(&Value::Unresolved(Unresolved::Cycle))
+    );
+    assert_eq!(
+        resolved.get("b"),
+        Some(&Value::Unresolved(Unresolved::Cycle))
+    );
+    assert_eq!(
+        resolved.get("c"),
+        Some(&Value::Unresolved(Unresolved::Missing))
+    );
     assert_eq!(resolved.px("d"), Some(4.0));
 }
 
@@ -54,7 +66,11 @@ fn reduced_motion_shortens_durations() {
     let full = tokens.resolve(&Appearance::default());
     let reduced = tokens.resolve(&Appearance::default().with("motion", "reduced"));
     let system = tokens.resolve(&Appearance::default().prefers_reduced_motion(true));
-    let forced_full = tokens.resolve(&Appearance::default().prefers_reduced_motion(true).with("motion", "full"));
+    let forced_full = tokens.resolve(
+        &Appearance::default()
+            .prefers_reduced_motion(true)
+            .with("motion", "full"),
+    );
     assert_eq!(full.ms("motion-base"), Some(180.0));
     assert_eq!(reduced.ms("motion-base"), Some(0.0));
     assert_eq!(reduced.ms("motion-fade"), Some(80.0));
