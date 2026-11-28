@@ -609,7 +609,7 @@ fn surface(
     max_h: Pixels,
     window: &mut Window,
     cx: &mut App,
-) -> gpui_kit::base::test_support::Observed<gpui_kit::Stateful<gpui_kit::Div>> {
+) -> gpui_kit::base::ObservedElement<gpui_kit::Stateful<gpui_kit::Div>> {
     let (levels, scroll, more_below) = state.update(cx, |s, _| {
         (
             s.levels.clone(),

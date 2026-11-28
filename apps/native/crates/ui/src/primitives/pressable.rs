@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 
 /// The element every pressable control builds on (observed, so tests can find it by id).
-pub(crate) type Pressable = gpui_kit::base::test_support::Observed<Stateful<Div>>;
+pub(crate) type Pressable = gpui_kit::base::ObservedElement<Stateful<Div>>;
 
 /// A press handler.
 pub type OnPress = Rc<dyn Fn(&mut Window, &mut App)>;
