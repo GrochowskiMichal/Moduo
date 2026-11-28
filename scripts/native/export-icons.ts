@@ -40,31 +40,37 @@ export function kebab(component: string): string {
   );
 }
 
-/** Every lucide component imported by the source folders (aliases ending in Icon included). */
+/** The lucide names one source file imports (aliases ending in Icon included). */
+function iconsIn(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/import\s*(?:type\s*)?\{([^}]+)\}\s*from\s*"lucide-react"/g)) {
+    for (const raw of m[1]!.split(",")) {
+      const name = raw
+        .trim()
+        .replace(/^type\s+/, "")
+        .split(/\s+as\s+/)[0]!
+        .trim();
+      if (name && name !== "LucideIcon" && name !== "LucideProps") out.push(name);
+    }
+  }
+  return out;
+}
+
+/** The app's source files under one folder, tests and stories left out. */
+function sourcesUnder(dir: string): string[] {
+  return readdirSync(join(root, dir), { withFileTypes: true }).flatMap((entry) => {
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return sourcesUnder(rel);
+    return /\.tsx?$/.test(entry.name) && !/\.(test|stories)\./.test(entry.name) ? [rel] : [];
+  });
+}
+
+/** Every lucide component imported by the source folders. */
 export function importedIcons(): string[] {
   const names = new Set<string>();
-  const walk = (dir: string) => {
-    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
-      const rel = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) walk(rel);
-      else if (/\.tsx?$/.test(entry.name) && !/\.(test|stories)\./.test(entry.name)) {
-        const text = readFileSync(join(root, rel), "utf8");
-        for (const m of text.matchAll(
-          /import\s*(?:type\s*)?\{([^}]+)\}\s*from\s*"lucide-react"/g,
-        )) {
-          for (const raw of m[1]!.split(",")) {
-            const name = raw
-              .trim()
-              .replace(/^type\s+/, "")
-              .split(/\s+as\s+/)[0]!
-              .trim();
-            if (name && name !== "LucideIcon" && name !== "LucideProps") names.add(name);
-          }
-        }
-      }
-    }
-  };
-  for (const dir of SOURCE_DIRS) walk(dir);
+  for (const file of SOURCE_DIRS.flatMap(sourcesUnder)) {
+    for (const name of iconsIn(readFileSync(join(root, file), "utf8"))) names.add(name);
+  }
   return [...names].sort();
 }
 
