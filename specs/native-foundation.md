@@ -262,7 +262,7 @@ Mike runs engineer mode; these are the technical calls, each recorded as a dated
 ### NF-5 · Fonts, icons and assets
 
 - **Goal:** The app draws text in Geist and icons from Lucide exactly as the web app does, through `moduo-ui` types: `IconName`, `Icon`, `ModuoMark` and the text-role helpers.
-- **Acceptance criteria:** AC2 (its part) — fonts and sizes come from tokens. AC4 (its part) — Icon and ModuoMark exist with the React sizes.
+- **Acceptance criteria:** AC2 (its part) — fonts and sizes come from tokens. AC4 (its part) — Icon and ModuoMark exist, sized on the density ladder (`--icon-xs` … `--icon-lg`), which is what icons inside controls use in React.
 - **Tests:** `crates/ui/tests/icon.rs` · "every IconName has an embedded SVG" · "an icon inside a control follows the density ladder"; `crates/ui/tests/text.rs` · "each type role resolves family, size, weight and leading from tokens".
 - **Start here:**
   - Fonts the web app loads: `apps/app/src/global.css:19-30` (Geist 400/500/600/700, Geist Mono 400/500, Inter latin-ext 400-700 as fallback) and the bridge faces at :67-97. Bundle the static TTF or OTF files from the Geist and Inter releases (both OFL; add the licence files) under `apps/native/assets/fonts/` and load them with `cx.text_system().add_fonts(…)` at start.

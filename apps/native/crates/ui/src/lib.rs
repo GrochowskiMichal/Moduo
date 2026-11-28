@@ -22,18 +22,27 @@ pub mod gpui {
     mod component {}
 }
 
+pub mod assets;
+pub mod fonts;
+pub mod icon;
+pub mod mark;
+pub mod text;
+pub mod theme;
+
 use gpui_kit::component::{ActiveTheme as _, Theme, ThemeMode};
 
 use crate::gpui::{AnyWindowHandle, App, Application, Entity, Hsla, Render, Window, WindowOptions};
 
-/// The application object, with the bundled assets registered.
+/// The application object, with Moduo's assets (and the kit's) registered.
 pub fn application() -> Application {
-    gpui_kit::application().with_assets(gpui_kit::assets::Assets)
+    gpui_kit::application().with_assets(assets::Assets)
 }
 
 /// Call once, before anything is drawn. Dark until the tokens drive the theme.
 pub fn init(cx: &mut App) {
     gpui_kit::init(cx);
+    fonts::load(cx);
+    theme::init(cx);
     Theme::change(ThemeMode::Dark, None, cx);
 }
 
