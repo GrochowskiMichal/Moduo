@@ -117,3 +117,32 @@ impl TextRole {
         }
     }
 }
+
+/// Which face a piece of text is set in (`font-sans`, `font-display`, `font-mono`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Family {
+    Sans,
+    Display,
+    Mono,
+}
+
+/// Sets a face, a size token and a weight token: the Tailwind `font-* text-* font-*` triple.
+pub fn font<E: Styled>(element: E, family: Family, size: Token, weight: Token, cx: &App) -> E {
+    let t = crate::theme::tokens(cx);
+    let token = match family {
+        Family::Sans => Token::FontBody,
+        Family::Display => Token::FontDisplay,
+        Family::Mono => Token::FontMono,
+    };
+    let stack = t.fonts(token).unwrap_or_default();
+    let bundled = crate::fonts::FAMILIES;
+    let face = stack
+        .iter()
+        .find(|f| bundled.contains(f))
+        .unwrap_or(&bundled[0])
+        .to_string();
+    element
+        .font_family(face)
+        .text_size(gpui_kit::px(t.px(size).unwrap_or_default()))
+        .font_weight(FontWeight(t.number(weight).unwrap_or_default()))
+}

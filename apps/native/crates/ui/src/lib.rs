@@ -31,6 +31,8 @@ pub mod fonts;
 pub mod icon;
 pub mod mark;
 pub mod motion;
+pub mod primitives;
+pub mod space;
 pub mod style;
 pub mod text;
 pub mod theme;

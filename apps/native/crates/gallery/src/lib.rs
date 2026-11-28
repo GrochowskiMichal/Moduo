@@ -1,6 +1,7 @@
 //! The gallery: a window that lists pages down the left and draws the chosen one, under a strip
 //! that switches every appearance axis live. Each primitive block adds its page to [`pages`].
 
+mod static_page;
 mod tokens_page;
 
 use moduo_tokens::{Appearance, Token};
@@ -20,7 +21,10 @@ pub trait Page {
 
 /// Every page, in the order the sidebar lists them.
 pub fn pages() -> Vec<Box<dyn Page>> {
-    vec![Box::new(tokens_page::TokensPage)]
+    vec![
+        Box::new(tokens_page::TokensPage),
+        Box::new(static_page::StaticPage),
+    ]
 }
 
 /// The axes the strip switches, with their values (`tokens.css` header). `None` is the absent
