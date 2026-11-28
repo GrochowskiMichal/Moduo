@@ -16,4 +16,6 @@ gpui-kit = { workspace = true }
 moduo-tokens = { path = "../tokens" }
 
 [dev-dependencies]
+# The test harness, also when this crate's tests run alone (`cargo test -p moduo-ui`).
+gpui-kit = { workspace = true, features = ["test-support"] }
 ttf-parser = "0.25"
