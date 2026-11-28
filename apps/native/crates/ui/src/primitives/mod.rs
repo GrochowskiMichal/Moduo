@@ -12,6 +12,7 @@ mod eyebrow;
 mod icon_button;
 mod kbd;
 mod label;
+mod menu;
 mod meta_count;
 mod number_input;
 mod popover;
@@ -35,6 +36,10 @@ pub use eyebrow::{Eyebrow, EyebrowTone};
 pub use icon_button::{IconButton, IconButtonSize};
 pub use kbd::Kbd;
 pub use label::Label;
+pub use menu::{
+    context_menu, dropdown, ContextMenu, DropdownMenu, MenuItem, MenuModel, MenuState,
+    TYPEAHEAD_RESET,
+};
 pub use meta_count::MetaCount;
 pub use number_input::{NumberEvent, NumberInput};
 pub use popover::{Align, Popover, Side};
