@@ -53,6 +53,21 @@ const ROLES: &[(TextRole, &str)] = &[
     (TextRole::Mono, "Mono · code only"),
 ];
 
+const SPACING: &[Token] = &[
+    Token::PadYSm,
+    Token::PadY,
+    Token::PadXSm,
+    Token::PadX,
+    Token::PanelPad,
+    Token::PanelGap,
+    Token::PanelInset,
+    Token::CtrlHSm,
+    Token::CtrlH,
+    Token::CtrlHLg,
+    Token::RowH,
+    Token::HitMin,
+];
+
 const RADII: &[Token] = &[
     Token::RadiusSm,
     Token::RadiusMd,
@@ -129,6 +144,27 @@ impl Page for TokensPage {
             roles = roles.child(text::styled(div().child(shown), *role, cx));
         }
 
+        let mut spacing = div().flex().flex_col().gap(theme::px(cx, Token::PadYSm));
+        for token in SPACING {
+            spacing = spacing.child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(theme::px(cx, Token::PanelGap))
+                    .child(
+                        div()
+                            .w(theme::px(cx, Token::WidthRail) / 2.)
+                            .child(text::styled(div().child(token.name()), TextRole::Mono, cx)),
+                    )
+                    .child(
+                        div()
+                            .h(theme::px(cx, Token::PadYSm))
+                            .w(theme::px(cx, *token))
+                            .bg(theme::color(cx, Token::Primary)),
+                    ),
+            );
+        }
+
         let mut radii = wrap(cx);
         for token in RADII {
             radii = radii.child(
@@ -174,6 +210,7 @@ impl Page for TokensPage {
             .flex_col()
             .child(section("Colour", colors, cx))
             .child(section("Type", roles, cx))
+            .child(section("Spacing", spacing, cx))
             .child(section("Radius", radii, cx))
             .child(section("Shadow", shadows, cx))
             .child(section("Icons", icons, cx))

@@ -94,11 +94,12 @@ fn is_literal_call(line: &str, pattern: &str) -> bool {
         let after = line[i + pattern.len()..].trim_start().chars().next();
         // A whole call (not `.px(` on a builder, not `some_px(`) with a number inside.
         !before.is_some_and(|c| c.is_alphanumeric() || c == '_' || c == '.')
-            && after.is_some_and(|c| c.is_ascii_digit())
+            && after.is_some_and(|c| c.is_ascii_digit() || c == '-')
     })
 }
 
-/// `.px_4()`, `.gap_2()`, `.text_xs()`: the style shorthands, fixed sizes in disguise.
+/// `.px_4()`, `.gap_2()`, `.text_xs()`: the style shorthands, fixed sizes in disguise. A zero
+/// (`.min_w_0()`) is layout, not a design value.
 fn is_shorthand(line: &str) -> bool {
     let shorthands = [
         ".p_",
@@ -123,34 +124,41 @@ fn is_shorthand(line: &str) -> bool {
         ".size_",
         ".rounded_",
         ".shadow_",
+        ".min_w_",
+        ".max_w_",
+        ".min_h_",
+        ".max_h_",
+        ".top_",
+        ".left_",
+        ".right_",
+        ".bottom_",
+        ".inset_",
     ];
     let sized = shorthands.iter().any(|s| {
         line.match_indices(s).any(|(i, _)| {
-            line[i + s.len()..]
-                .chars()
-                .next()
-                .is_some_and(|c| c.is_ascii_digit())
+            let rest = &line[i + s.len()..];
+            rest.chars().next().is_some_and(|c| c.is_ascii_digit()) && !rest.starts_with("0(")
         })
     });
-    let text = [
+    let named = [
         "text_xs()",
         "text_sm()",
         "text_base()",
         "text_lg()",
         "text_xl()",
         "text_2xl()",
-    ]
-    .iter()
-    .any(|t| line.contains(t));
-    let corners = [
+        "text_3xl()",
         "rounded_sm()",
         "rounded_md()",
         "rounded_lg()",
         "rounded_xl()",
-    ]
-    .iter()
-    .any(|t| line.contains(t));
-    sized || text || corners
+        "shadow_xs()",
+        "shadow_sm()",
+        "shadow_md()",
+        "shadow_lg()",
+        "shadow_xl()",
+    ];
+    sized || named.iter().any(|t| line.contains(t))
 }
 
 #[test]
@@ -205,4 +213,8 @@ fn the_literal_check_bites() {
     assert!(is_shorthand("div().px_4().py_0p5()"));
     assert!(is_shorthand("div().text_xs()"));
     assert!(!is_shorthand("div().size_full().w_full()"));
+    assert!(is_literal_call("div().ml(px(-4.))", "px("));
+    assert!(is_shorthand("div().min_w_8()"));
+    assert!(is_shorthand("div().shadow_md()"));
+    assert!(!is_shorthand("div().min_w_0().min_h_0()"));
 }

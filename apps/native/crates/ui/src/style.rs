@@ -51,7 +51,7 @@ pub fn state_layer<E: StatefulInteractiveElement + Styled>(
     if disabled {
         return element.opacity(0.5);
     }
-    element
+    crate::focus::ring(element, cx)
         .hover(move |s| s.bg(hover))
         .active(move |s| s.bg(active))
 }
@@ -62,15 +62,27 @@ pub fn hit_min<E: Styled>(element: E, cx: &App) -> E {
     element.min_w(min).min_h(min)
 }
 
-/// A selected row: the tint and an inset ring at the selection edge (`SELECTED_ROW`).
+/// A selected row: the tint and an inset ring at the selection edge (`SELECTED_ROW`). The ring is
+/// an inset shadow, as in CSS, so selecting a row never moves its content.
 pub fn selected_row<E: Styled>(element: E, cx: &App) -> E {
     element
         .bg(theme::color(cx, Token::StateSelected))
-        .border_1()
-        .border_color(theme::color(cx, Token::StateSelectedEdge))
+        .shadow(vec![inset_ring(theme::color(cx, Token::StateSelectedEdge))])
 }
 
-/// A selected card or option: the tint and the 32% ring (`SELECTED_OPTION`).
+/// A one-pixel ring drawn inside the box.
+pub fn inset_ring(color: Hsla) -> gpui_kit::BoxShadow {
+    gpui_kit::BoxShadow {
+        color,
+        offset: gpui_kit::point(gpui_kit::px(0.), gpui_kit::px(0.)), // design-literal: a ring has no offset
+        blur_radius: gpui_kit::px(0.), // design-literal: a ring is sharp
+        spread_radius: gpui_kit::px(1.), // design-literal: ring-1
+        inset: true,
+    }
+}
+
+/// A selected card or option: the tint and the 32% ring (`SELECTED_OPTION`). Its unselected
+/// state must carry a transparent 1px border too, so the box keeps its size.
 pub fn selected_option<E: Styled>(element: E, cx: &App) -> E {
     element
         .bg(theme::color(cx, Token::StateSelected))

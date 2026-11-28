@@ -4,7 +4,9 @@
 use gpui_kit::{prelude::*, relative, App, FontWeight};
 use moduo_tokens::{Resolved, Token};
 
-/// Draws an element's text in a role: face, size, weight, leading and tracking from tokens.
+/// Draws an element's text in a role: face, size, weight and leading from tokens. GPUI has no
+/// letter spacing, so `TextStyle::tracking` and `uppercase` are for the caller (upper-case the
+/// string; tracking waits for GPUI).
 pub fn styled<E: Styled>(element: E, role: TextRole, cx: &App) -> E {
     let s = role.style(crate::theme::tokens(cx));
     element

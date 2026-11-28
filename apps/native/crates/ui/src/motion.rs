@@ -31,11 +31,12 @@ pub struct MotionSpec {
     pub scale_from: f32,
     /// The distance it slides from, in pixels (0 means none).
     pub shift_from: f32,
+    /// Arrivals ease out (`--ease-out`): cubic-bezier control points.
+    pub easing: [f32; 4],
 }
 
 fn ms(t: &Resolved, token: Token) -> Duration {
-    // Whole microseconds: a token says 180ms, and 180ms is what it should read.
-    Duration::from_micros((t.ms(token).unwrap_or_default() * 1000.0).round() as u64)
+    crate::theme::duration_of(t, token)
 }
 
 pub fn spec(pattern: Pattern, t: &Resolved) -> MotionSpec {
@@ -45,6 +46,7 @@ pub fn spec(pattern: Pattern, t: &Resolved) -> MotionSpec {
         movement: Duration::ZERO,
         scale_from: 1.0,
         shift_from: 0.0,
+        easing: t.bezier(Token::EaseOut).unwrap_or([0.0, 0.0, 1.0, 1.0]),
     };
     match pattern {
         Pattern::Panel => MotionSpec {
