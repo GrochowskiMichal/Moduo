@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui_kit::test::{TestAppContextExt as _, TestSupportExt as _, TestWindowExt as _};
+use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AnyWindowHandle, InputHandler as _};
 use moduo_tokens::Token;
 use moduo_ui::gpui::{self, div, prelude::*, AppContext as _, Context, Entity, TestAppContext, Window};
@@ -33,29 +33,13 @@ impl Form {
 
 impl Render for Form {
     fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-        div()
-            .flex()
-            .flex_col()
-            .child(div().w_64().child(self.field.clone()))
-            .child(div().id("elsewhere").test_support().track_focus(&self.field_elsewhere()).h_8().w_8())
-    }
-}
-
-impl Form {
-    fn field_elsewhere(&self) -> gpui::FocusHandle {
-        thread_local!(static H: RefCell<Option<gpui::FocusHandle>> = const { RefCell::new(None) });
-        H.with(|h| h.borrow().clone()).expect("set in mount")
+        div().flex().flex_col().child(div().w_64().child(self.field.clone()))
     }
 }
 
 fn mount(cx: &mut TestAppContext) -> (AnyWindowHandle, Entity<Form>) {
     cx.update(moduo_ui::init);
-    let window = cx.add_window(|window, cx| {
-        let elsewhere = cx.focus_handle();
-        thread_local!(static H: RefCell<Option<gpui::FocusHandle>> = const { RefCell::new(None) });
-        let _ = &elsewhere;
-        cx.new(|cx| Form::new(window, cx))
-    });
+    let window = cx.add_window(|window, cx| Form::new(window, cx));
     let form = window.root(cx).unwrap();
     (window.into(), form)
 }
@@ -123,8 +107,6 @@ fn blur_and_enter_commit_esc_restores(cx: &mut TestAppContext) {
         window.press("end", cx);
         window.input("d", cx);
         // Focus moves away: the draft commits.
-        let f = form.read(cx).field.read(cx).focus_handle(cx);
-        let _ = f;
         window.blur();
     })
     .unwrap();
