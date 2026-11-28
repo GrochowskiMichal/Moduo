@@ -21,6 +21,37 @@ pub use resolve::{Shadow, Unresolved, Value};
 use export::{AxisTest, Export, Layer};
 use resolve::Evaluator;
 
+include!(concat!(env!("OUT_DIR"), "/token.rs"));
+
+/// A token, named by the generated [`Token`] (checked when the app compiles) or by its text.
+pub trait TokenName {
+    fn token_name(&self) -> &str;
+}
+
+impl TokenName for Token {
+    fn token_name(&self) -> &str {
+        self.name()
+    }
+}
+
+impl TokenName for str {
+    fn token_name(&self) -> &str {
+        self
+    }
+}
+
+impl TokenName for String {
+    fn token_name(&self) -> &str {
+        self
+    }
+}
+
+impl<T: TokenName + ?Sized> TokenName for &T {
+    fn token_name(&self) -> &str {
+        (**self).token_name()
+    }
+}
+
 /// The exported tokens, as written by `scripts/native/export-tokens.ts`.
 pub const TOKENS_JSON: &str = include_str!("../tokens.json");
 
@@ -127,12 +158,12 @@ pub struct Resolved {
 }
 
 impl Resolved {
-    pub fn get(&self, name: &str) -> Option<&Value> {
-        self.values.get(name)
+    pub fn get(&self, name: impl TokenName) -> Option<&Value> {
+        self.values.get(name.token_name())
     }
 
     /// A colour, clipped to sRGB, ready to draw.
-    pub fn color(&self, name: &str) -> Option<Rgba> {
+    pub fn color(&self, name: impl TokenName) -> Option<Rgba> {
         match self.get(name)? {
             Value::Color(c) => Some(c.clipped()),
             _ => None,
@@ -140,7 +171,7 @@ impl Resolved {
     }
 
     /// A length in pixels. A unitless 0 counts, as in CSS.
-    pub fn px(&self, name: &str) -> Option<f32> {
+    pub fn px(&self, name: impl TokenName) -> Option<f32> {
         match self.get(name)? {
             Value::Length(px) => Some(*px),
             Value::Number(n) if *n == 0.0 => Some(0.0),
@@ -149,28 +180,28 @@ impl Resolved {
     }
 
     /// A duration in milliseconds.
-    pub fn ms(&self, name: &str) -> Option<f32> {
+    pub fn ms(&self, name: impl TokenName) -> Option<f32> {
         match self.get(name)? {
             Value::Time(ms) => Some(*ms),
             _ => None,
         }
     }
 
-    pub fn number(&self, name: &str) -> Option<f32> {
+    pub fn number(&self, name: impl TokenName) -> Option<f32> {
         match self.get(name)? {
             Value::Number(n) => Some(*n),
             _ => None,
         }
     }
 
-    pub fn bezier(&self, name: &str) -> Option<[f32; 4]> {
+    pub fn bezier(&self, name: impl TokenName) -> Option<[f32; 4]> {
         match self.get(name)? {
             Value::Bezier(b) => Some(*b),
             _ => None,
         }
     }
 
-    pub fn shadows(&self, name: &str) -> Option<&[Shadow]> {
+    pub fn shadows(&self, name: impl TokenName) -> Option<&[Shadow]> {
         match self.get(name)? {
             Value::Shadows(s) => Some(s),
             _ => None,
@@ -178,7 +209,7 @@ impl Resolved {
     }
 
     /// A font stack, first choice first.
-    pub fn fonts(&self, name: &str) -> Option<Vec<&str>> {
+    pub fn fonts(&self, name: impl TokenName) -> Option<Vec<&str>> {
         match self.get(name)? {
             Value::Names(n) => Some(n.iter().map(String::as_str).collect()),
             Value::Keyword(k) => Some(vec![k.as_str()]),
@@ -189,9 +220,21 @@ impl Resolved {
 
 #[cfg(test)]
 mod tests {
+    use super::{Appearance, Token, Tokens};
+
     #[test]
     fn the_export_is_embedded_and_parses() {
-        let tokens = super::Tokens::load();
+        let tokens = Tokens::load();
         assert!(tokens.names().count() > 200);
+        assert_eq!(Token::ALL.len(), tokens.names().count());
+    }
+
+    #[test]
+    fn a_token_is_named_by_the_generated_enum() {
+        let resolved = Tokens::load().resolve(&Appearance::default());
+        assert_eq!(Token::CtrlHSm.name(), "ctrl-h-sm");
+        assert_eq!(resolved.color(Token::Primary), resolved.color("primary"));
+        assert_eq!(resolved.px(Token::RowH), Some(36.0));
+        assert_eq!(resolved.number(Token::ZPopover), Some(70.0));
     }
 }

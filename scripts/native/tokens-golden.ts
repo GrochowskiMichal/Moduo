@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { chromium } from "playwright";
+import { chromium, type Page } from "playwright";
 
 import { TOKENS_CSS, TOKENS_JSON } from "./export-tokens";
 
@@ -30,8 +30,38 @@ export const APPEARANCES: { name: string; attrs: Record<string, string> }[] = [
   { name: "light", attrs: { ...DEFAULTS, theme: "light" } },
   { name: "dark-warm-violet", attrs: { ...DEFAULTS, shade: "warm", accent: "violet" } },
   { name: "dark-dense-sharp", attrs: { ...DEFAULTS, density: "dense", radius: "sharp" } },
-  { name: "light-mono", attrs: { ...DEFAULTS, theme: "light", accent: "mono" } },
+  { name: "light-violet", attrs: { ...DEFAULTS, theme: "light", accent: "violet" } },
   { name: "dark-reduced-motion", attrs: { ...DEFAULTS, motion: "reduced" } },
+];
+
+/**
+ * Appearances that need their own page: the system's reduced motion, the smallest window, and
+ * a font. `tests/golden_extra.rs` checks them.
+ */
+export const EXTRA: {
+  name: string;
+  attrs: Record<string, string>;
+  viewport: { width: number; height: number };
+  reducedMotion: "reduce" | "no-preference";
+}[] = [
+  {
+    name: "dark-system-reduced-motion",
+    attrs: { ...DEFAULTS },
+    viewport: VIEWPORT,
+    reducedMotion: "reduce",
+  },
+  {
+    name: "dark-smallest-window",
+    attrs: { ...DEFAULTS },
+    viewport: { width: 1024, height: 700 },
+    reducedMotion: "no-preference",
+  },
+  {
+    name: "dark-font-inter",
+    attrs: { ...DEFAULTS, font: "inter" },
+    viewport: VIEWPORT,
+    reducedMotion: "no-preference",
+  },
 ];
 
 type Probe = {
@@ -56,18 +86,10 @@ const names = [
 ].sort();
 
 const browser = await chromium.launch();
-const page = await browser.newPage({
-  viewport: VIEWPORT,
-  reducedMotion: "no-preference",
-  colorScheme: "dark",
-});
-await page.setContent(
-  `<!doctype html><html><head><style>${css}</style></head><body><div id="p"></div></body></html>`,
-);
+const html = `<!doctype html><html><head><style>${css}</style></head><body><div id="p"></div></body></html>`;
 
-const out: Record<string, Record<string, Probe>> = {};
-for (const appearance of APPEARANCES) {
-  out[appearance.name] = await page.evaluate(
+async function probeAll(page: Page, attrs: Record<string, string>): Promise<Record<string, Probe>> {
+  return page.evaluate(
     ({ attrs, names }) => {
       const html = document.documentElement;
       for (const a of Array.from(html.attributes))
@@ -133,12 +155,38 @@ for (const appearance of APPEARANCES) {
       for (const name of names) result[name] = probeOf(name);
       return result;
     },
-    { attrs: appearance.attrs, names },
+    { attrs, names },
   );
+}
+
+const page = await browser.newPage({
+  viewport: VIEWPORT,
+  reducedMotion: "no-preference",
+  colorScheme: "dark",
+});
+await page.setContent(html);
+const out: Record<string, Record<string, Probe>> = {};
+for (const appearance of APPEARANCES) out[appearance.name] = await probeAll(page, appearance.attrs);
+
+const extra: Record<string, Record<string, Probe>> = {};
+for (const appearance of EXTRA) {
+  const own = await browser.newPage({
+    viewport: appearance.viewport,
+    reducedMotion: appearance.reducedMotion,
+    colorScheme: "dark",
+  });
+  await own.setContent(html);
+  extra[appearance.name] = await probeAll(own, appearance.attrs);
+  await own.close();
 }
 await browser.close();
 
-const golden = { viewport: VIEWPORT, appearances: APPEARANCES, tokens: out };
+const golden = {
+  viewport: VIEWPORT,
+  appearances: APPEARANCES,
+  tokens: out,
+  extra: { appearances: EXTRA, tokens: extra },
+};
 writeFileSync(join(root, GOLDEN_JSON), `${JSON.stringify(golden, null, 2)}\n`);
 Bun.spawnSync(["bun", "fmt", join(root, GOLDEN_JSON)]);
 console.log(`wrote ${GOLDEN_JSON}: ${names.length} tokens × ${APPEARANCES.length} appearances`);

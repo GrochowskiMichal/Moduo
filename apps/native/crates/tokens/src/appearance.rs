@@ -77,9 +77,6 @@ impl Appearance {
         let px = || value.trim_end_matches("px").parse::<f32>().ok();
         match feature {
             "prefers-reduced-motion" => (value == "reduce") == self.reduced_motion,
-            "prefers-color-scheme" => {
-                (value == "dark") == (self.attr("theme").unwrap_or("dark") != "light")
-            }
             "min-width" => px().is_some_and(|v| self.width >= v),
             "max-width" => px().is_some_and(|v| self.width <= v),
             "min-height" => px().is_some_and(|v| self.height >= v),

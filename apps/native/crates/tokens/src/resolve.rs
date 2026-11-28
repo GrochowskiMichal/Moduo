@@ -100,12 +100,14 @@ impl<'a> Evaluator<'a> {
             } => Value::Color(color::oklch(*l, *c, *h, *a)),
             Expr::Rgb { rgb: [r, g, b, a] } => Value::Color(color::rgb(*r, *g, *b, *a)),
             Expr::Hsl { hsl: [h, s, l, a] } => Value::Color(color::hsl(*h, *s, *l, *a)),
-            Expr::Var { var, fallback } => match self.token(var) {
-                Value::Unresolved(Unresolved::Missing) => match fallback {
+            // A token that is missing or on a cycle is "guaranteed-invalid" in CSS: the fallback,
+            // when there is one, takes its place.
+            Expr::Var { var, fallback } => match (self.token(var), fallback) {
+                (Value::Unresolved(u @ (Unresolved::Missing | Unresolved::Cycle)), f) => match f {
                     Some(f) => self.expr(f),
-                    None => Value::Unresolved(Unresolved::Missing),
+                    None => Value::Unresolved(u),
                 },
-                v => v,
+                (v, _) => v,
             },
             Expr::Mix { mix } => {
                 let (a, b) = (self.expr(&mix.a), self.expr(&mix.b));
@@ -230,5 +232,28 @@ fn number(num: f32, unit: &str) -> Value {
         "ms" => Value::Time(num),
         "s" => Value::Time(num * 1000.0),
         _ => Value::Unresolved(Unresolved::Invalid),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{Appearance, Tokens, Unresolved, Value};
+
+    #[test]
+    fn a_fallback_stands_in_for_a_cycle_as_in_css() {
+        // Chromium: --a:var(--b); --b:var(--a); --e:var(--a) gives var(--a,4px) = 4px and
+        // var(--e,5px) = 5px.
+        let tokens = Tokens::from_json(
+            r#"{"source":"t","layers":[{"when":[{}],"set":{
+                "a":{"var":"b"},"b":{"var":"a"},"e":{"var":"a"},
+                "f":{"var":"a","fallback":{"num":4,"unit":"px"}},
+                "g":{"var":"e","fallback":{"num":5,"unit":"px"}}
+            }}]}"#,
+        )
+        .unwrap();
+        let r = tokens.resolve(&Appearance::default());
+        assert_eq!(r.get("e"), Some(&Value::Unresolved(Unresolved::Cycle)));
+        assert_eq!(r.px("f"), Some(4.0));
+        assert_eq!(r.px("g"), Some(5.0));
     }
 }
