@@ -2,6 +2,7 @@
 //! that switches every appearance axis live. Each primitive block adds its page to [`pages`].
 
 mod controls_page;
+mod fields_page;
 mod static_page;
 mod tokens_page;
 
@@ -26,6 +27,7 @@ pub fn pages() -> Vec<Box<dyn Page>> {
         Box::new(tokens_page::TokensPage),
         Box::new(static_page::StaticPage),
         Box::new(controls_page::ControlsPage),
+        Box::new(fields_page::FieldsPage),
     ]
 }
 
