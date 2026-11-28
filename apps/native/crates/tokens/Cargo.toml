@@ -1,0 +1,11 @@
+[package]
+name = "moduo-tokens"
+description = "Moduo's design tokens, exported from apps/app/src/styles/tokens.css."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
